@@ -1,0 +1,18 @@
+# Dependencies & build output (Vite + TS skeleton lands in H1)
+node_modules/
+dist/
+*.local
+
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Editor
+.vscode/*
+!.vscode/extensions.json
+
+# Raw/unprocessed asset sources (processed assets live in public/assets/ with manifest)
+tools/raw-assets/
