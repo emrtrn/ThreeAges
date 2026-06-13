@@ -1,0 +1,465 @@
+{
+  "schema": 1,
+  "name": "render-test-room",
+  "loadGroups": [
+    "core",
+    "furniture-beds",
+    "furniture-seating",
+    "furniture-tables",
+    "furniture-storage",
+    "furniture-lighting",
+    "furniture-rugs",
+    "furniture-plants",
+    "characters"
+  ],
+  "instances": [
+    {
+      "assetId": "floor-full",
+      "placements": [
+        {
+          "position": [
+            -2,
+            0,
+            -2
+          ]
+        },
+        {
+          "position": [
+            -2,
+            0,
+            -1
+          ]
+        },
+        {
+          "position": [
+            -2,
+            0,
+            0
+          ]
+        },
+        {
+          "position": [
+            -2,
+            0,
+            1
+          ]
+        },
+        {
+          "position": [
+            -2,
+            0,
+            2
+          ]
+        },
+        {
+          "position": [
+            -1,
+            0,
+            -2
+          ]
+        },
+        {
+          "position": [
+            -1,
+            0,
+            -1
+          ]
+        },
+        {
+          "position": [
+            -1,
+            0,
+            0
+          ]
+        },
+        {
+          "position": [
+            -1,
+            0,
+            1
+          ]
+        },
+        {
+          "position": [
+            -1,
+            0,
+            2
+          ]
+        },
+        {
+          "position": [
+            0,
+            0,
+            -2
+          ]
+        },
+        {
+          "position": [
+            0,
+            0,
+            -1
+          ]
+        },
+        {
+          "position": [
+            0,
+            0,
+            0
+          ]
+        },
+        {
+          "position": [
+            0,
+            0,
+            1
+          ]
+        },
+        {
+          "position": [
+            0,
+            0,
+            2
+          ]
+        },
+        {
+          "position": [
+            1,
+            0,
+            -2
+          ]
+        },
+        {
+          "position": [
+            1,
+            0,
+            -1
+          ]
+        },
+        {
+          "position": [
+            1,
+            0,
+            0
+          ]
+        },
+        {
+          "position": [
+            1,
+            0,
+            1
+          ]
+        },
+        {
+          "position": [
+            1,
+            0,
+            2
+          ]
+        },
+        {
+          "position": [
+            2,
+            0,
+            -2
+          ]
+        },
+        {
+          "position": [
+            2,
+            0,
+            -1
+          ]
+        },
+        {
+          "position": [
+            2,
+            0,
+            0
+          ]
+        },
+        {
+          "position": [
+            2,
+            0,
+            1
+          ]
+        },
+        {
+          "position": [
+            2,
+            0,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "wall",
+      "placements": [
+        {
+          "position": [
+            -1,
+            0,
+            -3
+          ]
+        },
+        {
+          "position": [
+            0,
+            0,
+            -3
+          ]
+        },
+        {
+          "position": [
+            1,
+            0,
+            -3
+          ]
+        },
+        {
+          "position": [
+            -2,
+            0,
+            -1
+          ],
+          "rotationYDeg": 90
+        },
+        {
+          "position": [
+            -2,
+            0,
+            0
+          ],
+          "rotationYDeg": 90
+        },
+        {
+          "position": [
+            3,
+            0,
+            -1
+          ],
+          "rotationYDeg": -90
+        }
+      ]
+    },
+    {
+      "assetId": "wall-window",
+      "placements": [
+        {
+          "position": [
+            3,
+            0,
+            0
+          ],
+          "rotationYDeg": -90
+        },
+        {
+          "position": [
+            0,
+            0,
+            2
+          ],
+          "rotationYDeg": 180
+        }
+      ]
+    },
+    {
+      "assetId": "wall-corner",
+      "placements": [
+        {
+          "position": [
+            -1,
+            0,
+            -3
+          ],
+          "rotationYDeg": 180
+        },
+        {
+          "position": [
+            3,
+            0,
+            -2.5
+          ],
+          "rotationYDeg": 90
+        }
+      ]
+    },
+    {
+      "assetId": "doorway",
+      "placements": [
+        {
+          "position": [
+            -1,
+            0,
+            2
+          ],
+          "rotationYDeg": 180
+        }
+      ]
+    },
+    {
+      "assetId": "rug-rectangle",
+      "placements": [
+        {
+          "position": [
+            0.6,
+            0.01,
+            0.7
+          ],
+          "rotationYDeg": 90,
+          "scale": 1.25
+        }
+      ]
+    },
+    {
+      "assetId": "bed-single",
+      "placements": [
+        {
+          "position": [
+            -1.55,
+            0,
+            -1.1
+          ],
+          "rotationYDeg": 90
+        },
+        {
+          "position": [
+            0,
+            0,
+            -1
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "lounge-sofa",
+      "placements": [
+        {
+          "position": [
+            1.35,
+            0,
+            0.15
+          ],
+          "rotationYDeg": -90
+        }
+      ]
+    },
+    {
+      "assetId": "chair-modern-cushion",
+      "placements": [
+        {
+          "position": [
+            0.15,
+            0,
+            1.55
+          ],
+          "rotationYDeg": 180
+        },
+        {
+          "position": [
+            1.55,
+            0,
+            1.35
+          ],
+          "rotationYDeg": -90
+        }
+      ]
+    },
+    {
+      "assetId": "table-coffee",
+      "placements": [
+        {
+          "position": [
+            0.85,
+            0,
+            0.75
+          ],
+          "scale": 0.95
+        }
+      ]
+    },
+    {
+      "assetId": "desk",
+      "placements": [
+        {
+          "position": [
+            -1,
+            0,
+            -1
+          ],
+          "rotationYDeg": 0,
+          "scale": 5
+        }
+      ]
+    },
+    {
+      "assetId": "side-table",
+      "placements": [
+        {
+          "position": [
+            -2.15,
+            0,
+            -0.55
+          ],
+          "rotationYDeg": 90
+        }
+      ]
+    },
+    {
+      "assetId": "bookcase-open",
+      "placements": [
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotationYDeg": 180
+        }
+      ]
+    },
+    {
+      "assetId": "lamp-round-floor",
+      "placements": [
+        {
+          "position": [
+            2.15,
+            0,
+            1.65
+          ],
+          "rotationYDeg": -45
+        }
+      ]
+    },
+    {
+      "assetId": "potted-plant",
+      "placements": [
+        {
+          "position": [
+            -2.15,
+            0,
+            1.55
+          ],
+          "rotationYDeg": 45
+        }
+      ]
+    }
+  ],
+  "characters": [
+    {
+      "assetId": "character-a",
+      "position": [
+        0.35,
+        0,
+        1.55
+      ],
+      "name": "customer-character-a",
+      "animation": "idle",
+      "rotationYDeg": 162,
+      "scale": 0.42
+    }
+  ]
+}

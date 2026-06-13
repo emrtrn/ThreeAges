@@ -1,16 +1,22 @@
 {
-  "name": "home-makeover",
+  "name": "3dgamedev-editor",
   "private": true,
   "version": "0.1.0",
-  "description": "Home Makeover - 3D HTML5 home decoration game for Poki (working title: Ev Ustasi)",
+  "description": "Reusable Three.js editor and project launcher for 3D web games",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:local": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:lan": "vite --host 0.0.0.0 --port 5173 --strictPort",
+    "editor": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "editor:lan": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "assets:build": "node tools/process-assets.mjs"
+    "preview:local": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
+    "studio": "node scripts/studio.mjs"
   },
   "dependencies": {
+    "meshoptimizer": "^1.1.1",
     "three": "0.184.0"
   },
   "devDependencies": {
@@ -21,7 +27,6 @@
     "@types/node": "^25.9.3",
     "@types/three": "^0.184.0",
     "lil-gui": "^0.20.0",
-    "meshoptimizer": "^1.1.1",
     "typescript": "^5.8.0",
     "vite": "^7.0.0"
   }

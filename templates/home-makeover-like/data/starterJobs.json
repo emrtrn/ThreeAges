@@ -1,0 +1,10 @@
+{
+  "jobs": [
+    {
+      "id": "starter-room",
+      "title": "Starter Room",
+      "visiblePreferences": ["cozy", "bright"],
+      "hiddenWish": "plant"
+    }
+  ]
+}

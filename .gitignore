@@ -1,6 +1,8 @@
 # Dependencies & build output (Vite + TS skeleton lands in H1)
 node_modules/
 dist/
+builds/
+.dev-server/
 *.local
 
 # Claude Code local settings (machine-specific permissions)

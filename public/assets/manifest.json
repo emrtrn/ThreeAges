@@ -49,6 +49,21 @@
       "bytes": 4056
     },
     {
+      "id": "character-a",
+      "file": "assets/models/characters/character-a.glb",
+      "type": "model",
+      "category": "customer-character",
+      "loadGroup": "characters",
+      "source": {
+        "origin": "kenney",
+        "pack": "Blocky Characters",
+        "packVersion": "2.0",
+        "url": "https://kenney.nl/assets/blocky-characters"
+      },
+      "license": "CC0-1.0",
+      "bytes": 62568
+    },
+    {
       "id": "desk",
       "file": "assets/models/furniture-tables/desk.glb",
       "type": "model",
