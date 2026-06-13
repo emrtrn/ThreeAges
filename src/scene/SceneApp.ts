@@ -23,6 +23,7 @@ import {
   Mesh,
   MeshBasicMaterial,
   Object3D,
+  PCFSoftShadowMap,
   PerspectiveCamera,
   Plane,
   Quaternion,
@@ -191,6 +192,7 @@ export class SceneApp {
   private renderer: WebGLRenderer;
   private scene = new Scene();
   private camera: PerspectiveCamera;
+  private sun: DirectionalLight;
   private frameHandle = 0;
   private lastTime = 0;
   private assetLoader: AssetLoader | null = null;
@@ -300,14 +302,30 @@ export class SceneApp {
       powerPreference: "high-performance",
     });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, MAX_PIXEL_RATIO));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = PCFSoftShadowMap;
 
     this.scene.background = new Color(0xd7d7c7);
     this.camera = new PerspectiveCamera(44, 1, 0.1, 100);
 
-    const sun = new DirectionalLight(0xffffff, 1.8);
-    sun.position.set(3, 8, 4);
+    const sun = new DirectionalLight(0xffffff, 2.0);
+    sun.position.set(3, 9, 4);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.bias = -0.0005;
+    sun.shadow.normalBias = 0.02;
+    // Default ortho frustum; refit to the room AABB once the scene loads.
+    const shadowCam = sun.shadow.camera;
+    shadowCam.near = 0.5;
+    shadowCam.far = 60;
+    shadowCam.left = -12;
+    shadowCam.right = 12;
+    shadowCam.top = 12;
+    shadowCam.bottom = -12;
+    this.sun = sun;
     this.scene.add(sun);
-    this.scene.add(new AmbientLight(0xffffff, 0.75));
+    this.scene.add(sun.target);
+    this.scene.add(new AmbientLight(0xffffff, 0.6));
 
     this.gizmoGroup.name = "editor-transform-gizmo";
     this.gizmoGroup.visible = false;
@@ -794,6 +812,28 @@ export class SceneApp {
     return { position: next, rotationYDeg };
   }
 
+  /** Fits the sun's shadow frustum to the room AABB so shadows stay crisp. */
+  private fitSunShadowToScene(): void {
+    const room = this.getRoomBounds();
+    if (!room || room.isEmpty()) return;
+    const size = room.getSize(new Vector3());
+    const center = room.getCenter(new Vector3());
+    const half = Math.max(size.x, size.z) * 0.6 + 1;
+
+    // Keep the sun's angle but recentre it over the room.
+    this.sun.position.set(center.x + 3, center.y + 9, center.z + 4);
+    this.sun.target.position.copy(center);
+    this.sun.target.updateMatrixWorld();
+
+    const cam = this.sun.shadow.camera;
+    cam.left = -half;
+    cam.right = half;
+    cam.top = half;
+    cam.bottom = -half;
+    cam.far = size.y + 30;
+    cam.updateProjectionMatrix();
+  }
+
   private getRoomBounds(): Box3 | null {
     if (!this.layout) return null;
     const box = new Box3();
@@ -1199,6 +1239,7 @@ export class SceneApp {
       this.addCharacter(this.models.get(character.assetId), character);
     }
 
+    this.fitSunShadowToScene();
     this.emitSceneObjectsChanged();
     this.emitHistoryChanged();
 
@@ -1241,6 +1282,8 @@ export class SceneApp {
       );
       instanced.name = `${assetId}-${object.name || "mesh"}`;
       instanced.frustumCulled = false;
+      instanced.castShadow = true;
+      instanced.receiveShadow = true;
       instanced.userData.assetId = assetId;
 
       for (let index = 0; index < placementMatrices.length; index += 1) {
@@ -1590,7 +1633,24 @@ export class SceneApp {
     if (!target) return;
     if (value) delete target[field];
     else target[field] = false;
+    if (field === "castShadow") this.applyCastShadow(selection);
     this.emitSelectionChanged();
+  }
+
+  /**
+   * Reflects a castShadow change on the live object. Only characters are
+   * individual objects; instanced meshes are batched per asset, so their flag
+   * stays authoring-only data the runtime can consume.
+   */
+  private applyCastShadow(selection: Selection): void {
+    if (selection.kind !== "character") return;
+    const object = this.characterObjects[selection.index];
+    const character = this.layout?.characters[selection.index];
+    if (!object || !character) return;
+    const castShadow = character.castShadow ?? true;
+    object.traverse((child) => {
+      if (isRenderableMesh(child)) child.castShadow = castShadow;
+    });
   }
 
   private setSelectionFlag(
@@ -1712,6 +1772,14 @@ export class SceneApp {
     applyEulerDegrees(character, readRotation(placement));
     character.scale.set(...readScale(placement));
     character.visible = !(placement.hidden ?? false);
+    // Characters are individual objects, so the per-object castShadow flag
+    // (absent = true) can be honoured live, unlike batched instanced meshes.
+    const castShadow = placement.castShadow ?? true;
+    character.traverse((object) => {
+      if (!isRenderableMesh(object)) return;
+      object.castShadow = castShadow;
+      object.receiveShadow = true;
+    });
     return character;
   }
 
