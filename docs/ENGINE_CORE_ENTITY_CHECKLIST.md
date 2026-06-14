@@ -26,7 +26,7 @@ keeping the current `RoomLayout` runtime/editor path working.
 
 ## 1. Engine Core Spine
 
-- [ ] Add `engine/core/Subsystem.ts` with a minimal subsystem lifecycle
+- [x] Add `engine/core/Subsystem.ts` with a minimal subsystem lifecycle
   contract: `init`, `start`, `update`, and `dispose` hooks.
 - [ ] Add `engine/core/SubsystemRegistry.ts` with deterministic registration,
   lookup, forward lifecycle order, and reverse dispose order.
