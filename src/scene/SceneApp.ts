@@ -114,6 +114,10 @@ import {
   type EditableTransform,
   type EditorWorldSettings,
 } from "@editor/core/editableScene";
+import type {
+  EditorCommand,
+  EditorHistoryState,
+} from "@editor/core/history";
 import {
   compareCharacterDeletes,
   compareCharacterRestores,
@@ -137,6 +141,9 @@ export type {
   EditableTransform,
   EditorWorldSettings,
 } from "@editor/core/editableScene";
+export type {
+  EditorHistoryState,
+} from "@editor/core/history";
 
 /** Perf budget: clamp DPR so 1080p+ phones don't render 3x fragments. */
 const MAX_PIXEL_RATIO = 2;
@@ -211,13 +218,6 @@ type CameraDrag =
       pointerId: number;
     };
 
-export interface EditorHistoryState {
-  canUndo: boolean;
-  canRedo: boolean;
-  undoLabel: string | null;
-  redoLabel: string | null;
-}
-
 export interface EditorProjectInfo {
   manifest: ActiveProject["manifest"];
   rootName: string;
@@ -231,12 +231,6 @@ export interface EditorSnapSettings {
   moveEnabled: boolean;
   rotateEnabled: boolean;
   scaleEnabled: boolean;
-}
-
-interface EditorCommand {
-  label: string;
-  undo: () => void;
-  redo: () => void;
 }
 
 interface EditorOptions {
