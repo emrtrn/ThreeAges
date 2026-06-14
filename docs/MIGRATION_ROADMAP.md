@@ -125,6 +125,23 @@ Exit criteria:
 
 Goal: move serializable types before moving runtime logic.
 
+Status (2026-06-14): complete for the first data-contract extraction slice.
+
+Completed:
+
+- Added `@engine/*`, `@editor/*`, `@builder/*`, `@game/*`, and `@project/*`
+  path aliases in TypeScript and Vite.
+- Moved the first serializable layout contract into `engine/scene/layout.ts`.
+- Moved schema-driven metadata contracts/helpers into
+  `engine/scene/metadataSchema.ts`.
+- Kept `src/scene/roomLayout.ts` as the compatibility wrapper for layout loading
+  helpers and legacy imports.
+- Kept `src/scene/metadataSchema.ts` as a compatibility wrapper for legacy
+  imports.
+- `npm run build` passed after extraction.
+- `engine/scene` string/dependency check found no Three.js, DOM, or
+  `import.meta` usage.
+
 Tasks:
 
 - Move layout, transform, actor, and metadata data types into `engine/scene`.
@@ -135,6 +152,13 @@ Exit criteria:
 
 - Existing layout loads in Game Mode and Editor Mode.
 - TypeScript imports show data contracts do not depend on Three.js.
+
+Notes:
+
+- This phase did not move layout loading yet; `src/scene/roomLayout.ts` still
+  owns the Vite/public URL fetch helper because it uses `import.meta.env`.
+- Future phases can move pure transform helper functions into `engine/scene`
+  once runtime URL loading and render adapter boundaries are clearer.
 
 ## Phase 3 - Extract Asset System
 

@@ -14,8 +14,8 @@ import {
   metadataGroupsForTarget,
   type MetadataFieldDef,
   type MetadataSchema,
-} from "@/scene/metadataSchema";
-import type { MetadataValue } from "@/scene/roomLayout";
+} from "@engine/scene/metadataSchema";
+import type { MetadataValue } from "@engine/scene/layout";
 import { ThumbnailRenderer } from "./ThumbnailRenderer";
 import {
   fetchProjectDir,

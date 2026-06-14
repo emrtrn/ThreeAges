@@ -576,6 +576,11 @@ export default defineConfig({
     alias: {
       // Keep in sync with tsconfig.json "paths"
       "@": fileURLToPath(new URL("./src", import.meta.url)),
+      "@engine": fileURLToPath(new URL("./engine", import.meta.url)),
+      "@editor": fileURLToPath(new URL("./editor", import.meta.url)),
+      "@builder": fileURLToPath(new URL("./builder", import.meta.url)),
+      "@game": fileURLToPath(new URL("./game", import.meta.url)),
+      "@project": fileURLToPath(new URL("./project", import.meta.url)),
     },
   },
   build: {

@@ -24,8 +24,13 @@
     /* Path alias — keep in sync with vite.config.ts resolve.alias */
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@engine/*": ["engine/*"],
+      "@editor/*": ["editor/*"],
+      "@builder/*": ["builder/*"],
+      "@game/*": ["game/*"],
+      "@project/*": ["project/*"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "engine", "editor", "builder", "game", "project", "vite.config.ts"]
 }

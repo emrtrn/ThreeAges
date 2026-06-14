@@ -56,16 +56,21 @@ import {
   readPivot,
   readRotation,
   readScale,
-  type LayoutCharacter,
-  type LayoutLightActor,
-  type LayoutMetadata,
-  type LayoutPlacement,
-  type LayoutWorldSettings,
-  type MetadataValue,
-  type RoomLayout,
-  type Vec3,
 } from "./roomLayout";
-import { metadataValuesEqual, type MetadataSchema } from "./metadataSchema";
+import type {
+  LayoutCharacter,
+  LayoutLightActor,
+  LayoutMetadata,
+  LayoutPlacement,
+  LayoutWorldSettings,
+  MetadataValue,
+  RoomLayout,
+  Vec3,
+} from "@engine/scene/layout";
+import {
+  metadataValuesEqual,
+  type MetadataSchema,
+} from "@engine/scene/metadataSchema";
 
 /** Perf budget: clamp DPR so 1080p+ phones don't render 3x fragments. */
 const MAX_PIXEL_RATIO = 2;

@@ -7,7 +7,7 @@ import {
   projectPublicFileUrl,
   type ProjectManifest,
 } from "@/project/ProjectSystem";
-import type { MetadataSchema } from "./metadataSchema";
+import type { MetadataSchema } from "@engine/scene/metadataSchema";
 
 export interface AssetRecord {
   id: string;
