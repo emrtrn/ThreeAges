@@ -128,6 +128,10 @@ import type {
   EditorHistoryState,
 } from "@editor/core/history";
 import { EditorHistory } from "@editor/core/history";
+import {
+  descendantSelections,
+  groupedSelections,
+} from "@editor/core/hierarchy";
 import { uniqueEditorId } from "@editor/core/ids";
 import {
   compareCharacterDeletes,
@@ -3464,41 +3468,20 @@ export class SceneApp {
   }
 
   private getGroupedSelections(selection: Selection): Selection[] {
-    const groupId = this.getMutableTransform(selection)?.groupId;
-    if (!groupId) return [cloneSelection(selection)];
-
-    const members = this
-      .getAllSelections({ includeHidden: true })
-      .filter((entry) => this.getMutableTransform(entry)?.groupId === groupId);
-    return members.length > 0 ? members.map(cloneSelection) : [cloneSelection(selection)];
-  }
-
-  /** Direct children: objects whose parentId equals the given object's nodeId. */
-  private childrenOf(selection: Selection): Selection[] {
-    const nodeId = this.getMutableTransform(selection)?.nodeId;
-    if (!nodeId) return [];
-    return this.getAllSelections({ includeHidden: true }).filter(
-      (entry) => this.getMutableTransform(entry)?.parentId === nodeId,
+    return groupedSelections(
+      selection,
+      this.getAllSelections({ includeHidden: true }),
+      (entry) => this.getMutableTransform(entry),
     );
   }
 
   /** All descendants (depth-first), cycle-safe via a visited-nodeId set. */
   private descendantsOf(selection: Selection): Selection[] {
-    const result: Selection[] = [];
-    const visited = new Set<string>();
-    const walk = (current: Selection): void => {
-      const nodeId = this.getMutableTransform(current)?.nodeId;
-      if (nodeId) {
-        if (visited.has(nodeId)) return;
-        visited.add(nodeId);
-      }
-      for (const child of this.childrenOf(current)) {
-        result.push(child);
-        walk(child);
-      }
-    };
-    walk(selection);
-    return result;
+    return descendantSelections(
+      selection,
+      this.getAllSelections({ includeHidden: true }),
+      (entry) => this.getMutableTransform(entry),
+    );
   }
 
   private createNodeId(): string {

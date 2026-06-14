@@ -259,6 +259,8 @@ Completed:
   consumed by the editor UI.
 - Added `editor/core/history.ts` for editor command contracts plus undo/redo
   history stack behavior.
+- Added `editor/core/hierarchy.ts` for selection grouping, direct child lookup,
+  and cycle-safe descendant traversal helpers.
 - Added `editor/core/ids.ts` for collision-checked editor id generation used by
   grouping/hierarchy helpers.
 - Added `editor/core/layoutTransforms.ts` for pure layout rotation/scale write
