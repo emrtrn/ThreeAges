@@ -67,8 +67,8 @@ adapter intentionally leaves unmapped, and no audio component or manifest.
 
 ## 5. Readiness Gate
 
-- [ ] `npm run build:verify` reports only known baseline warning(s); engine
+- [x] `npm run build:verify` reports only known baseline warning(s); engine
   tests cover collider derivation + the placeholder physics step.
-- [ ] Game Mode shows a collision-driven behavior reaction and a one-shot sound.
-- [ ] No Three.js / Rapier / DOM imports leaked into `engine/core` or
+- [x] Game Mode shows a collision-driven behavior reaction and a one-shot sound.
+- [x] No Three.js / Rapier / DOM imports leaked into `engine/core` or
   `engine/scene`.
