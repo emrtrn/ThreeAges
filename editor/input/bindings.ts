@@ -1,0 +1,189 @@
+import type { EditableSelection } from "@editor/core/editableScene";
+import type { Selection } from "@editor/core/selection";
+import type { GizmoPointerDrag } from "@editor/gizmos/interaction";
+import type { GizmoHandle } from "@editor/gizmos/handles";
+import {
+  isCameraNavigationKey,
+  isEditableTarget,
+} from "./keyboard";
+
+type Unbind = () => void;
+
+export interface EditorInputBindings {
+  hasSelection(): boolean;
+  consumePendingAsset(clientX: number, clientY: number): boolean;
+  pickGizmoHandle(clientX: number, clientY: number): GizmoHandle | null;
+  startGizmoDrag(handle: GizmoHandle, event: PointerEvent): void;
+  beginAltCameraDrag(event: PointerEvent): boolean;
+  beginCameraNavigation(event: PointerEvent): void;
+  pickSelection(clientX: number, clientY: number): Selection | null;
+  toggleSelection(selection: Selection): void;
+  select(selection: Selection | null): void;
+
+  isCameraNavigationActive(): boolean;
+  cameraNavigationPointerId(): number | null;
+  updateCameraLook(movementX: number, movementY: number): void;
+  endCameraNavigation(event: PointerEvent): void;
+
+  cameraDragPointerId(): number | null;
+  updateCameraDrag(event: PointerEvent): void;
+  endCameraDrag(event: PointerEvent): void;
+
+  pointerDrag(): GizmoPointerDrag | null;
+  clearPointerDrag(): GizmoPointerDrag | null;
+  endGizmoDrag(): void;
+  selected(): EditableSelection | null;
+  updateGizmoHover(clientX: number, clientY: number): void;
+  clearGizmoHover(): void;
+  updateMoveDrag(event: PointerEvent, selected: EditableSelection): void;
+  updateRotateDrag(event: PointerEvent): void;
+  updateScaleDrag(event: PointerEvent): void;
+  commitPointerDrag(drag: GizmoPointerDrag): void;
+  updateGizmo(): void;
+
+  onAssetDrop(assetId: string, clientX: number, clientY: number): void;
+  onWheel(event: WheelEvent): void;
+
+  addPressedKey(code: string): void;
+  deletePressedKey(code: string): void;
+}
+
+export function bindEditorInputEvents(
+  canvas: HTMLCanvasElement,
+  bindings: EditorInputBindings,
+): Unbind {
+  const unbinders: Unbind[] = [];
+  const on = <K extends keyof HTMLElementEventMap>(
+    target: HTMLCanvasElement,
+    type: K,
+    listener: (event: HTMLElementEventMap[K]) => void,
+    options?: AddEventListenerOptions,
+  ): void => {
+    target.addEventListener(type, listener, options);
+    unbinders.push(() => target.removeEventListener(type, listener, options));
+  };
+  const onWindow = <K extends keyof WindowEventMap>(
+    type: K,
+    listener: (event: WindowEventMap[K]) => void,
+  ): void => {
+    window.addEventListener(type, listener);
+    unbinders.push(() => window.removeEventListener(type, listener));
+  };
+
+  on(canvas, "pointerdown", (event) => {
+    if (event.altKey) {
+      const gizmoHandle = bindings.pickGizmoHandle(event.clientX, event.clientY);
+      if (event.button === 0 && gizmoHandle && bindings.hasSelection()) {
+        bindings.startGizmoDrag(gizmoHandle, event);
+        return;
+      }
+      if (bindings.beginAltCameraDrag(event)) return;
+    }
+
+    // Middle mouse button = pan (no Alt required).
+    if (event.button === 1) {
+      bindings.beginAltCameraDrag(event);
+      return;
+    }
+
+    if (event.button === 2) {
+      bindings.beginCameraNavigation(event);
+      return;
+    }
+
+    if (bindings.consumePendingAsset(event.clientX, event.clientY)) return;
+
+    const gizmoHandle = bindings.pickGizmoHandle(event.clientX, event.clientY);
+    if (gizmoHandle && bindings.hasSelection()) {
+      bindings.startGizmoDrag(gizmoHandle, event);
+      return;
+    }
+
+    const picked = bindings.pickSelection(event.clientX, event.clientY);
+    if (event.ctrlKey || event.shiftKey) {
+      if (picked) bindings.toggleSelection(picked);
+      return;
+    }
+
+    bindings.select(picked);
+  });
+
+  on(canvas, "pointermove", (event) => {
+    if (
+      bindings.isCameraNavigationActive() &&
+      bindings.cameraNavigationPointerId() === event.pointerId
+    ) {
+      bindings.updateCameraLook(event.movementX, event.movementY);
+      return;
+    }
+
+    if (bindings.cameraDragPointerId() === event.pointerId) {
+      bindings.updateCameraDrag(event);
+      return;
+    }
+
+    const pointerDrag = bindings.pointerDrag();
+    if (!pointerDrag) {
+      bindings.updateGizmoHover(event.clientX, event.clientY);
+      return;
+    }
+    if (pointerDrag.pointerId !== event.pointerId) return;
+    const selected = bindings.selected();
+    if (!selected) return;
+
+    if (pointerDrag.mode === "move") {
+      bindings.updateMoveDrag(event, selected);
+    } else if (pointerDrag.mode === "rotate") {
+      bindings.updateRotateDrag(event);
+    } else {
+      bindings.updateScaleDrag(event);
+    }
+  });
+
+  const clearDrag = (event: PointerEvent): void => {
+    if (bindings.cameraNavigationPointerId() === event.pointerId) {
+      bindings.endCameraNavigation(event);
+    }
+    if (bindings.cameraDragPointerId() === event.pointerId) {
+      bindings.endCameraDrag(event);
+    }
+    if (bindings.pointerDrag()?.pointerId === event.pointerId) {
+      const drag = bindings.clearPointerDrag();
+      bindings.endGizmoDrag();
+      canvas.releasePointerCapture(event.pointerId);
+      if (drag) bindings.commitPointerDrag(drag);
+      bindings.updateGizmo();
+    }
+  };
+  on(canvas, "pointerup", clearDrag);
+  on(canvas, "pointercancel", clearDrag);
+  on(canvas, "pointerleave", () => bindings.clearGizmoHover());
+  on(canvas, "contextmenu", (event) => event.preventDefault());
+
+  onWindow("keydown", (event) => {
+    if (!bindings.isCameraNavigationActive() || isEditableTarget(event.target)) return;
+    if (!isCameraNavigationKey(event.code)) return;
+    event.preventDefault();
+    bindings.addPressedKey(event.code);
+  });
+  onWindow("keyup", (event) => {
+    if (!isCameraNavigationKey(event.code)) return;
+    bindings.deletePressedKey(event.code);
+  });
+
+  on(canvas, "dragover", (event) => {
+    event.preventDefault();
+    event.dataTransfer!.dropEffect = "copy";
+  });
+  on(canvas, "drop", (event) => {
+    event.preventDefault();
+    const assetId = event.dataTransfer?.getData("application/x-3dgamedev-asset");
+    if (!assetId) return;
+    bindings.onAssetDrop(assetId, event.clientX, event.clientY);
+  });
+  on(canvas, "wheel", (event) => bindings.onWheel(event), { passive: false });
+
+  return () => {
+    for (const unbind of unbinders.splice(0).reverse()) unbind();
+  };
+}

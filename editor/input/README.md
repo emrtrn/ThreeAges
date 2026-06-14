@@ -4,6 +4,8 @@ Editor DOM input helpers live here.
 
 Current files:
 
+- `bindings.ts`: editor-only DOM listener wiring for pointer, keyboard,
+  drag/drop, wheel, and cleanup.
 - `keyboard.ts`: keyboard-code filters and editable-target guards for editor controls.
 
 Rules:

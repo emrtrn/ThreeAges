@@ -206,10 +206,7 @@ import {
   type GizmoPointerDrag,
   type LinkedMoveStart,
 } from "@editor/gizmos/interaction";
-import {
-  isCameraNavigationKey,
-  isEditableTarget,
-} from "@editor/input/keyboard";
+import { bindEditorInputEvents } from "@editor/input/bindings";
 import {
   matrixToTransform,
   transformToMatrix,
@@ -382,6 +379,7 @@ export class SceneApp {
   private pendingAssetId: string | null = null;
   private pointerDrag: GizmoPointerDrag | null = null;
   private readonly commandStore = new EditorCommandStore();
+  private unbindEditorInput: (() => void) | null = null;
 
   /** Called every frame with the smoothed delta; used by the debug overlay. */
   onFrame: ((deltaMs: number) => void) | null = null;
@@ -426,7 +424,7 @@ export class SceneApp {
 
     this.projectReady = this.loadActiveProjectScene();
 
-    if (this.editorEnabled) this.bindEditorPointerEvents();
+    if (this.editorEnabled) this.bindEditorInput();
 
     this.handleResize();
     window.addEventListener("resize", this.handleResize);
@@ -466,8 +464,8 @@ export class SceneApp {
   dispose(): void {
     cancelAnimationFrame(this.frameHandle);
     window.removeEventListener("resize", this.handleResize);
-    window.removeEventListener("keydown", this.handleKeyDown);
-    window.removeEventListener("keyup", this.handleKeyUp);
+    this.unbindEditorInput?.();
+    this.unbindEditorInput = null;
     this.keyboardInput.detach();
     // EngineApp.dispose() is async (subsystems may release async resources);
     // SceneApp.dispose() is sync, so fire-and-forget like the renderer teardown.
@@ -2669,129 +2667,49 @@ export class SceneApp {
     });
   }
 
-  private bindEditorPointerEvents(): void {
-    this.canvas.addEventListener("pointerdown", (event) => {
-      if (event.altKey) {
-        const gizmoHandle = this.pickGizmoHandle(event.clientX, event.clientY);
-        if (event.button === 0 && gizmoHandle && this.selection) {
-          this.startGizmoDrag(gizmoHandle, event);
-          return;
-        }
-        if (this.beginAltCameraDrag(event)) return;
-      }
-
-      // Middle mouse button = pan (no Alt required).
-      if (event.button === 1) {
-        this.beginAltCameraDrag(event);
-        return;
-      }
-
-      if (event.button === 2) {
-        this.beginCameraNavigation(event);
-        return;
-      }
-
-      if (this.pendingAssetId) {
-        this.addAssetAt(this.pendingAssetId, event.clientX, event.clientY);
+  private bindEditorInput(): void {
+    this.unbindEditorInput = bindEditorInputEvents(this.canvas, {
+      hasSelection: () => Boolean(this.selection),
+      consumePendingAsset: (clientX, clientY) => {
+        if (!this.pendingAssetId) return false;
+        this.addAssetAt(this.pendingAssetId, clientX, clientY);
         this.pendingAssetId = null;
-        return;
-      }
-
-      const gizmoHandle = this.pickGizmoHandle(event.clientX, event.clientY);
-      if (gizmoHandle && this.selection) {
-        this.startGizmoDrag(gizmoHandle, event);
-        return;
-      }
-
-      const picked = this.pickSelection(event.clientX, event.clientY);
-      if (event.ctrlKey || event.shiftKey) {
-        if (picked) this.toggleSelection(picked);
-        return;
-      }
-
-      if (picked) {
-        this.select(picked);
-      } else {
-        this.select(null);
-      }
-    });
-
-    this.canvas.addEventListener("pointermove", (event) => {
-      if (this.cameraNavigationActive && this.cameraNavigationPointerId === event.pointerId) {
-        this.updateCameraLook(event.movementX, event.movementY);
-        return;
-      }
-
-      if (this.cameraDrag?.pointerId === event.pointerId) {
-        this.updateCameraDrag(event);
-        return;
-      }
-
-      if (!this.pointerDrag) {
-        this.updateGizmoHover(event.clientX, event.clientY);
-        return;
-      }
-      if (this.pointerDrag.pointerId !== event.pointerId) return;
-      const selected = this.getSelected();
-      if (!selected) return;
-
-      if (this.pointerDrag.mode === "move") {
-        this.updateMoveDrag(event, selected);
-      } else if (this.pointerDrag.mode === "rotate") {
-        this.updateRotateDrag(event);
-      } else {
-        this.updateScaleDrag(event);
-      }
-    });
-
-    const clearDrag = (event: PointerEvent) => {
-      if (this.cameraNavigationPointerId === event.pointerId) {
-        this.endCameraNavigation(event);
-      }
-      if (this.cameraDrag?.pointerId === event.pointerId) {
-        this.endCameraDrag(event);
-      }
-      if (this.pointerDrag?.pointerId === event.pointerId) {
+        return true;
+      },
+      pickGizmoHandle: (clientX, clientY) => this.pickGizmoHandle(clientX, clientY),
+      startGizmoDrag: (handle, event) => this.startGizmoDrag(handle, event),
+      beginAltCameraDrag: (event) => this.beginAltCameraDrag(event),
+      beginCameraNavigation: (event) => this.beginCameraNavigation(event),
+      pickSelection: (clientX, clientY) => this.pickSelection(clientX, clientY),
+      toggleSelection: (selection) => this.toggleSelection(selection),
+      select: (selection) => this.select(selection),
+      isCameraNavigationActive: () => this.cameraNavigationActive,
+      cameraNavigationPointerId: () => this.cameraNavigationPointerId,
+      updateCameraLook: (movementX, movementY) => this.updateCameraLook(movementX, movementY),
+      endCameraNavigation: (event) => this.endCameraNavigation(event),
+      cameraDragPointerId: () => this.cameraDrag?.pointerId ?? null,
+      updateCameraDrag: (event) => this.updateCameraDrag(event),
+      endCameraDrag: (event) => this.endCameraDrag(event),
+      pointerDrag: () => this.pointerDrag,
+      clearPointerDrag: () => {
         const drag = this.pointerDrag;
         this.pointerDrag = null;
-        this.gizmoInteraction.endDrag();
-        this.canvas.releasePointerCapture(event.pointerId);
-        if (drag.mode === "move" && drag.pivotEdit) {
-          this.commitPivotChange(
-            drag.selection,
-            drag.startPivot ?? [0, 0, 0],
-            this.getSelectionPivot(drag.selection),
-          );
-        } else if (drag.linkedTransforms?.length) {
-          const verb =
-            drag.mode === "rotate" ? "Rotate" : drag.mode === "scale" ? "Scale" : "Move";
-          this.commitLinkedMoveChange(drag, verb);
-        } else {
-          this.commitTransformChange(drag.selection, drag.startTransform);
-        }
-        this.updateGizmo();
-      }
-    };
-    this.canvas.addEventListener("pointerup", clearDrag);
-    this.canvas.addEventListener("pointercancel", clearDrag);
-    this.canvas.addEventListener("pointerleave", () => this.clearGizmoHover());
-    this.canvas.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
+        return drag;
+      },
+      endGizmoDrag: () => this.gizmoInteraction.endDrag(),
+      selected: () => this.getSelected(),
+      updateGizmoHover: (clientX, clientY) => this.updateGizmoHover(clientX, clientY),
+      clearGizmoHover: () => this.clearGizmoHover(),
+      updateMoveDrag: (event, selected) => this.updateMoveDrag(event, selected),
+      updateRotateDrag: (event) => this.updateRotateDrag(event),
+      updateScaleDrag: (event) => this.updateScaleDrag(event),
+      commitPointerDrag: (drag) => this.commitPointerDrag(drag),
+      updateGizmo: () => this.updateGizmo(),
+      onAssetDrop: (assetId, clientX, clientY) => this.addAssetAt(assetId, clientX, clientY),
+      onWheel: (event) => this.handleWheel(event),
+      addPressedKey: (code) => this.pressedKeys.add(code),
+      deletePressedKey: (code) => this.pressedKeys.delete(code),
     });
-    window.addEventListener("keydown", this.handleKeyDown);
-    window.addEventListener("keyup", this.handleKeyUp);
-
-    this.canvas.addEventListener("dragover", (event) => {
-      event.preventDefault();
-      event.dataTransfer!.dropEffect = "copy";
-    });
-    this.canvas.addEventListener("drop", (event) => {
-      event.preventDefault();
-      const assetId = event.dataTransfer?.getData("application/x-3dgamedev-asset");
-      if (!assetId) return;
-      this.addAssetAt(assetId, event.clientX, event.clientY);
-    });
-    this.canvas.addEventListener("wheel", this.handleWheel, { passive: false });
   }
 
   private beginCameraNavigation(event: PointerEvent): void {
@@ -2987,17 +2905,22 @@ export class SceneApp {
     this.camera.position.add(this.cameraMove);
   }
 
-  private handleKeyDown = (event: KeyboardEvent): void => {
-    if (!this.cameraNavigationActive || isEditableTarget(event.target)) return;
-    if (!isCameraNavigationKey(event.code)) return;
-    event.preventDefault();
-    this.pressedKeys.add(event.code);
-  };
-
-  private handleKeyUp = (event: KeyboardEvent): void => {
-    if (!isCameraNavigationKey(event.code)) return;
-    this.pressedKeys.delete(event.code);
-  };
+  private commitPointerDrag(drag: GizmoPointerDrag): void {
+    if (drag.mode === "move" && drag.pivotEdit) {
+      this.commitPivotChange(
+        drag.selection,
+        drag.startPivot ?? [0, 0, 0],
+        this.getSelectionPivot(drag.selection),
+      );
+      return;
+    }
+    if (drag.linkedTransforms?.length) {
+      const verb = drag.mode === "rotate" ? "Rotate" : drag.mode === "scale" ? "Scale" : "Move";
+      this.commitLinkedMoveChange(drag, verb);
+      return;
+    }
+    this.commitTransformChange(drag.selection, drag.startTransform);
+  }
 
   private getCameraBasis(): void {
     this.camera.getWorldDirection(this.cameraForward);
