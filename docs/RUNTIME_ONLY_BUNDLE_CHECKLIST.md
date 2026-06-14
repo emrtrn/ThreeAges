@@ -48,6 +48,6 @@ Today `npm run build` emits a single ~826 kB JS chunk (800 kB warning), and
 
 ## 4. Strict Gate
 
-- [ ] Make `npm run verify:dist -- --strict` pass with zero known-debt warnings.
-- [ ] Wire strict verification into `build:verify` (or a CI script) so runtime-only
+- [x] Make `npm run verify:dist -- --strict` pass with zero known-debt warnings.
+- [x] Wire strict verification into `build:verify` (or a CI script) so runtime-only
   output is enforced, not just reported.
