@@ -7,6 +7,8 @@ Current files:
 
 - `selection.ts`: editor selection identity, parsing, equality, and deterministic
   delete/restore ordering helpers.
+- `layoutSnapshots.ts`: layout actor/metadata deep-copy helpers and transform
+  equality checks used by editor undo/redo snapshots.
 
 Rules:
 

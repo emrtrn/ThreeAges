@@ -252,6 +252,8 @@ Completed:
 
 - Added `editor/core/selection.ts` for editor selection identity, parsing,
   equality, and deterministic delete/restore ordering helpers.
+- Added `editor/core/layoutSnapshots.ts` for layout actor/metadata deep-copy
+  helpers and transform equality checks used by undo/redo snapshots.
 - Kept selection state ownership in `SceneApp` for now; this step only moved
   pure editor-core helper logic.
 
