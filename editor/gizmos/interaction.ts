@@ -9,12 +9,20 @@ import {
   Vector3,
 } from "three";
 
-import type { EditableTransform } from "@editor/core/editableScene";
+import {
+  selectionToTransform,
+  type EditableSelection,
+  type EditableTransform,
+} from "@editor/core/editableScene";
 import { clamp } from "@editor/core/numeric";
 import type { Selection } from "@editor/core/selection";
+import { transformToMatrix } from "@editor/render-three/transformMatrices";
 import { degreesToRadians } from "@engine/scene/transform";
 import type { Vec3 } from "@engine/scene/layout";
-import type { GizmoPlaneAxis } from "./axes";
+import {
+  isPlaneAxis,
+  type GizmoPlaneAxis,
+} from "./axes";
 import {
   gizmoHandlesEqual,
   type GizmoHandle,
@@ -76,6 +84,24 @@ export type GizmoPointerDrag =
       pivot?: Vec3 | undefined;
     };
 
+export interface CreateGizmoPointerDragOptions {
+  handle: GizmoHandle;
+  selection: Selection;
+  selected: EditableSelection;
+  pointerId: number;
+  clientX: number;
+  clientY: number;
+  floorHit: Vector3 | null;
+  freeMoveBasis: { right: Vector3; up: Vector3 };
+  linkedTransforms?: LinkedMoveStart[] | undefined;
+  descendantTransforms?: LinkedMoveStart[] | undefined;
+  movePlane?: Plane | undefined;
+  planeStartHit?: Vector3 | undefined;
+  pivot: Vec3;
+  pivotWorld: Vector3 | null;
+  pivotEditing: boolean;
+}
+
 export class GizmoInteractionStore {
   private active: GizmoHandle | null = null;
   private hovered: GizmoHandle | null = null;
@@ -108,6 +134,102 @@ export class GizmoInteractionStore {
     this.hovered = null;
     return true;
   }
+}
+
+export function gizmoDragBaseWorld(
+  selected: EditableSelection,
+  pivotWorld: Vector3 | null,
+  pivotEditing: boolean,
+): Vector3 {
+  return (pivotEditing ? pivotWorld : null) ?? new Vector3(...selected.position);
+}
+
+export function createGizmoMovePlane(
+  handle: GizmoHandle,
+  base: Vector3,
+  gizmoQuaternion: Quaternion,
+): Plane | undefined {
+  if (handle.tool !== "move" || !isPlaneAxis(handle.axis)) return undefined;
+  return new Plane().setFromNormalAndCoplanarPoint(
+    planeAxisNormalWorld(handle.axis, gizmoQuaternion),
+    base,
+  );
+}
+
+export function createGizmoPointerDrag(
+  options: CreateGizmoPointerDragOptions,
+): GizmoPointerDrag {
+  const {
+    handle,
+    selection,
+    selected,
+    pointerId,
+    clientX,
+    clientY,
+    floorHit,
+    freeMoveBasis,
+    linkedTransforms,
+    descendantTransforms,
+    movePlane,
+    planeStartHit,
+    pivot,
+    pivotWorld,
+    pivotEditing,
+  } = options;
+  const startTransform = selectionToTransform(selected);
+
+  if (handle.tool === "move") {
+    const base = gizmoDragBaseWorld(selected, pivotWorld, pivotEditing);
+    return {
+      mode: "move",
+      axis: handle.axis,
+      selection,
+      pointerId,
+      startTransform,
+      offset: floorHit ? new Vector3(base.x - floorHit.x, 0, base.z - floorHit.z) : new Vector3(),
+      startPosition: [base.x, base.y, base.z],
+      startClientX: clientX,
+      startClientY: clientY,
+      freeMoveRight: freeMoveBasis.right,
+      freeMoveUp: freeMoveBasis.up,
+      linkedTransforms: pivotEditing ? undefined : linkedTransforms,
+      movePlane,
+      planeStartHit,
+      pivotEdit: pivotEditing ? true : undefined,
+      pivotMatrixInverse: pivotEditing ? transformToMatrix(startTransform).invert() : undefined,
+      startPivot: pivotEditing ? pivot : undefined,
+    };
+  }
+
+  const hasPivot = pivot[0] !== 0 || pivot[1] !== 0 || pivot[2] !== 0;
+  if (handle.tool === "rotate") {
+    return {
+      mode: "rotate",
+      axis: handle.axis,
+      selection,
+      pointerId,
+      startTransform,
+      startClientX: clientX,
+      startRotation: [...selected.rotation],
+      linkedTransforms: descendantTransforms,
+      pivot: hasPivot ? pivot : undefined,
+      pivotWorld: hasPivot ? pivotWorld ?? undefined : undefined,
+    };
+  }
+
+  return {
+    mode: "scale",
+    axis: handle.axis,
+    selection,
+    pointerId,
+    startTransform,
+    startClientX: clientX,
+    startClientY: clientY,
+    startScale: [...selected.scale],
+    linkedTransforms: descendantTransforms,
+    pivot: hasPivot ? pivot : undefined,
+    pivotWorld: hasPivot ? pivotWorld ?? undefined : undefined,
+  };
 }
 
 export function pickGizmoHandle(

@@ -146,7 +146,6 @@ import {
 } from "@editor/core/commandLabels";
 import type { EditorTool, TransformSpace } from "@editor/core/tools";
 import {
-  selectionToTransform,
   worldSettingsEqual,
   type EditableSceneObject,
   type EditableSelection,
@@ -198,9 +197,11 @@ import {
 } from "@editor/gizmos/handles";
 import {
   calculateGizmoScreenScale,
+  createGizmoMovePlane,
+  createGizmoPointerDrag,
+  gizmoDragBaseWorld,
   GizmoInteractionStore,
   pickGizmoHandle as pickGizmoHandleFromObjects,
-  planeAxisNormalWorld,
   screenSpaceMoveBasis,
   type GizmoPointerDrag,
   type LinkedMoveStart,
@@ -3042,79 +3043,34 @@ export class SceneApp {
     this.gizmoInteraction.beginDrag(handle);
     this.updateGizmo();
 
-    if (handle.tool === "move") {
-      const pivotEditing = this.pivotEditMode && this.selection.kind !== "light";
-      // The drag base is the pivot point when editing the pivot, else the origin.
-      const base =
-        (pivotEditing ? this.getSelectionPivotWorld(this.selection) : null) ??
-        new Vector3(...selected.position);
-      const hit = this.clientToFloor(event.clientX, event.clientY);
-      const freeMoveBasis = this.getScreenSpaceMoveBasis();
-      let movePlane: Plane | undefined;
-      let planeStartHit: Vector3 | undefined;
-      if (isPlaneAxis(handle.axis)) {
-        movePlane = new Plane().setFromNormalAndCoplanarPoint(
-          this.planeNormalWorld(handle.axis),
-          base,
-        );
-        planeStartHit =
-          this.clientToPlane(event.clientX, event.clientY, movePlane) ?? base.clone();
-      }
-      this.pointerDrag = {
-        mode: "move",
-        axis: handle.axis,
-        selection: this.selection,
-        pointerId: event.pointerId,
-        startTransform: selectionToTransform(selected),
-        offset: hit
-          ? new Vector3(base.x - hit.x, 0, base.z - hit.z)
-          : new Vector3(),
-        startPosition: [base.x, base.y, base.z],
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        freeMoveRight: freeMoveBasis.right,
-        freeMoveUp: freeMoveBasis.up,
-        linkedTransforms: pivotEditing ? undefined : linkedTransforms,
-        movePlane,
-        planeStartHit,
-        pivotEdit: pivotEditing ? true : undefined,
-        pivotMatrixInverse: pivotEditing
-          ? transformToMatrix(selectionToTransform(selected)).invert()
+    const pivot = this.getSelectionPivot(this.selection);
+    const pivotWorld = this.getSelectionPivotWorld(this.selection);
+    const pivotEditing = handle.tool === "move" && this.pivotEditMode && this.selection.kind !== "light";
+    const base = gizmoDragBaseWorld(selected, pivotWorld, pivotEditing);
+    const movePlane = createGizmoMovePlane(handle, base, this.gizmoGroup.quaternion);
+    const planeStartHit = movePlane
+      ? this.clientToPlane(event.clientX, event.clientY, movePlane) ?? base.clone()
+      : undefined;
+    this.pointerDrag = createGizmoPointerDrag({
+      handle,
+      selection: this.selection,
+      selected,
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      floorHit: handle.tool === "move" ? this.clientToFloor(event.clientX, event.clientY) : null,
+      freeMoveBasis: this.getScreenSpaceMoveBasis(),
+      linkedTransforms,
+      descendantTransforms:
+        handle.tool === "rotate" || handle.tool === "scale"
+          ? this.captureDescendantStarts(this.selection)
           : undefined,
-        startPivot: pivotEditing ? this.getSelectionPivot(this.selection) : undefined,
-      };
-    } else if (handle.tool === "rotate") {
-      const pivot = this.getSelectionPivot(this.selection);
-      const hasPivot = pivot[0] !== 0 || pivot[1] !== 0 || pivot[2] !== 0;
-      this.pointerDrag = {
-        mode: "rotate",
-        axis: handle.axis,
-        selection: this.selection,
-        pointerId: event.pointerId,
-        startTransform: selectionToTransform(selected),
-        startClientX: event.clientX,
-        startRotation: [...selected.rotation],
-        linkedTransforms: this.captureDescendantStarts(this.selection),
-        pivot: hasPivot ? pivot : undefined,
-        pivotWorld: hasPivot ? this.getSelectionPivotWorld(this.selection) ?? undefined : undefined,
-      };
-    } else {
-      const pivot = this.getSelectionPivot(this.selection);
-      const hasPivot = pivot[0] !== 0 || pivot[1] !== 0 || pivot[2] !== 0;
-      this.pointerDrag = {
-        mode: "scale",
-        axis: handle.axis,
-        selection: this.selection,
-        pointerId: event.pointerId,
-        startTransform: selectionToTransform(selected),
-        startClientX: event.clientX,
-        startClientY: event.clientY,
-        startScale: [...selected.scale],
-        linkedTransforms: this.captureDescendantStarts(this.selection),
-        pivot: hasPivot ? pivot : undefined,
-        pivotWorld: hasPivot ? this.getSelectionPivotWorld(this.selection) ?? undefined : undefined,
-      };
-    }
+      movePlane,
+      planeStartHit,
+      pivot,
+      pivotWorld,
+      pivotEditing,
+    });
 
     this.canvas.setPointerCapture(event.pointerId);
   }
@@ -3369,11 +3325,6 @@ export class SceneApp {
 
   private getScreenSpaceMoveBasis(): { right: Vector3; up: Vector3 } {
     return screenSpaceMoveBasis(this.camera.quaternion);
-  }
-
-  /** World-space normal of a plane handle, matching the gizmo's orientation. */
-  private planeNormalWorld(axis: GizmoPlaneAxis): Vector3 {
-    return planeAxisNormalWorld(axis, this.gizmoGroup.quaternion);
   }
 
   private clientToPlane(clientX: number, clientY: number, plane: Plane): Vector3 | null {
