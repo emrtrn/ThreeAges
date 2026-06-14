@@ -5,6 +5,7 @@ export const TRANSFORM_COMPONENT = "Transform";
 export const MESH_RENDERER_COMPONENT = "MeshRenderer";
 export const LIGHT_COMPONENT = "Light";
 export const METADATA_COMPONENT = "Metadata";
+export const BEHAVIOR_COMPONENT = "Behavior";
 
 export type SceneLightType = "directional" | "point" | "spot";
 
@@ -33,6 +34,16 @@ export interface LightComponent {
 
 export interface MetadataComponent {
   values: Record<string, SceneJsonValue>;
+}
+
+/**
+ * Attaches a runtime script to an entity: a registered behavior `scriptId` plus
+ * opaque JSON `params`. The behavior registry (a runtime concern) resolves the
+ * id to an update function; the engine layer only stores the reference.
+ */
+export interface BehaviorComponent {
+  scriptId: string;
+  params?: Record<string, SceneJsonValue>;
 }
 
 function readVec3(value: SceneJsonValue | undefined): Vec3 | undefined {
@@ -71,6 +82,19 @@ export function readMetadataComponent(entity: Entity): MetadataComponent | undef
   const values = data.values;
   if (typeof values !== "object" || values === null || Array.isArray(values)) return undefined;
   return { values: { ...(values as Record<string, SceneJsonValue>) } };
+}
+
+/** Reads a typed behavior reference from an entity's serializable component data. */
+export function readBehaviorComponent(entity: Entity): BehaviorComponent | undefined {
+  const data = entity.components[BEHAVIOR_COMPONENT];
+  if (!data) return undefined;
+  if (typeof data.scriptId !== "string" || data.scriptId.length === 0) return undefined;
+  const component: BehaviorComponent = { scriptId: data.scriptId };
+  const params = data.params;
+  if (typeof params === "object" && params !== null && !Array.isArray(params)) {
+    component.params = { ...(params as Record<string, SceneJsonValue>) };
+  }
+  return component;
 }
 
 const LIGHT_TYPES: readonly SceneLightType[] = ["directional", "point", "spot"];

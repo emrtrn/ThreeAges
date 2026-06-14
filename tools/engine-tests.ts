@@ -20,6 +20,7 @@ import {
 } from "../engine/scene/legacyRoomLayoutAdapter";
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
 import {
+  readBehaviorComponent,
   readLightComponent,
   readMeshRendererComponent,
   readMetadataComponent,
@@ -375,6 +376,45 @@ check("input subsystem maps raw codes to named action edges per tick", () => {
   actions.handleDown("KeyX");
   app.update(0.016);
   assert.equal(actions.get("move-forward").held, false);
+});
+
+// 6.1.3 A layout placement/character carrying a behavior derives a readable
+// BehaviorComponent (authoring path: layout field -> adapter -> typed reader).
+check("layout behavior maps to a readable behavior component", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "behavior-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "turntable",
+        placements: [
+          {
+            position: [0, 0, 0],
+            behavior: { script: "spin", params: { speedDeg: 90, axis: "y" } },
+          },
+        ],
+      },
+    ],
+    characters: [
+      { assetId: "hero", position: [0, 0, 0], behavior: { script: "input-move" } },
+    ],
+    lights: [],
+  };
+
+  const document = roomLayoutToSceneDocument(fixture);
+
+  const turntable = document.entities.find(
+    (entity) => entity.id === instanceEntityId("turntable", 0),
+  );
+  const spin = turntable ? readBehaviorComponent(turntable) : undefined;
+  assert.equal(spin?.scriptId, "spin");
+  assert.deepEqual(spin?.params, { speedDeg: 90, axis: "y" });
+
+  const hero = document.entities.find((entity) => entity.id === characterEntityId(0));
+  const move = hero ? readBehaviorComponent(hero) : undefined;
+  assert.equal(move?.scriptId, "input-move");
+  assert.equal(move?.params, undefined);
 });
 
 // 6.2 The scene model can represent a mesh entity, a light entity, metadata,

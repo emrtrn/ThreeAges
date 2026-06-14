@@ -9,6 +9,16 @@ export type LayoutLightType = "directional" | "point" | "spot";
 export type MetadataValue = string | number | boolean | string[];
 export type LayoutMetadata = Record<string, MetadataValue>;
 
+/**
+ * Authoring reference to a runtime behavior script: a registered `script` id and
+ * optional JSON-ish `params`. The runtime behavior registry resolves the id to
+ * an update function; the saved layout only stores the reference.
+ */
+export interface LayoutBehavior {
+  script: string;
+  params?: LayoutMetadata;
+}
+
 export interface LayoutPlacement {
   name?: string;
   hidden?: boolean;
@@ -39,6 +49,8 @@ export interface LayoutPlacement {
   collision?: boolean;
   /** Project-defined gameplay metadata (schema-driven; omitted when empty). */
   metadata?: LayoutMetadata;
+  /** Runtime behavior script reference (resolved by the behavior registry). */
+  behavior?: LayoutBehavior;
 }
 
 export interface LayoutModelInstances {
@@ -78,6 +90,8 @@ export interface LayoutCharacter {
   /** Project-defined gameplay metadata (schema-driven; omitted when empty). */
   metadata?: LayoutMetadata;
   animation?: string;
+  /** Runtime behavior script reference (resolved by the behavior registry). */
+  behavior?: LayoutBehavior;
 }
 
 export interface LayoutWorldSettings {

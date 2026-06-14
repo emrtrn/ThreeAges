@@ -32,6 +32,7 @@
  *   - per-object `receiveShadow` (world-level static shadow flags are used)
  */
 import {
+  type LayoutBehavior,
   type LayoutCharacter,
   type LayoutLightActor,
   type LayoutMetadata,
@@ -43,10 +44,12 @@ import {
 import { readRotation, readScale } from "./transform";
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
 import {
+  BEHAVIOR_COMPONENT,
   LIGHT_COMPONENT,
   MESH_RENDERER_COMPONENT,
   METADATA_COMPONENT,
   TRANSFORM_COMPONENT,
+  type BehaviorComponent,
   type LightComponent,
   type MeshRendererComponent,
   type MetadataComponent,
@@ -210,6 +213,8 @@ function instanceComponents(assetId: string, placement: LayoutPlacement): Entity
   };
   const metadata = metadataComponent(placement.metadata);
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
+  const behavior = behaviorComponent(placement.behavior);
+  if (behavior) components[BEHAVIOR_COMPONENT] = toData(behavior);
   return components;
 }
 
@@ -220,6 +225,8 @@ function characterComponents(character: LayoutCharacter): EntityComponentMap {
   };
   const metadata = metadataComponent(character.metadata);
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
+  const behavior = behaviorComponent(character.behavior);
+  if (behavior) components[BEHAVIOR_COMPONENT] = toData(behavior);
   return components;
 }
 
@@ -258,6 +265,19 @@ function lightComponent(light: LayoutLightActor): LightComponent {
   if (light.angle !== undefined) component.angle = light.angle;
   if (light.penumbra !== undefined) component.penumbra = light.penumbra;
   if (light.decay !== undefined) component.decay = light.decay;
+  return component;
+}
+
+function behaviorComponent(behavior: LayoutBehavior | undefined): BehaviorComponent | null {
+  if (!behavior) return null;
+  const component: BehaviorComponent = { scriptId: behavior.script };
+  if (behavior.params) {
+    const params: Record<string, SceneJsonValue> = {};
+    for (const [key, value] of Object.entries(behavior.params)) {
+      params[key] = Array.isArray(value) ? [...value] : value;
+    }
+    if (Object.keys(params).length > 0) component.params = params;
+  }
   return component;
 }
 
@@ -300,7 +320,12 @@ function sceneWorldSettings(source: LayoutWorldSettings): SceneWorldSettings {
  * is fully type-checked; only this final storage step is cast.
  */
 function toData(
-  component: TransformComponent | MeshRendererComponent | LightComponent | MetadataComponent,
+  component:
+    | TransformComponent
+    | MeshRendererComponent
+    | LightComponent
+    | MetadataComponent
+    | BehaviorComponent,
 ): EntityComponentData {
   return component as unknown as EntityComponentData;
 }

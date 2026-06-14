@@ -179,6 +179,22 @@ function validateMetadata(value: unknown, label: string): Record<string, unknown
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+/** Validates an optional behavior reference (`{ script, params? }`). */
+function validateBehavior(value: unknown, label: string): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} behavior must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.script !== "string" || input.script.length === 0) {
+    throw new Error(`${label} behavior.script must be a non-empty string`);
+  }
+  const behavior: Record<string, unknown> = { script: input.script };
+  const params = validateMetadata(input.params, `${label} behavior.params`);
+  if (params) behavior.params = params;
+  return behavior;
+}
+
 /** Copies the optional transform/authoring fields onto `target`, validating each. */
 function applyTransformFields(
   entry: Record<string, unknown>,
@@ -196,6 +212,8 @@ function applyTransformFields(
   if (typeof entry.parentId === "string") target.parentId = entry.parentId;
   const metadata = validateMetadata(entry.metadata, label);
   if (metadata) target.metadata = metadata;
+  const behavior = validateBehavior(entry.behavior, label);
+  if (behavior) target.behavior = behavior;
 
   if (entry.rotationYDeg !== undefined) {
     target.rotationYDeg = validateRotationDeg(entry.rotationYDeg, `${label} rotationYDeg`);

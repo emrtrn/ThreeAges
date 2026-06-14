@@ -72,8 +72,8 @@ inspection-only. This checklist makes the spine actually run.
 
 ## 4. Behavior / Script Update
 
-- [ ] Add a minimal `BehaviorComponent` to `engine/scene/components.ts`
-  (script id + JSON params) plus a typed reader.
+- [x] Add a minimal `BehaviorComponent` to `engine/scene/components.ts`
+  (script id + JSON params) plus a typed reader (`readBehaviorComponent`).
 - [ ] Add a behavior registry (script id -> update function) in a runtime/game
   location; behaviors receive `EngineUpdateContext` + input actions and may
   read/write entity transforms.
@@ -81,8 +81,9 @@ inspection-only. This checklist makes the spine actually run.
   derived from the scene. This is where `SceneDocument` begins to be a runtime
   source of truth (derive once, let behaviors mutate, sync transforms back to
   the rendered objects).
-- [ ] Map the legacy authoring path so a placement/character can carry a
-  behavior (adapter + save-validator allowlist if a new layout field is added).
+- [x] Map the legacy authoring path so a placement/character can carry a
+  behavior (`LayoutBehavior` field -> adapter `BehaviorComponent` mapping ->
+  `vite.config.ts` `validateBehavior` in the save-validator allowlist).
 
 ## 5. Readiness Gate
 
