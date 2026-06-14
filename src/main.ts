@@ -28,7 +28,11 @@ async function main(): Promise<void> {
   // — including the dynamic import — from the production game build, so the
   // package ships no editor UI at all. In dev, ?editor still loads it on demand.
   if (editorEnabled && import.meta.env.DEV) {
-    const { EditorUi } = await import("@/editor/EditorUi");
+    const [{ EditorUi }, { saveLayoutViaDevEndpoint }] = await Promise.all([
+      import("@/editor/EditorUi"),
+      import("@/editor/layoutSaver"),
+    ]);
+    app.setLayoutSaver(saveLayoutViaDevEndpoint);
     new EditorUi(app);
   }
 

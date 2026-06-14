@@ -280,6 +280,24 @@ interface EditorOptions {
   enabled: boolean;
 }
 
+export interface LayoutSavePayload {
+  layout: RoomLayout;
+  editor: {
+    gridSize: number;
+    gridEnabled: boolean;
+    snapRotationDeg: number;
+    snapRotationEnabled: boolean;
+    snapScale: number;
+    snapScaleEnabled: boolean;
+  };
+}
+
+export interface LayoutSaveResult {
+  path?: string;
+}
+
+export type LayoutSaver = (payload: LayoutSavePayload) => Promise<LayoutSaveResult>;
+
 export class SceneApp {
   private renderer: WebGLRenderer;
   private scene = new Scene();
@@ -380,6 +398,7 @@ export class SceneApp {
   private pointerDrag: GizmoPointerDrag | null = null;
   private readonly commandStore = new EditorCommandStore();
   private unbindEditorInput: (() => void) | null = null;
+  private layoutSaver: LayoutSaver | null = null;
 
   /** Called every frame with the smoothed delta; used by the debug overlay. */
   onFrame: ((deltaMs: number) => void) | null = null;
@@ -459,6 +478,10 @@ export class SceneApp {
    */
   registerSubsystem(subsystem: Subsystem): Subsystem {
     return this.engineApp.registerSubsystem(subsystem);
+  }
+
+  setLayoutSaver(saver: LayoutSaver): void {
+    this.layoutSaver = saver;
   }
 
   dispose(): void {
@@ -1716,30 +1739,21 @@ export class SceneApp {
 
   async saveLayout(): Promise<void> {
     if (!this.layout) throw new Error("Layout is not loaded yet.");
-    const response = await fetch("/__save-layout", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        layout: this.layout,
-        editor: {
-          gridSize: this.snapSettings.move,
-          gridEnabled: this.snapSettings.moveEnabled,
-          snapRotationDeg: this.snapSettings.rotate,
-          snapRotationEnabled: this.snapSettings.rotateEnabled,
-          snapScale: this.snapSettings.scale,
-          snapScaleEnabled: this.snapSettings.scaleEnabled,
-        },
-      }),
-    });
-    const body = (await response.json().catch(() => ({}))) as {
-      ok?: boolean;
-      error?: string;
-      path?: string;
-    };
-    if (!response.ok || !body.ok) {
-      throw new Error(body.error ?? `Save failed: HTTP ${response.status}`);
+    if (!this.layoutSaver) {
+      throw new Error("Layout saving is available only when the editor saver is installed.");
     }
-    this.onStatus?.(`Saved ${body.path ?? "layout"}.`, "success");
+    const result = await this.layoutSaver({
+      layout: this.layout,
+      editor: {
+        gridSize: this.snapSettings.move,
+        gridEnabled: this.snapSettings.moveEnabled,
+        snapRotationDeg: this.snapSettings.rotate,
+        snapRotationEnabled: this.snapSettings.rotateEnabled,
+        snapScale: this.snapSettings.scale,
+        snapScaleEnabled: this.snapSettings.scaleEnabled,
+      },
+    });
+    this.onStatus?.(`Saved ${result.path ?? "layout"}.`, "success");
   }
 
   private async loadActiveProjectScene(): Promise<void> {
