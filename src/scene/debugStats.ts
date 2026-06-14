@@ -4,11 +4,11 @@
  * lil-gui (devDependency) is dynamically imported on demand later, when
  * scene parameters need live tweaking — keeps it out of the base bundle.
  */
-import type { SceneApp } from "./SceneApp";
+import type { RuntimeStatsApp } from "./RuntimeSceneApp";
 
 const UPDATE_INTERVAL_MS = 500;
 
-export function attachDebugStats(app: SceneApp, element: HTMLElement): void {
+export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): void {
   let accumMs = 0;
   let frames = 0;
 
