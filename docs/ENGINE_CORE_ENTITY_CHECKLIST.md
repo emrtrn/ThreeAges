@@ -92,6 +92,17 @@ Notes (2026-06-14):
   `render-test-room` layout (3 entities; world settings preserved). A live
   browser render smoke was not run this pass.
 
+Testing (2026-06-14):
+
+- Added `tools/engine-tests.ts` (run via `npm run test:engine`, bundled with
+  esbuild on node; no test framework, matching `verify-dist.mjs` style) and
+  wired it into `npm run build:verify` before `verify:dist`.
+- Covers: adapter entity ids stay byte-for-byte in sync with
+  `editor/core/selection.ts#selectionId`, real-layout round-trip + validation,
+  hierarchy `nodeId`/`parentId` resolution (including dropped dangling refs),
+  and visibility/lock flag tags. This guards the id contract that section 5
+  render bindings will depend on.
+
 ## 5. Render Adapter Preparation
 
 - [ ] Identify the smallest render path that can consume `SceneDocument`
