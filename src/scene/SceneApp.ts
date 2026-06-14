@@ -121,6 +121,7 @@ import {
   compareInstanceRestores,
   compareLightDeletes,
   compareLightRestores,
+  cloneSelection,
   parseSelectionId,
   selectionId,
   selectionsEqual,
@@ -4143,18 +4144,6 @@ function planeAxisIndices(axis: GizmoPlaneAxis): [0 | 1 | 2, 0 | 1 | 2] {
   if (axis === "xy") return [0, 1];
   if (axis === "yz") return [1, 2];
   return [0, 2];
-}
-
-function cloneSelection(selection: Selection): Selection {
-  if (selection.kind === "instance") {
-    return {
-      kind: "instance",
-      assetId: selection.assetId,
-      placementIndex: selection.placementIndex,
-    };
-  }
-  if (selection.kind === "light") return { kind: "light", index: selection.index };
-  return { kind: "character", index: selection.index };
 }
 
 function clampIndex(index: number, length: number): number {

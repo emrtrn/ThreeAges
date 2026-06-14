@@ -7,6 +7,18 @@ export type InstanceSelection = Extract<Selection, { kind: "instance" }>;
 export type CharacterSelection = Extract<Selection, { kind: "character" }>;
 export type LightSelection = Extract<Selection, { kind: "light" }>;
 
+export function cloneSelection(selection: Selection): Selection {
+  if (selection.kind === "instance") {
+    return {
+      kind: "instance",
+      assetId: selection.assetId,
+      placementIndex: selection.placementIndex,
+    };
+  }
+  if (selection.kind === "light") return { kind: "light", index: selection.index };
+  return { kind: "character", index: selection.index };
+}
+
 export function selectionId(selection: Selection): string {
   if (selection.kind === "character") return `character:${selection.index}`;
   if (selection.kind === "light") return `light:${selection.index}`;
