@@ -550,4 +550,17 @@ check("saved layout derives mesh + light entities with readable components", () 
   }
 });
 
+// 6.4 Readiness demo (§5): the saved layout carries the scripted entity the
+// Game Mode demo relies on — a character with the input-driven behavior whose
+// transform the behavior layer mutates from input actions.
+check("saved layout carries the input-driven demo character behavior", () => {
+  const behaviored = doc.entities
+    .map((entity) => readBehaviorComponent(entity))
+    .filter((behavior) => behavior !== undefined);
+  assert.ok(
+    behaviored.some((behavior) => behavior?.scriptId === "input-move"),
+    "expected a character with the input-move behavior in the saved layout",
+  );
+});
+
 console.log(`[engine-tests] ${checks} checks passed`);

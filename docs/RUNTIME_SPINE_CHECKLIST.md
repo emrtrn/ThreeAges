@@ -89,8 +89,13 @@ inspection-only. This checklist makes the spine actually run.
 
 ## 5. Readiness Gate
 
-- [ ] `tools/engine-tests.ts` covers: action-map raw->named mapping and a
-  behavior tick mutating an entity transform deterministically.
-- [ ] `npm run build:verify` reports only the known baseline warning(s).
+- [x] `tools/engine-tests.ts` covers: action-map raw->named mapping (`input
+  subsystem maps raw codes to named action edges per tick`) and a behavior tick
+  mutating an entity transform deterministically (`behavior subsystem ticks
+  behaviors and mutates transforms deterministically`).
+- [x] `npm run build:verify` reports only the known baseline warning(s)
+  (`/__save-layout` in the game chunk; 22 engine checks pass).
 - [ ] Game Mode demonstrates one scripted entity reacting to an input action
-  (the smallest "the spine drives gameplay" proof).
+  (the smallest "the spine drives gameplay" proof). Authored: the
+  `customer-character-a` character carries the `input-move` behavior; pending a
+  live browser confirmation.

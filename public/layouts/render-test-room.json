@@ -144,7 +144,13 @@
       "name": "customer-character-a",
       "scaleLocked": true,
       "rotationYDeg": 30,
-      "scale": 0.3
+      "scale": 0.3,
+      "behavior": {
+        "script": "input-move",
+        "params": {
+          "speed": 2
+        }
+      }
     }
   ],
   "worldSettings": {
