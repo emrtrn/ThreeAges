@@ -12,7 +12,8 @@ excluded from the runtime package.
 
 ```sh
 npm run build
-node builder/web/verify-dist.mjs
+npm run verify:dist
+npm run build:verify
 node builder/web/verify-dist.mjs --strict      # warnings also fail
 node builder/web/verify-dist.mjs --dist some/dist
 ```
@@ -52,8 +53,10 @@ all; if it reappears, the DEV gate or the dynamic-import boundary broke.
   the gate trustworthy. Extend `FORBIDDEN` in `verify-dist.mjs` as editor-only
   modules move during the migration.
 
-### Not wired into `npm run build` yet
+### NPM scripts
 
-Left as a manual/standalone step on purpose: the roadmap wires it into an npm
-script only after the implementation is stable, and this keeps the change
-purely additive (new files only) while the render-three extraction is in flight.
+`npm run verify:dist` runs this checker against the current `dist/`.
+`npm run build:verify` runs a production build and then this checker. The base
+`npm run build` command remains unchanged so the migration can keep build and
+package-boundary verification as separate signals while authoring-code debt is
+still warning-only.

@@ -263,6 +263,16 @@ Exit criteria:
 
 Goal: turn runtime-only packaging into an explicit check.
 
+Status (2026-06-14): started.
+
+Completed:
+
+- Added `builder/web/verify-dist.mjs` and `builder/web/README.md`.
+- Added `npm run verify:dist` for checking the current `dist/`.
+- Added `npm run build:verify` for build + runtime-only package verification.
+- Kept `npm run build` unchanged while `/__save-layout` remains warning-only
+  authoring-code debt.
+
 Tasks:
 
 - Add a small build verification script under `builder/web`.
