@@ -259,6 +259,8 @@ Completed:
   consumed by the editor UI.
 - Added `editor/core/history.ts` for editor command contracts plus undo/redo
   history stack behavior.
+- Added `editor/core/ids.ts` for collision-checked editor id generation used by
+  grouping/hierarchy helpers.
 - Added `editor/core/layoutTransforms.ts` for pure layout rotation/scale write
   helpers used when committing editor transform changes.
 - Added `editor/core/numeric.ts` for numeric clamp, rounding, and snap

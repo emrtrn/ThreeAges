@@ -12,6 +12,7 @@ Current files:
 - `editableScene.ts`: editor-facing project info, snap settings, scene object,
   selection transform, and world settings contracts consumed by the editor UI.
 - `history.ts`: editor command contracts plus undo/redo history stack behavior.
+- `ids.ts`: collision-checked editor id generation for grouping/hierarchy helpers.
 - `layoutTransforms.ts`: pure layout rotation/scale write helpers used when
   committing editor transform changes.
 - `numeric.ts`: numeric clamp, rounding, and snap display/value helpers.

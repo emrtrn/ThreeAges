@@ -128,6 +128,7 @@ import type {
   EditorHistoryState,
 } from "@editor/core/history";
 import { EditorHistory } from "@editor/core/history";
+import { uniqueEditorId } from "@editor/core/ids";
 import {
   compareCharacterDeletes,
   compareCharacterRestores,
@@ -1875,11 +1876,7 @@ export class SceneApp {
 
   private createLightId(type: LayoutLightActor["type"]): string {
     const existing = new Set(this.layout?.lights?.map((light) => light.id) ?? []);
-    let id = "";
-    do {
-      id = `${type}-light-${Date.now().toString(36)}-${Math.floor(Math.random() * 10000)}`;
-    } while (existing.has(id));
-    return id;
+    return uniqueEditorId(`${type}-light`, existing, 10_000);
   }
 
   private defaultActorPosition(distance: number): Vec3 {
@@ -2525,11 +2522,7 @@ export class SceneApp {
       if (groupId) existing.add(groupId);
     }
 
-    let candidate = "";
-    do {
-      candidate = `group-${Date.now().toString(36)}-${Math.floor(Math.random() * 10000)}`;
-    } while (existing.has(candidate));
-    return candidate;
+    return uniqueEditorId("group", existing, 10_000);
   }
 
   private applyVisibility(selection: Selection): void {
@@ -3514,11 +3507,7 @@ export class SceneApp {
       const nodeId = this.getMutableTransform(selection)?.nodeId;
       if (nodeId) existing.add(nodeId);
     }
-    let id = "";
-    do {
-      id = `node-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
-    } while (existing.has(id));
-    return id;
+    return uniqueEditorId("node", existing);
   }
 
   private isSelectionSelected(selection: Selection): boolean {
