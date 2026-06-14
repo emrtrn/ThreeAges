@@ -643,12 +643,23 @@ await checkAsync("rapier physics backend reports contacts through the same contr
 
   const app = new EngineApp();
   app.registerSubsystem(physics);
-  await app.init();
-  app.update(0.016);
-  assert.deepEqual(physics.contactsForEntity("dynamic"), [
-    { a: "dynamic", b: "wall", isSensor: false },
-  ]);
-  await app.dispose();
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) {
+      return;
+    }
+    warn(...args);
+  };
+  try {
+    await app.init();
+    app.update(0.016);
+    assert.deepEqual(physics.contactsForEntity("dynamic"), [
+      { a: "dynamic", b: "wall", isSensor: false },
+    ]);
+    await app.dispose();
+  } finally {
+    console.warn = warn;
+  }
 });
 
 check("behavior can react to physics contacts from the engine tick", () => {
