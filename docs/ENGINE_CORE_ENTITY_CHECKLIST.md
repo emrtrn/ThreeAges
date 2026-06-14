@@ -105,12 +105,36 @@ Testing (2026-06-14):
 
 ## 5. Render Adapter Preparation
 
-- [ ] Identify the smallest render path that can consume `SceneDocument`
+- [x] Identify the smallest render path that can consume `SceneDocument`
   entities while the legacy `RoomLayout` path remains available.
 - [ ] Move only one render binding at a time toward entity/component input:
   static mesh instances first, then characters, then lights.
 - [ ] Keep compatibility wrappers until both Game Mode and Editor Mode are
   proven against the new path.
+
+Progress (2026-06-14):
+
+- Smallest render path identified: `createInstancedModelGroup` /
+  `SceneApp.createInstancedModel` (per-asset static mesh instances). It bakes
+  each placement's own world transform and uses neither `pivot` nor parent
+  hierarchy, so the `SceneDocument` `TransformComponent` reproduces it exactly.
+- Static mesh instances MOVED to entity/component input:
+  - `createInstancedModelGroup` now takes a normalized `InstanceRenderItem[]`
+    (`matrix` + `hidden`) instead of `LayoutPlacement[]`.
+  - `SceneApp.createInstancedModel` feeds it `entityInstanceItems(
+    instanceEntitiesForAsset(assetId, placements))` — render now flows through
+    the entity/component model.
+  - `placementInstanceItems` (legacy) is kept as the compatibility builder and
+    the equivalence reference; both compose via `composeTransformMatrix`.
+  - Added `readTransformComponent`/`readMeshRendererComponent` typed readers in
+    `engine/scene/components.ts`.
+- Verified: `build:verify` passes (12 engine checks). A render-parity test
+  proves instance entities carry the exact transform inputs (`position`,
+  resolved rotation/scale, `hidden`) the legacy path used, so matrices are
+  identical by construction.
+- PENDING (item 3): live browser smoke in Game Mode and Editor Mode to confirm
+  the static scene renders and instance selection still works, before moving
+  characters then lights.
 
 ## 6. Vertical Slice Readiness Gate
 
