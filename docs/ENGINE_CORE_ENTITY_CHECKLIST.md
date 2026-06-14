@@ -32,7 +32,7 @@ keeping the current `RoomLayout` runtime/editor path working.
   lookup, forward lifecycle order, and reverse dispose order.
 - [x] Add `engine/core/EngineApp.ts` as the lifecycle coordinator for the
   registry and tick/update calls.
-- [ ] Add a short `engine/core/README.md` documenting ownership rules and
+- [x] Add a short `engine/core/README.md` documenting ownership rules and
   forbidden dependencies.
 
 ## 2. Minimal Scene Data Model
