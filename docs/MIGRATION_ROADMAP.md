@@ -255,6 +255,8 @@ Completed:
   delete/restore ordering helpers.
 - Added `editor/core/tools.ts` for shared editor tool and transform-space
   contracts plus tool cycling.
+- Added `editor/gizmos/axes.ts` for transform gizmo axis contracts and
+  axis-index helpers.
 - Added `editor/core/layoutSnapshots.ts` for layout actor/metadata deep-copy
   helpers and transform equality checks used by undo/redo snapshots.
 - Added `editor/core/editableScene.ts` for editor-facing project info, snap

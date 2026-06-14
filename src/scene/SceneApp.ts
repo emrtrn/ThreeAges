@@ -154,6 +154,14 @@ import {
   type LightSelection,
   type Selection,
 } from "@editor/core/selection";
+import {
+  axisToIndex,
+  isPlaneAxis,
+  planeAxisIndices,
+  type GizmoAxis,
+  type GizmoPlaneAxis,
+  type GizmoVectorAxis,
+} from "@editor/gizmos/axes";
 
 export type {
   EditableSceneObject,
@@ -193,10 +201,6 @@ const DEFAULT_SUN_ID = "sun";
 const DEFAULT_BACKGROUND_COLOR = "#d7d7c7";
 const DEFAULT_AMBIENT_COLOR = "#ffffff";
 const DEFAULT_AMBIENT_INTENSITY = 0;
-
-type GizmoAxis = "x" | "y" | "z" | "xy" | "yz" | "xz" | "xyz" | "uniform";
-type GizmoVectorAxis = Extract<GizmoAxis, "x" | "y" | "z">;
-type GizmoPlaneAxis = Extract<GizmoAxis, "xy" | "yz" | "xz">;
 
 const FLAG_LABELS: Record<"hidden" | "locked" | "scaleLocked", { on: string; off: string }> = {
   hidden: { on: "Hide object", off: "Show object" },
@@ -4053,24 +4057,6 @@ function matrixToTransform(matrix: Matrix4): EditableTransform {
     rotation: [euler.x * RAD_TO_DEG, euler.y * RAD_TO_DEG, euler.z * RAD_TO_DEG],
     scale: [scale.x, scale.y, scale.z],
   };
-}
-
-/** Maps a gizmo axis to its rotation/scale vector index (defaults to Y). */
-function axisToIndex(axis: GizmoAxis): 0 | 1 | 2 {
-  if (axis === "x") return 0;
-  if (axis === "z") return 2;
-  return 1;
-}
-
-function isPlaneAxis(axis: GizmoAxis): axis is GizmoPlaneAxis {
-  return axis === "xy" || axis === "yz" || axis === "xz";
-}
-
-/** The two transform-component indices a plane handle edits. */
-function planeAxisIndices(axis: GizmoPlaneAxis): [0 | 1 | 2, 0 | 1 | 2] {
-  if (axis === "xy") return [0, 1];
-  if (axis === "yz") return [1, 2];
-  return [0, 2];
 }
 
 function findParentInstancedMesh(object: Object3D): InstancedMesh | null {
