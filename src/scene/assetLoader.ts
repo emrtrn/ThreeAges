@@ -1,5 +1,3 @@
-import { MeshoptDecoder } from "meshoptimizer";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import {
@@ -20,6 +18,7 @@ import type {
   EditableAsset,
 } from "@engine/assets/manifest";
 import type { MetadataSchema } from "@engine/scene/metadataSchema";
+import { GltfModelLoader } from "./gltfModelLoader";
 
 export type {
   AssetCatalog,
@@ -35,12 +34,9 @@ export class AssetLoader {
   private manifestPromise: Promise<AssetManifest> | null = null;
   private catalogPromise: Promise<AssetCatalog | null> | null = null;
   private metadataSchemaPromise: Promise<MetadataSchema | null> | null = null;
-  private modelPromises = new Map<string, Promise<GLTF>>();
-  private readonly gltfLoader = new GLTFLoader();
+  private readonly modelLoader = new GltfModelLoader();
 
-  constructor(private readonly project: ProjectManifest) {
-    this.gltfLoader.setMeshoptDecoder(MeshoptDecoder);
-  }
+  constructor(private readonly project: ProjectManifest) {}
 
   loadManifest(): Promise<AssetManifest> {
     this.manifestPromise ??= fetch(projectFileUrl(this.project.editor.assetManifest)).then(
@@ -113,12 +109,13 @@ export class AssetLoader {
   }
 
   async loadModel(id: string): Promise<GLTF> {
-    let promise = this.modelPromises.get(id);
-    if (!promise) {
-      promise = this.loadModelRecord(id);
-      this.modelPromises.set(id, promise);
-    }
-    return promise;
+    const manifest = await this.loadManifest();
+    const record = assetRecordById(manifest, id);
+    if (!record) throw new Error(`Asset not found in manifest: ${id}`);
+    return this.modelLoader.load(
+      id,
+      projectPublicFileUrl(this.project, record.file),
+    );
   }
 
   async totalBytesForGroups(loadGroups: string[]): Promise<number> {
@@ -126,10 +123,4 @@ export class AssetLoader {
     return totalBytesForGroups(manifest, loadGroups);
   }
 
-  private async loadModelRecord(id: string): Promise<GLTF> {
-    const manifest = await this.loadManifest();
-    const record = assetRecordById(manifest, id);
-    if (!record) throw new Error(`Asset not found in manifest: ${id}`);
-    return this.gltfLoader.loadAsync(projectPublicFileUrl(this.project, record.file));
-  }
 }

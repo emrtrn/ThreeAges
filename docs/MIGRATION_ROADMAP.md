@@ -176,6 +176,9 @@ Completed:
 - Moved type-only consumers to `@engine/assets/manifest` where practical.
 - Kept GLTF/Three loading in `src/scene/assetLoader.ts`; this file is still the
   current adapter that fetches public URLs and resolves models.
+- Split GLTF/Three loading into `src/scene/gltfModelLoader.ts`, keeping
+  `AssetLoader` focused on manifest/catalog/schema fetch orchestration and asset
+  record lookup.
 - Documented asset ID/path rules in `engine/assets/README.md`.
 - `npm run build` passed after extraction.
 - `engine/assets` string/dependency check found no Three.js, DOM, or
@@ -197,6 +200,8 @@ Notes:
 - Manifest/catalog fetches remain in `src/scene/assetLoader.ts` because they use
   project public URLs. Moving generic fetch/loading to `engine/assets` should
   wait until the project/public URL boundary is migrated.
+- `src/scene/gltfModelLoader.ts` is the current render-adapter candidate for a
+  future `engine/render-three` move.
 
 ## Phase 4 - Extract Render-Three Adapter
 
