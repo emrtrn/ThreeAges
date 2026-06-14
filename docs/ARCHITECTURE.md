@@ -80,6 +80,17 @@ docs, raw authoring assets, or local dev scripts.
 - Editor state such as selection, panel expansion, hover, and gizmo state must
   not be written into layout files.
 
+Top-level migration dependency rules:
+
+- `engine/*` must not import `editor/*`, `builder/*`, or `game/*`.
+- `editor/*` may import `engine/*`, but must remain dev/editor-route owned.
+- `game/*` may import `engine/*`, but must not import `editor/*`.
+- `builder/*` may read project/engine metadata and built output, but should not
+  become runtime code.
+- `project/*` is data/config ownership, not runtime implementation.
+- Existing `src/*` files remain the active implementation until code is moved in
+  small build-passing steps.
+
 ## Project Manifest
 
 File:
@@ -272,7 +283,12 @@ Initial command candidates:
 
 ```text
 3DGameDev-architecture-v2/
+  builder/       build/package verification boundary
   docs/          current architecture, roadmap, and workflow notes
+  editor/        future editor-only module boundary
+  engine/        future runtime engine module boundary
+  game/          future project-specific runtime code boundary
+  project/       future project config/data boundary
   public/        local manifest, layouts, and runtime assets for this copy
   src/core/      shared utility/core code
   src/editor/    dev-only editor UI and authoring panels

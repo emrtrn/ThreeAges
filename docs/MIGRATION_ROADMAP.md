@@ -97,6 +97,18 @@ Exit criteria:
 
 Goal: create folder boundaries without changing behavior.
 
+Status (2026-06-14): complete.
+
+Added documentation-only boundaries:
+
+- `engine/README.md`
+- `editor/README.md`
+- `builder/README.md`
+- `game/README.md`
+- `project/README.md`
+
+No source imports were changed in this phase.
+
 Tasks:
 
 - Add empty or minimal `engine/`, `editor/`, `builder/`, `game/`, and `project/`
