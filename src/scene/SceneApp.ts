@@ -113,6 +113,7 @@ import {
   snapStatus,
   snapValue,
 } from "@editor/core/numeric";
+import type { EditorTool, TransformSpace } from "@editor/core/tools";
 import {
   selectionToTransform,
   worldSettingsEqual,
@@ -193,8 +194,6 @@ const DEFAULT_BACKGROUND_COLOR = "#d7d7c7";
 const DEFAULT_AMBIENT_COLOR = "#ffffff";
 const DEFAULT_AMBIENT_INTENSITY = 0;
 
-type EditorTool = "select" | "move" | "rotate" | "scale";
-type TransformSpace = "world" | "local";
 type GizmoAxis = "x" | "y" | "z" | "xy" | "yz" | "xz" | "xyz" | "uniform";
 type GizmoVectorAxis = Extract<GizmoAxis, "x" | "y" | "z">;
 type GizmoPlaneAxis = Extract<GizmoAxis, "xy" | "yz" | "xz">;

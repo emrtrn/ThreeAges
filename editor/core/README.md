@@ -7,6 +7,7 @@ Current files:
 
 - `selection.ts`: editor selection cloning, identity, parsing, equality,
   selected-map state helpers, and deterministic delete/restore ordering helpers.
+- `tools.ts`: shared editor tool and transform-space contracts plus tool cycling.
 - `layoutSnapshots.ts`: layout actor/metadata deep-copy helpers and transform
   equality checks used by editor undo/redo snapshots.
 - `editableScene.ts`: editor-facing project info, snap settings, scene object,

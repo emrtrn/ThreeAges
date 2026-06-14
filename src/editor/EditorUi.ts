@@ -26,11 +26,15 @@ import {
   type ProjectDirNode,
 } from "@/project/ProjectAssetTree";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import {
+  nextTransformTool,
+  type EditorTool,
+  type TransformSpace,
+} from "@editor/core/tools";
 
-type Tool = "select" | "move" | "rotate" | "scale";
 type InspectorTab = "details" | "world";
 
-const TOOL_LABELS: Record<Tool, string> = {
+const TOOL_LABELS: Record<EditorTool, string> = {
   select: "Select",
   move: "Move",
   rotate: "Rotate",
@@ -63,9 +67,9 @@ export class EditorUi {
   private statusText: HTMLElement;
   private undoButton: HTMLButtonElement;
   private redoButton: HTMLButtonElement;
-  private toolButtons = new Map<Tool, HTMLButtonElement>();
+  private toolButtons = new Map<EditorTool, HTMLButtonElement>();
   private readonly thumbnailRenderer = new ThumbnailRenderer();
-  private activeTool: Tool = "move";
+  private activeTool: EditorTool = "move";
   private projectInfo: EditorProjectInfo | null = null;
   private metadataSchema: MetadataSchema | null = null;
   private editableAssets: EditableAsset[] = [];
@@ -268,7 +272,7 @@ export class EditorUi {
 
   private buildToolbar(): void {
     const tools = requireElement(this.root, "[data-tools]");
-    (["select", "move", "rotate", "scale"] as Tool[]).forEach((tool) => {
+    (["select", "move", "rotate", "scale"] as EditorTool[]).forEach((tool) => {
       const button = document.createElement("button");
       button.type = "button";
       button.textContent = TOOL_LABELS[tool];
@@ -292,7 +296,7 @@ export class EditorUi {
     tools.append(spaceButton);
   }
 
-  private setActiveTool(tool: Tool): void {
+  private setActiveTool(tool: EditorTool): void {
     this.activeTool = tool;
     for (const [itemTool, item] of this.toolButtons) {
       item.classList.toggle("active", itemTool === tool);
@@ -300,7 +304,7 @@ export class EditorUi {
     this.app.setEditorTool(tool);
   }
 
-  private updateSpaceButton(space: "world" | "local"): void {
+  private updateSpaceButton(space: TransformSpace): void {
     const button = this.root.querySelector<HTMLButtonElement>("[data-space-toggle]");
     if (!button) return;
     button.textContent = space === "local" ? "Local" : "World";
@@ -1839,12 +1843,6 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
-}
-
-function nextTransformTool(tool: Tool): Tool {
-  if (tool === "move") return "rotate";
-  if (tool === "rotate") return "scale";
-  return "move";
 }
 
 function formatPosition(position: [number, number, number]): string {
