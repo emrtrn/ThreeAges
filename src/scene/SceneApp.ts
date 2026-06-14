@@ -160,7 +160,7 @@ import type {
   EditorCommandPhase,
   EditorHistoryState,
 } from "@editor/core/history";
-import { EditorHistory } from "@editor/core/history";
+import { EditorCommandStore } from "@editor/core/history";
 import {
   descendantSelections,
   groupedSelections,
@@ -427,7 +427,7 @@ export class SceneApp {
         pivot?: Vec3 | undefined;
       }
     | null = null;
-  private readonly history = new EditorHistory();
+  private readonly commandStore = new EditorCommandStore();
 
   /** Called every frame with the smoothed delta; used by the debug overlay. */
   onFrame: ((deltaMs: number) => void) | null = null;
@@ -712,18 +712,18 @@ export class SceneApp {
   }
 
   getHistoryState(): EditorHistoryState {
-    return this.history.state();
+    return this.commandStore.state();
   }
 
   undo(): void {
-    const result = this.history.undoWithResult();
+    const result = this.commandStore.undo();
     if (!result) return;
     this.emitHistoryChanged();
     this.onStatus?.(result.statusMessage, result.statusTone);
   }
 
   redo(): void {
-    const result = this.history.redoWithResult();
+    const result = this.commandStore.redo();
     if (!result) return;
     this.emitHistoryChanged();
     this.onStatus?.(result.statusMessage, result.statusTone);
@@ -4047,7 +4047,7 @@ export class SceneApp {
   }
 
   private executeCommand(command: EditorCommand): void {
-    const result = this.history.executeWithResult(command);
+    const result = this.commandStore.execute(command);
     this.emitHistoryChanged();
     this.onStatus?.(result.statusMessage, result.statusTone);
   }

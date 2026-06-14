@@ -86,3 +86,23 @@ export class EditorHistory {
     };
   }
 }
+
+export class EditorCommandStore {
+  private readonly history = new EditorHistory();
+
+  state(): EditorHistoryState {
+    return this.history.state();
+  }
+
+  execute(command: EditorCommand): EditorHistoryActionResult {
+    return this.history.executeWithResult(command);
+  }
+
+  undo(): EditorHistoryActionResult | null {
+    return this.history.undoWithResult();
+  }
+
+  redo(): EditorHistoryActionResult | null {
+    return this.history.redoWithResult();
+  }
+}
