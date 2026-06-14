@@ -175,17 +175,14 @@ import {
   compareLightRestores,
   cloneSelection,
   parseSelectionId,
-  replaceSelectedGroup,
-  replaceSelectedMany,
   selectionId,
-  selectedSelectionList,
   selectionsEqual,
-  toggleSelectedGroup,
   type CharacterSelection,
   type InstanceSelection,
   type LightSelection,
   type Selection,
 } from "@editor/core/selection";
+import { SelectionStore } from "@editor/core/selectionStore";
 import {
   axisToIndex,
   isPlaneAxis,
@@ -353,8 +350,15 @@ export class SceneApp {
   private lightObjects: LightObjectRecord[] = [];
   private localBounds = new Map<string, Box3>();
   private assetPlacements = new Map<string, EditableAsset["placement"]>();
-  private selection: Selection | null = null;
-  private readonly selectedSelections = new Map<string, Selection>();
+  /** Owns the active selection + multi-select set (editor state, not runtime). */
+  private readonly selectionStore = new SelectionStore();
+  /** Active selection, delegating to the store so ownership lives there. */
+  private get selection(): Selection | null {
+    return this.selectionStore.activeSelection;
+  }
+  private set selection(value: Selection | null) {
+    this.selectionStore.activeSelection = value;
+  }
   private readonly selectionBoxes: Box3Helper[] = [];
   private readonly gizmoGroup = new Group();
   private readonly gizmoPickables: Object3D[] = [];
@@ -690,7 +694,7 @@ export class SceneApp {
   setSceneObjectHidden(id: string, hidden: boolean): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
-    if (this.selectedSelections.size > 1 && this.isSelectionSelected(selection)) {
+    if (this.selectionStore.selectedCount > 1 && this.isSelectionSelected(selection)) {
       this.setSelectedHidden(hidden);
       return;
     }
@@ -700,7 +704,7 @@ export class SceneApp {
   setSceneObjectLocked(id: string, locked: boolean): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
-    if (this.selectedSelections.size > 1 && this.isSelectionSelected(selection)) {
+    if (this.selectionStore.selectedCount > 1 && this.isSelectionSelected(selection)) {
       this.setSelectedLocked(locked);
       return;
     }
@@ -3469,8 +3473,7 @@ export class SceneApp {
   }
 
   private select(selection: Selection | null): void {
-    this.selection = replaceSelectedGroup(
-      this.selectedSelections,
+    this.selection = this.selectionStore.selectGroup(
       selection,
       selection ? this.getGroupedSelections(selection) : [],
     );
@@ -3480,8 +3483,7 @@ export class SceneApp {
   }
 
   private selectMany(selections: Selection[], active: Selection | null): void {
-    this.selection = replaceSelectedMany(
-      this.selectedSelections,
+    this.selection = this.selectionStore.selectMany(
       selections.filter((selection) => this.hasSelection(selection)),
       active,
     );
@@ -3491,9 +3493,7 @@ export class SceneApp {
   }
 
   private toggleSelection(selection: Selection): void {
-    this.selection = toggleSelectedGroup(
-      this.selectedSelections,
-      this.selection,
+    this.selection = this.selectionStore.toggleGroup(
       selection,
       this.getGroupedSelections(selection),
     );
@@ -3608,11 +3608,11 @@ export class SceneApp {
   }
 
   private isSelectionSelected(selection: Selection): boolean {
-    return this.selectedSelections.has(selectionId(selection));
+    return this.selectionStore.has(selection);
   }
 
   private getSelectedSelections(): Selection[] {
-    return selectedSelectionList(this.selectedSelections, (selection) => this.hasSelection(selection));
+    return this.selectionStore.list((selection) => this.hasSelection(selection));
   }
 
   private getAllSelections(options: { includeHidden: boolean }): Selection[] {
@@ -3738,7 +3738,7 @@ export class SceneApp {
   }
 
   private isLightSelected(index: number): boolean {
-    return this.selectedSelections.has(selectionId({ kind: "light", index }));
+    return this.selectionStore.has({ kind: "light", index });
   }
 
   private removeSelectionBox(): void {
