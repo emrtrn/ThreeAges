@@ -1,101 +1,110 @@
 # 3DGameDev Architecture Contract
 
-> Created: 2026-06-13 | Scope: editor platform boundaries for `3DGameDev`
+> Created: 2026-06-13 | Updated: 2026-06-14
+> Scope: single-codebase Three.js game template with a built-in editor mode.
 
 This document is the working contract for future Codex/Claude tasks. If a task
 conflicts with this file, update the contract first or call out the conflict
 before changing code.
 
-## Purpose
+## Direction
 
-`3DGameDev` is a reusable Three.js editor, launcher, and packaging tool for
-multiple 3D web game projects. It is not the shipped game and it is not a
-general-purpose Unity/Unreal replacement.
+`3DGameDev` is a reusable, single-codebase Three.js game template. One
+`SceneApp` serves both the player-facing game and the editor viewport, so there
+is no separate runtime to drift from the editor.
 
-The first external game project is:
+- Default route `/` is Game Mode: runtime render, no editor UI.
+- `/?editor` is Editor Mode: the same `SceneApp` plus `EditorUi`.
+- `?debug` adds the perf overlay in either mode.
+- A new game starts by copying this repository, then replacing the GDD, assets,
+  layouts, and project-specific game content.
+- The editor travels with each game during development, but is gated behind the
+  dev-only `?editor` dynamic import and is excluded from production builds.
 
-```text
-C:\Users\emret\Desktop\home-makeover
-```
+Removed architecture:
+
+- Project Browser / launcher route.
+- External project references in `projects/*.project-ref.json`.
+- `studio` CLI and external-project packaging scripts.
+- External-project dev middleware such as `/__project`, `/__project-file`,
+  `/__recent-projects`, `/__studio/*`, and `/__select-directory`.
+
+Kept dev middleware:
+
+- `/__save-layout`: writes local authoring data under this repo's `public/`.
+- `/__project-dir`: read-only Content Browser directory tree scoped to `public/`.
 
 ## Ownership Boundaries
 
-Editor/platform code lives in `3DGameDev`:
+Template/editor code lives in this repo:
 
-- Project Browser and launcher UI
-- viewport and editor camera controls
-- selection, transform gizmo, snap/grid tools
-- Content Browser, Details panel, future Scene Outliner
-- authoring save/load flow
-- project manifest loading and validation
-- templates and project creation
-- CLI wrappers such as `studio new/open/preview/package`
-- packaging orchestration and package reports
+- `src/scene/`: shared SceneApp, runtime render path, scene loading, save hooks.
+- `src/editor/`: editor UI, selection panels, authoring affordances.
+- `src/project/`: local manifest loading and project public-path helpers.
+- `public/project.3dgame.json`: this copy's project identity and editor settings.
+- `public/layouts/`: local scene/layout data.
+- `public/assets/`: local runtime assets and manifests.
+- `tools/`: local dev-server helpers.
+- `docs/`: current architecture and workflow notes.
 
-Game project code lives in each external project folder:
+Project-specific game work also lives in the copied repo:
 
-- game runtime entry and runtime scene code
-- game rules, economy, scoring, missions, save model
-- GDD, game docs, balance docs
-- processed runtime assets and raw project asset sources
-- levels/layouts/prefabs/data
-- project package scripts and final runtime build output
+- game rules, scoring, missions, save model, and runtime UI;
+- GDD and design docs;
+- project assets, layouts, prefabs, data, and metadata;
+- production build output in `dist/`.
 
-Final web packages contain only runtime output:
+Final production output must contain only runtime game files:
 
-- `index.html`
-- bundled runtime JS/CSS
-- runtime assets and runtime data
-- required license/credit files
+- `index.html`;
+- bundled runtime JS/CSS;
+- runtime assets and public data required by the game.
 
-Final packages must not contain editor UI, gizmos, Project Browser, dev
-middleware, GDD, source docs, templates, raw assets, or authoring-only scripts.
+Final output must not contain editor UI, authoring middleware, GDD, internal
+docs, raw authoring assets, or local dev scripts.
 
 ## Dependency Rules
 
-- Editor code may read project files through project-system APIs.
-- Editor code must not hardcode Home Makeover game rules.
-- Project runtime must not import editor UI, editor state, gizmo code, or
-  authoring middleware.
-- Shared data contracts must be plain JSON or TypeScript types with no Three.js
-  dependency unless the type belongs strictly to the scene/runtime layer.
-- Three.js-specific rendering code should stay behind scene/editor viewport
-  boundaries, not in project data schemas.
+- Game Mode must not import `src/editor/*`.
+- The `EditorUi` import must remain behind `?editor` and `import.meta.env.DEV`.
+- Editor code may depend on shared scene/project APIs.
+- Shared project/layout data must stay plain JSON or serializable TypeScript
+  types; do not store Three.js objects in saved data.
+- Runtime code should load project files through manifest-relative public URLs,
+  not absolute local filesystem paths.
+- Editor state such as selection, panel expansion, hover, and gizmo state must
+  not be written into layout files.
 
-Temporary exception:
+## Project Manifest
 
-- Until Phase 3 is complete, the current editor prototype may use local
-  render-test sample assets and `public/layouts/render-test-room.json`. New
-  feature work should move toward manifest-driven external project loading.
-
-## Standard File Types
-
-### Project Manifest
-
-File name:
+File:
 
 ```text
-project.3dgame.json
+public/project.3dgame.json
 ```
 
-Role: the editor's entry point into a game project.
+Role: this copied game's local identity and editor/runtime configuration.
 
-Minimum shape:
+Current minimum shape:
 
 ```json
 {
   "schema": 1,
-  "name": "home-makeover",
+  "name": "3dgame-template",
   "type": "three-game",
   "version": "0.1.0",
   "entry": "src/main.ts",
   "publicDir": "public",
   "editor": {
-    "defaultScene": "public/layouts/render-test-room.json",
-    "assetCatalog": "public/assets/catalog.json",
-    "assetManifest": "public/assets/manifest.json",
+    "defaultScene": "layouts/render-test-room.json",
+    "assetManifest": "assets/manifest.json",
+    "metadataSchema": "assets/metadata-schema.json",
     "gridSize": 1,
-    "snapRotationDeg": 15
+    "gridEnabled": true,
+    "snapRotationDeg": 15,
+    "snapRotationEnabled": true,
+    "snapScale": 0.1,
+    "snapScaleEnabled": false
   },
   "scripts": {
     "preview": "npm run dev",
@@ -110,52 +119,13 @@ Minimum shape:
 
 Rules:
 
-- Paths are project-relative unless explicitly documented otherwise.
+- Paths inside `editor` are relative to the public root.
 - The manifest is small and hand-readable.
-- The editor validates it before opening a project.
-- A schema version change requires a migration note.
+- Schema changes require an explicit migration note.
+- `editor.previewUrl` may point Play/Test to an external runtime during a
+  migration, but the default path is `/`.
 
-### Asset Catalog
-
-Suggested path:
-
-```text
-public/assets/catalog.json
-```
-
-Role: authoring metadata for Content Browser and placement behavior.
-
-Example:
-
-```json
-{
-  "schema": 1,
-  "assets": [
-    {
-      "id": "lounge-sofa",
-      "name": "Lounge Sofa",
-      "type": "model",
-      "category": "furniture",
-      "model": "public/assets/models/furniture-seating/loungeSofa.glb",
-      "preview": "public/assets/previews/lounge-sofa.png",
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": false
-      },
-      "tags": ["modern", "cozy"]
-    }
-  ]
-}
-```
-
-Rules:
-
-- Content Browser must be generated from catalog data, not hardcoded lists.
-- Placement tools must read placement rules from metadata.
-- Gameplay tags may exist here, but game scoring rules belong in project
-  runtime/data modules.
+## Authoring Files
 
 ### Runtime Asset Manifest
 
@@ -165,15 +135,14 @@ Suggested path:
 public/assets/manifest.json
 ```
 
-Role: optimized runtime loading manifest generated by the asset pipeline.
+Role: runtime and editor asset loading metadata.
 
 Rules:
 
-- Runtime loaders use this for final asset paths, byte sizes, load groups, and
-  license/provenance data.
-- The authoring catalog may reference assets before optimization; runtime code
-  should load optimized output.
-- Generated manifests should not be hand-edited.
+- Runtime loaders use this for final asset paths and IDs.
+- Content Browser can derive placeable assets from it unless a richer catalog is
+  added later.
+- Saved scenes reference asset IDs or manifest entries, not absolute paths.
 
 ### Level/Layout JSON
 
@@ -183,89 +152,83 @@ Suggested path:
 public/layouts/<name>.json
 ```
 
-Role: scene object data authored by the editor and consumed by runtime.
+Role: scene object data authored by the editor and consumed by Game Mode.
 
 Rules:
 
 - Store stable IDs and transforms, not Three.js objects.
-- Transform fields are `position`, `rotationYDeg` or a documented rotation
-  shape, and `scale`.
-- Level schema changes need migrations or explicit one-time conversion.
-- The editor writes through project-system save APIs, not raw hardcoded paths.
+- Keep editor-only state out of layout files.
+- Save through `/__save-layout` in dev; production builds have no write
+  middleware.
+- New saved fields must be allowlisted in the `vite.config.ts` save validator.
 
-### Prefab JSON
+### Metadata Schema
 
 Suggested path:
 
 ```text
-prefabs/<name>.json
+public/assets/metadata-schema.json
 ```
 
-Role: reusable object groups or configured entities.
+Role: schema-driven gameplay metadata for the Details panel.
 
 Rules:
 
-- Prefabs reference asset IDs and component/data values.
-- Prefabs do not include editor-only selection state.
-- Prefabs should be instantiable in both Editor Mode and Preview Mode.
+- Gameplay metadata must stay serializable.
+- Editor controls may expose fields, but game rules interpret them at runtime.
 
 ## Runtime Modes
 
+### Game Mode
+
+Purpose: player-facing game route.
+
+Allowed:
+
+- shared SceneApp runtime render;
+- runtime assets and layout data;
+- game UI and game systems;
+- debug overlay only when explicitly requested.
+
+Not allowed:
+
+- editor panels;
+- transform gizmo UI;
+- authoring saves;
+- dev-only directory/write middleware.
+
 ### Editor Mode
 
-Purpose: authoring.
+Purpose: local authoring in development.
 
 Allowed:
 
-- editor panels
-- selection and transform tools
-- gizmo rendering
-- authoring-only overlays
-- save/load to project files
-- dev middleware for local file writes
+- editor panels;
+- selection and transform tools;
+- gizmo rendering;
+- authoring overlays;
+- local save/load through dev middleware.
 
 Not allowed:
 
-- assuming editor-only data exists in final packages
-- writing directly to hardcoded project paths outside project-system APIs
-
-### Preview Mode
-
-Purpose: player-facing test run from a project.
-
-Allowed:
-
-- game runtime entry
-- runtime UI
-- runtime assets and level data
-- debug overlays when explicitly requested
-
-Not allowed:
-
-- editor panels
-- transform gizmo
-- authoring save middleware
-- project browser UI
+- relying on editor code in production builds;
+- writing outside the local copied repo's public data.
 
 ### Package Mode
 
-Purpose: produce web upload output.
+Purpose: produce static web output.
 
-Allowed output:
+Current command:
 
-- runtime HTML/JS/CSS
-- runtime assets/data
-- package report
-- required license/credits
+```text
+npm run build
+```
 
-Excluded output:
+Rules:
 
-- editor source and editor bundles
-- GDD and internal docs
-- templates
-- raw assets
-- local launcher scripts
-- dev server middleware
+- Build output goes to `dist/`.
+- The editor dynamic import is dev-gated and should not produce an editor chunk.
+- Dev middleware is Vite-dev-only and must not exist in production output.
 
 ## Undo/Redo Command Model
 
@@ -286,12 +249,9 @@ interface EditorCommand {
 Rules:
 
 - Commands must capture enough previous state to undo deterministically.
-- Commands should be small: move object, rotate object, add object, delete
-  object, rename object, change property.
-- Continuous drags should collapse into one command at pointer-up, not one
-  command per pointer-move.
+- Continuous drags should collapse into one command at pointer-up.
 - Save operations persist the current document state; they are not themselves
-  the undo history.
+  undo history.
 - File writes happen after command application through project-system APIs.
 
 Initial command candidates:
@@ -303,67 +263,30 @@ Initial command candidates:
 - `RenameObjectCommand`
 - `CreatePrefabCommand`
 
-## Save/Load Flow
-
-Open project:
-
-1. Read and validate `project.3dgame.json`.
-2. Resolve project-relative paths.
-3. Load default scene/layout.
-4. Load asset catalog and runtime asset manifest.
-5. Initialize editor state from project data.
-
-Save authoring data:
-
-1. Editor creates or applies commands.
-2. Project-system serializes the current document.
-3. Dev middleware writes to the external project folder in Editor Mode only.
-4. Runtime files remain valid JSON after every save.
-
-Package project:
-
-1. Run the project's package/build command.
-2. Copy only runtime output and required runtime data.
-3. Produce a package report.
-4. Run a smoke check against the packaged output.
-
 ## Directory Intent
-
-Current editor workspace:
 
 ```text
 3DGameDev/
-  docs/          platform docs and roadmap
-  projects/      external project references
-  src/editor/    editor UI and authoring panels
-  src/scene/     current editor viewport prototype
-  public/        temporary render-test sample assets until project-system lands
-  tools/         local editor launcher scripts
-```
-
-External game project:
-
-```text
-home-makeover/
-  project.3dgame.json
-  gdd/
-  docs/
-  src/
-  public/assets/
-  public/layouts/
-  tools/
+  docs/          current architecture, roadmap, and workflow notes
+  public/        local manifest, layouts, and runtime assets for this copy
+  src/core/      shared utility/core code
+  src/editor/    dev-only editor UI and authoring panels
+  src/project/   local project manifest/path helpers
+  src/scene/     shared game/editor scene runtime
+  tools/         local dev-server helpers
+  dist/          production build output
 ```
 
 Future package boundaries such as `editor-core`, `editor-ui`,
 `scene-runtime`, `asset-system`, `project-system`, `build-system`, and
-`shared-types` are allowed later. Do not introduce them until the first
-manifest-driven external project flow is working.
+`shared-types` are allowed later. Do not introduce them until the current
+single-codebase route and build behavior is covered by smoke tests.
 
 ## Not In Scope Yet
 
-- full pnpm/Turborepo migration
-- node editor
-- shader graph or material graph
-- physics editor
-- generic engine marketplace/plugin ecosystem
-- copying editor source into each game project
+- full pnpm/Turborepo migration;
+- node editor;
+- shader graph or material graph;
+- physics editor;
+- generic engine marketplace/plugin ecosystem;
+- reviving the Project Browser / external-project system.

@@ -62,166 +62,6 @@ body {
   white-space: pre;
 }
 
-body.launcher-mode #game-canvas {
-  display: none;
-}
-
-body.launcher-mode #ui-overlay {
-  pointer-events: auto;
-  background: #20242a;
-}
-
-.launcher-shell {
-  min-height: 100%;
-  color: #edf2f4;
-  font-size: 14px;
-  pointer-events: auto;
-}
-
-.launcher-main {
-  width: min(1120px, calc(100% - 32px));
-  margin: 0 auto;
-  padding: 28px 0;
-}
-
-.launcher-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.launcher-heading h1 {
-  margin: 0;
-  font-size: 28px;
-  letter-spacing: 0;
-}
-
-.launcher-heading p {
-  margin: 4px 0 0;
-  color: #aeb8bd;
-}
-
-.launcher-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
-.launcher-panel {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 6px;
-  background: #181c21;
-}
-
-.launcher-panel h2 {
-  margin: 0;
-  font-size: 14px;
-  letter-spacing: 0;
-}
-
-.launcher-panel label,
-.project-summary,
-.recent-project {
-  display: grid;
-  gap: 5px;
-}
-
-.launcher-panel span,
-.project-summary span,
-.recent-project span {
-  color: #aeb8bd;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
-.launcher-panel input,
-.launcher-panel select {
-  width: 100%;
-  height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
-  padding: 0 8px;
-  color: #edf2f4;
-  background: #2b3136;
-}
-
-.path-picker {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
-  align-items: center;
-}
-
-.path-picker button {
-  white-space: nowrap;
-}
-
-.launcher-shell button {
-  min-height: 34px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
-  padding: 0 12px;
-  color: #edf2f4;
-  background: #2b3136;
-  cursor: pointer;
-}
-
-.launcher-shell button:hover {
-  background: #394148;
-}
-
-.launcher-shell button.primary {
-  color: #07120f;
-  border-color: #72d49f;
-  background: #72d49f;
-}
-
-.recent-list {
-  display: grid;
-  gap: 8px;
-}
-
-.recent-project {
-  justify-items: start;
-  text-align: left;
-}
-
-.launcher-status {
-  min-height: 34px;
-  display: flex;
-  align-items: center;
-  margin-top: 12px;
-  padding: 0 10px;
-  border-radius: 6px;
-  color: #cbd3d7;
-  background: #14181c;
-}
-
-.launcher-status[data-tone="success"] {
-  color: #9ff0bd;
-}
-
-.launcher-status[data-tone="error"] {
-  color: #ff9d93;
-}
-
-@media (max-width: 760px) {
-  .launcher-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .launcher-heading {
-    align-items: stretch;
-    flex-direction: column;
-  }
-}
-
 body.editor-mode #debug-stats {
   top: calc(env(safe-area-inset-top) + 48px);
   left: 268px;
@@ -511,6 +351,58 @@ body.editor-mode #debug-stats {
   opacity: 0.45;
 }
 
+.outliner-row.is-grouped {
+  border-left: 2px solid rgba(243, 204, 92, 0.7);
+}
+
+.outliner-row.is-dragging {
+  opacity: 0.5;
+}
+
+.outliner-row.drop-target {
+  border-color: #72d49f;
+  box-shadow: inset 0 0 0 1px #72d49f;
+  background: rgba(114, 212, 159, 0.12);
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: #1b1f24;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.context-menu-item {
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #e8edf0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.context-menu-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.context-menu-item:disabled {
+  opacity: 0.38;
+  cursor: default;
+}
+
+.context-menu-item.danger:hover:not(:disabled) {
+  background: rgba(225, 91, 91, 0.25);
+}
+
 .outliner-actions {
   display: inline-flex;
   gap: 4px;
@@ -614,7 +506,8 @@ body.editor-mode #debug-stats {
   color: #c8d0d4;
 }
 
-.detail-row input {
+.detail-row input,
+.detail-row select {
   width: 100%;
   min-width: 0;
   height: 30px;
@@ -762,6 +655,12 @@ body.editor-mode #debug-stats {
 
 .editor-shell .detail-actions-row button {
   width: 100%;
+}
+
+.editor-shell .pivot-drag-toggle.on {
+  border-color: #ff9f1a;
+  background: rgba(255, 159, 26, 0.18);
+  color: #ffcf8a;
 }
 
 .detail-toggle {

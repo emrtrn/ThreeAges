@@ -1,46 +1,71 @@
-# 3DGameDev Editor Platform
+# 3DGameDev - Single-Codebase Game Template
 
-This workspace is the reusable Three.js editor, launcher, and packaging tool for multiple 3D web game projects.
+This workspace is a reusable Three.js **game template** whose editor is a
+built-in mode of the game (`?editor`), not a separate app. One `SceneApp`
+renders both the game and the editor viewport, so there is no separate runtime
+to drift from.
 
-Primary external game project right now:
+A new game = copy this repo, drop in its GDD/content, build. The editor travels
+with each game and is stripped from the production bundle.
 
-- `C:\Users\emret\Desktop\home-makeover`
+`home-makeover` (`C:\Users\emret\Desktop\home-makeover`) is a separate project
+for now; it will later be rebuilt as a copy of this template. This codebase no
+longer edits it.
 
-## Role Split
+## Modes (routes)
 
-- `3DGameDev` owns editor and launcher code: Project Browser, viewport, transform gizmo, Content Browser, Details panel, save/load authoring flow, future templates, CLI, and packaging orchestration.
-- Game projects own game runtime code, GDD, assets, levels/layouts, data, package scripts, and final web output.
-- Final packages must not include editor UI, gizmos, launcher code, dev middleware, GDD, source docs, templates, or raw authoring files.
+- **Game Mode**: `http://127.0.0.1:5173/` - runtime render, no editor UI.
+- **Editor Mode**: `http://127.0.0.1:5173/?editor` (add `&debug` for the perf
+  overlay) - same SceneApp + `EditorUi`, which is dynamically imported so the
+  game bundle excludes it.
+- `?debug`: perf overlay in either mode.
 
-## Current Roadmap
+## Docs
 
-Use `docs/2026-06-13-editor-platform-roadmap.md` as the active roadmap.
-Use `docs/ARCHITECTURE.md` as the boundary contract before editor/platform refactors.
-Use `docs/LAUNCH_WORKFLOW.md` for the practical VS Code and URL launch path.
+- `docs/ARCHITECTURE.md`: boundary contract.
+- `docs/LAUNCH_WORKFLOW.md`: practical VS Code and URL launch path.
+- `docs/roadmap.md`: current single-codebase template roadmap.
 
 ## Working Rules
 
-- Keep editor core free of project-specific game rules.
-- Keep project runtime free of editor UI imports.
-- Prefer manifest/config-driven project data over hardcoded Home Makeover paths.
-- Project loading is manifest-driven through `projects/active.project-ref.json` and external `project.3dgame.json` files.
-- Do not copy the whole editor app into game projects; use templates and project manifests instead.
+- Keep the editor core generic; project-specific game rules live in game runtime
+  code/data, not the editor.
+- The editor (`src/editor/`) must stay behind the dynamic `?editor` import so it
+  is excluded from the game build.
+- Project data is local: the game/editor read this repo's own `public/`
+  (`public/project.3dgame.json`, `public/layouts/*.json`, `public/assets/*`).
+  Manifest paths are relative to the public root.
+- After editing TypeScript, run `npx tsc --noEmit`; the dev server skips
+  type-checking.
+- **Save-validator allowlist gotcha:** any new `LayoutPlacement` /
+  `LayoutCharacter` / `LayoutLightActor` field must be added to the
+  `vite.config.ts` save validator (`applyTransformFields` /
+  `validateLightActor`) or it is silently dropped on save.
+
+## Authoring Data Flow
+
+- `/__save-layout` writes the layout to `public/<defaultScene>` and snap settings
+  to `public/project.3dgame.json`.
+- `/__project-dir` is the read-only Content Browser directory tree, scoped to
+  `public/`.
+- These dev endpoints do not exist in the production build.
 
 ## Current Capabilities
 
-- Project Browser opens at `http://127.0.0.1:5173/`.
-- Active Project Editor opens at `http://127.0.0.1:5173/?editor&debug`.
-- Project Browser can create projects from `templates/basic-three-project` and `templates/home-makeover-like`.
-- Project Browser can set/open an active project and package it.
-- Browse buttons in Project Browser open a Windows folder picker for target/open/package paths.
-- CLI entrypoint: `npm run studio -- new/open/preview/package`.
-- Runtime-only package output: `builds/<project>-web` with `package-report.json`.
-- Active external project is normally `C:\Users\emret\Desktop\home-makeover`.
+- Viewport camera (MMB pan / orbit / dolly), transform gizmo
+  (move/rotate/scale with dual-axis plane handles, hover highlight),
+  world-space + local transform.
+- Selection, multi-select, groups, parent/child hierarchy (outliner tree,
+  drag-to-parent, cascade move/rotate/scale), pivot editing (numeric + presets
+  + drag-in-viewport).
+- Scene Outliner, Details panel (transform + schema-driven gameplay metadata),
+  Content Browser, undo/redo command stack, World Settings (background/ambient
+  with autosave).
 
 ## Near-Term Order
 
-1. Add Scene Outliner.
-2. Implement undo/redo command stack for editor actions.
+1. Optional: split editor-only logic out of the main bundle (`SceneApp` still
+   ships gizmo/authoring code in the game chunk).
+2. Smoke tests around load/save and the game/editor mode split.
 3. Improve asset catalog UI with previews and placement-rule affordances.
-4. Harden project-system validation and add smoke tests around project switching.
-5. Improve package reports and package preview flow.
+4. Later: migrate `home-makeover` onto a copy of this template.

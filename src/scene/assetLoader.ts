@@ -2,7 +2,12 @@ import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
-import { projectPublicFileUrl, type ProjectManifest } from "@/project/ProjectSystem";
+import {
+  projectFileUrl,
+  projectPublicFileUrl,
+  type ProjectManifest,
+} from "@/project/ProjectSystem";
+import type { MetadataSchema } from "./metadataSchema";
 
 export interface AssetRecord {
   id: string;
@@ -60,6 +65,7 @@ export interface EditableAsset extends AssetRecord {
 export class AssetLoader {
   private manifestPromise: Promise<AssetManifest> | null = null;
   private catalogPromise: Promise<AssetCatalog | null> | null = null;
+  private metadataSchemaPromise: Promise<MetadataSchema | null> | null = null;
   private modelPromises = new Map<string, Promise<GLTF>>();
   private readonly gltfLoader = new GLTFLoader();
 
@@ -91,6 +97,18 @@ export class AssetLoader {
       return (await response.json()) as AssetCatalog;
     });
     return this.catalogPromise;
+  }
+
+  loadMetadataSchema(): Promise<MetadataSchema | null> {
+    const schemaPath = this.project.editor.metadataSchema;
+    if (!schemaPath) return Promise.resolve(null);
+    this.metadataSchemaPromise ??= fetch(projectFileUrl(schemaPath)).then(async (response) => {
+      if (!response.ok) {
+        throw new Error(`Metadata schema failed: ${response.status} ${response.statusText}`);
+      }
+      return (await response.json()) as MetadataSchema;
+    });
+    return this.metadataSchemaPromise;
   }
 
   async loadEditableAssets(): Promise<EditableAsset[]> {
@@ -186,9 +204,4 @@ function defaultPlacementForCategory(category: string): AssetCatalogRecord["plac
     allowRotation: true,
     allowScale: true,
   };
-}
-
-function projectFileUrl(projectRelativePath: string): string {
-  const normalized = projectRelativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-  return `/__project-file/${encodeURIComponent(normalized)}`;
 }

@@ -97,6 +97,6 @@ if (-not (Test-PreviewReady -TargetUrl $Url)) {
 
 Start-Process $Url
 Write-Host "Opened $Url"
-Write-Host "Project Browser URL: http://127.0.0.1:${Port}/"
-Write-Host "Stable editor URL while Vite is running: http://127.0.0.1:${Port}/?editor&debug"
+Write-Host "Game URL: http://127.0.0.1:${Port}/"
+Write-Host "Editor URL while Vite is running: http://127.0.0.1:${Port}/?editor&debug"
 Write-Host "Use 'Dev Server: LAN Phone Test' for phone testing on the same Wi-Fi."

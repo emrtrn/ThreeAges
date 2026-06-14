@@ -2,7 +2,7 @@
   "name": "3dgamedev-editor",
   "private": true,
   "version": "0.1.0",
-  "description": "Reusable Three.js editor and project launcher for 3D web games",
+  "description": "Reusable Three.js game template with a built-in editor mode",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,8 +12,7 @@
     "editor:lan": "vite --host 0.0.0.0 --port 5173 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "preview:local": "vite preview --host 127.0.0.1 --port 4173 --strictPort",
-    "studio": "node scripts/studio.mjs"
+    "preview:local": "vite preview --host 127.0.0.1 --port 4173 --strictPort"
   },
   "dependencies": {
     "meshoptimizer": "^1.1.1",

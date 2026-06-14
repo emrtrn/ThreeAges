@@ -1,9 +1,13 @@
 /**
  * Entry point: wires the DOM (canvas + UI overlay) to the scene layer.
  * Keep this file thin — composition only, no game or render logic.
+ *
+ * Routes (single codebase, one SceneApp):
+ *   (default)  game mode — runtime render, no editor UI.
+ *   ?editor    editor mode — same SceneApp + dynamically-imported EditorUi overlay
+ *              (the editor bundle is a separate chunk, never loaded in game mode).
+ *   ?debug     attaches the perf overlay in any mode.
  */
-import { ProjectLauncher } from "@/launcher/ProjectLauncher";
-import { EditorUi } from "@/editor/EditorUi";
 import { SceneApp } from "@/scene/SceneApp";
 import { attachDebugStats } from "@/scene/debugStats";
 
@@ -13,21 +17,27 @@ function requireElement<T extends HTMLElement>(id: string): T {
   return el as T;
 }
 
-const canvas = requireElement<HTMLCanvasElement>("game-canvas");
-const params = new URLSearchParams(location.search);
-const editorEnabled = params.has("editor");
+async function main(): Promise<void> {
+  const params = new URLSearchParams(location.search);
+  const canvas = requireElement<HTMLCanvasElement>("game-canvas");
+  const editorEnabled = params.has("editor");
+  const app = new SceneApp(canvas, { enabled: editorEnabled });
 
-if (!editorEnabled) {
-  new ProjectLauncher();
-} else {
-const app = new SceneApp(canvas, { enabled: editorEnabled });
+  // The editor is a dev-time authoring tool (it also needs the dev save server).
+  // Gating on import.meta.env.DEV lets Vite dead-code-eliminate the whole editor
+  // — including the dynamic import — from the production game build, so the
+  // package ships no editor UI at all. In dev, ?editor still loads it on demand.
+  if (editorEnabled && import.meta.env.DEV) {
+    const { EditorUi } = await import("@/editor/EditorUi");
+    new EditorUi(app);
+  }
 
-  new EditorUi(app);
+  // Perf readout (qa-poki standard) behind ?debug — invisible in production.
+  if (params.has("debug")) {
+    attachDebugStats(app, requireElement("debug-stats"));
+  }
 
-// Perf readout (qa-poki standard) behind ?debug — invisible in production.
-if (params.has("debug")) {
-  attachDebugStats(app, requireElement("debug-stats"));
+  app.start();
 }
 
-app.start();
-}
+void main();

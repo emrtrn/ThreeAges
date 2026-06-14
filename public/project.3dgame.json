@@ -1,16 +1,19 @@
 {
   "schema": 1,
-  "name": "__PROJECT_NAME__",
+  "name": "3dgame-template",
   "type": "three-game",
   "version": "0.1.0",
   "entry": "src/main.ts",
   "publicDir": "public",
   "editor": {
-    "defaultScene": "public/layouts/main.json",
-    "assetCatalog": "public/assets/catalog.json",
-    "assetManifest": "public/assets/manifest.json",
+    "defaultScene": "layouts/render-test-room.json",
+    "assetManifest": "assets/manifest.json",
     "gridSize": 1,
-    "snapRotationDeg": 15
+    "gridEnabled": true,
+    "snapRotationDeg": 15,
+    "snapRotationEnabled": true,
+    "snapScale": 0.1,
+    "snapScaleEnabled": false
   },
   "scripts": {
     "preview": "npm run dev",

@@ -9,6 +9,10 @@ export interface ProjectManifest {
     defaultScene: string;
     assetCatalog?: string;
     assetManifest: string;
+    /** Optional project-relative path to a gameplay metadata schema (Details panel). */
+    metadataSchema?: string;
+    /** Optional URL of the project's runtime dev server, opened by Play/Test (P). */
+    previewUrl?: string;
     gridSize?: number;
     gridEnabled?: boolean;
     snapRotationDeg?: number;
@@ -34,24 +38,40 @@ export interface ActiveProject {
 
 let activeProjectPromise: Promise<ActiveProject> | null = null;
 
+/**
+ * Loads this project's manifest. Single-codebase template: the manifest is a
+ * static file bundled in `public/`, fetched directly (works in dev and in the
+ * packaged game) — no external-project dev middleware involved.
+ */
 export async function loadActiveProject(): Promise<ActiveProject> {
-  activeProjectPromise ??= fetch("/__project").then(async (response) => {
+  activeProjectPromise ??= fetch("/project.3dgame.json").then(async (response) => {
     if (!response.ok) {
       throw new Error(`Project manifest failed: ${response.status} ${response.statusText}`);
     }
-    return (await response.json()) as ActiveProject;
+    const manifest = (await response.json()) as ProjectManifest;
+    return {
+      manifest,
+      manifestPath: "project.3dgame.json",
+      rootName: manifest.name,
+    };
   });
   return activeProjectPromise;
 }
 
-export function projectFileUrl(projectRelativePath: string): string {
-  const normalized = projectRelativePath.replace(/\\/g, "/").replace(/^\/+/, "");
-  return `/__project-file/${encodeURIComponent(normalized)}`;
+/**
+ * URL for a path relative to the project's public root. Vite serves `public/`
+ * at `/` in both dev and the packaged build, so these are plain static URLs.
+ */
+export function projectFileUrl(publicRelativePath: string): string {
+  const normalized = publicRelativePath.replace(/\\/g, "/").replace(/^\/+/, "");
+  return `/${normalized}`;
 }
 
 export function projectPublicFileUrl(
-  manifest: ProjectManifest,
+  _manifest: ProjectManifest,
   publicRelativePath: string,
 ): string {
-  return projectFileUrl(`${manifest.publicDir}/${publicRelativePath}`);
+  // Manifest paths are already relative to the public root in the single
+  // codebase, so publicDir no longer needs to be prepended.
+  return projectFileUrl(publicRelativePath);
 }

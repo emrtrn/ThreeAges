@@ -6,18 +6,24 @@
  * This class owns: renderer, scene graph, camera rig, lights, frame loop.
  */
 import {
+  AmbientLight,
   AnimationMixer,
   Box3,
   Box3Helper,
   BoxGeometry,
+  BufferGeometry,
+  CanvasTexture,
   Color,
   ConeGeometry,
   CylinderGeometry,
   DirectionalLight,
   DoubleSide,
   Euler,
+  Float32BufferAttribute,
   Group,
   InstancedMesh,
+  LineBasicMaterial,
+  LineSegments,
   Matrix4,
   Mesh,
   MeshBasicMaterial,
@@ -26,12 +32,14 @@ import {
   PCFSoftShadowMap,
   PerspectiveCamera,
   Plane,
+  PlaneGeometry,
   PointLight,
   Quaternion,
   Raycaster,
   Scene,
-  SphereGeometry,
   SpotLight,
+  Sprite,
+  SpriteMaterial,
   TorusGeometry,
   Vector2,
   Vector3,
@@ -45,15 +53,19 @@ import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
 import {
   degreesToRadians,
   loadRoomLayout,
+  readPivot,
   readRotation,
   readScale,
   type LayoutCharacter,
   type LayoutLightActor,
+  type LayoutMetadata,
   type LayoutPlacement,
   type LayoutWorldSettings,
+  type MetadataValue,
   type RoomLayout,
   type Vec3,
 } from "./roomLayout";
+import { metadataValuesEqual, type MetadataSchema } from "./metadataSchema";
 
 /** Perf budget: clamp DPR so 1080p+ phones don't render 3x fragments. */
 const MAX_PIXEL_RATIO = 2;
@@ -62,6 +74,9 @@ const GIZMO_RENDER_ORDER = 1000;
 const GIZMO_OPACITY = 0.42;
 const GIZMO_ACTIVE_OPACITY = 0.62;
 const GIZMO_ACTIVE_COLOR = 0xff9f1a;
+/** Lighter amber + extra opacity used while the cursor hovers a handle. */
+const GIZMO_HOVER_COLOR = 0xffc24d;
+const GIZMO_HOVER_OPACITY = 0.9;
 const CAMERA_MOVE_SPEED = 5.5;
 const CAMERA_MIN_MOVE_SPEED = 0.8;
 const CAMERA_MAX_MOVE_SPEED = 28;
@@ -75,11 +90,15 @@ const DEFAULT_STATIC_OBJECTS_CAST_SHADOWS = false;
 const DEFAULT_STATIC_OBJECTS_RECEIVE_SHADOWS = true;
 const DEFAULT_LIGHT_COLOR = "#ffffff";
 const DEFAULT_SUN_ID = "sun";
+const DEFAULT_BACKGROUND_COLOR = "#d7d7c7";
+const DEFAULT_AMBIENT_COLOR = "#ffffff";
+const DEFAULT_AMBIENT_INTENSITY = 0;
 
 type EditorTool = "select" | "move" | "rotate" | "scale";
 type TransformSpace = "world" | "local";
-type GizmoAxis = "x" | "y" | "z" | "xyz" | "uniform";
+type GizmoAxis = "x" | "y" | "z" | "xy" | "yz" | "xz" | "xyz" | "uniform";
 type GizmoVectorAxis = Extract<GizmoAxis, "x" | "y" | "z">;
+type GizmoPlaneAxis = Extract<GizmoAxis, "xy" | "yz" | "xz">;
 
 const FLAG_LABELS: Record<"hidden" | "locked" | "scaleLocked", { on: string; off: string }> = {
   hidden: { on: "Hide object", off: "Show object" },
@@ -147,12 +166,16 @@ export interface EditableSelection {
   position: Vec3;
   rotation: Vec3;
   scale: Vec3;
+  /** Local-space authoring pivot offset; `[0,0,0]` means the model origin. */
+  pivot: Vec3;
   scaleLocked: boolean;
   locked: boolean;
   /** Resolved cast-shadow flag (absent in data means true). */
   castShadow: boolean;
   /** Resolved collision flag (absent in data means true). */
   collision: boolean;
+  /** Project-defined gameplay metadata (schema-driven); empty when none set. */
+  metadata: LayoutMetadata;
   lightType?: LayoutLightActor["type"];
   color?: string;
   intensity?: number;
@@ -166,6 +189,12 @@ export interface EditableSceneObject extends EditableSelection {
   selected: boolean;
   hidden: boolean;
   locked: boolean;
+  /** Flat group id shared by grouped objects (move together). */
+  groupId?: string | undefined;
+  /** Stable id used to reference this object as a parent. */
+  nodeId?: string | undefined;
+  /** Parent reference (the parent's nodeId). */
+  parentId?: string | undefined;
 }
 
 export interface EditorHistoryState {
@@ -195,6 +224,9 @@ export interface EditorWorldSettings {
   shadowFilter: "PCF Soft";
   staticObjectsCastShadow: boolean;
   staticObjectsReceiveShadow: boolean;
+  backgroundColor: string;
+  ambientColor: string;
+  ambientIntensity: number;
 }
 
 interface EditorCommand {
@@ -207,6 +239,8 @@ interface LightObjectRecord {
   root: Object3D;
   light: DirectionalLight | PointLight | SpotLight;
   target?: Object3D;
+  /** Wireframe representation (cone/sphere) + clickable icon; rebuilt on change. */
+  gizmo: Object3D;
 }
 
 interface MaterialStats {
@@ -224,6 +258,8 @@ export class SceneApp {
   private scene = new Scene();
   private camera: PerspectiveCamera;
   private sun: DirectionalLight | null = null;
+  private ambientLight: AmbientLight | null = null;
+  private autoSaveTimer = 0;
   private frameHandle = 0;
   private lastTime = 0;
   private assetLoader: AssetLoader | null = null;
@@ -249,6 +285,7 @@ export class SceneApp {
   private cameraDrag: CameraDrag | null = null;
 
   private manifest: AssetManifest | null = null;
+  private metadataSchema: MetadataSchema | null = null;
   private layout: RoomLayout | null = null;
   private models = new Map<string, GLTF>();
   private instanceGroups = new Map<string, Group>();
@@ -263,6 +300,10 @@ export class SceneApp {
   private readonly gizmoGroup = new Group();
   private readonly gizmoPickables: Object3D[] = [];
   private activeGizmoHandle: GizmoHandle | null = null;
+  /** Handle currently under the cursor (idle hover highlight, not dragging). */
+  private hoveredGizmoHandle: GizmoHandle | null = null;
+  /** When on, the move gizmo drags the selection's pivot instead of the object. */
+  private pivotEditMode = false;
   private activeTool: EditorTool = "move";
   private transformSpace: TransformSpace = "world";
   private snapSettings = {
@@ -288,6 +329,14 @@ export class SceneApp {
         freeMoveRight?: Vector3 | undefined;
         freeMoveUp?: Vector3 | undefined;
         linkedTransforms?: LinkedMoveStart[] | undefined;
+        movePlane?: Plane | undefined;
+        planeStartHit?: Vector3 | undefined;
+        /** When set, the move handles drag the pivot point instead of the object. */
+        pivotEdit?: boolean | undefined;
+        /** Inverse of the (fixed) object world matrix, to map dragged world → local pivot. */
+        pivotMatrixInverse?: Matrix4 | undefined;
+        /** Pivot value at drag start, for the undo step. */
+        startPivot?: Vec3 | undefined;
       }
     | {
         mode: "rotate";
@@ -297,6 +346,9 @@ export class SceneApp {
         startTransform: EditableTransform;
         startClientX: number;
         startRotation: Vec3;
+        linkedTransforms?: LinkedMoveStart[] | undefined;
+        pivotWorld?: Vector3 | undefined;
+        pivot?: Vec3 | undefined;
       }
     | {
         mode: "scale";
@@ -307,6 +359,9 @@ export class SceneApp {
         startClientX: number;
         startClientY: number;
         startScale: Vec3;
+        linkedTransforms?: LinkedMoveStart[] | undefined;
+        pivotWorld?: Vector3 | undefined;
+        pivot?: Vec3 | undefined;
       }
     | null = null;
   private readonly undoStack: EditorCommand[] = [];
@@ -318,6 +373,7 @@ export class SceneApp {
   onSceneObjectsChanged: ((objects: EditableSceneObject[]) => void) | null = null;
   onHistoryChanged: ((state: EditorHistoryState) => void) | null = null;
   onWorldSettingsChanged: ((settings: EditorWorldSettings) => void) | null = null;
+  onPivotEditModeChanged: ((enabled: boolean) => void) | null = null;
   onStatus: ((message: string, tone?: "info" | "success" | "warning" | "error") => void) | null =
     null;
 
@@ -431,12 +487,17 @@ export class SceneApp {
           position: [...placement.position],
           rotation: readRotation(placement),
           scale: readScale(placement),
+          pivot: readPivot(placement),
           scaleLocked: placement.scaleLocked ?? false,
           selected: this.isSelectionSelected(selection),
           hidden: placement.hidden ?? false,
           locked: placement.locked ?? false,
           castShadow: this.staticObjectsCastShadow(),
           collision: placement.collision ?? true,
+          metadata: {},
+          groupId: placement.groupId,
+          nodeId: placement.nodeId,
+          parentId: placement.parentId,
         });
       });
     }
@@ -452,12 +513,17 @@ export class SceneApp {
         position: [...character.position],
         rotation: readRotation(character),
         scale: readScale(character),
+        pivot: readPivot(character),
         scaleLocked: character.scaleLocked ?? false,
         selected: this.isSelectionSelected(selection),
         hidden: character.hidden ?? false,
         locked: character.locked ?? false,
         castShadow: character.castShadow ?? true,
         collision: character.collision ?? true,
+        metadata: {},
+        groupId: character.groupId,
+        nodeId: character.nodeId,
+        parentId: character.parentId,
       });
     });
 
@@ -472,12 +538,17 @@ export class SceneApp {
         position: [...light.position],
         rotation: readRotation(light),
         scale: [1, 1, 1],
+        pivot: [0, 0, 0],
         scaleLocked: true,
         selected: this.isSelectionSelected(selection),
         hidden: light.hidden ?? false,
         locked: light.locked ?? false,
         castShadow: light.castShadow ?? light.type === "directional",
         collision: false,
+        metadata: {},
+        groupId: light.groupId,
+        nodeId: light.nodeId,
+        parentId: light.parentId,
         lightType: light.type,
         color: light.color ?? DEFAULT_LIGHT_COLOR,
         intensity: light.intensity ?? defaultLightIntensity(light.type),
@@ -573,6 +644,8 @@ export class SceneApp {
   setEditorTool(tool: EditorTool): void {
     this.activeTool = tool;
     this.pendingAssetId = null;
+    // Switching transform tool leaves pivot-edit mode so tools behave normally.
+    if (this.pivotEditMode) this.setPivotEditMode(false);
     this.updateGizmo();
     this.onStatus?.(`Tool: ${tool}`);
   }
@@ -609,23 +682,28 @@ export class SceneApp {
       shadowFilter: "PCF Soft",
       staticObjectsCastShadow: this.staticObjectsCastShadow(),
       staticObjectsReceiveShadow: this.staticObjectsReceiveShadow(),
+      backgroundColor: this.backgroundColor(),
+      ambientColor: this.ambientColor(),
+      ambientIntensity: this.ambientIntensity(),
     };
   }
 
   setWorldSettings(
     values: Partial<
-      Pick<EditorWorldSettings, "staticObjectsCastShadow" | "staticObjectsReceiveShadow">
+      Pick<
+        EditorWorldSettings,
+        | "staticObjectsCastShadow"
+        | "staticObjectsReceiveShadow"
+        | "backgroundColor"
+        | "ambientColor"
+        | "ambientIntensity"
+      >
     >,
   ): void {
     if (!this.layout) return;
     const previous = this.getWorldSettings();
     const next: EditorWorldSettings = { ...previous, ...values };
-    if (
-      previous.staticObjectsCastShadow === next.staticObjectsCastShadow &&
-      previous.staticObjectsReceiveShadow === next.staticObjectsReceiveShadow
-    ) {
-      return;
-    }
+    if (worldSettingsEqual(previous, next)) return;
 
     this.executeCommand({
       label: "Update world settings",
@@ -971,10 +1049,12 @@ export class SceneApp {
         position: [...placement.position],
         rotation: readRotation(placement),
         scale: readScale(placement),
+        pivot: readPivot(placement),
         scaleLocked: placement.scaleLocked ?? false,
         locked: placement.locked ?? false,
         castShadow: this.staticObjectsCastShadow(),
         collision: placement.collision ?? true,
+        metadata: cloneMetadata(placement.metadata),
       };
     }
 
@@ -990,10 +1070,12 @@ export class SceneApp {
         position: [...light.position],
         rotation: readRotation(light),
         scale: [1, 1, 1],
+        pivot: [0, 0, 0],
         scaleLocked: true,
         locked: light.locked ?? false,
         castShadow: light.castShadow ?? light.type === "directional",
         collision: false,
+        metadata: {},
         lightType: light.type,
         color: light.color ?? DEFAULT_LIGHT_COLOR,
         intensity: light.intensity ?? defaultLightIntensity(light.type),
@@ -1016,10 +1098,12 @@ export class SceneApp {
       position: [...character.position],
       rotation: readRotation(character),
       scale: readScale(character),
+      pivot: readPivot(character),
       scaleLocked: character.scaleLocked ?? false,
       locked: character.locked ?? false,
       castShadow: character.castShadow ?? true,
       collision: character.collision ?? true,
+      metadata: cloneMetadata(character.metadata),
     };
   }
 
@@ -1225,6 +1309,274 @@ export class SceneApp {
     });
   }
 
+  /** Clears the group id from every member of any group in the current selection. */
+  ungroupSelected(): void {
+    const groupIds = new Set<string>();
+    for (const selection of this.getSelectedSelections()) {
+      const groupId = this.getMutableTransform(selection)?.groupId;
+      if (groupId) groupIds.add(groupId);
+    }
+    if (groupIds.size === 0) {
+      this.onStatus?.("Selection is not grouped.", "warning");
+      return;
+    }
+
+    const entries = this.getAllSelections({ includeHidden: true }).flatMap((selection) => {
+      const target = this.getMutableTransform(selection);
+      return target?.groupId && groupIds.has(target.groupId)
+        ? [{ selection: cloneSelection(selection), previousGroupId: target.groupId }]
+        : [];
+    });
+    if (entries.length === 0) return;
+    const active = this.selection ? cloneSelection(this.selection) : null;
+
+    const applyEntries = (mode: "redo" | "undo"): void => {
+      for (const entry of entries) {
+        this.applyGroupId(
+          entry.selection,
+          mode === "redo" ? undefined : entry.previousGroupId,
+          { notify: false },
+        );
+      }
+      this.selectMany(entries.map((entry) => cloneSelection(entry.selection)), active);
+      this.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Ungroup ${entries.length} objects`,
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
+  /** Parents the other selected objects to the active selection (the parent). */
+  parentSelectionToActive(): void {
+    if (!this.selection) return;
+    const parent = cloneSelection(this.selection);
+    const parentTarget = this.getMutableTransform(parent);
+    if (!parentTarget) return;
+
+    // Cycle guard: an ancestor of the parent cannot become its child.
+    const parentDescendantIds = new Set(
+      this.descendantsOf(parent)
+        .map((entry) => this.getMutableTransform(entry)?.nodeId)
+        .filter((id): id is string => Boolean(id)),
+    );
+
+    const parentNodeId = parentTarget.nodeId ?? this.createNodeId();
+    const children = this.getSelectedSelections().flatMap((selection) => {
+      if (selectionsEqual(selection, parent)) return [];
+      const target = this.getMutableTransform(selection);
+      if (!target) return [];
+      // Skip if this object is the parent's ancestor (would form a cycle).
+      if (target.nodeId && parentDescendantIds.has(target.nodeId)) return [];
+      if (target.parentId === parentNodeId) return [];
+      return [{ selection: cloneSelection(selection), previousParentId: target.parentId }];
+    });
+    if (children.length === 0) {
+      this.onStatus?.("Select children plus a parent (active) to parent.", "warning");
+      return;
+    }
+
+    const hadParentNodeId = parentTarget.nodeId !== undefined;
+    const apply = (mode: "redo" | "undo"): void => {
+      const parentMut = this.getMutableTransform(parent);
+      if (parentMut) {
+        if (mode === "redo") parentMut.nodeId = parentNodeId;
+        else if (!hadParentNodeId) delete parentMut.nodeId;
+      }
+      for (const child of children) {
+        const target = this.getMutableTransform(child.selection);
+        if (!target) continue;
+        if (mode === "redo") target.parentId = parentNodeId;
+        else if (child.previousParentId === undefined) delete target.parentId;
+        else target.parentId = child.previousParentId;
+      }
+      this.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Parent ${children.length} to ${this.getSelectionLabel(parent)}`,
+      redo: () => apply("redo"),
+      undo: () => apply("undo"),
+    });
+  }
+
+  /**
+   * Parents one or more objects (by scene-object id) to a target object.
+   * Used by outliner drag-and-drop: drag child rows onto a parent row.
+   * Cycle-safe (a target that is a descendant of a dragged object is skipped).
+   */
+  parentObjectsTo(childIds: string[], parentId: string): void {
+    const parent = parseSelectionId(parentId);
+    if (!parent || !this.hasSelection(parent)) return;
+    const parentTarget = this.getMutableTransform(parent);
+    if (!parentTarget) return;
+
+    const parentNodeId = parentTarget.nodeId ?? this.createNodeId();
+    const children = childIds.flatMap((childId) => {
+      const selection = parseSelectionId(childId);
+      if (!selection || !this.hasSelection(selection)) return [];
+      if (selectionsEqual(selection, parent)) return [];
+      const target = this.getMutableTransform(selection);
+      if (!target) return [];
+      // Cycle guard: the target cannot be a descendant of this child.
+      const descendantIds = new Set(
+        this.descendantsOf(selection)
+          .map((entry) => this.getMutableTransform(entry)?.nodeId)
+          .filter((id): id is string => Boolean(id)),
+      );
+      if (target.nodeId && descendantIds.has(parentNodeId)) return [];
+      if (target.parentId === parentNodeId) return [];
+      return [{ selection: cloneSelection(selection), previousParentId: target.parentId }];
+    });
+    if (children.length === 0) return;
+
+    const hadParentNodeId = parentTarget.nodeId !== undefined;
+    const apply = (mode: "redo" | "undo"): void => {
+      const parentMut = this.getMutableTransform(parent);
+      if (parentMut) {
+        if (mode === "redo") parentMut.nodeId = parentNodeId;
+        else if (!hadParentNodeId) delete parentMut.nodeId;
+      }
+      for (const child of children) {
+        const target = this.getMutableTransform(child.selection);
+        if (!target) continue;
+        if (mode === "redo") target.parentId = parentNodeId;
+        else if (child.previousParentId === undefined) delete target.parentId;
+        else target.parentId = child.previousParentId;
+      }
+      this.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Parent ${children.length} to ${this.getSelectionLabel(parent)}`,
+      redo: () => apply("redo"),
+      undo: () => apply("undo"),
+    });
+  }
+
+  /** Clears the parent of every selected object. */
+  unparentSelected(): void {
+    const entries = this.getSelectedSelections().flatMap((selection) => {
+      const target = this.getMutableTransform(selection);
+      return target?.parentId !== undefined
+        ? [{ selection: cloneSelection(selection), previousParentId: target.parentId }]
+        : [];
+    });
+    if (entries.length === 0) {
+      this.onStatus?.("Selection has no parent.", "warning");
+      return;
+    }
+
+    const apply = (mode: "redo" | "undo"): void => {
+      for (const entry of entries) {
+        const target = this.getMutableTransform(entry.selection);
+        if (!target) continue;
+        if (mode === "redo") delete target.parentId;
+        else target.parentId = entry.previousParentId;
+      }
+      this.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: `Unparent ${entries.length} objects`,
+      redo: () => apply("redo"),
+      undo: () => apply("undo"),
+    });
+  }
+
+  /**
+   * Sets the active selection's local authoring pivot (the point rotation/scale
+   * gizmos act around). Does not move the object — only where the gizmo sits.
+   */
+  setSelectionPivot(pivot: Vec3): void {
+    if (!this.selection || this.selection.kind === "light") {
+      this.onStatus?.("This selection has no pivot.", "warning");
+      return;
+    }
+    const selection = cloneSelection(this.selection);
+    const target = this.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    const before = readPivot(target);
+    const next: Vec3 = [round(pivot[0]), round(pivot[1]), round(pivot[2])];
+    this.commitPivotChange(selection, before, next);
+  }
+
+  /** Writes a pivot value live (no command); deletes the field when at origin. */
+  private applyPivotValue(selection: Selection, value: Vec3): void {
+    const mut = this.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!mut) return;
+    if (value[0] === 0 && value[1] === 0 && value[2] === 0) delete mut.pivot;
+    else mut.pivot = [...value];
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  /** Pushes an undoable pivot change from `before` to `after` (no-op when equal). */
+  private commitPivotChange(selection: Selection, before: Vec3, after: Vec3): void {
+    if (before[0] === after[0] && before[1] === after[1] && before[2] === after[2]) return;
+    const sel = cloneSelection(selection);
+    this.executeCommand({
+      label: "Edit pivot",
+      redo: () => {
+        this.select(sel);
+        this.applyPivotValue(sel, after);
+      },
+      undo: () => {
+        this.select(sel);
+        this.applyPivotValue(sel, before);
+      },
+    });
+  }
+
+  isPivotEditMode(): boolean {
+    return this.pivotEditMode;
+  }
+
+  togglePivotEditMode(): void {
+    this.setPivotEditMode(!this.pivotEditMode);
+  }
+
+  /** Enters/leaves pivot-edit mode: the move gizmo then drags the pivot point. */
+  setPivotEditMode(enabled: boolean): void {
+    if (this.pivotEditMode === enabled) return;
+    this.pivotEditMode = enabled;
+    this.updateGizmo();
+    this.onPivotEditModeChanged?.(enabled);
+    this.onStatus?.(
+      enabled ? "Pivot edit: drag the move gizmo to set the pivot." : "Pivot edit off.",
+      "info",
+    );
+  }
+
+  /** Quick pivot presets derived from the model's local bounds. */
+  applySelectionPivotPreset(preset: "reset" | "center" | "base"): void {
+    if (!this.selection) return;
+    if (preset === "reset") {
+      this.setSelectionPivot([0, 0, 0]);
+      return;
+    }
+    const bounds = this.getLocalBounds(this.selection);
+    if (!bounds) {
+      this.onStatus?.("No local bounds available for this pivot preset.", "warning");
+      return;
+    }
+    const center = bounds.getCenter(new Vector3());
+    if (preset === "center") {
+      this.setSelectionPivot([center.x, center.y, center.z]);
+    } else {
+      // base: bottom-centre — natural hinge for objects resting on the floor.
+      this.setSelectionPivot([center.x, bounds.min.y, center.z]);
+    }
+  }
+
   showHiddenObjects(): void {
     const hiddenSelections = this
       .getAllSelections({ includeHidden: true })
@@ -1365,6 +1717,13 @@ export class SceneApp {
     this.snapSettings.scaleEnabled =
       this.activeProject.manifest.editor.snapScaleEnabled ?? this.snapSettings.scaleEnabled;
     this.manifest = await this.assetLoader.loadManifest();
+    this.metadataSchema = await this.assetLoader.loadMetadataSchema().catch((error) => {
+      this.onStatus?.(
+        `Metadata schema failed to load: ${error instanceof Error ? error.message : String(error)}`,
+        "warning",
+      );
+      return null;
+    });
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
     this.ensureDefaultLights();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
@@ -1394,6 +1753,7 @@ export class SceneApp {
     }
 
     this.fitSunShadowToScene();
+    this.applyBackgroundAndAmbient();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
     this.emitHistoryChanged();
@@ -1644,8 +2004,9 @@ export class SceneApp {
     light.castShadow = actor.castShadow ?? actor.type === "directional";
     configureShadowCastingLight(light);
     root.add(light);
-    root.add(createLightIcon(actor.type, color));
-    return target ? { root, light, target } : { root, light };
+    const gizmo = buildLightGizmo(actor, color);
+    root.add(gizmo);
+    return target ? { root, light, target, gizmo } : { root, light, gizmo };
   }
 
   private insertLightActor(index: number, actor: LayoutLightActor): void {
@@ -1718,7 +2079,13 @@ export class SceneApp {
       record.target.updateMatrixWorld();
     }
 
-    updateLightIconColor(record.root, color);
+    // Rebuild the wireframe so cone angle / sphere radius / color track the actor.
+    record.root.remove(record.gizmo);
+    disposeLightGizmo(record.gizmo);
+    record.gizmo = buildLightGizmo(actor, color);
+    record.root.add(record.gizmo);
+    const wire = record.gizmo.getObjectByName("light-wire");
+    if (wire) wire.visible = this.isLightSelected(index);
   }
 
   private duplicateSelection(selection: Selection): Selection | null {
@@ -1729,6 +2096,7 @@ export class SceneApp {
       if (!transform) return null;
       const snapshot = clonePlacement(transform);
       delete snapshot.groupId;
+      delete snapshot.nodeId;
       const duplicateIndex = selection.placementIndex + 1;
       const duplicateSelection: Selection = {
         kind: "instance",
@@ -1756,6 +2124,7 @@ export class SceneApp {
       snapshot.id = this.createLightId(light.type);
       snapshot.name = uniqueActorName(light.name ?? light.id, this.layout.lights ?? []);
       delete snapshot.groupId;
+      delete snapshot.nodeId;
       const duplicateIndex = selection.index + 1;
       const duplicateSelection: Selection = { kind: "light", index: duplicateIndex };
       this.executeCommand({
@@ -1776,6 +2145,7 @@ export class SceneApp {
     if (!character) return null;
     const snapshot = cloneCharacter(character);
     delete snapshot.groupId;
+    delete snapshot.nodeId;
     const duplicateIndex = selection.index + 1;
     const duplicateSelection: Selection = { kind: "character", index: duplicateIndex };
     this.executeCommand({
@@ -1982,6 +2352,58 @@ export class SceneApp {
     this.setSelectionDefaultTrueFlag(this.selection, "collision", value);
   }
 
+  /** Active project's gameplay metadata schema, or null when none is declared. */
+  getMetadataSchema(): MetadataSchema | null {
+    return this.metadataSchema;
+  }
+
+  /**
+   * Sets a single schema-driven metadata field on the active selection with
+   * undo/redo. Passing `undefined` (or an empty value, decided by the caller)
+   * removes the key so saved layouts only carry meaningful deviations.
+   */
+  setSelectionMetadata(key: string, value: MetadataValue | undefined, label?: string): void {
+    if (!this.selection || !this.hasSelection(this.selection)) return;
+    if (this.selection.kind === "light") return;
+    const target = this.getMutableTransform(this.selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    const previous = cloneMetadataValue(target.metadata?.[key]);
+    if (metadataValuesEqual(previous, value)) return;
+
+    const commandSelection = cloneSelection(this.selection);
+    this.executeCommand({
+      label: label ?? `Set ${key}`,
+      redo: () => this.applyMetadataValue(commandSelection, key, value),
+      undo: () => this.applyMetadataValue(commandSelection, key, previous),
+    });
+  }
+
+  private applyMetadataValue(
+    selection: Selection,
+    key: string,
+    value: MetadataValue | undefined,
+  ): void {
+    if (selection.kind === "light") return;
+    const target = this.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    if (value === undefined) {
+      if (target.metadata) {
+        delete target.metadata[key];
+        if (Object.keys(target.metadata).length === 0) delete target.metadata;
+      }
+    } else {
+      target.metadata ??= {};
+      target.metadata[key] = cloneMetadataValue(value) as MetadataValue;
+    }
+    this.emitSelectionChanged();
+  }
+
   /**
    * Sets a default-true boolean placement field (castShadow/collision) with
    * undo/redo. The absent key means true, so the default value is omitted on
@@ -2054,12 +2476,69 @@ export class SceneApp {
       worldSettings.staticObjectsReceiveShadow = settings.staticObjectsReceiveShadow;
     }
 
+    if (settings.backgroundColor.toLowerCase() === DEFAULT_BACKGROUND_COLOR) {
+      delete worldSettings.backgroundColor;
+    } else {
+      worldSettings.backgroundColor = settings.backgroundColor;
+    }
+
+    if (settings.ambientColor.toLowerCase() === DEFAULT_AMBIENT_COLOR) {
+      delete worldSettings.ambientColor;
+    } else {
+      worldSettings.ambientColor = settings.ambientColor;
+    }
+
+    if (settings.ambientIntensity === DEFAULT_AMBIENT_INTENSITY) {
+      delete worldSettings.ambientIntensity;
+    } else {
+      worldSettings.ambientIntensity = settings.ambientIntensity;
+    }
+
     if (Object.keys(worldSettings).length === 0) delete this.layout.worldSettings;
     else this.layout.worldSettings = worldSettings;
 
     this.applyStaticObjectShadowSettings();
+    this.applyBackgroundAndAmbient();
     this.emitWorldSettingsChanged();
     this.emitSceneObjectsChanged();
+    this.scheduleAutoSave();
+  }
+
+  /** Applies the resolved background color and ambient light to the live scene. */
+  private applyBackgroundAndAmbient(): void {
+    this.scene.background = new Color(this.backgroundColor());
+    const intensity = this.ambientIntensity();
+    if (intensity <= 0) {
+      if (this.ambientLight) {
+        this.ambientLight.removeFromParent();
+        this.ambientLight = null;
+      }
+      return;
+    }
+    if (!this.ambientLight) {
+      this.ambientLight = new AmbientLight(new Color(this.ambientColor()), intensity);
+      this.ambientLight.name = "editor-ambient-light";
+      this.scene.add(this.ambientLight);
+    } else {
+      this.ambientLight.color.set(this.ambientColor());
+      this.ambientLight.intensity = intensity;
+    }
+  }
+
+  /**
+   * World-settings edits persist immediately (debounced) so the user never has
+   * to press Save for scene rendering tweaks.
+   */
+  private scheduleAutoSave(): void {
+    window.clearTimeout(this.autoSaveTimer);
+    this.autoSaveTimer = window.setTimeout(() => {
+      void this.saveLayout().catch((error) => {
+        this.onStatus?.(
+          `Auto-save failed: ${error instanceof Error ? error.message : String(error)}`,
+          "error",
+        );
+      });
+    }, 500);
   }
 
   private applyLightActor(selection: LightSelection, actor: LayoutLightActor): void {
@@ -2248,6 +2727,12 @@ export class SceneApp {
         if (this.beginAltCameraDrag(event)) return;
       }
 
+      // Middle mouse button = pan (no Alt required).
+      if (event.button === 1) {
+        this.beginAltCameraDrag(event);
+        return;
+      }
+
       if (event.button === 2) {
         this.beginCameraNavigation(event);
         return;
@@ -2289,7 +2774,11 @@ export class SceneApp {
         return;
       }
 
-      if (!this.pointerDrag || this.pointerDrag.pointerId !== event.pointerId) return;
+      if (!this.pointerDrag) {
+        this.updateGizmoHover(event.clientX, event.clientY);
+        return;
+      }
+      if (this.pointerDrag.pointerId !== event.pointerId) return;
       const selected = this.getSelected();
       if (!selected) return;
 
@@ -2314,8 +2803,16 @@ export class SceneApp {
         this.pointerDrag = null;
         this.activeGizmoHandle = null;
         this.canvas.releasePointerCapture(event.pointerId);
-        if (drag.mode === "move" && drag.linkedTransforms?.length) {
-          this.commitLinkedMoveChange(drag);
+        if (drag.mode === "move" && drag.pivotEdit) {
+          this.commitPivotChange(
+            drag.selection,
+            drag.startPivot ?? [0, 0, 0],
+            this.getSelectionPivot(drag.selection),
+          );
+        } else if (drag.linkedTransforms?.length) {
+          const verb =
+            drag.mode === "rotate" ? "Rotate" : drag.mode === "scale" ? "Scale" : "Move";
+          this.commitLinkedMoveChange(drag, verb);
         } else {
           this.commitTransformChange(drag.selection, drag.startTransform);
         }
@@ -2324,6 +2821,7 @@ export class SceneApp {
     };
     this.canvas.addEventListener("pointerup", clearDrag);
     this.canvas.addEventListener("pointercancel", clearDrag);
+    this.canvas.addEventListener("pointerleave", () => this.clearGizmoHover());
     this.canvas.addEventListener("contextmenu", (event) => {
       event.preventDefault();
     });
@@ -2590,11 +3088,27 @@ export class SceneApp {
     if (!selected) return;
 
     this.activeGizmoHandle = { ...handle };
+    this.hoveredGizmoHandle = null;
     this.updateGizmo();
 
     if (handle.tool === "move") {
+      const pivotEditing = this.pivotEditMode && this.selection.kind !== "light";
+      // The drag base is the pivot point when editing the pivot, else the origin.
+      const base =
+        (pivotEditing ? this.getSelectionPivotWorld(this.selection) : null) ??
+        new Vector3(...selected.position);
       const hit = this.clientToFloor(event.clientX, event.clientY);
       const freeMoveBasis = this.getScreenSpaceMoveBasis();
+      let movePlane: Plane | undefined;
+      let planeStartHit: Vector3 | undefined;
+      if (isPlaneAxis(handle.axis)) {
+        movePlane = new Plane().setFromNormalAndCoplanarPoint(
+          this.planeNormalWorld(handle.axis),
+          base,
+        );
+        planeStartHit =
+          this.clientToPlane(event.clientX, event.clientY, movePlane) ?? base.clone();
+      }
       this.pointerDrag = {
         mode: "move",
         axis: handle.axis,
@@ -2602,16 +3116,25 @@ export class SceneApp {
         pointerId: event.pointerId,
         startTransform: selectionToTransform(selected),
         offset: hit
-          ? new Vector3(selected.position[0] - hit.x, 0, selected.position[2] - hit.z)
+          ? new Vector3(base.x - hit.x, 0, base.z - hit.z)
           : new Vector3(),
-        startPosition: [...selected.position],
+        startPosition: [base.x, base.y, base.z],
         startClientX: event.clientX,
         startClientY: event.clientY,
         freeMoveRight: freeMoveBasis.right,
         freeMoveUp: freeMoveBasis.up,
-        linkedTransforms,
+        linkedTransforms: pivotEditing ? undefined : linkedTransforms,
+        movePlane,
+        planeStartHit,
+        pivotEdit: pivotEditing ? true : undefined,
+        pivotMatrixInverse: pivotEditing
+          ? transformToMatrix(selectionToTransform(selected)).invert()
+          : undefined,
+        startPivot: pivotEditing ? this.getSelectionPivot(this.selection) : undefined,
       };
     } else if (handle.tool === "rotate") {
+      const pivot = this.getSelectionPivot(this.selection);
+      const hasPivot = pivot[0] !== 0 || pivot[1] !== 0 || pivot[2] !== 0;
       this.pointerDrag = {
         mode: "rotate",
         axis: handle.axis,
@@ -2620,8 +3143,13 @@ export class SceneApp {
         startTransform: selectionToTransform(selected),
         startClientX: event.clientX,
         startRotation: [...selected.rotation],
+        linkedTransforms: this.captureDescendantStarts(this.selection),
+        pivot: hasPivot ? pivot : undefined,
+        pivotWorld: hasPivot ? this.getSelectionPivotWorld(this.selection) ?? undefined : undefined,
       };
     } else {
+      const pivot = this.getSelectionPivot(this.selection);
+      const hasPivot = pivot[0] !== 0 || pivot[1] !== 0 || pivot[2] !== 0;
       this.pointerDrag = {
         mode: "scale",
         axis: handle.axis,
@@ -2631,6 +3159,9 @@ export class SceneApp {
         startClientX: event.clientX,
         startClientY: event.clientY,
         startScale: [...selected.scale],
+        linkedTransforms: this.captureDescendantStarts(this.selection),
+        pivot: hasPivot ? pivot : undefined,
+        pivotWorld: hasPivot ? this.getSelectionPivotWorld(this.selection) ?? undefined : undefined,
       };
     }
 
@@ -2640,7 +3171,11 @@ export class SceneApp {
   private updateMoveDrag(event: PointerEvent, selected: EditableSelection): void {
     if (!this.pointerDrag || this.pointerDrag.mode !== "move") return;
 
-    const position: [number, number, number] = [...selected.position];
+    // When editing the pivot the object stays put, so the unchanged components
+    // come from the pivot's start point (startPosition), not the object origin.
+    const position: [number, number, number] = this.pointerDrag.pivotEdit
+      ? [...this.pointerDrag.startPosition]
+      : [...selected.position];
     if (this.pointerDrag.axis === "xyz") {
       const deltaX = event.clientX - this.pointerDrag.startClientX;
       const deltaY = event.clientY - this.pointerDrag.startClientY;
@@ -2665,6 +3200,22 @@ export class SceneApp {
         this.snapSettings.move,
         this.snapSettings.moveEnabled,
       );
+      this.updateMoveDragPosition(position);
+      return;
+    }
+
+    if (isPlaneAxis(this.pointerDrag.axis) && this.pointerDrag.movePlane && this.pointerDrag.planeStartHit) {
+      const hit = this.clientToPlane(event.clientX, event.clientY, this.pointerDrag.movePlane);
+      if (!hit) return;
+      const delta = hit.sub(this.pointerDrag.planeStartHit);
+      const start = this.pointerDrag.startPosition;
+      for (let i = 0; i < 3; i += 1) {
+        position[i] = snapValue(
+          (start[i] ?? 0) + delta.getComponent(i),
+          this.snapSettings.move,
+          this.snapSettings.moveEnabled,
+        );
+      }
       this.updateMoveDragPosition(position);
       return;
     }
@@ -2731,6 +3282,18 @@ export class SceneApp {
     const activeTransform = this.getMutableTransform(drag.selection);
     if (!activeTransform) return;
 
+    // Pivot edit: `position` is the new pivot world point; map it back into the
+    // object's (fixed) local space and store as the pivot — the object stays put.
+    if (drag.pivotEdit && drag.pivotMatrixInverse) {
+      const local = new Vector3(...position).applyMatrix4(drag.pivotMatrixInverse);
+      this.applyPivotValue(drag.selection, [
+        round(local.x),
+        round(local.y),
+        round(local.z),
+      ]);
+      return;
+    }
+
     const delta: Vec3 = [
       position[0] - drag.startPosition[0],
       position[1] - drag.startPosition[1],
@@ -2766,7 +3329,19 @@ export class SceneApp {
       this.snapSettings.rotate,
       this.snapSettings.rotateEnabled,
     );
-    this.updateSelectedTransform({ rotation });
+    const values: { rotation: Vec3; position?: Vec3 } = { rotation };
+    if (this.pointerDrag.pivotWorld && this.pointerDrag.pivot) {
+      // Pivot around the offset point: keep it fixed by shifting the origin.
+      values.position = this.pivotCorrectedPosition(
+        this.pointerDrag.pivotWorld,
+        rotation,
+        this.pointerDrag.startTransform.scale,
+        this.pointerDrag.pivot,
+      );
+    }
+    this.updateSelectedTransform(values, { notifySelection: false });
+    this.cascadeActiveDragToLinks();
+    this.emitSelectionChanged();
   }
 
   private updateScaleDrag(event: PointerEvent): void {
@@ -2789,12 +3364,28 @@ export class SceneApp {
     if (locked) {
       // Grow every axis by the same amount so a locked object keeps its profile.
       scale = [apply(start[0]), apply(start[1]), apply(start[2])];
+    } else if (isPlaneAxis(this.pointerDrag.axis)) {
+      const [i, j] = planeAxisIndices(this.pointerDrag.axis);
+      scale = [...start];
+      scale[i] = apply(start[i]);
+      scale[j] = apply(start[j]);
     } else {
       const axisIndex = axisToIndex(this.pointerDrag.axis);
       scale = [...start];
       scale[axisIndex] = apply(start[axisIndex]);
     }
-    this.updateSelectedTransform({ scale });
+    const values: { scale: Vec3; position?: Vec3 } = { scale };
+    if (this.pointerDrag.pivotWorld && this.pointerDrag.pivot) {
+      values.position = this.pivotCorrectedPosition(
+        this.pointerDrag.pivotWorld,
+        this.pointerDrag.startTransform.rotation,
+        scale,
+        this.pointerDrag.pivot,
+      );
+    }
+    this.updateSelectedTransform(values, { notifySelection: false });
+    this.cascadeActiveDragToLinks();
+    this.emitSelectionChanged();
   }
 
   private pickGizmoHandle(clientX: number, clientY: number): GizmoHandle | null {
@@ -2806,11 +3397,49 @@ export class SceneApp {
     return handle ?? null;
   }
 
+  /** Highlights the handle under the cursor (idle, not dragging) so it's clear what a click will grab. */
+  private updateGizmoHover(clientX: number, clientY: number): void {
+    if (this.cameraDrag || this.cameraNavigationActive) return;
+    const handle = this.gizmoGroup.visible ? this.pickGizmoHandle(clientX, clientY) : null;
+    const changed =
+      (handle?.tool ?? null) !== (this.hoveredGizmoHandle?.tool ?? null) ||
+      (handle?.axis ?? null) !== (this.hoveredGizmoHandle?.axis ?? null);
+    if (!changed) return;
+    this.hoveredGizmoHandle = handle ? { ...handle } : null;
+    this.canvas.style.cursor = handle ? "pointer" : "";
+    this.updateGizmo();
+  }
+
+  private clearGizmoHover(): void {
+    if (!this.hoveredGizmoHandle) return;
+    this.hoveredGizmoHandle = null;
+    if (this.canvas.style.cursor === "pointer") this.canvas.style.cursor = "";
+    this.updateGizmo();
+  }
+
   private getScreenSpaceMoveBasis(): { right: Vector3; up: Vector3 } {
     return {
       right: new Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).normalize(),
       up: new Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize(),
     };
+  }
+
+  /** World-space normal of a plane handle, matching the gizmo's orientation. */
+  private planeNormalWorld(axis: GizmoPlaneAxis): Vector3 {
+    const local =
+      axis === "xy"
+        ? new Vector3(0, 0, 1)
+        : axis === "yz"
+          ? new Vector3(1, 0, 0)
+          : new Vector3(0, 1, 0);
+    return local.applyQuaternion(this.gizmoGroup.quaternion).normalize();
+  }
+
+  private clientToPlane(clientX: number, clientY: number, plane: Plane): Vector3 | null {
+    this.setPointerNdc(clientX, clientY);
+    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+    const target = new Vector3();
+    return this.raycaster.ray.intersectPlane(plane, target) ? target : null;
   }
 
   private pickSelection(clientX: number, clientY: number): Selection | null {
@@ -2820,6 +3449,7 @@ export class SceneApp {
     const pickables: Object3D[] = [];
     for (const meshes of this.instanceMeshes.values()) pickables.push(...meshes);
     pickables.push(...this.characterObjects);
+    for (const record of this.lightObjects) pickables.push(record.root);
 
     const hits = this.raycaster.intersectObjects(pickables, true);
     for (const hit of hits) {
@@ -2907,13 +3537,82 @@ export class SceneApp {
   }
 
   private captureLinkedMoveStarts(active: Selection): LinkedMoveStart[] | undefined {
-    const linked = this.getSelectedSelections().flatMap((selection) => {
+    // Everything that should move with the active object: the rest of the
+    // selection (groups/multi-select) plus all parent→child descendants.
+    const targets = new Map<string, Selection>();
+    const add = (selection: Selection): void => {
+      const id = selectionId(selection);
+      if (!targets.has(id)) targets.set(id, cloneSelection(selection));
+    };
+    for (const selection of this.getSelectedSelections()) add(selection);
+    for (const selection of [active, ...targets.values()]) {
+      for (const descendant of this.descendantsOf(selection)) add(descendant);
+    }
+
+    const linked = [...targets.values()].flatMap((selection) => {
       if (selectionsEqual(selection, active)) return [];
       if (this.isSelectionLocked(selection)) return [];
       const startTransform = this.captureTransform(selection);
       return startTransform ? [{ selection: cloneSelection(selection), startTransform }] : [];
     });
     return linked.length > 0 ? linked : undefined;
+  }
+
+  /**
+   * Captures start world transforms of the active object's descendants so a
+   * parent rotate/scale can carry its children (cascade). Descendants only —
+   * unlike captureLinkedMoveStarts, multi-selection siblings are not included.
+   */
+  private captureDescendantStarts(active: Selection): LinkedMoveStart[] | undefined {
+    const links = this.descendantsOf(active).flatMap((selection) => {
+      if (this.isSelectionLocked(selection)) return [];
+      const startTransform = this.captureTransform(selection);
+      return startTransform ? [{ selection: cloneSelection(selection), startTransform }] : [];
+    });
+    return links.length > 0 ? links : undefined;
+  }
+
+  /** During a rotate/scale drag, re-derives linked descendants from the parent. */
+  private cascadeActiveDragToLinks(): void {
+    const drag = this.pointerDrag;
+    if (!drag || (drag.mode !== "rotate" && drag.mode !== "scale")) return;
+    if (!drag.linkedTransforms || drag.linkedTransforms.length === 0) return;
+    const parentNow = this.captureTransform(drag.selection);
+    if (!parentNow) return;
+    this.applyCascadeToLinks(drag.startTransform, parentNow, drag.linkedTransforms);
+  }
+
+  /**
+   * Re-derives each linked descendant's world transform as the parent moves:
+   * D1 = (P1 · P0⁻¹) · D0, so children keep their start offset/orientation
+   * relative to the parent (UE-style hierarchy). Lights skip scale.
+   */
+  private applyCascadeToLinks(
+    parentStart: EditableTransform,
+    parentNow: EditableTransform,
+    links: LinkedMoveStart[],
+  ): void {
+    const delta = new Matrix4().multiplyMatrices(
+      transformToMatrix(parentNow),
+      transformToMatrix(parentStart).invert(),
+    );
+    for (const link of links) {
+      const transform = this.getMutableTransform(link.selection);
+      if (!transform) continue;
+      const next = matrixToTransform(
+        new Matrix4().multiplyMatrices(delta, transformToMatrix(link.startTransform)),
+      );
+      transform.position = [
+        round(next.position[0]),
+        round(next.position[1]),
+        round(next.position[2]),
+      ];
+      writeRotation(transform, next.rotation);
+      if (link.selection.kind !== "light") writeScale(transform, next.scale);
+      this.refreshSelectionObject(link.selection);
+    }
+    this.updateSelectionBox();
+    this.updateGizmo();
   }
 
   private getGroupedSelections(selection: Selection): Selection[] {
@@ -2924,6 +3623,47 @@ export class SceneApp {
       .getAllSelections({ includeHidden: true })
       .filter((entry) => this.getMutableTransform(entry)?.groupId === groupId);
     return members.length > 0 ? members.map(cloneSelection) : [cloneSelection(selection)];
+  }
+
+  /** Direct children: objects whose parentId equals the given object's nodeId. */
+  private childrenOf(selection: Selection): Selection[] {
+    const nodeId = this.getMutableTransform(selection)?.nodeId;
+    if (!nodeId) return [];
+    return this.getAllSelections({ includeHidden: true }).filter(
+      (entry) => this.getMutableTransform(entry)?.parentId === nodeId,
+    );
+  }
+
+  /** All descendants (depth-first), cycle-safe via a visited-nodeId set. */
+  private descendantsOf(selection: Selection): Selection[] {
+    const result: Selection[] = [];
+    const visited = new Set<string>();
+    const walk = (current: Selection): void => {
+      const nodeId = this.getMutableTransform(current)?.nodeId;
+      if (nodeId) {
+        if (visited.has(nodeId)) return;
+        visited.add(nodeId);
+      }
+      for (const child of this.childrenOf(current)) {
+        result.push(child);
+        walk(child);
+      }
+    };
+    walk(selection);
+    return result;
+  }
+
+  private createNodeId(): string {
+    const existing = new Set<string>();
+    for (const selection of this.getAllSelections({ includeHidden: true })) {
+      const nodeId = this.getMutableTransform(selection)?.nodeId;
+      if (nodeId) existing.add(nodeId);
+    }
+    let id = "";
+    do {
+      id = `node-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e6).toString(36)}`;
+    } while (existing.has(id));
+    return id;
   }
 
   private isSelectionSelected(selection: Selection): boolean {
@@ -2967,6 +3707,53 @@ export class SceneApp {
     return character?.name ?? character?.assetId ?? "object";
   }
 
+  /** The active selection's local authoring pivot (`[0,0,0]` when none / light). */
+  private getSelectionPivot(selection: Selection): Vec3 {
+    if (selection.kind === "light") return [0, 0, 0];
+    const transform = this.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    return transform ? readPivot(transform) : [0, 0, 0];
+  }
+
+  /** World-space position of a selection's pivot point (gizmo anchor). */
+  private getSelectionPivotWorld(selection: Selection): Vector3 | null {
+    const editable = this.captureTransform(selection);
+    if (!editable) return null;
+    const pivot = this.getSelectionPivot(selection);
+    return new Vector3(...pivot).applyMatrix4(transformToMatrix(editable));
+  }
+
+  /**
+   * Origin position that keeps `pivotWorld` fixed for a given rotation+scale:
+   * p' = pivotWorld − R·S·pivotLocal.
+   */
+  private pivotCorrectedPosition(
+    pivotWorld: Vector3,
+    rotation: Vec3,
+    scale: Vec3,
+    pivot: Vec3,
+  ): Vec3 {
+    const rotScale = new Matrix4().compose(
+      new Vector3(0, 0, 0),
+      new Quaternion().setFromEuler(eulerDegrees(rotation)),
+      new Vector3(...scale),
+    );
+    const offset = new Vector3(...pivot).applyMatrix4(rotScale);
+    return [
+      round(pivotWorld.x - offset.x),
+      round(pivotWorld.y - offset.y),
+      round(pivotWorld.z - offset.z),
+    ];
+  }
+
+  /** Model-space AABB for pivot presets (instances only for now). */
+  private getLocalBounds(selection: Selection): Box3 | null {
+    if (selection.kind === "instance") return this.localBounds.get(selection.assetId) ?? null;
+    return null;
+  }
+
   private getSelectionWorldBox(selection: Selection): Box3 | null {
     if (selection.kind === "instance") {
       const bounds = this.localBounds.get(selection.assetId);
@@ -2975,8 +3762,11 @@ export class SceneApp {
       return bounds.clone().applyMatrix4(composePlacementMatrix(transform));
     }
     if (selection.kind === "light") {
-      const object = this.lightObjects[selection.index]?.root;
-      return object ? new Box3().setFromObject(object) : null;
+      const record = this.lightObjects[selection.index];
+      if (!record) return null;
+      // Box the small icon, not the (large) wireframe reach.
+      const icon = record.gizmo.getObjectByName("light-icon") ?? record.root;
+      return new Box3().setFromObject(icon);
     }
     const object = this.characterObjects[selection.index];
     return object ? new Box3().setFromObject(object) : null;
@@ -2984,6 +3774,7 @@ export class SceneApp {
 
   private updateSelectionBox(): void {
     this.removeSelectionBox();
+    this.updateLightGizmoVisibility();
     if (!this.layout) return;
 
     for (const selection of this.getSelectedSelections()) {
@@ -2995,6 +3786,18 @@ export class SceneApp {
       this.selectionBoxes.push(helper);
       this.scene.add(helper);
     }
+  }
+
+  /** Shows a light's wireframe reach only while it is selected. */
+  private updateLightGizmoVisibility(): void {
+    this.lightObjects.forEach((record, index) => {
+      const wire = record.gizmo.getObjectByName("light-wire");
+      if (wire) wire.visible = this.isLightSelected(index);
+    });
+  }
+
+  private isLightSelected(index: number): boolean {
+    return this.selectedSelections.has(selectionId({ kind: "light", index }));
   }
 
   private removeSelectionBox(): void {
@@ -3014,22 +3817,27 @@ export class SceneApp {
     if (!this.selection) return;
 
     const selected = this.getSelected();
-    if (!selected || this.activeTool === "select") return;
+    // In pivot-edit mode the move gizmo is shown even under the Select tool.
+    const pivotEditing = this.pivotEditMode && this.selection.kind !== "light";
+    if (!selected || (this.activeTool === "select" && !pivotEditing)) return;
     if (this.selection && this.isSelectionLocked(this.selection)) return;
 
     this.gizmoGroup.visible = true;
-    this.gizmoGroup.position.set(...selected.position);
+    const pivotWorld = this.getSelectionPivotWorld(this.selection);
+    if (pivotWorld) this.gizmoGroup.position.copy(pivotWorld);
+    else this.gizmoGroup.position.set(...selected.position);
     if (this.transformSpace === "local") {
       applyEulerDegrees(this.gizmoGroup, selected.rotation);
     } else {
       this.gizmoGroup.rotation.set(0, 0, 0);
     }
 
-    if (this.activeTool === "move") {
+    const tool = pivotEditing ? "move" : this.activeTool;
+    if (tool === "move") {
       this.addMoveGizmo();
-    } else if (this.activeTool === "rotate") {
+    } else if (tool === "rotate") {
       this.addRotateGizmo();
-    } else if (this.activeTool === "scale") {
+    } else if (tool === "scale") {
       this.addScaleGizmo();
     }
     this.updateGizmoScreenScale();
@@ -3065,6 +3873,11 @@ export class SceneApp {
     this.addArrowHandle("x", 0xe15b5b);
     this.addArrowHandle("y", 0x69d282);
     this.addArrowHandle("z", 0x5b8fe1);
+
+    // Two-axis plane handles, colored by the axis they are perpendicular to.
+    this.addPlaneHandle("move", "xy", 0x5b8fe1);
+    this.addPlaneHandle("move", "xz", 0x69d282);
+    this.addPlaneHandle("move", "yz", 0xe15b5b);
 
     const center = new Mesh(
       new BoxGeometry(0.18, 0.18, 0.18),
@@ -3107,6 +3920,31 @@ export class SceneApp {
     this.addScaleHandle("x", 0xe15b5b);
     this.addScaleHandle("y", 0x69d282);
     this.addScaleHandle("z", 0x5b8fe1);
+
+    this.addPlaneHandle("scale", "xy", 0x5b8fe1);
+    this.addPlaneHandle("scale", "xz", 0x69d282);
+    this.addPlaneHandle("scale", "yz", 0xe15b5b);
+  }
+
+  /** Small square handle for two-axis (planar) move/scale, like Unreal's gizmo. */
+  private addPlaneHandle(tool: "move" | "scale", axis: GizmoPlaneAxis, color: number): void {
+    const size = 0.2;
+    const reach = 0.34;
+    const material = this.gizmoMaterialFor(tool, axis, color);
+    material.side = DoubleSide;
+    const quad = new Mesh(new PlaneGeometry(size, size), material);
+    quad.name = `${tool}-${axis}-plane`;
+    if (axis === "xy") {
+      quad.position.set(reach, reach, 0);
+    } else if (axis === "xz") {
+      quad.position.set(reach, 0, reach);
+      quad.rotation.x = -Math.PI / 2;
+    } else {
+      quad.position.set(0, reach, reach);
+      quad.rotation.y = Math.PI / 2;
+    }
+    this.registerGizmoHandle(quad, { tool, axis });
+    this.gizmoGroup.add(quad);
   }
 
   private addArrowHandle(axis: GizmoVectorAxis, color: number): void {
@@ -3145,15 +3983,21 @@ export class SceneApp {
   }
 
   private gizmoMaterialFor(tool: EditorTool, axis: GizmoAxis, color: number): MeshBasicMaterial {
-    const active = this.isActiveGizmoHandle(tool, axis);
-    return gizmoMaterial(
-      active ? GIZMO_ACTIVE_COLOR : color,
-      active ? GIZMO_ACTIVE_OPACITY : GIZMO_OPACITY,
-    );
+    if (this.isActiveGizmoHandle(tool, axis)) {
+      return gizmoMaterial(GIZMO_ACTIVE_COLOR, GIZMO_ACTIVE_OPACITY);
+    }
+    if (this.isHoveredGizmoHandle(tool, axis)) {
+      return gizmoMaterial(GIZMO_HOVER_COLOR, GIZMO_HOVER_OPACITY);
+    }
+    return gizmoMaterial(color, GIZMO_OPACITY);
   }
 
   private isActiveGizmoHandle(tool: EditorTool, axis: GizmoAxis): boolean {
     return this.activeGizmoHandle?.tool === tool && this.activeGizmoHandle.axis === axis;
+  }
+
+  private isHoveredGizmoHandle(tool: EditorTool, axis: GizmoAxis): boolean {
+    return this.hoveredGizmoHandle?.tool === tool && this.hoveredGizmoHandle.axis === axis;
   }
 
   private registerGizmoHandle(object: Object3D, handle: GizmoHandle): void {
@@ -3224,11 +4068,14 @@ export class SceneApp {
     });
   }
 
-  private commitLinkedMoveChange(drag: {
-    selection: Selection;
-    startTransform: EditableTransform;
-    linkedTransforms?: LinkedMoveStart[] | undefined;
-  }): void {
+  private commitLinkedMoveChange(
+    drag: {
+      selection: Selection;
+      startTransform: EditableTransform;
+      linkedTransforms?: LinkedMoveStart[] | undefined;
+    },
+    verb = "Move",
+  ): void {
     const entries = [
       {
         selection: cloneSelection(drag.selection),
@@ -3261,7 +4108,7 @@ export class SceneApp {
     const active = cloneSelection(drag.selection);
 
     this.executeCommand({
-      label: `Move ${changes.length} objects`,
+      label: `${verb} ${changes.length} objects`,
       redo: () => {
         this.selectMany(selections, active);
         for (const change of changes) this.applyTransform(change.selection, change.after);
@@ -3310,6 +4157,18 @@ export class SceneApp {
       this.layout?.worldSettings?.staticObjectsReceiveShadow ??
       DEFAULT_STATIC_OBJECTS_RECEIVE_SHADOWS
     );
+  }
+
+  private backgroundColor(): string {
+    return this.layout?.worldSettings?.backgroundColor ?? DEFAULT_BACKGROUND_COLOR;
+  }
+
+  private ambientColor(): string {
+    return this.layout?.worldSettings?.ambientColor ?? DEFAULT_AMBIENT_COLOR;
+  }
+
+  private ambientIntensity(): number {
+    return this.layout?.worldSettings?.ambientIntensity ?? DEFAULT_AMBIENT_INTENSITY;
   }
 
   private hasSelection(selection: Selection): boolean {
@@ -3385,6 +4244,30 @@ function composePlacementMatrix(placement: LayoutPlacement | LayoutCharacter): M
   return new Matrix4().compose(position, rotation, scale);
 }
 
+const RAD_TO_DEG = 180 / Math.PI;
+
+/** Builds a world matrix from an editable transform (pos / euler-degrees / scale). */
+function transformToMatrix(transform: EditableTransform): Matrix4 {
+  const position = new Vector3(...transform.position);
+  const rotation = new Quaternion().setFromEuler(eulerDegrees(transform.rotation));
+  const scale = new Vector3(...transform.scale);
+  return new Matrix4().compose(position, rotation, scale);
+}
+
+/** Decomposes a world matrix back into an editable transform (degrees rotation). */
+function matrixToTransform(matrix: Matrix4): EditableTransform {
+  const position = new Vector3();
+  const quaternion = new Quaternion();
+  const scale = new Vector3();
+  matrix.decompose(position, quaternion, scale);
+  const euler = new Euler().setFromQuaternion(quaternion, "XYZ");
+  return {
+    position: [position.x, position.y, position.z],
+    rotation: [euler.x * RAD_TO_DEG, euler.y * RAD_TO_DEG, euler.z * RAD_TO_DEG],
+    scale: [scale.x, scale.y, scale.z],
+  };
+}
+
 /** Builds an XYZ-order Euler from a degrees vector. */
 function eulerDegrees(rotation: Vec3): Euler {
   return new Euler(
@@ -3407,6 +4290,17 @@ function axisToIndex(axis: GizmoAxis): 0 | 1 | 2 {
   return 1;
 }
 
+function isPlaneAxis(axis: GizmoAxis): axis is GizmoPlaneAxis {
+  return axis === "xy" || axis === "yz" || axis === "xz";
+}
+
+/** The two transform-component indices a plane handle edits. */
+function planeAxisIndices(axis: GizmoPlaneAxis): [0 | 1 | 2, 0 | 1 | 2] {
+  if (axis === "xy") return [0, 1];
+  if (axis === "yz") return [1, 2];
+  return [0, 2];
+}
+
 /**
  * Writes a rotation vector back to a placement. Y-only rotations stay in the
  * legacy `rotationYDeg` field (runtime-compatible); X/Z components promote to
@@ -3417,11 +4311,17 @@ function writeRotation(
   rotation: Vec3,
 ): void {
   const [x, y, z] = [round(rotation[0]), round(rotation[1]), round(rotation[2])];
-  if ("assetId" in target) target.rotationYDeg = y;
-  if (x === 0 && z === 0) {
-    delete target.rotation;
+  if ("assetId" in target) {
+    // Instances/characters: keep Y in the legacy field (runtime-compatible) and
+    // promote X/Z to the full rotation array only when they are non-zero.
+    target.rotationYDeg = y;
+    if (x === 0 && z === 0) delete target.rotation;
+    else target.rotation = [x, y, z];
   } else {
-    target.rotation = [x, y, z];
+    // Lights have no legacy Y field, so a Y-only rotation must live in `rotation`
+    // too — otherwise rotating a light around Y is silently dropped.
+    if (x === 0 && y === 0 && z === 0) delete target.rotation;
+    else target.rotation = [x, y, z];
   }
 }
 
@@ -3442,6 +4342,22 @@ function cloneSelection(selection: Selection): Selection {
   }
   if (selection.kind === "light") return { kind: "light", index: selection.index };
   return { kind: "character", index: selection.index };
+}
+
+/** Deep-copies a layout metadata blob (arrays included) for snapshots/undo. */
+function cloneMetadata(metadata: LayoutMetadata | undefined): LayoutMetadata {
+  const clone: LayoutMetadata = {};
+  if (!metadata) return clone;
+  for (const [key, value] of Object.entries(metadata)) {
+    clone[key] = cloneMetadataValue(value) as MetadataValue;
+  }
+  return clone;
+}
+
+function cloneMetadataValue(
+  value: MetadataValue | undefined,
+): MetadataValue | undefined {
+  return Array.isArray(value) ? [...value] : value;
 }
 
 function selectionId(selection: Selection): string {
@@ -3556,10 +4472,14 @@ function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.groupId !== undefined) clone.groupId = placement.groupId;
   if (placement.rotationYDeg !== undefined) clone.rotationYDeg = placement.rotationYDeg;
   if (placement.rotation !== undefined) clone.rotation = [...placement.rotation];
+  if (placement.pivot !== undefined) clone.pivot = [...placement.pivot];
   if (placement.scale !== undefined) clone.scale = cloneScale(placement.scale);
   if (placement.scaleLocked !== undefined) clone.scaleLocked = placement.scaleLocked;
   if (placement.castShadow !== undefined) clone.castShadow = placement.castShadow;
   if (placement.collision !== undefined) clone.collision = placement.collision;
+  if (placement.metadata !== undefined) clone.metadata = cloneMetadata(placement.metadata);
+  if (placement.nodeId !== undefined) clone.nodeId = placement.nodeId;
+  if (placement.parentId !== undefined) clone.parentId = placement.parentId;
   return clone;
 }
 
@@ -3580,10 +4500,14 @@ function cloneCharacter(character: LayoutCharacter): LayoutCharacter {
   if (character.groupId !== undefined) clone.groupId = character.groupId;
   if (character.rotationYDeg !== undefined) clone.rotationYDeg = character.rotationYDeg;
   if (character.rotation !== undefined) clone.rotation = [...character.rotation];
+  if (character.pivot !== undefined) clone.pivot = [...character.pivot];
   if (character.scale !== undefined) clone.scale = cloneScale(character.scale);
   if (character.scaleLocked !== undefined) clone.scaleLocked = character.scaleLocked;
   if (character.castShadow !== undefined) clone.castShadow = character.castShadow;
   if (character.collision !== undefined) clone.collision = character.collision;
+  if (character.metadata !== undefined) clone.metadata = cloneMetadata(character.metadata);
+  if (character.nodeId !== undefined) clone.nodeId = character.nodeId;
+  if (character.parentId !== undefined) clone.parentId = character.parentId;
   if (character.animation !== undefined) clone.animation = character.animation;
   return clone;
 }
@@ -3605,6 +4529,8 @@ function cloneLightActor(light: LayoutLightActor): LayoutLightActor {
   if (light.locked !== undefined) clone.locked = light.locked;
   if (light.scaleLocked !== undefined) clone.scaleLocked = light.scaleLocked;
   if (light.groupId !== undefined) clone.groupId = light.groupId;
+  if (light.nodeId !== undefined) clone.nodeId = light.nodeId;
+  if (light.parentId !== undefined) clone.parentId = light.parentId;
   if (light.rotation !== undefined) clone.rotation = [...light.rotation];
   if (light.color !== undefined) clone.color = light.color;
   if (light.intensity !== undefined) clone.intensity = light.intensity;
@@ -3669,31 +4595,197 @@ function configureShadowCastingLight(light: DirectionalLight | PointLight | Spot
   }
 }
 
-function createLightIcon(type: LayoutLightActor["type"], color: Color): Mesh {
-  const geometry =
-    type === "point"
-      ? new SphereGeometry(0.16, 16, 10)
-      : type === "spot"
-        ? new ConeGeometry(0.18, 0.34, 16)
-        : new BoxGeometry(0.28, 0.28, 0.28);
-  const material = new MeshBasicMaterial({ color, transparent: true, opacity: 0.92 });
-  const icon = new Mesh(geometry, material);
-  icon.name = `${formatLightType(type)} Icon`;
-  return icon;
+const lightIconTextures = new Map<LayoutLightActor["type"], CanvasTexture>();
+const lightIconMaterials = new Map<LayoutLightActor["type"], SpriteMaterial>();
+
+/** Unreal-style billboard icon (bulb for point/spot, sun for directional). */
+function createLightIcon(type: LayoutLightActor["type"]): Sprite {
+  const sprite = new Sprite(lightIconMaterial(type));
+  sprite.scale.set(0.55, 0.55, 0.55);
+  sprite.name = "light-icon";
+  return sprite;
 }
 
-function updateLightIconColor(root: Object3D, color: Color): void {
-  root.traverse((child) => {
-    if (!(child instanceof Mesh)) return;
-    const materials = Array.isArray(child.material) ? child.material : [child.material];
-    for (const material of materials) {
-      if (material instanceof MeshBasicMaterial) material.color.copy(color);
+function lightIconMaterial(type: LayoutLightActor["type"]): SpriteMaterial {
+  let material = lightIconMaterials.get(type);
+  if (material) return material;
+  material = new SpriteMaterial({
+    map: lightIconTexture(type),
+    transparent: true,
+    // Always visible (like Unreal's editor icons), even behind geometry.
+    depthTest: false,
+    depthWrite: false,
+  });
+  lightIconMaterials.set(type, material);
+  return material;
+}
+
+function lightIconTexture(type: LayoutLightActor["type"]): CanvasTexture {
+  let texture = lightIconTextures.get(type);
+  if (texture) return texture;
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (ctx) drawLightGlyph(ctx, type);
+  texture = new CanvasTexture(canvas);
+  lightIconTextures.set(type, texture);
+  return texture;
+}
+
+function drawLightGlyph(ctx: CanvasRenderingContext2D, type: LayoutLightActor["type"]): void {
+  ctx.clearRect(0, 0, 64, 64);
+  ctx.lineWidth = 4;
+  ctx.lineJoin = "round";
+  ctx.strokeStyle = "rgba(25,20,8,0.92)";
+  ctx.fillStyle = "#ffd76a";
+
+  if (type === "directional") {
+    const cx = 32;
+    const cy = 32;
+    const r = 11;
+    for (let i = 0; i < 8; i += 1) {
+      const a = (i / 8) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(a) * (r + 4), cy + Math.sin(a) * (r + 4));
+      ctx.lineTo(cx + Math.cos(a) * (r + 13), cy + Math.sin(a) * (r + 13));
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    return;
+  }
+
+  // Bulb for point + spot.
+  const cx = 32;
+  const cy = 25;
+  const r = 14;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#9a8a5a";
+  ctx.beginPath();
+  ctx.rect(cx - 7, cy + r - 3, 14, 13);
+  ctx.fill();
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx - 7, cy + r + 2);
+  ctx.lineTo(cx + 7, cy + r + 2);
+  ctx.moveTo(cx - 7, cy + r + 6);
+  ctx.lineTo(cx + 7, cy + r + 6);
+  ctx.stroke();
+}
+
+/**
+ * Unreal-style wireframe light gizmo: a small solid icon (the click target) plus
+ * a wireframe that represents the light's actual reach — a cone with its apex at
+ * the spotlight origin (angle + range), or a sphere of the point light's range.
+ */
+function buildLightGizmo(actor: LayoutLightActor, color: Color): Object3D {
+  const group = new Group();
+  group.name = "light-gizmo";
+  group.add(createLightIcon(actor.type));
+
+  const lineMaterial = new LineBasicMaterial({ color, transparent: true, opacity: 0.85 });
+  let wire: LineSegments;
+  if (actor.type === "spot") {
+    const angle = degreesToRadians(actor.angle ?? 30);
+    const height = actor.distance && actor.distance > 0 ? actor.distance : 10;
+    const radius = Math.tan(angle) * height;
+    wire = buildSpotConeWire(radius, height, lineMaterial);
+  } else if (actor.type === "point") {
+    const radius = actor.distance && actor.distance > 0 ? actor.distance : 1;
+    wire = buildPointSphereWire(radius, lineMaterial);
+  } else {
+    wire = buildDirectionWire(lineMaterial);
+  }
+  wire.name = "light-wire";
+  // Visual only: never a pick target (otherwise the whole cone/sphere selects).
+  wire.raycast = () => {};
+  // Shown only while the light is selected.
+  wire.visible = false;
+  group.add(wire);
+  return group;
+}
+
+/** Cone wireframe: apex at origin (the light), opening down local -Z to z=-height. */
+function buildSpotConeWire(radius: number, height: number, material: LineBasicMaterial): LineSegments {
+  const segments = 24;
+  const rim: Vector3[] = [];
+  for (let i = 0; i < segments; i += 1) {
+    const a = (i / segments) * Math.PI * 2;
+    rim.push(new Vector3(Math.cos(a) * radius, Math.sin(a) * radius, -height));
+  }
+  const points: number[] = [];
+  for (let i = 0; i < segments; i += 1) {
+    const a = rim[i]!;
+    const b = rim[(i + 1) % segments]!;
+    points.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  }
+  for (let i = 0; i < 4; i += 1) {
+    const p = rim[Math.floor((i / 4) * segments)]!;
+    points.push(0, 0, 0, p.x, p.y, p.z);
+  }
+  return new LineSegments(bufferFromPoints(points), material);
+}
+
+/** Three orthogonal great circles forming a wireframe sphere of the given radius. */
+function buildPointSphereWire(radius: number, material: LineBasicMaterial): LineSegments {
+  const segments = 32;
+  const points: number[] = [];
+  const onCircle = (axis: 0 | 1 | 2, t: number): Vector3 => {
+    const c = Math.cos(t) * radius;
+    const s = Math.sin(t) * radius;
+    if (axis === 0) return new Vector3(0, c, s);
+    if (axis === 1) return new Vector3(c, 0, s);
+    return new Vector3(c, s, 0);
+  };
+  for (const axis of [0, 1, 2] as const) {
+    for (let i = 0; i < segments; i += 1) {
+      const u = onCircle(axis, (i / segments) * Math.PI * 2);
+      const v = onCircle(axis, ((i + 1) / segments) * Math.PI * 2);
+      points.push(u.x, u.y, u.z, v.x, v.y, v.z);
+    }
+  }
+  return new LineSegments(bufferFromPoints(points), material);
+}
+
+/** A short line down local -Z indicating a directional light's aim. */
+function buildDirectionWire(material: LineBasicMaterial): LineSegments {
+  return new LineSegments(bufferFromPoints([0, 0, 0, 0, 0, -1.2]), material);
+}
+
+function bufferFromPoints(points: number[]): BufferGeometry {
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(points, 3));
+  return geometry;
+}
+
+function disposeLightGizmo(gizmo: Object3D): void {
+  gizmo.traverse((child) => {
+    if (child instanceof Mesh || child instanceof LineSegments) {
+      child.geometry.dispose();
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) material.dispose();
     }
   });
 }
 
 function lightActorsEqual(left: LayoutLightActor, right: LayoutLightActor): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function worldSettingsEqual(left: EditorWorldSettings, right: EditorWorldSettings): boolean {
+  return (
+    left.staticObjectsCastShadow === right.staticObjectsCastShadow &&
+    left.staticObjectsReceiveShadow === right.staticObjectsReceiveShadow &&
+    left.backgroundColor.toLowerCase() === right.backgroundColor.toLowerCase() &&
+    left.ambientColor.toLowerCase() === right.ambientColor.toLowerCase() &&
+    left.ambientIntensity === right.ambientIntensity
+  );
 }
 
 function clampIndex(index: number, length: number): number {

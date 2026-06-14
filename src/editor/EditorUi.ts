@@ -9,6 +9,13 @@ import type {
   EditableTransform,
   SceneApp,
 } from "@/scene/SceneApp";
+import {
+  isDefaultMetadataValue,
+  metadataGroupsForTarget,
+  type MetadataFieldDef,
+  type MetadataSchema,
+} from "@/scene/metadataSchema";
+import type { MetadataValue } from "@/scene/roomLayout";
 import { ThumbnailRenderer } from "./ThumbnailRenderer";
 import {
   fetchProjectDir,
@@ -60,6 +67,7 @@ export class EditorUi {
   private readonly thumbnailRenderer = new ThumbnailRenderer();
   private activeTool: Tool = "move";
   private projectInfo: EditorProjectInfo | null = null;
+  private metadataSchema: MetadataSchema | null = null;
   private editableAssets: EditableAsset[] = [];
   private assetTreeRoot: ProjectDirNode | null = null;
   private selectedFolder = "";
@@ -73,6 +81,10 @@ export class EditorUi {
   private detailsBaseline: EditableTransform | null = null;
   private detailsScale: [number, number, number] | null = null;
   private transformClipboard: EditableTransform | null = null;
+  private contextMenu: HTMLElement | null = null;
+  private contextMenuCleanup: (() => void) | null = null;
+  /** Scene-object ids being dragged in the outliner (for drag-to-parent). */
+  private outlinerDragIds: string[] = [];
 
   constructor(private readonly app: SceneApp) {
     document.body.classList.add("editor-mode");
@@ -144,6 +156,7 @@ export class EditorUi {
           <button type="button" data-action="undo" title="Undo">Undo</button>
           <button type="button" data-action="redo" title="Redo">Redo</button>
           <button type="button" data-action="delete">Delete</button>
+          <button type="button" data-action="play" title="Save & open runtime (P)">Play</button>
           <button type="button" data-action="save" class="primary">Save Layout</button>
         </div>
       </header>
@@ -245,6 +258,7 @@ export class EditorUi {
     this.app.onSceneObjectsChanged = (objects) => this.renderOutliner(objects);
     this.app.onHistoryChanged = (state) => this.renderHistory(state);
     this.app.onWorldSettingsChanged = (settings) => this.renderWorldSettings(settings);
+    this.app.onPivotEditModeChanged = () => this.renderDetails(this.selected);
     this.app.onStatus = (message, tone) => this.setStatus(message, tone);
 
     this.renderOutliner(this.app.getSceneObjects());
@@ -302,6 +316,9 @@ export class EditorUi {
     });
     this.root.querySelector('[data-action="delete"]')?.addEventListener("click", () => {
       this.app.deleteSelected();
+    });
+    this.root.querySelector('[data-action="play"]')?.addEventListener("click", () => {
+      void this.playTest();
     });
     this.root.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       void this.save();
@@ -443,9 +460,33 @@ export class EditorUi {
     } else if (event.code === "KeyX") {
       event.preventDefault();
       this.updateSpaceButton(this.app.toggleTransformSpace());
+    } else if (event.code === "KeyP") {
+      event.preventDefault();
+      void this.playTest();
     } else if (event.code === "End") {
       event.preventDefault();
       this.app.snapSelected();
+    }
+  }
+
+  /**
+   * Play/Test: saves the layout, then opens the game in a new tab. Single
+   * codebase — the game is this same app's default route (`/`), so Play just
+   * opens it; a project may still override with an external `editor.previewUrl`.
+   */
+  private async playTest(): Promise<void> {
+    try {
+      await this.app.saveLayout();
+    } catch (error) {
+      this.setStatus(error instanceof Error ? error.message : String(error), "error");
+      return;
+    }
+    const previewUrl = this.projectInfo?.manifest.editor.previewUrl ?? "/";
+    const opened = window.open(previewUrl, "_blank", "noopener");
+    if (opened) {
+      this.setStatus(`Saved. Opening game: ${previewUrl}`, "success");
+    } else {
+      this.setStatus(`Saved. Popup blocked — open ${previewUrl} manually.`, "warning");
     }
   }
 
@@ -457,6 +498,7 @@ export class EditorUi {
       ]);
       this.syncSnapControls(this.app.getSnapSettings());
       this.projectInfo = projectInfo;
+      this.metadataSchema = this.app.getMetadataSchema();
       this.editableAssets = assets;
       this.selectedFolder = normalizeProjectPath(projectInfo.assetRoot);
       projectName.textContent = projectInfo.rootName;
@@ -674,69 +716,278 @@ export class EditorUi {
 
   private renderOutliner(objects: EditableSceneObject[]): void {
     this.outlinerObjects = objects;
-    const visibleObjects = this.outlinerFilter
-      ? objects.filter((object) => {
-          const haystack = `${object.label} ${object.assetId} ${object.kind}`.toLocaleLowerCase();
-          return haystack.includes(this.outlinerFilter);
-        })
-      : objects;
 
-    if (visibleObjects.length === 0) {
+    if (this.outlinerFilter) {
+      const matches = objects.filter((object) => {
+        const haystack = `${object.label} ${object.assetId} ${object.kind}`.toLocaleLowerCase();
+        return haystack.includes(this.outlinerFilter);
+      });
+      this.replaceOutlinerRows(matches.map((object) => ({ object, depth: 0 })), objects.length);
+      return;
+    }
+
+    this.replaceOutlinerRows(this.orderOutlinerTree(objects), objects.length);
+  }
+
+  /** Depth-first order so children render indented under their parent. */
+  private orderOutlinerTree(
+    objects: EditableSceneObject[],
+  ): Array<{ object: EditableSceneObject; depth: number }> {
+    const byNodeId = new Map<string, EditableSceneObject>();
+    for (const object of objects) {
+      if (object.nodeId) byNodeId.set(object.nodeId, object);
+    }
+    const childrenByParent = new Map<string, EditableSceneObject[]>();
+    for (const object of objects) {
+      if (!object.parentId || !byNodeId.has(object.parentId)) continue;
+      const list = childrenByParent.get(object.parentId) ?? [];
+      list.push(object);
+      childrenByParent.set(object.parentId, list);
+    }
+
+    const ordered: Array<{ object: EditableSceneObject; depth: number }> = [];
+    const visited = new Set<string>();
+    const walk = (object: EditableSceneObject, depth: number): void => {
+      if (visited.has(object.id)) return;
+      visited.add(object.id);
+      ordered.push({ object, depth });
+      if (object.nodeId) {
+        for (const child of childrenByParent.get(object.nodeId) ?? []) walk(child, depth + 1);
+      }
+    };
+    for (const object of objects) {
+      if (!object.parentId || !byNodeId.has(object.parentId)) walk(object, 0);
+    }
+    // Any leftover (cycle) objects get appended at root depth.
+    for (const object of objects) if (!visited.has(object.id)) walk(object, 0);
+    return ordered;
+  }
+
+  private replaceOutlinerRows(
+    entries: Array<{ object: EditableSceneObject; depth: number }>,
+    totalCount: number,
+  ): void {
+    if (entries.length === 0) {
       this.outlinerList.innerHTML = `
         <div class="empty-details">
-          <strong>${objects.length === 0 ? "No objects" : "No matches"}</strong>
+          <strong>${totalCount === 0 ? "No objects" : "No matches"}</strong>
           <span>Scene</span>
         </div>
       `;
       return;
     }
-
     this.outlinerList.replaceChildren(
-      ...visibleObjects.map((object) => {
-        const row = document.createElement("div");
-        row.className = "outliner-row";
-        row.dataset.objectId = object.id;
-        if (object.selected) row.classList.add("active");
-        if (object.hidden) row.classList.add("is-hidden");
-        row.innerHTML = `
-          <span class="outliner-kind">${outlinerKindLabel(object.kind)}</span>
-          <span class="outliner-meta">
-            <strong>${object.label}</strong>
-            <small>${object.assetId} - ${formatPosition(object.position)}</small>
-          </span>
-          <span class="outliner-actions">
-            <button type="button" class="outliner-toggle${object.hidden ? " on" : ""}"
-              data-action="hidden" title="${object.hidden ? "Show object" : "Hide object"}">${object.hidden ? "🙈" : "👁"}</button>
-            <button type="button" class="outliner-toggle${object.locked ? " on" : ""}"
-              data-action="locked" title="${object.locked ? "Unlock object" : "Lock object"}">${object.locked ? "🔒" : "🔓"}</button>
-          </span>
-        `;
-        row.addEventListener("click", (event) => {
-          if ((event.target as HTMLElement).closest(".outliner-actions")) return;
-          this.app.selectSceneObject(object.id, {
-            additive: event.ctrlKey || event.shiftKey,
-          });
-        });
-        row.addEventListener("dblclick", (event) => {
-          if ((event.target as HTMLElement).closest(".outliner-actions")) return;
-          const nextName = window.prompt("Rename object", object.label);
-          if (nextName === null) return;
-          this.app.renameSceneObject(object.id, nextName);
-        });
-        row
-          .querySelector<HTMLButtonElement>('[data-action="hidden"]')
-          ?.addEventListener("click", () => {
-            this.app.setSceneObjectHidden(object.id, !object.hidden);
-          });
-        row
-          .querySelector<HTMLButtonElement>('[data-action="locked"]')
-          ?.addEventListener("click", () => {
-            this.app.setSceneObjectLocked(object.id, !object.locked);
-          });
-        return row;
-      }),
+      ...entries.map((entry) => this.buildOutlinerRow(entry.object, entry.depth)),
     );
   }
+
+  private buildOutlinerRow(object: EditableSceneObject, depth: number): HTMLDivElement {
+    const row = document.createElement("div");
+    row.className = "outliner-row";
+    row.dataset.objectId = object.id;
+    row.draggable = true;
+    if (object.selected) row.classList.add("active");
+    if (object.hidden) row.classList.add("is-hidden");
+    if (object.groupId) row.classList.add("is-grouped");
+    row.style.paddingLeft = `${8 + depth * 14}px`;
+    row.innerHTML = `
+      <span class="outliner-kind">${outlinerKindLabel(object.kind)}</span>
+      <span class="outliner-meta">
+        <strong>${object.groupId ? "⛓ " : ""}${object.label}</strong>
+        <small>${object.assetId} - ${formatPosition(object.position)}</small>
+      </span>
+      <span class="outliner-actions">
+        <button type="button" class="outliner-toggle${object.hidden ? " on" : ""}"
+          data-action="hidden" title="${object.hidden ? "Show object" : "Hide object"}">${object.hidden ? "🙈" : "👁"}</button>
+        <button type="button" class="outliner-toggle${object.locked ? " on" : ""}"
+          data-action="locked" title="${object.locked ? "Unlock object" : "Lock object"}">${object.locked ? "🔒" : "🔓"}</button>
+      </span>
+    `;
+    row.addEventListener("click", (event) => {
+      if ((event.target as HTMLElement).closest(".outliner-actions")) return;
+      this.app.selectSceneObject(object.id, {
+        additive: event.ctrlKey || event.shiftKey,
+      });
+    });
+    row.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.openOutlinerContextMenu(event, object);
+    });
+    row.addEventListener("dblclick", (event) => {
+      if ((event.target as HTMLElement).closest(".outliner-actions")) return;
+      const nextName = window.prompt("Rename object", object.label);
+      if (nextName === null) return;
+      this.app.renameSceneObject(object.id, nextName);
+    });
+    row
+      .querySelector<HTMLButtonElement>('[data-action="hidden"]')
+      ?.addEventListener("click", () => {
+        this.app.setSceneObjectHidden(object.id, !object.hidden);
+      });
+    row
+      .querySelector<HTMLButtonElement>('[data-action="locked"]')
+      ?.addEventListener("click", () => {
+        this.app.setSceneObjectLocked(object.id, !object.locked);
+      });
+
+    // Drag-and-drop parenting: drag a row (or the whole multi-selection if the
+    // dragged row is part of it) onto another row to parent it there.
+    row.addEventListener("dragstart", (event) => {
+      const selectedIds = this.outlinerObjects
+        .filter((entry) => entry.selected)
+        .map((entry) => entry.id);
+      this.outlinerDragIds =
+        object.selected && selectedIds.length > 1 ? selectedIds : [object.id];
+      if (event.dataTransfer) {
+        event.dataTransfer.effectAllowed = "move";
+        event.dataTransfer.setData("text/plain", this.outlinerDragIds.join(","));
+      }
+      row.classList.add("is-dragging");
+    });
+    row.addEventListener("dragend", () => {
+      this.outlinerDragIds = [];
+      row.classList.remove("is-dragging");
+      for (const el of this.outlinerList.querySelectorAll(".drop-target")) {
+        el.classList.remove("drop-target");
+      }
+    });
+    row.addEventListener("dragover", (event) => {
+      if (this.outlinerDragIds.length === 0) return;
+      if (this.outlinerDragIds.includes(object.id)) return;
+      event.preventDefault();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      row.classList.add("drop-target");
+    });
+    row.addEventListener("dragleave", () => {
+      row.classList.remove("drop-target");
+    });
+    row.addEventListener("drop", (event) => {
+      event.preventDefault();
+      row.classList.remove("drop-target");
+      const childIds = this.outlinerDragIds.filter((id) => id !== object.id);
+      this.outlinerDragIds = [];
+      if (childIds.length > 0) this.app.parentObjectsTo(childIds, object.id);
+    });
+    return row;
+  }
+
+  /** Right-click menu for outliner rows: rename / duplicate / group / delete. */
+  private openOutlinerContextMenu(event: MouseEvent, object: EditableSceneObject): void {
+    this.closeContextMenu();
+
+    const selectedCount = this.outlinerObjects.filter((entry) => entry.selected).length;
+    const inGroup =
+      object.groupId !== undefined ||
+      this.outlinerObjects.some((entry) => entry.selected && entry.groupId);
+
+    const ensureSelected = (): void => {
+      if (!object.selected) this.app.selectSceneObject(object.id);
+    };
+
+    const items: Array<{ label: string; enabled: boolean; danger?: boolean; run: () => void }> = [
+      {
+        label: "Rename",
+        enabled: true,
+        run: () => {
+          const next = window.prompt("Rename object", object.label);
+          if (next !== null) this.app.renameSceneObject(object.id, next);
+        },
+      },
+      {
+        label: "Duplicate",
+        enabled: true,
+        run: () => {
+          ensureSelected();
+          this.app.duplicateSelected();
+        },
+      },
+      {
+        label: "Group Selected",
+        enabled: selectedCount >= 2,
+        run: () => this.app.groupSelected(),
+      },
+      {
+        label: "Ungroup",
+        enabled: inGroup,
+        run: () => {
+          ensureSelected();
+          this.app.ungroupSelected();
+        },
+      },
+      {
+        label: "Parent to active",
+        enabled: selectedCount >= 2,
+        run: () => this.app.parentSelectionToActive(),
+      },
+      {
+        label: "Unparent",
+        enabled:
+          object.parentId !== undefined ||
+          this.outlinerObjects.some((entry) => entry.selected && entry.parentId),
+        run: () => {
+          ensureSelected();
+          this.app.unparentSelected();
+        },
+      },
+      {
+        label: "Delete",
+        enabled: true,
+        danger: true,
+        run: () => {
+          ensureSelected();
+          this.app.deleteSelected();
+        },
+      },
+    ];
+
+    const menu = document.createElement("div");
+    menu.className = "context-menu";
+    for (const item of items) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `context-menu-item${item.danger ? " danger" : ""}`;
+      button.textContent = item.label;
+      button.disabled = !item.enabled;
+      button.addEventListener("click", () => {
+        this.closeContextMenu();
+        item.run();
+      });
+      menu.appendChild(button);
+    }
+    document.body.appendChild(menu);
+
+    const margin = 8;
+    const rect = menu.getBoundingClientRect();
+    const left = Math.min(event.clientX, window.innerWidth - rect.width - margin);
+    const top = Math.min(event.clientY, window.innerHeight - rect.height - margin);
+    menu.style.left = `${Math.max(margin, left)}px`;
+    menu.style.top = `${Math.max(margin, top)}px`;
+    this.contextMenu = menu;
+
+    const onPointerDown = (pointerEvent: Event): void => {
+      if (!menu.contains(pointerEvent.target as Node)) this.closeContextMenu();
+    };
+    const onKeyDown = (keyEvent: KeyboardEvent): void => {
+      if (keyEvent.code === "Escape") this.closeContextMenu();
+    };
+    // Defer so the opening event doesn't immediately dismiss the menu.
+    window.setTimeout(() => document.addEventListener("pointerdown", onPointerDown), 0);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("blur", this.closeContextMenu);
+    this.contextMenuCleanup = () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("blur", this.closeContextMenu);
+    };
+  }
+
+  private closeContextMenu = (): void => {
+    this.contextMenuCleanup?.();
+    this.contextMenuCleanup = null;
+    this.contextMenu?.remove();
+    this.contextMenu = null;
+  };
 
   private renderHistory(state: EditorHistoryState): void {
     this.undoButton.disabled = !state.canUndo;
@@ -776,6 +1027,27 @@ export class EditorUi {
         </div>
       </div>
       <div class="detail-section">
+        <div class="detail-section-title">Environment</div>
+        <label class="detail-row">
+          <span>Background</span>
+          <input type="color" data-world-color="backgroundColor"
+            value="${escapeHtml(settings.backgroundColor)}" />
+        </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Ambient Light</div>
+        <label class="detail-row">
+          <span>Color</span>
+          <input type="color" data-world-color="ambientColor"
+            value="${escapeHtml(settings.ambientColor)}" />
+        </label>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input type="number" data-world-number="ambientIntensity" min="0" max="20" step="0.05"
+            value="${escapeHtml(String(settings.ambientIntensity))}" />
+        </label>
+      </div>
+      <div class="detail-section">
         <div class="detail-section-title">Static Objects</div>
         <label class="detail-toggle">
           <input type="checkbox" data-world-toggle="staticObjectsCastShadow" ${
@@ -804,6 +1076,21 @@ export class EditorUi {
             this.app.setWorldSettings({ staticObjectsReceiveShadow: toggle.checked });
           }
         });
+      });
+
+    this.worldSettingsBody
+      .querySelectorAll<HTMLInputElement>("[data-world-color]")
+      .forEach((input) => {
+        const key = input.dataset.worldColor as "backgroundColor" | "ambientColor";
+        // "change" fires when the picker closes -> one command + one auto-save.
+        input.addEventListener("change", () => this.app.setWorldSettings({ [key]: input.value }));
+      });
+
+    this.worldSettingsBody
+      .querySelector<HTMLInputElement>('[data-world-number="ambientIntensity"]')
+      ?.addEventListener("change", (event) => {
+        const value = Number((event.currentTarget as HTMLInputElement).value);
+        if (Number.isFinite(value)) this.app.setWorldSettings({ ambientIntensity: value });
       });
   }
 
@@ -855,6 +1142,7 @@ export class EditorUi {
       ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
       ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
+      ${pivotRow(selection.pivot, selection.locked, this.app.isPivotEditMode())}
       <div class="detail-section">
         <div class="detail-actions-row">
           <button type="button" data-detail-action="reset" ${lockedAttr}
@@ -885,6 +1173,7 @@ export class EditorUi {
           <span>Collision</span>
         </label>
       </div>
+      ${this.renderMetadataSections(selection)}
     `;
 
     this.detailsBody
@@ -916,6 +1205,27 @@ export class EditorUi {
         this.app.setSelectionScaleLocked(!selection.scaleLocked);
       });
 
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("input[data-pivot]")
+      .forEach((input) => {
+        input.addEventListener("change", () => this.commitPivotInput());
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLButtonElement>("[data-pivot-preset]")
+      .forEach((button) => {
+        button.addEventListener("click", () => {
+          const preset = button.dataset.pivotPreset;
+          if (preset === "reset" || preset === "center" || preset === "base") {
+            this.app.applySelectionPivotPreset(preset);
+          }
+        });
+      });
+
+    this.detailsBody
+      .querySelector<HTMLButtonElement>("[data-pivot-drag]")
+      ?.addEventListener("click", () => this.app.togglePivotEditMode());
+
     const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-detail-name]");
     nameInput?.addEventListener("change", () => {
       this.app.renameSceneObject(selection.id, nameInput.value);
@@ -936,6 +1246,144 @@ export class EditorUi {
           this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
         );
       });
+
+    this.bindMetadataInputs();
+  }
+
+  /**
+   * Renders schema-driven gameplay metadata groups for the selection. The editor
+   * core stays generic: groups/fields come from the project's metadata schema.
+   */
+  private renderMetadataSections(selection: EditableSelection): string {
+    const groups = metadataGroupsForTarget(this.metadataSchema, {
+      kind: selection.kind,
+      category: selection.category,
+    });
+    if (groups.length === 0) return "";
+    return groups
+      .map(
+        (group) => `
+      <div class="detail-section">
+        <div class="detail-section-title">${escapeHtml(group.title)}</div>
+        ${group.fields.map((field) => this.renderMetadataField(field, selection)).join("")}
+      </div>`,
+      )
+      .join("");
+  }
+
+  private renderMetadataField(field: MetadataFieldDef, selection: EditableSelection): string {
+    const raw = selection.metadata[field.key] ?? field.default;
+    const attr = `data-meta-key="${escapeHtml(field.key)}" data-meta-type="${field.type}"`;
+    const label = escapeHtml(field.label);
+
+    if (field.type === "boolean") {
+      const checked = raw === true ? "checked" : "";
+      return `<label class="detail-toggle">
+        <input type="checkbox" ${attr} ${checked} />
+        <span>${label}</span>
+      </label>`;
+    }
+
+    if (field.type === "select") {
+      const current = typeof raw === "string" ? raw : "";
+      const options = [`<option value="">—</option>`]
+        .concat(
+          (field.options ?? []).map(
+            (option) =>
+              `<option value="${escapeHtml(option)}" ${
+                option === current ? "selected" : ""
+              }>${escapeHtml(option)}</option>`,
+          ),
+        )
+        .join("");
+      return `<label class="detail-row">
+        <span>${label}</span>
+        <select ${attr}>${options}</select>
+      </label>`;
+    }
+
+    if (field.type === "number") {
+      const value = typeof raw === "number" ? String(raw) : "";
+      const min = field.min !== undefined ? `min="${field.min}"` : "";
+      const max = field.max !== undefined ? `max="${field.max}"` : "";
+      const step = field.step !== undefined ? `step="${field.step}"` : "";
+      return `<label class="detail-row">
+        <span>${label}</span>
+        <input type="number" ${attr} ${min} ${max} ${step}
+          value="${escapeHtml(value)}" placeholder="${escapeHtml(field.placeholder ?? "")}" />
+      </label>`;
+    }
+
+    // text + tags share a free-text input; tags is comma-separated.
+    const value =
+      field.type === "tags"
+        ? (Array.isArray(raw) ? raw : []).join(", ")
+        : typeof raw === "string"
+          ? raw
+          : "";
+    const placeholder =
+      field.placeholder ?? (field.type === "tags" ? "comma, separated, tags" : "");
+    const listAttr = field.suggestions?.length
+      ? `list="meta-list-${escapeHtml(field.key)}"`
+      : "";
+    const datalist = field.suggestions?.length
+      ? `<datalist id="meta-list-${escapeHtml(field.key)}">${field.suggestions
+          .map((option) => `<option value="${escapeHtml(option)}"></option>`)
+          .join("")}</datalist>`
+      : "";
+    return `<label class="detail-row">
+      <span>${label}</span>
+      <input type="text" ${attr} ${listAttr} value="${escapeHtml(value)}"
+        placeholder="${escapeHtml(placeholder)}" />
+      ${datalist}
+    </label>`;
+  }
+
+  private bindMetadataInputs(): void {
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-meta-key]")
+      .forEach((input) => {
+        input.addEventListener("change", () => this.commitMetadataInput(input));
+      });
+  }
+
+  private commitMetadataInput(input: HTMLInputElement | HTMLSelectElement): void {
+    const key = input.dataset.metaKey;
+    const type = input.dataset.metaType as MetadataFieldDef["type"] | undefined;
+    if (!key || !type) return;
+    const field = this.metadataFieldFor(key);
+    if (!field) return;
+
+    let value: MetadataValue | undefined;
+    if (type === "boolean") {
+      value = (input as HTMLInputElement).checked;
+    } else if (type === "number") {
+      const num = Number(input.value);
+      value = input.value.trim() === "" || Number.isNaN(num) ? undefined : num;
+    } else if (type === "tags") {
+      value = input.value
+        .split(",")
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0);
+    } else {
+      value = input.value;
+    }
+
+    if (value !== undefined && isDefaultMetadataValue(field, value)) value = undefined;
+    this.app.setSelectionMetadata(key, value, `Set ${field.label}`);
+  }
+
+  private metadataFieldFor(key: string): MetadataFieldDef | null {
+    if (!this.selected) return null;
+    const groups = metadataGroupsForTarget(this.metadataSchema, {
+      kind: this.selected.kind,
+      category: this.selected.category,
+    });
+    for (const group of groups) {
+      const field = group.fields.find((entry) => entry.key === key);
+      if (field) return field;
+    }
+    return null;
   }
 
   private renderLightDetails(selection: EditableSelection): void {
@@ -1209,6 +1657,17 @@ export class EditorUi {
     );
   }
 
+  /** Reads the three pivot fields and applies them (own undo step, not the transform baseline). */
+  private commitPivotInput(): void {
+    const value = (axis: number): number => {
+      const input = this.detailsBody.querySelector<HTMLInputElement>(
+        `input[data-pivot][data-axis="${axis}"]`,
+      );
+      return Number(input?.value ?? 0);
+    };
+    this.app.setSelectionPivot([value(0), value(1), value(2)]);
+  }
+
   private async save(): Promise<void> {
     try {
       await this.app.saveLayout();
@@ -1314,6 +1773,44 @@ function scaleRow(
           aria-pressed="${locked}">${locked ? "🔒" : "🔓"}</button>
       </span>
       <div class="vector-fields">${fields}</div>
+    </div>
+  `;
+}
+
+/** The Pivot row: three X/Y/Z fields (local model space), drag toggle, presets. */
+function pivotRow(
+  values: readonly [number, number, number],
+  disabled = false,
+  dragActive = false,
+): string {
+  const fields = AXES.map(
+    (axis, index) => `
+    <label class="axis-field axis-${axis.toLowerCase()}">
+      <span class="axis-tag">${axis}</span>
+      <input data-pivot data-axis="${index}" type="number" step="0.05"
+        value="${Number((values[index] ?? 0).toFixed(3))}" ${disabled ? "disabled" : ""} />
+    </label>`,
+  ).join("");
+  const off = disabled ? "disabled" : "";
+  return `
+    <div class="detail-vector">
+      <span class="detail-vector-label">Pivot</span>
+      <div class="vector-fields">${fields}</div>
+    </div>
+    <div class="detail-actions-row">
+      <button type="button" class="pivot-drag-toggle${dragActive ? " on" : ""}"
+        data-pivot-drag aria-pressed="${dragActive}" ${off}
+        title="Drag the gizmo in the viewport to set the pivot">${
+          dragActive ? "● Dragging pivot" : "Drag in viewport"
+        }</button>
+    </div>
+    <div class="detail-actions-row">
+      <button type="button" data-pivot-preset="reset" ${off}
+        title="Pivot at the model origin">Reset</button>
+      <button type="button" data-pivot-preset="center" ${off}
+        title="Pivot at the bounds centre">Center</button>
+      <button type="button" data-pivot-preset="base" ${off}
+        title="Pivot at the bottom centre (e.g. a hinge resting on the floor)">Base</button>
     </div>
   `;
 }

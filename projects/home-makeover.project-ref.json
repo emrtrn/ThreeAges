@@ -1,7 +1,0 @@
-{
-  "schema": 1,
-  "name": "home-makeover",
-  "kind": "external-game-project",
-  "projectManifest": "C:/Users/emret/Desktop/home-makeover/project.3dgame.json",
-  "notes": "Temporary project reference until the project-system phase adds manifest-driven Open Project."
-}

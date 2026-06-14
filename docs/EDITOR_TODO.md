@@ -163,24 +163,36 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
   - [x] Lock Movement. (Toggle; coklu secimde tum secime uygulanir.)
   - [x] Cast Shadow. (Placement veri alani; absent=true varsayilan. Runtime tuketir.)
   - [x] Collision Enabled. (Placement veri alani; absent=true varsayilan. Runtime tuketir.)
-- [ ] Metadata bolumu ekle. (Faz C - sema-gudumlu; alanlar projede tanimlanir, editor cekirdegi generic kalir.)
-  - Price.
-  - Comfort.
-  - Style.
-  - Room Tags.
-  - comfortScore.
-  - roomType.
-  - interactable.
-  - placementRules.
+- [x] Metadata bolumu ekle. (Faz C - sema-gudumlu; alanlar projede tanimlanir, editor cekirdegi generic kalir.)
+  - Editor cekirdegi: `metadataSchema` projeden okunur (`editor.metadataSchema` yolu),
+    Details panelinde kind + kategori filtreli generic form render edilir, degerler
+    generic `placement.metadata` blob'una yazilir (undo/redo'ya bagli, bos/default
+    degerler kaydedilmez). Tipler: text / number / boolean / select / tags.
+  - Home Makeover semasi `public/editor/metadata-schema.json` icinde tanimlandi:
+    - Price. (number)
+    - Comfort. (number)
+    - comfortScore. (number)
+    - Style. (tags - StyleMatch etiketleri)
+    - Room Tags. (tags)
+    - interactable. (boolean)
+    - placementRules. (tags)
+    - roomType. (select; sadece room-shell)
 
 ### P5 - Preview ve test akisi
 
-- [ ] G ile Preview Mode ekle.
-  - Gizmo, grid ve editor helper cizgileri gizlenmeli.
-- [ ] P ile Play/Test Mode ekle.
-  - Oyuncunun gorecegi runtime davranisini editor icinden test etmeli.
-- [ ] F11 fullscreen viewport ekle.
-- [ ] Ctrl+R realtime render toggle ekle.
+- [x] P ile Play/Test Mode ekle.
+  - Model netlesti: editor sadece veri (layout JSON) uretir; gercek gameplay oyun
+    projesinin kendi runtime'inda yasar (ARCHITECTURE.md Preview Mode). Bu yuzden P,
+    editor icinde sahte bir play simule etmez; layout'u kaydedip oyun runtime'ini
+    yeni sekmede acar.
+  - P (veya toolbar "Play"): `saveLayout()` + `window.open(editor.previewUrl)`.
+  - `editor.previewUrl` manifest alani; home-makeover icin `http://localhost:5180`
+    (runtime vite portu sabitlendi). Runtime sunucusu calismiyorsa sekme baglanamaz.
+- [ ] G ile Preview Mode ekle. (Opsiyonel/ertelendi - gizmo/grid/helper gizleme.)
+- [x] F11 fullscreen viewport. (Kapsamdan cikarildi: Play yeni sekmesi zaten panelsiz,
+  ayrica F11 gerekmez.)
+- [x] Ctrl+R realtime render toggle. (Kapsamdan cikarildi: web'de render her zaman
+  aktif, toggle'in anlami dusuk.)
 
 ## Onerilen Uygulama Sirasi
 
@@ -198,5 +210,5 @@ Kaynak: `C:\Users\emret\Desktop\GPTEditorSohbeti.txt` icindeki web sohbet notlar
    - [x] Surface snap (floor drop dahil; placement'ta otomatik snap).
    - [x] Wall snap (en yakin duvara baglamsal snap + placement'ta otomatik).
 8. [x] Multi-select ve grouping.
-9. Details panel gameplay metadata alanlari.
-10. Preview/Game View.
+9. [x] Details panel gameplay metadata alanlari. (Sema-gudumlu; editor generic, sema home-makeover'da.)
+10. [x] Play/Test: P kaydeder ve oyun runtime'ini yeni sekmede acar (editor.previewUrl).
