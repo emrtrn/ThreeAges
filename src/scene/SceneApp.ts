@@ -97,14 +97,10 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import type { TransformComponent } from "@engine/scene/components";
-import {
-  metadataValuesEqual,
-  type MetadataSchema,
-} from "@engine/scene/metadataSchema";
+import type { MetadataSchema } from "@engine/scene/metadataSchema";
 import {
   cloneCharacter,
   cloneLightActor,
-  cloneMetadataValue,
   clonePlacement,
   lightActorsEqual,
   transformsEqual,
@@ -120,12 +116,6 @@ import {
   snapStatus,
   snapValue,
 } from "@editor/core/numeric";
-import {
-  defaultTrueFlagCommandLabel,
-  flagCommandLabel,
-  type EditorDefaultTrueFlagCommand,
-  type EditorFlagCommand,
-} from "@editor/core/commandLabels";
 import { buildEditableSelection, buildSceneObjects } from "@editor/core/sceneObjects";
 import type { EditorTool, TransformSpace } from "@editor/core/tools";
 import {
@@ -139,7 +129,6 @@ import {
 } from "@editor/core/editableScene";
 import type {
   EditorCommand,
-  EditorCommandPhase,
   EditorHistoryState,
 } from "@editor/core/history";
 import {
@@ -364,8 +353,10 @@ export class SceneApp {
     this.scene.background = new Color(0xd7d7c7);
     this.camera = createSceneCamera();
     this.editorSceneController = new EditorSceneController({
+      applyCastShadow: (selection) => this.applyCastShadow(selection),
       applyGroupId: (selection, groupId, options) =>
         this.applyGroupId(selection, groupId, options),
+      applyVisibility: (selection) => this.applyVisibility(selection),
       descendantsOf: (selection) => this.descendantsOf(selection),
       emitHistoryChanged: () => this.emitHistoryChanged(),
       emitSelectionChanged: () => this.emitSelectionChanged(),
@@ -589,7 +580,7 @@ export class SceneApp {
       this.setSelectedHidden(hidden);
       return;
     }
-    this.setSelectionFlag(selection, "hidden", hidden);
+    this.editorSceneController.setSelectionFlag(selection, "hidden", hidden);
   }
 
   setSceneObjectLocked(id: string, locked: boolean): void {
@@ -599,7 +590,7 @@ export class SceneApp {
       this.setSelectedLocked(locked);
       return;
     }
-    this.setSelectionFlag(selection, "locked", locked);
+    this.editorSceneController.setSelectionFlag(selection, "locked", locked);
   }
 
   getHistoryState(): EditorHistoryState {
@@ -958,25 +949,15 @@ export class SceneApp {
   }
 
   hideSelected(): void {
-    this.setSelectedHidden(true);
+    this.editorSceneController.hideSelected();
   }
 
   setSelectedHidden(hidden: boolean): void {
-    this.setSelectionsFlag(
-      this.getSelectedSelections(),
-      "hidden",
-      hidden,
-      hidden ? "Hide selected" : "Show selected",
-    );
+    this.editorSceneController.setSelectedHidden(hidden);
   }
 
   setSelectedLocked(locked: boolean): void {
-    this.setSelectionsFlag(
-      this.getSelectedSelections(),
-      "locked",
-      locked,
-      locked ? "Lock selected" : "Unlock selected",
-    );
+    this.editorSceneController.setSelectedLocked(locked);
   }
 
   groupSelected(): void {
@@ -1099,10 +1080,7 @@ export class SceneApp {
   }
 
   showHiddenObjects(): void {
-    const hiddenSelections = this
-      .getAllSelections({ includeHidden: true })
-      .filter((selection) => this.getMutableTransform(selection)?.hidden);
-    this.setSelectionsFlag(hiddenSelections, "hidden", false, "Show hidden objects");
+    this.editorSceneController.showHiddenObjects();
   }
 
   addLightActor(type: LayoutLightActor["type"]): void {
@@ -1574,25 +1552,17 @@ export class SceneApp {
 
   /** Toggles proportional-scale lock on the current selection (Details panel). */
   setSelectionScaleLocked(value: boolean): void {
-    if (!this.selection || !this.hasSelection(this.selection)) return;
-    this.setSelectionFlag(this.selection, "scaleLocked", value);
+    this.editorSceneController.setSelectionScaleLocked(value);
   }
 
   /** Details "Cast Shadow" toggle for the active selection (default on). */
   setSelectionCastShadow(value: boolean): void {
-    if (!this.selection || !this.hasSelection(this.selection)) return;
-    if (this.selection.kind !== "character") {
-      this.onStatus?.("Cast Shadow is controlled centrally for static objects.", "info");
-      return;
-    }
-    this.setSelectionDefaultTrueFlag(this.selection, "castShadow", value);
+    this.editorSceneController.setSelectionCastShadow(value);
   }
 
   /** Details "Collision" toggle for the active selection (default on). */
   setSelectionCollision(value: boolean): void {
-    if (!this.selection || !this.hasSelection(this.selection)) return;
-    if (this.selection.kind === "light") return;
-    this.setSelectionDefaultTrueFlag(this.selection, "collision", value);
+    this.editorSceneController.setSelectionCollision(value);
   }
 
   /** Active project's gameplay metadata schema, or null when none is declared. */
@@ -1606,85 +1576,7 @@ export class SceneApp {
    * removes the key so saved layouts only carry meaningful deviations.
    */
   setSelectionMetadata(key: string, value: MetadataValue | undefined, label?: string): void {
-    if (!this.selection || !this.hasSelection(this.selection)) return;
-    if (this.selection.kind === "light") return;
-    const target = this.getMutableTransform(this.selection) as
-      | LayoutPlacement
-      | LayoutCharacter
-      | null;
-    if (!target) return;
-    const previous = cloneMetadataValue(target.metadata?.[key]);
-    if (metadataValuesEqual(previous, value)) return;
-
-    const commandSelection = cloneSelection(this.selection);
-    this.executeCommand({
-      label: label ?? `Set ${key}`,
-      redo: () => this.applyMetadataValue(commandSelection, key, value),
-      undo: () => this.applyMetadataValue(commandSelection, key, previous),
-    });
-  }
-
-  private applyMetadataValue(
-    selection: Selection,
-    key: string,
-    value: MetadataValue | undefined,
-  ): void {
-    if (selection.kind === "light") return;
-    const target = this.getMutableTransform(selection) as
-      | LayoutPlacement
-      | LayoutCharacter
-      | null;
-    if (!target) return;
-    if (value === undefined) {
-      if (target.metadata) {
-        delete target.metadata[key];
-        if (Object.keys(target.metadata).length === 0) delete target.metadata;
-      }
-    } else {
-      target.metadata ??= {};
-      target.metadata[key] = cloneMetadataValue(value) as MetadataValue;
-    }
-    this.emitSelectionChanged();
-  }
-
-  /**
-   * Sets a default-true boolean placement field (castShadow/collision) with
-   * undo/redo. The absent key means true, so the default value is omitted on
-   * save and only the deviation (false) is stored.
-   */
-  private setSelectionDefaultTrueFlag(
-    selection: Selection,
-    field: EditorDefaultTrueFlagCommand,
-    value: boolean,
-  ): void {
-    if (selection.kind === "light") return;
-    const target = this.getMutableTransform(selection) as LayoutPlacement | LayoutCharacter | null;
-    if (!target) return;
-    const previous = target[field] ?? true;
-    if (previous === value) return;
-
-    const label = defaultTrueFlagCommandLabel(field, value);
-    const commandSelection = cloneSelection(selection);
-
-    this.executeCommand({
-      label,
-      redo: () => this.applyDefaultTrueFlag(commandSelection, field, value),
-      undo: () => this.applyDefaultTrueFlag(commandSelection, field, previous),
-    });
-  }
-
-  private applyDefaultTrueFlag(
-    selection: Selection,
-    field: EditorDefaultTrueFlagCommand,
-    value: boolean,
-  ): void {
-    if (selection.kind === "light") return;
-    const target = this.getMutableTransform(selection) as LayoutPlacement | LayoutCharacter | null;
-    if (!target) return;
-    if (value) delete target[field];
-    else target[field] = false;
-    if (field === "castShadow") this.applyCastShadow(selection);
-    this.emitSelectionChanged();
+    this.editorSceneController.setSelectionMetadata(key, value, label);
   }
 
   /**
@@ -1802,81 +1694,6 @@ export class SceneApp {
         mesh.receiveShadow = receiveShadow;
       }
     }
-  }
-
-  private setSelectionFlag(
-    selection: Selection,
-    flag: EditorFlagCommand,
-    value: boolean,
-  ): void {
-    const target = this.getMutableTransform(selection);
-    if (!target) return;
-    const previous = Boolean(target[flag]);
-    if (previous === value) return;
-
-    const label = flagCommandLabel(flag, value);
-
-    this.executeCommand({
-      label,
-      redo: () => this.applyFlag(selection, flag, value),
-      undo: () => this.applyFlag(selection, flag, previous),
-    });
-  }
-
-  private setSelectionsFlag(
-    selections: Selection[],
-    flag: EditorFlagCommand,
-    value: boolean,
-    label: string,
-  ): void {
-    const entries = selections.flatMap((selection) => {
-      const target = this.getMutableTransform(selection);
-      return target
-        ? [{ selection: cloneSelection(selection), previous: Boolean(target[flag]) }]
-        : [];
-    });
-    if (entries.length === 0) {
-      this.onStatus?.("No matching objects.", "warning");
-      return;
-    }
-    if (entries.every((entry) => entry.previous === value)) return;
-
-    const applyEntries = (mode: EditorCommandPhase): void => {
-      for (const entry of entries) {
-        this.applyFlag(
-          entry.selection,
-          flag,
-          mode === "redo" ? value : entry.previous,
-          { notify: false },
-        );
-      }
-      this.updateSelectionBox();
-      this.updateGizmo();
-      this.emitSelectionChanged();
-    };
-
-    this.executeCommand({
-      label,
-      redo: () => applyEntries("redo"),
-      undo: () => applyEntries("undo"),
-    });
-  }
-
-  private applyFlag(
-    selection: Selection,
-    flag: EditorFlagCommand,
-    value: boolean,
-    options: { notify?: boolean } = {},
-  ): void {
-    const target = this.getMutableTransform(selection);
-    if (!target) return;
-    if (value) target[flag] = true;
-    else delete target[flag];
-
-    if (flag === "hidden") this.applyVisibility(selection);
-    this.updateSelectionBox();
-    this.updateGizmo();
-    if (options.notify !== false) this.emitSelectionChanged();
   }
 
   private applyGroupId(

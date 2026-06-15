@@ -4,11 +4,18 @@ import { uniqueEditorId } from "@editor/core/ids";
 import {
   cloneCharacter,
   cloneLightActor,
+  cloneMetadataValue,
   clonePlacement,
   cloneUngroupedCharacter,
   cloneUngroupedLightActor,
   cloneUngroupedPlacement,
 } from "@editor/core/layoutSnapshots";
+import {
+  defaultTrueFlagCommandLabel,
+  flagCommandLabel,
+  type EditorDefaultTrueFlagCommand,
+  type EditorFlagCommand,
+} from "@editor/core/commandLabels";
 import {
   compareCharacterDeletes,
   compareCharacterRestores,
@@ -29,24 +36,35 @@ import { uniqueActorName } from "@engine/scene/lights";
 import type {
   LayoutCharacter,
   LayoutLightActor,
+  LayoutMetadata,
   LayoutPlacement,
+  MetadataValue,
   RoomLayout,
 } from "@engine/scene/layout";
+import { metadataValuesEqual } from "@engine/scene/metadataSchema";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
 type MutableHierarchyTransform = {
   groupId?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  castShadow?: boolean;
+  collision?: boolean;
+  metadata?: LayoutMetadata;
   nodeId?: string;
   parentId?: string;
 };
 
 export interface EditorSceneControllerHost {
+  applyCastShadow: (selection: Selection) => void;
   applyGroupId: (
     selection: Selection,
     groupId: string | undefined,
     options?: { notify?: boolean },
   ) => void;
+  applyVisibility: (selection: Selection) => void;
   descendantsOf: (selection: Selection) => Selection[];
   emitHistoryChanged: () => void;
   emitSelectionChanged: () => void;
@@ -485,6 +503,89 @@ export class EditorSceneController {
     return this.duplicateSelection(selection);
   }
 
+  hideSelected(): void {
+    this.setSelectedHidden(true);
+  }
+
+  setSelectedHidden(hidden: boolean): void {
+    this.setSelectionsFlag(
+      this.getSelectedSelections(),
+      "hidden",
+      hidden,
+      hidden ? "Hide selected" : "Show selected",
+    );
+  }
+
+  setSelectedLocked(locked: boolean): void {
+    this.setSelectionsFlag(
+      this.getSelectedSelections(),
+      "locked",
+      locked,
+      locked ? "Lock selected" : "Unlock selected",
+    );
+  }
+
+  showHiddenObjects(): void {
+    const hiddenSelections = this.host
+      .getAllSelections({ includeHidden: true })
+      .filter((selection) => this.host.getMutableTransform(selection)?.hidden);
+    this.setSelectionsFlag(hiddenSelections, "hidden", false, "Show hidden objects");
+  }
+
+  setSelectionFlag(selection: Selection, flag: EditorFlagCommand, value: boolean): void {
+    const target = this.host.getMutableTransform(selection);
+    if (!target) return;
+    const previous = Boolean(target[flag]);
+    if (previous === value) return;
+
+    const label = flagCommandLabel(flag, value);
+
+    this.executeCommand({
+      label,
+      redo: () => this.applyFlag(selection, flag, value),
+      undo: () => this.applyFlag(selection, flag, previous),
+    });
+  }
+
+  setSelectionScaleLocked(value: boolean): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    this.setSelectionFlag(this.selection, "scaleLocked", value);
+  }
+
+  setSelectionCastShadow(value: boolean): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind !== "character") {
+      this.host.onStatus("Cast Shadow is controlled centrally for static objects.", "info");
+      return;
+    }
+    this.setSelectionDefaultTrueFlag(this.selection, "castShadow", value);
+  }
+
+  setSelectionCollision(value: boolean): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind === "light") return;
+    this.setSelectionDefaultTrueFlag(this.selection, "collision", value);
+  }
+
+  setSelectionMetadata(key: string, value: MetadataValue | undefined, label?: string): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind === "light") return;
+    const target = this.host.getMutableTransform(this.selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    const previous = cloneMetadataValue(target.metadata?.[key]);
+    if (metadataValuesEqual(previous, value)) return;
+
+    const commandSelection = cloneSelection(this.selection);
+    this.executeCommand({
+      label: label ?? `Set ${key}`,
+      redo: () => this.applyMetadataValue(commandSelection, key, value),
+      undo: () => this.applyMetadataValue(commandSelection, key, previous),
+    });
+  }
+
   private duplicateSelection(selection: Selection): Selection | null {
     const layout = this.host.getMutableLayout();
     if (!layout) return null;
@@ -681,6 +782,126 @@ export class EditorSceneController {
       },
     });
     return activeDuplicate ? cloneSelection(activeDuplicate) : null;
+  }
+
+  private setSelectionsFlag(
+    selections: Selection[],
+    flag: EditorFlagCommand,
+    value: boolean,
+    label: string,
+  ): void {
+    const entries = selections.flatMap((selection) => {
+      const target = this.host.getMutableTransform(selection);
+      return target
+        ? [{ selection: cloneSelection(selection), previous: Boolean(target[flag]) }]
+        : [];
+    });
+    if (entries.length === 0) {
+      this.host.onStatus("No matching objects.", "warning");
+      return;
+    }
+    if (entries.every((entry) => entry.previous === value)) return;
+
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.applyFlag(
+          entry.selection,
+          flag,
+          mode === "redo" ? value : entry.previous,
+          { notify: false },
+        );
+      }
+      this.host.updateSelectionBox();
+      this.host.updateGizmo();
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
+  private applyFlag(
+    selection: Selection,
+    flag: EditorFlagCommand,
+    value: boolean,
+    options: { notify?: boolean } = {},
+  ): void {
+    const target = this.host.getMutableTransform(selection);
+    if (!target) return;
+    if (value) target[flag] = true;
+    else delete target[flag];
+
+    if (flag === "hidden") this.host.applyVisibility(selection);
+    this.host.updateSelectionBox();
+    this.host.updateGizmo();
+    if (options.notify !== false) this.host.emitSelectionChanged();
+  }
+
+  private setSelectionDefaultTrueFlag(
+    selection: Selection,
+    field: EditorDefaultTrueFlagCommand,
+    value: boolean,
+  ): void {
+    if (selection.kind === "light") return;
+    const target = this.host.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    const previous = target[field] ?? true;
+    if (previous === value) return;
+
+    const label = defaultTrueFlagCommandLabel(field, value);
+    const commandSelection = cloneSelection(selection);
+
+    this.executeCommand({
+      label,
+      redo: () => this.applyDefaultTrueFlag(commandSelection, field, value),
+      undo: () => this.applyDefaultTrueFlag(commandSelection, field, previous),
+    });
+  }
+
+  private applyDefaultTrueFlag(
+    selection: Selection,
+    field: EditorDefaultTrueFlagCommand,
+    value: boolean,
+  ): void {
+    if (selection.kind === "light") return;
+    const target = this.host.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    if (value) delete target[field];
+    else target[field] = false;
+    if (field === "castShadow") this.host.applyCastShadow(selection);
+    this.host.emitSelectionChanged();
+  }
+
+  private applyMetadataValue(
+    selection: Selection,
+    key: string,
+    value: MetadataValue | undefined,
+  ): void {
+    if (selection.kind === "light") return;
+    const target = this.host.getMutableTransform(selection) as
+      | LayoutPlacement
+      | LayoutCharacter
+      | null;
+    if (!target) return;
+    if (value === undefined) {
+      if (target.metadata) {
+        delete target.metadata[key];
+        if (Object.keys(target.metadata).length === 0) delete target.metadata;
+      }
+    } else {
+      target.metadata ??= {};
+      target.metadata[key] = cloneMetadataValue(value) as MetadataValue;
+    }
+    this.host.emitSelectionChanged();
   }
 
   private createGroupId(): string {

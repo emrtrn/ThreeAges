@@ -1222,6 +1222,75 @@ check("EditorSceneController duplicates and deletes layout objects through host 
   assert.equal(layout.lights?.length, 1);
 });
 
+check("EditorSceneController applies flags, default-true fields, and metadata with undo", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "controller-flags",
+    loadGroups: [],
+    instances: [{ assetId: "crate", placements: [{ position: [0, 0, 0] }] }],
+    characters: [{ assetId: "npc", position: [1, 0, 0] }],
+  };
+  const instanceSelection: Selection = { kind: "instance", assetId: "crate", placementIndex: 0 };
+  const characterSelection: Selection = { kind: "character", index: 0 };
+  const mutableTransform = (selection: Selection): HeadlessTransform | null => {
+    if (selection.kind === "instance") {
+      return layout.instances[0]?.placements[selection.placementIndex] ?? null;
+    }
+    if (selection.kind === "character") return layout.characters[selection.index] ?? null;
+    return null;
+  };
+  const events = { visibility: 0, castShadow: 0 };
+  const controller = new EditorSceneController({
+    applyCastShadow: () => {
+      events.castShadow += 1;
+    },
+    applyGroupId: () => {},
+    applyVisibility: () => {
+      events.visibility += 1;
+    },
+    descendantsOf: () => [],
+    emitHistoryChanged: () => {},
+    emitSelectionChanged: () => {},
+    getAllSelections: () => [instanceSelection, characterSelection],
+    getGroupedSelections: (selection) => [selection],
+    getMutableLayout: () => layout,
+    getMutableTransform: mutableTransform,
+    getSelectionLabel: (selection) => selectionId(selection),
+    hasSelection: (selection) => mutableTransform(selection) !== null,
+    createLightId: (type) => `${type}-copy`,
+    insertCharacterPlacement: () => {},
+    insertInstancePlacement: () => {},
+    insertLightActor: () => {},
+    onStatus: () => {},
+    removeCharacterPlacement: () => null,
+    removeInstancePlacement: () => null,
+    removeLightActor: () => null,
+    updateGizmo: () => {},
+    updateSelectionBox: () => {},
+  });
+
+  controller.select(instanceSelection);
+  controller.setSelectionFlag(instanceSelection, "hidden", true);
+  assert.equal(layout.instances[0]?.placements[0]?.hidden, true);
+  assert.equal(events.visibility, 1);
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.hidden, undefined);
+  assert.equal(events.visibility, 2);
+
+  controller.setSelectionMetadata("hp", 5);
+  assert.deepEqual(layout.instances[0]?.placements[0]?.metadata, { hp: 5 });
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.metadata, undefined);
+
+  controller.select(characterSelection);
+  controller.setSelectionCastShadow(false);
+  assert.equal(layout.characters[0]?.castShadow, false);
+  assert.equal(events.castShadow, 1);
+  controller.undo();
+  assert.equal(layout.characters[0]?.castShadow, undefined);
+  assert.equal(events.castShadow, 2);
+});
+
 // ===========================================================================
 // Section 8 - Gizmo transform-drag math (pure, extracted from SceneApp)
 // ===========================================================================
