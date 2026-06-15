@@ -326,6 +326,17 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 stretch Piece 1 done — EditorSceneController shell owns history/commands.**
+  Merged `refactor/sceneapp-split` and `test/item4-smoke-tests` into `main`
+  with non-squash merge commits, pushed `main`, then branched
+  `refactor/editor-scene-controller` from the updated `main`. Added
+  `editor/scene/EditorSceneController.ts` using the same callback-host pattern
+  as `EditorCameraController`/`ScenePicker`: it now owns `EditorCommandStore`
+  and exposes `getHistoryState`/`undo`/`redo`/`executeCommand`; `SceneApp`
+  delegates through same-named wrapper methods. Behavior unchanged; this is the
+  scaffolding for moving delete/duplicate/group/parent/drag command
+  orchestration next. `SceneApp.ts` 3179 → 3175 lines.
+
 - *2026-06-15* — **SESSION BOUNDARY / HANDOFF (read this first to resume).**
   **Status:** checklist Items 1–4 are all `[x]`. The only thing left is the
   **Item 3 `<2500` stretch** — `SceneApp.ts` is currently **3179 lines** (target

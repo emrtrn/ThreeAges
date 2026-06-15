@@ -145,7 +145,6 @@ import type {
   EditorCommandPhase,
   EditorHistoryState,
 } from "@editor/core/history";
-import { EditorCommandStore } from "@editor/core/history";
 import {
   descendantSelections,
   groupedSelections,
@@ -193,6 +192,7 @@ import {
 import { bindEditorInputEvents } from "@editor/input/bindings";
 import { EditorCameraController } from "@editor/input/editorCameraController";
 import { ScenePicker } from "@editor/render-three/scenePicker";
+import { EditorSceneController } from "@editor/scene/EditorSceneController";
 import { computeWallSnap } from "@editor/render-three/wallSnap";
 import {
   matrixToTransform,
@@ -355,7 +355,7 @@ export class SceneApp {
   };
   private pendingAssetId: string | null = null;
   private pointerDrag: GizmoPointerDrag | null = null;
-  private readonly commandStore = new EditorCommandStore();
+  private readonly editorSceneController: EditorSceneController;
   private unbindEditorInput: (() => void) | null = null;
   private layoutSaver: LayoutSaver | null = null;
 
@@ -376,6 +376,10 @@ export class SceneApp {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.scene.background = new Color(0xd7d7c7);
     this.camera = createSceneCamera();
+    this.editorSceneController = new EditorSceneController({
+      emitHistoryChanged: () => this.emitHistoryChanged(),
+      onStatus: (message, tone) => this.onStatus?.(message, tone),
+    });
     this.cameraController = new EditorCameraController({
       camera: this.camera,
       canvas: this.canvas,
@@ -591,21 +595,15 @@ export class SceneApp {
   }
 
   getHistoryState(): EditorHistoryState {
-    return this.commandStore.state();
+    return this.editorSceneController.getHistoryState();
   }
 
   undo(): void {
-    const result = this.commandStore.undo();
-    if (!result) return;
-    this.emitHistoryChanged();
-    this.onStatus?.(result.statusMessage, result.statusTone);
+    this.editorSceneController.undo();
   }
 
   redo(): void {
-    const result = this.commandStore.redo();
-    if (!result) return;
-    this.emitHistoryChanged();
-    this.onStatus?.(result.statusMessage, result.statusTone);
+    this.editorSceneController.redo();
   }
 
   setEditorTool(tool: EditorTool): void {
@@ -3104,9 +3102,7 @@ export class SceneApp {
   }
 
   private executeCommand(command: EditorCommand): void {
-    const result = this.commandStore.execute(command);
-    this.emitHistoryChanged();
-    this.onStatus?.(result.statusMessage, result.statusTone);
+    this.editorSceneController.executeCommand(command);
   }
 
   private emitSelectionChanged(): void {
