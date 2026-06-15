@@ -315,6 +315,31 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 Piece 7 done — pivot-corrected position extracted + tested.**
+  Moved the pure `pivotCorrectedPosition` (origin that keeps a pivot world point
+  fixed under rotation+scale: p' = pivotWorld − R·S·pivotLocal) into
+  `editor/render-three/transformMatrices.ts` next to `transformToMatrix`/
+  `matrixToTransform`. `updateRotateDrag`/`updateScaleDrag` import it; dropped the
+  now-unused `Quaternion` + `eulerDegrees` imports. Added 1 engine test
+  (41 checks). `SceneApp.ts` 3203 → 3179 lines. Gate green (tsc, 41 tests,
+  build).
+
+  **Milestone status / handoff.** Session total: `SceneApp.ts` **3999 → 3179
+  (−820, ~20.5%)** across 7 green, pushed, editor-only pieces (gizmo builders,
+  camera controller, scene picker, scene-object builders, drag math, wall snap,
+  pivot math) + **9 new engine tests** (32 → 41). The <2500 first-milestone
+  target is **not yet reached**: per the 2026-06-15 user decision (safe + tests),
+  the remaining ~680 lines are deeply-coupled *interactive command orchestration*
+  (gizmo drag apply/commit, duplicate/delete, group/parent, metadata/flags,
+  world-settings, light CRUD). Their *pure cores were already extracted in prior
+  migrations* (commandLabels, hierarchy, selection comparators, layoutSnapshots
+  clones) and in these 7 pieces; what remains in `SceneApp` is orchestration glue
+  that mutates `this.layout` + the live scene + the command stack. Cutting it
+  further means an `EditorSceneController` that owns that state and is driven by a
+  shared scene API — a larger structural change to do deliberately (ideally after
+  Item 4's load/save smoke tests give the command paths a net). Opening a PR for
+  this safe milestone; `<2500` continues next.
+
 - *2026-06-15* — **Item 3 Piece 6 done — wall-snap geometry extracted + unit-tested.**
   Moved the pure `computeWallSnap` (nearest-wall slide + interior-facing
   orientation) into `editor/render-three/wallSnap.ts`, taking the asset/room

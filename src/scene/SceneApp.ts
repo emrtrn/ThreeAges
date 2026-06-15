@@ -16,7 +16,6 @@ import {
   Matrix4,
   Object3D,
   Plane,
-  Quaternion,
   Raycaster,
   Scene,
   Vector3,
@@ -45,7 +44,6 @@ import { loadRoomLayout } from "./roomLayout";
 import {
   applyEulerDegrees,
   composePlacementMatrix,
-  eulerDegrees,
 } from "@engine/render-three/transforms";
 import {
   collectMaterialStats,
@@ -198,6 +196,7 @@ import { ScenePicker } from "@editor/render-three/scenePicker";
 import { computeWallSnap } from "@editor/render-three/wallSnap";
 import {
   matrixToTransform,
+  pivotCorrectedPosition,
   transformToMatrix,
 } from "@editor/render-three/transformMatrices";
 
@@ -2642,7 +2641,7 @@ export class SceneApp {
     const values: { rotation: Vec3; position?: Vec3 } = { rotation };
     if (drag.pivotWorld && drag.pivot) {
       // Pivot around the offset point: keep it fixed by shifting the origin.
-      values.position = this.pivotCorrectedPosition(
+      values.position = pivotCorrectedPosition(
         drag.pivotWorld,
         rotation,
         drag.startTransform.scale,
@@ -2665,7 +2664,7 @@ export class SceneApp {
     );
     const values: { scale: Vec3; position?: Vec3 } = { scale };
     if (drag.pivotWorld && drag.pivot) {
-      values.position = this.pivotCorrectedPosition(
+      values.position = pivotCorrectedPosition(
         drag.pivotWorld,
         drag.startTransform.rotation,
         scale,
@@ -2889,29 +2888,6 @@ export class SceneApp {
     if (!editable) return null;
     const pivot = this.getSelectionPivot(selection);
     return new Vector3(...pivot).applyMatrix4(transformToMatrix(editable));
-  }
-
-  /**
-   * Origin position that keeps `pivotWorld` fixed for a given rotation+scale:
-   * p' = pivotWorld − R·S·pivotLocal.
-   */
-  private pivotCorrectedPosition(
-    pivotWorld: Vector3,
-    rotation: Vec3,
-    scale: Vec3,
-    pivot: Vec3,
-  ): Vec3 {
-    const rotScale = new Matrix4().compose(
-      new Vector3(0, 0, 0),
-      new Quaternion().setFromEuler(eulerDegrees(rotation)),
-      new Vector3(...scale),
-    );
-    const offset = new Vector3(...pivot).applyMatrix4(rotScale);
-    return [
-      round(pivotWorld.x - offset.x),
-      round(pivotWorld.y - offset.y),
-      round(pivotWorld.z - offset.z),
-    ];
   }
 
   /** Model-space AABB for pivot presets (instances only for now). */

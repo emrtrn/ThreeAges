@@ -53,6 +53,7 @@ import {
 } from "../editor/gizmos/transformDrag";
 import type { GizmoPointerDrag } from "../editor/gizmos/interaction";
 import { computeWallSnap } from "../editor/render-three/wallSnap";
+import { pivotCorrectedPosition } from "../editor/render-three/transformMatrices";
 import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
 import { Box3, Vector3 } from "three";
 import type { AnimationMixer } from "three";
@@ -1066,6 +1067,18 @@ check("wall snap slides flush against the nearest wall and faces the interior", 
   // (wall at z=5, half-depth 0.1 -> centre at 4.9).
   assert.equal(snap.rotationYDeg, 180);
   assert.deepEqual(snap.position, [0, 0, 4.9]);
+});
+
+check("pivot-corrected position keeps the pivot world point fixed", () => {
+  // No rotation, unit scale, origin pivot -> the origin equals the pivot world.
+  assert.deepEqual(pivotCorrectedPosition(new Vector3(1, 2, 3), [0, 0, 0], [1, 1, 1], [0, 0, 0]), [
+    1, 2, 3,
+  ]);
+  // 90deg about Y turns local +x into world -z, so a [1,0,0] pivot shifts the
+  // origin by +1 along z to keep the pivot world point (5,0,5) fixed.
+  assert.deepEqual(pivotCorrectedPosition(new Vector3(5, 0, 5), [0, 90, 0], [1, 1, 1], [1, 0, 0]), [
+    5, 0, 6,
+  ]);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);
