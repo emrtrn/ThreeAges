@@ -315,6 +315,18 @@ npm run build:verify     # build + engine tests + verify-dist --strict
 Append newest entries at the top. Record: date, item #, what changed, where it
 stopped, and any decision made (so the next session does not re-litigate it).
 
+- *2026-06-15* — **Item 3 Piece 4 done — scene-object view-model builders extracted.**
+  New `editor/core/sceneObjects.ts`: `buildSceneObjects(layout, deps)` (Outliner
+  rows, empty metadata) and `buildEditableSelection(layout, selection, deps)`
+  (Details payload, real cloned metadata). Pure layout→view-model transforms;
+  deps are `assetCategory` (manifest lookup, stays in SceneApp), `isSelected`
+  (selection store), and the resolved `staticObjectsCastShadow` flag.
+  `SceneApp.getSceneObjects`/`getSelected` now delegate. Dropped the now-unused
+  `cloneMetadata` import (`noUnusedLocals` confirmed it). Logic byte-identical.
+  `SceneApp.ts` 3514 → 3360 lines. Gate green (tsc, 32 tests, build). These
+  builders are deterministic and a good Item 4 unit-test target later. Next:
+  pointer-drag transform math.
+
 - *2026-06-15* — **Item 3 Piece 3 done — viewport raycasting extracted (ScenePicker).**
   (Re-scoped: did picking before drag math, since the drag methods reuse
   `clientToFloor`/`clientToPlane`.) New `editor/render-three/scenePicker.ts`

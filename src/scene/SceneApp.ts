@@ -107,7 +107,6 @@ import {
 import {
   cloneCharacter,
   cloneLightActor,
-  cloneMetadata,
   cloneMetadataValue,
   clonePlacement,
   cloneUngroupedCharacter,
@@ -133,6 +132,7 @@ import {
   type EditorDefaultTrueFlagCommand,
   type EditorFlagCommand,
 } from "@editor/core/commandLabels";
+import { buildEditableSelection, buildSceneObjects } from "@editor/core/sceneObjects";
 import type { EditorTool, TransformSpace } from "@editor/core/tools";
 import {
   worldSettingsEqual,
@@ -528,98 +528,11 @@ export class SceneApp {
 
   getSceneObjects(): EditableSceneObject[] {
     if (!this.layout) return [];
-
-    const objects: EditableSceneObject[] = [];
-    for (const instance of this.layout.instances) {
-      instance.placements.forEach((placement, placementIndex) => {
-        const selection: Selection = {
-          kind: "instance",
-          assetId: instance.assetId,
-          placementIndex,
-        };
-        objects.push({
-          id: selectionId(selection),
-          kind: "instance",
-          assetId: instance.assetId,
-          category: this.assetCategory(instance.assetId),
-          label: placement.name ?? `${instance.assetId} #${placementIndex + 1}`,
-          position: [...placement.position],
-          rotation: readRotation(placement),
-          scale: readScale(placement),
-          pivot: readPivot(placement),
-          scaleLocked: placement.scaleLocked ?? false,
-          selected: this.isSelectionSelected(selection),
-          hidden: placement.hidden ?? false,
-          locked: placement.locked ?? false,
-          castShadow: this.staticObjectsCastShadow(),
-          collision: placement.collision ?? true,
-          metadata: {},
-          groupId: placement.groupId,
-          nodeId: placement.nodeId,
-          parentId: placement.parentId,
-        });
-      });
-    }
-
-    this.layout.characters.forEach((character, index) => {
-      const selection: Selection = { kind: "character", index };
-      objects.push({
-        id: selectionId(selection),
-        kind: "character",
-        assetId: character.assetId,
-        category: this.assetCategory(character.assetId),
-        label: character.name ?? `${character.assetId} #${index + 1}`,
-        position: [...character.position],
-        rotation: readRotation(character),
-        scale: readScale(character),
-        pivot: readPivot(character),
-        scaleLocked: character.scaleLocked ?? false,
-        selected: this.isSelectionSelected(selection),
-        hidden: character.hidden ?? false,
-        locked: character.locked ?? false,
-        castShadow: character.castShadow ?? true,
-        collision: character.collision ?? true,
-        metadata: {},
-        groupId: character.groupId,
-        nodeId: character.nodeId,
-        parentId: character.parentId,
-      });
+    return buildSceneObjects(this.layout, {
+      assetCategory: (assetId) => this.assetCategory(assetId),
+      isSelected: (selection) => this.isSelectionSelected(selection),
+      staticObjectsCastShadow: this.staticObjectsCastShadow(),
     });
-
-    this.layout.lights?.forEach((light, index) => {
-      const selection: Selection = { kind: "light", index };
-      const sceneObject: EditableSceneObject = {
-        id: selectionId(selection),
-        kind: "light",
-        assetId: light.type,
-        category: "light",
-        label: light.name ?? light.id,
-        position: [...light.position],
-        rotation: readRotation(light),
-        scale: [1, 1, 1],
-        pivot: [0, 0, 0],
-        scaleLocked: true,
-        selected: this.isSelectionSelected(selection),
-        hidden: light.hidden ?? false,
-        locked: light.locked ?? false,
-        castShadow: light.castShadow ?? light.type === "directional",
-        collision: false,
-        metadata: {},
-        groupId: light.groupId,
-        nodeId: light.nodeId,
-        parentId: light.parentId,
-        lightType: light.type,
-        color: light.color ?? DEFAULT_LIGHT_COLOR,
-        intensity: light.intensity ?? defaultLightIntensity(light.type),
-      };
-      if (light.distance !== undefined) sceneObject.distance = light.distance;
-      if (light.angle !== undefined) sceneObject.angle = light.angle;
-      if (light.penumbra !== undefined) sceneObject.penumbra = light.penumbra;
-      if (light.decay !== undefined) sceneObject.decay = light.decay;
-      objects.push(sceneObject);
-    });
-
-    return objects;
   }
 
   selectSceneObject(id: string, options: { additive?: boolean } = {}): void {
@@ -1054,78 +967,10 @@ export class SceneApp {
 
   getSelected(): EditableSelection | null {
     if (!this.layout || !this.selection) return null;
-    const selection = this.selection;
-    if (selection.kind === "instance") {
-      const instance = this.layout.instances.find(
-        (entry) => entry.assetId === selection.assetId,
-      );
-      const placement = instance?.placements[selection.placementIndex];
-      if (!placement) return null;
-      return {
-        id: selectionId(selection),
-        kind: "instance",
-        assetId: selection.assetId,
-        category: this.assetCategory(selection.assetId),
-        label: placement.name ?? `${selection.assetId} #${selection.placementIndex + 1}`,
-        position: [...placement.position],
-        rotation: readRotation(placement),
-        scale: readScale(placement),
-        pivot: readPivot(placement),
-        scaleLocked: placement.scaleLocked ?? false,
-        locked: placement.locked ?? false,
-        castShadow: this.staticObjectsCastShadow(),
-        collision: placement.collision ?? true,
-        metadata: cloneMetadata(placement.metadata),
-      };
-    }
-
-    if (selection.kind === "light") {
-      const light = this.layout.lights?.[selection.index];
-      if (!light) return null;
-      const editable: EditableSelection = {
-        id: selectionId(selection),
-        kind: "light",
-        assetId: light.type,
-        category: "light",
-        label: light.name ?? light.id,
-        position: [...light.position],
-        rotation: readRotation(light),
-        scale: [1, 1, 1],
-        pivot: [0, 0, 0],
-        scaleLocked: true,
-        locked: light.locked ?? false,
-        castShadow: light.castShadow ?? light.type === "directional",
-        collision: false,
-        metadata: {},
-        lightType: light.type,
-        color: light.color ?? DEFAULT_LIGHT_COLOR,
-        intensity: light.intensity ?? defaultLightIntensity(light.type),
-      };
-      if (light.distance !== undefined) editable.distance = light.distance;
-      if (light.angle !== undefined) editable.angle = light.angle;
-      if (light.penumbra !== undefined) editable.penumbra = light.penumbra;
-      if (light.decay !== undefined) editable.decay = light.decay;
-      return editable;
-    }
-
-    const character = this.layout.characters[selection.index];
-    if (!character) return null;
-    return {
-      id: selectionId(selection),
-      kind: "character",
-      assetId: character.assetId,
-      category: this.assetCategory(character.assetId),
-      label: character.name ?? character.assetId,
-      position: [...character.position],
-      rotation: readRotation(character),
-      scale: readScale(character),
-      pivot: readPivot(character),
-      scaleLocked: character.scaleLocked ?? false,
-      locked: character.locked ?? false,
-      castShadow: character.castShadow ?? true,
-      collision: character.collision ?? true,
-      metadata: cloneMetadata(character.metadata),
-    };
+    return buildEditableSelection(this.layout, this.selection, {
+      assetCategory: (assetId) => this.assetCategory(assetId),
+      staticObjectsCastShadow: this.staticObjectsCastShadow(),
+    });
   }
 
   /** Resolves an asset's manifest category for Details display. */
