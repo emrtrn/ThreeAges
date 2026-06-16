@@ -71,6 +71,11 @@ npm run build           # başarılı olmalı
 # veya birleşik: npm run build:verify  (build + engine tests + strict dist scan)
 ```
 
+Çalışma akışı kuralı: rutin/küçük işler için otomatik branch açma, commit
+atma veya push yapma. İşi bitir, gerekli gate'i çalıştır ve kullanıcıya hazır
+olduğunu bildir; commit/push kullanıcıda kalır. Sadece açıkça istenirse branch,
+commit veya push yap.
+
 Sınır kuralı (bkz. "En Kritik Kurallar"): gameplay kuralları `src/game/*` +
 sahne verisinde yaşar, `engine/` veya `editor/` içine girmez. Game Mode
 (`RuntimeSceneApp`) hiçbir zaman `editor/*` import etmez. Mümkün olduğunca saf,
