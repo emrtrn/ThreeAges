@@ -116,10 +116,8 @@ export class BehaviorSubsystem implements Subsystem {
   }
 
   /**
-   * Enables or disables behavior simulation. When disabled, `update()` is a
-   * no-op so no behavior mutates a transform — the host (e.g. the editor in edit
-   * mode) holds the scene static until simulation is turned on. Entities and
-   * per-behavior state are preserved across the toggle.
+   * Enables or disables behavior simulation. When disabled, update() is a no-op
+   * so edit-mode hosts can keep authored scenes static until Play mode runs.
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;

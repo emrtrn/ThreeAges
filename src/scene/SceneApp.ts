@@ -42,6 +42,7 @@ import {
   colliderBoxFromBounds,
   composePlacementMatrix,
 } from "@engine/render-three/transforms";
+import { collisionWireboxes } from "@engine/render-three/collisionView";
 import {
   collectMaterialStats,
   convertUnlitModelMaterialsToLit,
@@ -179,6 +180,7 @@ import { bindEditorInputEvents } from "@editor/input/bindings";
 import { EditorCameraController } from "@editor/input/editorCameraController";
 import { ScenePicker } from "@editor/render-three/scenePicker";
 import { EditorSceneController } from "@editor/scene/EditorSceneController";
+import { floorSnapPosition } from "@editor/render-three/floorSnap";
 import { computeWallSnap } from "@editor/render-three/wallSnap";
 import {
   matrixToTransform,
@@ -310,6 +312,9 @@ export class SceneApp {
     this.editorSceneController.selection = value;
   }
   private readonly selectionBoxes: Box3Helper[] = [];
+  /** "Show > Collision" overlay: wireframe boxes of every collider, off by default. */
+  private readonly collisionBoxes: Box3Helper[] = [];
+  private showCollision = false;
   private readonly gizmoGroup = new Group();
   private readonly gizmoPickables: Object3D[] = [];
   /** Owns active/hovered gizmo handle state (editor-only interaction state). */
@@ -430,11 +435,8 @@ export class SceneApp {
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
 
-    // The editor viewport is an authoring surface, not a play surface: keep the
-    // scene static in edit mode so gameplay behaviors (WASD movement, gravity,
-    // goal/chime triggers) do not run. The runtime route (RuntimeSceneApp) and a
-    // future in-editor Play toggle re-enable simulation. Subsystem still ticks
-    // for lifecycle; only its per-frame behavior mutation is suppressed.
+    // The editor viewport is an authoring surface, not Play mode: keep gameplay
+    // behaviors from mutating placed characters while editing.
     if (this.editorEnabled) this.behaviorSubsystem.setEnabled(false);
 
     // Observer-only keyboard source: records raw codes into the action map in
@@ -805,10 +807,36 @@ export class SceneApp {
     );
   }
 
-  /** End / "Snap" button entry: wall-snaps wall assets, otherwise surface-snaps. */
+  snapSelectedToFloor(): void {
+    if (!this.selection) {
+      this.onStatus?.("No selected object to snap.", "warning");
+      return;
+    }
+    if (this.isSelectionLocked(this.selection)) {
+      this.onStatus?.("Selected object is locked.", "warning");
+      return;
+    }
+
+    const before = this.captureTransform(this.selection);
+    const box = this.getSelectionWorldBox(this.selection);
+    if (!before || !box || box.isEmpty()) {
+      this.onStatus?.("Cannot compute bounds for floor snap.", "warning");
+      return;
+    }
+
+    const position = floorSnapPosition(box, before.position);
+    if (!position) {
+      this.onStatus?.("Already resting on the floor.", "info");
+      return;
+    }
+
+    this.updateSelectedTransform({ position });
+    this.commitTransformChange(this.selection, before, "Snap to floor");
+  }
+
+  /** End entry: drops the active selection onto the floor plane. */
   snapSelected(): void {
-    if (this.wallSnapSelected()) return;
-    this.surfaceSnapSelected();
+    this.snapSelectedToFloor();
   }
 
   isSelectionWallAsset(): boolean {
@@ -829,14 +857,6 @@ export class SceneApp {
       return;
     }
     this.performWallSnap(this.selection);
-  }
-
-  /** Returns true when the selection is a wall asset (handled here, no surface fallback). */
-  private wallSnapSelected(): boolean {
-    if (!this.selection || this.selection.kind !== "instance") return false;
-    if (!this.isWallAsset(this.selection.assetId)) return false;
-    this.performWallSnap(this.selection);
-    return true;
   }
 
   /** Slides and orients an instance flush against the nearest room wall. */
@@ -2165,6 +2185,9 @@ export class SceneApp {
   private updateSelectionBox(): void {
     this.removeSelectionBox();
     this.updateLightGizmoVisibility();
+    // Collision overlay refreshes with the same cadence as selection boxes, so it
+    // tracks live transform edits (drag/cascade all route through here).
+    this.updateCollisionBoxes();
     if (!this.layout) return;
 
     for (const selection of this.getSelectedSelections()) {
@@ -2176,6 +2199,47 @@ export class SceneApp {
       this.selectionBoxes.push(helper);
       this.scene.add(helper);
     }
+  }
+
+  /** Whether the "Show > Collision" overlay is on. */
+  getShowCollision(): boolean {
+    return this.showCollision;
+  }
+
+  /** Toggles the "Show > Collision" overlay and rebuilds it immediately. */
+  setShowCollision(visible: boolean): void {
+    if (this.showCollision === visible) return;
+    this.showCollision = visible;
+    this.updateCollisionBoxes();
+  }
+
+  /**
+   * Rebuilds the collision overlay from the current layout + model bounds. Solid
+   * colliders draw green, sensors amber; both match the collider physics derives
+   * (see `collisionWireboxes`). A no-op (after clearing) while the overlay is off.
+   */
+  private updateCollisionBoxes(): void {
+    this.removeCollisionBoxes();
+    if (!this.showCollision || !this.layout) return;
+    for (const { box, sensor } of collisionWireboxes(this.layout, this.localBounds)) {
+      if (box.isEmpty()) continue;
+      const helper = new Box3Helper(box, sensor ? 0xffb454 : 0x4cd07d);
+      helper.name = "editor-collision-box";
+      this.collisionBoxes.push(helper);
+      this.scene.add(helper);
+    }
+  }
+
+  private removeCollisionBoxes(): void {
+    for (const collisionBox of this.collisionBoxes) {
+      this.scene.remove(collisionBox);
+      collisionBox.geometry.dispose();
+      const materials = Array.isArray(collisionBox.material)
+        ? collisionBox.material
+        : [collisionBox.material];
+      for (const material of materials) material.dispose();
+    }
+    this.collisionBoxes.length = 0;
   }
 
   /** Shows a light's wireframe reach only while it is selected. */

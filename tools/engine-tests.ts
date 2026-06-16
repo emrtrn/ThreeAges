@@ -73,6 +73,7 @@ import {
 } from "../editor/gizmos/transformDrag";
 import type { GizmoPointerDrag } from "../editor/gizmos/interaction";
 import { computeWallSnap } from "../editor/render-three/wallSnap";
+import { floorSnapPosition } from "../editor/render-three/floorSnap";
 import { pivotCorrectedPosition } from "../editor/render-three/transformMatrices";
 import {
   applySceneBackgroundAndAmbient,
@@ -103,6 +104,7 @@ import {
 } from "./saveValidator";
 import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
+import { collisionWireboxes } from "../engine/render-three/collisionView";
 import type { LightObjectRecord } from "../engine/render-three/lights";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
@@ -380,6 +382,64 @@ check("colliderBoxFromBounds reorients and offsets from rotation + off-origin bo
   assert.ok(Math.abs(box.center[0]) < 1e-9);
   assert.ok(Math.abs(box.center[1] - 1) < 1e-9);
   assert.ok(Math.abs(box.center[2]) < 1e-9);
+});
+
+// The editor "Show > Collision" overlay derives one world box per collidable
+// placement/character: `collision: false` opts out, the sensor flag carries
+// through, and each box is the model's bounds under its placement transform.
+check("collisionWireboxes: one box per collider, skips collision:false, flags sensors", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "collision-overlay-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "wall",
+        placements: [
+          { position: [0, 0, 0], scale: [2, 1, 1] },
+          { position: [5, 0, 0], collision: false }, // opted out -> no box
+        ],
+      },
+      { assetId: "zone", placements: [{ position: [0, 0, -3], sensor: true }] },
+    ],
+    characters: [{ assetId: "hero", position: [1, 0, 0] }],
+    lights: [],
+  };
+  const unit = () => new Box3(new Vector3(-0.5, -0.5, -0.5), new Vector3(0.5, 0.5, 0.5));
+  const localBounds = new Map([
+    ["wall", unit()],
+    ["zone", unit()],
+    ["hero", unit()],
+  ]);
+
+  const boxes = collisionWireboxes(layout, localBounds);
+  assert.equal(boxes.length, 3); // wall[0] + zone + hero; wall[1] opted out
+
+  // wall[0]: unit bounds scaled x2 on X about origin -> x span [-1,1].
+  const wall = boxes[0]!;
+  assert.equal(wall.sensor, false);
+  assert.deepEqual(wall.box.min.toArray(), [-1, -0.5, -0.5]);
+  assert.deepEqual(wall.box.max.toArray(), [1, 0.5, 0.5]);
+
+  // zone is a sensor centered at z=-3.
+  const zone = boxes[1]!;
+  assert.equal(zone.sensor, true);
+  assert.deepEqual(zone.box.min.toArray(), [-0.5, -0.5, -3.5]);
+
+  // hero (character) is collidable by default, centered at x=1.
+  const hero = boxes[2]!;
+  assert.equal(hero.sensor, false);
+  assert.deepEqual(hero.box.min.toArray(), [0.5, -0.5, -0.5]);
+});
+
+check("floorSnapPosition places the world-box bottom on y=0", () => {
+  const box = new Box3(new Vector3(2, 1.25, -1), new Vector3(4, 3.25, 1));
+  assert.deepEqual(floorSnapPosition(box, [3, 5, 0]), [3, 3.75, 0]);
+});
+
+check("floorSnapPosition no-ops when already on the floor", () => {
+  const box = new Box3(new Vector3(-1, 0, -1), new Vector3(1, 2, 1));
+  assert.equal(floorSnapPosition(box, [0, 0, 0]), null);
 });
 
 check("scene runtime builds entities in instance -> character -> light order", () => {
@@ -986,27 +1046,30 @@ check("behavior subsystem: setEnabled(false) suppresses ticking until re-enabled
         : undefined,
   };
   const actions = new ActionMap({ KeyD: "move-right" });
-  const mover: Entity = {
-    id: "character:0",
-    components: {
-      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
-      Behavior: { scriptId: "input-move" },
-    },
-  };
-  const subsystem = new BehaviorSubsystem(registry, actions, (id, transform) => {
-    synced.push(`${id}:${transform.position[0]}`);
+  const subsystem = new BehaviorSubsystem(registry, actions, (_id, transform) => {
+    synced.push(String(transform.position[0]));
   });
-  subsystem.setEntities([mover]);
-  subsystem.setEnabled(false);
-
+  subsystem.setEntities([
+    {
+      id: "character:0",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "input-move" },
+      },
+    },
+  ]);
   actions.handleDown("KeyD");
-  actions.advance();
-  subsystem.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
-  assert.deepEqual(synced, []); // disabled: nothing ticks, nothing syncs
+  const app = new EngineApp();
+  app.registerSubsystem(new InputSubsystem(actions));
+  app.registerSubsystem(subsystem);
+
+  subsystem.setEnabled(false);
+  app.update(0.5);
+  assert.deepEqual(synced, []);
 
   subsystem.setEnabled(true);
-  subsystem.update({ deltaSeconds: 0.5, elapsedSeconds: 1, frame: 2 });
-  assert.deepEqual(synced, ["character:0:1"]); // re-enabled: moves +2*0.5
+  app.update(0.5);
+  assert.deepEqual(synced, ["1"]);
 });
 
 check("physics subsystem reports deterministic placeholder contacts", () => {
