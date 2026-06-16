@@ -120,10 +120,13 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const rapier = this.rapierBodies.get(entityId);
     if (!rapier) return;
     const translation = vectorFromTransform(transform);
+    const rotation = quaternionFromEulerDegrees(transform.rotation);
     if (rapier.body.isKinematic()) {
       rapier.body.setNextKinematicTranslation(translation);
+      rapier.body.setNextKinematicRotation(rotation);
     } else {
       rapier.body.setTranslation(translation, true);
+      rapier.body.setRotation(rotation, true);
     }
   }
 
@@ -143,8 +146,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 
   /**
    * Half-extents of an entity's collider, or null if it has none. The collider
-   * `size` is already world-space (rotation + scale baked at scene-build), so
-   * this is just `size / 2`.
+   * `size` already has placement scale baked at scene-build, so this is just
+   * `size / 2`.
    */
   colliderHalfExtents(entityId: EntityId): readonly [number, number, number] | null {
     const body = this.bodies.find((candidate) => candidate.id === entityId);
@@ -215,6 +218,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         body.transform.position[1],
         body.transform.position[2],
       );
+      desc.setRotation(quaternionFromEulerDegrees(body.transform.rotation));
       const rigidBody = this.rapierWorld.createRigidBody(desc);
       const collider = this.rapierWorld.createCollider(
         colliderDescForBody(RAPIER, body).setSensor(body.collider.isSensor),
@@ -284,7 +288,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 }
 
 function bodyAabb(body: PhysicsBody): Aabb {
-  // `size` and `center` are world-space (rotation + scale baked at scene-build),
+  // `size` and `center` are world-space (placement scale baked at scene-build),
   // so the AABB is centered at position + center with half-extents size / 2.
   const half = body.collider.size.map((size) => size / 2);
   const center = body.collider.center ?? [0, 0, 0];
@@ -337,8 +341,8 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
 }
 
 function colliderDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
-  // `size` is world-space (scale already baked); the `center` offset is applied
-  // as the collider's translation relative to the body at the entity position.
+  // `size` is world-space (placement scale already baked); the `center` offset
+  // is applied as the collider's translation relative to the body position.
   const size = body.collider.size;
   const center = body.collider.center ?? [0, 0, 0];
   const desc = colliderShapeDesc(RAPIER, body.collider.shape, size);
@@ -385,4 +389,26 @@ function vectorFromVec3(vec: Vec3): { x: number; y: number; z: number } {
     y: vec[1],
     z: vec[2],
   };
+}
+
+function quaternionFromEulerDegrees(rotation: Vec3): { x: number; y: number; z: number; w: number } {
+  const x = degreesToRadians(rotation[0]) / 2;
+  const y = degreesToRadians(rotation[1]) / 2;
+  const z = degreesToRadians(rotation[2]) / 2;
+  const cx = Math.cos(x);
+  const sx = Math.sin(x);
+  const cy = Math.cos(y);
+  const sy = Math.sin(y);
+  const cz = Math.cos(z);
+  const sz = Math.sin(z);
+  return {
+    x: sx * cy * cz + cx * sy * sz,
+    y: cx * sy * cz - sx * cy * sz,
+    z: cx * cy * sz + sx * sy * cz,
+    w: cx * cy * cz - sx * sy * sz,
+  };
+}
+
+function degreesToRadians(degrees: number): number {
+  return (degrees * Math.PI) / 180;
 }

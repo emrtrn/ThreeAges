@@ -8,8 +8,12 @@
 import {
   Box3,
   Box3Helper,
+  BufferGeometry,
   DirectionalLight,
+  Float32BufferAttribute,
   Group,
+  LineBasicMaterial,
+  LineSegments,
   Matrix4,
   Object3D,
   Plane,
@@ -313,7 +317,7 @@ export class SceneApp {
   }
   private readonly selectionBoxes: Box3Helper[] = [];
   /** "Show > Collision" overlay: wireframe boxes of every collider, off by default. */
-  private readonly collisionBoxes: Box3Helper[] = [];
+  private readonly collisionBoxes: LineSegments[] = [];
   private showCollision = false;
   private readonly gizmoGroup = new Group();
   private readonly gizmoPickables: Object3D[] = [];
@@ -2230,9 +2234,15 @@ export class SceneApp {
   private updateCollisionBoxes(): void {
     this.removeCollisionBoxes();
     if (!this.showCollision || !this.layout) return;
-    for (const { box, sensor } of collisionWireboxes(this.layout, this.localBounds)) {
-      if (box.isEmpty()) continue;
-      const helper = new Box3Helper(box, sensor ? 0xffb454 : 0x4cd07d);
+    for (const { box, segments, sensor } of collisionWireboxes(this.layout, this.localBounds)) {
+      if (box.isEmpty() || segments.length === 0) continue;
+      const geometry = new BufferGeometry();
+      geometry.setAttribute(
+        "position",
+        new Float32BufferAttribute(segments.flatMap((point) => point), 3),
+      );
+      const material = new LineBasicMaterial({ color: sensor ? 0xffb454 : 0x4cd07d });
+      const helper = new LineSegments(geometry, material);
       helper.name = "editor-collision-box";
       this.collisionBoxes.push(helper);
       this.scene.add(helper);

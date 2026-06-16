@@ -51,11 +51,11 @@ export interface BehaviorComponent {
 
 export interface ColliderComponent {
   shape: ColliderShape;
-  /** World-axis-aligned full size (rotation + scale already baked in). */
+  /** World-axis-aligned full size (placement scale already baked in). */
   size: Vec3;
   /**
    * Offset of the collider center from the entity's transform position, in world
-   * space (rotation + scale baked in). Absent means centered on the position.
+   * space (placement scale baked in). Absent means centered on the position.
    */
   center?: Vec3;
   isStatic: boolean;

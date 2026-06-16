@@ -355,8 +355,8 @@ check("scene runtime computes local model bounds keyed by asset id", () => {
   assert.deepEqual(bounds.get("box")?.max.toArray(), [1, 1, 1]);
 });
 
-// colliderBoxFromBounds bakes the placement's scale into the world-aligned size;
-// for an origin-centered model the center offset stays zero.
+// colliderBoxFromBounds bakes placement scale into the world-aligned size; for
+// an origin-centered model the center offset stays zero.
 check("colliderBoxFromBounds bakes scale into a centered model's footprint", () => {
   const box = colliderBoxFromBounds(
     new Box3(new Vector3(-1, -1, -1), new Vector3(1, 1, 1)),
@@ -366,22 +366,17 @@ check("colliderBoxFromBounds bakes scale into a centered model's footprint", () 
   assert.deepEqual(box.center, [0, 0, 0]);
 });
 
-// Rotation reorients a non-square footprint (a long-X thin-Z wall becomes
-// long-Z after a 90 deg Y turn); an off-origin model yields a center offset
-// relative to its placement position.
-check("colliderBoxFromBounds reorients and offsets from rotation + off-origin bounds", () => {
+// Rotation intentionally does not resize the collider footprint. A rotated wall
+// keeps the same collision dimensions; an off-origin model still yields a center
+// offset relative to its placement position.
+check("colliderBoxFromBounds ignores rotation while preserving scale and offset", () => {
   const box = colliderBoxFromBounds(
     new Box3(new Vector3(-1, 0, -0.25), new Vector3(1, 2, 0.25)),
     { position: [5, 0, 0], rotationYDeg: 90 },
   );
-  // Size axes X/Z swap under the 90 deg Y rotation (within float tolerance).
-  assert.ok(Math.abs(box.size[0] - 0.5) < 1e-9);
-  assert.ok(Math.abs(box.size[1] - 2) < 1e-9);
-  assert.ok(Math.abs(box.size[2] - 2) < 1e-9);
+  assert.deepEqual(box.size, [2, 2, 0.5]);
   // The box spans y [0,2] about position y=0, so its center sits 1 unit up.
-  assert.ok(Math.abs(box.center[0]) < 1e-9);
-  assert.ok(Math.abs(box.center[1] - 1) < 1e-9);
-  assert.ok(Math.abs(box.center[2]) < 1e-9);
+  assert.deepEqual(box.center, [0, 1, 0]);
 });
 
 // The editor "Show > Collision" overlay derives one world box per collidable
@@ -430,6 +425,35 @@ check("collisionWireboxes: one box per collider, skips collision:false, flags se
   const hero = boxes[2]!;
   assert.equal(hero.sensor, false);
   assert.deepEqual(hero.box.min.toArray(), [0.5, -0.5, -0.5]);
+});
+
+check("collisionWireboxes ignore rotation and grow only with scale", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "collision-rotation-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "wall",
+        placements: [
+          { position: [0, 0, 0] },
+          { position: [4, 0, 0], rotationYDeg: 45 },
+          { position: [8, 0, 0], rotationYDeg: 45, scale: [2, 1, 3] },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const wallBounds = new Box3(new Vector3(-1, 0, -0.1), new Vector3(1, 2, 0.1));
+  const boxes = collisionWireboxes(layout, new Map([["wall", wallBounds]]));
+
+  assert.deepEqual(boxes[0]?.box.getSize(new Vector3()).toArray(), [2, 2, 0.2]);
+  assert.deepEqual(boxes[1]?.box.getSize(new Vector3()).toArray(), [2, 2, 0.2]);
+  const scaledSize = boxes[2]?.box.getSize(new Vector3()).toArray() ?? [];
+  assert.ok(Math.abs((scaledSize[0] ?? 0) - 4) < 1e-9);
+  assert.ok(Math.abs((scaledSize[1] ?? 0) - 2) < 1e-9);
+  assert.ok(Math.abs((scaledSize[2] ?? 0) - 0.6) < 1e-9);
 });
 
 check("floorSnapPosition places the world-box bottom on y=0", () => {

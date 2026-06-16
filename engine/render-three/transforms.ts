@@ -34,20 +34,19 @@ export function applyEulerDegrees(object: Object3D, rotation: Vec3): void {
 }
 
 /** A world-axis-aligned collider footprint: full `size` plus a `center` offset
- *  from the entity's transform position (both already incorporate the
- *  placement's rotation and scale). */
+ *  from the entity's transform position (placement scale baked in). */
 export interface ColliderBox {
   size: Vec3;
   center: Vec3;
 }
 
 /**
- * Derives the world-axis-aligned box that encloses a model's local bounds once
- * the placement's rotation and scale are applied, so a derived collider matches
- * the rendered mesh instead of a unit cube. `center` is returned relative to the
- * placement position (translation is excluded) so it stays valid as the entity
- * moves. Rotation is baked from the authored transform; the box does not track
- * runtime re-orientation.
+ * Derives the world-axis-aligned collider footprint from a model's local bounds
+ * using only placement position + scale. Rotation is intentionally ignored so a
+ * wall rotated in the editor keeps the same collision dimensions; scale remains
+ * the only transform that changes the collider's size. `center` is returned
+ * relative to the placement position (translation is excluded) so it stays valid
+ * as the entity moves.
  */
 export function colliderBoxFromBounds(
   localBounds: Box3,
@@ -55,9 +54,7 @@ export function colliderBoxFromBounds(
 ): ColliderBox {
   const world = localBounds
     .clone()
-    .applyMatrix4(
-      composeTransformMatrix(placement.position, readRotation(placement), readScale(placement)),
-    );
+    .applyMatrix4(composeTransformMatrix(placement.position, [0, 0, 0], readScale(placement)));
   const size = world.getSize(new Vector3());
   const center = world.getCenter(new Vector3());
   return {

@@ -345,8 +345,9 @@ function colliderComponent(
   const simulatePhysics = source.simulatePhysics === true;
   if (source.collision === false && !simulatePhysics) return null;
   // World-aligned footprint from the model's bounds when the host can supply
-  // them; otherwise a scaled unit box (rotation/bounds unknown). Both bake the
-  // placement's scale into `size`, since the physics layer no longer rescales.
+  // them; otherwise a scaled unit box. Rotation intentionally does not resize
+  // the collider; placement scale is baked into `size`, since the physics layer
+  // no longer rescales.
   const box = resolveBox?.(assetId, source);
   const component: ColliderComponent = {
     shape: "box",
