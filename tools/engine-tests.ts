@@ -1227,7 +1227,7 @@ await checkAsync("rapier simulatePhysics body falls under configured gravity", a
     {
       id: "crate",
       components: {
-        Transform: { position: [0, 5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Transform: { position: [0, 5, 0], rotation: [0, 30, 0], scale: [1, 1, 1] },
         Collider: {
           shape: "box",
           size: [1, 1, 1],
@@ -1253,7 +1253,9 @@ await checkAsync("rapier simulatePhysics body falls under configured gravity", a
     assert.equal(physics.usesRapier(), true);
     for (let frame = 0; frame < 12; frame += 1) app.update(1 / 60);
     assert.ok(synced.length > 0, "expected physics to sync dynamic transforms");
-    assert.ok((synced.at(-1) ?? assert.fail("synced")).position[1] < 5);
+    const last = synced.at(-1) ?? assert.fail("synced");
+    assert.ok(last.position[1] < 5);
+    assert.ok(Math.abs(last.rotation[1] - 30) < 1e-6);
     await app.dispose();
   } finally {
     console.warn = warn;

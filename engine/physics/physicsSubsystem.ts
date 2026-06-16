@@ -255,9 +255,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       const body = this.bodies.find((candidate) => candidate.id === entityId);
       if (!body?.collider.simulatePhysics) continue;
       const translation = rapier.body.translation();
+      const rotation = eulerDegreesFromQuaternion(rapier.body.rotation());
       const transform: TransformComponent = {
         position: [translation.x, translation.y, translation.z],
-        rotation: [...body.transform.rotation],
+        rotation,
         scale: [...body.transform.scale],
       };
       body.transform = cloneTransform(transform);
@@ -346,12 +347,20 @@ function colliderDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
   const size = body.collider.size;
   const center = body.collider.center ?? [0, 0, 0];
   const desc = colliderShapeDesc(RAPIER, body.collider.shape, size);
-  return desc.setTranslation(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0);
+  return desc
+    .setTranslation(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0)
+    .setFriction(0.8)
+    .setRestitution(0);
 }
 
 function rigidBodyDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
   if (body.collider.isStatic) return RAPIER.RigidBodyDesc.fixed();
-  if (body.collider.simulatePhysics) return RAPIER.RigidBodyDesc.dynamic();
+  if (body.collider.simulatePhysics) {
+    return RAPIER.RigidBodyDesc.dynamic()
+      .setCcdEnabled(true)
+      .setLinearDamping(0.12)
+      .setAngularDamping(0.45);
+  }
   return RAPIER.RigidBodyDesc.kinematicPositionBased();
 }
 
@@ -411,4 +420,43 @@ function quaternionFromEulerDegrees(rotation: Vec3): { x: number; y: number; z: 
 
 function degreesToRadians(degrees: number): number {
   return (degrees * Math.PI) / 180;
+}
+
+function eulerDegreesFromQuaternion(rotation: {
+  x: number;
+  y: number;
+  z: number;
+  w: number;
+}): Vec3 {
+  const x = rotation.x;
+  const y = rotation.y;
+  const z = rotation.z;
+  const w = rotation.w;
+  const m11 = 1 - 2 * (y * y + z * z);
+  const m12 = 2 * (x * y - z * w);
+  const m13 = 2 * (x * z + y * w);
+  const m22 = 1 - 2 * (x * x + z * z);
+  const m23 = 2 * (y * z - x * w);
+  const m32 = 2 * (y * z + x * w);
+  const m33 = 1 - 2 * (x * x + y * y);
+
+  const ry = Math.asin(clamp(m13, -1, 1));
+  let rx: number;
+  let rz: number;
+  if (Math.abs(m13) < 0.9999999) {
+    rx = Math.atan2(-m23, m33);
+    rz = Math.atan2(-m12, m11);
+  } else {
+    rx = Math.atan2(m32, m22);
+    rz = 0;
+  }
+  return [radiansToDegrees(rx), radiansToDegrees(ry), radiansToDegrees(rz)];
+}
+
+function radiansToDegrees(radians: number): number {
+  return (radians * 180) / Math.PI;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
 }

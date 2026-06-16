@@ -22,6 +22,342 @@
             1,
             6
           ]
+        },
+        {
+          "position": [
+            -0.28,
+            2.05,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            6.16,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            4.1,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            8.21,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            3.43,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            7.54,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            5.48,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            9.59,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.56,
+            2.72,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.56,
+            6.83,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.56,
+            4.77,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.56,
+            8.88,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            2.36,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            6.47,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            4.41,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            8.52,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            3.74,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            7.85,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            5.79,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.28,
+            9.9,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.56,
+            3.03,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.56,
+            7.14,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.56,
+            5.08,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
+        },
+        {
+          "position": [
+            -0.56,
+            9.19,
+            -0.21
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": [
+            0.47,
+            6,
+            0.46
+          ]
         }
       ]
     },
@@ -35,6 +371,25 @@
             -1.47
           ],
           "simulatePhysics": true,
+          "rotation": [
+            30,
+            0,
+            15
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -2.22,
+            3.78,
+            -1.47
+          ],
+          "simulatePhysics": true,
+          "rotation": [
+            150,
+            0,
+            15
+          ],
           "scale": 1
         }
       ]
@@ -44,7 +399,7 @@
       "placements": [
         {
           "position": [
-            0.51,
+            0.49,
             0.05,
             -0.76
           ],
@@ -64,11 +419,12 @@
         {
           "position": [
             -1.06,
-            0,
+            0.58,
             -2.79
           ],
           "name": "goal",
           "sensor": true,
+          "simulatePhysics": true,
           "behavior": {
             "script": "goal-reached"
           },
@@ -78,6 +434,16 @@
             "loop": false,
             "spatial": false
           },
+          "scale": 1
+        },
+        {
+          "position": [
+            -0.59,
+            0.62,
+            -0.05
+          ],
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
           "scale": 1
         }
       ]
@@ -92,16 +458,26 @@
     },
     {
       "assetId": "chair-modern-cushion",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            0.92,
+            0.05,
+            -1.9
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [
     {
       "assetId": "character-a",
       "position": [
-        -0.51,
-        0.05,
-        2.01
+        -2.1,
+        0.11,
+        1.35
       ],
       "animation": "idle",
       "name": "player",

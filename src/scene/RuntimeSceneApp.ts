@@ -131,11 +131,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   onFrame: ((deltaMs: number) => void) | null = null;
 
-  private readonly syncEntityTransform = (entityId: string, transform: TransformComponent): void => {
+  private readonly applyEntityTransformToRender = (
+    entityId: string,
+    transform: TransformComponent,
+  ): void => {
     const instance = parseInstanceEntityId(entityId);
     if (instance) {
       this.syncInstanceTransform(instance.assetId, instance.placementIndex, transform);
-      this.physicsSubsystem.setEntityTransform(entityId, transform);
       return;
     }
 
@@ -146,6 +148,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     object.position.set(transform.position[0], transform.position[1], transform.position[2]);
     applyEulerDegrees(object, transform.rotation);
     object.scale.set(transform.scale[0], transform.scale[1], transform.scale[2]);
+  };
+
+  private readonly syncEntityTransform = (entityId: string, transform: TransformComponent): void => {
+    this.applyEntityTransformToRender(entityId, transform);
     this.physicsSubsystem.setEntityTransform(entityId, transform);
   };
 
@@ -160,7 +166,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
     this.engineApp.registerSubsystem(this.physicsSubsystem);
-    this.physicsSubsystem.setTransformSink(this.syncEntityTransform);
+    this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
       createBehaviorRegistry({
         getGravityY: () => this.gravityY,
