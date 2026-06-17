@@ -138,6 +138,7 @@ export class StaticMeshEditor {
   private transformControls: TransformControls | null = null;
   private gizmoMode: GizmoMode = "translate";
   private gizmoDragging = false;
+  private altDown = false;
   private readonly raycaster = new Raycaster();
 
   private constructor(private readonly options: StaticMeshEditorOptions) {
@@ -223,11 +224,16 @@ export class StaticMeshEditor {
     controls.setSize(0.85);
     controls.addEventListener("dragging-changed", (event) => {
       this.gizmoDragging = event.value === true;
-      // Commit the edit once the drag ends (live changes already wrote through).
-      if (!this.gizmoDragging) {
-        this.markDirty();
-        this.renderDetails();
+      if (this.gizmoDragging) {
+        // Alt + Move drag duplicates: leave a static copy at the drag-start
+        // transform and keep dragging the original (Unreal-style Alt-drag copy).
+        if (this.altDown && this.gizmoMode === "translate") this.duplicateForDrag();
+        return;
       }
+      // Commit the edit once the drag ends (live changes already wrote through).
+      this.altDown = false;
+      this.markDirty();
+      this.renderDetails();
     });
     controls.addEventListener("objectChange", () => this.onGizmoChange());
     this.scene.add(controls.getHelper());
@@ -268,6 +274,16 @@ export class StaticMeshEditor {
     let lastY = 0;
     let downX = 0;
     let downY = 0;
+
+    // Capture phase so the Alt state is recorded before TransformControls reads
+    // the pointerdown and dispatches its drag-start (which consumes altDown).
+    el.addEventListener(
+      "pointerdown",
+      (event) => {
+        this.altDown = event.altKey;
+      },
+      { capture: true },
+    );
 
     el.addEventListener("contextmenu", (event) => event.preventDefault());
     el.addEventListener("pointerdown", (event) => {
@@ -561,6 +577,26 @@ export class StaticMeshEditor {
     }
     controls.setMode(this.gizmoMode);
     controls.attach(overlay.root);
+  }
+
+  /**
+   * Alt-drag copy: clones the selected primitive at its current (drag-start)
+   * transform and leaves the clone in place, while the gizmo keeps moving the
+   * original. Appends the clone without rebuilding the dragged overlay so the
+   * in-progress drag is undisturbed.
+   */
+  private duplicateForDrag(): void {
+    const source = this.collision.primitives[this.selectedPrimitive];
+    if (!source) return;
+    const clone = clonePrimitive(source);
+    const cloneIndex = this.collision.primitives.length;
+    this.collision.primitives.push(clone);
+    const overlay = buildPrimitiveOverlay(clone, false);
+    overlay.pickMesh.userData.primitiveIndex = cloneIndex;
+    this.overlays.push(overlay);
+    this.overlayGroup.add(overlay.root);
+    this.markDirty();
+    this.setStatus("Duplicated collision (Alt-drag).");
   }
 
   /** Live write-back from the gizmo: root transform -> selected primitive data. */

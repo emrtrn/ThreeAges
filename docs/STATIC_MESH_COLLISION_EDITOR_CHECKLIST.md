@@ -251,6 +251,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] Primitif seçimi (details listesi **veya** viewport'ta tıkla/raycast) + seçili vurgusu
 - [x] **Move/Rotate/Scale** transform gizmo (three TransformControls), üst barda Select/Move/Rotate/Scale (Q/W/E/R)
 - [x] Birden fazla primitif ekleyip her birini ayrı düzenleme (gizmo seçili olana bağlanır)
+- [x] **Alt + Move sürükle = kopyala** (Unreal tarzı; orijinal yerinde kalır, kopya taşınır)
 - [ ] "Show Simple/Complex Collision" görünürlük toggle'ı
 - [ ] Sahne viewport'unda da collider görselleştirme tutarlılığı (mevcut `getShowCollision` ile uyum)
 
