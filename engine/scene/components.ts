@@ -10,7 +10,7 @@ export const COLLIDER_COMPONENT = "Collider";
 export const AUDIO_COMPONENT = "Audio";
 
 export type SceneLightType = "directional" | "point" | "spot";
-export type ColliderShape = "box" | "sphere" | "capsule";
+export type ColliderShape = "box" | "sphere" | "capsule" | "cylinder" | "cone" | "convex";
 
 export interface TransformComponent {
   position: Vec3;
@@ -59,6 +59,8 @@ export interface ColliderPrimitive {
   size: Vec3;
   center?: Vec3;
   rotation?: Vec3;
+  /** Baked convex hull points (world-scaled, relative to body origin) for `shape === "convex"`. */
+  points?: Vec3[];
 }
 
 export interface ColliderComponent {
@@ -166,7 +168,14 @@ export function readBehaviorComponent(entity: Entity): BehaviorComponent | undef
   return component;
 }
 
-const COLLIDER_SHAPES: readonly ColliderShape[] = ["box", "sphere", "capsule"];
+const COLLIDER_SHAPES: readonly ColliderShape[] = [
+  "box",
+  "sphere",
+  "capsule",
+  "cylinder",
+  "cone",
+  "convex",
+];
 
 /** Parses the optional compound-collider `primitives` array. */
 function readColliderPrimitives(
@@ -190,6 +199,12 @@ function readColliderPrimitives(
     if (center) primitive.center = center;
     const rotation = readVec3(record.rotation);
     if (rotation) primitive.rotation = rotation;
+    if (Array.isArray(record.points)) {
+      const points = record.points
+        .map((point) => readVec3(point))
+        .filter((point): point is Vec3 => point !== undefined);
+      if (points.length > 0) primitive.points = points;
+    }
     primitives.push(primitive);
   }
   return primitives.length > 0 ? primitives : undefined;

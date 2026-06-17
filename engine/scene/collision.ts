@@ -120,19 +120,27 @@ export interface CollisionProfile {
 }
 
 /** Simple collision primitive shapes authored in the Static Mesh editor. */
-export type CollisionPrimitiveShape = "box" | "sphere" | "capsule" | "convex";
+export type CollisionPrimitiveShape =
+  | "box"
+  | "sphere"
+  | "capsule"
+  | "cylinder"
+  | "cone"
+  | "convex";
 
 export const COLLISION_PRIMITIVE_SHAPES: readonly CollisionPrimitiveShape[] = [
   "box",
   "sphere",
   "capsule",
+  "cylinder",
+  "cone",
   "convex",
 ];
 
 /**
  * A single simple-collision shape in the asset's local space (before placement
- * scale). `convex` carries baked hull `points` (deferred phase) and ignores
- * `size`.
+ * scale). `convex` carries baked hull `points` and derives its runtime size
+ * from those points.
  */
 export interface CollisionPrimitive {
   shape: CollisionPrimitiveShape;

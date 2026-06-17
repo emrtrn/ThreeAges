@@ -7,13 +7,20 @@
  * rule belongs only to the explicitly selected TPS mode. Physics, audio and
  * behavior subsystems keep running; this session only owns the camera.
  *
- * Look/orbit control is intentionally out of scope for this iteration: WASD pans
- * the camera horizontally along its current facing and the orientation set by
- * the scene's default framing is preserved (an RTS-style pan).
+ * Controls match the editor viewport's feel: WASD pans along the camera's facing
+ * and a held right-mouse drag turns the view (yaw/pitch). The camera keeps
+ * whatever pose it boots with — the scene's default framing, or the editor
+ * camera pose handed off through the Play button — instead of being reframed.
  */
 import { Vector3 } from "three";
 import { DEFAULT_GAME_MODE_ID } from "./catalog";
-import { cameraPlanarPan } from "./cameraControl";
+import {
+  applyMouseLook,
+  cameraPlanarPan,
+  forwardFromLookAngles,
+  lookAnglesFromForward,
+  type LookAngles,
+} from "./cameraControl";
 import type {
   GameModeContext,
   GameModeDefinition,
@@ -31,6 +38,7 @@ class CameraPawnSession implements GameModeSession {
   readonly gameState: GameState = { elapsedSeconds: 0 };
   private readonly speed: number;
   private readonly forward = new Vector3();
+  private look: LookAngles = { yaw: 0, pitch: 0 };
 
   constructor(
     private readonly context: GameModeContext,
@@ -48,11 +56,26 @@ class CameraPawnSession implements GameModeSession {
     this.playerState.possessed = true;
     // Own the camera so window resizes stop re-framing it from under the player.
     this.context.markCameraControlled();
+    // Seed look angles from whatever pose the camera booted with so the first
+    // right-drag continues smoothly instead of snapping.
+    this.context.camera.getWorldDirection(this.forward);
+    this.look = lookAnglesFromForward(this.forward.x, this.forward.y, this.forward.z);
   }
 
   update(deltaSeconds: number): void {
     this.gameState.elapsedSeconds += deltaSeconds;
     const { camera, actions } = this.context;
+
+    // Right-drag look: turn the accumulated pointer delta into yaw/pitch and aim
+    // the camera before moving, so WASD follows the new facing.
+    const { dx: lookDx, dy: lookDy } = this.context.consumeLookDelta();
+    if (lookDx !== 0 || lookDy !== 0) {
+      this.look = applyMouseLook(this.look, lookDx, lookDy);
+      const dir = forwardFromLookAngles(this.look);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(camera.position.x + dir.x, camera.position.y + dir.y, camera.position.z + dir.z);
+    }
+
     camera.getWorldDirection(this.forward);
     const { dx, dz } = cameraPlanarPan(
       this.forward.x,

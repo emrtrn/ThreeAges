@@ -509,18 +509,18 @@ Bu script:
 ```md
 # Projects & Templates Checklist
 
-- [ ] `project.3dgame.json` dosyasını Forge'un resmi `.uproject` karşılığı kabul et.
-- [ ] Yeni oyun oluşturma modelini "template repo kopyala + manifest değiştir" olarak koru.
-- [ ] Şimdilik Project Browser / Launcher route'u geri getirme.
+- [x] `project.3dgame.json` dosyasını Forge'un resmi `.uproject` karşılığı kabul et.
+- [x] Yeni oyun oluşturma modelini "template repo kopyala + manifest değiştir" olarak koru.
+- [x] Şimdilik Project Browser / Launcher route'u geri getirme.
 - [ ] İleride ayrı bir `tools/create-project.mjs` script'i yaz.
 - [ ] Script şunları yapmalı:
   - template klasörünü kopyala
   - `project.3dgame.json.name` alanını değiştir
   - `package.json.name` alanını değiştir
   - örnek layout/assets temizleme seçeneği sun
-- [ ] Content Browser'ı veritabanı gibi değil, `public/assets` ve `public/layouts` disk yapısının yansıması olarak geliştir.
-- [ ] Template içine çalışan örnek sahne, minimum asset manifest ve paketlenebilir runtime bırak.
-- [ ] Production build kuralını koru: editor UI, authoring middleware, GDD ve raw authoring dosyaları `dist/` içine girmemeli.
+- [x] Content Browser'ı veritabanı gibi değil, `public/assets` ve `public/layouts` disk yapısının yansıması olarak geliştir.
+- [x] Template içine çalışan örnek sahne, minimum asset manifest ve paketlenebilir runtime bırak.
+- [x] Production build kuralını koru: editor UI, authoring middleware, GDD ve raw authoring dosyaları `dist/` içine girmemeli.
 ```
 
 ---
@@ -685,8 +685,8 @@ Content Browser asset kartında şu uyarılar görünmeli:
 ```md
 # Content Browser Checklist
 
-- [ ] `public/assets/manifest.json` dosyasını Content Browser'ın ana veri kaynağı yap.
-- [ ] Layout dosyalarına absolute file path yazmayı yasakla; sadece `assetId` veya manifest referansı yaz.
+- [x] `public/assets/manifest.json` dosyasını Content Browser'ın ana veri kaynağı yap.
+- [x] Layout dosyalarına absolute file path yazmayı yasakla; sadece `assetId` veya manifest referansı yaz.
 - [ ] Asset manifest entry'lerini standartlaştır:
   - `id`
   - `name`
@@ -704,7 +704,7 @@ Content Browser asset kartında şu uyarılar görünmeli:
   - Type/category filters
   - Asset cards / Asset View
 - [ ] Asset kartlarında thumbnail + type + category + temel metadata göster.
-- [ ] Asset drag-drop akışını `assetId -> Actor/LayoutPlacement -> runtime loader` şeklinde kur.
+- [x] Asset drag-drop akışını `assetId -> Actor/LayoutPlacement -> runtime loader` şeklinde kur.
 - [ ] `public/assets/metadata-schema.json` ile Details panel metadata alanlarını Content Browser metadata'sından ayrı ama uyumlu tut.
 - [ ] Basit health-check uyarıları ekle:
   - manifest path missing
@@ -714,7 +714,7 @@ Content Browser asset kartında şu uyarılar görünmeli:
   - high poly model
   - missing placement rule
 - [ ] Collections sistemini hemen yapma; önce Favorites / Recently Used gibi küçük bir ID listesiyle başla.
-- [ ] Editor içi import sistemini ertele; önce `tools/import-asset.mjs` gibi script tabanlı import düşün.
+- [x] Editor içi import sistemini ertele; önce `tools/import-asset.mjs` gibi script tabanlı import düşün.
 ```
 
 ---
@@ -1003,10 +1003,10 @@ metadata            → MetadataComponent
 ```md
 # Actors & Components Checklist
 
-- [ ] `Asset` ile `Actor / SceneObject` ayrımını resmi mimari kural yap.
-- [ ] Three.js `Object3D` nesnesini Actor modelinin kendisi yapma.
+- [x] `Asset` ile `Actor / SceneObject` ayrımını resmi mimari kural yap.
+- [x] Three.js `Object3D` nesnesini Actor modelinin kendisi yapma.
 - [ ] Layout dosyalarının sadece stable ID, transform, component datası ve asset referansı tutmasını sağla.
-- [ ] Editor-only state'i Actor/Component datasına karıştırma.
+- [x] Editor-only state'i Actor/Component datasına karıştırma.
 - [ ] İlk resmi component listesini tanımla:
   - TransformComponent
   - RenderComponent
@@ -1017,18 +1017,18 @@ metadata            → MetadataComponent
   - InteractionComponent
   - BehaviorComponent
   - MetadataComponent
-- [ ] Light Actor'ları uzun vadede `TransformComponent + LightComponent` olarak temsil et.
+- [x] Light Actor'ları uzun vadede `TransformComponent + LightComponent` olarak temsil et.
 - [ ] Particle efektleri `ParticleEmitterComponent` üzerinden modelle.
 - [ ] `ParticleEmitterComponent.effectId` alanını manifest'teki particle/fx asset'e bağla.
-- [ ] Outliner Actor/SceneObject listelemeli; Component'ler ana outliner nesnesi gibi davranmamalı.
+- [x] Outliner Actor/SceneObject listelemeli; Component'ler ana outliner nesnesi gibi davranmamalı.
 - [ ] Details panel Component editor'a dönüşmeli.
 - [ ] Add Component / Remove Component sistemi ekle.
 - [ ] Zorunlu `TransformComponent` silinemez olsun.
 - [ ] Component değişiklikleri undo/redo command üzerinden çalışsın.
-- [ ] Runtime tarafında component'leri class inheritance yerine sistemler yorumlasın.
-- [ ] Mevcut `LayoutPlacement`, `LayoutCharacter`, `LayoutLightActor` tiplerini hemen kırma.
+- [x] Runtime tarafında component'leri class inheritance yerine sistemler yorumlasın.
+- [x] Mevcut `LayoutPlacement`, `LayoutCharacter`, `LayoutLightActor` tiplerini hemen kırma.
 - [ ] Önce ortak `SceneObjectBase`, sonra optional `components?: ActorComponent[]` ekle.
-- [ ] Yeni layout alanları eklenirse save validator allowlist'ini güncelle.
+- [x] Yeni layout alanları eklenirse save validator allowlist'ini güncelle.
 ```
 
 ---
@@ -1215,9 +1215,9 @@ save/slot_01.json
 ```md
 # Levels / World Settings Checklist
 
-- [ ] `public/layouts/<name>.json` dosyasını Forge'un resmi Level karşılığı olarak tanımla.
-- [ ] `project.3dgame.json` dosyasını Level dosyası gibi kullanma; proje kimliği ve editor/runtime başlangıç config'i olarak tut.
-- [ ] Layout JSON içine `world` veya `worldSettings` alanı eklemeyi planla.
+- [x] `public/layouts/<name>.json` dosyasını Forge'un resmi Level karşılığı olarak tanımla.
+- [x] `project.3dgame.json` dosyasını Level dosyası gibi kullanma; proje kimliği ve editor/runtime başlangıç config'i olarak tut.
+- [x] Layout JSON içine `world` veya `worldSettings` alanı eklemeyi planla.
 - [ ] World Settings'i per-level yap:
   - background
   - ambient
@@ -1228,19 +1228,19 @@ save/slot_01.json
   - lighting defaults
   - audio ambience
   - gameMode override
-- [ ] Grid/snap gibi editor authoring tercihlerini World Settings ile karıştırma.
-- [ ] Scene Outliner'ın aktif layout actor ağacını gösterdiğini netleştir.
-- [ ] Runtime spawned actor'ların debug'da görünebileceğini ama layout'a otomatik kaydedilmemesi gerektiğini kural yap.
+- [x] Grid/snap gibi editor authoring tercihlerini World Settings ile karıştırma.
+- [x] Scene Outliner'ın aktif layout actor ağacını gösterdiğini netleştir.
+- [x] Runtime spawned actor'ların debug'da görünebileceğini ama layout'a otomatik kaydedilmemesi gerektiğini kural yap.
 - [ ] `defaultScene`, `startupScene`, `activeScene` kavramlarını ileride ayırmaya hazır ol.
 - [ ] Level Streaming/Sublevels sistemini şimdilik ertele; ama layout formatını ileride sublevel referansı alabilecek şekilde tasarla.
-- [ ] Game Mode referansını World Settings altında düşün:
+- [x] Game Mode referansını World Settings altında düşün:
   - `world.gameMode`
   - `world.ruleset`
   - `world.spawnProfile`
-- [ ] Game Mode davranışını editor core'a gömme; runtime game code yorumlasın.
-- [ ] Level/Layout data ile Save Game data ayrımını resmi kural yap.
-- [ ] Yeni layout alanları eklenirse save validator allowlist'ini güncelle.
-- [ ] World Settings değişikliklerini undo/redo command veya açık autosave politikasıyla yönet.
+- [x] Game Mode davranışını editor core'a gömme; runtime game code yorumlasın.
+- [x] Level/Layout data ile Save Game data ayrımını resmi kural yap.
+- [x] Yeni layout alanları eklenirse save validator allowlist'ini güncelle.
+- [x] World Settings değişikliklerini undo/redo command veya açık autosave politikasıyla yönet.
 ```
 
 ---
@@ -1452,7 +1452,7 @@ type RuntimeSessionControls = {
   - Editor araçları açık kalır.
   - Authoring state ve simulation state ayrılır.
 
-- [~] Possess / Eject kavramlarını TPS/FPS aşaması için not et.
+- [ ] Possess / Eject kavramlarını TPS/FPS aşaması için not et.
       (KISMİ — Possess yalnızca not edilmedi, **uygulandı**: `GameModeSession.possess`
       + `PlayerControllerDefinition.possess` sözleşmesi. Eject henüz yok.)
   - [x] Possess: player controller'a bağlan.  (uygulandı)

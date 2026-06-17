@@ -14,6 +14,8 @@ import {
   BoxGeometry,
   CapsuleGeometry,
   Color,
+  ConeGeometry,
+  CylinderGeometry,
   DirectionalLight,
   EdgesGeometry,
   GridHelper,
@@ -37,6 +39,7 @@ import {
 import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
+import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
 import {
   COLLISION_COMPLEXITY_VALUES,
   COLLISION_PRESET_IDS,
@@ -459,7 +462,7 @@ export class StaticMeshEditor {
       ${menuItem("kdop10", "Add 10DOP-X Simplified Collision", true)}
       ${menuItem("kdop18", "Add 18DOP Simplified Collision", true)}
       ${menuItem("kdop26", "Add 26DOP Simplified Collision", true)}
-      ${menuItem("convex", "Auto Convex Collision", true)}
+      ${menuItem("convex", "Auto Convex Collision")}
       <div class="sm-menu-sep"></div>
       ${menuItem("delete", "Delete Selected Collision", !hasSelection)}
       ${menuItem("duplicate", "Duplicate Selected Collision", !hasSelection)}
@@ -502,6 +505,9 @@ export class StaticMeshEditor {
       case "remove":
         this.removeAll();
         break;
+      case "convex":
+        this.addConvexCollision();
+        break;
       default:
         this.setStatus("That collision generator is not available yet.", "warning");
     }
@@ -523,6 +529,69 @@ export class StaticMeshEditor {
     this.renderDetails();
     this.rebuildOverlays();
     this.setStatus(`Added ${shape} collision.`);
+  }
+
+  /** Generates a single convex hull collision shape from the loaded model. */
+  private addConvexCollision(): void {
+    const points = this.computeConvexHullPoints();
+    if (!points) {
+      this.setStatus("Could not generate a convex hull for this model.", "warning");
+      return;
+    }
+    const bounds = new Box3();
+    for (const point of points) bounds.expandByPoint(new Vector3(point[0], point[1], point[2]));
+    const size = bounds.getSize(new Vector3());
+    const center = bounds.getCenter(new Vector3());
+    const primitive: CollisionPrimitive = {
+      shape: "convex",
+      size: [round(size.x), round(size.y), round(size.z)],
+      points,
+    };
+    if (center.lengthSq() > 1e-6) primitive.center = [round(center.x), round(center.y), round(center.z)];
+    this.collision.primitives.push(primitive);
+    this.selectedPrimitive = this.collision.primitives.length - 1;
+    this.markDirty();
+    this.renderDetails();
+    this.rebuildOverlays();
+    this.setStatus(`Added convex collision (${points.length} hull points).`);
+  }
+
+  /** Collects model vertices and returns the deduped convex-hull points (model space). */
+  private computeConvexHullPoints(): Vec3[] | null {
+    this.modelGroup.updateMatrixWorld(true);
+    const raw: Vector3[] = [];
+    const scratch = new Vector3();
+    this.modelGroup.traverse((object) => {
+      const geometry = (object as Mesh).geometry as BufferGeometry | undefined;
+      if (!geometry || typeof geometry.getAttribute !== "function") return;
+      const position = geometry.getAttribute("position");
+      if (!position) return;
+      const step = Math.max(1, Math.floor(position.count / 4000));
+      for (let i = 0; i < position.count; i += step) {
+        scratch.fromBufferAttribute(position, i).applyMatrix4((object as Mesh).matrixWorld);
+        raw.push(scratch.clone());
+      }
+    });
+    if (raw.length < 4) return null;
+    let hull: BufferGeometry;
+    try {
+      hull = new ConvexGeometry(raw);
+    } catch {
+      return null;
+    }
+    const hullPosition = hull.getAttribute("position");
+    const seen = new Set<string>();
+    const points: Vec3[] = [];
+    const vertex = new Vector3();
+    for (let i = 0; i < hullPosition.count; i += 1) {
+      vertex.fromBufferAttribute(hullPosition, i);
+      const key = `${vertex.x.toFixed(3)},${vertex.y.toFixed(3)},${vertex.z.toFixed(3)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      points.push([round(vertex.x), round(vertex.y), round(vertex.z)]);
+    }
+    hull.dispose();
+    return points.length >= 4 ? points : null;
   }
 
   private deleteSelected(): void {
@@ -572,7 +641,10 @@ export class StaticMeshEditor {
     const controls = this.transformControls;
     if (!controls) return;
     const overlay = this.overlays[this.selectedPrimitive];
-    if (!overlay || this.gizmoMode === "select") {
+    const primitive = this.collision.primitives[this.selectedPrimitive];
+    // Convex hulls store absolute points, so the unit-transform gizmo doesn't
+    // apply — they are generated/deleted, not transformed.
+    if (!overlay || this.gizmoMode === "select" || primitive?.shape === "convex") {
       controls.detach();
       return;
     }
@@ -867,11 +939,16 @@ function modeButton(mode: GizmoMode, icon: string, title: string): string {
 function unitGeometryForShape(shape: CollisionPrimitiveShape): BufferGeometry {
   if (shape === "sphere") return new SphereGeometry(0.5, 20, 14);
   if (shape === "capsule") return new CapsuleGeometry(0.5, 0.0001, 8, 16);
+  if (shape === "cylinder") return new CylinderGeometry(0.5, 0.5, 1, 24);
+  if (shape === "cone") return new ConeGeometry(0.5, 1, 24);
   return new BoxGeometry(1, 1, 1);
 }
 
 function buildPrimitiveOverlay(primitive: CollisionPrimitive, selected: boolean): PrimitiveOverlay {
-  const solidGeometry = unitGeometryForShape(primitive.shape);
+  const solidGeometry =
+    primitive.shape === "convex" && primitive.points && primitive.points.length >= 4
+      ? new ConvexGeometry(primitive.points.map((point) => new Vector3(point[0], point[1], point[2])))
+      : unitGeometryForShape(primitive.shape);
   const wireGeometry = new EdgesGeometry(solidGeometry);
   const wireMaterial = new LineBasicMaterial({
     color: selected ? WIRE_SELECTED_COLOR : WIRE_COLOR,
@@ -893,6 +970,13 @@ function buildPrimitiveOverlay(primitive: CollisionPrimitive, selected: boolean)
 
 /** Drives a unit overlay's transform from the primitive (center/rotation/size). */
 function applyPrimitiveToRoot(root: Group, primitive: CollisionPrimitive): void {
+  if (primitive.shape === "convex") {
+    // Convex geometry is built at absolute points, so the root stays at identity.
+    root.position.set(0, 0, 0);
+    root.rotation.set(0, 0, 0);
+    root.scale.set(1, 1, 1);
+    return;
+  }
   const center = primitive.center ?? [0, 0, 0];
   root.position.set(center[0], center[1], center[2]);
   const rotation = primitive.rotation ?? [0, 0, 0];

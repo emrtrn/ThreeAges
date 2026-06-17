@@ -34,8 +34,8 @@ import {
   instanceEntitiesForAsset,
   lightEntity,
 } from "@engine/scene/legacyRoomLayoutAdapter";
-import { parseShapeAssetId } from "@engine/scene/shapes";
-import { createShapePrimitiveGltf } from "./shapePrimitives";
+import { isProceduralAssetId } from "@engine/scene/shapes";
+import { createProceduralAssetGltf } from "./shapePrimitives";
 import type {
   LayoutCharacter,
   LayoutLightActor,
@@ -337,9 +337,8 @@ export function registerSceneShapeModels(
   for (const instance of layout?.instances ?? []) {
     const assetId = instance.assetId;
     if (models.has(assetId)) continue;
-    const type = parseShapeAssetId(assetId);
-    if (!type) continue;
-    const gltf = createShapePrimitiveGltf(type);
+    const gltf = createProceduralAssetGltf(assetId);
+    if (!gltf) continue;
     models.set(assetId, gltf);
     for (const [id, box] of computeModelLocalBounds(new Map([[assetId, gltf]]))) {
       localBounds.set(id, box);
@@ -355,7 +354,7 @@ export function registerSceneShapeModels(
 export function sceneModelAssetIds(layout: RoomLayout | null): string[] {
   const ids = new Set<string>();
   for (const instance of layout?.instances ?? []) {
-    if (!parseShapeAssetId(instance.assetId)) ids.add(instance.assetId);
+    if (!isProceduralAssetId(instance.assetId)) ids.add(instance.assetId);
   }
   for (const character of layout?.characters ?? []) {
     ids.add(character.assetId);

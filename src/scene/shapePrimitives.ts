@@ -17,7 +17,14 @@ import {
 } from "three";
 import type { BufferGeometry } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
-import type { ShapePrimitiveType } from "@engine/scene/shapes";
+import {
+  isPlayerStartAssetId,
+  parseShapeAssetId,
+  SHAPE_PLANE_SIZE,
+  SHAPE_PRIMITIVE_SIZE,
+  type ShapePrimitiveType,
+} from "@engine/scene/shapes";
+import { createPlayerStartMarkerGltf } from "./markerPrimitives";
 
 /** Neutral, lit material colour shared by every primitive shape. */
 const SHAPE_PRIMITIVE_COLOR = "#b9c0c6";
@@ -27,23 +34,24 @@ const SHAPE_PRIMITIVE_COLOR = "#b9c0c6";
  * 2 m (a doorway is ~1.0 units tall, the lounge sofa ~0.98 wide), so 0.5 units
  * ≈ 1 m keeps a spawned cube furniture-sized rather than door-height.
  */
-const SHAPE_SIZE = 0.5;
-/** Plane spawns as a floor tile, matching the core `floorFull` model (1 unit). */
-const PLANE_SIZE = 1;
-
 function createShapeGeometry(type: ShapePrimitiveType): BufferGeometry {
   switch (type) {
     case "cube":
-      return new BoxGeometry(SHAPE_SIZE, SHAPE_SIZE, SHAPE_SIZE);
+      return new BoxGeometry(SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE);
     case "sphere":
-      return new SphereGeometry(SHAPE_SIZE / 2, 32, 16);
+      return new SphereGeometry(SHAPE_PRIMITIVE_SIZE / 2, 32, 16);
     case "cylinder":
-      return new CylinderGeometry(SHAPE_SIZE / 2, SHAPE_SIZE / 2, SHAPE_SIZE, 32);
+      return new CylinderGeometry(
+        SHAPE_PRIMITIVE_SIZE / 2,
+        SHAPE_PRIMITIVE_SIZE / 2,
+        SHAPE_PRIMITIVE_SIZE,
+        32,
+      );
     case "cone":
-      return new ConeGeometry(SHAPE_SIZE / 2, SHAPE_SIZE, 32);
+      return new ConeGeometry(SHAPE_PRIMITIVE_SIZE / 2, SHAPE_PRIMITIVE_SIZE, 32);
     case "plane": {
       // PlaneGeometry faces +Z; lay it flat on the ground (XZ plane).
-      const geometry = new PlaneGeometry(PLANE_SIZE, PLANE_SIZE);
+      const geometry = new PlaneGeometry(SHAPE_PLANE_SIZE, SHAPE_PLANE_SIZE);
       geometry.rotateX(-Math.PI / 2);
       return geometry;
     }
@@ -81,4 +89,15 @@ export function createShapePrimitiveGltf(type: ShapePrimitiveType): GLTF {
     asset: { version: "2.0", generator: "forge-shape-primitive" },
     userData: {},
   } as unknown as GLTF;
+}
+
+/**
+ * Build the procedural GLTF for a synthetic asset id (a `shape:<type>` primitive
+ * or the `marker:playerStart` Player Start marker), or null for a manifest asset.
+ * The single dispatch point both shells use to register procedural models.
+ */
+export function createProceduralAssetGltf(assetId: string): GLTF | null {
+  if (isPlayerStartAssetId(assetId)) return createPlayerStartMarkerGltf();
+  const type = parseShapeAssetId(assetId);
+  return type ? createShapePrimitiveGltf(type) : null;
 }

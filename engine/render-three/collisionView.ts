@@ -108,9 +108,9 @@ const BOX_EDGES = [
 ] as const;
 
 /**
- * A wirebox for one authored collision primitive. Composes the placement
+ * A wire overlay for one authored collision primitive. Composes the placement
  * transform (position/rotation/scale) with the primitive's local
- * center/rotation/size, so the box follows both the model placement and the
+ * center/rotation/size, so the shape follows both the model placement and the
  * shape authored in the Static Mesh editor.
  */
 function authoredWirebox(
@@ -125,13 +125,89 @@ function authoredWirebox(
     primitive.size,
   );
   const matrix = place.multiply(local);
-  const world = UNIT_CORNERS.map((corner) => {
+  const unitSegments = unitSegmentsForShape(primitive.shape);
+  const segments = unitSegments.map((corner) => {
     const point = new Vector3(corner[0], corner[1], corner[2]).applyMatrix4(matrix);
     return [point.x, point.y, point.z] as Vec3;
   });
-  const segments = BOX_EDGES.flatMap(([a, b]) => [world[a]!, world[b]!]);
+  const world = segments.length > 0 ? segments : UNIT_CORNERS.map((corner) => {
+    const point = new Vector3(corner[0], corner[1], corner[2]).applyMatrix4(matrix);
+    return [point.x, point.y, point.z] as Vec3;
+  });
   const box = new Box3().setFromPoints(world.map((p) => new Vector3(p[0], p[1], p[2])));
   return { box, segments, size: [...primitive.size], sensor };
+}
+
+function unitSegmentsForShape(shape: CollisionPrimitive["shape"]): Vec3[] {
+  if (shape === "sphere") return sphereSegments();
+  if (shape === "capsule") return capsuleSegments();
+  if (shape === "cylinder") return cylinderSegments();
+  if (shape === "cone") return coneSegments();
+  return BOX_EDGES.flatMap(([a, b]) => [UNIT_CORNERS[a]!, UNIT_CORNERS[b]!]);
+}
+
+function sphereSegments(): Vec3[] {
+  return [
+    ...circleSegments("xy", 0, 0.5),
+    ...circleSegments("xz", 0, 0.5),
+    ...circleSegments("yz", 0, 0.5),
+  ];
+}
+
+function capsuleSegments(): Vec3[] {
+  return [
+    ...circleSegments("xz", -0.25, 0.5),
+    ...circleSegments("xz", 0.25, 0.5),
+    ...circleSegments("xy", 0, 0.5),
+    ...circleSegments("yz", 0, 0.5),
+  ];
+}
+
+function cylinderSegments(): Vec3[] {
+  const top = circleSegments("xz", 0.5, 0.5);
+  const bottom = circleSegments("xz", -0.5, 0.5);
+  const verticals: Vec3[] = [];
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (i / 8) * Math.PI * 2;
+    const x = Math.cos(angle) * 0.5;
+    const z = Math.sin(angle) * 0.5;
+    verticals.push([x, -0.5, z], [x, 0.5, z]);
+  }
+  return [...top, ...bottom, ...verticals];
+}
+
+function coneSegments(): Vec3[] {
+  const base = circleSegments("xz", -0.5, 0.5);
+  const sides: Vec3[] = [];
+  for (let i = 0; i < 8; i += 1) {
+    const angle = (i / 8) * Math.PI * 2;
+    sides.push([Math.cos(angle) * 0.5, -0.5, Math.sin(angle) * 0.5], [0, 0.5, 0]);
+  }
+  return [...base, ...sides];
+}
+
+function circleSegments(plane: "xy" | "xz" | "yz", offset: number, radius: number): Vec3[] {
+  const segments: Vec3[] = [];
+  const steps = 32;
+  for (let i = 0; i < steps; i += 1) {
+    const a = (i / steps) * Math.PI * 2;
+    const b = ((i + 1) / steps) * Math.PI * 2;
+    segments.push(circlePoint(plane, offset, radius, a), circlePoint(plane, offset, radius, b));
+  }
+  return segments;
+}
+
+function circlePoint(
+  plane: "xy" | "xz" | "yz",
+  offset: number,
+  radius: number,
+  angle: number,
+): Vec3 {
+  const a = Math.cos(angle) * radius;
+  const b = Math.sin(angle) * radius;
+  if (plane === "xy") return [a, b, offset];
+  if (plane === "xz") return [a, offset, b];
+  return [offset, a, b];
 }
 
 function wireboxSegments(position: Vec3, rotation: Vec3, collider: ColliderBox): Vec3[] {

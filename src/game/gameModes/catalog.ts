@@ -20,6 +20,9 @@ export interface GameModeOption {
 /** Built-in Game Mode used when a layout selects none / an unknown id. */
 export const DEFAULT_GAME_MODE_ID = "forge.defaultCamera";
 
+/** Third-person Game Mode that possesses a player character at the Player Start. */
+export const TPS_GAME_MODE_ID = "forge.tpsCharacter";
+
 /**
  * The selectable Game Modes, in dropdown order. The first entry is the default
  * camera mode and must keep `DEFAULT_GAME_MODE_ID`.
@@ -31,7 +34,7 @@ export const GAME_MODE_OPTIONS: readonly GameModeOption[] = [
     description: "Runtime-only WASD camera pawn. No character is possessed.",
   },
   {
-    id: "forge.tpsCharacter",
+    id: TPS_GAME_MODE_ID,
     displayName: "TPS Character",
     description: "Possesses an input-driven character with a third-person follow camera.",
   },

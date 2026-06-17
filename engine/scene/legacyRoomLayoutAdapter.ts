@@ -439,7 +439,18 @@ function bakeColliderPrimitives(
   scale: Vec3,
 ): ColliderPrimitive[] {
   return primitives.map((primitive) => {
-    // `convex` has no runtime collider yet; approximate with its bounding box.
+    // A convex hull keeps its baked points; size/center become the points' AABB.
+    if (primitive.shape === "convex" && primitive.points && primitive.points.length >= 4) {
+      const points = primitive.points.map(
+        (point) => [point[0] * scale[0], point[1] * scale[1], point[2] * scale[2]] as Vec3,
+      );
+      const aabb = aabbOfPoints(points);
+      const baked: ColliderPrimitive = { shape: "convex", size: aabb.size, points };
+      if (!isZeroVec3(aabb.center)) baked.center = aabb.center;
+      return baked;
+    }
+    // Primitive shape sizes/centers scale into the placement's local axes. Any
+    // convex missing points falls back to a box.
     const shape: ColliderShape = primitive.shape === "convex" ? "box" : primitive.shape;
     const baked: ColliderPrimitive = {
       shape,
@@ -462,6 +473,28 @@ function bakeColliderPrimitives(
     }
     return baked;
   });
+}
+
+/** AABB (size + center) of a point cloud. */
+function aabbOfPoints(points: readonly Vec3[]): { size: Vec3; center: Vec3 } {
+  let minX = Infinity;
+  let minY = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  let maxZ = -Infinity;
+  for (const point of points) {
+    minX = Math.min(minX, point[0]);
+    maxX = Math.max(maxX, point[0]);
+    minY = Math.min(minY, point[1]);
+    maxY = Math.max(maxY, point[1]);
+    minZ = Math.min(minZ, point[2]);
+    maxZ = Math.max(maxZ, point[2]);
+  }
+  return {
+    size: [maxX - minX, maxY - minY, maxZ - minZ],
+    center: [(minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2],
+  };
 }
 
 /** Encompassing AABB (size + center) of a set of baked primitives, ignoring rotation. */

@@ -58,3 +58,59 @@ export function cameraPlanarPan(
     dz: (fz * forwardAmount + rz * rightAmount) * scale,
   };
 }
+
+/** Yaw/pitch look angles in radians (engine convention: yaw 0 looks toward -z). */
+export interface LookAngles {
+  readonly yaw: number;
+  readonly pitch: number;
+}
+
+/** Default right-drag look sensitivity (radians per pixel of pointer travel). */
+export const DEFAULT_LOOK_SENSITIVITY = 0.003;
+/** Pitch clamp so the camera never flips past straight up/down. */
+export const DEFAULT_PITCH_LIMIT = Math.PI * 0.47;
+
+function clampPitch(pitch: number, limit: number): number {
+  return pitch < -limit ? -limit : pitch > limit ? limit : pitch;
+}
+
+/**
+ * Applies a pointer-drag delta to look angles. Matches the editor camera's feel:
+ * moving right turns right (yaw decreases), moving down looks down, and pitch is
+ * clamped so the view cannot flip over the poles.
+ */
+export function applyMouseLook(
+  angles: LookAngles,
+  dx: number,
+  dy: number,
+  sensitivity: number = DEFAULT_LOOK_SENSITIVITY,
+  pitchLimit: number = DEFAULT_PITCH_LIMIT,
+): LookAngles {
+  return {
+    yaw: angles.yaw - dx * sensitivity,
+    pitch: clampPitch(angles.pitch - dy * sensitivity, pitchLimit),
+  };
+}
+
+/** Derives look angles from a (not necessarily normalized) forward direction. */
+export function lookAnglesFromForward(fx: number, fy: number, fz: number): LookAngles {
+  const length = Math.hypot(fx, fy, fz);
+  if (!(length > 1e-6)) return { yaw: 0, pitch: 0 };
+  const y = fy / length;
+  const clampedY = y < -1 ? -1 : y > 1 ? 1 : y;
+  return { yaw: Math.atan2(-fx, -fz), pitch: Math.asin(clampedY) };
+}
+
+/** Unit forward direction for the given look angles (inverse of {@link lookAnglesFromForward}). */
+export function forwardFromLookAngles(angles: LookAngles): {
+  readonly x: number;
+  readonly y: number;
+  readonly z: number;
+} {
+  const cosPitch = Math.cos(angles.pitch);
+  return {
+    x: -Math.sin(angles.yaw) * cosPitch,
+    y: Math.sin(angles.pitch),
+    z: -Math.cos(angles.yaw) * cosPitch,
+  };
+}

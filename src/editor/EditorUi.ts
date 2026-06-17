@@ -20,6 +20,7 @@ import {
 } from "@engine/scene/metadataSchema";
 import type { LayoutPhysics, MetadataValue } from "@engine/scene/layout";
 import { isShapePrimitiveType } from "@engine/scene/shapes";
+import { writePlayCameraPose } from "@/play/cameraHandoff";
 import { ThumbnailRenderer } from "./ThumbnailRenderer";
 import {
   fetchProjectDir,
@@ -99,6 +100,8 @@ export class EditorUi {
   private selectedFolder = "";
   /** Content Browser asset card highlighted as selected (orange). */
   private selectedAssetId: string | null = null;
+  /** Cached 1x1 transparent image used to suppress the native drag thumbnail. */
+  private emptyDragImage: HTMLImageElement | null = null;
   private contentQuery = "";
   private contentDrawerOpen = false;
   private contentRefreshTimer = 0;
@@ -116,6 +119,8 @@ export class EditorUi {
 
   constructor(private readonly app: SceneApp) {
     document.body.classList.add("editor-mode");
+    // Preload the transparent drag image so setDragImage works on the first drag.
+    this.getEmptyDragImage();
 
     this.root = document.createElement("div");
     this.root.id = "editor-ui";
@@ -185,6 +190,8 @@ export class EditorUi {
               <button type="button" data-add-shape="cylinder">Cylinder</button>
               <button type="button" data-add-shape="cone">Cone</button>
               <button type="button" data-add-shape="plane">Plane</button>
+              <div class="add-actor-section-title">Gameplay</div>
+              <button type="button" data-add-player-start>Player Start</button>
             </div>
           </div>
           <div class="show-menu">
@@ -395,6 +402,12 @@ export class EditorUi {
       });
     });
 
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-player-start]")
+      ?.addEventListener("click", () => {
+        this.app.addPlayerStartActor();
+      });
+
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         const tab = button.dataset.inspectorTab;
@@ -543,6 +556,9 @@ export class EditorUi {
       this.setStatus(error instanceof Error ? error.message : String(error), "error");
       return;
     }
+    // Hand the current viewport camera pose to the runtime (default camera mode
+    // starts there). Temporary session override — not written to the layout.
+    writePlayCameraPose(this.app.getPlayCameraPose());
     const previewUrl = this.projectInfo?.manifest.editor.previewUrl ?? "/";
     const opened = window.open(previewUrl, "_blank", "noopener");
     if (opened) {
@@ -733,6 +749,18 @@ export class EditorUi {
     return byPath;
   }
 
+  /** A preloaded 1x1 transparent image used as the drag image so the browser
+   *  doesn't render its default card snapshot during a drag. */
+  private getEmptyDragImage(): HTMLImageElement {
+    if (!this.emptyDragImage) {
+      const image = new Image();
+      image.src =
+        "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+      this.emptyDragImage = image;
+    }
+    return this.emptyDragImage;
+  }
+
   /** Highlight a single Content Browser asset card without re-rendering the
    *  whole grid (re-renders re-apply the class from `selectedAssetId`). */
   private setSelectedAsset(assetId: string | null): void {
@@ -757,14 +785,16 @@ export class EditorUi {
     card.innerHTML = `
       <span class="asset-thumb" data-asset-thumb>${escapeHtml(item.ext.toUpperCase())}</span>
       <span class="asset-meta">
-        <strong>${escapeHtml(item.label)}</strong>
-        <small>${escapeHtml(item.category)}${item.editable ? "" : " / file only"}</small>
+        <strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong>
       </span>
     `;
     card.addEventListener("dragstart", (event) => {
       if (!item.editable) return;
       event.dataTransfer?.setData("application/x-3dgamedev-asset", item.editable.id);
       event.dataTransfer!.effectAllowed = "copy";
+      // Hide the browser's default drag image (a snapshot of the card) so only
+      // the 3D placement ghost in the viewport tracks the cursor.
+      event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
       this.setSelectedAsset(item.editable.id);
       // Spawn the live placement ghost so the viewport shows where it will land.
       this.app.beginAssetDragPreview(item.editable.id);

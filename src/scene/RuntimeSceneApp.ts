@@ -12,9 +12,13 @@ import { BehaviorSubsystem } from "@engine/behavior/behaviorSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
+import { PointerLookSource } from "@/input/pointerLookSource";
+import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 import { resolveGameMode } from "@/game/gameModes/registry";
+import { normalizeGameModeId, TPS_GAME_MODE_ID } from "@/game/gameModes/catalog";
+import { computePlayerStartSpawn } from "@/game/gameModes/playerSpawn";
 import type {
   GameModeContext,
   GameModeSession,
@@ -57,6 +61,7 @@ import {
   roomLayoutToSceneDocument,
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
+import { isPlayerStartAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import type { TransformComponent } from "@engine/scene/components";
@@ -91,6 +96,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly physicsSubsystem = new PhysicsSubsystem({ backend: "rapier" });
   private readonly audioSubsystem = new AudioSubsystem({ backend: "web-audio" });
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
+  private readonly pointerLook: PointerLookSource;
   private readonly behaviorSubsystem: BehaviorSubsystem;
   private frameHandle = 0;
   private lastTime = 0;
@@ -147,6 +153,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.renderer = runtimeCore.renderer;
     this.scene = runtimeCore.scene;
     this.camera = runtimeCore.camera;
+    this.pointerLook = new PointerLookSource(canvas);
 
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
@@ -161,6 +168,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         onGoalReached: (entityId) => {
           console.info("[runtime] goal reached", entityId);
         },
+        // The active Game Mode owns possession: only the pawn it possessed
+        // (none, under the default camera mode) is driven by player input.
+        isPlayerControlled: (entityId) =>
+          this.gameModeSession?.playerState.pawnEntityId === entityId,
       }),
       this.inputActions,
       this.syncEntityTransform,
@@ -170,6 +181,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
     this.keyboardInput.attach();
+    this.pointerLook.attach();
 
     void this.loadActiveProjectScene();
     this.handleResize();
@@ -194,6 +206,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     cancelAnimationFrame(this.frameHandle);
     window.removeEventListener("resize", this.handleResize);
     this.keyboardInput.detach();
+    this.pointerLook.detach();
     this.gameModeSession?.dispose();
     void this.engineApp.dispose();
     this.renderer.dispose();
@@ -209,6 +222,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
     this.gravityY = resolveSceneWorldSettings(this.layout).gravity[1];
     this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
+    this.applyPlayerStartSpawn();
     this.ensureDefaultLights();
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     await this.loadMissingSceneModels();
@@ -221,8 +235,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     registerSceneShapeModels(this.layout, this.models, this.localBounds);
 
     buildSceneEntities(this.layout, {
-      addInstance: (assetId, placements) =>
-        this.scene.add(this.createInstancedModel(assetId, placements)),
+      addInstance: (assetId, placements) => {
+        // Player Start markers are editor-only authoring gizmos; the runtime reads
+        // their transform (TPS spawn) but never renders them.
+        if (isPlayerStartAssetId(assetId)) return;
+        this.scene.add(this.createInstancedModel(assetId, placements));
+      },
       addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
       addLight: (light) => this.addLight(light),
     });
@@ -258,12 +276,30 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
+   * In the TPS Game Mode, moves the player character's authored start transform
+   * to the first Player Start marker (or the origin when none exists) before the
+   * scene is built, so render, physics and behavior all begin at the spawn point.
+   * No-op for other modes (the default camera mode possesses no character).
+   */
+  private applyPlayerStartSpawn(): void {
+    if (!this.layout) return;
+    if (normalizeGameModeId(this.layout.worldSettings?.gameMode) !== TPS_GAME_MODE_ID) return;
+    const spawn = computePlayerStartSpawn(this.layout);
+    if (!spawn) return;
+    const character = this.layout.characters[spawn.characterIndex];
+    if (!character) return;
+    character.position = [...spawn.position];
+    if (spawn.yawDeg !== null) character.rotation = [0, spawn.yawDeg, 0];
+  }
+
+  /**
    * Resolves the layout's selected Game Mode (Unreal's GameMode analogue),
    * spawns + possesses its default pawn, then attaches ambient single-clip
    * animation to every character the mode did not possess. Unknown/absent
    * `worldSettings.gameMode` falls back to the default camera mode.
    */
   private startGameMode(): void {
+    this.applyPlayCameraHandoff();
     const session = resolveGameMode(this.layout?.worldSettings?.gameMode).createSession(
       this.createGameModeContext(),
     );
@@ -280,6 +316,27 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
   }
 
+  /**
+   * If the editor's Play button handed off a viewport camera pose, place the
+   * runtime camera there before the Game Mode possesses it (the default camera
+   * mode then seeds its look angles from this pose). One-shot: opening `/`
+   * directly has no handoff and keeps the scene's default framing. The TPS mode
+   * overrides the camera each tick, so the handoff only matters for default mode.
+   */
+  private applyPlayCameraHandoff(): void {
+    const pose = consumePlayCameraPose();
+    if (!pose) return;
+    this.camera.position.set(pose.position[0], pose.position[1], pose.position[2]);
+    this.camera.quaternion.set(
+      pose.quaternion[0],
+      pose.quaternion[1],
+      pose.quaternion[2],
+      pose.quaternion[3],
+    );
+    this.camera.updateMatrixWorld();
+    this.cameraViewTouched = true;
+  }
+
   private createGameModeContext(): GameModeContext {
     return {
       camera: this.camera,
@@ -290,6 +347,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       markCameraControlled: () => {
         this.cameraViewTouched = true;
       },
+      consumeLookDelta: () => this.pointerLook.consume(),
     };
   }
 
@@ -316,8 +374,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     for (const instance of this.layout.instances) assetIds.add(instance.assetId);
     for (const character of this.layout.characters) assetIds.add(character.assetId);
     const defs = new Map<string, AssetCollisionDef>();
+    for (const assetId of assetIds) {
+      const def = shapeAssetCollisionDef(assetId);
+      if (def && def.primitives.length > 0) defs.set(assetId, def);
+    }
     await Promise.all(
       [...assetIds].map(async (assetId) => {
+        if (defs.has(assetId)) return;
         const file = manifest.assets.find((entry) => entry.id === assetId)?.file;
         if (!file) return;
         const def = await loadAssetCollision(file);

@@ -54,8 +54,7 @@ body.editor-mode #debug-stats {
 
 .editor-brand span,
 .detail-heading span,
-.empty-details span,
-.asset-meta small {
+.empty-details span {
   color: #aeb8bd;
   font-size: 11px;
 }
@@ -782,8 +781,7 @@ body.editor-mode #debug-stats {
 
 .content-drawer-title span,
 .content-path,
-.content-drawer-status,
-.asset-meta small {
+.content-drawer-status {
   color: #aeb8bd;
   font-size: 11px;
 }
@@ -881,9 +879,9 @@ body.editor-mode #debug-stats {
 .editor-shell .asset-card {
   width: 100%;
   min-width: 0;
-  height: 142px;
+  height: 126px;
   display: grid;
-  grid-template-rows: 1fr 36px;
+  grid-template-rows: 1fr 18px;
   gap: 6px;
   border-radius: 6px;
   padding: 6px;
@@ -938,18 +936,14 @@ body.editor-mode #debug-stats {
 
 .asset-meta {
   display: grid;
-  gap: 2px;
+  align-items: center;
   min-width: 0;
 }
 
-.asset-meta strong,
-.asset-meta small {
+.asset-meta strong {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.asset-meta strong {
   font-size: 12px;
 }
 
@@ -1041,8 +1035,8 @@ body.editor-mode #debug-stats {
   }
 
   .editor-shell .asset-card {
-    height: 128px;
-    grid-template-rows: 1fr 34px;
+    height: 118px;
+    grid-template-rows: 1fr 18px;
   }
 
   .outliner-row {

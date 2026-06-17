@@ -32,6 +32,14 @@ export interface BehaviorRegistryOptions {
    * The runtime shell uses it for feedback (e.g. a log); headless tests spy on it.
    */
   onGoalReached?: (entityId: string) => void;
+  /**
+   * Whether the named entity is the player-controlled (possessed) pawn this Play
+   * boot. `input-move` only reads input + moves when this is true, so a character
+   * carrying the behavior stays put unless the active Game Mode possesses it
+   * (e.g. the default camera mode possesses no character). Absent means "always
+   * controlled" so headless tests drive the behavior directly.
+   */
+  isPlayerControlled?: (entityId: string) => boolean;
 }
 
 function numberParam(value: unknown, fallback: number): number {
@@ -101,10 +109,16 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   const getGravityY = options.getGravityY ?? (() => DEFAULT_GRAVITY_Y);
   const reportLocomotion = options.reportLocomotion;
   const onGoalReached = options.onGoalReached;
+  const isPlayerControlled = options.isPlayerControlled ?? (() => true);
   const vertical = new Map<string, PlayerVertical>();
   const reachedGoals = new Set<string>();
 
   const inputMove: BehaviorUpdate = (context) => {
+    // Only the possessed pawn responds to input. An authored `input-move`
+    // character left unpossessed (e.g. under the default camera Game Mode) stays
+    // exactly where it was placed instead of drifting on WASD.
+    if (!isPlayerControlled(context.entityId)) return;
+
     const { engine, actions, params, transform } = context;
 
     // Planar movement (G1) resolved against static blockers (G3), then facing.

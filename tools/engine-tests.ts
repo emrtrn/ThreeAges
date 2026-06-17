@@ -64,9 +64,16 @@ import {
   GAME_MODE_OPTIONS,
   isKnownGameModeId,
   normalizeGameModeId,
+  TPS_GAME_MODE_ID,
 } from "../src/game/gameModes/catalog";
 import { resolveGameMode } from "../src/game/gameModes/registry";
-import { cameraPlanarPan } from "../src/game/gameModes/cameraControl";
+import {
+  applyMouseLook,
+  cameraPlanarPan,
+  forwardFromLookAngles,
+  lookAnglesFromForward,
+} from "../src/game/gameModes/cameraControl";
+import { computePlayerStartSpawn } from "../src/game/gameModes/playerSpawn";
 import { defaultCameraGameMode } from "../src/game/gameModes/defaultCameraGameMode";
 import { tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
 import type {
@@ -134,6 +141,16 @@ import {
   resolvePhysicalMaterial,
   type AssetCollisionDef,
 } from "../engine/scene/collision";
+import {
+  isPlayerStartAssetId,
+  isProceduralAssetId,
+  PLAYER_START_ASSET_ID,
+  SHAPE_PLANE_COLLISION_THICKNESS,
+  SHAPE_PLANE_SIZE,
+  SHAPE_PRIMITIVE_SIZE,
+  shapeAssetCollisionDef,
+} from "../engine/scene/shapes";
+import { createProceduralAssetGltf } from "../src/scene/shapePrimitives";
 import type { LightObjectRecord } from "../engine/render-three/lights";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import {
@@ -1496,6 +1513,52 @@ await checkAsync("rapier builds a compound collider per authored primitive (gap 
     // ...but a probe sitting in the gap between the two boxes does not (proving
     // the per-primitive compound is used rather than the encompassing AABB box).
     assert.deepEqual(physics.contactsForEntity("gap"), []);
+    await app.dispose();
+  } finally {
+    console.warn = warn;
+  }
+});
+
+await checkAsync("rapier builds a convex collider from hull points", async () => {
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  physics.setGravity([0, 0, 0]);
+  physics.setEntities([
+    {
+      id: "hull",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1, 1, 1],
+          isStatic: true,
+          isSensor: false,
+          primitives: [{ shape: "convex", size: [1, 1, 1], points: UNIT_CUBE_CORNERS }],
+        },
+      },
+    },
+    {
+      id: "probe",
+      components: {
+        Transform: { position: [0.3, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false, simulatePhysics: true },
+      },
+    },
+  ]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) return;
+    warn(...args);
+  };
+  try {
+    await app.init();
+    assert.equal(physics.usesRapier(), true);
+    app.update(1 / 60);
+    assert.ok(
+      physics.contactsForEntity("probe").some((c) => c.a === "hull" || c.b === "hull"),
+      "probe overlapping the convex hull should contact it",
+    );
     await app.dispose();
   } finally {
     console.warn = warn;
@@ -3080,6 +3143,86 @@ check("physical material id sets collider friction/restitution", () => {
   assert.ok(Math.abs((collider?.restitution ?? -1) - 0.7) < 1e-9, `restitution=${collider?.restitution}`);
 });
 
+const UNIT_CUBE_CORNERS: [number, number, number][] = [
+  [-0.5, -0.5, -0.5],
+  [0.5, -0.5, -0.5],
+  [0.5, 0.5, -0.5],
+  [-0.5, 0.5, -0.5],
+  [-0.5, -0.5, 0.5],
+  [0.5, -0.5, 0.5],
+  [0.5, 0.5, 0.5],
+  [-0.5, 0.5, 0.5],
+];
+
+check("adapter keeps convex hull points and derives their AABB", () => {
+  const convexLayout: RoomLayout = {
+    schema: 1,
+    name: "convex-fixture",
+    loadGroups: [],
+    instances: [{ assetId: "rock", placements: [{ position: [0, 0, 0], scale: 2 }] }],
+    characters: [],
+    lights: [],
+  };
+  const defs = new Map<string, AssetCollisionDef>([
+    [
+      "rock",
+      {
+        primitives: [{ shape: "convex", size: [1, 1, 1], points: UNIT_CUBE_CORNERS }],
+        complexity: "projectDefault",
+        preset: "blockAll",
+      },
+    ],
+  ]);
+  const doc = roomLayoutToSceneDocument(convexLayout, { collisionDefs: defs });
+  const entity = doc.entities.find((e) => e.id === instanceEntityId("rock", 0));
+  const primitive = (entity ? readColliderComponent(entity) : undefined)?.primitives?.[0];
+  assert.equal(primitive?.shape, "convex");
+  assert.equal(primitive?.points?.length, 8);
+  // Placement scale 2 is baked into both the points and the derived AABB size.
+  assert.deepEqual(primitive?.points?.[6], [1, 1, 1]);
+  assert.deepEqual(primitive?.size, [2, 2, 2]);
+});
+
+check("built-in Add Actor shapes provide shape-specific collision defs", () => {
+  assert.deepEqual(shapeAssetCollisionDef("shape:cube")?.primitives, [
+    { shape: "box", size: [SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE] },
+  ]);
+  assert.deepEqual(shapeAssetCollisionDef("shape:sphere")?.primitives, [
+    { shape: "sphere", size: [SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE] },
+  ]);
+  assert.deepEqual(shapeAssetCollisionDef("shape:cylinder")?.primitives, [
+    { shape: "cylinder", size: [SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE] },
+  ]);
+  assert.deepEqual(shapeAssetCollisionDef("shape:cone")?.primitives, [
+    { shape: "cone", size: [SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE, SHAPE_PRIMITIVE_SIZE] },
+  ]);
+  assert.deepEqual(shapeAssetCollisionDef("shape:plane")?.primitives, [
+    { shape: "box", size: [SHAPE_PLANE_SIZE, SHAPE_PLANE_COLLISION_THICKNESS, SHAPE_PLANE_SIZE] },
+  ]);
+  assert.equal(shapeAssetCollisionDef("chair"), null);
+});
+
+check("adapter uses Add Actor sphere collision instead of an auto box", () => {
+  const shapeLayout: RoomLayout = {
+    schema: 1,
+    name: "shape-collision-fixture",
+    loadGroups: [],
+    instances: [{ assetId: "shape:sphere", placements: [{ position: [0, 0, 0], scale: 2 }] }],
+    characters: [],
+    lights: [],
+  };
+  const def = shapeAssetCollisionDef("shape:sphere");
+  assert.ok(def);
+  const doc = roomLayoutToSceneDocument(shapeLayout, {
+    collisionDefs: new Map([["shape:sphere", def]]),
+  });
+  const entity = doc.entities.find((e) => e.id === instanceEntityId("shape:sphere", 0));
+  const collider = entity ? readColliderComponent(entity) : undefined;
+  assert.equal(collider?.shape, "box");
+  assert.equal(collider?.primitives?.[0]?.shape, "sphere");
+  assert.deepEqual(collider?.primitives?.[0]?.size, [1, 1, 1]);
+});
+
 check("collisionWireboxes draws authored primitives over the auto bounding box", () => {
   const wireLayout: RoomLayout = {
     schema: 1,
@@ -3221,10 +3364,13 @@ function makeGameModeContext(options: {
   actions?: ActionMap;
   characters?: RuntimeCharacterRef[];
   locomotion?: Map<string, LocomotionInput>;
+  /** Look deltas to hand out one-per-call (e.g. simulate right-drag turns). */
+  lookDeltas?: { dx: number; dy: number }[];
 }): { context: GameModeContext; mixers: AnimationMixer[]; cameraControlled: () => boolean } {
   let controlled = false;
   const mixers: AnimationMixer[] = [];
   const locomotion = options.locomotion ?? new Map<string, LocomotionInput>();
+  const lookDeltas = options.lookDeltas ? [...options.lookDeltas] : [];
   const context: GameModeContext = {
     camera: options.camera ?? new PerspectiveCamera(),
     actions: options.actions ?? new ActionMap(),
@@ -3234,6 +3380,7 @@ function makeGameModeContext(options: {
     markCameraControlled: () => {
       controlled = true;
     },
+    consumeLookDelta: () => lookDeltas.shift() ?? { dx: 0, dy: 0 },
   };
   return { context, mixers, cameraControlled: () => controlled };
 }
@@ -3349,6 +3496,154 @@ check("tps mode prefers a metadata-tagged player over input-move order", () => {
   assert.equal(session.playerState.pawnEntityId, characterEntityId(1));
 });
 
+check("input-move behavior: an unpossessed character ignores movement input", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  actions.handleDown("KeyW");
+  actions.advance();
+  const entity: Entity = {
+    id: "character:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "input-move", params: { speed: 5 } },
+    },
+  };
+
+  // Not the possessed pawn -> stays put.
+  let unpossessed: { position: number[] } | null = null;
+  const idle = new BehaviorSubsystem(
+    createBehaviorRegistry({ isPlayerControlled: () => false }),
+    actions,
+    (_id, transform) => {
+      unpossessed = transform;
+    },
+  );
+  idle.setEntities([entity]);
+  idle.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+  assert.deepEqual(unpossessed!.position, [0, 0, 0]);
+
+  // The possessed pawn moves on the same input.
+  let possessed: { position: number[] } | null = null;
+  const driven = new BehaviorSubsystem(
+    createBehaviorRegistry({ isPlayerControlled: () => true }),
+    actions,
+    (_id, transform) => {
+      possessed = transform;
+    },
+  );
+  driven.setEntities([entity]);
+  driven.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+  assert.notDeepEqual(possessed!.position, [0, 0, 0]);
+});
+
+check("applyMouseLook turns with the pointer delta and clamps pitch", () => {
+  const turned = applyMouseLook({ yaw: 0, pitch: 0 }, 100, 0, 0.01, 1);
+  assert.ok(Math.abs(turned.yaw - -1) < 1e-9);
+  assert.equal(applyMouseLook({ yaw: 0, pitch: 0 }, 0, -1000, 0.01, 1).pitch, 1);
+  assert.equal(applyMouseLook({ yaw: 0, pitch: 0 }, 0, 1000, 0.01, 1).pitch, -1);
+});
+
+check("look angles round-trip through a forward direction", () => {
+  const angles = { yaw: 0.6, pitch: -0.3 };
+  const dir = forwardFromLookAngles(angles);
+  const back = lookAnglesFromForward(dir.x, dir.y, dir.z);
+  assert.ok(Math.abs(back.yaw - angles.yaw) < 1e-9, `yaw ${back.yaw}`);
+  assert.ok(Math.abs(back.pitch - angles.pitch) < 1e-9, `pitch ${back.pitch}`);
+});
+
+check("default camera mode turns the view on a right-drag look delta", () => {
+  const camera = new PerspectiveCamera();
+  const { context } = makeGameModeContext({ camera, lookDeltas: [{ dx: 100, dy: 0 }] });
+  const session = defaultCameraGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess();
+  session.update(0.016);
+  const dir = new Vector3();
+  camera.getWorldDirection(dir);
+  assert.ok(dir.x > 0.1, `expected the camera to yaw right, got x=${dir.x}`);
+});
+
+check("player start marker is a procedural asset excluded from manifest loading", () => {
+  assert.ok(isPlayerStartAssetId(PLAYER_START_ASSET_ID));
+  assert.equal(isPlayerStartAssetId("furniture.sofa"), false);
+  assert.ok(isProceduralAssetId(PLAYER_START_ASSET_ID));
+  assert.ok(isProceduralAssetId("shape:cube"));
+  assert.equal(isProceduralAssetId("furniture.sofa"), false);
+  // The dispatcher builds a model for the marker but not for a manifest asset.
+  assert.ok(createProceduralAssetGltf(PLAYER_START_ASSET_ID)?.scene);
+  assert.equal(createProceduralAssetGltf("furniture.sofa"), null);
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "marker",
+    loadGroups: [],
+    instances: [
+      { assetId: PLAYER_START_ASSET_ID, placements: [{ position: [0, 0, 0] }] },
+      { assetId: "furniture.sofa", placements: [{ position: [0, 0, 0] }] },
+    ],
+    characters: [],
+    lights: [],
+  };
+  assert.deepEqual(sceneModelAssetIds(layout), ["furniture.sofa"]);
+});
+
+check("computePlayerStartSpawn: a marker sets the player's spawn position and yaw", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "spawn",
+    loadGroups: [],
+    instances: [
+      { assetId: PLAYER_START_ASSET_ID, placements: [{ position: [3, 0, -2], rotation: [0, 90, 0] }] },
+    ],
+    characters: [{ assetId: "hero", position: [9, 9, 9], behavior: { script: "input-move" } }],
+    lights: [],
+  };
+  assert.deepEqual(computePlayerStartSpawn(layout), {
+    characterIndex: 0,
+    position: [3, 0, -2],
+    yawDeg: 90,
+  });
+});
+
+check("computePlayerStartSpawn: no marker spawns at the origin and keeps facing", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "spawn",
+    loadGroups: [],
+    instances: [],
+    characters: [{ assetId: "hero", position: [9, 9, 9], behavior: { script: "input-move" } }],
+    lights: [],
+  };
+  assert.deepEqual(computePlayerStartSpawn(layout), {
+    characterIndex: 0,
+    position: [0, 0, 0],
+    yawDeg: null,
+  });
+});
+
+check("computePlayerStartSpawn: prefers a tagged player and is null without any", () => {
+  const tagged: RoomLayout = {
+    schema: 1,
+    name: "spawn",
+    loadGroups: [],
+    instances: [],
+    characters: [
+      { assetId: "a", position: [0, 0, 0], behavior: { script: "input-move" } },
+      { assetId: "b", position: [0, 0, 0], metadata: { player: true } },
+    ],
+    lights: [],
+  };
+  assert.equal(computePlayerStartSpawn(tagged)?.characterIndex, 1);
+  const none: RoomLayout = {
+    schema: 1,
+    name: "spawn",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    lights: [],
+  };
+  assert.equal(computePlayerStartSpawn(none), null);
+  assert.equal(TPS_GAME_MODE_ID, "forge.tpsCharacter");
+});
+
 // Collision model: preset resolution + defaults.
 check("blockAll preset blocks every channel with query+physics", () => {
   const profile = resolveCollisionProfile("blockAll");
@@ -3442,12 +3737,14 @@ check("asset collision validator keeps primitives, preset, complexity", () => {
     primitives: [
       { shape: "box", size: [1, 2, 3], center: [0, 1, 0] },
       { shape: "sphere", size: [2, 2, 2] },
+      { shape: "cylinder", size: [1, 2, 1] },
+      { shape: "cone", size: [1, 2, 1] },
     ],
     complexity: "simpleAndComplex",
     preset: "blockAll",
     doubleSided: true,
   });
-  assert.equal((def.primitives as unknown[]).length, 2);
+  assert.equal((def.primitives as unknown[]).length, 4);
   assert.equal(def.complexity, "simpleAndComplex");
   assert.equal(def.preset, "blockAll");
   assert.equal(def.doubleSided, true);

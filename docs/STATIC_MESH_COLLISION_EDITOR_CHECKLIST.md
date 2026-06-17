@@ -282,6 +282,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] Placement `collisionPreset` → runtime collider eşlemesi (`legacyRoomLayoutAdapter`): `none`=collider yok, `query`=sensor, `physics/queryAndPhysics`=solid
 - [x] Asset sidecar'larını async yükle (SceneApp `refreshCollisionDefs` + RuntimeSceneApp `loadCollisionDefs`, manifest dosya yolundan)
 - [x] Asset primitiflerini runtime **fizik** collider'ına derle: `ColliderComponent.primitives[]`, adapter scale-baked + AABB, Rapier **compound** (primitif başına collider). Editör (SceneApp) ve oyun (RuntimeSceneApp) ikisinde de bağlı
+- [x] Add Actor built-in shape'leri (`shape:sphere`, `shape:cylinder`, `shape:cone`) sidecar gerektirmeden kendi collision primitive'lerini kullanır; cube/plane box olarak kalır
 - [ ] `convex` primitif şu an bounding-box ile yaklaşık (gerçek convex hull sonra)
 - [ ] Kanal yanıtları → Rapier **collision groups** (membership/filter bitmask)
 - [ ] Convex hull (Rapier `convexHull`) ve (ertele) trimesh complex collision

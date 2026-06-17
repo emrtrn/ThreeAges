@@ -398,6 +398,7 @@ function clonePrimitive(primitive: ColliderPrimitive): ColliderPrimitive {
   const copy: ColliderPrimitive = { shape: primitive.shape, size: [...primitive.size] };
   if (primitive.center) copy.center = [...primitive.center];
   if (primitive.rotation) copy.rotation = [...primitive.rotation];
+  if (primitive.points) copy.points = primitive.points.map((point) => [...point] as typeof point);
   return copy;
 }
 
@@ -413,15 +414,38 @@ function colliderDescsForBody(RAPIER: RapierModule, body: PhysicsBody) {
   const restitution = body.collider.restitution ?? DEFAULT_RESTITUTION;
   const groups = body.collider.collisionGroups;
   return primitives.map((primitive) => {
-    const center = primitive.center ?? [0, 0, 0];
-    const desc = colliderShapeDesc(RAPIER, primitive.shape, primitive.size)
-      .setTranslation(center[0] ?? 0, center[1] ?? 0, center[2] ?? 0)
-      .setFriction(friction)
-      .setRestitution(restitution);
-    if (primitive.rotation) desc.setRotation(quaternionFromEulerDegrees(primitive.rotation));
+    const desc = primitiveColliderDesc(RAPIER, primitive).setFriction(friction).setRestitution(restitution);
     if (groups !== undefined) desc.setCollisionGroups(groups);
     return desc;
   });
+}
+
+/**
+ * A collider descriptor for one primitive. A convex primitive builds a Rapier
+ * convex hull from its (already body-local) points; everything else is a
+ * translated/rotated box/sphere/capsule. A degenerate hull falls back to the
+ * primitive's bounding box.
+ */
+function primitiveColliderDesc(RAPIER: RapierModule, primitive: ColliderPrimitive) {
+  if (primitive.shape === "convex" && primitive.points && primitive.points.length >= 4) {
+    const flat = new Float32Array(primitive.points.length * 3);
+    primitive.points.forEach((point, index) => {
+      flat[index * 3] = point[0];
+      flat[index * 3 + 1] = point[1];
+      flat[index * 3 + 2] = point[2];
+    });
+    const hull = RAPIER.ColliderDesc.convexHull(flat);
+    if (hull) return hull; // points are absolute (body-local) — no extra translation
+  }
+  const center = primitive.center ?? [0, 0, 0];
+  const shape = primitive.shape === "convex" ? "box" : primitive.shape;
+  const desc = colliderShapeDesc(RAPIER, shape, primitive.size).setTranslation(
+    center[0] ?? 0,
+    center[1] ?? 0,
+    center[2] ?? 0,
+  );
+  if (primitive.rotation) desc.setRotation(quaternionFromEulerDegrees(primitive.rotation));
+  return desc;
 }
 
 function colliderDescForBody(RAPIER: RapierModule, body: PhysicsBody) {
@@ -476,6 +500,14 @@ function colliderShapeDesc(
     const radius = Math.max(size[0] ?? 1, size[2] ?? 1) / 2;
     const halfHeight = Math.max(0, ((size[1] ?? 1) / 2) - radius);
     return RAPIER.ColliderDesc.capsule(halfHeight, radius);
+  }
+  if (shape === "cylinder") {
+    const radius = Math.max(size[0] ?? 1, size[2] ?? 1) / 2;
+    return RAPIER.ColliderDesc.cylinder((size[1] ?? 1) / 2, radius);
+  }
+  if (shape === "cone") {
+    const radius = Math.max(size[0] ?? 1, size[2] ?? 1) / 2;
+    return RAPIER.ColliderDesc.cone((size[1] ?? 1) / 2, radius);
   }
   return RAPIER.ColliderDesc.cuboid(
     (size[0] ?? 1) / 2,

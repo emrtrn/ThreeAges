@@ -102,6 +102,12 @@ export interface GameModeContext {
    * resize handler stops re-framing it.
    */
   markCameraControlled(): void;
+  /**
+   * Pointer look delta (pixels) accumulated since the last call, from a held
+   * right-mouse drag on the canvas. Resets on read. The default camera mode turns
+   * this into yaw/pitch; modes that ignore it (TPS) simply never call it.
+   */
+  consumeLookDelta(): { dx: number; dy: number };
 }
 
 /**

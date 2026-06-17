@@ -37,6 +37,7 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
+import type { PlayCameraPose } from "@/play/cameraHandoff";
 import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
 import {
   dirnameProjectPath,
@@ -96,11 +97,12 @@ import {
 } from "@engine/scene/lights";
 import {
   formatShapeType,
-  parseShapeAssetId,
+  PLAYER_START_ASSET_ID,
+  shapeAssetCollisionDef,
   shapeAssetId,
   type ShapePrimitiveType,
 } from "@engine/scene/shapes";
-import { createShapePrimitiveGltf } from "./shapePrimitives";
+import { createProceduralAssetGltf } from "./shapePrimitives";
 import {
   readPivot,
   readRotation,
@@ -780,6 +782,23 @@ export class SceneApp {
     this.onStatus?.(`Focused ${selected.label}.`, "info");
   }
 
+  /**
+   * Current viewport camera pose, for the Play button to hand off to the runtime
+   * so the default camera mode starts where the editor was looking. Editor-only
+   * handoff — never written into the layout.
+   */
+  getPlayCameraPose(): PlayCameraPose {
+    return {
+      position: [this.camera.position.x, this.camera.position.y, this.camera.position.z],
+      quaternion: [
+        this.camera.quaternion.x,
+        this.camera.quaternion.y,
+        this.camera.quaternion.z,
+        this.camera.quaternion.w,
+      ],
+    };
+  }
+
   setTechnicalView(view: "top" | "front" | "side"): void {
     const target = this.getCameraOrbitTarget();
     const distance = clamp(this.camera.position.distanceTo(target), 3, 10);
@@ -1306,6 +1325,40 @@ export class SceneApp {
   }
 
   /**
+   * Spawn a Player Start marker (Unreal's PlayerStart). It persists as an
+   * ordinary instance under the synthetic `marker:playerStart` asset, so it
+   * reuses the instance transform/selection/save pipeline; the runtime skips
+   * rendering it and reads its transform as the TPS spawn point. Non-colliding.
+   */
+  addPlayerStartActor(): void {
+    if (!this.layout) return;
+    const assetId = PLAYER_START_ASSET_ID;
+    this.ensureShapeModel(assetId);
+
+    const instance = this.layout.instances.find((entry) => entry.assetId === assetId);
+    const placementIndex = instance?.placements.length ?? 0;
+    const placement: LayoutPlacement = {
+      name: this.uniqueInstanceName("Player Start"),
+      position: this.defaultActorPosition(3),
+      scale: 1,
+      collision: false,
+    };
+    const selection: Selection = { kind: "instance", assetId, placementIndex };
+
+    this.executeCommand({
+      label: "Add Player Start",
+      redo: () => {
+        this.insertInstancePlacement(assetId, placementIndex, placement);
+        this.select(selection);
+      },
+      undo: () => {
+        this.removeInstancePlacement(assetId, placementIndex);
+        this.select(null);
+      },
+    });
+  }
+
+  /**
    * Resolve the snapped world transform for dropping an instance asset under the
    * cursor. Shared by the live drag ghost and the committed drop so the preview
    * lands exactly where the asset will. Returns null when the cursor isn't over
@@ -1521,12 +1574,11 @@ export class SceneApp {
     registerSceneShapeModels(this.layout, this.models, this.localBounds);
   }
 
-  /** Lazily build + register the procedural model and bounds for a shape asset. */
+  /** Lazily build + register the procedural model and bounds for a shape/marker asset. */
   private ensureShapeModel(assetId: string): void {
     if (this.models.has(assetId)) return;
-    const type = parseShapeAssetId(assetId);
-    if (!type) return;
-    const gltf = createShapePrimitiveGltf(type);
+    const gltf = createProceduralAssetGltf(assetId);
+    if (!gltf) return;
     this.models.set(assetId, gltf);
     for (const [id, box] of computeModelLocalBounds(new Map([[assetId, gltf]]))) {
       this.localBounds.set(id, box);
@@ -2507,8 +2559,13 @@ export class SceneApp {
     for (const instance of this.layout.instances) assetIds.add(instance.assetId);
     for (const character of this.layout.characters) assetIds.add(character.assetId);
     const next = new Map<string, AssetCollisionDef>();
+    for (const assetId of assetIds) {
+      const def = shapeAssetCollisionDef(assetId);
+      if (def && def.primitives.length > 0) next.set(assetId, def);
+    }
     await Promise.all(
       [...assetIds].map(async (assetId) => {
+        if (next.has(assetId)) return;
         const file = this.manifest?.assets.find((entry) => entry.id === assetId)?.file;
         if (!file) return;
         const def = await loadAssetCollision(file);
