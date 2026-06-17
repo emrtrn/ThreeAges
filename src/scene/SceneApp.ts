@@ -114,7 +114,8 @@ import type {
   RoomLayout,
   Vec3,
 } from "@engine/scene/layout";
-import type { CollisionPresetId } from "@engine/scene/collision";
+import type { AssetCollisionDef, CollisionPresetId } from "@engine/scene/collision";
+import { loadAssetCollision } from "@/editor/assetCollisionStore";
 import {
   lightEntity,
   roomLayoutToSceneDocument,
@@ -319,6 +320,8 @@ export class SceneApp {
   private characterObjects: Object3D[] = [];
   private lightObjects: LightObjectRecord[] = [];
   private localBounds = new Map<string, Box3>();
+  /** Authored asset collision definitions (sidecars) for assets that have primitives. */
+  private collisionDefs = new Map<string, AssetCollisionDef>();
   private assetPlacements = new Map<string, EditableAsset["placement"]>();
   /** Active selection, delegating to the store so ownership lives there. */
   private get selection(): Selection | null {
@@ -1397,6 +1400,10 @@ export class SceneApp {
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
+
+    // Warm the authored-collision sidecar cache so the first "Show > Collision"
+    // toggle reflects authored shapes immediately.
+    void this.refreshCollisionDefs();
   }
 
   /** Register synthetic models for any `shape:<type>` instances in the layout. */
@@ -2375,6 +2382,32 @@ export class SceneApp {
     if (this.showCollision === visible) return;
     this.showCollision = visible;
     this.updateCollisionBoxes();
+    // Pick up sidecars authored/edited since the scene loaded, then rebuild.
+    if (visible) void this.refreshCollisionDefs();
+  }
+
+  /**
+   * Loads authored collision sidecars (`*.collision.json`) for the assets in the
+   * current layout into `collisionDefs`, then rebuilds the overlay. Async and
+   * race-safe: only definitions with primitives are kept (others fall back to the
+   * auto bounding box). Shape actors aren't in the manifest, so they are skipped.
+   */
+  private async refreshCollisionDefs(): Promise<void> {
+    if (!this.manifest || !this.layout) return;
+    const assetIds = new Set<string>();
+    for (const instance of this.layout.instances) assetIds.add(instance.assetId);
+    for (const character of this.layout.characters) assetIds.add(character.assetId);
+    const next = new Map<string, AssetCollisionDef>();
+    await Promise.all(
+      [...assetIds].map(async (assetId) => {
+        const file = this.manifest?.assets.find((entry) => entry.id === assetId)?.file;
+        if (!file) return;
+        const def = await loadAssetCollision(file);
+        if (def.primitives.length > 0) next.set(assetId, def);
+      }),
+    );
+    this.collisionDefs = next;
+    this.updateCollisionBoxes();
   }
 
   /**
@@ -2385,7 +2418,11 @@ export class SceneApp {
   private updateCollisionBoxes(): void {
     this.removeCollisionBoxes();
     if (!this.showCollision || !this.layout) return;
-    for (const { box, segments, sensor } of collisionWireboxes(this.layout, this.localBounds)) {
+    for (const { box, segments, sensor } of collisionWireboxes(
+      this.layout,
+      this.localBounds,
+      this.collisionDefs,
+    )) {
       if (box.isEmpty() || segments.length === 0) continue;
       const geometry = new BufferGeometry();
       geometry.setAttribute(

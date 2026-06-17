@@ -1,7 +1,8 @@
 import { Box3, Vector3 } from "three";
 
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
-import { readRotation } from "@engine/scene/transform";
+import type { AssetCollisionDef, CollisionPrimitive } from "@engine/scene/collision";
+import { readRotation, readScale } from "@engine/scene/transform";
 import { colliderBoxFromBounds, composeTransformMatrix, type ColliderBox } from "./transforms";
 
 /** A world-aligned collider box plus whether its owner is a (non-blocking) sensor. */
@@ -29,37 +30,108 @@ export interface CollisionWirebox {
 export function collisionWireboxes(
   layout: RoomLayout,
   localBounds: ReadonlyMap<string, Box3>,
+  collisionDefs?: ReadonlyMap<string, AssetCollisionDef>,
 ): CollisionWirebox[] {
   const boxes: CollisionWirebox[] = [];
+  const emit = (
+    source: ColliderSource,
+    assetId: string,
+    sensor: boolean,
+  ): void => {
+    if (source.collision === false && source.simulatePhysics !== true) return;
+    // Authored simple-collision primitives (from the Static Mesh editor's
+    // sidecar) replace the auto bounding box when present.
+    const def = collisionDefs?.get(assetId);
+    if (def && def.primitives.length > 0) {
+      for (const primitive of def.primitives) {
+        boxes.push(authoredWirebox(source, primitive, sensor));
+      }
+      return;
+    }
+    const bounds = localBounds.get(assetId);
+    if (!bounds || bounds.isEmpty()) return;
+    const collider = colliderBoxFromBounds(bounds, source);
+    boxes.push({
+      box: boxFromColliderBox(source.position, collider),
+      segments: wireboxSegments(source.position, readRotation(source), collider),
+      size: [...collider.size],
+      sensor,
+    });
+  };
+
   for (const instance of layout.instances) {
-    const bounds = localBounds.get(instance.assetId);
-    if (!bounds || bounds.isEmpty()) continue;
     for (const placement of instance.placements) {
-      if (placement.collision === false && placement.simulatePhysics !== true) continue;
-      const collider = colliderBoxFromBounds(bounds, placement);
-      const segments = wireboxSegments(placement.position, readRotation(placement), collider);
-      boxes.push({
-        box: boxFromColliderBox(placement.position, collider),
-        segments,
-        size: [...collider.size],
-        sensor: placement.sensor === true,
-      });
+      emit(placement, instance.assetId, placement.sensor === true);
     }
   }
   for (const character of layout.characters) {
-    if (character.collision === false && character.simulatePhysics !== true) continue;
-    const bounds = localBounds.get(character.assetId);
-    if (!bounds || bounds.isEmpty()) continue;
-    const collider = colliderBoxFromBounds(bounds, character);
-    const segments = wireboxSegments(character.position, readRotation(character), collider);
-    boxes.push({
-      box: boxFromColliderBox(character.position, collider),
-      segments,
-      size: [...collider.size],
-      sensor: character.sensor === true,
-    });
+    emit(character, character.assetId, character.sensor === true);
   }
   return boxes;
+}
+
+/** Placement/character fields the wirebox builder reads. */
+type ColliderSource = {
+  position: Vec3;
+  rotation?: Vec3;
+  rotationYDeg?: number;
+  scale?: number | Vec3;
+  collision?: boolean;
+  sensor?: boolean;
+  simulatePhysics?: boolean;
+};
+
+const UNIT_CORNERS: readonly Vec3[] = [
+  [-0.5, -0.5, -0.5],
+  [0.5, -0.5, -0.5],
+  [0.5, 0.5, -0.5],
+  [-0.5, 0.5, -0.5],
+  [-0.5, -0.5, 0.5],
+  [0.5, -0.5, 0.5],
+  [0.5, 0.5, 0.5],
+  [-0.5, 0.5, 0.5],
+];
+
+const BOX_EDGES = [
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 0],
+  [4, 5],
+  [5, 6],
+  [6, 7],
+  [7, 4],
+  [0, 4],
+  [1, 5],
+  [2, 6],
+  [3, 7],
+] as const;
+
+/**
+ * A wirebox for one authored collision primitive. Composes the placement
+ * transform (position/rotation/scale) with the primitive's local
+ * center/rotation/size, so the box follows both the model placement and the
+ * shape authored in the Static Mesh editor.
+ */
+function authoredWirebox(
+  source: ColliderSource,
+  primitive: CollisionPrimitive,
+  sensor: boolean,
+): CollisionWirebox {
+  const place = composeTransformMatrix(source.position, readRotation(source), readScale(source));
+  const local = composeTransformMatrix(
+    primitive.center ?? [0, 0, 0],
+    primitive.rotation ?? [0, 0, 0],
+    primitive.size,
+  );
+  const matrix = place.multiply(local);
+  const world = UNIT_CORNERS.map((corner) => {
+    const point = new Vector3(corner[0], corner[1], corner[2]).applyMatrix4(matrix);
+    return [point.x, point.y, point.z] as Vec3;
+  });
+  const segments = BOX_EDGES.flatMap(([a, b]) => [world[a]!, world[b]!]);
+  const box = new Box3().setFromPoints(world.map((p) => new Vector3(p[0], p[1], p[2])));
+  return { box, segments, size: [...primitive.size], sensor };
 }
 
 function wireboxSegments(position: Vec3, rotation: Vec3, collider: ColliderBox): Vec3[] {

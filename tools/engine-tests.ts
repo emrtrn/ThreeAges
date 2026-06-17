@@ -128,6 +128,7 @@ import {
   DEFAULT_COLLISION_PRESET,
   defaultAssetCollisionDef,
   resolveCollisionProfile,
+  type AssetCollisionDef,
 } from "../engine/scene/collision";
 import type { LightObjectRecord } from "../engine/render-three/lights";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -2864,6 +2865,41 @@ check("collisionPreset maps to runtime collider: trigger=sensor, noCollision=non
   assert.equal(triggerEntity ? readColliderComponent(triggerEntity)?.isSensor : undefined, true);
   assert.equal(noneEntity ? readColliderComponent(noneEntity) : "missing", undefined);
   assert.equal(blockEntity ? readColliderComponent(blockEntity)?.isSensor : undefined, false);
+});
+
+check("collisionWireboxes draws authored primitives over the auto bounding box", () => {
+  const wireLayout: RoomLayout = {
+    schema: 1,
+    name: "wirebox-fixture",
+    loadGroups: [],
+    instances: [{ assetId: "chair", placements: [{ position: [1, 0, 0] }] }],
+    characters: [],
+    lights: [],
+  };
+  const bounds = new Map([["chair", new Box3(new Vector3(-1, -1, -1), new Vector3(1, 1, 1))]]);
+  // No defs -> a single auto box from the model bounds.
+  assert.equal(collisionWireboxes(wireLayout, bounds).length, 1);
+  // With two authored primitives -> two boxes, ignoring the auto bounds box.
+  const defs = new Map<string, AssetCollisionDef>([
+    [
+      "chair",
+      {
+        primitives: [
+          { shape: "box", size: [0.5, 0.5, 0.5], center: [0.2, 0.1, 0] },
+          { shape: "box", size: [0.3, 1, 0.3] },
+        ],
+        complexity: "projectDefault",
+        preset: "blockAll",
+      },
+    ],
+  ]);
+  const authored = collisionWireboxes(wireLayout, bounds, defs);
+  assert.equal(authored.length, 2);
+  // First authored box centers at placement(1,0,0) + local center(0.2,0.1,0).
+  const center = authored[0]!.box.getCenter(new Vector3());
+  assert.ok(Math.abs(center.x - 1.2) < 1e-6, `x=${center.x}`);
+  assert.ok(Math.abs(center.y - 0.1) < 1e-6, `y=${center.y}`);
+  assert.deepEqual(authored[0]!.size, [0.5, 0.5, 0.5]);
 });
 
 check("save validator allowlist keeps a placement sensor flag", () => {
