@@ -1,25 +1,4 @@
-export interface AssetRecord {
-  id: string;
-  file: string;
-  type: "model";
-  category: string;
-  loadGroup: string;
-  source: {
-    origin: string;
-    pack?: string;
-    packVersion?: string;
-    url?: string;
-  };
-  license: string;
-  bytes: number;
-}
-
-export interface AssetManifest {
-  version: number;
-  generated: string;
-  ktx2: boolean;
-  assets: AssetRecord[];
-}
+export type AssetType = "model";
 
 export type PlacementSurface = "floor" | "wall" | "room" | "character";
 
@@ -30,10 +9,55 @@ export interface AssetPlacementRules {
   allowScale: boolean;
 }
 
+export interface AssetRuntimeSettings {
+  loadGroup: string;
+  castShadow: boolean;
+  receiveShadow: boolean;
+  collision: boolean;
+  bytes: number;
+}
+
+export interface AssetSourceInfo {
+  origin: string;
+  pack?: string;
+  packVersion?: string;
+  url?: string;
+}
+
+export interface AssetRecord {
+  id: string;
+  name: string;
+  type: AssetType;
+  category: string;
+  /** Public-root-relative asset path. Example: `assets/models/props/chair.glb`. */
+  path: string;
+  /** Optional public-root-relative thumbnail image path. */
+  thumbnail?: string;
+  tags: string[];
+  placeable: boolean;
+  placement: AssetPlacementRules;
+  runtime: AssetRuntimeSettings;
+  source?: AssetSourceInfo;
+  license: string;
+  /** Legacy alias accepted while older manifests are phased out. */
+  file?: string;
+  /** Legacy top-level load group accepted while older manifests are phased out. */
+  loadGroup?: string;
+  /** Legacy top-level byte count accepted while older manifests are phased out. */
+  bytes?: number;
+}
+
+export interface AssetManifest {
+  version: number;
+  generated: string;
+  ktx2: boolean;
+  assets: AssetRecord[];
+}
+
 export interface AssetCatalogRecord {
   id: string;
   name: string;
-  type: "model";
+  type: AssetType;
   category: string;
   model: string;
   preview?: string;
@@ -53,6 +77,47 @@ export interface EditableAsset extends AssetRecord {
   tags: string[];
 }
 
+export type AssetManifestIssueLevel = "error" | "warning";
+
+export interface AssetManifestIssue {
+  level: AssetManifestIssueLevel;
+  code: string;
+  message: string;
+  assetId?: string | undefined;
+  path?: string | undefined;
+}
+
+export interface AssetManifestHealthReport {
+  valid: boolean;
+  assetCount: number;
+  placeableCount: number;
+  errorCount: number;
+  warningCount: number;
+  issues: AssetManifestIssue[];
+}
+
+export interface AssetManifestValidationOptions {
+  /** Public-root-relative files currently present on disk, such as `assets/models/a.glb`. */
+  publicFiles?: Iterable<string>;
+}
+
+const MODEL_EXTENSIONS = new Set(["glb", "gltf"]);
+const THUMBNAIL_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
+const ASSET_FILE_EXTENSIONS = new Set([...MODEL_EXTENSIONS, ...THUMBNAIL_EXTENSIONS]);
+const PLACEMENT_SURFACES: readonly PlacementSurface[] = ["floor", "wall", "room", "character"];
+
+export function assetPath(asset: AssetRecord): string {
+  return asset.path ?? asset.file ?? "";
+}
+
+export function assetLoadGroup(asset: AssetRecord): string {
+  return asset.runtime?.loadGroup ?? asset.loadGroup ?? "";
+}
+
+export function assetByteSize(asset: AssetRecord): number {
+  return asset.runtime?.bytes ?? asset.bytes ?? 0;
+}
+
 export function assetRecordById(
   manifest: AssetManifest,
   id: string,
@@ -64,7 +129,7 @@ export function recordsForGroup(
   manifest: AssetManifest,
   loadGroup: string,
 ): AssetRecord[] {
-  return manifest.assets.filter((asset) => asset.loadGroup === loadGroup);
+  return manifest.assets.filter((asset) => assetLoadGroup(asset) === loadGroup);
 }
 
 export function totalBytesForGroups(
@@ -73,8 +138,8 @@ export function totalBytesForGroups(
 ): number {
   const groupSet = new Set(loadGroups);
   return manifest.assets
-    .filter((asset) => groupSet.has(asset.loadGroup))
-    .reduce((total, asset) => total + asset.bytes, 0);
+    .filter((asset) => groupSet.has(assetLoadGroup(asset)))
+    .reduce((total, asset) => total + assetByteSize(asset), 0);
 }
 
 export function editableAssetsFromManifest(
@@ -88,11 +153,11 @@ export function editableAssetsFromManifest(
       const catalogAsset = catalogById.get(asset.id);
       return {
         ...asset,
-        displayName: catalogAsset?.name ?? asset.id,
+        displayName: catalogAsset?.name ?? asset.name ?? asset.id,
         catalogCategory: catalogAsset?.category ?? asset.category,
         placement:
-          catalogAsset?.placement ?? defaultPlacementForCategory(asset.category),
-        tags: catalogAsset?.tags ?? [],
+          catalogAsset?.placement ?? asset.placement ?? defaultPlacementForCategory(asset.category),
+        tags: catalogAsset?.tags ?? asset.tags ?? [],
       };
     });
 }
@@ -121,5 +186,365 @@ export function defaultPlacementForCategory(
     snapToWall: false,
     allowRotation: true,
     allowScale: true,
+  };
+}
+
+export function validateAssetManifest(
+  value: unknown,
+  options: AssetManifestValidationOptions = {},
+): AssetManifestHealthReport {
+  const issues: AssetManifestIssue[] = [];
+  const addIssue = (issue: AssetManifestIssue): void => {
+    issues.push(issue);
+  };
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    addIssue({
+      level: "error",
+      code: "manifest-invalid",
+      message: "Asset manifest must be an object.",
+    });
+    return finalize(0, 0, issues);
+  }
+
+  const manifest = value as Record<string, unknown>;
+  if (typeof manifest.version !== "number") {
+    addIssue({
+      level: "error",
+      code: "manifest-version",
+      message: "Asset manifest `version` must be a number.",
+    });
+  }
+  if (typeof manifest.generated !== "string") {
+    addIssue({
+      level: "error",
+      code: "manifest-generated",
+      message: "Asset manifest `generated` must be a string.",
+    });
+  }
+  if (typeof manifest.ktx2 !== "boolean") {
+    addIssue({
+      level: "error",
+      code: "manifest-ktx2",
+      message: "Asset manifest `ktx2` must be a boolean.",
+    });
+  }
+  if (!Array.isArray(manifest.assets)) {
+    addIssue({
+      level: "error",
+      code: "manifest-assets",
+      message: "Asset manifest `assets` must be an array.",
+    });
+    return finalize(0, 0, issues);
+  }
+
+  const publicFiles = new Set(
+    [...(options.publicFiles ?? [])].map((path) => normalizePublicPath(path)),
+  );
+  const manifestPaths = new Set<string>();
+  const manifestThumbs = new Set<string>();
+  const ids = new Set<string>();
+  let placeableCount = 0;
+
+  for (const rawAsset of manifest.assets) {
+    if (!rawAsset || typeof rawAsset !== "object" || Array.isArray(rawAsset)) {
+      addIssue({
+        level: "error",
+        code: "asset-invalid",
+        message: "Manifest asset entry must be an object.",
+      });
+      continue;
+    }
+
+    const asset = rawAsset as Partial<AssetRecord> & Record<string, unknown>;
+    const assetId = typeof asset.id === "string" ? asset.id : undefined;
+    if (!assetId) {
+      addIssue({
+        level: "error",
+        code: "asset-id",
+        message: "Asset `id` must be a non-empty string.",
+      });
+    } else if (ids.has(assetId)) {
+      addIssue({
+        level: "error",
+        code: "asset-id-duplicate",
+        assetId,
+        message: `Duplicate asset id: ${assetId}`,
+      });
+    } else {
+      ids.add(assetId);
+    }
+
+    checkString(asset.name, "asset-name", "`name` must be a non-empty string", addIssue, assetId);
+    checkString(asset.category, "asset-category", "`category` must be a non-empty string", addIssue, assetId);
+    if (asset.type !== "model") {
+      addIssue({
+        level: "error",
+        code: "asset-type",
+        assetId,
+        message: "`type` must be `model`.",
+      });
+    }
+
+    const path = normalizePublicPath(
+      typeof asset.path === "string" ? asset.path : typeof asset.file === "string" ? asset.file : "",
+    );
+    if (!path) {
+      addIssue({
+        level: "error",
+        code: "asset-path",
+        assetId,
+        message: "`path` must be a public-root-relative asset path.",
+      });
+    } else {
+      manifestPaths.add(path);
+      validateRelativePath(path, "asset-path", assetId, addIssue);
+      if (asset.type === "model" && !MODEL_EXTENSIONS.has(extensionOf(path))) {
+        addIssue({
+          level: "error",
+          code: "asset-path-extension",
+          assetId,
+          path,
+          message: "Model asset path must end with .glb or .gltf.",
+        });
+      }
+      if (publicFiles.size > 0 && !publicFiles.has(path)) {
+        addIssue({
+          level: "error",
+          code: "asset-path-missing",
+          assetId,
+          path,
+          message: `Manifest asset path does not exist on disk: ${path}`,
+        });
+      }
+    }
+
+    if (typeof asset.thumbnail === "string" && asset.thumbnail.length > 0) {
+      const thumbnail = normalizePublicPath(asset.thumbnail);
+      manifestThumbs.add(thumbnail);
+      validateRelativePath(thumbnail, "asset-thumbnail", assetId, addIssue);
+      if (!THUMBNAIL_EXTENSIONS.has(extensionOf(thumbnail))) {
+        addIssue({
+          level: "warning",
+          code: "asset-thumbnail-extension",
+          assetId,
+          path: thumbnail,
+          message: "Thumbnail should be a .png, .jpg, .jpeg, or .webp image.",
+        });
+      }
+      if (publicFiles.size > 0 && !publicFiles.has(thumbnail)) {
+        addIssue({
+          level: "warning",
+          code: "asset-thumbnail-file-missing",
+          assetId,
+          path: thumbnail,
+          message: `Thumbnail path does not exist on disk: ${thumbnail}`,
+        });
+      }
+    } else {
+      addIssue({
+        level: "warning",
+        code: "asset-thumbnail-missing",
+        assetId,
+        message: "Asset has no manifest thumbnail; editor will fall back to generated preview.",
+      });
+    }
+
+    if (!Array.isArray(asset.tags) || !asset.tags.every((tag) => typeof tag === "string")) {
+      addIssue({
+        level: "error",
+        code: "asset-tags",
+        assetId,
+        message: "`tags` must be a string array.",
+      });
+    }
+
+    if (typeof asset.placeable !== "boolean") {
+      addIssue({
+        level: "error",
+        code: "asset-placeable",
+        assetId,
+        message: "`placeable` must be a boolean.",
+      });
+    } else if (asset.placeable) {
+      placeableCount += 1;
+    }
+
+    validatePlacementRules(asset.placement, assetId, addIssue);
+    validateRuntimeSettings(asset.runtime, assetId, addIssue);
+    if (typeof asset.license !== "string" || asset.license.length === 0) {
+      addIssue({
+        level: "error",
+        code: "asset-license",
+        assetId,
+        message: "`license` must be a non-empty string.",
+      });
+    }
+  }
+
+  for (const path of publicFiles) {
+    if (!isHealthCheckAssetFile(path)) continue;
+    if (manifestPaths.has(path) || manifestThumbs.has(path)) continue;
+    addIssue({
+      level: "warning",
+      code: "asset-file-unregistered",
+      path,
+      message: `Asset-like file exists but is not registered in the manifest: ${path}`,
+    });
+  }
+
+  return finalize(manifest.assets.length, placeableCount, issues);
+}
+
+function checkString(
+  value: unknown,
+  code: string,
+  detail: string,
+  addIssue: (issue: AssetManifestIssue) => void,
+  assetId?: string,
+): void {
+  if (typeof value !== "string" || value.length === 0) {
+    addIssue({
+      level: "error",
+      code,
+      assetId,
+      message: detail,
+    });
+  }
+}
+
+function validatePlacementRules(
+  value: unknown,
+  assetId: string | undefined,
+  addIssue: (issue: AssetManifestIssue) => void,
+): void {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    addIssue({
+      level: "error",
+      code: "asset-placement",
+      assetId,
+      message: "`placement` must define surface and transform affordances.",
+    });
+    return;
+  }
+  const placement = value as Partial<AssetPlacementRules>;
+  if (
+    typeof placement.surface !== "string" ||
+    !PLACEMENT_SURFACES.includes(placement.surface as PlacementSurface)
+  ) {
+    addIssue({
+      level: "error",
+      code: "asset-placement-surface",
+      assetId,
+      message: "`placement.surface` must be floor, wall, room, or character.",
+    });
+  }
+  for (const key of ["snapToWall", "allowRotation", "allowScale"] as const) {
+    if (typeof placement[key] !== "boolean") {
+      addIssue({
+        level: "error",
+        code: `asset-placement-${key}`,
+        assetId,
+        message: `\`placement.${key}\` must be a boolean.`,
+      });
+    }
+  }
+}
+
+function validateRuntimeSettings(
+  value: unknown,
+  assetId: string | undefined,
+  addIssue: (issue: AssetManifestIssue) => void,
+): void {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    addIssue({
+      level: "error",
+      code: "asset-runtime",
+      assetId,
+      message: "`runtime` must define load group and runtime defaults.",
+    });
+    return;
+  }
+  const runtime = value as Partial<AssetRuntimeSettings>;
+  checkString(runtime.loadGroup, "asset-runtime-loadGroup", "`runtime.loadGroup` must be a non-empty string", addIssue, assetId);
+  for (const key of ["castShadow", "receiveShadow", "collision"] as const) {
+    if (typeof runtime[key] !== "boolean") {
+      addIssue({
+        level: "error",
+        code: `asset-runtime-${key}`,
+        assetId,
+        message: `\`runtime.${key}\` must be a boolean.`,
+      });
+    }
+  }
+  if (typeof runtime.bytes !== "number" || !Number.isFinite(runtime.bytes) || runtime.bytes < 0) {
+    addIssue({
+      level: "error",
+      code: "asset-runtime-bytes",
+      assetId,
+      message: "`runtime.bytes` must be a non-negative number.",
+    });
+  }
+}
+
+function validateRelativePath(
+  path: string,
+  code: string,
+  assetId: string | undefined,
+  addIssue: (issue: AssetManifestIssue) => void,
+): void {
+  if (/^[a-zA-Z]:[\\/]/.test(path) || path.startsWith("/") || path.startsWith("\\")) {
+    addIssue({
+      level: "error",
+      code,
+      assetId,
+      path,
+      message: "Manifest paths must be public-root-relative, not absolute.",
+    });
+  }
+  if (path.split("/").includes("..")) {
+    addIssue({
+      level: "error",
+      code,
+      assetId,
+      path,
+      message: "Manifest paths must not contain `..` segments.",
+    });
+  }
+}
+
+function isHealthCheckAssetFile(path: string): boolean {
+  const lower = path.toLowerCase();
+  if (!lower.startsWith("assets/")) return false;
+  if (lower.endsWith("/manifest.json") || lower.endsWith("/catalog.json")) return false;
+  if (lower.endsWith("/metadata-schema.json")) return false;
+  if (lower.endsWith(".collision.json")) return false;
+  return ASSET_FILE_EXTENSIONS.has(extensionOf(lower));
+}
+
+function normalizePublicPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\/+/, "").replace(/^public\//, "");
+}
+
+function extensionOf(path: string): string {
+  const file = path.split("/").at(-1) ?? "";
+  const index = file.lastIndexOf(".");
+  return index === -1 ? "" : file.slice(index + 1).toLowerCase();
+}
+
+function finalize(
+  assetCount: number,
+  placeableCount: number,
+  issues: AssetManifestIssue[],
+): AssetManifestHealthReport {
+  const errorCount = issues.filter((issue) => issue.level === "error").length;
+  const warningCount = issues.filter((issue) => issue.level === "warning").length;
+  return {
+    valid: errorCount === 0,
+    assetCount,
+    placeableCount,
+    errorCount,
+    warningCount,
+    issues,
   };
 }

@@ -687,7 +687,7 @@ Content Browser asset kartında şu uyarılar görünmeli:
 
 - [x] `public/assets/manifest.json` dosyasını Content Browser'ın ana veri kaynağı yap.
 - [x] Layout dosyalarına absolute file path yazmayı yasakla; sadece `assetId` veya manifest referansı yaz.
-- [ ] Asset manifest entry'lerini standartlaştır:
+- [x] Asset manifest entry'lerini standartlaştır:
   - `id`
   - `name`
   - `type`

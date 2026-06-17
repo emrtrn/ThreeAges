@@ -7,6 +7,7 @@ import {
 } from "@/project/ProjectSystem";
 import {
   assetRecordById,
+  assetPath,
   editableAssetsFromManifest,
   recordsForGroup,
   totalBytesForGroups,
@@ -122,7 +123,7 @@ export class AssetLoader {
     if (!record) throw new Error(`Asset not found in manifest: ${id}`);
     return this.modelLoader.load(
       id,
-      projectPublicFileUrl(this.project, record.file),
+      projectPublicFileUrl(this.project, assetPath(record)),
     );
   }
 

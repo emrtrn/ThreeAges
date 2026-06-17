@@ -8,7 +8,7 @@
  * `editor/core/selection.ts#selectionId`.
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import {
   characterEntity,
   characterEntityId,
@@ -131,6 +131,14 @@ import {
   validatePlacement,
   validateSaveCollisionPayload,
 } from "./saveValidator";
+import {
+  assetByteSize,
+  assetLoadGroup,
+  assetPath,
+  validateAssetManifest,
+  type AssetRecord,
+  type AssetManifest,
+} from "../engine/assets/manifest";
 import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
 import { collisionWireboxes } from "../engine/render-three/collisionView";
@@ -185,6 +193,20 @@ const checkAsync = async (label: string, fn: () => Promise<void>): Promise<void>
   console.log(`  ok: ${label}`);
 };
 
+function listPublicFiles(root: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.name.startsWith(".")) continue;
+    const path = `${root}/${entry.name}`;
+    if (entry.isDirectory()) {
+      files.push(...listPublicFiles(path));
+    } else if (entry.isFile() && statSync(path).isFile()) {
+      files.push(path.replace(/^public\//, "").replace(/\\/g, "/"));
+    }
+  }
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
 // 1. Entity ids must stay byte-for-byte in sync with editor selectionId.
 check("instance id matches selectionId", () => {
   assert.equal(
@@ -210,7 +232,40 @@ check("light id matches selectionId", () => {
 const layout = JSON.parse(
   readFileSync("public/layouts/render-test-room.json", "utf8"),
 ) as RoomLayout;
+const assetManifest = JSON.parse(
+  readFileSync("public/assets/manifest.json", "utf8"),
+) as AssetManifest;
 const doc = roomLayoutToSceneDocument(layout);
+check("asset manifest validates against the public assets tree", () => {
+  const report = validateAssetManifest(assetManifest, {
+    publicFiles: listPublicFiles("public/assets"),
+  });
+  const errors = report.issues
+    .filter((issue) => issue.level === "error")
+    .map((issue) => `${issue.code}:${issue.assetId ?? issue.path ?? "manifest"}`);
+  assert.equal(report.errorCount, 0, errors.join("; "));
+  assert.equal(report.assetCount, assetManifest.assets.length);
+});
+check("asset manifest helpers expose canonical path, load group, and byte size", () => {
+  const sofa = assetManifest.assets.find((asset) => asset.id === "lounge-sofa");
+  assert.ok(sofa);
+  assert.equal(assetPath(sofa), "assets/models/furniture-seating/loungeSofa.glb");
+  assert.equal(assetLoadGroup(sofa), "furniture-seating");
+  assert.equal(assetByteSize(sofa), 4588);
+});
+check("asset manifest helpers tolerate the legacy file/loadGroup/bytes shape", () => {
+  const legacy = {
+    id: "legacy-chair",
+    file: "assets/models/chair.glb",
+    type: "model",
+    category: "chairs",
+    loadGroup: "legacy",
+    bytes: 123,
+  } as unknown as AssetRecord;
+  assert.equal(assetPath(legacy), "assets/models/chair.glb");
+  assert.equal(assetLoadGroup(legacy), "legacy");
+  assert.equal(assetByteSize(legacy), 123);
+});
 check("derived document validates", () => {
   const result = validateSceneDocument(doc);
   assert.ok(result.valid, `errors: ${result.errors.join("; ")}`);

@@ -38,7 +38,7 @@ import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
 import type { PlayCameraPose } from "@/play/cameraHandoff";
-import type { AssetManifest, EditableAsset } from "@engine/assets/manifest";
+import { assetPath, type AssetManifest, type EditableAsset } from "@engine/assets/manifest";
 import {
   dirnameProjectPath,
   loadActiveProject,
@@ -2808,9 +2808,9 @@ export class SceneApp {
     await Promise.all(
       [...assetIds].map(async (assetId) => {
         if (next.has(assetId)) return;
-        const file = this.manifest?.assets.find((entry) => entry.id === assetId)?.file;
-        if (!file) return;
-        const def = await loadAssetCollision(file);
+        const asset = this.manifest?.assets.find((entry) => entry.id === assetId);
+        if (!asset) return;
+        const def = await loadAssetCollision(assetPath(asset));
         if (def.primitives.length > 0) next.set(assetId, def);
       }),
     );

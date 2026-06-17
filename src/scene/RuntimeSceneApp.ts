@@ -69,6 +69,7 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import { isPlayerStartAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
+import { assetPath } from "@engine/assets/manifest";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import type { TransformComponent } from "@engine/scene/components";
 
@@ -418,9 +419,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await Promise.all(
       [...assetIds].map(async (assetId) => {
         if (defs.has(assetId)) return;
-        const file = manifest.assets.find((entry) => entry.id === assetId)?.file;
-        if (!file) return;
-        const def = await loadAssetCollision(file);
+        const asset = manifest.assets.find((entry) => entry.id === assetId);
+        if (!asset) return;
+        const def = await loadAssetCollision(assetPath(asset));
         if (def.primitives.length > 0) defs.set(assetId, def);
       }),
     );

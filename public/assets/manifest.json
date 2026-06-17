@@ -5,243 +5,546 @@
   "assets": [
     {
       "id": "bed-single",
-      "file": "assets/models/furniture-beds/bedSingle.glb",
+      "name": "Bed Single",
       "type": "model",
       "category": "beds",
-      "loadGroup": "furniture-beds",
+      "path": "assets/models/furniture-beds/bedSingle.glb",
+      "tags": [
+        "beds",
+        "furniture-beds",
+        "bed",
+        "single"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-beds",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 10172
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 10172
+      "license": "CC0-1.0"
     },
     {
       "id": "bookcase-open",
-      "file": "assets/models/furniture-storage/bookcaseOpen.glb",
+      "name": "Bookcase Open",
       "type": "model",
       "category": "storage",
-      "loadGroup": "furniture-storage",
+      "path": "assets/models/furniture-storage/bookcaseOpen.glb",
+      "tags": [
+        "storage",
+        "furniture-storage",
+        "bookcase",
+        "open"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-storage",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4512
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 4512
+      "license": "CC0-1.0"
     },
     {
       "id": "chair-modern-cushion",
-      "file": "assets/models/furniture-seating/chairModernCushion.glb",
+      "name": "Chair Modern Cushion",
       "type": "model",
       "category": "sofas-chairs",
-      "loadGroup": "furniture-seating",
+      "path": "assets/models/furniture-seating/chairModernCushion.glb",
+      "tags": [
+        "sofas-chairs",
+        "furniture-seating",
+        "chair",
+        "modern",
+        "cushion"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-seating",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4056
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 4056
+      "license": "CC0-1.0"
     },
     {
       "id": "character-a",
-      "file": "assets/models/characters/character-a.glb",
+      "name": "Character A",
       "type": "model",
       "category": "customer-character",
-      "loadGroup": "characters",
+      "path": "assets/models/characters/character-a.glb",
+      "tags": [
+        "customer-character",
+        "characters",
+        "character",
+        "a"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "characters",
+        "castShadow": true,
+        "receiveShadow": false,
+        "collision": true,
+        "bytes": 62568
+      },
       "source": {
         "origin": "kenney",
         "pack": "Blocky Characters",
         "packVersion": "2.0",
         "url": "https://kenney.nl/assets/blocky-characters"
       },
-      "license": "CC0-1.0",
-      "bytes": 62568
+      "license": "CC0-1.0"
     },
     {
       "id": "desk",
-      "file": "assets/models/furniture-tables/desk.glb",
+      "name": "Desk",
       "type": "model",
       "category": "tables-desks",
-      "loadGroup": "furniture-tables",
+      "path": "assets/models/furniture-tables/desk.glb",
+      "tags": [
+        "tables-desks",
+        "furniture-tables",
+        "desk"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-tables",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6332
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 6332
+      "license": "CC0-1.0"
     },
     {
       "id": "doorway",
-      "file": "assets/models/core/doorway.glb",
+      "name": "Doorway",
       "type": "model",
       "category": "room-shell",
-      "loadGroup": "core",
+      "path": "assets/models/core/doorway.glb",
+      "tags": [
+        "room-shell",
+        "core",
+        "doorway"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "room",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "core",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6432
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 6432
+      "license": "CC0-1.0"
     },
     {
       "id": "floor-full",
-      "file": "assets/models/core/floorFull.glb",
+      "name": "Floor Full",
       "type": "model",
       "category": "room-shell",
-      "loadGroup": "core",
+      "path": "assets/models/core/floorFull.glb",
+      "tags": [
+        "room-shell",
+        "core",
+        "floor",
+        "full"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "room",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "core",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2008
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 2008
+      "license": "CC0-1.0"
     },
     {
       "id": "lamp-round-floor",
-      "file": "assets/models/furniture-lighting/lampRoundFloor.glb",
+      "name": "Lamp Round Floor",
       "type": "model",
       "category": "lighting",
-      "loadGroup": "furniture-lighting",
+      "path": "assets/models/furniture-lighting/lampRoundFloor.glb",
+      "tags": [
+        "lighting",
+        "furniture-lighting",
+        "lamp",
+        "round",
+        "floor"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-lighting",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3936
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 3936
+      "license": "CC0-1.0"
     },
     {
       "id": "lounge-sofa",
-      "file": "assets/models/furniture-seating/loungeSofa.glb",
+      "name": "Lounge Sofa",
       "type": "model",
       "category": "sofas-chairs",
-      "loadGroup": "furniture-seating",
+      "path": "assets/models/furniture-seating/loungeSofa.glb",
+      "tags": [
+        "sofas-chairs",
+        "furniture-seating",
+        "lounge",
+        "sofa"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-seating",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4588
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 4588
+      "license": "CC0-1.0"
     },
     {
       "id": "potted-plant",
-      "file": "assets/models/furniture-plants/pottedPlant.glb",
+      "name": "Potted Plant",
       "type": "model",
       "category": "plants",
-      "loadGroup": "furniture-plants",
+      "path": "assets/models/furniture-plants/pottedPlant.glb",
+      "tags": [
+        "plants",
+        "furniture-plants",
+        "potted",
+        "plant"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-plants",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5356
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 5356
+      "license": "CC0-1.0"
     },
     {
       "id": "rug-rectangle",
-      "file": "assets/models/furniture-rugs/rugRectangle.glb",
+      "name": "Rug Rectangle",
       "type": "model",
       "category": "rugs",
-      "loadGroup": "furniture-rugs",
+      "path": "assets/models/furniture-rugs/rugRectangle.glb",
+      "tags": [
+        "rugs",
+        "furniture-rugs",
+        "rug",
+        "rectangle"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-rugs",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3232
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 3232
+      "license": "CC0-1.0"
     },
     {
       "id": "side-table",
-      "file": "assets/models/furniture-tables/sideTable.glb",
+      "name": "Side Table",
       "type": "model",
       "category": "tables-desks",
-      "loadGroup": "furniture-tables",
+      "path": "assets/models/furniture-tables/sideTable.glb",
+      "tags": [
+        "tables-desks",
+        "furniture-tables",
+        "side",
+        "table"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-tables",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4204
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 4204
+      "license": "CC0-1.0"
     },
     {
       "id": "table-coffee",
-      "file": "assets/models/furniture-tables/tableCoffee.glb",
+      "name": "Table Coffee",
       "type": "model",
       "category": "tables-desks",
-      "loadGroup": "furniture-tables",
+      "path": "assets/models/furniture-tables/tableCoffee.glb",
+      "tags": [
+        "tables-desks",
+        "furniture-tables",
+        "table",
+        "coffee"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "furniture-tables",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3064
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 3064
+      "license": "CC0-1.0"
     },
     {
       "id": "wall",
-      "file": "assets/models/core/wall.glb",
+      "name": "Wall",
       "type": "model",
       "category": "room-shell",
-      "loadGroup": "core",
+      "path": "assets/models/core/wall.glb",
+      "tags": [
+        "room-shell",
+        "core",
+        "wall"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "room",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "core",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4084
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 4084
+      "license": "CC0-1.0"
     },
     {
       "id": "wall-corner",
-      "file": "assets/models/core/wallCorner.glb",
+      "name": "Wall Corner",
       "type": "model",
       "category": "room-shell",
-      "loadGroup": "core",
+      "path": "assets/models/core/wallCorner.glb",
+      "tags": [
+        "room-shell",
+        "core",
+        "wall",
+        "corner"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "room",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "core",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4292
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 4292
+      "license": "CC0-1.0"
     },
     {
       "id": "wall-window",
-      "file": "assets/models/core/wallWindow.glb",
+      "name": "Wall Window",
       "type": "model",
       "category": "room-shell",
-      "loadGroup": "core",
+      "path": "assets/models/core/wallWindow.glb",
+      "tags": [
+        "room-shell",
+        "core",
+        "wall",
+        "window"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "room",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "core",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 7336
+      },
       "source": {
         "origin": "kenney",
         "pack": "Furniture Kit",
         "packVersion": "1.0",
         "url": "https://kenney.nl/assets/furniture-kit"
       },
-      "license": "CC0-1.0",
-      "bytes": 7336
+      "license": "CC0-1.0"
     }
   ]
 }

@@ -1,7 +1,7 @@
 // Editor-only styles. Importing here (rather than statically in index.html)
 // keeps them in the dev-only editor chunk, out of the production game build.
 import "./editorUi.css";
-import type { EditableAsset } from "@engine/assets/manifest";
+import { assetPath, type EditableAsset } from "@engine/assets/manifest";
 import type {
   EditableSceneObject,
   EditableSelection,
@@ -775,17 +775,17 @@ export class EditorUi {
 
   private editableAssetByProjectPath(): Map<string, EditableAsset> {
     // The Content Browser directory tree (`/__project-dir`) is public-scoped, so
-    // its file paths are "assets/...". Manifest `asset.file` is also public-root
+    // its file paths are "assets/...". Manifest `asset.path` is also public-root
     // relative. Index both the bare "assets/..." key and the legacy
     // "public/assets/..." form so a manifest-registered file is matched instead
     // of being treated as "not registered" (which blocks drag-to-place).
     const publicDir = this.projectInfo?.manifest.publicDir ?? "public";
     const byPath = new Map<string, EditableAsset>();
     for (const asset of this.editableAssets) {
-      const assetPath = normalizeProjectPath(asset.file);
-      byPath.set(assetPath, asset);
-      const publicPrefixedPath = normalizeProjectPath(`${publicDir}/${asset.file}`);
-      if (publicPrefixedPath !== assetPath) byPath.set(publicPrefixedPath, asset);
+      const path = normalizeProjectPath(assetPath(asset));
+      byPath.set(path, asset);
+      const publicPrefixedPath = normalizeProjectPath(`${publicDir}/${path}`);
+      if (publicPrefixedPath !== path) byPath.set(publicPrefixedPath, asset);
     }
     return byPath;
   }
@@ -812,6 +812,7 @@ export class EditorUi {
   }
 
   private createAssetCard(item: BrowserAssetItem): HTMLElement {
+    const canPlace = Boolean(item.editable?.placeable);
     const card = document.createElement("button");
     card.type = "button";
     card.className = "asset-card";
@@ -820,7 +821,7 @@ export class EditorUi {
       "is-selected",
       Boolean(item.editable && item.editable.id === this.selectedAssetId),
     );
-    card.draggable = Boolean(item.editable);
+    card.draggable = canPlace;
     card.dataset.assetPath = item.path;
     if (item.editable) card.dataset.assetId = item.editable.id;
     card.innerHTML = `
@@ -830,7 +831,7 @@ export class EditorUi {
       </span>
     `;
     card.addEventListener("dragstart", (event) => {
-      if (!item.editable) return;
+      if (!item.editable || !canPlace) return;
       event.dataTransfer?.setData("application/x-3dgamedev-asset", item.editable.id);
       event.dataTransfer!.effectAllowed = "copy";
       // Hide the browser's default drag image (a snapshot of the card) so only
@@ -848,6 +849,9 @@ export class EditorUi {
       if (!item.editable) {
         this.setStatus(`${item.path} is visible but not registered in the asset manifest.`, "warning");
         return;
+      }
+      if (!canPlace) {
+        this.setStatus(`${item.editable.id} is registered but not placeable.`, "warning");
       }
       // Click only selects; placement is drag-and-drop into the viewport.
       this.setSelectedAsset(item.editable.id);
