@@ -762,7 +762,7 @@ body.editor-mode #debug-stats {
 
 .content-drawer-top {
   display: grid;
-  grid-template-columns: 250px minmax(180px, 1fr) minmax(210px, 320px) auto;
+  grid-template-columns: 250px minmax(180px, 1fr) minmax(120px, 160px) auto;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
@@ -798,9 +798,6 @@ body.editor-mode #debug-stats {
 
 .content-filters {
   min-width: 0;
-  display: grid;
-  grid-template-columns: minmax(92px, 1fr) minmax(112px, 1.2fr);
-  gap: 6px;
 }
 
 .content-filter {
@@ -1045,7 +1042,6 @@ body.editor-mode #debug-stats {
 
   .content-filters {
     grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .content-drawer-body {

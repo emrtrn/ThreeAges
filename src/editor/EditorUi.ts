@@ -93,7 +93,6 @@ export class EditorUi {
   private contentStatus: HTMLElement;
   private contentSearch: HTMLInputElement;
   private contentTypeFilter: HTMLSelectElement;
-  private contentCategoryFilter: HTMLSelectElement;
   private folderTree: HTMLElement;
   private outlinerList: HTMLDivElement;
   private detailsBody: HTMLDivElement;
@@ -115,7 +114,6 @@ export class EditorUi {
   private emptyDragImage: HTMLImageElement | null = null;
   private contentQuery = "";
   private contentType: ContentTypeFilter = CONTENT_FILTER_ALL;
-  private contentCategory = CONTENT_FILTER_ALL;
   private contentDrawerOpen = false;
   private contentRefreshTimer = 0;
   private outlinerObjects: EditableSceneObject[] = [];
@@ -274,9 +272,6 @@ export class EditorUi {
             <select class="content-filter" data-content-type-filter aria-label="Asset type">
               <option value="${CONTENT_FILTER_ALL}">All types</option>
             </select>
-            <select class="content-filter" data-content-category-filter aria-label="Asset category">
-              <option value="${CONTENT_FILTER_ALL}">All categories</option>
-            </select>
           </div>
           <button type="button" data-content-refresh>Refresh</button>
         </div>
@@ -309,7 +304,6 @@ export class EditorUi {
     this.contentStatus = requireElement(this.root, "[data-content-status]");
     this.contentSearch = requireElement(this.root, "[data-content-search]");
     this.contentTypeFilter = requireElement(this.root, "[data-content-type-filter]");
-    this.contentCategoryFilter = requireElement(this.root, "[data-content-category-filter]");
     this.folderTree = requireElement(this.root, "[data-folder-tree]");
     this.outlinerList = requireElement(this.root, "[data-outliner-list]");
     this.detailsBody = requireElement(this.root, "[data-details-body]");
@@ -491,11 +485,6 @@ export class EditorUi {
     this.contentTypeFilter.addEventListener("change", () => {
       const value = this.contentTypeFilter.value;
       this.contentType = isContentTypeFilter(value) ? value : CONTENT_FILTER_ALL;
-      this.renderContentAssets();
-    });
-
-    this.contentCategoryFilter.addEventListener("change", () => {
-      this.contentCategory = this.contentCategoryFilter.value || CONTENT_FILTER_ALL;
       this.renderContentAssets();
     });
 
@@ -759,10 +748,6 @@ export class EditorUi {
       .filter((file) => this.shouldDisplayAssetFile(file))
       .map((file) => this.toBrowserAssetItem(file))
       .filter((item) => this.contentType === CONTENT_FILTER_ALL || item.type === this.contentType)
-      .filter(
-        (item) =>
-          this.contentCategory === CONTENT_FILTER_ALL || item.category === this.contentCategory,
-      )
       .filter((item) => {
         if (!this.contentQuery) return true;
         return `${item.label} ${item.category} ${item.type} ${item.path}`.toLocaleLowerCase().includes(
@@ -795,9 +780,6 @@ export class EditorUi {
           .map((file) => this.toBrowserAssetItem(file))
       : [];
     const types = [...new Set(allItems.map((item) => item.type))].sort(compareContentTypes);
-    const categories = [...new Set(allItems.map((item) => item.category))]
-      .filter(Boolean)
-      .sort((left, right) => left.localeCompare(right));
 
     this.contentType = this.replaceContentFilterOptions(
       this.contentTypeFilter,
@@ -806,13 +788,6 @@ export class EditorUi {
       this.contentType,
       formatContentTypeLabel,
     ) as ContentTypeFilter;
-    this.contentCategory = this.replaceContentFilterOptions(
-      this.contentCategoryFilter,
-      "All categories",
-      categories,
-      this.contentCategory,
-      formatContentFilterLabel,
-    );
   }
 
   private replaceContentFilterOptions(
