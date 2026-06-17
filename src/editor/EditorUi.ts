@@ -19,7 +19,7 @@ import {
   type MetadataSchema,
 } from "@engine/scene/metadataSchema";
 import type { LayoutPhysics, MetadataValue } from "@engine/scene/layout";
-import { isShapePrimitiveType } from "@engine/scene/shapes";
+import { isShapePrimitiveType, shapeAssetId, type ShapePrimitiveType } from "@engine/scene/shapes";
 import { writePlayCameraPose } from "@/play/cameraHandoff";
 import { ThumbnailRenderer } from "./ThumbnailRenderer";
 import {
@@ -385,20 +385,43 @@ export class EditorUi {
     });
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-add-actor]").forEach((button) => {
+      const type = button.dataset.addActor;
+      if (type === "directional" || type === "point" || type === "spot") {
+        button.draggable = true;
+        button.addEventListener("dragstart", (event) => {
+          event.dataTransfer?.setData("application/x-forge-light-actor", type);
+          event.dataTransfer!.effectAllowed = "copy";
+          event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
+          this.app.beginLightDragPreview(type);
+          this.setStatus(`Dragging ${formatLightTypeLabel(type)} - drop in the viewport to place.`);
+        });
+        button.addEventListener("dragend", () => {
+          this.app.endAssetDragPreview();
+        });
+      }
       button.addEventListener("click", () => {
-        const type = button.dataset.addActor;
-        if (type === "directional" || type === "point" || type === "spot") {
-          this.app.addLightActor(type);
-        }
+        this.setStatus("Drag the actor into the viewport to place it.", "info");
       });
     });
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-add-shape]").forEach((button) => {
+      const type = button.dataset.addShape;
+      if (isShapePrimitiveType(type)) {
+        const assetId = shapeAssetId(type);
+        button.draggable = true;
+        button.addEventListener("dragstart", (event) => {
+          event.dataTransfer?.setData("application/x-3dgamedev-asset", assetId);
+          event.dataTransfer!.effectAllowed = "copy";
+          event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
+          this.app.beginAssetDragPreview(assetId);
+          this.setStatus(`Dragging ${formatShapeTypeLabel(type)} - drop in the viewport to place.`);
+        });
+        button.addEventListener("dragend", () => {
+          this.app.endAssetDragPreview();
+        });
+      }
       button.addEventListener("click", () => {
-        const type = button.dataset.addShape;
-        if (isShapePrimitiveType(type)) {
-          this.app.addShapeActor(type);
-        }
+        this.setStatus("Drag the actor into the viewport to place it.", "info");
       });
     });
 
@@ -2180,6 +2203,27 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "character") return "C";
   if (kind === "light") return "L";
   return "I";
+}
+
+function formatShapeTypeLabel(type: ShapePrimitiveType): string {
+  switch (type) {
+    case "cube":
+      return "Cube";
+    case "sphere":
+      return "Sphere";
+    case "cylinder":
+      return "Cylinder";
+    case "cone":
+      return "Cone";
+    case "plane":
+      return "Plane";
+  }
+}
+
+function formatLightTypeLabel(type: "directional" | "point" | "spot"): string {
+  if (type === "directional") return "Directional Light";
+  if (type === "point") return "Point Light";
+  return "Spot Light";
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {

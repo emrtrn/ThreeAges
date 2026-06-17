@@ -2,6 +2,7 @@ import type { EditableSelection } from "@editor/core/editableScene";
 import type { Selection } from "@editor/core/selection";
 import type { GizmoPointerDrag } from "@editor/gizmos/interaction";
 import type { GizmoHandle } from "@editor/gizmos/handles";
+import type { LayoutLightActor } from "@engine/scene/layout";
 import {
   isCameraNavigationKey,
   isEditableTarget,
@@ -43,6 +44,7 @@ export interface EditorInputBindings {
   onAssetDragOver(clientX: number, clientY: number): void;
   onAssetDragLeave(): void;
   onAssetDrop(assetId: string, clientX: number, clientY: number): void;
+  onLightDrop(type: LayoutLightActor["type"], clientX: number, clientY: number): void;
   onWheel(event: WheelEvent): void;
 
   addPressedKey(code: string): void;
@@ -184,11 +186,19 @@ export function bindEditorInputEvents(
   on(canvas, "drop", (event) => {
     event.preventDefault();
     const assetId = event.dataTransfer?.getData("application/x-3dgamedev-asset");
+    if (assetId) {
+      bindings.onAssetDrop(assetId, event.clientX, event.clientY);
+      return;
+    }
+    const lightType = event.dataTransfer?.getData("application/x-forge-light-actor");
+    if (lightType === "directional" || lightType === "point" || lightType === "spot") {
+      bindings.onLightDrop(lightType, event.clientX, event.clientY);
+      return;
+    }
     if (!assetId) {
       bindings.onAssetDragLeave();
       return;
     }
-    bindings.onAssetDrop(assetId, event.clientX, event.clientY);
   });
   on(canvas, "wheel", (event) => bindings.onWheel(event), { passive: false });
 

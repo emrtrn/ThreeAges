@@ -58,6 +58,7 @@ import {
 } from "@engine/render-three/materials";
 import {
   entityLightItem,
+  disposeLightGizmo,
   syncLightObject,
   type LightObjectRecord,
 } from "@engine/render-three/lights";
@@ -97,6 +98,8 @@ import {
 } from "@engine/scene/lights";
 import {
   formatShapeType,
+  isPlayerStartAssetId,
+  parseShapeAssetId,
   PLAYER_START_ASSET_ID,
   shapeAssetCollisionDef,
   shapeAssetId,
@@ -357,11 +360,12 @@ export class SceneApp {
   /** Live drag-and-drop placement ghost (a translucent clone of the dragged
    *  asset shown in the viewport before the drop commits). */
   private dragPreview: {
-    assetId: string;
+    kind: "asset" | "light";
+    key: string;
     group: Object3D;
-    material: MeshStandardMaterial;
+    dispose: () => void;
   } | null = null;
-  /** Asset id currently being dragged from the Content Browser. */
+  /** Asset/light key currently being dragged from the UI. */
   private dragPreviewAssetId: string | null = null;
   /** Last viewport client coords seen during a drag (so a lazily-loaded ghost
    *  can snap to the cursor as soon as its model finishes loading). */
@@ -971,6 +975,7 @@ export class SceneApp {
     this.endAssetDragPreview();
     this.dragPreviewAssetId = assetId;
     this.dragPreviewClient = null;
+    this.ensureShapeModel(assetId);
 
     const asset = this.manifest?.assets.find((entry) => entry.id === assetId);
     if (asset?.category === "customer-character") return;
@@ -987,6 +992,27 @@ export class SceneApp {
         this.updateAssetDragPreview(this.dragPreviewClient.x, this.dragPreviewClient.y);
       }
     });
+  }
+
+  beginLightDragPreview(type: LayoutLightActor["type"]): void {
+    this.endAssetDragPreview();
+    const key = `light:${type}`;
+    this.dragPreviewAssetId = key;
+    this.dragPreviewClient = null;
+    const actor = this.createDefaultLightActor(type);
+    actor.position = [0, 0, 0];
+    const record = buildSceneLightObject(actor, -1);
+    record.light.visible = false;
+    const wire = record.gizmo.getObjectByName("light-wire");
+    if (wire) wire.visible = true;
+    record.root.visible = false;
+    this.dragPreview = {
+      kind: "light",
+      key,
+      group: record.root,
+      dispose: () => disposeLightGizmo(record.gizmo),
+    };
+    this.scene.add(record.root);
   }
 
   private createDragPreview(assetId: string): void {
@@ -1012,7 +1038,12 @@ export class SceneApp {
       }
     });
     group.visible = false;
-    this.dragPreview = { assetId, group, material };
+    this.dragPreview = {
+      kind: "asset",
+      key: assetId,
+      group,
+      dispose: () => material.dispose(),
+    };
     this.scene.add(group);
   }
 
@@ -1022,7 +1053,17 @@ export class SceneApp {
     this.dragPreviewClient = { x: clientX, y: clientY };
     const preview = this.dragPreview;
     if (!preview) return;
-    const transform = this.computeInstanceDropTransform(preview.assetId, clientX, clientY);
+    if (preview.kind === "light") {
+      const position = this.computeLightDropPosition(clientX, clientY);
+      if (!position) {
+        preview.group.visible = false;
+        return;
+      }
+      preview.group.position.set(...position);
+      preview.group.visible = true;
+      return;
+    }
+    const transform = this.computeInstanceDropTransform(preview.key, clientX, clientY);
     if (!transform) {
       preview.group.visible = false;
       return;
@@ -1046,7 +1087,7 @@ export class SceneApp {
     if (!preview) return;
     this.dragPreview = null;
     this.scene.remove(preview.group);
-    preview.material.dispose();
+    preview.dispose();
   }
 
   /**
@@ -1393,8 +1434,19 @@ export class SceneApp {
     return { position, rotationYDeg };
   }
 
+  private computeLightDropPosition(clientX: number, clientY: number): Vec3 | null {
+    const hit = this.picker.clientToSurface(clientX, clientY);
+    if (!hit) return null;
+    return [
+      snapValue(hit.x, this.snapSettings.move, this.snapSettings.moveEnabled),
+      round(hit.y + 1.5),
+      snapValue(hit.z, this.snapSettings.move, this.snapSettings.moveEnabled),
+    ];
+  }
+
   addAssetAt(assetId: string, clientX: number, clientY: number): void {
     if (!this.layout) return;
+    this.ensureShapeModel(assetId);
     // Drag-and-drop can target an asset whose loadGroup wasn't loaded up front;
     // lazy-load it, then retry the placement at the original drop coordinates.
     if (!this.models.has(assetId)) {
@@ -1447,6 +1499,12 @@ export class SceneApp {
       rotationYDeg: transform.rotationYDeg,
       scale: 1,
     };
+    const shapeType = parseShapeAssetId(assetId);
+    if (shapeType) placement.name = this.uniqueInstanceName(formatShapeType(shapeType));
+    if (isPlayerStartAssetId(assetId)) {
+      placement.name = this.uniqueInstanceName("Player Start");
+      placement.collision = false;
+    }
 
     const instance = this.layout.instances.find((entry) => entry.assetId === assetId);
     const placementIndex = instance?.placements.length ?? 0;
@@ -1459,6 +1517,28 @@ export class SceneApp {
       },
       undo: () => {
         this.removeInstancePlacement(assetId, placementIndex);
+        this.select(null);
+      },
+    });
+  }
+
+  addLightActorAt(type: LayoutLightActor["type"], clientX: number, clientY: number): void {
+    if (!this.layout) return;
+    const position = this.computeLightDropPosition(clientX, clientY);
+    if (!position) return;
+    const index = this.layout.lights?.length ?? 0;
+    const actor = this.createDefaultLightActor(type);
+    actor.position = position;
+    const selection: Selection = { kind: "light", index };
+
+    this.executeCommand({
+      label: `Place ${formatLightType(type)}`,
+      redo: () => {
+        this.insertLightActor(index, actor);
+        this.select(selection);
+      },
+      undo: () => {
+        this.removeLightActor(index);
         this.select(null);
       },
     });
@@ -2085,6 +2165,10 @@ export class SceneApp {
       onAssetDrop: (assetId, clientX, clientY) => {
         this.endAssetDragPreview();
         this.addAssetAt(assetId, clientX, clientY);
+      },
+      onLightDrop: (type, clientX, clientY) => {
+        this.endAssetDragPreview();
+        this.addLightActorAt(type, clientX, clientY);
       },
       onWheel: (event) => this.cameraController.handleWheel(event),
       addPressedKey: (code) => this.cameraController.addPressedKey(code),
