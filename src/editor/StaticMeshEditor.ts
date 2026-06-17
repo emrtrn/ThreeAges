@@ -20,17 +20,23 @@ import {
   Group,
   LineBasicMaterial,
   LineSegments,
+  MathUtils,
+  Mesh,
+  MeshBasicMaterial,
   PerspectiveCamera,
+  Raycaster,
   Scene,
   SphereGeometry,
   SRGBColorSpace,
   Spherical,
+  Vector2,
   Vector3,
   WebGLRenderer,
   type BufferGeometry,
 } from "three";
 import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import {
   COLLISION_COMPLEXITY_VALUES,
   COLLISION_PRESET_IDS,
@@ -76,10 +82,22 @@ const COMPLEXITY_LABELS: Record<CollisionComplexity, string> = {
 const WIRE_COLOR = 0x49e6a2;
 const WIRE_SELECTED_COLOR = 0xffb648;
 
-/** A wireframe overlay tied to a collision primitive (for viewport display). */
+type GizmoMode = "select" | "translate" | "rotate" | "scale";
+
+/**
+ * A collision-primitive overlay. The geometry is built at unit size so the
+ * `root` group's transform maps 1:1 to the primitive (position=center,
+ * rotation=rotation, scale=size) — which lets the transform gizmo drive it
+ * directly. `pickMesh` is an invisible solid used for viewport raycast picking.
+ */
 interface PrimitiveOverlay {
-  lines: LineSegments;
-  geometry: BufferGeometry;
+  root: Group;
+  wire: LineSegments;
+  pickMesh: Mesh;
+  solidGeometry: BufferGeometry;
+  wireGeometry: BufferGeometry;
+  wireMaterial: LineBasicMaterial;
+  pickMaterial: MeshBasicMaterial;
 }
 
 export class StaticMeshEditor {
@@ -116,6 +134,11 @@ export class StaticMeshEditor {
   private modelBounds = new Box3();
   private selectedPrimitive = -1;
   private readonly overlays: PrimitiveOverlay[] = [];
+
+  private transformControls: TransformControls | null = null;
+  private gizmoMode: GizmoMode = "translate";
+  private gizmoDragging = false;
+  private readonly raycaster = new Raycaster();
 
   private constructor(private readonly options: StaticMeshEditorOptions) {
     this.loader.setMeshoptDecoder(MeshoptDecoder);
@@ -195,6 +218,21 @@ export class StaticMeshEditor {
     this.scene.add(grid);
     this.scene.add(this.modelGroup);
     this.scene.add(this.overlayGroup);
+
+    const controls = new TransformControls(this.camera, this.renderer.domElement);
+    controls.setSize(0.85);
+    controls.addEventListener("dragging-changed", (event) => {
+      this.gizmoDragging = event.value === true;
+      // Commit the edit once the drag ends (live changes already wrote through).
+      if (!this.gizmoDragging) {
+        this.markDirty();
+        this.renderDetails();
+      }
+    });
+    controls.addEventListener("objectChange", () => this.onGizmoChange());
+    this.scene.add(controls.getHelper());
+    this.transformControls = controls;
+
     this.updateCamera();
   }
 
@@ -228,17 +266,23 @@ export class StaticMeshEditor {
     let mode: "orbit" | "pan" | null = null;
     let lastX = 0;
     let lastY = 0;
+    let downX = 0;
+    let downY = 0;
 
     el.addEventListener("contextmenu", (event) => event.preventDefault());
     el.addEventListener("pointerdown", (event) => {
       this.closeMenu();
+      // Let the transform gizmo own the drag when the pointer is over a handle.
+      if (this.transformControls?.axis) return;
       lastX = event.clientX;
       lastY = event.clientY;
+      downX = event.clientX;
+      downY = event.clientY;
       mode = event.button === 1 || event.shiftKey || event.button === 2 ? "pan" : "orbit";
       el.setPointerCapture(event.pointerId);
     });
     el.addEventListener("pointermove", (event) => {
-      if (!mode) return;
+      if (!mode || this.gizmoDragging) return;
       const dx = event.clientX - lastX;
       const dy = event.clientY - lastY;
       lastX = event.clientX;
@@ -256,8 +300,19 @@ export class StaticMeshEditor {
       this.updateCamera();
     });
     const end = (event: PointerEvent): void => {
+      const wasOrbiting = mode !== null;
       mode = null;
       if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
+      // A click (no meaningful drag, left button) selects a primitive under the
+      // cursor — or clears the selection when clicking empty space.
+      if (
+        wasOrbiting &&
+        event.button === 0 &&
+        !this.gizmoDragging &&
+        Math.hypot(event.clientX - downX, event.clientY - downY) < 4
+      ) {
+        this.pickPrimitiveAt(event);
+      }
     };
     el.addEventListener("pointerup", end);
     el.addEventListener("pointercancel", end);
@@ -275,13 +330,25 @@ export class StaticMeshEditor {
 
   private bindKeyboard(): void {
     this.overlay.addEventListener("keydown", (event) => {
+      const target = event.target as HTMLElement;
+      // Don't hijack typing in the details inputs.
+      if (target.matches("input, select, textarea")) return;
       if (event.key === "Escape") {
         event.stopPropagation();
         this.close();
-      } else if (event.key.toLowerCase() === "s" && (event.ctrlKey || event.metaKey)) {
+        return;
+      }
+      if (event.key.toLowerCase() === "s" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         event.stopPropagation();
         void this.save();
+        return;
+      }
+      const modeKey: Record<string, GizmoMode> = { q: "select", w: "translate", e: "rotate", r: "scale" };
+      const mode = modeKey[event.key.toLowerCase()];
+      if (mode) {
+        event.stopPropagation();
+        this.setGizmoMode(mode);
       }
     });
     this.overlay.tabIndex = -1;
@@ -326,13 +393,30 @@ export class StaticMeshEditor {
         </button>
         <div class="sm-tool-menu" data-sm-menu-panel hidden></div>
       </div>
+      <div class="sm-tool-sep"></div>
+      <div class="sm-tool-group sm-tool-modes">
+        ${modeButton("select", "▦", "Select (Q)")}
+        ${modeButton("translate", "✥", "Move (W)")}
+        ${modeButton("rotate", "⟳", "Rotate (E)")}
+        ${modeButton("scale", "⤢", "Scale (R)")}
+      </div>
     `;
     const button = this.requireEl<HTMLButtonElement>('[data-sm-menu="collision"]');
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       this.toggleMenu();
     });
+    this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-sm-mode]").forEach((item) => {
+      item.addEventListener("click", () => this.setGizmoMode(item.dataset.smMode as GizmoMode));
+    });
+    this.updateToolbarModes();
     document.addEventListener("pointerdown", this.onDocPointerDown);
+  }
+
+  private updateToolbarModes(): void {
+    this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-sm-mode]").forEach((item) => {
+      item.classList.toggle("is-active", item.dataset.smMode === this.gizmoMode);
+    });
   }
 
   private readonly onDocPointerDown = (event: PointerEvent): void => {
@@ -455,27 +539,102 @@ export class StaticMeshEditor {
     this.selectedPrimitive = index;
     this.renderDetails();
     this.refreshOverlayColors();
+    this.attachGizmo();
+  }
+
+  // --- transform gizmo ---------------------------------------------------
+
+  private setGizmoMode(mode: GizmoMode): void {
+    this.gizmoMode = mode;
+    this.updateToolbarModes();
+    this.attachGizmo();
+  }
+
+  /** Attaches the gizmo to the selected primitive (or detaches when none / Select mode). */
+  private attachGizmo(): void {
+    const controls = this.transformControls;
+    if (!controls) return;
+    const overlay = this.overlays[this.selectedPrimitive];
+    if (!overlay || this.gizmoMode === "select") {
+      controls.detach();
+      return;
+    }
+    controls.setMode(this.gizmoMode);
+    controls.attach(overlay.root);
+  }
+
+  /** Live write-back from the gizmo: root transform -> selected primitive data. */
+  private onGizmoChange(): void {
+    const overlay = this.overlays[this.selectedPrimitive];
+    const primitive = this.collision.primitives[this.selectedPrimitive];
+    if (!overlay || !primitive) return;
+    const { position, rotation, scale } = overlay.root;
+    primitive.size = [
+      round(Math.max(scale.x, 0.001)),
+      round(Math.max(scale.y, 0.001)),
+      round(Math.max(scale.z, 0.001)),
+    ];
+    if (position.lengthSq() > 1e-8) {
+      primitive.center = [round(position.x), round(position.y), round(position.z)];
+    } else {
+      delete primitive.center;
+    }
+    const rot: Vec3 = [
+      roundDeg(MathUtils.radToDeg(rotation.x)),
+      roundDeg(MathUtils.radToDeg(rotation.y)),
+      roundDeg(MathUtils.radToDeg(rotation.z)),
+    ];
+    if (rot.some((axis) => Math.abs(axis) > 1e-3)) primitive.rotation = rot;
+    else delete primitive.rotation;
+    this.updateSelectedRowText();
+  }
+
+  /** Updates the size readout of the selected primitive row without a full re-render. */
+  private updateSelectedRowText(): void {
+    const primitive = this.collision.primitives[this.selectedPrimitive];
+    if (!primitive) return;
+    const small = this.detailsHost.querySelector<HTMLElement>(
+      `[data-sm-prim="${this.selectedPrimitive}"] small`,
+    );
+    if (small) small.textContent = primitive.size.map((axis) => axis.toFixed(2)).join(" × ");
+  }
+
+  private pickPrimitiveAt(event: PointerEvent): void {
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    const ndc = new Vector2(
+      ((event.clientX - rect.left) / rect.width) * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(ndc, this.camera);
+    const hits = this.raycaster.intersectObjects(
+      this.overlays.map((overlay) => overlay.pickMesh),
+      false,
+    );
+    const index = hits.length > 0 ? Number(hits[0]!.object.userData.primitiveIndex) : -1;
+    if (index !== this.selectedPrimitive) this.selectPrimitive(index);
   }
 
   // --- viewport overlays -------------------------------------------------
 
   private rebuildOverlays(): void {
+    this.transformControls?.detach();
     for (const overlay of this.overlays) {
-      this.overlayGroup.remove(overlay.lines);
-      overlay.geometry.dispose();
-      (overlay.lines.material as LineBasicMaterial).dispose();
+      this.overlayGroup.remove(overlay.root);
+      disposeOverlay(overlay);
     }
     this.overlays.length = 0;
     this.collision.primitives.forEach((primitive, index) => {
       const overlay = buildPrimitiveOverlay(primitive, index === this.selectedPrimitive);
+      overlay.pickMesh.userData.primitiveIndex = index;
       this.overlays.push(overlay);
-      this.overlayGroup.add(overlay.lines);
+      this.overlayGroup.add(overlay.root);
     });
+    this.attachGizmo();
   }
 
   private refreshOverlayColors(): void {
     this.overlays.forEach((overlay, index) => {
-      (overlay.lines.material as LineBasicMaterial).color.setHex(
+      overlay.wireMaterial.color.setHex(
         index === this.selectedPrimitive ? WIRE_SELECTED_COLOR : WIRE_COLOR,
       );
     });
@@ -607,10 +766,9 @@ export class StaticMeshEditor {
     cancelAnimationFrame(this.rafId);
     document.removeEventListener("pointerdown", this.onDocPointerDown);
     this.resizeObserver.disconnect();
-    for (const overlay of this.overlays) {
-      overlay.geometry.dispose();
-      (overlay.lines.material as LineBasicMaterial).dispose();
-    }
+    this.transformControls?.detach();
+    this.transformControls?.dispose();
+    for (const overlay of this.overlays) disposeOverlay(overlay);
     this.renderer.dispose();
     this.overlay.remove();
     if (StaticMeshEditor.active === this) StaticMeshEditor.active = null;
@@ -629,32 +787,53 @@ function menuItem(action: string, label: string, disabled = false): string {
   }>${label}</button>`;
 }
 
+function modeButton(mode: GizmoMode, icon: string, title: string): string {
+  return `<button type="button" class="sm-tool-btn sm-mode-btn" data-sm-mode="${mode}" title="${title}">${icon}</button>`;
+}
+
+/** Unit-sized solid geometry for a shape (its bounding box is 1×1×1). */
+function unitGeometryForShape(shape: CollisionPrimitiveShape): BufferGeometry {
+  if (shape === "sphere") return new SphereGeometry(0.5, 20, 14);
+  if (shape === "capsule") return new CapsuleGeometry(0.5, 0.0001, 8, 16);
+  return new BoxGeometry(1, 1, 1);
+}
+
 function buildPrimitiveOverlay(primitive: CollisionPrimitive, selected: boolean): PrimitiveOverlay {
-  const [sx, sy, sz] = primitive.size;
-  let source: BufferGeometry;
-  if (primitive.shape === "sphere") {
-    source = new SphereGeometry(Math.max(sx, sy, sz) / 2, 16, 12);
-  } else if (primitive.shape === "capsule") {
-    const radius = Math.max(sx, sz) / 2;
-    const length = Math.max(sy - radius * 2, 0.01);
-    source = new CapsuleGeometry(radius, length, 6, 12);
-  } else {
-    source = new BoxGeometry(sx || 1, sy || 1, sz || 1);
-  }
-  const geometry = new EdgesGeometry(source);
-  source.dispose();
-  const material = new LineBasicMaterial({ color: selected ? WIRE_SELECTED_COLOR : WIRE_COLOR });
-  const lines = new LineSegments(geometry, material);
+  const solidGeometry = unitGeometryForShape(primitive.shape);
+  const wireGeometry = new EdgesGeometry(solidGeometry);
+  const wireMaterial = new LineBasicMaterial({
+    color: selected ? WIRE_SELECTED_COLOR : WIRE_COLOR,
+    depthTest: false,
+    transparent: true,
+  });
+  const wire = new LineSegments(wireGeometry, wireMaterial);
+  wire.renderOrder = 3;
+  // Invisible but raycastable solid for viewport picking.
+  const pickMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+  const pickMesh = new Mesh(solidGeometry, pickMaterial);
+
+  const root = new Group();
+  root.add(pickMesh);
+  root.add(wire);
+  applyPrimitiveToRoot(root, primitive);
+  return { root, wire, pickMesh, solidGeometry, wireGeometry, wireMaterial, pickMaterial };
+}
+
+/** Drives a unit overlay's transform from the primitive (center/rotation/size). */
+function applyPrimitiveToRoot(root: Group, primitive: CollisionPrimitive): void {
   const center = primitive.center ?? [0, 0, 0];
-  lines.position.set(center[0], center[1], center[2]);
-  if (primitive.rotation) {
-    lines.rotation.set(
-      degToRad(primitive.rotation[0]),
-      degToRad(primitive.rotation[1]),
-      degToRad(primitive.rotation[2]),
-    );
-  }
-  return { lines, geometry };
+  root.position.set(center[0], center[1], center[2]);
+  const rotation = primitive.rotation ?? [0, 0, 0];
+  root.rotation.set(degToRad(rotation[0]), degToRad(rotation[1]), degToRad(rotation[2]));
+  const [sx, sy, sz] = primitive.size;
+  root.scale.set(Math.max(sx || 1, 0.001), Math.max(sy || 1, 0.001), Math.max(sz || 1, 0.001));
+}
+
+function disposeOverlay(overlay: PrimitiveOverlay): void {
+  overlay.solidGeometry.dispose();
+  overlay.wireGeometry.dispose();
+  overlay.wireMaterial.dispose();
+  overlay.pickMaterial.dispose();
 }
 
 function clonePrimitive(primitive: CollisionPrimitive): CollisionPrimitive {
@@ -671,6 +850,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function round(value: number): number {
   return Number(value.toFixed(4));
+}
+
+function roundDeg(value: number): number {
+  return Number(value.toFixed(2));
 }
 
 function degToRad(deg: number): number {
