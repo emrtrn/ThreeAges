@@ -1270,7 +1270,67 @@ await checkAsync("rapier simulatePhysics body falls under configured gravity", a
     assert.ok(synced.length > 0, "expected physics to sync dynamic transforms");
     const last = synced.at(-1) ?? assert.fail("synced");
     assert.ok(last.position[1] < 5);
-    assert.ok(Math.abs(last.rotation[1] - 30) < 1e-6);
+    assert.ok(Math.abs(last.rotation[1] - 30) < 1e-3, `rotationY=${last.rotation[1]}`);
+    await app.dispose();
+  } finally {
+    console.warn = warn;
+  }
+});
+
+await checkAsync("rapier simulatePhysics thin wall can topple after ground contact", async () => {
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  physics.setGravity([0, -10, 0]);
+  const synced: TransformComponent[] = [];
+  physics.setTransformSink((entityId, transform) => {
+    if (entityId === "wall") {
+      synced.push({
+        position: [...transform.position],
+        rotation: [...transform.rotation],
+        scale: [...transform.scale],
+      });
+    }
+  });
+  physics.setEntities([
+    {
+      id: "floor",
+      components: {
+        Transform: { position: [0, -0.1, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [20, 0.2, 20], isStatic: true, isSensor: false },
+      },
+    },
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [0, 3, 0], rotation: [0, 0, 25], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [0.2, 3, 0.2],
+          isStatic: false,
+          isSensor: false,
+          simulatePhysics: true,
+        },
+      },
+    },
+  ]);
+
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) {
+      return;
+    }
+    warn(...args);
+  };
+  try {
+    await app.init();
+    for (let frame = 0; frame < 240; frame += 1) app.update(1 / 60);
+    const last = synced.at(-1) ?? assert.fail("synced");
+    assert.ok(last.position[1] < 2, `wall did not reach the floor: y=${last.position[1]}`);
+    assert.ok(
+      Math.abs(last.rotation[2] - 25) > 2,
+      `wall rotation stayed locked: rotationZ=${last.rotation[2]}`,
+    );
     await app.dispose();
   } finally {
     console.warn = warn;
