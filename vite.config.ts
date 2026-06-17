@@ -4,7 +4,7 @@ import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
-import { validateSavePayload } from "./tools/saveValidator";
+import { validateSaveCollisionPayload, validateSavePayload } from "./tools/saveValidator";
 
 // Single-codebase template: this repo's own public/ is the project root that
 // both the game (static fetch) and the editor (authoring middleware) read/write.
@@ -129,7 +129,7 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 // Endpoints that write files. These must never be reachable from the LAN even
 // when `server.host` is true; the read-only directory listing (/__project-dir)
 // stays open so real-device (LAN) testing can still render scenes.
-const PRIVILEGED_URLS = new Set(["/__save-layout"]);
+const PRIVILEGED_URLS = new Set(["/__save-layout", "/__save-collision"]);
 
 function isPrivilegedUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -182,6 +182,34 @@ function layoutEditorPlugin(): Plugin {
             res.statusCode = 404;
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }));
+          }
+          return;
+        }
+
+        // Asset-level collision sidecar writes (`*.collision.json`). Reads go
+        // through Vite's static serving of public/, so only writes need an
+        // endpoint. The path is validated to stay a collision sidecar; the
+        // resolvePublicPath guard keeps it inside public/.
+        if (req.url === "/__save-collision") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveCollisionPayload(await readJsonBody(req));
+            const sidecarPath = resolvePublicPath(payload.path);
+            const previous = await readFile(sidecarPath, "utf8").catch(() => null);
+            const nextSidecar = `${JSON.stringify(payload.collision, null, 2)}\n`;
+            await writeFile(sidecarPath, nextSidecar, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== nextSidecar }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
           }
           return;
         }

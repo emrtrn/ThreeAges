@@ -113,9 +113,11 @@ import {
 } from "../src/scene/SceneRuntimeCore";
 import type { SceneDocument } from "../engine/scene/sceneDocument";
 import {
+  validateAssetCollisionDef,
   validateLayout,
   validateLightActor,
   validatePlacement,
+  validateSaveCollisionPayload,
 } from "./saveValidator";
 import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
@@ -3113,6 +3115,42 @@ check("default asset collision def is empty block-all", () => {
   assert.deepEqual(def.primitives, []);
   assert.equal(def.preset, DEFAULT_COLLISION_PRESET);
   assert.equal(def.complexity, DEFAULT_COLLISION_COMPLEXITY);
+});
+check("asset collision validator keeps primitives, preset, complexity", () => {
+  const def = validateAssetCollisionDef({
+    primitives: [
+      { shape: "box", size: [1, 2, 3], center: [0, 1, 0] },
+      { shape: "sphere", size: [2, 2, 2] },
+    ],
+    complexity: "simpleAndComplex",
+    preset: "blockAll",
+    doubleSided: true,
+  });
+  assert.equal((def.primitives as unknown[]).length, 2);
+  assert.equal(def.complexity, "simpleAndComplex");
+  assert.equal(def.preset, "blockAll");
+  assert.equal(def.doubleSided, true);
+});
+check("asset collision validator rejects unknown shape and preset", () => {
+  assert.throws(() =>
+    validateAssetCollisionDef({ primitives: [{ shape: "pyramid", size: [1, 1, 1] }], complexity: "projectDefault", preset: "blockAll" }),
+  );
+  assert.throws(() =>
+    validateAssetCollisionDef({ primitives: [], complexity: "projectDefault", preset: "nope" }),
+  );
+});
+check("collision save payload requires a .collision.json path", () => {
+  const payload = validateSaveCollisionPayload({
+    path: "assets/props/chair.collision.json",
+    collision: { primitives: [], complexity: "projectDefault", preset: "blockAll" },
+  });
+  assert.equal(payload.path, "assets/props/chair.collision.json");
+  assert.throws(() =>
+    validateSaveCollisionPayload({ path: "assets/props/chair.json", collision: {} }),
+  );
+  assert.throws(() =>
+    validateSaveCollisionPayload({ path: "../secret.collision.json", collision: {} }),
+  );
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

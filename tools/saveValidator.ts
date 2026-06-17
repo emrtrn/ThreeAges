@@ -10,6 +10,15 @@
  * tests can import it.
  */
 
+import {
+  COLLISION_CHANNELS,
+  isCollisionComplexity,
+  isCollisionPresetId,
+  isCollisionPrimitiveShape,
+  isCollisionResponse,
+  type CollisionChannel,
+} from "../engine/scene/collision";
+
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
   gridSize?: number;
@@ -450,6 +459,106 @@ function validateEditorSettings(value: unknown): EditorSettingsPatch | null {
   }
 
   return editor;
+}
+
+function validateVec3(value: unknown, label: string): [number, number, number] {
+  if (!isNumberTuple(value)) throw new Error(`invalid ${label}`);
+  return value.map((axis) => Number(axis.toFixed(4))) as [number, number, number];
+}
+
+function validateCollisionPrimitive(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (!isCollisionPrimitiveShape(input.shape)) throw new Error(`invalid ${label}.shape`);
+  const primitive: Record<string, unknown> = {
+    shape: input.shape,
+    size: validateVec3(input.size, `${label}.size`),
+  };
+  if (input.center !== undefined) primitive.center = validateVec3(input.center, `${label}.center`);
+  if (input.rotation !== undefined) {
+    primitive.rotation = validateVec3(input.rotation, `${label}.rotation`).map((axis) =>
+      Number(axis.toFixed(3)),
+    );
+  }
+  if (input.points !== undefined) {
+    if (!Array.isArray(input.points)) throw new Error(`${label}.points must be an array`);
+    primitive.points = input.points.map((point, index) =>
+      validateVec3(point, `${label}.points[${index}]`),
+    );
+  }
+  return primitive;
+}
+
+function validateCollisionResponses(
+  value: unknown,
+  label: string,
+): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  const responses: Record<string, unknown> = {};
+  for (const [channel, response] of Object.entries(input)) {
+    if (!COLLISION_CHANNELS.includes(channel as CollisionChannel)) {
+      throw new Error(`invalid ${label} channel: ${channel}`);
+    }
+    if (!isCollisionResponse(response)) {
+      throw new Error(`invalid ${label} response for ${channel}`);
+    }
+    responses[channel] = response;
+  }
+  return Object.keys(responses).length > 0 ? responses : undefined;
+}
+
+/** Validates an asset-level collision definition (`*.collision.json` sidecar). */
+export function validateAssetCollisionDef(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("collision def must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (!isCollisionComplexity(input.complexity)) throw new Error("invalid collision.complexity");
+  if (!isCollisionPresetId(input.preset)) throw new Error("invalid collision.preset");
+  if (!Array.isArray(input.primitives)) throw new Error("collision.primitives must be an array");
+  const def: Record<string, unknown> = {
+    primitives: input.primitives.map((primitive, index) =>
+      validateCollisionPrimitive(primitive, `collision.primitives[${index}]`),
+    ),
+    complexity: input.complexity,
+    preset: input.preset,
+  };
+  const responses = validateCollisionResponses(input.responses, "collision.responses");
+  if (responses) def.responses = responses;
+  if (input.physicalMaterialId !== undefined) {
+    if (typeof input.physicalMaterialId !== "string") {
+      throw new Error("collision.physicalMaterialId must be a string");
+    }
+    if (input.physicalMaterialId.length > 0) def.physicalMaterialId = input.physicalMaterialId;
+  }
+  if (input.doubleSided !== undefined) {
+    if (typeof input.doubleSided !== "boolean") throw new Error("collision.doubleSided must be boolean");
+    if (input.doubleSided) def.doubleSided = true;
+  }
+  return def;
+}
+
+/** Validates the `/__save-collision` payload (`{ path, collision }`). */
+export function validateSaveCollisionPayload(value: unknown): {
+  path: string;
+  collision: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") throw new Error("collision payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".collision.json")) {
+    throw new Error("collision payload path must end with .collision.json");
+  }
+  if (input.path.includes("..")) throw new Error("collision payload path must not contain ..");
+  return {
+    path: input.path,
+    collision: validateAssetCollisionDef(input.collision),
+  };
 }
 
 export function validateSavePayload(value: unknown): {
