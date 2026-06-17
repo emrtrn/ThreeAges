@@ -7,7 +7,6 @@
  */
 import {
   Box3,
-  Box3Helper,
   BufferGeometry,
   DirectionalLight,
   Float32BufferAttribute,
@@ -20,6 +19,7 @@ import {
   Object3D,
   Plane,
   Raycaster,
+  SphereGeometry,
   Vector3,
 } from "three";
 import type { AmbientLight, InstancedMesh, PerspectiveCamera, Scene, WebGLRenderer } from "three";
@@ -211,6 +211,7 @@ import {
   pivotCorrectedPosition,
   transformToMatrix,
 } from "@editor/render-three/transformMatrices";
+import { EditorSelectionOutline } from "./editorSelectionOutline";
 
 export type {
   EditableSceneObject,
@@ -223,6 +224,11 @@ export type {
 export type {
   EditorHistoryState,
 } from "@editor/core/history";
+
+export interface EditableTransformSnapshot {
+  selection: Selection;
+  transform: EditableTransform;
+}
 
 /**
  * Default raw-code -> action bindings for the runtime input map. Game-specific
@@ -337,7 +343,8 @@ export class SceneApp {
   private set selection(value: Selection | null) {
     this.editorSceneController.selection = value;
   }
-  private readonly selectionBoxes: Box3Helper[] = [];
+  private selectionOutline: EditorSelectionOutline | null = null;
+  private readonly lightOutlineGeometry = new SphereGeometry(0.35, 16, 8);
   /** "Show > Collision" overlay: wireframe boxes of every collider, off by default. */
   private readonly collisionBoxes: LineSegments[] = [];
   private showCollision = false;
@@ -451,6 +458,16 @@ export class SceneApp {
       gizmo: () => ({ visible: this.gizmoGroup.visible, pickables: this.gizmoPickables }),
     });
 
+    if (this.editorEnabled) {
+      this.selectionOutline = new EditorSelectionOutline({
+        renderer: this.renderer,
+        scene: this.scene,
+        camera: this.camera,
+        width: window.innerWidth,
+        height: window.innerHeight,
+      });
+    }
+
     this.gizmoGroup.name = "editor-transform-gizmo";
     this.gizmoGroup.visible = false;
     this.scene.add(this.gizmoGroup);
@@ -509,7 +526,8 @@ export class SceneApp {
       this.cameraController.update(deltaSeconds);
       this.updateGizmoScreenScale();
 
-      this.renderer.render(this.scene, this.camera);
+      if (this.selectionOutline) this.selectionOutline.render(deltaSeconds);
+      else this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);
     };
     this.frameHandle = requestAnimationFrame(loop);
@@ -534,6 +552,9 @@ export class SceneApp {
     this.unbindEditorInput?.();
     this.unbindEditorInput = null;
     this.keyboardInput.detach();
+    this.selectionOutline?.dispose();
+    this.selectionOutline = null;
+    this.lightOutlineGeometry.dispose();
     // EngineApp.dispose() is async (subsystems may release async resources);
     // SceneApp.dispose() is sync, so fire-and-forget like the renderer teardown.
     void this.engineApp.dispose();
@@ -1142,9 +1163,58 @@ export class SceneApp {
     return this.captureTransform(this.selection);
   }
 
+  captureSelectedTransforms(): EditableTransformSnapshot[] {
+    return this.getSelectedSelections().flatMap((selection) => {
+      const transform = this.captureTransform(selection);
+      return transform ? [{ selection: cloneSelection(selection), transform }] : [];
+    });
+  }
+
   commitSelectedTransform(before: EditableTransform | null, label = "Transform"): void {
     if (!before || !this.selection) return;
     this.commitTransformChange(this.selection, before, label);
+  }
+
+  commitSelectedTransforms(before: EditableTransformSnapshot[], label = "Transform"): void {
+    if (before.length === 0) return;
+    const entries = before.map((entry) => ({
+      selection: cloneSelection(entry.selection),
+      before: entry.transform,
+      after: this.captureTransform(entry.selection),
+    }));
+
+    const changes: Array<{
+      selection: Selection;
+      before: EditableTransform;
+      after: EditableTransform;
+    }> = [];
+    for (const entry of entries) {
+      if (!entry.after || transformsEqual(entry.before, entry.after)) continue;
+      changes.push({
+        selection: entry.selection,
+        before: entry.before,
+        after: entry.after,
+      });
+    }
+    if (changes.length === 0) return;
+
+    const selections = changes.map((entry) => cloneSelection(entry.selection));
+    const active =
+      this.selection && selections.some((selection) => selectionsEqual(selection, this.selection))
+        ? cloneSelection(this.selection)
+        : cloneSelection(selections[0]!);
+
+    this.executeCommand({
+      label: changes.length === 1 ? label : `${label} ${changes.length} objects`,
+      redo: () => {
+        this.selectMany(selections, active);
+        for (const change of changes) this.applyTransform(change.selection, change.after);
+      },
+      undo: () => {
+        this.selectMany(selections, active);
+        for (const change of changes) this.applyTransform(change.selection, change.before);
+      },
+    });
   }
 
   updateSelectedTransform(values: {
@@ -1165,6 +1235,34 @@ export class SceneApp {
     if (values.scale) writeScale(transform, values.scale);
 
     this.refreshSelectionObject(this.selection);
+    this.updateSelectionBox();
+    this.updateGizmo();
+    if (options.notifySelection !== false) this.emitSelectionChanged();
+  }
+
+  updateSelectedTransforms(values: {
+    position?: Vec3;
+    rotation?: Vec3;
+    scale?: Vec3;
+  }, options: { notifySelection?: boolean } = {}): void {
+    if (!this.layout || !this.selection) return;
+
+    const selections = this.getSelectedSelections();
+    const editableSelections = selections.filter((selection) => !this.isSelectionLocked(selection));
+    if (editableSelections.length === 0) {
+      this.onStatus?.("Selected object is locked.", "warning");
+      return;
+    }
+
+    for (const selection of editableSelections) {
+      const transform = this.getMutableTransform(selection);
+      if (!transform) continue;
+      if (values.position) transform.position = [...values.position];
+      if (values.rotation) writeRotation(transform, values.rotation);
+      if (values.scale) writeScale(transform, values.scale);
+      this.refreshSelectionObject(selection);
+    }
+
     this.updateSelectionBox();
     this.updateGizmo();
     if (options.notifySelection !== false) this.emitSelectionChanged();
@@ -2604,17 +2702,77 @@ export class SceneApp {
     // Collision overlay refreshes with the same cadence as selection boxes, so it
     // tracks live transform edits (drag/cascade all route through here).
     this.updateCollisionBoxes();
-    if (!this.layout) return;
+    if (!this.layout || !this.selectionOutline) return;
 
+    const outlineTargets: Object3D[] = [];
     for (const selection of this.getSelectedSelections()) {
-      const box = this.getSelectionWorldBox(selection);
-      if (!box || box.isEmpty()) continue;
-      const active = this.selection && selectionsEqual(this.selection, selection);
-      const helper = new Box3Helper(box, active ? 0x00aaff : 0xf3cc5c);
-      helper.name = active ? "editor-selection-box-active" : "editor-selection-box";
-      this.selectionBoxes.push(helper);
-      this.scene.add(helper);
+      const target = this.createSelectionOutlineTarget(selection);
+      if (target) outlineTargets.push(target);
     }
+    this.selectionOutline.setTargets(outlineTargets);
+  }
+
+  private createSelectionOutlineTarget(selection: Selection): Object3D | null {
+    if (!this.selectionOutline || !this.layout) return null;
+
+    if (selection.kind === "instance") {
+      const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
+      const placement = instance?.placements[selection.placementIndex];
+      const gltf = this.models.get(selection.assetId);
+      if (!placement || !gltf || placement.hidden) return null;
+      return this.createInstanceOutlineTarget(selection.assetId, placement, gltf);
+    }
+
+    if (selection.kind === "light") {
+      const record = this.lightObjects[selection.index];
+      const actor = this.layout.lights?.[selection.index];
+      if (!record || actor?.hidden) return null;
+      const proxy = new Mesh(
+        this.lightOutlineGeometry,
+        this.selectionOutline.getInvisibleMaterial(),
+      );
+      proxy.name = "light-outline-proxy";
+      proxy.matrix.copy(record.root.matrixWorld);
+      proxy.matrixAutoUpdate = false;
+      proxy.frustumCulled = false;
+      proxy.castShadow = false;
+      proxy.receiveShadow = false;
+      proxy.raycast = () => {};
+      return proxy;
+    }
+
+    const object = this.characterObjects[selection.index];
+    const character = this.layout.characters[selection.index];
+    if (!object || character?.hidden) return null;
+    return this.selectionOutline.cloneRenderableMeshes(object);
+  }
+
+  private createInstanceOutlineTarget(
+    assetId: string,
+    placement: LayoutPlacement,
+    gltf: GLTF,
+  ): Object3D | null {
+    const outline = this.selectionOutline;
+    if (!outline) return null;
+    const placementMatrix = composePlacementMatrix(placement);
+    const group = new Group();
+    group.name = `${assetId}-outline-proxy`;
+
+    gltf.scene.updateMatrixWorld(true);
+    gltf.scene.traverse((object) => {
+      if (!isRenderableMesh(object)) return;
+      const proxy = new Mesh(object.geometry, outline.getInvisibleMaterial());
+      proxy.name = `${object.name || "mesh"}-outline-proxy`;
+      proxy.matrix.copy(placementMatrix).multiply(object.matrixWorld);
+      proxy.matrixAutoUpdate = false;
+      proxy.frustumCulled = false;
+      proxy.castShadow = false;
+      proxy.receiveShadow = false;
+      proxy.raycast = () => {};
+      group.add(proxy);
+    });
+
+    return group.children.length > 0 ? group : null;
   }
 
   /** Whether the "Show > Collision" overlay is on. */
@@ -2712,15 +2870,7 @@ export class SceneApp {
   }
 
   private removeSelectionBox(): void {
-    for (const selectionBox of this.selectionBoxes) {
-      this.scene.remove(selectionBox);
-      selectionBox.geometry.dispose();
-      const materials = Array.isArray(selectionBox.material)
-        ? selectionBox.material
-        : [selectionBox.material];
-      for (const material of materials) material.dispose();
-    }
-    this.selectionBoxes.length = 0;
+    this.selectionOutline?.setTargets([]);
   }
 
   private updateGizmo(): void {
@@ -2937,6 +3087,7 @@ export class SceneApp {
       height,
       viewTouched: this.cameraController.hasTouched,
     });
+    this.selectionOutline?.setSize(width, height);
     if (resetView) {
       this.cameraController.syncAnglesFromCurrentView();
     }

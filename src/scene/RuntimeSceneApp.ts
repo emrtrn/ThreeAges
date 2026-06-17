@@ -17,16 +17,22 @@ import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 import { resolveGameMode } from "@/game/gameModes/registry";
-import { normalizeGameModeId, TPS_GAME_MODE_ID } from "@/game/gameModes/catalog";
-import { computePlayerStartSpawn } from "@/game/gameModes/playerSpawn";
+import { TPS_GAME_MODE_ID } from "@/game/gameModes/catalog";
+import {
+  computePlayerStartSpawn,
+  createDefaultPlayerCharacter,
+  findPlayerStartTransform,
+} from "@/game/gameModes/playerSpawn";
 import type {
   GameModeContext,
   GameModeSession,
+  PawnDefinition,
   RuntimeCharacterRef,
 } from "@/game/gameModes/types";
 import { loadActiveProject, type ActiveProject } from "@/project/ProjectSystem";
 import {
   applySceneBackgroundAndAmbient,
+  applyEditorMatchedPlayLook,
   buildSceneCharacterObject,
   buildSceneEntities,
   buildSceneInstancedModel,
@@ -151,6 +157,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,
     });
     this.renderer = runtimeCore.renderer;
+    applyEditorMatchedPlayLook(this.renderer);
     this.scene = runtimeCore.scene;
     this.camera = runtimeCore.camera;
     this.pointerLook = new PointerLookSource(canvas);
@@ -276,20 +283,50 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * In the TPS Game Mode, moves the player character's authored start transform
-   * to the first Player Start marker (or the origin when none exists) before the
-   * scene is built, so render, physics and behavior all begin at the spawn point.
+   * In the TPS Game Mode, anchors the possessed player at the first Player Start
+   * marker (or the origin when none exists) before the scene is built, so render,
+   * physics and behavior all begin at the spawn point. When the scene has no
+   * authored player character, spawns the mode's default character pawn at the
+   * Player Start so Play always has someone to possess. The synthetic pawn is
+   * appended to the in-memory layout only — never written back to the saved file.
    * No-op for other modes (the default camera mode possesses no character).
    */
   private applyPlayerStartSpawn(): void {
     if (!this.layout) return;
-    if (normalizeGameModeId(this.layout.worldSettings?.gameMode) !== TPS_GAME_MODE_ID) return;
+    const mode = resolveGameMode(this.layout.worldSettings?.gameMode);
+    if (mode.id !== TPS_GAME_MODE_ID) return;
+
     const spawn = computePlayerStartSpawn(this.layout);
-    if (!spawn) return;
-    const character = this.layout.characters[spawn.characterIndex];
-    if (!character) return;
-    character.position = [...spawn.position];
-    if (spawn.yawDeg !== null) character.rotation = [0, spawn.yawDeg, 0];
+    if (spawn) {
+      const character = this.layout.characters[spawn.characterIndex];
+      if (!character) return;
+      character.position = [...spawn.position];
+      if (spawn.yawDeg !== null) character.rotation = [0, spawn.yawDeg, 0];
+      return;
+    }
+    // No authored player character: spawn the mode's default character pawn at
+    // the Player Start (only when one exists — the player enters at that marker).
+    this.spawnDefaultPlayerPawn(mode.defaultPawn);
+  }
+
+  /**
+   * Appends the TPS default player pawn to the in-memory layout at the Player
+   * Start, so the scene builder, physics and the TPS possession path treat it
+   * like an authored player. No-op without a character pawn asset or a Player
+   * Start marker. Runtime-only; never persisted.
+   */
+  private spawnDefaultPlayerPawn(pawn: PawnDefinition): void {
+    if (!this.layout) return;
+    if (pawn.kind !== "character" || !pawn.characterAssetId) return;
+    const start = findPlayerStartTransform(this.layout);
+    if (!start) return;
+    this.layout.characters.push(
+      createDefaultPlayerCharacter(
+        { assetId: pawn.characterAssetId, scale: pawn.characterScale, speed: pawn.movement?.speed },
+        start.position,
+        start.yawDeg,
+      ),
+    );
   }
 
   /**

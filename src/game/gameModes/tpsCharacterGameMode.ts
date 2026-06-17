@@ -120,6 +120,11 @@ export const tpsCharacterGameMode: GameModeDefinition = {
   defaultPawn: {
     id: "forge.tpsPawn",
     kind: "character",
+    // Temporary default: when the scene has no authored player, TPS spawns this
+    // character at the Player Start. Tuned to match the follow camera (the demo
+    // Blocky Character reads correctly at 0.3).
+    characterAssetId: "character-a",
+    characterScale: 0.3,
     movement: { speed: 3, sprintMultiplier: 2 },
   },
   playerController: {

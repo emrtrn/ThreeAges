@@ -1,160 +1,36 @@
 {
   "schema": 1,
   "name": "playground",
-  "loadGroups": [
-    "core",
-    "furniture-seating",
-    "furniture-plants",
-    "characters"
-  ],
+  "loadGroups": [],
   "instances": [
     {
-      "assetId": "floor-full",
+      "assetId": "shape:plane",
       "placements": [
         {
           "position": [
-            -3.91,
             0,
-            2.35
+            0,
+            0
           ],
+          "name": "Floor",
           "scale": [
-            6,
+            8,
             1,
-            6
-          ]
-        },
-        {
-          "position": [
-            -0.28,
-            2.36,
-            -0.21
-          ],
-          "simulatePhysics": true,
-          "physics": {
-            "enableGravity": false
-          },
-          "rotationYDeg": 0,
-          "scale": [
-            0.47,
-            6,
-            0.46
-          ]
-        },
-        {
-          "position": [
-            -0.28,
-            6.47,
-            -0.21
-          ],
-          "simulatePhysics": true,
-          "rotationYDeg": 0,
-          "scale": [
-            0.47,
-            6,
-            0.46
-          ]
-        },
-        {
-          "position": [
-            -0.28,
-            4.41,
-            -0.21
-          ],
-          "simulatePhysics": true,
-          "rotationYDeg": 0,
-          "scale": [
-            0.47,
-            6,
-            0.46
-          ]
-        },
-        {
-          "position": [
-            -0.28,
-            3.74,
-            -0.21
-          ],
-          "simulatePhysics": true,
-          "rotationYDeg": 0,
-          "scale": [
-            0.47,
-            6,
-            0.46
-          ]
-        },
-        {
-          "position": [
-            -0.28,
-            5.79,
-            -0.21
-          ],
-          "simulatePhysics": true,
-          "rotationYDeg": 0,
-          "scale": [
-            0.47,
-            6,
-            0.46
-          ]
-        },
-        {
-          "position": [
-            -0.56,
-            3.03,
-            -0.21
-          ],
-          "simulatePhysics": true,
-          "rotationYDeg": 0,
-          "scale": [
-            0.47,
-            6,
-            0.46
-          ]
-        },
-        {
-          "position": [
-            -0.56,
-            5.08,
-            -0.21
-          ],
-          "simulatePhysics": true,
-          "rotationYDeg": 0,
-          "scale": [
-            0.47,
-            6,
-            0.46
+            8
           ]
         }
       ]
     },
     {
-      "assetId": "wall",
+      "assetId": "rug-rectangle",
       "placements": [
         {
           "position": [
-            -2.22,
-            0.94,
-            -1.47
-          ],
-          "simulatePhysics": true,
-          "rotation": [
-            30,
+            -0.52,
             0,
-            15
+            0.64
           ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -2.22,
-            3.78,
-            -1.47
-          ],
-          "simulatePhysics": true,
-          "rotation": [
-            150,
-            0,
-            15
-          ],
+          "rotationYDeg": 0,
           "scale": 1
         }
       ]
@@ -164,67 +40,123 @@
       "placements": [
         {
           "position": [
-            0.49,
-            0.05,
-            -0.76
-          ],
-          "rotationYDeg": 90,
-          "rotation": [
+            -0.29,
             0,
-            270,
-            0
+            -0.6
           ],
+          "rotationYDeg": 0,
           "scale": 1
         }
       ]
     },
     {
-      "assetId": "potted-plant",
-      "placements": []
-    },
-    {
-      "assetId": "wall-window",
-      "placements": []
-    },
-    {
-      "assetId": "wall-corner",
-      "placements": []
-    },
-    {
-      "assetId": "chair-modern-cushion",
-      "placements": []
+      "assetId": "table-coffee",
+      "placements": [
+        {
+          "position": [
+            0.41,
+            0.01,
+            0.31
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     },
     {
       "assetId": "shape:cube",
-      "placements": []
-    },
-    {
-      "assetId": "shape:sphere",
-      "placements": []
-    },
-    {
-      "assetId": "shape:cylinder",
-      "placements": []
-    },
-    {
-      "assetId": "shape:cone",
-      "placements": []
-    },
-    {
-      "assetId": "bed-single",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -2.06,
+            1.66,
+            2.25
+          ],
+          "name": "Cube",
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -2.06,
+            1.66,
+            1.52
+          ],
+          "name": "Cube",
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -2.06,
+            2.54,
+            2.06
+          ],
+          "name": "Cube",
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -2.06,
+            1.66,
+            0.64
+          ],
+          "name": "Cube",
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -2.06,
+            2.54,
+            1.18
+          ],
+          "name": "Cube",
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -2.06,
+            1.66,
+            -0.38
+          ],
+          "name": "Cube",
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -2.06,
+            2.54,
+            0.16
+          ],
+          "name": "Cube",
+          "simulatePhysics": true,
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     },
     {
       "assetId": "marker:playerStart",
       "placements": [
         {
           "position": [
-            -0.42,
+            0.05,
             0.01,
-            1.35
+            1.73
           ],
           "name": "Player Start",
           "collision": false,
+          "rotationYDeg": 0,
           "rotation": [
             0,
             180,
@@ -233,40 +165,67 @@
           "scale": 1
         }
       ]
-    }
-  ],
-  "characters": [
+    },
     {
-      "assetId": "character-a",
-      "position": [
-        -2.1,
-        0.11,
-        1.35
-      ],
-      "animation": "idle",
-      "name": "player",
-      "scaleLocked": true,
-      "behavior": {
-        "script": "input-move",
-        "params": {
-          "speed": 2,
-          "jumpSpeed": 4,
-          "sprintMultiplier": 2
+      "assetId": "doorway",
+      "placements": [
+        {
+          "position": [
+            0.21,
+            0,
+            -3.25
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
         }
-      },
-      "audio": {
-        "clipId": "collision-chime",
-        "volume": 0.35,
-        "loop": false,
-        "spatial": false
-      },
-      "rotationYDeg": 180,
-      "scale": 0.3
+      ]
+    },
+    {
+      "assetId": "wall",
+      "placements": [
+        {
+          "position": [
+            -1.66,
+            0,
+            2.88
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            5.85,
+            1.16,
+            0.05
+          ]
+        },
+        {
+          "position": [
+            3,
+            0,
+            -3.18
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": [
+            5.85,
+            1.16,
+            0.05
+          ]
+        }
+      ]
     }
   ],
+  "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "backgroundColor": "#404040",
+    "backgroundColor": "#b8e0ff",
     "ambientIntensity": 1,
     "gameMode": "forge.tpsCharacter"
   },
@@ -275,9 +234,9 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        -0.35,
-        1.54,
-        -0.08
+        3,
+        9,
+        4
       ],
       "name": "Sun",
       "rotation": [
@@ -286,7 +245,7 @@
         0
       ],
       "color": "#ffffff",
-      "intensity": 2,
+      "intensity": 1,
       "castShadow": true
     }
   ]

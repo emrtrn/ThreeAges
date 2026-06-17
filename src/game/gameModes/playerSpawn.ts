@@ -6,10 +6,14 @@
  * the scene has no marker the player spawns at the world origin. Used by the
  * runtime shell to rewrite the player character's start transform before the
  * scene is built, so render, physics and behavior all begin at the spawn point.
+ *
+ * When the scene has no authored player character at all, the runtime spawns a
+ * default character pawn (see {@link createDefaultPlayerCharacter}) at the Player
+ * Start so Play always has someone to possess.
  */
 import { PLAYER_START_ASSET_ID } from "@engine/scene/shapes";
 import { readRotation } from "@engine/scene/transform";
-import type { RoomLayout, Vec3 } from "@engine/scene/layout";
+import type { LayoutCharacter, RoomLayout, Vec3 } from "@engine/scene/layout";
 
 export interface PlayerStartSpawn {
   /** Index into `layout.characters` of the resolved player. */
@@ -20,12 +24,33 @@ export interface PlayerStartSpawn {
   readonly yawDeg: number | null;
 }
 
+/**
+ * The first Player Start marker's world position + yaw, or null when the scene
+ * has no marker. Yaw is the marker's Y rotation in degrees.
+ */
+export function findPlayerStartTransform(
+  layout: RoomLayout,
+): { position: Vec3; yawDeg: number | null } | null {
+  const marker = layout.instances.find((entry) => entry.assetId === PLAYER_START_ASSET_ID)
+    ?.placements[0];
+  if (!marker) return null;
+  return {
+    position: [marker.position[0], marker.position[1], marker.position[2]],
+    yawDeg: readRotation(marker)[1],
+  };
+}
+
 /** Resolves the player character the same way the TPS mode possesses one. */
 function resolvePlayerCharacterIndex(layout: RoomLayout): number | null {
   const tagged = layout.characters.findIndex((c) => c.metadata?.player === true);
   if (tagged !== -1) return tagged;
   const input = layout.characters.findIndex((c) => c.behavior?.script === "input-move");
   return input === -1 ? null : input;
+}
+
+/** True when the layout already contains a character the TPS mode would possess. */
+export function hasPlayerCharacter(layout: RoomLayout): boolean {
+  return resolvePlayerCharacterIndex(layout) !== null;
 }
 
 /**
@@ -38,14 +63,44 @@ export function computePlayerStartSpawn(layout: RoomLayout): PlayerStartSpawn | 
   const characterIndex = resolvePlayerCharacterIndex(layout);
   if (characterIndex === null) return null;
 
-  const marker = layout.instances.find((entry) => entry.assetId === PLAYER_START_ASSET_ID)
-    ?.placements[0];
-  if (!marker) {
+  const start = findPlayerStartTransform(layout);
+  if (!start) {
     return { characterIndex, position: [0, 0, 0], yawDeg: null };
   }
+  return { characterIndex, position: start.position, yawDeg: start.yawDeg };
+}
+
+/** Inputs for {@link createDefaultPlayerCharacter}, sourced from the mode's pawn. */
+export interface DefaultPlayerPawnSpec {
+  /** Character asset id to instantiate. */
+  readonly assetId: string;
+  /** Authored uniform scale; defaults to 1. */
+  readonly scale?: number | undefined;
+  /** `input-move` walk speed; defaults to 3. */
+  readonly speed?: number | undefined;
+}
+
+/**
+ * Builds the synthetic player character the TPS mode spawns when the scene has
+ * no authored player. It carries the `player` metadata tag + `input-move`
+ * behavior, so the same possession path picks it up, placed at the given Player
+ * Start transform. Runtime-only: the caller appends it to the in-memory layout,
+ * never to the saved file.
+ */
+export function createDefaultPlayerCharacter(
+  pawn: DefaultPlayerPawnSpec,
+  position: Vec3,
+  yawDeg: number | null,
+): LayoutCharacter {
   return {
-    characterIndex,
-    position: [marker.position[0], marker.position[1], marker.position[2]],
-    yawDeg: readRotation(marker)[1],
+    assetId: pawn.assetId,
+    name: "Player",
+    position: [position[0], position[1], position[2]],
+    rotation: [0, yawDeg ?? 0, 0],
+    scale: pawn.scale ?? 1,
+    scaleLocked: true,
+    animation: "idle",
+    metadata: { player: true },
+    behavior: { script: "input-move", params: { speed: pawn.speed ?? 3 } },
   };
 }

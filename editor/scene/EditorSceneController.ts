@@ -12,7 +12,6 @@ import {
   cloneUngroupedPlacement,
 } from "@editor/core/layoutSnapshots";
 import {
-  defaultTrueFlagCommandLabel,
   flagCommandLabel,
   type EditorDefaultTrueFlagCommand,
   type EditorFlagCommand,
@@ -593,8 +592,12 @@ export class EditorSceneController {
   }
 
   setSelectionScaleLocked(value: boolean): void {
-    if (!this.selection || !this.host.hasSelection(this.selection)) return;
-    this.setSelectionFlag(this.selection, "scaleLocked", value);
+    this.setSelectionsFlag(
+      this.getSelectedSelectionsWithTargets(),
+      "scaleLocked",
+      value,
+      value ? "Lock selected scale ratios" : "Unlock selected scale ratios",
+    );
   }
 
   setSelectionCastShadow(value: boolean): void {
@@ -603,85 +606,146 @@ export class EditorSceneController {
       this.host.onStatus("Cast Shadow is controlled centrally for static objects.", "info");
       return;
     }
-    this.setSelectionDefaultTrueFlag(this.selection, "castShadow", value);
+    this.setSelectionsDefaultTrueFlag(
+      this.getSelectedSelectionsWithTargets((selection) => selection.kind === "character"),
+      "castShadow",
+      value,
+      value ? "Enable selected cast shadow" : "Disable selected cast shadow",
+    );
   }
 
   setSelectionCollision(value: boolean): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
-    this.setSelectionDefaultTrueFlag(this.selection, "collision", value);
+    this.setSelectionsDefaultTrueFlag(
+      this.getSelectedSelectionsWithTargets((selection) => selection.kind !== "light"),
+      "collision",
+      value,
+      value ? "Enable selected collision" : "Disable selected collision",
+    );
   }
 
   setSelectionSimulatePhysics(value: boolean): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
-    this.setSelectionFlag(this.selection, "simulatePhysics", value);
+    this.setSelectionsFlag(
+      this.getSelectedSelectionsWithTargets((selection) => selection.kind !== "light"),
+      "simulatePhysics",
+      value,
+      value ? "Enable selected simulate physics" : "Disable selected simulate physics",
+    );
   }
 
   /** Sets (or clears, when `undefined`) the per-placement collision preset override. */
   setSelectionCollisionPreset(value: CollisionPresetId | undefined): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
-    const target = this.host.getMutableTransform(this.selection);
-    if (!target) return;
-    const previous = target.collisionPreset;
-    if (previous === value) return;
-    const commandSelection = cloneSelection(this.selection);
+    const entries = this.getSelectedSelectionsWithTargets((selection) => selection.kind !== "light")
+      .flatMap((selection) => {
+        const target = this.host.getMutableTransform(selection);
+        if (!target || target.collisionPreset === value) return [];
+        return [{ selection: cloneSelection(selection), previous: target.collisionPreset }];
+      });
+    if (entries.length === 0) return;
+
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.applyCollisionPreset(
+          entry.selection,
+          mode === "redo" ? value : entry.previous,
+          { notify: false },
+        );
+      }
+      this.host.emitSelectionChanged();
+    };
+
     this.executeCommand({
-      label: "Set collision preset",
-      redo: () => this.applyCollisionPreset(commandSelection, value),
-      undo: () => this.applyCollisionPreset(commandSelection, previous),
+      label: entries.length === 1 ? "Set collision preset" : "Set selected collision presets",
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
     });
   }
 
   private applyCollisionPreset(
     selection: Selection,
     value: CollisionPresetId | undefined,
+    options: { notify?: boolean } = {},
   ): void {
     if (selection.kind === "light") return;
     const target = this.host.getMutableTransform(selection);
     if (!target) return;
     if (value === undefined) delete target.collisionPreset;
     else target.collisionPreset = value;
-    this.host.emitSelectionChanged();
+    if (options.notify !== false) this.host.emitSelectionChanged();
   }
 
   setSelectionPhysics(patch: Partial<LayoutPhysics>): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
-    const target = this.host.getMutableTransform(this.selection) as
-      | LayoutPlacement
-      | LayoutCharacter
-      | null;
-    if (!target) return;
-    const previous = normalizePhysicsSettings(target.physics);
-    const next = normalizePhysicsSettings({ ...(previous ?? {}), ...patch });
-    if (physicsSettingsEqual(previous, next)) return;
+    const entries = this.getSelectedSelectionsWithTargets((selection) => selection.kind !== "light")
+      .flatMap((selection) => {
+        const target = this.host.getMutableTransform(selection) as
+          | LayoutPlacement
+          | LayoutCharacter
+          | null;
+        if (!target) return [];
+        const previous = normalizePhysicsSettings(target.physics);
+        const next = normalizePhysicsSettings({ ...(previous ?? {}), ...patch });
+        if (physicsSettingsEqual(previous, next)) return [];
+        return [{ selection: cloneSelection(selection), previous, next }];
+      });
+    if (entries.length === 0) return;
 
-    const commandSelection = cloneSelection(this.selection);
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.applyPhysicsSettings(
+          entry.selection,
+          mode === "redo" ? entry.next : entry.previous,
+          { notify: false },
+        );
+      }
+      this.host.emitSelectionChanged();
+    };
+
     this.executeCommand({
-      label: "Set physics",
-      redo: () => this.applyPhysicsSettings(commandSelection, next),
-      undo: () => this.applyPhysicsSettings(commandSelection, previous),
+      label: entries.length === 1 ? "Set physics" : "Set selected physics",
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
     });
   }
 
   setSelectionMetadata(key: string, value: MetadataValue | undefined, label?: string): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind === "light") return;
-    const target = this.host.getMutableTransform(this.selection) as
-      | LayoutPlacement
-      | LayoutCharacter
-      | null;
-    if (!target) return;
-    const previous = cloneMetadataValue(target.metadata?.[key]);
-    if (metadataValuesEqual(previous, value)) return;
+    const entries = this.getSelectedSelectionsWithTargets((selection) => selection.kind !== "light")
+      .flatMap((selection) => {
+        const target = this.host.getMutableTransform(selection) as
+          | LayoutPlacement
+          | LayoutCharacter
+          | null;
+        if (!target) return [];
+        const previous = cloneMetadataValue(target.metadata?.[key]);
+        if (metadataValuesEqual(previous, value)) return [];
+        return [{ selection: cloneSelection(selection), previous }];
+      });
+    if (entries.length === 0) return;
 
-    const commandSelection = cloneSelection(this.selection);
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.applyMetadataValue(
+          entry.selection,
+          key,
+          mode === "redo" ? value : entry.previous,
+          { notify: false },
+        );
+      }
+      this.host.emitSelectionChanged();
+    };
+
     this.executeCommand({
       label: label ?? `Set ${key}`,
-      redo: () => this.applyMetadataValue(commandSelection, key, value),
-      undo: () => this.applyMetadataValue(commandSelection, key, previous),
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
     });
   }
 
@@ -922,6 +986,14 @@ export class EditorSceneController {
     });
   }
 
+  private getSelectedSelectionsWithTargets(
+    filter: (selection: Selection) => boolean = () => true,
+  ): Selection[] {
+    return this.getSelectedSelections().filter((selection) => {
+      return filter(selection) && this.host.getMutableTransform(selection) !== null;
+    });
+  }
+
   private applyFlag(
     selection: Selection,
     flag: EditorFlagCommand,
@@ -939,27 +1011,40 @@ export class EditorSceneController {
     if (options.notify !== false) this.host.emitSelectionChanged();
   }
 
-  private setSelectionDefaultTrueFlag(
-    selection: Selection,
+  private setSelectionsDefaultTrueFlag(
+    selections: Selection[],
     field: EditorDefaultTrueFlagCommand,
     value: boolean,
+    label: string,
   ): void {
-    if (selection.kind === "light") return;
-    const target = this.host.getMutableTransform(selection) as
-      | LayoutPlacement
-      | LayoutCharacter
-      | null;
-    if (!target) return;
-    const previous = target[field] ?? true;
-    if (previous === value) return;
+    const entries = selections.flatMap((selection) => {
+      if (selection.kind === "light") return [];
+      const target = this.host.getMutableTransform(selection) as
+        | LayoutPlacement
+        | LayoutCharacter
+        | null;
+      if (!target) return [];
+      const previous = target[field] ?? true;
+      return previous === value ? [] : [{ selection: cloneSelection(selection), previous }];
+    });
+    if (entries.length === 0) return;
 
-    const label = defaultTrueFlagCommandLabel(field, value);
-    const commandSelection = cloneSelection(selection);
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.applyDefaultTrueFlag(
+          entry.selection,
+          field,
+          mode === "redo" ? value : entry.previous,
+          { notify: false },
+        );
+      }
+      this.host.emitSelectionChanged();
+    };
 
     this.executeCommand({
       label,
-      redo: () => this.applyDefaultTrueFlag(commandSelection, field, value),
-      undo: () => this.applyDefaultTrueFlag(commandSelection, field, previous),
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
     });
   }
 
@@ -967,6 +1052,7 @@ export class EditorSceneController {
     selection: Selection,
     field: EditorDefaultTrueFlagCommand,
     value: boolean,
+    options: { notify?: boolean } = {},
   ): void {
     if (selection.kind === "light") return;
     const target = this.host.getMutableTransform(selection) as
@@ -977,13 +1063,14 @@ export class EditorSceneController {
     if (value) delete target[field];
     else target[field] = false;
     if (field === "castShadow") this.host.applyCastShadow(selection);
-    this.host.emitSelectionChanged();
+    if (options.notify !== false) this.host.emitSelectionChanged();
   }
 
   private applyMetadataValue(
     selection: Selection,
     key: string,
     value: MetadataValue | undefined,
+    options: { notify?: boolean } = {},
   ): void {
     if (selection.kind === "light") return;
     const target = this.host.getMutableTransform(selection) as
@@ -1000,12 +1087,13 @@ export class EditorSceneController {
       target.metadata ??= {};
       target.metadata[key] = cloneMetadataValue(value) as MetadataValue;
     }
-    this.host.emitSelectionChanged();
+    if (options.notify !== false) this.host.emitSelectionChanged();
   }
 
   private applyPhysicsSettings(
     selection: Selection,
     physics: LayoutPhysics | undefined,
+    options: { notify?: boolean } = {},
   ): void {
     if (selection.kind === "light") return;
     const target = this.host.getMutableTransform(selection) as
@@ -1016,7 +1104,7 @@ export class EditorSceneController {
     const next = clonePhysics(physics);
     if (next) target.physics = next;
     else delete target.physics;
-    this.host.emitSelectionChanged();
+    if (options.notify !== false) this.host.emitSelectionChanged();
   }
 
   private createGroupId(): string {

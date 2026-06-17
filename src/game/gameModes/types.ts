@@ -24,6 +24,14 @@ export type Vec3 = [number, number, number];
 export interface PawnDefinition {
   readonly id: string;
   readonly kind: "camera" | "character";
+  /**
+   * For `character` pawns, the asset spawned as the default player when the scene
+   * has no authored player character. (Temporary: a future build lets the user
+   * assign the pawn its own character asset here.) Absent for `camera` pawns.
+   */
+  readonly characterAssetId?: string;
+  /** Authored scale for the spawned default character pawn. Absent means 1. */
+  readonly characterScale?: number;
   /** Movement tuning (units/s, sprint multiplier). Optional per kind. */
   readonly movement?: {
     readonly speed?: number;

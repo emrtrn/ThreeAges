@@ -73,7 +73,12 @@ import {
   forwardFromLookAngles,
   lookAnglesFromForward,
 } from "../src/game/gameModes/cameraControl";
-import { computePlayerStartSpawn } from "../src/game/gameModes/playerSpawn";
+import {
+  computePlayerStartSpawn,
+  createDefaultPlayerCharacter,
+  findPlayerStartTransform,
+  hasPlayerCharacter,
+} from "../src/game/gameModes/playerSpawn";
 import { defaultCameraGameMode } from "../src/game/gameModes/defaultCameraGameMode";
 import { tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
 import type {
@@ -2282,6 +2287,91 @@ check("EditorSceneController applies flags, default-true fields, and metadata wi
   assert.equal(events.castShadow, 2);
 });
 
+check("EditorSceneController applies Details edits to the multi-selection", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "controller-details-batch",
+    loadGroups: [],
+    instances: [{ assetId: "crate", placements: [{ position: [0, 0, 0] }] }],
+    characters: [{ assetId: "npc", position: [1, 0, 0] }],
+  };
+  const instanceSelection: Selection = { kind: "instance", assetId: "crate", placementIndex: 0 };
+  const characterSelection: Selection = { kind: "character", index: 0 };
+  const mutableTransform = (selection: Selection): HeadlessTransform | null => {
+    if (selection.kind === "instance") {
+      return layout.instances[0]?.placements[selection.placementIndex] ?? null;
+    }
+    if (selection.kind === "character") return layout.characters[selection.index] ?? null;
+    return null;
+  };
+  const controller = new EditorSceneController({
+    applyCastShadow: () => {},
+    applyGroupId: () => {},
+    applyVisibility: () => {},
+    descendantsOf: () => [],
+    emitHistoryChanged: () => {},
+    emitSelectionChanged: () => {},
+    getAllSelections: () => [instanceSelection, characterSelection],
+    getGroupedSelections: (selection) => [selection],
+    getMutableLayout: () => layout,
+    getMutableTransform: mutableTransform,
+    getSelectionLabel: (selection) => selectionId(selection),
+    hasSelection: (selection) => mutableTransform(selection) !== null,
+    createLightId: (type) => `${type}-copy`,
+    insertCharacterPlacement: () => {},
+    insertInstancePlacement: () => {},
+    insertLightActor: () => {},
+    onStatus: () => {},
+    removeCharacterPlacement: () => null,
+    removeInstancePlacement: () => null,
+    removeLightActor: () => null,
+    updateGizmo: () => {},
+    updateSelectionBox: () => {},
+  });
+
+  controller.selectMany([instanceSelection, characterSelection], instanceSelection);
+  controller.setSelectionSimulatePhysics(true);
+  assert.equal(layout.instances[0]?.placements[0]?.simulatePhysics, true);
+  assert.equal(layout.characters[0]?.simulatePhysics, true);
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.simulatePhysics, undefined);
+  assert.equal(layout.characters[0]?.simulatePhysics, undefined);
+
+  controller.setSelectionCollision(false);
+  assert.equal(layout.instances[0]?.placements[0]?.collision, false);
+  assert.equal(layout.characters[0]?.collision, false);
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.collision, undefined);
+  assert.equal(layout.characters[0]?.collision, undefined);
+
+  controller.setSelectionCollisionPreset("physicsActor");
+  assert.equal(layout.instances[0]?.placements[0]?.collisionPreset, "physicsActor");
+  assert.equal(layout.characters[0]?.collisionPreset, "physicsActor");
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.collisionPreset, undefined);
+  assert.equal(layout.characters[0]?.collisionPreset, undefined);
+
+  controller.setSelectionPhysics({ linearDamping: 0.5, enableGravity: false });
+  assert.deepEqual(layout.instances[0]?.placements[0]?.physics, {
+    linearDamping: 0.5,
+    enableGravity: false,
+  });
+  assert.deepEqual(layout.characters[0]?.physics, {
+    linearDamping: 0.5,
+    enableGravity: false,
+  });
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.physics, undefined);
+  assert.equal(layout.characters[0]?.physics, undefined);
+
+  controller.setSelectionMetadata("team", "blue");
+  assert.deepEqual(layout.instances[0]?.placements[0]?.metadata, { team: "blue" });
+  assert.deepEqual(layout.characters[0]?.metadata, { team: "blue" });
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.metadata, undefined);
+  assert.equal(layout.characters[0]?.metadata, undefined);
+});
+
 // ===========================================================================
 // Section 8 - Gizmo transform-drag math (pure, extracted from SceneApp)
 // ===========================================================================
@@ -3020,10 +3110,11 @@ check("input-move behavior: reports the movement snapshot and sprint raises plan
   assert.ok(Math.abs(run.planarSpeed - 4) <= 1e-9, `run speed ${run.planarSpeed}`);
 });
 
-// G6 authored playable scene: a `sensor` placement flag yields a non-blocking
+// G6 gameplay primitives: a `sensor` placement flag yields a non-blocking
 // trigger collider, and the `goal-reached` behavior fires once on the first
 // contact (only the player can touch a static sensor), playing its cue and
-// signalling the shell. The playground layout is the authored default scene.
+// signalling the shell. Verified here against crafted fixtures, independent of
+// any particular layout.
 check("layout sensor flag maps to a non-blocking sensor collider", () => {
   const fixture: RoomLayout = {
     schema: 1,
@@ -3318,15 +3409,10 @@ check("goal-reached behavior: fires once on contact, plays its cue, signals the 
   ]);
 });
 
-check("playground layout validates and carries the sensor goal trigger", () => {
-  const raw = JSON.parse(readFileSync("public/layouts/playground.json", "utf8"));
-  const playground = validateLayout(raw) as RoomLayout;
-  assert.deepEqual(validateLayout(playground), playground); // idempotent
-  const goal = playground.instances.find((i) => i.assetId === "potted-plant")?.placements[0];
-  assert.equal(goal?.sensor, true);
-  assert.equal(goal?.behavior?.script, "goal-reached");
-  assert.equal(playground.characters[0]?.behavior?.script, "input-move");
-});
+// playground.json is now a free-editing sandbox scene (no pinned content), so it
+// is intentionally not asserted here. Save-validator round-trip coverage lives on
+// the curated render-test-room layout above ("save validator round-trips the
+// saved layout").
 
 // ---------------------------------------------------------------------------
 // Gameplay framework (Game Mode / Pawn / Controller) — catalog, registry,
@@ -3642,6 +3728,80 @@ check("computePlayerStartSpawn: prefers a tagged player and is null without any"
   };
   assert.equal(computePlayerStartSpawn(none), null);
   assert.equal(TPS_GAME_MODE_ID, "forge.tpsCharacter");
+});
+
+check("hasPlayerCharacter: true for tagged or input-move, false otherwise", () => {
+  const base = { schema: 1 as const, name: "p", loadGroups: [], instances: [], lights: [] };
+  assert.equal(
+    hasPlayerCharacter({
+      ...base,
+      characters: [{ assetId: "a", position: [0, 0, 0], metadata: { player: true } }],
+    }),
+    true,
+  );
+  assert.equal(
+    hasPlayerCharacter({
+      ...base,
+      characters: [{ assetId: "a", position: [0, 0, 0], behavior: { script: "input-move" } }],
+    }),
+    true,
+  );
+  assert.equal(
+    hasPlayerCharacter({
+      ...base,
+      characters: [{ assetId: "a", position: [0, 0, 0], behavior: { script: "spin" } }],
+    }),
+    false,
+  );
+  assert.equal(hasPlayerCharacter({ ...base, characters: [] }), false);
+});
+
+check("findPlayerStartTransform: reads the first marker's position/yaw, else null", () => {
+  const base = { schema: 1 as const, name: "p", loadGroups: [], characters: [], lights: [] };
+  assert.deepEqual(
+    findPlayerStartTransform({
+      ...base,
+      instances: [
+        { assetId: PLAYER_START_ASSET_ID, placements: [{ position: [3, 0, -2], rotation: [0, 90, 0] }] },
+      ],
+    }),
+    { position: [3, 0, -2], yawDeg: 90 },
+  );
+  assert.equal(findPlayerStartTransform({ ...base, instances: [] }), null);
+});
+
+check("createDefaultPlayerCharacter: tagged input-move pawn placed at the spawn", () => {
+  const character = createDefaultPlayerCharacter(
+    { assetId: "character-a", scale: 0.3, speed: 3 },
+    [3, 0, -2],
+    90,
+  );
+  assert.equal(character.assetId, "character-a");
+  assert.deepEqual(character.position, [3, 0, -2]);
+  assert.deepEqual(character.rotation, [0, 90, 0]);
+  assert.equal(character.scale, 0.3);
+  assert.equal(character.metadata?.player, true);
+  assert.equal(character.behavior?.script, "input-move");
+  assert.equal(character.behavior?.params?.speed, 3);
+  // The synthetic pawn is itself a resolvable player, so the TPS spawn path and
+  // possession both pick it up once appended to the layout.
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "p",
+    loadGroups: [],
+    instances: [],
+    characters: [character],
+    lights: [],
+  };
+  assert.equal(hasPlayerCharacter(layout), true);
+  assert.equal(computePlayerStartSpawn(layout)?.characterIndex, 0);
+});
+
+check("createDefaultPlayerCharacter: null yaw keeps a zero facing, defaults scale/speed", () => {
+  const character = createDefaultPlayerCharacter({ assetId: "character-a" }, [0, 0, 0], null);
+  assert.deepEqual(character.rotation, [0, 0, 0]);
+  assert.equal(character.scale, 1);
+  assert.equal(character.behavior?.params?.speed, 3);
 });
 
 // Collision model: preset resolution + defaults.

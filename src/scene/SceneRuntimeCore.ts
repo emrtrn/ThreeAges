@@ -1,4 +1,12 @@
-import { AmbientLight, AnimationMixer, Box3, Color, Scene, Vector3 } from "three";
+import {
+  AmbientLight,
+  AnimationMixer,
+  Box3,
+  Color,
+  LinearSRGBColorSpace,
+  Scene,
+  Vector3,
+} from "three";
 import type {
   DirectionalLight,
   Group,
@@ -82,6 +90,12 @@ export function createSceneRuntimeCore(
   scene.background = new Color(options.backgroundColor);
   const camera = createSceneCamera();
   return { renderer, scene, camera };
+}
+
+export function applyEditorMatchedPlayLook(renderer: WebGLRenderer): void {
+  // Temporary Play viewport look: mirror the editor outline-composer output until
+  // display/color grading becomes an exposed project setting.
+  renderer.outputColorSpace = LinearSRGBColorSpace;
 }
 
 export function readSceneRuntimeStats(

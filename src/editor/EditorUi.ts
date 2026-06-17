@@ -10,6 +10,7 @@ import type {
   EditorSnapSettings,
   EditorWorldSettings,
   EditableTransform,
+  EditableTransformSnapshot,
   SceneApp,
 } from "@/scene/SceneApp";
 import {
@@ -19,7 +20,12 @@ import {
   type MetadataSchema,
 } from "@engine/scene/metadataSchema";
 import type { LayoutPhysics, MetadataValue } from "@engine/scene/layout";
-import { isShapePrimitiveType, shapeAssetId, type ShapePrimitiveType } from "@engine/scene/shapes";
+import {
+  isShapePrimitiveType,
+  PLAYER_START_ASSET_ID,
+  shapeAssetId,
+  type ShapePrimitiveType,
+} from "@engine/scene/shapes";
 import { writePlayCameraPose } from "@/play/cameraHandoff";
 import { ThumbnailRenderer } from "./ThumbnailRenderer";
 import {
@@ -109,7 +115,7 @@ export class EditorUi {
   private outlinerFilter = "";
   private selected: EditableSelection | null = null;
   private worldSettings: EditorWorldSettings | null = null;
-  private detailsBaseline: EditableTransform | null = null;
+  private detailsBaseline: EditableTransformSnapshot[] | null = null;
   private detailsScale: [number, number, number] | null = null;
   private transformClipboard: EditableTransform | null = null;
   private contextMenu: HTMLElement | null = null;
@@ -425,11 +431,23 @@ export class EditorUi {
       });
     });
 
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-player-start]")
-      ?.addEventListener("click", () => {
-        this.app.addPlayerStartActor();
+    const playerStartButton = this.root.querySelector<HTMLButtonElement>("[data-add-player-start]");
+    if (playerStartButton) {
+      playerStartButton.draggable = true;
+      playerStartButton.addEventListener("dragstart", (event) => {
+        event.dataTransfer?.setData("application/x-3dgamedev-asset", PLAYER_START_ASSET_ID);
+        event.dataTransfer!.effectAllowed = "copy";
+        event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
+        this.app.beginAssetDragPreview(PLAYER_START_ASSET_ID);
+        this.setStatus("Dragging Player Start - drop in the viewport to place.");
       });
+      playerStartButton.addEventListener("dragend", () => {
+        this.app.endAssetDragPreview();
+      });
+      playerStartButton.addEventListener("click", () => {
+        this.setStatus("Drag the actor into the viewport to place it.", "info");
+      });
+    }
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1885,10 +1903,10 @@ export class EditorUi {
 
   /** Resets rotation to 0 and scale to 1, leaving position untouched. */
   private resetSelectedTransform(): void {
-    const before = this.app.captureSelectedTransform();
-    if (!before) return;
-    this.app.updateSelectedTransform({ rotation: [0, 0, 0], scale: [1, 1, 1] });
-    this.app.commitSelectedTransform(before, "Reset transform");
+    const before = this.app.captureSelectedTransforms();
+    if (before.length === 0) return;
+    this.app.updateSelectedTransforms({ rotation: [0, 0, 0], scale: [1, 1, 1] });
+    this.app.commitSelectedTransforms(before, "Reset transform");
   }
 
   private copySelectedTransform(): void {
@@ -1904,14 +1922,14 @@ export class EditorUi {
       this.setStatus("Transform clipboard is empty.", "warning");
       return;
     }
-    const before = this.app.captureSelectedTransform();
-    if (!before) return;
-    this.app.updateSelectedTransform({
+    const before = this.app.captureSelectedTransforms();
+    if (before.length === 0) return;
+    this.app.updateSelectedTransforms({
       position: [...clip.position],
       rotation: [...clip.rotation],
       scale: [...clip.scale],
     });
-    this.app.commitSelectedTransform(before, "Paste transform");
+    this.app.commitSelectedTransforms(before, "Paste transform");
   }
 
   /**
@@ -1955,13 +1973,13 @@ export class EditorUi {
   }
 
   private beginDetailsEdit(): void {
-    this.detailsBaseline ??= this.app.captureSelectedTransform();
+    this.detailsBaseline ??= this.app.captureSelectedTransforms();
   }
 
   private commitDetailsEdit(): void {
     this.beginDetailsEdit();
     this.applyDetails();
-    this.app.commitSelectedTransform(this.detailsBaseline);
+    this.app.commitSelectedTransforms(this.detailsBaseline ?? []);
     this.detailsBaseline = null;
   }
 
@@ -1973,7 +1991,7 @@ export class EditorUi {
       );
       return Number(input?.value ?? 0);
     };
-    this.app.updateSelectedTransform(
+    this.app.updateSelectedTransforms(
       {
         position: [value("px"), value("py"), value("pz")],
         rotation: [value("rx"), value("ry"), value("rz")],
