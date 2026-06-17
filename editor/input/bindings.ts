@@ -11,7 +11,6 @@ type Unbind = () => void;
 
 export interface EditorInputBindings {
   hasSelection(): boolean;
-  consumePendingAsset(clientX: number, clientY: number): boolean;
   pickGizmoHandle(clientX: number, clientY: number): GizmoHandle | null;
   startGizmoDrag(handle: GizmoHandle, event: PointerEvent): void;
   beginAltCameraDrag(event: PointerEvent): boolean;
@@ -41,6 +40,8 @@ export interface EditorInputBindings {
   commitPointerDrag(drag: GizmoPointerDrag): void;
   updateGizmo(): void;
 
+  onAssetDragOver(clientX: number, clientY: number): void;
+  onAssetDragLeave(): void;
   onAssetDrop(assetId: string, clientX: number, clientY: number): void;
   onWheel(event: WheelEvent): void;
 
@@ -90,8 +91,6 @@ export function bindEditorInputEvents(
       bindings.beginCameraNavigation(event);
       return;
     }
-
-    if (bindings.consumePendingAsset(event.clientX, event.clientY)) return;
 
     const gizmoHandle = bindings.pickGizmoHandle(event.clientX, event.clientY);
     if (gizmoHandle && bindings.hasSelection()) {
@@ -174,11 +173,21 @@ export function bindEditorInputEvents(
   on(canvas, "dragover", (event) => {
     event.preventDefault();
     event.dataTransfer!.dropEffect = "copy";
+    // dataTransfer payloads are unreadable during dragover (drag data store is in
+    // protected mode), so the ghost is tracked by client coords here and the
+    // asset id is resolved by beginAssetDragPreview on dragstart.
+    bindings.onAssetDragOver(event.clientX, event.clientY);
+  });
+  on(canvas, "dragleave", () => {
+    bindings.onAssetDragLeave();
   });
   on(canvas, "drop", (event) => {
     event.preventDefault();
     const assetId = event.dataTransfer?.getData("application/x-3dgamedev-asset");
-    if (!assetId) return;
+    if (!assetId) {
+      bindings.onAssetDragLeave();
+      return;
+    }
     bindings.onAssetDrop(assetId, event.clientX, event.clientY);
   });
   on(canvas, "wheel", (event) => bindings.onWheel(event), { passive: false });

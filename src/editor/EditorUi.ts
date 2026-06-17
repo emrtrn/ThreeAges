@@ -97,6 +97,8 @@ export class EditorUi {
   private editableAssets: EditableAsset[] = [];
   private assetTreeRoot: ProjectDirNode | null = null;
   private selectedFolder = "";
+  /** Content Browser asset card highlighted as selected (orange). */
+  private selectedAssetId: string | null = null;
   private contentQuery = "";
   private contentDrawerOpen = false;
   private contentRefreshTimer = 0;
@@ -731,11 +733,24 @@ export class EditorUi {
     return byPath;
   }
 
+  /** Highlight a single Content Browser asset card without re-rendering the
+   *  whole grid (re-renders re-apply the class from `selectedAssetId`). */
+  private setSelectedAsset(assetId: string | null): void {
+    this.selectedAssetId = assetId;
+    for (const card of this.contentList.querySelectorAll<HTMLElement>(".asset-card")) {
+      card.classList.toggle("is-selected", card.dataset.assetId === assetId);
+    }
+  }
+
   private createAssetCard(item: BrowserAssetItem): HTMLElement {
     const card = document.createElement("button");
     card.type = "button";
     card.className = "asset-card";
     card.classList.toggle("is-unregistered", !item.editable);
+    card.classList.toggle(
+      "is-selected",
+      Boolean(item.editable && item.editable.id === this.selectedAssetId),
+    );
     card.draggable = Boolean(item.editable);
     card.dataset.assetPath = item.path;
     if (item.editable) card.dataset.assetId = item.editable.id;
@@ -750,14 +765,21 @@ export class EditorUi {
       if (!item.editable) return;
       event.dataTransfer?.setData("application/x-3dgamedev-asset", item.editable.id);
       event.dataTransfer!.effectAllowed = "copy";
-      this.setStatus(`Dragging ${item.editable.id}.`);
+      this.setSelectedAsset(item.editable.id);
+      // Spawn the live placement ghost so the viewport shows where it will land.
+      this.app.beginAssetDragPreview(item.editable.id);
+      this.setStatus(`Dragging ${item.editable.id} — drop in the viewport to place.`);
+    });
+    card.addEventListener("dragend", () => {
+      this.app.endAssetDragPreview();
     });
     card.addEventListener("click", () => {
       if (!item.editable) {
         this.setStatus(`${item.path} is visible but not registered in the asset manifest.`, "warning");
         return;
       }
-      this.app.beginAssetPlacement(item.editable.id);
+      // Click only selects; placement is drag-and-drop into the viewport.
+      this.setSelectedAsset(item.editable.id);
     });
     if (item.type === "model") {
       card.addEventListener("dblclick", (event) => {
