@@ -90,7 +90,6 @@ interface BrowserAssetItem {
 interface BrowserAssetIssue {
   code:
     | "loose-file"
-    | "thumbnail-missing"
     | "unsupported-file"
     | "missing-placement"
     | "missing-collision-setting"
@@ -2389,9 +2388,6 @@ function contentAssetIssues(item: BrowserAssetItem): BrowserAssetIssue[] {
     return issues;
   }
 
-  if (item.type !== "file" && isModelAssetType(item.type) && !item.editable.thumbnail) {
-    issues.push({ code: "thumbnail-missing", label: "Thumbnail missing" });
-  }
   if (!item.editable.placement) {
     issues.push({ code: "missing-placement", label: "Missing placement rule" });
   }

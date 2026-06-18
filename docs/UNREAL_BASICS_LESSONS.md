@@ -704,7 +704,6 @@ Aşama 3:
 Content Browser asset kartında şu uyarılar görünmeli:
 
 ```text
-⚠ thumbnail missing
 ⚠ model path missing
 ⚠ no collision setting
 ⚠ unsupported extension
@@ -742,7 +741,6 @@ Not: too many triangles ve texture too large kontrolleri suresiz ertelendi; bu k
 - [ ] `public/assets/metadata-schema.json` ile Details panel metadata alanlarını Content Browser metadata'sından ayrı ama uyumlu tut.
 - [x] Basit health-check uyarıları ekle:
   - manifest path missing
-  - thumbnail missing
   - unsupported file type
   - missing placement rule
   - no collision setting
