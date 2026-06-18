@@ -74,6 +74,7 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.scaleLocked !== undefined) clone.scaleLocked = placement.scaleLocked;
   if (placement.castShadow !== undefined) clone.castShadow = placement.castShadow;
   if (placement.collision !== undefined) clone.collision = placement.collision;
+  if (placement.materialSlot !== undefined) clone.materialSlot = placement.materialSlot;
   if (placement.simulatePhysics !== undefined) clone.simulatePhysics = placement.simulatePhysics;
   if (placement.physics !== undefined) {
     const physics = clonePhysics(placement.physics);

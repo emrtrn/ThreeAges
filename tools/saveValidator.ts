@@ -277,6 +277,12 @@ export function applyTransformFields(
     }
     target.collisionPreset = entry.collisionPreset;
   }
+  if (entry.materialSlot !== undefined) {
+    if (typeof entry.materialSlot !== "string" || entry.materialSlot.length === 0) {
+      throw new Error(`invalid ${label} materialSlot`);
+    }
+    target.materialSlot = entry.materialSlot;
+  }
   if (entry.sensor === true) target.sensor = true;
   if (entry.simulatePhysics === true) target.simulatePhysics = true;
   const physics = validatePhysics(entry.physics, label);

@@ -64,6 +64,7 @@ type MutableHierarchyTransform = {
   castShadow?: boolean;
   collision?: boolean;
   collisionPreset?: CollisionPresetId;
+  materialSlot?: string;
   simulatePhysics?: boolean;
   physics?: LayoutPhysics;
   metadata?: LayoutMetadata;
@@ -82,6 +83,7 @@ export interface EditorSceneControllerHost {
     groupId: string | undefined,
     options?: { notify?: boolean },
   ) => void;
+  applyMaterialSlot: (selection: Selection) => void;
   applyVisibility: (selection: Selection) => void;
   descendantsOf: (selection: Selection) => Selection[];
   emitHistoryChanged: () => void;
@@ -736,6 +738,53 @@ export class EditorSceneController {
     if (!target) return;
     if (value === undefined) delete target.collisionPreset;
     else target.collisionPreset = value;
+    if (options.notify !== false) this.host.emitSelectionChanged();
+  }
+
+  /** Sets or clears the first material slot for selected static mesh placements. */
+  setSelectionMaterialSlot(value: string | undefined): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind !== "instance") {
+      this.host.onStatus("Material slots are available for static mesh instances.", "info");
+      return;
+    }
+    const entries = this.getSelectedSelectionsWithTargets((selection) => selection.kind === "instance")
+      .flatMap((selection) => {
+        const target = this.host.getMutableTransform(selection);
+        if (!target || target.materialSlot === value) return [];
+        return [{ selection: cloneSelection(selection), previous: target.materialSlot }];
+      });
+    if (entries.length === 0) return;
+
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.applyMaterialSlot(
+          entry.selection,
+          mode === "redo" ? value : entry.previous,
+          { notify: false },
+        );
+      }
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: entries.length === 1 ? "Set material slot" : "Set selected material slots",
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
+  private applyMaterialSlot(
+    selection: Selection,
+    value: string | undefined,
+    options: { notify?: boolean } = {},
+  ): void {
+    if (selection.kind !== "instance") return;
+    const target = this.host.getMutableTransform(selection);
+    if (!target) return;
+    if (value === undefined) delete target.materialSlot;
+    else target.materialSlot = value;
+    this.host.applyMaterialSlot(selection);
     if (options.notify !== false) this.host.emitSelectionChanged();
   }
 

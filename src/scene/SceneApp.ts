@@ -20,9 +20,10 @@ import {
   Plane,
   Raycaster,
   SphereGeometry,
+  TextureLoader,
   Vector3,
 } from "three";
-import type { AmbientLight, InstancedMesh, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import type { AmbientLight, InstancedMesh, Material, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
@@ -38,7 +39,12 @@ import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
 import type { PlayCameraPose } from "@/play/cameraHandoff";
-import { assetPath, type AssetManifest, type EditableAsset } from "@engine/assets/manifest";
+import {
+  assetPath,
+  assetType,
+  type AssetManifest,
+  type EditableAsset,
+} from "@engine/assets/manifest";
 import {
   dirnameProjectPath,
   loadActiveProject,
@@ -106,6 +112,7 @@ import {
   type ShapePrimitiveType,
 } from "@engine/scene/shapes";
 import { createProceduralAssetGltf } from "./shapePrimitives";
+import { loadForgeMaterial } from "./materialAssets";
 import {
   readPivot,
   readRotation,
@@ -334,6 +341,10 @@ export class SceneApp {
   private models = new Map<string, GLTF>();
   private instanceGroups = new Map<string, Group>();
   private instanceMeshes = new Map<string, InstancedMesh[]>();
+  private instanceOverrideObjects = new Map<string, Object3D[]>();
+  private readonly textureLoader = new TextureLoader();
+  private readonly materialCache = new Map<string, MeshStandardMaterial>();
+  private readonly materialLoads = new Map<string, Promise<MeshStandardMaterial>>();
   private characterObjects: Object3D[] = [];
   private lightObjects: LightObjectRecord[] = [];
   private localBounds = new Map<string, Box3>();
@@ -410,6 +421,7 @@ export class SceneApp {
       applyCastShadow: (selection) => this.applyCastShadow(selection),
       applyGroupId: (selection, groupId, options) =>
         this.applyGroupId(selection, groupId, options),
+      applyMaterialSlot: (selection) => this.applyMaterialSlot(selection),
       applyVisibility: (selection) => this.applyVisibility(selection),
       descendantsOf: (selection) => this.descendantsOf(selection),
       emitHistoryChanged: () => this.emitHistoryChanged(),
@@ -449,6 +461,9 @@ export class SceneApp {
       pickables: () => {
         const objects: Object3D[] = [];
         for (const meshes of this.instanceMeshes.values()) objects.push(...meshes);
+        for (const objectsForAsset of this.instanceOverrideObjects.values()) {
+          objects.push(...objectsForAsset);
+        }
         objects.push(...this.characterObjects);
         for (const record of this.lightObjects) objects.push(record.root);
         return objects;
@@ -456,6 +471,9 @@ export class SceneApp {
       surfacePickables: () => {
         const objects: Object3D[] = [];
         for (const meshes of this.instanceMeshes.values()) objects.push(...meshes);
+        for (const objectsForAsset of this.instanceOverrideObjects.values()) {
+          objects.push(...objectsForAsset);
+        }
         objects.push(...this.characterObjects);
         return objects;
       },
@@ -2049,6 +2067,30 @@ export class SceneApp {
   /** Details "Collision" section preset override (undefined inherits asset default). */
   setSelectionCollisionPreset(value: CollisionPresetId | undefined): void {
     this.editorSceneController.setSelectionCollisionPreset(value);
+  }
+
+  /** Details / Content Drawer material slot override for static mesh instances. */
+  setSelectionMaterialSlot(value: string | undefined): void {
+    if (value !== undefined && !this.isMaterialAsset(value)) {
+      this.onStatus?.(`Material asset not found: ${value}`, "warning");
+      return;
+    }
+    this.editorSceneController.setSelectionMaterialSlot(value);
+  }
+
+  /** Assigns a dragged material to the static mesh instance under the cursor. */
+  assignMaterialAt(materialId: string, clientX: number, clientY: number): void {
+    if (!this.isMaterialAsset(materialId)) {
+      this.onStatus?.(`Material asset not found: ${materialId}`, "warning");
+      return;
+    }
+    const selection = this.picker.pickSelection(clientX, clientY);
+    if (!selection || selection.kind !== "instance") {
+      this.onStatus?.("Drop the material on a static mesh instance.", "warning");
+      return;
+    }
+    this.select(selection);
+    this.setSelectionMaterialSlot(materialId);
   }
 
   /** Details Physics section settings for the active selection. */

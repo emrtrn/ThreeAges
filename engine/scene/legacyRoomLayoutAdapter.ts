@@ -278,7 +278,9 @@ function instanceComponents(
 ): EntityComponentMap {
   const components: EntityComponentMap = {
     [TRANSFORM_COMPONENT]: toData(transformComponent(placement)),
-    [MESH_RENDERER_COMPONENT]: toData(meshRendererComponent(assetId, placement.castShadow)),
+    [MESH_RENDERER_COMPONENT]: toData(
+      meshRendererComponent(assetId, placement.castShadow, placement.materialSlot),
+    ),
   };
   const collider = colliderComponent(assetId, placement, true, resolveBox, collisionDef);
   if (collider) components[COLLIDER_COMPONENT] = toData(collider);
@@ -339,8 +341,13 @@ function transformComponent(source: {
   };
 }
 
-function meshRendererComponent(assetId: string, castShadow: boolean | undefined): MeshRendererComponent {
+function meshRendererComponent(
+  assetId: string,
+  castShadow: boolean | undefined,
+  materialSlot?: string,
+): MeshRendererComponent {
   const component: MeshRendererComponent = { assetId };
+  if (materialSlot !== undefined) component.materialSlot = materialSlot;
   if (castShadow !== undefined) component.castShadow = castShadow;
   return component;
 }

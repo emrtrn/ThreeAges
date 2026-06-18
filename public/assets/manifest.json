@@ -1455,6 +1455,72 @@
       "license": "Project-local placeholder; replace before distribution if needed"
     },
     {
+      "id": "starter-mat-brick-clay-beveled",
+      "name": "Brick Clay Beveled Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Brick_Clay_Beveled.material.json",
+      "tags": [
+        "starter",
+        "material",
+        "brick",
+        "clay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 387
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-mat-brick-clay-new",
+      "name": "Brick Clay New Material",
+      "assetType": "material",
+      "category": "starter-materials",
+      "path": "assets/starter-content/Materials/M_Brick_Clay_New.material.json",
+      "tags": [
+        "starter",
+        "material",
+        "brick",
+        "clay"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 371
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
       "id": "starter-snd-ui-click",
       "name": "UI Click",
       "assetType": "sound",

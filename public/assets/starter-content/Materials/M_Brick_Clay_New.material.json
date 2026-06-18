@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "materialType": "standard",
+  "name": "Brick Clay New Material",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "starter-tex-brick-clay-new-d",
+  "maskTexture": "starter-tex-brick-clay-new-m",
+  "normalTexture": "starter-tex-brick-clay-new-n",
+  "roughness": 0.72,
+  "metalness": 0,
+  "opacity": 1,
+  "emissive": "#000000",
+  "emissiveIntensity": 0
+}

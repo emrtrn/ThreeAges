@@ -24,6 +24,7 @@ export interface TransformComponent {
 
 export interface MeshRendererComponent {
   assetId: string;
+  materialSlot?: string;
   castShadow?: boolean;
   receiveShadow?: boolean;
 }
@@ -183,6 +184,7 @@ export function readMeshRendererComponent(entity: Entity): MeshRendererComponent
   if (!data) return undefined;
   if (typeof data.assetId !== "string") return undefined;
   const component: MeshRendererComponent = { assetId: data.assetId };
+  if (typeof data.materialSlot === "string") component.materialSlot = data.materialSlot;
   if (typeof data.castShadow === "boolean") component.castShadow = data.castShadow;
   if (typeof data.receiveShadow === "boolean") component.receiveShadow = data.receiveShadow;
   return component;

@@ -39,6 +39,8 @@ export interface EditableSelection {
   collision: boolean;
   /** Per-placement collision preset override; absent means inherit asset default. */
   collisionPreset?: CollisionPresetId;
+  /** Per-placement material override. References a manifest material asset id. */
+  materialSlot?: string;
   /** Dynamic rigid-body simulation in Play mode. */
   simulatePhysics: boolean;
   /** Runtime physics settings for the selected object. */

@@ -109,6 +109,8 @@ export interface LayoutPlacement {
   collision?: boolean;
   /** Per-placement collision preset override; absent means inherit the asset default. */
   collisionPreset?: CollisionPresetId;
+  /** Per-placement material override. References a manifest material asset id. */
+  materialSlot?: string;
   /** Runtime hint: collider is a non-blocking sensor (trigger zone). Absent means false. */
   sensor?: boolean;
   /** Runtime hint: this object is a dynamic rigid body in Play mode. Absent means false. */
