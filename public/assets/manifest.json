@@ -1059,6 +1059,216 @@
       "license": "Project-local placeholder; replace before distribution if needed"
     },
     {
+      "id": "starter-tex-brick-clay-beveled-d",
+      "name": "Brick Clay Beveled Diffuse",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Clay_Beveled_D.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "clay",
+        "beveled",
+        "diffuse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 469280
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-clay-beveled-m",
+      "name": "Brick Clay Beveled Mask",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Clay_Beveled_M.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "clay",
+        "beveled",
+        "mask"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 483753
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-clay-beveled-n",
+      "name": "Brick Clay Beveled Normal",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Clay_Beveled_N.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "clay",
+        "beveled",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 454006
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-clay-new-d",
+      "name": "Brick Clay New Diffuse",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Clay_New_D.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "clay",
+        "new",
+        "diffuse"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 407746
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-clay-new-m",
+      "name": "Brick Clay New Mask",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Clay_New_M.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "clay",
+        "new",
+        "mask"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 513581
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-tex-brick-clay-new-n",
+      "name": "Brick Clay New Normal",
+      "assetType": "texture",
+      "category": "starter-textures",
+      "path": "assets/starter-content/Textures/T_Brick_Clay_New_N.png",
+      "tags": [
+        "starter",
+        "texture",
+        "brick",
+        "clay",
+        "new",
+        "normal"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 450922
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
       "id": "starter-mat-prototype-grid",
       "name": "Prototype Grid Material",
       "assetType": "material",
@@ -1428,6 +1638,480 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 88244
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-birds-01",
+      "name": "Birds 01",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Starter_Birds01.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "birds",
+        "01",
+        "ambient"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 335290
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-collapse-01",
+      "name": "Collapse 01",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Collapse01.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "collapse",
+        "01",
+        "impact"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 53274
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-collapse-02",
+      "name": "Collapse 02",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Collapse02.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "collapse",
+        "02",
+        "impact"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 55272
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-explosion-01",
+      "name": "Explosion 01",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Explosion01.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "explosion",
+        "01",
+        "impact"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 33776
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-explosion-02",
+      "name": "Explosion 02",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Explosion02.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "explosion",
+        "02",
+        "impact"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 32949
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-fire-01",
+      "name": "Fire 01",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Fire01.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "fire",
+        "01",
+        "effect"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 104128
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-fire-sparks-01",
+      "name": "Fire Sparks 01",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Fire_Sparks01.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "fire",
+        "sparks",
+        "01",
+        "effect"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 135728
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-light-01",
+      "name": "Light 01",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Light01.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "light",
+        "01"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 52383
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-light-02",
+      "name": "Light 02",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Light02.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "light",
+        "02"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 43521
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-music-01",
+      "name": "Music 01",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Starter_Music01.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "music",
+        "01"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1046642
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-smoke-01",
+      "name": "Smoke 01",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Smoke01.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "smoke",
+        "01",
+        "effect"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 61085
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-steam-01",
+      "name": "Steam 01",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Steam01.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "steam",
+        "01",
+        "effect"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 109342
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-wind-05",
+      "name": "Wind 05",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Starter_Wind05.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "wind",
+        "05",
+        "ambient"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 299960
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-snd-wind-06",
+      "name": "Wind 06",
+      "assetType": "sound",
+      "category": "starter-sounds",
+      "path": "assets/starter-content/Sounds/Starter_Wind06.OGG",
+      "tags": [
+        "starter",
+        "sound",
+        "wind",
+        "06",
+        "ambient"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 375244
       },
       "source": {
         "origin": "forge",

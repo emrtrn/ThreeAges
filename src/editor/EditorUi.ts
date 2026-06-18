@@ -1795,9 +1795,20 @@ export class EditorUi {
     const mode = particle.materialMode ?? "";
     const option = (value: string, label: string): string =>
       `<option value="${value}" ${mode === value ? "selected" : ""}>${label}</option>`;
-    const velocityHint = particle.velocity
-      ? `<div class="detail-hint">velocity authored; edit in layout JSON</div>`
-      : "";
+    const velocity = particle.velocity;
+    const velocityFields = AXES.map(
+      (axis, index) => `
+        <label class="axis-field axis-${axis.toLowerCase()}">
+          <span class="axis-tag">${axis}</span>
+          <input data-particle-velocity="${index}" type="number" step="0.1"
+            value="${velocity ? velocity[index] : ""}" placeholder="0" />
+        </label>`,
+    ).join("");
+    const velocityRow = `
+      <div class="detail-vector">
+        <span class="detail-vector-label">Velocity</span>
+        <div class="vector-fields">${velocityFields}</div>
+      </div>`;
     return `
       <label class="detail-row">
         <span>Effect Id</span>
@@ -1847,7 +1858,7 @@ export class EditorUi {
         <input type="checkbox" data-particle="worldSpace" ${particle.worldSpace ? "checked" : ""} />
         <span>World Space</span>
       </label>
-      ${velocityHint}`;
+      ${velocityRow}`;
   }
 
   private renderInteractionFields(interaction: LayoutInteraction): string {
@@ -1897,6 +1908,9 @@ export class EditorUi {
       .forEach((input) => input.addEventListener("change", () => this.commitBehaviorInput()));
     this.detailsBody
       .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-particle]")
+      .forEach((input) => input.addEventListener("change", () => this.commitParticleInput()));
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-particle-velocity]")
       .forEach((input) => input.addEventListener("change", () => this.commitParticleInput()));
     this.detailsBody
       .querySelectorAll<HTMLInputElement>("[data-interaction]")
@@ -1973,6 +1987,21 @@ export class EditorUi {
     const mode = this.detailsBody.querySelector<HTMLSelectElement>('[data-particle="materialMode"]')?.value;
     if (mode === "additive" || mode === "alpha") base.materialMode = mode;
     else delete base.materialMode;
+    // Velocity: blank on all three axes clears it; otherwise blanks read as 0.
+    const axisRaw = (index: number): string =>
+      this.detailsBody
+        .querySelector<HTMLInputElement>(`[data-particle-velocity="${index}"]`)
+        ?.value.trim() ?? "";
+    const raw = [axisRaw(0), axisRaw(1), axisRaw(2)];
+    if (raw.every((value) => value === "")) {
+      delete base.velocity;
+    } else {
+      const axis = (value: string): number => {
+        const parsed = Number(value);
+        return value !== "" && Number.isFinite(parsed) ? parsed : 0;
+      };
+      base.velocity = [axis(raw[0]!), axis(raw[1]!), axis(raw[2]!)];
+    }
     this.app.setSelectionParticle(base);
   }
 

@@ -145,7 +145,13 @@ import {
   type AssetRecord,
   type AssetManifest,
 } from "../engine/assets/manifest";
-import type { LayoutCharacter, LayoutLightActor, RoomLayout } from "../engine/scene/layout";
+import type {
+  LayoutCharacter,
+  LayoutLightActor,
+  LayoutPlacement,
+  RoomLayout,
+} from "../engine/scene/layout";
+import { cloneCharacter, clonePlacement } from "../editor/core/layoutSnapshots";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
 import { collisionWireboxes } from "../engine/render-three/collisionView";
 import {
@@ -2567,6 +2573,70 @@ check("EditorSceneController applies Details edits to the multi-selection", () =
   controller.undo();
   assert.equal(layout.instances[0]?.placements[0]?.metadata, undefined);
   assert.equal(layout.characters[0]?.metadata, undefined);
+
+  // §3 Track B: optional components add (set) + undo (remove) across the
+  // multi-selection, each as one command through setSelectionOptionalComponent.
+  controller.setSelectionInteraction({ action: "open", cooldown: 2 });
+  assert.deepEqual(layout.instances[0]?.placements[0]?.interaction, { action: "open", cooldown: 2 });
+  assert.deepEqual(layout.characters[0]?.interaction, { action: "open", cooldown: 2 });
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.interaction, undefined);
+  assert.equal(layout.characters[0]?.interaction, undefined);
+
+  controller.setSelectionAudio({ clipId: "collision-chime", volume: 0.5, loop: false, spatial: false });
+  assert.deepEqual(layout.instances[0]?.placements[0]?.audio, {
+    clipId: "collision-chime",
+    volume: 0.5,
+    loop: false,
+    spatial: false,
+  });
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.audio, undefined);
+
+  controller.setSelectionBehavior({ script: "spin", params: { speedDeg: 45 } });
+  assert.deepEqual(layout.characters[0]?.behavior, { script: "spin", params: { speedDeg: 45 } });
+  controller.undo();
+  assert.equal(layout.characters[0]?.behavior, undefined);
+
+  controller.setSelectionParticle({ effectId: "fx.smoke", velocity: [0, 1, 0] });
+  assert.deepEqual(layout.instances[0]?.placements[0]?.particle, {
+    effectId: "fx.smoke",
+    velocity: [0, 1, 0],
+  });
+  controller.undo();
+  assert.equal(layout.instances[0]?.placements[0]?.particle, undefined);
+});
+
+// Duplicate/paste deep-clone must carry the component fields (regression: audio
+// was copied but behavior/particle/interaction were dropped before §3 Track B).
+check("clonePlacement/cloneCharacter preserve and deep-copy component fields", () => {
+  const placement: LayoutPlacement = {
+    position: [1, 2, 3],
+    audio: { clipId: "chime" },
+    behavior: { script: "spin", params: { speedDeg: 45 } },
+    particle: { effectId: "fx.smoke", velocity: [0, 1, 0] },
+    interaction: { action: "open", cooldown: 2 },
+  };
+  const clone = clonePlacement(placement);
+  assert.deepEqual(clone.audio, { clipId: "chime" });
+  assert.deepEqual(clone.behavior, { script: "spin", params: { speedDeg: 45 } });
+  assert.deepEqual(clone.particle, { effectId: "fx.smoke", velocity: [0, 1, 0] });
+  assert.deepEqual(clone.interaction, { action: "open", cooldown: 2 });
+  // Deep copy: mutating the clone's nested data leaves the source untouched.
+  clone.behavior!.params!.speedDeg = 90;
+  clone.particle!.velocity![1] = 5;
+  assert.equal(placement.behavior?.params?.speedDeg, 45);
+  assert.equal(placement.particle?.velocity?.[1], 1);
+
+  const character: LayoutCharacter = {
+    assetId: "npc",
+    position: [0, 0, 0],
+    behavior: { script: "interact" },
+    interaction: { action: "talk" },
+  };
+  const characterClone = cloneCharacter(character);
+  assert.deepEqual(characterClone.behavior, { script: "interact" });
+  assert.deepEqual(characterClone.interaction, { action: "talk" });
 });
 
 // ===========================================================================

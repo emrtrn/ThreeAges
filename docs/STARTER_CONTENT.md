@@ -27,6 +27,12 @@ replaceable.
   - `T_Grass_Noise.png`
   - `T_Flat_Normal.png`
   - `T_Roughness_Mid.png`
+  - `T_Brick_Clay_Beveled_D.png`
+  - `T_Brick_Clay_Beveled_M.png`
+  - `T_Brick_Clay_Beveled_N.png`
+  - `T_Brick_Clay_New_D.png`
+  - `T_Brick_Clay_New_M.png`
+  - `T_Brick_Clay_New_N.png`
 - `Materials`
   - `M_Prototype_Grid.material.json`
   - `M_Concrete.material.json`
@@ -41,6 +47,20 @@ replaceable.
   - `S_Impact_Light.wav`
   - `S_Door_Open.wav`
   - `S_Ambient_Room.wav`
+  - `Collapse01.OGG`
+  - `Collapse02.OGG`
+  - `Explosion01.OGG`
+  - `Explosion02.OGG`
+  - `Fire01.OGG`
+  - `Fire_Sparks01.OGG`
+  - `Light01.OGG`
+  - `Light02.OGG`
+  - `Smoke01.OGG`
+  - `Starter_Birds01.OGG`
+  - `Starter_Music01.OGG`
+  - `Starter_Wind05.OGG`
+  - `Starter_Wind06.OGG`
+  - `Steam01.OGG`
 - `Effects`
   - `FX_Smoke_Puff.effect.json`
   - `FX_Spark_Burst.effect.json`
@@ -65,7 +85,6 @@ properly licensed production-quality content when available:
   - footstep sets for stone, wood, metal, grass
   - UI click, hover, confirm, error
   - object impact, pickup, door open/close
-  - short indoor and outdoor ambience loops
 - Better prototype meshes:
   - stairs module
   - doorway module

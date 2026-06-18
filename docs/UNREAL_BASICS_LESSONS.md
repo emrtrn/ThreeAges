@@ -269,6 +269,21 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-18* — **§3 Track B — Slice B-3: headless test kapsamı.** B-1/B-2'yi
+  kilitleyen testler (tools/engine-tests.ts: 162 → **163 check**): (1) mevcut
+  "EditorSceneController applies Details edits to the multi-selection" testi
+  Interaction/Audio/Behavior/Particle için **set + undo** (multi-select, generic
+  `setSelectionOptionalComponent` üzerinden) ile genişletildi; (2) yeni
+  `clonePlacement`/`cloneCharacter` testi component alanlarının **korunduğunu ve
+  derin kopyalandığını** sabitler (B-2'de düzeltilen duplicate/paste
+  regression'ı — params/velocity mutasyonu kaynağı etkilemez). `npm run
+  build:verify` yeşil. **Polish (B-4, bitti):** particle `velocity` artık Details'te
+  düzenlenebilir vec3 satırı (`.detail-vector` yapısı, üç eksen boşken velocity
+  temizlenir, boş eksen 0 okunur) — particle editöründe artık "edit in JSON"
+  kalan tek alan behavior `params`. **Kalan (opsiyonel polish):** Collision/
+  Physics/Metadata'yı kart çatısına alma. **Kalan §3 (büyük):** Track C
+  (`SceneObjectBase`+`components[]` saved-format göçü, B4) + particle
+  `effectId`→manifest fx.
 - *2026-06-18* — **§3 Track B — Slice B-2: birleşik "Add Component" menüsü +
   Audio/Behavior/Particle component'leri.** Details panel artık tam bir
   optional-component editörü: seçili objede **Audio / Behavior / Particle /
