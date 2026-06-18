@@ -706,13 +706,13 @@ Content Browser asset kartında şu uyarılar görünmeli:
 ```text
 ⚠ thumbnail missing
 ⚠ model path missing
-⚠ too many triangles
 ⚠ no collision setting
-⚠ texture too large
 ⚠ unsupported extension
 ⚠ asset in manifest but file missing
 ⚠ file exists but not in manifest
 ```
+
+Not: too many triangles ve texture too large kontrolleri suresiz ertelendi; bu kontroller gercek asset analizoru gerektirir.
 
 ## Checklist
 
@@ -740,13 +740,12 @@ Content Browser asset kartında şu uyarılar görünmeli:
 - [x] Asset kartlarında thumbnail + assetType + temel metadata göster.
 - [x] Asset drag-drop akışını `assetId -> Actor/LayoutPlacement -> runtime loader` şeklinde kur.
 - [ ] `public/assets/metadata-schema.json` ile Details panel metadata alanlarını Content Browser metadata'sından ayrı ama uyumlu tut.
-- [ ] Basit health-check uyarıları ekle:
+- [x] Basit health-check uyarıları ekle:
   - manifest path missing
   - thumbnail missing
   - unsupported file type
-  - texture too large
-  - high poly model
   - missing placement rule
+  - no collision setting
 - [ ] Collections sistemini hemen yapma; önce Favorites / Recently Used gibi küçük bir ID listesiyle başla.
 - [x] Editor içi import sistemini ertele; önce `tools/import-asset.mjs` gibi script tabanlı import düşün.
 ```

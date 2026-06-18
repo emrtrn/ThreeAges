@@ -87,6 +87,17 @@ interface BrowserAssetItem {
   editable?: EditableAsset;
 }
 
+interface BrowserAssetIssue {
+  code:
+    | "loose-file"
+    | "thumbnail-missing"
+    | "unsupported-file"
+    | "missing-placement"
+    | "missing-collision-setting"
+    | "not-placeable";
+  label: string;
+}
+
 const CONTENT_FILTER_ALL = "__all__";
 type ContentTypeFilter = BrowserAssetItem["type"] | typeof CONTENT_FILTER_ALL;
 
@@ -761,9 +772,16 @@ export class EditorUi {
           .toLocaleLowerCase()
           .includes(this.contentQuery);
       });
+    const issueCount = items.filter((item) => contentAssetIssues(item).length > 0).length;
+    const missingManifestAssetCount = this.countMissingManifestAssetFiles();
 
     this.contentPathLabel.textContent = this.selectedFolder || this.assetTreeRoot.path;
-    this.contentStatus.textContent = `${items.length} shown / ${files.length} files`;
+    this.contentStatus.textContent = formatContentListStatus(
+      items.length,
+      files.length,
+      issueCount,
+      missingManifestAssetCount,
+    );
 
     if (items.length === 0) {
       this.contentList.innerHTML = `
@@ -853,6 +871,19 @@ export class EditorUi {
     return byPath;
   }
 
+  private countMissingManifestAssetFiles(): number {
+    if (!this.assetTreeRoot || !this.projectInfo) return 0;
+    const publicDir = this.projectInfo.manifest.publicDir ?? "public";
+    const filePaths = new Set(
+      flattenProjectFiles([this.assetTreeRoot]).map((file) => normalizeProjectPath(file.path)),
+    );
+    return this.editableAssets.filter((asset) => {
+      const path = normalizeProjectPath(assetPath(asset));
+      if (filePaths.has(path)) return false;
+      return !filePaths.has(normalizeProjectPath(`${publicDir}/${path}`));
+    }).length;
+  }
+
   /** A preloaded 1x1 transparent image used as the drag image so the browser
    *  doesn't render its default card snapshot during a drag. */
   private getEmptyDragImage(): HTMLImageElement {
@@ -876,11 +907,13 @@ export class EditorUi {
 
   private createAssetCard(item: BrowserAssetItem): HTMLElement {
     const canPlace = Boolean(item.editable?.placeable);
+    const issues = contentAssetIssues(item);
+    const issueTooltip = contentAssetIssueTooltip(issues);
     const card = document.createElement("button");
     card.type = "button";
     card.className = "asset-card";
     card.classList.toggle("is-unregistered", !item.editable);
-    card.classList.toggle("is-not-placeable", Boolean(item.editable && !canPlace));
+    card.classList.toggle("has-issues", issues.length > 0);
     card.classList.toggle(
       "is-selected",
       Boolean(item.editable && item.editable.id === this.selectedAssetId),
@@ -888,15 +921,16 @@ export class EditorUi {
     card.draggable = canPlace;
     card.dataset.assetPath = item.path;
     if (item.editable) card.dataset.assetId = item.editable.id;
-    const status = contentAssetStatus(item, canPlace);
     card.innerHTML = `
+      ${
+        issues.length > 0
+          ? `<span class="asset-issue-dot" title="${escapeHtml(issueTooltip)}" aria-label="${escapeHtml(issueTooltip)}"></span>`
+          : ""
+      }
       <span class="asset-thumb" data-asset-thumb>${escapeHtml(item.ext.toUpperCase())}</span>
       <span class="asset-meta">
         <strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong>
-        <span class="asset-badges">
-          <span class="asset-type-badge">${escapeHtml(formatContentTypeBadge(item.type))}</span>
-          ${status ? `<span class="asset-state-badge">${escapeHtml(status)}</span>` : ""}
-        </span>
+        <span class="asset-type-line">${escapeHtml(formatContentTypeBadge(item.type))}</span>
       </span>
     `;
     card.addEventListener("dragstart", (event) => {
@@ -916,14 +950,12 @@ export class EditorUi {
     });
     card.addEventListener("click", () => {
       if (!item.editable) {
-        this.setStatus(`${item.path} is visible but not registered in the asset manifest.`, "warning");
+        this.showContentAssetDetails(item, issues);
         return;
-      }
-      if (!canPlace) {
-        this.setStatus(`${item.editable.id} is registered but not placeable.`, "warning");
       }
       // Click only selects; placement is drag-and-drop into the viewport.
       this.setSelectedAsset(item.editable.id);
+      this.showContentAssetDetails(item, issues);
     });
     if (item.type !== "file" && isModelAssetType(item.type)) {
       card.addEventListener("dblclick", (event) => {
@@ -936,6 +968,12 @@ export class EditorUi {
       void this.renderAssetThumbnail(item, thumb);
     }
     return card;
+  }
+
+  private showContentAssetDetails(item: BrowserAssetItem, issues: BrowserAssetIssue[]): void {
+    const prefix = `${item.label} · ${formatContentTypeBadge(item.type)}`;
+    this.contentStatus.textContent =
+      issues.length > 0 ? `${prefix} · ${contentAssetIssueTooltip(issues)}` : `${prefix} · No issues`;
   }
 
   private async renderAssetThumbnail(
@@ -2338,13 +2376,53 @@ function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {
   return "File";
 }
 
-function contentAssetStatus(item: BrowserAssetItem, canPlace: boolean): string {
-  if (!item.editable) return "Loose file";
-  if (!canPlace) return "Not placeable";
-  if (!item.editable.thumbnail && item.type !== "file" && isModelAssetType(item.type)) {
-    return "Generated";
+function contentAssetIssues(item: BrowserAssetItem): BrowserAssetIssue[] {
+  const issues: BrowserAssetIssue[] = [];
+  if (!item.editable) {
+    issues.push({
+      code: "loose-file",
+      label: "File exists but is not registered in the manifest",
+    });
+    if (item.type === "file") {
+      issues.push({ code: "unsupported-file", label: "Unsupported file type" });
+    }
+    return issues;
   }
-  return "";
+
+  if (item.type !== "file" && isModelAssetType(item.type) && !item.editable.thumbnail) {
+    issues.push({ code: "thumbnail-missing", label: "Thumbnail missing" });
+  }
+  if (!item.editable.placement) {
+    issues.push({ code: "missing-placement", label: "Missing placement rule" });
+  }
+  if (typeof item.editable.runtime?.collision !== "boolean") {
+    issues.push({ code: "missing-collision-setting", label: "No collision setting" });
+  }
+  if (!item.editable.placeable) {
+    issues.push({ code: "not-placeable", label: "Not placeable" });
+  }
+  if (item.type === "file") {
+    issues.push({ code: "unsupported-file", label: "Unsupported file type" });
+  }
+  return issues;
+}
+
+function contentAssetIssueTooltip(issues: readonly BrowserAssetIssue[]): string {
+  return issues.map((issue) => issue.label).join("; ");
+}
+
+function formatContentListStatus(
+  shownCount: number,
+  fileCount: number,
+  issueCount: number,
+  missingManifestAssetCount: number,
+): string {
+  const parts = [`${shownCount} shown / ${fileCount} files`];
+  if (issueCount > 0) parts.push(`${issueCount} with issues`);
+  if (missingManifestAssetCount > 0) {
+    parts.push(`${missingManifestAssetCount} manifest asset file missing`);
+  }
+  return parts.join(" · ");
 }
 
 function formatAssetTypeFallbackLabel(value: string): string {
