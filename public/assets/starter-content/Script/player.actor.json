@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "player",
+  "parentClass": "character",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    }
+  ],
+  "eventBindings": [],
+  "construction": null
+}
