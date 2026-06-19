@@ -1352,7 +1352,13 @@ body.editor-mode #debug-stats {
 }
 .sm-prim-row.is-selected { outline: 1px solid #ffb648; background: #20242a; }
 .sm-prim-kind { text-transform: capitalize; font-weight: 600; }
-.sm-prim-row small { color: #8a949a; }
+.sm-prim-row small {
+  min-width: 0;
+  overflow: hidden;
+  color: #8a949a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sm-prim-del {
   width: 22px;
   height: 22px;

@@ -5,11 +5,15 @@ import type { IncomingMessage } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 import {
+  buildImportedAssetRecord,
   resolveContentNewFile,
+  resolveImportPath,
   validateContentNewPayload,
+  validateImportAssetMeta,
   validateSaveCollisionPayload,
   validateSaveMaterialSlotsPayload,
   validateSavePayload,
+  validateSaveUvwPayload,
 } from "./tools/saveValidator";
 
 // Single-codebase template: this repo's own public/ is the project root that
@@ -132,6 +136,49 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
 }
 
+// Collects a raw request body (binary uploads) into a Buffer, capped at maxBytes.
+async function readRawBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > maxBytes) throw new Error("import file too large");
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
+/**
+ * Appends a manifest entry for a just-imported asset so it isn't a "loose file".
+ * Best-effort: returns the new asset id, or null when the type can't be inferred
+ * or the path is already registered. Errors propagate to the caller, which keeps
+ * the imported file even if registration fails.
+ */
+async function registerImportedAsset(rel: string, bytes: number): Promise<string | null> {
+  const project = await readProjectManifest();
+  const manifestAbs = resolvePublicPath(project.editor.assetManifest);
+  const manifest = JSON.parse(await readFile(manifestAbs, "utf8")) as {
+    assets?: unknown[];
+  } & Record<string, unknown>;
+  if (!Array.isArray(manifest.assets)) return null;
+
+  const entries = manifest.assets.filter(
+    (asset): asset is Record<string, unknown> => Boolean(asset) && typeof asset === "object",
+  );
+  if (entries.some((asset) => asset.path === rel)) return null;
+
+  const existingIds = entries
+    .map((asset) => asset.id)
+    .filter((id): id is string => typeof id === "string");
+  const record = buildImportedAssetRecord(rel, bytes, existingIds);
+  if (!record) return null;
+
+  manifest.assets.push(record);
+  await writeFile(manifestAbs, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return record.id;
+}
+
 // Endpoints that write files. These must never be reachable from the LAN even
 // when `server.host` is true; the read-only directory listing (/__project-dir)
 // stays open so real-device (LAN) testing can still render scenes.
@@ -139,8 +186,14 @@ const PRIVILEGED_URLS = new Set([
   "/__save-layout",
   "/__save-collision",
   "/__save-material-slots",
+  "/__save-uvw",
   "/__content-new",
+  "/__import-asset",
 ]);
+
+// Cap a single imported asset (binary models/textures/audio are larger than the
+// 256 KB JSON bodies, but a stray huge upload should not exhaust dev-server RAM).
+const IMPORT_MAX_BYTES = 64 * 1024 * 1024;
 
 function isPrivilegedUrl(url: string | undefined): boolean {
   if (!url) return false;
@@ -249,6 +302,30 @@ function layoutEditorPlugin(): Plugin {
           return;
         }
 
+        if (req.url === "/__save-uvw") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveUvwPayload(await readJsonBody(req));
+            const sidecarPath = resolvePublicPath(payload.path);
+            const previous = await readFile(sidecarPath, "utf8").catch(() => null);
+            const nextSidecar = `${JSON.stringify(payload.uvw, null, 2)}\n`;
+            await writeFile(sidecarPath, nextSidecar, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== nextSidecar }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
         // Content Browser "new content": create a folder or a typed stub asset
         // (`<name>.<kind>.json`) inside a public-scoped directory. The path stays
         // inside public/ via resolvePublicPath; existing targets are never
@@ -280,6 +357,56 @@ function layoutEditorPlugin(): Plugin {
             }
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: target.path, kind: payload.kind }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Content Browser Import: write an uploaded asset's raw bytes into a
+        // public-scoped folder. Metadata (target dir + filename) travels in the
+        // query string; the body is the raw file. Extension is allowlisted and
+        // existing files are never overwritten (409).
+        if (req.url?.split("?")[0] === "/__import-asset") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const params = new URL(req.url, "http://localhost").searchParams;
+            const meta = validateImportAssetMeta({
+              dir: params.get("dir") ?? "",
+              name: params.get("name") ?? "",
+            });
+            const rel = resolveImportPath(meta);
+            const absPath = resolvePublicPath(rel);
+            const exists = await stat(absPath).then(
+              () => true,
+              () => false,
+            );
+            if (exists) {
+              res.statusCode = 409;
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ ok: false, error: `already exists: ${rel}` }));
+              return;
+            }
+            const body = await readRawBody(req, IMPORT_MAX_BYTES);
+            await writeFile(absPath, body);
+            // Best-effort manifest registration so the file isn't a loose file.
+            // The import itself still succeeds if registration throws.
+            let registeredId: string | null = null;
+            try {
+              registeredId = await registerImportedAsset(rel, body.length);
+            } catch {
+              registeredId = null;
+            }
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: rel, bytes: body.length, registeredId }));
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");

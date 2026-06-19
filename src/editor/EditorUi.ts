@@ -49,6 +49,7 @@ import {
   fetchProjectDir,
   findProjectDir,
   flattenProjectFiles,
+  importProjectAsset,
   normalizeProjectPath,
   type ContentNewKind,
   type ProjectDirNode,
@@ -187,6 +188,10 @@ export class EditorUi {
   private transformClipboard: EditableTransform | null = null;
   private contextMenu: HTMLElement | null = null;
   private contextMenuCleanup: (() => void) | null = null;
+  /** Hidden file input reused by the Content Browser Import flow. */
+  private importInput: HTMLInputElement | null = null;
+  /** Folder the next Import upload targets (set when Import is clicked). */
+  private importTargetDir = "";
   /** Scene-object ids being dragged in the outliner (for drag-to-parent). */
   private outlinerDragIds: string[] = [];
 
@@ -1178,6 +1183,9 @@ export class EditorUi {
           this.renderContentAssets();
           void this.app.refreshAssetMaterialSlots(assetId);
         },
+        onAssetUvwSaved: (assetId) => {
+          void this.app.refreshAssetUvwMapping(assetId);
+        },
       });
     } catch (error) {
       this.setStatus(
@@ -1474,8 +1482,7 @@ export class EditorUi {
     const items: ContextMenuItem[] = [
       { label: "New Folder", run: () => void this.createContent("folder", dir) },
       { separator: true },
-      // Import lands in a later phase (binary upload endpoint); shown but disabled.
-      { label: "Import", enabled: false, run: () => {} },
+      { label: "Import...", run: () => this.startImport(dir) },
       { separator: true },
       ...CONTENT_NEW_ITEMS.map((item) => ({
         label: item.label,
@@ -1497,6 +1504,62 @@ export class EditorUi {
     } catch (error) {
       this.setStatus(error instanceof Error ? error.message : String(error), "error");
     }
+  }
+
+  /** Lazily builds the hidden file input the Import flow reuses. */
+  private ensureImportInput(): HTMLInputElement {
+    if (this.importInput) return this.importInput;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.accept =
+      ".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2,.basis,.hdr,.exr,.mp3,.wav,.ogg,.json";
+    input.style.display = "none";
+    input.addEventListener("change", () => void this.handleImportFiles());
+    document.body.appendChild(input);
+    this.importInput = input;
+    return input;
+  }
+
+  /** Opens the OS file picker; selected files upload into `dir`. */
+  private startImport(dir: string): void {
+    this.importTargetDir = dir;
+    const input = this.ensureImportInput();
+    input.value = ""; // allow re-selecting the same file twice in a row
+    input.click();
+  }
+
+  /** Uploads the picked files into the target folder, then refreshes the tree. */
+  private async handleImportFiles(): Promise<void> {
+    const files = Array.from(this.importInput?.files ?? []);
+    if (files.length === 0) return;
+    const dir = this.importTargetDir;
+    let imported = 0;
+    const errors: string[] = [];
+    for (const file of files) {
+      try {
+        await importProjectAsset(dir, file);
+        imported += 1;
+      } catch (error) {
+        errors.push(`${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (errors.length === 0) {
+      this.setStatus(`Imported ${imported} file${imported === 1 ? "" : "s"}`, "success");
+    } else {
+      const tone = imported === 0 ? "error" : "warning";
+      this.setStatus(`Imported ${imported}/${files.length}. ${errors[0]}`, tone);
+    }
+    // The import endpoint registers each asset in the manifest; re-read it so the
+    // new entries resolve as editable (clears the "loose file" badge).
+    if (imported > 0) {
+      try {
+        this.editableAssets = await this.app.reloadEditableAssets();
+      } catch {
+        // Keep the stale list; the tree refresh below still shows the new file.
+      }
+    }
+    await this.refreshAssetTree({ quiet: false });
   }
 
   private closeContextMenu = (): void => {

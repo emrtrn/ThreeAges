@@ -131,14 +131,18 @@ import {
 } from "../src/scene/SceneRuntimeCore";
 import type { SceneDocument } from "../engine/scene/sceneDocument";
 import {
+  buildImportedAssetRecord,
   resolveContentNewFile,
+  resolveImportPath,
   validateAssetCollisionDef,
   validateContentNewPayload,
+  validateImportAssetMeta,
   validateLayout,
   validateLightActor,
   validatePlacement,
   validateSaveCollisionPayload,
   validateSaveMaterialSlotsPayload,
+  validateSaveUvwPayload,
 } from "./saveValidator";
 import {
   assetByteSize,
@@ -4441,6 +4445,39 @@ check("material slots save payload requires a .materials.json path", () => {
   );
 });
 
+check("uvw save payload requires a .uvw.json path and valid map type", () => {
+  const payload = validateSaveUvwPayload({
+    path: "assets/props/chair.uvw.json",
+    uvw: {
+      schema: 1,
+      mapType: "box",
+      position: [0, 1, 0],
+      rotation: [0, 45, 0],
+      scale: [2, 3, 4],
+    },
+  });
+  assert.equal(payload.path, "assets/props/chair.uvw.json");
+  assert.deepEqual(payload.uvw, {
+    schema: 1,
+    mapType: "box",
+    position: [0, 1, 0],
+    rotation: [0, 45, 0],
+    scale: [2, 3, 4],
+  });
+  assert.throws(() =>
+    validateSaveUvwPayload({ path: "assets/props/chair.json", uvw: {} }),
+  );
+  assert.throws(() =>
+    validateSaveUvwPayload({ path: "../secret.uvw.json", uvw: {} }),
+  );
+  assert.throws(() =>
+    validateSaveUvwPayload({
+      path: "assets/props/chair.uvw.json",
+      uvw: { mapType: "unwrap", position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    }),
+  );
+});
+
 check("content-new payload validates kind/name and rejects unsafe names", () => {
   const level = validateContentNewPayload({ kind: "level", dir: "assets/levels", name: " Giris " });
   assert.equal(level.kind, "level");
@@ -4471,6 +4508,45 @@ check("content-new resolves to typed stub files and folders", () => {
     instances: [],
     characters: [],
   });
+});
+
+check("import asset meta allowlists extensions and rejects unsafe names/types", () => {
+  const meta = validateImportAssetMeta({ dir: "assets/props", name: "chair.glb" });
+  assert.equal(resolveImportPath(meta), "assets/props/chair.glb");
+  assert.equal(resolveImportPath(validateImportAssetMeta({ dir: "", name: "tex.png" })), "tex.png");
+  assert.throws(() => validateImportAssetMeta({ dir: "assets", name: "evil.exe" }));
+  assert.throws(() => validateImportAssetMeta({ dir: "assets", name: "noext" }));
+  assert.throws(() => validateImportAssetMeta({ dir: "assets", name: "a/b.glb" }));
+  assert.throws(() => validateImportAssetMeta({ dir: "../escape", name: "x.glb" }));
+});
+
+check("buildImportedAssetRecord derives a valid manifest entry per type", () => {
+  const mesh = buildImportedAssetRecord("assets/models/props/chair.glb", 2048, ["chair"]);
+  assert.ok(mesh);
+  assert.equal(mesh?.assetType, "staticMesh");
+  assert.equal(mesh?.id, "chair-2"); // de-duplicated against the existing "chair"
+  assert.equal(mesh?.category, "props"); // parent folder name
+  assert.equal(mesh?.placeable, true);
+  assert.equal(mesh?.runtime.collision, true);
+  assert.equal(mesh?.runtime.bytes, 2048);
+
+  const texture = buildImportedAssetRecord("assets/sky.png", 99, []);
+  assert.equal(texture?.assetType, "texture");
+  assert.equal(texture?.placeable, false);
+  assert.equal(texture?.runtime.collision, false);
+  assert.equal(texture?.category, "texture"); // falls back to type when dir is "assets"
+
+  // Unknown/companion types are not auto-registered.
+  assert.equal(buildImportedAssetRecord("assets/models/props/chair.bin", 10, []), null);
+
+  // The generated record passes manifest validation with no errors.
+  const report = validateAssetManifest({
+    version: 1,
+    generated: "2026-06-19",
+    ktx2: false,
+    assets: [mesh],
+  });
+  assert.equal(report.errorCount, 0);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

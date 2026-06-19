@@ -18,6 +18,13 @@ import {
   isCollisionResponse,
   type CollisionChannel,
 } from "../engine/scene/collision";
+import {
+  defaultPlacementForCategory,
+  inferAssetTypeFromPath,
+  isModelAssetType,
+  type AssetRecord,
+  type AssetType,
+} from "../engine/assets/manifest";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -28,6 +35,9 @@ export interface EditorSettingsPatch {
   snapScale?: number;
   snapScaleEnabled?: boolean;
 }
+
+const UVW_MAP_TYPES = ["planar", "box", "sphere", "cylinder"] as const;
+type UvwMapType = (typeof UVW_MAP_TYPES)[number];
 
 export function isNumberTuple(value: unknown): value is [number, number, number] {
   return (
@@ -700,6 +710,49 @@ export function validateSaveMaterialSlotsPayload(value: unknown): {
   };
 }
 
+export function validateAssetUvwDef(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("uvw def must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const mapType = input.mapType;
+  if (mapType !== null && !UVW_MAP_TYPES.includes(mapType as UvwMapType)) {
+    throw new Error("invalid uvw.mapType");
+  }
+  return {
+    schema: 1,
+    mapType,
+    position: validateVec3(input.position, "uvw.position"),
+    rotation: validateVec3(input.rotation, "uvw.rotation").map((axis) =>
+      Number(axis.toFixed(3)),
+    ),
+    scale: validateVec3(input.scale, "uvw.scale").map((axis) => {
+      if (axis <= 0 || axis > 1_000_000) throw new Error("uvw.scale values must be positive");
+      return Number(axis.toFixed(4));
+    }),
+  };
+}
+
+export function validateSaveUvwPayload(value: unknown): {
+  path: string;
+  uvw: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("uvw payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".uvw.json")) {
+    throw new Error("uvw payload path must end with .uvw.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("uvw payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    uvw: validateAssetUvwDef(input.uvw),
+  };
+}
+
 /** Content Browser "new content" kinds the `/__content-new` endpoint accepts. */
 export const CONTENT_NEW_KINDS = [
   "folder",
@@ -788,6 +841,132 @@ export function resolveContentNewFile(payload: ContentNewPayload): ContentNewFil
   return {
     path: join(`${payload.name}.${payload.kind}.json`),
     content: contentStubJson(payload.kind, payload.name),
+  };
+}
+
+/**
+ * File extensions the Content Browser Import accepts. Restricting to known
+ * asset types keeps the dev endpoint from writing arbitrary files into public/.
+ */
+export const IMPORT_ALLOWED_EXTS = new Set([
+  "glb",
+  "gltf",
+  "bin",
+  "png",
+  "jpg",
+  "jpeg",
+  "webp",
+  "ktx2",
+  "basis",
+  "hdr",
+  "exr",
+  "mp3",
+  "wav",
+  "ogg",
+  "json",
+]);
+
+export interface ImportAssetMeta {
+  dir: string;
+  /** Sanitized destination filename (with an allowlisted extension). */
+  name: string;
+}
+
+/**
+ * Validates Import request metadata (`dir` + filename). The filename is
+ * sanitized like a content name and must carry an allowlisted asset extension.
+ */
+export function validateImportAssetMeta(input: { dir: unknown; name: unknown }): ImportAssetMeta {
+  if (typeof input.dir !== "string") throw new Error("import dir must be a string");
+  if (input.dir.includes("..")) throw new Error("import dir must not contain ..");
+  const name = sanitizeContentName(input.name);
+  const dot = name.lastIndexOf(".");
+  const ext = dot >= 0 ? name.slice(dot + 1).toLowerCase() : "";
+  if (!ext) throw new Error("import file must have an extension");
+  if (!IMPORT_ALLOWED_EXTS.has(ext)) throw new Error(`unsupported import type: .${ext}`);
+  return { dir: input.dir, name };
+}
+
+/** Joins validated import metadata into a public-root-relative destination path. */
+export function resolveImportPath(meta: ImportAssetMeta): string {
+  const dir = meta.dir.replace(/\\/g, "/").replace(/\/+$/, "").replace(/^\/+/, "");
+  return dir ? `${dir}/${meta.name}` : meta.name;
+}
+
+const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
+  staticMesh: "prop",
+  skeletalMesh: "character",
+  texture: "texture",
+  material: "material",
+  sound: "sound",
+  animation: "animation",
+  prefab: "prefab",
+  level: "level",
+};
+
+/** Slug + Title-Case helpers for deriving an asset id / display name from a filename. */
+function slugifyId(value: string): string {
+  const slug = value
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return slug || "asset";
+}
+
+function humanizeName(value: string): string {
+  const spaced = value
+    .replace(/[-_]+/g, " ")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .trim();
+  const titled = spaced.replace(/\b\w/g, (char) => char.toUpperCase());
+  return titled || value;
+}
+
+/**
+ * Builds a manifest `AssetRecord` for a freshly imported file so it is no longer
+ * a "loose file". Returns null when the type can't be inferred (e.g. a `.bin`
+ * companion or plain `.json`) — those stay unregistered. The id is made unique
+ * against `existingIds`. Mesh assets are placeable with collision on; other
+ * types are non-placeable. Defaults satisfy `validateAssetManifest`.
+ */
+export function buildImportedAssetRecord(
+  path: string,
+  bytes: number,
+  existingIds: Iterable<string>,
+): AssetRecord | null {
+  const type = inferAssetTypeFromPath(path);
+  if (!type) return null;
+
+  const fileName = path.split("/").at(-1) ?? path;
+  const dot = fileName.lastIndexOf(".");
+  const baseName = dot > 0 ? fileName.slice(0, dot) : fileName;
+  const parentDir = path.split("/").slice(0, -1).at(-1) ?? "";
+  const category = parentDir && parentDir !== "assets" ? parentDir : ASSET_TYPE_CATEGORY[type];
+
+  const taken = new Set(existingIds);
+  const base = slugifyId(baseName);
+  let id = base;
+  for (let n = 2; taken.has(id); n += 1) id = `${base}-${n}`;
+
+  const placeable = isModelAssetType(type);
+  return {
+    id,
+    name: humanizeName(baseName),
+    assetType: type,
+    category,
+    path,
+    tags: [],
+    placeable,
+    placement: defaultPlacementForCategory(category),
+    runtime: {
+      loadGroup: category,
+      castShadow: true,
+      receiveShadow: true,
+      collision: placeable,
+      bytes: Math.max(0, Math.floor(bytes)),
+    },
+    license: "Unknown",
   };
 }
 

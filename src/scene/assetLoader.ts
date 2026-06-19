@@ -41,6 +41,11 @@ export class AssetLoader {
 
   constructor(private readonly project: ProjectManifest) {}
 
+  /** Drops the cached manifest so the next load re-fetches it (after edits). */
+  invalidateManifest(): void {
+    this.manifestPromise = null;
+  }
+
   loadManifest(): Promise<AssetManifest> {
     this.manifestPromise ??= fetch(projectFileUrl(this.project.editor.assetManifest)).then(
       async (response) => {

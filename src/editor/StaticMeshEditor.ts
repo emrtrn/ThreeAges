@@ -58,6 +58,15 @@ import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { loadAssetCollision, saveAssetCollision } from "@/editor/assetCollisionStore";
 import {
+  applyAssetUvwMapping,
+  defaultAssetUvw,
+  loadAssetUvw,
+  restoreAssetUvs,
+  saveAssetUvw,
+  type AssetUvwDef,
+  type UvwMapType,
+} from "@/editor/assetUvwStore";
+import {
   defaultAssetMaterialSlots,
   loadAssetMaterialSlots,
   saveAssetMaterialSlots,
@@ -81,6 +90,7 @@ export interface StaticMeshEditorOptions {
   /** Optional status sink (surfaces to the host editor's status bar). */
   onStatus?: (message: string, tone?: "info" | "warning" | "error") => void;
   onMaterialSlotsSaved?: (assetId: string) => void;
+  onAssetUvwSaved?: (assetId: string) => void;
 }
 
 const PRESET_LABELS: Record<CollisionPresetId, string> = {
@@ -104,8 +114,18 @@ const COMPLEXITY_LABELS: Record<CollisionComplexity, string> = {
 
 const WIRE_COLOR = 0x49e6a2;
 const WIRE_SELECTED_COLOR = 0xffb648;
+const UVW_WIRE_COLOR = 0x7fb8ff;
+const UVW_WIRE_SELECTED_COLOR = 0xffd166;
 
 type GizmoMode = "select" | "translate" | "rotate" | "scale";
+type ActiveTarget = "collision" | "uvw" | null;
+
+const UVW_LABELS: Record<UvwMapType, string> = {
+  planar: "Planar",
+  box: "Box",
+  sphere: "Sphere",
+  cylinder: "Cylinder",
+};
 
 /**
  * A collision-primitive overlay. The geometry is built at unit size so the
@@ -152,16 +172,19 @@ export class StaticMeshEditor {
 
   private rafId = 0;
   private disposed = false;
-  private menuOpen = false;
+  private menuOpen: "collision" | "uvw" | null = null;
 
   private collision: AssetCollisionDef = defaultAssetCollisionDef();
+  private uvw: AssetUvwDef = defaultAssetUvw();
   private materialSlots: AssetMaterialSlotsDef = defaultAssetMaterialSlots();
   private selectedMaterialId = "";
   private previewMaterial: MeshStandardMaterial | null = null;
   private readonly originalMeshMaterials = new Map<Mesh, Mesh["material"]>();
   private modelBounds = new Box3();
   private selectedPrimitive = -1;
+  private activeTarget: ActiveTarget = null;
   private readonly overlays: PrimitiveOverlay[] = [];
+  private uvwOverlay: PrimitiveOverlay | null = null;
 
   private transformControls: TransformControls | null = null;
   private gizmoMode: GizmoMode = "translate";
@@ -182,7 +205,7 @@ export class StaticMeshEditor {
             <strong data-sm-title></strong>
           </span>
           <div class="sm-editor-header-actions">
-            <button type="button" class="sm-editor-save" data-sm-save title="Save collision and material slots (Ctrl+S)">Save</button>
+            <button type="button" class="sm-editor-save" data-sm-save title="Save collision, material slots, and UVW map (Ctrl+S)">Save</button>
             <button type="button" class="sm-editor-close" data-sm-close title="Close (Esc)">✕</button>
           </div>
         </header>
@@ -227,6 +250,7 @@ export class StaticMeshEditor {
 
     void this.loadModel();
     void this.loadCollision();
+    void this.loadUvw();
     void this.loadMaterialSlots();
   }
 
@@ -420,6 +444,8 @@ export class StaticMeshEditor {
       this.target.copy(center);
       this.spherical.radius = this.modelRadius * 2.6;
       this.updateCamera();
+      this.applyCurrentUvw();
+      this.rebuildUvwOverlay();
       if (this.selectedMaterialId) {
         void this.applyPreviewMaterial(this.selectedMaterialId, { dirty: false, status: false });
       }
@@ -434,6 +460,14 @@ export class StaticMeshEditor {
     if (this.disposed) return;
     this.renderDetails();
     this.rebuildOverlays();
+  }
+
+  private async loadUvw(): Promise<void> {
+    this.uvw = await loadAssetUvw(this.options.modelPath);
+    if (this.disposed) return;
+    this.applyCurrentUvw();
+    this.renderDetails();
+    this.rebuildUvwOverlay();
   }
 
   private async loadMaterialSlots(): Promise<void> {
@@ -454,7 +488,13 @@ export class StaticMeshEditor {
         <button type="button" class="sm-tool-btn" data-sm-menu="collision">
           <span class="sm-tool-icon">⬡</span> Collision <span class="sm-tool-caret">▾</span>
         </button>
-        <div class="sm-tool-menu" data-sm-menu-panel hidden></div>
+        <div class="sm-tool-menu" data-sm-menu-panel="collision" hidden></div>
+      </div>
+      <div class="sm-tool-group">
+        <button type="button" class="sm-tool-btn" data-sm-menu="uvw">
+          <span class="sm-tool-icon">▦</span> UVW Map <span class="sm-tool-caret">▾</span>
+        </button>
+        <div class="sm-tool-menu" data-sm-menu-panel="uvw" hidden></div>
       </div>
       <div class="sm-tool-sep"></div>
       <div class="sm-tool-group sm-tool-modes">
@@ -464,10 +504,11 @@ export class StaticMeshEditor {
         ${modeButton("scale", "⤢", "Scale (R)")}
       </div>
     `;
-    const button = this.requireEl<HTMLButtonElement>('[data-sm-menu="collision"]');
-    button.addEventListener("click", (event) => {
-      event.stopPropagation();
-      this.toggleMenu();
+    this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-sm-menu]").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        this.toggleMenu(button.dataset.smMenu === "uvw" ? "uvw" : "collision");
+      });
     });
     this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-sm-mode]").forEach((item) => {
       item.addEventListener("click", () => this.setGizmoMode(item.dataset.smMode as GizmoMode));
@@ -488,12 +529,35 @@ export class StaticMeshEditor {
     this.closeMenu();
   };
 
-  private toggleMenu(): void {
-    this.menuOpen ? this.closeMenu() : this.openMenu();
+  private toggleMenu(kind: "collision" | "uvw"): void {
+    this.menuOpen === kind ? this.closeMenu() : this.openMenu(kind);
   }
 
-  private openMenu(): void {
-    const panel = this.requireEl("[data-sm-menu-panel]");
+  private openMenu(kind: "collision" | "uvw"): void {
+    this.closeMenu();
+    const panel = this.requireEl(`[data-sm-menu-panel="${kind}"]`);
+    if (kind === "uvw") {
+      const hasUvw = Boolean(this.uvw.mapType);
+      panel.innerHTML = `
+        <div class="sm-menu-section">Apply UVW Map</div>
+        ${menuItem("uvw-planar", "Planar")}
+        ${menuItem("uvw-box", "Box")}
+        ${menuItem("uvw-sphere", "Sphere")}
+        ${menuItem("uvw-cylinder", "Cylinder")}
+        <div class="sm-menu-sep"></div>
+        ${menuItem("uvw-select", "Select UVW Gizmo", !hasUvw)}
+        ${menuItem("uvw-remove", "Remove UVW Map", !hasUvw)}
+      `;
+      panel.hidden = false;
+      this.menuOpen = kind;
+      panel.querySelectorAll<HTMLButtonElement>("[data-sm-action]").forEach((item) => {
+        item.addEventListener("click", () => {
+          this.closeMenu();
+          this.runMenuAction(item.dataset.smAction ?? "");
+        });
+      });
+      return;
+    }
     const hasPrimitives = this.collision.primitives.length > 0;
     const hasSelection = this.selectedPrimitive >= 0;
     panel.innerHTML = `
@@ -512,7 +576,7 @@ export class StaticMeshEditor {
       ${menuItem("remove", "Remove Collision", !hasPrimitives)}
     `;
     panel.hidden = false;
-    this.menuOpen = true;
+    this.menuOpen = kind;
     panel.querySelectorAll<HTMLButtonElement>("[data-sm-action]").forEach((item) => {
       item.addEventListener("click", () => {
         this.closeMenu();
@@ -523,9 +587,11 @@ export class StaticMeshEditor {
 
   private closeMenu(): void {
     if (!this.menuOpen) return;
-    const panel = this.overlay.querySelector<HTMLElement>("[data-sm-menu-panel]");
+    const panel = this.overlay.querySelector<HTMLElement>(
+      `[data-sm-menu-panel="${this.menuOpen}"]`,
+    );
     if (panel) panel.hidden = true;
-    this.menuOpen = false;
+    this.menuOpen = null;
   }
 
   private runMenuAction(action: string): void {
@@ -551,6 +617,18 @@ export class StaticMeshEditor {
       case "convex":
         this.addConvexCollision();
         break;
+      case "uvw-planar":
+      case "uvw-box":
+      case "uvw-sphere":
+      case "uvw-cylinder":
+        this.applyUvwMap(action.replace("uvw-", "") as UvwMapType);
+        break;
+      case "uvw-select":
+        this.selectUvwGizmo();
+        break;
+      case "uvw-remove":
+        this.removeUvwMap();
+        break;
       default:
         this.setStatus("That collision generator is not available yet.", "warning");
     }
@@ -568,6 +646,7 @@ export class StaticMeshEditor {
     if (center.lengthSq() > 1e-6) primitive.center = [round(center.x), round(center.y), round(center.z)];
     this.collision.primitives.push(primitive);
     this.selectedPrimitive = this.collision.primitives.length - 1;
+    this.activeTarget = "collision";
     this.markDirty();
     this.renderDetails();
     this.rebuildOverlays();
@@ -593,6 +672,7 @@ export class StaticMeshEditor {
     if (center.lengthSq() > 1e-6) primitive.center = [round(center.x), round(center.y), round(center.z)];
     this.collision.primitives.push(primitive);
     this.selectedPrimitive = this.collision.primitives.length - 1;
+    this.activeTarget = "collision";
     this.markDirty();
     this.renderDetails();
     this.rebuildOverlays();
@@ -641,6 +721,7 @@ export class StaticMeshEditor {
     if (this.selectedPrimitive < 0) return;
     this.collision.primitives.splice(this.selectedPrimitive, 1);
     this.selectedPrimitive = Math.min(this.selectedPrimitive, this.collision.primitives.length - 1);
+    this.activeTarget = this.selectedPrimitive >= 0 ? "collision" : null;
     this.markDirty();
     this.renderDetails();
     this.rebuildOverlays();
@@ -651,6 +732,7 @@ export class StaticMeshEditor {
     if (!source) return;
     this.collision.primitives.push(clonePrimitive(source));
     this.selectedPrimitive = this.collision.primitives.length - 1;
+    this.activeTarget = "collision";
     this.markDirty();
     this.renderDetails();
     this.rebuildOverlays();
@@ -659,6 +741,7 @@ export class StaticMeshEditor {
   private removeAll(): void {
     this.collision.primitives = [];
     this.selectedPrimitive = -1;
+    this.activeTarget = null;
     this.markDirty();
     this.renderDetails();
     this.rebuildOverlays();
@@ -666,9 +749,63 @@ export class StaticMeshEditor {
 
   private selectPrimitive(index: number): void {
     this.selectedPrimitive = index;
+    this.activeTarget = index >= 0 ? "collision" : null;
     this.renderDetails();
     this.refreshOverlayColors();
     this.attachGizmo();
+  }
+
+  // --- UVW map editing --------------------------------------------------
+
+  private applyUvwMap(mapType: UvwMapType): void {
+    const size = this.modelBounds.getSize(new Vector3());
+    const center = this.modelBounds.getCenter(new Vector3());
+    const fallbackScale: Vec3 = [
+      round(Math.max(size.x || 1, 0.001)),
+      round(Math.max(size.y || 1, 0.001)),
+      round(Math.max(size.z || 1, 0.001)),
+    ];
+    this.uvw = {
+      schema: 1,
+      mapType,
+      position: this.uvw.mapType
+        ? ([...this.uvw.position] as Vec3)
+        : [round(center.x), round(center.y), round(center.z)],
+      rotation: this.uvw.mapType ? ([...this.uvw.rotation] as Vec3) : [0, 0, 0],
+      scale: this.uvw.mapType ? ([...this.uvw.scale] as Vec3) : fallbackScale,
+    };
+    this.activeTarget = "uvw";
+    this.selectedPrimitive = -1;
+    this.applyCurrentUvw();
+    this.rebuildUvwOverlay();
+    this.refreshOverlayColors();
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Applied ${UVW_LABELS[mapType]} UVW map.`);
+  }
+
+  private removeUvwMap(): void {
+    this.uvw = defaultAssetUvw();
+    restoreAssetUvs(this.modelGroup);
+    this.disposeUvwOverlay();
+    if (this.activeTarget === "uvw") this.activeTarget = null;
+    this.attachGizmo();
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus("Removed UVW map.");
+  }
+
+  private selectUvwGizmo(): void {
+    if (!this.uvw.mapType) return;
+    this.activeTarget = "uvw";
+    this.selectedPrimitive = -1;
+    this.refreshOverlayColors();
+    this.renderDetails();
+    this.attachGizmo();
+  }
+
+  private applyCurrentUvw(): void {
+    applyAssetUvwMapping(this.modelGroup, this.uvw);
   }
 
   // --- transform gizmo ---------------------------------------------------
@@ -683,6 +820,15 @@ export class StaticMeshEditor {
   private attachGizmo(): void {
     const controls = this.transformControls;
     if (!controls) return;
+    if (this.activeTarget === "uvw") {
+      if (!this.uvwOverlay || this.gizmoMode === "select") {
+        controls.detach();
+        return;
+      }
+      controls.setMode(this.gizmoMode);
+      controls.attach(this.uvwOverlay.root);
+      return;
+    }
     const overlay = this.overlays[this.selectedPrimitive];
     const primitive = this.collision.primitives[this.selectedPrimitive];
     // Convex hulls store absolute points, so the unit-transform gizmo doesn't
@@ -717,6 +863,10 @@ export class StaticMeshEditor {
 
   /** Live write-back from the gizmo: root transform -> selected primitive data. */
   private onGizmoChange(): void {
+    if (this.activeTarget === "uvw") {
+      this.onUvwGizmoChange();
+      return;
+    }
     const overlay = this.overlays[this.selectedPrimitive];
     const primitive = this.collision.primitives[this.selectedPrimitive];
     if (!overlay || !primitive) return;
@@ -741,6 +891,24 @@ export class StaticMeshEditor {
     this.updateSelectedRowText();
   }
 
+  private onUvwGizmoChange(): void {
+    if (!this.uvwOverlay || !this.uvw.mapType) return;
+    const { position, rotation, scale } = this.uvwOverlay.root;
+    this.uvw.position = [round(position.x), round(position.y), round(position.z)];
+    this.uvw.rotation = [
+      roundDeg(MathUtils.radToDeg(rotation.x)),
+      roundDeg(MathUtils.radToDeg(rotation.y)),
+      roundDeg(MathUtils.radToDeg(rotation.z)),
+    ];
+    this.uvw.scale = [
+      round(Math.max(scale.x, 0.001)),
+      round(Math.max(scale.y, 0.001)),
+      round(Math.max(scale.z, 0.001)),
+    ];
+    this.applyCurrentUvw();
+    this.updateUvwDetailsText();
+  }
+
   /** Updates the size readout of the selected primitive row without a full re-render. */
   private updateSelectedRowText(): void {
     const primitive = this.collision.primitives[this.selectedPrimitive];
@@ -758,6 +926,13 @@ export class StaticMeshEditor {
       -((event.clientY - rect.top) / rect.height) * 2 + 1,
     );
     this.raycaster.setFromCamera(ndc, this.camera);
+    if (this.uvwOverlay) {
+      const uvwHits = this.raycaster.intersectObject(this.uvwOverlay.pickMesh, false);
+      if (uvwHits.length > 0) {
+        this.selectUvwGizmo();
+        return;
+      }
+    }
     const hits = this.raycaster.intersectObjects(
       this.overlays.map((overlay) => overlay.pickMesh),
       false,
@@ -784,12 +959,35 @@ export class StaticMeshEditor {
     this.attachGizmo();
   }
 
+  private rebuildUvwOverlay(): void {
+    this.disposeUvwOverlay();
+    if (!this.uvw.mapType) {
+      this.attachGizmo();
+      return;
+    }
+    this.uvwOverlay = buildUvwOverlay(this.uvw, this.activeTarget === "uvw");
+    this.overlayGroup.add(this.uvwOverlay.root);
+    this.attachGizmo();
+  }
+
+  private disposeUvwOverlay(): void {
+    if (!this.uvwOverlay) return;
+    this.overlayGroup.remove(this.uvwOverlay.root);
+    disposeOverlay(this.uvwOverlay);
+    this.uvwOverlay = null;
+  }
+
   private refreshOverlayColors(): void {
     this.overlays.forEach((overlay, index) => {
       overlay.wireMaterial.color.setHex(
-        index === this.selectedPrimitive ? WIRE_SELECTED_COLOR : WIRE_COLOR,
+        this.activeTarget === "collision" && index === this.selectedPrimitive
+          ? WIRE_SELECTED_COLOR
+          : WIRE_COLOR,
       );
     });
+    this.uvwOverlay?.wireMaterial.color.setHex(
+      this.activeTarget === "uvw" ? UVW_WIRE_SELECTED_COLOR : UVW_WIRE_COLOR,
+    );
   }
 
   // --- details panel -----------------------------------------------------
@@ -824,6 +1022,14 @@ export class StaticMeshEditor {
           )
           .join("")
       : `<div class="sm-empty">No simple collision. Use the Collision menu to add a shape.</div>`;
+    const uvwDetails = this.uvw.mapType
+      ? `
+        <div class="sm-prim-row ${this.activeTarget === "uvw" ? "is-selected" : ""}" data-sm-uvw-row>
+          <span class="sm-prim-kind">${UVW_LABELS[this.uvw.mapType]}</span>
+          <small data-sm-uvw-readout>${this.uvwReadout()}</small>
+          <button type="button" class="sm-prim-del" data-sm-uvw-remove title="Remove">✕</button>
+        </div>`
+      : `<div class="sm-empty">No UVW map. Use the UVW Map menu to apply a projection.</div>`;
 
     this.detailsHost.innerHTML = `
       <div class="sm-details-heading">Details</div>
@@ -833,6 +1039,10 @@ export class StaticMeshEditor {
           <span>Element 0</span>
           <select data-sm-field="materialSlot">${this.materialSlotOptions()}</select>
         </label>
+      </div>
+      <div class="sm-section">
+        <div class="sm-section-title">UVW Map</div>
+        <div class="sm-prim-list">${uvwDetails}</div>
       </div>
       <div class="sm-section">
         <div class="sm-section-title">Collision</div>
@@ -917,6 +1127,22 @@ export class StaticMeshEditor {
         this.deleteSelected();
       });
     });
+    this.detailsHost.querySelector<HTMLElement>("[data-sm-uvw-row]")?.addEventListener("click", (event) => {
+      if ((event.target as HTMLElement).closest("[data-sm-uvw-remove]")) return;
+      this.selectUvwGizmo();
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-sm-uvw-remove]")?.addEventListener("click", () => {
+      this.removeUvwMap();
+    });
+  }
+
+  private uvwReadout(): string {
+    return `P ${formatVec3(this.uvw.position)} / R ${formatVec3(this.uvw.rotation)} / S ${formatVec3(this.uvw.scale)}`;
+  }
+
+  private updateUvwDetailsText(): void {
+    const readout = this.detailsHost.querySelector<HTMLElement>("[data-sm-uvw-readout]");
+    if (readout) readout.textContent = this.uvwReadout();
   }
 
   private materialSlotOptions(): string {
@@ -1035,14 +1261,22 @@ export class StaticMeshEditor {
 
   private async save(): Promise<void> {
     try {
-      const [collisionResult, materialResult] = await Promise.all([
+      const [collisionResult, materialResult, uvwResult] = await Promise.all([
         saveAssetCollision(this.options.modelPath, this.collision),
         saveAssetMaterialSlots(this.options.modelPath, this.materialSlots),
+        saveAssetUvw(this.options.modelPath, this.uvw),
       ]);
       this.overlay.querySelector<HTMLButtonElement>("[data-sm-save]")?.classList.remove("is-dirty");
-      const changed = collisionResult.changed || materialResult.changed;
-      this.setStatus(changed ? `Saved ${collisionResult.path} and ${materialResult.path}` : "No changes to save.");
-      if (this.options.assetId) this.options.onMaterialSlotsSaved?.(this.options.assetId);
+      const changed = collisionResult.changed || materialResult.changed || uvwResult.changed;
+      this.setStatus(
+        changed
+          ? `Saved ${collisionResult.path}, ${materialResult.path}, and ${uvwResult.path}`
+          : "No changes to save.",
+      );
+      if (this.options.assetId) {
+        this.options.onMaterialSlotsSaved?.(this.options.assetId);
+        this.options.onAssetUvwSaved?.(this.options.assetId);
+      }
     } catch (error) {
       this.setStatus(`Save failed: ${describeError(error)}`, "error");
     }
@@ -1071,6 +1305,7 @@ export class StaticMeshEditor {
     this.previewMaterial?.normalMap?.dispose();
     this.previewMaterial?.dispose();
     for (const overlay of this.overlays) disposeOverlay(overlay);
+    this.disposeUvwOverlay();
     this.renderer.dispose();
     this.overlay.remove();
     if (StaticMeshEditor.active === this) StaticMeshEditor.active = null;
@@ -1100,6 +1335,40 @@ function unitGeometryForShape(shape: CollisionPrimitiveShape): BufferGeometry {
   if (shape === "cylinder") return new CylinderGeometry(0.5, 0.5, 1, 24);
   if (shape === "cone") return new ConeGeometry(0.5, 1, 24);
   return new BoxGeometry(1, 1, 1);
+}
+
+function unitGeometryForUvw(type: UvwMapType): BufferGeometry {
+  if (type === "sphere") return new SphereGeometry(0.5, 24, 16);
+  if (type === "cylinder") return new CylinderGeometry(0.5, 0.5, 1, 24);
+  if (type === "planar") return new BoxGeometry(1, 0.01, 1);
+  return new BoxGeometry(1, 1, 1);
+}
+
+function buildUvwOverlay(uvw: AssetUvwDef, selected: boolean): PrimitiveOverlay {
+  const solidGeometry = unitGeometryForUvw(uvw.mapType ?? "box");
+  const wireGeometry = new EdgesGeometry(solidGeometry);
+  const wireMaterial = new LineBasicMaterial({
+    color: selected ? UVW_WIRE_SELECTED_COLOR : UVW_WIRE_COLOR,
+    depthTest: false,
+    transparent: true,
+  });
+  const wire = new LineSegments(wireGeometry, wireMaterial);
+  wire.renderOrder = 4;
+  const pickMaterial = new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false });
+  const pickMesh = new Mesh(solidGeometry, pickMaterial);
+
+  const root = new Group();
+  root.name = "uvw-map-gizmo";
+  root.add(pickMesh);
+  root.add(wire);
+  root.position.set(uvw.position[0], uvw.position[1], uvw.position[2]);
+  root.rotation.set(degToRad(uvw.rotation[0]), degToRad(uvw.rotation[1]), degToRad(uvw.rotation[2]));
+  root.scale.set(
+    Math.max(uvw.scale[0], 0.001),
+    Math.max(uvw.scale[1], 0.001),
+    Math.max(uvw.scale[2], 0.001),
+  );
+  return { root, wire, pickMesh, solidGeometry, wireGeometry, wireMaterial, pickMaterial };
 }
 
 function buildPrimitiveOverlay(primitive: CollisionPrimitive, selected: boolean): PrimitiveOverlay {
@@ -1184,6 +1453,10 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function formatVec3(value: Vec3): string {
+  return value.map((axis) => axis.toFixed(2)).join(", ");
 }
 
 function describeError(error: unknown): string {

@@ -96,3 +96,30 @@ export async function createProjectContent(
   }
   return { path: data.path ?? "" };
 }
+
+/**
+ * Uploads a single file into `dir` via the localhost-only `/__import-asset`
+ * endpoint. The raw bytes are the POST body; target dir + filename ride the
+ * query string. Returns the created public-relative path.
+ */
+export async function importProjectAsset(
+  dir: string,
+  file: File,
+): Promise<{ path: string; registeredId: string | null }> {
+  const query = `dir=${encodeURIComponent(dir)}&name=${encodeURIComponent(file.name)}`;
+  const response = await fetch(`/__import-asset?${query}`, {
+    method: "POST",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  const data = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    path?: string;
+    registeredId?: string | null;
+    error?: string;
+  } | null;
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error ?? `Import failed: ${response.status} ${response.statusText}`);
+  }
+  return { path: data.path ?? "", registeredId: data.registeredId ?? null };
+}

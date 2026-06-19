@@ -139,6 +139,10 @@ import {
   type AssetMaterialSlotsDef,
 } from "@/scene/assetMaterialSlotsLoader";
 import {
+  applyAssetUvwMapping,
+  loadAssetUvw,
+} from "@/scene/assetUvwLoader";
+import {
   lightEntity,
   roomLayoutToSceneDocument,
   type ColliderTransformSource,
@@ -602,6 +606,20 @@ export class SceneApp {
   async getEditableAssets(): Promise<EditableAsset[]> {
     await this.projectReady;
     if (!this.assetLoader) throw new Error("Project is not loaded yet.");
+    return this.assetLoader.loadEditableAssets();
+  }
+
+  /**
+   * Drops the cached asset manifest and re-reads the editable asset list. Used
+   * after the editor mutates the manifest on disk (e.g. importing a new asset).
+   */
+  async reloadEditableAssets(): Promise<EditableAsset[]> {
+    await this.projectReady;
+    if (!this.assetLoader) throw new Error("Project is not loaded yet.");
+    this.assetLoader.invalidateManifest();
+    // Re-prime the cached manifest so direct lookups (drag-to-place, materials)
+    // stay consistent with the freshly reloaded editable list.
+    this.manifest = await this.assetLoader.loadManifest();
     return this.assetLoader.loadEditableAssets();
   }
 
@@ -1154,6 +1172,7 @@ export class SceneApp {
       for (const [id, box] of computeModelLocalBounds(single)) {
         this.localBounds.set(id, box);
       }
+      await this.refreshAssetUvwMapping(assetId, { rebuild: false });
       await this.refreshAssetMaterialSlots(assetId);
       return true;
     } catch (error) {
@@ -1727,6 +1746,7 @@ export class SceneApp {
     // Shape actors persist as `shape:<type>` instances; their synthetic models
     // aren't part of any loadGroup, so register them before the scene is built.
     this.registerShapeModelsFromLayout();
+    await this.refreshAssetUvwMapping(undefined, { rebuild: false });
     await this.refreshAssetMaterialSlots(undefined, { rebuild: false });
 
     this.assetPlacements.clear();
@@ -3024,6 +3044,28 @@ export class SceneApp {
         } else {
           this.assetMaterialSlots.delete(assetId);
         }
+      }),
+    );
+    if (rebuild) {
+      for (const assetId of new Set(ids)) this.rebuildInstanceGroup(assetId);
+    }
+  }
+
+  async refreshAssetUvwMapping(
+    assetIds?: string | string[],
+    options: { rebuild?: boolean } = {},
+  ): Promise<void> {
+    if (!this.manifest || !this.layout) return;
+    const rebuild = options.rebuild !== false;
+    const ids = typeof assetIds === "string"
+      ? [assetIds]
+      : assetIds ?? sceneModelAssetIds(this.layout);
+    await Promise.all(
+      [...new Set(ids)].map(async (assetId) => {
+        const asset = this.manifest?.assets.find((entry) => entry.id === assetId);
+        const gltf = this.models.get(assetId);
+        if (!asset || !gltf) return;
+        applyAssetUvwMapping(gltf.scene, await loadAssetUvw(assetPath(asset)));
       }),
     );
     if (rebuild) {

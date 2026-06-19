@@ -69,6 +69,10 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import { isPlayerStartAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
+import {
+  applyAssetUvwMapping,
+  loadAssetUvw,
+} from "@/scene/assetUvwLoader";
 import { assetPath, assetType } from "@engine/assets/manifest";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
@@ -286,6 +290,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // instanced-model builder throws and aborts scene construction (the editor
     // does the same via registerShapeModelsFromLayout).
     registerSceneShapeModels(this.layout, this.models, this.localBounds);
+    await this.applyAssetUvwMappings();
 
     buildSceneEntities(this.layout, {
       addInstance: (assetId, placements) => {
@@ -560,6 +565,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (missing.length === 0) return;
     const models = await this.assetLoader.loadModels(missing);
     for (const [assetId, model] of models) this.models.set(assetId, model);
+  }
+
+  private async applyAssetUvwMappings(): Promise<void> {
+    if (!this.assetLoader || !this.layout) return;
+    const manifest = await this.assetLoader.loadManifest();
+    const assetIds = sceneModelAssetIds(this.layout);
+    await Promise.all(
+      assetIds.map(async (assetId) => {
+        const asset = manifest.assets.find((entry) => entry.id === assetId);
+        const gltf = this.models.get(assetId);
+        if (!asset || !gltf) return;
+        applyAssetUvwMapping(gltf.scene, await loadAssetUvw(assetPath(asset)));
+      }),
+    );
   }
 
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {

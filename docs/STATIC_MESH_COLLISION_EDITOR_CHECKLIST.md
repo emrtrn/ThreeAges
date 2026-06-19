@@ -266,6 +266,15 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] **Primitives** listesi (eklenen simple collider'lar; sayı + tip + sil)
 - [x] Değişiklikleri asset-düzeyi collision tanımına yaz (explicit Save / Ctrl+S)
 
+### Faz 5b — SM Editor UVW Map (hızlı haritalama)
+
+- [x] Üst barda `UVW Map` açılır menüsü
+- [x] Planar / Box / Sphere / Cylinder hızlı UVW projection seçenekleri
+- [x] Unwrap yapmadan vertex pozisyonlarından UV üretimi
+- [x] UVW gizmosu: Move / Rotate / Scale araçlarıyla yön, konum ve ölçek ayarı
+- [x] Asset-düzeyi `*.uvw.json` sidecar + `/__save-uvw` yazma yolu
+- [x] Editor ve Play model yükleme yolunda kayıtlı UVW projection uygulaması
+
 ### Faz 6 — Sahne Objesi Details (Collision başlığı alt kümesi)
 
 - [x] Seçili objenin Details'ında `Collision` başlığı (toggle bölüme yükseltildi)

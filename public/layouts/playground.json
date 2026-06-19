@@ -99,7 +99,7 @@
             1.52
           ],
           "name": "Cube",
-          "materialSlot": "starter-mat-brick-clay-new",
+          "materialSlot": "starter-mat-grass",
           "simulatePhysics": true,
           "rotationYDeg": 0,
           "scale": 1
@@ -188,17 +188,7 @@
     },
     {
       "assetId": "doorway",
-      "placements": [
-        {
-          "position": [
-            0.21,
-            0,
-            -3.25
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "wall",
@@ -213,15 +203,23 @@
       "placements": [
         {
           "position": [
-            -1.01,
-            0,
-            2.97
+            -3.43,
+            0.28,
+            3.58
           ],
           "materialSlot": "starter-mat-prototype-grid",
           "rotationYDeg": 0,
-          "scale": 1
+          "scale": [
+            2.42,
+            1,
+            2.42
+          ]
         }
       ]
+    },
+    {
+      "assetId": "starter-sm-crate",
+      "placements": []
     }
   ],
   "characters": [],
