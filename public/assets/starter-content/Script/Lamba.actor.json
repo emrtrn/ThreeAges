@@ -15,6 +15,12 @@
       "component": "MeshRenderer",
       "props": {},
       "parent": "root"
+    },
+    {
+      "id": "meshRenderer1",
+      "component": "MeshRenderer",
+      "props": {},
+      "parent": "root"
     }
   ],
   "eventBindings": [],

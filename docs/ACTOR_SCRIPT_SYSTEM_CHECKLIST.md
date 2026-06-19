@@ -316,8 +316,9 @@ Authoring dikey kesiti **tamamlandı ve yeşil** (tsc temiz · build başarılı
 175 engine check). Kullanılabilir akış: sağ tık → **Script** → Pick Parent Class
 → isim → `*.actor.json` · Content Browser'da çift tık → **Actor Script editörü**
 (Components ağacı, My Blueprint Variables, Event Graph bindings, Details,
-Compile/Save). Kalan: 3D viewport önizleme, instance/spawn (Faz 7), behavior stub
-üretimi (Faz 8).
+Compile/Save). Instance/spawn (Faz 7) tamamlandı: runtime + editör-içi sürükle-
+bırak yerleştirme/seçim/gizmo/sil/undo + WYSIWYG mesh. Kalan: editör viewport'unda
+3D component önizleme, per-instance override, behavior stub üretimi (Faz 8).
 
 İlgili commit'ler: veri modeli + content/save plumbing; editör (picker, overlay,
 paneller).
@@ -402,17 +403,22 @@ npm run build           # başarılı
 ### Faz 7 — Instance/Spawn katmanı (sınıf → level)
 
 Runtime yarısı (veri modeli + spawn/render/behavior) **bitti ve gate yeşil**
-(tsc temiz · 179 engine check · build başarılı). Editör-içi yerleştirme (sürükle/
-yerleştir + seç + gizmo) bir sonraki oturuma bırakıldı — kapsam kararı (tam vs.
-minimal) açık.
+(tsc temiz · 181 engine check · build başarılı). **Slice 3 — editör-içi
+yerleştirme de tamamlandı (2026-06-19):** kullanıcı kararı **tam kapsam** (sürükle/
+yerleştir + seç + gizmo + sil + undo/redo) ve **gerçek mesh (WYSIWYG)** —
+RuntimeSceneApp'in classRef çözme/mesh yükleme mantığı SceneApp'e taşındı,
+mesh'siz logic/trigger actor'lar için placeholder marker render edilir.
+Per-instance override hâlâ ertelenmiş durumda.
 
 - [x] Level/layout instance şeması: `LayoutActorInstance { classRef, transform,
       hierarchy/flags }` (`engine/scene/layout.ts`) + `RoomLayout.actors?`.
       `overrides` ertelendi.
-- [ ] Content'ten `*.actor.json` sürükle/yerleştir → level'a class instance
-      (**Slice 3, bekliyor** — drop pipeline `editor/input/bindings.ts:onAssetDrop`
-      desenini izleyip yeni `application/x-forge-actor-class` payload'ı + editör
-      seçim union'ına `actor` türü ekler)
+- [x] Content'ten `*.actor.json` sürükle/yerleştir → level'a class instance
+      (drop pipeline `editor/input/bindings.ts`'e `application/x-forge-actor-class`
+      payload'ı + `onActorClassDrop` eklendi; editör seçim union'ına `actor` türü
+      eklendi (`editor/core/selection.ts`); `SceneApp.addActorAt` sınıfı çözer +
+      mesh'i yükler + undoable yerleştirir + seçer; `*.actor.json` kartları
+      sürüklenebilir (classRef = public-relative yol))
 - [x] Runtime spawn: sınıfı çöz → component'ler + event binding'leri → entity
       (saf `actorInstanceToEntity`, `engine/scene/actorInstance.ts`);
       `RuntimeSceneApp` classRef'leri çözer (cache'li), mesh modellerini yükler,
@@ -443,5 +449,6 @@ procedural `shape:<type>` actor mesh'i + actor parent hiyerarşisi → B4/sonrak
 - [x] Save payload normalize testi (bozuk gövde güvenli default'a düşüyor)
 - [x] `npx tsc --noEmit` temiz · `npm run build` başarılı
 - [ ] `docs/UNREAL_BASICS_LESSONS.md` Progress Log'a giriş
-- [~] Uçtan uca: sağ tık → sınıf seç → editör → component+değişken+event → kaydet
-      (✓); level'a yerleştir → Play (Faz 7 sonrası)
+- [x] Uçtan uca: sağ tık → sınıf seç → editör → component+değişken+event → kaydet
+      → Content'ten level'a sürükle-bırak → seç/taşı/sil/undo → Play'de spawn
+      (✓). Kalan uç: per-instance override authoring.

@@ -170,7 +170,11 @@ import type {
   LayoutPlacement,
   RoomLayout,
 } from "../engine/scene/layout";
-import { cloneCharacter, clonePlacement } from "../editor/core/layoutSnapshots";
+import {
+  cloneActorInstance,
+  cloneCharacter,
+  clonePlacement,
+} from "../editor/core/layoutSnapshots";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
 import { collisionWireboxes } from "../engine/render-three/collisionView";
 import {
@@ -257,6 +261,11 @@ check("character id matches selectionId", () => {
 });
 check("light id matches selectionId", () => {
   assert.equal(lightEntityId(2), selectionId({ kind: "light", index: 2 }));
+});
+check("actor id matches selectionId", () => {
+  // Placed actor instances pick by `actor:<index>`; the entity id (used by the
+  // behavior/physics transform sink) must stay byte-for-byte in sync.
+  assert.equal(actorInstanceEntityId(4), selectionId({ kind: "actor", index: 4 }));
 });
 
 // 2. Round-trip on the real saved layout (cwd is the repo root under npm).
@@ -4671,6 +4680,28 @@ check("actorInstanceToEntity falls back to a Behavior component node when no bin
   });
   const entity = actorInstanceToEntity(def, { classRef: "s.actor.json", position: [0, 0, 0] }, 1);
   assert.equal(readBehaviorComponent(entity)?.scriptId, "spin");
+});
+
+check("cloneActorInstance deep-copies fields and shares no references", () => {
+  const original = {
+    classRef: "blueprints/DoorBP.actor.json",
+    name: "Front Door",
+    position: [1, 2, 3] as [number, number, number],
+    rotation: [0, 90, 0] as [number, number, number],
+    scale: [2, 2, 2] as [number, number, number],
+    scaleLocked: true,
+    hidden: true,
+    locked: true,
+    groupId: "g1",
+    nodeId: "n1",
+    parentId: "n0",
+  };
+  const clone = cloneActorInstance(original);
+  assert.deepEqual(clone, original);
+  clone.position[0] = 99;
+  (clone.rotation as number[])[1] = 0;
+  assert.equal(original.position[0], 1, "position array must be copied");
+  assert.equal(original.rotation[1], 90, "rotation array must be copied");
 });
 
 check("validateActorInstance allowlists classRef + transform and rejects bad refs", () => {

@@ -269,6 +269,33 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-19* — **Actor Script Faz 7 Slice 3 — editör-içi yerleştirme (tamam).**
+  Placed Actor Script class instance'ları artık editörde birinci-sınıf nesne
+  (checklist: `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7 Slice 3). **Kullanıcı
+  kararları:** kapsam = **tam** (sürükle-bırak + seç + gizmo + sil + undo/redo);
+  edit-mode görsel = **gerçek mesh (WYSIWYG)**; per-instance override = **ertele**.
+  **Kimlik/seçim:** `editor/core/selection.ts`'e `actor` union üyesi (index-bazlı,
+  `character` desenini izler) + clone/id/parse/equal + compareActor\*; `picking.ts`
+  `findParentActor` (`userData.actorIndex`); `scenePicker` pick + self-hit. **Okuma
+  modeli:** `sceneObjects.ts` outliner satırları + Details view-model;
+  `metadataSchema` actor target'ı per-instance şema taşımaz (sınıfta yaşar).
+  **Render (SceneApp):** RuntimeSceneApp'in classRef çözme/mesh yükleme mantığı
+  edit sahnesine taşındı — `resolveActorClass` (cache) + `loadActorMeshModels` +
+  `buildActorObject` (`createCharacterSceneObject` ile gerçek mesh; mesh'siz logic/
+  trigger actor'lar için placeholder marker). `getMutableTransform`/captureTransform/
+  refreshSelectionObject/applyName/applyVisibility/getAllSelections/getSelectionLabel/
+  hasSelection/getSelectionWorldBox/createSelectionOutlineTarget + pickable
+  supplier'ları `actor`'ı işler. **Yerleştirme:** `bindings.onActorClassDrop`
+  (`application/x-forge-actor-class`) → `SceneApp.addActorAt` (çöz + mesh yükle +
+  undoable yerleştir + seç); `*.actor.json` Content kartları sürüklenebilir
+  (classRef = public-relative yol); `EditorSceneController` actor sil + tekli/çoklu
+  duplicate (host `insert/removeActorPlacement`). Details actor'da transform-only
+  (collision/physics/components/metadata bastırıldı — override ertelendi).
+  **Save:** `saveLayout` `this.layout`'u (actors[] dahil) gönderir; validator zaten
+  allowlist'liyor. **Gate:** tsc temiz · engine 179 → **181** (actor id-sync +
+  cloneActorInstance round-trip) · build başarılı. **Kalan:** editör viewport'unda
+  3D component önizleme, per-instance override authoring, behavior stub üretimi (Faz 8).
+
 - *2026-06-19* — **Actor Script Faz 7 — Instance/Spawn katmanı (runtime yarısı).**
   Placed Actor Script class → runtime spawn dikey kesiti kuruldu (checklist:
   `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7). **Veri modeli:**
