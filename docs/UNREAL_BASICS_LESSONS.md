@@ -269,6 +269,26 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-19* — **Actor Script (Blueprint) sistemi — authoring dikey kesiti.**
+  Unreal Actor Blueprint'in Forge'a uygun, **veri-odaklı** versiyonu kuruldu
+  (rapor + checklist: `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md`). **Karar:** görsel
+  node grafiği **yok** — event = `scriptId + params`, mantık TS'te (`src/game/`),
+  AI yazar; editör sadece parametreleri yüzeye çıkarır. **Veri modeli:**
+  `engine/scene/actorScript.ts` (`ParentClass`, `ComponentTemplateNode`,
+  `EventBinding`, `ActorScriptDef` + defensive `normalizeActorScriptDef`; eski
+  `type:"script"` stub'ı boş `actor` sınıfına düşer). **Authoring:** sağ tık →
+  **Script** artık **Pick Parent Class** modalı (Actor/Pawn/Character/Player
+  Controller/Game Mode Base) açıp `<name>.actor.json` yaratıyor (parent class
+  seed'li); Content Browser'da çift tık → **ActorScriptEditor** overlay (dinamik
+  import, editor-only): Components ağacı + My Blueprint Variables (sol), Viewport
+  placeholder + Event Graph bindings (orta), Details (sağ), Compile/Save/Browse/
+  Play toolbar. Compile = yapısal validate (benzersiz id, parent ref, döngü,
+  benzersiz key, boş scriptId) + kayıtsız script uyarısı. Yeni `/__save-actor`
+  endpoint + `validateSaveActorPayload`; `BEHAVIOR_SCRIPT_IDS` export'u öneriler
+  için. tsc temiz · build yeşil · 175 engine check. **Nerede durdu / sıradaki:**
+  3D viewport önizleme; **instance/spawn katmanı** (`classRef` ile level'a
+  yerleştir + runtime spawn — Faz 7); behavior stub üretimi (Faz 8).
+
 - *2026-06-19* — **§3 Particle: efekt-asset dropdown + autoPlay + VFX renderer
   (effectId→manifest fx + ilk renderer).** Kullanıcı doğru itirazı: component
   eklemek inline bir parçacık sistemi *authorlamak* gibiydi; doğrusu **önceden

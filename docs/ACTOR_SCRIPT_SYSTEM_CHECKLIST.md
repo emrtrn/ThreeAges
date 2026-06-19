@@ -292,6 +292,36 @@ Bu, "Unreal mimarisi kullanıp AI ile serbest kod yazma" hedefinin somut halidir
 
 ---
 
+## Kararlar (2026-06-19 netleşti)
+
+Açık sorular, kullanıcı "uygula, sorma; gerekirse öneri geliştir" dediği için
+şöyle karara bağlandı ve uygulandı:
+
+1. **Görsel grafik vs. parametre listesi → parametre listesi.** Görsel node
+   grafiği yok; event = `scriptId + params`, mantık TS'te (AI yazar).
+2. **Format → `*.actor.json`.** Eski `*.script.json` stub'ı okunduğunda boş bir
+   `actor` sınıfına normalize edilir.
+3. **v1 parent class → 5'i de tipte tanımlı**, picker'da hepsi seçilebilir
+   (Actor/Pawn/Character tam akış; Controller/GameMode iskelet — runtime
+   farklılaşması Faz 7'de).
+4. **Prefab/instance katmanı → ertelendi (Faz 7).** Önce authoring (sınıf-asset +
+   editör + kaydet) tam çalışır; spawn sonraki adım.
+5. **Behavior kod konumu → `src/game/behaviors.ts`** (katalog `BEHAVIOR_SCRIPT_IDS`
+   olarak export edildi); `src/game/scripts/` opsiyonel olarak desteklenir.
+6. **Construction Script → ertelendi** (`construction: null` rezerve).
+
+## Uygulama Durumu (2026-06-19)
+
+Authoring dikey kesiti **tamamlandı ve yeşil** (tsc temiz · build başarılı ·
+175 engine check). Kullanılabilir akış: sağ tık → **Script** → Pick Parent Class
+→ isim → `*.actor.json` · Content Browser'da çift tık → **Actor Script editörü**
+(Components ağacı, My Blueprint Variables, Event Graph bindings, Details,
+Compile/Save). Kalan: 3D viewport önizleme, instance/spawn (Faz 7), behavior stub
+üretimi (Faz 8).
+
+İlgili commit'ler: veri modeli + content/save plumbing; editör (picker, overlay,
+paneller).
+
 ## Checklist
 
 Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
@@ -309,67 +339,65 @@ npm run build           # başarılı
 - [x] Unreal Blueprint/Components modelini özetle (Bölüm A)
 - [x] Forge mevcut durumu çıkar (Bölüm B)
 - [x] Kapsam/eşleme (Bölüm C) + mimari karar (Bölüm D)
-- [ ] Açık soruları kullanıcıyla netleştir (aşağıdaki "Açık Sorular")
+- [x] Açık soruları karara bağla (yukarıdaki "Kararlar")
 
 ### Faz 1 — Veri Modeli (engine + validator)
 
-- [ ] `ParentClass` tipi: `actor | pawn | character | playerController | gameMode`
-- [ ] `ActorScriptDef` tipi: `parentClass`, `variables[]`, `components[]`,
-      `eventBindings[]`, `construction?` (engine, three.js'siz)
-- [ ] `ActorEventKind`: `beginPlay | tick | overlap | hit | interact` (sabit küme)
-- [ ] `EventBinding` tipi: `{ event, scriptId, params? }`
-- [ ] `ComponentTemplateNode` tipi: `{ id, parent?, component, props }`
-- [ ] `variables[]` için mevcut `MetadataFieldDef`'i yeniden kullan
-- [ ] `validateActorScriptDef` + `normalizeActorScriptDef` (`tools/saveValidator.ts`)
-- [ ] Eski `type:"script"` stub'ını boş `actor` sınıfına normalize et (geriye uyum)
-- [ ] `tools/engine-tests.ts`: tip okuma + normalize + round-trip testleri
+- [x] `ParentClass` tipi: `actor | pawn | character | playerController | gameMode`
+- [x] `ActorScriptDef` tipi: `parentClass`, `variables[]`, `components[]`,
+      `eventBindings[]`, `construction` (engine, three.js'siz — `engine/scene/actorScript.ts`)
+- [x] `ActorEventKind`: `beginPlay | tick | overlap | hit | interact` (sabit küme)
+- [x] `EventBinding` tipi: `{ event, scriptId, params? }`
+- [x] `ComponentTemplateNode` tipi: `{ id, parent?, component, props }`
+- [x] `variables[]` için mevcut `MetadataFieldDef`'i yeniden kullan
+- [x] `validateSaveActorPayload` + `normalizeActorScriptDef` (`tools/saveValidator.ts`)
+- [x] Eski `type:"script"` stub'ını boş `actor` sınıfına normalize et (geriye uyum)
+- [x] `tools/engine-tests.ts`: normalize + content-new + save payload testleri
 
 ### Faz 2 — Pick Parent Class diyalogu (sağ tık → Script)
 
-- [ ] `openContentContextMenu`'da "Script" → isim prompt'u yerine **sınıf seçici
-      modal** (Actor/Pawn/Character/Player Controller/Game Mode Base; görsele
-      yakın ikon + açıklama)
-- [ ] Seçim → `createProjectContent({ kind:"script", parentClass, name })`
-      (`ContentNewRequest`'e `parentClass` ekle)
-- [ ] `contentStubJson` "script" dalı → seçilen `parentClass` ile `ActorScriptDef`
-      iskeleti yazar (`graph:{}` yerine)
+- [x] `createContent`'te "Script" → isim prompt'undan önce **sınıf seçici modal**
+      (Actor/Pawn/Character/Player Controller/Game Mode Base; ikon + açıklama)
+- [x] Seçim → `createProjectContent({ kind:"script", parentClass, name })`
+      (`ContentNewRequest`'e `parentClass` eklendi)
+- [x] `contentStubJson` "script" dalı → seçilen `parentClass` ile `ActorScriptDef`
+      iskeleti + `.actor.json` uzantısı (`graph:{}` kaldırıldı)
 - [ ] (ertele) Actor/Scene **Component** sınıfı dalları
 
 ### Faz 3 — Actor Script Editör kabuğu (overlay + viewport)
 
-- [ ] `src/editor/ActorScriptEditor.ts` overlay doküman (StaticMeshEditor deseni,
+- [x] `src/editor/ActorScriptEditor.ts` overlay doküman (StaticMeshEditor deseni,
       dinamik import, Esc kapat, tek editör)
-- [ ] Content Browser `*.actor.json` kartına `dblclick` → editörü aç
-- [ ] Viewport: grid + ışık + arkaplan (StaticMesh sahne kurulumu payı)
-- [ ] Orbit/pan/dolly kamera (minimal inline controller payı)
-- [ ] Başlık = sınıf adı + parentClass rozeti; production'da DEV-gate
+- [x] Content Browser `*.actor.json` kartına `dblclick` → editörü aç (+ "BP" rozeti)
+- [~] Viewport: şimdilik **placeholder kart** (sınıf adı/parent/sayımlar); 3D grid+ışık ertelendi
+- [ ] Orbit/pan/dolly kamera (3D viewport ile birlikte)
+- [x] Başlık = sınıf adı + parentClass rozeti; dinamik import ile DEV-gate
 
 ### Faz 4 — Components paneli (şablon ağacı)
 
-- [ ] Sol panelde component **parent-child ağacı** (root = Transform/Scene)
-- [ ] `+ Add` menüsü: Forge component seti (`MeshRenderer`, `Collider`, `Audio`,
-      `ParticleEmitter`, `Light`, `Interaction`, `Behavior`) kategorize
-- [ ] Component seçimi → Details'ta prop formu (schema-driven form yeniden kullanımı)
+- [x] Sol panelde component **parent-child ağacı** (root = Transform, silinemez)
+- [x] `+ Add` menüsü: Forge component seti (`MeshRenderer`, `Collider`, `Audio`,
+      `ParticleEmitter`, `Light`, `Interaction`, `Behavior`)
+- [x] Component seçimi → Details'ta form (id/parent/kind + **props JSON** editörü)
 - [ ] Viewport'ta component önizleme (mesh/collider/light gizmo'ları)
 - [ ] (ertele) Add menüsünü roadmap kategorileriyle (Movement/Camera/Spring Arm…)
-      genişlet
 
 ### Faz 5 — Event Bindings + Variables + Details
 
-- [ ] **Event Bindings** paneli: `event` dropdown + `scriptId` dropdown (registry'den)
-      + `params` formu (şema)
-- [ ] `scriptId` listesi `BehaviorRegistry`'den dinamik; çözülemeyen id uyarısı
-- [ ] **Variables** editörü: `MetadataFieldDef` ekle/sil/düzenle (key/label/type/default)
-- [ ] Details paneli seçili öğeye göre (component / variable / event binding) form
+- [x] **Event Bindings** paneli: `event` dropdown + `scriptId` (datalist + serbest
+      metin) + `params` JSON editörü
+- [x] `scriptId` önerileri `BEHAVIOR_SCRIPT_IDS`'ten; çözülemeyen id Compile'da uyarı
+- [x] **Variables** editörü: `MetadataFieldDef` ekle/sil/düzenle (key/label/type/default/options)
+- [x] Details paneli seçime göre (class / component / variable / event)
 - [ ] (ertele) **Construction Script** hook'u (editör-zamanı TS)
 
 ### Faz 6 — Toolbar (Compile / Save / Browse / Play)
 
-- [ ] **Save / Ctrl+S** → `/__save-actor` (veya content-new save yolu)
-- [ ] **Compile** = validate: scriptId çözümü + değişken/param tip kontrolü +
-      component prop geçerliliği; sonuçlar alt panelde (Compiler Results analoğu)
-- [ ] **Browse** → Content Browser'da dosyayı seç/vurgula
-- [ ] **Play** → Play moduna gir (varsa test instance'ıyla)
+- [x] **Save / Ctrl+S** → `/__save-actor`
+- [x] **Compile** = validate: benzersiz id'ler, parent referansları, döngü yok,
+      benzersiz değişken key, boş olmayan scriptId; sonuç toolbar'da + footer'da
+- [~] **Browse** → şimdilik statü mesajı (kart seçme/vurgu sonra)
+- [ ] **Play** → Play moduna gir (instance/spawn sonrası)
 
 ### Faz 7 — Instance/Spawn katmanı (sınıf → level)
 
@@ -377,42 +405,21 @@ npm run build           # başarılı
 - [ ] Content'ten `*.actor.json` sürükle/yerleştir → level'a class instance
 - [ ] Runtime spawn: sınıfı çöz → component'ler + event binding'leri → entity;
       `BehaviorSubsystem.setEntities` ile bağla
-- [ ] Save validator allowlist: `classRef`/`overrides` alanlarını `applyTransform
-      Fields`'e ekle (yoksa sessizce düşer)
+- [ ] Save validator allowlist: `classRef`/`overrides` alanlarını ekle (yoksa düşer)
 - [ ] (ertele) per-instance `overrides` (variable/component override) UI'si
 
 ### Faz 8 — AI kod yolu (behavior stub)
 
-- [ ] Editörde "Yeni Behavior" → `src/game/scripts/<name>.ts` stub yolu önerisi +
-      `BehaviorContext` imzası
-- [ ] Stub'a beklenen `params` şemasını yorum olarak yaz (AI'ye sözleşme)
-- [ ] `createBehaviorRegistry` Map'ine kayıt notu/yardımı
+- [x] `BEHAVIOR_SCRIPT_IDS` kataloğu export edildi (`src/game/behaviors.ts`); editör önerilerde kullanır
+- [~] Details'ta "scriptId → src/game TS behavior'ı yaz/kaydet" sözleşme notu var
+- [ ] Editörde "Yeni Behavior" → `src/game/scripts/<name>.ts` stub yolu + imza üretimi
 - [ ] Doküman: "AI ile behavior yazma" akışı (CLAUDE.md / bu doküman)
 
 ### Faz 9 — Test & Doküman
 
-- [ ] `tools/engine-tests.ts`: ActorScriptDef + eventBinding + instance spawn testleri
-- [ ] Save round-trip (yeni alanlar düşmüyor)
-- [ ] `npx tsc --noEmit` temiz · `npm run build` başarılı
+- [x] `tools/engine-tests.ts`: normalize/coerce + content-new + save payload (175 check)
+- [x] Save payload normalize testi (bozuk gövde güvenli default'a düşüyor)
+- [x] `npx tsc --noEmit` temiz · `npm run build` başarılı
 - [ ] `docs/UNREAL_BASICS_LESSONS.md` Progress Log'a giriş
-- [ ] Uçtan uca akış: sağ tık → sınıf seç → editör → component+değişken+event →
-      AI behavior yaz → kaydet → level'a yerleştir → Play'de çalış
-
----
-
-## Açık Sorular (Faz 1 öncesi netleşmeli)
-
-1. **Görsel grafik vs. parametre listesi:** Rapor, kullanıcı yönüne uyarak
-   görsel node grafiği **yapmamayı**, event'i `scriptId + params` listesiyle
-   modellemeyi öneriyor. Onaylanıyor mu, yoksa minimal bir görsel akış da
-   isteniyor mu? **(Öneri: parametre listesi.)**
-2. **Dosya uzantısı/format:** `*.actor.json` mı, `*.bp.json` / `*.script.json`
-   mı? (Rapor `*.actor.json` öneriyor; mevcut `*.script.json` stub'ı normalize
-   edilir.)
-3. **v1 parent class kümesi:** Sadece **Actor + Pawn + Character** ile başlayıp
-   Player Controller / Game Mode Base'i sonraya bırakalım mı?
-4. **Prefab/instance katmanı (Faz 7):** Şimdi mi, yoksa önce tek-sınıf editör +
-   doğrudan yerleştirme yeterli mi?
-5. **Behavior kod konumu:** Yeni `src/game/scripts/<name>.ts` modülleri mi, yoksa
-   her şey `src/game/behaviors.ts` içinde mi büyüsün?
-6. **Construction Script:** İlk sürümde tamamen ertelensin mi (Faz 5 opsiyonel)?
+- [~] Uçtan uca: sağ tık → sınıf seç → editör → component+değişken+event → kaydet
+      (✓); level'a yerleştir → Play (Faz 7 sonrası)
