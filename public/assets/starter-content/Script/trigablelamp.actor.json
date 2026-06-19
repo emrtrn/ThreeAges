@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "trigablelamp",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    }
+  ],
+  "eventBindings": [],
+  "construction": null
+}
