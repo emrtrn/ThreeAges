@@ -517,6 +517,50 @@ export function validateLightActor(value: unknown): Record<string, unknown> {
 }
 
 /**
+ * Allowlist validator for one placed Planar Reflection (mirror) actor. Mirrors
+ * {@link validateLightActor}: a required `id` + `position`, the shared
+ * transform/hierarchy/flag fields, plus the mirror `color` and `resolution`.
+ */
+export function validateReflectionPlane(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") throw new Error("reflection plane must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) {
+    throw new Error("reflection plane id must be a string");
+  }
+  if (!isNumberTuple(input.position)) throw new Error("invalid reflection plane position");
+
+  const plane: Record<string, unknown> = {
+    id: input.id,
+    position: input.position.map((number) => Number(number.toFixed(3))),
+  };
+  if (typeof input.name === "string") plane.name = input.name;
+  if (input.hidden === true) plane.hidden = true;
+  if (input.locked === true) plane.locked = true;
+  if (input.scaleLocked === true) plane.scaleLocked = true;
+  if (typeof input.groupId === "string") plane.groupId = input.groupId;
+  if (typeof input.nodeId === "string") plane.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") plane.parentId = input.parentId;
+  if (input.rotation !== undefined) {
+    if (!isNumberTuple(input.rotation)) throw new Error("invalid reflection plane rotation");
+    plane.rotation = input.rotation.map((axis) =>
+      validateRotationDeg(axis, "reflection plane rotation component"),
+    );
+  }
+  if (input.scale !== undefined) {
+    if (!isNumberTuple(input.scale)) throw new Error("invalid reflection plane scale");
+    plane.scale = input.scale.map((axis) =>
+      validateScaleValue(axis, "reflection plane scale component"),
+    );
+  }
+  if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
+    plane.color = input.color;
+  }
+  const resolution = validateOptionalNumber(input.resolution, "reflection plane resolution", 64, 2048);
+  if (resolution !== undefined) plane.resolution = resolution;
+  return plane;
+}
+
+/**
  * Allowlist validator for the singleton Sky Atmosphere actor. Every field that
  * survives a save is copied explicitly; omitted/out-of-range values are dropped
  * so the runtime falls back to {@link resolveSkyAtmosphere} defaults. Returns null
@@ -752,6 +796,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("lights must be an array");
         })();
+  const reflectionPlanes = layout.reflectionPlanes === undefined
+    ? null
+    : Array.isArray(layout.reflectionPlanes)
+      ? layout.reflectionPlanes.map(validateReflectionPlane)
+      : (() => {
+          throw new Error("reflectionPlanes must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -811,6 +862,7 @@ export function validateLayout(value: unknown): unknown {
   if (reflection) output.reflection = reflection;
   if (postProcess) output.postProcess = postProcess;
   if (lights) output.lights = lights;
+  if (reflectionPlanes) output.reflectionPlanes = reflectionPlanes;
   if (actors) output.actors = actors;
   return output;
 }

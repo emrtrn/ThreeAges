@@ -378,16 +378,42 @@ Film Grain, AO, opsiyonel SMAA. Faz 1 yeşil geçtikten sonra; istenmezse iptal.
 - [x] **Saturation/Contrast** (ColorCorrection tarzı grading shader):
       `saturation`, `contrast` + Details + validator
 
-#### F2.2 — İleri pass efektleri (opsiyonel)
+#### F2.2 — Sonraki onaylı set (CA + Grain + White Balance + DoF)
 
-- [ ] **Depth of Field** (`BokehPass`): focusDistance/aperture/maxBlur, 100u ölçeği
-- [ ] **Chromatic Aberration** (`RGBShiftShader` ShaderPass): amount
-- [ ] **Film Grain** (`FilmPass`, yalnız gren — scanline kapalı): intensity
+Mevcut çekirdeğe (Bloom/Vignette/Saturation/Contrast) eklenecek, "tam paket"
+hissini tamamlayan düşük-maliyetli üçlü + en büyük eksik DoF (2026-06-20 onaylı).
+
+- [ ] **Chromatic Aberration** (`RGBShiftShader` ShaderPass):
+      `chromaticAberration{enabled,amount}` + Details + validator
+- [ ] **Film Grain** (`FilmPass`, yalnız gren — scanline kapalı):
+      `grain{enabled,intensity}` + Details + validator
+- [ ] **White Balance** (grading shader'a temp/tint uniform): `temperature`,
+      `tint` (Saturation/Contrast grading pass'ine eklenir) + Details + validator
+- [ ] **Depth of Field** (`BokehPass`): `dof{enabled,focusDistance,aperture,
+      maxBlur}`, 100u ölçeğine tune + Details + validator
+
+#### F2.3 — Bloom kalitesi (karar: global bloom korunuyor)
+
+> **Geçmiş:** Güneşin bloom blowout'unu önlemek için **selective bloom** (sky/cloud
+> backdrop'ları hariç) denendi ve **geri alındı (2026-06-20)** — güneşin bloom'u,
+> selective bloom'da kalan Sky-shader Mie halesinden **daha iyi görünüyor**. Karar:
+> **global bloom** (güneş dahil her şey parlar) korunur.
+> Emissive bloom'u görünür kılmak için yol, materyalin **emissive intensity**
+> tavanını yükseltmek (mevcut cap 20; ~1000'e dek istenebilir).
+
+- [ ] Emissive intensity cap'ini yükselt (MaterialEditor slider+input clamp +
+      `saveValidator` `material.emissiveIntensity` aralığı) — örn. 0..1000
+- [ ] (ileride, opsiyonel) Selective / per-object bloom layer — yalnızca istenirse
+- [ ] Anti-alias: composer yolunda Play kenarlarını kontrol et; gerekirse
+      `SMAAPass` veya composer `samples`
+
+#### F2.4 — Kalan opsiyonel pass efektleri
+
 - [ ] **Ambient Occlusion** (`GTAOPass`/`SSAOPass`): radius/intensity
 - [ ] **Anti-alias** toggle (`SMAAPass`): `antialias: "none" | "smaa"`
-- [ ] Genişletilmiş grading: white balance (temp/tint); ops. shadows/mid/highlights
+- [ ] Bölgesel grading: shadows/midtones/highlights (lift/gamma/gain)
 
-#### F2.3 — Test & doğrulama
+#### F2.5 — Test & doğrulama
 
 - [ ] Pass sırası + resize + dispose her efekt için doğrulanmış
 - [ ] `tools/engine-tests.ts`: `applyPostProcess` enabled-set'e göre pass ekleme/
@@ -428,5 +454,7 @@ Film Grain, AO, opsiyonel SMAA. Faz 1 yeşil geçtikten sonra; istenmezse iptal.
 5. **Menü:** `Add Actor → Visual Effects` başlığında, Cloud Layer'ın yanında
    **"Post Process"**; Sky gibi tıkla-ekle (drag yok).
 6. **Ölçek:** DoF/bloom/AO değerleri 100u far-plane ölçeğine göre ayarlanır.
-</content>
-</invoke>
+7. **Bloom kalitesi (2026-06-20):** Selective bloom (sky/cloud hariç) denendi ve
+   **geri alındı** — güneşin bloom'u Mie halesinden daha iyi. **Global bloom**
+   (güneş dahil) korunur; emissive bloom için materyalin emissive intensity
+   tavanı yükseltilir (F2.3).

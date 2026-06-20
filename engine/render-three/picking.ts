@@ -35,3 +35,12 @@ export function findParentLight(object: Object3D): Object3D | null {
   }
   return null;
 }
+
+export function findParentReflectionPlane(object: Object3D): Object3D | null {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current.userData.reflectionPlaneIndex !== undefined) return current;
+    current = current.parent;
+  }
+  return null;
+}

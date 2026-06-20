@@ -558,12 +558,14 @@ export class EditorSceneController {
         continue;
       }
 
-      // Environment singletons are deleted via their own dedicated commands.
+      // Environment singletons + reflection planes are deleted via their own
+      // dedicated (SceneApp) commands, not the multi-select snapshot stack.
       if (
         selection.kind === "sky" ||
         selection.kind === "fog" ||
         selection.kind === "cloud" ||
         selection.kind === "reflection" ||
+        selection.kind === "reflectionPlane" ||
         selection.kind === "post"
       ) {
         continue;
@@ -1022,12 +1024,14 @@ export class EditorSceneController {
   private duplicateSelection(selection: Selection): Selection | null {
     const layout = this.host.getMutableLayout();
     if (!layout) return null;
-    // The Sky Atmosphere + Height Fog + Cloud Layer + Reflection are singletons: never duplicated.
+    // The Sky Atmosphere + Height Fog + Cloud Layer + Reflection are singletons,
+    // and reflection planes aren't duplicable in v1: never duplicated.
     if (
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
-      selection.kind === "reflection"
+      selection.kind === "reflection" ||
+      selection.kind === "reflectionPlane"
     ) {
       return null;
     }

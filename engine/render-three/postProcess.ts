@@ -69,6 +69,14 @@ const COLOR_GRADING_SHADER = {
   `,
 };
 
+/**
+ * Bloom strength is authored in intuitive ~1-based units (1 = the standard sun
+ * bloom look, matching threshold/radius) but the analytic Sky sun disc has
+ * enormous linear-HDR radiance, so a tiny actual UnrealBloomPass strength already
+ * reads strongly. This factor maps authored intensity to that strength (1 → 0.001).
+ */
+const BLOOM_INTENSITY_SCALE = 0.001;
+
 export function createPostProcessEffectPasses(
   resolved: ResolvedPostProcess | null,
   size: { width: number; height: number },
@@ -79,7 +87,7 @@ export function createPostProcessEffectPasses(
     passes.push(
       new UnrealBloomPass(
         new Vector2(size.width, size.height),
-        resolved.bloom.intensity,
+        resolved.bloom.intensity * BLOOM_INTENSITY_SCALE,
         resolved.bloom.radius,
         resolved.bloom.threshold,
       ),

@@ -312,6 +312,7 @@ export class EditorUi {
               <button type="button" data-add-height-fog>Exponential Height Fog</button>
               <button type="button" data-add-cloud-layer>Cloud Layer</button>
               <button type="button" data-add-reflection>Reflection Environment</button>
+              <button type="button" data-add-reflection-plane>Reflection Plane</button>
               <button type="button" data-add-post-process>Post Process</button>
               <div class="add-actor-section-title">Gameplay</div>
               <button type="button" data-add-player-start>Player Start</button>
@@ -601,6 +602,13 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-reflection]")
       ?.addEventListener("click", () => {
         this.app.addReflection();
+      });
+
+    // Reflection Plane (Planar mirror) is a placed actor with a transform.
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-reflection-plane]")
+      ?.addEventListener("click", () => {
+        this.app.addReflectionPlane();
       });
 
     // Post Process is a transform-less singleton environment actor.
@@ -2228,6 +2236,10 @@ export class EditorUi {
       this.renderPostDetails(selection);
       return;
     }
+    if (selection.kind === "reflectionPlane") {
+      this.renderReflectionPlaneDetails(selection);
+      return;
+    }
 
     this.detailsScale = [...selection.scale];
 
@@ -2797,12 +2809,13 @@ export class EditorUi {
    * core stays generic: groups/fields come from the project's metadata schema.
    */
   private renderMetadataSections(selection: EditableSelection): string {
-    // Environment singletons carry no schema-driven gameplay metadata.
+    // Environment singletons + reflection planes carry no schema-driven metadata.
     if (
       selection.kind === "sky" ||
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
       selection.kind === "reflection" ||
+      selection.kind === "reflectionPlane" ||
       selection.kind === "post"
     ) {
       return "";
@@ -2985,6 +2998,7 @@ export class EditorUi {
       this.selected.kind === "fog" ||
       this.selected.kind === "cloud" ||
       this.selected.kind === "reflection" ||
+      this.selected.kind === "reflectionPlane" ||
       this.selected.kind === "post"
     ) {
       return null;
@@ -3120,6 +3134,117 @@ export class EditorUi {
         });
       },
     );
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-detail-toggle]")
+      .forEach((toggle) => {
+        toggle.addEventListener("change", () =>
+          this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
+        );
+      });
+  }
+
+  /**
+   * Details panel for a placed Planar Reflection (mirror) actor: a full transform
+   * (location/rotation/scale) plus a Reflection section for the mirror tint and
+   * render-target resolution. The reflective face is the plane's local +Z.
+   */
+  private renderReflectionPlaneDetails(selection: EditableSelection): void {
+    this.detailsScale = [...selection.scale];
+    const lockedAttr = selection.locked ? "disabled" : "";
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>reflection / planar mirror</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="Reflection Plane" />
+      </label>
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
+      ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
+      <div class="detail-section">
+        <div class="detail-section-title">Reflection</div>
+        <label class="detail-row">
+          <span>Tint</span>
+          <input data-reflection-plane-color type="color"
+            value="${escapeHtml(selection.color ?? "#888888")}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Resolution</span>
+          <select data-reflection-plane-resolution ${lockedAttr}>
+            ${[128, 256, 512, 1024, 2048]
+              .map(
+                (res) =>
+                  `<option value="${res}" ${
+                    (selection.reflectionResolution ?? 512) === res ? "selected" : ""
+                  }>${res}px</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+        <div class="detail-hint">Higher resolution = sharper mirror, more GPU cost.</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Actor</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
+          <span>Lock Movement</span>
+        </label>
+      </div>
+    `;
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>('input[data-detail="pr"]')
+      .forEach((input) => {
+        input.addEventListener("focus", () => this.beginDetailsEdit());
+        input.addEventListener("input", () => {
+          this.beginDetailsEdit();
+          this.applyDetails();
+        });
+        input.addEventListener("change", () => this.commitDetailsEdit());
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>('input[data-detail="scale"]')
+      .forEach((input) => {
+        input.addEventListener("focus", () => this.beginDetailsEdit());
+        input.addEventListener("input", () => {
+          this.beginDetailsEdit();
+          this.applyScaleInput(input);
+          this.applyDetails();
+        });
+        input.addEventListener("change", () => this.commitDetailsEdit());
+      });
+
+    this.detailsBody
+      .querySelector<HTMLButtonElement>("[data-scale-lock]")
+      ?.addEventListener("click", () => {
+        this.app.setSelectionScaleLocked(!selection.scaleLocked);
+      });
+
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-detail-name]");
+    nameInput?.addEventListener("change", () => {
+      this.app.renameSceneObject(selection.id, nameInput.value);
+    });
+
+    this.detailsBody
+      .querySelector<HTMLInputElement>("[data-reflection-plane-color]")
+      ?.addEventListener("change", (event) => {
+        this.app.setSelectedReflectionPlane({
+          color: (event.currentTarget as HTMLInputElement).value,
+        });
+      });
+
+    this.detailsBody
+      .querySelector<HTMLSelectElement>("[data-reflection-plane-resolution]")
+      ?.addEventListener("change", (event) => {
+        const value = Number((event.currentTarget as HTMLSelectElement).value);
+        if (!Number.isFinite(value)) return;
+        this.app.setSelectedReflectionPlane({ resolution: value });
+      });
 
     this.detailsBody
       .querySelectorAll<HTMLInputElement>("[data-detail-toggle]")
@@ -3981,6 +4106,7 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "fog") return "F";
   if (kind === "cloud") return "K";
   if (kind === "reflection") return "R";
+  if (kind === "reflectionPlane") return "M";
   if (kind === "post") return "P";
   return "I";
 }

@@ -396,6 +396,32 @@ export interface LayoutLightActor {
   decay?: number;
 }
 
+/**
+ * Placed Planar Reflection actor (à la Unreal's Planar Reflection): a flat mirror
+ * surface (water / polished floor / mirror) rendered with three.js's `Reflector`.
+ * The reflective face is the plane's local +Z; the transform orients and sizes it.
+ * Optional fields read defaults from `engine/scene/reflectionPlane.ts`.
+ */
+export interface LayoutReflectionPlane {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  position: Vec3;
+  /** Full Euler rotation (XYZ order) in degrees. */
+  rotation?: Vec3;
+  /** Per-axis scale (plane size). */
+  scale?: Vec3;
+  /** Mirror tint (hex `#rrggbb`). */
+  color?: string;
+  /** Reflection render-target resolution in px. */
+  resolution?: number;
+}
+
 export interface RoomLayout {
   schema: 1;
   name: string;
@@ -412,6 +438,8 @@ export interface RoomLayout {
   /** Optional singleton global Post Process settings actor. */
   postProcess?: LayoutPostProcess;
   lights?: LayoutLightActor[];
+  /** Placed Planar Reflection (mirror) actors. */
+  reflectionPlanes?: LayoutReflectionPlane[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

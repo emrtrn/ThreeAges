@@ -9,59 +9,15 @@
     },
     {
       "assetId": "rug-rectangle",
-      "placements": [
-        {
-          "position": [
-            -0.52,
-            0.26,
-            0.64
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "lounge-sofa",
-      "placements": [
-        {
-          "position": [
-            -0.29,
-            0.26,
-            -0.6
-          ],
-          "behavior": {
-            "script": "collision-chime"
-          },
-          "audio": {
-            "clipId": "starter-snd-music-01",
-            "autoPlay": true
-          },
-          "particle": {
-            "effectId": "starter-fx-dust-hit",
-            "autoPlay": true
-          },
-          "interaction": {
-            "action": "interact"
-          },
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "table-coffee",
-      "placements": [
-        {
-          "position": [
-            0.41,
-            0.27,
-            0.31
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "shape:cube",
@@ -72,16 +28,16 @@
       "placements": [
         {
           "position": [
-            -2.76,
-            0.27,
-            3.38
+            -3.05,
+            0.26,
+            -0.36
           ],
           "name": "Player Start",
           "collision": false,
           "rotationYDeg": 0,
           "rotation": [
             0,
-            165,
+            90,
             0
           ],
           "scale": 1
@@ -106,48 +62,7 @@
     },
     {
       "assetId": "starter-sm-crate",
-      "placements": [
-        {
-          "position": [
-            -3.06,
-            0.75,
-            3.11
-          ],
-          "materialSlot": "starter-mat-brick-clay-beveled",
-          "rotationYDeg": 0,
-          "scale": 0.48
-        },
-        {
-          "position": [
-            -3.06,
-            0.75,
-            2.35
-          ],
-          "materialSlot": "starter-mat-brick-clay-new",
-          "rotationYDeg": 0,
-          "scale": 0.48
-        },
-        {
-          "position": [
-            -3.06,
-            0.75,
-            1.47
-          ],
-          "materialSlot": "starter-mat-brick-clay-old",
-          "rotationYDeg": 0,
-          "scale": 0.48
-        },
-        {
-          "position": [
-            -3.06,
-            0.75,
-            0.58
-          ],
-          "materialSlot": "starter-mat-brick-cut-stone",
-          "rotationYDeg": 0,
-          "scale": 0.48
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "wall-2",
@@ -155,50 +70,15 @@
     },
     {
       "assetId": "cardboardboxclosed",
-      "placements": [
-        {
-          "position": [
-            0.93,
-            0.26,
-            -0.68
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "bedbunk",
-      "placements": [
-        {
-          "position": [
-            2.05,
-            0.26,
-            0.34
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "laptop",
-      "placements": [
-        {
-          "position": [
-            0.4,
-            0.5,
-            0.11
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            180,
-            0
-          ],
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "starter-sm-platform",
@@ -210,7 +90,7 @@
             0
           ],
           "scaleLocked": true,
-          "materialSlot": "white-material",
+          "materialSlot": "ground",
           "rotationYDeg": 0,
           "scale": 2
         }
@@ -235,9 +115,29 @@
         },
         {
           "position": [
+            -3.17,
+            1.75,
+            3.31
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
             3.41,
             1.75,
             -3.1
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            3.41,
+            1.75,
+            3.32
           ],
           "materialSlot": "white-material",
           "rotationYDeg": 0,
@@ -250,46 +150,96 @@
       "placements": [
         {
           "position": [
-            3.01,
-            0.75,
-            -1.81
+            1.25,
+            1,
+            2.5
           ],
           "materialSlot": "starter-mat-emissive",
           "rotationYDeg": 0,
           "scale": 0.29
+        },
+        {
+          "position": [
+            2.28,
+            1,
+            1.82
+          ],
+          "materialSlot": "starter-mat-metal",
+          "rotationYDeg": 0,
+          "scale": 0.29
         }
       ]
+    },
+    {
+      "assetId": "starter-sm-cube",
+      "placements": [
+        {
+          "position": [
+            2.44,
+            0.75,
+            2.59
+          ],
+          "materialSlot": "starter-mat-brick-clay-beveled",
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            0.06,
+            0.75,
+            2.59
+          ],
+          "materialSlot": "starter-mat-brick-clay-beveled",
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "starter-sm-cylinder",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-plane",
+      "placements": []
     }
   ],
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "backgroundColor": "#000000",
-    "ambientIntensity": 1,
+    "backgroundColor": "#ffffff",
     "gameMode": "forge.tpsCharacter"
   },
   "skyAtmosphere": {
-    "rayleigh": 1,
-    "turbidity": 1,
+    "rayleigh": 2,
+    "turbidity": 2,
     "mie": 0.001,
-    "mieDirectionalG": 0.7,
-    "exposure": 0.1
+    "mieDirectionalG": 0.5,
+    "exposure": 0.5
   },
   "cloudLayer": {
     "color": "#ffffff",
-    "density": 0.8,
-    "softness": 0.5,
-    "scale": 2,
-    "speed": 0.05
+    "coverage": 0.3,
+    "density": 0.3,
+    "softness": 0.3,
+    "scale": 3,
+    "speed": 0.1
+  },
+  "reflection": {
+    "intensity": 0.5
   },
   "postProcess": {
     "toneMapping": "aces",
-    "exposure": 0.8,
+    "exposure": 0.1,
     "bloom": {
       "enabled": true,
-      "threshold": 0,
-      "intensity": 0.01,
+      "threshold": 1,
+      "intensity": 1,
       "radius": 1
+    },
+    "vignette": {
+      "intensity": 1,
+      "offset": 1
     }
   },
   "lights": [
@@ -312,16 +262,6 @@
       "castShadow": true
     }
   ],
-  "actors": [
-    {
-      "classRef": "assets/starter-content/Script/Script_Lamp.actor.json",
-      "position": [
-        -2.27,
-        0.25,
-        2.31
-      ],
-      "rotationYDeg": 0,
-      "scale": 1
-    }
-  ]
+  "reflectionPlanes": [],
+  "actors": []
 }

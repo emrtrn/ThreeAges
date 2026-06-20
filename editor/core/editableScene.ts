@@ -142,6 +142,8 @@ export interface EditableSelection {
   angle?: number;
   penumbra?: number;
   decay?: number;
+  /** Planar Reflection render-target resolution; present only when `kind === "reflectionPlane"`. */
+  reflectionResolution?: number;
   /** Resolved Sky Atmosphere settings; present only when `kind === "sky"`. */
   sky?: EditableSky;
   /** Resolved Height Fog settings; present only when `kind === "fog"`. */

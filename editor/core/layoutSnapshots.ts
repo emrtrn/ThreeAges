@@ -7,6 +7,7 @@ import type {
   LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
+  LayoutReflectionPlane,
   MetadataValue,
   Vec3,
 } from "@engine/scene/layout";
@@ -186,6 +187,25 @@ export function cloneLightActor(light: LayoutLightActor): LayoutLightActor {
 export function cloneUngroupedLightActor(light: LayoutLightActor): LayoutLightActor {
   const clone = cloneLightActor(light);
   delete clone.groupId;
+  return clone;
+}
+
+export function cloneReflectionPlane(plane: LayoutReflectionPlane): LayoutReflectionPlane {
+  const clone: LayoutReflectionPlane = {
+    id: plane.id,
+    position: [...plane.position],
+  };
+  if (plane.name !== undefined) clone.name = plane.name;
+  if (plane.hidden !== undefined) clone.hidden = plane.hidden;
+  if (plane.locked !== undefined) clone.locked = plane.locked;
+  if (plane.scaleLocked !== undefined) clone.scaleLocked = plane.scaleLocked;
+  if (plane.groupId !== undefined) clone.groupId = plane.groupId;
+  if (plane.nodeId !== undefined) clone.nodeId = plane.nodeId;
+  if (plane.parentId !== undefined) clone.parentId = plane.parentId;
+  if (plane.rotation !== undefined) clone.rotation = [...plane.rotation];
+  if (plane.scale !== undefined) clone.scale = [...plane.scale];
+  if (plane.color !== undefined) clone.color = plane.color;
+  if (plane.resolution !== undefined) clone.resolution = plane.resolution;
   return clone;
 }
 

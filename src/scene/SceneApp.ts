@@ -109,6 +109,16 @@ import {
   captureSkyEnvironment,
   resolveReflection,
 } from "@engine/render-three/reflection";
+import {
+  applyReflectionPlaneTransform,
+  createReflectionPlaneObject,
+  disposeReflectionPlaneObject,
+  resolveReflectionPlane,
+  uniqueReflectionPlaneId,
+  uniqueReflectionPlaneName,
+  type ReflectionPlaneObject,
+  type ReflectionPlaneRenderItem,
+} from "@engine/render-three/reflectionPlane";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   applySceneBackgroundAndAmbient,
@@ -174,6 +184,7 @@ import type {
   LayoutPhysics,
   LayoutPostProcess,
   LayoutReflection,
+  LayoutReflectionPlane,
   LayoutSkyAtmosphere,
   LayoutWorldSettings,
   MetadataValue,
@@ -208,6 +219,7 @@ import {
   cloneCharacter,
   cloneLightActor,
   clonePlacement,
+  cloneReflectionPlane,
   lightActorsEqual,
   transformsEqual,
 } from "@editor/core/layoutSnapshots";
@@ -353,6 +365,8 @@ export class SceneApp {
   private cloudObject: CloudDome | null = null;
   /** Captured Sky Light environment (PMREM) backing `scene.environment`; null when none. */
   private reflectionTarget: WebGLRenderTarget | null = null;
+  /** Live `Reflector` meshes for placed Planar Reflection actors, by index. */
+  private reflectionPlaneObjects: ReflectionPlaneObject[] = [];
   private postProcessPipeline: PostProcessPipeline | null = null;
   private autoSaveTimer = 0;
   private frameHandle = 0;
@@ -549,6 +563,7 @@ export class SceneApp {
         objects.push(...this.characterObjects);
         objects.push(...this.actorObjects);
         for (const record of this.lightObjects) objects.push(record.root);
+        objects.push(...this.reflectionPlaneObjects);
         return objects;
       },
       surfacePickables: () => {
@@ -1490,6 +1505,13 @@ export class SceneApp {
       this.removePostProcess();
       return;
     }
+    if (
+      this.selection?.kind === "reflectionPlane" &&
+      this.editorSceneController.selectedCount <= 1
+    ) {
+      this.removeReflectionPlane(this.selection.index);
+      return;
+    }
     this.editorSceneController.deleteSelected();
   }
 
@@ -1938,6 +1960,7 @@ export class SceneApp {
     this.applyHeightFog();
     this.applyCloudLayer();
     this.applyReflection(true);
+    this.buildReflectionPlanes();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
     this.emitHistoryChanged();
@@ -2161,6 +2184,11 @@ export class SceneApp {
 
     if (selection.kind === "light") {
       this.refreshLightObject(selection.index);
+      return;
+    }
+
+    if (selection.kind === "reflectionPlane") {
+      this.refreshReflectionPlaneObject(selection.index);
       return;
     }
 
@@ -2478,6 +2506,181 @@ export class SceneApp {
     // Sun = source of truth for the sky's sun: keep the sky disc in sync as the
     // (directional) Sun light is rotated via gizmo or its rotation fields.
     if (actor.type === "directional") this.updateSkySunFromLight();
+  }
+
+  // --- Planar Reflection (mirror) actors -----------------------------------
+
+  /** Resolved settings + world transform for a reflection-plane layout actor. */
+  private reflectionPlaneItem(actor: LayoutReflectionPlane): ReflectionPlaneRenderItem {
+    return {
+      ...resolveReflectionPlane(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      scale: readScale(actor),
+    };
+  }
+
+  /** Rebuilds every reflector from `layout.reflectionPlanes` (used on load). */
+  private buildReflectionPlanes(): void {
+    for (const reflector of this.reflectionPlaneObjects) {
+      this.scene.remove(reflector);
+      disposeReflectionPlaneObject(reflector);
+    }
+    this.reflectionPlaneObjects = [];
+    const planes = this.layout?.reflectionPlanes ?? [];
+    planes.forEach((actor, index) => {
+      const reflector = createReflectionPlaneObject(this.reflectionPlaneItem(actor));
+      reflector.userData.reflectionPlaneIndex = index;
+      this.reflectionPlaneObjects.push(reflector);
+      this.scene.add(reflector);
+    });
+  }
+
+  /** Cheap transform/visibility/color sync for one reflector (gizmo drag). */
+  private refreshReflectionPlaneObject(index: number): void {
+    const actor = this.layout?.reflectionPlanes?.[index];
+    const reflector = this.reflectionPlaneObjects[index];
+    if (!actor || !reflector) return;
+    applyReflectionPlaneTransform(reflector, this.reflectionPlaneItem(actor));
+  }
+
+  /** Recreates one reflector (needed when resolution changes — fixed at build). */
+  private rebuildReflectionPlaneObject(index: number): void {
+    const old = this.reflectionPlaneObjects[index];
+    if (old) {
+      this.scene.remove(old);
+      disposeReflectionPlaneObject(old);
+    }
+    const actor = this.layout?.reflectionPlanes?.[index];
+    if (!actor) return;
+    const reflector = createReflectionPlaneObject(this.reflectionPlaneItem(actor));
+    reflector.userData.reflectionPlaneIndex = index;
+    this.reflectionPlaneObjects[index] = reflector;
+    this.scene.add(reflector);
+  }
+
+  private refreshReflectionPlaneIndices(): void {
+    this.reflectionPlaneObjects.forEach((reflector, index) => {
+      reflector.userData.reflectionPlaneIndex = index;
+    });
+  }
+
+  private insertReflectionPlane(index: number, actor: LayoutReflectionPlane): void {
+    if (!this.layout) return;
+    this.layout.reflectionPlanes ??= [];
+    const insertionIndex = clampIndex(index, this.layout.reflectionPlanes.length);
+    this.layout.reflectionPlanes.splice(insertionIndex, 0, cloneReflectionPlane(actor));
+    const reflector = createReflectionPlaneObject(this.reflectionPlaneItem(actor));
+    this.reflectionPlaneObjects.splice(insertionIndex, 0, reflector);
+    this.scene.add(reflector);
+    this.refreshReflectionPlaneIndices();
+  }
+
+  private removeReflectionPlaneAt(index: number): LayoutReflectionPlane | null {
+    if (!this.layout?.reflectionPlanes) return null;
+    const [removed] = this.layout.reflectionPlanes.splice(index, 1);
+    const [reflector] = this.reflectionPlaneObjects.splice(index, 1);
+    if (reflector) {
+      this.scene.remove(reflector);
+      disposeReflectionPlaneObject(reflector);
+    }
+    this.refreshReflectionPlaneIndices();
+    return removed ? cloneReflectionPlane(removed) : null;
+  }
+
+  /** Adds a Planar Reflection actor (flat floor mirror by default) and selects it. */
+  addReflectionPlane(): void {
+    if (!this.layout) return;
+    const planes = this.layout.reflectionPlanes ?? [];
+    const actor: LayoutReflectionPlane = {
+      id: uniqueReflectionPlaneId(planes),
+      name: uniqueReflectionPlaneName("Reflection Plane", planes),
+      position: [0, 0.01, 0],
+      rotation: [-90, 0, 0],
+      scale: [4, 4, 1],
+    };
+    const index = planes.length;
+    this.executeCommand({
+      label: "Add Reflection Plane",
+      redo: () => {
+        this.insertReflectionPlane(index, actor);
+        this.select({ kind: "reflectionPlane", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.removeReflectionPlaneAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Added Reflection Plane.", "info");
+  }
+
+  /** Removes a Planar Reflection actor (undoable). */
+  removeReflectionPlane(index: number): void {
+    const actor = this.layout?.reflectionPlanes?.[index];
+    if (!actor) return;
+    const snapshot = cloneReflectionPlane(actor);
+    this.executeCommand({
+      label: "Delete Reflection Plane",
+      redo: () => {
+        this.removeReflectionPlaneAt(index);
+        if (this.selection?.kind === "reflectionPlane") this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.insertReflectionPlane(index, snapshot);
+        this.select({ kind: "reflectionPlane", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+  }
+
+  /**
+   * Applies a partial property edit (color/resolution) to a reflection plane as
+   * one undoable command. Transform/name/hidden edits flow through the generic
+   * selection pipeline; this path rebuilds the reflector since resolution is
+   * baked into its render target.
+   */
+  setReflectionPlane(
+    index: number,
+    patch: { color?: string; resolution?: number | undefined },
+    label = "Edit Reflection Plane",
+  ): void {
+    const actor = this.layout?.reflectionPlanes?.[index];
+    if (!actor) return;
+    const previous = cloneReflectionPlane(actor);
+    const next = cloneReflectionPlane(actor);
+    if (patch.color !== undefined) next.color = patch.color;
+    if ("resolution" in patch) {
+      if (patch.resolution === undefined) delete next.resolution;
+      else next.resolution = patch.resolution;
+    }
+
+    const apply = (value: LayoutReflectionPlane): void => {
+      if (!this.layout?.reflectionPlanes?.[index]) return;
+      this.layout.reflectionPlanes[index] = cloneReflectionPlane(value);
+      this.rebuildReflectionPlaneObject(index);
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(next),
+      undo: () => apply(previous),
+    });
+  }
+
+  /** Edits the currently selected reflection plane's color/resolution (Details panel). */
+  setSelectedReflectionPlane(patch: { color?: string; resolution?: number | undefined }): void {
+    if (this.selection?.kind !== "reflectionPlane") return;
+    this.setReflectionPlane(this.selection.index, patch);
   }
 
   private duplicateSelectionForDrag(selection: Selection): Selection | null {
@@ -3743,6 +3946,10 @@ export class SceneApp {
       if (!options.includeHidden && actor.hidden) return;
       selections.push({ kind: "actor", index });
     });
+    this.layout.reflectionPlanes?.forEach((plane, index) => {
+      if (!options.includeHidden && plane.hidden) return;
+      selections.push({ kind: "reflectionPlane", index });
+    });
     return selections;
   }
 
@@ -3761,6 +3968,9 @@ export class SceneApp {
     }
     if (selection.kind === "post") {
       return resolvePostProcess(this.layout?.postProcess ?? null).name;
+    }
+    if (selection.kind === "reflectionPlane") {
+      return resolveReflectionPlane(this.layout?.reflectionPlanes?.[selection.index] ?? null).name;
     }
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
@@ -3820,6 +4030,10 @@ export class SceneApp {
       const actorObject = this.actorObjects[selection.index];
       return actorObject ? new Box3().setFromObject(actorObject) : null;
     }
+    if (selection.kind === "reflectionPlane") {
+      const reflector = this.reflectionPlaneObjects[selection.index];
+      return reflector ? new Box3().setFromObject(reflector) : null;
+    }
     // Environment singletons have no transform bounds.
     if (
       selection.kind === "sky" ||
@@ -3863,6 +4077,13 @@ export class SceneApp {
       const gltf = this.models.get(selection.assetId);
       if (!placement || !gltf || placement.hidden) return null;
       return this.createInstanceOutlineTarget(selection.assetId, placement, gltf);
+    }
+
+    if (selection.kind === "reflectionPlane") {
+      const reflector = this.reflectionPlaneObjects[selection.index];
+      const actor = this.layout.reflectionPlanes?.[selection.index];
+      if (!reflector || actor?.hidden) return null;
+      return this.selectionOutline.cloneRenderableMeshes(reflector);
     }
 
     if (selection.kind === "light") {
@@ -4143,7 +4364,13 @@ export class SceneApp {
 
   private getMutableTransform(
     selection: Selection,
-  ): (LayoutPlacement | LayoutCharacter | LayoutLightActor | LayoutActorInstance) | null {
+  ):
+    | LayoutPlacement
+    | LayoutCharacter
+    | LayoutLightActor
+    | LayoutActorInstance
+    | LayoutReflectionPlane
+    | null {
     if (!this.layout) return null;
     if (selection.kind === "instance") {
       const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
@@ -4151,6 +4378,9 @@ export class SceneApp {
     }
     if (selection.kind === "light") return this.layout.lights?.[selection.index] ?? null;
     if (selection.kind === "actor") return this.layout.actors?.[selection.index] ?? null;
+    if (selection.kind === "reflectionPlane") {
+      return this.layout.reflectionPlanes?.[selection.index] ?? null;
+    }
     // Environment singletons are transform-less (no gizmo / move target).
     if (
       selection.kind === "sky" ||
@@ -4321,6 +4551,9 @@ export class SceneApp {
     if (selection.kind === "cloud") return Boolean(this.layout.cloudLayer);
     if (selection.kind === "reflection") return Boolean(this.layout.reflection);
     if (selection.kind === "post") return Boolean(this.layout.postProcess);
+    if (selection.kind === "reflectionPlane") {
+      return Boolean(this.layout.reflectionPlanes?.[selection.index]);
+    }
     return Boolean(this.layout.characters[selection.index]);
   }
 

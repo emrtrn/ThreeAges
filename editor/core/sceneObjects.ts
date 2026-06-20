@@ -3,6 +3,7 @@ import { resolveSkyAtmosphere } from "@engine/scene/skyAtmosphere";
 import { resolveHeightFog } from "@engine/scene/heightFog";
 import { resolveCloudLayer } from "@engine/scene/cloudLayer";
 import { resolveReflection } from "@engine/scene/reflection";
+import { resolveReflectionPlane } from "@engine/scene/reflectionPlane";
 import { resolvePostProcess } from "@engine/scene/postProcess";
 import { readPivot, readRotation, readScale } from "@engine/scene/transform";
 import type {
@@ -11,6 +12,7 @@ import type {
   LayoutLightActor,
   LayoutPostProcess,
   LayoutReflection,
+  LayoutReflectionPlane,
   LayoutSkyAtmosphere,
   RoomLayout,
 } from "@engine/scene/layout";
@@ -174,6 +176,39 @@ function buildPostEditableSelection(post: LayoutPostProcess): EditableSelection 
     simulatePhysics: false,
     physics: {},
     post: { ...resolved },
+    metadata: {},
+  };
+}
+
+/**
+ * Builds the Details/Outliner view-model for a placed Planar Reflection (mirror)
+ * actor. Unlike the environment singletons it carries a real transform; the
+ * mirror tint rides along in `color` and the texture resolution in
+ * `reflectionResolution`.
+ */
+function buildReflectionPlaneEditableSelection(
+  plane: LayoutReflectionPlane,
+  index: number,
+): EditableSelection {
+  const resolved = resolveReflectionPlane(plane);
+  return {
+    id: selectionId({ kind: "reflectionPlane", index }),
+    kind: "reflectionPlane",
+    assetId: "reflection-plane",
+    category: "reflection",
+    label: resolved.name,
+    position: [...plane.position],
+    rotation: readRotation(plane),
+    scale: readScale(plane),
+    pivot: [0, 0, 0],
+    scaleLocked: plane.scaleLocked ?? false,
+    locked: plane.locked ?? false,
+    castShadow: false,
+    collision: false,
+    simulatePhysics: false,
+    physics: {},
+    color: resolved.color,
+    reflectionResolution: resolved.resolution,
     metadata: {},
   };
 }
@@ -369,6 +404,19 @@ export function buildSceneObjects(
     });
   });
 
+  layout.reflectionPlanes?.forEach((plane, index) => {
+    const selection: Selection = { kind: "reflectionPlane", index };
+    objects.push({
+      ...buildReflectionPlaneEditableSelection(plane, index),
+      selected: deps.isSelected(selection),
+      hidden: plane.hidden ?? false,
+      locked: plane.locked ?? false,
+      groupId: plane.groupId,
+      nodeId: plane.nodeId,
+      parentId: plane.parentId,
+    });
+  });
+
   return objects;
 }
 
@@ -470,6 +518,12 @@ export function buildEditableSelection(
   if (selection.kind === "post") {
     if (!layout.postProcess) return null;
     return buildPostEditableSelection(layout.postProcess);
+  }
+
+  if (selection.kind === "reflectionPlane") {
+    const plane = layout.reflectionPlanes?.[selection.index];
+    if (!plane) return null;
+    return buildReflectionPlaneEditableSelection(plane, selection.index);
   }
 
   if (selection.kind === "actor") {

@@ -6,6 +6,7 @@ import {
   findParentCharacter,
   findParentInstancedMesh,
   findParentLight,
+  findParentReflectionPlane,
 } from "@engine/render-three/picking";
 import type { InstanceSelection, Selection } from "@editor/core/selection";
 import { pickGizmoHandle as pickGizmoHandleFromObjects } from "@editor/gizmos/interaction";
@@ -94,6 +95,12 @@ export class ScenePicker {
         const index = Number(light.userData.lightIndex);
         if (Number.isInteger(index)) return { kind: "light", index };
       }
+
+      const reflectionPlane = findParentReflectionPlane(hit.object);
+      if (reflectionPlane) {
+        const index = Number(reflectionPlane.userData.reflectionPlaneIndex);
+        if (Number.isInteger(index)) return { kind: "reflectionPlane", index };
+      }
     }
     return null;
   }
@@ -156,6 +163,10 @@ export class ScenePicker {
     if (selection.kind === "actor") {
       const actor = findParentActor(hit.object);
       return actor ? Number(actor.userData.actorIndex) === selection.index : false;
+    }
+    if (selection.kind === "reflectionPlane") {
+      const plane = findParentReflectionPlane(hit.object);
+      return plane ? Number(plane.userData.reflectionPlaneIndex) === selection.index : false;
     }
     // Environment singletons have no pickable geometry.
     if (

@@ -3,6 +3,7 @@ export type Selection =
   | { kind: "character"; index: number }
   | { kind: "light"; index: number }
   | { kind: "actor"; index: number }
+  | { kind: "reflectionPlane"; index: number }
   | { kind: "sky" }
   | { kind: "fog" }
   | { kind: "cloud" }
@@ -13,6 +14,8 @@ export type InstanceSelection = Extract<Selection, { kind: "instance" }>;
 export type CharacterSelection = Extract<Selection, { kind: "character" }>;
 export type LightSelection = Extract<Selection, { kind: "light" }>;
 export type ActorSelection = Extract<Selection, { kind: "actor" }>;
+/** A placed Planar Reflection (mirror) actor. */
+export type ReflectionPlaneSelection = Extract<Selection, { kind: "reflectionPlane" }>;
 /** The singleton Sky Atmosphere environment actor (no index/transform). */
 export type SkySelection = Extract<Selection, { kind: "sky" }>;
 /** The singleton Exponential Height Fog environment actor (no index/transform). */
@@ -34,6 +37,7 @@ export function cloneSelection(selection: Selection): Selection {
   }
   if (selection.kind === "light") return { kind: "light", index: selection.index };
   if (selection.kind === "actor") return { kind: "actor", index: selection.index };
+  if (selection.kind === "reflectionPlane") return { kind: "reflectionPlane", index: selection.index };
   if (selection.kind === "sky") return { kind: "sky" };
   if (selection.kind === "fog") return { kind: "fog" };
   if (selection.kind === "cloud") return { kind: "cloud" };
@@ -46,6 +50,7 @@ export function selectionId(selection: Selection): string {
   if (selection.kind === "character") return `character:${selection.index}`;
   if (selection.kind === "light") return `light:${selection.index}`;
   if (selection.kind === "actor") return `actor:${selection.index}`;
+  if (selection.kind === "reflectionPlane") return `reflectionPlane:${selection.index}`;
   if (selection.kind === "sky") return "sky";
   if (selection.kind === "fog") return "fog";
   if (selection.kind === "cloud") return "cloud";
@@ -73,6 +78,10 @@ export function parseSelectionId(id: string): Selection | null {
     const index = Number(encodedAssetId);
     return Number.isInteger(index) ? { kind: "actor", index } : null;
   }
+  if (kind === "reflectionPlane") {
+    const index = Number(encodedAssetId);
+    return Number.isInteger(index) ? { kind: "reflectionPlane", index } : null;
+  }
   if (kind !== "instance" || rawIndex === undefined) return null;
   const placementIndex = Number(rawIndex);
   if (!Number.isInteger(placementIndex)) return null;
@@ -95,6 +104,9 @@ export function selectionsEqual(
     return left.index === right.index;
   }
   if (left.kind === "actor" && right.kind === "actor") {
+    return left.index === right.index;
+  }
+  if (left.kind === "reflectionPlane" && right.kind === "reflectionPlane") {
     return left.index === right.index;
   }
   // The Sky Atmosphere + Height Fog + Cloud Layer are singletons: same kind ⇒ same object.

@@ -6577,6 +6577,29 @@
         "bytes": 223961
       },
       "license": "Unknown"
+    },
+    {
+      "id": "mirror-material",
+      "name": "Mirror.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/Mirror.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 361
+      },
+      "license": "Unknown"
     }
   ]
 }

@@ -29,9 +29,9 @@ export const POST_PROCESS_DEFAULTS: ResolvedPostProcess = {
   toneMapping: "aces",
   bloom: {
     enabled: false,
-    threshold: 0.9,
-    intensity: 0.4,
-    radius: 0.25,
+    threshold: 1,
+    intensity: 1,
+    radius: 1,
   },
   vignette: {
     enabled: false,

@@ -159,6 +159,7 @@ import {
   validateHeightFog,
   validateCloudLayer,
   validateReflection,
+  validateReflectionPlane,
   validatePostProcess,
   validateSaveActorPayload,
   validateNewBehaviorPayload,
@@ -230,6 +231,14 @@ import {
   resolveReflection,
   REFLECTION_DEFAULTS,
 } from "../engine/render-three/reflection";
+import {
+  applyReflectionPlaneTransform,
+  createReflectionPlaneObject,
+  resolveReflectionPlane,
+  uniqueReflectionPlaneId,
+  uniqueReflectionPlaneName,
+  REFLECTION_PLANE_DEFAULTS,
+} from "../engine/render-three/reflectionPlane";
 import {
   COLLISION_CHANNELS,
   COLLISION_OBJECT_CHANNEL_BITS,
@@ -5488,6 +5497,82 @@ check("validateReflection allowlists fields and round-trips through validateLayo
     reflection: { intensity: 1.5 },
   }) as RoomLayout;
   assert.deepEqual(layout.reflection, { intensity: 1.5 });
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("resolveReflectionPlane fills defaults and overrides per field", () => {
+  assert.deepEqual(resolveReflectionPlane(null), REFLECTION_PLANE_DEFAULTS);
+  const resolved = resolveReflectionPlane({
+    id: "rp",
+    position: [0, 0, 0],
+    color: "#102030",
+    resolution: 1024,
+  });
+  assert.equal(resolved.color, "#102030");
+  assert.equal(resolved.resolution, 1024);
+  // Unset fields fall back to defaults.
+  assert.equal(resolved.name, REFLECTION_PLANE_DEFAULTS.name);
+  assert.equal(resolved.hidden, REFLECTION_PLANE_DEFAULTS.hidden);
+});
+
+check("uniqueReflectionPlaneId/Name avoid collisions", () => {
+  const planes = [{ id: "reflection-plane-1", name: "Reflection Plane", position: [0, 0, 0] }];
+  assert.equal(uniqueReflectionPlaneId(planes), "reflection-plane-2");
+  assert.equal(uniqueReflectionPlaneName("Reflection Plane", planes), "Reflection Plane 2");
+});
+
+check("createReflectionPlaneObject builds a reflector with the transform + tint", () => {
+  const item = {
+    name: "Mirror",
+    hidden: false,
+    color: "#abcdef",
+    resolution: 256,
+    position: [1, 2, 3] as [number, number, number],
+    rotation: [-90, 0, 0] as [number, number, number],
+    scale: [4, 4, 1] as [number, number, number],
+  };
+  const reflector = createReflectionPlaneObject(item);
+  assert.equal(reflector.name, "Mirror");
+  assert.equal(reflector.position.x, 1);
+  assert.equal(reflector.visible, true);
+  // Hidden hides the reflector via the shared transform path.
+  applyReflectionPlaneTransform(reflector, { ...item, hidden: true });
+  assert.equal(reflector.visible, false);
+});
+
+check("validateReflectionPlane allowlists fields and round-trips through validateLayout", () => {
+  const plane = validateReflectionPlane({
+    id: "rp1",
+    position: [1, 2, 3],
+    name: "Water",
+    color: "#102030",
+    resolution: 1024,
+    rotation: [-90, 0, 0],
+    scale: [4, 4, 1],
+    bogusField: "dropped",
+  });
+  assert.deepEqual(plane, {
+    id: "rp1",
+    position: [1, 2, 3],
+    name: "Water",
+    rotation: [-90, 0, 0],
+    scale: [4, 4, 1],
+    color: "#102030",
+    resolution: 1024,
+  });
+  // A missing id rejects; out-of-range resolution rejects the save.
+  assert.throws(() => validateReflectionPlane({ position: [0, 0, 0] }));
+  assert.throws(() => validateReflectionPlane({ id: "x", position: [0, 0, 0], resolution: 9999 }));
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithMirror",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    reflectionPlanes: [{ id: "rp1", position: [0, 0, 0] }],
+  }) as RoomLayout;
+  assert.deepEqual(layout.reflectionPlanes, [{ id: "rp1", position: [0, 0, 0] }]);
   assert.deepEqual(validateLayout(layout), layout);
 });
 
