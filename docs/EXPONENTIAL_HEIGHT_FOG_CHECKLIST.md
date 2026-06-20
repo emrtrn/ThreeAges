@@ -157,72 +157,77 @@ aktör. Mesafe-tabanlı; height-falloff yok (o Faz 2).
 
 #### F1.1 — Model (render-agnostik)
 
-- [ ] `engine/scene/heightFog.ts`: `ResolvedHeightFog` arayüzü
+- [x] `engine/scene/heightFog.ts`: `ResolvedHeightFog` arayüzü
       (`name`, `hidden`, `mode`, `color`, `density`, `start`, `end`)
-- [ ] `HEIGHT_FOG_DEFAULTS` (ölçeğe uygun: ör. `mode:"exp"`, `density:0.03`,
-      `color:"#bcc6d1"`, `start:5`, `end:60`)
-- [ ] `resolveHeightFog(actor)` — Sky'ın `resolveSkyAtmosphere` ikizi
+- [x] `HEIGHT_FOG_DEFAULTS` (`mode:"exp"`, `density:0.03`, `color:"#bcc6d1"`,
+      `start:5`, `end:60`)
+- [x] `resolveHeightFog(actor)` — Sky'ın `resolveSkyAtmosphere` ikizi
 
 #### F1.2 — Render bağlama
 
-- [ ] `engine/render-three/heightFog.ts`: `applySceneFog(scene, resolved | null)`
+- [x] `engine/render-three/heightFog.ts`: `applySceneFog(scene, resolved | null)`
       → exp modda `FogExp2(color, density)`, lineer modda `Fog(color, start, end)`,
       `hidden`/null'da `scene.fog = null`
-- [ ] Model + defaults re-export (Sky'ın render modülündeki re-export deseni)
+- [x] Model + defaults re-export (Sky'ın render modülündeki re-export deseni)
 
 #### F1.3 — Layout tipi & persistans
 
-- [ ] `engine/scene/layout.ts`: `LayoutHeightFog` arayüzü + `RoomLayout.heightFog?`
-- [ ] `tools/saveValidator.ts`: `validateHeightFog` (allowlist, aralık clamp,
+- [x] `engine/scene/layout.ts`: `LayoutHeightFog` arayüzü + `RoomLayout.heightFog?`
+- [x] `tools/saveValidator.ts`: `validateHeightFog` (allowlist, aralık reddi,
       placed-fog her zaman round-trip — `validateSkyAtmosphere` deseni)
-- [ ] `validateRoomLayout`'a `heightFog` bağla + `vite.config.ts` allowlist'in
-      bu modülü kullandığını doğrula
-- [ ] CLAUDE.md "save-validator allowlist gotcha" notuna fog alanlarını ekle
+- [x] `validateLayout`'a `heightFog` bağlı + `vite.config.ts` `validateLayout`'u
+      import ediyor (allowlist saveValidator içinde)
+- [x] CLAUDE.md "save-validator allowlist gotcha" notuna fog alanları eklendi
 
 #### F1.4 — Seçim & Outliner/Details VM
 
-- [ ] `editor/core/selection.ts`: `kind: "fog"` (clone / encodeSelectionId /
-      parseSelectionId / selectionsEqual hepsine ekle)
-- [ ] `editor/core/sceneObjects.ts`: `FOG_ASSET_ID`, `buildFogEditableSelection`
-      (`category: "visual-effects"`, transform'suz), liste + tek-seçim çözümü
-- [ ] `EditableSelection`'a `fog?: ResolvedHeightFog` alanı
+- [x] `editor/core/selection.ts`: `kind: "fog"` (clone / encodeSelectionId /
+      parseSelectionId / selectionsEqual + `FogSelection` tipi)
+- [x] `editor/core/sceneObjects.ts`: `HEIGHT_FOG_ASSET_ID`,
+      `buildFogEditableSelection` (`category: "visual-effects"`, transform'suz),
+      liste + tek-seçim çözümü
+- [x] `EditableSelection`'a `fog?: EditableFog` alanı (+ `EditableFog` tipi)
 
 #### F1.5 — SceneApp orkestrasyon (editör + ortak)
 
-- [ ] `applyHeightFog()` — `layout.heightFog` → `applySceneFog` (Sky'ın
-      `applySkyAtmosphere` çağrıldığı yerlerde, `applySkyAtmosphere` yanında çağır)
-- [ ] `addHeightFog()` / `removeHeightFog()` / `setHeightFog(patch, label)`
-- [ ] `commitFog(next, label)` — tek undoable mutasyon (`commitSky` ikizi)
-- [ ] `rename`/`setHidden`/`deleteSelected` yollarında `kind: "fog"` dallarını ekle
-      (`SceneApp.ts:743`, `:754`, `:1375` çevresindeki Sky dallarıyla simetrik)
-- [ ] `getSelectionLabel` + `hasSelection` (`SceneApp.ts:3214`, `:3740`) fog dalı
+- [x] `applyHeightFog()` — `layout.heightFog` → `applySceneFog` (`applySkyAtmosphere`
+      yanında çağrılıyor)
+- [x] `addHeightFog()` / `removeHeightFog()` / `setHeightFog(patch, label)`
+- [x] `commitFog(next, label)` — tek undoable mutasyon (`commitSky` ikizi)
+- [x] `rename`/`setHidden`/`deleteSelected` + tüm singleton dalları (picker,
+      gizmo, outline, mutableTransform, visibility) `kind: "fog"` ile genişletildi
+- [x] `getSelectionLabel` + `hasSelection` fog dalı
 
 #### F1.6 — Runtime bağlama
 
-- [ ] `RuntimeSceneApp` / `SceneRuntimeCore` yükleme yolunda `applySceneFog`
-      çağrısı (oyun modunda da fog görünsün; Sky'ın runtime'da uygulandığı yer)
+- [x] `RuntimeSceneApp.applyRuntimeFog()` yükleme yolunda `applySceneFog` çağırıyor
+      (`applyRuntimeSky` yanında) — Play modunda da fog görünür
 
 #### F1.7 — Editör UI
 
-- [ ] `src/editor/EditorUi.ts:307`: "Visual Effects" başlığı altına
+- [x] "Visual Effects" başlığı altına
       `<button data-add-height-fog>Exponential Height Fog</button>`
-- [ ] Tıkla-ekle bağlaması (`addHeightFog()`), Sky'ın `data-add-sky-atmosphere`
-      handler'ı (`:569`) ikizi — drag yok
-- [ ] `renderFogDetails(selection)` (`renderSkyDetails:3061` deseni): name,
-      mode (exp/linear), color, density (exp), start/end (linear) alanları +
-      `setHeightFog` bağlamaları
-- [ ] `renderDetails` içinde `selection.kind === "fog"` dalı (`:2173` Sky dalı yanı)
-- [ ] Outliner ikonu/harfi (`EditorUi.ts:3530` `kind === "sky"` → "S" yanında fog "F")
+- [x] Tıkla-ekle bağlaması (`addHeightFog()`), Sky handler'ı ikizi — drag yok
+- [x] `renderFogDetails(selection)`: name, mode (exp/linear), color, density (exp),
+      start/end (linear) alanları + `setHeightFog` bağlamaları (mod değişince
+      alanlar canlı takas)
+- [x] `renderDetails` içinde `selection.kind === "fog"` dalı
+- [x] Outliner harfi `kind === "fog"` → "F"
 
 #### F1.8 — Test & doğrulama
 
-- [ ] `tools/engine-tests.ts`: `resolveHeightFog` defaults + `applySceneFog`
+- [x] `tools/engine-tests.ts`: `resolveHeightFog` defaults + `applySceneFog`
       exp/linear/null lifecycle testi
-- [ ] Save round-trip testi (fog alanları düşmüyor)
-- [ ] `npx tsc --noEmit` temiz
-- [ ] Akış doğrulaması: Add Actor → Exponential Height Fog → Details'tan renk/
-      yoğunluk → Play'de görünüyor → Save/Reload round-trip → Undo/Redo → Delete
-- [ ] `docs/UNREAL_BASICS_LESSONS.md` Progress Log'a giriş
+- [x] Save round-trip testi (`validateHeightFog` + `validateLayout` ile fog
+      alanları düşmüyor)
+- [x] `npx tsc --noEmit` temiz; `node tools/run-engine-tests.mjs` 197/197 yeşil
+- [ ] Manuel akış doğrulaması (tarayıcıda): Add Actor → Exponential Height Fog →
+      Details'tan renk/yoğunluk → Play'de görünüyor → Save/Reload → Undo/Redo →
+      Delete. *(Kod yolu tsc + unit testlerle doğrulandı; tarayıcı dev sunucusu
+      playground.json'u autosave ile yeniden yazdığından elle test kullanıcıya
+      bırakıldı.)*
+- [ ] `docs/UNREAL_BASICS_LESSONS.md` Progress Log'a giriş *(opsiyonel; bu
+      checklist zaten track kaydı)*
 
 ---
 

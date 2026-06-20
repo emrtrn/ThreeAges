@@ -66,6 +66,7 @@ import {
   resolveSkyAtmosphere,
   sunDirectionFromLightRotation,
 } from "@engine/render-three/skyAtmosphere";
+import { applySceneFog, resolveHeightFog } from "@engine/render-three/heightFog";
 import { readRotation } from "@engine/scene/transform";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
@@ -377,6 +378,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.fitSunShadowToScene();
     this.applyBackgroundAndAmbient();
     this.applyRuntimeSky();
+    this.applyRuntimeFog();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);
@@ -993,6 +995,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (sun) applySkySunDirection(this.skyObject, sunDirectionFromLightRotation(readRotation(sun)));
     followCameraWithSky(this.skyObject, this.camera);
     applySkyToneMapping(this.renderer, resolved);
+  }
+
+  /**
+   * Applies the Exponential Height Fog to `scene.fog` at runtime (distance-based,
+   * Faz 1). Mirrors the editor's applyHeightFog so Play looks identical.
+   */
+  private applyRuntimeFog(): void {
+    const actor = this.layout?.heightFog ?? null;
+    applySceneFog(this.scene, actor ? resolveHeightFog(actor) : null);
   }
 
   /** The scene's Sun light actor (preferred id, else the first directional light). */

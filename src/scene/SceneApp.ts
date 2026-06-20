@@ -81,6 +81,7 @@ import {
   resolveSkyAtmosphere,
   sunDirectionFromLightRotation,
 } from "@engine/render-three/skyAtmosphere";
+import { applySceneFog, resolveHeightFog } from "@engine/render-three/heightFog";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   applySceneBackgroundAndAmbient,
@@ -139,6 +140,7 @@ import type {
   LayoutCharacter,
   LayoutInteraction,
   LayoutLightActor,
+  LayoutHeightFog,
   LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
@@ -745,6 +747,14 @@ export class SceneApp {
       this.setSkyAtmosphere({ name: next.length > 0 ? next : undefined }, "Rename Sky Atmosphere");
       return;
     }
+    if (selection.kind === "fog") {
+      const next = name.trim();
+      this.setHeightFog(
+        { name: next.length > 0 ? next : undefined },
+        "Rename Exponential Height Fog",
+      );
+      return;
+    }
     this.renameSelection(selection, name);
   }
 
@@ -753,6 +763,13 @@ export class SceneApp {
     if (!selection || !this.hasSelection(selection)) return;
     if (selection.kind === "sky") {
       this.setSkyAtmosphere({ hidden }, hidden ? "Hide Sky Atmosphere" : "Show Sky Atmosphere");
+      return;
+    }
+    if (selection.kind === "fog") {
+      this.setHeightFog(
+        { hidden },
+        hidden ? "Hide Exponential Height Fog" : "Show Exponential Height Fog",
+      );
       return;
     }
     if (this.editorSceneController.selectedCount > 1 && this.isSelectionSelected(selection)) {
@@ -1370,10 +1387,15 @@ export class SceneApp {
   }
 
   deleteSelected(): void {
-    // The Sky Atmosphere is a singleton outside the transform/multi-select stack;
-    // route its delete through the dedicated (undoable) command.
+    // The Sky Atmosphere + Height Fog are singletons outside the transform/
+    // multi-select stack; route their deletes through the dedicated (undoable)
+    // commands.
     if (this.selection?.kind === "sky" && this.editorSceneController.selectedCount <= 1) {
       this.removeSkyAtmosphere();
+      return;
+    }
+    if (this.selection?.kind === "fog" && this.editorSceneController.selectedCount <= 1) {
+      this.removeHeightFog();
       return;
     }
     this.editorSceneController.deleteSelected();
@@ -1820,6 +1842,7 @@ export class SceneApp {
     this.fitSunShadowToScene();
     this.applyBackgroundAndAmbient();
     this.applySkyAtmosphere();
+    this.applyHeightFog();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
     this.emitHistoryChanged();
@@ -2032,8 +2055,8 @@ export class SceneApp {
       this.rebuildInstanceGroup(selection.assetId);
       return;
     }
-    // The Sky Atmosphere has no scene object to re-sync from a transform.
-    if (selection.kind === "sky") return;
+    // The Sky Atmosphere + Height Fog have no scene object to re-sync from a transform.
+    if (selection.kind === "sky" || selection.kind === "fog") return;
 
     if (selection.kind === "light") {
       this.refreshLightObject(selection.index);
@@ -2693,6 +2716,79 @@ export class SceneApp {
   }
 
   /**
+   * Applies `layout.heightFog` to `scene.fog` (or clears it). Distance-based scene
+   * fog (Faz 1); three.js applies it to every fog-aware material automatically.
+   */
+  private applyHeightFog(): void {
+    const actor = this.layout?.heightFog ?? null;
+    applySceneFog(this.scene, actor ? resolveHeightFog(actor) : null);
+  }
+
+  /** Adds the singleton Height Fog (or selects the existing one). */
+  addHeightFog(): void {
+    if (!this.layout) return;
+    if (this.layout.heightFog) {
+      this.select({ kind: "fog" });
+      this.onStatus?.("Exponential Height Fog already exists - selected it.", "info");
+      return;
+    }
+    this.commitFog({}, "Add Exponential Height Fog");
+    this.select({ kind: "fog" });
+    this.onStatus?.("Added Exponential Height Fog.", "info");
+  }
+
+  /** Removes the singleton Height Fog (undoable). */
+  removeHeightFog(): void {
+    if (!this.layout?.heightFog) return;
+    this.commitFog(undefined, "Delete Exponential Height Fog");
+  }
+
+  /**
+   * Applies a partial edit to the Height Fog as one undoable command. A patch
+   * value of `undefined` clears that field (reverts to its default); any other
+   * value overrides it.
+   */
+  setHeightFog(
+    patch: { [K in keyof LayoutHeightFog]?: LayoutHeightFog[K] | undefined },
+    label = "Edit Exponential Height Fog",
+  ): void {
+    if (!this.layout?.heightFog) return;
+    const next: LayoutHeightFog = { ...this.layout.heightFog };
+    for (const key of Object.keys(patch) as Array<keyof LayoutHeightFog>) {
+      const value = patch[key];
+      if (value === undefined) delete next[key];
+      else (next as Record<string, unknown>)[key] = value;
+    }
+    this.commitFog(next, label);
+  }
+
+  /**
+   * Single undoable Height Fog mutation: swaps `layout.heightFog`, re-renders, and
+   * re-emits panels. Selection is cleared if the fog disappears while it was the
+   * active selection. Mirrors {@link commitSky}.
+   */
+  private commitFog(nextFog: LayoutHeightFog | undefined, label: string): void {
+    if (!this.layout) return;
+    const previousFog = this.layout.heightFog ? { ...this.layout.heightFog } : undefined;
+
+    const apply = (fog: LayoutHeightFog | undefined): void => {
+      if (!this.layout) return;
+      if (fog) this.layout.heightFog = { ...fog };
+      else delete this.layout.heightFog;
+      this.applyHeightFog();
+      if (!this.layout.heightFog && this.selection?.kind === "fog") this.select(null);
+      else this.emitSelectionChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(nextFog),
+      undo: () => apply(previousFog),
+    });
+  }
+
+  /**
    * World-settings edits persist immediately (debounced) so the user never has
    * to press Save for scene rendering tweaks.
    */
@@ -2777,6 +2873,11 @@ export class SceneApp {
     // The Sky Atmosphere's visibility is applied through applySkyAtmosphere().
     if (selection.kind === "sky") {
       this.applySkyAtmosphere();
+      return;
+    }
+    // The Height Fog's visibility is applied through applyHeightFog().
+    if (selection.kind === "fog") {
+      this.applyHeightFog();
       return;
     }
     const object = this.characterObjects[selection.index];
@@ -3234,6 +3335,9 @@ export class SceneApp {
     if (selection.kind === "sky") {
       return resolveSkyAtmosphere(this.layout?.skyAtmosphere ?? null).name;
     }
+    if (selection.kind === "fog") {
+      return resolveHeightFog(this.layout?.heightFog ?? null).name;
+    }
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
       return transform?.name ?? selection.assetId;
@@ -3292,8 +3396,8 @@ export class SceneApp {
       const actorObject = this.actorObjects[selection.index];
       return actorObject ? new Box3().setFromObject(actorObject) : null;
     }
-    // The Sky Atmosphere is a backdrop with no bounding box.
-    if (selection.kind === "sky") return null;
+    // The Sky Atmosphere is a backdrop and Height Fog is a scene-wide effect; neither has a bounding box.
+    if (selection.kind === "sky" || selection.kind === "fog") return null;
     const object = this.characterObjects[selection.index];
     return object ? new Box3().setFromObject(object) : null;
   }
@@ -3316,8 +3420,8 @@ export class SceneApp {
 
   private createSelectionOutlineTarget(selection: Selection): Object3D | null {
     if (!this.selectionOutline || !this.layout) return null;
-    // The Sky Atmosphere is a full-screen backdrop; it has no outline proxy.
-    if (selection.kind === "sky") return null;
+    // The Sky Atmosphere is a full-screen backdrop and Height Fog is scene-wide; neither has an outline proxy.
+    if (selection.kind === "sky" || selection.kind === "fog") return null;
 
     if (selection.kind === "instance") {
       const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
@@ -3556,8 +3660,8 @@ export class SceneApp {
   private updateGizmo(): void {
     clearGizmoGroup(this.gizmoGroup, this.gizmoPickables);
     if (!this.selection) return;
-    // The Sky Atmosphere has no transform, so it never shows a gizmo.
-    if (this.selection.kind === "sky") return;
+    // The Sky Atmosphere + Height Fog have no transform, so they never show a gizmo.
+    if (this.selection.kind === "sky" || this.selection.kind === "fog") return;
 
     const selected = this.getSelected();
     // In pivot-edit mode the move gizmo is shown even under the Select tool.
@@ -3603,8 +3707,8 @@ export class SceneApp {
     }
     if (selection.kind === "light") return this.layout.lights?.[selection.index] ?? null;
     if (selection.kind === "actor") return this.layout.actors?.[selection.index] ?? null;
-    // The Sky Atmosphere is a transform-less singleton (no gizmo / move target).
-    if (selection.kind === "sky") return null;
+    // The Sky Atmosphere + Height Fog are transform-less singletons (no gizmo / move target).
+    if (selection.kind === "sky" || selection.kind === "fog") return null;
     return this.layout.characters[selection.index] ?? null;
   }
 
@@ -3761,6 +3865,7 @@ export class SceneApp {
     if (selection.kind === "light") return Boolean(this.layout.lights?.[selection.index]);
     if (selection.kind === "actor") return Boolean(this.layout.actors?.[selection.index]);
     if (selection.kind === "sky") return Boolean(this.layout.skyAtmosphere);
+    if (selection.kind === "fog") return Boolean(this.layout.heightFog);
     return Boolean(this.layout.characters[selection.index]);
   }
 

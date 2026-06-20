@@ -32,6 +32,7 @@ import type {
   LayoutAudio,
   LayoutBehavior,
   LayoutInteraction,
+  LayoutHeightFog,
   LayoutParticleEmitter,
   LayoutPhysics,
   LayoutSkyAtmosphere,
@@ -305,6 +306,7 @@ export class EditorUi {
               <button type="button" data-add-shape="plane">Plane</button>
               <div class="add-actor-section-title">Visual Effects</div>
               <button type="button" data-add-sky-atmosphere>Sky Atmosphere</button>
+              <button type="button" data-add-height-fog>Exponential Height Fog</button>
               <div class="add-actor-section-title">Gameplay</div>
               <button type="button" data-add-player-start>Player Start</button>
             </div>
@@ -570,6 +572,14 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-sky-atmosphere]")
       ?.addEventListener("click", () => {
         this.app.addSkyAtmosphere();
+      });
+
+    // Height Fog is a transform-less singleton environment actor: click to add
+    // (or select the existing one) rather than drag-to-place.
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-height-fog]")
+      ?.addEventListener("click", () => {
+        this.app.addHeightFog();
       });
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
@@ -2174,6 +2184,10 @@ export class EditorUi {
       this.renderSkyDetails(selection);
       return;
     }
+    if (selection.kind === "fog" && selection.fog) {
+      this.renderFogDetails(selection);
+      return;
+    }
 
     this.detailsScale = [...selection.scale];
 
@@ -2743,8 +2757,8 @@ export class EditorUi {
    * core stays generic: groups/fields come from the project's metadata schema.
    */
   private renderMetadataSections(selection: EditableSelection): string {
-    // The Sky Atmosphere carries no schema-driven gameplay metadata.
-    if (selection.kind === "sky") return "";
+    // The Sky Atmosphere + Height Fog carry no schema-driven gameplay metadata.
+    if (selection.kind === "sky" || selection.kind === "fog") return "";
     const groups = metadataGroupsForTarget(this.metadataSchema, {
       kind: selection.kind,
       category: selection.category,
@@ -2917,7 +2931,7 @@ export class EditorUi {
   }
 
   private metadataFieldFor(key: string): MetadataFieldDef | null {
-    if (!this.selected || this.selected.kind === "sky") return null;
+    if (!this.selected || this.selected.kind === "sky" || this.selected.kind === "fog") return null;
     const groups = metadataGroupsForTarget(this.metadataSchema, {
       kind: this.selected.kind,
       category: this.selected.category,
@@ -3125,6 +3139,98 @@ export class EditorUi {
         this.app.setSkyAtmosphere(
           { [key]: value } as Partial<LayoutSkyAtmosphere>,
           "Edit Sky Atmosphere",
+        );
+      });
+    });
+  }
+
+  /**
+   * Details panel for the singleton Exponential Height Fog (distance-based, Faz 1).
+   * `exp` mode shows Density (FogExp2); `linear` mode shows Start/End (Fog). The
+   * panel re-renders after each edit, so the mode-specific fields swap live.
+   */
+  private renderFogDetails(selection: EditableSelection): void {
+    const fog = selection.fog;
+    if (!fog) return;
+    this.detailsScale = [1, 1, 1];
+    const densityRow = `
+      <label class="detail-row">
+        <span>Density</span>
+        <input data-fog-number="density" type="number" step="0.005" min="0" max="2"
+          value="${fog.density}" />
+      </label>`;
+    const linearRows = `
+      <label class="detail-row">
+        <span>Start</span>
+        <input data-fog-number="start" type="number" step="1" min="0"
+          value="${fog.start}" />
+      </label>
+      <label class="detail-row">
+        <span>End</span>
+        <input data-fog-number="end" type="number" step="1" min="0"
+          value="${fog.end}" />
+      </label>`;
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>visual effect / exponential height fog</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-fog-name type="text" value="${escapeHtml(fog.name)}" placeholder="Exponential Height Fog" />
+      </label>
+      <div class="detail-section">
+        <div class="detail-section-title">Fog</div>
+        <label class="detail-row">
+          <span>Mode</span>
+          <select data-fog-mode>
+            <option value="exp" ${fog.mode === "exp" ? "selected" : ""}>Exponential (FogExp2)</option>
+            <option value="linear" ${fog.mode === "linear" ? "selected" : ""}>Linear (near/far)</option>
+          </select>
+        </label>
+        <label class="detail-row">
+          <span>Color</span>
+          <input data-fog-color type="color" value="${escapeHtml(fog.color)}" />
+        </label>
+        ${fog.mode === "linear" ? linearRows : densityRow}
+        <div class="detail-hint">Distance-based scene fog. Height falloff is a later phase.</div>
+      </div>
+    `;
+
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-fog-name]");
+    nameInput?.addEventListener("change", () => {
+      const value = nameInput.value.trim();
+      this.app.setHeightFog(
+        { name: value.length > 0 ? value : undefined },
+        "Rename Exponential Height Fog",
+      );
+    });
+
+    this.detailsBody.querySelector<HTMLSelectElement>("[data-fog-mode]")?.addEventListener(
+      "change",
+      (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        if (value !== "exp" && value !== "linear") return;
+        this.app.setHeightFog({ mode: value }, "Edit Exponential Height Fog");
+      },
+    );
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-fog-color]")?.addEventListener(
+      "change",
+      (event) => {
+        const value = (event.currentTarget as HTMLInputElement).value;
+        this.app.setHeightFog({ color: value }, "Edit Exponential Height Fog");
+      },
+    );
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-fog-number]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.fogNumber as keyof LayoutHeightFog | undefined;
+        const value = Number(input.value);
+        if (!key || !Number.isFinite(value)) return;
+        this.app.setHeightFog(
+          { [key]: value } as Partial<LayoutHeightFog>,
+          "Edit Exponential Height Fog",
         );
       });
     });
@@ -3488,6 +3594,7 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "character") return "C";
   if (kind === "light") return "L";
   if (kind === "sky") return "S";
+  if (kind === "fog") return "F";
   return "I";
 }
 

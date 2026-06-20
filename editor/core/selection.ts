@@ -3,7 +3,8 @@ export type Selection =
   | { kind: "character"; index: number }
   | { kind: "light"; index: number }
   | { kind: "actor"; index: number }
-  | { kind: "sky" };
+  | { kind: "sky" }
+  | { kind: "fog" };
 
 export type InstanceSelection = Extract<Selection, { kind: "instance" }>;
 export type CharacterSelection = Extract<Selection, { kind: "character" }>;
@@ -11,6 +12,8 @@ export type LightSelection = Extract<Selection, { kind: "light" }>;
 export type ActorSelection = Extract<Selection, { kind: "actor" }>;
 /** The singleton Sky Atmosphere environment actor (no index/transform). */
 export type SkySelection = Extract<Selection, { kind: "sky" }>;
+/** The singleton Exponential Height Fog environment actor (no index/transform). */
+export type FogSelection = Extract<Selection, { kind: "fog" }>;
 
 export function cloneSelection(selection: Selection): Selection {
   if (selection.kind === "instance") {
@@ -23,6 +26,7 @@ export function cloneSelection(selection: Selection): Selection {
   if (selection.kind === "light") return { kind: "light", index: selection.index };
   if (selection.kind === "actor") return { kind: "actor", index: selection.index };
   if (selection.kind === "sky") return { kind: "sky" };
+  if (selection.kind === "fog") return { kind: "fog" };
   return { kind: "character", index: selection.index };
 }
 
@@ -31,12 +35,14 @@ export function selectionId(selection: Selection): string {
   if (selection.kind === "light") return `light:${selection.index}`;
   if (selection.kind === "actor") return `actor:${selection.index}`;
   if (selection.kind === "sky") return "sky";
+  if (selection.kind === "fog") return "fog";
   return `instance:${encodeURIComponent(selection.assetId)}:${selection.placementIndex}`;
 }
 
 export function parseSelectionId(id: string): Selection | null {
   const [kind, encodedAssetId, rawIndex] = id.split(":");
   if (kind === "sky") return { kind: "sky" };
+  if (kind === "fog") return { kind: "fog" };
   if (kind === "character") {
     const index = Number(encodedAssetId);
     return Number.isInteger(index) ? { kind: "character", index } : null;
@@ -73,8 +79,9 @@ export function selectionsEqual(
   if (left.kind === "actor" && right.kind === "actor") {
     return left.index === right.index;
   }
-  // The Sky Atmosphere is a singleton: same kind ⇒ same object.
+  // The Sky Atmosphere + Height Fog are singletons: same kind ⇒ same object.
   if (left.kind === "sky" && right.kind === "sky") return true;
+  if (left.kind === "fog" && right.kind === "fog") return true;
   if (left.kind !== "instance" || right.kind !== "instance") return false;
   return left.assetId === right.assetId && left.placementIndex === right.placementIndex;
 }

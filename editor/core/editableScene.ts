@@ -34,6 +34,21 @@ export interface EditableSky {
   exposure: number;
 }
 
+/**
+ * Resolved Exponential Height Fog fields for the Details panel (singleton actor).
+ * Faz 1 is distance-based: `exp` mode uses `density`, `linear` mode uses
+ * `start`/`end`.
+ */
+export interface EditableFog {
+  name: string;
+  hidden: boolean;
+  mode: "exp" | "linear";
+  color: string;
+  density: number;
+  start: number;
+  end: number;
+}
+
 export interface EditableSelection {
   id: string;
   kind: Selection["kind"];
@@ -79,6 +94,8 @@ export interface EditableSelection {
   decay?: number;
   /** Resolved Sky Atmosphere settings; present only when `kind === "sky"`. */
   sky?: EditableSky;
+  /** Resolved Height Fog settings; present only when `kind === "fog"`. */
+  fog?: EditableFog;
 }
 
 export interface EditableSceneObject extends EditableSelection {

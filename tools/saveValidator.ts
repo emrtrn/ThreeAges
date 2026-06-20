@@ -550,6 +550,42 @@ export function validateSkyAtmosphere(value: unknown): Record<string, unknown> |
   return sky;
 }
 
+/**
+ * Allowlist validator for the singleton Exponential Height Fog actor. Mirrors
+ * {@link validateSkyAtmosphere}: every surviving field is copied explicitly;
+ * omitted/out-of-range values are dropped so the runtime falls back to
+ * {@link resolveHeightFog} defaults. Returns null only when no fog actor is
+ * present (`undefined`); a placed fog at all-defaults still round-trips as an
+ * empty object so its existence is never lost on save.
+ */
+export function validateHeightFog(value: unknown): Record<string, unknown> | null {
+  if (value === undefined) return null;
+  if (!value || typeof value !== "object") throw new Error("heightFog must be an object");
+  const input = value as Record<string, unknown>;
+  const fog: Record<string, unknown> = {};
+
+  if (typeof input.name === "string" && input.name.length > 0) fog.name = input.name;
+  if (input.hidden === true) fog.hidden = true;
+  if (input.mode === "exp" || input.mode === "linear") fog.mode = input.mode;
+  if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
+    fog.color = input.color;
+  }
+
+  const numeric: Array<[keyof typeof input, number, number]> = [
+    ["density", 0, 10],
+    ["start", 0, 100000],
+    ["end", 0, 100000],
+  ];
+  for (const [key, min, max] of numeric) {
+    const resolved = validateOptionalNumber(input[key], `heightFog.${String(key)}`, min, max);
+    if (resolved !== undefined) fog[key as string] = resolved;
+  }
+
+  // A present (placed) fog always round-trips — even an all-defaults `{}` — so the
+  // actor's existence survives the save; only `undefined` (no fog) returns null.
+  return fog;
+}
+
 export function validateLayout(value: unknown): unknown {
   if (!value || typeof value !== "object") throw new Error("layout must be an object");
   const layout = value as Record<string, unknown>;
@@ -566,6 +602,7 @@ export function validateLayout(value: unknown): unknown {
   if (!Array.isArray(layout.characters)) throw new Error("characters must be an array");
   const worldSettings = validateWorldSettings(layout.worldSettings);
   const skyAtmosphere = validateSkyAtmosphere(layout.skyAtmosphere);
+  const heightFog = validateHeightFog(layout.heightFog);
   const lights = layout.lights === undefined
     ? null
     : Array.isArray(layout.lights)
@@ -627,6 +664,7 @@ export function validateLayout(value: unknown): unknown {
   };
   if (worldSettings) output.worldSettings = worldSettings;
   if (skyAtmosphere) output.skyAtmosphere = skyAtmosphere;
+  if (heightFog) output.heightFog = heightFog;
   if (lights) output.lights = lights;
   if (actors) output.actors = actors;
   return output;

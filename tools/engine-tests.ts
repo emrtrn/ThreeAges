@@ -156,6 +156,7 @@ import {
   validateLightActor,
   validatePlacement,
   validateSkyAtmosphere,
+  validateHeightFog,
   validateSaveActorPayload,
   validateNewBehaviorPayload,
   resolveBehaviorStub,
@@ -202,6 +203,11 @@ import { collisionWireboxes } from "../engine/render-three/collisionView";
 import { attachActorLight } from "../engine/render-three/lights";
 import { sunDirectionFromLightRotation } from "../engine/render-three/skyAtmosphere";
 import {
+  applySceneFog,
+  resolveHeightFog,
+  HEIGHT_FOG_DEFAULTS,
+} from "../engine/render-three/heightFog";
+import {
   COLLISION_CHANNELS,
   COLLISION_OBJECT_CHANNEL_BITS,
   DEFAULT_COLLISION_COMPLEXITY,
@@ -232,6 +238,8 @@ import {
   BoxGeometry,
   Color,
   DirectionalLight,
+  Fog,
+  FogExp2,
   Mesh,
   Object3D,
   PerspectiveCamera,
@@ -5238,6 +5246,81 @@ check("validateLayout round-trips a skyAtmosphere singleton", () => {
   }) as RoomLayout;
   assert.deepEqual(layout.skyAtmosphere, { turbidity: 6, rayleigh: 2.5 });
   // Idempotent: validating the output again yields the same shape.
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("resolveHeightFog fills defaults and overrides per field", () => {
+  assert.deepEqual(resolveHeightFog(null), HEIGHT_FOG_DEFAULTS);
+  assert.deepEqual(resolveHeightFog(undefined), HEIGHT_FOG_DEFAULTS);
+  const resolved = resolveHeightFog({ mode: "linear", color: "#102030", start: 3, end: 40 });
+  assert.equal(resolved.mode, "linear");
+  assert.equal(resolved.color, "#102030");
+  assert.equal(resolved.start, 3);
+  assert.equal(resolved.end, 40);
+  // Unset fields fall back to defaults.
+  assert.equal(resolved.density, HEIGHT_FOG_DEFAULTS.density);
+  assert.equal(resolved.name, HEIGHT_FOG_DEFAULTS.name);
+});
+
+check("applySceneFog sets exp/linear fog and clears on hidden/null", () => {
+  const scene = new Scene();
+
+  applySceneFog(scene, resolveHeightFog({ mode: "exp", color: "#445566", density: 0.07 }));
+  assert.ok(scene.fog instanceof FogExp2);
+  assert.equal((scene.fog as FogExp2).density, 0.07);
+  assert.equal((scene.fog as FogExp2).color.getHexString(), "445566");
+
+  applySceneFog(scene, resolveHeightFog({ mode: "linear", color: "#223344", start: 4, end: 44 }));
+  assert.ok(scene.fog instanceof Fog);
+  assert.equal((scene.fog as Fog).near, 4);
+  assert.equal((scene.fog as Fog).far, 44);
+
+  // Hidden fog and an absent actor both clear scene.fog.
+  applySceneFog(scene, resolveHeightFog({ hidden: true }));
+  assert.equal(scene.fog, null);
+  applySceneFog(scene, resolveHeightFog({ mode: "exp" }));
+  assert.ok(scene.fog instanceof FogExp2);
+  applySceneFog(scene, null);
+  assert.equal(scene.fog, null);
+});
+
+check("validateHeightFog allowlists fields and round-trips through validateLayout", () => {
+  // A present fog with all-defaults still round-trips as `{}` so it is never lost.
+  assert.deepEqual(validateHeightFog({}), {});
+  assert.equal(validateHeightFog(undefined), null);
+
+  const fog = validateHeightFog({
+    name: "Mist",
+    hidden: true,
+    mode: "linear",
+    color: "#aabbcc",
+    density: 0.05,
+    start: 2,
+    end: 80,
+    bogusField: "dropped",
+  });
+  assert.deepEqual(fog, {
+    name: "Mist",
+    hidden: true,
+    mode: "linear",
+    color: "#aabbcc",
+    density: 0.05,
+    start: 2,
+    end: 80,
+  });
+  // Invalid mode/color are dropped; out-of-range numbers reject the save.
+  assert.deepEqual(validateHeightFog({ mode: "weird", color: "red" }), {});
+  assert.throws(() => validateHeightFog({ density: 999 }));
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithFog",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    heightFog: { mode: "exp", density: 0.04 },
+  }) as RoomLayout;
+  assert.deepEqual(layout.heightFog, { mode: "exp", density: 0.04 });
   assert.deepEqual(validateLayout(layout), layout);
 });
 

@@ -52,9 +52,11 @@ engine/editor.
 - After editing TypeScript, run `npx tsc --noEmit`; the dev server skips
   type-checking.
 - **Save-validator allowlist gotcha:** any new `LayoutPlacement` /
-  `LayoutCharacter` / `LayoutLightActor` field must be added to the
-  `vite.config.ts` save validator (`applyTransformFields` /
-  `validateLightActor`) or it is silently dropped on save.
+  `LayoutCharacter` / `LayoutLightActor` field — or any new field on a singleton
+  environment actor (`LayoutSkyAtmosphere`, `LayoutHeightFog`) — must be added to
+  the `tools/saveValidator.ts` allowlist (`applyTransformFields` /
+  `validateLightActor` / `validateSkyAtmosphere` / `validateHeightFog`, imported
+  by `vite.config.ts`) or it is silently dropped on save.
 
 ## Authoring Data Flow
 

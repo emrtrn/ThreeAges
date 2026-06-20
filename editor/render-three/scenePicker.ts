@@ -157,8 +157,8 @@ export class ScenePicker {
       const actor = findParentActor(hit.object);
       return actor ? Number(actor.userData.actorIndex) === selection.index : false;
     }
-    // The Sky Atmosphere has no pickable geometry (it's a backdrop dome).
-    if (selection.kind === "sky") return false;
+    // The Sky Atmosphere + Height Fog have no pickable geometry (scene-wide effects).
+    if (selection.kind === "sky" || selection.kind === "fog") return false;
     const character = findParentCharacter(hit.object);
     return character ? Number(character.userData.characterIndex) === selection.index : false;
   }
