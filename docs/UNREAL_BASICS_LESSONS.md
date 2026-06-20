@@ -279,6 +279,29 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-20* — **Actor Script Faz 10.7 — Mesh seçici + viewport transform gizmo'ları (tamam).**
+  Kullanıcı geri bildirimi ("Content'teki modeli MeshRenderer'a nasıl alacağım?
+  viewport'ta transform aracı yok") üzerine iki UX boşluğu kapatıldı (checklist:
+  `docs/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 4 + Slice 10.7). **Mesh seçici:**
+  MeshRenderer Details formuna model varlıklarını isimleriyle listeleyen **Mesh**
+  açılır listesi (`modelAssets()` → `isModelAssetType` süzme); seçim `props.assetId`'ye
+  yazılır, viewport gerçek mesh'i gösterir; elle yazılmış/bilinmeyen id `... (unknown)`
+  olarak korunur. Ham props artık katlanır "Advanced" `<details>` altında.
+  **Transform alanları:** her component için Position/Rotation°/Scale X/Y/Z sayısal
+  kutuları (`vec3Row`/`readVec3Prop`/`setVec3Prop`; identity değerler dosyaya yazılmaz),
+  yazarken viewport canlı. **Gizmo'lar:** `ActorScriptViewport`'a `TransformControls`
+  + köşe toolbar (Select/Move/Rotate/Scale; Select varsayılan → read-only his korunur);
+  seçili node'un `Group`'una bağlanır, sürükleme grubun local transform'unu
+  `onTransformNode(nodeId, {position, rotation°, scale})` ile editöre canlı yazar →
+  `applyNodeTransform` props + Details inputs + ham JSON'ı senkron tutar ve build
+  imzasını ilerleterek **drag sırasında rebuild jank'ını** önler. Gizmo-handle/drag
+  sırasında kamera orbit/pan bastırılır (`transformControls.axis` + `gizmoDragging`);
+  rebuild'de detach, dispose'da `transformControls.dispose()`. **Plumbing:**
+  `EditorUi`/`ActorScriptEditor` `assets` option'ı artık `name` de taşıyor.
+  **Gate:** tsc temiz · engine **189** check · build başarılı. **Karar:** Faz 10'un
+  "read-only viewport" kararı, gizmo'lar **opt-in** (Select default) olacak şekilde
+  genişletildi. **Kalan:** per-instance override, Play modu, behavior stub (Faz 8).
+
 - *2026-06-19* — **Actor Script Faz 10 — editör 3D viewport (tamam).**
   `ActorScriptEditor`'ın placeholder kartı, sınıfın component-ağacını canlı render
   eden gerçek bir 3D viewport ile değiştirildi (checklist:

@@ -342,7 +342,7 @@ Kabul kriteri:
 - [x] `maskTexture` destek karari uygulanir veya guvenli sekilde korunur.
 - [x] Save sonrasi `SceneApp` material cache invalidate eder.
 - [x] Save sonrasi material'i kullanan sahne instance'lari refresh olur.
-- [~] Static Mesh Editor icindeki material preview yeni loader helper'ini kullansin.
+- [x] Static Mesh Editor icindeki material preview yeni loader helper'ini kullansin.
 - [x] Content Browser material thumbnail'i full canonical material degerlerinden render edilir.
 - [x] Thumbnail cache invalidation ekle.
 
@@ -370,7 +370,7 @@ Kabul kriteri:
 
 - [x] `tools/engine-tests.ts` icine material validator testleri ekle.
 - [x] Content creation preset testleri ekle.
-- [~] Loader mapping icin unit test veya headless smoke test ekle.
+- [x] Loader mapping icin unit test veya headless smoke test ekle.
 - [x] `npm run build:verify` calistir.
 - [x] Bu checklist'te tamamlanan maddeleri sadece dogrulama sonrasi isaretle.
 - [x] Gerekirse `docs/STARTER_CONTENT.md` material preset bilgisini guncelle.

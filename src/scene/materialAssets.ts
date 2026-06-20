@@ -1,27 +1,18 @@
-import {
-  BackSide,
-  Color,
-  DoubleSide,
-  FrontSide,
-  MeshBasicMaterial,
-  MeshStandardMaterial,
-  RepeatWrapping,
-  SRGBColorSpace,
-  TextureLoader,
-} from "three";
+import { TextureLoader } from "three";
 
 import { assetPath, assetRecordById, assetType, type AssetManifest } from "@engine/assets/manifest";
+import { normalizeForgeMaterialDef } from "@engine/assets/material";
 import {
-  normalizeForgeMaterialDef,
-  type ForgeMaterialSide,
-} from "@engine/assets/material";
+  createThreeMaterialFromForgeDef,
+  type ForgeThreeMaterial,
+} from "@engine/render-three/materials";
 import { projectFileUrl } from "@/project/ProjectSystem";
 
 export async function loadForgeMaterial(
   manifest: AssetManifest,
   materialId: string,
   textureLoader = new TextureLoader(),
-): Promise<MeshStandardMaterial | MeshBasicMaterial> {
+): Promise<ForgeThreeMaterial> {
   const materialRecord = assetRecordById(manifest, materialId);
   if (!materialRecord || assetType(materialRecord) !== "material") {
     throw new Error(`Material asset not found: ${materialId}`);
@@ -31,34 +22,14 @@ export async function loadForgeMaterial(
     throw new Error(`Material asset failed: ${response.status} ${response.statusText}`);
   }
   const def = normalizeForgeMaterialDef(await response.json(), materialRecord.name);
-  const shared = {
-    name: def.name,
-    color: new Color(def.baseColor ?? "#ffffff"),
-    transparent: def.alphaMode === "blend" || def.opacity < 1,
-    opacity: def.opacity,
-    alphaTest: def.alphaMode === "mask" ? def.alphaTest : 0,
-    side: materialSide(def.side),
-  };
-  const material =
-    def.materialType === "basic"
-      ? new MeshBasicMaterial(shared)
-      : new MeshStandardMaterial({
-          ...shared,
-          roughness: def.roughness,
-          metalness: def.metalness,
-          emissive: new Color(def.emissive),
-          emissiveIntensity: def.emissiveIntensity,
-        });
-  if (def.baseColorTexture) {
-    const texture = await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader);
-    texture.colorSpace = SRGBColorSpace;
-    material.map = texture;
-  }
-  if (def.normalTexture && material instanceof MeshStandardMaterial) {
-    material.normalMap = await loadTextureByAssetId(manifest, def.normalTexture, textureLoader);
-  }
-  material.needsUpdate = true;
-  return material;
+  return createThreeMaterialFromForgeDef(def, {
+    baseColorTexture: def.baseColorTexture
+      ? await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader)
+      : null,
+    normalTexture: def.normalTexture
+      ? await loadTextureByAssetId(manifest, def.normalTexture, textureLoader)
+      : null,
+  });
 }
 
 async function loadTextureByAssetId(
@@ -70,14 +41,5 @@ async function loadTextureByAssetId(
   if (!record || assetType(record) !== "texture") {
     throw new Error(`Texture asset not found: ${textureId}`);
   }
-  const texture = await loader.loadAsync(projectFileUrl(assetPath(record)));
-  texture.wrapS = RepeatWrapping;
-  texture.wrapT = RepeatWrapping;
-  return texture;
-}
-
-function materialSide(side: ForgeMaterialSide): typeof FrontSide | typeof BackSide | typeof DoubleSide {
-  if (side === "back") return BackSide;
-  if (side === "double") return DoubleSide;
-  return FrontSide;
+  return loader.loadAsync(projectFileUrl(assetPath(record)));
 }

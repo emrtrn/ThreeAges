@@ -1850,6 +1850,35 @@ body.editor-mode #debug-stats {
   font-size: 11px;
   pointer-events: none;
 }
+.as-viewport-tools {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(20, 23, 27, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.as-viewport-tools button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #cfd6db;
+  font-size: 15px;
+  cursor: pointer;
+}
+.as-viewport-tools button:hover { background: rgba(255, 255, 255, 0.08); }
+.as-viewport-tools button.is-active {
+  background: rgba(91, 214, 160, 0.18);
+  border-color: rgba(91, 214, 160, 0.5);
+  color: #aef0d0;
+}
 
 .as-editor-graph { flex: 0 0 auto; max-height: 42%; overflow-y: auto; background: #181b1f; }
 .as-graph-hint { padding: 4px 10px; font-size: 11px; color: #6a7378; }

@@ -1,6 +1,19 @@
-import { Mesh, MeshBasicMaterial, MeshStandardMaterial, Object3D } from "three";
-import type { Material } from "three";
+import {
+  BackSide,
+  Color,
+  DoubleSide,
+  FrontSide,
+  Mesh,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  Object3D,
+  RepeatWrapping,
+  SRGBColorSpace,
+  type Material,
+  type Texture,
+} from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { ForgeMaterialDef, ForgeMaterialSide } from "../assets/material";
 
 export interface MaterialStats {
   basic: number;
@@ -8,10 +21,57 @@ export interface MaterialStats {
   total: number;
 }
 
+export interface ForgeMaterialTextureMaps {
+  baseColorTexture?: Texture | null;
+  normalTexture?: Texture | null;
+}
+
+export type ForgeThreeMaterial = MeshStandardMaterial | MeshBasicMaterial;
+
 export function isRenderableMesh(
   object: Object3D,
 ): object is Mesh & { material: Material | Material[] } {
   return object instanceof Mesh;
+}
+
+export function createThreeMaterialFromForgeDef(
+  def: ForgeMaterialDef,
+  textures: ForgeMaterialTextureMaps = {},
+): ForgeThreeMaterial {
+  const shared = {
+    name: def.name,
+    color: new Color(def.baseColor),
+    transparent: def.alphaMode === "blend" || def.opacity < 1,
+    opacity: def.opacity,
+    alphaTest: def.alphaMode === "mask" ? def.alphaTest : 0,
+    depthWrite: def.alphaMode !== "blend",
+    side: materialSide(def.side),
+  };
+  const material =
+    def.materialType === "basic"
+      ? new MeshBasicMaterial(shared)
+      : new MeshStandardMaterial({
+          ...shared,
+          roughness: def.roughness,
+          metalness: def.metalness,
+          emissive: new Color(def.emissive),
+          emissiveIntensity: def.emissiveIntensity,
+        });
+
+  if (textures.baseColorTexture) {
+    textures.baseColorTexture.colorSpace = SRGBColorSpace;
+    textures.baseColorTexture.wrapS = RepeatWrapping;
+    textures.baseColorTexture.wrapT = RepeatWrapping;
+    material.map = textures.baseColorTexture;
+  }
+  if (textures.normalTexture && material instanceof MeshStandardMaterial) {
+    textures.normalTexture.wrapS = RepeatWrapping;
+    textures.normalTexture.wrapT = RepeatWrapping;
+    material.normalMap = textures.normalTexture;
+  }
+
+  material.needsUpdate = true;
+  return material;
 }
 
 export function collectMaterialStats(models: Map<string, GLTF>): MaterialStats {
@@ -74,4 +134,10 @@ export function convertUnlitModelMaterialsToLit(models: Map<string, GLTF>): numb
   }
 
   return converted.size;
+}
+
+function materialSide(side: ForgeMaterialSide): typeof FrontSide | typeof BackSide | typeof DoubleSide {
+  if (side === "back") return BackSide;
+  if (side === "double") return DoubleSide;
+  return FrontSide;
 }

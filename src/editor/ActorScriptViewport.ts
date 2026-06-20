@@ -28,6 +28,7 @@ import {
   Group,
   LineBasicMaterial,
   LineSegments,
+  MathUtils,
   Material,
   Mesh,
   MeshStandardMaterial,
@@ -48,6 +49,7 @@ import {
 import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 
 import {
   actorPreviewNodes,
@@ -72,7 +74,25 @@ export interface ActorScriptViewportOptions {
   resolveModelPath: (assetId: string) => string | undefined;
   /** Notified when the user clicks a node's object in the viewport (or empty → null). */
   onPickNode?: (nodeId: string | null) => void;
+  /** Notified (live, during drag) when a transform gizmo edits a node's local transform. */
+  onTransformNode?: (nodeId: string, transform: NodeTransform) => void;
 }
+
+/** A node's local transform written back from the viewport gizmo (rotation in degrees). */
+export interface NodeTransform {
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: [number, number, number];
+}
+
+type GizmoMode = "select" | "translate" | "rotate" | "scale";
+
+const GIZMO_BUTTONS: ReadonlyArray<{ mode: GizmoMode; glyph: string; title: string }> = [
+  { mode: "select", glyph: "▦", title: "Select (no gizmo)" },
+  { mode: "translate", glyph: "✥", title: "Move" },
+  { mode: "rotate", glyph: "⟳", title: "Rotate" },
+  { mode: "scale", glyph: "⤢", title: "Scale" },
+];
 
 const PLACEHOLDER_COLOR = 0x8a8f96;
 const COLLIDER_COLOR = 0x49e6a2;
@@ -95,6 +115,10 @@ export class ActorScriptViewport {
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new Raycaster();
   private readonly hintEl: HTMLElement;
+  private readonly toolsEl: HTMLElement;
+  private transformControls: TransformControls | null = null;
+  private gizmoMode: GizmoMode = "select";
+  private gizmoDragging = false;
 
   private readonly target = new Vector3(0, 0.5, 0);
   private readonly spherical = new Spherical(5, Math.PI / 3, Math.PI / 4);
@@ -131,6 +155,9 @@ export class ActorScriptViewport {
     this.hintEl.textContent = "Add components to preview this class.";
     options.host.append(this.hintEl);
 
+    this.toolsEl = this.buildToolbar();
+    options.host.append(this.toolsEl);
+
     this.buildScene();
     this.bindCameraControls();
 
@@ -155,7 +182,75 @@ export class ActorScriptViewport {
     const grid = new GridHelper(20, 40, 0x55585c, 0x33373d);
     this.scene.add(grid);
     this.scene.add(this.modelGroup);
+
+    const controls = new TransformControls(this.camera, this.renderer.domElement);
+    controls.setSize(0.8);
+    controls.addEventListener("dragging-changed", (event) => {
+      this.gizmoDragging = event.value === true;
+    });
+    controls.addEventListener("objectChange", () => this.onGizmoChange());
+    this.scene.add(controls.getHelper());
+    this.transformControls = controls;
+
     this.updateCamera();
+  }
+
+  // --- gizmo (move / rotate / scale) -------------------------------------
+
+  private buildToolbar(): HTMLElement {
+    const tools = document.createElement("div");
+    tools.className = "as-viewport-tools";
+    tools.innerHTML = GIZMO_BUTTONS.map(
+      (button) =>
+        `<button type="button" data-gizmo="${button.mode}" title="${button.title}" class="${
+          button.mode === this.gizmoMode ? "is-active" : ""
+        }">${button.glyph}</button>`,
+    ).join("");
+    tools.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
+      btn.addEventListener("click", () => this.setGizmoMode(btn.dataset.gizmo as GizmoMode));
+    });
+    return tools;
+  }
+
+  private setGizmoMode(mode: GizmoMode): void {
+    this.gizmoMode = mode;
+    this.toolsEl.querySelectorAll<HTMLButtonElement>("button").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.gizmo === mode);
+    });
+    this.attachGizmo();
+  }
+
+  /** Attaches the gizmo to the selected node's group (detaches in Select mode / none). */
+  private attachGizmo(): void {
+    const controls = this.transformControls;
+    if (!controls) return;
+    const group = this.selectedNodeId ? this.nodeObjects.get(this.selectedNodeId) : undefined;
+    if (!group || this.gizmoMode === "select") {
+      controls.detach();
+      return;
+    }
+    controls.setMode(this.gizmoMode);
+    controls.attach(group);
+  }
+
+  /** Live write-back: the dragged group's local transform → the node's props. */
+  private onGizmoChange(): void {
+    if (!this.selectedNodeId || !this.options.onTransformNode) return;
+    const group = this.nodeObjects.get(this.selectedNodeId);
+    if (!group) return;
+    this.options.onTransformNode(this.selectedNodeId, {
+      position: [round(group.position.x), round(group.position.y), round(group.position.z)],
+      rotation: [
+        roundDeg(MathUtils.radToDeg(group.rotation.x)),
+        roundDeg(MathUtils.radToDeg(group.rotation.y)),
+        roundDeg(MathUtils.radToDeg(group.rotation.z)),
+      ],
+      scale: [
+        round(Math.max(group.scale.x, 0.001)),
+        round(Math.max(group.scale.y, 0.001)),
+        round(Math.max(group.scale.z, 0.001)),
+      ],
+    });
   }
 
   private updateCamera(): void {
@@ -195,6 +290,8 @@ export class ActorScriptViewport {
 
     el.addEventListener("contextmenu", (event) => event.preventDefault());
     el.addEventListener("pointerdown", (event) => {
+      // Let the transform gizmo own the drag when the pointer is over a handle.
+      if (this.transformControls?.axis) return;
       lastX = event.clientX;
       lastY = event.clientY;
       downX = event.clientX;
@@ -203,7 +300,7 @@ export class ActorScriptViewport {
       el.setPointerCapture(event.pointerId);
     });
     el.addEventListener("pointermove", (event) => {
-      if (!mode) return;
+      if (!mode || this.gizmoDragging) return;
       const dx = event.clientX - lastX;
       const dy = event.clientY - lastY;
       lastX = event.clientX;
@@ -280,6 +377,7 @@ export class ActorScriptViewport {
 
     this.hintEl.style.display = visibleCount > 0 ? "none" : "";
     this.refreshSelectionHelper();
+    this.attachGizmo();
     if (!this.userAdjustedCamera) this.frameToContent();
   }
 
@@ -424,6 +522,7 @@ export class ActorScriptViewport {
   setSelection(nodeId: string | null): void {
     this.selectedNodeId = nodeId;
     this.refreshSelectionHelper();
+    this.attachGizmo();
   }
 
   private refreshSelectionHelper(): void {
@@ -483,6 +582,8 @@ export class ActorScriptViewport {
   // --- teardown -----------------------------------------------------------
 
   private clearBuild(): void {
+    // Detach the gizmo before the node groups it points at are removed.
+    this.transformControls?.detach();
     if (this.selectionHelper) {
       this.scene.remove(this.selectionHelper);
       this.selectionHelper.geometry.dispose();
@@ -512,6 +613,11 @@ export class ActorScriptViewport {
     cancelAnimationFrame(this.rafId);
     this.resizeObserver.disconnect();
     this.clearBuild();
+    if (this.transformControls) {
+      this.transformControls.detach();
+      this.transformControls.dispose();
+      this.transformControls = null;
+    }
     // Dispose cached model resources once (clones shared these buffers).
     for (const promise of this.modelCache.values()) {
       void promise.then((gltf) => disposeGltf(gltf)).catch(() => {});
@@ -520,6 +626,7 @@ export class ActorScriptViewport {
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.hintEl.remove();
+    this.toolsEl.remove();
   }
 }
 
@@ -596,4 +703,12 @@ function disposeMaterial(material: Material): void {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
+}
+
+function round(value: number): number {
+  return Number(value.toFixed(4));
+}
+
+function roundDeg(value: number): number {
+  return Number(value.toFixed(2));
 }

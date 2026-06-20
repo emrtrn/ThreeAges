@@ -376,6 +376,7 @@ export class ActorScriptEditor {
         onPickNode: (nodeId) => {
           if (nodeId) this.select({ kind: "component", id: nodeId });
         },
+        onTransformNode: (nodeId, transform) => this.applyNodeTransform(nodeId, transform),
       });
       this.lastBuildSignature = "";
     }
@@ -400,6 +401,46 @@ export class ActorScriptEditor {
       this.viewportSyncTimer = undefined;
       this.syncViewport();
     }, 150);
+  }
+
+  /**
+   * Writes a viewport gizmo edit back into the node's props. The viewport group
+   * already shows the new transform, so the build signature is advanced to skip a
+   * redundant rebuild; the Details transform inputs are refreshed in place.
+   */
+  private applyNodeTransform(
+    nodeId: string,
+    transform: { position: Vec3; rotation: Vec3; scale: Vec3 },
+  ): void {
+    const node = this.def.components.find((n) => n.id === nodeId);
+    if (!node) return;
+    setVec3Prop(node.props, "position", transform.position, [0, 0, 0]);
+    setVec3Prop(node.props, "rotation", transform.rotation, [0, 0, 0]);
+    setVec3Prop(node.props, "scale", transform.scale, [1, 1, 1]);
+    this.markDirty();
+    // The viewport already reflects this edit; keep the signature in sync so a
+    // later selection-driven render does not pointlessly rebuild the scene.
+    this.lastBuildSignature = JSON.stringify(this.def.components);
+    if (this.selection.kind === "component" && this.selection.id === nodeId) {
+      this.updateTransformInputs(node);
+    }
+  }
+
+  /** Updates the Details Transform inputs (+ raw-props view) to match the node's props. */
+  private updateTransformInputs(node: ComponentTemplateNode): void {
+    for (const key of ["position", "rotation", "scale"] as const) {
+      const row = this.detailsHost.querySelector<HTMLElement>(`[data-as-vec="${key}"]`);
+      if (!row) continue;
+      const vec = readVec3Prop(node.props[key], key === "scale" ? [1, 1, 1] : [0, 0, 0]);
+      row.querySelectorAll<HTMLInputElement>("input").forEach((input, i) => {
+        input.value = String(vec[i]);
+      });
+    }
+    // Keep the collapsed raw-props JSON in sync (not focused during a gizmo drag).
+    const props = this.detailsHost.querySelector<HTMLTextAreaElement>("[data-as-node-props]");
+    if (props && document.activeElement !== props) {
+      props.value = JSON.stringify(node.props, null, 2);
+    }
   }
 
   /** Maps a manifest asset id to its public-relative model path (mesh nodes only). */
@@ -620,8 +661,7 @@ export class ActorScriptEditor {
           const n = Number(input.value);
           return Number.isFinite(n) ? n : 0;
         }) as Vec3;
-        if (value.every((axis, i) => axis === identity[i])) delete node.props[key];
-        else node.props[key] = value;
+        setVec3Prop(node.props, key, value, identity);
         this.markDirty();
       };
       // Live preview while typing; sync the raw-props view on commit (blur).
@@ -1020,6 +1060,17 @@ function readVec3Prop(value: SceneJsonValue | undefined, fallback: Vec3): Vec3 {
     if (typeof x === "number" && typeof y === "number" && typeof z === "number") return [x, y, z];
   }
   return [...fallback] as Vec3;
+}
+
+/** Stores a Vec3 prop, or deletes the key when it equals the identity (keeps files lean). */
+function setVec3Prop(
+  props: Record<string, SceneJsonValue>,
+  key: string,
+  value: Vec3,
+  identity: Vec3,
+): void {
+  if (value.every((axis, i) => axis === identity[i])) delete props[key];
+  else props[key] = [...value];
 }
 
 /** A 3-input (X/Y/Z) numeric row bound by `data-as-vec="<key>"`. */

@@ -10,7 +10,6 @@
  */
 import {
   AmbientLight,
-  BackSide,
   Box3,
   BoxGeometry,
   CapsuleGeometry,
@@ -18,9 +17,7 @@ import {
   ConeGeometry,
   CylinderGeometry,
   DirectionalLight,
-  DoubleSide,
   EdgesGeometry,
-  FrontSide,
   GridHelper,
   Group,
   LineBasicMaterial,
@@ -30,7 +27,6 @@ import {
   MeshBasicMaterial,
   MeshStandardMaterial,
   PerspectiveCamera,
-  RepeatWrapping,
   Raycaster,
   Scene,
   SphereGeometry,
@@ -75,10 +71,8 @@ import {
   saveAssetMaterialSlots,
   type AssetMaterialSlotsDef,
 } from "@/editor/assetMaterialSlotsStore";
-import {
-  normalizeForgeMaterialDef,
-  type ForgeMaterialSide,
-} from "@engine/assets/material";
+import type { AssetManifest, AssetRecord } from "@engine/assets/manifest";
+import { loadForgeMaterial } from "@/scene/materialAssets";
 
 export interface StaticMeshEditorOptions {
   /** Public-relative path to the model file (e.g. `assets/props/chair.glb`). */
@@ -185,7 +179,7 @@ export class StaticMeshEditor {
   private uvw: AssetUvwDef = defaultAssetUvw();
   private materialSlots: AssetMaterialSlotsDef = defaultAssetMaterialSlots();
   private selectedMaterialId = "";
-  private previewMaterial: MeshStandardMaterial | null = null;
+  private previewMaterial: MeshBasicMaterial | MeshStandardMaterial | null = null;
   private readonly originalMeshMaterials = new Map<Mesh, Mesh["material"]>();
   private modelBounds = new Box3();
   private selectedPrimitive = -1;
@@ -1172,10 +1166,7 @@ export class StaticMeshEditor {
   ): Promise<void> {
     this.selectedMaterialId = materialId;
     this.materialSlots = { schema: 1, slots: materialId ? [materialId] : [] };
-    this.previewMaterial?.map?.dispose();
-    this.previewMaterial?.normalMap?.dispose();
-    this.previewMaterial?.dispose();
-    this.previewMaterial = null;
+    this.disposePreviewMaterial();
     if (!materialId) {
       this.restoreOriginalMaterials();
       if (options.dirty) this.markDirty();
@@ -1188,37 +1179,11 @@ export class StaticMeshEditor {
       return;
     }
     try {
-      const response = await fetch(projectFileUrl(record.path));
-      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-      const def = normalizeForgeMaterialDef(await response.json(), record.name);
-      const material = new MeshStandardMaterial({
-        name: def.name,
-        color: new Color(def.baseColor),
-        roughness: def.roughness,
-        metalness: def.metalness,
-        transparent: def.alphaMode === "blend" || def.opacity < 1,
-        opacity: def.opacity,
-        alphaTest: def.alphaMode === "mask" ? def.alphaTest : 0,
-        side: materialSide(def.side),
-      });
-      if (def.baseColorTexture) {
-        const texture = await this.loadTextureAsset(def.baseColorTexture);
-        if (texture) {
-          texture.colorSpace = SRGBColorSpace;
-          texture.wrapS = RepeatWrapping;
-          texture.wrapT = RepeatWrapping;
-          material.map = texture;
-        }
-      }
-      if (def.normalTexture) {
-        const texture = await this.loadTextureAsset(def.normalTexture);
-        if (texture) {
-          texture.wrapS = RepeatWrapping;
-          texture.wrapT = RepeatWrapping;
-          material.normalMap = texture;
-        }
-      }
-      material.needsUpdate = true;
+      const material = await loadForgeMaterial(
+        this.previewAssetManifest(),
+        materialId,
+        this.textureLoader,
+      );
       this.previewMaterial = material;
       this.modelGroup.traverse((object) => {
         if (!(object instanceof Mesh)) return;
@@ -1231,10 +1196,50 @@ export class StaticMeshEditor {
     }
   }
 
-  private async loadTextureAsset(textureId: string) {
-    const record = this.options.assets?.find((asset) => asset.id === textureId);
-    if (!record) return null;
-    return this.textureLoader.loadAsync(projectFileUrl(record.path));
+  private previewAssetManifest(): AssetManifest {
+    const assets: AssetRecord[] = [];
+    for (const asset of this.options.assets ?? []) {
+      if (asset.assetType !== "material" && asset.assetType !== "texture") continue;
+      assets.push({
+        id: asset.id,
+        name: asset.name,
+        assetType: asset.assetType,
+        category: "",
+        path: asset.path,
+        tags: [],
+        placeable: false,
+        placement: {
+          surface: "floor",
+          snapToWall: false,
+          allowRotation: true,
+          allowScale: true,
+        },
+        runtime: {
+          loadGroup: "editor",
+          castShadow: false,
+          receiveShadow: false,
+          collision: false,
+          bytes: 0,
+        },
+        license: "unknown",
+      });
+    }
+    return {
+      version: 1,
+      generated: "static-mesh-editor-preview",
+      ktx2: false,
+      assets,
+    };
+  }
+
+  private disposePreviewMaterial(): void {
+    if (!this.previewMaterial) return;
+    this.previewMaterial.map?.dispose();
+    if (this.previewMaterial instanceof MeshStandardMaterial) {
+      this.previewMaterial.normalMap?.dispose();
+    }
+    this.previewMaterial.dispose();
+    this.previewMaterial = null;
   }
 
   private restoreOriginalMaterials(): void {
@@ -1305,9 +1310,7 @@ export class StaticMeshEditor {
     this.resizeObserver.disconnect();
     this.transformControls?.detach();
     this.transformControls?.dispose();
-    this.previewMaterial?.map?.dispose();
-    this.previewMaterial?.normalMap?.dispose();
-    this.previewMaterial?.dispose();
+    this.disposePreviewMaterial();
     for (const overlay of this.overlays) disposeOverlay(overlay);
     this.disposeUvwOverlay();
     this.renderer.dispose();
@@ -1461,12 +1464,6 @@ function escapeHtml(value: string): string {
 
 function formatVec3(value: Vec3): string {
   return value.map((axis) => axis.toFixed(2)).join(", ");
-}
-
-function materialSide(side: ForgeMaterialSide): typeof FrontSide | typeof BackSide | typeof DoubleSide {
-  if (side === "back") return BackSide;
-  if (side === "double") return DoubleSide;
-  return FrontSide;
 }
 
 function describeError(error: unknown): string {

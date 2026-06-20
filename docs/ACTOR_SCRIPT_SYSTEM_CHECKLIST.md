@@ -470,11 +470,11 @@ procedural `shape:<type>` actor mesh'i + actor parent hiyerarşisi → B4/sonrak
 > orbit + render döngüsü + dispose). **Editör-only**: tüm kod `src/editor/` altında,
 > `?editor` dinamik importu arkasında (game bundle'a girmez).
 >
-> **Tasarım kararı:** Bu viewport bir **read-only önizlemedir**; component
-> transform'ları/props'ları Details panelinden düzenlenir (viewport'ta zorunlu
-> gizmo yok — 10.4'teki opsiyonel viewport-seçimi hariç). Runtime'ın v1 "flat
-> entity" collapse'ından **bağımsızdır**: editör önizlemesi component ağacının
-> _tamamını_ (çoklu node + parent-child) gösterir.
+> **Tasarım kararı (güncellendi 10.7):** Viewport varsayılan **Select** modunda
+> bir read-only önizlemedir; ama artık **opt-in transform gizmo'ları** da var
+> (Move/Rotate/Scale → seçili node'un props transform'una yazar; bkz. Slice 10.7).
+> Runtime'ın v1 "flat entity" collapse'ından **bağımsızdır**: editör önizlemesi
+> component ağacının _tamamını_ (çoklu node + parent-child) gösterir.
 >
 > **Yeniden kullanım noktaları:** `StaticMeshEditor.buildScene/bindCameraControls/
 > updateCamera/startRenderLoop/resize/dispose` deseni; mesh için `AssetLoader`
@@ -547,6 +547,24 @@ procedural `shape:<type>` actor mesh'i + actor parent hiyerarşisi → B4/sonrak
       transform + mesh/collider/light payload + bozuk props default'ları + bare class)
 - [x] Bu checklist + `docs/UNREAL_BASICS_LESSONS.md` Progress Log güncellenir
 - Gate: `tsc` · `npm run test:engine` · `build`.
+
+#### Slice 10.7 — Viewport transform gizmo'ları (read-only kararının genişletilmesi)
+
+> Eklendi: kullanıcı "viewportta transform araçları yok, hareket ettiremiyorum"
+> geri bildirimi üzerine. Select varsayılan kalır; gizmo opt-in.
+
+- [x] `TransformControls` (StaticMeshEditor deseni) + viewport köşesinde
+      Select/Move/Rotate/Scale toolbar (aktif mod vurgulu)
+- [x] Gizmo seçili node'un `Group`'una bağlanır; sürükleme → grubun local
+      transform'u → `onTransformNode(nodeId, {position, rotation°, scale})` ile
+      editöre canlı yazılır (props'a; identity değerler atlanır)
+- [x] Editör tarafı canlı güncelleme: props + Details transform inputs + katlanır
+      ham JSON senkron; build imzası ilerletilir (drag sırasında rebuild yok)
+- [x] Sürükleme/gizmo-handle sırasında kamera orbit/pan bastırılır; rebuild'de
+      detach, dispose'da `transformControls.dispose()`
+- [x] **Mesh seçici** (Faz 4): MeshRenderer Details'ta model varlık açılır listesi
+      (`assetId`) — ham JSON yerine; bilinmeyen id korunur
+- Gate: `tsc` temiz · engine 189 check · `build` başarılı.
 
 **Notlar / sınırlar:**
 

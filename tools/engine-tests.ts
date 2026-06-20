@@ -10,6 +10,15 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import {
+  BackSide,
+  DoubleSide,
+  MeshBasicMaterial,
+  MeshStandardMaterial,
+  RepeatWrapping,
+  SRGBColorSpace,
+  Texture,
+} from "three";
+import {
   characterEntity,
   characterEntityId,
   instanceEntitiesForAsset,
@@ -157,6 +166,7 @@ import {
 } from "../engine/scene/actorScript";
 import { actorPreviewNodes } from "../engine/scene/actorPreview";
 import { normalizeForgeMaterialDef } from "../engine/assets/material";
+import { createThreeMaterialFromForgeDef } from "../engine/render-three/materials";
 import {
   actorInstanceEntityId,
   actorInstanceToEntity,
@@ -4552,6 +4562,83 @@ check("starter material assets normalize to the canonical material shape", () =>
     assert.ok(material.metalness >= 0 && material.metalness <= 1);
     assert.ok(material.opacity >= 0 && material.opacity <= 1);
   }
+});
+
+check("forge material mapping creates matching Three material types and fields", () => {
+  const standard = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Preview Glass",
+      baseColor: "#123456",
+      roughness: 0.25,
+      metalness: 0.75,
+      opacity: 0.4,
+      alphaMode: "blend",
+      alphaTest: 0.9,
+      side: "double",
+      emissive: "#101010",
+      emissiveIntensity: 2,
+    }),
+  );
+  assert.ok(standard instanceof MeshStandardMaterial);
+  assert.equal(standard.name, "Preview Glass");
+  assert.equal(standard.color.getHexString(), "123456");
+  assert.equal(standard.roughness, 0.25);
+  assert.equal(standard.metalness, 0.75);
+  assert.equal(standard.transparent, true);
+  assert.equal(standard.depthWrite, false);
+  assert.equal(standard.opacity, 0.4);
+  assert.equal(standard.alphaTest, 0);
+  assert.equal(standard.side, DoubleSide);
+  assert.equal(standard.emissive.getHexString(), "101010");
+  assert.equal(standard.emissiveIntensity, 2);
+  standard.dispose();
+
+  const baseColorTexture = new Texture();
+  const normalTexture = new Texture();
+  const textured = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Textured",
+      baseColorTexture: "albedo",
+      normalTexture: "normal",
+    }),
+    { baseColorTexture, normalTexture },
+  );
+  assert.ok(textured instanceof MeshStandardMaterial);
+  assert.equal(textured.map, baseColorTexture);
+  assert.equal(textured.normalMap, normalTexture);
+  assert.equal(baseColorTexture.colorSpace, SRGBColorSpace);
+  assert.equal(baseColorTexture.wrapS, RepeatWrapping);
+  assert.equal(baseColorTexture.wrapT, RepeatWrapping);
+  assert.equal(normalTexture.wrapS, RepeatWrapping);
+  assert.equal(normalTexture.wrapT, RepeatWrapping);
+  textured.dispose();
+
+  const basic = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "basic",
+      name: "Unlit",
+      baseColor: "#ff00aa",
+      alphaMode: "mask",
+      alphaTest: 0.33,
+      side: "back",
+    }),
+  );
+  assert.ok(basic instanceof MeshBasicMaterial);
+  assert.equal(basic.name, "Unlit");
+  assert.equal(basic.color.getHexString(), "ff00aa");
+  assert.equal(basic.transparent, false);
+  assert.equal(basic.depthWrite, true);
+  assert.equal(basic.alphaTest, 0.33);
+  assert.equal(basic.side, BackSide);
+  basic.dispose();
 });
 
 check("uvw save payload requires a .uvw.json path and valid map type", () => {
