@@ -53,7 +53,15 @@
     {
       "id": "particleEmitter",
       "component": "ParticleEmitter",
-      "props": {},
+      "props": {
+        "effectId": "starter-fx-dust-hit",
+        "autoPlay": true,
+        "position": [
+          0,
+          0.9397,
+          -0.1118
+        ]
+      },
       "parent": "root"
     }
   ],

@@ -72,16 +72,16 @@
       "placements": [
         {
           "position": [
-            -2.64,
+            -2.76,
             0.27,
-            -1.29
+            3.38
           ],
           "name": "Player Start",
           "collision": false,
           "rotationYDeg": 0,
           "rotation": [
             0,
-            90,
+            165,
             0
           ],
           "scale": 1
@@ -210,7 +210,7 @@
             0
           ],
           "scaleLocked": true,
-          "materialSlot": "starter-mat-brick-clay-beveled",
+          "materialSlot": "ground",
           "rotationYDeg": 0,
           "scale": 2
         }
@@ -249,27 +249,38 @@
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "backgroundColor": "#add8ff",
+    "backgroundColor": "#ffffff",
     "ambientIntensity": 1,
     "gameMode": "forge.tpsCharacter"
+  },
+  "skyAtmosphere": {
+    "sunColor": "#fef5d2",
+    "sunElevationDeg": 1,
+    "sunAzimuthDeg": 0,
+    "sunIntensity": 3,
+    "rayleigh": 3,
+    "turbidity": 10,
+    "mie": 0.005,
+    "mieDirectionalG": 0.8,
+    "exposure": 0.5
   },
   "lights": [
     {
       "id": "sun",
       "type": "directional",
       "position": [
-        3,
-        9,
-        4
+        0,
+        2,
+        0
       ],
       "name": "Sun",
       "rotation": [
-        -55,
-        35,
+        -75,
+        0,
         0
       ],
-      "color": "#ffffff",
-      "intensity": 1,
+      "color": "#fef5d2",
+      "intensity": 3,
       "castShadow": true
     }
   ],

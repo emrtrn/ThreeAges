@@ -1919,6 +1919,9 @@ body.editor-mode #debug-stats {
 .as-field textarea.is-invalid { border-color: #ff7a7a; }
 .as-json-error { color: #ff9a9a; font-size: 11px; min-height: 14px; margin-top: -6px; }
 .as-field-actions { display: flex; justify-content: flex-end; margin: -2px 0 10px; }
+.as-field.as-check { flex-direction: row; align-items: center; gap: 8px; }
+.as-field.as-check input[type="checkbox"] { width: auto; margin: 0; }
+.as-field.as-check > span { font-size: 12px; color: #c8d0d6; }
 
 .as-section-label {
   font-size: 11px;

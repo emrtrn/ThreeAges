@@ -5,7 +5,7 @@
   "name": "Ground",
   "baseColor": "#6e6e6e",
   "baseColorTexture": "starter-tex-checker",
-  "normalTexture": null,
+  "normalTexture": "starter-tex-flat-normal",
   "maskTexture": null,
   "roughness": 0.36,
   "metalness": 0,

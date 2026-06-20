@@ -14,6 +14,7 @@ import type {
 } from "three";
 import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
 import { OutlinePass } from "three/examples/jsm/postprocessing/OutlinePass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
 
 import { isRenderableMesh } from "@engine/render-three/materials";
@@ -29,6 +30,7 @@ export class EditorSelectionOutline {
   private readonly scene: Scene;
   private readonly composer: EffectComposer;
   private readonly outlinePass: OutlinePass;
+  private readonly outputPass: OutputPass;
   private readonly proxyRoot = new Group();
   private readonly invisibleMaterial = new MeshBasicMaterial({
     colorWrite: false,
@@ -62,6 +64,11 @@ export class EditorSelectionOutline {
     this.outlinePass.edgeGlow = 0;
     this.outlinePass.pulsePeriod = 0;
     this.composer.addPass(this.outlinePass);
+    // Final pass: encode the linear composite to the renderer's outputColorSpace
+    // (sRGB) + apply tone mapping. Without it the EffectComposer's linear buffers
+    // are written to the sRGB canvas unconverted, so the scene looks dark.
+    this.outputPass = new OutputPass();
+    this.composer.addPass(this.outputPass);
     this.composer.setSize(options.width, options.height);
   }
 
@@ -86,6 +93,7 @@ export class EditorSelectionOutline {
     this.proxyRoot.removeFromParent();
     this.invisibleMaterial.dispose();
     this.outlinePass.dispose();
+    this.outputPass.dispose();
     this.composer.dispose();
   }
 

@@ -516,6 +516,46 @@ export function validateLightActor(value: unknown): Record<string, unknown> {
   return light;
 }
 
+/**
+ * Allowlist validator for the singleton Sky Atmosphere actor. Every field that
+ * survives a save is copied explicitly; omitted/out-of-range values are dropped
+ * so the runtime falls back to {@link resolveSkyAtmosphere} defaults. Returns null
+ * only when no sky actor is present (`undefined`); a placed sky at all-defaults
+ * still round-trips as an empty object so its existence is never lost on save.
+ */
+export function validateSkyAtmosphere(value: unknown): Record<string, unknown> | null {
+  if (value === undefined) return null;
+  if (!value || typeof value !== "object") throw new Error("skyAtmosphere must be an object");
+  const input = value as Record<string, unknown>;
+  const sky: Record<string, unknown> = {};
+
+  if (typeof input.name === "string" && input.name.length > 0) sky.name = input.name;
+  if (input.hidden === true) sky.hidden = true;
+  if (input.driveSunLight === false) sky.driveSunLight = false;
+  if (typeof input.sunColor === "string" && /^#[0-9a-fA-F]{6}$/.test(input.sunColor)) {
+    sky.sunColor = input.sunColor;
+  }
+
+  const numeric: Array<[keyof typeof input, number, number]> = [
+    ["sunElevationDeg", -10, 90],
+    ["sunAzimuthDeg", 0, 360],
+    ["sunIntensity", 0, 20],
+    ["rayleigh", 0, 6],
+    ["turbidity", 1, 20],
+    ["mie", 0, 0.1],
+    ["mieDirectionalG", 0, 1],
+    ["exposure", 0, 1],
+  ];
+  for (const [key, min, max] of numeric) {
+    const resolved = validateOptionalNumber(input[key], `skyAtmosphere.${String(key)}`, min, max);
+    if (resolved !== undefined) sky[key as string] = resolved;
+  }
+
+  // A present (placed) sky always round-trips — even an all-defaults `{}` — so the
+  // actor's existence survives the save; only `undefined` (no sky) returns null.
+  return sky;
+}
+
 export function validateLayout(value: unknown): unknown {
   if (!value || typeof value !== "object") throw new Error("layout must be an object");
   const layout = value as Record<string, unknown>;
@@ -531,6 +571,7 @@ export function validateLayout(value: unknown): unknown {
   if (!Array.isArray(layout.instances)) throw new Error("instances must be an array");
   if (!Array.isArray(layout.characters)) throw new Error("characters must be an array");
   const worldSettings = validateWorldSettings(layout.worldSettings);
+  const skyAtmosphere = validateSkyAtmosphere(layout.skyAtmosphere);
   const lights = layout.lights === undefined
     ? null
     : Array.isArray(layout.lights)
@@ -591,6 +632,7 @@ export function validateLayout(value: unknown): unknown {
     characters,
   };
   if (worldSettings) output.worldSettings = worldSettings;
+  if (skyAtmosphere) output.skyAtmosphere = skyAtmosphere;
   if (lights) output.lights = lights;
   if (actors) output.actors = actors;
   return output;

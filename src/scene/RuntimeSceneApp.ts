@@ -1,5 +1,5 @@
-import { Box3, DirectionalLight, Group, Matrix4, Object3D } from "three";
-import type { AmbientLight, InstancedMesh, PerspectiveCamera, Scene, WebGLRenderer } from "three";
+import { Box3, DirectionalLight, Group, Matrix4, Object3D, TextureLoader } from "three";
+import type { AmbientLight, InstancedMesh, Material, PerspectiveCamera, Scene, WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
@@ -56,10 +56,23 @@ import {
 } from "./SceneRuntimeCore";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { attachActorLight } from "@engine/render-three/lights";
-import { collectMaterialStats, convertUnlitModelMaterialsToLit } from "@engine/render-three/materials";
+import {
+  applySkyToneMapping,
+  applySkyUniforms,
+  createSkyObject,
+  followCameraWithSky,
+  resolveSkyAtmosphere,
+} from "@engine/render-three/skyAtmosphere";
+import type { Sky } from "three/examples/jsm/objects/Sky.js";
+import {
+  collectMaterialStats,
+  convertUnlitModelMaterialsToLit,
+  isRenderableMesh,
+} from "@engine/render-three/materials";
 import {
   applyEulerDegrees,
   colliderBoxFromBounds,
+  composePlacementMatrix,
   composeTransformMatrix,
 } from "@engine/render-three/transforms";
 import type { LayoutCharacter, LayoutLightActor, LayoutPlacement, RoomLayout } from "@engine/scene/layout";
@@ -80,7 +93,12 @@ import {
   applyAssetUvwMapping,
   loadAssetUvw,
 } from "@/scene/assetUvwLoader";
-import { assetPath, assetType, isModelAssetType } from "@engine/assets/manifest";
+import { loadForgeMaterial } from "@/scene/materialAssets";
+import {
+  loadAssetMaterialSlots,
+  type AssetMaterialSlotsDef,
+} from "@/scene/assetMaterialSlotsLoader";
+import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   readAudioComponent,
@@ -150,6 +168,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private models = new Map<string, GLTF>();
   private instanceGroups = new Map<string, Group>();
   private instanceMeshes = new Map<string, InstancedMesh[]>();
+  /** Asset manifest (with `.assets`), cached once the scene begins loading. */
+  private assetManifest: AssetManifest | null = null;
+  private readonly textureLoader = new TextureLoader();
+  /** Loaded material override assets, cached by material id. */
+  private readonly materialCache = new Map<string, Material>();
+  /** In-flight material loads, deduped by material id. */
+  private readonly materialLoads = new Map<string, Promise<Material | undefined>>();
+  /** Per-asset default material slots (`*.materials.json` sidecars). */
+  private readonly assetMaterialSlots = new Map<string, AssetMaterialSlotsDef>();
+  /** Cloned override mesh per overridden placement, keyed by `assetId:placementIndex`. */
+  private readonly instanceOverrideObjects = new Map<string, Object3D>();
   private characterObjects: Object3D[] = [];
   private characterRefs: RuntimeCharacterRef[] = [];
   private lightObjects: LightObjectRecord[] = [];
@@ -162,6 +191,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private localBounds = new Map<string, Box3>();
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
+  /** Sky Atmosphere dome (singleton); null when no sky actor is in the layout. */
+  private skyObject: Sky | null = null;
   private cameraViewTouched = false;
   /** Latest per-entity locomotion snapshot a behavior reported (read by the Game Mode). */
   private readonly locomotionReports = new Map<string, LocomotionInput>();
@@ -261,6 +292,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.engineApp.update(deltaMs / 1000);
       this.gameModeSession?.update(deltaMs / 1000);
       this.updateParticleEffects(deltaMs / 1000);
+      if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
       this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);
     };
@@ -321,6 +353,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // does the same via registerShapeModelsFromLayout).
     registerSceneShapeModels(this.layout, this.models, this.localBounds);
     await this.applyAssetUvwMappings();
+    // Resolve material overrides + default slots into the cache before instances
+    // build, so createInstancedModel can render the assigned materials (mirrors
+    // the editor's material-override path; otherwise Play shows the base mesh).
+    await this.loadSceneMaterials();
 
     buildSceneEntities(this.layout, {
       addInstance: (assetId, placements) => {
@@ -336,6 +372,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     this.fitSunShadowToScene();
     this.applyBackgroundAndAmbient();
+    this.applyRuntimeSky();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);
@@ -726,16 +763,124 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private createInstancedModel(assetId: string, placements: LayoutPlacement[]): Group {
     const gltf = this.models.get(assetId);
     if (!gltf) throw new Error(`Runtime asset missing: ${assetId}`);
+    // Placements with a loaded material override are hidden in the instanced mesh
+    // (its base material would otherwise draw) and rendered as a separate clone
+    // carrying the override material below.
+    const instancedPlacements = placements.map((placement) => {
+      const materialSlot = this.resolvePlacementMaterialSlot(assetId, placement);
+      if (materialSlot && this.materialCache.has(materialSlot)) {
+        return { ...placement, hidden: true };
+      }
+      return placement;
+    });
     const { group, meshes } = buildSceneInstancedModel({
       assetId,
       gltf,
-      placements,
+      placements: instancedPlacements,
       castShadow: this.staticObjectsCastShadow(),
       receiveShadow: this.staticObjectsReceiveShadow(),
+    });
+    placements.forEach((placement, placementIndex) => {
+      const materialSlot = this.resolvePlacementMaterialSlot(assetId, placement);
+      const material = materialSlot ? this.materialCache.get(materialSlot) : undefined;
+      if (!material || placement.hidden) return;
+      const object = this.createMaterialOverrideObject(assetId, placementIndex, placement, gltf, material);
+      group.add(object);
+      this.instanceOverrideObjects.set(overrideObjectKey(assetId, placementIndex), object);
     });
     this.instanceGroups.set(assetId, group);
     this.instanceMeshes.set(assetId, meshes);
     return group;
+  }
+
+  private resolvePlacementMaterialSlot(assetId: string, placement: LayoutPlacement): string | undefined {
+    return placement.materialSlot ?? this.assetMaterialSlots.get(assetId)?.slots[0];
+  }
+
+  /**
+   * A clone of the asset mesh carrying the override material, used for placements
+   * whose instanced slot is hidden. Matches the editor's authoring-time override
+   * object so Play renders identically.
+   */
+  private createMaterialOverrideObject(
+    assetId: string,
+    placementIndex: number,
+    placement: LayoutPlacement,
+    gltf: GLTF,
+    material: Material,
+  ): Object3D {
+    const object = gltf.scene.clone(true);
+    object.name = `${assetId}-material-override-${placementIndex}`;
+    object.matrix.copy(composePlacementMatrix(placement));
+    object.matrixAutoUpdate = false;
+    object.visible = !(placement.hidden ?? false);
+    object.userData.assetId = assetId;
+    object.userData.placementIndex = placementIndex;
+    object.traverse((child) => {
+      if (!isRenderableMesh(child)) return;
+      child.material = Array.isArray(child.material)
+        ? child.material.map(() => material)
+        : material;
+      child.castShadow = this.staticObjectsCastShadow();
+      child.receiveShadow = this.staticObjectsReceiveShadow();
+    });
+    return object;
+  }
+
+  /**
+   * Loads per-asset default material slots (`*.materials.json`) and every material
+   * a placement references, caching them before instances build. Individual load
+   * failures are swallowed so one bad material can't abort scene construction.
+   */
+  private async loadSceneMaterials(): Promise<void> {
+    if (!this.assetLoader || !this.layout) return;
+    const manifest = await this.assetLoader.loadManifest();
+    this.assetManifest = manifest;
+    const assetIds = sceneModelAssetIds(this.layout);
+    await Promise.all(
+      assetIds.map(async (assetId) => {
+        const asset = manifest.assets.find((entry) => entry.id === assetId);
+        if (!asset) return;
+        const slots = await loadAssetMaterialSlots(assetPath(asset));
+        if (slots.slots.length > 0) this.assetMaterialSlots.set(assetId, slots);
+      }),
+    );
+    const materialIds = new Set<string>();
+    for (const instance of this.layout.instances) {
+      for (const placement of instance.placements) {
+        const id = this.resolvePlacementMaterialSlot(instance.assetId, placement);
+        if (id) materialIds.add(id);
+      }
+    }
+    await Promise.all(
+      [...materialIds].map((id) => this.ensureMaterialLoaded(id).catch(() => undefined)),
+    );
+  }
+
+  /** Loads + caches a material override asset by id (deduped; never rejects callers via the cache). */
+  private ensureMaterialLoaded(materialId: string): Promise<Material | undefined> {
+    const cached = this.materialCache.get(materialId);
+    if (cached) return Promise.resolve(cached);
+    const pending = this.materialLoads.get(materialId);
+    if (pending) return pending;
+    const manifest = this.assetManifest;
+    if (!manifest) return Promise.resolve(undefined);
+    const load = loadForgeMaterial(manifest, materialId, this.textureLoader)
+      .then((material) => {
+        this.materialCache.set(materialId, material);
+        this.materialLoads.delete(materialId);
+        return material;
+      })
+      .catch((error) => {
+        this.materialLoads.delete(materialId);
+        console.warn(
+          "[runtime] material load failed:",
+          error instanceof Error ? error.message : String(error),
+        );
+        throw error;
+      });
+    this.materialLoads.set(materialId, load);
+    return load;
   }
 
   private syncInstanceTransform(
@@ -743,13 +888,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     placementIndex: number,
     transform: TransformComponent,
   ): void {
-    const meshes = this.instanceMeshes.get(assetId);
-    if (!meshes) return;
     const transformMatrix = composeTransformMatrix(
       transform.position,
       transform.rotation,
       transform.scale,
     );
+    // Overridden placements render as a separate clone, not the instanced slot
+    // (which stays hidden). Move that clone instead, or the base mesh would
+    // reappear and the override would stay frozen at its authored pose.
+    const overrideObject = this.instanceOverrideObjects.get(
+      overrideObjectKey(assetId, placementIndex),
+    );
+    if (overrideObject) {
+      overrideObject.matrix.copy(transformMatrix);
+      overrideObject.matrixWorldNeedsUpdate = true;
+      return;
+    }
+    const meshes = this.instanceMeshes.get(assetId);
+    if (!meshes) return;
     for (const mesh of meshes) {
       const sourceMatrix =
         mesh.userData.sourceMatrix instanceof Matrix4
@@ -812,6 +968,27 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
   }
 
+  /**
+   * Renders the Sky Atmosphere dome at runtime. The driven Sun rotation is already
+   * baked into the saved layout's directional light (the editor persists it), so
+   * the runtime only builds the backdrop + tone mapping — it never re-drives lights.
+   */
+  private applyRuntimeSky(): void {
+    const actor = this.layout?.skyAtmosphere ?? null;
+    if (!actor) {
+      applySkyToneMapping(this.renderer, null);
+      return;
+    }
+    const resolved = resolveSkyAtmosphere(actor);
+    if (!this.skyObject) {
+      this.skyObject = createSkyObject();
+      this.scene.add(this.skyObject);
+    }
+    applySkyUniforms(this.skyObject, resolved);
+    followCameraWithSky(this.skyObject, this.camera);
+    applySkyToneMapping(this.renderer, resolved);
+  }
+
   private staticObjectsCastShadow(): boolean {
     return resolveSceneWorldSettings(this.layout).staticObjectsCastShadow;
   }
@@ -830,6 +1007,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     if (resetView) this.cameraViewTouched = false;
   };
+}
+
+function overrideObjectKey(assetId: string, placementIndex: number): string {
+  return `${assetId}:${placementIndex}`;
 }
 
 function parseCharacterEntityIndex(entityId: string): number | null {

@@ -471,6 +471,14 @@ export class ActorScriptEditor {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** Effect assets ({id,name}) offered by the ParticleEmitter effect picker, name-sorted. */
+  private effectAssets(): Array<{ id: string; name: string }> {
+    return (this.options.assets ?? [])
+      .filter((asset) => asset.path.toLowerCase().endsWith(".effect.json"))
+      .map((asset) => ({ id: asset.id, name: asset.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   // --- details forms ------------------------------------------------------
 
   private renderDetails(): void {
@@ -554,6 +562,7 @@ export class ActorScriptEditor {
     ].join("");
     const meshField = node.component === "MeshRenderer" ? this.meshPickerField(node) : "";
     const lightField = node.component === "Light" ? lightFields(node) : "";
+    const particleField = node.component === "ParticleEmitter" ? this.particleFields(node) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -573,6 +582,7 @@ export class ActorScriptEditor {
       </label>
       ${meshField}
       ${lightField}
+      ${particleField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${vec3Row("position", "Position", pos)}
       ${vec3Row("rotation", "Rotation°", rot)}
@@ -606,6 +616,41 @@ export class ActorScriptEditor {
         <span>Mesh</span>
         <select data-as-node-mesh>${options}</select>
       </label>
+    `;
+  }
+
+  /**
+   * The ParticleEmitter form: an "Effect" dropdown of `.effect.json` assets
+   * (→ props.effectId) plus an Auto Play toggle (→ props.autoPlay). Like the mesh
+   * picker, an unknown/hand-typed effect id is preserved. Emitter settings
+   * (rate/size/velocity/material) live in the referenced effect asset, not inline.
+   */
+  private particleFields(node: ComponentTemplateNode): string {
+    const current = typeof node.props.effectId === "string" ? node.props.effectId : "";
+    const autoPlay = node.props.autoPlay === true;
+    const assets = this.effectAssets();
+    const known = assets.some((asset) => asset.id === current);
+    const options = [
+      `<option value="" ${current ? "" : "selected"}>— none —</option>`,
+      ...assets.map(
+        (asset) =>
+          `<option value="${escapeHtml(asset.id)}" ${asset.id === current ? "selected" : ""}>${escapeHtml(asset.name)}</option>`,
+      ),
+      ...(current && !known
+        ? [`<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (unknown)</option>`]
+        : []),
+    ].join("");
+    return `
+      <div class="as-section-label">Particle</div>
+      <label class="as-field">
+        <span>Effect</span>
+        <select data-as-particle-effect>${options}</select>
+      </label>
+      <label class="as-field as-check">
+        <input type="checkbox" data-as-particle-autoplay ${autoPlay ? "checked" : ""} />
+        <span>Auto Play</span>
+      </label>
+      <p class="as-details-note">Emitter settings live in the effect asset (<code>.effect.json</code>).</p>
     `;
   }
 
@@ -662,6 +707,7 @@ export class ActorScriptEditor {
       this.render(); // rebuilds tree + viewport + the raw-props view
     });
     this.bindLightDetails(node);
+    this.bindParticleDetails(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
       const inputs = Array.from(rowEl.querySelectorAll<HTMLInputElement>("input"));
@@ -747,6 +793,29 @@ export class ActorScriptEditor {
         this.renderDetails();
         this.syncViewport();
       });
+    });
+  }
+
+  /**
+   * Wires the ParticleEmitter Details controls (no-op when the node carries no
+   * particle form): the effect picker (→ props.effectId, dropping the key when
+   * cleared) and the Auto Play toggle (→ props.autoPlay). Re-renders so the
+   * raw-props view tracks the change.
+   */
+  private bindParticleDetails(node: ComponentTemplateNode): void {
+    const effect = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-particle-effect]");
+    effect?.addEventListener("change", () => {
+      if (effect.value) node.props.effectId = effect.value;
+      else delete node.props.effectId;
+      this.markDirty();
+      this.render(); // rebuilds tree + the raw-props view
+    });
+    const autoPlay = this.detailsHost.querySelector<HTMLInputElement>("[data-as-particle-autoplay]");
+    autoPlay?.addEventListener("change", () => {
+      if (autoPlay.checked) node.props.autoPlay = true;
+      else delete node.props.autoPlay;
+      this.markDirty();
+      this.renderDetails();
     });
   }
 

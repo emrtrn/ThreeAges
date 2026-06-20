@@ -240,6 +240,45 @@ export interface LayoutWorldSettings {
   gameMode?: string;
 }
 
+/**
+ * Singleton environment actor: a physically-inspired sky dome (Rayleigh + Mie
+ * scattering, à la Unreal's Sky Atmosphere). Rendered with three.js's analytic
+ * `Sky` shader as the scene background. The sun direction (`sunElevationDeg` /
+ * `sunAzimuthDeg`) places the sun disc + horizon glow and, when `driveSunLight`
+ * is set, is pushed onto the scene's directional Sun light so the sky and the
+ * scene's shadows move together. All fields are optional; absent reads the
+ * defaults in `engine/render-three/skyAtmosphere.ts`.
+ */
+export interface LayoutSkyAtmosphere {
+  /** Display name in the Outliner. Absent means "Sky Atmosphere". */
+  name?: string;
+  /** Hidden in the viewport + runtime (no sky dome, no sun drive). Absent means false. */
+  hidden?: boolean;
+  /** Sun elevation above the horizon, degrees (-10..90). Higher = midday. */
+  sunElevationDeg?: number;
+  /** Sun azimuth / compass angle, degrees (0..360). */
+  sunAzimuthDeg?: number;
+  /** Sun tint applied to the driven directional light (hex). */
+  sunColor?: string;
+  /** Sun intensity applied to the driven directional light. */
+  sunIntensity?: number;
+  /**
+   * When true (default), rotate + recolor the scene's directional Sun light to
+   * match the sky's sun, so the sky and the scene's shadows stay in sync.
+   */
+  driveSunLight?: boolean;
+  /** Rayleigh scattering strength — controls the blueness of the sky (0..6). */
+  rayleigh?: number;
+  /** Atmospheric turbidity / haziness (1..20). */
+  turbidity?: number;
+  /** Mie scattering coefficient — the haze/glow around the sun (0..0.1). */
+  mie?: number;
+  /** Mie directional anisotropy — sun halo tightness (0..1). */
+  mieDirectionalG?: number;
+  /** Sky exposure / overall brightness, mapped to tone-mapping exposure (0..1). */
+  exposure?: number;
+}
+
 export interface LayoutLightActor {
   id: string;
   type: LayoutLightType;
@@ -269,6 +308,8 @@ export interface RoomLayout {
   name: string;
   loadGroups: string[];
   worldSettings?: LayoutWorldSettings;
+  /** Optional singleton sky/atmosphere environment actor. */
+  skyAtmosphere?: LayoutSkyAtmosphere;
   lights?: LayoutLightActor[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];

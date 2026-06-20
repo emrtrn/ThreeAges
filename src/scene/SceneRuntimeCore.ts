@@ -3,7 +3,7 @@ import {
   AnimationMixer,
   Box3,
   Color,
-  LinearSRGBColorSpace,
+  SRGBColorSpace,
   Scene,
   Vector3,
 } from "three";
@@ -93,9 +93,11 @@ export function createSceneRuntimeCore(
 }
 
 export function applyEditorMatchedPlayLook(renderer: WebGLRenderer): void {
-  // Temporary Play viewport look: mirror the editor outline-composer output until
-  // display/color grading becomes an exposed project setting.
-  renderer.outputColorSpace = LinearSRGBColorSpace;
+  // Match the editor's OutputPass: encode the linear-rendered scene to sRGB for
+  // display. Play renders directly (no composer), so this is the only place the
+  // sRGB transfer is applied — without it the image is rendered linear and looks
+  // dark. (SRGBColorSpace is the renderer default; set explicitly to document it.)
+  renderer.outputColorSpace = SRGBColorSpace;
 }
 
 export function readSceneRuntimeStats(

@@ -1,6 +1,7 @@
 import { defaultLightIntensity } from "@engine/scene/lights";
+import { resolveSkyAtmosphere } from "@engine/scene/skyAtmosphere";
 import { readPivot, readRotation, readScale } from "@engine/scene/transform";
-import type { LayoutLightActor, RoomLayout } from "@engine/scene/layout";
+import type { LayoutLightActor, LayoutSkyAtmosphere, RoomLayout } from "@engine/scene/layout";
 
 import {
   type EditableSceneObject,
@@ -10,6 +11,37 @@ import { cloneBehavior, cloneMetadata, cloneParticle, clonePhysics } from "./lay
 import { selectionId, type Selection } from "./selection";
 
 const DEFAULT_LIGHT_COLOR = "#ffffff";
+
+/** Stable Outliner/Details asset id shown for the singleton Sky Atmosphere. */
+export const SKY_ATMOSPHERE_ASSET_ID = "sky-atmosphere";
+
+/**
+ * Builds the transform-less Details/Outliner view-model for the Sky Atmosphere
+ * singleton. It has no position/scale, so transform fields are zeroed and the
+ * resolved sky settings ride along in {@link EditableSelection.sky}.
+ */
+function buildSkyEditableSelection(sky: LayoutSkyAtmosphere): EditableSelection {
+  const resolved = resolveSkyAtmosphere(sky);
+  return {
+    id: "sky",
+    kind: "sky",
+    assetId: SKY_ATMOSPHERE_ASSET_ID,
+    category: "visual-effects",
+    label: resolved.name,
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+    pivot: [0, 0, 0],
+    scaleLocked: true,
+    locked: false,
+    castShadow: false,
+    collision: false,
+    simulatePhysics: false,
+    physics: {},
+    metadata: {},
+    sky: { ...resolved },
+  };
+}
 
 /** Shared inputs the editable view-models need that aren't on the layout. */
 export interface SceneObjectDeps {
@@ -125,6 +157,16 @@ export function buildSceneObjects(
     objects.push(sceneObject);
   });
 
+  if (layout.skyAtmosphere) {
+    const selection: Selection = { kind: "sky" };
+    objects.push({
+      ...buildSkyEditableSelection(layout.skyAtmosphere),
+      selected: deps.isSelected(selection),
+      hidden: layout.skyAtmosphere.hidden ?? false,
+      locked: false,
+    });
+  }
+
   layout.actors?.forEach((actor, index) => {
     const selection: Selection = { kind: "actor", index };
     objects.push({
@@ -228,6 +270,11 @@ export function buildEditableSelection(
     };
     applyOptionalLightFields(editable, light);
     return editable;
+  }
+
+  if (selection.kind === "sky") {
+    if (!layout.skyAtmosphere) return null;
+    return buildSkyEditableSelection(layout.skyAtmosphere);
   }
 
   if (selection.kind === "actor") {

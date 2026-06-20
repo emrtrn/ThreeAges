@@ -73,6 +73,16 @@ import {
   type LightObjectRecord,
 } from "@engine/render-three/lights";
 import {
+  applySkyToneMapping,
+  applySkyUniforms,
+  createSkyObject,
+  followCameraWithSky,
+  resolveSkyAtmosphere,
+  sunLightRotationDeg,
+  type ResolvedSkyAtmosphere,
+} from "@engine/render-three/skyAtmosphere";
+import type { Sky } from "three/examples/jsm/objects/Sky.js";
+import {
   applySceneBackgroundAndAmbient,
   buildSceneCharacterObject,
   buildSceneEntities,
@@ -132,6 +142,7 @@ import type {
   LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
+  LayoutSkyAtmosphere,
   LayoutWorldSettings,
   MetadataValue,
   RoomLayout,
@@ -305,6 +316,8 @@ export class SceneApp {
   private camera: PerspectiveCamera;
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
+  /** Sky Atmosphere dome (singleton); null when no sky actor is placed. */
+  private skyObject: Sky | null = null;
   private autoSaveTimer = 0;
   private frameHandle = 0;
   private lastTime = 0;
@@ -582,6 +595,7 @@ export class SceneApp {
 
       this.cameraController.update(deltaSeconds);
       this.updateGizmoScreenScale();
+      if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
 
       if (this.selectionOutline) this.selectionOutline.render(deltaSeconds);
       else this.renderer.render(this.scene, this.camera);
@@ -726,12 +740,21 @@ export class SceneApp {
   renameSceneObject(id: string, name: string): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
+    if (selection.kind === "sky") {
+      const next = name.trim();
+      this.setSkyAtmosphere({ name: next.length > 0 ? next : undefined }, "Rename Sky Atmosphere");
+      return;
+    }
     this.renameSelection(selection, name);
   }
 
   setSceneObjectHidden(id: string, hidden: boolean): void {
     const selection = parseSelectionId(id);
     if (!selection || !this.hasSelection(selection)) return;
+    if (selection.kind === "sky") {
+      this.setSkyAtmosphere({ hidden }, hidden ? "Hide Sky Atmosphere" : "Show Sky Atmosphere");
+      return;
+    }
     if (this.editorSceneController.selectedCount > 1 && this.isSelectionSelected(selection)) {
       this.setSelectedHidden(hidden);
       return;
@@ -1347,6 +1370,12 @@ export class SceneApp {
   }
 
   deleteSelected(): void {
+    // The Sky Atmosphere is a singleton outside the transform/multi-select stack;
+    // route its delete through the dedicated (undoable) command.
+    if (this.selection?.kind === "sky" && this.editorSceneController.selectedCount <= 1) {
+      this.removeSkyAtmosphere();
+      return;
+    }
     this.editorSceneController.deleteSelected();
   }
 
@@ -1790,6 +1819,7 @@ export class SceneApp {
 
     this.fitSunShadowToScene();
     this.applyBackgroundAndAmbient();
+    this.applySkyAtmosphere();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
     this.emitHistoryChanged();
@@ -2002,6 +2032,8 @@ export class SceneApp {
       this.rebuildInstanceGroup(selection.assetId);
       return;
     }
+    // The Sky Atmosphere has no scene object to re-sync from a transform.
+    if (selection.kind === "sky") return;
 
     if (selection.kind === "light") {
       this.refreshLightObject(selection.index);
@@ -2534,6 +2566,132 @@ export class SceneApp {
   }
 
   /**
+   * Builds/updates/removes the Sky Atmosphere dome to match `layout.skyAtmosphere`,
+   * pushes the scattering uniforms + tone mapping, and (when enabled) drives the
+   * scene's directional Sun so the sky and shadows stay in sync.
+   */
+  private applySkyAtmosphere(): void {
+    const actor = this.layout?.skyAtmosphere ?? null;
+    if (!actor) {
+      if (this.skyObject) {
+        this.scene.remove(this.skyObject);
+        this.skyObject.material.dispose();
+        this.skyObject.geometry.dispose();
+        this.skyObject = null;
+      }
+      applySkyToneMapping(this.renderer, null);
+      return;
+    }
+
+    const resolved = resolveSkyAtmosphere(actor);
+    if (!this.skyObject) {
+      this.skyObject = createSkyObject();
+      this.scene.add(this.skyObject);
+    }
+    applySkyUniforms(this.skyObject, resolved);
+    followCameraWithSky(this.skyObject, this.camera);
+    applySkyToneMapping(this.renderer, resolved);
+    if (resolved.driveSunLight && !resolved.hidden) this.driveSunFromSky(resolved);
+  }
+
+  /** Index of the scene's Sun (preferred id) or the first directional light. */
+  private sunLightIndex(): number {
+    const lights = this.layout?.lights;
+    if (!lights) return -1;
+    const preferred = lights.findIndex(
+      (light) => light.type === "directional" && light.id === DEFAULT_SCENE_SUN_ID,
+    );
+    if (preferred >= 0) return preferred;
+    return lights.findIndex((light) => light.type === "directional");
+  }
+
+  /** Rotates + recolors the scene's Sun directional light to match the sky. */
+  private driveSunFromSky(resolved: ResolvedSkyAtmosphere): void {
+    const index = this.sunLightIndex();
+    const sun = index >= 0 ? this.layout?.lights?.[index] : undefined;
+    if (!sun) return;
+    sun.rotation = sunLightRotationDeg(resolved.sunElevationDeg, resolved.sunAzimuthDeg);
+    sun.color = resolved.sunColor;
+    sun.intensity = resolved.sunIntensity;
+    this.refreshLightObject(index);
+    this.fitSunShadowToScene();
+  }
+
+  /** Adds the singleton Sky Atmosphere (or selects the existing one). */
+  addSkyAtmosphere(): void {
+    if (!this.layout) return;
+    if (this.layout.skyAtmosphere) {
+      this.select({ kind: "sky" });
+      this.onStatus?.("Sky Atmosphere already exists - selected it.", "info");
+      return;
+    }
+    this.commitSky({}, "Add Sky Atmosphere");
+    this.select({ kind: "sky" });
+    this.onStatus?.("Added Sky Atmosphere.", "info");
+  }
+
+  /** Removes the singleton Sky Atmosphere (undoable). */
+  removeSkyAtmosphere(): void {
+    if (!this.layout?.skyAtmosphere) return;
+    this.commitSky(undefined, "Delete Sky Atmosphere");
+  }
+
+  /**
+   * Applies a partial edit to the Sky Atmosphere as one undoable command. A patch
+   * value of `undefined` clears that field (reverts to its default); any other
+   * value overrides it.
+   */
+  setSkyAtmosphere(
+    patch: { [K in keyof LayoutSkyAtmosphere]?: LayoutSkyAtmosphere[K] | undefined },
+    label = "Edit Sky Atmosphere",
+  ): void {
+    if (!this.layout?.skyAtmosphere) return;
+    const next: LayoutSkyAtmosphere = { ...this.layout.skyAtmosphere };
+    for (const key of Object.keys(patch) as Array<keyof LayoutSkyAtmosphere>) {
+      const value = patch[key];
+      if (value === undefined) delete next[key];
+      else (next as Record<string, unknown>)[key] = value;
+    }
+    this.commitSky(next, label);
+  }
+
+  /**
+   * Single undoable Sky Atmosphere mutation: swaps `layout.skyAtmosphere`, snapshots
+   * the driven Sun so undo restores it, re-renders, and re-emits panels. Selection
+   * is cleared if the sky disappears while it was the active selection.
+   */
+  private commitSky(nextSky: LayoutSkyAtmosphere | undefined, label: string): void {
+    if (!this.layout) return;
+    const previousSky = this.layout.skyAtmosphere ? { ...this.layout.skyAtmosphere } : undefined;
+    const sunIndex = this.sunLightIndex();
+    const previousSun =
+      sunIndex >= 0 && this.layout.lights?.[sunIndex]
+        ? cloneLightActor(this.layout.lights[sunIndex]!)
+        : undefined;
+
+    const apply = (sky: LayoutSkyAtmosphere | undefined, restoreSun: boolean): void => {
+      if (!this.layout) return;
+      if (sky) this.layout.skyAtmosphere = { ...sky };
+      else delete this.layout.skyAtmosphere;
+      if (restoreSun && previousSun && sunIndex >= 0 && this.layout.lights?.[sunIndex]) {
+        this.layout.lights[sunIndex] = cloneLightActor(previousSun);
+        this.refreshLightObject(sunIndex);
+        this.fitSunShadowToScene();
+      }
+      this.applySkyAtmosphere();
+      if (!this.layout.skyAtmosphere && this.selection?.kind === "sky") this.select(null);
+      else this.emitSelectionChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(nextSky, false),
+      undo: () => apply(previousSky, true),
+    });
+  }
+
+  /**
    * World-settings edits persist immediately (debounced) so the user never has
    * to press Save for scene rendering tweaks.
    */
@@ -2613,6 +2771,11 @@ export class SceneApp {
       const object = this.actorObjects[selection.index];
       const actor = this.layout?.actors?.[selection.index];
       if (object && actor) object.visible = !(actor.hidden ?? false);
+      return;
+    }
+    // The Sky Atmosphere's visibility is applied through applySkyAtmosphere().
+    if (selection.kind === "sky") {
+      this.applySkyAtmosphere();
       return;
     }
     const object = this.characterObjects[selection.index];
@@ -3067,6 +3230,9 @@ export class SceneApp {
   }
 
   private getSelectionLabel(selection: Selection): string {
+    if (selection.kind === "sky") {
+      return resolveSkyAtmosphere(this.layout?.skyAtmosphere ?? null).name;
+    }
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
       return transform?.name ?? selection.assetId;
@@ -3125,6 +3291,8 @@ export class SceneApp {
       const actorObject = this.actorObjects[selection.index];
       return actorObject ? new Box3().setFromObject(actorObject) : null;
     }
+    // The Sky Atmosphere is a backdrop with no bounding box.
+    if (selection.kind === "sky") return null;
     const object = this.characterObjects[selection.index];
     return object ? new Box3().setFromObject(object) : null;
   }
@@ -3147,6 +3315,8 @@ export class SceneApp {
 
   private createSelectionOutlineTarget(selection: Selection): Object3D | null {
     if (!this.selectionOutline || !this.layout) return null;
+    // The Sky Atmosphere is a full-screen backdrop; it has no outline proxy.
+    if (selection.kind === "sky") return null;
 
     if (selection.kind === "instance") {
       const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
@@ -3385,6 +3555,8 @@ export class SceneApp {
   private updateGizmo(): void {
     clearGizmoGroup(this.gizmoGroup, this.gizmoPickables);
     if (!this.selection) return;
+    // The Sky Atmosphere has no transform, so it never shows a gizmo.
+    if (this.selection.kind === "sky") return;
 
     const selected = this.getSelected();
     // In pivot-edit mode the move gizmo is shown even under the Select tool.
@@ -3430,6 +3602,8 @@ export class SceneApp {
     }
     if (selection.kind === "light") return this.layout.lights?.[selection.index] ?? null;
     if (selection.kind === "actor") return this.layout.actors?.[selection.index] ?? null;
+    // The Sky Atmosphere is a transform-less singleton (no gizmo / move target).
+    if (selection.kind === "sky") return null;
     return this.layout.characters[selection.index] ?? null;
   }
 
@@ -3585,6 +3759,7 @@ export class SceneApp {
     }
     if (selection.kind === "light") return Boolean(this.layout.lights?.[selection.index]);
     if (selection.kind === "actor") return Boolean(this.layout.actors?.[selection.index]);
+    if (selection.kind === "sky") return Boolean(this.layout.skyAtmosphere);
     return Boolean(this.layout.characters[selection.index]);
   }
 

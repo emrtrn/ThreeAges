@@ -19,6 +19,22 @@ export interface EditableTransform {
   scale: Vec3;
 }
 
+/** Resolved Sky Atmosphere fields for the Details panel (singleton actor). */
+export interface EditableSky {
+  name: string;
+  hidden: boolean;
+  sunElevationDeg: number;
+  sunAzimuthDeg: number;
+  sunColor: string;
+  sunIntensity: number;
+  driveSunLight: boolean;
+  rayleigh: number;
+  turbidity: number;
+  mie: number;
+  mieDirectionalG: number;
+  exposure: number;
+}
+
 export interface EditableSelection {
   id: string;
   kind: Selection["kind"];
@@ -62,6 +78,8 @@ export interface EditableSelection {
   angle?: number;
   penumbra?: number;
   decay?: number;
+  /** Resolved Sky Atmosphere settings; present only when `kind === "sky"`. */
+  sky?: EditableSky;
 }
 
 export interface EditableSceneObject extends EditableSelection {

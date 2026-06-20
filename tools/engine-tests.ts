@@ -155,6 +155,7 @@ import {
   validateLayout,
   validateLightActor,
   validatePlacement,
+  validateSkyAtmosphere,
   validateSaveActorPayload,
   validateNewBehaviorPayload,
   resolveBehaviorStub,
@@ -5174,6 +5175,61 @@ check("validateLayout round-trips an actors[] array", () => {
   }) as RoomLayout;
   assert.equal(layout.actors?.length, 1);
   assert.equal(layout.actors?.[0]?.classRef, "blueprints/DoorBP.actor.json");
+  // Idempotent: validating the output again yields the same shape.
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("validateSkyAtmosphere allowlists fields, clamps junk, and round-trips defaults", () => {
+  // A present sky with all-defaults still round-trips as `{}` so it is never lost.
+  assert.deepEqual(validateSkyAtmosphere({}), {});
+  assert.equal(validateSkyAtmosphere(undefined), null);
+
+  const sky = validateSkyAtmosphere({
+    name: "Dusk",
+    hidden: true,
+    driveSunLight: false,
+    sunColor: "#ffaa33",
+    sunElevationDeg: 12,
+    sunAzimuthDeg: 210,
+    sunIntensity: 4,
+    rayleigh: 3,
+    turbidity: 8,
+    mie: 0.01,
+    mieDirectionalG: 0.9,
+    exposure: 0.4,
+    bogusField: "dropped",
+  });
+  assert.deepEqual(sky, {
+    name: "Dusk",
+    hidden: true,
+    driveSunLight: false,
+    sunColor: "#ffaa33",
+    sunElevationDeg: 12,
+    sunAzimuthDeg: 210,
+    sunIntensity: 4,
+    rayleigh: 3,
+    turbidity: 8,
+    mie: 0.01,
+    mieDirectionalG: 0.9,
+    exposure: 0.4,
+  });
+  // A malformed color is silently dropped (falls back to the default sun color).
+  assert.deepEqual(validateSkyAtmosphere({ sunColor: "red" }), {});
+  // Out-of-range numbers reject the save, mirroring the light-actor validator.
+  assert.throws(() => validateSkyAtmosphere({ sunElevationDeg: 999 }));
+  assert.throws(() => validateSkyAtmosphere({ mie: 5 }));
+});
+
+check("validateLayout round-trips a skyAtmosphere singleton", () => {
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithSky",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    skyAtmosphere: { sunElevationDeg: 30, rayleigh: 2.5 },
+  }) as RoomLayout;
+  assert.deepEqual(layout.skyAtmosphere, { sunElevationDeg: 30, rayleigh: 2.5 });
   // Idempotent: validating the output again yields the same shape.
   assert.deepEqual(validateLayout(layout), layout);
 });

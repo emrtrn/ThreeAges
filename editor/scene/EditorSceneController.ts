@@ -558,6 +558,9 @@ export class EditorSceneController {
         continue;
       }
 
+      // The Sky Atmosphere singleton is deleted via its own dedicated command.
+      if (selection.kind === "sky") continue;
+
       const light = layout.lights?.[selection.index];
       if (light) {
         lightDeletes.push({
@@ -1011,6 +1014,8 @@ export class EditorSceneController {
   private duplicateSelection(selection: Selection): Selection | null {
     const layout = this.host.getMutableLayout();
     if (!layout) return null;
+    // The Sky Atmosphere is a singleton: never duplicated.
+    if (selection.kind === "sky") return null;
     if (selection.kind === "instance") {
       const instance = layout.instances.find((entry) => entry.assetId === selection.assetId);
       const transform = instance?.placements[selection.placementIndex];
@@ -1222,7 +1227,7 @@ export class EditorSceneController {
               entry.selection.index,
               entry.snapshot as LayoutActorInstance,
             );
-          } else {
+          } else if (entry.selection.kind === "light") {
             this.host.insertLightActor(entry.selection.index, entry.snapshot as LayoutLightActor);
           }
         }
@@ -1239,7 +1244,7 @@ export class EditorSceneController {
             this.host.removeCharacterPlacement(entry.selection.index);
           } else if (entry.selection.kind === "actor") {
             this.host.removeActorPlacement(entry.selection.index);
-          } else {
+          } else if (entry.selection.kind === "light") {
             this.host.removeLightActor(entry.selection.index);
           }
         }

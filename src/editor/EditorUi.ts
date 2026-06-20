@@ -34,6 +34,7 @@ import type {
   LayoutInteraction,
   LayoutParticleEmitter,
   LayoutPhysics,
+  LayoutSkyAtmosphere,
   MetadataValue,
 } from "@engine/scene/layout";
 import {
@@ -302,6 +303,8 @@ export class EditorUi {
               <button type="button" data-add-shape="cylinder">Cylinder</button>
               <button type="button" data-add-shape="cone">Cone</button>
               <button type="button" data-add-shape="plane">Plane</button>
+              <div class="add-actor-section-title">Visual Effects</div>
+              <button type="button" data-add-sky-atmosphere>Sky Atmosphere</button>
               <div class="add-actor-section-title">Gameplay</div>
               <button type="button" data-add-player-start>Player Start</button>
             </div>
@@ -560,6 +563,14 @@ export class EditorUi {
         this.setStatus("Drag the actor into the viewport to place it.", "info");
       });
     }
+
+    // Sky Atmosphere is a transform-less singleton environment actor: click to add
+    // (or select the existing one) rather than drag-to-place.
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-sky-atmosphere]")
+      ?.addEventListener("click", () => {
+        this.app.addSkyAtmosphere();
+      });
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -2159,6 +2170,10 @@ export class EditorUi {
       this.renderLightDetails(selection);
       return;
     }
+    if (selection.kind === "sky" && selection.sky) {
+      this.renderSkyDetails(selection);
+      return;
+    }
 
     this.detailsScale = [...selection.scale];
 
@@ -2728,6 +2743,8 @@ export class EditorUi {
    * core stays generic: groups/fields come from the project's metadata schema.
    */
   private renderMetadataSections(selection: EditableSelection): string {
+    // The Sky Atmosphere carries no schema-driven gameplay metadata.
+    if (selection.kind === "sky") return "";
     const groups = metadataGroupsForTarget(this.metadataSchema, {
       kind: selection.kind,
       category: selection.category,
@@ -2900,7 +2917,7 @@ export class EditorUi {
   }
 
   private metadataFieldFor(key: string): MetadataFieldDef | null {
-    if (!this.selected) return null;
+    if (!this.selected || this.selected.kind === "sky") return null;
     const groups = metadataGroupsForTarget(this.metadataSchema, {
       kind: this.selected.kind,
       category: this.selected.category,
@@ -3040,6 +3057,119 @@ export class EditorUi {
           this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
         );
       });
+  }
+
+  /** Details panel for the singleton Sky Atmosphere (sun direction + scattering). */
+  private renderSkyDetails(selection: EditableSelection): void {
+    const sky = selection.sky;
+    if (!sky) return;
+    this.detailsScale = [1, 1, 1];
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>visual effect / sky atmosphere</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-sky-name type="text" value="${escapeHtml(sky.name)}" placeholder="Sky Atmosphere" />
+      </label>
+      <div class="detail-section">
+        <div class="detail-section-title">Sun</div>
+        <label class="detail-row">
+          <span>Elevation</span>
+          <input data-sky-number="sunElevationDeg" type="number" step="1" min="-10" max="90"
+            value="${sky.sunElevationDeg}" />
+        </label>
+        <label class="detail-row">
+          <span>Azimuth</span>
+          <input data-sky-number="sunAzimuthDeg" type="number" step="1" min="0" max="360"
+            value="${sky.sunAzimuthDeg}" />
+        </label>
+        <label class="detail-row">
+          <span>Color</span>
+          <input data-sky-color type="color" value="${escapeHtml(sky.sunColor)}" />
+        </label>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-sky-number="sunIntensity" type="number" step="0.1" min="0" max="20"
+            value="${sky.sunIntensity}" />
+        </label>
+        <label class="detail-toggle">
+          <input type="checkbox" data-sky-toggle="driveSunLight" ${sky.driveSunLight ? "checked" : ""} />
+          <span>Drive Sun Light</span>
+        </label>
+        <div class="detail-hint">Rotates &amp; recolors the scene's directional Sun to match.</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Atmosphere</div>
+        <label class="detail-row">
+          <span>Rayleigh</span>
+          <input data-sky-number="rayleigh" type="number" step="0.1" min="0" max="6"
+            value="${sky.rayleigh}" />
+        </label>
+        <label class="detail-row">
+          <span>Turbidity</span>
+          <input data-sky-number="turbidity" type="number" step="0.5" min="1" max="20"
+            value="${sky.turbidity}" />
+        </label>
+        <label class="detail-row">
+          <span>Mie</span>
+          <input data-sky-number="mie" type="number" step="0.001" min="0" max="0.1"
+            value="${sky.mie}" />
+        </label>
+        <label class="detail-row">
+          <span>Mie Anisotropy</span>
+          <input data-sky-number="mieDirectionalG" type="number" step="0.01" min="0" max="0.999"
+            value="${sky.mieDirectionalG}" />
+        </label>
+        <label class="detail-row">
+          <span>Exposure</span>
+          <input data-sky-number="exposure" type="number" step="0.05" min="0" max="1"
+            value="${sky.exposure}" />
+        </label>
+      </div>
+    `;
+
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-sky-name]");
+    nameInput?.addEventListener("change", () => {
+      const value = nameInput.value.trim();
+      this.app.setSkyAtmosphere(
+        { name: value.length > 0 ? value : undefined },
+        "Rename Sky Atmosphere",
+      );
+    });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-sky-color]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setSkyAtmosphere(
+          { sunColor: (event.currentTarget as HTMLInputElement).value },
+          "Set Sun Color",
+        );
+      },
+    );
+
+    this.detailsBody.querySelectorAll<HTMLInputElement>("[data-sky-number]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.skyNumber as keyof LayoutSkyAtmosphere | undefined;
+        const value = Number(input.value);
+        if (!key || !Number.isFinite(value)) return;
+        this.app.setSkyAtmosphere(
+          { [key]: value } as Partial<LayoutSkyAtmosphere>,
+          "Edit Sky Atmosphere",
+        );
+      });
+    });
+
+    this.detailsBody.querySelector<HTMLInputElement>("[data-sky-toggle]")?.addEventListener(
+      "change",
+      (event) => {
+        this.app.setSkyAtmosphere(
+          { driveSunLight: (event.currentTarget as HTMLInputElement).checked },
+          "Toggle Drive Sun Light",
+        );
+      },
+    );
   }
 
   private handleDetailAction(action: string): void {
@@ -3399,6 +3529,7 @@ function formatPosition(position: [number, number, number]): string {
 function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "character") return "C";
   if (kind === "light") return "L";
+  if (kind === "sky") return "S";
   return "I";
 }
 
