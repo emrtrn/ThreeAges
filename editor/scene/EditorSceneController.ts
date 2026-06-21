@@ -566,6 +566,7 @@ export class EditorSceneController {
         selection.kind === "cloud" ||
         selection.kind === "reflection" ||
         selection.kind === "reflectionPlane" ||
+        selection.kind === "reflectionCapture" ||
         selection.kind === "post"
       ) {
         continue;
@@ -1031,7 +1032,8 @@ export class EditorSceneController {
       selection.kind === "fog" ||
       selection.kind === "cloud" ||
       selection.kind === "reflection" ||
-      selection.kind === "reflectionPlane"
+      selection.kind === "reflectionPlane" ||
+      selection.kind === "reflectionCapture"
     ) {
       return null;
     }

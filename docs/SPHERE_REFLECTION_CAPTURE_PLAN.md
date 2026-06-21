@@ -279,20 +279,32 @@ Viewport:
 
 ## Faz Planı
 
-### Faz 1 - Şema ve Editor Aktörü
+### Faz 1 - Şema ve Editor Aktörü ✅ (tamamlandı)
 
-- [ ] `LayoutSphereReflectionCapture` ekle.
-- [ ] Resolver/default/id/name helper dosyasını ekle.
-- [ ] Validator ve layout round-trip testleri ekle.
-- [ ] Selection/outliner/details modelini ekle.
-- [ ] Add Actor button ve Details panelini ekle.
-- [ ] SceneApp add/remove/set/undo/redo lifecycle ekle.
-- [ ] Viewport wire sphere helper ve picking ekle.
+- [x] `LayoutSphereReflectionCapture` ekle. (`engine/scene/layout.ts` + `reflectionCaptures?` alanı)
+- [x] Resolver/default/id/name helper dosyasını ekle. (`engine/scene/reflectionCapture.ts`)
+- [x] Validator ve layout round-trip testleri ekle. (`tools/saveValidator.ts`
+  `validateSphereReflectionCapture` + `tools/engine-tests.ts`)
+- [x] Selection/outliner/details modelini ekle. (`editor/core/selection.ts`,
+  `sceneObjects.ts`, `editableScene.ts`, `layoutSnapshots.ts`)
+- [x] Add Actor button ve Details panelini ekle. (`src/editor/EditorUi.ts`
+  `renderReflectionCaptureDetails`)
+- [x] SceneApp add/remove/set/undo/redo lifecycle ekle. (`src/scene/SceneApp.ts`
+  add/remove/insert/set + undo commands)
+- [x] Viewport wire sphere helper ve picking ekle. (`engine/render-three/reflectionCapture.ts`
+  wireframe-sphere helper + `picking.ts`/`scenePicker.ts`)
 
 Kabul:
 
-- Aktör eklenir, seçilir, taşınır, kaydedilir, yüklenir.
-- `npm run build:verify` geçer.
+- Aktör eklenir, seçilir, taşınır, kaydedilir, yüklenir. ✅
+- `npm run build:verify` geçer. ✅
+
+> Not: Faz 1'de capture yalnızca editor-side wireframe helper olarak görünür; bake
+> ve nearest-probe envMap yok, bu yüzden `RuntimeSceneApp` parity'si Faz 3'e
+> ertelendi (Play modunda capture görünmez). Helper sadece pickables'a eklenir,
+> surface-pickables'a değil (asset yerleştirme küreye tutunmaz). Capture'ın anlamlı
+> bir scale'i yoktur (boyut = `radius`), bu yüzden `applyTransform` capture için
+> `writeScale`'i atlar; `rotation` küre için kozmetiktir ama round-trip eder.
 
 ### Faz 2 - CubeCamera Bake Cache
 

@@ -8,6 +8,7 @@ import type {
   LayoutPlacement,
   LayoutPhysics,
   LayoutReflectionPlane,
+  LayoutSphereReflectionCapture,
   MetadataValue,
   Vec3,
 } from "@engine/scene/layout";
@@ -206,6 +207,31 @@ export function cloneReflectionPlane(plane: LayoutReflectionPlane): LayoutReflec
   if (plane.scale !== undefined) clone.scale = [...plane.scale];
   if (plane.color !== undefined) clone.color = plane.color;
   if (plane.resolution !== undefined) clone.resolution = plane.resolution;
+  return clone;
+}
+
+export function cloneSphereReflectionCapture(
+  capture: LayoutSphereReflectionCapture,
+): LayoutSphereReflectionCapture {
+  const clone: LayoutSphereReflectionCapture = {
+    id: capture.id,
+    position: [...capture.position],
+  };
+  if (capture.name !== undefined) clone.name = capture.name;
+  if (capture.hidden !== undefined) clone.hidden = capture.hidden;
+  if (capture.locked !== undefined) clone.locked = capture.locked;
+  if (capture.scaleLocked !== undefined) clone.scaleLocked = capture.scaleLocked;
+  if (capture.groupId !== undefined) clone.groupId = capture.groupId;
+  if (capture.nodeId !== undefined) clone.nodeId = capture.nodeId;
+  if (capture.parentId !== undefined) clone.parentId = capture.parentId;
+  if (capture.rotation !== undefined) clone.rotation = [...capture.rotation];
+  if (capture.radius !== undefined) clone.radius = capture.radius;
+  if (capture.intensity !== undefined) clone.intensity = capture.intensity;
+  if (capture.resolution !== undefined) clone.resolution = capture.resolution;
+  if (capture.near !== undefined) clone.near = capture.near;
+  if (capture.far !== undefined) clone.far = capture.far;
+  if (capture.parallax !== undefined) clone.parallax = capture.parallax;
+  if (capture.priority !== undefined) clone.priority = capture.priority;
   return clone;
 }
 

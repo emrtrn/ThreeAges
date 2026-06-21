@@ -4,6 +4,7 @@ import { resolveHeightFog } from "@engine/scene/heightFog";
 import { resolveCloudLayer } from "@engine/scene/cloudLayer";
 import { resolveReflection } from "@engine/scene/reflection";
 import { resolveReflectionPlane } from "@engine/scene/reflectionPlane";
+import { resolveSphereReflectionCapture } from "@engine/scene/reflectionCapture";
 import { resolvePostProcess } from "@engine/scene/postProcess";
 import { readPivot, readRotation, readScale } from "@engine/scene/transform";
 import type {
@@ -14,6 +15,7 @@ import type {
   LayoutReflection,
   LayoutReflectionPlane,
   LayoutSkyAtmosphere,
+  LayoutSphereReflectionCapture,
   RoomLayout,
 } from "@engine/scene/layout";
 
@@ -209,6 +211,38 @@ function buildReflectionPlaneEditableSelection(
     physics: {},
     color: resolved.color,
     reflectionResolution: resolved.resolution,
+    metadata: {},
+  };
+}
+
+/**
+ * Builds the Details/Outliner view-model for a placed Sphere Reflection Capture
+ * (probe) actor. Like the Planar Reflection it carries a real transform (position
+ * only — there is no meaningful scale); the probe settings ride along in
+ * {@link EditableSelection.reflectionCapture}.
+ */
+function buildReflectionCaptureEditableSelection(
+  capture: LayoutSphereReflectionCapture,
+  index: number,
+): EditableSelection {
+  const resolved = resolveSphereReflectionCapture(capture);
+  return {
+    id: selectionId({ kind: "reflectionCapture", index }),
+    kind: "reflectionCapture",
+    assetId: "reflection-capture",
+    category: "reflection",
+    label: resolved.name,
+    position: [...capture.position],
+    rotation: readRotation(capture),
+    scale: [1, 1, 1],
+    pivot: [0, 0, 0],
+    scaleLocked: true,
+    locked: capture.locked ?? false,
+    castShadow: false,
+    collision: false,
+    simulatePhysics: false,
+    physics: {},
+    reflectionCapture: { ...resolved },
     metadata: {},
   };
 }
@@ -417,6 +451,19 @@ export function buildSceneObjects(
     });
   });
 
+  layout.reflectionCaptures?.forEach((capture, index) => {
+    const selection: Selection = { kind: "reflectionCapture", index };
+    objects.push({
+      ...buildReflectionCaptureEditableSelection(capture, index),
+      selected: deps.isSelected(selection),
+      hidden: capture.hidden ?? false,
+      locked: capture.locked ?? false,
+      groupId: capture.groupId,
+      nodeId: capture.nodeId,
+      parentId: capture.parentId,
+    });
+  });
+
   return objects;
 }
 
@@ -524,6 +571,12 @@ export function buildEditableSelection(
     const plane = layout.reflectionPlanes?.[selection.index];
     if (!plane) return null;
     return buildReflectionPlaneEditableSelection(plane, selection.index);
+  }
+
+  if (selection.kind === "reflectionCapture") {
+    const capture = layout.reflectionCaptures?.[selection.index];
+    if (!capture) return null;
+    return buildReflectionCaptureEditableSelection(capture, selection.index);
   }
 
   if (selection.kind === "actor") {

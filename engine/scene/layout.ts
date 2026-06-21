@@ -422,6 +422,44 @@ export interface LayoutReflectionPlane {
   resolution?: number;
 }
 
+/**
+ * Placed Sphere Reflection Capture actor (à la Unreal's Sphere Reflection
+ * Capture). A positional probe that bakes a static local cubemap from its own
+ * position; nearby PBR surfaces sample this local capture instead of the global
+ * Reflection Environment. Unlike the Planar Reflection it does not re-render the
+ * scene every frame — the capture is baked once and cached. Faz 1 models only the
+ * placed actor + influence sphere (no bake/render yet). The influence size is the
+ * `radius`, not a transform scale, so there is no `scale` field. Optional fields
+ * read defaults from `engine/scene/reflectionCapture.ts`.
+ */
+export interface LayoutSphereReflectionCapture {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  position: Vec3;
+  /** Full Euler rotation (XYZ order) in degrees. Cosmetic for a sphere; kept for the gizmo. */
+  rotation?: Vec3;
+  /** Influence radius in world units; surfaces within use this probe's capture. */
+  radius?: number;
+  /** Reflection strength multiplier applied to the captured cubemap. */
+  intensity?: number;
+  /** Baked cubemap face resolution in px (higher = sharper, costlier). */
+  resolution?: number;
+  /** CubeCamera near clip used when baking. */
+  near?: number;
+  /** CubeCamera far clip used when baking. */
+  far?: number;
+  /** Local parallax correction (V2+). Faz 1 keeps this off. */
+  parallax?: boolean;
+  /** Overlap tie-breaker: higher priority wins when two probes both cover a surface. */
+  priority?: number;
+}
+
 export interface RoomLayout {
   schema: 1;
   name: string;
@@ -440,6 +478,8 @@ export interface RoomLayout {
   lights?: LayoutLightActor[];
   /** Placed Planar Reflection (mirror) actors. */
   reflectionPlanes?: LayoutReflectionPlane[];
+  /** Placed Sphere Reflection Capture (local cubemap probe) actors. */
+  reflectionCaptures?: LayoutSphereReflectionCapture[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

@@ -561,6 +561,61 @@ export function validateReflectionPlane(value: unknown): Record<string, unknown>
 }
 
 /**
+ * Allowlist validator for one placed Sphere Reflection Capture (probe) actor.
+ * Mirrors {@link validateReflectionPlane}: a required `id` + `position`, the
+ * shared transform/hierarchy/flag fields, plus the probe-specific radius /
+ * intensity / resolution / near / far / parallax / priority. There is no `scale`
+ * — the influence size is the `radius`.
+ */
+export function validateSphereReflectionCapture(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") {
+    throw new Error("reflection capture must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) {
+    throw new Error("reflection capture id must be a string");
+  }
+  if (!isNumberTuple(input.position)) throw new Error("invalid reflection capture position");
+
+  const capture: Record<string, unknown> = {
+    id: input.id,
+    position: input.position.map((number) => Number(number.toFixed(3))),
+  };
+  if (typeof input.name === "string") capture.name = input.name;
+  if (input.hidden === true) capture.hidden = true;
+  if (input.locked === true) capture.locked = true;
+  if (input.scaleLocked === true) capture.scaleLocked = true;
+  if (typeof input.groupId === "string") capture.groupId = input.groupId;
+  if (typeof input.nodeId === "string") capture.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") capture.parentId = input.parentId;
+  if (input.rotation !== undefined) {
+    if (!isNumberTuple(input.rotation)) throw new Error("invalid reflection capture rotation");
+    capture.rotation = input.rotation.map((axis) =>
+      validateRotationDeg(axis, "reflection capture rotation component"),
+    );
+  }
+  const radius = validateOptionalNumber(input.radius, "reflection capture radius", 0.1, 1000);
+  if (radius !== undefined) capture.radius = radius;
+  const intensity = validateOptionalNumber(input.intensity, "reflection capture intensity", 0, 4);
+  if (intensity !== undefined) capture.intensity = intensity;
+  const resolution = validateOptionalNumber(
+    input.resolution,
+    "reflection capture resolution",
+    16,
+    2048,
+  );
+  if (resolution !== undefined) capture.resolution = resolution;
+  const near = validateOptionalNumber(input.near, "reflection capture near", 0.001, 1000);
+  if (near !== undefined) capture.near = near;
+  const far = validateOptionalNumber(input.far, "reflection capture far", 0.1, 100000);
+  if (far !== undefined) capture.far = far;
+  if (input.parallax === true) capture.parallax = true;
+  const priority = validateOptionalNumber(input.priority, "reflection capture priority", -100, 100);
+  if (priority !== undefined) capture.priority = priority;
+  return capture;
+}
+
+/**
  * Allowlist validator for the singleton Sky Atmosphere actor. Every field that
  * survives a save is copied explicitly; omitted/out-of-range values are dropped
  * so the runtime falls back to {@link resolveSkyAtmosphere} defaults. Returns null
@@ -803,6 +858,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("reflectionPlanes must be an array");
         })();
+  const reflectionCaptures = layout.reflectionCaptures === undefined
+    ? null
+    : Array.isArray(layout.reflectionCaptures)
+      ? layout.reflectionCaptures.map(validateSphereReflectionCapture)
+      : (() => {
+          throw new Error("reflectionCaptures must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -863,6 +925,7 @@ export function validateLayout(value: unknown): unknown {
   if (postProcess) output.postProcess = postProcess;
   if (lights) output.lights = lights;
   if (reflectionPlanes) output.reflectionPlanes = reflectionPlanes;
+  if (reflectionCaptures) output.reflectionCaptures = reflectionCaptures;
   if (actors) output.actors = actors;
   return output;
 }

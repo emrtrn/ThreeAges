@@ -119,6 +119,16 @@ import {
   type ReflectionPlaneObject,
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
+import {
+  applySphereReflectionCaptureTransform,
+  createSphereReflectionCaptureObject,
+  disposeSphereReflectionCaptureObject,
+  resolveSphereReflectionCapture,
+  uniqueSphereReflectionCaptureId,
+  uniqueSphereReflectionCaptureName,
+  type SphereReflectionCaptureObject,
+  type SphereReflectionCaptureRenderItem,
+} from "@engine/render-three/reflectionCapture";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   applySceneBackgroundAndAmbient,
@@ -186,6 +196,7 @@ import type {
   LayoutReflection,
   LayoutReflectionPlane,
   LayoutSkyAtmosphere,
+  LayoutSphereReflectionCapture,
   LayoutWorldSettings,
   MetadataValue,
   RoomLayout,
@@ -220,6 +231,7 @@ import {
   cloneLightActor,
   clonePlacement,
   cloneReflectionPlane,
+  cloneSphereReflectionCapture,
   lightActorsEqual,
   transformsEqual,
 } from "@editor/core/layoutSnapshots";
@@ -367,6 +379,8 @@ export class SceneApp {
   private reflectionTarget: WebGLRenderTarget | null = null;
   /** Live `Reflector` meshes for placed Planar Reflection actors, by index. */
   private reflectionPlaneObjects: ReflectionPlaneObject[] = [];
+  /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
+  private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
   private postProcessPipeline: PostProcessPipeline | null = null;
   private autoSaveTimer = 0;
   private frameHandle = 0;
@@ -564,6 +578,7 @@ export class SceneApp {
         objects.push(...this.actorObjects);
         for (const record of this.lightObjects) objects.push(record.root);
         objects.push(...this.reflectionPlaneObjects);
+        objects.push(...this.reflectionCaptureObjects);
         return objects;
       },
       surfacePickables: () => {
@@ -1512,6 +1527,13 @@ export class SceneApp {
       this.removeReflectionPlane(this.selection.index);
       return;
     }
+    if (
+      this.selection?.kind === "reflectionCapture" &&
+      this.editorSceneController.selectedCount <= 1
+    ) {
+      this.removeReflectionCapture(this.selection.index);
+      return;
+    }
     this.editorSceneController.deleteSelected();
   }
 
@@ -1564,7 +1586,11 @@ export class SceneApp {
    * gizmos act around). Does not move the object — only where the gizmo sits.
    */
   setSelectionPivot(pivot: Vec3): void {
-    if (!this.selection || this.selection.kind === "light") {
+    if (
+      !this.selection ||
+      this.selection.kind === "light" ||
+      this.selection.kind === "reflectionCapture"
+    ) {
       this.onStatus?.("This selection has no pivot.", "warning");
       return;
     }
@@ -1961,6 +1987,7 @@ export class SceneApp {
     this.applyCloudLayer();
     this.applyReflection(true);
     this.buildReflectionPlanes();
+    this.buildReflectionCaptures();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
     this.emitHistoryChanged();
@@ -2189,6 +2216,11 @@ export class SceneApp {
 
     if (selection.kind === "reflectionPlane") {
       this.refreshReflectionPlaneObject(selection.index);
+      return;
+    }
+
+    if (selection.kind === "reflectionCapture") {
+      this.refreshReflectionCaptureObject(selection.index);
       return;
     }
 
@@ -2681,6 +2713,183 @@ export class SceneApp {
   setSelectedReflectionPlane(patch: { color?: string; resolution?: number | undefined }): void {
     if (this.selection?.kind !== "reflectionPlane") return;
     this.setReflectionPlane(this.selection.index, patch);
+  }
+
+  // --- Sphere Reflection Capture (probe) actors ----------------------------
+
+  /** Resolved settings + world transform for a reflection-capture layout actor. */
+  private reflectionCaptureItem(
+    actor: LayoutSphereReflectionCapture,
+  ): SphereReflectionCaptureRenderItem {
+    return {
+      ...resolveSphereReflectionCapture(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+    };
+  }
+
+  /** Rebuilds every capture helper from `layout.reflectionCaptures` (used on load). */
+  private buildReflectionCaptures(): void {
+    for (const helper of this.reflectionCaptureObjects) {
+      this.scene.remove(helper);
+      disposeSphereReflectionCaptureObject(helper);
+    }
+    this.reflectionCaptureObjects = [];
+    const captures = this.layout?.reflectionCaptures ?? [];
+    captures.forEach((actor, index) => {
+      const helper = createSphereReflectionCaptureObject(this.reflectionCaptureItem(actor));
+      helper.userData.reflectionCaptureIndex = index;
+      this.reflectionCaptureObjects.push(helper);
+      this.scene.add(helper);
+    });
+  }
+
+  /** Cheap transform/visibility/radius sync for one capture helper (gizmo drag + radius edit). */
+  private refreshReflectionCaptureObject(index: number): void {
+    const actor = this.layout?.reflectionCaptures?.[index];
+    const helper = this.reflectionCaptureObjects[index];
+    if (!actor || !helper) return;
+    applySphereReflectionCaptureTransform(helper, this.reflectionCaptureItem(actor));
+  }
+
+  private refreshReflectionCaptureIndices(): void {
+    this.reflectionCaptureObjects.forEach((helper, index) => {
+      helper.userData.reflectionCaptureIndex = index;
+    });
+  }
+
+  private insertReflectionCapture(index: number, actor: LayoutSphereReflectionCapture): void {
+    if (!this.layout) return;
+    this.layout.reflectionCaptures ??= [];
+    const insertionIndex = clampIndex(index, this.layout.reflectionCaptures.length);
+    this.layout.reflectionCaptures.splice(insertionIndex, 0, cloneSphereReflectionCapture(actor));
+    const helper = createSphereReflectionCaptureObject(this.reflectionCaptureItem(actor));
+    this.reflectionCaptureObjects.splice(insertionIndex, 0, helper);
+    this.scene.add(helper);
+    this.refreshReflectionCaptureIndices();
+  }
+
+  private removeReflectionCaptureAt(index: number): LayoutSphereReflectionCapture | null {
+    if (!this.layout?.reflectionCaptures) return null;
+    const [removed] = this.layout.reflectionCaptures.splice(index, 1);
+    const [helper] = this.reflectionCaptureObjects.splice(index, 1);
+    if (helper) {
+      this.scene.remove(helper);
+      disposeSphereReflectionCaptureObject(helper);
+    }
+    this.refreshReflectionCaptureIndices();
+    return removed ? cloneSphereReflectionCapture(removed) : null;
+  }
+
+  /** Adds a Sphere Reflection Capture probe (default radius) and selects it. */
+  addReflectionCapture(): void {
+    if (!this.layout) return;
+    const captures = this.layout.reflectionCaptures ?? [];
+    const actor: LayoutSphereReflectionCapture = {
+      id: uniqueSphereReflectionCaptureId(captures),
+      name: uniqueSphereReflectionCaptureName("Sphere Reflection Capture", captures),
+      position: [0, 2, 0],
+    };
+    const index = captures.length;
+    this.executeCommand({
+      label: "Add Sphere Reflection Capture",
+      redo: () => {
+        this.insertReflectionCapture(index, actor);
+        this.select({ kind: "reflectionCapture", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.removeReflectionCaptureAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Added Sphere Reflection Capture.", "info");
+  }
+
+  /** Removes a Sphere Reflection Capture probe (undoable). */
+  removeReflectionCapture(index: number): void {
+    const actor = this.layout?.reflectionCaptures?.[index];
+    if (!actor) return;
+    const snapshot = cloneSphereReflectionCapture(actor);
+    this.executeCommand({
+      label: "Delete Sphere Reflection Capture",
+      redo: () => {
+        this.removeReflectionCaptureAt(index);
+        if (this.selection?.kind === "reflectionCapture") this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.insertReflectionCapture(index, snapshot);
+        this.select({ kind: "reflectionCapture", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+  }
+
+  /**
+   * Applies a partial probe-property edit (radius/intensity/resolution/near/far/
+   * parallax/priority) to a reflection capture as one undoable command. Transform/
+   * name/hidden edits flow through the generic selection pipeline; a radius change
+   * just re-syncs the helper scale.
+   */
+  setReflectionCapture(
+    index: number,
+    patch: {
+      radius?: number;
+      intensity?: number;
+      resolution?: number;
+      near?: number;
+      far?: number;
+      parallax?: boolean;
+      priority?: number;
+    },
+    label = "Edit Sphere Reflection Capture",
+  ): void {
+    const actor = this.layout?.reflectionCaptures?.[index];
+    if (!actor) return;
+    const previous = cloneSphereReflectionCapture(actor);
+    const next = cloneSphereReflectionCapture(actor);
+    if (patch.radius !== undefined) next.radius = patch.radius;
+    if (patch.intensity !== undefined) next.intensity = patch.intensity;
+    if (patch.resolution !== undefined) next.resolution = patch.resolution;
+    if (patch.near !== undefined) next.near = patch.near;
+    if (patch.far !== undefined) next.far = patch.far;
+    if (patch.parallax !== undefined) next.parallax = patch.parallax;
+    if (patch.priority !== undefined) next.priority = patch.priority;
+
+    const apply = (value: LayoutSphereReflectionCapture): void => {
+      if (!this.layout?.reflectionCaptures?.[index]) return;
+      this.layout.reflectionCaptures[index] = cloneSphereReflectionCapture(value);
+      this.refreshReflectionCaptureObject(index);
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(next),
+      undo: () => apply(previous),
+    });
+  }
+
+  /** Edits the currently selected reflection capture's probe settings (Details panel). */
+  setSelectedReflectionCapture(patch: {
+    radius?: number;
+    intensity?: number;
+    resolution?: number;
+    near?: number;
+    far?: number;
+    parallax?: boolean;
+    priority?: number;
+  }): void {
+    if (this.selection?.kind !== "reflectionCapture") return;
+    this.setReflectionCapture(this.selection.index, patch);
   }
 
   private duplicateSelectionForDrag(selection: Selection): Selection | null {
@@ -3473,6 +3682,16 @@ export class SceneApp {
       if (object && actor) object.visible = !(actor.hidden ?? false);
       return;
     }
+    // Placed reflection actors carry their visibility in the render-item transform,
+    // so re-sync the helper/reflector to pick up the new hidden flag.
+    if (selection.kind === "reflectionPlane") {
+      this.refreshReflectionPlaneObject(selection.index);
+      return;
+    }
+    if (selection.kind === "reflectionCapture") {
+      this.refreshReflectionCaptureObject(selection.index);
+      return;
+    }
     // The Sky Atmosphere's visibility is applied through applySkyAtmosphere().
     if (selection.kind === "sky") {
       this.applySkyAtmosphere();
@@ -3950,6 +4169,10 @@ export class SceneApp {
       if (!options.includeHidden && plane.hidden) return;
       selections.push({ kind: "reflectionPlane", index });
     });
+    this.layout.reflectionCaptures?.forEach((capture, index) => {
+      if (!options.includeHidden && capture.hidden) return;
+      selections.push({ kind: "reflectionCapture", index });
+    });
     return selections;
   }
 
@@ -3972,6 +4195,11 @@ export class SceneApp {
     if (selection.kind === "reflectionPlane") {
       return resolveReflectionPlane(this.layout?.reflectionPlanes?.[selection.index] ?? null).name;
     }
+    if (selection.kind === "reflectionCapture") {
+      return resolveSphereReflectionCapture(
+        this.layout?.reflectionCaptures?.[selection.index] ?? null,
+      ).name;
+    }
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
       return transform?.name ?? selection.assetId;
@@ -3990,7 +4218,13 @@ export class SceneApp {
 
   /** The active selection's local authoring pivot (`[0,0,0]` when none / light). */
   private getSelectionPivot(selection: Selection): Vec3 {
-    if (selection.kind === "light" || selection.kind === "actor") return [0, 0, 0];
+    if (
+      selection.kind === "light" ||
+      selection.kind === "actor" ||
+      selection.kind === "reflectionCapture"
+    ) {
+      return [0, 0, 0];
+    }
     const transform = this.getMutableTransform(selection) as
       | LayoutPlacement
       | LayoutCharacter
@@ -4033,6 +4267,10 @@ export class SceneApp {
     if (selection.kind === "reflectionPlane") {
       const reflector = this.reflectionPlaneObjects[selection.index];
       return reflector ? new Box3().setFromObject(reflector) : null;
+    }
+    if (selection.kind === "reflectionCapture") {
+      const helper = this.reflectionCaptureObjects[selection.index];
+      return helper ? new Box3().setFromObject(helper) : null;
     }
     // Environment singletons have no transform bounds.
     if (
@@ -4084,6 +4322,13 @@ export class SceneApp {
       const actor = this.layout.reflectionPlanes?.[selection.index];
       if (!reflector || actor?.hidden) return null;
       return this.selectionOutline.cloneRenderableMeshes(reflector);
+    }
+
+    if (selection.kind === "reflectionCapture") {
+      const helper = this.reflectionCaptureObjects[selection.index];
+      const actor = this.layout.reflectionCaptures?.[selection.index];
+      if (!helper || actor?.hidden) return null;
+      return this.selectionOutline.cloneRenderableMeshes(helper);
     }
 
     if (selection.kind === "light") {
@@ -4370,6 +4615,7 @@ export class SceneApp {
     | LayoutLightActor
     | LayoutActorInstance
     | LayoutReflectionPlane
+    | LayoutSphereReflectionCapture
     | null {
     if (!this.layout) return null;
     if (selection.kind === "instance") {
@@ -4380,6 +4626,9 @@ export class SceneApp {
     if (selection.kind === "actor") return this.layout.actors?.[selection.index] ?? null;
     if (selection.kind === "reflectionPlane") {
       return this.layout.reflectionPlanes?.[selection.index] ?? null;
+    }
+    if (selection.kind === "reflectionCapture") {
+      return this.layout.reflectionCaptures?.[selection.index] ?? null;
     }
     // Environment singletons are transform-less (no gizmo / move target).
     if (
@@ -4401,7 +4650,7 @@ export class SceneApp {
       position: [...transform.position],
       rotation: readRotation(transform),
       scale:
-        selection.kind === "light"
+        selection.kind === "light" || selection.kind === "reflectionCapture"
           ? [1, 1, 1]
           : readScale(transform as LayoutPlacement | LayoutCharacter | LayoutActorInstance),
     };
@@ -4413,7 +4662,9 @@ export class SceneApp {
     if (!transform) return;
     transform.position = [...values.position];
     writeRotation(transform, values.rotation);
-    writeScale(transform, values.scale);
+    // A Sphere Reflection Capture has no meaningful scale (its size is the
+    // `radius`), so never write a phantom `scale` field onto it.
+    if (selection.kind !== "reflectionCapture") writeScale(transform, values.scale);
     this.refreshSelectionObject(selection);
     this.updateSelectionBox();
     this.updateGizmo();
@@ -4553,6 +4804,9 @@ export class SceneApp {
     if (selection.kind === "post") return Boolean(this.layout.postProcess);
     if (selection.kind === "reflectionPlane") {
       return Boolean(this.layout.reflectionPlanes?.[selection.index]);
+    }
+    if (selection.kind === "reflectionCapture") {
+      return Boolean(this.layout.reflectionCaptures?.[selection.index]);
     }
     return Boolean(this.layout.characters[selection.index]);
   }

@@ -234,7 +234,7 @@
     "bloom": {
       "enabled": true,
       "threshold": 1,
-      "intensity": 1,
+      "intensity": 0.5,
       "radius": 1
     },
     "vignette": {
@@ -265,6 +265,18 @@
     }
   ],
   "reflectionPlanes": [],
+  "reflectionCaptures": [
+    {
+      "id": "reflection-capture-1",
+      "position": [
+        0.58,
+        0.75,
+        1.55
+      ],
+      "name": "Sphere Reflection Capture",
+      "radius": 4
+    }
+  ],
   "actors": [
     {
       "classRef": "assets/starter-content/Script/Script_Lamp.actor.json",

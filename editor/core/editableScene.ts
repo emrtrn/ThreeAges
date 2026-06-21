@@ -78,6 +78,24 @@ export interface EditableReflection {
   intensity: number;
 }
 
+/**
+ * Resolved Sphere Reflection Capture fields for the Details panel. Unlike the
+ * environment singletons this is a placed actor with a transform; these
+ * probe-specific settings ride alongside the transform in
+ * {@link EditableSelection.reflectionCapture}.
+ */
+export interface EditableReflectionCapture {
+  name: string;
+  hidden: boolean;
+  radius: number;
+  intensity: number;
+  resolution: number;
+  near: number;
+  far: number;
+  parallax: boolean;
+  priority: number;
+}
+
 /** Resolved global Post Process fields for the Details panel. */
 export interface EditablePostProcess {
   name: string;
@@ -152,6 +170,8 @@ export interface EditableSelection {
   cloud?: EditableCloud;
   /** Resolved Reflection Environment settings; present only when `kind === "reflection"`. */
   reflection?: EditableReflection;
+  /** Resolved Sphere Reflection Capture settings; present only when `kind === "reflectionCapture"`. */
+  reflectionCapture?: EditableReflectionCapture;
   /** Resolved Post Process settings; present only when `kind === "post"`. */
   post?: EditablePostProcess;
 }

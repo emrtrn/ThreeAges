@@ -85,6 +85,9 @@ import {
 
 type InspectorTab = "details" | "world";
 
+/** Numeric Sphere Reflection Capture probe fields editable from the Details panel. */
+type CaptureNumericKey = "radius" | "intensity" | "resolution" | "near" | "far" | "priority";
+
 const DEFAULT_LINEAR_DAMPING = 0.12;
 const DEFAULT_ANGULAR_DAMPING = 0.45;
 const PHYSICS_AXIS_LABELS = ["X", "Y", "Z"] as const;
@@ -313,6 +316,7 @@ export class EditorUi {
               <button type="button" data-add-cloud-layer>Cloud Layer</button>
               <button type="button" data-add-reflection>Reflection Environment</button>
               <button type="button" data-add-reflection-plane>Reflection Plane</button>
+              <button type="button" data-add-reflection-capture>Sphere Reflection Capture</button>
               <button type="button" data-add-post-process>Post Process</button>
               <div class="add-actor-section-title">Gameplay</div>
               <button type="button" data-add-player-start>Player Start</button>
@@ -609,6 +613,13 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-reflection-plane]")
       ?.addEventListener("click", () => {
         this.app.addReflectionPlane();
+      });
+
+    // Sphere Reflection Capture (probe) is a placed actor with a transform.
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-reflection-capture]")
+      ?.addEventListener("click", () => {
+        this.app.addReflectionCapture();
       });
 
     // Post Process is a transform-less singleton environment actor.
@@ -2240,6 +2251,10 @@ export class EditorUi {
       this.renderReflectionPlaneDetails(selection);
       return;
     }
+    if (selection.kind === "reflectionCapture" && selection.reflectionCapture) {
+      this.renderReflectionCaptureDetails(selection);
+      return;
+    }
 
     this.detailsScale = [...selection.scale];
 
@@ -2816,6 +2831,7 @@ export class EditorUi {
       selection.kind === "cloud" ||
       selection.kind === "reflection" ||
       selection.kind === "reflectionPlane" ||
+      selection.kind === "reflectionCapture" ||
       selection.kind === "post"
     ) {
       return "";
@@ -2999,6 +3015,7 @@ export class EditorUi {
       this.selected.kind === "cloud" ||
       this.selected.kind === "reflection" ||
       this.selected.kind === "reflectionPlane" ||
+      this.selected.kind === "reflectionCapture" ||
       this.selected.kind === "post"
     ) {
       return null;
@@ -3244,6 +3261,125 @@ export class EditorUi {
         const value = Number((event.currentTarget as HTMLSelectElement).value);
         if (!Number.isFinite(value)) return;
         this.app.setSelectedReflectionPlane({ resolution: value });
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-detail-toggle]")
+      .forEach((toggle) => {
+        toggle.addEventListener("change", () =>
+          this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
+        );
+      });
+  }
+
+  /**
+   * Details panel for a placed Sphere Reflection Capture (probe) actor: a Location
+   * transform plus a Reflection Capture section for the probe radius / resolution /
+   * intensity / near-far / priority. There is no rotation or scale — the influence
+   * size is the radius. Parallax is a later phase and shown disabled.
+   */
+  private renderReflectionCaptureDetails(selection: EditableSelection): void {
+    const capture = selection.reflectionCapture;
+    if (!capture) return;
+    this.detailsScale = [...selection.scale];
+    const lockedAttr = selection.locked ? "disabled" : "";
+    const resolutions = [64, 128, 256, 512, 1024];
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>reflection / sphere capture</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="Sphere Reflection Capture" />
+      </label>
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+      <div class="detail-section">
+        <div class="detail-section-title">Reflection Capture</div>
+        <label class="detail-row">
+          <span>Radius</span>
+          <input data-capture-field="radius" type="number" min="0.1" step="0.1"
+            value="${capture.radius}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Resolution</span>
+          <select data-capture-field="resolution" ${lockedAttr}>
+            ${resolutions
+              .map(
+                (res) =>
+                  `<option value="${res}" ${
+                    capture.resolution === res ? "selected" : ""
+                  }>${res}px</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+        <label class="detail-row">
+          <span>Intensity</span>
+          <input data-capture-field="intensity" type="number" min="0" max="4" step="0.05"
+            value="${capture.intensity}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Near</span>
+          <input data-capture-field="near" type="number" min="0.001" step="0.1"
+            value="${capture.near}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Far</span>
+          <input data-capture-field="far" type="number" min="0.1" step="1"
+            value="${capture.far}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Priority</span>
+          <input data-capture-field="priority" type="number" step="1"
+            value="${capture.priority}" ${lockedAttr} />
+        </label>
+        <label class="detail-toggle">
+          <input type="checkbox" data-capture-field="parallax"
+            ${capture.parallax ? "checked" : ""} disabled />
+          <span>Parallax Correction (planned)</span>
+        </label>
+        <div class="detail-hint">Surfaces within the radius use this probe's local capture.</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Actor</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
+          <span>Lock Movement</span>
+        </label>
+      </div>
+    `;
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>('input[data-detail="pr"]')
+      .forEach((input) => {
+        input.addEventListener("focus", () => this.beginDetailsEdit());
+        input.addEventListener("input", () => {
+          this.beginDetailsEdit();
+          this.applyDetails();
+        });
+        input.addEventListener("change", () => this.commitDetailsEdit());
+      });
+
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-detail-name]");
+    nameInput?.addEventListener("change", () => {
+      this.app.renameSceneObject(selection.id, nameInput.value);
+    });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-capture-field]")
+      .forEach((field) => {
+        field.addEventListener("change", () => {
+          const key = field.dataset.captureField as CaptureNumericKey | "parallax" | undefined;
+          // Parallax is a later phase: the checkbox is disabled and never edited.
+          if (!key || key === "parallax") return;
+          const value = Number(field.value);
+          if (!Number.isFinite(value)) return;
+          const patch: Partial<Record<CaptureNumericKey, number>> = {};
+          patch[key] = value;
+          this.app.setSelectedReflectionCapture(patch);
+        });
       });
 
     this.detailsBody
@@ -4107,6 +4243,7 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "cloud") return "K";
   if (kind === "reflection") return "R";
   if (kind === "reflectionPlane") return "M";
+  if (kind === "reflectionCapture") return "O";
   if (kind === "post") return "P";
   return "I";
 }

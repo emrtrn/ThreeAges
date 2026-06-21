@@ -160,6 +160,7 @@ import {
   validateCloudLayer,
   validateReflection,
   validateReflectionPlane,
+  validateSphereReflectionCapture,
   validatePostProcess,
   validateSaveActorPayload,
   validateNewBehaviorPayload,
@@ -242,6 +243,14 @@ import {
   uniqueReflectionPlaneName,
   REFLECTION_PLANE_DEFAULTS,
 } from "../engine/render-three/reflectionPlane";
+import {
+  applySphereReflectionCaptureTransform,
+  createSphereReflectionCaptureObject,
+  resolveSphereReflectionCapture,
+  uniqueSphereReflectionCaptureId,
+  uniqueSphereReflectionCaptureName,
+  SPHERE_REFLECTION_CAPTURE_DEFAULTS,
+} from "../engine/render-three/reflectionCapture";
 import {
   COLLISION_CHANNELS,
   COLLISION_OBJECT_CHANNEL_BITS,
@@ -5688,6 +5697,111 @@ check("validateReflectionPlane allowlists fields and round-trips through validat
     reflectionPlanes: [{ id: "rp1", position: [0, 0, 0] }],
   }) as RoomLayout;
   assert.deepEqual(layout.reflectionPlanes, [{ id: "rp1", position: [0, 0, 0] }]);
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("resolveSphereReflectionCapture fills defaults and overrides per field", () => {
+  assert.deepEqual(resolveSphereReflectionCapture(null), SPHERE_REFLECTION_CAPTURE_DEFAULTS);
+  assert.deepEqual(resolveSphereReflectionCapture(undefined), SPHERE_REFLECTION_CAPTURE_DEFAULTS);
+  const resolved = resolveSphereReflectionCapture({
+    id: "rc",
+    position: [0, 0, 0],
+    radius: 8,
+    intensity: 1.5,
+    resolution: 512,
+    priority: 3,
+  });
+  assert.equal(resolved.radius, 8);
+  assert.equal(resolved.intensity, 1.5);
+  assert.equal(resolved.resolution, 512);
+  assert.equal(resolved.priority, 3);
+  // Unset fields fall back to defaults.
+  assert.equal(resolved.near, SPHERE_REFLECTION_CAPTURE_DEFAULTS.near);
+  assert.equal(resolved.far, SPHERE_REFLECTION_CAPTURE_DEFAULTS.far);
+  assert.equal(resolved.parallax, SPHERE_REFLECTION_CAPTURE_DEFAULTS.parallax);
+  assert.equal(resolved.name, SPHERE_REFLECTION_CAPTURE_DEFAULTS.name);
+});
+
+check("uniqueSphereReflectionCaptureId/Name avoid collisions", () => {
+  const captures = [
+    { id: "reflection-capture-1", name: "Sphere Reflection Capture", position: [0, 0, 0] as const },
+  ];
+  assert.equal(uniqueSphereReflectionCaptureId(captures), "reflection-capture-2");
+  assert.equal(
+    uniqueSphereReflectionCaptureName("Sphere Reflection Capture", captures),
+    "Sphere Reflection Capture 2",
+  );
+});
+
+check("createSphereReflectionCaptureObject builds a helper scaled by radius", () => {
+  const item = {
+    name: "Probe",
+    hidden: false,
+    radius: 5,
+    intensity: 1,
+    resolution: 256,
+    near: 0.1,
+    far: 100,
+    parallax: false,
+    priority: 0,
+    position: [1, 2, 3] as [number, number, number],
+    rotation: [0, 0, 0] as [number, number, number],
+  };
+  const helper = createSphereReflectionCaptureObject(item);
+  assert.equal(helper.name, "Probe");
+  assert.equal(helper.position.x, 1);
+  // Radius maps to a uniform scale on the unit sphere.
+  assert.equal(helper.scale.x, 5);
+  assert.equal(helper.visible, true);
+  // Hidden hides the helper and a radius change re-scales it via the shared path.
+  applySphereReflectionCaptureTransform(helper, { ...item, hidden: true, radius: 9 });
+  assert.equal(helper.visible, false);
+  assert.equal(helper.scale.x, 9);
+});
+
+check("validateSphereReflectionCapture allowlists fields and round-trips through validateLayout", () => {
+  const capture = validateSphereReflectionCapture({
+    id: "rc1",
+    position: [1, 2, 3],
+    name: "Probe",
+    rotation: [0, 45, 0],
+    radius: 8,
+    intensity: 1.5,
+    resolution: 512,
+    near: 0.5,
+    far: 80,
+    parallax: true,
+    priority: 2,
+    bogusField: "dropped",
+  });
+  assert.deepEqual(capture, {
+    id: "rc1",
+    position: [1, 2, 3],
+    name: "Probe",
+    rotation: [0, 45, 0],
+    radius: 8,
+    intensity: 1.5,
+    resolution: 512,
+    near: 0.5,
+    far: 80,
+    parallax: true,
+    priority: 2,
+  });
+  // A missing id rejects; out-of-range radius rejects the save.
+  assert.throws(() => validateSphereReflectionCapture({ position: [0, 0, 0] }));
+  assert.throws(() =>
+    validateSphereReflectionCapture({ id: "x", position: [0, 0, 0], radius: 9999 }),
+  );
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithCapture",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    reflectionCaptures: [{ id: "rc1", position: [0, 0, 0] }],
+  }) as RoomLayout;
+  assert.deepEqual(layout.reflectionCaptures, [{ id: "rc1", position: [0, 0, 0] }]);
   assert.deepEqual(validateLayout(layout), layout);
 });
 
