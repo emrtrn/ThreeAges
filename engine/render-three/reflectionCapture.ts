@@ -8,6 +8,7 @@ import {
   NoToneMapping,
   PMREMGenerator,
   SphereGeometry,
+  Vector3,
   WebGLCubeRenderTarget,
   type Material,
   type Object3D,
@@ -112,6 +113,8 @@ export interface SphereReflectionCaptureBake {
   priority: number;
   /** Cubemap face resolution this was baked at (lets the owner detect rebake-on-resolution). */
   resolution: number;
+  /** Whether covered surfaces get local sphere parallax correction (Faz 4). */
+  parallax: boolean;
 }
 
 /**
@@ -153,6 +156,7 @@ export function bakeSphereReflectionCapture(
     intensity: item.intensity,
     priority: item.priority,
     resolution: item.resolution,
+    parallax: item.parallax,
   };
 }
 
@@ -166,10 +170,87 @@ function isProbeEnvMaterial(material: Material): material is MeshStandardMateria
   return material instanceof MeshStandardMaterial;
 }
 
+/** The shader param object three.js hands `onBeforeCompile` (uniforms + GLSL sources). */
+type ShaderPatch = Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
+
+/**
+ * `customProgramCacheKey` value for parallax-corrected materials. All parallax
+ * clones share one compiled program (same GLSL); the per-probe position/radius
+ * ride in as uniforms, so they stay distinct per material. This key only has to
+ * differ from the stock standard/physical key so the patched program is not
+ * confused with an unpatched one in three.js' program cache.
+ */
+const PARALLAX_CACHE_KEY = "forge-reflection-capture-parallax";
+
+/** Vertex-shader anchor after which `worldPosition` is in scope (USE_ENVMAP is set). */
+const PARALLAX_WORLDPOS_ANCHOR = "#include <worldpos_vertex>";
+/** Fragment-shader anchor: `reflectVec` is the world-space reflection dir right here. */
+const PARALLAX_REFLECT_ANCHOR =
+  "reflectVec = inverseTransformDirection( reflectVec, viewMatrix );";
+
+/** Forwards the fragment world position to the parallax correction. */
+const PARALLAX_VERTEX_ASSIGN = `${PARALLAX_WORLDPOS_ANCHOR}\n\tvCaptureWorldPos = worldPosition.xyz;`;
+
+/**
+ * Sphere-bounded parallax correction injected after `reflectVec` becomes the
+ * world-space reflection direction: intersect the reflection ray with the probe's
+ * influence sphere and re-aim the cubemap lookup at that hit. Without this the
+ * cubemap is sampled as if infinitely far (flat-looking on planar surfaces); with
+ * it the reflection tracks the fragment's position inside the probe sphere.
+ */
+const PARALLAX_FRAGMENT_CORRECTION = `${PARALLAX_REFLECT_ANCHOR}
+			{
+				vec3 captureToFrag = vCaptureWorldPos - captureProbePosition;
+				float captureB = dot( reflectVec, captureToFrag );
+				float captureC = dot( captureToFrag, captureToFrag ) - captureProbeRadius * captureProbeRadius;
+				float captureDisc = captureB * captureB - captureC;
+				if ( captureDisc > 0.0 ) {
+					float captureDist = - captureB + sqrt( captureDisc );
+					if ( captureDist > 0.0 ) {
+						reflectVec = normalize( vCaptureWorldPos + reflectVec * captureDist - captureProbePosition );
+					}
+				}
+			}`;
+
+/**
+ * Installs local sphere parallax correction on a probe-envMap material via
+ * `onBeforeCompile`: patches the standard shader so its IBL reflection lookup is
+ * re-aimed at the probe sphere using the fragment's world position. The probe
+ * `position`/`radius` ride in as uniforms (so all parallax clones share one
+ * program), and `customProgramCacheKey` keeps that program separate from the
+ * unpatched standard program. If the three.js shader anchors ever move the patch
+ * is skipped and the material degrades to a plain (non-parallax) envMap.
+ */
+function installParallaxCorrection(material: MeshStandardMaterial, position: Vec3, radius: number): void {
+  const probePosition = new Vector3(position[0], position[1], position[2]);
+  const probeRadius = Math.max(radius, 0.001);
+  material.onBeforeCompile = (shader: ShaderPatch) => {
+    if (
+      !shader.vertexShader.includes(PARALLAX_WORLDPOS_ANCHOR) ||
+      !shader.fragmentShader.includes(PARALLAX_REFLECT_ANCHOR)
+    ) {
+      return;
+    }
+    shader.uniforms.captureProbePosition = { value: probePosition };
+    shader.uniforms.captureProbeRadius = { value: probeRadius };
+    shader.vertexShader = `varying vec3 vCaptureWorldPos;\n${shader.vertexShader.replace(
+      PARALLAX_WORLDPOS_ANCHOR,
+      PARALLAX_VERTEX_ASSIGN,
+    )}`;
+    shader.fragmentShader = `uniform vec3 captureProbePosition;\nuniform float captureProbeRadius;\nvarying vec3 vCaptureWorldPos;\n${shader.fragmentShader.replace(
+      PARALLAX_REFLECT_ANCHOR,
+      PARALLAX_FRAGMENT_CORRECTION,
+    )}`;
+  };
+  material.customProgramCacheKey = () => PARALLAX_CACHE_KEY;
+  material.needsUpdate = true;
+}
+
 /**
  * Returns a material carrying the probe's local envMap: clones the standard `base`
  * material and assigns the PMREM texture + `envMapIntensity` (tracking the clone in
- * `clonedMaterials` for later disposal). Non-standard materials (e.g.
+ * `clonedMaterials` for later disposal). When the probe has `parallax` on, the clone
+ * also gets the sphere parallax shader patch. Non-standard materials (e.g.
  * `MeshBasicMaterial`) are returned unchanged. Shared by the editor + runtime
  * clone-fallback paths so a probe-covered surface samples the local capture.
  */
@@ -182,6 +263,7 @@ export function assignProbeEnvMapMaterial(
   const cloned = base.clone();
   cloned.envMap = bake.target.texture;
   cloned.envMapIntensity = bake.intensity;
+  if (bake.parallax) installParallaxCorrection(cloned, bake.position, bake.radius);
   cloned.needsUpdate = true;
   clonedMaterials.push(cloned);
   return cloned;

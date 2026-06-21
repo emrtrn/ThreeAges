@@ -275,7 +275,8 @@
       ],
       "name": "Sphere Reflection Capture",
       "radius": 6,
-      "resolution": 256
+      "resolution": 64,
+      "parallax": true
     }
   ],
   "actors": [

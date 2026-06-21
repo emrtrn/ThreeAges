@@ -366,17 +366,38 @@ Kabul:
 > de canlı (radius/intensity/priority cache scalar'ı güncellenir), near/far explicit
 > Recapture bekler. Material clone'ları rebuild/dispose'da serbest bırakılır.
 
-### Faz 4 - Parallax
+### Faz 4 - Parallax ✅ (tamamlandı)
 
-- [ ] `onBeforeCompile` shader patch prototipi.
-- [ ] Probe uniform'ları: position, radius, intensity.
-- [ ] `parallax` checkbox aktif et.
-- [ ] Basit düz yüzey ve oda test layout'u ile görsel doğrulama.
+- [x] `onBeforeCompile` shader patch prototipi. (`engine/render-three/reflectionCapture.ts`
+  `installParallaxCorrection`: standard shader'ın IBL `reflectVec`'ini probe küresiyle
+  kesiştirip yeniden yönlendiren ray-sphere düzeltmesi; vertex'te dünya pozisyonu
+  `vCaptureWorldPos` varying'i ile taşınır. Anchor'lar bulunamazsa patch sessizce atlanır.)
+- [x] Probe uniform'ları: position, radius, intensity. (`captureProbePosition` +
+  `captureProbeRadius` custom uniform; intensity stok `envMapIntensity` uniform'undan gelir —
+  yön düzeltmesini etkilemez. Tüm parallax klonları aynı programı paylaşsın diye
+  `customProgramCacheKey` sabit bir anahtar döner; probe değerleri uniform olarak ayrı kalır.)
+- [x] `parallax` checkbox aktif et. (`src/editor/EditorUi.ts` checkbox artık aktif;
+  `setSelectedReflectionCapture({ parallax })` → `setReflectionCapture` toggle anında
+  cache scalar'ını günceller ve `applyReflectionCaptureEnvMaps` ile materyalleri yeniden
+  klonlayıp patch'i ekler/kaldırır.)
+- [ ] Basit düz yüzey ve oda test layout'u ile görsel doğrulama. (Kod + birim testi hazır;
+  WebGL gerektiren görsel doğrulama editörde manuel yapılacak — `?editor`, probe ekle,
+  Parallax'ı aç/kapat.)
 
 Kabul:
 
-- Parallax açıkken local capture, object konumuna göre daha doğru yönlenir.
-- Parallax kapalıyken V3 öncesi stabil envMap davranışı korunur.
+- Parallax açıkken local capture, object konumuna göre daha doğru yönlenir. ✅ (kod yolu;
+  shader düzeltmesi fragment dünya pozisyonuna göre `reflectVec`'i probe küresine kilitler.)
+- Parallax kapalıyken V3 öncesi stabil envMap davranışı korunur. ✅ (parallax kapalı klon
+  patch almaz, stok program cache anahtarını korur — birim testi doğrular.)
+
+> Not: Parallax yalnızca specular IBL reflection vektörünü düzeltir (`getIBLRadiance`);
+> diffuse irradiance (`getIBLIrradiance`) küre projeksiyonu gerektirmediğinden dokunulmaz.
+> Düzeltme `MeshStandardMaterial` klonlarına `bake.parallax` true olduğunda
+> `assignProbeEnvMapMaterial` içinde uygulanır; editör + Play paylaşılan helper'lardan
+> geçtiği için parite otomatiktir. Patch `node_modules/three@0.184` shader anchor
+> string'lerine bağlıdır; three sürümü değişirse anchor kontrolü patch'i güvenle atlar
+> (plain envMap'e düşer).
 
 ### Faz 5 - Kalite / Unreal Benzeri Refinement
 

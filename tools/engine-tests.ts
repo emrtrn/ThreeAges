@@ -19,6 +19,7 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
   Texture,
+  type Material,
 } from "three";
 import {
   characterEntity,
@@ -256,6 +257,7 @@ import {
 } from "../engine/render-three/reflectionPlane";
 import {
   applySphereReflectionCaptureTransform,
+  assignProbeEnvMapMaterial,
   createSphereReflectionCaptureObject,
   disposeSphereReflectionCaptureBake,
   resolveSphereReflectionCapture,
@@ -6666,6 +6668,84 @@ check("disposeSphereReflectionCaptureBake frees the cached PMREM target", () => 
   } as unknown as SphereReflectionCaptureBake;
   disposeSphereReflectionCaptureBake(bake);
   assert.equal(disposed, 1);
+});
+
+check("assignProbeEnvMapMaterial clones standard mats; parallax patches the shader", () => {
+  const fakeTexture = { isTexture: true } as unknown;
+  const makeBake = (
+    parallax: boolean,
+    position: [number, number, number],
+  ): SphereReflectionCaptureBake =>
+    ({
+      target: { texture: fakeTexture },
+      position,
+      radius: 4,
+      intensity: 1.5,
+      priority: 0,
+      resolution: 256,
+      parallax,
+    }) as unknown as SphereReflectionCaptureBake;
+
+  // MeshBasicMaterial is not a probe-env material — returned as-is, never tracked.
+  const basic = new MeshBasicMaterial();
+  const basicTracked: Material[] = [];
+  assert.equal(assignProbeEnvMapMaterial(basic, makeBake(true, [0, 0, 0]), basicTracked), basic);
+  assert.equal(basicTracked.length, 0);
+
+  const base = new MeshStandardMaterial();
+
+  // Parallax off: a clone with the probe envMap + intensity and the stock program key.
+  const plainTracked: Material[] = [];
+  const plain = assignProbeEnvMapMaterial(
+    base,
+    makeBake(false, [0, 0, 0]),
+    plainTracked,
+  ) as MeshStandardMaterial;
+  assert.notEqual(plain, base);
+  assert.equal(plain.envMap, fakeTexture);
+  assert.equal(plain.envMapIntensity, 1.5);
+  // No parallax patch → same program cache key as an untouched standard material.
+  assert.equal(plain.customProgramCacheKey(), base.customProgramCacheKey());
+  assert.deepEqual(plainTracked, [plain]);
+
+  // Parallax on: a distinct, stable program key shared across probes; each clone's
+  // onBeforeCompile injects its own probe position/radius and rewrites both stages.
+  const tracked: Material[] = [];
+  const a = assignProbeEnvMapMaterial(base, makeBake(true, [2, 0, 0]), tracked) as MeshStandardMaterial;
+  const b = assignProbeEnvMapMaterial(base, makeBake(true, [-5, 1, 0]), tracked) as MeshStandardMaterial;
+  assert.notEqual(a.customProgramCacheKey(), plain.customProgramCacheKey());
+  assert.equal(a.customProgramCacheKey(), b.customProgramCacheKey());
+
+  const runPatch = (material: MeshStandardMaterial) => {
+    const shader = {
+      uniforms: {} as Record<string, { value: unknown }>,
+      vertexShader: "void main() {\n#include <worldpos_vertex>\n}",
+      fragmentShader:
+        "void main() {\nreflectVec = inverseTransformDirection( reflectVec, viewMatrix );\n}",
+    };
+    material.onBeforeCompile(shader as never, null as never);
+    return shader;
+  };
+
+  const shaderA = runPatch(a);
+  assert.equal((shaderA.uniforms.captureProbePosition?.value as { x: number }).x, 2);
+  assert.equal(shaderA.uniforms.captureProbeRadius?.value, 4);
+  assert.ok(shaderA.vertexShader.includes("vCaptureWorldPos = worldPosition.xyz;"));
+  assert.ok(shaderA.fragmentShader.includes("uniform vec3 captureProbePosition;"));
+  assert.ok(shaderA.fragmentShader.includes("reflectVec = normalize("));
+
+  const shaderB = runPatch(b);
+  assert.equal((shaderB.uniforms.captureProbePosition?.value as { x: number }).x, -5);
+
+  // The patch degrades gracefully (no-op) when the three.js shader anchors are gone.
+  const noAnchors = {
+    uniforms: {} as Record<string, { value: unknown }>,
+    vertexShader: "x",
+    fragmentShader: "y",
+  };
+  a.onBeforeCompile(noAnchors as never, null as never);
+  assert.equal(noAnchors.vertexShader, "x");
+  assert.equal(Object.keys(noAnchors.uniforms).length, 0);
 });
 
 check("validateSphereReflectionCapture allowlists fields and round-trips through validateLayout", () => {

@@ -3275,8 +3275,8 @@ export class EditorUi {
   /**
    * Details panel for a placed Sphere Reflection Capture (probe) actor: a Location
    * transform plus a Reflection Capture section for the probe radius / resolution /
-   * intensity / near-far / priority. There is no rotation or scale — the influence
-   * size is the radius. Parallax is a later phase and shown disabled.
+   * intensity / near-far / priority / parallax. There is no rotation or scale — the
+   * influence size is the radius.
    */
   private renderReflectionCaptureDetails(selection: EditableSelection): void {
     const capture = selection.reflectionCapture;
@@ -3337,8 +3337,8 @@ export class EditorUi {
         </label>
         <label class="detail-toggle">
           <input type="checkbox" data-capture-field="parallax"
-            ${capture.parallax ? "checked" : ""} disabled />
-          <span>Parallax Correction (planned)</span>
+            ${capture.parallax ? "checked" : ""} ${lockedAttr} />
+          <span>Parallax Correction</span>
         </label>
         <button type="button" data-capture-recapture class="detail-button">Recapture</button>
         <button type="button" data-capture-recapture-all class="detail-button">Recapture All</button>
@@ -3374,8 +3374,12 @@ export class EditorUi {
       .forEach((field) => {
         field.addEventListener("change", () => {
           const key = field.dataset.captureField as CaptureNumericKey | "parallax" | undefined;
-          // Parallax is a later phase: the checkbox is disabled and never edited.
-          if (!key || key === "parallax") return;
+          if (!key) return;
+          // Parallax is a boolean checkbox; the rest are numeric inputs/selects.
+          if (key === "parallax") {
+            this.app.setSelectedReflectionCapture({ parallax: (field as HTMLInputElement).checked });
+            return;
+          }
           const value = Number(field.value);
           if (!Number.isFinite(value)) return;
           const patch: Partial<Record<CaptureNumericKey, number>> = {};

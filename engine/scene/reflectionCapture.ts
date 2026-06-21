@@ -28,7 +28,7 @@ export interface ResolvedSphereReflectionCapture {
   near: number;
   /** CubeCamera far clip used when baking. */
   far: number;
-  /** Local parallax correction (V2+); Faz 1 keeps this off. */
+  /** Local sphere parallax correction for covered surfaces (Faz 4); default off. */
   parallax: boolean;
   /** Overlap tie-breaker: higher priority wins when two probes both cover a surface. */
   priority: number;

@@ -3072,9 +3072,10 @@ export class SceneApp {
       this.refreshReflectionCaptureObject(index);
       // Resolution is baked into the cube target, so a resolution change disposes
       // the old bake and re-captures (which re-assigns envMaps). Radius/intensity/
-      // priority feed selection + envMapIntensity, so refresh the cached bake scalars
-      // and re-assign live without a re-render; near/far only affect the cubemap and
-      // wait for an explicit Recapture.
+      // priority/parallax feed selection + envMap clones, so refresh the cached bake
+      // scalars and re-assign live without a re-render (parallax toggles the shader
+      // patch on the re-clone); near/far only affect the cubemap and wait for an
+      // explicit Recapture.
       const baked = this.reflectionCaptureBakes[index];
       const resolved = resolveSphereReflectionCapture(this.layout.reflectionCaptures[index]);
       if (!resolved.hidden && (!baked || baked.resolution !== resolved.resolution)) {
@@ -3083,6 +3084,7 @@ export class SceneApp {
         baked.radius = resolved.radius;
         baked.intensity = resolved.intensity;
         baked.priority = resolved.priority;
+        baked.parallax = resolved.parallax;
         this.applyReflectionCaptureEnvMaps();
       }
       this.emitSelectionChanged();
