@@ -41,7 +41,10 @@ import type { Subsystem } from "@engine/core/Subsystem";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
 import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
-import { BehaviorSubsystem } from "@engine/behavior/behaviorSubsystem";
+import {
+  BehaviorSubsystem,
+  type ScriptMessageDebugSnapshot,
+} from "@engine/behavior/behaviorSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
@@ -349,6 +352,7 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
 
 interface EditorOptions {
   enabled: boolean;
+  scriptMessageTraceLimit?: number;
 }
 
 export interface LayoutSavePayload {
@@ -634,6 +638,12 @@ export class SceneApp {
       this.syncEntityTransform,
       this.physicsSubsystem,
       this.audioSubsystem,
+      {
+        messageTraceLimit: options.scriptMessageTraceLimit ?? 0,
+        onMessageWarnings: (warnings) => {
+          this.onStatus?.(`Script message warning: ${warnings[0]?.message ?? "unknown"}`, "warning");
+        },
+      },
     );
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
@@ -719,6 +729,10 @@ export class SceneApp {
 
   getRenderStats(): { drawCalls: number; triangles: number } {
     return readSceneRuntimeStats(this.renderer);
+  }
+
+  getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot {
+    return this.behaviorSubsystem.getScriptMessageDebugSnapshot();
   }
 
   async getManifest(): Promise<AssetManifest> {

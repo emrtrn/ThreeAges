@@ -16,7 +16,10 @@ import { EngineApp } from "@engine/core/EngineApp";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
 import { ActionMap, type ActionBindings } from "@engine/input/actionMap";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
-import { BehaviorSubsystem } from "@engine/behavior/behaviorSubsystem";
+import {
+  BehaviorSubsystem,
+  type ScriptMessageDebugSnapshot,
+} from "@engine/behavior/behaviorSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
@@ -164,11 +167,14 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   ShiftRight: "sprint",
 };
 
-const TOGGLE_ACTOR_LIGHT_ACTION = "toggle-actor-light";
-
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
   getRenderStats(): { drawCalls: number; triangles: number };
+  getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot;
+}
+
+export interface RuntimeSceneAppOptions {
+  readonly scriptMessageTraceLimit?: number;
 }
 
 export class RuntimeSceneApp implements RuntimeStatsApp {
@@ -278,7 +284,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.physicsSubsystem.setEntityTransform(entityId, transform);
   };
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, options: RuntimeSceneAppOptions = {}) {
     const runtimeCore = createSceneRuntimeCore(canvas, {
       backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,
     });
@@ -303,15 +309,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           console.info("[runtime] goal reached", entityId);
         },
         onInteraction: (entityId, action) => {
-          if (action === TOGGLE_ACTOR_LIGHT_ACTION) {
-            this.toggleActorLight(entityId);
-            void this.playActorParticleEffect(entityId);
-            return;
-          }
           console.info("[runtime] interaction", action, entityId);
         },
         onInteractionOverlap: (entityId, action, prompt, overlapping) => {
           this.setInteractionPrompt(entityId, action, prompt, overlapping);
+        },
+        onActorLightToggle: (entityId, enabled) => {
+          this.setActorLightEnabled(entityId, enabled);
+        },
+        onActorParticleEffect: (entityId) => {
+          void this.playActorParticleEffect(entityId);
         },
         // The active Game Mode owns possession: only the pawn it possessed
         // (none, under the default camera mode) is driven by player input.
@@ -322,6 +329,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.syncEntityTransform,
       this.physicsSubsystem,
       this.audioSubsystem,
+      {
+        messageTraceLimit: options.scriptMessageTraceLimit ?? 0,
+        onMessageWarnings: (warnings) => {
+          for (const warning of warnings) {
+            console.warn("[script-message]", warning.message, warning.envelope ?? "");
+          }
+        },
+      },
     );
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
@@ -391,6 +406,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return readSceneRuntimeStats(this.renderer);
   }
 
+  getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot {
+    return this.behaviorSubsystem.getScriptMessageDebugSnapshot();
+  }
+
   private createInteractionPromptElement(): HTMLDivElement {
     const element = document.createElement("div");
     element.textContent = "Press E Key";
@@ -416,11 +435,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private setInteractionPrompt(
     entityId: string,
-    action: string,
+    _action: string,
     prompt: string | undefined,
     overlapping: boolean,
   ): void {
-    if (action !== TOGGLE_ACTOR_LIGHT_ACTION) return;
     if (overlapping) {
       this.activeInteractionPromptEntityId = entityId;
       this.interactionPromptElement.textContent = prompt?.trim() || "Press E Key";
@@ -851,7 +869,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return object;
   }
 
-  private toggleActorLight(entityId: string): void {
+  private setActorLightEnabled(entityId: string, enabled: boolean): void {
     const actorIndex = parseActorInstanceEntityIndex(entityId);
     if (actorIndex === null) return;
     const object = this.actorObjects.get(actorIndex);
@@ -862,7 +880,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     if (lights.length === 0) return;
 
-    const enabled = !lights.some((light) => light.visible && light.intensity > 0);
     for (const light of lights) {
       if (typeof light.userData.forgeToggleBaseIntensity !== "number") {
         light.userData.forgeToggleBaseIntensity = light.intensity > 0 ? light.intensity : 1;

@@ -12,6 +12,11 @@ export const COLLIDER_COMPONENT = "Collider";
 export const AUDIO_COMPONENT = "Audio";
 export const PARTICLE_EMITTER_COMPONENT = "ParticleEmitter";
 export const INTERACTION_COMPONENT = "Interaction";
+export const MESSAGE_BINDINGS_COMPONENT = "MessageBindings";
+export const SCRIPT_INTERFACES_COMPONENT = "ScriptInterfaces";
+export const SCRIPT_ACTOR_COMPONENT = "ScriptActor";
+export const SCRIPT_REFERENCES_COMPONENT = "ScriptReferences";
+export const SCRIPT_DISPATCHERS_COMPONENT = "ScriptDispatchers";
 
 export type SceneLightType = "directional" | "point" | "spot";
 export type ColliderShape = "box" | "sphere" | "capsule" | "cylinder" | "cone" | "convex";
@@ -52,6 +57,54 @@ export interface MetadataComponent {
 export interface BehaviorComponent {
   scriptId: string;
   params?: Record<string, SceneJsonValue>;
+}
+
+export type MessageBindingTarget = "self" | "any";
+
+export interface MessageBindingComponentEntry {
+  message: string;
+  scriptId: string;
+  params?: Record<string, SceneJsonValue>;
+  target: MessageBindingTarget;
+}
+
+export interface MessageBindingsComponent {
+  bindings: MessageBindingComponentEntry[];
+}
+
+export interface ScriptInterfacesComponent {
+  interfaces: string[];
+}
+
+export interface ScriptActorComponent {
+  classRef: string;
+  nodeId?: string;
+}
+
+export interface ScriptReferenceSelectorComponent {
+  byNodeId?: string;
+  byName?: string;
+  byTag?: string;
+  byClassRef?: string;
+  byInterface?: string;
+}
+
+export interface ScriptReferenceComponentEntry {
+  key: string;
+  selector: ScriptReferenceSelectorComponent;
+}
+
+export interface ScriptReferencesComponent {
+  references: ScriptReferenceComponentEntry[];
+}
+
+export interface ScriptDispatcherComponentEntry {
+  name: string;
+  payload: Record<string, string>;
+}
+
+export interface ScriptDispatchersComponent {
+  dispatchers: ScriptDispatcherComponentEntry[];
 }
 
 /**
@@ -212,6 +265,105 @@ export function readBehaviorComponent(entity: Entity): BehaviorComponent | undef
     component.params = { ...(params as Record<string, SceneJsonValue>) };
   }
   return component;
+}
+
+/** Reads runtime script message bindings from an entity. */
+export function readMessageBindingsComponent(entity: Entity): MessageBindingsComponent | undefined {
+  const data = entity.components[MESSAGE_BINDINGS_COMPONENT];
+  if (!data) return undefined;
+  const rawBindings = Array.isArray(data.bindings) ? data.bindings : [];
+  const bindings: MessageBindingComponentEntry[] = [];
+  for (const raw of rawBindings) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const record = raw as Record<string, SceneJsonValue>;
+    if (typeof record.message !== "string" || record.message.length === 0) continue;
+    if (typeof record.scriptId !== "string" || record.scriptId.length === 0) continue;
+    const binding: MessageBindingComponentEntry = {
+      message: record.message,
+      scriptId: record.scriptId,
+      target: record.target === "any" ? "any" : "self",
+    };
+    if (typeof record.params === "object" && record.params !== null && !Array.isArray(record.params)) {
+      binding.params = { ...(record.params as Record<string, SceneJsonValue>) };
+    }
+    bindings.push(binding);
+  }
+  return bindings.length > 0 ? { bindings } : undefined;
+}
+
+/** Reads interface/capability labels advertised by a script-authored entity. */
+export function readScriptInterfacesComponent(entity: Entity): ScriptInterfacesComponent | undefined {
+  const data = entity.components[SCRIPT_INTERFACES_COMPONENT];
+  if (!data || !Array.isArray(data.interfaces)) return undefined;
+  const interfaces = data.interfaces.filter(
+    (entry): entry is string => typeof entry === "string" && entry.length > 0,
+  );
+  return interfaces.length > 0 ? { interfaces } : undefined;
+}
+
+/** Reads placed Actor Script instance metadata used by world queries. */
+export function readScriptActorComponent(entity: Entity): ScriptActorComponent | undefined {
+  const data = entity.components[SCRIPT_ACTOR_COMPONENT];
+  if (!data || typeof data.classRef !== "string" || data.classRef.length === 0) return undefined;
+  const component: ScriptActorComponent = { classRef: data.classRef };
+  if (typeof data.nodeId === "string" && data.nodeId.length > 0) component.nodeId = data.nodeId;
+  return component;
+}
+
+function readScriptReferenceSelector(
+  value: SceneJsonValue | undefined,
+): ScriptReferenceSelectorComponent | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const input = value as Record<string, SceneJsonValue>;
+  const selector: ScriptReferenceSelectorComponent = {};
+  if (typeof input.byNodeId === "string" && input.byNodeId.length > 0) {
+    selector.byNodeId = input.byNodeId;
+  }
+  if (typeof input.byName === "string" && input.byName.length > 0) selector.byName = input.byName;
+  if (typeof input.byTag === "string" && input.byTag.length > 0) selector.byTag = input.byTag;
+  if (typeof input.byClassRef === "string" && input.byClassRef.length > 0) {
+    selector.byClassRef = input.byClassRef;
+  }
+  if (typeof input.byInterface === "string" && input.byInterface.length > 0) {
+    selector.byInterface = input.byInterface;
+  }
+  return Object.keys(selector).length > 0 ? selector : undefined;
+}
+
+/** Reads class-authored reference selectors from an entity. */
+export function readScriptReferencesComponent(entity: Entity): ScriptReferencesComponent | undefined {
+  const data = entity.components[SCRIPT_REFERENCES_COMPONENT];
+  if (!data || !Array.isArray(data.references)) return undefined;
+  const references: ScriptReferenceComponentEntry[] = [];
+  for (const raw of data.references) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const record = raw as Record<string, SceneJsonValue>;
+    if (typeof record.key !== "string" || record.key.length === 0) continue;
+    const selector = readScriptReferenceSelector(record.selector);
+    if (!selector) continue;
+    references.push({ key: record.key, selector });
+  }
+  return references.length > 0 ? { references } : undefined;
+}
+
+/** Reads message dispatcher metadata advertised by a script-authored entity. */
+export function readScriptDispatchersComponent(entity: Entity): ScriptDispatchersComponent | undefined {
+  const data = entity.components[SCRIPT_DISPATCHERS_COMPONENT];
+  if (!data || !Array.isArray(data.dispatchers)) return undefined;
+  const dispatchers: ScriptDispatcherComponentEntry[] = [];
+  for (const raw of data.dispatchers) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const record = raw as Record<string, SceneJsonValue>;
+    if (typeof record.name !== "string" || record.name.length === 0) continue;
+    const payload: Record<string, string> = {};
+    if (record.payload && typeof record.payload === "object" && !Array.isArray(record.payload)) {
+      for (const [key, value] of Object.entries(record.payload)) {
+        if (typeof value === "string" && value.length > 0) payload[key] = value;
+      }
+    }
+    dispatchers.push({ name: record.name, payload });
+  }
+  return dispatchers.length > 0 ? { dispatchers } : undefined;
 }
 
 const COLLIDER_SHAPES: readonly ColliderShape[] = [

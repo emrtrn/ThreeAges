@@ -204,63 +204,69 @@ AI tarafindan yazilan behavior:
 
 ### Faz 1 - Saf Runtime Message Core
 
-- [ ] `ScriptMessageEnvelope` tipi:
+- [x] `ScriptMessageEnvelope` tipi:
       `id`, `frame`, `type`, `source`, `target?`, `payload`.
-- [ ] `ScriptMessageBus` saf modulu: `send`, `emit`, `subscribe`, `flush`.
-- [ ] Event type + target bazli subscription index.
-- [ ] Missing target / missing handler / recursive dispatch guard.
-- [ ] Headless engine testleri.
+- [x] `ScriptMessageBus` saf modulu: `send`, `emit`, `subscribe`, `flush`.
+- [x] Event type + target bazli subscription index.
+- [x] Missing target / missing handler / recursive dispatch guard.
+- [x] Headless engine testleri.
 
 ### Faz 2 - BehaviorContext Entegrasyonu
 
-- [ ] `BehaviorContext` icine `messages`, `world`, `state` ekle.
-- [ ] BehaviorSubsystem lifecycle'inda frame bazli message flush karari ver.
-- [ ] `messageBindings` ile behavior tetikleme yolu ekle.
-- [ ] Mevcut `interact` behavior'ini host callback yerine message gondermeye
+- [x] `BehaviorContext` icine `messages`, `world`, `state` ekle.
+- [x] BehaviorSubsystem lifecycle'inda frame bazli message flush karari ver.
+- [x] `messageBindings` ile behavior tetikleme yolu ekle.
+- [x] Mevcut `interact` behavior'ini host callback yerine message gondermeye
       hazir hale getir.
-- [ ] Headless test: actor A mesaj gonderir, actor B behavior'i tetiklenir.
+- [x] Headless test: actor A mesaj gonderir, actor B behavior'i tetiklenir.
 
 ### Faz 3 - Actor Script Schema
 
-- [ ] `ActorScriptDef` alanlari: `interfaces`, `references`, `dispatchers`,
+- [x] `ActorScriptDef` alanlari: `interfaces`, `references`, `dispatchers`,
       `messageBindings`.
-- [ ] `normalizeActorScriptDef` additive/back-compat parse.
-- [ ] `tools/saveValidator.ts` allowlist ve hata mesajlari.
-- [ ] `ActorScriptEditor` form yuzeyi: Interfaces, References, Dispatchers,
+- [x] `normalizeActorScriptDef` additive/back-compat parse.
+- [x] `tools/saveValidator.ts` allowlist ve hata mesajlari.
+- [x] `ActorScriptEditor` form yuzeyi: Interfaces, References, Dispatchers,
       Message Bindings.
-- [ ] Compile uyarilari: unknown interface/message/script/target.
+- [x] Compile uyarilari: unknown interface/message/script/target.
 
 ### Faz 4 - Interaction Genellestirme
 
-- [ ] `Interaction.action` hardcoded host aksiyonlarini azalt.
-- [ ] Yakindaki `Usable` actor'e E ile `Usable.Use` mesaji gonder.
-- [ ] Lamba testi yeni sistemle yeniden kur:
+- [x] `Interaction.action` hardcoded host aksiyonlarini azalt.
+- [x] Yakindaki `Usable` actor'e E ile `Usable.Use` mesaji gonder.
+- [x] Lamba testi yeni sistemle yeniden kur:
       `Usable.Use -> Toggleable.Toggle -> light + particle + Lamp.Toggled`.
-- [ ] Prompt sistemi `InteractionComponent.prompt` ile kalir, davranis mesajla
+- [x] Prompt sistemi `InteractionComponent.prompt` ile kalir, davranis mesajla
       ayrilir.
-- [ ] Regression test: Begin overlap prompt, E message, end overlap prompt hide.
+- [x] Regression test: Begin overlap prompt, E message, end overlap prompt hide.
 
 ### Faz 5 - Direct References ve Query
 
-- [ ] Explicit placed actor/node reference cozumleme.
-- [ ] `byName`, `byTag`, `byClassRef`, `withInterface` query'leri.
-- [ ] Query cache invalidation: scene load, spawn, destroy.
-- [ ] Per-instance override gelmeden once class-level reference sinirlari
+- [x] Explicit placed actor/node reference cozumleme.
+- [x] `byName`, `byTag`, `byClassRef`, `withInterface` query'leri.
+- [x] Query cache invalidation: scene load, spawn, destroy.
+- [x] Per-instance override gelmeden once class-level reference sinirlari
       dokumante edilir.
+
+Not: Faz 5 referanslari actor class seviyesindeki `references[]` selector
+sozlesmesidir. Per-instance override henuz yoktur; ayni actor class'indan gelen
+tum instance'lar ayni reference key/selector tanimini tasir ve runtime cozumleme
+`setEntities` ile yeniden kurulan isim, tag, classRef, nodeId ve interface
+indeksleri uzerinden yapilir.
 
 ### Faz 6 - Debug ve Tooling
 
-- [ ] Runtime debug panel: son mesajlar, source, target, payload, result.
-- [ ] Actor inspect: interfaces, dispatchers, subscribers.
-- [ ] Failed message warning'leri.
-- [ ] AI behavior stub yorumu yeni API'i anlatacak sekilde guncellenir.
+- [x] Runtime debug panel: son mesajlar, source, target, payload, result.
+- [x] Actor inspect: interfaces, dispatchers, subscribers.
+- [x] Failed message warning'leri.
+- [x] AI behavior stub yorumu yeni API'i anlatacak sekilde guncellenir.
 
 ### Faz 7 - Optimizasyon ve Buyuk Proje Gate'i
 
-- [ ] No global per-frame actor scan kuralini test/benchmark ile koru.
-- [ ] 1000 actor + 1000 message smoke/perf testi.
-- [ ] Production build'de debug trace kapatma/limit ayari.
-- [ ] `npm run build:verify` gate'i.
+- [x] No global per-frame actor scan kuralini test/benchmark ile koru.
+- [x] 1000 actor + 1000 message smoke/perf testi.
+- [x] Production build'de debug trace kapatma/limit ayari.
+- [x] `npm run build:verify` gate'i.
 
 ---
 

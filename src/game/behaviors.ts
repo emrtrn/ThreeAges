@@ -32,6 +32,8 @@ export const BEHAVIOR_SCRIPT_IDS = [
   "collision-chime",
   "goal-reached",
   "interact",
+  "use-toggleable",
+  "lamp-toggle",
 ] as const;
 export type BehaviorScriptId = (typeof BEHAVIOR_SCRIPT_IDS)[number];
 
@@ -68,6 +70,10 @@ export interface BehaviorRegistryOptions {
     prompt: string | undefined,
     overlapping: boolean,
   ) => void;
+  /** Runtime shell sink for the built-in lamp-toggle behavior. */
+  onActorLightToggle?: (entityId: string, enabled: boolean) => void;
+  /** Runtime shell sink for one-shot actor VFX triggered by message behaviors. */
+  onActorParticleEffect?: (entityId: string) => void;
   /**
    * Whether the named entity is the player-controlled (possessed) pawn this Play
    * boot. `input-move` only reads input + moves when this is true, so a character
@@ -158,6 +164,8 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   const onGoalReached = options.onGoalReached;
   const onInteraction = options.onInteraction;
   const onInteractionOverlap = options.onInteractionOverlap;
+  const onActorLightToggle = options.onActorLightToggle;
+  const onActorParticleEffect = options.onActorParticleEffect;
   const isPlayerControlled = options.isPlayerControlled ?? (() => true);
   const vertical = new Map<string, PlayerVertical>();
   const reachedGoals = new Set<string>();
@@ -265,7 +273,36 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     interactions.set(context.entityId, result.state);
     if (!result.fire) return;
     playAudioCue(context);
+    const payload: Record<string, unknown> = {
+      entityId: context.entityId,
+      action: interaction.action,
+    };
+    if (interaction.prompt !== undefined) payload.prompt = interaction.prompt;
+    const usableTargets = context.world.withInterface("Usable");
+    const usableTarget = usableTargets.includes(context.entityId)
+      ? context.entityId
+      : context.world.nearestWithInterface(
+          "Usable",
+          context.entityId,
+          numberParam(context.params.useRange, 2),
+        );
+    if (usableTarget) context.messages.send(usableTarget, "Usable.Use", payload);
+    context.messages.emit("Interaction.Activated", payload);
+    context.messages.emit(`Interaction.${interaction.action}`, payload);
     onInteraction?.(context.entityId, interaction.action);
+  };
+
+  const useToggleable: BehaviorUpdate = (context) => {
+    context.messages.send(context.entityId, "Toggleable.Toggle", {
+      source: context.message?.source ?? context.entityId,
+    });
+  };
+
+  const lampToggle: BehaviorUpdate = (context) => {
+    const enabled = context.state.toggle("enabled", true);
+    onActorLightToggle?.(context.entityId, enabled);
+    onActorParticleEffect?.(context.entityId);
+    context.messages.emit("Lamp.Toggled", { enabled });
   };
 
   const behaviors = new Map<string, BehaviorUpdate>([
@@ -274,6 +311,8 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     ["collision-chime", collisionChime],
     ["goal-reached", goalReached],
     ["interact", interact],
+    ["use-toggleable", useToggleable],
+    ["lamp-toggle", lampToggle],
   ]);
   return { get: (scriptId) => behaviors.get(scriptId) };
 }

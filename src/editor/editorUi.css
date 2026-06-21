@@ -1939,6 +1939,52 @@ body.editor-mode #debug-stats {
   margin: 4px 0 8px;
 }
 .as-section-label small { color: #6a7378; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.as-inspect {
+  margin-bottom: 10px;
+  padding: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  background: #15181c;
+}
+.as-inspect-row { display: grid; gap: 4px; margin-bottom: 8px; }
+.as-inspect-row:last-child { margin-bottom: 0; }
+.as-inspect-row > span {
+  color: #97a0a6;
+  font-size: 11px;
+}
+.as-inspect-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.as-inspect code {
+  display: inline-block;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(111, 208, 164, 0.12);
+  color: #b6e8d2;
+  font-family: ui-monospace, "Cascadia Code", monospace;
+  font-size: 11px;
+}
+.as-inspect ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.as-inspect li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 0;
+  color: #c8d0d6;
+  font-size: 11px;
+}
+.as-inspect li span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #8a949a;
+}
+.as-inspect-empty { color: #6a7378; font-size: 11px; }
 .as-vec3 { display: flex; gap: 6px; }
 .as-vec3 input { width: 100%; min-width: 0; }
 .as-advanced { margin-top: 8px; }

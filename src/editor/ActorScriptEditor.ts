@@ -21,6 +21,7 @@ import {
   PARENT_CLASSES,
   PARENT_CLASS_LABELS,
   defaultActorScriptDef,
+  normalizeActorScriptDef,
   type ActorComponentKind,
   type ActorEventKind,
   type ActorScriptDef,
@@ -61,7 +62,11 @@ type Selection =
   | { kind: "class" }
   | { kind: "component"; id: string }
   | { kind: "variable"; index: number }
-  | { kind: "event"; index: number };
+  | { kind: "interface"; index: number }
+  | { kind: "reference"; index: number }
+  | { kind: "dispatcher"; index: number }
+  | { kind: "event"; index: number }
+  | { kind: "message"; index: number };
 
 const METADATA_FIELD_TYPES: readonly MetadataFieldType[] = [
   "text",
@@ -518,7 +523,60 @@ export class ActorScriptEditor {
         <span>Parent Class</span>
         <select data-as-class-parent>${parentOptions}</select>
       </label>
+      <label class="as-field">
+        <span>Interfaces</span>
+        <input type="text" data-as-class-interfaces value="${escapeHtml(this.def.interfaces.join(", "))}" placeholder="Usable, Toggleable" />
+      </label>
+      <label class="as-field">
+        <span>References (JSON)</span>
+        <textarea data-as-class-references rows="4">${escapeHtml(JSON.stringify(this.def.references, null, 2))}</textarea>
+      </label>
+      <div class="as-json-error" data-as-class-references-error></div>
+      <label class="as-field">
+        <span>Dispatchers (JSON)</span>
+        <textarea data-as-class-dispatchers rows="4">${escapeHtml(JSON.stringify(this.def.dispatchers, null, 2))}</textarea>
+      </label>
+      <div class="as-json-error" data-as-class-dispatchers-error></div>
+      <label class="as-field">
+        <span>Message Bindings (JSON)</span>
+        <textarea data-as-class-message-bindings rows="5">${escapeHtml(JSON.stringify(this.def.messageBindings, null, 2))}</textarea>
+      </label>
+      <div class="as-json-error" data-as-class-message-bindings-error></div>
+      ${this.actorInspectSummary()}
       <p class="as-details-note">This class is saved to <code>${escapeHtml(this.options.path)}</code>.</p>
+    `;
+  }
+
+  private actorInspectSummary(): string {
+    const interfaces = this.def.interfaces.length
+      ? this.def.interfaces.map((name) => `<code>${escapeHtml(name)}</code>`).join("")
+      : `<span class="as-inspect-empty">none</span>`;
+    const dispatchers = this.def.dispatchers.length
+      ? this.def.dispatchers
+          .map((dispatcher) => {
+            const payload = dispatcher.payload ?? {};
+            const payloadText = Object.keys(payload).length
+              ? ` ${escapeHtml(JSON.stringify(payload))}`
+              : "";
+            return `<li><code>${escapeHtml(dispatcher.name)}</code><span>${payloadText}</span></li>`;
+          })
+          .join("")
+      : `<li class="as-inspect-empty">none</li>`;
+    const subscribers = this.def.messageBindings.length
+      ? this.def.messageBindings
+          .map(
+            (binding) =>
+              `<li><code>${escapeHtml(binding.message)}</code><span>${escapeHtml(binding.target ?? "self")} -> ${escapeHtml(binding.scriptId)}</span></li>`,
+          )
+          .join("")
+      : `<li class="as-inspect-empty">none</li>`;
+    return `
+      <div class="as-section-label">Actor Inspect <small>runtime metadata</small></div>
+      <div class="as-inspect">
+        <div class="as-inspect-row"><span>Interfaces</span><div class="as-inspect-chips">${interfaces}</div></div>
+        <div class="as-inspect-row"><span>Dispatchers</span><ul>${dispatchers}</ul></div>
+        <div class="as-inspect-row"><span>Subscribers</span><ul>${subscribers}</ul></div>
+      </div>
     `;
   }
 
@@ -535,6 +593,47 @@ export class ActorScriptEditor {
       this.def.parentClass = parent.value as ParentClass;
       this.markDirty();
       this.refreshLists();
+    });
+    const interfaces = this.detailsHost.querySelector<HTMLInputElement>("[data-as-class-interfaces]");
+    interfaces?.addEventListener("input", () => {
+      this.def.interfaces = uniqueNonEmptyCsv(interfaces.value);
+      this.markDirty();
+    });
+    this.bindJsonArrayField("[data-as-class-references]", "[data-as-class-references-error]", (value) => {
+      this.def.references = value as ActorScriptDef["references"];
+    });
+    this.bindJsonArrayField("[data-as-class-dispatchers]", "[data-as-class-dispatchers-error]", (value) => {
+      this.def.dispatchers = value as ActorScriptDef["dispatchers"];
+    });
+    this.bindJsonArrayField(
+      "[data-as-class-message-bindings]",
+      "[data-as-class-message-bindings-error]",
+      (value) => {
+        this.def.messageBindings = value as ActorScriptDef["messageBindings"];
+      },
+    );
+  }
+
+  private bindJsonArrayField(
+    inputSelector: string,
+    errorSelector: string,
+    apply: (value: unknown[]) => void,
+  ): void {
+    const input = this.detailsHost.querySelector<HTMLTextAreaElement>(inputSelector);
+    const error = this.detailsHost.querySelector<HTMLElement>(errorSelector);
+    input?.addEventListener("input", () => {
+      try {
+        const parsed = JSON.parse(input.value.trim() || "[]") as unknown;
+        if (!Array.isArray(parsed)) throw new Error("Must be a JSON array.");
+        apply(parsed);
+        this.def = normalizeActorScriptDef(this.def, this.def.name);
+        this.markDirty();
+        if (error) error.textContent = "";
+        input.classList.remove("is-invalid");
+      } catch (err) {
+        if (error) error.textContent = describeError(err);
+        input.classList.add("is-invalid");
+      }
     });
   }
 
@@ -1113,6 +1212,40 @@ export class ActorScriptEditor {
         warnings.push(`Script "${binding.scriptId}" is not registered yet (author it in src/game/).`);
       }
     });
+    const interfaces = new Set<string>();
+    for (const name of this.def.interfaces) {
+      if (interfaces.has(name)) errors.push(`Duplicate interface "${name}".`);
+      interfaces.add(name);
+    }
+    const references = new Set<string>();
+    for (const reference of this.def.references) {
+      if (references.has(reference.key)) errors.push(`Duplicate reference key "${reference.key}".`);
+      references.add(reference.key);
+      if (reference.selector.byInterface && !interfaces.has(reference.selector.byInterface)) {
+        warnings.push(
+          `Reference "${reference.key}" targets interface "${reference.selector.byInterface}" not declared by this class.`,
+        );
+      }
+    }
+    const dispatchers = new Set<string>();
+    for (const dispatcher of this.def.dispatchers) {
+      if (dispatchers.has(dispatcher.name)) errors.push(`Duplicate dispatcher "${dispatcher.name}".`);
+      dispatchers.add(dispatcher.name);
+    }
+    this.def.messageBindings.forEach((binding, index) => {
+      if (!binding.message) errors.push(`Message binding #${index + 1} has no message.`);
+      if (binding.message.startsWith(`${this.def.name}.`) && !dispatchers.has(binding.message)) {
+        warnings.push(`Message "${binding.message}" has no matching dispatcher in this class.`);
+      }
+      if (!binding.scriptId) {
+        errors.push(`Message binding #${index + 1} has no script id.`);
+      } else if (known.size > 0 && !known.has(binding.scriptId)) {
+        warnings.push(`Script "${binding.scriptId}" is not registered yet (author it in src/game/).`);
+      }
+      if (binding.target && binding.target !== "self" && binding.target !== "any") {
+        errors.push(`Message binding #${index + 1} has invalid target "${binding.target}".`);
+      }
+    });
 
     if (errors.length === 0) {
       const suffix = warnings.length ? ` · ${warnings.length} warning(s)` : "";
@@ -1370,4 +1503,15 @@ function coerceMetadataDefault(
       .filter((entry) => entry.length > 0);
   }
   return trimmed;
+}
+
+function uniqueNonEmptyCsv(value: string): string[] {
+  return [
+    ...new Set(
+      value
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0),
+    ),
+  ];
 }

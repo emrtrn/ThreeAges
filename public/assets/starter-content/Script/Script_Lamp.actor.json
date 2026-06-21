@@ -4,6 +4,19 @@
   "name": "Script_Lamp",
   "parentClass": "actor",
   "variables": [],
+  "interfaces": [
+    "Usable",
+    "Toggleable"
+  ],
+  "references": [],
+  "dispatchers": [
+    {
+      "name": "Lamp.Toggled",
+      "payload": {
+        "enabled": "boolean"
+      }
+    }
+  ],
   "components": [
     {
       "id": "root",
@@ -68,7 +81,7 @@
       "id": "interaction",
       "component": "Interaction",
       "props": {
-        "action": "toggle-actor-light",
+        "action": "use",
         "prompt": "Press E Key",
         "enabled": true
       },
@@ -94,8 +107,21 @@
       "event": "interact",
       "scriptId": "interact",
       "params": {
-        "inputAction": "interact"
+        "inputAction": "interact",
+        "useRange": 2
       }
+    }
+  ],
+  "messageBindings": [
+    {
+      "message": "Usable.Use",
+      "scriptId": "use-toggleable",
+      "target": "self"
+    },
+    {
+      "message": "Toggleable.Toggle",
+      "scriptId": "lamp-toggle",
+      "target": "self"
     }
   ],
   "construction": null

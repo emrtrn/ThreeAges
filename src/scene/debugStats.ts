@@ -22,8 +22,32 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
     element.textContent =
       `${fps.toFixed(0)} fps\n` +
       `${drawCalls} draw calls\n` +
-      `${triangles} tris`;
+      `${triangles} tris` +
+      scriptMessageDebugText(app);
     accumMs = 0;
     frames = 0;
   };
+}
+
+function scriptMessageDebugText(app: RuntimeStatsApp): string {
+  const snapshot = app.getScriptMessageDebugSnapshot();
+  const { lastFlush, recentMessages } = snapshot;
+  const lines = [
+    "",
+    "script messages",
+    `flush p:${lastFlush.processed} d:${lastFlush.delivered} w:${lastFlush.warnings.length}`,
+    `subscribers: ${snapshot.subscribers.length}`,
+  ];
+  for (const entry of recentMessages.slice(-5)) {
+    const target = entry.envelope.target ?? "*";
+    const payload = JSON.stringify(entry.envelope.payload);
+    const payloadText = payload.length > 44 ? `${payload.slice(0, 41)}...` : payload;
+    lines.push(
+      `${entry.envelope.frame} ${entry.envelope.source}->${target} ${entry.envelope.type} ${entry.status}(${entry.delivered}) ${payloadText}`,
+    );
+  }
+  if (lastFlush.warnings.length > 0) {
+    lines.push(`last warning: ${lastFlush.warnings[0]?.code ?? "unknown"}`);
+  }
+  return `\n${lines.join("\n")}`;
 }

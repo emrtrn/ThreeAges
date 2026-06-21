@@ -104,6 +104,34 @@ export interface EventBinding {
   params?: Record<string, SceneJsonValue>;
 }
 
+export interface ActorReferenceSelector {
+  byNodeId?: string;
+  byName?: string;
+  byTag?: string;
+  byClassRef?: string;
+  byInterface?: string;
+}
+
+export interface ActorReference {
+  key: string;
+  selector: ActorReferenceSelector;
+}
+
+export interface ActorDispatcher {
+  name: string;
+  payload?: Record<string, string>;
+}
+
+export type MessageBindingTarget = "self" | "any";
+
+export interface MessageBinding {
+  message: string;
+  /** Resolved at runtime by the game BehaviorRegistry. */
+  scriptId: string;
+  params?: Record<string, SceneJsonValue>;
+  target?: MessageBindingTarget;
+}
+
 /** One node of the component template tree (parent-child via `parent` ids). */
 export interface ComponentTemplateNode {
   /** Stable id, unique within the class; referenced by children's `parent`. */
@@ -124,7 +152,11 @@ export interface ActorScriptDef {
   /** Authored variables (reuses the Details schema field type). */
   variables: MetadataFieldDef[];
   components: ComponentTemplateNode[];
+  interfaces: string[];
+  references: ActorReference[];
+  dispatchers: ActorDispatcher[];
   eventBindings: EventBinding[];
+  messageBindings: MessageBinding[];
   /** Reserved for a future editor-time Construction Script hook (Faz 5). */
   construction: null;
 }
@@ -149,7 +181,11 @@ export function defaultActorScriptDef(
     parentClass,
     variables: [],
     components: [{ id: "root", component: "Transform", props: {} }],
+    interfaces: [],
+    references: [],
+    dispatchers: [],
     eventBindings: [],
+    messageBindings: [],
     construction: null,
   };
 }
@@ -236,6 +272,68 @@ function normalizeEventBinding(value: unknown): EventBinding | null {
   return binding;
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [
+    ...new Set(value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0)),
+  ];
+}
+
+function normalizeReferenceSelector(value: unknown): ActorReferenceSelector {
+  if (!isPlainObject(value)) return {};
+  const selector: ActorReferenceSelector = {};
+  if (typeof value.byNodeId === "string" && value.byNodeId.length > 0) {
+    selector.byNodeId = value.byNodeId;
+  }
+  if (typeof value.byName === "string" && value.byName.length > 0) selector.byName = value.byName;
+  if (typeof value.byTag === "string" && value.byTag.length > 0) selector.byTag = value.byTag;
+  if (typeof value.byClassRef === "string" && value.byClassRef.length > 0) {
+    selector.byClassRef = value.byClassRef;
+  }
+  if (typeof value.byInterface === "string" && value.byInterface.length > 0) {
+    selector.byInterface = value.byInterface;
+  }
+  return selector;
+}
+
+function normalizeActorReference(value: unknown): ActorReference | null {
+  if (!isPlainObject(value)) return null;
+  if (typeof value.key !== "string" || value.key.length === 0) return null;
+  const selector = normalizeReferenceSelector(value.selector);
+  if (Object.keys(selector).length === 0) return null;
+  return { key: value.key, selector };
+}
+
+function normalizeDispatcherPayload(value: unknown): Record<string, string> | undefined {
+  if (!isPlainObject(value)) return undefined;
+  const payload: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw === "string" && raw.length > 0) payload[key] = raw;
+  }
+  return Object.keys(payload).length > 0 ? payload : undefined;
+}
+
+function normalizeActorDispatcher(value: unknown): ActorDispatcher | null {
+  if (!isPlainObject(value)) return null;
+  if (typeof value.name !== "string" || value.name.length === 0) return null;
+  const dispatcher: ActorDispatcher = { name: value.name };
+  const payload = normalizeDispatcherPayload(value.payload);
+  if (payload) dispatcher.payload = payload;
+  return dispatcher;
+}
+
+function normalizeMessageBinding(value: unknown): MessageBinding | null {
+  if (!isPlainObject(value)) return null;
+  if (typeof value.message !== "string" || value.message.length === 0) return null;
+  if (typeof value.scriptId !== "string" || value.scriptId.length === 0) return null;
+  const binding: MessageBinding = { message: value.message, scriptId: value.scriptId };
+  const params = normalizeParams(value.params);
+  if (Object.keys(params).length > 0) binding.params = params;
+  if (value.target === "any") binding.target = "any";
+  else if (value.target === "self") binding.target = "self";
+  return binding;
+}
+
 /**
  * Defensively coerces arbitrary JSON into a valid {@link ActorScriptDef}.
  *
@@ -265,6 +363,22 @@ export function normalizeActorScriptDef(value: unknown, fallbackName = "Untitled
   const eventBindings = Array.isArray(input.eventBindings)
     ? input.eventBindings.map(normalizeEventBinding).filter((b): b is EventBinding => b !== null)
     : [];
+  const interfaces = normalizeStringArray(input.interfaces);
+  const references = Array.isArray(input.references)
+    ? input.references
+        .map(normalizeActorReference)
+        .filter((reference): reference is ActorReference => reference !== null)
+    : [];
+  const dispatchers = Array.isArray(input.dispatchers)
+    ? input.dispatchers
+        .map(normalizeActorDispatcher)
+        .filter((dispatcher): dispatcher is ActorDispatcher => dispatcher !== null)
+    : [];
+  const messageBindings = Array.isArray(input.messageBindings)
+    ? input.messageBindings
+        .map(normalizeMessageBinding)
+        .filter((binding): binding is MessageBinding => binding !== null)
+    : [];
 
   return {
     schema: 1,
@@ -273,7 +387,11 @@ export function normalizeActorScriptDef(value: unknown, fallbackName = "Untitled
     parentClass,
     variables,
     components,
+    interfaces,
+    references,
+    dispatchers,
     eventBindings,
+    messageBindings,
     construction: null,
   };
 }

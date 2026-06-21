@@ -23,6 +23,11 @@
 import type { ActorScriptDef } from "./actorScript";
 import {
   BEHAVIOR_COMPONENT,
+  MESSAGE_BINDINGS_COMPONENT,
+  SCRIPT_ACTOR_COMPONENT,
+  SCRIPT_DISPATCHERS_COMPONENT,
+  SCRIPT_INTERFACES_COMPONENT,
+  SCRIPT_REFERENCES_COMPONENT,
   TRANSFORM_COMPONENT,
   type TransformComponent,
 } from "./components";
@@ -109,6 +114,33 @@ export function actorInstanceToEntity(
   if (!components[BEHAVIOR_COMPONENT]) {
     const behavior = selectBehaviorData(def);
     if (behavior) components[BEHAVIOR_COMPONENT] = behavior;
+  }
+  if (def.interfaces.length > 0) {
+    components[SCRIPT_INTERFACES_COMPONENT] = {
+      interfaces: [...def.interfaces],
+    } as unknown as EntityComponentData;
+  }
+  if (def.messageBindings.length > 0) {
+    components[MESSAGE_BINDINGS_COMPONENT] = {
+      bindings: def.messageBindings.map((binding) => ({ ...binding })),
+    } as unknown as EntityComponentData;
+  }
+  if (def.dispatchers.length > 0) {
+    components[SCRIPT_DISPATCHERS_COMPONENT] = {
+      dispatchers: def.dispatchers.map((dispatcher) => ({
+        name: dispatcher.name,
+        payload: { ...dispatcher.payload },
+      })),
+    } as unknown as EntityComponentData;
+  }
+  components[SCRIPT_ACTOR_COMPONENT] = {
+    classRef: instance.classRef,
+    ...(instance.nodeId ? { nodeId: instance.nodeId } : {}),
+  } as unknown as EntityComponentData;
+  if (def.references.length > 0) {
+    components[SCRIPT_REFERENCES_COMPONENT] = {
+      references: def.references.map((reference) => ({ ...reference })),
+    } as unknown as EntityComponentData;
   }
 
   const tags: string[] = [];

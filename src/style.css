@@ -60,8 +60,13 @@ body {
   position: absolute;
   top: calc(env(safe-area-inset-top) + 4px);
   left: 4px;
+  max-width: min(620px, calc(100vw - 8px));
+  padding: 6px 8px;
+  background: rgba(0, 0, 0, 0.45);
+  border-radius: 4px;
   color: #7fff7f;
   font: 12px/1.4 monospace;
   text-shadow: 0 0 2px #000;
   white-space: pre;
+  overflow: hidden;
 }

@@ -21,6 +21,7 @@ async function main(): Promise<void> {
   const params = new URLSearchParams(location.search);
   const canvas = requireElement<HTMLCanvasElement>("game-canvas");
   const editorEnabled = params.has("editor");
+  const scriptMessageTraceLimit = import.meta.env.DEV && params.has("debug") ? 20 : 0;
 
   // The editor is a dev-time authoring tool (it also needs the dev save server).
   // Gating on import.meta.env.DEV lets Vite dead-code-eliminate the whole editor
@@ -32,7 +33,7 @@ async function main(): Promise<void> {
       import("@/editor/EditorUi"),
       import("@/editor/layoutSaver"),
     ]);
-    const app = new SceneApp(canvas, { enabled: true });
+    const app = new SceneApp(canvas, { enabled: true, scriptMessageTraceLimit });
     app.setLayoutSaver(saveLayoutViaDevEndpoint);
     new EditorUi(app);
     if (params.has("debug")) {
@@ -42,7 +43,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const app = new RuntimeSceneApp(canvas);
+  const app = new RuntimeSceneApp(canvas, { scriptMessageTraceLimit });
 
   // Perf readout (qa-poki standard) behind ?debug — invisible in production.
   if (params.has("debug")) {

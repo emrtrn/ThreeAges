@@ -36,12 +36,22 @@ import {
   readColliderComponent,
   readInteractionComponent,
   readLightComponent,
+  readMessageBindingsComponent,
   readMeshRendererComponent,
   readMetadataComponent,
   readParticleEmitterComponent,
+  readScriptActorComponent,
+  readScriptDispatchersComponent,
+  readScriptInterfacesComponent,
+  readScriptReferencesComponent,
   readTransformComponent,
   INTERACTION_COMPONENT,
+  MESSAGE_BINDINGS_COMPONENT,
   PARTICLE_EMITTER_COMPONENT,
+  SCRIPT_ACTOR_COMPONENT,
+  SCRIPT_DISPATCHERS_COMPONENT,
+  SCRIPT_INTERFACES_COMPONENT,
+  SCRIPT_REFERENCES_COMPONENT,
 } from "../engine/scene/components";
 import { readRotation, readScale } from "../engine/scene/transform";
 import { EngineApp } from "../engine/core/EngineApp";
@@ -51,6 +61,7 @@ import { ActionMap } from "../engine/input/actionMap";
 import { InputSubsystem } from "../engine/input/inputSubsystem";
 import { BehaviorSubsystem } from "../engine/behavior/behaviorSubsystem";
 import type { BehaviorRegistry } from "../engine/behavior/behaviorSubsystem";
+import { ScriptMessageBus } from "../engine/behavior/scriptMessages";
 import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "../engine/audio/audioSubsystem";
 import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/audio";
@@ -1577,6 +1588,588 @@ check("behavior subsystem: setEnabled(false) suppresses ticking until re-enabled
   subsystem.setEnabled(true);
   app.update(0.5);
   assert.deepEqual(synced, ["1"]);
+});
+
+check("script message bus dispatches by message type and target", () => {
+  const deliveries: string[] = [];
+  const bus = new ScriptMessageBus({
+    targetExists: (target) => target === "lamp" || target === "switch",
+  });
+
+  bus.subscribe("Toggleable.Toggle", (envelope) => {
+    deliveries.push(`any:${envelope.source}->${envelope.target ?? "*"}`);
+  });
+  bus.subscribe(
+    "Toggleable.Toggle",
+    (envelope) => {
+      deliveries.push(`lamp:${String(envelope.payload.enabled)}`);
+    },
+    { target: "lamp" },
+  );
+  bus.subscribe("Lamp.Toggled", (envelope) => {
+    deliveries.push(`emit:${String(envelope.payload.enabled)}`);
+  });
+
+  const sent = bus.send({
+    frame: 12,
+    type: "Toggleable.Toggle",
+    source: "switch",
+    target: "lamp",
+    payload: { enabled: true },
+  });
+  const emitted = bus.emit({
+    frame: 12,
+    type: "Lamp.Toggled",
+    source: "lamp",
+    payload: { enabled: true },
+  });
+  const result = bus.flush();
+
+  assert.equal(sent.id, "script-message:1");
+  assert.equal(emitted.id, "script-message:2");
+  assert.deepEqual(deliveries, ["any:switch->lamp", "lamp:true", "emit:true"]);
+  assert.deepEqual(result, { processed: 2, delivered: 3, warnings: [] });
+  assert.deepEqual(
+    bus.getRecentTrace().map((entry) => ({
+      type: entry.envelope.type,
+      source: entry.envelope.source,
+      target: entry.envelope.target ?? null,
+      status: entry.status,
+      delivered: entry.delivered,
+    })),
+    [
+      {
+        type: "Toggleable.Toggle",
+        source: "switch",
+        target: "lamp",
+        status: "delivered",
+        delivered: 2,
+      },
+      {
+        type: "Lamp.Toggled",
+        source: "lamp",
+        target: null,
+        status: "delivered",
+        delivered: 1,
+      },
+    ],
+  );
+  assert.equal(bus.pendingCount(), 0);
+});
+
+check("script message bus reports missing target and missing handler", () => {
+  const bus = new ScriptMessageBus({
+    targetExists: (target) => target === "lamp",
+  });
+
+  bus.send({
+    type: "Toggleable.Toggle",
+    source: "switch",
+    target: "missing-lamp",
+  });
+  bus.send({
+    type: "Door.Open",
+    source: "switch",
+    target: "lamp",
+  });
+  const result = bus.flush();
+
+  assert.equal(result.processed, 2);
+  assert.equal(result.delivered, 0);
+  assert.deepEqual(
+    result.warnings.map((warning) => warning.code),
+    ["missing-target", "missing-handler"],
+  );
+  assert.equal(result.warnings[0]?.envelope?.target, "missing-lamp");
+  assert.equal(result.warnings[1]?.envelope?.type, "Door.Open");
+  assert.deepEqual(
+    bus.getRecentTrace().map((entry) => ({
+      type: entry.envelope.type,
+      target: entry.envelope.target,
+      status: entry.status,
+      warning: entry.warnings[0]?.code,
+    })),
+    [
+      {
+        type: "Toggleable.Toggle",
+        target: "missing-lamp",
+        status: "missing-target",
+        warning: "missing-target",
+      },
+      {
+        type: "Door.Open",
+        target: "lamp",
+        status: "missing-handler",
+        warning: "missing-handler",
+      },
+    ],
+  );
+});
+
+check("script message bus keeps dispatch target-indexed under many subscribers", () => {
+  const bus = new ScriptMessageBus({ recentTraceLimit: 3 });
+  const deliveries: string[] = [];
+  for (let i = 0; i < 1000; i += 1) {
+    const target = `actor:${i}`;
+    bus.subscribe("Perf.Ping", () => deliveries.push(target), { target });
+  }
+
+  for (let i = 0; i < 5; i += 1) {
+    bus.send({ frame: i, type: "Perf.Ping", source: "sender", target: "actor:999" });
+  }
+  const result = bus.flush();
+
+  assert.equal(result.processed, 5);
+  assert.equal(result.delivered, 5);
+  assert.equal(deliveries.length, 5);
+  assert.equal(deliveries.every((target) => target === "actor:999"), true);
+  assert.deepEqual(
+    bus.getRecentTrace().map((entry) => entry.envelope.frame),
+    [2, 3, 4],
+  );
+});
+
+check("script message bus can disable recent debug trace", () => {
+  const bus = new ScriptMessageBus({ recentTraceLimit: 0 });
+  let delivered = 0;
+  bus.subscribe("Trace.Off", () => {
+    delivered += 1;
+  });
+
+  bus.emit({ frame: 1, type: "Trace.Off", source: "sender" });
+  const result = bus.flush();
+
+  assert.equal(delivered, 1);
+  assert.equal(result.processed, 1);
+  assert.equal(bus.getRecentTrace().length, 0);
+});
+
+check("script message bus guards recursive flush while allowing queued follow-up messages", () => {
+  const bus = new ScriptMessageBus();
+  let nestedWarnings: readonly string[] = [];
+  const deliveries: string[] = [];
+
+  bus.subscribe("Ping", (envelope) => {
+    nestedWarnings = bus.flush().warnings.map((warning) => warning.code);
+    deliveries.push(envelope.type);
+    bus.emit({ type: "Pong", source: envelope.source });
+  });
+  bus.subscribe("Pong", (envelope) => {
+    deliveries.push(envelope.type);
+  });
+
+  bus.emit({ type: "Ping", source: "switch" });
+  const result = bus.flush();
+
+  assert.deepEqual(nestedWarnings, ["recursive-dispatch"]);
+  assert.deepEqual(deliveries, ["Ping", "Pong"]);
+  assert.deepEqual(
+    result.warnings.map((warning) => warning.code),
+    ["recursive-dispatch"],
+  );
+  assert.equal(result.processed, 2);
+  assert.equal(result.delivered, 2);
+});
+
+check("behavior context routes messages through world query, message bindings, and state", () => {
+  const events: string[] = [];
+  let senderWorld: {
+    self: string;
+    byName: string | null;
+    byTag: string[];
+    withInterface: string[];
+    nearest: string | null;
+  } | null = null;
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "sender") {
+        return (context) => {
+          const target = context.world.nearestWithInterface(
+            "Toggleable",
+            context.world.self(),
+            5,
+          );
+          senderWorld = {
+            self: context.world.self(),
+            byName: context.world.byName("Lamp"),
+            byTag: context.world.byTag("lighting"),
+            withInterface: context.world.withInterface("Toggleable"),
+            nearest: target,
+          };
+          if (target) {
+            context.messages.send(target, "Toggleable.Toggle", { requested: true });
+          }
+          context.messages.emit("Sender.Done", { frame: context.engine.frame });
+        };
+      }
+      if (scriptId === "toggle-handler") {
+        return (context) => {
+          const enabled = context.state.toggle("enabled");
+          context.transform.position[0] = enabled ? 1 : 0;
+          events.push(
+            `${context.entityId}:${context.message?.type}:${String(context.message?.payload.requested)}:${enabled}`,
+          );
+        };
+      }
+      if (scriptId === "broadcast-handler") {
+        return (context) => {
+          events.push(`${context.entityId}:${context.message?.type}:${context.message?.source}`);
+        };
+      }
+      return undefined;
+    },
+  };
+  const synced: Array<{ id: string; x: number }> = [];
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    (id, transform) => synced.push({ id, x: transform.position[0] }),
+  );
+  behavior.setEntities([
+    {
+      id: "switch",
+      name: "Switch",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "sender" },
+      },
+    },
+    {
+      id: "lamp",
+      name: "Lamp",
+      tags: ["lighting"],
+      components: {
+        Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [SCRIPT_INTERFACES_COMPONENT]: { interfaces: ["Toggleable"] },
+        [MESSAGE_BINDINGS_COMPONENT]: {
+          bindings: [{ message: "Toggleable.Toggle", scriptId: "toggle-handler" }],
+        },
+      },
+    },
+    {
+      id: "observer",
+      components: {
+        Transform: { position: [10, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [MESSAGE_BINDINGS_COMPONENT]: {
+          bindings: [{ message: "Sender.Done", scriptId: "broadcast-handler", target: "any" }],
+        },
+      },
+    },
+  ]);
+
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+
+  assert.deepEqual(senderWorld, {
+    self: "switch",
+    byName: "lamp",
+    byTag: ["lamp"],
+    withInterface: ["lamp"],
+    nearest: "lamp",
+  });
+  assert.deepEqual(events, [
+    "lamp:Toggleable.Toggle:true:true",
+    "observer:Sender.Done:switch",
+    "lamp:Toggleable.Toggle:true:false",
+    "observer:Sender.Done:switch",
+  ]);
+  assert.deepEqual(
+    synced.filter((entry) => entry.id === "lamp").map((entry) => entry.x),
+    [1, 0],
+  );
+  assert.deepEqual(behavior.getLastMessageFlushResult(), {
+    processed: 2,
+    delivered: 2,
+    warnings: [],
+  });
+});
+
+check("behavior world resolves direct actor references and rebuilds query indexes", () => {
+  const reports: Array<{
+    byName: string | null;
+    byTag: string[];
+    byClassRef: string[];
+    withInterface: string[];
+    refByNode: string | null;
+    refByName: string | null;
+    refByTag: string | null;
+    refByClass: string | null;
+    refByInterface: string | null;
+  }> = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId !== "probe") return undefined;
+      return (context) => {
+        reports.push({
+          byName: context.world.byName("Door A"),
+          byTag: context.world.byTag("door"),
+          byClassRef: context.world.byClassRef("blueprints/Door.actor.json"),
+          withInterface: context.world.withInterface("Openable"),
+          refByNode: context.world.ref("nodeDoor"),
+          refByName: context.world.ref("nameDoor"),
+          refByTag: context.world.ref("tagDoor"),
+          refByClass: context.world.ref("classDoor"),
+          refByInterface: context.world.ref("interfaceDoor"),
+        });
+      };
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  const probe: Entity = {
+    id: "probe",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "probe" },
+      [SCRIPT_REFERENCES_COMPONENT]: {
+        references: [
+          { key: "nodeDoor", selector: { byNodeId: "door-node" } },
+          { key: "nameDoor", selector: { byName: "Door A" } },
+          { key: "tagDoor", selector: { byTag: "door" } },
+          { key: "classDoor", selector: { byClassRef: "blueprints/Door.actor.json" } },
+          { key: "interfaceDoor", selector: { byInterface: "Openable" } },
+        ],
+      },
+    },
+  };
+  const door: Entity = {
+    id: "actor:7",
+    name: "Door A",
+    tags: ["door"],
+    components: {
+      Transform: { position: [4, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      [SCRIPT_ACTOR_COMPONENT]: {
+        classRef: "blueprints/Door.actor.json",
+        nodeId: "door-node",
+      },
+      [SCRIPT_INTERFACES_COMPONENT]: { interfaces: ["Openable"] },
+    },
+  };
+
+  behavior.setEntities([probe]);
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  behavior.setEntities([probe, door]);
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  behavior.setEntities([probe]);
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.048, frame: 3 });
+
+  assert.deepEqual(reports, [
+    {
+      byName: null,
+      byTag: [],
+      byClassRef: [],
+      withInterface: [],
+      refByNode: null,
+      refByName: null,
+      refByTag: null,
+      refByClass: null,
+      refByInterface: null,
+    },
+    {
+      byName: "actor:7",
+      byTag: ["actor:7"],
+      byClassRef: ["actor:7"],
+      withInterface: ["actor:7"],
+      refByNode: "actor:7",
+      refByName: "actor:7",
+      refByTag: "actor:7",
+      refByClass: "actor:7",
+      refByInterface: "actor:7",
+    },
+    {
+      byName: null,
+      byTag: [],
+      byClassRef: [],
+      withInterface: [],
+      refByNode: null,
+      refByName: null,
+      refByTag: null,
+      refByClass: null,
+      refByInterface: null,
+    },
+  ]);
+});
+
+check("behavior subsystem exposes script debug warnings, trace, and actor inspect data", () => {
+  const warningCodes: string[][] = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "sender") {
+        return (context) => {
+          context.messages.send("missing-actor", "Door.Open", { locked: false });
+        };
+      }
+      if (scriptId === "door-handler") return () => undefined;
+      return undefined;
+    },
+  };
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    {
+      onMessageWarnings: (warnings) => {
+        warningCodes.push(warnings.map((warning) => warning.code));
+      },
+    },
+  );
+  behavior.setEntities([
+    {
+      id: "switch",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "sender" },
+      },
+    },
+    {
+      id: "actor:2",
+      name: "Door",
+      components: {
+        Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [SCRIPT_ACTOR_COMPONENT]: {
+          classRef: "blueprints/Door.actor.json",
+          nodeId: "door-node",
+        },
+        [SCRIPT_INTERFACES_COMPONENT]: { interfaces: ["Openable"] },
+        [SCRIPT_DISPATCHERS_COMPONENT]: {
+          dispatchers: [{ name: "Door.Opened", payload: { locked: "boolean" } }],
+        },
+        [MESSAGE_BINDINGS_COMPONENT]: {
+          bindings: [{ message: "Door.Open", scriptId: "door-handler", target: "self" }],
+        },
+      },
+    },
+  ]);
+
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+
+  assert.deepEqual(warningCodes, [["missing-target"]]);
+  assert.deepEqual(behavior.getScriptActorDebugInfo("actor:2"), {
+    entityId: "actor:2",
+    name: "Door",
+    classRef: "blueprints/Door.actor.json",
+    nodeId: "door-node",
+    interfaces: ["Openable"],
+    dispatchers: [{ name: "Door.Opened", payload: { locked: "boolean" } }],
+    subscribers: [
+      {
+        entityId: "actor:2",
+        message: "Door.Open",
+        scriptId: "door-handler",
+        target: "self",
+      },
+    ],
+  });
+  const snapshot = behavior.getScriptMessageDebugSnapshot();
+  assert.equal(snapshot.lastFlush.processed, 1);
+  assert.equal(snapshot.lastFlush.delivered, 0);
+  assert.deepEqual(
+    snapshot.recentMessages.map((entry) => ({
+      type: entry.envelope.type,
+      source: entry.envelope.source,
+      target: entry.envelope.target,
+      status: entry.status,
+      delivered: entry.delivered,
+      payload: entry.envelope.payload,
+    })),
+    [
+      {
+        type: "Door.Open",
+        source: "switch",
+        target: "missing-actor",
+        status: "missing-target",
+        delivered: 0,
+        payload: { locked: false },
+      },
+    ],
+  );
+  assert.deepEqual(snapshot.subscribers, [
+    {
+      entityId: "actor:2",
+      message: "Door.Open",
+      scriptId: "door-handler",
+      target: "self",
+    },
+  ]);
+});
+
+check("behavior subsystem smoke: 1000 actors receive 1000 targeted script messages", () => {
+  const actorCount = 1000;
+  let delivered = 0;
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "sender") {
+        return (context) => {
+          for (let i = 0; i < actorCount; i += 1) {
+            context.messages.send(`actor:${i}`, "Perf.Ping", { index: i });
+          }
+        };
+      }
+      if (scriptId === "receiver") {
+        return (context) => {
+          delivered += 1;
+          context.state.set("lastIndex", context.message?.payload.index ?? -1);
+        };
+      }
+      return undefined;
+    },
+  };
+  const entities: Entity[] = [
+    {
+      id: "sender",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "sender" },
+      },
+    },
+  ];
+  for (let i = 0; i < actorCount; i += 1) {
+    entities.push({
+      id: `actor:${i}`,
+      components: {
+        Transform: { position: [i, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [MESSAGE_BINDINGS_COMPONENT]: {
+          bindings: [{ message: "Perf.Ping", scriptId: "receiver", target: "self" }],
+        },
+      },
+    });
+  }
+
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    { messageTraceLimit: 5 },
+  );
+  behavior.setEntities(entities);
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+
+  assert.equal(delivered, actorCount);
+  assert.deepEqual(behavior.getLastMessageFlushResult(), {
+    processed: actorCount,
+    delivered: actorCount,
+    warnings: [],
+  });
+  const snapshot = behavior.getScriptMessageDebugSnapshot();
+  assert.equal(snapshot.subscribers.length, actorCount);
+  assert.equal(snapshot.recentMessages.length, 5);
+  assert.deepEqual(
+    snapshot.recentMessages.map((entry) => ({
+      target: entry.envelope.target,
+      status: entry.status,
+      delivered: entry.delivered,
+    })),
+    [
+      { target: "actor:995", status: "delivered", delivered: 1 },
+      { target: "actor:996", status: "delivered", delivered: 1 },
+      { target: "actor:997", status: "delivered", delivered: 1 },
+      { target: "actor:998", status: "delivered", delivered: 1 },
+      { target: "actor:999", status: "delivered", delivered: 1 },
+    ],
+  );
 });
 
 check("physics subsystem reports deterministic placeholder contacts", () => {
@@ -3944,6 +4537,167 @@ check("interact behavior: fires the action + cue on a sensor enter, not while he
   ]);
 });
 
+check("interact behavior emits an Interaction.Activated script message", () => {
+  const gameRegistry = createBehaviorRegistry();
+  const messages: Array<{ listener: string; source: string | undefined; action: unknown }> = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "record-interaction") {
+        return (context) => {
+          messages.push({
+            listener: context.entityId,
+            source: context.message?.source,
+            action: context.message?.payload.action,
+          });
+        };
+      }
+      return gameRegistry.get(scriptId);
+    },
+  };
+  const physics = new PhysicsSubsystem();
+  const lever: Entity = {
+    id: "lever:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "interact" },
+      Interaction: { action: "pull-lever", prompt: "Pull" },
+    },
+  };
+  const listener: Entity = {
+    id: "listener:0",
+    components: {
+      Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      [MESSAGE_BINDINGS_COMPONENT]: {
+        bindings: [
+          { message: "Interaction.Activated", scriptId: "record-interaction", target: "any" },
+          { message: "Interaction.pull-lever", scriptId: "record-interaction", target: "any" },
+        ],
+      },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+
+  physics.setEntities([lever, listener, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics);
+  behavior.setEntities([lever, listener, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+
+  assert.deepEqual(messages, [
+    { listener: "listener:0", source: "lever:0", action: "pull-lever" },
+    { listener: "listener:0", source: "lever:0", action: "pull-lever" },
+  ]);
+  assert.deepEqual(behavior.getLastMessageFlushResult(), {
+    processed: 2,
+    delivered: 2,
+    warnings: [],
+  });
+});
+
+check("interact behavior sends Usable.Use and drives Toggleable lamp message chain", () => {
+  const lightToggles: Array<{ id: string; enabled: boolean }> = [];
+  const particles: string[] = [];
+  const overlaps: Array<{ id: string; action: string; prompt: string | undefined; overlapping: boolean }> = [];
+  const messages: Array<{ id: string; type: string; enabled: unknown }> = [];
+  const gameRegistry = createBehaviorRegistry({
+    onActorLightToggle: (id, enabled) => lightToggles.push({ id, enabled }),
+    onActorParticleEffect: (id) => particles.push(id),
+    onInteractionOverlap: (id, action, prompt, overlapping) =>
+      overlaps.push({ id, action, prompt, overlapping }),
+  });
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "record-message") {
+        return (context) => {
+          messages.push({
+            id: context.entityId,
+            type: context.message?.type ?? "",
+            enabled: context.message?.payload.enabled,
+          });
+        };
+      }
+      return gameRegistry.get(scriptId);
+    },
+  };
+  const physics = new PhysicsSubsystem();
+  const actions = new ActionMap({ KeyE: "interact" });
+  const lamp: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "interact", params: { inputAction: "interact", useRange: 2 } },
+      Interaction: { action: "use", prompt: "Press E Key" },
+      [SCRIPT_INTERFACES_COMPONENT]: { interfaces: ["Usable", "Toggleable"] },
+      [MESSAGE_BINDINGS_COMPONENT]: {
+        bindings: [
+          { message: "Usable.Use", scriptId: "use-toggleable" },
+          { message: "Toggleable.Toggle", scriptId: "lamp-toggle" },
+          { message: "Lamp.Toggled", scriptId: "record-message", target: "any" },
+          { message: "Interaction.Activated", scriptId: "record-message", target: "any" },
+          { message: "Interaction.use", scriptId: "record-message", target: "any" },
+        ],
+      },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([lamp, player]);
+  const behavior = new BehaviorSubsystem(registry, actions, () => undefined, physics);
+  behavior.setEntities([lamp, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(new InputSubsystem(actions));
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  app.update(0.016);
+  assert.deepEqual(overlaps, [
+    { id: "actor:0", action: "use", prompt: "Press E Key", overlapping: true },
+  ]);
+  assert.deepEqual(lightToggles, []);
+
+  actions.handleDown("KeyE");
+  app.update(0.016);
+  assert.deepEqual(lightToggles, [{ id: "actor:0", enabled: false }]);
+  assert.deepEqual(particles, ["actor:0"]);
+  assert.deepEqual(messages.map((message) => message.type), [
+    "Interaction.Activated",
+    "Interaction.use",
+    "Lamp.Toggled",
+  ]);
+  assert.deepEqual(messages.at(-1), { id: "actor:0", type: "Lamp.Toggled", enabled: false });
+  assert.deepEqual(behavior.getLastMessageFlushResult(), {
+    processed: 5,
+    delivered: 5,
+    warnings: [],
+  });
+
+  physics.setEntityTransform("player:0", {
+    position: [5, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+  assert.deepEqual(overlaps, [
+    { id: "actor:0", action: "use", prompt: "Press E Key", overlapping: true },
+    { id: "actor:0", action: "use", prompt: "Press E Key", overlapping: false },
+  ]);
+});
+
 check("interact behavior: can require an input action while inside the sensor", () => {
   const fired: Array<{ id: string; action: string }> = [];
   const overlaps: Array<{ id: string; action: string; prompt: string | undefined; overlapping: boolean }> = [];
@@ -4961,6 +5715,10 @@ check("content-new 'script' creates a `.actor.json` Actor Script seeded with the
   // Always seeded with a root Transform so the component tree has an anchor.
   assert.deepEqual(def.components, [{ id: "root", component: "Transform", props: {} }]);
   assert.deepEqual(def.eventBindings, []);
+  assert.deepEqual(def.interfaces, []);
+  assert.deepEqual(def.references, []);
+  assert.deepEqual(def.dispatchers, []);
+  assert.deepEqual(def.messageBindings, []);
   assert.deepEqual(def.variables, []);
 
   // No parent class picked falls back to "actor".
@@ -5039,10 +5797,26 @@ check("normalizeActorScriptDef coerces malformed/legacy data to a valid class", 
       { id: "mesh", parent: "root", component: "MeshRenderer", props: { assetId: "door" } },
       { component: "NotAThing", props: {} }, // dropped (bad kind)
     ],
+    interfaces: ["Usable", "Toggleable", "Usable", ""],
+    references: [
+      { key: "nodeDoor", selector: { byNodeId: "door-node" } },
+      { key: "door", selector: { byName: "Door_01", bogus: true } },
+      { key: "", selector: { byName: "Bad" } },
+      { key: "empty", selector: {} },
+    ],
+    dispatchers: [
+      { name: "Lamp.Toggled", payload: { enabled: "boolean", bad: 42 } },
+      { name: "", payload: {} },
+    ],
     eventBindings: [
       { event: "tick", scriptId: "spin", params: { speedDeg: 90 } },
       { event: "tick", scriptId: "" }, // dropped (empty id)
       { event: "bogus", scriptId: "x" }, // dropped (bad event)
+    ],
+    messageBindings: [
+      { message: "Toggleable.Toggle", scriptId: "lamp-toggle", target: "self" },
+      { message: "", scriptId: "bad" },
+      { message: "Bad", scriptId: "" },
     ],
   });
   assert.equal(messy.parentClass, "character");
@@ -5057,6 +5831,17 @@ check("normalizeActorScriptDef coerces malformed/legacy data to a valid class", 
     scriptId: "spin",
     params: { speedDeg: 90 },
   });
+  assert.deepEqual(messy.interfaces, ["Usable", "Toggleable"]);
+  assert.deepEqual(messy.references, [
+    { key: "nodeDoor", selector: { byNodeId: "door-node" } },
+    { key: "door", selector: { byName: "Door_01" } },
+  ]);
+  assert.deepEqual(messy.dispatchers, [
+    { name: "Lamp.Toggled", payload: { enabled: "boolean" } },
+  ]);
+  assert.deepEqual(messy.messageBindings, [
+    { message: "Toggleable.Toggle", scriptId: "lamp-toggle", target: "self" },
+  ]);
 });
 
 check("actor save payload requires a .actor.json path and normalizes the body", () => {
@@ -5084,6 +5869,9 @@ check("resolveBehaviorStub derives a kebab path + camelCase export + signed sour
   assert.ok(stub.source.includes("export const openDoor: BehaviorUpdate"));
   assert.ok(stub.source.includes('import { openDoor } from "./scripts/open-door"'));
   assert.ok(stub.source.includes('add "open-door" to BEHAVIOR_SCRIPT_IDS'));
+  assert.ok(stub.source.includes("context.messages.send"));
+  assert.ok(stub.source.includes("context.world.ref"));
+  assert.ok(stub.source.includes("context.message"));
 
   // Mixed separators + casing collapse to a single kebab slug / camel identifier.
   const messy = resolveBehaviorStub("  My Custom Dash!! ");
@@ -5117,6 +5905,20 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
       // Second MeshRenderer is ignored: first node of each kind wins (flat entity).
       { id: "mesh2", parent: "root", component: "MeshRenderer", props: { assetId: "ignored" } },
     ],
+    interfaces: ["Usable", "Toggleable"],
+    references: [
+      { key: "panel", selector: { byNodeId: "panel-node" } },
+      { key: "controller", selector: { byClassRef: "blueprints/Controller.actor.json" } },
+    ],
+    dispatchers: [{ name: "Door.Opened", payload: { locked: "boolean" } }],
+    messageBindings: [
+      {
+        message: "Toggleable.Toggle",
+        scriptId: "door-toggle",
+        params: { sound: "door" },
+        target: "self",
+      },
+    ],
     eventBindings: [{ event: "tick", scriptId: "spin", params: { speedDeg: 45 } }],
   });
   const entity = actorInstanceToEntity(
@@ -5140,6 +5942,31 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
   const behavior = readBehaviorComponent(entity);
   assert.equal(behavior?.scriptId, "spin");
   assert.deepEqual(behavior?.params, { speedDeg: 45 });
+  assert.deepEqual(readScriptActorComponent(entity), {
+    classRef: "blueprints/DoorBP.actor.json",
+  });
+  assert.deepEqual(readScriptInterfacesComponent(entity), {
+    interfaces: ["Usable", "Toggleable"],
+  });
+  assert.deepEqual(readScriptReferencesComponent(entity), {
+    references: [
+      { key: "panel", selector: { byNodeId: "panel-node" } },
+      { key: "controller", selector: { byClassRef: "blueprints/Controller.actor.json" } },
+    ],
+  });
+  assert.deepEqual(readScriptDispatchersComponent(entity), {
+    dispatchers: [{ name: "Door.Opened", payload: { locked: "boolean" } }],
+  });
+  assert.deepEqual(readMessageBindingsComponent(entity), {
+    bindings: [
+      {
+        message: "Toggleable.Toggle",
+        scriptId: "door-toggle",
+        params: { sound: "door" },
+        target: "self",
+      },
+    ],
+  });
 
   // Instance name + hidden flag override the class name and tag the entity.
   const named = actorInstanceToEntity(

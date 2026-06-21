@@ -1149,16 +1149,21 @@ export function behaviorStubSource(scriptId: string, exportName: string, slug: s
  *   // 1. add "${scriptId}" to BEHAVIOR_SCRIPT_IDS
  *   // 2. add ["${scriptId}", ${exportName}] to the behaviors map
  *
- * The BehaviorContext (engine tick, input actions, physics/audio queries, the
- * authored params, and a mutable transform) is documented in
- * engine/behavior/behaviorSubsystem.ts.
+ * The BehaviorContext is the script API: read input from \`context.actions\`,
+ * query actors with \`context.world\`, persist per-entity runtime values with
+ * \`context.state\`, and communicate through \`context.messages.send(...)\` or
+ * \`context.messages.emit(...)\`. When this behavior runs from a message
+ * binding, \`context.message\` contains the source, target, type, and payload.
+ * Mutate only this entity's \`context.transform\`; reach other actors through
+ * messages/interfaces instead of direct component writes.
  */
 import type { BehaviorUpdate } from "@engine/behavior/behaviorSubsystem";
 
 /** TODO: implement the \`${scriptId}\` behavior. */
 export const ${exportName}: BehaviorUpdate = (context) => {
-  // Mutate \`context.transform\` using \`context.engine.deltaSeconds\` and the
-  // authored \`context.params\`. Remove this no-op once implemented.
+  // Example: const target = context.world.ref("linkedActor");
+  // if (target) context.messages.send(target, "Some.Message", { from: context.entityId });
+  // Remove this no-op once implemented.
   void context;
 };
 `;
