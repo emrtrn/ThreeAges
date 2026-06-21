@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "ConcrateTile",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "t-concrete-tiles-d",
+  "normalTexture": "t-concrete-tiles-n",
+  "maskTexture": null,
+  "roughness": 0,
+  "metalness": 0,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0
+}

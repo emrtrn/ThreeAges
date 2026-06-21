@@ -1,4 +1,4 @@
-import { Box3, DirectionalLight, Group, Light as ThreeLight, Matrix4, Object3D, TextureLoader, Vector3 } from "three";
+import { Box3, DirectionalLight, Group, Light as ThreeLight, Matrix4, MeshStandardMaterial, Object3D, TextureLoader, Vector3 } from "three";
 import type {
   AmbientLight,
   InstancedMesh,
@@ -120,6 +120,13 @@ import {
   type ReflectionPlaneObject,
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
+import {
+  createReflectiveSurfaceObject,
+  disposeReflectiveSurfaceObject,
+  resolveReflectiveSurface,
+  type ReflectiveSurfaceObject,
+  type ReflectiveSurfaceRenderItem,
+} from "@engine/render-three/reflectiveSurface";
 import { readRotation, readScale } from "@engine/scene/transform";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
@@ -138,6 +145,7 @@ import type {
   LayoutLightActor,
   LayoutPlacement,
   LayoutReflectionPlane,
+  LayoutReflectiveSurface,
   LayoutSphereReflectionCapture,
   RoomLayout,
   Vec3,
@@ -260,6 +268,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly instanceProbeMaterials = new Map<string, Material[]>();
   /** Planar Reflection (mirror) reflectors built from `layout.reflectionPlanes`. */
   private reflectionPlaneObjects: ReflectionPlaneObject[] = [];
+  /** Textured reflective-surface meshes built from `layout.reflectiveSurfaces`. */
+  private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
   private characterObjects: Object3D[] = [];
   private characterRefs: RuntimeCharacterRef[] = [];
   private lightObjects: LightObjectRecord[] = [];
@@ -446,6 +456,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeReflectionPlaneObject(reflector);
     }
     this.reflectionPlaneObjects = [];
+    for (const surface of this.reflectiveSurfaceObjects) {
+      this.scene.remove(surface);
+      disposeReflectiveSurfaceObject(surface);
+    }
+    this.reflectiveSurfaceObjects = [];
     this.disposeInstanceProbeMaterials();
     this.interactionPromptElement.remove();
     void this.engineApp.dispose();
@@ -562,8 +577,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Bake placed Sphere Reflection Captures from the finished scene + environment,
     // then assign nearest-probe envMaps (Play parity with the editor).
     this.buildRuntimeReflectionCaptures();
-    // Planar Reflection mirrors come last so they don't leak into the probe cubemaps.
+    // Planar reflections come last so they don't leak into the probe cubemaps.
     this.buildRuntimeReflectionPlanes();
+    this.buildRuntimeReflectiveSurfaces();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);
@@ -1251,6 +1267,40 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
   }
 
+  /** Resolved settings + world transform for a reflective-surface layout actor. */
+  private reflectiveSurfaceItem(actor: LayoutReflectiveSurface): ReflectiveSurfaceRenderItem {
+    return {
+      ...resolveReflectiveSurface(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      scale: readScale(actor),
+    };
+  }
+
+  /** A fresh clone of a cached material (surfaces patch their material, so never share). */
+  private reflectiveSurfaceMaterial(materialId: string | null): MeshStandardMaterial | null {
+    if (!materialId) return null;
+    const cached = this.materialCache.get(materialId);
+    return cached instanceof MeshStandardMaterial ? (cached.clone() as MeshStandardMaterial) : null;
+  }
+
+  /**
+   * Builds the Reflective Surface meshes (`layout.reflectiveSurfaces`) for Play —
+   * editor parity with {@link SceneApp.buildReflectiveSurfaces}. Materials are
+   * preloaded in {@link loadSceneMaterials}, so each surface clones its cached
+   * material here. Built after the capture bake so the surfaces don't leak into the
+   * probe cubemaps (mirrors the Planar Reflection ordering).
+   */
+  private buildRuntimeReflectiveSurfaces(): void {
+    const surfaces = this.layout?.reflectiveSurfaces ?? [];
+    surfaces.forEach((actor) => {
+      const item = this.reflectiveSurfaceItem(actor);
+      const surface = createReflectiveSurfaceObject(item, this.reflectiveSurfaceMaterial(item.material));
+      this.reflectiveSurfaceObjects.push(surface);
+      this.scene.add(surface);
+    });
+  }
+
   /**
    * Loads per-asset default material slots (`*.materials.json`) and every material
    * a placement references, caching them before instances build. Individual load
@@ -1275,6 +1325,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const id = this.resolvePlacementMaterialSlot(instance.assetId, placement);
         if (id) materialIds.add(id);
       }
+    }
+    for (const surface of this.layout.reflectiveSurfaces ?? []) {
+      if (surface.material) materialIds.add(surface.material);
     }
     await Promise.all(
       [...materialIds].map((id) => this.ensureMaterialLoaded(id).catch(() => undefined)),

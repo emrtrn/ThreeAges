@@ -174,6 +174,7 @@ import {
   validateCloudLayer,
   validateReflection,
   validateReflectionPlane,
+  validateReflectiveSurface,
   validateSphereReflectionCapture,
   validatePostProcess,
   validateSaveActorPayload,
@@ -261,6 +262,14 @@ import {
   uniqueReflectionPlaneName,
   REFLECTION_PLANE_DEFAULTS,
 } from "../engine/render-three/reflectionPlane";
+import {
+  applyReflectiveSurfaceTransform,
+  createReflectiveSurfaceObject,
+  resolveReflectiveSurface,
+  uniqueReflectiveSurfaceId,
+  uniqueReflectiveSurfaceName,
+  REFLECTIVE_SURFACE_DEFAULTS,
+} from "../engine/render-three/reflectiveSurface";
 import {
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -6676,6 +6685,101 @@ check("validateReflectionPlane allowlists fields and round-trips through validat
     reflectionPlanes: [{ id: "rp1", position: [0, 0, 0] }],
   }) as RoomLayout;
   assert.deepEqual(layout.reflectionPlanes, [{ id: "rp1", position: [0, 0, 0] }]);
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("resolveReflectiveSurface fills defaults and overrides per field", () => {
+  assert.deepEqual(resolveReflectiveSurface(null), REFLECTIVE_SURFACE_DEFAULTS);
+  const resolved = resolveReflectiveSurface({
+    id: "rs",
+    position: [0, 0, 0],
+    material: "M_Asphalt",
+    reflectionStrength: 0.4,
+    fresnelPower: 6,
+    fresnelBias: 0.1,
+    distortion: 0.2,
+    tint: "#101010",
+    resolution: 1024,
+  });
+  assert.equal(resolved.material, "M_Asphalt");
+  assert.equal(resolved.reflectionStrength, 0.4);
+  assert.equal(resolved.fresnelPower, 6);
+  assert.equal(resolved.distortion, 0.2);
+  assert.equal(resolved.resolution, 1024);
+  // Unset fields fall back to defaults.
+  assert.equal(resolved.name, REFLECTIVE_SURFACE_DEFAULTS.name);
+  assert.equal(resolved.fresnelBias, 0.1);
+});
+
+check("uniqueReflectiveSurfaceId/Name avoid collisions", () => {
+  const surfaces = [
+    { id: "reflective-surface-1", name: "Reflective Surface", position: [0, 0, 0] as [number, number, number] },
+  ];
+  assert.equal(uniqueReflectiveSurfaceId(surfaces), "reflective-surface-2");
+  assert.equal(uniqueReflectiveSurfaceName("Reflective Surface", surfaces), "Reflective Surface 2");
+});
+
+check("createReflectiveSurfaceObject builds a textured plane with the transform", () => {
+  const item = {
+    ...REFLECTIVE_SURFACE_DEFAULTS,
+    position: [1, 2, 3] as [number, number, number],
+    rotation: [-90, 0, 0] as [number, number, number],
+    scale: [4, 4, 1] as [number, number, number],
+  };
+  const surface = createReflectiveSurfaceObject(item, null);
+  assert.equal(surface.name, REFLECTIVE_SURFACE_DEFAULTS.name);
+  assert.equal(surface.position.x, 1);
+  assert.equal(surface.visible, true);
+  // Hidden hides the surface via the shared transform path.
+  applyReflectiveSurfaceTransform(surface, { ...item, hidden: true });
+  assert.equal(surface.visible, false);
+});
+
+check("validateReflectiveSurface allowlists fields and round-trips through validateLayout", () => {
+  const surface = validateReflectiveSurface({
+    id: "rs1",
+    position: [1, 2, 3],
+    name: "Wet Road",
+    material: "M_Asphalt",
+    reflectionStrength: 0.4,
+    fresnelPower: 6,
+    fresnelBias: 0.1,
+    distortion: 0.2,
+    tint: "#101010",
+    resolution: 1024,
+    rotation: [-90, 0, 0],
+    scale: [4, 4, 1],
+    bogusField: "dropped",
+  });
+  assert.deepEqual(surface, {
+    id: "rs1",
+    position: [1, 2, 3],
+    name: "Wet Road",
+    rotation: [-90, 0, 0],
+    scale: [4, 4, 1],
+    material: "M_Asphalt",
+    reflectionStrength: 0.4,
+    fresnelPower: 6,
+    fresnelBias: 0.1,
+    distortion: 0.2,
+    tint: "#101010",
+    resolution: 1024,
+  });
+  // A missing id rejects; out-of-range strength rejects the save.
+  assert.throws(() => validateReflectiveSurface({ position: [0, 0, 0] }));
+  assert.throws(() =>
+    validateReflectiveSurface({ id: "x", position: [0, 0, 0], reflectionStrength: 5 }),
+  );
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithSurface",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    reflectiveSurfaces: [{ id: "rs1", position: [0, 0, 0] }],
+  }) as RoomLayout;
+  assert.deepEqual(layout.reflectiveSurfaces, [{ id: "rs1", position: [0, 0, 0] }]);
   assert.deepEqual(validateLayout(layout), layout);
 });
 

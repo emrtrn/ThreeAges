@@ -87,6 +87,14 @@ type InspectorTab = "details" | "world";
 /** Numeric Sphere Reflection Capture probe fields editable from the Details panel. */
 type CaptureNumericKey = "radius" | "intensity" | "resolution" | "near" | "far" | "priority";
 
+/** Numeric Reflective Surface fields editable from the Details panel. */
+type SurfaceNumericKey =
+  | "reflectionStrength"
+  | "fresnelPower"
+  | "fresnelBias"
+  | "distortion"
+  | "resolution";
+
 const DEFAULT_LINEAR_DAMPING = 0.12;
 const DEFAULT_ANGULAR_DAMPING = 0.45;
 const PHYSICS_AXIS_LABELS = ["X", "Y", "Z"] as const;
@@ -314,6 +322,7 @@ export class EditorUi {
               <button type="button" data-add-height-fog>Exponential Height Fog</button>
               <button type="button" data-add-cloud-layer>Cloud Layer</button>
               <button type="button" data-add-reflection-plane>Mirror Plane</button>
+              <button type="button" data-add-reflective-surface>Reflective Surface</button>
               <button type="button" data-add-reflection-capture>Sphere Reflection Capture</button>
               <button type="button" data-add-post-process>Post Process</button>
               <div class="add-actor-section-title">Gameplay</div>
@@ -604,6 +613,13 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-reflection-plane]")
       ?.addEventListener("click", () => {
         this.app.addReflectionPlane();
+      });
+
+    // Reflective Surface (textured glossy planar reflection) is a placed actor.
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-reflective-surface]")
+      ?.addEventListener("click", () => {
+        this.app.addReflectiveSurface();
       });
 
     // Sphere Reflection Capture (probe) is a placed actor with a transform.
@@ -2238,6 +2254,10 @@ export class EditorUi {
       this.renderReflectionPlaneDetails(selection);
       return;
     }
+    if (selection.kind === "reflectiveSurface" && selection.reflectiveSurface) {
+      this.renderReflectiveSurfaceDetails(selection);
+      return;
+    }
     if (selection.kind === "reflectionCapture" && selection.reflectionCapture) {
       this.renderReflectionCaptureDetails(selection);
       return;
@@ -3260,6 +3280,173 @@ export class EditorUi {
   }
 
   /**
+   * Details panel for a placed Reflective Surface actor: a full transform plus a
+   * Material picker (Forge `.material.json` → albedo/normal/roughness) and a
+   * Reflection section blending the planar reflection into that material (strength /
+   * fresnel / distortion / tint / resolution). The reflective face is local +Z.
+   */
+  private renderReflectiveSurfaceDetails(selection: EditableSelection): void {
+    const surface = selection.reflectiveSurface;
+    if (!surface) return;
+    this.detailsScale = [...selection.scale];
+    const lockedAttr = selection.locked ? "disabled" : "";
+    const materialAssets = this.editableAssets.filter((asset) => assetType(asset) === "material");
+    const materialOptions = [
+      `<option value="" ${surface.material ? "" : "selected"}>Default (glossy)</option>`,
+    ]
+      .concat(
+        materialAssets.map(
+          (asset) =>
+            `<option value="${escapeHtml(asset.id)}" ${
+              surface.material === asset.id ? "selected" : ""
+            }>${escapeHtml(asset.displayName ?? asset.name)}</option>`,
+        ),
+      )
+      .join("");
+    this.detailsBody.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>reflection / reflective surface</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="Reflective Surface" />
+      </label>
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
+      ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
+      <div class="detail-section">
+        <div class="detail-section-title">Material</div>
+        <label class="detail-row">
+          <span>Surface</span>
+          <select data-surface-material ${lockedAttr}>${materialOptions}</select>
+        </label>
+        <div class="detail-hint">Albedo + normal map + roughness come from this material (asphalt, marble, …).</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Reflection</div>
+        <label class="detail-row">
+          <span>Strength</span>
+          <input data-surface-field="reflectionStrength" type="number" min="0" max="1" step="0.05"
+            value="${surface.reflectionStrength}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Fresnel Power</span>
+          <input data-surface-field="fresnelPower" type="number" min="0" max="16" step="0.5"
+            value="${surface.fresnelPower}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Fresnel Bias</span>
+          <input data-surface-field="fresnelBias" type="number" min="0" max="1" step="0.02"
+            value="${surface.fresnelBias}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Distortion</span>
+          <input data-surface-field="distortion" type="number" min="0" max="1" step="0.01"
+            value="${surface.distortion}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Tint</span>
+          <input data-surface-tint type="color" value="${escapeHtml(surface.tint)}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Resolution</span>
+          <select data-surface-field="resolution" ${lockedAttr}>
+            ${[128, 256, 512, 1024, 2048]
+              .map(
+                (res) =>
+                  `<option value="${res}" ${
+                    surface.resolution === res ? "selected" : ""
+                  }>${res}px</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+        <div class="detail-hint">Lower roughness + higher strength = sharper reflection; fresnel concentrates it at grazing angles.</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Actor</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
+          <span>Lock Movement</span>
+        </label>
+      </div>
+    `;
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>('input[data-detail="pr"]')
+      .forEach((input) => {
+        input.addEventListener("focus", () => this.beginDetailsEdit());
+        input.addEventListener("input", () => {
+          this.beginDetailsEdit();
+          this.applyDetails();
+        });
+        input.addEventListener("change", () => this.commitDetailsEdit());
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>('input[data-detail="scale"]')
+      .forEach((input) => {
+        input.addEventListener("focus", () => this.beginDetailsEdit());
+        input.addEventListener("input", () => {
+          this.beginDetailsEdit();
+          this.applyScaleInput(input);
+          this.applyDetails();
+        });
+        input.addEventListener("change", () => this.commitDetailsEdit());
+      });
+
+    this.detailsBody
+      .querySelector<HTMLButtonElement>("[data-scale-lock]")
+      ?.addEventListener("click", () => {
+        this.app.setSelectionScaleLocked(!selection.scaleLocked);
+      });
+
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-detail-name]");
+    nameInput?.addEventListener("change", () => {
+      this.app.renameSceneObject(selection.id, nameInput.value);
+    });
+
+    this.detailsBody
+      .querySelector<HTMLSelectElement>("[data-surface-material]")
+      ?.addEventListener("change", (event) => {
+        const value = (event.currentTarget as HTMLSelectElement).value;
+        this.app.setSelectedReflectiveSurface({ material: value || null });
+      });
+
+    this.detailsBody
+      .querySelector<HTMLInputElement>("[data-surface-tint]")
+      ?.addEventListener("change", (event) => {
+        this.app.setSelectedReflectiveSurface({
+          tint: (event.currentTarget as HTMLInputElement).value,
+        });
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-surface-field]")
+      .forEach((field) => {
+        field.addEventListener("change", () => {
+          const key = field.dataset.surfaceField as SurfaceNumericKey | undefined;
+          if (!key) return;
+          const value = Number(field.value);
+          if (!Number.isFinite(value)) return;
+          const patch: Partial<Record<SurfaceNumericKey, number>> = {};
+          patch[key] = value;
+          this.app.setSelectedReflectiveSurface(patch);
+        });
+      });
+
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-detail-toggle]")
+      .forEach((toggle) => {
+        toggle.addEventListener("change", () =>
+          this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
+        );
+      });
+  }
+
+  /**
    * Details panel for a placed Sphere Reflection Capture (probe) actor: a Location
    * transform plus a Reflection Capture section for the probe radius / resolution /
    * intensity / near-far / priority / parallax. There is no rotation or scale â€” the
@@ -4213,6 +4400,7 @@ function outlinerKindLabel(kind: EditableSceneObject["kind"]): string {
   if (kind === "fog") return "F";
   if (kind === "cloud") return "K";
   if (kind === "reflectionPlane") return "M";
+  if (kind === "reflectiveSurface") return "R";
   if (kind === "reflectionCapture") return "O";
   if (kind === "post") return "P";
   return "I";

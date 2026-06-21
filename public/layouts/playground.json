@@ -288,26 +288,29 @@
       "castShadow": true
     }
   ],
-  "reflectionPlanes": [
+  "reflectionPlanes": [],
+  "reflectiveSurfaces": [
     {
-      "id": "reflection-plane-1",
+      "id": "reflective-surface-1",
       "position": [
-        0.06,
-        0.76,
-        1.45
+        -0.4,
+        0.31,
+        1.87
       ],
-      "name": "Reflection Plane",
+      "name": "Reflective Surface",
       "rotation": [
+        -90,
         0,
-        0,
-        90
+        0
       ],
       "scale": [
-        0.91,
-        0.91,
-        0.05
+        4,
+        4,
+        1
       ],
-      "color": "#dbdbdb",
+      "material": "concratetile-material",
+      "reflectionStrength": 0.3,
+      "fresnelPower": 4,
       "resolution": 512
     }
   ],

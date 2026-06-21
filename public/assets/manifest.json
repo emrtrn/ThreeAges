@@ -7497,6 +7497,29 @@
         "bytes": 347
       },
       "license": "Unknown"
+    },
+    {
+      "id": "concratetile-material",
+      "name": "Concrate Tile.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/ConcrateTile.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 367
+      },
+      "license": "Unknown"
     }
   ]
 }

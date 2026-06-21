@@ -129,6 +129,16 @@ import {
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
 import {
+  applyReflectiveSurfaceTransform,
+  createReflectiveSurfaceObject,
+  disposeReflectiveSurfaceObject,
+  resolveReflectiveSurface,
+  uniqueReflectiveSurfaceId,
+  uniqueReflectiveSurfaceName,
+  type ReflectiveSurfaceObject,
+  type ReflectiveSurfaceRenderItem,
+} from "@engine/render-three/reflectiveSurface";
+import {
   applyProbeEnvMapToObject,
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -214,6 +224,7 @@ import type {
   LayoutPhysics,
   LayoutPostProcess,
   LayoutReflectionPlane,
+  LayoutReflectiveSurface,
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
   LayoutWorldSettings,
@@ -250,6 +261,7 @@ import {
   cloneLightActor,
   clonePlacement,
   cloneReflectionPlane,
+  cloneReflectiveSurface,
   cloneSphereReflectionCapture,
   lightActorsEqual,
   transformsEqual,
@@ -401,6 +413,8 @@ export class SceneApp {
   private reflectionPlaneObjects: ReflectionPlaneObject[] = [];
   /** Billboard icons (clickable handles) for placed Mirror Plane actors, by index. */
   private reflectionPlaneIcons: Sprite[] = [];
+  /** Live textured reflective-surface meshes for placed Reflective Surface actors, by index. */
+  private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
   private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
   /** Billboard icons (clickable handles) for placed Sphere Reflection Capture actors, by index. */
@@ -614,6 +628,7 @@ export class SceneApp {
         for (const record of this.lightObjects) objects.push(record.root);
         objects.push(...this.reflectionPlaneObjects);
         objects.push(...this.reflectionPlaneIcons);
+        objects.push(...this.reflectiveSurfaceObjects);
         // The influence sphere never picks — it only previews the radius while the
         // probe is selected. The probe is selected through its billboard icon.
         objects.push(...this.reflectionCaptureIcons);
@@ -1560,6 +1575,13 @@ export class SceneApp {
       return;
     }
     if (
+      this.selection?.kind === "reflectiveSurface" &&
+      this.editorSceneController.selectedCount <= 1
+    ) {
+      this.removeReflectiveSurface(this.selection.index);
+      return;
+    }
+    if (
       this.selection?.kind === "reflectionCapture" &&
       this.editorSceneController.selectedCount <= 1
     ) {
@@ -2019,6 +2041,7 @@ export class SceneApp {
     this.applyCloudLayer();
     this.applyReflection(true);
     this.buildReflectionPlanes();
+    this.buildReflectiveSurfaces();
     this.buildReflectionCaptures();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
@@ -2343,6 +2366,11 @@ export class SceneApp {
 
     if (selection.kind === "reflectionPlane") {
       this.refreshReflectionPlaneObject(selection.index);
+      return;
+    }
+
+    if (selection.kind === "reflectiveSurface") {
+      this.refreshReflectiveSurfaceObject(selection.index);
       return;
     }
 
@@ -2870,6 +2898,236 @@ export class SceneApp {
     this.setReflectionPlane(this.selection.index, patch);
   }
 
+  // --- Reflective Surface (textured glossy planar reflection) actors --------
+
+  /** Resolved settings + world transform for a reflective-surface layout actor. */
+  private reflectiveSurfaceItem(actor: LayoutReflectiveSurface): ReflectiveSurfaceRenderItem {
+    return {
+      ...resolveReflectiveSurface(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      scale: readScale(actor),
+    };
+  }
+
+  /**
+   * Resolves a reflective surface's material to a fresh `MeshStandardMaterial`. The
+   * surface patches its material (`onBeforeCompile`), so it must own a CLONE — never
+   * the shared cache instance that placed-instance meshes also use. Returns null when
+   * no material is assigned or it isn't cached yet (built with the default; see
+   * {@link ensureReflectiveSurfaceMaterial}).
+   */
+  private reflectiveSurfaceMaterial(materialId: string | null): MeshStandardMaterial | null {
+    if (!materialId) return null;
+    const cached = this.materialCache.get(materialId);
+    return cached instanceof MeshStandardMaterial ? (cached.clone() as MeshStandardMaterial) : null;
+  }
+
+  /** Kicks off an async material load (if needed), rebuilding the surface once it lands. */
+  private ensureReflectiveSurfaceMaterial(index: number, materialId: string | null): void {
+    if (!materialId || this.materialCache.has(materialId)) return;
+    void this.ensureMaterialLoaded(materialId).then(
+      () => this.rebuildReflectiveSurfaceObject(index),
+      () => undefined,
+    );
+  }
+
+  /** Rebuilds every reflective surface from `layout.reflectiveSurfaces` (used on load). */
+  private buildReflectiveSurfaces(): void {
+    for (const surface of this.reflectiveSurfaceObjects) {
+      this.scene.remove(surface);
+      disposeReflectiveSurfaceObject(surface);
+    }
+    this.reflectiveSurfaceObjects = [];
+    const surfaces = this.layout?.reflectiveSurfaces ?? [];
+    surfaces.forEach((actor, index) => {
+      const item = this.reflectiveSurfaceItem(actor);
+      const surface = createReflectiveSurfaceObject(item, this.reflectiveSurfaceMaterial(item.material));
+      surface.userData.reflectiveSurfaceIndex = index;
+      this.reflectiveSurfaceObjects.push(surface);
+      this.scene.add(surface);
+      this.ensureReflectiveSurfaceMaterial(index, item.material);
+    });
+  }
+
+  /** Cheap transform/visibility/live-param sync for one surface (gizmo drag). */
+  private refreshReflectiveSurfaceObject(index: number): void {
+    const actor = this.layout?.reflectiveSurfaces?.[index];
+    const surface = this.reflectiveSurfaceObjects[index];
+    if (!actor || !surface) return;
+    applyReflectiveSurfaceTransform(surface, this.reflectiveSurfaceItem(actor));
+  }
+
+  /** Recreates one surface (needed when material or resolution changes — baked at build). */
+  private rebuildReflectiveSurfaceObject(index: number): void {
+    const old = this.reflectiveSurfaceObjects[index];
+    if (old) {
+      this.scene.remove(old);
+      disposeReflectiveSurfaceObject(old);
+    }
+    const actor = this.layout?.reflectiveSurfaces?.[index];
+    if (!actor) return;
+    const item = this.reflectiveSurfaceItem(actor);
+    const surface = createReflectiveSurfaceObject(item, this.reflectiveSurfaceMaterial(item.material));
+    surface.userData.reflectiveSurfaceIndex = index;
+    this.reflectiveSurfaceObjects[index] = surface;
+    this.scene.add(surface);
+    this.ensureReflectiveSurfaceMaterial(index, item.material);
+  }
+
+  private refreshReflectiveSurfaceIndices(): void {
+    this.reflectiveSurfaceObjects.forEach((surface, index) => {
+      surface.userData.reflectiveSurfaceIndex = index;
+    });
+  }
+
+  private insertReflectiveSurface(index: number, actor: LayoutReflectiveSurface): void {
+    if (!this.layout) return;
+    this.layout.reflectiveSurfaces ??= [];
+    const insertionIndex = clampIndex(index, this.layout.reflectiveSurfaces.length);
+    this.layout.reflectiveSurfaces.splice(insertionIndex, 0, cloneReflectiveSurface(actor));
+    const item = this.reflectiveSurfaceItem(actor);
+    const surface = createReflectiveSurfaceObject(item, this.reflectiveSurfaceMaterial(item.material));
+    this.reflectiveSurfaceObjects.splice(insertionIndex, 0, surface);
+    this.scene.add(surface);
+    this.refreshReflectiveSurfaceIndices();
+    this.ensureReflectiveSurfaceMaterial(insertionIndex, item.material);
+  }
+
+  private removeReflectiveSurfaceAt(index: number): LayoutReflectiveSurface | null {
+    if (!this.layout?.reflectiveSurfaces) return null;
+    const [removed] = this.layout.reflectiveSurfaces.splice(index, 1);
+    const [surface] = this.reflectiveSurfaceObjects.splice(index, 1);
+    if (surface) {
+      this.scene.remove(surface);
+      disposeReflectiveSurfaceObject(surface);
+    }
+    this.refreshReflectiveSurfaceIndices();
+    return removed ? cloneReflectiveSurface(removed) : null;
+  }
+
+  /** Adds a Reflective Surface actor (flat floor by default) and selects it. */
+  addReflectiveSurface(): void {
+    if (!this.layout) return;
+    const surfaces = this.layout.reflectiveSurfaces ?? [];
+    const actor: LayoutReflectiveSurface = {
+      id: uniqueReflectiveSurfaceId(surfaces),
+      name: uniqueReflectiveSurfaceName("Reflective Surface", surfaces),
+      position: [0, 0.01, 0],
+      rotation: [-90, 0, 0],
+      scale: [4, 4, 1],
+    };
+    const index = surfaces.length;
+    this.executeCommand({
+      label: "Add Reflective Surface",
+      redo: () => {
+        this.insertReflectiveSurface(index, actor);
+        this.select({ kind: "reflectiveSurface", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.removeReflectiveSurfaceAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Added Reflective Surface.", "info");
+  }
+
+  /** Removes a Reflective Surface actor (undoable). */
+  removeReflectiveSurface(index: number): void {
+    const actor = this.layout?.reflectiveSurfaces?.[index];
+    if (!actor) return;
+    const snapshot = cloneReflectiveSurface(actor);
+    this.executeCommand({
+      label: "Delete Reflective Surface",
+      redo: () => {
+        this.removeReflectiveSurfaceAt(index);
+        if (this.selection?.kind === "reflectiveSurface") this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.insertReflectiveSurface(index, snapshot);
+        this.select({ kind: "reflectiveSurface", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+  }
+
+  /**
+   * Applies a partial property edit to a reflective surface as one undoable command.
+   * Material + resolution are baked into the object (render target / patched material),
+   * so those rebuild it; the fresnel/strength/distortion/tint params are live uniforms
+   * and only need a cheap refresh. Transform/name/hidden flow through the generic
+   * selection pipeline.
+   */
+  setReflectiveSurface(
+    index: number,
+    patch: {
+      material?: string | null;
+      reflectionStrength?: number;
+      fresnelPower?: number;
+      fresnelBias?: number;
+      distortion?: number;
+      tint?: string;
+      resolution?: number | undefined;
+    },
+    label = "Edit Reflective Surface",
+  ): void {
+    const actor = this.layout?.reflectiveSurfaces?.[index];
+    if (!actor) return;
+    const previous = cloneReflectiveSurface(actor);
+    const next = cloneReflectiveSurface(actor);
+    if ("material" in patch) {
+      if (patch.material === null || patch.material === undefined) delete next.material;
+      else next.material = patch.material;
+    }
+    if (patch.reflectionStrength !== undefined) next.reflectionStrength = patch.reflectionStrength;
+    if (patch.fresnelPower !== undefined) next.fresnelPower = patch.fresnelPower;
+    if (patch.fresnelBias !== undefined) next.fresnelBias = patch.fresnelBias;
+    if (patch.distortion !== undefined) next.distortion = patch.distortion;
+    if (patch.tint !== undefined) next.tint = patch.tint;
+    if ("resolution" in patch) {
+      if (patch.resolution === undefined) delete next.resolution;
+      else next.resolution = patch.resolution;
+    }
+
+    const needsRebuild = "material" in patch || "resolution" in patch;
+    const apply = (value: LayoutReflectiveSurface): void => {
+      if (!this.layout?.reflectiveSurfaces?.[index]) return;
+      this.layout.reflectiveSurfaces[index] = cloneReflectiveSurface(value);
+      if (needsRebuild) this.rebuildReflectiveSurfaceObject(index);
+      else this.refreshReflectiveSurfaceObject(index);
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(next),
+      undo: () => apply(previous),
+    });
+  }
+
+  /** Edits the currently selected reflective surface's params (Details panel). */
+  setSelectedReflectiveSurface(patch: {
+    material?: string | null;
+    reflectionStrength?: number;
+    fresnelPower?: number;
+    fresnelBias?: number;
+    distortion?: number;
+    tint?: string;
+    resolution?: number | undefined;
+  }): void {
+    if (this.selection?.kind !== "reflectiveSurface") return;
+    this.setReflectiveSurface(this.selection.index, patch);
+  }
+
   // --- Sphere Reflection Capture (probe) actors ----------------------------
 
   /** Resolved settings + world transform for a reflection-capture layout actor. */
@@ -3068,6 +3326,7 @@ export class SceneApp {
     for (const icon of this.reflectionCaptureIcons) hide(icon);
     for (const reflector of this.reflectionPlaneObjects) hide(reflector);
     for (const icon of this.reflectionPlaneIcons) hide(icon);
+    for (const surface of this.reflectiveSurfaceObjects) hide(surface);
     for (const record of this.lightObjects) hide(record.gizmo);
     try {
       return fn();
@@ -4042,6 +4301,10 @@ export class SceneApp {
       this.refreshReflectionPlaneObject(selection.index);
       return;
     }
+    if (selection.kind === "reflectiveSurface") {
+      this.refreshReflectiveSurfaceObject(selection.index);
+      return;
+    }
     if (selection.kind === "reflectionCapture") {
       this.refreshReflectionCaptureObject(selection.index);
       // Hiding disposes the probe bake (it leaves the envMap pool); showing re-bakes.
@@ -4521,6 +4784,10 @@ export class SceneApp {
       if (!options.includeHidden && plane.hidden) return;
       selections.push({ kind: "reflectionPlane", index });
     });
+    this.layout.reflectiveSurfaces?.forEach((surface, index) => {
+      if (!options.includeHidden && surface.hidden) return;
+      selections.push({ kind: "reflectiveSurface", index });
+    });
     this.layout.reflectionCaptures?.forEach((capture, index) => {
       if (!options.includeHidden && capture.hidden) return;
       selections.push({ kind: "reflectionCapture", index });
@@ -4543,6 +4810,11 @@ export class SceneApp {
     }
     if (selection.kind === "reflectionPlane") {
       return resolveReflectionPlane(this.layout?.reflectionPlanes?.[selection.index] ?? null).name;
+    }
+    if (selection.kind === "reflectiveSurface") {
+      return resolveReflectiveSurface(
+        this.layout?.reflectiveSurfaces?.[selection.index] ?? null,
+      ).name;
     }
     if (selection.kind === "reflectionCapture") {
       return resolveSphereReflectionCapture(
@@ -4617,6 +4889,10 @@ export class SceneApp {
       const reflector = this.reflectionPlaneObjects[selection.index];
       return reflector ? new Box3().setFromObject(reflector) : null;
     }
+    if (selection.kind === "reflectiveSurface") {
+      const surface = this.reflectiveSurfaceObjects[selection.index];
+      return surface ? new Box3().setFromObject(surface) : null;
+    }
     if (selection.kind === "reflectionCapture") {
       const helper = this.reflectionCaptureObjects[selection.index];
       return helper ? new Box3().setFromObject(helper) : null;
@@ -4672,6 +4948,13 @@ export class SceneApp {
       const actor = this.layout.reflectionPlanes?.[selection.index];
       if (!reflector || actor?.hidden) return null;
       return this.selectionOutline.cloneRenderableMeshes(reflector);
+    }
+
+    if (selection.kind === "reflectiveSurface") {
+      const surface = this.reflectiveSurfaceObjects[selection.index];
+      const actor = this.layout.reflectiveSurfaces?.[selection.index];
+      if (!surface || actor?.hidden) return null;
+      return this.selectionOutline.cloneRenderableMeshes(surface);
     }
 
     if (selection.kind === "reflectionCapture") {
@@ -4980,6 +5263,7 @@ export class SceneApp {
     | LayoutLightActor
     | LayoutActorInstance
     | LayoutReflectionPlane
+    | LayoutReflectiveSurface
     | LayoutSphereReflectionCapture
     | null {
     if (!this.layout) return null;
@@ -4991,6 +5275,9 @@ export class SceneApp {
     if (selection.kind === "actor") return this.layout.actors?.[selection.index] ?? null;
     if (selection.kind === "reflectionPlane") {
       return this.layout.reflectionPlanes?.[selection.index] ?? null;
+    }
+    if (selection.kind === "reflectiveSurface") {
+      return this.layout.reflectiveSurfaces?.[selection.index] ?? null;
     }
     if (selection.kind === "reflectionCapture") {
       return this.layout.reflectionCaptures?.[selection.index] ?? null;
@@ -5167,6 +5454,9 @@ export class SceneApp {
     if (selection.kind === "post") return Boolean(this.layout.postProcess);
     if (selection.kind === "reflectionPlane") {
       return Boolean(this.layout.reflectionPlanes?.[selection.index]);
+    }
+    if (selection.kind === "reflectiveSurface") {
+      return Boolean(this.layout.reflectiveSurfaces?.[selection.index]);
     }
     if (selection.kind === "reflectionCapture") {
       return Boolean(this.layout.reflectionCaptures?.[selection.index]);
