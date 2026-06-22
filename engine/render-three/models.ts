@@ -10,6 +10,28 @@ import { applyEulerDegrees, composePlacementMatrix, composeTransformMatrix } fro
 
 const HIDDEN_INSTANCE_MATRIX = new Matrix4().makeScale(0, 0, 0);
 
+/**
+ * glTF primitives may ship without a NORMAL attribute. Per the spec GLTFLoader
+ * then only flips the material to `flatShading` (face normals via screen-space
+ * derivatives), which keeps the *beauty* render correct but leaves the geometry
+ * with no `normal` attribute. GTAOPass (Ambient Occlusion) renders its G-buffer
+ * with a `MeshNormalMaterial` override that reads that attribute directly, so a
+ * missing normal buffer yields zero-length normals → the mesh computes as fully
+ * occluded and renders solid black under AO (the long-standing "Play character
+ * is black with AO on" bug). Computing vertex normals where they are absent
+ * gives the AO pass valid normals; the `flatShading` material still drives the
+ * beauty look, so on-screen appearance is unchanged. Idempotent: cloned/shared
+ * geometries are skipped once normals exist.
+ */
+export function ensureVertexNormals(root: Object3D): void {
+  root.traverse((object) => {
+    if (!isRenderableMesh(object)) return;
+    const geometry = object.geometry;
+    if (geometry.getAttribute("normal") || !geometry.getAttribute("position")) return;
+    geometry.computeVertexNormals();
+  });
+}
+
 export interface InstancedModelGroup {
   group: Group;
   meshes: InstancedMesh[];
@@ -60,6 +82,7 @@ export function createInstancedModelGroup(
   const meshes: InstancedMesh[] = [];
   group.name = `instanced-${assetId}`;
 
+  ensureVertexNormals(gltf.scene);
   gltf.scene.updateMatrixWorld(true);
 
   gltf.scene.traverse((object) => {
@@ -146,6 +169,7 @@ export function createCharacterSceneObject(
   gltf: GLTF,
   item: CharacterRenderItem,
 ): Object3D {
+  ensureVertexNormals(gltf.scene);
   const character = gltf.scene.clone();
   character.name = item.name;
   character.position.set(...item.position);

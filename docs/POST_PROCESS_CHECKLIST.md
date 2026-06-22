@@ -415,11 +415,11 @@ hissini tamamlayan düşük-maliyetli üçlü + en büyük eksik DoF (2026-06-20
 
 #### F2.4 — Kalan opsiyonel pass efektleri
 
-- [~] **Ambient Occlusion** (`GTAOPass`): `ao{enabled,radius,intensity}` → GTAO
+- [x] **Ambient Occlusion** (`GTAOPass`): `ao{enabled,radius,intensity}` → GTAO
       (SSAOPass/SAOPass yerine seçildi, 2026-06-22). **Durum:** boru hattı + UI +
-      validator + testler tamam ve ikon çerçevesi düzeldi, ancak **Play
-      karakterinin tamamen siyah görünmesi sorunu HÂLÂ ÇÖZÜLMEDİ** — bkz. aşağıdaki
-      "Açık sorun (2026-06-22)". Başka oturumda ele alınacak. **Mimari not:** AO pass'i
+      validator + testler tamam, ikon çerçevesi düzeldi **ve Play karakterinin
+      siyah görünmesi sorunu ÇÖZÜLDÜ (2026-06-22)** — bkz. aşağıdaki "Çözüldü"
+      notu. **Mimari not:** AO pass'i
       `scene` + `camera` ister; F2.2'de DoF için fabrika imzası zaten
       `createPostProcessEffectPasses(resolved, {scene,camera,width,height})`
       olarak genişletildi — AO `context.scene`/`context.camera`'yı doğrudan
@@ -448,40 +448,36 @@ hissini tamamlayan düşük-maliyetli üçlü + en büyük eksik DoF (2026-06-20
          sonra geri yüklenir). Gerçek geometri (karakter dahil) içeride kalır.
       2. **Editör ikon çerçevesi düzeldi** (Sprite hariç tutma çalışıyor).
 
-      ### Açık sorun (2026-06-22) — Play karakteri AO ile tamamen siyah
+      ### Çözüldü (2026-06-22) — Play karakteri AO ile siyah: eksik vertex normalleri
 
-      **Belirti:** Post Process → Ambient Occlusion açıkken Play modunda karakter
+      **Belirtiydi:** Post Process → Ambient Occlusion açıkken Play modunda karakter
       (`character-a`, default pawn, `characterScale: 0.3`, ~0.5u boy) tamamen
-      **siyah** render oluyor; düz zemin ve gökyüzü normal. Editör ikon çerçevesi
-      düzeldikten sonra bu **ayrı sorun çözülmedi**.
+      **siyah** render oluyordu; düz zemin ve gökyüzü normaldi.
 
-      **Denenenler (işe yaramadı):**
-      - `ForgeGtaoPass` ile Sprite + `userData.noAmbientOcclusion` hariç tutma →
-        ikonları düzeltti, karakteri **düzeltmedi**.
-      - İlk (yanlış) hipotez: SkinnedMesh G-buffer bozulması → blanket SkinnedMesh
-        hariç tutuldu; `character-a` skinned değil (blok `Mesh`), işe yaramadı,
-        kaldırıldı.
-      - `AO_RADIUS_SCALE` 0.5 → **0.1** (authored radius 1 → 0.1u). Ölçek
-        hipotezi (radius ≈ karakter boyu → tam self-occlusion) test edildi;
-        **karakter hâlâ siyah** (yani tek başına oversized-radius değil ya da
-        başka bir neden var).
+      **Kök neden:** `character-a.glb`'nin 6 mesh primitive'inin **hiçbirinde NORMAL
+      attribute'u yok** (yalnız `POSITION` + `TEXCOORD_0`). glTF spec'ine göre
+      normal yokken `GLTFLoader` normalleri **hesaplamaz**; sadece materyali
+      `flatShading = true` yapar (`assignFinalMaterial`, GLTFLoader satır ~3505).
+      Flat shading yüzey normallerini fragment shader'da ekran-uzayı türevlerinden
+      (`dFdx`/`dFdy`) üretir — bu yüzden **beauty render düzgün** görünür. Ama
+      geometride hâlâ `normal` attribute'u yoktur. GTAOPass G-buffer'ını
+      `MeshNormalMaterial` override ile çizer ve bu materyal **doğrudan `normal`
+      attribute'unu** okur (flatShading kullanmaz). Attribute olmadığından normaller
+      sıfır-uzunlukta çıkar → GTAO karakteri tam occluded hesaplar → beauty × AO(0)
+      = **siyah**. Zemin/bloklar built-in geometriler (normalleri var) olduğu için
+      etkilenmedi. `AO_RADIUS_SCALE` 0.1'in işe yaramaması da bunu doğrular: sorun
+      ölçek değil, eksik normaldi.
 
-      **Bir sonraki oturum için araştırma yönleri:**
-      - GTAOPass `OUTPUT.AO` / `OUTPUT.Normal` / `OUTPUT.Depth` ile debug et:
-        karakterin normal/derinlik G-buffer'ı doğru mu çiziliyor? Normaller ters/
-        bozuk mu, derinlik yanlış mı?
-      - Karakter materyali/normalleri: `character-a` glTF'inde ters normaller,
-        `side`/winding, veya normal eksikliği olabilir mi (override
-        `MeshNormalMaterial` FrontSide çiziyor).
-      - Node-animasyonlu (skinned olmayan) parçaların override pass'inde dünya
-        matrisi/derinliği beauty ile uyuşuyor mu?
-      - Gerekirse: karakteri tümüyle AO'dan muaf tutmak için kök objesine
-        `userData.noAmbientOcclusion = true` ekle (build yolu:
-        `createCharacterSceneObject` / default-pawn spawn). `ForgeGtaoPass` bu
-        bayrağı zaten okuyor — tek eksik bayrağı set etmek. Bu, "karakterde AO
-        olmasın" kararı verilirse hızlı geçici/kalıcı çözüm.
-      - Alternatif: `screenSpaceRadius: true` (ölçek-bağımsız ekran-uzayı yarıçapı)
-        denenebilir.
+      **Düzeltme:** `engine/render-three/models.ts` içine `ensureVertexNormals(root)`
+      yardımcısı eklendi — `normal` attribute'u olmayan her renderable mesh
+      geometrisine `computeVertexNormals()` uygular (idempotent; paylaşılan/klon
+      geometriler normal varsa atlanır). `createCharacterSceneObject` (clone'dan
+      önce) ve `createInstancedModelGroup` (instancing'den önce) çağırır, böylece
+      hem editör hem runtime, hem karakter hem statik glTF mesh'leri kapsanır.
+      `flatShading` materyali beauty görünümünü sürdürdüğünden **on-screen görünüm
+      değişmez** (regresyon yok); AO override'ı artık geçerli (smooth) normaller
+      okur. `tsc` temiz, 274 engine-test yeşil. Manuel tarayıcı doğrulaması
+      (autosave nedeniyle) kullanıcıya bırakıldı.
 - [ ] **Anti-alias** toggle (`SMAAPass`): `antialias: "none" | "smaa"`
 - [ ] Bölgesel grading: shadows/midtones/highlights (lift/gamma/gain)
 
