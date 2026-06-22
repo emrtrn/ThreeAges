@@ -31,7 +31,7 @@ scene/runtime helpers:
   dev-only `?editor` dynamic import and is excluded from production builds.
 - The stable reference repo is `C:\Users\emret\Desktop\3DGameDev`; use it to
   compare behavior if the migrated boundaries ever drift from it.
-- `docs/ARCHITECTURE_PLAN_SOURCE.md` is the imported source plan.
+- `docs/architecture/ARCHITECTURE_PLAN_SOURCE.md` is the imported source plan.
 
 Removed architecture:
 
