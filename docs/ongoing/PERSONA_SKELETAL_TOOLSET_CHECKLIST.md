@@ -271,11 +271,78 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [ ] Klip timeline'ında **notify** işaretleri ekle/düzenle (ayak sesi, hasar
       penceresi, efekt tetikleyici)
 - [ ] `notifies[]` sidecar formatı + runtime'da notify yayını (event akışı)
-- [ ] **Montage-lite**: tek-atış aksiyon — bir klibi (veya section dizisini) bir
-      kez oynat, base locomotion'a blend-in/out, ortasında notify yay
-      (saldırı / zıplama / reload). `montages[]` sidecar formatı + runtime tetikleme API'si
+- [~] **Montage-lite + Upper Body slot (runtime bağlandı; notify + editör authoring pending).**
+      Unreal'in "Slot + Layered Blend Per Bone" mekaniğinin **veri** karşılığı kuruldu
+      (node-graph yok). Şema: `*.skeleton.json` `montages[]`
+      (`{name, clip, slot:"upperBody"|"fullBody", loop, blendIn/OutSeconds}`) +
+      `upperBodyBone` (maske kökü). Engine: `bodyMask.splitClipsByUpperBody` (klibi
+      node-subtree'ye göre alt/üst track'lere böler — skinned VEYA rigid rig),
+      `LayeredCharacterAnimator` (iki kanal: alt=locomotion, üst=slot; üst normalde
+      locomotion'ı yansıtır, montage/aim geçici sahiplenir; tek-atış montage
+      `update(dt)` zamanlayıcısıyla aim/passthrough'a döner). Input:
+      `PointerButtonSource` (Mouse0=fire, Mouse2=aim). Game mode
+      `tpsCharacterGameMode`: `upperBodyBone` varsa layered, yoksa düz CrossfadeAnimator
+      (geriye dönük). RMB→aim pozu (üst gövde), LMB→fire montage; **bacaklar yürürken
+      üst gövde ateş eder**. Demo `character-a`: `torso` maske kökü, hazır
+      `holding-both`(aim)/`holding-both-shoot`(fire) klipleri. **Pending:** notify
+      yayını, editör authoring (maske kökü Skeleton Tree'den seçimi + montage UI),
+      `fullBody` slot, kemik-başına yumuşak blend (şu an sert ayrım).
 - [ ] (opsiyonel) Montage section'ları / basit branching — Animation Composite
       ihtiyacını da büyük ölçüde karşılar
+
+#### ▶ SONRAKİ OTURUM — Adım 2: Editör Montage + Upper-Body Root Authoring UI
+
+> Hedef: `*.skeleton.json` `montages[]` ve `upperBodyBone` alanlarını **elle JSON
+> yazmadan**, `SkeletalMeshEditor` içinde görsel olarak yazmak. Runtime + şema +
+> save validator ZATEN HAZIR (bu oturumda kuruldu); bu adım **yalnızca editör UI**.
+> Yeni karakter authoring'i bundan sonra kullanıcıya geçer (bana sormaya gerek kalmaz).
+
+**Bağlam / hazır olanlar (yeniden keşfetme):**
+
+- Şema + persistans: [`assetSkeletonLoader.ts`](../../src/scene/assetSkeletonLoader.ts)
+  `AssetSkeletonMontageDef` (`{name, clip, slot:"upperBody"|"fullBody", loop,
+  blendInSeconds, blendOutSeconds}`), `MONTAGE_SLOTS`, `AssetSkeletonDef.upperBodyBone`.
+  Store re-export'ları [`assetSkeletonStore.ts`](../../src/editor/assetSkeletonStore.ts)
+  (`AssetSkeletonMontageDef`, `MontageSlot`, `MONTAGE_SLOTS` zaten dışa açık).
+- Save validator (`tools/saveValidator.ts`) `validateMontages` + `upperBodyBone`
+  zaten allowlist'te — yeni alan EKLEME yok, sadece UI `this.skeleton`'ı mutate edip
+  mevcut `save()`'i çağırsın.
+- **En yakın şablon = Blend Space UI** ([`SkeletalMeshEditor.ts`](../../src/editor/SkeletalMeshEditor.ts)):
+  `renderBlendSpaceDetails` / `renderBlendSpaceEditor` / `bindBlendSpaceControls` +
+  immutable mutator deseni (`replaceSelectedBlendSpace`, `markDirty`, `renderDetails`).
+  Montage UI bunu birebir taklit etmeli. CSS: `editorUi.css` `sm-*` sınıfları.
+
+**Yapılacaklar:**
+
+- [ ] **Upper-Body Root seçimi (Skeleton mode):** `renderSkeletonDetails` "Selected
+      Bone" bölümüne, seçili kemik varken **"Set as Upper-Body Root"** + mevcut değeri
+      gösteren satır + **"Clear"**. `this.skeleton.upperBodyBone` yazar. (Opsiyonel:
+      üst-gövde alt-ağacını bone tree'de/viewport'ta vurgula — `collectSubtreeNodeNames`
+      [`engine/render-three/bodyMask.ts`](../../engine/render-three/bodyMask.ts) yeniden
+      kullanılabilir.)
+- [ ] **Montages bölümü (Animation mode):** `renderAnimationDetails` sonuna Blend Space
+      gibi bir "Montages" section: liste (ad/clip/slot/loop), **Add Montage** (default
+      `{name:"montage", clip: ilk klip, slot:"upperBody", loop:false, blendIn:0.12,
+      blendOut:0.2}`), seç → düzenle (ad text, clip dropdown=`blendSampleClipOptions`
+      benzeri None'suz liste, slot select=`MONTAGE_SLOTS`, loop checkbox, blendIn/Out
+      text), sil. Yinelenen ad / boş clip engelle (validator zaten atar ama UI'da uyar).
+- [ ] **(Opsiyonel) Montage önizleme:** "Play Montage" → editör viewport'unda layered
+      sonucu göster. `LayeredCharacterAnimator`'ı
+      ([`engine/render-three/layeredCharacterAnimator.ts`](../../engine/render-three/layeredCharacterAnimator.ts))
+      editörde kur (root = yüklenen model, clips = `this.clips`, upperBodyBone =
+      `this.skeleton.upperBodyBone`); `playLocomotion(seçili klip)` + `playMontage`/`setAim`
+      ile önizle, `mixers`'ı render döngüsünde `update`'le. Not: editör şu an tek mixer
+      (`this.mixer`) kullanıyor; layered iki mixer ekler — render loop'ta ikisini de
+      ilerlet. Bu opsiyonel; minimum sürümde önizleme atlanıp sadece authoring yapılır.
+- [ ] **İpucu metni:** game mode konvansiyonu — TPS, `"aim"` (held) ve `"fire"`
+      (one-shot) adlı `upperBody` montage'larını otomatik tanır; UI'da küçük bir hint.
+      (Editör generic kalsın — kuralı zorlama, sadece bilgilendir.)
+- [ ] **Gate:** `npx tsc --noEmit` temiz; mümkünse el ile bir montage ekle→kaydet→
+      `*.skeleton.json`'da görünüyor + Play'de çalışıyor doğrulaması. engine-tests
+      zaten normalize/validate'i kapsıyor (yeni saf mantık yoksa ek test gerekmez).
+
+**Gotcha:** Montage `clip` dropdown'ı **None içermemeli** (boş clip save'de reddedilir);
+Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini kullan.
 
 ### Faz 4 — Physics Mode / PhAT-lite (ertelenmiş, opsiyonel)
 

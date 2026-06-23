@@ -11,6 +11,7 @@ import {
 export {
   ANIMATION_SET_ROLES,
   BLEND_SPACE_TYPES,
+  MONTAGE_SLOTS,
   defaultAssetSkeleton,
   defaultBlendSpaceAxis,
   loadAssetSkeleton,
@@ -22,12 +23,14 @@ export type {
   AnimationSetRole,
   AssetSkeletonBlendSpaceDef,
   AssetSkeletonDef,
+  AssetSkeletonMontageDef,
   AssetSkeletonPreviewPrefs,
   AssetSkeletonSocketDef,
   BlendSampleWeight,
   BlendSpaceAxisDef,
   BlendSpaceSampleDef,
   BlendSpaceType,
+  MontageSlot,
 } from "@/scene/assetSkeletonLoader";
 
 export async function saveAssetSkeleton(

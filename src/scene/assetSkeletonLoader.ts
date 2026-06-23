@@ -63,6 +63,31 @@ export interface BlendSampleWeight {
   weight: number;
 }
 
+export const MONTAGE_SLOTS = ["upperBody", "fullBody"] as const;
+export type MontageSlot = (typeof MONTAGE_SLOTS)[number];
+
+/**
+ * A one-shot or held action clip layered over the base locomotion — the data
+ * form of an Unreal Animation Montage played into a slot. `upperBody` montages
+ * blend only over the bones at/under {@link AssetSkeletonDef.upperBodyBone}
+ * (Unreal's "Layered Blend Per Bone" + Slot), so legs keep walking while the
+ * upper body fires/reloads/aims.
+ */
+export interface AssetSkeletonMontageDef {
+  /** Unique name within the asset; runtime/game data triggers by this name. */
+  name: string;
+  /** Clip the montage plays. */
+  clip: string;
+  /** Which body region the montage drives. */
+  slot: MontageSlot;
+  /** Loop while held (aim poses), or play once (fire/reload). */
+  loop: boolean;
+  /** Crossfade-in seconds when the montage starts. */
+  blendInSeconds: number;
+  /** Crossfade-out seconds when it ends/returns to base. */
+  blendOutSeconds: number;
+}
+
 export interface AssetSkeletonPreviewPrefs {
   selectedClip: string | null;
 }
@@ -73,7 +98,13 @@ export interface AssetSkeletonDef {
   animationSet: Partial<Record<AnimationSetRole, string>>;
   blendSpaces: AssetSkeletonBlendSpaceDef[];
   notifies: unknown[];
-  montages: unknown[];
+  montages: AssetSkeletonMontageDef[];
+  /**
+   * Bone/node name that roots the upper-body mask for `upperBody` montages.
+   * Everything in its subtree blends to the montage; the rest keeps locomotion.
+   * Absent disables upper-body layering (montages fall back to full-body).
+   */
+  upperBodyBone?: string;
   preview: AssetSkeletonPreviewPrefs;
 }
 
@@ -113,15 +144,47 @@ export async function loadAssetSkeleton(modelPath: string): Promise<AssetSkeleto
 export function normalizeAssetSkeleton(value: unknown): AssetSkeletonDef {
   if (!value || typeof value !== "object" || Array.isArray(value)) return defaultAssetSkeleton();
   const input = value as Record<string, unknown>;
-  return {
+  const result: AssetSkeletonDef = {
     schema: 1,
     sockets: normalizeSockets(input.sockets),
     animationSet: normalizeAnimationSet(input.animationSet),
     blendSpaces: normalizeBlendSpaces(input.blendSpaces),
     notifies: Array.isArray(input.notifies) ? input.notifies : [],
-    montages: Array.isArray(input.montages) ? input.montages : [],
+    montages: normalizeMontages(input.montages),
     preview: normalizePreview(input.preview),
   };
+  if (typeof input.upperBodyBone === "string" && input.upperBodyBone.length > 0) {
+    result.upperBodyBone = input.upperBodyBone;
+  }
+  return result;
+}
+
+function normalizeMontages(value: unknown): AssetSkeletonMontageDef[] {
+  if (!Array.isArray(value)) return [];
+  const result: AssetSkeletonMontageDef[] = [];
+  const names = new Set<string>();
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const input = item as Record<string, unknown>;
+    if (typeof input.name !== "string" || input.name.length === 0) continue;
+    if (typeof input.clip !== "string" || input.clip.length === 0) continue;
+    if (names.has(input.name)) continue;
+    names.add(input.name);
+    result.push({
+      name: input.name,
+      clip: input.clip,
+      slot: input.slot === "fullBody" ? "fullBody" : "upperBody",
+      loop: input.loop === true,
+      blendInSeconds: normalizeBlendSeconds(input.blendInSeconds, 0.12),
+      blendOutSeconds: normalizeBlendSeconds(input.blendOutSeconds, 0.2),
+    });
+  }
+  return result;
+}
+
+function normalizeBlendSeconds(value: unknown, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Number(Math.min(Math.max(Number(value), 0), 4).toFixed(3));
 }
 
 function normalizeAnimationSet(value: unknown): Partial<Record<AnimationSetRole, string>> {

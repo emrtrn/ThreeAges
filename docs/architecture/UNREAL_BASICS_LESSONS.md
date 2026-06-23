@@ -317,6 +317,28 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-23* - **Upper Body slot + Layered Blend Per Bone (data) - bacaklar yururken ust govde ates eder.**
+  Unreal Anim BP'deki `Slot 'UpperBody'` + `Layered blend per bone` (+ `Blend Poses by bool: Is Aiming`)
+  grafiginin **node-graph'siz, veri** karsiligi kuruldu (kullanici BP gorseli paylasti).
+  Mekanik = **kemik-maskeli klipler**: three.js'te "Layered Blend Per Bone" yok, ama bir
+  klibin track'lerini hedef node'a gore alt/ust olarak filtreleyip iki kanalda (iki mixer,
+  ayni root) calistirinca maskeler ayrik oldugu icin temiz katmanlanir. Demo `character-a`
+  RIGID rig (Skins:0, node-TRS animasyonu) — hiyerarsi root→{leg-left,leg-right,torso→{arm-left,arm-right,head}};
+  maske koku **torso**. Hazir klipler tam uygun: `holding-both`(aim), `holding-both-shoot`(fire).
+  Sema: `*.skeleton.json` `montages[]` ({name,clip,slot,loop,blendIn/Out}) + `upperBodyBone`
+  (normalize+validate+store). Engine: `bodyMask.splitClipsByUpperBody` (PropertyBinding.parseTrackName
+  ile node adina gore ayirir), `LayeredCharacterAnimator` (alt=locomotion CrossfadeAnimator,
+  ust="UpperBody slot": normalde locomotion'i yansitir; `setAim` held poz, `playMontage` tek-atis
+  + `update(dt)` zamanlayici ile aim/passthrough'a doner; maske eslesmezse `hasUpperBody=false` →
+  cagiran duz animator'a duser). Input: `PointerButtonSource` (Mouse0=fire, Mouse2=aim; ana dongude
+  engineApp.update→session.update sirasi pressed-edge'i guvenli kilar). `tpsCharacterGameMode`:
+  upperBodyBone varsa layered, RMB→aim pozu, LMB→fire montage; bacaklar locomotion'a devam. Gate:
+  tsc temiz, test:engine 296 (yeni: bodyMask split + LayeredCharacterAnimator state makinesi +
+  montage/upperBodyBone normalize/validate round-trip), vite build temiz (game bundle editorsuz).
+  Karar/sinir: kemik-basina yumusak blend (Unreal "Blend Depth") native degil → sert ayrim (v1 yeterli);
+  aim "orient-to-camera" hareket tarafinda ayri (bu dilim yalnizca animasyon katmanlama); editor
+  authoring (maske koku secimi + montage UI) ve notify yayini Faz 3'te pending. Calismadi: el ile Play
+  dogrulamasi bana ait degil (kullanici test edecek).
 - *2026-06-23* - **Authored anim-set runtime'a baglandi (clip fallback).** Tek-klip
   locomotion secicisi artik karakterin authored `animationSet`'ini (rol→klip,
   `*.skeleton.json`) onurlandiriyor; onceden yalnizca sabit `CLIP_FALLBACKS` klip-ismi

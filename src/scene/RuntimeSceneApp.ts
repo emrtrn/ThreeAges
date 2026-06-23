@@ -24,6 +24,7 @@ import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { PointerLookSource } from "@/input/pointerLookSource";
+import { PointerButtonSource } from "@/input/pointerButtonSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { CharacterMovementSubsystem } from "@/game/characterMovementSystem";
@@ -225,6 +226,8 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   Space: "jump",
   ShiftLeft: "sprint",
   ShiftRight: "sprint",
+  Mouse0: "fire",
+  Mouse2: "aim",
 };
 
 /**
@@ -292,6 +295,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   });
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   private readonly pointerLook: PointerLookSource;
+  private readonly pointerButtons: PointerButtonSource;
   private readonly behaviorSubsystem: BehaviorSubsystem;
   private frameHandle = 0;
   private lastTime = 0;
@@ -420,6 +424,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.inputMode = mode;
       },
     });
+    this.pointerButtons = new PointerButtonSource(this.inputActions, canvas);
     this.interactionPromptElement = this.createInteractionPromptElement();
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
@@ -484,6 +489,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.audioSubsystem);
     this.keyboardInput.attach();
     this.pointerLook.attach();
+    this.pointerButtons.attach();
     this.resumeAudioOnFirstGesture();
 
     void this.loadActiveProjectScene();
@@ -518,6 +524,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     window.removeEventListener("resize", this.handleResize);
     this.keyboardInput.detach();
     this.pointerLook.detach();
+    this.pointerButtons.detach();
     for (const effect of this.particleEffects) {
       this.scene.remove(effect.object3D);
       effect.dispose();

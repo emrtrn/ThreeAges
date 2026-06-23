@@ -1634,6 +1634,56 @@ function validateBlendSpaces(value: unknown): Record<string, unknown>[] {
   });
 }
 
+const MONTAGE_SLOTS = ["upperBody", "fullBody"] as const;
+
+function validateBlendSeconds(value: unknown, label: string, fallback: number): number {
+  if (value === undefined || value === null) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 4) {
+    throw new Error(`${label} must be a number in [0, 4]`);
+  }
+  return Number(value.toFixed(3));
+}
+
+function validateMontage(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.name !== "string" || input.name.length === 0) {
+    throw new Error(`${label}.name must be a non-empty string`);
+  }
+  if (typeof input.clip !== "string" || input.clip.length === 0) {
+    throw new Error(`${label}.clip must be a non-empty string`);
+  }
+  if (input.slot !== undefined && !MONTAGE_SLOTS.includes(input.slot as (typeof MONTAGE_SLOTS)[number])) {
+    throw new Error(`${label}.slot must be one of ${MONTAGE_SLOTS.join(", ")}`);
+  }
+  if (input.loop !== undefined && typeof input.loop !== "boolean") {
+    throw new Error(`${label}.loop must be a boolean`);
+  }
+  return {
+    name: input.name,
+    clip: input.clip,
+    slot: input.slot === "fullBody" ? "fullBody" : "upperBody",
+    loop: input.loop === true,
+    blendInSeconds: validateBlendSeconds(input.blendInSeconds, `${label}.blendInSeconds`, 0.12),
+    blendOutSeconds: validateBlendSeconds(input.blendOutSeconds, `${label}.blendOutSeconds`, 0.2),
+  };
+}
+
+function validateMontages(value: unknown): Record<string, unknown>[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error("skeleton.montages must be an array");
+  const names = new Set<string>();
+  return value.map((montage, index) => {
+    const validated = validateMontage(montage, `skeleton.montages[${index}]`);
+    const name = validated.name as string;
+    if (names.has(name)) throw new Error(`skeleton.montages[${index}].name "${name}" is duplicated`);
+    names.add(name);
+    return validated;
+  });
+}
+
 export function validateAssetSkeletonDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("skeleton def must be an object");
@@ -1650,17 +1700,28 @@ export function validateAssetSkeletonDef(value: unknown): Record<string, unknown
   if (selectedClip !== undefined && selectedClip !== null && typeof selectedClip !== "string") {
     throw new Error("skeleton.preview.selectedClip must be a string or null");
   }
-  return {
+  if (
+    input.upperBodyBone !== undefined &&
+    input.upperBodyBone !== null &&
+    typeof input.upperBodyBone !== "string"
+  ) {
+    throw new Error("skeleton.upperBodyBone must be a bone name string");
+  }
+  const output: Record<string, unknown> = {
     schema: 1,
     sockets,
     animationSet: validateAnimationSet(input.animationSet),
     blendSpaces: validateBlendSpaces(input.blendSpaces),
     notifies: Array.isArray(input.notifies) ? input.notifies : [],
-    montages: Array.isArray(input.montages) ? input.montages : [],
+    montages: validateMontages(input.montages),
     preview: {
       selectedClip: typeof selectedClip === "string" && selectedClip.length > 0 ? selectedClip : null,
     },
   };
+  if (typeof input.upperBodyBone === "string" && input.upperBodyBone.length > 0) {
+    output.upperBodyBone = input.upperBodyBone;
+  }
+  return output;
 }
 
 export function validateSaveSkeletonPayload(value: unknown): {

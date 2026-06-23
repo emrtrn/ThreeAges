@@ -110,6 +110,8 @@ import {
 import { initialInteractionState, stepInteractionTrigger } from "../src/game/interaction";
 import { parseEffectDefinition } from "../engine/render-three/particleEffect";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
+import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
+import { LayeredCharacterAnimator } from "../engine/render-three/layeredCharacterAnimator";
 import { entityCharacterItem } from "../engine/render-three/models";
 import {
   DEFAULT_GAME_MODE_ID,
@@ -369,6 +371,7 @@ import {
   PerspectiveCamera,
   Scene,
   Vector3,
+  VectorKeyframeTrack,
 } from "three";
 import type { AnimationMixer } from "three";
 
@@ -4461,6 +4464,87 @@ check("CrossfadeAnimator: playBlend enters blend mode and play() leaves it", () 
   assert.equal(animator.currentClip, "jump");
 });
 
+// A rigid character rig (Kenney "blocky" style): root -> legs + torso -> arms + head.
+const buildCharacterRig = (): Object3D => {
+  const make = (name: string): Object3D => {
+    const node = new Object3D();
+    node.name = name;
+    return node;
+  };
+  const character = make("character");
+  const root = make("root");
+  const torso = make("torso");
+  torso.add(make("arm-left"), make("arm-right"), make("head"));
+  root.add(make("leg-left"), make("leg-right"), torso);
+  character.add(root);
+  return character;
+};
+const positionTrack = (node: string): VectorKeyframeTrack =>
+  new VectorKeyframeTrack(`${node}.position`, [0, 0.5], [0, 0, 0, 0, 0, 0]);
+const buildLayeredClips = (): AnimationClip[] => [
+  new AnimationClip("walk", 0.5, ["root", "leg-left", "leg-right", "arm-left", "arm-right", "head"].map(positionTrack)),
+  new AnimationClip("holding-both", 0.5, ["arm-left", "arm-right"].map(positionTrack)),
+  new AnimationClip("holding-both-shoot", 0.5, ["torso", "arm-right", "arm-left", "head"].map(positionTrack)),
+];
+
+check("splitClipsByUpperBody: routes each track to the half its node belongs to", () => {
+  const rig = buildCharacterRig();
+  const upper = collectSubtreeNodeNames(rig, "torso");
+  assert.deepEqual([...upper].sort(), ["arm-left", "arm-right", "head", "torso"]);
+  // An absent root bone yields an empty mask (everything stays lower).
+  assert.equal(collectSubtreeNodeNames(rig, "nope").size, 0);
+
+  const split = splitClipsByUpperBody(buildLayeredClips(), upper);
+  const walkLower = split.lower.find((clip) => clip.name === "walk")!;
+  const walkUpper = split.upper.find((clip) => clip.name === "walk")!;
+  assert.deepEqual(
+    walkLower.tracks.map((track) => track.name).sort(),
+    ["leg-left.position", "leg-right.position", "root.position"],
+  );
+  assert.deepEqual(
+    walkUpper.tracks.map((track) => track.name).sort(),
+    ["arm-left.position", "arm-right.position", "head.position"],
+  );
+  // A purely upper-body clip leaves the lower variant empty (still emitted by name).
+  const shootLower = split.lower.find((clip) => clip.name === "holding-both-shoot")!;
+  assert.equal(shootLower.tracks.length, 0);
+});
+
+check("LayeredCharacterAnimator: upper montage/aim layers over locomotion legs", () => {
+  const rig = buildCharacterRig();
+  const animator = new LayeredCharacterAnimator(rig, buildLayeredClips(), "torso");
+  assert.equal(animator.hasUpperBody, true);
+
+  // Plain locomotion: legs and (passthrough) upper both follow the walk clip.
+  animator.playLocomotion("walk", 0);
+  assert.equal(animator.lowerClip, "walk");
+  assert.equal(animator.upperClip, "walk");
+
+  // Aim holds an upper pose; the legs keep walking.
+  animator.setAim("holding-both", 0);
+  assert.equal(animator.upperClip, "holding-both");
+  assert.equal(animator.lowerClip, "walk");
+
+  // Fire is a one-shot upper montage that returns to the aim pose when it ends.
+  animator.playMontage("holding-both-shoot", { blendInSeconds: 0 });
+  assert.equal(animator.upperClip, "holding-both-shoot");
+  assert.equal(animator.isMontaging, true);
+  animator.update(0.1); // mid-montage
+  assert.equal(animator.isMontaging, true);
+  animator.update(10); // past its 0.5s duration -> returns to aim
+  assert.equal(animator.isMontaging, false);
+  assert.equal(animator.upperClip, "holding-both");
+  assert.equal(animator.lowerClip, "walk");
+
+  // Releasing aim drops the upper body back to locomotion passthrough.
+  animator.setAim(null, 0);
+  assert.equal(animator.upperClip, "walk");
+
+  // A missing upper-body bone disables layering (caller falls back to single-channel).
+  const flat = new LayeredCharacterAnimator(rig, buildLayeredClips(), "missing");
+  assert.equal(flat.hasUpperBody, false);
+});
+
 check("pickLocomotionBlendSpace: prefers a named 1D space, else the first usable one", () => {
   const oneDimensional = (name: string): AssetSkeletonBlendSpaceDef => ({
     name,
@@ -6704,7 +6788,11 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
         },
       ],
       notifies: [],
-      montages: [],
+      montages: [
+        { name: "fire", clip: "holding-both-shoot", slot: "upperBody", loop: false, blendInSeconds: 0.08 },
+        { name: "aim", clip: "holding-both", slot: "upperBody", loop: true },
+      ],
+      upperBodyBone: "torso",
       preview: { selectedClip: "Idle" },
     },
   });
@@ -6714,6 +6802,11 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
     walk: "Walk",
     run: "Run",
   });
+  assert.equal(payload.skeleton.upperBodyBone, "torso");
+  assert.deepEqual(payload.skeleton.montages, [
+    { name: "fire", clip: "holding-both-shoot", slot: "upperBody", loop: false, blendInSeconds: 0.08, blendOutSeconds: 0.2 },
+    { name: "aim", clip: "holding-both", slot: "upperBody", loop: true, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
+  ]);
   assert.equal(payload.skeleton.sockets[0]?.previewAssetId, "starter-sword");
   assert.deepEqual(payload.skeleton.preview, { selectedClip: "Idle" });
   const savedBlend = payload.skeleton.blendSpaces[0]!;
@@ -6766,6 +6859,30 @@ check("skeleton save payload requires a .skeleton.json path and canonical metada
       },
     }),
   );
+  // A montage with no clip, an unknown slot, or a duplicate name is rejected.
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { montages: [{ name: "fire", clip: "" }] },
+    }),
+  );
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { montages: [{ name: "fire", clip: "Shoot", slot: "legs" }] },
+    }),
+  );
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: {
+        montages: [
+          { name: "fire", clip: "A" },
+          { name: "fire", clip: "B" },
+        ],
+      },
+    }),
+  );
 });
 
 check("asset skeleton sidecar normalizes animation metadata", () => {
@@ -6804,7 +6921,13 @@ check("asset skeleton sidecar normalizes animation metadata", () => {
       { name: "", type: "1d" }, // empty name dropped
     ],
     notifies: [],
-    montages: [],
+    montages: [
+      { name: "fire", clip: "Shoot", slot: "upperBody", loop: false },
+      { name: "aim", clip: "Hold", loop: true, blendInSeconds: 0.25, blendOutSeconds: 9 },
+      { name: "fire", clip: "Dup" }, // duplicate name dropped
+      { name: "bad", clip: "" }, // empty clip dropped
+    ],
+    upperBodyBone: "torso",
     preview: { selectedClip: "Idle" },
   });
   assert.deepEqual(skeleton.animationSet, { idle: "Idle", walk: "Walk" });
@@ -6812,6 +6935,12 @@ check("asset skeleton sidecar normalizes animation metadata", () => {
   assert.deepEqual(skeleton.sockets[0]?.position, [1.1235, 2, 3]);
   assert.equal(skeleton.sockets[0]?.previewAssetId, "starter-sword");
   assert.deepEqual(skeleton.preview, { selectedClip: "Idle" });
+  assert.equal(skeleton.upperBodyBone, "torso");
+  // Montages: duplicate name + empty clip dropped; defaults filled; blend clamped.
+  assert.deepEqual(skeleton.montages, [
+    { name: "fire", clip: "Shoot", slot: "upperBody", loop: false, blendInSeconds: 0.12, blendOutSeconds: 0.2 },
+    { name: "aim", clip: "Hold", slot: "upperBody", loop: true, blendInSeconds: 0.25, blendOutSeconds: 4 },
+  ]);
   assert.equal(skeleton.blendSpaces.length, 1);
   const blend = skeleton.blendSpaces[0]!;
   assert.equal(blend.name, "Locomotion");

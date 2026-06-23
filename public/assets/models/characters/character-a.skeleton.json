@@ -25,7 +25,25 @@
     }
   ],
   "notifies": [],
-  "montages": [],
+  "montages": [
+    {
+      "name": "aim",
+      "clip": "holding-both",
+      "slot": "upperBody",
+      "loop": true,
+      "blendInSeconds": 0.18,
+      "blendOutSeconds": 0.22
+    },
+    {
+      "name": "fire",
+      "clip": "holding-both-shoot",
+      "slot": "upperBody",
+      "loop": false,
+      "blendInSeconds": 0.06,
+      "blendOutSeconds": 0.18
+    }
+  ],
+  "upperBodyBone": "torso",
   "preview": {
     "selectedClip": "static"
   }

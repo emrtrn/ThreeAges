@@ -10,6 +10,7 @@
  * camera mode — `input-move` stays a general behavior, not a "player" marker.
  */
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
+import { LayeredCharacterAnimator } from "@engine/render-three/layeredCharacterAnimator";
 import {
   readCameraComponent,
   readSpringArmComponent,
@@ -31,6 +32,7 @@ import {
   EMPTY_LOCOMOTION_CONFIG,
   type LocomotionAssetConfig,
 } from "@/game/locomotionAnimation";
+import type { AssetSkeletonMontageDef } from "@/scene/assetSkeletonLoader";
 import {
   cameraProjectionFromComponent,
   desiredSpringArmCameraPose,
@@ -73,6 +75,14 @@ const SPRINT_SHAKE_FREQUENCY_HZ = 8;
 /** Crossfade duration (seconds) between locomotion clips. */
 const ANIMATION_CROSSFADE_SECONDS = 0.18;
 
+/** Finds an authored upper-body montage by its gameplay convention name. */
+function findUpperBodyMontage(
+  montages: readonly AssetSkeletonMontageDef[] | undefined,
+  name: string,
+): AssetSkeletonMontageDef | null {
+  return montages?.find((montage) => montage.name === name && montage.slot === "upperBody") ?? null;
+}
+
 /** Resolves the explicit player character a TPS session should possess. */
 export function resolvePlayerCharacter(
   characters: readonly RuntimeCharacterRef[],
@@ -95,7 +105,15 @@ export class TpsCharacterSession implements GameModeSession {
   readonly gameState: GameState = { elapsedSeconds: 0 };
   private readonly controller: RuntimePlayerController;
   private player: RuntimeCharacterRef | null = null;
+  /** Full-body crossfade animator (used when no upper-body layering is authored). */
   private animator: CrossfadeAnimator | null = null;
+  /** Layered animator (legs locomotion + upper-body slot) when authored. */
+  private layered: LayeredCharacterAnimator | null = null;
+  /** Clip names available on the active animator, for the locomotion selector. */
+  private clipNames: ReadonlySet<string> = new Set();
+  /** Authored upper-body montages keyed by gameplay convention name. */
+  private aimMontage: AssetSkeletonMontageDef | null = null;
+  private fireMontage: AssetSkeletonMontageDef | null = null;
   /** The player asset's authored locomotion config (blend space + anim-set). */
   private locomotionConfig: LocomotionAssetConfig = EMPTY_LOCOMOTION_CONFIG;
   private followPose: FollowCameraPose | null = null;
@@ -120,15 +138,31 @@ export class TpsCharacterSession implements GameModeSession {
     const player = this.player;
     if (!player) return;
     this.controller.possess(player.entityId);
-    // The player gets the full clip set, crossfaded by movement state; snap to
-    // the authored idle clip so it never flashes a bind pose.
-    const animator = new CrossfadeAnimator(player.object, player.gltf.animations);
-    animator.play(player.placement.animation ?? "idle", 0);
-    this.context.addMixer(animator.mixer);
-    this.animator = animator;
+    // Snap to the authored idle clip so it never flashes a bind pose.
+    const initialClip = player.placement.animation ?? "idle";
+    // An authored upper-body bone enables the layered animator (legs locomotion +
+    // upper-body montage slot); otherwise fall back to the full-body crossfade.
+    const upperBodyBone = player.skeleton?.upperBodyBone;
+    const layered = upperBodyBone
+      ? new LayeredCharacterAnimator(player.object, player.gltf.animations, upperBodyBone)
+      : null;
+    if (layered?.hasUpperBody) {
+      this.layered = layered;
+      for (const mixer of layered.mixers) this.context.addMixer(mixer);
+      layered.playLocomotion(initialClip, 0);
+      this.clipNames = layered.clips;
+    } else {
+      const animator = new CrossfadeAnimator(player.object, player.gltf.animations);
+      animator.play(initialClip, 0);
+      this.context.addMixer(animator.mixer);
+      this.animator = animator;
+      this.clipNames = animator.clips;
+    }
     // Resolve the authored locomotion config (blend space + anim-set) from the
     // character's skeleton sidecar; drives grounded blending and clip selection.
     this.locomotionConfig = locomotionConfigForSkeleton(player.skeleton);
+    this.aimMontage = findUpperBodyMontage(player.skeleton?.montages, "aim");
+    this.fireMontage = findUpperBodyMontage(player.skeleton?.montages, "fire");
     // Following the player owns the view; stop the resize handler resetting it.
     this.context.markCameraControlled();
   }
@@ -138,7 +172,7 @@ export class TpsCharacterSession implements GameModeSession {
     const player = this.player;
     if (!player) return;
     this.updateFollowCamera(player, deltaSeconds);
-    this.updateAnimation(player);
+    this.updateAnimation(player, deltaSeconds);
   }
 
   beforeEngineUpdate(deltaSeconds: number): void {
@@ -203,19 +237,46 @@ export class TpsCharacterSession implements GameModeSession {
     }
   }
 
-  private updateAnimation(player: RuntimeCharacterRef): void {
-    const animator = this.animator;
-    if (!animator) return;
+  private updateAnimation(player: RuntimeCharacterRef, deltaSeconds: number): void {
     const report = this.context.getLocomotion(player.entityId);
-    if (!report) return;
-    const result = resolveLocomotionAnimation(
-      report,
-      animator.clips,
-      this.locomotionConfig,
-      DEFAULT_LOCOMOTION_THRESHOLDS,
-    );
-    if (result.kind === "blend") animator.playBlend(result.weights);
-    else if (result.clip) animator.play(result.clip, ANIMATION_CROSSFADE_SECONDS);
+    if (report) {
+      const result = resolveLocomotionAnimation(
+        report,
+        this.clipNames,
+        this.locomotionConfig,
+        DEFAULT_LOCOMOTION_THRESHOLDS,
+      );
+      if (this.layered) {
+        if (result.kind === "blend") this.layered.playLocomotionBlend(result.weights);
+        else if (result.clip) this.layered.playLocomotion(result.clip, ANIMATION_CROSSFADE_SECONDS);
+      } else if (this.animator) {
+        if (result.kind === "blend") this.animator.playBlend(result.weights);
+        else if (result.clip) this.animator.play(result.clip, ANIMATION_CROSSFADE_SECONDS);
+      }
+    }
+    this.updateUpperBody(deltaSeconds);
+  }
+
+  /**
+   * Drives the upper-body slot from input: hold RMB (`aim`) to layer the aim pose
+   * over locomotion, tap LMB (`fire`) for a one-shot fire montage. Both only run
+   * when a layered animator and the matching montages are authored.
+   */
+  private updateUpperBody(deltaSeconds: number): void {
+    const layered = this.layered;
+    if (!layered) return;
+    const gameInput = this.context.getInputMode() !== "ui";
+    if (this.aimMontage) {
+      const aiming = gameInput && this.context.actions.held("aim");
+      layered.setAim(aiming ? this.aimMontage.clip : null, this.aimMontage.blendInSeconds);
+    }
+    if (this.fireMontage && gameInput && this.context.actions.pressed("fire")) {
+      layered.playMontage(this.fireMontage.clip, {
+        blendInSeconds: this.fireMontage.blendInSeconds,
+        blendOutSeconds: this.fireMontage.blendOutSeconds,
+      });
+    }
+    layered.update(deltaSeconds);
   }
 
   private updateGameplayCameraEffects(player: RuntimeCharacterRef): void {
