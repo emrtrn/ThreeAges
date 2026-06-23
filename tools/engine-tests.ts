@@ -6512,6 +6512,8 @@ check("material save payload requires a material path and canonical fields", () 
       roughnessTexture: "tex-stone-r",
       metalnessTexture: "tex-stone-metal",
       aoTexture: "tex-stone-ao",
+      opacityTexture: "tex-stone-opacity",
+      emissiveTexture: "tex-stone-emissive",
       ormTexture: null,
       uvTiling: { x: 2, y: 3 },
       roughness: 0.72,
@@ -6556,6 +6558,8 @@ check("material save payload requires a material path and canonical fields", () 
     roughnessTexture: "tex-stone-r",
     metalnessTexture: "tex-stone-metal",
     aoTexture: "tex-stone-ao",
+    opacityTexture: "tex-stone-opacity",
+    emissiveTexture: "tex-stone-emissive",
     ormTexture: "tex-stone-m",
     uvTiling: { x: 2, y: 3 },
     roughness: 0.72,
@@ -6766,6 +6770,8 @@ check("forge material mapping creates matching Three material types and fields",
   const roughnessTexture = new Texture();
   const metalnessTexture = new Texture();
   const aoTexture = new Texture();
+  const opacityTexture = new Texture();
+  const emissiveTexture = new Texture();
   const mapped = createThreeMaterialFromForgeDef(
     normalizeForgeMaterialDef({
       schema: 1,
@@ -6775,19 +6781,26 @@ check("forge material mapping creates matching Three material types and fields",
       roughnessTexture: "rough",
       metalnessTexture: "metal",
       aoTexture: "ao",
+      opacityTexture: "opacity",
+      emissiveTexture: "emissive",
       aoIntensity: 0.4,
     }),
-    { roughnessTexture, metalnessTexture, aoTexture },
+    { roughnessTexture, metalnessTexture, aoTexture, opacityTexture, emissiveTexture },
     { maxAnisotropy: 4 },
   );
   assert.ok(mapped instanceof MeshStandardMaterial);
   assert.equal(mapped.roughnessMap, roughnessTexture);
   assert.equal(mapped.metalnessMap, metalnessTexture);
   assert.equal(mapped.aoMap, aoTexture);
+  assert.equal(mapped.alphaMap, opacityTexture);
+  assert.equal(mapped.emissiveMap, emissiveTexture);
+  assert.equal(mapped.transparent, true);
   assert.equal(mapped.aoMapIntensity, 0.4);
   assert.equal(roughnessTexture.colorSpace, NoColorSpace);
   assert.equal(metalnessTexture.colorSpace, NoColorSpace);
   assert.equal(aoTexture.colorSpace, NoColorSpace);
+  assert.equal(opacityTexture.colorSpace, NoColorSpace);
+  assert.equal(emissiveTexture.colorSpace, SRGBColorSpace);
   assert.equal(roughnessTexture.anisotropy, 4);
   mapped.dispose();
 
@@ -6987,6 +7000,8 @@ check("content-new resolves to typed stub files and folders", () => {
     roughnessTexture: null,
     metalnessTexture: null,
     aoTexture: null,
+    opacityTexture: null,
+    emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
     roughness: 0.8,
@@ -7019,6 +7034,8 @@ check("content-new resolves to typed stub files and folders", () => {
     roughnessTexture: null,
     metalnessTexture: null,
     aoTexture: null,
+    opacityTexture: null,
+    emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
     roughness: 0.3,

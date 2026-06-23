@@ -33,6 +33,8 @@ export interface ForgeMaterialTextureMaps {
   roughnessTexture?: Texture | null;
   metalnessTexture?: Texture | null;
   aoTexture?: Texture | null;
+  opacityTexture?: Texture | null;
+  emissiveTexture?: Texture | null;
   ormTexture?: Texture | null;
   layer1BaseColorTexture?: Texture | null;
   layer1NormalTexture?: Texture | null;
@@ -94,6 +96,14 @@ export function createThreeMaterialFromForgeDef(
       maxAnisotropy: options.maxAnisotropy,
     });
   }
+  if (textures.opacityTexture) {
+    material.alphaMap = configureForgeTexture(textures.opacityTexture, {
+      srgb: false,
+      repeat: def.uvTiling,
+      maxAnisotropy: options.maxAnisotropy,
+    });
+    material.transparent = true;
+  }
   if (textures.normalTexture && material instanceof MeshStandardMaterial) {
     material.normalMap = configureForgeTexture(textures.normalTexture, {
       srgb: false,
@@ -137,6 +147,13 @@ export function createThreeMaterialFromForgeDef(
         });
         material.aoMapIntensity = def.aoIntensity;
       }
+    }
+    if (textures.emissiveTexture) {
+      material.emissiveMap = configureForgeTexture(textures.emissiveTexture, {
+        srgb: true,
+        repeat: def.uvTiling,
+        maxAnisotropy: options.maxAnisotropy,
+      });
     }
     if (def.layerBlend) {
       applyLayerBlendMaterial(material, def.layerBlend, textures, options);

@@ -41,6 +41,12 @@ export async function loadForgeMaterial(
       aoTexture: def.aoTexture
         ? await loadTextureByAssetId(manifest, def.aoTexture, textureLoader)
         : null,
+      opacityTexture: def.opacityTexture
+        ? await loadTextureByAssetId(manifest, def.opacityTexture, textureLoader)
+        : null,
+      emissiveTexture: def.emissiveTexture
+        ? await loadTextureByAssetId(manifest, def.emissiveTexture, textureLoader)
+        : null,
       ormTexture: def.ormTexture
         ? await loadTextureByAssetId(manifest, def.ormTexture, textureLoader)
         : null,

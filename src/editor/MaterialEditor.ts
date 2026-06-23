@@ -252,8 +252,8 @@ export class MaterialEditor {
         ${this.textureVector3Row("Normal Map", "normalTexture", [0, 0, 1], false)}
         ${this.textureNumberRow("Roughness Map", "roughnessTexture", "roughness", this.def.roughness, 0, 1, 0.01)}
         ${this.textureNumberRow("Metalness Map", "metalnessTexture", "metalness", this.def.metalness, 0, 1, 0.01)}
-        ${this.unsupportedTextureActiveNumberRow("Opacity Map", "opacity", this.def.opacity, 0, 1, 0.01)}
-        ${this.unsupportedTextureActiveColorNumberRow("Emissive Map", "emissive", this.def.emissive, "emissiveIntensity", this.def.emissiveIntensity, 0, 20, 0.1)}
+        ${this.textureNumberRow("Opacity Map", "opacityTexture", "opacity", this.def.opacity, 0, 1, 0.01)}
+        ${this.textureColorNumberRow("Emissive Map", "emissiveTexture", "emissive", this.def.emissive, "emissiveIntensity", this.def.emissiveIntensity, 0, 20, 0.1)}
         ${this.textureNumberRow("Ambient Occlusion Map", "aoTexture", "aoIntensity", this.def.aoIntensity, 0, 1, 0.01)}
         ${this.vector2Row("UV Tiling", "uvTilingX", "uvTilingY", this.def.uvTiling.x, this.def.uvTiling.y)}
       </div>
@@ -315,12 +315,14 @@ export class MaterialEditor {
       | "roughnessTexture"
       | "metalnessTexture"
       | "aoTexture"
+      | "opacityTexture"
       | "layer1RoughnessTexture"
       | "layer1MetalnessTexture",
     numberField:
       | "roughness"
       | "metalness"
       | "aoIntensity"
+      | "opacity"
       | "layer1Roughness"
       | "layer1Metalness",
     value: number,
@@ -376,27 +378,9 @@ export class MaterialEditor {
     `;
   }
 
-  private unsupportedTextureActiveNumberRow(
+  private textureColorNumberRow(
     label: string,
-    field: "opacity",
-    value: number,
-    min: number,
-    max: number,
-    step: number,
-  ): string {
-    return `
-      <label class="me-row" title="${label} texture is not implemented in the material schema/render path yet.">
-        <span>${label}</span>
-        <span class="me-input-pair">
-          <select disabled><option>Not implemented</option></select>
-          <input data-me-field="${field}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" title="Constant value" />
-        </span>
-      </label>
-    `;
-  }
-
-  private unsupportedTextureActiveColorNumberRow(
-    label: string,
+    textureField: "emissiveTexture",
     colorField: "emissive",
     color: string,
     numberField: "emissiveIntensity",
@@ -406,10 +390,10 @@ export class MaterialEditor {
     step: number,
   ): string {
     return `
-      <label class="me-row" title="${label} texture is not implemented in the material schema/render path yet.">
+      <label class="me-row">
         <span>${label}</span>
         <span class="me-input-triple">
-          <select disabled><option>Not implemented</option></select>
+          <select data-me-field="${textureField}">${this.textureOptions(textureField)}</select>
           <input data-me-field="${colorField}" type="color" value="${escapeHtml(color)}" title="Color picker" />
           <input data-me-field="${numberField}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" title="Constant value" />
         </span>
@@ -424,7 +408,7 @@ export class MaterialEditor {
         <span class="me-input-triple">
           <select disabled><option>Not implemented</option></select>
           <input type="color" value="${escapeHtml(color)}" disabled />
-          <input data-me-field="emissiveIntensity" type="number" min="0" max="20" step="0.1" value="${value}" title="Emissive constant intensity" />
+          <input type="number" min="0" max="20" step="0.1" value="${value}" title="Emissive constant intensity" disabled />
         </span>
       </label>
     `;
@@ -519,6 +503,8 @@ export class MaterialEditor {
       | "roughnessTexture"
       | "metalnessTexture"
       | "aoTexture"
+      | "opacityTexture"
+      | "emissiveTexture"
       | "ormTexture"
       | "layer1BaseColorTexture"
       | "layer1NormalTexture"
@@ -565,6 +551,8 @@ export class MaterialEditor {
     else if (field === "roughnessTexture") next.roughnessTexture = input.value || null;
     else if (field === "metalnessTexture") next.metalnessTexture = input.value || null;
     else if (field === "aoTexture") next.aoTexture = input.value || null;
+    else if (field === "opacityTexture") next.opacityTexture = input.value || null;
+    else if (field === "emissiveTexture") next.emissiveTexture = input.value || null;
     else if (field === "ormTexture") {
       next.ormTexture = input.value || null;
       next.maskTexture = null;
@@ -676,6 +664,8 @@ export class MaterialEditor {
       const roughnessMap = await this.loadTexture(this.def.roughnessTexture, loadedTextures);
       const metalnessMap = await this.loadTexture(this.def.metalnessTexture, loadedTextures);
       const aoMap = await this.loadTexture(this.def.aoTexture, loadedTextures);
+      const opacityMap = await this.loadTexture(this.def.opacityTexture, loadedTextures);
+      const emissiveMap = await this.loadTexture(this.def.emissiveTexture, loadedTextures);
       const ormMap = await this.loadTexture(this.def.ormTexture, loadedTextures);
       const layer1BaseColorMap = await this.loadTexture(this.def.layerBlend?.layer1.baseColorTexture ?? null, loadedTextures);
       const layer1NormalMap = await this.loadTexture(this.def.layerBlend?.layer1.normalTexture ?? null, loadedTextures);
@@ -690,6 +680,8 @@ export class MaterialEditor {
           roughnessTexture: roughnessMap,
           metalnessTexture: metalnessMap,
           aoTexture: aoMap,
+          opacityTexture: opacityMap,
+          emissiveTexture: emissiveMap,
           ormTexture: ormMap,
           layer1BaseColorTexture: layer1BaseColorMap,
           layer1NormalTexture: layer1NormalMap,

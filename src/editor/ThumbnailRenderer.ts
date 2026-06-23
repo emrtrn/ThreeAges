@@ -37,6 +37,8 @@ export interface ThumbnailMaterialPreview {
   roughnessTextureUrl?: string;
   metalnessTextureUrl?: string;
   aoTextureUrl?: string;
+  opacityTextureUrl?: string;
+  emissiveTextureUrl?: string;
   ormTextureUrl?: string;
   layerBlend?: ForgeMaterialLayerBlend | null;
   layer1BaseColorTextureUrl?: string;
@@ -202,6 +204,8 @@ export class ThumbnailRenderer {
           roughnessTexture: await this.loadPreviewTexture(preview.roughnessTextureUrl),
           metalnessTexture: await this.loadPreviewTexture(preview.metalnessTextureUrl),
           aoTexture: await this.loadPreviewTexture(preview.aoTextureUrl),
+          opacityTexture: await this.loadPreviewTexture(preview.opacityTextureUrl),
+          emissiveTexture: await this.loadPreviewTexture(preview.emissiveTextureUrl),
           ormTexture: await this.loadPreviewTexture(preview.ormTextureUrl),
           layer1BaseColorTexture: await this.loadPreviewTexture(preview.layer1BaseColorTextureUrl),
           layer1NormalTexture: await this.loadPreviewTexture(preview.layer1NormalTextureUrl),
@@ -252,6 +256,8 @@ function thumbnailPreviewToMaterialDef(preview: ThumbnailMaterialPreview): Forge
     roughnessTexture: preview.roughnessTextureUrl ? "__thumbnail-roughness" : null,
     metalnessTexture: preview.metalnessTextureUrl ? "__thumbnail-metalness" : null,
     aoTexture: preview.aoTextureUrl ? "__thumbnail-ao" : null,
+    opacityTexture: preview.opacityTextureUrl ? "__thumbnail-opacity" : null,
+    emissiveTexture: preview.emissiveTextureUrl ? "__thumbnail-emissive" : null,
     ormTexture: preview.ormTextureUrl ? "__thumbnail-orm" : null,
     uvTiling: preview.uvTiling,
     roughness: preview.roughness,

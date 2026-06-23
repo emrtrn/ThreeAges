@@ -1533,6 +1533,8 @@ export class EditorUi {
     const roughnessTexturePath = this.texturePathById(def.roughnessTexture);
     const metalnessTexturePath = this.texturePathById(def.metalnessTexture);
     const aoTexturePath = this.texturePathById(def.aoTexture);
+    const opacityTexturePath = this.texturePathById(def.opacityTexture);
+    const emissiveTexturePath = this.texturePathById(def.emissiveTexture);
     const ormTexturePath = this.texturePathById(def.ormTexture);
     const layer1BaseColorTexturePath = this.texturePathById(def.layerBlend?.layer1.baseColorTexture ?? null);
     const layer1NormalTexturePath = this.texturePathById(def.layerBlend?.layer1.normalTexture ?? null);
@@ -1547,6 +1549,8 @@ export class EditorUi {
       ...(roughnessTexturePath ? { roughnessTextureUrl: projectFileUrl(roughnessTexturePath) } : {}),
       ...(metalnessTexturePath ? { metalnessTextureUrl: projectFileUrl(metalnessTexturePath) } : {}),
       ...(aoTexturePath ? { aoTextureUrl: projectFileUrl(aoTexturePath) } : {}),
+      ...(opacityTexturePath ? { opacityTextureUrl: projectFileUrl(opacityTexturePath) } : {}),
+      ...(emissiveTexturePath ? { emissiveTextureUrl: projectFileUrl(emissiveTexturePath) } : {}),
       ...(ormTexturePath ? { ormTextureUrl: projectFileUrl(ormTexturePath) } : {}),
       ...(def.layerBlend ? { layerBlend: def.layerBlend } : {}),
       ...(layer1BaseColorTexturePath ? { layer1BaseColorTextureUrl: projectFileUrl(layer1BaseColorTexturePath) } : {}),

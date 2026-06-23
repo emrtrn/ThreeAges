@@ -1612,6 +1612,8 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     roughnessTexture: validateTextureRef(input.roughnessTexture, "material.roughnessTexture"),
     metalnessTexture: validateTextureRef(input.metalnessTexture, "material.metalnessTexture"),
     aoTexture: validateTextureRef(input.aoTexture, "material.aoTexture"),
+    opacityTexture: validateTextureRef(input.opacityTexture, "material.opacityTexture"),
+    emissiveTexture: validateTextureRef(input.emissiveTexture, "material.emissiveTexture"),
     ormTexture,
     uvTiling: validateUvTiling(input.uvTiling, "material.uvTiling"),
     roughness: validateOptionalNumber(input.roughness, "material.roughness", 0, 1) ?? 0.8,

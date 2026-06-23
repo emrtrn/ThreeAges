@@ -64,6 +64,8 @@ export interface ForgeMaterialDef {
   roughnessTexture: string | null;
   metalnessTexture: string | null;
   aoTexture: string | null;
+  opacityTexture: string | null;
+  emissiveTexture: string | null;
   ormTexture: string | null;
   uvTiling: ForgeMaterialUvTiling;
   roughness: number;
@@ -113,6 +115,8 @@ export function defaultForgeMaterialDef(
     roughnessTexture: null,
     metalnessTexture: null,
     aoTexture: null,
+    opacityTexture: null,
+    emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
     roughness: 0.8,
@@ -191,6 +195,8 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     roughnessTexture: textureRefOrNull(input.roughnessTexture),
     metalnessTexture: textureRefOrNull(input.metalnessTexture),
     aoTexture: textureRefOrNull(input.aoTexture),
+    opacityTexture: textureRefOrNull(input.opacityTexture),
+    emissiveTexture: textureRefOrNull(input.emissiveTexture),
     ormTexture: textureRefOrNull(input.ormTexture) ?? (legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture),
     uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
     roughness: clamp01(numberOr(input.roughness, 0.8)),
