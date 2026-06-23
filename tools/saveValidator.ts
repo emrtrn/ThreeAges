@@ -1529,18 +1529,22 @@ function validateForgeMaterialLayer(value: unknown, label: string): Record<strin
   };
 }
 
-function validateForgeMaterialLayerBlend(value: unknown): Record<string, unknown> | null {
+function validateForgeMaterialLayerBlend(
+  value: unknown,
+  legacyMaskTexture: string | null = null,
+): Record<string, unknown> | null {
   if (value === undefined || value === null) return null;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("material.layerBlend must be an object or null");
   }
   const input = value as Record<string, unknown>;
   if (!isForgeMaterialLayerBlendDriver(input.driver)) {
-    throw new Error("material.layerBlend.driver must be constant, slope, or worldHeight");
+    throw new Error("material.layerBlend.driver must be constant, slope, worldHeight, or maskTexture");
   }
   const min = validateOptionalNumber(input.min, "material.layerBlend.min", -100000, 100000) ?? 0;
   const max = validateOptionalNumber(input.max, "material.layerBlend.max", -100000, 100000) ?? 1;
   if (min > max) throw new Error("material.layerBlend.min must be <= max");
+  const explicitMaskTexture = validateTextureRef(input.maskTexture, "material.layerBlend.maskTexture");
   return {
     layer1: validateForgeMaterialLayer(input.layer1, "material.layerBlend.layer1"),
     driver: input.driver,
@@ -1548,6 +1552,7 @@ function validateForgeMaterialLayerBlend(value: unknown): Record<string, unknown
     min,
     max,
     contrast: validateOptionalNumber(input.contrast, "material.layerBlend.contrast", 0.01, 8) ?? 1,
+    maskTexture: explicitMaskTexture ?? (input.driver === "maskTexture" ? legacyMaskTexture : null),
   };
 }
 
@@ -1581,7 +1586,18 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
   if (!isForgeMaterialSide(side)) {
     throw new Error("material.side must be front, back, or double");
   }
-  const maskTexture = validateTextureRef(input.maskTexture, "material.maskTexture");
+  const legacyMaskTexture = validateTextureRef(input.maskTexture, "material.maskTexture");
+  const layerBlend = validateForgeMaterialLayerBlend(input.layerBlend, legacyMaskTexture);
+  const legacyMaskConsumedByLayerBlend =
+    layerBlend?.driver === "maskTexture" &&
+    layerBlend.maskTexture === legacyMaskTexture &&
+    !(
+      input.layerBlend &&
+      typeof input.layerBlend === "object" &&
+      !Array.isArray(input.layerBlend) &&
+      validateTextureRef((input.layerBlend as Record<string, unknown>).maskTexture, "material.layerBlend.maskTexture")
+    );
+  const maskTexture = legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture;
   const ormTexture = validateTextureRef(input.ormTexture, "material.ormTexture") ?? maskTexture;
 
   return {
@@ -1608,7 +1624,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     emissive: validateColorHex(input.emissive ?? "#000000", "material.emissive"),
     emissiveIntensity:
       validateOptionalNumber(input.emissiveIntensity, "material.emissiveIntensity", 0, 20) ?? 0,
-    layerBlend: validateForgeMaterialLayerBlend(input.layerBlend),
+    layerBlend,
   };
 }
 

@@ -7,12 +7,42 @@
   "baseColorTexture": "t-concrete-tiles-d",
   "normalTexture": "t-concrete-tiles-n",
   "maskTexture": null,
-  "roughness": 0,
+  "roughnessTexture": "t-macrovariation",
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 2,
+    "y": 2
+  },
+  "roughness": 0.7,
   "metalness": 0,
+  "aoIntensity": 1,
   "opacity": 1,
   "alphaMode": "opaque",
   "alphaTest": 0.5,
   "side": "front",
   "emissive": "#000000",
-  "emissiveIntensity": 0
+  "emissiveIntensity": 0,
+  "layerBlend": {
+    "layer1": {
+      "baseColor": "#ffffff",
+      "baseColorTexture": null,
+      "normalTexture": "t-rock-slate-n",
+      "roughnessTexture": null,
+      "metalnessTexture": null,
+      "roughness": 0,
+      "metalness": 0,
+      "uvTiling": {
+        "x": 2,
+        "y": 2
+      }
+    },
+    "driver": "slope",
+    "amount": 1,
+    "min": 0,
+    "max": 1,
+    "contrast": 1,
+    "maskTexture": null
+  }
 }

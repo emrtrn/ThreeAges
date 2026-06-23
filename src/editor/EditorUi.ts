@@ -1538,6 +1538,7 @@ export class EditorUi {
     const layer1NormalTexturePath = this.texturePathById(def.layerBlend?.layer1.normalTexture ?? null);
     const layer1RoughnessTexturePath = this.texturePathById(def.layerBlend?.layer1.roughnessTexture ?? null);
     const layer1MetalnessTexturePath = this.texturePathById(def.layerBlend?.layer1.metalnessTexture ?? null);
+    const layerBlendMaskTexturePath = this.texturePathById(def.layerBlend?.maskTexture ?? null);
     return {
       materialType: def.materialType,
       baseColor: def.baseColor,
@@ -1552,6 +1553,7 @@ export class EditorUi {
       ...(layer1NormalTexturePath ? { layer1NormalTextureUrl: projectFileUrl(layer1NormalTexturePath) } : {}),
       ...(layer1RoughnessTexturePath ? { layer1RoughnessTextureUrl: projectFileUrl(layer1RoughnessTexturePath) } : {}),
       ...(layer1MetalnessTexturePath ? { layer1MetalnessTextureUrl: projectFileUrl(layer1MetalnessTexturePath) } : {}),
+      ...(layerBlendMaskTexturePath ? { layerBlendMaskTextureUrl: projectFileUrl(layerBlendMaskTexturePath) } : {}),
       uvTiling: def.uvTiling,
       roughness: def.roughness,
       metalness: def.metalness,

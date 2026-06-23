@@ -99,8 +99,11 @@ tutkalı shell'lerde ince kalır.
   anisotropy, roughness/metalness/AO icin ayri gri haritalar veya paketli ORM
   texture, runtime/editor preview/thumbnail icin ayni texture ayari. Iki katmanli
   Material Layer Blend ise node graph degil; sinirli bir `MeshStandardMaterial`
-  `onBeforeCompile` istisnasi olarak `constant`, `slope`, `worldHeight` driver'lariyla
-  uygulanir. Takip dokumani: `docs/ongoing/MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md`.
+  `onBeforeCompile` istisnasi olarak `constant`, `slope`, `worldHeight` ve siyah-beyaz
+  `maskTexture` driver'lariyla uygulanir. `maskTexture` lineer/skaler maske bekler;
+  Material Editor normal/base-color dokularini bu slota baglama durumunda uyarir ve
+  preview shader compile hatasinda onceki materyali korur. Takip dokumani:
+  `docs/ongoing/MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md`.
 
 - *2026-06-20* — **Script Communication System kararı.** Forge, Unreal Blueprint
   Communication modelini görsel node VM olarak kopyalamayacak. Actor Script verisi

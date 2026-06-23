@@ -38,6 +38,7 @@ export interface ForgeMaterialTextureMaps {
   layer1NormalTexture?: Texture | null;
   layer1RoughnessTexture?: Texture | null;
   layer1MetalnessTexture?: Texture | null;
+  layerBlendMaskTexture?: Texture | null;
 }
 
 export interface ForgeMaterialOptions {
@@ -181,6 +182,13 @@ function applyLayerBlendMaterial(
         maxAnisotropy: options.maxAnisotropy,
       })
     : null;
+  const layerBlendMaskMap = textures.layerBlendMaskTexture
+    ? configureForgeTexture(textures.layerBlendMaskTexture, {
+        srgb: false,
+        repeat: layer1.uvTiling,
+        maxAnisotropy: options.maxAnisotropy,
+      })
+    : null;
 
   material.defines = {
     ...(material.defines ?? {}),
@@ -190,6 +198,7 @@ function applyLayerBlendMaterial(
     ...(layer1NormalMap ? { USE_FORGE_LAYER_NORMALMAP: "" } : {}),
     ...(layer1RoughnessMap ? { USE_FORGE_LAYER_ROUGHNESSMAP: "" } : {}),
     ...(layer1MetalnessMap ? { USE_FORGE_LAYER_METALNESSMAP: "" } : {}),
+    ...(layerBlendMaskMap ? { USE_FORGE_LAYER_MASKMAP: "" } : {}),
   };
   material.onBeforeCompile = (shader) => {
     patchLayerBlendShader(shader, blend, {
@@ -197,6 +206,7 @@ function applyLayerBlendMaterial(
       layer1NormalMap,
       layer1RoughnessMap,
       layer1MetalnessMap,
+      layerBlendMaskMap,
     });
   };
   material.customProgramCacheKey = () =>
@@ -207,6 +217,7 @@ function applyLayerBlendMaterial(
       layer1NormalMap ? "n" : "no-n",
       layer1RoughnessMap ? "r" : "rough",
       layer1MetalnessMap ? "m" : "metal",
+      layerBlendMaskMap ? "mask" : "no-mask",
     ].join(":");
 }
 
@@ -218,6 +229,7 @@ function patchLayerBlendShader(
     layer1NormalMap: Texture | null;
     layer1RoughnessMap: Texture | null;
     layer1MetalnessMap: Texture | null;
+    layerBlendMaskMap: Texture | null;
   },
 ): void {
   shader.uniforms.forgeLayerColor = { value: new Color(blend.layer1.baseColor) };
@@ -241,6 +253,15 @@ function patchLayerBlendShader(
   if (maps.layer1MetalnessMap) {
     shader.uniforms.forgeLayerMetalnessMap = { value: maps.layer1MetalnessMap };
   }
+  if (maps.layerBlendMaskMap) {
+    shader.uniforms.forgeLayerMaskMap = { value: maps.layerBlendMaskMap };
+  }
+  const maskTextureUniform = maps.layerBlendMaskMap
+    ? "uniform sampler2D forgeLayerMaskMap;"
+    : "";
+  const maskTextureSample = maps.layerBlendMaskMap
+    ? "value = texture2D( forgeLayerMaskMap, vUv * forgeLayerTiling ).r;"
+    : "value = 0.0;";
 
   shader.vertexShader = shader.vertexShader
     .replace(
@@ -292,12 +313,15 @@ varying vec3 vForgeLayerWorldNormal;
 #ifdef USE_FORGE_LAYER_METALNESSMAP
   uniform sampler2D forgeLayerMetalnessMap;
 #endif
+${maskTextureUniform}
 float forgeLayerBlendFactor() {
   float value = forgeLayerAmount;
   if (forgeLayerDriver == 1) {
     value = smoothstep(forgeLayerMin, forgeLayerMax, clamp(dot(normalize(vForgeLayerWorldNormal), vec3(0.0, 1.0, 0.0)), 0.0, 1.0));
   } else if (forgeLayerDriver == 2) {
     value = smoothstep(forgeLayerMin, forgeLayerMax, vForgeLayerWorldPosition.y);
+  } else if (forgeLayerDriver == 3) {
+    ${maskTextureSample}
   }
   return clamp(pow(clamp(value, 0.0, 1.0), forgeLayerContrast), 0.0, 1.0);
 }`,
@@ -345,6 +369,7 @@ metalnessFactor = mix( metalnessFactor, forgeLayerMetalnessFactor, forgeLayerBle
 function layerBlendDriverIndex(driver: ForgeMaterialLayerBlend["driver"]): number {
   if (driver === "slope") return 1;
   if (driver === "worldHeight") return 2;
+  if (driver === "maskTexture") return 3;
   return 0;
 }
 

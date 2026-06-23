@@ -201,9 +201,11 @@ yok"** sınırını aşar. Bilinçli ve sınırlı bir istisna olarak yapılır:
 | `vertexColor` | Mesh vertex color R kanalı | Elle boyalı geçiş (geometri color attr. ister) |
 | `maskTexture` | Ayrı gri maske (R), kendi UV'si | Sanatçı maskesi |
 
-v1: `constant` + `slope` + `worldHeight` (taş/kar'ın doğal sürücüleri). `vertexColor`
-ve `maskTexture` sonraki kademe. Sürücülerde `contrast`/`bias` (geçiş sertliği) +
-`min/max` parametreleri.
+v1: `constant` + `slope` + `worldHeight` (taş/kar'ın doğal sürücüleri) ve
+`maskTexture` (siyah-beyaz sanatçı maskesi). `vertexColor` sonraki kademe.
+Sürücülerde `contrast`/`bias` (geçiş sertliği) + `min/max` parametreleri.
+`maskTexture` lineer/skaler maske bekler; normal map veya base-color dokusu bu slota
+bağlanırsa Material Editor Unreal'daki sampler/semantic hatasına benzer bir uyarı verir.
 
 ### C.4 onBeforeCompile yama planı
 
@@ -270,10 +272,17 @@ onBeforeCompile yolunu seçer.
 - [x] map/roughness/metalness blend; normal blend (tangent varsa)
 - [x] Loader: layer1 dokularını yükler; her iki katmana tiling/anisotropy uygular
 - [x] Material Editor: Layer Blend toggle + Layer 1 slotları + driver paneli + preview
-- [ ] `vertexColor` ve `maskTexture` sürücüleri (sonraki kademe)
+- [x] `maskTexture` sürücüsü (siyah-beyaz blend maskesi)
+- [ ] `vertexColor` sürücüsü (sonraki kademe)
 - [x] Thumbnail blend'i temsil eder (constant=0.5 veya sürücü default)
 - [x] `engine-tests.ts`: layerBlend normalize/validate round-trip; shader cache key
       ayrışması (blend var/yok ayrı program)
+- [x] Details UI sadeleştirme: slider yerine Constant kutuları; Base Material,
+      Layer Blend ve Layer Settings grupları.
+- [ ] **Deferred bug:** `maskTexture`/Blend Mask atanırken preview/runtime davranışı
+      kullanıcı testinde halen beklenen sonucu vermiyor. Shader/schema tarafındaki
+      önceki sertleştirmelere rağmen problem çözülmüş sayılmayacak; ayrı oturumda
+      sahne üstü repro ile incelenecek.
 
 **Kabul:** Taş ve kar dokuları tek materyalde; eğim/yükseklik sürücüsüyle dik
 yüzeyde taş, düz/yüksek yüzeyde kar görünür; blend yokken standart materyal birebir
@@ -300,6 +309,11 @@ aynı render eder (regresyon yok).
 - Triplanar projeksiyon (UV'siz dünya-uzayı doku).
 - Texture import ayarları sidecar'ı (sRGB/linear, wrap, filter override) —
   gerekirse, yine ayrı editör değil.
+- Opacity/Emissive/Layer Opacity/Layer Emissive/Layer AO map slotlarının gerçek
+  schema + renderer desteği. Details UI bu alanları şimdilik pasif `Not implemented`
+  olarak gösterir; sahte kayıt alanı yazmaz.
+- Normal `Constant3Vector` authoring. Details UI şimdilik alanı pasif gösterir;
+  normal map yoksa mevcut mesh normal yolu korunur.
 
 ## İlk başlanacak iş
 

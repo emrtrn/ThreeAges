@@ -21,6 +21,7 @@ export const FORGE_MATERIAL_LAYER_BLEND_DRIVERS = [
   "constant",
   "slope",
   "worldHeight",
+  "maskTexture",
 ] as const;
 export type ForgeMaterialLayerBlendDriver =
   (typeof FORGE_MATERIAL_LAYER_BLEND_DRIVERS)[number];
@@ -48,6 +49,7 @@ export interface ForgeMaterialLayerBlend {
   min: number;
   max: number;
   contrast: number;
+  maskTexture: string | null;
 }
 
 export interface ForgeMaterialDef {
@@ -166,6 +168,17 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     : opacity < 1
       ? "blend"
       : "opaque";
+  const legacyMaskTexture = textureRefOrNull(input.maskTexture);
+  const layerBlend = layerBlendOrNull(input.layerBlend, legacyMaskTexture);
+  const legacyMaskConsumedByLayerBlend =
+    layerBlend?.driver === "maskTexture" &&
+    layerBlend.maskTexture === legacyMaskTexture &&
+    !(
+      input.layerBlend &&
+      typeof input.layerBlend === "object" &&
+      !Array.isArray(input.layerBlend) &&
+      textureRefOrNull((input.layerBlend as Record<string, unknown>).maskTexture)
+    );
   return {
     schema: 1,
     type: "material",
@@ -174,11 +187,11 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     baseColor: colorOr(input.baseColor, "#ffffff"),
     baseColorTexture: textureRefOrNull(input.baseColorTexture),
     normalTexture: textureRefOrNull(input.normalTexture),
-    maskTexture: textureRefOrNull(input.maskTexture),
+    maskTexture: legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture,
     roughnessTexture: textureRefOrNull(input.roughnessTexture),
     metalnessTexture: textureRefOrNull(input.metalnessTexture),
     aoTexture: textureRefOrNull(input.aoTexture),
-    ormTexture: textureRefOrNull(input.ormTexture) ?? textureRefOrNull(input.maskTexture),
+    ormTexture: textureRefOrNull(input.ormTexture) ?? (legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture),
     uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),
     roughness: clamp01(numberOr(input.roughness, 0.8)),
     metalness: clamp01(numberOr(input.metalness, 0)),
@@ -189,7 +202,7 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     side: isForgeMaterialSide(input.side) ? input.side : "front",
     emissive: colorOr(input.emissive, "#000000"),
     emissiveIntensity: Math.max(0, numberOr(input.emissiveIntensity, 0)),
-    layerBlend: layerBlendOrNull(input.layerBlend),
+    layerBlend,
   };
 }
 
@@ -232,20 +245,26 @@ function clampUvTiling(value: number): number {
   return Math.min(Math.max(value, 0.001), 100);
 }
 
-function layerBlendOrNull(value: unknown): ForgeMaterialLayerBlend | null {
+function layerBlendOrNull(
+  value: unknown,
+  legacyMaskTexture: string | null = null,
+): ForgeMaterialLayerBlend | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
   const layer1 = layerOr(input.layer1);
   if (!layer1) return null;
   const min = numberOr(input.min, 0);
   const max = numberOr(input.max, 1);
+  const driver = isForgeMaterialLayerBlendDriver(input.driver) ? input.driver : "constant";
+  const explicitMaskTexture = textureRefOrNull(input.maskTexture);
   return {
     layer1,
-    driver: isForgeMaterialLayerBlendDriver(input.driver) ? input.driver : "constant",
+    driver,
     amount: clamp01(numberOr(input.amount, 0.5)),
     min: Math.min(min, max),
     max: Math.max(min, max),
     contrast: Math.min(Math.max(numberOr(input.contrast, 1), 0.01), 8),
+    maskTexture: explicitMaskTexture ?? (driver === "maskTexture" ? legacyMaskTexture : null),
   };
 }
 

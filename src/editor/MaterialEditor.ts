@@ -93,6 +93,7 @@ export class MaterialEditor {
   private previewMaterial: Material | null = null;
   private dirty = false;
   private disposed = false;
+  private lastPreviewShaderError: string | null = null;
 
   private constructor(private readonly options: MaterialEditorOptions) {
     this.def = normalizeForgeMaterialDef({ name: options.label }, options.label);
@@ -134,6 +135,20 @@ export class MaterialEditor {
 
     this.renderer = new WebGLRenderer({ antialias: true });
     this.renderer.outputColorSpace = SRGBColorSpace;
+    this.renderer.debug.checkShaderErrors = true;
+    this.renderer.debug.onShaderError = (gl, program, vertexShader, fragmentShader) => {
+      const programLog = gl.getProgramInfoLog(program)?.trim() ?? "";
+      const vertexLog = gl.getShaderInfoLog(vertexShader)?.trim() ?? "";
+      const fragmentLog = gl.getShaderInfoLog(fragmentShader)?.trim() ?? "";
+      const message = fragmentLog || vertexLog || programLog || "unknown shader compile error";
+      this.lastPreviewShaderError = message;
+      this.setStatus(`Preview shader failed: ${message}`, "error");
+      console.error("[MaterialEditor] Preview shader failed", {
+        programLog,
+        vertexLog,
+        fragmentLog,
+      });
+    };
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.previewHost.append(this.renderer.domElement);
     this.setupPreviewScene();
@@ -220,33 +235,30 @@ export class MaterialEditor {
   }
 
   private renderDetails(): void {
+    const blend = this.def.layerBlend;
     this.detailsHost.innerHTML = `
       <div class="me-details-heading">Details</div>
       <div class="me-section">
         <div class="me-section-title">Material</div>
         <label class="me-row"><span>Name</span><input data-me-field="name" type="text" value="${escapeHtml(this.def.name)}" /></label>
         <label class="me-row"><span>Type</span><select data-me-field="materialType">${this.enumOptions(FORGE_MATERIAL_TYPES, this.def.materialType)}</select></label>
-        <label class="me-row"><span>Base Color</span><input data-me-field="baseColor" type="color" value="${escapeHtml(this.def.baseColor)}" /></label>
-        <label class="me-row"><span>Base Texture</span><select data-me-field="baseColorTexture">${this.textureOptions("baseColorTexture")}</select></label>
-        <label class="me-row"><span>Normal Texture</span><select data-me-field="normalTexture">${this.textureOptions("normalTexture")}</select></label>
-        ${this.uvTilingRow()}
-      </div>
-      <div class="me-section">
-        <div class="me-section-title">Surface</div>
-        ${this.numberRow("Roughness", "roughness", this.def.roughness, 0, 1, 0.01)}
-        ${this.numberRow("Metalness", "metalness", this.def.metalness, 0, 1, 0.01)}
-        ${this.surfaceTextureRows()}
-        ${this.numberRow("Opacity", "opacity", this.def.opacity, 0, 1, 0.01)}
         <label class="me-row"><span>Alpha Mode</span><select data-me-field="alphaMode">${this.enumOptions(FORGE_MATERIAL_ALPHA_MODES, this.def.alphaMode)}</select></label>
         ${this.numberRow("Alpha Test", "alphaTest", this.def.alphaTest, 0, 1, 0.01)}
         <label class="me-row"><span>Side</span><select data-me-field="side">${this.enumOptions(FORGE_MATERIAL_SIDES, this.def.side)}</select></label>
       </div>
-      ${this.layerBlendSection()}
       <div class="me-section">
-        <div class="me-section-title">Emissive</div>
-        <label class="me-row"><span>Color</span><input data-me-field="emissive" type="color" value="${escapeHtml(this.def.emissive)}" /></label>
-        ${this.numberRow("Intensity", "emissiveIntensity", this.def.emissiveIntensity, 0, 20, 0.1)}
+        <div class="me-section-title">Base Material</div>
+        ${this.textureColorRow("Base Color Map", "baseColorTexture", "baseColor", this.def.baseColor)}
+        ${this.textureVector3Row("Normal Map", "normalTexture", [0, 0, 1], false)}
+        ${this.textureNumberRow("Roughness Map", "roughnessTexture", "roughness", this.def.roughness, 0, 1, 0.01)}
+        ${this.textureNumberRow("Metalness Map", "metalnessTexture", "metalness", this.def.metalness, 0, 1, 0.01)}
+        ${this.unsupportedTextureActiveNumberRow("Opacity Map", "opacity", this.def.opacity, 0, 1, 0.01)}
+        ${this.unsupportedTextureActiveColorNumberRow("Emissive Map", "emissive", this.def.emissive, "emissiveIntensity", this.def.emissiveIntensity, 0, 20, 0.1)}
+        ${this.textureNumberRow("Ambient Occlusion Map", "aoTexture", "aoIntensity", this.def.aoIntensity, 0, 1, 0.01)}
+        ${this.vector2Row("UV Tiling", "uvTilingX", "uvTilingY", this.def.uvTiling.x, this.def.uvTiling.y)}
       </div>
+      ${this.layerBlendSection()}
+      ${blend ? this.layerSettingsSection(blend) : ""}
     `;
     this.detailsHost.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-me-field]")
       .forEach((input) => {
@@ -275,74 +287,185 @@ export class MaterialEditor {
     return `
       <label class="me-row">
         <span>${label}</span>
-        <span class="me-number-pair">
-          <input data-me-field="${field}" type="range" min="${min}" max="${max}" step="${step}" value="${value}" />
-          <input data-me-field="${field}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" />
-        </span>
+        <input data-me-field="${field}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" />
       </label>
     `;
   }
 
-  private uvTilingRow(): string {
+  private textureColorRow(
+    label: string,
+    textureField: "baseColorTexture" | "layer1BaseColorTexture",
+    colorField: "baseColor" | "layer1BaseColor",
+    color: string,
+  ): string {
     return `
       <label class="me-row">
-        <span>UV Tiling</span>
-        <span class="me-number-pair">
-          <input data-me-field="uvTilingX" type="number" min="0.001" max="100" step="0.1" value="${this.def.uvTiling.x}" title="Texture repeat on U/X" />
-          <input data-me-field="uvTilingY" type="number" min="0.001" max="100" step="0.1" value="${this.def.uvTiling.y}" title="Texture repeat on V/Y" />
+        <span>${label}</span>
+        <span class="me-input-pair">
+          <select data-me-field="${textureField}">${this.textureOptions(textureField)}</select>
+          <input data-me-field="${colorField}" type="color" value="${escapeHtml(color)}" title="Constant color" />
         </span>
       </label>
     `;
   }
 
-  private surfaceTextureRows(): string {
-    const mode = this.textureMapMode();
+  private textureNumberRow(
+    label: string,
+    textureField:
+      | "roughnessTexture"
+      | "metalnessTexture"
+      | "aoTexture"
+      | "layer1RoughnessTexture"
+      | "layer1MetalnessTexture",
+    numberField:
+      | "roughness"
+      | "metalness"
+      | "aoIntensity"
+      | "layer1Roughness"
+      | "layer1Metalness",
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+  ): string {
     return `
-      <label class="me-row"><span>Map Mode</span><select data-me-field="textureMapMode">${this.enumOptions(["separate", "orm"] as const, mode)}</select></label>
-      ${
-        mode === "orm"
-          ? `
-            <label class="me-row"><span>ORM Texture</span><select data-me-field="ormTexture">${this.textureOptions("ormTexture")}</select></label>
-            ${this.numberRow("AO Intensity", "aoIntensity", this.def.aoIntensity, 0, 1, 0.01)}
-          `
-          : `
-            <label class="me-row"><span>Roughness Map</span><select data-me-field="roughnessTexture">${this.textureOptions("roughnessTexture")}</select></label>
-            <label class="me-row"><span>Metalness Map</span><select data-me-field="metalnessTexture">${this.textureOptions("metalnessTexture")}</select></label>
-            <label class="me-row"><span>AO Map</span><select data-me-field="aoTexture">${this.textureOptions("aoTexture")}</select></label>
-            ${this.numberRow("AO Intensity", "aoIntensity", this.def.aoIntensity, 0, 1, 0.01)}
-          `
-      }
+      <label class="me-row">
+        <span>${label}</span>
+        <span class="me-input-pair">
+          <select data-me-field="${textureField}">${this.textureOptions(textureField)}</select>
+          <input data-me-field="${numberField}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" title="Constant value" />
+        </span>
+      </label>
+    `;
+  }
+
+  private textureVector3Row(
+    label: string,
+    textureField: "normalTexture" | "layer1NormalTexture",
+    value: [number, number, number],
+    enabled: boolean,
+  ): string {
+    const disabled = enabled ? "" : "disabled";
+    const title = enabled
+      ? "Constant3Vector"
+      : "Constant3Vector authoring is not implemented yet; material uses the mesh normal when no normal map is assigned.";
+    return `
+      <label class="me-row">
+        <span>${label}</span>
+        <span class="me-input-pair">
+          <select data-me-field="${textureField}">${this.textureOptions(textureField)}</select>
+          <span class="me-vector3">
+            <input type="number" value="${value[0]}" step="0.01" title="${title}" ${disabled} />
+            <input type="number" value="${value[1]}" step="0.01" title="${title}" ${disabled} />
+            <input type="number" value="${value[2]}" step="0.01" title="${title}" ${disabled} />
+          </span>
+        </span>
+      </label>
+    `;
+  }
+
+  private unsupportedTextureNumberRow(label: string, value: number): string {
+    return `
+      <label class="me-row is-disabled" title="${label} texture is not implemented in the material schema/render path yet.">
+        <span>${label}</span>
+        <span class="me-input-pair">
+          <select disabled><option>Not implemented</option></select>
+          <input type="number" value="${value}" disabled />
+        </span>
+      </label>
+    `;
+  }
+
+  private unsupportedTextureActiveNumberRow(
+    label: string,
+    field: "opacity",
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+  ): string {
+    return `
+      <label class="me-row" title="${label} texture is not implemented in the material schema/render path yet.">
+        <span>${label}</span>
+        <span class="me-input-pair">
+          <select disabled><option>Not implemented</option></select>
+          <input data-me-field="${field}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" title="Constant value" />
+        </span>
+      </label>
+    `;
+  }
+
+  private unsupportedTextureActiveColorNumberRow(
+    label: string,
+    colorField: "emissive",
+    color: string,
+    numberField: "emissiveIntensity",
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+  ): string {
+    return `
+      <label class="me-row" title="${label} texture is not implemented in the material schema/render path yet.">
+        <span>${label}</span>
+        <span class="me-input-triple">
+          <select disabled><option>Not implemented</option></select>
+          <input data-me-field="${colorField}" type="color" value="${escapeHtml(color)}" title="Color picker" />
+          <input data-me-field="${numberField}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" title="Constant value" />
+        </span>
+      </label>
+    `;
+  }
+
+  private unsupportedTextureColorNumberRow(label: string, color: string, value: number): string {
+    return `
+      <label class="me-row is-disabled" title="${label} texture is not implemented in the material schema/render path yet.">
+        <span>${label}</span>
+        <span class="me-input-triple">
+          <select disabled><option>Not implemented</option></select>
+          <input type="color" value="${escapeHtml(color)}" disabled />
+          <input data-me-field="emissiveIntensity" type="number" min="0" max="20" step="0.1" value="${value}" title="Emissive constant intensity" />
+        </span>
+      </label>
+    `;
+  }
+
+  private vector2Row(
+    label: string,
+    xField: "uvTilingX" | "layer1UvTilingX",
+    yField: "uvTilingY" | "layer1UvTilingY",
+    x: number,
+    y: number,
+  ): string {
+    return `
+      <label class="me-row">
+        <span>${label}</span>
+        <span class="me-vector2">
+          <input data-me-field="${xField}" type="number" min="0.001" max="100" step="0.1" value="${x}" title="Constant2Vector X" />
+          <input data-me-field="${yField}" type="number" min="0.001" max="100" step="0.1" value="${y}" title="Constant2Vector Y" />
+        </span>
+      </label>
     `;
   }
 
   private layerBlendSection(): string {
-    const blend = this.def.layerBlend;
+    const enabled = this.def.layerBlend !== null;
+    const blend = this.def.layerBlend ?? defaultLayerBlend(null);
     return `
       <div class="me-section">
         <div class="me-section-title">Layer Blend</div>
-        <label class="me-row"><span>Enabled</span><input data-me-field="layerBlendEnabled" type="checkbox" ${blend ? "checked" : ""} /></label>
+        <label class="me-row"><span>Layer Enabled</span><input data-me-field="layerBlendEnabled" type="checkbox" ${enabled ? "checked" : ""} /></label>
         ${
-          blend
+          enabled
             ? `
-              <label class="me-row"><span>Layer 1 Color</span><input data-me-field="layer1BaseColor" type="color" value="${escapeHtml(blend.layer1.baseColor)}" /></label>
-              <label class="me-row"><span>BC₂ Texture</span><select data-me-field="layer1BaseColorTexture">${this.textureOptions("layer1BaseColorTexture")}</select></label>
-              <label class="me-row"><span>N₂ Texture</span><select data-me-field="layer1NormalTexture">${this.textureOptions("layer1NormalTexture")}</select></label>
-              <label class="me-row"><span>R₂ Texture</span><select data-me-field="layer1RoughnessTexture">${this.textureOptions("layer1RoughnessTexture")}</select></label>
-              <label class="me-row"><span>M₂ Texture</span><select data-me-field="layer1MetalnessTexture">${this.textureOptions("layer1MetalnessTexture")}</select></label>
-              ${this.layerNumberRow("Layer 1 Roughness", "layer1Roughness", blend.layer1.roughness, 0, 1, 0.01)}
-              ${this.layerNumberRow("Layer 1 Metalness", "layer1Metalness", blend.layer1.metalness, 0, 1, 0.01)}
-              <label class="me-row">
-                <span>Layer 1 UV</span>
-                <span class="me-number-pair">
-                  <input data-me-field="layer1UvTilingX" type="number" min="0.001" max="100" step="0.1" value="${blend.layer1.uvTiling.x}" title="Layer 1 texture repeat on U/X" />
-                  <input data-me-field="layer1UvTilingY" type="number" min="0.001" max="100" step="0.1" value="${blend.layer1.uvTiling.y}" title="Layer 1 texture repeat on V/Y" />
-                </span>
-              </label>
-              <label class="me-row"><span>Driver</span><select data-me-field="layerBlendDriver">${this.enumOptions(FORGE_MATERIAL_LAYER_BLEND_DRIVERS, blend.driver)}</select></label>
-              ${this.layerNumberRow("Blend Amount", "layerBlendAmount", blend.amount, 0, 1, 0.01)}
-              ${this.layerNumberRow("Blend Min", "layerBlendMin", blend.min, -100000, 100000, 0.1)}
-              ${this.layerNumberRow("Blend Max", "layerBlendMax", blend.max, -100000, 100000, 0.1)}
-              ${this.layerNumberRow("Blend Contrast", "layerBlendContrast", blend.contrast, 0.01, 8, 0.01)}
+              ${this.textureColorRow("Layer BC Map", "layer1BaseColorTexture", "layer1BaseColor", blend.layer1.baseColor)}
+              ${this.textureVector3Row("Layer N Map", "layer1NormalTexture", [0, 0, 1], false)}
+              ${this.textureNumberRow("Layer R Map", "layer1RoughnessTexture", "layer1Roughness", blend.layer1.roughness, 0, 1, 0.01)}
+              ${this.textureNumberRow("Layer M Map", "layer1MetalnessTexture", "layer1Metalness", blend.layer1.metalness, 0, 1, 0.01)}
+              ${this.unsupportedTextureNumberRow("Layer O Map", 1)}
+              ${this.unsupportedTextureColorNumberRow("Layer E Map", "#000000", 0)}
+              ${this.unsupportedTextureNumberRow("Layer AO Map", 1)}
+              ${this.vector2Row("Layer UV Tiling", "layer1UvTilingX", "layer1UvTilingY", blend.layer1.uvTiling.x, blend.layer1.uvTiling.y)}
             `
             : ""
         }
@@ -366,8 +489,27 @@ export class MaterialEditor {
     `;
   }
 
-  private textureMapMode(): "separate" | "orm" {
-    return this.def.ormTexture || this.def.maskTexture ? "orm" : "separate";
+  private layerSettingsSection(blend: ForgeMaterialLayerBlend): string {
+    return `
+      <div class="me-section">
+        <div class="me-section-title">Layer Settings</div>
+        <label class="me-row"><span>Driver</span><select data-me-field="layerBlendDriver">${this.enumOptions(FORGE_MATERIAL_LAYER_BLEND_DRIVERS, blend.driver)}</select></label>
+        ${
+          blend.driver === "maskTexture"
+            ? `<label class="me-row"><span>Blend Mask</span><select data-me-field="layerBlendMaskTexture">${this.textureOptions("layerBlendMaskTexture")}</select></label>`
+            : ""
+        }
+        ${this.layerNumberRow("Blend Amount", "layerBlendAmount", blend.amount, 0, 1, 0.01)}
+        <label class="me-row">
+          <span>Blend Min + Max</span>
+          <span class="me-vector2">
+            <input data-me-field="layerBlendMin" type="number" min="-100000" max="100000" step="0.1" value="${blend.min}" />
+            <input data-me-field="layerBlendMax" type="number" min="-100000" max="100000" step="0.1" value="${blend.max}" />
+          </span>
+        </label>
+        ${this.layerNumberRow("Blend Contrast", "layerBlendContrast", blend.contrast, 0.01, 8, 0.01)}
+      </div>
+    `;
   }
 
   private textureOptions(
@@ -381,7 +523,8 @@ export class MaterialEditor {
       | "layer1BaseColorTexture"
       | "layer1NormalTexture"
       | "layer1RoughnessTexture"
-      | "layer1MetalnessTexture",
+      | "layer1MetalnessTexture"
+      | "layerBlendMaskTexture",
   ): string {
     const current = isLayerTextureField(field)
       ? this.layerTextureValue(field)
@@ -406,6 +549,7 @@ export class MaterialEditor {
     if (field === "layer1NormalTexture") return layer1.normalTexture;
     if (field === "layer1RoughnessTexture") return layer1.roughnessTexture;
     if (field === "layer1MetalnessTexture") return layer1.metalnessTexture;
+    if (field === "layerBlendMaskTexture") return this.def.layerBlend?.maskTexture ?? null;
     return null;
   }
 
@@ -424,15 +568,6 @@ export class MaterialEditor {
     else if (field === "ormTexture") {
       next.ormTexture = input.value || null;
       next.maskTexture = null;
-    }
-    else if (field === "textureMapMode") {
-      if (input.value === "orm") {
-        next.ormTexture = next.ormTexture ?? next.maskTexture;
-        next.maskTexture = null;
-      } else {
-        next.ormTexture = null;
-        next.maskTexture = null;
-      }
     }
     else if (field === "uvTilingX") next.uvTiling = { ...next.uvTiling, x: numberInput(input.value, 0.001, 100) };
     else if (field === "uvTilingY") next.uvTiling = { ...next.uvTiling, y: numberInput(input.value, 0.001, 100) };
@@ -457,10 +592,11 @@ export class MaterialEditor {
     this.titleEl.textContent = this.def.name;
     this.syncFieldControls(field, input.value);
     this.markDirty();
-    if (field === "textureMapMode" || field === "layerBlendEnabled") this.renderDetails();
+    if (field === "layerBlendEnabled" || field === "layerBlendDriver") this.renderDetails();
     await this.updatePreviewMaterial();
     this.warnIfTransparentMaterial(field);
     this.warnIfSurfaceMapUsesScalar(field);
+    this.warnIfLayerBlendMaskUsesWrongTexture(field);
   }
 
   private applyLayerBlendField(
@@ -483,6 +619,7 @@ export class MaterialEditor {
     else if (field === "layerBlendMin") next.min = numberInput(input.value, -100000, 100000);
     else if (field === "layerBlendMax") next.max = numberInput(input.value, -100000, 100000);
     else if (field === "layerBlendContrast") next.contrast = numberInput(input.value, 0.01, 8);
+    else if (field === "layerBlendMaskTexture") next.maskTexture = input.value || null;
     return next;
   }
 
@@ -513,46 +650,88 @@ export class MaterialEditor {
     this.setStatus("Surface maps multiply the scalar sliders; set Roughness/Metalness near 1 for map-driven results.", "info");
   }
 
-  private async updatePreviewMaterial(): Promise<void> {
-    this.disposePreviewMaterial();
-    const baseMap = await this.loadTexture(this.def.baseColorTexture);
-    const normalMap = await this.loadTexture(this.def.normalTexture);
-    const roughnessMap = await this.loadTexture(this.def.roughnessTexture);
-    const metalnessMap = await this.loadTexture(this.def.metalnessTexture);
-    const aoMap = await this.loadTexture(this.def.aoTexture);
-    const ormMap = await this.loadTexture(this.def.ormTexture);
-    const layer1BaseColorMap = await this.loadTexture(this.def.layerBlend?.layer1.baseColorTexture ?? null);
-    const layer1NormalMap = await this.loadTexture(this.def.layerBlend?.layer1.normalTexture ?? null);
-    const layer1RoughnessMap = await this.loadTexture(this.def.layerBlend?.layer1.roughnessTexture ?? null);
-    const layer1MetalnessMap = await this.loadTexture(this.def.layerBlend?.layer1.metalnessTexture ?? null);
-    const material = createThreeMaterialFromForgeDef(
-      this.def,
-      {
-        baseColorTexture: baseMap,
-        normalTexture: normalMap,
-        roughnessTexture: roughnessMap,
-        metalnessTexture: metalnessMap,
-        aoTexture: aoMap,
-        ormTexture: ormMap,
-        layer1BaseColorTexture: layer1BaseColorMap,
-        layer1NormalTexture: layer1NormalMap,
-        layer1RoughnessTexture: layer1RoughnessMap,
-        layer1MetalnessTexture: layer1MetalnessMap,
-      },
-      { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },
-    );
-    this.previewMaterial = material;
-    this.sphere.material = material;
-    this.renderPreview();
+  private warnIfLayerBlendMaskUsesWrongTexture(field: string): void {
+    if (field !== "layerBlendMaskTexture") return;
+    if (this.statusEl.dataset.tone === "error") return;
+    const textureId = this.def.layerBlend?.maskTexture;
+    if (!textureId) return;
+    const asset = this.textureAssetById(textureId);
+    if (!asset) return;
+    const semantic = inferTextureSemantic(asset);
+    if (semantic === "normal") {
+      this.setStatus("Blend Mask expects a linear grayscale mask, not a normal map.", "warning");
+    } else if (semantic === "color") {
+      this.setStatus("Blend Mask expects a linear grayscale mask; color/base-color textures may give the wrong blend.", "warning");
+    } else {
+      this.setStatus("Blend Mask assigned. Black keeps Layer 0; white shows Layer 1.", "info");
+    }
   }
 
-  private async loadTexture(assetId: string | null): Promise<Texture | null> {
+  private async updatePreviewMaterial(): Promise<void> {
+    const loadedTextures: Texture[] = [];
+    try {
+      this.lastPreviewShaderError = null;
+      const baseMap = await this.loadTexture(this.def.baseColorTexture, loadedTextures);
+      const normalMap = await this.loadTexture(this.def.normalTexture, loadedTextures);
+      const roughnessMap = await this.loadTexture(this.def.roughnessTexture, loadedTextures);
+      const metalnessMap = await this.loadTexture(this.def.metalnessTexture, loadedTextures);
+      const aoMap = await this.loadTexture(this.def.aoTexture, loadedTextures);
+      const ormMap = await this.loadTexture(this.def.ormTexture, loadedTextures);
+      const layer1BaseColorMap = await this.loadTexture(this.def.layerBlend?.layer1.baseColorTexture ?? null, loadedTextures);
+      const layer1NormalMap = await this.loadTexture(this.def.layerBlend?.layer1.normalTexture ?? null, loadedTextures);
+      const layer1RoughnessMap = await this.loadTexture(this.def.layerBlend?.layer1.roughnessTexture ?? null, loadedTextures);
+      const layer1MetalnessMap = await this.loadTexture(this.def.layerBlend?.layer1.metalnessTexture ?? null, loadedTextures);
+      const layerBlendMaskMap = await this.loadTexture(this.def.layerBlend?.maskTexture ?? null, loadedTextures);
+      const material = createThreeMaterialFromForgeDef(
+        this.def,
+        {
+          baseColorTexture: baseMap,
+          normalTexture: normalMap,
+          roughnessTexture: roughnessMap,
+          metalnessTexture: metalnessMap,
+          aoTexture: aoMap,
+          ormTexture: ormMap,
+          layer1BaseColorTexture: layer1BaseColorMap,
+          layer1NormalTexture: layer1NormalMap,
+          layer1RoughnessTexture: layer1RoughnessMap,
+          layer1MetalnessTexture: layer1MetalnessMap,
+          layerBlendMaskTexture: layerBlendMaskMap,
+        },
+        { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },
+      );
+      const previousMaterial = this.previewMaterial;
+      this.previewMaterial = material;
+      this.sphere.material = material;
+      this.renderPreview();
+      if (this.lastPreviewShaderError) {
+        this.previewMaterial = previousMaterial;
+        if (previousMaterial) this.sphere.material = previousMaterial;
+        material.dispose();
+        loadedTextures.forEach((texture) => texture.dispose());
+        this.renderPreview();
+        return;
+      }
+      const previousTextures = this.loadedTextures.splice(0);
+      previousTextures.forEach((texture) => texture.dispose());
+      previousMaterial?.dispose();
+      this.loadedTextures.push(...loadedTextures);
+    } catch (error) {
+      loadedTextures.forEach((texture) => texture.dispose());
+      this.setStatus(`Preview texture failed: ${describeError(error)}`, "error");
+    }
+  }
+
+  private async loadTexture(assetId: string | null, loadedTextures: Texture[]): Promise<Texture | null> {
     if (!assetId) return null;
-    const asset = this.options.assets?.find((entry) => entry.id === assetId && entry.assetType === "texture");
+    const asset = this.textureAssetById(assetId);
     if (!asset) return null;
     const texture = await this.textureLoader.loadAsync(projectFileUrl(asset.path));
-    this.loadedTextures.push(texture);
+    loadedTextures.push(texture);
     return texture;
+  }
+
+  private textureAssetById(assetId: string): MaterialEditorAssetOption | null {
+    return this.options.assets?.find((entry) => entry.id === assetId && entry.assetType === "texture") ?? null;
   }
 
   private resize = (): void => {
@@ -637,6 +816,7 @@ function defaultLayerBlend(current: ForgeMaterialLayerBlend | null): ForgeMateri
     min: current?.min ?? 0,
     max: current?.max ?? 1,
     contrast: current?.contrast ?? 1,
+    maskTexture: current?.maskTexture ?? null,
   };
 }
 
@@ -644,6 +824,22 @@ function isLayerTextureField(field: string): field is
   | "layer1BaseColorTexture"
   | "layer1NormalTexture"
   | "layer1RoughnessTexture"
-  | "layer1MetalnessTexture" {
-  return field.startsWith("layer1");
+  | "layer1MetalnessTexture"
+  | "layerBlendMaskTexture" {
+  return field.startsWith("layer1") || field === "layerBlendMaskTexture";
+}
+
+function inferTextureSemantic(
+  asset: MaterialEditorAssetOption,
+): "color" | "normal" | "scalar" | "unknown" {
+  const text = `${asset.id} ${asset.name} ${asset.path}`.toLowerCase();
+  if (/(^|[_\-\s])(n|normal)([_\-\s.]|$)/.test(text)) return "normal";
+  if (/(normalmap|_n\.|[-_]n[-_.])/.test(text)) return "normal";
+  if (/(basecolor|base-color|albedo|diffuse|_d\.|[-_]d[-_.])/.test(text)) {
+    return "color";
+  }
+  if (/(mask|rough|metal|orm|ao|noise|variation|_m\.|[-_]m[-_.])/.test(text)) {
+    return "scalar";
+  }
+  return "unknown";
 }

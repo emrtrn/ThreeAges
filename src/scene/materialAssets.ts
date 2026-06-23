@@ -56,6 +56,9 @@ export async function loadForgeMaterial(
       layer1MetalnessTexture: def.layerBlend?.layer1.metalnessTexture
         ? await loadTextureByAssetId(manifest, def.layerBlend.layer1.metalnessTexture, textureLoader)
         : null,
+      layerBlendMaskTexture: def.layerBlend?.maskTexture
+        ? await loadTextureByAssetId(manifest, def.layerBlend.maskTexture, textureLoader)
+        : null,
     },
     options,
   );

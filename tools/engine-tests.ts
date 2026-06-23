@@ -6539,6 +6539,7 @@ check("material save payload requires a material path and canonical fields", () 
         min: 0.35,
         max: 0.85,
         contrast: 1.5,
+        maskTexture: null,
       },
     },
   });
@@ -6582,6 +6583,7 @@ check("material save payload requires a material path and canonical fields", () 
       min: 0.35,
       max: 0.85,
       contrast: 1.5,
+      maskTexture: null,
     },
   });
   assert.throws(() =>
@@ -6635,6 +6637,48 @@ check("material save payload requires a material path and canonical fields", () 
       layerBlend: { driver: "vertexColor", layer1: {} },
     }),
   );
+  const maskDriven = validateForgeMaterialDef({
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "Mask Driven",
+    layerBlend: {
+      driver: "maskTexture",
+      maskTexture: "blend-mask",
+      layer1: {},
+    },
+  });
+  assert.equal((maskDriven.layerBlend as Record<string, unknown>).maskTexture, "blend-mask");
+
+  const legacyLayerMask = normalizeForgeMaterialDef({
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "Legacy Layer Mask",
+    maskTexture: "legacy-mask",
+    layerBlend: {
+      driver: "maskTexture",
+      layer1: {},
+    },
+  });
+  assert.equal(legacyLayerMask.maskTexture, null);
+  assert.equal(legacyLayerMask.ormTexture, null);
+  assert.equal(legacyLayerMask.layerBlend?.maskTexture, "legacy-mask");
+
+  const savedLegacyLayerMask = validateForgeMaterialDef({
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "Saved Legacy Layer Mask",
+    maskTexture: "legacy-mask",
+    layerBlend: {
+      driver: "maskTexture",
+      layer1: {},
+    },
+  });
+  assert.equal(savedLegacyLayerMask.maskTexture, null);
+  assert.equal(savedLegacyLayerMask.ormTexture, null);
+  assert.equal((savedLegacyLayerMask.layerBlend as Record<string, unknown>).maskTexture, "legacy-mask");
 });
 
 check("starter material assets normalize to the canonical material shape", () => {
@@ -6771,6 +6815,7 @@ check("forge material mapping creates matching Three material types and fields",
   const layer1NormalTexture = new Texture();
   const layer1RoughnessTexture = new Texture();
   const layer1MetalnessTexture = new Texture();
+  const layerBlendMaskTexture = new Texture();
   const layerBlend = createThreeMaterialFromForgeDef(
     normalizeForgeMaterialDef({
       schema: 1,
@@ -6790,11 +6835,12 @@ check("forge material mapping creates matching Three material types and fields",
           metalness: 0.1,
           uvTiling: { x: 5, y: 6 },
         },
-        driver: "worldHeight",
+        driver: "maskTexture",
         amount: 0.25,
         min: 2,
         max: 8,
         contrast: 1.2,
+        maskTexture: "snow-mask",
       },
     }),
     {
@@ -6804,6 +6850,7 @@ check("forge material mapping creates matching Three material types and fields",
       layer1NormalTexture,
       layer1RoughnessTexture,
       layer1MetalnessTexture,
+      layerBlendMaskTexture,
     },
     { maxAnisotropy: 16 },
   );
@@ -6811,10 +6858,12 @@ check("forge material mapping creates matching Three material types and fields",
   assert.equal(layerBlend.defines?.FORGE_LAYER_BLEND, "");
   assert.equal(layerBlend.defines?.USE_FORGE_LAYER_MAP, "");
   assert.equal(layerBlend.defines?.USE_FORGE_LAYER_NORMALMAP, "");
-  assert.match(layerBlend.customProgramCacheKey(), /forge-layer-blend-v1:worldHeight:bc:n:r:m/);
+  assert.equal(layerBlend.defines?.USE_FORGE_LAYER_MASKMAP, "");
+  assert.match(layerBlend.customProgramCacheKey(), /forge-layer-blend-v1:maskTexture:bc:n:r:m:mask/);
   assert.equal(layer1BaseColorTexture.repeat.x, 5);
   assert.equal(layer1BaseColorTexture.repeat.y, 6);
   assert.equal(layer1BaseColorTexture.anisotropy, 8);
+  assert.equal(layerBlendMaskTexture.colorSpace, NoColorSpace);
   const shader = {
     uniforms: {},
     vertexShader: "#include <common>\nvoid main(){\n#include <worldpos_vertex>\n}",
@@ -6824,8 +6873,10 @@ check("forge material mapping creates matching Three material types and fields",
   layerBlend.onBeforeCompile(shader, null!);
   assert.ok("forgeLayerMap" in shader.uniforms);
   assert.ok("forgeLayerNormalMap" in shader.uniforms);
+  assert.ok("forgeLayerMaskMap" in shader.uniforms);
   assert.match(shader.vertexShader, /vForgeLayerWorldPosition/);
   assert.match(shader.fragmentShader, /forgeLayerBlendFactor/);
+  assert.match(shader.fragmentShader, /forgeLayerMaskMap/);
   assert.match(shader.fragmentShader, /diffuseColor\.rgb = mix/);
   assert.match(shader.fragmentShader, /roughnessFactor = mix/);
   assert.match(shader.fragmentShader, /metalnessFactor = mix/);
