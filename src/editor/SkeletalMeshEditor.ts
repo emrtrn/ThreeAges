@@ -15,6 +15,7 @@ import {
   Group,
   LoopOnce,
   LoopRepeat,
+  MathUtils,
   Mesh,
   MeshBasicMaterial,
   Object3D,
@@ -32,8 +33,10 @@ import {
 } from "three";
 import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { VertexNormalsHelper } from "three/examples/jsm/helpers/VertexNormalsHelper.js";
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
+import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import {
   ANIMATION_SET_ROLES,
@@ -42,6 +45,7 @@ import {
   saveAssetSkeleton,
   type AnimationSetRole,
   type AssetSkeletonDef,
+  type AssetSkeletonSocketDef,
 } from "@/editor/assetSkeletonStore";
 
 export interface SkeletalMeshEditorOptions {
@@ -56,6 +60,7 @@ export interface SkeletalMeshEditorOptions {
 }
 
 type PersonaMode = "skeleton" | "animation";
+type SocketGizmoMode = "translate" | "rotate" | "scale";
 
 interface BoneNode {
   bone: Bone;
@@ -91,6 +96,12 @@ interface MorphTargetControl {
   bindings: MorphTargetBinding[];
 }
 
+interface SocketOverlay {
+  root: Group;
+  marker: Mesh;
+  socket: AssetSkeletonSocketDef;
+}
+
 export class SkeletalMeshEditor {
   private static active: SkeletalMeshEditor | null = null;
 
@@ -123,6 +134,11 @@ export class SkeletalMeshEditor {
   private disposed = false;
   private skeletonHelper: SkeletonHelper | null = null;
   private readonly normalHelpers: VertexNormalsHelper[] = [];
+  private readonly socketOverlays: SocketOverlay[] = [];
+  private transformControls: TransformControls | null = null;
+  private socketGizmoMode: SocketGizmoMode = "translate";
+  private socketGizmoDragging = false;
+  private selectedSocketName: string | null = null;
   private selectedBone: Bone | null = null;
   private readonly boneMarker = new Mesh(
     new SphereGeometry(0.045, 16, 10),
@@ -227,6 +243,19 @@ export class SkeletalMeshEditor {
     this.scene.add(this.modelGroup);
     this.scene.add(this.helperGroup);
     this.helperGroup.add(this.boneMarker);
+
+    const controls = new TransformControls(this.camera, this.renderer.domElement);
+    controls.setSize(0.78);
+    controls.addEventListener("dragging-changed", (event) => {
+      this.socketGizmoDragging = event.value === true;
+      if (!this.socketGizmoDragging) {
+        this.commitSelectedSocketFromGizmo();
+      }
+    });
+    controls.addEventListener("objectChange", () => this.commitSelectedSocketFromGizmo({ quiet: true }));
+    this.scene.add(controls.getHelper());
+    this.transformControls = controls;
+
     this.updateCamera();
   }
 
@@ -261,6 +290,8 @@ export class SkeletalMeshEditor {
   private async loadSkeleton(): Promise<void> {
     this.skeleton = await loadAssetSkeleton(this.options.modelPath);
     this.sanitizeAnimationSet();
+    this.sanitizeSockets();
+    this.rebuildSocketOverlays();
   }
 
   private resolveInitialClip(): string {
@@ -282,6 +313,18 @@ export class SkeletalMeshEditor {
       if (clip && available.has(clip)) animationSet[role] = clip;
     }
     this.skeleton = { ...this.skeleton, animationSet };
+  }
+
+  private sanitizeSockets(): void {
+    const bones = new Set(this.bones.map((bone) => bone.name).filter(Boolean));
+    const names = new Set<string>();
+    const sockets = this.skeleton.sockets.filter((socket) => {
+      if (!socket.name || names.has(socket.name)) return false;
+      if (!bones.has(socket.bone)) return false;
+      names.add(socket.name);
+      return true;
+    });
+    this.skeleton = { ...this.skeleton, sockets };
   }
 
   private collectModelInfo(root: Object3D): void {
@@ -425,13 +468,14 @@ export class SkeletalMeshEditor {
 
     el.addEventListener("contextmenu", (event) => event.preventDefault());
     el.addEventListener("pointerdown", (event) => {
+      if (this.transformControls?.axis) return;
       lastX = event.clientX;
       lastY = event.clientY;
       mode = event.button === 1 || event.shiftKey || event.button === 2 ? "pan" : "orbit";
       el.setPointerCapture(event.pointerId);
     });
     el.addEventListener("pointermove", (event) => {
-      if (!mode) return;
+      if (!mode || this.socketGizmoDragging) return;
       const dx = event.clientX - lastX;
       const dy = event.clientY - lastY;
       lastX = event.clientX;
@@ -516,6 +560,12 @@ export class SkeletalMeshEditor {
       <div class="sm-tool-group">
         <button type="button" class="sm-tool-btn" data-skel-bind-pose>Bind Pose</button>
       </div>
+      <div class="sm-tool-sep"></div>
+      <div class="sm-tool-group sm-tool-modes" aria-label="Socket transform mode">
+        <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "translate" ? "is-active" : ""}" data-skel-socket-mode="translate" title="Move Socket">✥</button>
+        <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "rotate" ? "is-active" : ""}" data-skel-socket-mode="rotate" title="Rotate Socket">⟳</button>
+        <button type="button" class="sm-tool-btn sm-mode-btn ${this.socketGizmoMode === "scale" ? "is-active" : ""}" data-skel-socket-mode="scale" title="Scale Socket">⤢</button>
+      </div>
     `;
     this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-skel-mode]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -544,6 +594,11 @@ export class SkeletalMeshEditor {
       });
     this.toolbarHost.querySelector<HTMLButtonElement>("[data-skel-bind-pose]")?.addEventListener("click", () => {
       this.showBindPose();
+    });
+    this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-skel-socket-mode]").forEach((button) => {
+      button.addEventListener("click", () => {
+        this.setSocketGizmoMode(button.dataset.skelSocketMode as SocketGizmoMode);
+      });
     });
   }
 
@@ -581,6 +636,34 @@ export class SkeletalMeshEditor {
             `
             : `<div class="sm-empty">Select a bone to inspect it in the viewport.</div>`
         }
+      </div>
+      <div class="sm-section">
+        <div class="sm-section-title">Sockets <span class="sm-count">${this.skeleton.sockets.length}</span></div>
+        <div class="sm-prim-list">
+          ${
+            this.selectedBone
+              ? `<button type="button" class="sm-menu-item" data-skel-add-socket>Add Socket To ${escapeHtml(this.selectedBone.name || "Bone")}</button>`
+              : `<div class="sm-empty">Select a bone before adding a socket.</div>`
+          }
+          ${
+            this.skeleton.sockets.length
+              ? this.skeleton.sockets.map((socket) => this.renderSocketRow(socket)).join("")
+              : `<div class="sm-empty">No sockets authored yet.</div>`
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  private renderSocketRow(socket: AssetSkeletonSocketDef): string {
+    const selected = socket.name === this.selectedSocketName;
+    return `
+      <div class="sm-socket-row ${selected ? "is-selected" : ""}" data-skel-socket="${escapeHtml(socket.name)}">
+        <button type="button" class="sm-socket-main" data-skel-socket-select="${escapeHtml(socket.name)}">
+          <strong>${escapeHtml(socket.name)}</strong>
+          <small>${escapeHtml(socket.bone)} · P ${formatVec3Array(socket.position)} · R ${formatVec3Array(socket.rotation)}</small>
+        </button>
+        <button type="button" class="sm-prim-del" data-skel-socket-delete="${escapeHtml(socket.name)}" title="Delete">✕</button>
       </div>
     `;
   }
@@ -757,6 +840,15 @@ export class SkeletalMeshEditor {
         this.renderDetails();
       });
     });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-add-socket]")?.addEventListener("click", () => {
+      this.addSocketToSelectedBone();
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-socket-select]").forEach((button) => {
+      button.addEventListener("click", () => this.selectSocket(button.dataset.skelSocketSelect ?? null));
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-socket-delete]").forEach((button) => {
+      button.addEventListener("click", () => this.deleteSocket(button.dataset.skelSocketDelete ?? ""));
+    });
     this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-clip]").forEach((button) => {
       button.addEventListener("click", () =>
         this.selectClip(button.dataset.skelClip ?? "", { autoplay: true, crossfade: true }),
@@ -823,6 +915,128 @@ export class SkeletalMeshEditor {
   private resetMorphTargets(): void {
     for (const target of this.morphTargets) this.setMorphTarget(target.key, 0);
     this.renderDetails();
+  }
+
+  private rebuildSocketOverlays(): void {
+    this.transformControls?.detach();
+    this.disposeSocketOverlays();
+    for (const socket of this.skeleton.sockets) {
+      const bone = this.bones.find((item) => item.name === socket.bone);
+      if (!bone) continue;
+      const root = new Group();
+      root.name = `Socket:${socket.name}`;
+      applySocketTransform(root, socket);
+      const marker = new Mesh(
+        new SphereGeometry(0.04, 14, 8),
+        new MeshBasicMaterial({ color: socket.name === this.selectedSocketName ? 0xffb648 : 0x7ac7ff, depthTest: false }),
+      );
+      marker.renderOrder = 5;
+      root.add(marker);
+      bone.add(root);
+      this.socketOverlays.push({ root, marker, socket });
+    }
+    this.attachSelectedSocketGizmo();
+  }
+
+  private disposeSocketOverlays(): void {
+    for (const overlay of this.socketOverlays) {
+      overlay.root.removeFromParent();
+      overlay.marker.geometry.dispose();
+      if (Array.isArray(overlay.marker.material)) {
+        for (const material of overlay.marker.material) material.dispose();
+      } else {
+        overlay.marker.material.dispose();
+      }
+    }
+    this.socketOverlays.length = 0;
+  }
+
+  private addSocketToSelectedBone(): void {
+    if (!this.selectedBone?.name) return;
+    const base = `${this.selectedBone.name}_socket`;
+    const taken = new Set(this.skeleton.sockets.map((socket) => socket.name));
+    let name = base;
+    for (let index = 2; taken.has(name); index += 1) name = `${base}_${index}`;
+    const socket: AssetSkeletonSocketDef = {
+      name,
+      bone: this.selectedBone.name,
+      position: [0, 0, 0],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+    };
+    this.skeleton = { ...this.skeleton, sockets: [...this.skeleton.sockets, socket] };
+    this.selectedSocketName = name;
+    this.rebuildSocketOverlays();
+    this.markDirty();
+    this.renderToolbar();
+    this.renderDetails();
+    this.setStatus(`Added socket ${name}.`);
+  }
+
+  private selectSocket(name: string | null): void {
+    this.selectedSocketName = name;
+    const socket = name ? this.skeleton.sockets.find((item) => item.name === name) : null;
+    const bone = socket ? this.bones.find((item) => item.name === socket.bone) : null;
+    if (bone) this.selectedBone = bone;
+    this.updateSocketSelectionVisuals();
+    this.attachSelectedSocketGizmo();
+    this.renderDetails();
+  }
+
+  private deleteSocket(name: string): void {
+    if (!name) return;
+    this.skeleton = {
+      ...this.skeleton,
+      sockets: this.skeleton.sockets.filter((socket) => socket.name !== name),
+    };
+    if (this.selectedSocketName === name) this.selectedSocketName = null;
+    this.rebuildSocketOverlays();
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Deleted socket ${name}.`);
+  }
+
+  private attachSelectedSocketGizmo(): void {
+    const overlay = this.socketOverlays.find((item) => item.socket.name === this.selectedSocketName);
+    if (!overlay) {
+      this.transformControls?.detach();
+      return;
+    }
+    this.transformControls?.attach(overlay.root);
+    this.transformControls?.setMode(this.socketGizmoMode);
+    this.updateSocketSelectionVisuals();
+  }
+
+  private setSocketGizmoMode(mode: SocketGizmoMode): void {
+    if (mode !== "translate" && mode !== "rotate" && mode !== "scale") return;
+    this.socketGizmoMode = mode;
+    this.transformControls?.setMode(mode);
+    this.renderToolbar();
+  }
+
+  private commitSelectedSocketFromGizmo(options: { quiet?: boolean } = {}): void {
+    const overlay = this.socketOverlays.find((item) => item.socket.name === this.selectedSocketName);
+    if (!overlay) return;
+    const sockets = this.skeleton.sockets.map((socket) =>
+      socket.name === overlay.socket.name ? socketFromObject(overlay.root, socket) : socket,
+    );
+    this.skeleton = { ...this.skeleton, sockets };
+    overlay.socket = sockets.find((socket) => socket.name === overlay.socket.name) ?? overlay.socket;
+    if (!options.quiet) {
+      this.markDirty();
+      this.renderDetails();
+    } else {
+      this.markDirty();
+    }
+  }
+
+  private updateSocketSelectionVisuals(): void {
+    for (const overlay of this.socketOverlays) {
+      const selected = overlay.socket.name === this.selectedSocketName;
+      if (overlay.marker.material instanceof MeshBasicMaterial) {
+        overlay.marker.material.color.setHex(selected ? 0xffb648 : 0x7ac7ff);
+      }
+    }
   }
 
   private clipOptions(selected: string): string {
@@ -990,7 +1204,10 @@ export class SkeletalMeshEditor {
     this.action?.stop();
     this.mixer?.stopAllAction();
     this.skeletonHelper?.dispose();
+    this.transformControls?.detach();
+    this.transformControls?.dispose();
     this.disposeNormalHelpers();
+    this.disposeSocketOverlays();
     this.boneMarker.geometry.dispose();
     if (Array.isArray(this.boneMarker.material)) {
       for (const material of this.boneMarker.material) material.dispose();
@@ -1065,8 +1282,48 @@ function formatVec3(value: Vector3): string {
   return [value.x, value.y, value.z].map((axis) => axis.toFixed(2)).join(", ");
 }
 
+function formatVec3Array(value: Vec3): string {
+  return value.map((axis) => axis.toFixed(2)).join(", ");
+}
+
 function formatRoleLabel(role: AnimationSetRole): string {
   return role.length > 0 ? role[0]!.toUpperCase() + role.slice(1) : role;
+}
+
+function applySocketTransform(root: Object3D, socket: AssetSkeletonSocketDef): void {
+  root.position.set(socket.position[0], socket.position[1], socket.position[2]);
+  root.rotation.set(
+    MathUtils.degToRad(socket.rotation[0]),
+    MathUtils.degToRad(socket.rotation[1]),
+    MathUtils.degToRad(socket.rotation[2]),
+    "XYZ",
+  );
+  root.scale.set(socket.scale[0], socket.scale[1], socket.scale[2]);
+}
+
+function socketFromObject(root: Object3D, socket: AssetSkeletonSocketDef): AssetSkeletonSocketDef {
+  return {
+    ...socket,
+    position: [
+      round(root.position.x),
+      round(root.position.y),
+      round(root.position.z),
+    ] as Vec3,
+    rotation: [
+      round(MathUtils.radToDeg(root.rotation.x)),
+      round(MathUtils.radToDeg(root.rotation.y)),
+      round(MathUtils.radToDeg(root.rotation.z)),
+    ] as Vec3,
+    scale: [
+      Math.max(round(root.scale.x), 0.001),
+      Math.max(round(root.scale.y), 0.001),
+      Math.max(round(root.scale.z), 0.001),
+    ] as Vec3,
+  };
+}
+
+function round(value: number): number {
+  return Number(value.toFixed(4));
 }
 
 function describeError(error: unknown): string {

@@ -230,7 +230,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [x] `CrossfadeAnimator` ile klipler arası geçiş önizlemesi
 - [x] **Anim-set rol eşlemesi**: klip ismi → semantik rol (idle/walk/run/jump…);
       `animationSet` olarak sidecar'a yaz → locomotion seçicisini besler
-- [ ] **Sockets**: kemik seç → offset transform'lu socket ekle, viewport gizmo
+- [x] **Sockets**: kemik seç → offset transform'lu socket ekle, viewport gizmo
       ile düzenle, `sockets[]` sidecar'a yaz
 - [ ] Socket'e preview asset takıp konumlandırma (silah/prop attach önizlemesi)
 - [x] **Morph Target Previewer**: `morphTargetInfluences` slider'ları

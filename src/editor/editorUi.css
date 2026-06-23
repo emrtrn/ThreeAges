@@ -1415,6 +1415,44 @@ body.editor-mode #debug-stats {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.sm-socket-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+  border-radius: 4px;
+  background: #14171a;
+}
+
+.sm-socket-row.is-selected {
+  outline: 1px solid #ffb648;
+  background: #20242a;
+}
+
+.sm-socket-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border: 0;
+  background: transparent;
+  color: #e6ebee;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sm-socket-main strong,
+.sm-socket-main small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sm-socket-main small {
+  color: #8a949a;
+}
 .sm-prim-del {
   width: 22px;
   height: 22px;
