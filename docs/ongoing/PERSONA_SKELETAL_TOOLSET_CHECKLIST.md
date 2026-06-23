@@ -234,11 +234,23 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
       ile düzenle, `sockets[]` sidecar'a yaz
 - [x] Socket'e preview asset takıp konumlandırma (silah/prop attach önizlemesi)
 - [x] **Morph Target Previewer**: `morphTargetInfluences` slider'ları
-- [ ] **Blend Space (data)**: 1D/2D blend noktaları tanımla (örn. hız →
+- [x] **Blend Space (data)**: 1D/2D blend noktaları tanımla (örn. hız →
       idle↔walk↔run sürekli harman) + viewport önizleme; runtime'da `AnimationMixer`
       ağırlıklarıyla harman. `blendSpaces` sidecar'a yazılır. (CrossfadeAnimator'ın
       "tek aktif klip" modelini çok-klip ağırlıklı harmana yükseltmenin authoring ucu;
       node-graph değil, saf data.)
+      - Tip+çözümleyici [`assetSkeletonLoader.ts`](../../src/scene/assetSkeletonLoader.ts):
+        `AssetSkeletonBlendSpaceDef` (1d/2d, axisX[/axisY], samples[]) +
+        saf `resolveBlendSpaceWeights` (1D piecewise-linear, 2D normalize edilmiş
+        ters-mesafe/Shepard; çakışan klip ağırlıkları birleşir). Normalize blendSpaces'i
+        ayıklar (boş/yinelenen ad, alan-dışı/NaN örnekleri kırpar).
+      - Authoring + önizleme [`SkeletalMeshEditor.ts`](../../src/editor/SkeletalMeshEditor.ts)
+        Animation modunda: blend space ekle/sil/seç, ad/tip/eksen ad+min/max,
+        örnek (klip+koordinat) ekle/sil, "Preview Blend" → eksen slider'ları
+        `AnimationMixer` action ağırlıklarını canlı sürer (faz-senkron), yüzde okuması.
+      - Save validator [`saveValidator.ts`](../../tools/saveValidator.ts):
+        `validateBlendSpaces` (eksen/örnek tip kontrolü, 2D'de y zorunlu, yinelenen
+        ad reddi). engine-tests: normalize + 1D/2D resolver + save round-trip.
 
 ### Faz 3 — Animation Notifies + Montage-lite (ertelenmiş)
 

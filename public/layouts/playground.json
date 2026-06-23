@@ -234,6 +234,7 @@
       "maxBlur": 1
     },
     "ao": {
+      "enabled": true,
       "radius": 1,
       "intensity": 1
     },

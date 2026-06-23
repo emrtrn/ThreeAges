@@ -317,6 +317,25 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-23* - **Persona Blend Space (data) - Faz 2 tamam.** Skeletal mesh
+  editorune Unreal Blend Space'in *data* karsiligi eklendi (node-graph YOK; karar
+  PERSONA_SKELETAL_TOOLSET_CHECKLIST Bolum D'de sabit). Veri modeli + saf
+  cozumleyici `src/scene/assetSkeletonLoader.ts`: `AssetSkeletonBlendSpaceDef`
+  (1d/2d, axisX[/axisY], samples[]) ve `resolveBlendSpaceWeights` — 1D parcali-dogrusal
+  (idle<->walk<->run), 2D normalize ters-mesafe (Shepard, tam-ornek kisa devre);
+  cakisan klipler birlesir, agirliklar 1'e normalize. `normalizeAssetSkeleton`
+  blendSpaces'i artik ayikliyor (bos/yinelenen ad, alan-disi/NaN kirpma).
+  `SkeletalMeshEditor.ts` Animation modunda authoring ve viewport onizleme: blend
+  space ekle/sil/sec, ad/tip/eksen+min/max, ornek (klip+koordinat) ekle/sil; "Preview
+  Blend" ile eksen slider'lari `AnimationMixer` action agirliklarini canli
+  (faz-senkron) suruyor, yuzde okumasi gosterir. Save validator `validateBlendSpaces`
+  (2D'de y zorunlu, yinelenen ad
+  reddi). Gate: tsc temiz, test:engine 289 check (yeni: normalize + 1D/2D resolver +
+  save round-trip). Sidecar persistans (`*.skeleton.json` blendSpaces) ve `/__save-skeleton`
+  zaten vardi; sadece passthrough yerine gercek dogrulama. Karar/erteleme: runtime
+  tuketimi (locomotion'i blend space ile besleme) bu maddenin disinda — animationSet
+  gibi su an authoring-only; viewport-base refactor (Faz 1, opsiyonel) ve Montage-lite
+  (Faz 3) hala acik.
 - *2026-06-22* - **complexAsSimple - oyuncu hareketi + kritik clone fix.** Kullanici
   L formlu wallCorner'da test etti: Show>Collision kutu gosteriyor, Play'de L
   bosluguna girilemiyor. Iki kok neden bulundu: (1) `physicsSubsystem.clonePrimitive`

@@ -1544,6 +1544,96 @@ function validateSkeletonSocket(value: unknown, label: string): Record<string, u
   return socket;
 }
 
+const BLEND_SPACE_TYPES = ["1d", "2d"] as const;
+
+function validateBlendAxis(value: unknown, label: string): Record<string, number | string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.name !== "string" || input.name.length === 0) {
+    throw new Error(`${label}.name must be a non-empty string`);
+  }
+  if (typeof input.min !== "number" || !Number.isFinite(input.min)) {
+    throw new Error(`${label}.min must be a finite number`);
+  }
+  if (typeof input.max !== "number" || !Number.isFinite(input.max)) {
+    throw new Error(`${label}.max must be a finite number`);
+  }
+  if (input.max <= input.min) {
+    throw new Error(`${label}.max must be greater than ${label}.min`);
+  }
+  return {
+    name: input.name,
+    min: Number(input.min.toFixed(4)),
+    max: Number(input.max.toFixed(4)),
+  };
+}
+
+function validateBlendSample(
+  value: unknown,
+  label: string,
+  type: (typeof BLEND_SPACE_TYPES)[number],
+): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.clip !== "string" || input.clip.length === 0) {
+    throw new Error(`${label}.clip must be a non-empty string`);
+  }
+  if (typeof input.x !== "number" || !Number.isFinite(input.x)) {
+    throw new Error(`${label}.x must be a finite number`);
+  }
+  const sample: Record<string, unknown> = { clip: input.clip, x: Number(input.x.toFixed(4)) };
+  if (type === "2d") {
+    if (typeof input.y !== "number" || !Number.isFinite(input.y)) {
+      throw new Error(`${label}.y must be a finite number for a 2d blend space`);
+    }
+    sample.y = Number(input.y.toFixed(4));
+  }
+  return sample;
+}
+
+function validateBlendSpace(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.name !== "string" || input.name.length === 0) {
+    throw new Error(`${label}.name must be a non-empty string`);
+  }
+  const type = BLEND_SPACE_TYPES.find((candidate) => candidate === input.type);
+  if (!type) {
+    throw new Error(`${label}.type must be one of ${BLEND_SPACE_TYPES.join(", ")}`);
+  }
+  const blendSpace: Record<string, unknown> = {
+    name: input.name,
+    type,
+    axisX: validateBlendAxis(input.axisX, `${label}.axisX`),
+  };
+  if (type === "2d") blendSpace.axisY = validateBlendAxis(input.axisY, `${label}.axisY`);
+  blendSpace.samples = Array.isArray(input.samples)
+    ? input.samples.map((sample, index) => validateBlendSample(sample, `${label}.samples[${index}]`, type))
+    : [];
+  return blendSpace;
+}
+
+function validateBlendSpaces(value: unknown): Record<string, unknown>[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error("skeleton.blendSpaces must be an array");
+  const names = new Set<string>();
+  return value.map((blendSpace, index) => {
+    const validated = validateBlendSpace(blendSpace, `skeleton.blendSpaces[${index}]`);
+    const name = validated.name as string;
+    if (names.has(name)) {
+      throw new Error(`skeleton.blendSpaces[${index}].name "${name}" is duplicated`);
+    }
+    names.add(name);
+    return validated;
+  });
+}
+
 export function validateAssetSkeletonDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("skeleton def must be an object");
@@ -1564,7 +1654,7 @@ export function validateAssetSkeletonDef(value: unknown): Record<string, unknown
     schema: 1,
     sockets,
     animationSet: validateAnimationSet(input.animationSet),
-    blendSpaces: Array.isArray(input.blendSpaces) ? input.blendSpaces : [],
+    blendSpaces: validateBlendSpaces(input.blendSpaces),
     notifies: Array.isArray(input.notifies) ? input.notifies : [],
     montages: Array.isArray(input.montages) ? input.montages : [],
     preview: {

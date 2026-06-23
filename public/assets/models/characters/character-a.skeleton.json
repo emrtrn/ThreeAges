@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "sockets": [],
+  "animationSet": {
+    "idle": "idle",
+    "walk": "walk",
+    "run": "sprint",
+    "jump": "walk",
+    "fall": "walk"
+  },
+  "blendSpaces": [
+    {
+      "name": "BlendSpace",
+      "type": "1d",
+      "axisX": {
+        "name": "Speed",
+        "min": 0,
+        "max": 4
+      },
+      "samples": []
+    }
+  ],
+  "notifies": [],
+  "montages": [],
+  "preview": {
+    "selectedClip": "static"
+  }
+}

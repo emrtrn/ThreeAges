@@ -40,12 +40,19 @@ import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import {
   ANIMATION_SET_ROLES,
+  BLEND_SPACE_TYPES,
   defaultAssetSkeleton,
+  defaultBlendSpaceAxis,
   loadAssetSkeleton,
+  resolveBlendSpaceWeights,
   saveAssetSkeleton,
   type AnimationSetRole,
+  type AssetSkeletonBlendSpaceDef,
   type AssetSkeletonDef,
   type AssetSkeletonSocketDef,
+  type BlendSpaceAxisDef,
+  type BlendSpaceSampleDef,
+  type BlendSpaceType,
 } from "@/editor/assetSkeletonStore";
 
 export interface SkeletalMeshEditorOptions {
@@ -170,6 +177,11 @@ export class SkeletalMeshEditor {
   private mixer: AnimationMixer | null = null;
   private action: AnimationAction | null = null;
   private selectedClipName = "";
+  private selectedBlendSpaceName: string | null = null;
+  private blendPreviewActive = false;
+  private blendPreviewPhase = 0;
+  private readonly blendPreviewParams = { x: 0, y: 0 };
+  private readonly blendPreviewActions = new Map<string, AnimationAction>();
   private playing = false;
   private loop = true;
   private playRate = 1;
@@ -445,7 +457,9 @@ export class SkeletalMeshEditor {
     const tick = (): void => {
       if (this.disposed) return;
       const delta = this.clock.getDelta();
-      if (this.playing) {
+      if (this.blendPreviewActive) {
+        this.updateBlendPreview(delta);
+      } else if (this.playing) {
         this.mixer?.update(delta * this.playRate);
         this.updateTimelineFromAction();
       }
@@ -580,7 +594,9 @@ export class SkeletalMeshEditor {
     `;
     this.toolbarHost.querySelectorAll<HTMLButtonElement>("[data-skel-mode]").forEach((button) => {
       button.addEventListener("click", () => {
-        this.mode = button.dataset.skelMode === "animation" ? "animation" : "skeleton";
+        const nextMode = button.dataset.skelMode === "animation" ? "animation" : "skeleton";
+        if (nextMode !== this.mode && this.blendPreviewActive) this.stopBlendPreview();
+        this.mode = nextMode;
         this.renderToolbar();
         this.renderDetails();
       });
@@ -775,6 +791,135 @@ export class SkeletalMeshEditor {
             : `<div class="sm-empty">No clips available for role mapping.</div>`
         }
       </div>
+      ${this.renderBlendSpaceDetails()}
+    `;
+  }
+
+  private renderBlendSpaceDetails(): string {
+    const selected = this.getSelectedBlendSpace();
+    return `
+      <div class="sm-section">
+        <div class="sm-section-title">Blend Spaces <span class="sm-count">${this.skeleton.blendSpaces.length}</span></div>
+        <div class="sm-prim-list">
+          ${
+            this.clips.length
+              ? `<button type="button" class="sm-menu-item" data-skel-blend-add>Add Blend Space</button>`
+              : `<div class="sm-empty">Import a clip before authoring a blend space.</div>`
+          }
+          ${
+            this.skeleton.blendSpaces.length
+              ? this.skeleton.blendSpaces.map((blend) => this.renderBlendSpaceRow(blend)).join("")
+              : `<div class="sm-empty">No blend spaces authored yet.</div>`
+          }
+        </div>
+      </div>
+      ${selected ? this.renderBlendSpaceEditor(selected) : ""}
+    `;
+  }
+
+  private renderBlendSpaceRow(blend: AssetSkeletonBlendSpaceDef): string {
+    const isSelected = blend.name === this.selectedBlendSpaceName;
+    return `
+      <div class="sm-socket-row ${isSelected ? "is-selected" : ""}">
+        <button type="button" class="sm-socket-main" data-skel-blend-select="${escapeHtml(blend.name)}">
+          <strong>${escapeHtml(blend.name)}</strong>
+          <small>${blend.type.toUpperCase()} · ${blend.samples.length} sample${blend.samples.length === 1 ? "" : "s"}</small>
+        </button>
+        <button type="button" class="sm-prim-del" data-skel-blend-delete="${escapeHtml(blend.name)}" title="Delete">✕</button>
+      </div>
+    `;
+  }
+
+  private renderBlendSpaceEditor(blend: AssetSkeletonBlendSpaceDef): string {
+    return `
+      <div class="sm-section sm-blend-editor">
+        <div class="sm-section-title">Edit “${escapeHtml(blend.name)}”</div>
+        <label class="sm-row"><span>Name</span><input type="text" data-skel-blend-name value="${escapeHtml(blend.name)}" /></label>
+        <label class="sm-row">
+          <span>Type</span>
+          <select data-skel-blend-type>
+            ${BLEND_SPACE_TYPES.map(
+              (type) => `<option value="${type}" ${type === blend.type ? "selected" : ""}>${type === "1d" ? "1D (single axis)" : "2D (two axes)"}</option>`,
+            ).join("")}
+          </select>
+        </label>
+        ${this.renderBlendAxisFields("x", blend.axisX)}
+        ${blend.type === "2d" && blend.axisY ? this.renderBlendAxisFields("y", blend.axisY) : ""}
+        <div class="sm-section-title">Samples <span class="sm-count">${blend.samples.length}</span></div>
+        <div class="sm-prim-list">
+          ${
+            blend.samples.length
+              ? blend.samples.map((sample, index) => this.renderBlendSampleRow(blend, sample, index)).join("")
+              : `<div class="sm-empty">Add a sample to place a clip on the axis.</div>`
+          }
+          <button type="button" class="sm-menu-item" data-skel-blend-sample-add>Add Sample</button>
+        </div>
+        ${this.renderBlendPreview(blend)}
+      </div>
+    `;
+  }
+
+  private renderBlendAxisFields(axis: "x" | "y", def: BlendSpaceAxisDef): string {
+    const label = axis === "x" ? "Axis X" : "Axis Y";
+    return `
+      <div class="sm-blend-axis">
+        <div class="sm-blend-axis-label">${label}</div>
+        <label class="sm-row"><span>Name</span><input type="text" data-skel-blend-axis="${axis}" data-skel-blend-axis-field="name" value="${escapeHtml(def.name)}" /></label>
+        <label class="sm-row"><span>Min</span><input type="text" data-skel-blend-axis="${axis}" data-skel-blend-axis-field="min" value="${def.min}" /></label>
+        <label class="sm-row"><span>Max</span><input type="text" data-skel-blend-axis="${axis}" data-skel-blend-axis-field="max" value="${def.max}" /></label>
+      </div>
+    `;
+  }
+
+  private renderBlendSampleRow(
+    blend: AssetSkeletonBlendSpaceDef,
+    sample: { clip: string; x: number; y?: number },
+    index: number,
+  ): string {
+    return `
+      <div class="sm-blend-sample">
+        <select data-skel-blend-sample-clip="${index}">
+          ${this.blendSampleClipOptions(sample.clip)}
+        </select>
+        <label class="sm-blend-coord"><span>${escapeHtml(blend.axisX.name || "X")}</span><input type="text" data-skel-blend-sample-coord="${index}" data-skel-blend-coord-axis="x" value="${sample.x}" /></label>
+        ${
+          blend.type === "2d"
+            ? `<label class="sm-blend-coord"><span>${escapeHtml(blend.axisY?.name || "Y")}</span><input type="text" data-skel-blend-sample-coord="${index}" data-skel-blend-coord-axis="y" value="${sample.y ?? 0}" /></label>`
+            : ""
+        }
+        <button type="button" class="sm-prim-del" data-skel-blend-sample-delete="${index}" title="Delete sample">✕</button>
+      </div>
+    `;
+  }
+
+  private renderBlendPreview(blend: AssetSkeletonBlendSpaceDef): string {
+    const active = this.blendPreviewActive && this.selectedBlendSpaceName === blend.name;
+    const canPreview = blend.samples.some((sample) => this.clips.some((clip) => clip.name === sample.clip));
+    return `
+      <div class="sm-section-title">Preview</div>
+      <div class="sm-anim-controls">
+        <button type="button" class="sm-tool-btn ${active ? "is-active" : ""}" data-skel-blend-preview ${canPreview ? "" : "disabled"}>
+          ${active ? "Stop Preview" : "Preview Blend"}
+        </button>
+      </div>
+      ${
+        active
+          ? `
+            <label class="sm-row sm-blend-param">
+              <span>${escapeHtml(blend.axisX.name || "X")}</span>
+              <input type="range" min="${blend.axisX.min}" max="${blend.axisX.max}" step="0.01" value="${this.blendPreviewParams.x}" data-skel-blend-param="x" />
+            </label>
+            ${
+              blend.type === "2d" && blend.axisY
+                ? `<label class="sm-row sm-blend-param"><span>${escapeHtml(blend.axisY.name || "Y")}</span><input type="range" min="${blend.axisY.min}" max="${blend.axisY.max}" step="0.01" value="${this.blendPreviewParams.y}" data-skel-blend-param="y" /></label>`
+                : ""
+            }
+            <div class="sm-blend-weights" data-skel-blend-weights>${escapeHtml(this.describeBlendWeights(blend))}</div>
+          `
+          : !canPreview
+            ? `<div class="sm-hint">Assign clips that exist in this asset to preview the blend.</div>`
+            : ""
+      }
     `;
   }
 
@@ -920,6 +1065,62 @@ export class SkeletalMeshEditor {
     });
     this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-morph-reset]")?.addEventListener("click", () => {
       this.resetMorphTargets();
+    });
+    this.bindBlendSpaceControls();
+  }
+
+  private bindBlendSpaceControls(): void {
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-blend-add]")?.addEventListener("click", () => {
+      this.addBlendSpace();
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-blend-select]").forEach((button) => {
+      button.addEventListener("click", () => this.selectBlendSpace(button.dataset.skelBlendSelect ?? null));
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-blend-delete]").forEach((button) => {
+      button.addEventListener("click", () => this.deleteBlendSpace(button.dataset.skelBlendDelete ?? ""));
+    });
+    this.detailsHost.querySelector<HTMLInputElement>("[data-skel-blend-name]")?.addEventListener("change", (event) => {
+      this.renameBlendSpace((event.target as HTMLInputElement).value);
+    });
+    this.detailsHost.querySelector<HTMLSelectElement>("[data-skel-blend-type]")?.addEventListener("change", (event) => {
+      this.setBlendSpaceType((event.target as HTMLSelectElement).value as BlendSpaceType);
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-blend-axis]").forEach((input) => {
+      input.addEventListener("change", () => {
+        this.setBlendAxisField(
+          input.dataset.skelBlendAxis as "x" | "y",
+          input.dataset.skelBlendAxisField as "name" | "min" | "max",
+          input.value,
+        );
+      });
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-blend-sample-add]")?.addEventListener("click", () => {
+      this.addBlendSample();
+    });
+    this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-skel-blend-sample-clip]").forEach((select) => {
+      select.addEventListener("change", () => {
+        this.setBlendSampleClip(Number(select.dataset.skelBlendSampleClip), select.value);
+      });
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-blend-sample-coord]").forEach((input) => {
+      input.addEventListener("change", () => {
+        this.setBlendSampleCoord(
+          Number(input.dataset.skelBlendSampleCoord),
+          input.dataset.skelBlendCoordAxis as "x" | "y",
+          Number(input.value),
+        );
+      });
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-blend-sample-delete]").forEach((button) => {
+      button.addEventListener("click", () => this.deleteBlendSample(Number(button.dataset.skelBlendSampleDelete)));
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-blend-preview]")?.addEventListener("click", () => {
+      this.toggleBlendPreview();
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-blend-param]").forEach((input) => {
+      input.addEventListener("input", () => {
+        this.setBlendPreviewParam(input.dataset.skelBlendParam as "x" | "y", Number(input.value));
+      });
     });
   }
 
@@ -1158,6 +1359,25 @@ export class SkeletalMeshEditor {
       .join("");
   }
 
+  private blendSampleClipOptions(selected: string): string {
+    const known = this.clips.some((clip) => clip.name === selected);
+    const missing =
+      selected && !known
+        ? `<option value="${escapeHtml(selected)}" selected>${escapeHtml(selected)} (missing)</option>`
+        : "";
+    return (
+      missing +
+      this.clips
+        .map(
+          (clip) =>
+            `<option value="${escapeHtml(clip.name)}" ${
+              clip.name === selected ? "selected" : ""
+            }>${escapeHtml(clip.name)}</option>`,
+        )
+        .join("")
+    );
+  }
+
   private socketPreviewOptions(selected: string): string {
     return [`<option value="" ${selected ? "" : "selected"}>None</option>`]
       .concat(
@@ -1181,7 +1401,266 @@ export class SkeletalMeshEditor {
     this.renderDetails();
   }
 
+  private getSelectedBlendSpace(): AssetSkeletonBlendSpaceDef | null {
+    if (!this.selectedBlendSpaceName) return null;
+    return this.skeleton.blendSpaces.find((blend) => blend.name === this.selectedBlendSpaceName) ?? null;
+  }
+
+  private replaceSelectedBlendSpace(next: AssetSkeletonBlendSpaceDef): void {
+    const current = this.selectedBlendSpaceName;
+    if (!current) return;
+    this.skeleton = {
+      ...this.skeleton,
+      blendSpaces: this.skeleton.blendSpaces.map((blend) => (blend.name === current ? next : blend)),
+    };
+    this.selectedBlendSpaceName = next.name;
+    this.markDirty();
+  }
+
+  private addBlendSpace(): void {
+    const taken = new Set(this.skeleton.blendSpaces.map((blend) => blend.name));
+    let name = "BlendSpace";
+    for (let index = 2; taken.has(name); index += 1) name = `BlendSpace_${index}`;
+    const blend: AssetSkeletonBlendSpaceDef = {
+      name,
+      type: "1d",
+      axisX: { ...defaultBlendSpaceAxis("Speed"), max: 4 },
+      samples: [],
+    };
+    this.skeleton = { ...this.skeleton, blendSpaces: [...this.skeleton.blendSpaces, blend] };
+    this.selectedBlendSpaceName = name;
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Added blend space ${name}.`);
+  }
+
+  private selectBlendSpace(name: string | null): void {
+    if (this.blendPreviewActive) this.stopBlendPreview();
+    this.selectedBlendSpaceName = name;
+    this.renderDetails();
+  }
+
+  private deleteBlendSpace(name: string): void {
+    if (!name) return;
+    if (this.blendPreviewActive && this.selectedBlendSpaceName === name) this.stopBlendPreview();
+    this.skeleton = {
+      ...this.skeleton,
+      blendSpaces: this.skeleton.blendSpaces.filter((blend) => blend.name !== name),
+    };
+    if (this.selectedBlendSpaceName === name) this.selectedBlendSpaceName = null;
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Deleted blend space ${name}.`);
+  }
+
+  private renameBlendSpace(rawName: string): void {
+    const blend = this.getSelectedBlendSpace();
+    if (!blend) return;
+    const name = rawName.trim();
+    const collision = this.skeleton.blendSpaces.some(
+      (other) => other !== blend && other.name === name,
+    );
+    if (!name || collision) {
+      this.setStatus(
+        !name ? "Blend space name cannot be empty." : `Blend space "${name}" already exists.`,
+        "warning",
+      );
+      this.renderDetails();
+      return;
+    }
+    this.replaceSelectedBlendSpace({ ...blend, name });
+    this.renderDetails();
+  }
+
+  private setBlendSpaceType(type: BlendSpaceType): void {
+    const blend = this.getSelectedBlendSpace();
+    if (!blend || blend.type === type) return;
+    if (type === "2d") {
+      const axisY = blend.axisY ?? { name: "Direction", min: -1, max: 1 };
+      const samples = blend.samples.map((sample) => ({ ...sample, y: sample.y ?? axisY.min }));
+      this.replaceSelectedBlendSpace({ ...blend, type, axisY, samples });
+    } else {
+      const samples = blend.samples.map(({ clip, x }) => ({ clip, x }));
+      this.replaceSelectedBlendSpace({ name: blend.name, type, axisX: blend.axisX, samples });
+    }
+    this.refreshBlendPreviewIfActive();
+    this.renderDetails();
+  }
+
+  private setBlendAxisField(axis: "x" | "y", field: "name" | "min" | "max", value: string): void {
+    const blend = this.getSelectedBlendSpace();
+    if (!blend) return;
+    const current = axis === "x" ? blend.axisX : blend.axisY;
+    if (!current) return;
+    let nextAxis: BlendSpaceAxisDef;
+    if (field === "name") {
+      nextAxis = { ...current, name: value.trim() || current.name };
+    } else {
+      const numeric = Number(value);
+      if (!Number.isFinite(numeric)) {
+        this.renderDetails();
+        return;
+      }
+      nextAxis = { ...current, [field]: numeric };
+      if (nextAxis.max <= nextAxis.min) {
+        nextAxis = field === "max" ? { ...nextAxis, max: nextAxis.min + 1 } : { ...nextAxis, min: nextAxis.max - 1 };
+      }
+    }
+    const next =
+      axis === "x"
+        ? { ...blend, axisX: nextAxis, samples: clampSamplesToAxis(blend.samples, nextAxis, "x") }
+        : { ...blend, axisY: nextAxis, samples: clampSamplesToAxis(blend.samples, nextAxis, "y") };
+    this.replaceSelectedBlendSpace(next);
+    this.renderDetails();
+  }
+
+  private addBlendSample(): void {
+    const blend = this.getSelectedBlendSpace();
+    if (!blend) return;
+    const clip = this.clips[0]?.name ?? "";
+    if (!clip) {
+      this.setStatus("No clips available to place in the blend space.", "warning");
+      return;
+    }
+    const sample: { clip: string; x: number; y?: number } = {
+      clip,
+      x: round(axisMidpoint(blend.axisX)),
+    };
+    if (blend.type === "2d" && blend.axisY) sample.y = round(axisMidpoint(blend.axisY));
+    this.replaceSelectedBlendSpace({ ...blend, samples: [...blend.samples, sample] });
+    this.refreshBlendPreviewIfActive();
+    this.renderDetails();
+  }
+
+  private setBlendSampleClip(index: number, clip: string): void {
+    const blend = this.getSelectedBlendSpace();
+    if (!blend || !blend.samples[index]) return;
+    const samples = blend.samples.map((sample, i) => (i === index ? { ...sample, clip } : sample));
+    this.replaceSelectedBlendSpace({ ...blend, samples });
+    this.refreshBlendPreviewIfActive();
+    this.renderDetails();
+  }
+
+  private setBlendSampleCoord(index: number, axis: "x" | "y", value: number): void {
+    const blend = this.getSelectedBlendSpace();
+    if (!blend || !blend.samples[index] || !Number.isFinite(value)) {
+      this.renderDetails();
+      return;
+    }
+    const domain = axis === "x" ? blend.axisX : blend.axisY;
+    if (!domain) return;
+    const clamped = round(Math.min(Math.max(value, domain.min), domain.max));
+    const samples = blend.samples.map((sample, i) => (i === index ? { ...sample, [axis]: clamped } : sample));
+    this.replaceSelectedBlendSpace({ ...blend, samples });
+    this.renderDetails();
+  }
+
+  private deleteBlendSample(index: number): void {
+    const blend = this.getSelectedBlendSpace();
+    if (!blend || !blend.samples[index]) return;
+    const samples = blend.samples.filter((_, i) => i !== index);
+    this.replaceSelectedBlendSpace({ ...blend, samples });
+    this.refreshBlendPreviewIfActive();
+    this.renderDetails();
+  }
+
+  private toggleBlendPreview(): void {
+    if (this.blendPreviewActive) this.stopBlendPreview();
+    else this.startBlendPreview();
+    this.renderDetails();
+  }
+
+  private startBlendPreview(): void {
+    const blend = this.getSelectedBlendSpace();
+    if (!blend || !this.mixer) return;
+    this.playing = false;
+    this.action?.stop();
+    this.mixer.stopAllAction();
+    this.blendPreviewActive = true;
+    this.blendPreviewPhase = 0;
+    this.blendPreviewParams.x = blend.axisX.min;
+    this.blendPreviewParams.y = blend.axisY ? blend.axisY.min : 0;
+    this.clock.getDelta();
+    this.rebuildBlendPreviewActions();
+    this.setStatus(`Previewing blend space ${blend.name}.`);
+  }
+
+  private stopBlendPreview(): void {
+    if (!this.blendPreviewActive) return;
+    this.blendPreviewActive = false;
+    this.clearBlendPreviewActions();
+    this.mixer?.stopAllAction();
+    for (const mesh of this.skinnedMeshes) mesh.skeleton.pose();
+  }
+
+  private refreshBlendPreviewIfActive(): void {
+    if (this.blendPreviewActive) this.rebuildBlendPreviewActions();
+  }
+
+  private rebuildBlendPreviewActions(): void {
+    this.clearBlendPreviewActions();
+    const blend = this.getSelectedBlendSpace();
+    if (!blend || !this.mixer) return;
+    for (const clipName of new Set(blend.samples.map((sample) => sample.clip))) {
+      const clip = this.clips.find((item) => item.name === clipName);
+      if (!clip) continue;
+      const action = this.mixer.clipAction(clip);
+      action.reset();
+      action.setLoop(LoopRepeat, Infinity);
+      action.enabled = false;
+      action.setEffectiveWeight(0);
+      action.play();
+      this.blendPreviewActions.set(clipName, action);
+    }
+  }
+
+  private clearBlendPreviewActions(): void {
+    for (const action of this.blendPreviewActions.values()) action.stop();
+    this.blendPreviewActions.clear();
+  }
+
+  private updateBlendPreview(delta: number): void {
+    const blend = this.getSelectedBlendSpace();
+    if (!blend || !this.mixer || this.blendPreviewActions.size === 0) return;
+    const weights = resolveBlendSpaceWeights(blend, this.blendPreviewParams);
+    const weightByClip = new Map(weights.map((entry) => [entry.clip, entry.weight]));
+    let refDuration = 0;
+    for (const entry of weights) {
+      const action = this.blendPreviewActions.get(entry.clip);
+      if (action) refDuration += action.getClip().duration * entry.weight;
+    }
+    if (refDuration <= 1e-4) refDuration = 1;
+    this.blendPreviewPhase = (this.blendPreviewPhase + (delta * this.playRate) / refDuration) % 1;
+    for (const [clipName, action] of this.blendPreviewActions) {
+      const weight = weightByClip.get(clipName) ?? 0;
+      action.enabled = weight > 0;
+      action.setEffectiveWeight(weight);
+      action.time = this.blendPreviewPhase * action.getClip().duration;
+    }
+    this.mixer.update(0);
+    const readout = this.detailsHost.querySelector<HTMLElement>("[data-skel-blend-weights]");
+    if (readout) readout.textContent = this.describeBlendWeights(blend);
+  }
+
+  private setBlendPreviewParam(axis: "x" | "y", value: number): void {
+    if (!Number.isFinite(value)) return;
+    if (axis === "x") this.blendPreviewParams.x = value;
+    else this.blendPreviewParams.y = value;
+    const blend = this.getSelectedBlendSpace();
+    const readout = this.detailsHost.querySelector<HTMLElement>("[data-skel-blend-weights]");
+    if (blend && readout) readout.textContent = this.describeBlendWeights(blend);
+  }
+
+  private describeBlendWeights(blend: AssetSkeletonBlendSpaceDef): string {
+    const weights = resolveBlendSpaceWeights(blend, this.blendPreviewParams).filter(
+      (entry) => entry.weight > 0.001,
+    );
+    if (weights.length === 0) return "No clips contribute at this parameter.";
+    return weights.map((entry) => `${entry.clip} ${Math.round(entry.weight * 100)}%`).join("  ·  ");
+  }
+
   private selectClip(name: string, options: { autoplay: boolean; crossfade: boolean }): void {
+    if (this.blendPreviewActive) this.stopBlendPreview();
     const clip = this.clips.find((item) => item.name === name);
     if (!clip || !this.mixer) return;
     const previousClipName = this.selectedClipName;
@@ -1214,6 +1693,7 @@ export class SkeletalMeshEditor {
   }
 
   private togglePlayback(): void {
+    if (this.blendPreviewActive) this.stopBlendPreview();
     if (!this.action && this.selectedClipName) {
       this.selectClip(this.selectedClipName, { autoplay: false, crossfade: false });
     }
@@ -1246,6 +1726,7 @@ export class SkeletalMeshEditor {
   }
 
   private showBindPose(): void {
+    if (this.blendPreviewActive) this.stopBlendPreview();
     this.playing = false;
     this.action?.stop();
     this.action = null;
@@ -1453,6 +1934,23 @@ function socketFromObject(root: Object3D, socket: AssetSkeletonSocketDef): Asset
 
 function round(value: number): number {
   return Number(value.toFixed(4));
+}
+
+function axisMidpoint(axis: BlendSpaceAxisDef): number {
+  return (axis.min + axis.max) / 2;
+}
+
+function clampSamplesToAxis(
+  samples: readonly BlendSpaceSampleDef[],
+  axis: BlendSpaceAxisDef,
+  which: "x" | "y",
+): BlendSpaceSampleDef[] {
+  return samples.map((sample) => {
+    const value = which === "x" ? sample.x : sample.y;
+    if (value === undefined) return { ...sample };
+    const clamped = round(Math.min(Math.max(value, axis.min), axis.max));
+    return which === "x" ? { ...sample, x: clamped } : { ...sample, y: clamped };
+  });
 }
 
 function describeError(error: unknown): string {

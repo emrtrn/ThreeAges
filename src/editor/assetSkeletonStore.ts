@@ -10,16 +10,24 @@ import {
 
 export {
   ANIMATION_SET_ROLES,
+  BLEND_SPACE_TYPES,
   defaultAssetSkeleton,
+  defaultBlendSpaceAxis,
   loadAssetSkeleton,
   normalizeAssetSkeleton,
+  resolveBlendSpaceWeights,
   skeletonSidecarPath,
 } from "@/scene/assetSkeletonLoader";
 export type {
   AnimationSetRole,
+  AssetSkeletonBlendSpaceDef,
   AssetSkeletonDef,
   AssetSkeletonPreviewPrefs,
   AssetSkeletonSocketDef,
+  BlendSampleWeight,
+  BlendSpaceAxisDef,
+  BlendSpaceSampleDef,
+  BlendSpaceType,
 } from "@/scene/assetSkeletonLoader";
 
 export async function saveAssetSkeleton(
