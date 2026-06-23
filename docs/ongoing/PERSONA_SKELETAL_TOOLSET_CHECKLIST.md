@@ -233,7 +233,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 - [ ] **Sockets**: kemik seç → offset transform'lu socket ekle, viewport gizmo
       ile düzenle, `sockets[]` sidecar'a yaz
 - [ ] Socket'e preview asset takıp konumlandırma (silah/prop attach önizlemesi)
-- [ ] **Morph Target Previewer**: `morphTargetInfluences` slider'ları
+- [x] **Morph Target Previewer**: `morphTargetInfluences` slider'ları
 - [ ] **Blend Space (data)**: 1D/2D blend noktaları tanımla (örn. hız →
       idle↔walk↔run sürekli harman) + viewport önizleme; runtime'da `AnimationMixer`
       ağırlıklarıyla harman. `blendSpaces` sidecar'a yazılır. (CrossfadeAnimator'ın

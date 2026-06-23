@@ -79,6 +79,18 @@ interface MeshSectionInfo {
   skinned: boolean;
 }
 
+interface MorphTargetBinding {
+  mesh: Mesh;
+  index: number;
+  meshName: string;
+}
+
+interface MorphTargetControl {
+  key: string;
+  name: string;
+  bindings: MorphTargetBinding[];
+}
+
 export class SkeletalMeshEditor {
   private static active: SkeletalMeshEditor | null = null;
 
@@ -121,6 +133,7 @@ export class SkeletalMeshEditor {
   private readonly skinnedMeshes: SkinnedMesh[] = [];
   private readonly materials = new Set<Material>();
   private readonly meshSections: MeshSectionInfo[] = [];
+  private readonly morphTargets: MorphTargetControl[] = [];
   private boneRoots: BoneNode[] = [];
   private bones: Bone[] = [];
   private clips: AnimationClip[] = [];
@@ -275,6 +288,8 @@ export class SkeletalMeshEditor {
     this.skinnedMeshes.length = 0;
     this.materials.clear();
     this.meshSections.length = 0;
+    this.morphTargets.length = 0;
+    const morphTargetsByName = new Map<string, MorphTargetControl>();
     const boneSet = new Set<Bone>();
     const stats = emptyStats();
 
@@ -309,12 +324,33 @@ export class SkeletalMeshEditor {
         this.skinnedMeshes.push(object);
         for (const bone of object.skeleton.bones) boneSet.add(bone);
       }
+      this.collectMorphTargets(object, morphTargetsByName);
     });
 
     stats.materialCount = this.materials.size;
+    this.morphTargets.push(...morphTargetsByName.values());
     this.stats = stats;
     this.bones = [...boneSet];
     this.boneRoots = buildBoneTree(this.bones);
+  }
+
+  private collectMorphTargets(mesh: Mesh, targets: Map<string, MorphTargetControl>): void {
+    const influences = mesh.morphTargetInfluences;
+    if (!influences || influences.length === 0) return;
+    const dictionary = mesh.morphTargetDictionary ?? {};
+    const namesByIndex = new Map<number, string>();
+    for (const [name, index] of Object.entries(dictionary)) {
+      namesByIndex.set(index, name);
+    }
+    for (let index = 0; index < influences.length; index += 1) {
+      const name = namesByIndex.get(index) ?? `Morph ${index}`;
+      let target = targets.get(name);
+      if (!target) {
+        target = { key: name, name, bindings: [] };
+        targets.set(name, target);
+      }
+      target.bindings.push({ mesh, index, meshName: mesh.name || `Mesh ${targets.size}` });
+    }
   }
 
   private frameModel(root: Object3D): void {
@@ -516,6 +552,7 @@ export class SkeletalMeshEditor {
     this.detailsHost.innerHTML = `
       <div class="sm-details-heading">Details</div>
       ${modeBody}
+      ${this.renderMorphDetails()}
       ${this.renderMeshDetails()}
     `;
     this.bindDetails();
@@ -681,6 +718,37 @@ export class SkeletalMeshEditor {
     `;
   }
 
+  private renderMorphDetails(): string {
+    return `
+      <div class="sm-section">
+        <div class="sm-section-title">
+          Morph Targets <span class="sm-count">${this.morphTargets.length}</span>
+        </div>
+        ${
+          this.morphTargets.length
+            ? `
+              <div class="sm-prim-list">
+                ${this.morphTargets
+                  .map(
+                    (target) => `
+                      <label class="sm-morph-row">
+                        <span title="${escapeHtml(target.name)}">${escapeHtml(target.name)}</span>
+                        <input type="range" min="0" max="1" step="0.01" value="${this.morphValue(target).toFixed(2)}" data-skel-morph="${escapeHtml(target.key)}" />
+                        <strong data-skel-morph-value="${escapeHtml(target.key)}">${this.morphValue(target).toFixed(2)}</strong>
+                      </label>
+                      <div class="sm-morph-meta">${escapeHtml(this.morphBindingLabel(target))}</div>
+                    `,
+                  )
+                  .join("")}
+                <button type="button" class="sm-menu-item" data-skel-morph-reset>Reset Morph Targets</button>
+              </div>
+            `
+            : `<div class="sm-empty">No morph targets found in this asset.</div>`
+        }
+      </div>
+    `;
+  }
+
   private bindDetails(): void {
     this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-bone-index]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -719,6 +787,42 @@ export class SkeletalMeshEditor {
         this.setAnimationRole(select.dataset.skelRole as AnimationSetRole, select.value);
       });
     });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-morph]").forEach((input) => {
+      input.addEventListener("input", () => {
+        this.setMorphTarget(input.dataset.skelMorph ?? "", Number(input.value));
+      });
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-morph-reset]")?.addEventListener("click", () => {
+      this.resetMorphTargets();
+    });
+  }
+
+  private morphValue(target: MorphTargetControl): number {
+    const first = target.bindings[0];
+    return first?.mesh.morphTargetInfluences?.[first.index] ?? 0;
+  }
+
+  private morphBindingLabel(target: MorphTargetControl): string {
+    const meshes = [...new Set(target.bindings.map((binding) => binding.meshName))];
+    return meshes.length === 1 ? meshes[0]! : `${meshes.length} meshes`;
+  }
+
+  private setMorphTarget(key: string, value: number): void {
+    const target = this.morphTargets.find((item) => item.key === key);
+    if (!target) return;
+    const next = clamp(value, 0, 1);
+    for (const binding of target.bindings) {
+      if (!binding.mesh.morphTargetInfluences) continue;
+      binding.mesh.morphTargetInfluences[binding.index] = next;
+    }
+    const label = [...this.detailsHost.querySelectorAll<HTMLElement>("[data-skel-morph-value]")]
+      .find((item) => item.dataset.skelMorphValue === key);
+    if (label) label.textContent = next.toFixed(2);
+  }
+
+  private resetMorphTargets(): void {
+    for (const target of this.morphTargets) this.setMorphTarget(target.key, 0);
+    this.renderDetails();
   }
 
   private clipOptions(selected: string): string {

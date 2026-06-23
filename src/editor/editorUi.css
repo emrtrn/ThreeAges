@@ -1491,6 +1491,37 @@ body.editor-mode #debug-stats {
   margin: 8px 10px 2px;
 }
 
+.sm-morph-row {
+  display: grid;
+  grid-template-columns: minmax(76px, 1fr) minmax(90px, 1.2fr) 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 0;
+}
+
+.sm-morph-row span {
+  min-width: 0;
+  overflow: hidden;
+  color: #e6ebee;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sm-morph-row input { width: 100%; }
+
+.sm-morph-row strong {
+  color: #aeb8bd;
+  font-size: 12px;
+  text-align: right;
+}
+
+.sm-morph-meta {
+  padding: 0 8px 6px;
+  color: #6f7a82;
+  font-size: 11px;
+}
+
 .sm-editor-status {
   height: 26px;
   display: flex;
