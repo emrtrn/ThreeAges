@@ -317,6 +317,31 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-06-24* - **Runtime ragdoll (Persona Faz 4 / Aşama 3: 3b+3a+3c tamam).** Karakter kinematik
+  animasyondan dinamik fizik ragdoll'una geçiyor. **3b (saf):** `src/game/ragdollSpec.ts`
+  `buildRagdollSpec(bodies, constraints, resolveBoneWorld)` → world-yerleşik body'ler (`boneWorld ∘
+  bodyLocal`, mass = shape hacmi × 1000, floor 0.1kg) + cone-twist joint'ler (anchor = child body origin,
+  derece→radyan); bone world enjekte (Three'siz testlenebilir). **3a (engine):** `engine/physics/ragdoll.ts`
+  tipler + saf `worldAnchorToBodyLocal` + `boneWorldFromBodyPose` (driver'ın bone-sürme tersi) +
+  `RAGDOLL_COLLISION_GROUPS`; `physicsSubsystem`'e `spawnRagdoll`/`sampleRagdoll`/`despawnRagdoll` —
+  spec'ten dinamik Rapier body (CCD+angular damping) + **spherical** impulse joint, canlı dünyaya
+  bırakır (statik level collider'larıyla çarpışır, kendiyle değil), `detachEntityId` ile player kapsülünü
+  ragdoll grubuna alır. **3c (runtime glue):** `src/game/ragdollDriver.ts` aktivasyonda canlı bone world'leri
+  örnekler (uniform world-scale ölçekleme → küçültülmüş karakter), spawn eder; her tick `sampleRagdoll` →
+  `boneWorldFromBodyPose` → parent-inverse decompose ile bone'ları sürer (shallow-first; bodysiz bone'lar
+  donuk pozda parent'a biner). Mikser'ler `timeScale=0` ile donar; driver `session.update`'te (engineApp.update
+  fizik step'inden SONRA) ezer. Context köprüsü opsiyonel (`types.ts`/`RuntimeSceneApp`); tetik debug
+  `KeyR`→`ragdoll` action (terminal/tek-yön), `tpsCharacterGameMode.activateRagdoll` (authored body +
+  canlı bridge gerekir → yoksa no-op, demo bozulmaz), kamera ragdoll ana gövdesini takip eder. Gate: tsc
+  temiz, test:engine **315** (yeni: ragdoll spec compose/mass/joint/atlama, world→local anchor, group desc
+  lowering, boneWorldFromBodyPose round-trip). **Karar/sınır:** rapier3d-compat 0.19 `SphericalImpulseJoint`'te
+  cone/twist limiti YOK → swing/twist taşınır ama henüz zorlanmaz (angular damping ile floppy ama kararlı;
+  gerçek cone-twist daha yeni Rapier veya raw generic-limit API). Uniform-scale varsayımı. **3d (ops. editör
+  Simulate önizleme) ERTELENDİ** — çalışan editörün WebGL/dispose döngüsüne dokunur, dev server'sız
+  doğrulanamaz; çalışmadı. **El ile Play doğrulaması kullanıcıda:** demo `character-a`'ya henüz physicsBody
+  authored DEĞİL → editörde gövde/eklem ekle, Play'de R'ye bas. Sıradaki: 3d veya runtime düşman/ölüm-eventi
+  ile ragdoll tetiği (R yerine gerçek oyun mantığı). Spec: `PERSONA_SKELETAL_TOOLSET_CHECKLIST.md` SONRAKİ
+  OTURUM 3d bloğu.
 - *2026-06-23* - **Upper Body slot + Layered Blend Per Bone (data) - bacaklar yururken ust govde ates eder.**
   Unreal Anim BP'deki `Slot 'UpperBody'` + `Layered blend per bone` (+ `Blend Poses by bool: Is Aiming`)
   grafiginin **node-graph'siz, veri** karsiligi kuruldu (kullanici BP gorseli paylasti).

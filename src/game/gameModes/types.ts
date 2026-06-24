@@ -16,6 +16,7 @@ import type { Entity } from "@engine/scene/entity";
 import type { Aabb3 } from "@/game/collision";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 import type { AssetSkeletonDef } from "@/scene/assetSkeletonLoader";
+import type { RagdollGroupDesc, RagdollPose } from "@engine/physics/ragdoll";
 
 export type Vec3 = [number, number, number];
 export type InputMode = "game" | "ui" | "game-and-ui";
@@ -149,6 +150,17 @@ export interface GameModeContext {
    * fine. Optional so headless/test contexts may omit it.
    */
   emitAnimNotify?(entityId: string, name: string): void;
+  /**
+   * Spawns a physics ragdoll group into the live world and returns its id, or null
+   * when the Rapier backend isn't active. `detachEntityId` excludes the possessed
+   * pawn's capsule from colliding with its own ragdoll. Optional so headless/test
+   * contexts may omit the whole ragdoll bridge.
+   */
+  spawnRagdoll?(desc: RagdollGroupDesc, options?: { detachEntityId?: string }): number | null;
+  /** World transforms of a spawned ragdoll's bodies, sampled after the step. */
+  sampleRagdoll?(id: number): RagdollPose[];
+  /** Removes a spawned ragdoll (bodies, colliders, joints). */
+  despawnRagdoll?(id: number): void;
   /**
    * Marks the runtime camera as controlled by this session so the responsive
    * resize handler stops re-framing it.

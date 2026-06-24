@@ -402,7 +402,7 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 **Gotcha:** Montage `clip` dropdown'ı **None içermemeli** (boş clip save'de reddedilir);
 Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini kullan.
 
-### Faz 4 — Physics Mode / PhAT-lite (Aşama 1 yapıldı)
+### Faz 4 — Physics Mode / PhAT-lite (Aşama 1-2 yapıldı; Aşama 3 fazlı, bkz. SONRAKİ OTURUM)
 
 - [x] Mod anahtarında `Physics` modunu aktifleştir (2026-06-24). `PersonaMode += "physics"`,
       toolbar Physics butonu etkin, `setPersonaMode` overlay/gizmo yaşam döngüsünü yönetir
@@ -432,9 +432,97 @@ Blend Space sample'larında çözdüğüm gibi `blendSampleClipOptions` desenini
       (ad, Body A/B dropdown, Swing°, Twist°), sil. Viewport'ta her constraint iki body arasında **pembe
       çizgi** (render loop'ta dünya pozisyonlarından canlı güncellenir; seçili sarı). Body referansları
       esnek (yeniden adlandırılan body veri kaybetmez). engine-tests: normalize + validate round-trip.
-- [ ] Rapier ragdoll önizleme/simülasyon; collision profili — **Aşama 3 (asıl oyun değeri;
-      physics subsystem'e joint/articulation eklemek + karakteri kinematikten dinamiğe geçirmek
-      gerekir).** Rapier rigid body + collider var; **joint henüz yok** (`physicsSubsystem.ts`).
+- [~] **Aşama 3 — Runtime ragdoll** (asıl oyun değeri; fazlı). Sıralama önerisi: **3b → 3a → 3c → 3d.**
+      **3b + 3a + 3c yapıldı (2026-06-24)** — runtime ragdoll çalışıyor (debug `R` tuşu / ölüm-eventi
+      hook'u, authored body gerekir). Kalan: **3d** (ops. editör Simulate önizleme).
+  - [x] **3a — Engine: Rapier joint + ragdoll spawn (2026-06-24).** Yeni generic modül
+        [`engine/physics/ragdoll.ts`](../../engine/physics/ragdoll.ts): tipler (`RagdollGroupDesc`/
+        `RagdollBodyDesc`/`RagdollJointDesc`/`RagdollPose`) + saf `worldAnchorToBodyLocal`
+        (`inverse(q)·(anchorWorld−bodyPos)`) + `RAGDOLL_COLLISION_GROUPS` (parçalar dünyayla çarpışır,
+        birbiriyle değil). `physicsSubsystem`'e `spawnRagdoll`/`sampleRagdoll`/`despawnRagdoll`:
+        spec'ten dinamik Rapier body (CCD + angular damping) + **spherical** impulse joint kurar,
+        canlı dünyaya bırakır (statik level collider'larıyla çarpışır), her tick body world transform'u
+        okunur, dispose/despawn temizler; `rebuildRapierWorld` ragdoll'ları geçersiz kılar.
+        Glue [`ragdollSpec.ts`](../../src/game/ragdollSpec.ts) `toRagdollGroupDesc`: world anchor → iki
+        body-local anchor. **Kısıt:** rapier3d-compat 0.19 `SphericalImpulseJoint`'te cone/twist limiti
+        **yok** → swing/twist taşınır ama henüz zorlanmaz (angular damping ile floppy ama kararlı; gerçek
+        cone-twist daha yeni Rapier veya raw generic-limit API ister — ertelendi). engine-tests **+2**
+        (314): world→local anchor, group desc lowering.
+  - [x] **3b — Saf ragdoll spec builder** (2026-06-24). Yeni saf modül
+        [`src/game/ragdollSpec.ts`](../../src/game/ragdollSpec.ts): `buildRagdollSpec(bodies,
+        constraints, resolveBoneWorld)` → `RagdollSpec { bodies:[{name, shape, size, position(world),
+        quaternion[x,y,z,w], mass}], joints:[{name, bodyA, bodyB, anchor(world), swingRad, twistRad}] }`.
+        Bone world transform **enjekte** (`ResolveBoneWorld`, Three scene-graph'tan bağımsız → testte
+        sahte). Her body: `boneWorld ∘ bodyLocal` (offset+XYZ° rotation, uniform scale); mass = shape
+        hacmi × `RAGDOLL_DENSITY`(1000), floor 0.1kg. Hacim/şema collider mapping ile birebir (box=full
+        extents, sphere r=maxAxis/2, capsule r=max(x,z)/2 + silindir h=y). Joint anchor = bodyB world
+        origin, açı derece→radyan. Bilinmeyen bone'lu body atlanır; eksik-endpoint joint düşer. Saf trig
+        euler→quat (Euler import yok), yalnız `Vector3`/`Quaternion`. engine-tests **+5** (312 yeşil):
+        identity/rotated bone compose, sphere/capsule/box mass + floor, joint anchor/limit, atlama.
+  - [x] **3c — Runtime ragdoll aktivasyonu (2026-06-24).** Yeni runtime glue
+        [`src/game/ragdollDriver.ts`](../../src/game/ragdollDriver.ts) `createRagdollDriver` +
+        `RagdollDriver`: aktivasyonda karakterin **canlı bone world transform'larını** örnekler (uniform
+        world scale ile offset/size'ı ölçekler → küçültülmüş karakterle eşleşir), `buildRagdollSpec` +
+        `toRagdollGroupDesc` ile spawn eder; her tick `sampleRagdoll` → saf `boneWorldFromBodyPose`
+        (spec yerleşiminin tersi) ile **bone'ları fizik body'lerinden konumlar** (parent-inverse decompose,
+        shallow-first; bodysiz bone'lar donuk pozda parent'a biner). Mikser'ler `timeScale=0` ile dondurulur
+        (driver session.update'te mikser'i ezer — loop sırası: engineApp.update [mikser+fizik step] →
+        session.update [driver]). Context köprüsü `spawnRagdoll`/`sampleRagdoll`/`despawnRagdoll`
+        ([`types.ts`](../../src/game/gameModes/types.ts) opsiyonel, [`RuntimeSceneApp`](../../src/scene/RuntimeSceneApp.ts)
+        physics'e delege). Tetik: debug `ragdoll` action ([`defaultInputBindings.ts`](../../src/game/defaultInputBindings.ts)
+        `KeyR`, **terminal/tek-yön**); `tpsCharacterGameMode` `activateRagdoll` (authored body + canlı bridge
+        gerekir, yoksa no-op → demo bozulmaz), kamera ragdoll ana gövdesini takip eder, dispose despawn'lar.
+        Player kapsülü ragdoll grubuna alınır (`detachEntityId`) → kendi ragdoll'unu itmez. engine-tests
+        **+1** (315): `boneWorldFromBodyPose` round-trip. **Kısıt:** swing/twist limitsiz (3a notu);
+        uniform-scale varsayımı; el ile Play doğrulaması (body author + R) kullanıcıda.
+  - [ ] **3d — (ops.) Editör önizleme.** Physics modunda "Simulate" — editör-içi Rapier mini-world ile
+        ragdoll'u canlı önizle (aşağıdaki SONRAKİ OTURUM bloğuna bkz). Authoring'i kapatır.
+
+#### ▶ SONRAKİ OTURUM — Aşama 3d (ops.): Editör Physics "Simulate" Önizleme
+
+> **3b + 3a + 3c bitti (2026-06-24); runtime ragdoll çalışıyor.** Bu blok yalnız **opsiyonel** 3d
+> içindir: Physics modunda authoring'i bırakmadan ragdoll'u editörde canlı önizleme. Bilinçli olarak
+> ertelendi — çalışan editörün WebGL/dispose yaşam döngüsüne dokunur, dev server olmadan doğrulanamaz.
+> Düşük riskli, **additive** yaklaşım aşağıda.
+
+**Runtime'da hazır olan (yeniden keşfetme — 3d bunları aynen kullanır):**
+
+- Saf spec: [`src/game/ragdollSpec.ts`](../../src/game/ragdollSpec.ts) `buildRagdollSpec` +
+  `toRagdollGroupDesc`. Engine: [`engine/physics/ragdoll.ts`](../../engine/physics/ragdoll.ts)
+  tipler + `worldAnchorToBodyLocal` + `boneWorldFromBodyPose` + `RAGDOLL_COLLISION_GROUPS`.
+- Fizik: [`physicsSubsystem.ts`](../../engine/physics/physicsSubsystem.ts)
+  `spawnRagdoll(desc, {detachEntityId?})` / `sampleRagdoll(id)` / `despawnRagdoll(id)` — ama bunlar
+  **entity-güdümlü** dünyayı varsayar (`rebuildRapierWorld` yalnız `this.bodies` varsa Rapier yükler).
+- Editör Physics overlay'leri zaten var: [`SkeletalMeshEditor.ts`](../../src/editor/SkeletalMeshEditor.ts)
+  `rebuildPhysicsOverlays` (her body bir wireframe `Mesh`, node'a offset'le bağlı), `constraintOverlays`
+  (pembe çizgiler), `bodyGeometry`, `applyBodyTransform`, render loop + `dispose`.
+
+**3d yapılacaklar (additive — authoring'i bozma):**
+
+- [ ] Physics toolbar'ına **Simulate** toggle. Açıkken: gizmo'yu bırak, body listesi salt-okunur.
+- [ ] Editör-içi Rapier mini-world (runtime'dan bağımsız). Seçenekler:
+  (a) Doğrudan `@dimforge/rapier3d-compat` dinamik import + küçük yerel dünya (ground plane + ragdoll
+  bodies/joints) — `physicsSubsystem`'in spawn helper'larındaki desen kopyalanır; **veya**
+  (b) `new PhysicsSubsystem({backend:"rapier"})`'a bir statik ground entity verip Rapier'i yüklet, sonra
+  `spawnRagdoll` çağır (mevcut API'yi yeniden kullanır). (a) daha temiz/izole, (b) daha az kod.
+- [ ] Build: `buildRagdollSpec(physicsBodies, physicsConstraints, resolveBoneWorld)` —
+  `resolveBoneWorld` editörde `modelGroup.getObjectByName(bone)` world transform'undan
+  (3c `ragdollDriver` ile birebir; uniform-scale ölçekleme dahil). `toRagdollGroupDesc` → spawn.
+- [ ] Render loop'ta: `sampleRagdoll` → `boneWorldFromBodyPose` ile body/overlay mesh'lerini sür
+  (3c `RagdollDriver.update` deseni; editörde **gerçek karakter mesh'i yerine overlay**'leri sürmek
+  yeterli, ya da mesh node'larını da sürüp tam önizleme). Stop'ta `despawnRagdoll` + `rebuildPhysicsOverlays`.
+- [ ] **Kapı:** `npx tsc --noEmit` temiz + `npm run test:engine` yeşil + **el ile editör Play**
+  (dev server; bu yüzden ertelendi).
+
+**Gotcha'lar:**
+
+- **Editör yaşam döngüsü:** Rapier dünyası + RAF döngüsü editör `dispose`'unda MUTLAKA `world.free()` +
+  despawn; mod değişiminde (Physics'ten çıkış) durdur. Sızıntı/çift-step riski.
+- **3d saf mantık EKLEMEZ:** tüm ragdoll matematiği zaten 3b/3a/3c'de + testli; 3d sadece editör
+  entegrasyonu. Yeni engine-test gerekmez.
+- **Cone/twist limiti hâlâ yok** (rapier3d-compat 0.19 spherical) — önizleme de floppy görünür; 3a notuna bak.
+- **Demo author'lama:** 3d (ve 3c'nin el-ile doğrulaması) için demo `character-a`'ya editörde
+  physicsBodies/Constraints eklenmeli (henüz yok). Önce birkaç gövde + eklem authorla.
 
 ### Faz 5 — Persistans & Save Validator
 

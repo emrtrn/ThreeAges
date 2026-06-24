@@ -1000,6 +1000,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       addMixer: (mixer) => this.animationSubsystem.add(mixer),
       emitAnimNotify: (entityId, name) =>
         this.behaviorSubsystem.emitScriptMessage("anim-notify", entityId, { name }, entityId),
+      spawnRagdoll: (desc, options) => this.physicsSubsystem.spawnRagdoll(desc, options),
+      sampleRagdoll: (id) => this.physicsSubsystem.sampleRagdoll(id),
+      despawnRagdoll: (id) => this.physicsSubsystem.despawnRagdoll(id),
       markCameraControlled: () => {
         this.cameraViewTouched = true;
       },

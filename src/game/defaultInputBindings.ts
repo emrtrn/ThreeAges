@@ -28,6 +28,10 @@ export const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   ShiftRight: "sprint",
   Mouse0: "fire",
   Mouse2: "aim",
+  // Debug/demo trigger: drop the possessed character into a physics ragdoll
+  // (only fires when the character authored physics bodies). Game logic can drive
+  // the same activation from a death event later.
+  KeyR: "ragdoll",
 };
 
 /** Raw input codes bound to an action, in declaration order (may be empty). */

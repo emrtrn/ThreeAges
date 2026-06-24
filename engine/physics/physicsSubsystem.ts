@@ -10,6 +10,11 @@ import { interactionGroupsInteract } from "../scene/collision";
 import type { Entity, EntityId } from "../scene/entity";
 import type { PhysicsAabb, PhysicsContact, PhysicsQuery } from "../behavior/behaviorSubsystem";
 import type { Vec3 } from "../scene/layout";
+import {
+  RAGDOLL_COLLISION_GROUPS,
+  type RagdollGroupDesc,
+  type RagdollPose,
+} from "./ragdoll";
 
 export const PHYSICS_SUBSYSTEM_ID = "physics";
 /** Collider surface defaults when no physical material is assigned. */
@@ -46,6 +51,12 @@ interface RapierBodyRecord {
   isSensor: boolean;
 }
 
+/** A spawned ragdoll's live Rapier bodies, keyed by their desc name. */
+interface RagdollGroupRecord {
+  id: number;
+  bodies: Map<string, RapierRigidBody>;
+}
+
 export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   readonly id = PHYSICS_SUBSYSTEM_ID;
   private readonly backend: PhysicsBackend;
@@ -57,6 +68,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private rapierWorld: RapierWorld | null = null;
   private rapierBodies = new Map<EntityId, RapierBodyRecord>();
   private rapierColliderToEntity = new Map<number, EntityId>();
+  private ragdollGroups = new Map<number, RagdollGroupRecord>();
+  private nextRagdollId = 1;
   private gravity: Vec3 = [0, -9.81, 0];
   private transformSink: PhysicsTransformSink | null = null;
   private enabled = true;
@@ -179,6 +192,101 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     ];
   }
 
+  /**
+   * Spawns a transient ragdoll: a dynamic Rapier body per desc body, linked by
+   * spherical impulse joints, dropped into the live world. The bodies collide
+   * with the level's static colliders but never each other (see
+   * `RAGDOLL_COLLISION_GROUPS`); angular damping keeps them from flailing since
+   * the spherical joints carry no cone/twist limit (rapier3d-compat 0.19).
+   *
+   * Returns an id for {@link sampleRagdoll}/{@link despawnRagdoll}, or null when
+   * the Rapier backend isn't active (a scene with no colliders never loads it).
+   * Game code owns the trigger (e.g. a death event) and the per-tick bone driving.
+   * Rebuilding the world (`setEntities`) frees these bodies — a ragdoll is meant
+   * to live within a play session, not across scene reloads.
+   *
+   * `options.detachEntityId` moves that entity's colliders into the ragdoll's
+   * collision group so the (kinematic) player capsule never shoves its own
+   * ragdoll — the capsule still collides with the level. Not restored on despawn
+   * (ragdoll activation is terminal for the possessed pawn).
+   */
+  spawnRagdoll(desc: RagdollGroupDesc, options: { detachEntityId?: EntityId } = {}): number | null {
+    const RAPIER = this.rapierModule;
+    if (!RAPIER || !this.rapierWorld) return null;
+    const bodies = new Map<string, RapierRigidBody>();
+    for (const bodyDesc of desc.bodies) {
+      const rigidBody = this.rapierWorld.createRigidBody(
+        RAPIER.RigidBodyDesc.dynamic()
+          .setTranslation(bodyDesc.position[0], bodyDesc.position[1], bodyDesc.position[2])
+          .setRotation({
+            x: bodyDesc.quaternion[0],
+            y: bodyDesc.quaternion[1],
+            z: bodyDesc.quaternion[2],
+            w: bodyDesc.quaternion[3],
+          })
+          .setCcdEnabled(true)
+          .setLinearDamping(0.05)
+          .setAngularDamping(0.6),
+      );
+      this.rapierWorld.createCollider(
+        colliderShapeDesc(RAPIER, bodyDesc.shape, bodyDesc.size)
+          .setMass(bodyDesc.mass)
+          .setFriction(DEFAULT_FRICTION)
+          .setRestitution(DEFAULT_RESTITUTION)
+          .setCollisionGroups(RAGDOLL_COLLISION_GROUPS),
+        rigidBody,
+      );
+      bodies.set(bodyDesc.name, rigidBody);
+    }
+    for (const joint of desc.joints) {
+      const a = bodies.get(joint.bodyA);
+      const b = bodies.get(joint.bodyB);
+      if (!a || !b) continue;
+      const params = RAPIER.JointData.spherical(
+        { x: joint.anchorA[0], y: joint.anchorA[1], z: joint.anchorA[2] },
+        { x: joint.anchorB[0], y: joint.anchorB[1], z: joint.anchorB[2] },
+      );
+      this.rapierWorld.createImpulseJoint(params, a, b, true);
+    }
+    if (options.detachEntityId !== undefined) {
+      const record = this.rapierBodies.get(options.detachEntityId);
+      if (record) {
+        for (const collider of record.colliders) collider.setCollisionGroups(RAGDOLL_COLLISION_GROUPS);
+      }
+    }
+    const id = this.nextRagdollId;
+    this.nextRagdollId += 1;
+    this.ragdollGroups.set(id, { id, bodies });
+    return id;
+  }
+
+  /** World transforms of a spawned ragdoll's bodies, after the latest step. */
+  sampleRagdoll(id: number): RagdollPose[] {
+    const group = this.ragdollGroups.get(id);
+    if (!group) return [];
+    const poses: RagdollPose[] = [];
+    for (const [name, body] of group.bodies) {
+      const translation = body.translation();
+      const rotation = body.rotation();
+      poses.push({
+        name,
+        position: [translation.x, translation.y, translation.z],
+        quaternion: [rotation.x, rotation.y, rotation.z, rotation.w],
+      });
+    }
+    return poses;
+  }
+
+  /** Removes a spawned ragdoll (its bodies, colliders, and joints). */
+  despawnRagdoll(id: number): void {
+    const group = this.ragdollGroups.get(id);
+    if (!group) return;
+    if (this.rapierWorld) {
+      for (const body of group.bodies.values()) this.rapierWorld.removeRigidBody(body);
+    }
+    this.ragdollGroups.delete(id);
+  }
+
   update(_context: EngineUpdateContext): void {
     if (!this.enabled) {
       this.contacts = [];
@@ -248,6 +356,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.rapierWorld = null;
     this.rapierBodies.clear();
     this.rapierColliderToEntity.clear();
+    this.ragdollGroups.clear();
   }
 
   private rebuildRapierWorld(): void {
@@ -257,6 +366,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.rapierWorld = new RAPIER.World(vectorFromVec3(this.gravity));
     this.rapierBodies.clear();
     this.rapierColliderToEntity.clear();
+    // Ragdoll bodies belonged to the freed world; their handles are now invalid.
+    this.ragdollGroups.clear();
 
     for (const body of this.bodies) {
       const desc = rigidBodyDescForBody(RAPIER, body);

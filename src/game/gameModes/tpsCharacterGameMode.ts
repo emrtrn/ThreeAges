@@ -41,6 +41,7 @@ import {
   groupNotifiesByClip,
   type NotifyMarker,
 } from "@/game/animationNotifies";
+import { createRagdollDriver, type RagdollDriver } from "@/game/ragdollDriver";
 import {
   cameraProjectionFromComponent,
   desiredSpringArmCameraPose,
@@ -122,6 +123,8 @@ export class TpsCharacterSession implements GameModeSession {
   private readonly notifyTracker = new AnimationNotifyTracker();
   private followPose: FollowCameraPose | null = null;
   private activeCameraSource: "follow config" | "spring arm component" = "follow config";
+  /** Active physics ragdoll once the character has been dropped (terminal). */
+  private ragdoll: RagdollDriver | null = null;
 
   constructor(
     private readonly context: GameModeContext,
@@ -178,8 +181,45 @@ export class TpsCharacterSession implements GameModeSession {
     this.gameState.elapsedSeconds += deltaSeconds;
     const player = this.player;
     if (!player) return;
+    if (this.ragdoll) {
+      // Dead/ragdolled: physics poses the bones; the camera tracks the body, and
+      // locomotion clip selection stops (the frozen mixer is overridden anyway).
+      this.ragdoll.update();
+      this.updateFollowCamera(player, deltaSeconds, this.ragdoll.getFollowPosition());
+      return;
+    }
+    if (this.context.actions.pressed("ragdoll")) this.activateRagdoll(player);
     this.updateFollowCamera(player, deltaSeconds);
     this.updateAnimation(player, deltaSeconds);
+  }
+
+  /**
+   * Switches the character from kinematic animation to a dynamic physics ragdoll
+   * (debug `ragdoll` action, or a future death event). No-op unless the character
+   * authored physics bodies and the physics bridge/backend is live. Freezes the
+   * locomotion mixers so un-bodied bones hold their pose while bodied bones fall.
+   */
+  private activateRagdoll(player: RuntimeCharacterRef): void {
+    const bodies = player.skeleton?.physicsBodies;
+    if (!bodies || bodies.length === 0) return;
+    const { spawnRagdoll, sampleRagdoll, despawnRagdoll } = this.context;
+    if (!spawnRagdoll || !sampleRagdoll || !despawnRagdoll) return;
+    const driver = createRagdollDriver(
+      player.object,
+      bodies,
+      player.skeleton?.physicsConstraints ?? [],
+      { spawnRagdoll, sampleRagdoll, despawnRagdoll },
+      player.entityId,
+    );
+    if (!driver) return;
+    this.ragdoll = driver;
+    this.freezeAnimationMixers();
+  }
+
+  /** Stops the locomotion mixers advancing so the ragdoll driver fully owns the pose. */
+  private freezeAnimationMixers(): void {
+    if (this.animator) this.animator.mixer.timeScale = 0;
+    if (this.layered) for (const mixer of this.layered.mixers) mixer.timeScale = 0;
   }
 
   beforeEngineUpdate(deltaSeconds: number): void {
@@ -205,12 +245,22 @@ export class TpsCharacterSession implements GameModeSession {
 
   dispose(): void {
     this.controller.unpossess();
-    // The animator's mixer is owned by the AnimationSubsystem (disposed by the
-    // EngineApp); nothing extra to release here.
+    // Release the ragdoll's physics bodies/joints; the animator's mixer is owned
+    // by the AnimationSubsystem (disposed by the EngineApp).
+    this.ragdoll?.dispose();
+    this.ragdoll = null;
   }
 
-  private updateFollowCamera(player: RuntimeCharacterRef, deltaSeconds: number): void {
-    const pos: Vec3 = [player.object.position.x, player.object.position.y, player.object.position.z];
+  private updateFollowCamera(
+    player: RuntimeCharacterRef,
+    deltaSeconds: number,
+    targetOverride?: Vec3 | null,
+  ): void {
+    const pos: Vec3 = targetOverride ?? [
+      player.object.position.x,
+      player.object.position.y,
+      player.object.position.z,
+    ];
     const authored = this.authoredCamera(player);
     this.updateGameplayCameraEffects(player);
     if (authored.springArm) {

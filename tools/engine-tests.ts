@@ -147,6 +147,13 @@ import {
   collectFiredNotifies,
   groupNotifiesByClip,
 } from "../src/game/animationNotifies";
+import {
+  buildRagdollSpec,
+  toRagdollGroupDesc,
+  RAGDOLL_DENSITY,
+  type BoneWorldTransform,
+} from "../src/game/ragdollSpec";
+import { boneWorldFromBodyPose, worldAnchorToBodyLocal } from "../engine/physics/ragdoll";
 import type {
   GameModeContext,
   InputMode,
@@ -368,6 +375,7 @@ import {
   BoxGeometry,
   Color,
   DirectionalLight,
+  Euler,
   Fog,
   FogExp2,
   Mesh,
@@ -375,6 +383,7 @@ import {
   NoToneMapping,
   Object3D,
   PerspectiveCamera,
+  Quaternion,
   Scene,
   Vector3,
   VectorKeyframeTrack,
@@ -7209,6 +7218,175 @@ check("asset skeleton physics constraints round-trip through the save validator;
       },
     }),
   );
+});
+
+const boneResolver =
+  (map: Record<string, BoneWorldTransform>) =>
+  (bone: string): BoneWorldTransform | null =>
+    map[bone] ?? null;
+
+const approxVec = (actual: readonly number[], expected: readonly number[], eps = 1e-5): void => {
+  assert.equal(actual.length, expected.length);
+  for (let i = 0; i < expected.length; i += 1) {
+    assert.ok(Math.abs(actual[i]! - expected[i]!) < eps, `axis ${i}: ${actual[i]} !~= ${expected[i]}`);
+  }
+};
+
+check("ragdoll spec: identity bone places body at its local offset; box mass = volume × density", () => {
+  const resolve = boneResolver({ hips: { position: [0, 0, 0], quaternion: [0, 0, 0, 1] } });
+  const spec = buildRagdollSpec(
+    [{ name: "pelvis", bone: "hips", shape: "box", position: [1, 2, 3], rotation: [0, 0, 0], size: [2, 2, 2] }],
+    [],
+    resolve,
+  );
+  assert.equal(spec.bodies.length, 1);
+  const body = spec.bodies[0]!;
+  approxVec(body.position, [1, 2, 3]);
+  approxVec(body.quaternion, [0, 0, 0, 1]);
+  // 2×2×2 box → 8 m³ × 1000 kg/m³.
+  assert.equal(body.mass, 8 * RAGDOLL_DENSITY);
+});
+
+check("ragdoll spec: bone rotation composes into world position; body rotation into world orientation", () => {
+  // Bone rotated +90° about Y, sitting at x=5.
+  const yawY = [0, Math.SQRT1_2, 0, Math.SQRT1_2] as [number, number, number, number];
+  const resolve = boneResolver({
+    spine: { position: [5, 0, 0], quaternion: yawY },
+    root: { position: [0, 0, 0], quaternion: [0, 0, 0, 1] },
+  });
+  const spec = buildRagdollSpec(
+    [
+      // Local +X offset, rotated by the bone's +90°Y → swings to -Z, plus bone origin.
+      { name: "armB", bone: "spine", shape: "box", position: [1, 0, 0], rotation: [0, 0, 0], size: [1, 1, 1] },
+      // Identity bone, body's own +90°Y rotation surfaces as the world orientation.
+      { name: "armA", bone: "root", shape: "box", position: [0, 0, 0], rotation: [0, 90, 0], size: [1, 1, 1] },
+    ],
+    [],
+    resolve,
+  );
+  approxVec(spec.bodies[0]!.position, [5, 0, -1]);
+  approxVec(spec.bodies[0]!.quaternion, yawY);
+  approxVec(spec.bodies[1]!.quaternion, yawY);
+});
+
+check("ragdoll spec: sphere/capsule mass from volume; degenerate body hits the mass floor", () => {
+  const resolve = boneResolver({ b: { position: [0, 0, 0], quaternion: [0, 0, 0, 1] } });
+  const spec = buildRagdollSpec(
+    [
+      { name: "head", bone: "b", shape: "sphere", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.5, 0.5, 0.5] },
+      { name: "limb", bone: "b", shape: "capsule", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.2, 0.6, 0.2] },
+      { name: "speck", bone: "b", shape: "box", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.01, 0.01, 0.01] },
+    ],
+    [],
+    resolve,
+  );
+  // Sphere r=0.25 → (4/3)πr³ × 1000 ≈ 65.45 kg.
+  assert.ok(Math.abs(spec.bodies[0]!.mass - 65.4498) < 1e-3, `sphere mass ${spec.bodies[0]!.mass}`);
+  // Capsule r=0.1, cyl height 0.4 → (πr²h + (4/3)πr³) × 1000 ≈ 16.76 kg.
+  assert.ok(Math.abs(spec.bodies[1]!.mass - 16.7552) < 1e-3, `capsule mass ${spec.bodies[1]!.mass}`);
+  // 0.01³ box → 0.001 kg, clamped up to the 0.1 kg floor.
+  assert.equal(spec.bodies[2]!.mass, 0.1);
+});
+
+check("ragdoll spec: joint anchors at the child body and converts limits to radians", () => {
+  const resolve = boneResolver({
+    hips: { position: [0, 1, 0], quaternion: [0, 0, 0, 1] },
+    leg: { position: [0, 0.5, 0], quaternion: [0, 0, 0, 1] },
+  });
+  const spec = buildRagdollSpec(
+    [
+      { name: "pelvis", bone: "hips", shape: "box", position: [0, 0, 0], rotation: [0, 0, 0], size: [1, 1, 1] },
+      { name: "thigh", bone: "leg", shape: "capsule", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.2, 0.5, 0.2] },
+    ],
+    [{ name: "hip", bodyA: "pelvis", bodyB: "thigh", swingDeg: 90, twistDeg: 45 }],
+    resolve,
+  );
+  assert.equal(spec.joints.length, 1);
+  const joint = spec.joints[0]!;
+  assert.equal(joint.bodyA, "pelvis");
+  assert.equal(joint.bodyB, "thigh");
+  approxVec(joint.anchor, [0, 0.5, 0]); // child (bodyB) world origin
+  assert.ok(Math.abs(joint.swingRad - Math.PI / 2) < 1e-9, `swing ${joint.swingRad}`);
+  assert.ok(Math.abs(joint.twistRad - Math.PI / 4) < 1e-9, `twist ${joint.twistRad}`);
+});
+
+check("ragdoll spec: skips unknown-bone bodies and joints with a missing endpoint", () => {
+  const resolve = boneResolver({ hips: { position: [0, 0, 0], quaternion: [0, 0, 0, 1] } });
+  const spec = buildRagdollSpec(
+    [
+      { name: "pelvis", bone: "hips", shape: "box", position: [0, 0, 0], rotation: [0, 0, 0], size: [1, 1, 1] },
+      // "ghost" bone has no world transform → body dropped.
+      { name: "phantom", bone: "ghost", shape: "box", position: [0, 0, 0], rotation: [0, 0, 0], size: [1, 1, 1] },
+    ],
+    [
+      { name: "ok", bodyA: "pelvis", bodyB: "pelvis", swingDeg: 10, twistDeg: 10 }, // both present (self ok at spec level)
+      { name: "dangling", bodyA: "pelvis", bodyB: "phantom", swingDeg: 10, twistDeg: 10 }, // bodyB dropped → joint dropped
+    ],
+    resolve,
+  );
+  assert.deepEqual(spec.bodies.map((body) => body.name), ["pelvis"]);
+  assert.deepEqual(spec.joints.map((joint) => joint.name), ["ok"]);
+});
+
+check("ragdoll joint: world anchor → body-local frame (translation + inverse rotation)", () => {
+  // Identity body: local anchor is just the offset from the body origin.
+  approxVec(worldAnchorToBodyLocal([1, 2, 3], [1, 1, 1], [0, 0, 0, 1]), [0, 1, 2]);
+  // Body rotated +90° about Y at the origin: a world +X anchor maps to local +Z.
+  const yawY = [0, Math.SQRT1_2, 0, Math.SQRT1_2] as [number, number, number, number];
+  approxVec(worldAnchorToBodyLocal([1, 0, 0], [0, 0, 0], yawY), [0, 0, 1]);
+});
+
+check("ragdoll group desc: bodies map 1:1; joint anchors lower to per-body local frames", () => {
+  const resolve = boneResolver({
+    hips: { position: [0, 1, 0], quaternion: [0, 0, 0, 1] },
+    leg: { position: [0, 0.5, 0], quaternion: [0, 0, 0, 1] },
+  });
+  const spec = buildRagdollSpec(
+    [
+      { name: "pelvis", bone: "hips", shape: "box", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.3, 0.3, 0.2] },
+      { name: "thigh", bone: "leg", shape: "capsule", position: [0, 0, 0], rotation: [0, 0, 0], size: [0.2, 0.5, 0.2] },
+    ],
+    [{ name: "hip", bodyA: "pelvis", bodyB: "thigh", swingDeg: 60, twistDeg: 20 }],
+    resolve,
+  );
+  const group = toRagdollGroupDesc(spec);
+  assert.deepEqual(group.bodies.map((body) => body.name), ["pelvis", "thigh"]);
+  assert.equal(group.bodies[0]!.shape, "box");
+  assert.equal(group.joints.length, 1);
+  const joint = group.joints[0]!;
+  // Anchor lives at the child (thigh) origin → local-to-thigh ≈ 0; local-to-pelvis
+  // is that point relative to the pelvis (1 unit below, both identity-rotated).
+  approxVec(joint.anchorB, [0, 0, 0]);
+  approxVec(joint.anchorA, [0, -0.5, 0]);
+  assert.ok(Math.abs(joint.swingRad - (60 * Math.PI) / 180) < 1e-9);
+  assert.ok(Math.abs(joint.twistRad - (20 * Math.PI) / 180) < 1e-9);
+});
+
+check("ragdoll bone driving: boneWorldFromBodyPose inverts buildRagdollSpec placement", () => {
+  // The driver poses a bone by inverting the spec's body placement. Round-trip a
+  // non-trivial bone world transform + body offset through both directions.
+  const boneWorld = {
+    position: [5, 1, 2] as [number, number, number],
+    quaternion: [0, Math.SQRT1_2, 0, Math.SQRT1_2] as [number, number, number, number],
+  };
+  const body = {
+    name: "b",
+    bone: "k",
+    shape: "box" as const,
+    position: [0.1, -0.2, 0.05] as [number, number, number],
+    rotation: [0, 0, 90] as [number, number, number],
+    size: [0.2, 0.4, 0.2] as [number, number, number],
+  };
+  const placed = buildRagdollSpec([body], [], boneResolver({ k: boneWorld })).bodies[0]!;
+  const offsetQuat = new Quaternion().setFromEuler(new Euler(0, 0, (90 * Math.PI) / 180, "XYZ"));
+  const recovered = boneWorldFromBodyPose(placed.position, placed.quaternion, body.position, [
+    offsetQuat.x,
+    offsetQuat.y,
+    offsetQuat.z,
+    offsetQuat.w,
+  ]);
+  approxVec(recovered.position, boneWorld.position);
+  approxVec(recovered.quaternion, boneWorld.quaternion);
 });
 
 check("asset skeleton sidecar normalizes animation metadata", () => {
