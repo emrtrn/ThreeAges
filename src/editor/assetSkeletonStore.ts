@@ -24,6 +24,7 @@ export type {
   AssetSkeletonBlendSpaceDef,
   AssetSkeletonDef,
   AssetSkeletonMontageDef,
+  AssetSkeletonNotifyDef,
   AssetSkeletonPreviewPrefs,
   AssetSkeletonSocketDef,
   BlendSampleWeight,

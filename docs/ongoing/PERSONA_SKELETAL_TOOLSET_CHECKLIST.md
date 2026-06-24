@@ -209,8 +209,14 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 
 ### Faz 1 — Persona Kabuğu + Skeleton/Mesh Görüntüleme (en yüksek değer)
 
-- [ ] (refactor) Ortak viewport base'i çıkar: kamera/keyboard/grid/ışık/GLTF
-      yükleme/sidecar plumbing (`StaticMeshEditor`'dan, onu bozmadan)
+- [~] (refactor) Ortak viewport base'i çıkar — **dar kapsam yapıldı (2026-06-24):**
+      [`assetViewportCamera.ts`](../../src/editor/assetViewportCamera.ts) `OrbitViewportCamera`
+      (orbit/pan/dolly pointer+wheel, paylaşılan `spherical`/`target`, gizmo/seçim kancaları) +
+      `createAssetViewportRig` (background+ışık+grid). Static & Skeletal editör birebir aynı olan
+      kamera/ışık/grid kopyalarını ona delege eder (davranış değişmedi; iki editörden −120 satır).
+      **Ertelendi (tam base):** renderer/raf döngüsü/GLTF yükleme/keyboard/sidecar/dispose
+      birleştirmesi — çalışan editörlerin yaşam döngüsüne dokunduğu için (WebGL/dispose regresyon
+      riski, engine-test kapsamaz) bilinçli bırakıldı.
 - [x] `src/editor/SkeletalMeshEditor.ts` overlay kabuğu (tek aktif instance,
       başlık = asset adı, Esc ile kapanır, dinamik import)
 - [x] Üst barda **mod anahtarı**: `Skeleton` · `Animation` (Physics gri/pasif)
@@ -268,9 +274,21 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
 
 ### Faz 3 — Animation Notifies + Montage-lite (ertelenmiş)
 
-- [ ] Klip timeline'ında **notify** işaretleri ekle/düzenle (ayak sesi, hasar
-      penceresi, efekt tetikleyici)
-- [ ] `notifies[]` sidecar formatı + runtime'da notify yayını (event akışı)
+- [x] Klip timeline'ında **notify** işaretleri ekle/düzenle (2026-06-24). Animation
+      modunda **Notifies** bölümü ([`SkeletalMeshEditor.ts`](../../src/editor/SkeletalMeshEditor.ts)):
+      "şimdiki zamanda ekle", ad/zaman düzenle, sil; timeline üstünde sarı marker'lar
+      (`renderNotifyMarkers`); seçili klibe göre filtreli, zamana göre sıralı. `skeleton.notifies`
+      sidecar'ına yazar (immutable mutator + `markDirty`). CSS `sm-timeline-track`/`sm-notify-*`.
+- [~] `notifies[]` sidecar formatı + runtime notify **yayını** — **format + saf çözümleyici
+      yapıldı; runtime emisyon ertelendi.** Tipli `AssetSkeletonNotifyDef {name, clip, time}`
+      ([`assetSkeletonLoader.ts`](../../src/scene/assetSkeletonLoader.ts) normalize: geçersizi
+      düşürür, negatif zamanı kırpar; [`saveValidator.ts`](../../tools/saveValidator.ts)
+      `validateNotifies`; `assetSkeletonStore` re-export). Saf çözümleyici
+      [`src/game/animationNotifies.ts`](../../src/game/animationNotifies.ts) `collectFiredNotifies`
+      (önceki/şimdiki zaman + süre + loop → ateşlenen marker'lar; tek loop-sarması işlenir).
+      engine-tests: normalize + validate round-trip + 1D/wrap firing. **Ertelendi:** çözümleyiciyi
+      animator/game-mode tick'ine bağlayıp isimleri **event akışı** olarak yaymak (animator
+      `onNotify` seam'i + game-mode drain; tüketici ses/efekt yönlendirmesi proje koduna ait).
 - [~] **Montage-lite + Upper Body slot (runtime + editör authoring bağlandı; notify pending).**
       Unreal'in "Slot + Layered Blend Per Bone" mekaniğinin **veri** karşılığı kuruldu
       (node-graph yok). Şema: `*.skeleton.json` `montages[]`

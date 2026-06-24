@@ -3,15 +3,11 @@
  * `skeletalMesh` assets and kept behind a dynamic editor import.
  */
 import {
-  AmbientLight,
   AnimationAction,
   AnimationClip,
   Bone,
   Box3,
   Clock,
-  Color,
-  DirectionalLight,
-  GridHelper,
   Group,
   LoopOnce,
   LoopRepeat,
@@ -38,6 +34,7 @@ import { VertexNormalsHelper } from "three/examples/jsm/helpers/VertexNormalsHel
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
 import {
   ANIMATION_SET_ROLES,
   BLEND_SPACE_TYPES,
@@ -51,6 +48,7 @@ import {
   type AssetSkeletonBlendSpaceDef,
   type AssetSkeletonDef,
   type AssetSkeletonMontageDef,
+  type AssetSkeletonNotifyDef,
   type AssetSkeletonSocketDef,
   type BlendSpaceAxisDef,
   type BlendSpaceSampleDef,
@@ -149,6 +147,12 @@ export class SkeletalMeshEditor {
   private readonly target = new Vector3();
   private readonly spherical = new Spherical(4, Math.PI / 3, Math.PI / 4);
   private modelRadius = 1;
+  private readonly cameraController = new OrbitViewportCamera(
+    this.camera,
+    this.spherical,
+    this.target,
+    () => this.modelRadius,
+  );
 
   private mode: PersonaMode = "skeleton";
   private rafId = 0;
@@ -257,18 +261,7 @@ export class SkeletalMeshEditor {
   }
 
   private buildScene(): void {
-    this.scene.background = new Color(0x23262b);
-    this.scene.add(new AmbientLight(0xffffff, 1.1));
-
-    const key = new DirectionalLight(0xffffff, 2.4);
-    key.position.set(3, 5, 2.5);
-    this.scene.add(key);
-    const fill = new DirectionalLight(0xb9d4ff, 1.0);
-    fill.position.set(-3, 2.5, -2);
-    this.scene.add(fill);
-
-    const grid = new GridHelper(20, 40, 0x55585c, 0x33373d);
-    this.scene.add(grid);
+    createAssetViewportRig(this.scene);
     this.scene.add(this.modelGroup);
     this.scene.add(this.helperGroup);
     this.helperGroup.add(this.boneMarker);
@@ -493,59 +486,15 @@ export class SkeletalMeshEditor {
   }
 
   private updateCamera(): void {
-    const offset = new Vector3().setFromSpherical(this.spherical);
-    this.camera.position.copy(this.target).add(offset);
-    this.camera.lookAt(this.target);
+    this.cameraController.update();
   }
 
   private bindCameraControls(): void {
-    const el = this.renderer.domElement;
-    let mode: "orbit" | "pan" | null = null;
-    let lastX = 0;
-    let lastY = 0;
-
-    el.addEventListener("contextmenu", (event) => event.preventDefault());
-    el.addEventListener("pointerdown", (event) => {
-      if (this.transformControls?.axis) return;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      mode = event.button === 1 || event.shiftKey || event.button === 2 ? "pan" : "orbit";
-      el.setPointerCapture(event.pointerId);
+    this.cameraController.bind(this.renderer.domElement, {
+      // Let the socket transform gizmo own the drag when over a handle.
+      shouldSkipPointerDown: () => Boolean(this.transformControls?.axis),
+      isDragSuppressed: () => this.socketGizmoDragging,
     });
-    el.addEventListener("pointermove", (event) => {
-      if (!mode || this.socketGizmoDragging) return;
-      const dx = event.clientX - lastX;
-      const dy = event.clientY - lastY;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      if (mode === "orbit") {
-        this.spherical.theta -= dx * 0.01;
-        this.spherical.phi = clamp(this.spherical.phi - dy * 0.01, 0.05, Math.PI - 0.05);
-      } else {
-        const panScale = this.spherical.radius * 0.0015;
-        const right = new Vector3().setFromMatrixColumn(this.camera.matrix, 0);
-        const up = new Vector3().setFromMatrixColumn(this.camera.matrix, 1);
-        this.target.addScaledVector(right, -dx * panScale);
-        this.target.addScaledVector(up, dy * panScale);
-      }
-      this.updateCamera();
-    });
-    const end = (event: PointerEvent): void => {
-      mode = null;
-      if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
-    };
-    el.addEventListener("pointerup", end);
-    el.addEventListener("pointercancel", end);
-    el.addEventListener(
-      "wheel",
-      (event) => {
-        event.preventDefault();
-        const factor = Math.exp(event.deltaY * 0.001);
-        this.spherical.radius = clamp(this.spherical.radius * factor, this.modelRadius * 0.2, this.modelRadius * 12);
-        this.updateCamera();
-      },
-      { passive: false },
-    );
   }
 
   private bindKeyboard(): void {
@@ -794,7 +743,10 @@ export class SkeletalMeshEditor {
                 <button type="button" class="sm-tool-btn" data-skel-play>${this.playing ? "Pause" : "Play"}</button>
                 <label class="sm-tool-check"><input type="checkbox" data-skel-loop ${this.loop ? "checked" : ""} /><span>Loop</span></label>
               </div>
-              <input class="sm-timeline" type="range" min="0" max="${clip.duration}" step="0.001" value="${this.action?.time ?? 0}" data-skel-time />
+              <div class="sm-timeline-track">
+                <input class="sm-timeline" type="range" min="0" max="${clip.duration}" step="0.001" value="${this.action?.time ?? 0}" data-skel-time />
+                ${this.renderNotifyMarkers(clip.name, clip.duration)}
+              </div>
               <div class="sm-row">
                 <span>Time</span>
                 <strong data-skel-time-label>${(this.action?.time ?? 0).toFixed(2)} / ${clip.duration.toFixed(2)}s</strong>
@@ -811,6 +763,7 @@ export class SkeletalMeshEditor {
             : `<div class="sm-empty">Select a clip to preview animation.</div>`
         }
       </div>
+      ${this.renderNotifyDetails(clip)}
       <div class="sm-section">
         <div class="sm-section-title">Animation Set</div>
         ${
@@ -1170,6 +1123,24 @@ export class SkeletalMeshEditor {
     });
     this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-morph-reset]")?.addEventListener("click", () => {
       this.resetMorphTargets();
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-skel-notify-add]")?.addEventListener("click", () => {
+      this.addNotifyAtPlayhead();
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-notify-name]").forEach((input) => {
+      input.addEventListener("change", () =>
+        this.setNotifyName(Number(input.dataset.skelNotifyName), input.value),
+      );
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-skel-notify-time]").forEach((input) => {
+      input.addEventListener("change", () =>
+        this.setNotifyTime(Number(input.dataset.skelNotifyTime), input.value),
+      );
+    });
+    this.detailsHost.querySelectorAll<HTMLButtonElement>("[data-skel-notify-delete]").forEach((button) => {
+      button.addEventListener("click", () =>
+        this.deleteNotify(Number(button.dataset.skelNotifyDelete)),
+      );
     });
     this.detailsHost.querySelector<HTMLSelectElement>("[data-skel-upper-root]")?.addEventListener("change", (event) => {
       this.setUpperBodyBone((event.target as HTMLSelectElement).value || null);
@@ -1564,6 +1535,106 @@ export class SkeletalMeshEditor {
     this.markDirty();
     this.renderDetails();
     this.setStatus(next ? `Upper-body root set to ${next}.` : "Upper-body root cleared.");
+  }
+
+  private clipNotifyEntries(
+    clipName: string,
+  ): Array<{ notify: AssetSkeletonNotifyDef; index: number }> {
+    return this.skeleton.notifies
+      .map((notify, index) => ({ notify, index }))
+      .filter((entry) => entry.notify.clip === clipName)
+      .sort((a, b) => a.notify.time - b.notify.time);
+  }
+
+  /** Absolutely-positioned tick marks overlaid on the timeline track. */
+  private renderNotifyMarkers(clipName: string, duration: number): string {
+    if (duration <= 0) return "";
+    return this.clipNotifyEntries(clipName)
+      .map((entry) => {
+        const pct = clamp(entry.notify.time / duration, 0, 1) * 100;
+        return `<span class="sm-notify-marker" style="left:${pct.toFixed(2)}%" title="${escapeHtml(entry.notify.name)} @ ${entry.notify.time.toFixed(2)}s"></span>`;
+      })
+      .join("");
+  }
+
+  private renderNotifyDetails(clip: AnimationClip | null): string {
+    if (!clip) return "";
+    const entries = this.clipNotifyEntries(clip.name);
+    return `
+      <div class="sm-section">
+        <div class="sm-section-title">Notifies <span class="sm-count">${entries.length}</span></div>
+        <div class="sm-anim-controls">
+          <button type="button" class="sm-tool-btn" data-skel-notify-add>Add at ${(this.action?.time ?? 0).toFixed(2)}s</button>
+        </div>
+        ${
+          entries.length
+            ? entries
+                .map(
+                  (entry) => `
+                    <div class="sm-notify-row">
+                      <input type="text" class="sm-notify-name" data-skel-notify-name="${entry.index}" value="${escapeHtml(entry.notify.name)}" />
+                      <input type="text" class="sm-notify-time" data-skel-notify-time="${entry.index}" value="${entry.notify.time.toFixed(2)}" />
+                      <button type="button" class="sm-prim-del" data-skel-notify-delete="${entry.index}" title="Delete">✕</button>
+                    </div>
+                  `,
+                )
+                .join("")
+            : `<div class="sm-empty">No notifies on “${escapeHtml(clip.name)}”.</div>`
+        }
+        <div class="sm-hint">Markers fire by name as the playhead crosses them; game code maps names to footsteps/effects.</div>
+      </div>
+    `;
+  }
+
+  private addNotifyAtPlayhead(): void {
+    const clipName = this.selectedClipName;
+    if (!clipName) return;
+    const time = Number((this.action?.time ?? 0).toFixed(4));
+    const notify: AssetSkeletonNotifyDef = { name: "notify", clip: clipName, time };
+    this.skeleton = { ...this.skeleton, notifies: [...this.skeleton.notifies, notify] };
+    this.markDirty();
+    this.renderDetails();
+  }
+
+  private setNotifyName(index: number, rawName: string): void {
+    const notify = this.skeleton.notifies[index];
+    if (!notify) return;
+    const name = rawName.trim();
+    if (!name) {
+      this.renderDetails();
+      return;
+    }
+    this.replaceNotify(index, { ...notify, name });
+    this.renderDetails();
+  }
+
+  private setNotifyTime(index: number, rawTime: string): void {
+    const notify = this.skeleton.notifies[index];
+    if (!notify) return;
+    const clip = this.clips.find((item) => item.name === notify.clip);
+    const max = clip ? clip.duration : Number.POSITIVE_INFINITY;
+    const parsed = Number(rawTime);
+    const time = Number.isFinite(parsed) ? Number(clamp(parsed, 0, max).toFixed(4)) : notify.time;
+    this.replaceNotify(index, { ...notify, time });
+    this.renderDetails();
+  }
+
+  private deleteNotify(index: number): void {
+    if (!this.skeleton.notifies[index]) return;
+    this.skeleton = {
+      ...this.skeleton,
+      notifies: this.skeleton.notifies.filter((_, i) => i !== index),
+    };
+    this.markDirty();
+    this.renderDetails();
+  }
+
+  private replaceNotify(index: number, next: AssetSkeletonNotifyDef): void {
+    this.skeleton = {
+      ...this.skeleton,
+      notifies: this.skeleton.notifies.map((notify, i) => (i === index ? next : notify)),
+    };
+    this.markDirty();
   }
 
   private setAnimationRole(role: AnimationSetRole, clipName: string): void {

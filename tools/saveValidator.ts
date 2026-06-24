@@ -1685,6 +1685,36 @@ function validateMontages(value: unknown): Record<string, unknown>[] {
   });
 }
 
+function validateNotify(value: unknown, label: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.name !== "string" || input.name.length === 0) {
+    throw new Error(`${label}.name must be a non-empty string`);
+  }
+  if (typeof input.clip !== "string" || input.clip.length === 0) {
+    throw new Error(`${label}.clip must be a non-empty string`);
+  }
+  if (
+    input.time !== undefined &&
+    (typeof input.time !== "number" || !Number.isFinite(input.time) || input.time < 0)
+  ) {
+    throw new Error(`${label}.time must be a number >= 0`);
+  }
+  return {
+    name: input.name,
+    clip: input.clip,
+    time: typeof input.time === "number" ? Number(input.time.toFixed(4)) : 0,
+  };
+}
+
+function validateNotifies(value: unknown): Record<string, unknown>[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error("skeleton.notifies must be an array");
+  return value.map((notify, index) => validateNotify(notify, `skeleton.notifies[${index}]`));
+}
+
 export function validateAssetSkeletonDef(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("skeleton def must be an object");
@@ -1713,7 +1743,7 @@ export function validateAssetSkeletonDef(value: unknown): Record<string, unknown
     sockets,
     animationSet: validateAnimationSet(input.animationSet),
     blendSpaces: validateBlendSpaces(input.blendSpaces),
-    notifies: Array.isArray(input.notifies) ? input.notifies : [],
+    notifies: validateNotifies(input.notifies),
     montages: validateMontages(input.montages),
     preview: {
       selectedClip: typeof selectedClip === "string" && selectedClip.length > 0 ? selectedClip : null,

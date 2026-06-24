@@ -142,6 +142,7 @@ import {
 import { defaultCameraGameMode } from "../src/game/gameModes/defaultCameraGameMode";
 import { tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
 import { resolveMontageBindings } from "../src/game/montageInputBindings";
+import { collectFiredNotifies } from "../src/game/animationNotifies";
 import type {
   GameModeContext,
   InputMode,
@@ -6953,6 +6954,88 @@ check("resolveMontageBindings applies the aim/fire convention and the code-owned
     ],
   );
   assert.equal(resolveMontageBindings(undefined).length, 0);
+});
+
+check("asset skeleton notifies normalize: drop invalid, clamp negative time, default missing", () => {
+  const skeleton = normalizeAssetSkeleton({
+    schema: 1,
+    notifies: [
+      { name: "footL", clip: "walk", time: 0.25 },
+      { name: "footR", clip: "walk", time: -1 },
+      { name: "", clip: "walk", time: 0.1 },
+      { name: "x", clip: "", time: 0.1 },
+      { name: "y", clip: "walk" },
+      "nope",
+    ],
+  });
+  assert.deepEqual(skeleton.notifies, [
+    { name: "footL", clip: "walk", time: 0.25 },
+    { name: "footR", clip: "walk", time: 0 },
+    { name: "y", clip: "walk", time: 0 },
+  ]);
+});
+
+check("asset skeleton notifies round-trip through the save validator; bad fields rejected", () => {
+  const validated = validateSaveSkeletonPayload({
+    path: "assets/characters/Hero.skeleton.json",
+    skeleton: {
+      notifies: [
+        { name: "hit", clip: "attack", time: 0.5 },
+        { name: "z", clip: "attack" },
+      ],
+    },
+  });
+  assert.deepEqual(validated.skeleton.notifies, [
+    { name: "hit", clip: "attack", time: 0.5 },
+    { name: "z", clip: "attack", time: 0 },
+  ]);
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { notifies: [{ name: "n", clip: "c", time: -1 }] },
+    }),
+  );
+  assert.throws(() =>
+    validateSaveSkeletonPayload({
+      path: "assets/characters/Hero.skeleton.json",
+      skeleton: { notifies: [{ name: "", clip: "c", time: 0 }] },
+    }),
+  );
+});
+
+check("collectFiredNotifies fires markers crossed forward and across a loop wrap", () => {
+  const markers = [
+    { name: "a", time: 0.1 },
+    { name: "b", time: 0.5 },
+    { name: "c", time: 0.9 },
+  ];
+  const dur = 1;
+  // Forward, no wrap: (0.05, 0.6] → a, b.
+  assert.deepEqual(
+    collectFiredNotifies(markers, { prevTime: 0.05, currTime: 0.6, duration: dur, looped: true }).map((m) => m.name),
+    ["a", "b"],
+  );
+  // Exactly on the marker time fires once (half-open at currTime).
+  assert.deepEqual(
+    collectFiredNotifies(markers, { prevTime: 0.4, currTime: 0.5, duration: dur, looped: true }).map((m) => m.name),
+    ["b"],
+  );
+  // No movement → nothing fires.
+  assert.equal(
+    collectFiredNotifies(markers, { prevTime: 0.5, currTime: 0.5, duration: dur, looped: true }).length,
+    0,
+  );
+  // Loop wrap 0.95 → 0.15: tail (0.95,1] has none, head [0,0.15] → a.
+  assert.deepEqual(
+    collectFiredNotifies(markers, { prevTime: 0.95, currTime: 0.15, duration: dur, looped: true }).map((m) => m.name),
+    ["a"],
+  );
+  // Same backward jump but not looped → no forward progress, nothing fires.
+  assert.equal(
+    collectFiredNotifies(markers, { prevTime: 0.95, currTime: 0.15, duration: dur, looped: false }).length,
+    0,
+  );
+  assert.equal(collectFiredNotifies([], { prevTime: 0, currTime: 1, duration: dur, looped: true }).length, 0);
 });
 
 check("asset skeleton sidecar normalizes animation metadata", () => {

@@ -9,16 +9,12 @@
  * ships in the game build.
  */
 import {
-  AmbientLight,
   Box3,
   BoxGeometry,
   CapsuleGeometry,
-  Color,
   ConeGeometry,
   CylinderGeometry,
-  DirectionalLight,
   EdgesGeometry,
-  GridHelper,
   Group,
   LineBasicMaterial,
   LineSegments,
@@ -55,6 +51,7 @@ import {
 } from "@engine/scene/collision";
 import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
 import { loadAssetCollision, saveAssetCollision } from "@/editor/assetCollisionStore";
 import {
   applyAssetUvwMapping,
@@ -174,6 +171,12 @@ export class StaticMeshEditor {
   private readonly target = new Vector3();
   private readonly spherical = new Spherical(4, Math.PI / 3, Math.PI / 4);
   private modelRadius = 1;
+  private readonly cameraController = new OrbitViewportCamera(
+    this.camera,
+    this.spherical,
+    this.target,
+    () => this.modelRadius,
+  );
 
   private rafId = 0;
   private disposed = false;
@@ -271,19 +274,7 @@ export class StaticMeshEditor {
   // --- scene setup -------------------------------------------------------
 
   private buildScene(): void {
-    this.scene.background = new Color(0x23262b);
-    this.scene.add(new AmbientLight(0xffffff, 1.1));
-
-    const key = new DirectionalLight(0xffffff, 2.4);
-    key.position.set(3, 5, 2.5);
-    this.scene.add(key);
-    const fill = new DirectionalLight(0xb9d4ff, 1.0);
-    fill.position.set(-3, 2.5, -2);
-    this.scene.add(fill);
-
-    const grid = new GridHelper(20, 40, 0x55585c, 0x33373d);
-    grid.position.y = 0;
-    this.scene.add(grid);
+    createAssetViewportRig(this.scene);
     this.scene.add(this.modelGroup);
     this.scene.add(this.overlayGroup);
     this.scene.add(this.complexCollisionGroup);
@@ -312,9 +303,7 @@ export class StaticMeshEditor {
   }
 
   private updateCamera(): void {
-    const offset = new Vector3().setFromSpherical(this.spherical);
-    this.camera.position.copy(this.target).add(offset);
-    this.camera.lookAt(this.target);
+    this.cameraController.update();
   }
 
   private startRenderLoop(): void {
@@ -338,12 +327,6 @@ export class StaticMeshEditor {
 
   private bindCameraControls(): void {
     const el = this.renderer.domElement;
-    let mode: "orbit" | "pan" | null = null;
-    let lastX = 0;
-    let lastY = 0;
-    let downX = 0;
-    let downY = 0;
-
     // Capture phase so the Alt state is recorded before TransformControls reads
     // the pointerdown and dispatches its drag-start (which consumes altDown).
     el.addEventListener(
@@ -353,64 +336,17 @@ export class StaticMeshEditor {
       },
       { capture: true },
     );
-
-    el.addEventListener("contextmenu", (event) => event.preventDefault());
-    el.addEventListener("pointerdown", (event) => {
-      this.closeMenu();
+    this.cameraController.bind(el, {
+      onPointerDown: () => this.closeMenu(),
       // Let the transform gizmo own the drag when the pointer is over a handle.
-      if (this.transformControls?.axis) return;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      downX = event.clientX;
-      downY = event.clientY;
-      mode = event.button === 1 || event.shiftKey || event.button === 2 ? "pan" : "orbit";
-      el.setPointerCapture(event.pointerId);
-    });
-    el.addEventListener("pointermove", (event) => {
-      if (!mode || this.gizmoDragging) return;
-      const dx = event.clientX - lastX;
-      const dy = event.clientY - lastY;
-      lastX = event.clientX;
-      lastY = event.clientY;
-      if (mode === "orbit") {
-        this.spherical.theta -= dx * 0.01;
-        this.spherical.phi = clamp(this.spherical.phi - dy * 0.01, 0.05, Math.PI - 0.05);
-      } else {
-        const panScale = this.spherical.radius * 0.0015;
-        const right = new Vector3().setFromMatrixColumn(this.camera.matrix, 0);
-        const up = new Vector3().setFromMatrixColumn(this.camera.matrix, 1);
-        this.target.addScaledVector(right, -dx * panScale);
-        this.target.addScaledVector(up, dy * panScale);
-      }
-      this.updateCamera();
-    });
-    const end = (event: PointerEvent): void => {
-      const wasOrbiting = mode !== null;
-      mode = null;
-      if (el.hasPointerCapture(event.pointerId)) el.releasePointerCapture(event.pointerId);
+      shouldSkipPointerDown: () => Boolean(this.transformControls?.axis),
+      isDragSuppressed: () => this.gizmoDragging,
       // A click (no meaningful drag, left button) selects a primitive under the
       // cursor — or clears the selection when clicking empty space.
-      if (
-        wasOrbiting &&
-        event.button === 0 &&
-        !this.gizmoDragging &&
-        Math.hypot(event.clientX - downX, event.clientY - downY) < 4
-      ) {
-        this.pickPrimitiveAt(event);
-      }
-    };
-    el.addEventListener("pointerup", end);
-    el.addEventListener("pointercancel", end);
-    el.addEventListener(
-      "wheel",
-      (event) => {
-        event.preventDefault();
-        const factor = Math.exp(event.deltaY * 0.001);
-        this.spherical.radius = clamp(this.spherical.radius * factor, this.modelRadius * 0.2, this.modelRadius * 12);
-        this.updateCamera();
+      onClick: (event, dragDistance) => {
+        if (!this.gizmoDragging && dragDistance < 4) this.pickPrimitiveAt(event);
       },
-      { passive: false },
-    );
+    });
   }
 
   private bindKeyboard(): void {
@@ -1656,10 +1592,6 @@ function clonePrimitive(primitive: CollisionPrimitive): CollisionPrimitive {
   if (primitive.rotation) clone.rotation = [...primitive.rotation] as Vec3;
   if (primitive.points) clone.points = primitive.points.map((point) => [...point] as Vec3);
   return clone;
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
 }
 
 function round(value: number): number {

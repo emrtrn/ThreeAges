@@ -67,6 +67,21 @@ export const MONTAGE_SLOTS = ["upperBody", "fullBody"] as const;
 export type MontageSlot = (typeof MONTAGE_SLOTS)[number];
 
 /**
+ * A named marker placed at a time on an animation clip — the data form of an
+ * Unreal Animation Notify. The runtime fires `name` as the clip's playhead
+ * crosses `time` (footstep, hit window, effect trigger); game code decides what
+ * the name does, keeping the asset generic.
+ */
+export interface AssetSkeletonNotifyDef {
+  /** Marker name emitted to the runtime (e.g. "footstep", "hit-window"). */
+  name: string;
+  /** Clip this notify lives on. */
+  clip: string;
+  /** Time in seconds from the clip start. */
+  time: number;
+}
+
+/**
  * A one-shot or held action clip layered over the base locomotion — the data
  * form of an Unreal Animation Montage played into a slot. `upperBody` montages
  * blend only over the bones at/under {@link AssetSkeletonDef.upperBodyBone}
@@ -97,7 +112,7 @@ export interface AssetSkeletonDef {
   sockets: AssetSkeletonSocketDef[];
   animationSet: Partial<Record<AnimationSetRole, string>>;
   blendSpaces: AssetSkeletonBlendSpaceDef[];
-  notifies: unknown[];
+  notifies: AssetSkeletonNotifyDef[];
   montages: AssetSkeletonMontageDef[];
   /**
    * Bone/node name that roots the upper-body mask for `upperBody` montages.
@@ -149,7 +164,7 @@ export function normalizeAssetSkeleton(value: unknown): AssetSkeletonDef {
     sockets: normalizeSockets(input.sockets),
     animationSet: normalizeAnimationSet(input.animationSet),
     blendSpaces: normalizeBlendSpaces(input.blendSpaces),
-    notifies: Array.isArray(input.notifies) ? input.notifies : [],
+    notifies: normalizeNotifies(input.notifies),
     montages: normalizeMontages(input.montages),
     preview: normalizePreview(input.preview),
   };
@@ -179,6 +194,20 @@ function normalizeMontages(value: unknown): AssetSkeletonMontageDef[] {
       blendOutSeconds: normalizeBlendSeconds(input.blendOutSeconds, 0.2),
     };
     result.push(montage);
+  }
+  return result;
+}
+
+function normalizeNotifies(value: unknown): AssetSkeletonNotifyDef[] {
+  if (!Array.isArray(value)) return [];
+  const result: AssetSkeletonNotifyDef[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const input = item as Record<string, unknown>;
+    if (typeof input.name !== "string" || input.name.length === 0) continue;
+    if (typeof input.clip !== "string" || input.clip.length === 0) continue;
+    const time = Number.isFinite(input.time) ? Math.max(0, Number(input.time)) : 0;
+    result.push({ name: input.name, clip: input.clip, time: Number(time.toFixed(4)) });
   }
   return result;
 }
