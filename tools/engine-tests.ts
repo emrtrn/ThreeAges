@@ -142,7 +142,11 @@ import {
 import { defaultCameraGameMode } from "../src/game/gameModes/defaultCameraGameMode";
 import { tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
 import { resolveMontageBindings } from "../src/game/montageInputBindings";
-import { collectFiredNotifies } from "../src/game/animationNotifies";
+import {
+  AnimationNotifyTracker,
+  collectFiredNotifies,
+  groupNotifiesByClip,
+} from "../src/game/animationNotifies";
 import type {
   GameModeContext,
   InputMode,
@@ -7036,6 +7040,56 @@ check("collectFiredNotifies fires markers crossed forward and across a loop wrap
     0,
   );
   assert.equal(collectFiredNotifies([], { prevTime: 0, currTime: 1, duration: dur, looped: true }).length, 0);
+});
+
+check("groupNotifiesByClip groups markers by clip in order", () => {
+  const byClip = groupNotifiesByClip([
+    { name: "footL", clip: "walk", time: 0.2 },
+    { name: "footR", clip: "walk", time: 0.7 },
+    { name: "hit", clip: "attack", time: 0.4 },
+  ]);
+  assert.deepEqual(byClip.get("walk"), [
+    { name: "footL", time: 0.2 },
+    { name: "footR", time: 0.7 },
+  ]);
+  assert.deepEqual(byClip.get("attack"), [{ name: "hit", time: 0.4 }]);
+  assert.equal(groupNotifiesByClip(undefined).size, 0);
+});
+
+check("AnimationNotifyTracker fires across ticks, re-arms on clip switch and stop", () => {
+  const byClip = groupNotifiesByClip([
+    { name: "footL", clip: "walk", time: 0.2 },
+    { name: "footR", clip: "walk", time: 0.7 },
+    { name: "hit", clip: "attack", time: 0.3 },
+  ]);
+  const tracker = new AnimationNotifyTracker();
+  // First sample of a clip arms without firing past markers.
+  assert.deepEqual(tracker.sample({ clip: "walk", time: 0.1, duration: 1 }, byClip), []);
+  assert.deepEqual(
+    tracker.sample({ clip: "walk", time: 0.3, duration: 1 }, byClip).map((m) => m.name),
+    ["footL"],
+  );
+  assert.deepEqual(
+    tracker.sample({ clip: "walk", time: 0.8, duration: 1 }, byClip).map((m) => m.name),
+    ["footR"],
+  );
+  // Loop wrap 0.8 → 0.25 fires footL again (head of the loop).
+  assert.deepEqual(
+    tracker.sample({ clip: "walk", time: 0.25, duration: 1 }, byClip).map((m) => m.name),
+    ["footL"],
+  );
+  // Switching clips re-arms from the new playhead (no spurious fire).
+  assert.deepEqual(tracker.sample({ clip: "attack", time: 0.5, duration: 1 }, byClip), []);
+  assert.deepEqual(tracker.sample({ clip: "attack", time: 0.9, duration: 1 }, byClip), []);
+  // Stopping (null) resets; re-entering and crossing 0.3 fires hit.
+  assert.deepEqual(tracker.sample(null, byClip), []);
+  assert.deepEqual(tracker.sample({ clip: "attack", time: 0.1, duration: 1 }, byClip), []);
+  assert.deepEqual(
+    tracker.sample({ clip: "attack", time: 0.4, duration: 1 }, byClip).map((m) => m.name),
+    ["hit"],
+  );
+  // A clip with no authored notifies fires nothing.
+  assert.deepEqual(tracker.sample({ clip: "idle", time: 0.5, duration: 1 }, byClip), []);
 });
 
 check("asset skeleton sidecar normalizes animation metadata", () => {

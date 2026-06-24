@@ -143,6 +143,13 @@ export interface GameModeContext {
   /** Registers a crossfade animator's mixer with the animation subsystem. */
   addMixer(mixer: AnimationMixer): void;
   /**
+   * Emits a fired animation notify (by name) into the runtime event stream as an
+   * `anim-notify` script message targeted at `entityId`, so actor scripts can
+   * react (footstep audio, hit window, effect). Fire-and-forget: no subscriber is
+   * fine. Optional so headless/test contexts may omit it.
+   */
+  emitAnimNotify?(entityId: string, name: string): void;
+  /**
    * Marks the runtime camera as controlled by this session so the responsive
    * resize handler stops re-framing it.
    */

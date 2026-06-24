@@ -38,6 +38,18 @@ export class CrossfadeAnimator {
     return this.current;
   }
 
+  /**
+   * The single clip currently driving the pose with its playhead, for animation
+   * notify detection. Null in weighted-blend mode (the playhead is ambiguous) or
+   * before the first {@link play}.
+   */
+  getActiveClip(): { clip: string; time: number; duration: number } | null {
+    if (this.blendActions.size > 0 || !this.current) return null;
+    const action = this.actions.get(this.current);
+    if (!action) return null;
+    return { clip: this.current, time: action.time, duration: action.getClip().duration };
+  }
+
   /** Whether a weighted blend (not a single clip) is currently driving the pose. */
   get isBlending(): boolean {
     return this.blendActions.size > 0;

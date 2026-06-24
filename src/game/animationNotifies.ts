@@ -52,3 +52,66 @@ export function collectFiredNotifies(
   }
   return fired;
 }
+
+/** The animator's single active clip with its playhead, sampled each tick. */
+export interface ActiveClipSample {
+  readonly clip: string;
+  readonly time: number;
+  readonly duration: number;
+}
+
+/** A flat notify list (from a `*.skeleton.json` sidecar) keyed by clip. */
+export function groupNotifiesByClip(
+  notifies: readonly { readonly name: string; readonly clip: string; readonly time: number }[] | undefined,
+): Map<string, NotifyMarker[]> {
+  const byClip = new Map<string, NotifyMarker[]>();
+  for (const notify of notifies ?? []) {
+    const list = byClip.get(notify.clip);
+    if (list) list.push({ name: notify.name, time: notify.time });
+    else byClip.set(notify.clip, [{ name: notify.name, time: notify.time }]);
+  }
+  return byClip;
+}
+
+/**
+ * Stateful per-character notify detector. Each tick it is handed the animator's
+ * single active clip + playhead (or null when stopped/blending) and the
+ * character's notifies grouped by clip; it returns the markers crossed since the
+ * previous tick. A clip change (or a stop) re-arms from the new playhead so a
+ * switch never spurious-fires past markers.
+ */
+export class AnimationNotifyTracker {
+  private clip: string | null = null;
+  private time = 0;
+
+  sample(
+    active: ActiveClipSample | null,
+    notifiesByClip: ReadonlyMap<string, readonly NotifyMarker[]>,
+  ): NotifyMarker[] {
+    if (!active) {
+      this.clip = null;
+      return [];
+    }
+    if (active.clip !== this.clip) {
+      this.clip = active.clip;
+      this.time = active.time;
+      return [];
+    }
+    const markers = notifiesByClip.get(active.clip);
+    const fired = markers
+      ? collectFiredNotifies(markers, {
+          prevTime: this.time,
+          currTime: active.time,
+          duration: active.duration,
+          looped: true,
+        })
+      : [];
+    this.time = active.time;
+    return fired;
+  }
+
+  reset(): void {
+    this.clip = null;
+    this.time = 0;
+  }
+}

@@ -279,16 +279,21 @@ Durum: `[ ]` yapılmadı · `[~]` kısmi · `[x]` tamam
       "şimdiki zamanda ekle", ad/zaman düzenle, sil; timeline üstünde sarı marker'lar
       (`renderNotifyMarkers`); seçili klibe göre filtreli, zamana göre sıralı. `skeleton.notifies`
       sidecar'ına yazar (immutable mutator + `markDirty`). CSS `sm-timeline-track`/`sm-notify-*`.
-- [~] `notifies[]` sidecar formatı + runtime notify **yayını** — **format + saf çözümleyici
-      yapıldı; runtime emisyon ertelendi.** Tipli `AssetSkeletonNotifyDef {name, clip, time}`
-      ([`assetSkeletonLoader.ts`](../../src/scene/assetSkeletonLoader.ts) normalize: geçersizi
-      düşürür, negatif zamanı kırpar; [`saveValidator.ts`](../../tools/saveValidator.ts)
-      `validateNotifies`; `assetSkeletonStore` re-export). Saf çözümleyici
-      [`src/game/animationNotifies.ts`](../../src/game/animationNotifies.ts) `collectFiredNotifies`
-      (önceki/şimdiki zaman + süre + loop → ateşlenen marker'lar; tek loop-sarması işlenir).
-      engine-tests: normalize + validate round-trip + 1D/wrap firing. **Ertelendi:** çözümleyiciyi
-      animator/game-mode tick'ine bağlayıp isimleri **event akışı** olarak yaymak (animator
-      `onNotify` seam'i + game-mode drain; tüketici ses/efekt yönlendirmesi proje koduna ait).
+- [x] `notifies[]` sidecar formatı + runtime notify **yayını** (2026-06-24). Tipli
+      `AssetSkeletonNotifyDef {name, clip, time}` ([`assetSkeletonLoader.ts`](../../src/scene/assetSkeletonLoader.ts)
+      normalize: geçersizi düşürür, negatif zamanı kırpar; [`saveValidator.ts`](../../tools/saveValidator.ts)
+      `validateNotifies`; `assetSkeletonStore` re-export). Saf mantık
+      [`src/game/animationNotifies.ts`](../../src/game/animationNotifies.ts): `collectFiredNotifies`
+      (önceki/şimdiki zaman + süre + loop → ateşlenen marker'lar; tek loop-sarması), `groupNotifiesByClip`,
+      stateful `AnimationNotifyTracker` (klip değişince/durunca yeniden kurulur, sahte ateşleme yok).
+      **Runtime emisyonu bağlandı:** animator playhead'i (`CrossfadeAnimator.getActiveClip` /
+      `LayeredCharacterAnimator` lower kanal), `tpsCharacterGameMode` her tick `notifyTracker.sample`
+      → `context.emitAnimNotify(entityId, name)`; `RuntimeSceneApp` bunu `BehaviorSubsystem.emitScriptMessage`
+      ile **`anim-notify`** script mesajı olarak (entity'ye targeted) yayar — actor script'leri abone olabilir
+      (event akışı). Abonesiz `anim-notify` missing-handler uyarısı bilinçle susturuldu (fire-and-forget).
+      engine-tests: normalize + validate round-trip + collectFiredNotifies + group + tracker. **Kısıt:**
+      blend (walk↔run) modunda playhead belirsiz → footstep ateşlemez (tek-klip locomotion ateşler);
+      upper-body montage notify'ları henüz örneklenmiyor (lower kanal). İleride genişletilebilir.
 - [~] **Montage-lite + Upper Body slot (runtime + editör authoring bağlandı; notify pending).**
       Unreal'in "Slot + Layered Blend Per Bone" mekaniğinin **veri** karşılığı kuruldu
       (node-graph yok). Şema: `*.skeleton.json` `montages[]`

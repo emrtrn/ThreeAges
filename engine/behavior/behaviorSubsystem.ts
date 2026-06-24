@@ -343,10 +343,31 @@ export class BehaviorSubsystem implements Subsystem {
   }
 
   private currentEngine: EngineUpdateContext | null = null;
+  private lastEngineFrame = 0;
+
+  /**
+   * Enqueues a script message from a non-behavior runtime source (e.g. a Game
+   * Mode emitting an animation notify). Delivered on the next message flush.
+   */
+  emitScriptMessage(
+    type: string,
+    source: EntityId,
+    payload?: ScriptMessagePayload,
+    target?: EntityId,
+  ): void {
+    this.messageBus.send({
+      frame: this.lastEngineFrame,
+      type,
+      source,
+      ...(target !== undefined ? { target } : {}),
+      ...(payload !== undefined ? { payload } : {}),
+    });
+  }
 
   update(engine: EngineUpdateContext): void {
     if (!this.enabled) return;
     this.currentEngine = engine;
+    this.lastEngineFrame = engine.frame;
     for (const instance of this.instances) {
       const context = this.createContext(instance.runtime, engine, instance.params);
       instance.update(context);

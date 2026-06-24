@@ -37,6 +37,11 @@ import {
   type MontageBinding,
 } from "@/game/montageInputBindings";
 import {
+  AnimationNotifyTracker,
+  groupNotifiesByClip,
+  type NotifyMarker,
+} from "@/game/animationNotifies";
+import {
   cameraProjectionFromComponent,
   desiredSpringArmCameraPose,
   stepSpringArmCameraPose,
@@ -111,6 +116,10 @@ export class TpsCharacterSession implements GameModeSession {
   private pressMontages: MontageBinding[] = [];
   /** The player asset's authored locomotion config (blend space + anim-set). */
   private locomotionConfig: LocomotionAssetConfig = EMPTY_LOCOMOTION_CONFIG;
+  /** Player's authored notify markers, grouped by clip, for per-tick emission. */
+  private notifiesByClip = new Map<string, NotifyMarker[]>();
+  /** Stateful detector that emits notify names as the playhead crosses them. */
+  private readonly notifyTracker = new AnimationNotifyTracker();
   private followPose: FollowCameraPose | null = null;
   private activeCameraSource: "follow config" | "spring arm component" = "follow config";
 
@@ -156,6 +165,8 @@ export class TpsCharacterSession implements GameModeSession {
     // Resolve the authored locomotion config (blend space + anim-set) from the
     // character's skeleton sidecar; drives grounded blending and clip selection.
     this.locomotionConfig = locomotionConfigForSkeleton(player.skeleton);
+    this.notifiesByClip = groupNotifiesByClip(player.skeleton?.notifies);
+    this.notifyTracker.reset();
     const bindings = resolveMontageBindings(player.skeleton?.montages);
     this.holdMontages = bindings.filter((binding) => binding.mode === "hold");
     this.pressMontages = bindings.filter((binding) => binding.mode === "press");
@@ -251,6 +262,20 @@ export class TpsCharacterSession implements GameModeSession {
       }
     }
     this.updateUpperBody(deltaSeconds);
+    this.emitAnimationNotifies(player);
+  }
+
+  /**
+   * Samples the active clip's playhead and emits any notify markers crossed this
+   * tick into the runtime event stream. No-op when the character authored none.
+   */
+  private emitAnimationNotifies(player: RuntimeCharacterRef): void {
+    if (this.notifiesByClip.size === 0) return;
+    const active = this.layered
+      ? this.layered.getActiveClip()
+      : (this.animator?.getActiveClip() ?? null);
+    const fired = this.notifyTracker.sample(active, this.notifiesByClip);
+    for (const notify of fired) this.context.emitAnimNotify?.(player.entityId, notify.name);
   }
 
   /**

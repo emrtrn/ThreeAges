@@ -464,6 +464,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         messageTraceLimit: options.scriptMessageTraceLimit ?? 0,
         onMessageWarnings: (warnings) => {
           for (const warning of warnings) {
+            // Animation notifies are fire-and-forget; no subscriber is normal, so
+            // don't spam the console when nothing reacts to one.
+            if (warning.code === "missing-handler" && warning.envelope?.type === "anim-notify") {
+              continue;
+            }
             console.warn("[script-message]", warning.message, warning.envelope ?? "");
           }
         },
@@ -993,6 +998,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       getLocomotion: (entityId) => this.locomotionReports.get(entityId),
       staticBlockerAabbs: () => this.physicsSubsystem.staticBlockerAabbs(),
       addMixer: (mixer) => this.animationSubsystem.add(mixer),
+      emitAnimNotify: (entityId, name) =>
+        this.behaviorSubsystem.emitScriptMessage("anim-notify", entityId, { name }, entityId),
       markCameraControlled: () => {
         this.cameraViewTouched = true;
       },

@@ -64,6 +64,16 @@ export class LayeredCharacterAnimator {
     return this.upper.currentClip;
   }
 
+  /**
+   * Lower-channel (locomotion) playhead for notify detection — the canonical
+   * footstep case. Null in blend mode / before first play (see
+   * {@link CrossfadeAnimator.getActiveClip}). Upper-body montage notifies are not
+   * sampled here yet.
+   */
+  getActiveClip(): { clip: string; time: number; duration: number } | null {
+    return this.lower.getActiveClip();
+  }
+
   // --- Lower body (locomotion) ---
 
   playLocomotion(clip: string, fadeSeconds = 0.18): void {
