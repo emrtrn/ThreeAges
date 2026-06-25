@@ -403,6 +403,7 @@ import {
   normalizeUiWidgetDef,
   readUiAction,
   readUiBindingPath,
+  readUiTextKey,
   UI_WIDGET_KINDS,
   type UiNode,
 } from "../engine/ui/uiWidget";
@@ -412,8 +413,13 @@ import {
   resolveInlineStyle,
 } from "../engine/ui/uiRenderer";
 import { UiViewModelStore } from "../engine/ui/uiViewModel";
-import { collectUiBindings, resolveUiBoundValue } from "../engine/ui/uiBinding";
+import { collectUiBindings, collectUiLocBindings, resolveUiBoundValue } from "../engine/ui/uiBinding";
 import { normalizeUiThemeDef, themeToCssVariables, tokenToCssVar } from "../engine/ui/uiTheme";
+import {
+  applyLocParams,
+  LocaleRegistry,
+  normalizeUiLocaleTable,
+} from "../engine/ui/uiLocale";
 import {
   normalizeUiTransition,
   transitionClasses,
@@ -5700,17 +5706,18 @@ check("save validator preserves worldSettings.gameMode and drops runtime state",
   assert.equal((out.worldSettings as Record<string, unknown>).pawnEntityId, undefined);
 });
 
-check("save validator preserves worldSettings.hudWidget + pauseMenuWidget", () => {
+check("save validator preserves worldSettings.hudWidget + pauseMenuWidget + locale", () => {
   const out = validateLayout({
     schema: 1,
     name: "ui",
     loadGroups: [],
     instances: [],
     characters: [],
-    worldSettings: { hudWidget: "hud", pauseMenuWidget: "menu" },
+    worldSettings: { hudWidget: "hud", pauseMenuWidget: "menu", locale: "tr" },
   }) as RoomLayout;
   assert.equal(out.worldSettings?.hudWidget, "hud");
   assert.equal(out.worldSettings?.pauseMenuWidget, "menu");
+  assert.equal(out.worldSettings?.locale, "tr");
   assert.throws(() =>
     validateLayout({
       schema: 1,
@@ -5719,6 +5726,16 @@ check("save validator preserves worldSettings.hudWidget + pauseMenuWidget", () =
       instances: [],
       characters: [],
       worldSettings: { hudWidget: "" },
+    }),
+  );
+  assert.throws(() =>
+    validateLayout({
+      schema: 1,
+      name: "ui",
+      loadGroups: [],
+      instances: [],
+      characters: [],
+      worldSettings: { locale: "" },
     }),
   );
 });
@@ -10720,10 +10737,11 @@ check("UiViewModelStore.snapshot returns path-sorted [path, value] pairs", () =>
   ]);
 });
 
-check("formatUiDebug renders the HUD, screen stack and bound fields", () => {
+check("formatUiDebug renders the HUD, screen stack, locale and bound fields", () => {
   const lines = formatUiDebug({
     hud: "Hud",
     screens: ["Menu", "Options"],
+    locale: "tr",
     fields: [
       ["player.speed", 2.5],
       ["player.speedLabel", "Speed 2.5 m/s"],
@@ -10733,6 +10751,7 @@ check("formatUiDebug renders the HUD, screen stack and bound fields", () => {
     "ui",
     "hud: Hud",
     "screens(2): Menu > Options",
+    "locale: tr",
     "fields(2):",
     '  player.speed = 2.5',
     '  player.speedLabel = "Speed 2.5 m/s"',
@@ -10740,13 +10759,13 @@ check("formatUiDebug renders the HUD, screen stack and bound fields", () => {
 });
 
 check("formatUiDebug shows placeholders when nothing is mounted", () => {
-  const lines = formatUiDebug({ hud: null, screens: [], fields: [] });
-  assert.deepEqual(lines, ["ui", "hud: none", "screens: none", "fields: none"]);
+  const lines = formatUiDebug({ hud: null, screens: [], locale: null, fields: [] });
+  assert.deepEqual(lines, ["ui", "hud: none", "screens: none", "locale: none", "fields: none"]);
 });
 
 check("formatUiDebug clips long string values", () => {
   const long = "x".repeat(40);
-  const lines = formatUiDebug({ hud: null, screens: [], fields: [["msg", long]] });
+  const lines = formatUiDebug({ hud: null, screens: [], locale: null, fields: [["msg", long]] });
   assert.equal(lines.at(-1), `  msg = "${"x".repeat(29)}..."`);
 });
 
@@ -10803,6 +10822,126 @@ check("normalizeUiWidgetDef carries a valid transition and drops a no-op one", (
     root: { id: "root", widget: "Canvas", children: [] },
   });
   assert.equal(noTx.transition, undefined);
+});
+
+check("normalizeUiLocaleTable keeps string entries and drops the rest", () => {
+  const table = normalizeUiLocaleTable({
+    locale: "tr",
+    strings: { "menu.title": "Duraklatıldı", bad: 12, nested: { a: 1 }, ok: "Tamam" },
+  });
+  assert.equal(table.type, "uiLoc");
+  assert.equal(table.locale, "tr");
+  assert.equal(table.strings["menu.title"], "Duraklatıldı");
+  assert.equal(table.strings.ok, "Tamam");
+  assert.equal("bad" in table.strings, false);
+  assert.equal("nested" in table.strings, false);
+  // Garbage / missing locale falls back to the default "en".
+  assert.equal(normalizeUiLocaleTable(null).locale, "en");
+});
+
+check("applyLocParams substitutes {name} and leaves unknown placeholders intact", () => {
+  assert.equal(applyLocParams("build {version}", { version: "0.1" }), "build 0.1");
+  assert.equal(applyLocParams("hi {name}", {}), "hi {name}"); // unknown param kept
+  assert.equal(applyLocParams("plain text"), "plain text"); // no params
+});
+
+check("LocaleRegistry.resolve uses the active locale, params, and key fallback", () => {
+  const registry = new LocaleRegistry();
+  registry.register(normalizeUiLocaleTable({ locale: "en", strings: { "menu.resume": "Resume" } }));
+  registry.register(normalizeUiLocaleTable({ locale: "tr", strings: { "menu.resume": "Devam Et" } }));
+  assert.equal(registry.activeLocale, "en"); // first registered is active
+  assert.equal(registry.resolve("menu.resume"), "Resume");
+  registry.setActiveLocale("tr");
+  assert.equal(registry.resolve("menu.resume"), "Devam Et");
+  // Missing key falls back to the key itself (or a supplied default).
+  assert.equal(registry.resolve("menu.missing"), "menu.missing");
+  assert.equal(registry.resolve("menu.missing", undefined, "—"), "—");
+  // Unknown locale is ignored (keeps the current one, never blanks).
+  registry.setActiveLocale("fr");
+  assert.equal(registry.activeLocale, "tr");
+});
+
+check("LocaleRegistry notifies subscribers only on a real locale change", () => {
+  const registry = new LocaleRegistry();
+  registry.register(normalizeUiLocaleTable({ locale: "en", strings: {} }));
+  registry.register(normalizeUiLocaleTable({ locale: "tr", strings: {} }));
+  let calls = 0;
+  const off = registry.subscribe(() => {
+    calls += 1;
+  });
+  registry.setActiveLocale("en"); // already active -> no notify
+  registry.setActiveLocale("tr"); // change -> notify
+  registry.setActiveLocale("zz"); // unknown -> no notify
+  off();
+  registry.setActiveLocale("en"); // unsubscribed -> not counted
+  assert.equal(calls, 1);
+});
+
+check("readUiTextKey reads a localized text prop and sanitizes params", () => {
+  const def = normalizeUiWidgetDef({
+    name: "M",
+    root: {
+      widget: "Canvas",
+      children: [
+        { id: "t", widget: "Text", props: { text: { key: "menu.build", params: { version: 1, junk: { x: 1 } } } } },
+        { id: "lit", widget: "Text", props: { text: "Static" } },
+        { id: "bound", widget: "Text", props: { text: { bind: "player.label" } } },
+      ],
+    },
+  });
+  const textKey = readUiTextKey(findUiNode(def.root, "t")!, "text");
+  assert.equal(textKey?.key, "menu.build");
+  assert.deepEqual(textKey?.params, { version: "1" }); // number coerced, object dropped
+  assert.equal(readUiTextKey(findUiNode(def.root, "lit")!, "text"), undefined);
+  assert.equal(readUiTextKey(findUiNode(def.root, "bound")!, "text"), undefined);
+});
+
+check("buildUiRenderTree resolves localized text via resolveLoc (key fallback)", () => {
+  const def = normalizeUiWidgetDef({
+    name: "M",
+    root: {
+      widget: "Canvas",
+      children: [
+        { id: "t", widget: "Text", props: { text: { key: "menu.build", params: { version: "0.1" } } } },
+        { id: "b", widget: "Button", props: { text: { key: "menu.resume" } } },
+      ],
+    },
+  });
+  const registry = new LocaleRegistry();
+  registry.register(
+    normalizeUiLocaleTable({
+      locale: "en",
+      strings: { "menu.build": "Build {version}", "menu.resume": "Resume" },
+    }),
+  );
+  const tree = buildUiRenderTree(def, { resolveLoc: (key, params) => registry.resolve(key, params) });
+  const text = tree.children[0];
+  const button = tree.children[1];
+  assert.equal(text.text, "Build 0.1");
+  assert.equal(button.text, "Resume");
+  // Without a resolver the raw key is shown (editor preview without a table).
+  assert.equal(buildUiRenderTree(def).children[0].text, "menu.build");
+});
+
+check("collectUiLocBindings finds only Text/Button nodes with localized text", () => {
+  const def = normalizeUiWidgetDef({
+    name: "M",
+    root: {
+      widget: "Canvas",
+      children: [
+        { id: "t", widget: "Text", props: { text: { key: "a" } } },
+        { id: "b", widget: "Button", props: { text: { key: "b" } } },
+        { id: "lit", widget: "Text", props: { text: "Static" } },
+        { id: "bar", widget: "ProgressBar", props: { value: { bind: "x" } } },
+      ],
+    },
+  });
+  const locNodes = collectUiLocBindings(def);
+  assert.equal(locNodes.length, 2);
+  assert.deepEqual(
+    locNodes.map((entry) => entry.node.id).sort(),
+    ["b", "t"],
+  );
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

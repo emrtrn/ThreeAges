@@ -26,9 +26,10 @@ import {
   type UiWidgetDef,
 } from "@engine/ui/uiWidget";
 import { renderUiWidget, type RenderedUiWidget, type RenderUiWidgetOptions } from "@engine/ui/uiRenderer";
-import { bindUiWidget } from "@engine/ui/uiBinding";
+import { bindUiLocale, bindUiWidget } from "@engine/ui/uiBinding";
 import type { UiViewModelStore } from "@engine/ui/uiViewModel";
 import { applyUiTheme, type UiThemeDef } from "@engine/ui/uiTheme";
+import type { LocaleRegistry } from "@engine/ui/uiLocale";
 import { transitionClasses, type UiTransition } from "@engine/ui/uiTransition";
 
 export interface RuntimeUiSubsystemOptions {
@@ -38,6 +39,8 @@ export interface RuntimeUiSubsystemOptions {
   onScreenStackChange?: (depth: number) => void;
   /** ViewModel store driving `{ "bind": "path" }` props; omit for static UI. */
   store?: UiViewModelStore;
+  /** Locale registry resolving `{ "key": ... }` text props; omit for non-localized UI. */
+  locale?: LocaleRegistry;
   /** Resolves a widget's `theme` reference to a loaded theme (for `$token` props). */
   resolveTheme?: (ref: string) => UiThemeDef | null;
   /** Resolves an Include widget's `src` asset-id to its definition for inlining. */
@@ -295,16 +298,28 @@ export class RuntimeUiSubsystem {
     this.options.onMessageAction?.(action, nodeId);
   };
 
-  /** Builds render options for a widget mount (action handler + optional resolveWidget). */
+  /** Builds render options for a widget mount (action handler + optional resolvers). */
   private renderOptions(): RenderUiWidgetOptions {
     const opts: RenderUiWidgetOptions = { onAction: this.handleAction };
     if (this.options.resolveWidget) opts.resolveWidget = this.options.resolveWidget;
+    const locale = this.options.locale;
+    if (locale) opts.resolveLoc = (key, params) => locale.resolve(key, params);
     return opts;
   }
 
-  /** Wires a freshly rendered widget's `{ bind }` props to the store (no-op without one). */
+  /**
+   * Wires a freshly rendered widget to its data sources: `{ bind }` props to the
+   * store and `{ key }` text to the locale registry. Returns one combined dispose
+   * the caller releases on unmount (no-op when neither source is configured).
+   */
   private bind(rendered: RenderedUiWidget, widget: UiWidgetDef): () => void {
-    return this.options.store ? bindUiWidget(rendered, widget, this.options.store) : () => {};
+    const disposers: (() => void)[] = [];
+    if (this.options.store) disposers.push(bindUiWidget(rendered, widget, this.options.store));
+    if (this.options.locale) disposers.push(bindUiLocale(rendered, widget, this.options.locale));
+    if (disposers.length === 0) return () => {};
+    return () => {
+      for (const dispose of disposers) dispose();
+    };
   }
 
   /** Applies the widget's referenced theme's `$token` CSS variables to its root. */

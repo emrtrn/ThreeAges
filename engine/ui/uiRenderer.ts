@@ -18,6 +18,7 @@ import {
   readUiAction,
   readUiStaticNumber,
   readUiStaticString,
+  readUiTextKey,
   type UiAction,
   type UiNode,
   type UiWidgetDef,
@@ -45,6 +46,12 @@ const WIDGET_CSS_NAME: Record<UiWidgetKind, string> = {
  */
 export interface UiBuildOptions {
   resolveWidget?: (src: string) => UiWidgetDef | null;
+  /**
+   * Resolves a Text/Button node's localized `{ key, params }` text to display
+   * text. Absent: a localized prop falls back to its raw key (so an editor
+   * preview without a loaded locale table still shows something meaningful).
+   */
+  resolveLoc?: (key: string, params?: Record<string, string>) => string;
   _depth?: number;
 }
 
@@ -156,6 +163,18 @@ export function resolveInlineStyle(node: UiNode): Record<string, string> {
   return style;
 }
 
+/**
+ * Resolves a node's `text` prop for the initial render: a localized
+ * `{ key, params }` goes through {@link UiBuildOptions.resolveLoc} (raw key when
+ * absent), otherwise the literal string. Returns undefined for a `{ bind }` prop
+ * (the ViewModel binding fills that in after mount).
+ */
+function resolveNodeText(node: UiNode, opts: UiBuildOptions): string | undefined {
+  const textKey = readUiTextKey(node, "text");
+  if (textKey) return opts.resolveLoc ? opts.resolveLoc(textKey.key, textKey.params) : textKey.key;
+  return readUiStaticString(node, "text");
+}
+
 function progressFillNode(node: UiNode): UiRenderNode {
   const value = readUiStaticNumber(node, "value") ?? 0;
   const max = readUiStaticNumber(node, "max") ?? 1;
@@ -233,7 +252,7 @@ export function buildUiRenderNode(node: UiNode, opts: UiBuildOptions = {}): UiRe
       tag: "div",
       className,
       style,
-      text: readUiStaticString(node, "text") ?? "",
+      text: resolveNodeText(node, opts) ?? "",
       children: [],
     };
   }
@@ -246,7 +265,7 @@ export function buildUiRenderNode(node: UiNode, opts: UiBuildOptions = {}): UiRe
       tag: "button",
       className,
       style,
-      text: readUiStaticString(node, "text") ?? "Button",
+      text: resolveNodeText(node, opts) ?? "Button",
       ...(action ? { action } : {}),
       children: [],
     };
@@ -318,6 +337,8 @@ export interface RenderUiWidgetOptions {
   onAction?: (action: UiAction, nodeId: string) => void;
   /** Resolves Include widget `src` references to their definitions. */
   resolveWidget?: (src: string) => UiWidgetDef | null;
+  /** Resolves localized `{ key, params }` text for the initial render. */
+  resolveLoc?: (key: string, params?: Record<string, string>) => string;
 }
 
 /** Builds + mounts a widget asset into a detached element ready to append to the overlay. */
@@ -327,6 +348,7 @@ export function renderUiWidget(
 ): RenderedUiWidget {
   const buildOpts: UiBuildOptions = {};
   if (options.resolveWidget) buildOpts.resolveWidget = options.resolveWidget;
+  if (options.resolveLoc) buildOpts.resolveLoc = options.resolveLoc;
   const tree = buildUiRenderTree(def, buildOpts);
   const byId = new Map<string, HTMLElement>();
   const element = mountUiRenderNode(tree, { onAction: options.onAction, byId });

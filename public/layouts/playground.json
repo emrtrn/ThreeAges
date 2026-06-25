@@ -198,7 +198,8 @@
     "backgroundColor": "#ffffff",
     "gameMode": "assets/starter-content/Script/MyGameMode.actor.json",
     "hudWidget": "hud",
-    "pauseMenuWidget": "menu"
+    "pauseMenuWidget": "menu",
+    "locale": "en"
   },
   "skyAtmosphere": {
     "rayleigh": 1,

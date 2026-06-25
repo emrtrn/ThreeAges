@@ -519,6 +519,12 @@ function validateWorldSettings(value: unknown): Record<string, unknown> | null {
     }
     worldSettings.pauseMenuWidget = input.pauseMenuWidget;
   }
+  if (input.locale !== undefined) {
+    if (typeof input.locale !== "string" || input.locale.length === 0) {
+      throw new Error("worldSettings.locale must be a non-empty string");
+    }
+    worldSettings.locale = input.locale;
+  }
 
   return Object.keys(worldSettings).length > 0 ? worldSettings : null;
 }

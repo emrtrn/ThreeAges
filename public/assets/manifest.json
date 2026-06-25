@@ -6464,6 +6464,52 @@
       "license": "Unknown"
     },
     {
+      "id": "loc-en",
+      "name": "Locale EN",
+      "assetType": "ui",
+      "category": "UI",
+      "path": "assets/starter-content/UI/Default_en.loc.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 198
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "loc-tr",
+      "name": "Locale TR",
+      "assetType": "ui",
+      "category": "UI",
+      "path": "assets/starter-content/UI/Default_tr.loc.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 210
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "zz-smokebp",
       "name": "ZZ Smoke BP",
       "assetType": "prefab",

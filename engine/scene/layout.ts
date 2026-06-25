@@ -277,6 +277,11 @@ export interface LayoutWorldSettings {
    * `menu` action (Escape). Absent means Escape only releases pointer lock.
    */
   pauseMenuWidget?: string;
+  /**
+   * Active UI locale id (`en`, `tr`, ...) selecting which `.loc.json` table
+   * resolves localized widget text. Absent means the first loaded table wins.
+   */
+  locale?: string;
 }
 
 /**

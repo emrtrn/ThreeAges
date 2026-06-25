@@ -194,6 +194,7 @@ import { assetPath, assetType, isModelAssetType, type AssetManifest } from "@eng
 import { normalizeUiWidgetDef, type UiWidgetDef } from "@engine/ui/uiWidget";
 import { normalizeUiThemeDef, type UiThemeDef } from "@engine/ui/uiTheme";
 import { UiViewModelStore, type UiFieldValue } from "@engine/ui/uiViewModel";
+import { LocaleRegistry, normalizeUiLocaleTable } from "@engine/ui/uiLocale";
 import { RuntimeUiSubsystem } from "@/ui/RuntimeUiSubsystem";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
@@ -259,6 +260,8 @@ export interface UiDebugSnapshot {
   screens: string[];
   /** ViewModel store fields as path-sorted `[path, value]` pairs. */
   fields: Array<[string, UiFieldValue]>;
+  /** Active UI locale, or null when the scene authors no localization tables. */
+  locale: string | null;
 }
 
 export interface RuntimeStatsApp {
@@ -380,6 +383,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly uiDefs = new Map<string, UiWidgetDef>();
   /** Loaded UI theme defs keyed by their `theme` reference (asset id or path). */
   private readonly uiThemes = new Map<string, UiThemeDef>();
+  /** Loaded UI localization tables + active locale; null when the scene authors none. */
+  private localeRegistry: LocaleRegistry | null = null;
 
   onFrame: ((deltaMs: number) => void) | null = null;
 
@@ -641,7 +646,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   getUiDebugSnapshot(): UiDebugSnapshot {
     const host = this.uiSubsystem?.getDebugSnapshot() ?? { hud: null, screens: [] };
-    return { hud: host.hud, screens: host.screens, fields: this.uiStore.snapshot() };
+    return {
+      hud: host.hud,
+      screens: host.screens,
+      fields: this.uiStore.snapshot(),
+      locale: this.localeRegistry?.activeLocale ?? null,
+    };
   }
 
   /** Authored CharacterMovement mode of a possessed Actor Script pawn, else null. */
@@ -809,8 +819,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const allDefs = await this.loadAllUiWidgetDefs();
     for (const [id, def] of allDefs) this.uiDefs.set(id, def);
     await this.loadUiThemeDefs(this.uiDefs.values());
+    this.localeRegistry = await this.loadUiLocaleRegistry();
     this.uiSubsystem = new RuntimeUiSubsystem(host, {
       store: this.uiStore,
+      ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
       resolveTheme: (ref) => this.uiThemes.get(ref) ?? null,
       resolveWidget: (src) => this.uiDefs.get(src) ?? null,
       onMessageAction: (action) => {
@@ -853,6 +865,40 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }),
     );
     return out;
+  }
+
+  /**
+   * Loads the `.loc.json` localization tables from the manifest into a
+   * {@link LocaleRegistry}, then selects the active locale from
+   * `worldSettings.locale` (falling back to the first registered table). Returns
+   * null when the project authors no locale tables, so non-localized scenes pay
+   * nothing. Tables are registered in manifest order for a deterministic default.
+   */
+  private async loadUiLocaleRegistry(): Promise<LocaleRegistry | null> {
+    if (!this.assetLoader) return null;
+    const manifest = await this.assetLoader.loadManifest();
+    const locAssets = manifest.assets.filter(
+      (entry) => assetType(entry) === "ui" && assetPath(entry).endsWith(".loc.json"),
+    );
+    if (locAssets.length === 0) return null;
+    const tables = await Promise.all(
+      locAssets.map(async (asset) => {
+        try {
+          const response = await fetch(projectFileUrl(assetPath(asset)), { cache: "no-cache" });
+          if (!response.ok) return null;
+          return normalizeUiLocaleTable(await response.json());
+        } catch {
+          // Missing/malformed locale table: skip it (keys fall back to themselves).
+          return null;
+        }
+      }),
+    );
+    const registry = new LocaleRegistry();
+    for (const table of tables) if (table) registry.register(table);
+    if (registry.availableLocales().length === 0) return null;
+    const desired = this.layout?.worldSettings?.locale;
+    if (desired) registry.setActiveLocale(desired);
+    return registry;
   }
 
   /**

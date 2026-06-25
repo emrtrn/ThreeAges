@@ -19,6 +19,7 @@ import {
   findUiNodeParent,
   isUiBinding,
   isUiContainerKind,
+  isUiTextKey,
   normalizeUiWidgetDef,
   readUiAction,
   UI_WIDGET_KINDS,
@@ -415,6 +416,10 @@ export class UiWidgetEditor {
     const current = node.props[field.key];
     const bindPath = isUiBinding(current) ? current.bind : null;
     const bound = bindPath !== null;
+    // A localized `{ key }` text prop is read-only here (edit the .ui.json/loc
+    // table directly): v1 has no loc authoring UI, but the field must not clobber
+    // the key with a literal or show "[object Object]".
+    const locKey = !bound && field.key === "text" && isUiTextKey(current) ? current.key : null;
 
     const row = document.createElement("label");
     row.className = "uie-field";
@@ -426,7 +431,12 @@ export class UiWidgetEditor {
     controls.className = "uie-bindable-controls";
 
     const input = document.createElement("input");
-    if (bindPath !== null) {
+    if (locKey !== null) {
+      input.type = "text";
+      input.value = locKey;
+      input.disabled = true;
+      input.title = "Localized text key — edit the locale table to change it";
+    } else if (bindPath !== null) {
       input.type = "text";
       input.placeholder = "field path, e.g. player.health";
       input.value = bindPath;
@@ -449,8 +459,14 @@ export class UiWidgetEditor {
     const toggle = document.createElement("button");
     toggle.type = "button";
     toggle.className = bound ? "uie-bind-toggle is-active" : "uie-bind-toggle";
-    toggle.textContent = "bind";
-    toggle.title = bound ? "Unbind (use a literal value)" : "Bind to a ViewModel field";
+    toggle.textContent = locKey !== null ? "loc" : "bind";
+    toggle.disabled = locKey !== null;
+    toggle.title =
+      locKey !== null
+        ? "Localized text (key binding)"
+        : bound
+          ? "Unbind (use a literal value)"
+          : "Bind to a ViewModel field";
     toggle.addEventListener("click", () => {
       if (bound) {
         this.setProp(node, field.key, null);

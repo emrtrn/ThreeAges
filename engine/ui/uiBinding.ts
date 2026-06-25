@@ -11,9 +11,10 @@
  * (Image). Collection is pure + testable; {@link applyBoundNode} /
  * {@link bindUiWidget} touch the DOM and run only at runtime.
  */
-import { readUiBindingPath, type UiNode, type UiWidgetDef } from "./uiWidget";
+import { readUiBindingPath, readUiTextKey, type UiNode, type UiTextKey, type UiWidgetDef } from "./uiWidget";
 import type { RenderedUiWidget } from "./uiRenderer";
 import type { UiFieldValue, UiViewModelStore } from "./uiViewModel";
+import type { LocaleRegistry } from "./uiLocale";
 
 /** Props a binding can drive, per widget kind. */
 export const BINDABLE_UI_PROPS = ["text", "value", "max", "src"] as const;
@@ -115,4 +116,60 @@ export function bindUiWidget(
   return () => {
     for (const unsubscribe of unsubscribes) unsubscribe();
   };
+}
+
+// ---------------------------------------------------------------------------
+// Localization glue (sibling of binding): re-resolve `{ key }` text on a locale
+// switch. The initial render is already localized by the build pass
+// (`resolveLoc`); this keeps mounted widgets in sync when the locale changes.
+// ---------------------------------------------------------------------------
+
+export interface UiNodeLoc {
+  node: UiNode;
+  textKey: UiTextKey;
+}
+
+/** Walks the tree and returns one entry per Text/Button node with a localized `text`. */
+export function collectUiLocBindings(def: UiWidgetDef): UiNodeLoc[] {
+  const out: UiNodeLoc[] = [];
+  const walk = (node: UiNode): void => {
+    if (node.widget === "Text" || node.widget === "Button") {
+      const textKey = readUiTextKey(node, "text");
+      if (textKey) out.push({ node, textKey });
+    }
+    node.children.forEach(walk);
+  };
+  walk(def.root);
+  return out;
+}
+
+/** Resolves a localized node's text against the active locale and applies it (DOM). */
+export function applyLocNode(
+  element: HTMLElement,
+  textKey: UiTextKey,
+  registry: LocaleRegistry,
+): void {
+  element.textContent = registry.resolve(textKey.key, textKey.params);
+}
+
+/**
+ * Wires a rendered widget's localized text nodes to the registry: re-resolves
+ * them whenever the active locale changes. Returns an unsubscribe handle the
+ * caller releases on unmount. No-op when the widget has no localized text.
+ */
+export function bindUiLocale(
+  rendered: RenderedUiWidget,
+  def: UiWidgetDef,
+  registry: LocaleRegistry,
+): () => void {
+  const locNodes = collectUiLocBindings(def);
+  if (locNodes.length === 0) return () => {};
+  const apply = (): void => {
+    for (const { node, textKey } of locNodes) {
+      const element = rendered.byId.get(node.id);
+      if (element) applyLocNode(element, textKey, registry);
+    }
+  };
+  apply();
+  return registry.subscribe(apply);
 }

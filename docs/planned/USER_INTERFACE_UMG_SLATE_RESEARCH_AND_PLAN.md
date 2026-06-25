@@ -300,7 +300,7 @@ Bu, Forge'un mevcut `?editor` / runtime ayrimina uyumludur.
 - [x] **Editor tema onizleme** ekle: UI editordeki canli preview artik widget'in `theme` ref'ini cozup uyguluyor (`loadUiThemeAsset` + `applyUiTheme`); stage'e runtime `--forge-ui-*` varsayilanlari verildi, boylece temasiz widget'lar da oyundaki gibi gorunuyor. `verify:dist --strict` hala runtime-only (editor kodu dist'e sizmaz).
 - [x] Sonraki faz icin animation, localization, accessibility ve world-space UI gereksinimlerini ayri planla. (U7) → asagidaki "## U7 — Ileri UI plani" bolumu; U7a–U7d alt-fazlari + onerilen sira + kapsam sinirlari.
 - [x] **U7a — UI animation:** deklaratif gecis preset'leri (fade/slide/scale) ekran push/pop icin; `prefers-reduced-motion` saygisi. (timeline yok) → `engine/ui/uiTransition.ts` + `UiWidgetDef.transition` + RuntimeUiSubsystem enter/exit + style.css preset'leri + editor transition paneli & "Play"; 6 yeni headless test → 354 check, `verify:dist --strict` runtime-only.
-- [ ] **U7b — Localization:** `.loc.json` string tablolari + Text `textKey`, aktif locale resolver, runtime + binding entegrasyonu.
+- [x] **U7b — Localization:** `.loc.json` string tablolari + Text `textKey`, aktif locale resolver, runtime + binding entegrasyonu. → `engine/ui/uiLocale.ts` (`normalizeUiLocaleTable`/`applyLocParams`/`LocaleRegistry`) + `UiTextKey` (`uiWidget.ts`) + renderer `resolveLoc` + `bindUiLocale` (locale-change re-apply) + `RuntimeSceneApp.loadUiLocaleRegistry` + `worldSettings.locale` (save-validator allowlist) + debug `locale:` satiri; demo en/tr tablolari, `Menu.ui.json` textKey'lere tasindi; 8 yeni headless test → 361 check, `verify:dist --strict` runtime-only.
 - [ ] **U7c — Accessibility:** ARIA rol/label/alt, klavye+gamepad focus navigation, modal focus trap + initial/restore focus, high-contrast tema.
 - [ ] **U7d — World-space widget (WidgetComponentLite):** once screen-projected DOM (billboard label/prompt), sonra raycast etkilesim; true 3D widget mesh en sona.
 
@@ -502,10 +502,64 @@ Dogrulama: `tsc`, `npm run build:verify` (354 test + `verify:dist --strict`
 runtime-only), `check:assets` PASS. Elle: `/` ac, `Escape` ile pause menu
 acilirken/kapanirken scale+fade gecisini gor.
 
+### U7b — Localization (TAMAMLANDI)
+
+U7 ikinci alt-fazi: typed string-table lokalizasyonu (FText/string-table
+analogu — expression yok, sadece `{name}` substitution).
+
+Eklenenler:
+
+- `engine/ui/uiLocale.ts` (saf): `UiLocaleTable` (`schema/type:"uiLoc"/locale/
+  strings`), `normalizeUiLocaleTable` (yalniz string entry'leri korur, eksik
+  locale → "en"), `applyLocParams` (`{name}` substitution; bilinmeyen yer tutucu
+  oldugu gibi kalir), `LocaleRegistry` (tablolari tutar, aktif locale + degisim
+  abonesi; `resolve(key, params?, fallback?)` eksikse key'in kendisine duser,
+  bilinmeyen locale'i yok sayar — UI hicbir zaman boslanmaz).
+- `engine/ui/uiWidget.ts`: `UiTextKey` (`{ key, params? }`) — `UiBinding`'in
+  kardesi, `text` prop'u icin; `isUiTextKey` + `readUiTextKey` (param'lari string'e
+  sanitize eder, sayilari coerce eder, obje param'lari duser). Prop bag'da bind
+  gibi tasinir; ayri normalize/allowlist gerekmez (`validateSaveUiPayload` zaten
+  tum def'i normalize eder).
+- `engine/ui/uiRenderer.ts`: `UiBuildOptions.resolveLoc` + `RenderUiWidgetOptions.
+  resolveLoc`; Text/Button ilk render'da `{ key }`'i cozer (resolver yoksa ham
+  key'i gosterir — temasiz editor onizlemesi anlamli kalir). `{ bind }` text'i
+  bos render edip binding'e birakma davranisi korunur.
+- `engine/ui/uiBinding.ts`: `collectUiLocBindings` (saf — localized Text/Button
+  node'lari), `applyLocNode`, `bindUiLocale` (locale degisince ilgili node'lari
+  yeniden cozer; store flush deseninin kardesi, unmount'ta unsubscribe).
+- `src/ui/RuntimeUiSubsystem.ts`: opsiyonel `locale` registry; `renderOptions`'a
+  `resolveLoc`, `bind()` artik store + locale dispose'unu birlestirir.
+- `src/scene/RuntimeSceneApp.ts`: `loadUiLocaleRegistry` manifest'ten `.loc.json`
+  tablolarini (manifest sirasinda, deterministik) yukler; aktif locale
+  `worldSettings.locale`'den (yoksa ilk tablo) secilir; subsystem'e verilir.
+  `getUiDebugSnapshot` aktif locale'i tasir.
+- `engine/scene/layout.ts` + `tools/saveValidator.ts`: `worldSettings.locale`
+  (non-empty string) — save-validator allowlist'ine eklendi (gotcha), yoksa
+  kayitta dusurulurdu.
+- `src/scene/debugStats.ts`: `?debug` UI inspector'inda `locale:` satiri.
+- `src/editor/UiWidgetEditor.ts`: localized `{ key }` text prop'u Details'te
+  read-only gosterilir ("loc" rozeti + disabled input) — v1'de loc authoring UI
+  yok, ama alan key'i literal'e ezmez / "[object Object]" gostermez.
+- Demo: `Default_en.loc.json` (+`loc-en`) ve `Default_tr.loc.json` (+`loc-tr`)
+  manifest girdileri; `Menu.ui.json` baslik/alt-baslik/Resume/Options textKey'lere
+  tasindi (alt-baslik `{version}` param ornegi); `playground.json`
+  `worldSettings.locale: "en"`.
+- 8 yeni headless test (normalize/applyLocParams/registry resolve+notify/
+  readUiTextKey/render resolveLoc/collectUiLocBindings + worldSettings.locale
+  round-trip).
+
+Dogrulama: `tsc`, `npm run build:verify` (361 test + `verify:dist --strict`
+runtime-only), `check:assets` PASS. Elle: `/` ac, `Escape` ile pause menuyu ac,
+metinlerin locale'den geldigini gor; `worldSettings.locale`'i `"tr"` yapinca
+menu Turkce gelir.
+
+Kapsam disi (planda): cogul/plural, cinsiyet, sayi/tarih formatlama, runtime
+canli kultur hot-swap UI editoru. (RTL → U7c layout notu.)
+
 ### Sonraki adim (U7)
 
-- Sirada **U7b (localization)** → U7c (accessibility) → U7d (world-space).
-  Detayli plan asagida ("## U7 — Ileri UI plani").
+- Sirada **U7c (accessibility)** → U7d (world-space). Detayli plan asagida
+  ("## U7 — Ileri UI plani"). a11y label'lari `textKey` ile lokalize edilebilir.
 
 ## U7 — Ileri UI plani
 

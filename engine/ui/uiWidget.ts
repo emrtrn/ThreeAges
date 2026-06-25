@@ -67,6 +67,22 @@ export function isUiBinding(value: unknown): value is UiBinding {
 export type UiBindable<T> = T | UiBinding;
 
 /**
+ * A typed localized-text reference, e.g. `{ "key": "menu.start" }` with optional
+ * `{name}` params. The sibling of {@link UiBinding} for the `text` prop: the
+ * active locale's table resolves it at render time (see `engine/ui/uiLocale.ts`).
+ * Like bindings, the schema tolerates it now so authored data survives even
+ * before any locale table is loaded.
+ */
+export interface UiTextKey {
+  key: string;
+  params?: Record<string, string>;
+}
+
+export function isUiTextKey(value: unknown): value is UiTextKey {
+  return isPlainObject(value) && typeof value.key === "string" && value.key.length > 0;
+}
+
+/**
  * A typed widget action. v1 supports two kinds:
  *  - `message`: post a named message the game layer subscribes to (UI → gameplay).
  *  - `back`: pop the current screen (Common UI's "back"/cancel) — handled by the
@@ -161,6 +177,28 @@ export function readUiStaticBoolean(node: UiNode, key: string): boolean | undefi
 export function readUiBindingPath(node: UiNode, key: string): string | undefined {
   const value = node.props[key];
   return isUiBinding(value) ? value.bind : undefined;
+}
+
+/**
+ * Localized-text reference at `key` (default `"text"`), or undefined for a
+ * literal/binding. Params are sanitized to string values (numbers coerced) so a
+ * hand-authored table can't smuggle non-string substitutions into the DOM.
+ */
+export function readUiTextKey(node: UiNode, key = "text"): UiTextKey | undefined {
+  const value = node.props[key];
+  if (!isUiTextKey(value)) return undefined;
+  const params = isPlainObject(value.params) ? sanitizeTextKeyParams(value.params) : undefined;
+  return params ? { key: value.key, params } : { key: value.key };
+}
+
+/** Keeps only string/number param values (numbers coerced to strings), dropping the rest. */
+function sanitizeTextKeyParams(value: Record<string, unknown>): Record<string, string> | undefined {
+  const out: Record<string, string> = {};
+  for (const [key, raw] of Object.entries(value)) {
+    if (typeof raw === "string") out[key] = raw;
+    else if (typeof raw === "number" && Number.isFinite(raw)) out[key] = String(raw);
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** Typed action at `key` (default `"onClick"`), or null when absent / malformed. */
