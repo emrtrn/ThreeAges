@@ -76,6 +76,16 @@ engine/editor.
   `normalizeAssetSkeleton` (`src/scene/assetSkeletonLoader.ts`), or it is silently
   dropped on save.
 
+## Codex Tooling Context
+
+- This repository may also be worked on from Codex. Codex-specific tool guidance
+  lives in `AGENTS.md`.
+- If you are not running inside Codex, do not assume Codex Security, Codex
+  plugins, or Codex skills are available in your own tool environment. Treat
+  those notes as handoff context for the user or for a future Codex session.
+- Normal code validation still starts with local commands (`npx tsc --noEmit`,
+  `npm run test:engine`, and when appropriate `npm run build:verify`).
+
 ## Authoring Data Flow
 
 - `/__save-layout` writes the layout to `public/<defaultScene>` and snap settings
