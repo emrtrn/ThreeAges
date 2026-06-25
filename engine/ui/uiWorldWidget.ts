@@ -16,10 +16,19 @@
 /** Local 3-tuple (mirrors `engine/scene/layout.ts`'s `Vec3`, kept local to avoid an import cycle). */
 export type Vec3 = [number, number, number];
 
-/** Where a world widget is pinned. v1: a fixed world point; entity/socket anchors are a later phase. */
+/**
+ * Where a world widget is pinned. A fixed {@link WorldUiWidgetAnchor.worldPos}, or
+ * an {@link WorldUiWidgetAnchor.entityId} the runtime resolves to a tracked entity's
+ * live world position each frame (socket anchors are a later phase). `offset3d`
+ * lifts the anchor in world space (e.g. above an actor's origin).
+ */
 export interface WorldUiWidgetAnchor {
-  /** World-space anchor point `[x, y, z]`. */
+  /** Fixed world-space point `[x, y, z]`; the fallback when no `entityId` is set. */
   worldPos: Vec3;
+  /** Entity to track (e.g. `"actor:0"`, `"character:1"`): its live position wins over `worldPos`. */
+  entityId?: string;
+  /** World-space offset `[x, y, z]` added after the anchor resolves. */
+  offset3d?: Vec3;
 }
 
 /**
@@ -52,10 +61,19 @@ function isNumberTriple(value: unknown): value is Vec3 {
 }
 
 function normalizeAnchor(value: unknown): WorldUiWidgetAnchor {
-  if (isPlainObject(value) && isNumberTriple(value.worldPos)) {
-    return { worldPos: [value.worldPos[0], value.worldPos[1], value.worldPos[2]] };
+  const anchor: WorldUiWidgetAnchor = { worldPos: [0, 0, 0] };
+  if (isPlainObject(value)) {
+    if (isNumberTriple(value.worldPos)) {
+      anchor.worldPos = [value.worldPos[0], value.worldPos[1], value.worldPos[2]];
+    }
+    if (typeof value.entityId === "string" && value.entityId.length > 0) {
+      anchor.entityId = value.entityId;
+    }
+    if (isNumberTriple(value.offset3d)) {
+      anchor.offset3d = [value.offset3d[0], value.offset3d[1], value.offset3d[2]];
+    }
   }
-  return { worldPos: [0, 0, 0] };
+  return anchor;
 }
 
 function normalizeOffset(value: unknown): [number, number] | undefined {

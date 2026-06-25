@@ -36,6 +36,12 @@ export interface WorldUiSubsystemOptions {
   locale?: LocaleRegistry;
   /** Invoked when a `message`-kind widget action fires (UI → gameplay). */
   onMessageAction?: (action: Extract<UiAction, { type: "message" }>, nodeId: string) => void;
+  /**
+   * Resolves an `anchor.entityId` to its live world position, writing into `target`
+   * and returning true when found (false → the widget is hidden this frame). Omit
+   * to support only `worldPos` anchors.
+   */
+  resolveEntityPosition?: (entityId: string, target: Vector3) => boolean;
 }
 
 interface WorldWidgetEntry {
@@ -104,7 +110,24 @@ export class WorldUiSubsystem {
   update(camera: PerspectiveCamera, width: number, height: number): void {
     if (this.entries.length === 0 || width <= 0 || height <= 0) return;
     for (const entry of this.entries) {
-      this.scratch.copy(entry.anchor);
+      const anchor = entry.def.anchor;
+      // Entity anchor: resolve its live world position (hide when it's gone).
+      if (anchor.entityId) {
+        if (
+          !this.options.resolveEntityPosition ||
+          !this.options.resolveEntityPosition(anchor.entityId, this.scratch)
+        ) {
+          entry.wrapper.style.display = "none";
+          continue;
+        }
+      } else {
+        this.scratch.copy(entry.anchor);
+      }
+      if (anchor.offset3d) {
+        this.scratch.x += anchor.offset3d[0];
+        this.scratch.y += anchor.offset3d[1];
+        this.scratch.z += anchor.offset3d[2];
+      }
       const distance = camera.position.distanceTo(this.scratch);
       this.scratch.project(camera);
       const proj = ndcToScreen(this.scratch.x, this.scratch.y, this.scratch.z, width, height);

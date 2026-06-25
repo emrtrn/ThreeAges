@@ -866,6 +866,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         onMessageAction: (action) => {
           this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
         },
+        resolveEntityPosition: (entityId, target) => this.resolveEntityWorldPosition(entityId, target),
       });
       this.worldUiSubsystem.setWidgets(worldWidgets);
     }
@@ -1009,6 +1010,30 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!this.worldUiSubsystem) return;
     const canvas = this.renderer.domElement;
     this.worldUiSubsystem.update(this.camera, canvas.clientWidth, canvas.clientHeight);
+  }
+
+  /**
+   * Resolves a world-widget `anchor.entityId` (`actor:<i>` / `character:<i>`) to
+   * the entity's live world position, writing into `target`. Returns false when
+   * the entity has no render object (e.g. a mesh-less logic actor, or an
+   * instanced placement — unsupported for entity anchors), so its billboard hides.
+   */
+  private resolveEntityWorldPosition(entityId: string, target: Vector3): boolean {
+    const actorIndex = parseActorInstanceEntityIndex(entityId);
+    if (actorIndex !== null) {
+      const object = this.actorObjects.get(actorIndex);
+      if (!object) return false;
+      object.getWorldPosition(target);
+      return true;
+    }
+    const characterIndex = parseCharacterEntityIndex(entityId);
+    if (characterIndex !== null) {
+      const object = this.characterObjects[characterIndex];
+      if (!object) return false;
+      object.getWorldPosition(target);
+      return true;
+    }
+    return false;
   }
 
   /**

@@ -11154,6 +11154,18 @@ check("normalizeWorldWidget keeps valid fields, defaults the anchor, drops junk"
   assert.equal(normalizeWorldWidget(null), null);
 });
 
+check("normalizeWorldWidget reads an entity anchor + world offset", () => {
+  assert.deepEqual(
+    normalizeWorldWidget({ widget: "tag", anchor: { entityId: "actor:0", offset3d: [0, 1.5, 0] } }),
+    { widget: "tag", anchor: { worldPos: [0, 0, 0], entityId: "actor:0", offset3d: [0, 1.5, 0] } },
+  );
+  // worldPos coexists as the fallback; an empty entityId is dropped.
+  assert.deepEqual(
+    normalizeWorldWidget({ widget: "tag", anchor: { worldPos: [1, 1, 1], entityId: "" } }),
+    { widget: "tag", anchor: { worldPos: [1, 1, 1] } },
+  );
+});
+
 check("normalizeWorldWidgets drops unusable entries", () => {
   const list = normalizeWorldWidgets([
     { widget: "a", anchor: { worldPos: [0, 1, 0] } },
