@@ -141,6 +141,34 @@ export async function importProjectAsset(
 }
 
 /**
+ * Promotes an existing layout JSON to the project's active scene via the
+ * localhost-only `/__open-level` endpoint: it rewrites
+ * `project.3dgame.json` `editor.defaultScene` to `path`, so the editor loads
+ * and saves that level. Callers reload the editor afterwards to rebuild the
+ * scene from the new default. Returns the stored path and whether the manifest
+ * actually changed.
+ */
+export async function openProjectLevel(
+  path: string,
+): Promise<{ path: string; changed: boolean }> {
+  const response = await fetch("/__open-level", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  const data = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    path?: string;
+    changed?: boolean;
+    error?: string;
+  } | null;
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error ?? `Open level failed: ${response.status} ${response.statusText}`);
+  }
+  return { path: data.path ?? path, changed: Boolean(data.changed) };
+}
+
+/**
  * Renames a single asset file via the localhost-only `/__content-rename`
  * endpoint. `name` is the new base name (no extension); the server preserves the
  * file's extension chain and repoints the manifest entry. Returns the new path

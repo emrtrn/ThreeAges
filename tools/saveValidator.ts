@@ -2536,6 +2536,26 @@ export function validateContentDeletePayload(value: unknown): ContentDeletePaylo
   return { path };
 }
 
+export interface OpenLevelPayload {
+  /** Public-root-relative path of the level/layout JSON to make the active scene. */
+  path: string;
+}
+
+/**
+ * Validates a `/__open-level` payload: a single public-relative `.json` layout to
+ * promote to `manifest.editor.defaultScene` (the scene the editor loads + saves).
+ */
+export function validateOpenLevelPayload(value: unknown): OpenLevelPayload {
+  if (!value || typeof value !== "object") throw new Error("open-level payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string") throw new Error("open-level payload path must be a string");
+  if (input.path.includes("..")) throw new Error("open-level path must not contain ..");
+  const path = input.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (!path) throw new Error("open-level path must not be empty");
+  if (!path.toLowerCase().endsWith(".json")) throw new Error("open-level path must be a .json layout");
+  return { path };
+}
+
 const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   staticMesh: "prop",
   skeletalMesh: "character",

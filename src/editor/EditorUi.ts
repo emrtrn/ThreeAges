@@ -57,6 +57,7 @@ import {
   flattenProjectFiles,
   importProjectAsset,
   normalizeProjectPath,
+  openProjectLevel,
   renameProjectContent,
   type ContentNewKind,
   type ProjectDirNode,
@@ -1264,6 +1265,7 @@ export class EditorUi {
   private createAssetCard(item: BrowserAssetItem): HTMLElement {
     const canPlace = Boolean(item.editable?.placeable);
     const canAssignMaterial = Boolean(item.editable && item.type === "material");
+    const activeLevel = this.isActiveLevel(item);
     const issues = contentAssetIssues(item);
     const issueTooltip = contentAssetIssueTooltip(issues);
     const card = document.createElement("button");
@@ -1271,6 +1273,8 @@ export class EditorUi {
     card.className = "asset-card";
     card.classList.toggle("is-unregistered", !item.editable);
     card.classList.toggle("has-issues", issues.length > 0);
+    // The active level is visually marked and locked against destructive actions.
+    card.classList.toggle("is-active-level", activeLevel);
     card.classList.toggle(
       "is-selected",
       Boolean(item.editable && item.editable.id === this.selectedAssetId),
@@ -1283,6 +1287,11 @@ export class EditorUi {
       ${
         issues.length > 0
           ? `<span class="asset-issue-dot" title="${escapeHtml(issueTooltip)}" aria-label="${escapeHtml(issueTooltip)}"></span>`
+          : ""
+      }
+      ${
+        activeLevel
+          ? `<span class="asset-active-badge" title="Active level — locked against rename/delete">Active</span>`
           : ""
       }
       <span class="asset-thumb" data-asset-thumb>${escapeHtml(item.ext.toUpperCase())}</span>
@@ -1358,6 +1367,12 @@ export class EditorUi {
         void this.openMaterialEditor(item);
       });
     }
+    if (isLevelItem(item) && !activeLevel) {
+      card.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        void this.openLevel(item);
+      });
+    }
     if (isUiWidgetItem(item)) {
       card.addEventListener("dblclick", (event) => {
         event.preventDefault();
@@ -1391,18 +1406,37 @@ export class EditorUi {
 
   /** Right-click menu for a single Content Browser asset card. */
   private openAssetContextMenu(event: MouseEvent, item: BrowserAssetItem): void {
-    const opener = this.assetEditorOpener(item);
     const items: ContextMenuItem[] = [];
-    if (opener) {
-      items.push({ label: "Open", run: opener });
+    const activeLevel = this.isActiveLevel(item);
+    if (isLevelItem(item)) {
+      // A level's primary action is choosing it as the project's default scene.
+      // The active level shows a disabled marker instead (it is already default).
+      if (activeLevel) {
+        items.push({ label: "✓ Default Level", enabled: false, run: () => {} });
+      } else {
+        items.push({ label: "Set Default Level", run: () => void this.openLevel(item) });
+      }
       items.push({ separator: true });
+    } else {
+      const opener = this.assetEditorOpener(item);
+      if (opener) {
+        items.push({ label: "Open", run: opener });
+        items.push({ separator: true });
+      }
     }
-    items.push({ label: "Rename...", run: () => void this.renameContentAsset(item) });
+    // The active level is locked: renaming or deleting it would leave
+    // `defaultScene` pointing at a missing file, so both are disabled.
+    items.push({
+      label: "Rename...",
+      enabled: !activeLevel,
+      run: () => void this.renameContentAsset(item),
+    });
     items.push({ label: "Copy Path", run: () => void this.copyContentAssetPath(item) });
     items.push({ separator: true });
     items.push({
       label: "Delete",
       danger: true,
+      enabled: !activeLevel,
       run: () => void this.deleteContentAsset(item),
     });
     this.openContextMenu(event, items);
@@ -1410,6 +1444,7 @@ export class EditorUi {
 
   /** Returns an action opening the editor that matches `item`, or null. */
   private assetEditorOpener(item: BrowserAssetItem): (() => void) | null {
+    if (isLevelItem(item)) return () => void this.openLevel(item);
     if (item.type === "material") return () => void this.openMaterialEditor(item);
     if (isUiWidgetItem(item)) return () => void this.openUiWidgetEditor(item);
     if (isActorScriptItem(item)) return () => void this.openActorScriptEditor(item);
@@ -1419,8 +1454,58 @@ export class EditorUi {
     return null;
   }
 
+  /**
+   * Opens a level for editing: makes it the project's active scene
+   * (`editor.defaultScene`) via the dev endpoint, then reloads so boot rebuilds
+   * the whole scene from the new default. A full reload is intentional — the
+   * scene build path (physics, behaviors, reflections, widgets, runtime) is the
+   * boot path, so reusing it avoids a fragile in-place teardown. Switching the
+   * active scene also changes where Save writes, so this is gated on a confirm
+   * when the current level has undoable (possibly unsaved) edits.
+   */
+  private async openLevel(item: BrowserAssetItem): Promise<void> {
+    if (this.isActiveLevel(item)) {
+      this.setStatus(`${item.label} is already the active level.`, "info");
+      return;
+    }
+    if (
+      this.app.getHistoryState().canUndo &&
+      !window.confirm(
+        `Open "${item.label}"?\nUnsaved changes to the current level will be lost.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await openProjectLevel(item.path);
+      this.setStatus(`Opening ${item.label}…`, "success");
+      window.location.reload();
+    } catch (error) {
+      this.setStatus(error instanceof Error ? error.message : String(error), "error");
+    }
+  }
+
+  /**
+   * True when `item` is the level the project currently loads + saves
+   * (`editor.defaultScene`). The active level is locked in the Content Browser:
+   * it can't be deleted or renamed (either would break the next scene load), and
+   * it is the one "Set Default Level" hides since it is already the default.
+   */
+  private isActiveLevel(item: BrowserAssetItem): boolean {
+    if (!isLevelItem(item)) return false;
+    const current = this.projectInfo?.manifest.editor.defaultScene;
+    return Boolean(current && normalizeProjectPath(current) === normalizeProjectPath(item.path));
+  }
+
   /** Prompts for a new base name and renames the asset file via the dev endpoint. */
   private async renameContentAsset(item: BrowserAssetItem): Promise<void> {
+    if (this.isActiveLevel(item)) {
+      this.setStatus(
+        `"${item.label}" is the active level and is locked. Set another level as default before renaming it.`,
+        "warning",
+      );
+      return;
+    }
     const fileName = item.path.split("/").at(-1) ?? item.path;
     const dot = fileName.indexOf(".");
     const currentBase = dot > 0 ? fileName.slice(0, dot) : fileName;
@@ -1446,6 +1531,13 @@ export class EditorUi {
 
   /** Confirms, then deletes the asset file (and sidecars/manifest entry). */
   private async deleteContentAsset(item: BrowserAssetItem): Promise<void> {
+    if (this.isActiveLevel(item)) {
+      this.setStatus(
+        `"${item.label}" is the active level and is locked. Set another level as default before deleting it.`,
+        "warning",
+      );
+      return;
+    }
     if (!window.confirm(`Delete "${item.label}"? This cannot be undone.`)) return;
     try {
       const result = await deleteProjectContent(item.path);
@@ -5146,6 +5238,11 @@ function formatContentTypeLabel(value: string): string {
 /** True when a Content Browser item is an Actor Script class-asset (`*.actor.json`). */
 function isActorScriptItem(item: BrowserAssetItem): boolean {
   return item.path.toLowerCase().endsWith(".actor.json");
+}
+
+/** True when a Content Browser item is a level/layout asset (`*.level.json` / `*.layout.json`). */
+function isLevelItem(item: BrowserAssetItem): boolean {
+  return item.type === "level";
 }
 
 /**

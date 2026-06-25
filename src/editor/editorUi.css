@@ -987,6 +987,31 @@ body.editor-mode #debug-stats {
   }
 }
 
+/* The project's active level: locked against rename/delete, marked with a badge. */
+.editor-shell .asset-card.is-active-level {
+  border-color: #4ad6a0;
+  box-shadow: 0 0 0 1px rgba(74, 214, 160, 0.55);
+}
+
+.editor-shell .asset-card.is-active-level .asset-thumb {
+  border-color: rgba(74, 214, 160, 0.7);
+}
+
+.asset-active-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 2;
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #08110d;
+  background: #4ad6a0;
+  box-shadow: 0 0 0 1px rgba(8, 17, 13, 0.55);
+}
+
 .asset-issue-dot {
   position: absolute;
   top: 7px;

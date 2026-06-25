@@ -2,6 +2,41 @@
   "schema": 1,
   "name": "TestLevel",
   "loadGroups": [],
-  "instances": [],
-  "characters": []
+  "instances": [
+    {
+      "assetId": "starter-sm-platform",
+      "placements": [
+        {
+          "position": [
+            -2.24,
+            0.13,
+            -0.04
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    }
+  ],
+  "characters": [],
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        3,
+        9,
+        4
+      ],
+      "name": "Sun",
+      "rotation": [
+        -55,
+        35,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 2,
+      "castShadow": true
+    }
+  ]
 }

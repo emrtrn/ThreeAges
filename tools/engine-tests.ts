@@ -505,10 +505,30 @@ check("actor id matches selectionId", () => {
   assert.equal(actorInstanceEntityId(4), selectionId({ kind: "actor", index: 4 }));
 });
 
-// 2. Round-trip on the real saved layout (cwd is the repo root under npm).
-const layout = JSON.parse(
-  readFileSync("public/layouts/render-test-room.json", "utf8"),
-) as RoomLayout;
+// 2. Round-trip on a self-contained, project-agnostic fixture that exercises the
+// same legacy-adapter paths a real saved scene would: a placed static mesh (mesh +
+// transform components), a default directional light, and a scripted character
+// carrying the input-move behavior + collision-chime audio cue the Game Mode demo
+// relies on. Previously read from public/layouts/render-test-room.json; inlined here
+// so the generic template ships no home-decor demo layout. (cwd is repo root.)
+const layout: RoomLayout = {
+  schema: 1,
+  name: "legacy-adapter-fixture",
+  loadGroups: [],
+  instances: [{ assetId: "starter-sm-crate", placements: [{ position: [0, 0, 0] }] }],
+  characters: [
+    {
+      assetId: "demo-character",
+      position: [0.38, 0, 1.64],
+      animation: "idle",
+      name: "demo-character",
+      behavior: { script: "input-move" },
+      audio: { clipId: "collision-chime", volume: 0.35, loop: false, spatial: false },
+    },
+  ],
+  worldSettings: { staticObjectsCastShadow: true, ambientIntensity: 1 },
+};
+ensureDefaultSceneLights(layout);
 const assetManifest = JSON.parse(
   readFileSync("public/assets/manifest.json", "utf8"),
 ) as AssetManifest;
@@ -524,17 +544,15 @@ check("asset manifest validates against the public assets tree", () => {
   assert.equal(report.assetCount, assetManifest.assets.length);
 });
 check("asset manifest helpers expose canonical path, load group, and byte size", () => {
-  const sofa = assetManifest.assets.find((asset) => asset.id === "lounge-sofa");
-  assert.ok(sofa);
-  assert.equal(assetType(sofa), "staticMesh");
-  assert.equal(assetPath(sofa), "assets/models/loungeSofa.glb");
-  assert.equal(assetLoadGroup(sofa), "models");
-  assert.equal(assetByteSize(sofa), 4588);
-});
-check("asset manifest classifies authored characters as skeletal meshes", () => {
-  const character = assetManifest.assets.find((asset) => asset.id === "character-a");
-  assert.ok(character);
-  assert.equal(assetType(character), "skeletalMesh");
+  const crate = assetManifest.assets.find((asset) => asset.id === "starter-sm-crate");
+  assert.ok(crate);
+  assert.equal(assetType(crate), "staticMesh");
+  assert.equal(
+    assetPath(crate),
+    "assets/starter-content/StaticMeshes/Props/SM_Prototype_Crate.glb",
+  );
+  assert.equal(assetLoadGroup(crate), "starter-static-meshes");
+  assert.equal(assetByteSize(crate), 2024);
 });
 check("asset manifest classifies Sound Cue assets separately from prefab JSON", () => {
   const cue = assetManifest.assets.find((asset) => asset.id === "sc-footstep-stone");
@@ -3167,8 +3185,8 @@ check("scene model represents mesh + light + metadata + transform hierarchy", ()
 });
 
 // 6.3 The legacy adapter derives that scene model from the current SAVED layout:
-// the real render-test-room layout yields readable mesh and light entities.
-// (`doc` was derived from public/layouts/render-test-room.json above.)
+// the legacy-adapter fixture yields readable mesh and light entities.
+// (`doc` was derived from the inline `layout` fixture above.)
 check("saved layout derives mesh + light entities with readable components", () => {
   const meshEntities = doc.entities.filter((entity) => readMeshRendererComponent(entity));
   const lightEntities = doc.entities.filter((entity) => readLightComponent(entity));

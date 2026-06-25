@@ -25,6 +25,7 @@ import {
   validateSaveSkeletonPayload,
   validateSaveUiPayload,
   validateSaveUvwPayload,
+  validateOpenLevelPayload,
 } from "./tools/saveValidator";
 
 // Single-codebase template: this repo's own public/ is the project root that
@@ -325,6 +326,7 @@ const PRIVILEGED_URLS = new Set([
   "/__content-delete",
   "/__import-asset",
   "/__new-behavior",
+  "/__open-level",
 ]);
 
 // Cap a single imported asset (binary models/textures/audio are larger than the
@@ -799,6 +801,39 @@ function layoutEditorPlugin(): Plugin {
             }
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: rel, bytes: body.length, registeredId }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // "Open Level": promote an existing public-relative layout JSON to
+        // `manifest.editor.defaultScene` so the editor loads + saves it. The
+        // editor reloads after this; boot then builds the scene from the new
+        // default. Guards: the path must stay inside public/ and exist.
+        if (req.url === "/__open-level") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateOpenLevelPayload(await readJsonBody(req));
+            const targetAbs = resolvePublicPath(payload.path);
+            const targetStat = await stat(targetAbs);
+            if (!targetStat.isFile()) throw new Error(`not a file: ${payload.path}`);
+            const manifest = await readProjectManifest();
+            const previousManifest = `${JSON.stringify(manifest, null, 2)}\n`;
+            manifest.editor = { ...manifest.editor, defaultScene: payload.path };
+            const nextManifest = `${JSON.stringify(manifest, null, 2)}\n`;
+            const changed = previousManifest !== nextManifest;
+            if (changed) await writeFile(PROJECT_MANIFEST_PATH, nextManifest, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed }));
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");

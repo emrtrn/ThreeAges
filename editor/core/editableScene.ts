@@ -274,6 +274,8 @@ export interface EditorProjectInfo {
   manifest: {
     publicDir: string;
     editor: {
+      /** Active scene the editor loads + saves (`/__open-level` repoints this). */
+      defaultScene: string;
       assetManifest: string;
       previewUrl?: string;
     };
