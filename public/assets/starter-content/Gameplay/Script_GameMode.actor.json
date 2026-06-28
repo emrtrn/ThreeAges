@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "Script_GameMode",
+  "parentClass": "gameMode",
+  "variables": [
+    {
+      "key": "defaultPawnClassRef",
+      "label": "Default Pawn Class",
+      "type": "text",
+      "default": "assets/starter-content/Gameplay/Script_PlayerCharacter.actor.json"
+    }
+  ],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

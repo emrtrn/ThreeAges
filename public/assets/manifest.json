@@ -25193,6 +25193,167 @@
         "bytes": 6493676
       },
       "license": "Unknown"
+    },
+    {
+      "id": "skm-player",
+      "name": "SKM Player",
+      "assetType": "skeletalMesh",
+      "category": "SkeletalMeshes",
+      "path": "assets/starter-content/SkeletalMeshes/SKM_Player.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "SkeletalMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 11753504
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "script-gamemode-actor",
+      "name": "Script Game Mode.Actor",
+      "assetType": "prefab",
+      "category": "Gameplay",
+      "path": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Gameplay",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 352
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "script-playercharacter-actor",
+      "name": "Script Player Character.Actor",
+      "assetType": "prefab",
+      "category": "Gameplay",
+      "path": "assets/starter-content/Gameplay/Script_PlayerCharacter.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Gameplay",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 360
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "adventurer",
+      "name": "Adventurer",
+      "assetType": "skeletalMesh",
+      "category": "SkeletalMeshes",
+      "path": "assets/starter-content/SkeletalMeshes/Adventurer.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "SkeletalMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3671456
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ual1-standard-rm",
+      "name": "UAL1 Standard RM",
+      "assetType": "skeletalMesh",
+      "category": "SkeletalMeshes",
+      "path": "assets/starter-content/SkeletalMeshes/UAL1_Standard_RM.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "SkeletalMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 7620504
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "casual",
+      "name": "Casual",
+      "assetType": "skeletalMesh",
+      "category": "SkeletalMeshes",
+      "path": "assets/starter-content/SkeletalMeshes/Casual.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "SkeletalMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3131788
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ual2-standard",
+      "name": "UAL2 Standard",
+      "assetType": "skeletalMesh",
+      "category": "SkeletalMeshes",
+      "path": "assets/starter-content/SkeletalMeshes/UAL2_Standard.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "SkeletalMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 8091444
+      },
+      "license": "Unknown"
     }
   ]
 }

@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "Script_PlayerCharacter",
+  "parentClass": "character",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "meshRenderer",
+      "component": "MeshRenderer",
+      "props": {
+        "assetId": "skm-player"
+      },
+      "parent": "collider"
+    },
+    {
+      "id": "springArm",
+      "component": "SpringArm",
+      "props": {
+        "targetArmLength": 3,
+        "enableCameraLag": true,
+        "cameraLagSpeed": 10
+      },
+      "parent": "collider"
+    },
+    {
+      "id": "camera",
+      "component": "Camera",
+      "props": {
+        "fieldOfView": 44,
+        "nearClip": 0.1,
+        "farClip": 100
+      },
+      "parent": "springArm"
+    },
+    {
+      "id": "collider",
+      "component": "Collider",
+      "props": {
+        "shape": "capsule",
+        "isStatic": false,
+        "isSensor": false,
+        "capsuleRadius": 0.3,
+        "capsuleHalfHeight": 0.9
+      },
+      "parent": "root"
+    },
+    {
+      "id": "characterMovement",
+      "component": "CharacterMovement",
+      "props": {
+        "maxWalkSpeed": 3,
+        "sprintMultiplier": 2,
+        "jumpSpeed": 4,
+        "gravityScale": 1,
+        "airControl": 0.25,
+        "acceleration": 30,
+        "brakingDeceleration": 24,
+        "groundFriction": 8,
+        "orientRotationToMovement": true,
+        "orientRotationToControl": false,
+        "movementMode": "walking",
+        "capsuleRadius": 0.3,
+        "capsuleHalfHeight": 0.9
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

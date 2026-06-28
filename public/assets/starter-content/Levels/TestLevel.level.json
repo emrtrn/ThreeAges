@@ -5,20 +5,62 @@
   "instances": [
     {
       "assetId": "starter-sm-platform",
+      "placements": []
+    },
+    {
+      "assetId": "floor-400x400",
       "placements": [
         {
           "position": [
-            -2.24,
-            0.13,
-            -0.04
+            -2.35,
+            0.2,
+            0.3
           ],
           "rotationYDeg": 0,
           "scale": 1
         }
       ]
+    },
+    {
+      "assetId": "shape-cube",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pickup-coin",
+      "placements": []
     }
   ],
-  "characters": [],
+  "characters": [
+    {
+      "assetId": "adventurer",
+      "position": [
+        -0.48,
+        0.2,
+        1.9
+      ],
+      "animation": "idle",
+      "name": "adventurer",
+      "rotationYDeg": 0,
+      "scale": 0.42
+    }
+  ],
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 1,
+    "mie": 0.004,
+    "mieDirectionalG": 0.7,
+    "skyLightCapture": {
+      "intensity": 0.6
+    }
+  },
+  "postProcess": {
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    }
+  },
   "lights": [
     {
       "id": "sun",

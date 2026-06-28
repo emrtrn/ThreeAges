@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "sockets": [],
+  "animationSet": {
+    "idle": "Armature.447|[n_40] idle",
+    "walk": "Armature.447|[n_40] walk_1",
+    "run": "Armature.447|[n_40] run_1",
+    "jump": "Armature.447|[n_40] land_1",
+    "fall": "Armature.447|[n_40] land_1"
+  },
+  "blendSpaces": [
+    {
+      "name": "BlendSpace",
+      "type": "1d",
+      "axisX": {
+        "name": "Speed",
+        "min": 0,
+        "max": 4
+      },
+      "samples": []
+    }
+  ],
+  "notifies": [],
+  "montages": [],
+  "physicsBodies": [],
+  "physicsConstraints": [],
+  "preview": {
+    "selectedClip": "Armature.447|[n_40] greeting_1"
+  }
+}
