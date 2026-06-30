@@ -395,6 +395,9 @@ import {
   type AssetCollisionDef,
 } from "../engine/scene/collision";
 import {
+  AMBIENT_SOUND_ASSET_ID,
+  isAmbientSoundAssetId,
+  isMarkerAssetId,
   isPlayerStartAssetId,
   isProceduralAssetId,
   PLAYER_START_ASSET_ID,
@@ -1707,6 +1710,58 @@ check("layout audio maps to a readable audio component", () => {
     volume: 0.4,
     loop: false,
     spatial: true,
+    autoPlay: true,
+  });
+});
+
+check("readAudioComponent surfaces cue source + pitch + spatial attenuation overrides", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "ambient",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "marker:ambientSound",
+        placements: [
+          {
+            position: [1, 0, 2],
+            audio: {
+              clipId: "",
+              sourceId: "cue.fire_loop",
+              sourceType: "soundCue",
+              volume: 0.5,
+              pitch: 1.2,
+              loop: true,
+              spatial: true,
+              refDistance: 3,
+              maxDistance: 40,
+              rolloff: 1.5,
+              autoPlay: true,
+            },
+          },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+
+  const entity = roomLayoutToSceneDocument(fixture).entities.find(
+    (candidate) => candidate.id === instanceEntityId("marker:ambientSound", 0),
+  );
+  // The source type / id must round-trip (a prior bug dropped them, so a cue-sourced
+  // ambient sound silently fell back to the empty clipId at runtime).
+  assert.deepEqual(entity ? readAudioComponent(entity) : undefined, {
+    clipId: "",
+    sourceId: "cue.fire_loop",
+    sourceType: "soundCue",
+    volume: 0.5,
+    pitch: 1.2,
+    loop: true,
+    spatial: true,
+    refDistance: 3,
+    maxDistance: 40,
+    rolloff: 1.5,
     autoPlay: true,
   });
 });
@@ -7237,6 +7292,27 @@ check("player start marker is a procedural asset excluded from manifest loading"
     lights: [],
   };
   assert.deepEqual(sceneModelAssetIds(layout), ["furniture.sofa"]);
+});
+
+check("ambient sound marker is a procedural, runtime-non-rendered marker asset", () => {
+  assert.ok(isAmbientSoundAssetId(AMBIENT_SOUND_ASSET_ID));
+  assert.equal(isAmbientSoundAssetId(PLAYER_START_ASSET_ID), false);
+  // Both markers are excluded from manifest loading and from runtime mesh render.
+  assert.ok(isProceduralAssetId(AMBIENT_SOUND_ASSET_ID));
+  assert.ok(isMarkerAssetId(AMBIENT_SOUND_ASSET_ID));
+  assert.ok(isMarkerAssetId(PLAYER_START_ASSET_ID));
+  assert.equal(isMarkerAssetId("shape:cube"), false);
+  // The dispatcher builds a gizmo model for the ambient-sound marker.
+  assert.ok(createProceduralAssetGltf(AMBIENT_SOUND_ASSET_ID)?.scene);
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "ambient",
+    loadGroups: [],
+    instances: [{ assetId: AMBIENT_SOUND_ASSET_ID, placements: [{ position: [0, 0, 0] }] }],
+    characters: [],
+    lights: [],
+  };
+  assert.deepEqual(sceneModelAssetIds(layout), []);
 });
 
 check("computePlayerStartSpawn: a marker sets the player's spawn position and yaw", () => {

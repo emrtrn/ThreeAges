@@ -179,7 +179,7 @@ import {
   type ActorScriptDef,
 } from "@engine/scene/actorScript";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
-import { isPlayerStartAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
+import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import {
   applyAssetUvwMapping,
@@ -794,9 +794,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     buildSceneEntities(this.layout, {
       addInstance: (assetId, placements) => {
-        // Player Start markers are editor-only authoring gizmos; the runtime reads
-        // their transform (TPS spawn) but never renders them.
-        if (isPlayerStartAssetId(assetId)) return;
+        // Marker gizmos (Player Start, Ambient Sound) are editor-only authoring
+        // helpers: the runtime never renders the gizmo mesh. It still reads their
+        // transform — Player Start as the TPS spawn, Ambient Sound as the emitter
+        // point for its (separately-built) audio entity.
+        if (isMarkerAssetId(assetId)) return;
         this.scene.add(this.createInstancedModel(assetId, placements));
       },
       addCharacter: (assetId, character) => this.addCharacter(this.models.get(assetId), character),
@@ -1263,9 +1265,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const audio = readAudioComponent(entity);
       if (!audio?.autoPlay) continue;
       const position = audio.spatial ? readTransformComponent(entity)?.position : undefined;
-      const spatialOpts = position
-        ? ({ position: [position[0], position[1], position[2]] as const } as const)
-        : {};
+      // Spatial placement + authored sphere-attenuation overrides for the PannerNode.
+      const spatialOpts =
+        audio.spatial && position
+          ? {
+              position: [position[0], position[1], position[2]] as const,
+              ...(audio.refDistance !== undefined ? { refDistance: audio.refDistance } : {}),
+              ...(audio.maxDistance !== undefined ? { maxDistance: audio.maxDistance } : {}),
+              ...(audio.rolloff !== undefined ? { rolloff: audio.rolloff } : {}),
+            }
+          : {};
+      const componentPitch = audio.pitch ?? 1;
 
       if (audio.sourceType === "soundCue" && audio.sourceId) {
         // Async: load cue, evaluate graph, fire each resolved event.
@@ -1276,7 +1286,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             const opts = {
               volume: ev.volume * audio.volume,
               loop: ev.loop || audio.loop,
-              pitch: ev.pitch,
+              // The component's pitch multiplier scales the cue's own pitch (Unreal parity).
+              pitch: ev.pitch * componentPitch,
               spatial: audio.spatial,
               // Route the cue through its authored mix bus (default master).
               ...(cue.output.bus ? { bus: cue.output.bus } : {}),
@@ -1294,6 +1305,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           volume: audio.volume,
           loop: audio.loop,
           spatial: audio.spatial,
+          ...(audio.pitch !== undefined ? { pitch: audio.pitch } : {}),
           ...spatialOpts,
         });
       }
@@ -2027,7 +2039,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.disposeInstanceProbeMaterials();
     this.instanceOverrideObjects.clear();
     for (const instance of this.layout.instances) {
-      if (isPlayerStartAssetId(instance.assetId)) continue;
+      if (isMarkerAssetId(instance.assetId)) continue;
       const previous = this.instanceGroups.get(instance.assetId);
       if (previous) this.scene.remove(previous);
       this.scene.add(this.createInstancedModel(instance.assetId, instance.placements));

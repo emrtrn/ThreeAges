@@ -19903,6 +19903,29 @@
         "bytes": 265
       },
       "license": "Unknown"
+    },
+    {
+      "id": "ambientsound-actor",
+      "name": "Ambient Sound.Actor",
+      "assetType": "prefab",
+      "category": "Script",
+      "path": "assets/starter-content/Script/AmbientSound.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Script",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 346
+      },
+      "license": "Unknown"
     }
   ]
 }

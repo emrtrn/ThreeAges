@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "AmbientSound",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "audio",
+      "component": "Audio",
+      "props": {},
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

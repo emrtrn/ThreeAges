@@ -44,8 +44,19 @@ export interface LayoutAudio {
   /** Distinguishes a raw `"sound"` asset from a `"soundCue"` graph asset. */
   sourceType?: "sound" | "soundCue";
   volume?: number;
+  /** Pitch / playback-rate multiplier (1 = unchanged). Absent means the runtime default. */
+  pitch?: number;
   loop?: boolean;
   spatial?: boolean;
+  /**
+   * Spatial attenuation (only meaningful when `spatial` is true). These map
+   * directly to the runtime `PannerNode`: `refDistance` is the radius of full
+   * volume, `maxDistance` clamps falloff, `rolloff` is the falloff factor.
+   * Absent fields fall back to the runtime defaults.
+   */
+  refDistance?: number;
+  maxDistance?: number;
+  rolloff?: number;
   /** Play this cue automatically when the scene loads (ambient). Absent means false. */
   autoPlay?: boolean;
 }

@@ -42,6 +42,7 @@ import type {
   Vec3,
 } from "@engine/scene/layout";
 import {
+  AMBIENT_SOUND_ASSET_ID,
   isShapePrimitiveType,
   PLAYER_START_ASSET_ID,
   shapeAssetId,
@@ -392,6 +393,8 @@ export class EditorUi {
               <button type="button" data-add-reflective-surface>Reflective Surface</button>
               <button type="button" data-add-reflection-capture>Sphere Reflection Capture</button>
               <button type="button" data-add-post-process>Post Process</button>
+              <div class="add-actor-section-title">Sounds</div>
+              <button type="button" data-add-ambient-sound>Ambient Sound</button>
               <div class="add-actor-section-title">UI</div>
               <button type="button" data-add-world-widget>World Widget</button>
               <div class="add-actor-section-title">Gameplay</div>
@@ -657,6 +660,24 @@ export class EditorUi {
         this.app.endAssetDragPreview();
       });
       playerStartButton.addEventListener("click", () => {
+        this.setStatus("Drag the actor into the viewport to place it.", "info");
+      });
+    }
+
+    const ambientSoundButton = this.root.querySelector<HTMLButtonElement>("[data-add-ambient-sound]");
+    if (ambientSoundButton) {
+      ambientSoundButton.draggable = true;
+      ambientSoundButton.addEventListener("dragstart", (event) => {
+        event.dataTransfer?.setData("application/x-3dgamedev-asset", AMBIENT_SOUND_ASSET_ID);
+        event.dataTransfer!.effectAllowed = "copy";
+        event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
+        this.app.beginAssetDragPreview(AMBIENT_SOUND_ASSET_ID);
+        this.setStatus("Dragging Ambient Sound - drop in the viewport to place.");
+      });
+      ambientSoundButton.addEventListener("dragend", () => {
+        this.app.endAssetDragPreview();
+      });
+      ambientSoundButton.addEventListener("click", () => {
         this.setStatus("Drag the actor into the viewport to place it.", "info");
       });
     }
@@ -3380,6 +3401,11 @@ export class EditorUi {
         <input type="number" data-audio="volume" min="0" max="1" step="0.05"
           value="${audio.volume ?? ""}" placeholder="1" />
       </label>
+      <label class="detail-row">
+        <span>Pitch</span>
+        <input type="number" data-audio="pitch" min="0.01" max="8" step="0.05"
+          value="${audio.pitch ?? ""}" placeholder="1" />
+      </label>
       <label class="detail-toggle">
         <input type="checkbox" data-audio="autoPlay" ${audio.autoPlay ? "checked" : ""} />
         <span>Auto Play</span>
@@ -3391,6 +3417,23 @@ export class EditorUi {
       <label class="detail-toggle">
         <input type="checkbox" data-audio="spatial" ${audio.spatial ? "checked" : ""} />
         <span>Spatial</span>
+      </label>
+      <div class="detail-subhead">Attenuation</div>
+      <div class="detail-hint">Applies when Spatial is on. Blank = runtime default.</div>
+      <label class="detail-row">
+        <span>Min Distance</span>
+        <input type="number" data-audio="refDistance" min="0" step="0.5"
+          value="${audio.refDistance ?? ""}" placeholder="4" />
+      </label>
+      <label class="detail-row">
+        <span>Max Distance</span>
+        <input type="number" data-audio="maxDistance" min="0" step="1"
+          value="${audio.maxDistance ?? ""}" placeholder="60" />
+      </label>
+      <label class="detail-row">
+        <span>Rolloff</span>
+        <input type="number" data-audio="rolloff" min="0" step="0.1"
+          value="${audio.rolloff ?? ""}" placeholder="1" />
       </label>`;
   }
 
@@ -3552,6 +3595,22 @@ export class EditorUi {
       const volume = Number(volumeRaw);
       if (Number.isFinite(volume) && volume >= 0 && volume <= 1) audio.volume = volume;
     }
+    const readAudioNumber = (field: string, min: number, max: number): number | undefined => {
+      const raw = this.detailsBody
+        .querySelector<HTMLInputElement>(`[data-audio="${field}"]`)
+        ?.value.trim();
+      if (!raw) return undefined;
+      const value = Number(raw);
+      return Number.isFinite(value) && value >= min && value <= max ? value : undefined;
+    };
+    const pitch = readAudioNumber("pitch", 0.01, 8);
+    if (pitch !== undefined) audio.pitch = pitch;
+    const refDistance = readAudioNumber("refDistance", 0, 100000);
+    if (refDistance !== undefined) audio.refDistance = refDistance;
+    const maxDistance = readAudioNumber("maxDistance", 0, 100000);
+    if (maxDistance !== undefined) audio.maxDistance = maxDistance;
+    const rolloff = readAudioNumber("rolloff", 0, 100);
+    if (rolloff !== undefined) audio.rolloff = rolloff;
     if (this.detailsBody.querySelector<HTMLInputElement>('[data-audio="autoPlay"]')?.checked) {
       audio.autoPlay = true;
     }

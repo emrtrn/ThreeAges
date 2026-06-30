@@ -232,6 +232,14 @@ function validateAudio(value: unknown, label: string): Record<string, unknown> |
   }
   const volume = validateOptionalNumber(input.volume, `${label} audio.volume`, 0, 1);
   if (volume !== undefined) audio.volume = volume;
+  const pitch = validateOptionalNumber(input.pitch, `${label} audio.pitch`, 0.01, 8);
+  if (pitch !== undefined) audio.pitch = pitch;
+  const refDistance = validateOptionalNumber(input.refDistance, `${label} audio.refDistance`, 0, 100000);
+  if (refDistance !== undefined) audio.refDistance = refDistance;
+  const maxDistance = validateOptionalNumber(input.maxDistance, `${label} audio.maxDistance`, 0, 100000);
+  if (maxDistance !== undefined) audio.maxDistance = maxDistance;
+  const rolloff = validateOptionalNumber(input.rolloff, `${label} audio.rolloff`, 0, 100);
+  if (rolloff !== undefined) audio.rolloff = rolloff;
   if (input.loop !== undefined) {
     if (typeof input.loop !== "boolean") throw new Error(`${label} audio.loop must be boolean`);
     audio.loop = input.loop;

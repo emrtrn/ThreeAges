@@ -308,6 +308,29 @@
     {
       "assetId": "ar-1",
       "placements": []
+    },
+    {
+      "assetId": "marker:ambientSound",
+      "placements": [
+        {
+          "position": [
+            3.75,
+            -0.08,
+            -4.06
+          ],
+          "name": "Ambient Sound",
+          "collision": false,
+          "audio": {
+            "clipId": "starter-snd-birds-01",
+            "volume": 1,
+            "loop": true,
+            "spatial": true,
+            "autoPlay": true
+          },
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [],

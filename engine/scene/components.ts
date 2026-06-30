@@ -189,8 +189,14 @@ export interface AudioComponent {
   /** `"soundCue"` when the source is a Sound Cue graph asset; `"sound"` or absent = raw clip. */
   sourceType?: "sound" | "soundCue";
   volume: number;
+  /** Pitch / playback-rate multiplier (1 = unchanged). Absent means the runtime default. */
+  pitch?: number;
   loop: boolean;
   spatial: boolean;
+  /** Spatial attenuation overrides (only used when `spatial`); map to the runtime `PannerNode`. */
+  refDistance?: number;
+  maxDistance?: number;
+  rolloff?: number;
   /** Play automatically on scene load (ambient). Absent means false. */
   autoPlay?: boolean;
 }
@@ -577,6 +583,18 @@ export function readAudioComponent(entity: Entity): AudioComponent | undefined {
     loop: data.loop,
     spatial: data.spatial,
   };
+  if (typeof data.sourceId === "string" && data.sourceId.length > 0) component.sourceId = data.sourceId;
+  if (data.sourceType === "sound" || data.sourceType === "soundCue") {
+    component.sourceType = data.sourceType;
+  }
+  if (typeof data.pitch === "number" && Number.isFinite(data.pitch)) component.pitch = data.pitch;
+  if (typeof data.refDistance === "number" && Number.isFinite(data.refDistance)) {
+    component.refDistance = data.refDistance;
+  }
+  if (typeof data.maxDistance === "number" && Number.isFinite(data.maxDistance)) {
+    component.maxDistance = data.maxDistance;
+  }
+  if (typeof data.rolloff === "number" && Number.isFinite(data.rolloff)) component.rolloff = data.rolloff;
   if (typeof data.autoPlay === "boolean") component.autoPlay = data.autoPlay;
   return component;
 }
