@@ -286,6 +286,10 @@ import {
   validateSaveMaterialSlotsPayload,
   validateSaveSkeletonPayload,
   validateSaveUvwPayload,
+  validateDialogueVoiceAsset,
+  validateDialogueLineAsset,
+  validateSaveDialogueVoicePayload,
+  validateSaveDialogueLinePayload,
 } from "./saveValidator";
 import {
   defaultActorScriptDef,
@@ -9470,6 +9474,105 @@ check("content-new resolves to typed stub files and folders", () => {
     nodes: [{ id: "output", kind: "output", volume: 1, pitch: 1 }],
     connections: [],
   });
+});
+
+check("content-new dialogue kinds create typed stubs with the right extension", () => {
+  const voice = resolveContentNewFile({ kind: "dialogueVoice", dir: "assets/dialogue", name: "Hero VO" });
+  assert.equal(voice.path, "assets/dialogue/Hero VO.dialoguevoice.json");
+  const voiceDef = JSON.parse(voice.content ?? "");
+  assert.equal(voiceDef.type, "dialogueVoice");
+  assert.equal(voiceDef.name, "Hero VO");
+  assert.equal(voiceDef.id, "hero-vo");
+  // The stub round-trips through its own save validator unchanged.
+  assert.deepEqual(validateDialogueVoiceAsset(voiceDef), voiceDef);
+
+  const line = resolveContentNewFile({ kind: "dialogueLine", dir: "assets/dialogue", name: "Greeting" });
+  assert.equal(line.path, "assets/dialogue/Greeting.dialogue.json");
+  const lineDef = JSON.parse(line.content ?? "");
+  assert.equal(lineDef.type, "dialogueLine");
+  assert.deepEqual(lineDef.contexts, []);
+  assert.deepEqual(validateDialogueLineAsset(lineDef), lineDef);
+});
+
+check("validateDialogueVoiceAsset keeps allowed fields and rejects bad ones", () => {
+  const out = validateDialogueVoiceAsset({
+    schema: 1,
+    type: "dialogueVoice",
+    id: "narrator",
+    name: "Narrator",
+    displayName: "The Narrator",
+    actorId: "npc-1",
+    gender: "feminine",
+    plurality: "singular",
+    localeHints: ["en", "tr", ""],
+    extra: "dropped",
+  });
+  assert.equal(out.extra, undefined); // unknown field dropped
+  assert.deepEqual(out.localeHints, ["en", "tr"]); // blank entry dropped
+  assert.equal(out.gender, "feminine");
+  assert.throws(() =>
+    validateDialogueVoiceAsset({ schema: 1, type: "dialogueVoice", id: "x", name: "X", gender: "robot" }),
+  );
+  assert.throws(() => validateDialogueVoiceAsset({ schema: 1, type: "dialogueVoice", id: "", name: "X" }));
+  assert.throws(() => validateDialogueVoiceAsset({ schema: 2, type: "dialogueVoice", id: "x", name: "X" }));
+});
+
+check("validateDialogueLineAsset normalizes contexts and drops empty optionals", () => {
+  const out = validateDialogueLineAsset({
+    schema: 1,
+    type: "dialogueLine",
+    id: "l1",
+    spokenText: "Hi there.",
+    subtitleText: "", // empty → dropped
+    mature: true,
+    contexts: [
+      {
+        speakerVoiceId: "narrator",
+        audioSourceId: "snd-a",
+        audioSourceType: "sound",
+        locale: "en",
+        localizationKey: "k",
+        targetVoiceIds: ["player", ""],
+      },
+      { speakerVoiceId: "narrator", audioSourceId: "" }, // empty audio dropped
+    ],
+  }) as {
+    subtitleText?: string;
+    mature?: boolean;
+    contexts: Array<Record<string, unknown>>;
+  };
+  assert.equal(out.subtitleText, undefined);
+  assert.equal(out.mature, true);
+  assert.equal(out.contexts.length, 2);
+  assert.deepEqual(out.contexts[0]?.targetVoiceIds, ["player"]);
+  assert.equal(out.contexts[0]?.audioSourceId, "snd-a");
+  assert.equal(out.contexts[1]?.audioSourceId, undefined);
+  assert.throws(() =>
+    validateDialogueLineAsset({ schema: 1, type: "dialogueLine", id: "l", spokenText: "x", contexts: [{}] }),
+  );
+  assert.throws(() =>
+    validateDialogueLineAsset({ schema: 1, type: "dialogueLine", id: "l", spokenText: "", contexts: [] }),
+  );
+});
+
+check("dialogue save payloads enforce their file extensions and reject traversal", () => {
+  const voice = { schema: 1, type: "dialogueVoice", id: "n", name: "N" };
+  assert.equal(
+    validateSaveDialogueVoicePayload({ path: "assets/d/N.dialoguevoice.json", voice }).path,
+    "assets/d/N.dialoguevoice.json",
+  );
+  assert.throws(() => validateSaveDialogueVoicePayload({ path: "assets/d/N.json", voice }));
+  assert.throws(() => validateSaveDialogueVoicePayload({ path: "../evil.dialoguevoice.json", voice }));
+
+  const lineAsset = { schema: 1, type: "dialogueLine", id: "l", spokenText: "hi", contexts: [] };
+  assert.equal(
+    validateSaveDialogueLinePayload({ path: "assets/d/L.dialogue.json", line: lineAsset }).path,
+    "assets/d/L.dialogue.json",
+  );
+  // A voice-extension path must not pass the line payload check (and vice-versa).
+  assert.throws(() =>
+    validateSaveDialogueLinePayload({ path: "assets/d/L.dialoguevoice.json", line: lineAsset }),
+  );
 });
 
 check("content-new 'script' creates a `.actor.json` Actor Script seeded with the parent class", () => {

@@ -263,14 +263,37 @@ Minimum yararlı editor yüzeyi:
   D2'de Dialogue Voice/Line editörü save eklerken bu allowlist yüzeyi gerekli
   olacak (bkz. CLAUDE.md save-validator gotcha).
 
-### Faz D2 - Dialogue editor
+### Faz D2 - Dialogue editor (TAMAMLANDI 2026-07-01)
 
-- [ ] Dialogue Voice editor ekle.
-- [ ] Dialogue Line editor ekle.
-- [ ] Raw `sound` ve ileride `soundCue` için audio source picker ekle.
-- [ ] Subtitle preview ile playback preview ekle.
-- [ ] Missing audio/subtitle/speaker/localization key uyarılarını ekle.
-- [ ] Save flow ve validation testlerini ekle.
+- [x] Dialogue Voice editor ekle. (`src/editor/DialogueEditor.ts` voice modu:
+      name/displayName/actorId/gender/plurality/localeHints)
+- [x] Dialogue Line editor ekle. (aynı shell, line modu: spoken/subtitle/direction/
+      mature + tekrarlanabilir context mapping listesi)
+- [x] Raw `sound` ve ileride `soundCue` için audio source picker ekle.
+      (context başına audio type + kaynak seçici; hem sound hem soundCue)
+- [x] Subtitle preview ile playback preview ekle. (context başına ▶ preview +
+      toolbar Preview; subtitle strip + WebAudio playback, cue evaluate)
+- [x] Missing audio/subtitle/speaker/localization key uyarılarını ekle.
+      (canlı Validation paneli: `validateDialogueVoice/Line` + missing/duplicate uyarıları)
+- [x] Save flow ve validation testlerini ekle. (`src/editor/dialogueStore.ts` +
+      dev endpoints `/__save-dialogue-voice` / `/__save-dialogue-line`;
+      `tools/saveValidator.ts` allowlist + engine-tests testleri)
+
+**Uygulama notları / D3 için devir:**
+
+- Dev endpoint + allowlist: `vite.config.ts` (`PRIVILEGED_URLS`) +
+  `tools/saveValidator.ts` (`validateSaveDialogueVoicePayload` /
+  `validateSaveDialogueLinePayload` → `validateDialogueVoiceAsset` /
+  `validateDialogueLineAsset`). Yeni bir alan eklerken bu allowlist güncellenmeli
+  (CLAUDE.md save-validator gotcha).
+- Content Browser: `dialogueVoice` / `dialogueLine` yeni-içerik menüsünde;
+  çift-tıklama editörü açar. `CONTENT_NEW_KINDS` + stub üretimi
+  (`resolveContentNewFile`/`contentStubJson`) eklendi. Line stub'ı boş `contexts`
+  ile başlar; editör context ekletir.
+- Speaker/target seçici: line editörü voice asset'lerini `voicePaths`'ten yükleyip
+  `<datalist>` önerisi sunar, ama serbest-metin id'ye izin verir (kırılmaz).
+- Editör hâlâ dinamik `?editor` import'unun arkasında; oyun paketine girmez
+  (verify:dist strict yeşil).
 
 ### Faz D3 - Conversation manager
 

@@ -2570,6 +2570,159 @@ export function validateSaveSoundCuePayload(value: unknown): {
   };
 }
 
+// ─── Dialogue & Voice (D2 editor save) ───────────────────────────────────────
+//
+// Allowlist for `*.dialoguevoice.json` / `*.dialogue.json` editor saves. Mirrors
+// engine/dialogue/dialogueTypes.ts — any new DialogueVoiceAsset /
+// DialogueLineAsset / DialogueContextMapping field must be added here too or it
+// is silently dropped on save (see CLAUDE.md save-validator gotcha).
+
+const DIALOGUE_VOICE_GENDERS = new Set(["neutral", "feminine", "masculine"]);
+const DIALOGUE_VOICE_PLURALITIES = new Set(["singular", "plural"]);
+const DIALOGUE_AUDIO_SOURCE_TYPES = new Set(["sound", "soundCue"]);
+
+/** Validates a string[] field, dropping non-strings; returns undefined when empty. */
+function validateOptionalStringArray(value: unknown, label: string): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  const out = value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+  return out.length > 0 ? out : undefined;
+}
+
+export function validateDialogueVoiceAsset(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("dialogueVoice must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.schema !== 1) throw new Error("dialogueVoice.schema must be 1");
+  if (input.type !== "dialogueVoice") throw new Error('dialogueVoice.type must be "dialogueVoice"');
+  const out: Record<string, unknown> = {
+    schema: 1,
+    type: "dialogueVoice",
+    id: requireNonEmptyString(input.id, "dialogueVoice.id"),
+    name: requireNonEmptyString(input.name, "dialogueVoice.name"),
+  };
+  if (input.actorId !== undefined && input.actorId !== "") {
+    out.actorId = requireNonEmptyString(input.actorId, "dialogueVoice.actorId");
+  }
+  if (input.displayName !== undefined && input.displayName !== "") {
+    out.displayName = requireNonEmptyString(input.displayName, "dialogueVoice.displayName");
+  }
+  if (input.gender !== undefined) {
+    if (!DIALOGUE_VOICE_GENDERS.has(input.gender as string)) {
+      throw new Error(`dialogueVoice.gender "${String(input.gender)}" is invalid`);
+    }
+    out.gender = input.gender;
+  }
+  if (input.plurality !== undefined) {
+    if (!DIALOGUE_VOICE_PLURALITIES.has(input.plurality as string)) {
+      throw new Error(`dialogueVoice.plurality "${String(input.plurality)}" is invalid`);
+    }
+    out.plurality = input.plurality;
+  }
+  const localeHints = validateOptionalStringArray(input.localeHints, "dialogueVoice.localeHints");
+  if (localeHints) out.localeHints = localeHints;
+  return out;
+}
+
+function validateDialogueContextMapping(value: unknown, index: number): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`dialogueLine.contexts[${index}] must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  const out: Record<string, unknown> = {
+    speakerVoiceId: requireNonEmptyString(
+      input.speakerVoiceId,
+      `dialogueLine.contexts[${index}].speakerVoiceId`,
+    ),
+  };
+  const targetVoiceIds = validateOptionalStringArray(
+    input.targetVoiceIds,
+    `dialogueLine.contexts[${index}].targetVoiceIds`,
+  );
+  if (targetVoiceIds) out.targetVoiceIds = targetVoiceIds;
+  if (input.locale !== undefined && input.locale !== "") {
+    out.locale = requireNonEmptyString(input.locale, `dialogueLine.contexts[${index}].locale`);
+  }
+  if (input.audioSourceId !== undefined && input.audioSourceId !== "") {
+    out.audioSourceId = requireNonEmptyString(
+      input.audioSourceId,
+      `dialogueLine.contexts[${index}].audioSourceId`,
+    );
+  }
+  if (input.audioSourceType !== undefined) {
+    if (!DIALOGUE_AUDIO_SOURCE_TYPES.has(input.audioSourceType as string)) {
+      throw new Error(`dialogueLine.contexts[${index}].audioSourceType is invalid`);
+    }
+    out.audioSourceType = input.audioSourceType;
+  }
+  if (input.localizationKey !== undefined && input.localizationKey !== "") {
+    out.localizationKey = requireNonEmptyString(
+      input.localizationKey,
+      `dialogueLine.contexts[${index}].localizationKey`,
+    );
+  }
+  return out;
+}
+
+export function validateDialogueLineAsset(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("dialogueLine must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.schema !== 1) throw new Error("dialogueLine.schema must be 1");
+  if (input.type !== "dialogueLine") throw new Error('dialogueLine.type must be "dialogueLine"');
+  if (!Array.isArray(input.contexts)) throw new Error("dialogueLine.contexts must be an array");
+  const out: Record<string, unknown> = {
+    schema: 1,
+    type: "dialogueLine",
+    id: requireNonEmptyString(input.id, "dialogueLine.id"),
+    spokenText: requireNonEmptyString(input.spokenText, "dialogueLine.spokenText"),
+    contexts: (input.contexts as unknown[]).map((c, i) => validateDialogueContextMapping(c, i)),
+  };
+  if (input.subtitleText !== undefined && input.subtitleText !== "") {
+    out.subtitleText = requireNonEmptyString(input.subtitleText, "dialogueLine.subtitleText");
+  }
+  if (input.voiceActorDirection !== undefined && input.voiceActorDirection !== "") {
+    out.voiceActorDirection = requireNonEmptyString(
+      input.voiceActorDirection,
+      "dialogueLine.voiceActorDirection",
+    );
+  }
+  if (input.mature !== undefined) out.mature = input.mature === true;
+  return out;
+}
+
+export function validateSaveDialogueVoicePayload(value: unknown): {
+  path: string;
+  voice: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("dialogueVoice payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".dialoguevoice.json")) {
+    throw new Error("dialogueVoice payload path must end with .dialoguevoice.json");
+  }
+  if (input.path.includes("..")) throw new Error("dialogueVoice payload path must not contain ..");
+  return { path: input.path, voice: validateDialogueVoiceAsset(input.voice) };
+}
+
+export function validateSaveDialogueLinePayload(value: unknown): {
+  path: string;
+  line: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("dialogueLine payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".dialogue.json")) {
+    throw new Error("dialogueLine payload path must end with .dialogue.json");
+  }
+  if (input.path.includes("..")) throw new Error("dialogueLine payload path must not contain ..");
+  return { path: input.path, line: validateDialogueLineAsset(input.line) };
+}
+
 export function validateSaveUvwPayload(value: unknown): {
   path: string;
   uvw: Record<string, unknown>;
@@ -2599,6 +2752,8 @@ export const CONTENT_NEW_KINDS = [
   "script",
   "sound",
   "soundCue",
+  "dialogueVoice",
+  "dialogueLine",
   "ui",
 ] as const;
 export type ContentNewKind = (typeof CONTENT_NEW_KINDS)[number];
@@ -2703,6 +2858,13 @@ function contentStubJson(payload: ContentNewPayload): string {
       nodes: [{ id: "output", kind: "output", volume: 1, pitch: 1 }],
       connections: [],
     };
+  } else if (kind === "dialogueVoice") {
+    // Dialogue Voice identity (engine/dialogue/dialogueTypes.ts); no audio.
+    body = { schema: 1, type: "dialogueVoice", id: slugifyId(name), name, gender: "neutral" };
+  } else if (kind === "dialogueLine") {
+    // Dialogue Line stub: spoken text seeded from the name, no context mappings
+    // yet (the editor adds speaker/audio contexts).
+    body = { schema: 1, type: "dialogueLine", id: slugifyId(name), spokenText: name, contexts: [] };
   } else if (kind === "ui") {
     // UI Widget (UMG Lite) class-asset: a minimal empty Canvas root.
     body = defaultUiWidgetDef(name) as unknown as Record<string, unknown>;
@@ -2733,7 +2895,11 @@ export function resolveContentNewFile(payload: ContentNewPayload): ContentNewFil
         ? "effect"
         : payload.kind === "soundCue"
           ? "soundcue"
-          : payload.kind;
+          : payload.kind === "dialogueVoice"
+            ? "dialoguevoice"
+            : payload.kind === "dialogueLine"
+              ? "dialogue"
+              : payload.kind;
   return {
     path: join(`${payload.name}.${ext}.json`),
     content: contentStubJson(payload),

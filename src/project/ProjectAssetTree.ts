@@ -67,6 +67,8 @@ export type ContentNewKind =
   | "script"
   | "sound"
   | "soundCue"
+  | "dialogueVoice"
+  | "dialogueLine"
   | "ui";
 
 /** Parent class picked for a `kind: "script"` Actor Script (Unreal-style). */

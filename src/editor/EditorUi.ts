@@ -127,6 +127,8 @@ const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> 
   { kind: "script", label: "Script" },
   { kind: "sound", label: "Sound" },
   { kind: "soundCue", label: "Sound Cue" },
+  { kind: "dialogueVoice", label: "Dialogue Voice" },
+  { kind: "dialogueLine", label: "Dialogue Line" },
   { kind: "ui", label: "UI" },
 ];
 
@@ -1502,6 +1504,12 @@ export class EditorUi {
         void this.openSoundCueEditor(item);
       });
     }
+    if (item.type === "dialogueVoice" || item.type === "dialogueLine") {
+      card.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        void this.openDialogueEditor(item);
+      });
+    }
     if (isLevelItem(item) && !activeLevel) {
       card.addEventListener("dblclick", (event) => {
         event.preventDefault();
@@ -1647,6 +1655,9 @@ export class EditorUi {
     if (isUiWidgetItem(item)) return () => void this.openUiWidgetEditor(item);
     if (isActorScriptItem(item)) return () => void this.openActorScriptEditor(item);
     if (item.type === "soundCue") return () => void this.openSoundCueEditor(item);
+    if (item.type === "dialogueVoice" || item.type === "dialogueLine") {
+      return () => void this.openDialogueEditor(item);
+    }
     if (item.type !== "file" && isModelAssetType(item.type)) {
       return () => void this.openMeshEditor(item);
     }
@@ -2160,6 +2171,39 @@ export class EditorUi {
     } catch (error) {
       this.setStatus(
         `Could not open Sound Cue editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
+  private async openDialogueEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { DialogueEditor } = await import("@/editor/DialogueEditor");
+      const mode = item.type === "dialogueVoice" ? "voice" : "line";
+      const suffix = mode === "voice" ? /\.dialoguevoice\.json$/i : /\.dialogue\.json$/i;
+      await DialogueEditor.open({
+        mode,
+        path: item.path,
+        label: item.label.replace(suffix, ""),
+        // Line mode: speaker/target suggestions come from the project's voices,
+        // and the audio-source picker + preview from its sound / soundCue assets.
+        voicePaths: this.editableAssets
+          .filter((asset) => assetType(asset) === "dialogueVoice")
+          .map((asset) => assetPath(asset)),
+        audioAssets: this.editableAssets
+          .filter((asset) => assetType(asset) === "sound" || assetType(asset) === "soundCue")
+          .map((asset) => ({
+            id: asset.id,
+            name: asset.displayName ?? asset.name,
+            assetType: assetType(asset) as "sound" | "soundCue",
+            path: assetPath(asset),
+          })),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+        onSaved: () => this.renderContentAssets(),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Dialogue editor: ${error instanceof Error ? error.message : String(error)}`,
         "error",
       );
     }
@@ -5842,6 +5886,8 @@ function isContentTypeFilter(value: string): value is ContentTypeFilter {
     value === "material" ||
     value === "sound" ||
     value === "soundCue" ||
+    value === "dialogueVoice" ||
+    value === "dialogueLine" ||
     value === "animation" ||
     value === "prefab" ||
     value === "ui" ||
@@ -5857,6 +5903,8 @@ function formatContentTypeLabel(value: string): string {
   if (value === "material") return "Materials";
   if (value === "sound") return "Sounds";
   if (value === "soundCue") return "Sound Cues";
+  if (value === "dialogueVoice") return "Dialogue Voices";
+  if (value === "dialogueLine") return "Dialogue Lines";
   if (value === "animation") return "Animations";
   if (value === "prefab") return "Prefabs";
   if (value === "level") return "Levels";
@@ -5890,6 +5938,8 @@ function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {
   if (value === "material") return "Material";
   if (value === "sound") return "Sound";
   if (value === "soundCue") return "Sound Cue";
+  if (value === "dialogueVoice") return "Dialogue Voice";
+  if (value === "dialogueLine") return "Dialogue Line";
   if (value === "animation") return "Animation";
   if (value === "prefab") return "Prefab";
   if (value === "ui") return "UI Widget";

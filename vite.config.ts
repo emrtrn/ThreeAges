@@ -26,6 +26,8 @@ import {
   validateSaveUiPayload,
   validateSaveUvwPayload,
   validateSaveSoundCuePayload,
+  validateSaveDialogueVoicePayload,
+  validateSaveDialogueLinePayload,
   validateOpenLevelPayload,
 } from "./tools/saveValidator";
 
@@ -673,6 +675,8 @@ const PRIVILEGED_URLS = new Set([
   "/__save-material-slots",
   "/__save-skeleton",
   "/__save-soundcue",
+  "/__save-dialogue-voice",
+  "/__save-dialogue-line",
   "/__save-ui",
   "/__save-uvw",
   "/__content-new",
@@ -951,6 +955,54 @@ function layoutEditorPlugin(): Plugin {
             const filePath = resolvePublicPath(payload.path);
             const previous = await readFile(filePath, "utf8").catch(() => null);
             const next = `${JSON.stringify(payload.cue, null, 2)}\n`;
+            await writeFile(filePath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        if (req.url === "/__save-dialogue-voice") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveDialogueVoicePayload(await readJsonBody(req));
+            const filePath = resolvePublicPath(payload.path);
+            const previous = await readFile(filePath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.voice, null, 2)}\n`;
+            await writeFile(filePath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        if (req.url === "/__save-dialogue-line") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveDialogueLinePayload(await readJsonBody(req));
+            const filePath = resolvePublicPath(payload.path);
+            const previous = await readFile(filePath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.line, null, 2)}\n`;
             await writeFile(filePath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
