@@ -576,8 +576,8 @@ export interface LayoutReflectionPlane {
   position: Vec3;
   /** Full Euler rotation (XYZ order) in degrees. */
   rotation?: Vec3;
-  /** Per-axis scale (plane size). */
-  scale?: Vec3;
+  /** Scale (uniform scalar when all axes match, else per-axis `[x, y, z]`). */
+  scale?: number | Vec3;
   /** Mirror tint (hex `#rrggbb`). */
   color?: string;
   /** Reflection render-target resolution in px. */
@@ -605,8 +605,8 @@ export interface LayoutReflectiveSurface {
   position: Vec3;
   /** Full Euler rotation (XYZ order) in degrees. */
   rotation?: Vec3;
-  /** Per-axis scale (plane size). */
-  scale?: Vec3;
+  /** Scale (uniform scalar when all axes match, else per-axis `[x, y, z]`). */
+  scale?: number | Vec3;
   /** Material asset id (`*.material.json`) shading the surface; null = built-in glossy default. */
   material?: string | null;
   /** Overall planar-reflection contribution, 0 (none) .. 1 (full mirror at grazing). */
@@ -684,12 +684,23 @@ export interface LayoutBlockingVolume {
   position: Vec3;
   /** Full Euler rotation (XYZ order) in degrees. */
   rotation?: Vec3;
-  /** Per-axis transform scale (multiplied onto the brush `size`). */
-  scale?: Vec3;
+  /**
+   * Transform scale multiplied onto the brush `size` (uniform scalar when all
+   * axes match, else per-axis `[x, y, z]`). The editor's shared `writeScale`
+   * collapses a uniform scale to a scalar, so this must accept both.
+   */
+  scale?: number | Vec3;
   /** Brush primitive shape. Absent means `box`. */
   brushShape?: BrushShape;
-  /** Brush dimensions in world units (`[x, y, z]`). Absent reads the default size. */
+  /**
+   * Brush dimensions in world units, canonical per shape (see
+   * `canonicalBrushSize`): box uses all three `[x, y, z]`; sphere uses `[d, d, d]`
+   * (diameter); cylinder/cone use `[diameter, height, diameter]`. Absent reads the
+   * default size.
+   */
   size?: Vec3;
+  /** Radial segment count for `cylinder` / `cone` brushes (ignored by box/sphere). Absent reads the default. */
+  brushSides?: number;
   /** Draw as a solid grey-box in Play. Absent/false means invisible-but-blocking. */
   renderInGame?: boolean;
   /** Editor brush tint (hex `#rrggbb`). */

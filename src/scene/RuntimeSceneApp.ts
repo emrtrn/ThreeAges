@@ -25,6 +25,17 @@ import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
+import {
+  DialogueSubsystem,
+  type DialogueAudioPlayback,
+  type DialogueAudioRequest,
+} from "@engine/dialogue/dialogueSubsystem";
+import {
+  isDialogueLineAsset,
+  isDialogueVoiceAsset,
+  type DialoguePlayContext,
+} from "@engine/dialogue/dialogueTypes";
+import { SubtitleOverlay } from "./subtitleOverlay";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { GamepadInputSource } from "@/input/gamepadInputSource";
 import { TouchInputSource, isTouchLikely } from "@/input/touchInputSource";
@@ -303,6 +314,12 @@ export interface RuntimeSceneAppOptions {
   readonly scriptMessageTraceLimit?: number;
 }
 
+/** Mounts the dialogue subtitle overlay into `#ui-overlay`, or null when absent. */
+function mountSubtitleOverlay(): SubtitleOverlay | null {
+  const host = typeof document !== "undefined" ? document.getElementById("ui-overlay") : null;
+  return host ? new SubtitleOverlay(host) : null;
+}
+
 export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly renderer: WebGLRenderer;
   private readonly scene: Scene;
@@ -329,6 +346,25 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     backend: "web-audio",
     resolveClipUrl: (clipId) => this.soundUrlById.get(clipId) ?? null,
   });
+  /** Bottom-centre subtitle line for dialogue (null when no #ui-overlay host). */
+  private readonly subtitleOverlay = mountSubtitleOverlay();
+  /**
+   * Dialogue & Voice runtime: resolves authored lines to audio + subtitles.
+   * Audio is delegated back to {@link audioSubsystem}; subtitles drive the
+   * overlay above. Voices/lines are registered from the manifest on scene load.
+   */
+  private readonly dialogueSubsystem = new DialogueSubsystem({
+    playAudio: (request) => this.playDialogueAudio(request),
+    onSubtitleShow: (event) =>
+      this.subtitleOverlay?.show({
+        lineId: event.lineId,
+        text: event.text,
+        ...(event.speakerName ? { speakerName: event.speakerName } : {}),
+      }),
+    onSubtitleHide: (lineId) => this.subtitleOverlay?.hide(lineId),
+  });
+  /** Unsubscribes the `play-dialogue` script-message trigger (released on dispose). */
+  private dialogueUnsub: (() => void) | null = null;
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   /** Gamepad → action-map bridge (poll-only, fed once per frame in the loop). */
   private readonly gamepadInput = new GamepadInputSource(this.inputActions);
@@ -571,6 +607,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     );
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
+    this.engineApp.registerSubsystem(this.dialogueSubsystem);
     this.keyboardInput.attach();
     this.gamepadInput.attach();
     this.attachTouchControls(canvas);
@@ -625,6 +662,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.gameEventUnsub?.();
     this.gameEventUnsub = null;
     this.gameStateStore = null;
+    this.dialogueUnsub?.();
+    this.dialogueUnsub = null;
+    this.subtitleOverlay?.dispose();
     this.keyboardInput.detach();
     this.gamepadInput.detach();
     this.touchInput?.detach();
@@ -884,6 +924,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await this.loadCharacterSkeletons();
     await this.startGameMode();
     await this.setupRuntimeUi();
+    await this.setupDialogue();
   }
 
   /**
@@ -1280,6 +1321,90 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.soundCueDefs.set(cueId, null);
       return null;
     }
+  }
+
+  /**
+   * Registers every `dialogueVoice` / `dialogueLine` manifest asset into the
+   * {@link dialogueSubsystem}, then subscribes the `play-dialogue` script message
+   * as the trigger. Gameplay/interactions emit `play-dialogue` with a `lineId`
+   * (and optional `speakerVoiceId` / `targetVoiceId` / `locale`) to start a line.
+   */
+  private async setupDialogue(): Promise<void> {
+    await this.loadDialogueAssets();
+    // Re-subscribe from scratch: a scene rebuild clears message-bus subscriptions.
+    this.dialogueUnsub?.();
+    this.dialogueUnsub = this.behaviorSubsystem.subscribeScriptMessage(
+      "play-dialogue",
+      (envelope) => {
+        const payload = envelope.payload;
+        const lineId = typeof payload.lineId === "string" ? payload.lineId : "";
+        if (!lineId) return;
+        const context: DialoguePlayContext = {};
+        if (typeof payload.speakerVoiceId === "string") {
+          context.speakerVoiceId = payload.speakerVoiceId;
+        }
+        if (typeof payload.targetVoiceId === "string") {
+          context.targetVoiceId = payload.targetVoiceId;
+        }
+        if (typeof payload.locale === "string") context.locale = payload.locale;
+        this.dialogueSubsystem.playLine(lineId, context);
+      },
+    );
+  }
+
+  /** Fetches + registers dialogue voice/line assets from the manifest. */
+  private async loadDialogueAssets(): Promise<void> {
+    if (!this.assetLoader) return;
+    const manifest = await this.assetLoader.loadManifest();
+    await Promise.all(
+      manifest.assets.map(async (asset) => {
+        const kind = assetType(asset);
+        if (kind !== "dialogueVoice" && kind !== "dialogueLine") return;
+        try {
+          const response = await fetch(projectFileUrl(assetPath(asset)), { cache: "no-cache" });
+          if (!response.ok) return;
+          const data = (await response.json()) as unknown;
+          if (kind === "dialogueVoice" && isDialogueVoiceAsset(data)) {
+            this.dialogueSubsystem.registerVoice(data);
+          } else if (kind === "dialogueLine" && isDialogueLineAsset(data)) {
+            this.dialogueSubsystem.registerLine(data);
+          }
+        } catch {
+          // Missing/malformed dialogue asset: skip it (the scene still plays).
+        }
+      }),
+    );
+  }
+
+  /**
+   * Plays a resolved dialogue line's audio through the {@link audioSubsystem} and
+   * hands the subsystem a control handle. Raw `sound` sources play directly; a
+   * `soundCue` source is evaluated and fired best-effort (subtitle timing then
+   * falls back to the text-length estimate, since a cue reports no duration).
+   */
+  private playDialogueAudio(request: DialogueAudioRequest): DialogueAudioPlayback | null {
+    if (request.sourceType === "soundCue") {
+      void this.loadSoundCue(request.sourceId).then((cue) => {
+        if (!cue) return;
+        for (const ev of evaluateSoundCue(cue)) {
+          const opts = {
+            volume: ev.volume,
+            loop: ev.loop,
+            pitch: ev.pitch,
+            ...(cue.output.bus ? { bus: cue.output.bus } : {}),
+          };
+          if (ev.delaySeconds > 0) {
+            setTimeout(() => this.audioSubsystem.playOneShot(ev.clipId, opts), ev.delaySeconds * 1000);
+          } else {
+            this.audioSubsystem.playOneShot(ev.clipId, opts);
+          }
+        }
+      });
+      return { stop: () => undefined };
+    }
+    // Raw sound: the audio subsystem resolves the asset id to a file URL itself.
+    const handle = this.audioSubsystem.play(request.sourceId, {});
+    return { stop: () => handle.stop() };
   }
 
   /** Plays every Audio component flagged `autoPlay` once the scene is built (ambient). */

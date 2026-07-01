@@ -12,6 +12,7 @@ import {
   type EditableAsset,
 } from "@engine/assets/manifest";
 import type {
+  EditableBlockingVolume,
   EditableSceneObject,
   EditableSelection,
   EditorProjectInfo,
@@ -4397,21 +4398,7 @@ export class EditorUi {
           <span>Brush Shape</span>
           <select data-brush-shape ${lockedAttr}>${shapeOptions}</select>
         </label>
-        <label class="detail-row">
-          <span>X</span>
-          <input data-brush-size="0" type="number" min="0.01" step="0.1"
-            value="${volume.size[0]}" ${lockedAttr} />
-        </label>
-        <label class="detail-row">
-          <span>Y</span>
-          <input data-brush-size="1" type="number" min="0.01" step="0.1"
-            value="${volume.size[1]}" ${lockedAttr} />
-        </label>
-        <label class="detail-row">
-          <span>Z</span>
-          <input data-brush-size="2" type="number" min="0.01" step="0.1"
-            value="${volume.size[2]}" ${lockedAttr} />
-        </label>
+        ${this.brushDimensionRows(volume, lockedAttr)}
         <label class="detail-row">
           <span>Color</span>
           <input data-brush-color type="color" value="${escapeHtml(volume.color)}" ${lockedAttr} />
@@ -4473,11 +4460,10 @@ export class EditorUi {
       });
 
     this.detailsBody
-      .querySelectorAll<HTMLInputElement>("[data-brush-size]")
+      .querySelectorAll<HTMLInputElement>("[data-brush-dim]")
       .forEach((input) => {
         input.addEventListener("change", () => {
-          const size = this.readBrushSize(volume.size);
-          if (size) this.app.setSelectedBlockingVolume({ size });
+          this.app.setSelectedBlockingVolume(this.readBrushDimensions(volume));
         });
       });
 
@@ -4506,16 +4492,74 @@ export class EditorUi {
       });
   }
 
-  /** Reads the three `[data-brush-size]` inputs into a Vec3, falling back per axis. */
-  private readBrushSize(fallback: Vec3): Vec3 | null {
-    const size: Vec3 = [fallback[0], fallback[1], fallback[2]];
-    for (let i = 0; i < 3; i += 1) {
-      const input = this.detailsBody.querySelector<HTMLInputElement>(`[data-brush-size="${i}"]`);
-      if (!input) continue;
-      const value = Number(input.value);
-      if (Number.isFinite(value) && value > 0) size[i] = value;
+  /**
+   * Shape-specific brush dimension rows (à la Unreal's brush builder settings):
+   * a box exposes X/Y/Z; a sphere a single Radius; a cylinder/cone a Radius,
+   * Height and Sides (radial segments / "köşe sayısı"). Each input carries
+   * `data-brush-dim` so one change handler re-reads them via {@link readBrushDimensions}.
+   */
+  private brushDimensionRows(volume: EditableBlockingVolume, lockedAttr: string): string {
+    const numberRow = (label: string, attr: string, value: number, step = 0.1): string => `
+        <label class="detail-row">
+          <span>${label}</span>
+          <input data-brush-dim ${attr} type="number" min="0.01" step="${step}"
+            value="${value}" ${lockedAttr} />
+        </label>`;
+    if (volume.brushShape === "box") {
+      return (
+        numberRow("X", 'data-brush-size="0"', volume.size[0]) +
+        numberRow("Y", 'data-brush-size="1"', volume.size[1]) +
+        numberRow("Z", 'data-brush-size="2"', volume.size[2])
+      );
     }
-    return size;
+    if (volume.brushShape === "sphere") {
+      return numberRow("Radius", "data-brush-radius", volume.size[0] / 2);
+    }
+    // cylinder / cone: radius + height + radial segment count.
+    return (
+      numberRow("Radius", "data-brush-radius", volume.size[0] / 2) +
+      numberRow("Height", "data-brush-height", volume.size[1]) +
+      `
+        <label class="detail-row">
+          <span>Sides</span>
+          <input data-brush-dim data-brush-sides type="number" min="3" max="128" step="1"
+            value="${volume.brushSides}" ${lockedAttr} />
+        </label>`
+    );
+  }
+
+  /**
+   * Reads the shape-specific brush dimension inputs back into a
+   * {@link SceneApp.setSelectedBlockingVolume} patch. Radius drives the X/Z
+   * diameter; the SceneApp canonicalises the stored `size` per shape.
+   */
+  private readBrushDimensions(
+    volume: EditableBlockingVolume,
+  ): { size: Vec3; brushSides?: number } {
+    const readPositive = (attr: string, fallback: number): number => {
+      const input = this.detailsBody.querySelector<HTMLInputElement>(`[${attr}]`);
+      if (!input) return fallback;
+      const value = Number(input.value);
+      return Number.isFinite(value) && value > 0 ? value : fallback;
+    };
+    if (volume.brushShape === "box") {
+      return {
+        size: [
+          readPositive('data-brush-size="0"', volume.size[0]),
+          readPositive('data-brush-size="1"', volume.size[1]),
+          readPositive('data-brush-size="2"', volume.size[2]),
+        ],
+      };
+    }
+    if (volume.brushShape === "sphere") {
+      const diameter = readPositive("data-brush-radius", volume.size[0] / 2) * 2;
+      return { size: [diameter, diameter, diameter] };
+    }
+    // cylinder / cone.
+    const diameter = readPositive("data-brush-radius", volume.size[0] / 2) * 2;
+    const height = readPositive("data-brush-height", volume.size[1]);
+    const sides = readPositive("data-brush-sides", volume.brushSides);
+    return { size: [diameter, height, diameter], brushSides: sides };
   }
 
   /**

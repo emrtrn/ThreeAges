@@ -82,6 +82,21 @@ import { DEFAULT_AUDIO_CLIP_MANIFEST, audioClipById } from "../engine/assets/aud
 import { evaluateSoundCue, validateSoundCueGraph } from "../engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "../engine/audio/soundCueTypes";
 import {
+  estimateSubtitleDurationSeconds,
+  resolveDialogueLine,
+  validateDialogueLine,
+  validateDialogueVoice,
+} from "../engine/dialogue/dialogueResolver";
+import {
+  DialogueSubsystem,
+  type DialogueAudioPlayback,
+  type DialogueSubtitleEvent,
+} from "../engine/dialogue/dialogueSubsystem";
+import type {
+  DialogueLineAsset,
+  DialogueVoiceAsset,
+} from "../engine/dialogue/dialogueTypes";
+import {
   AUDIO_BUS_IDS,
   MENU_DUCK_MIX,
   createDefaultBusVolumes,
@@ -312,6 +327,7 @@ import type {
 } from "../engine/scene/layout";
 import {
   cloneActorInstance,
+  cloneBlockingVolume,
   cloneCharacter,
   clonePlacement,
 } from "../editor/core/layoutSnapshots";
@@ -2243,6 +2259,220 @@ check("starter SC_Footstep_Stone cue validates and evaluates to one clip", () =>
   assert.deepEqual(evaluateSoundCue(raw), [
     { clipId: "starter-snd-footstep-stone", volume: 1, pitch: 1, loop: false, delaySeconds: 0 },
   ]);
+});
+
+// --- Dialogue & Voice (D1: resolver + subsystem) ------------------------------
+
+const dvNarrator: DialogueVoiceAsset = {
+  schema: 1,
+  type: "dialogueVoice",
+  id: "narrator",
+  name: "Narrator",
+  displayName: "The Narrator",
+};
+const dlHello: DialogueLineAsset = {
+  schema: 1,
+  type: "dialogueLine",
+  id: "line-1",
+  spokenText: "Hello there, traveler.",
+  contexts: [
+    { speakerVoiceId: "narrator", audioSourceId: "snd-generic", audioSourceType: "sound" },
+    { speakerVoiceId: "narrator", locale: "en", audioSourceId: "snd-en", audioSourceType: "sound" },
+  ],
+};
+const engineTick = (subsystem: DialogueSubsystem, dt: number, frame: number): void => {
+  subsystem.update({ deltaSeconds: dt, elapsedSeconds: dt * frame, frame });
+};
+
+check("resolveDialogueLine picks locale/speaker context and falls back to subtitle-only", () => {
+  const en = resolveDialogueLine(dlHello, { locale: "en" });
+  assert.equal(en.matchedContextIndex, 1);
+  assert.equal(en.audioSourceId, "snd-en");
+  // A locale with no exact mapping falls back to the locale-agnostic recording.
+  assert.equal(resolveDialogueLine(dlHello, { locale: "fr" }).audioSourceId, "snd-generic");
+  // A speaker the line has no mapping for still resolves to subtitle-only text.
+  const noMatch = resolveDialogueLine(dlHello, { speakerVoiceId: "villain" });
+  assert.equal(noMatch.matchedContextIndex, -1);
+  assert.equal(noMatch.audioSourceId, undefined);
+  assert.equal(noMatch.subtitleText, "Hello there, traveler.");
+});
+
+check("resolveDialogueLine prefers a directed-target mapping and honors subtitle override", () => {
+  const directed: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "d",
+    spokenText: "spoken",
+    subtitleText: "shown",
+    contexts: [
+      { speakerVoiceId: "narrator", audioSourceId: "generic" },
+      { speakerVoiceId: "narrator", targetVoiceIds: ["player"], audioSourceId: "to-player" },
+    ],
+  };
+  assert.equal(resolveDialogueLine(directed, { targetVoiceId: "player" }).audioSourceId, "to-player");
+  // No context → earliest mapping on a score tie; subtitleText overrides spokenText.
+  const plain = resolveDialogueLine(directed, {});
+  assert.equal(plain.audioSourceId, "generic");
+  assert.equal(plain.subtitleText, "shown");
+});
+
+check("estimateSubtitleDurationSeconds scales with length and clamps", () => {
+  assert.equal(estimateSubtitleDurationSeconds(""), 1.5); // min floor
+  assert.equal(estimateSubtitleDurationSeconds("a".repeat(10000)), 12); // max ceil
+  assert.ok(Math.abs(estimateSubtitleDurationSeconds("a".repeat(90)) - 6.6) < 1e-9); // 0.6 + 90/15
+});
+
+check("validateDialogueVoice/Line flag structural problems", () => {
+  assert.deepEqual(validateDialogueVoice(dvNarrator), []);
+  const badVoice: DialogueVoiceAsset = {
+    schema: 1,
+    type: "dialogueVoice",
+    id: "v",
+    name: "V",
+    gender: "robot" as DialogueVoiceAsset["gender"],
+  };
+  assert.ok(validateDialogueVoice(badVoice).some((i) => i.includes("invalid gender")));
+
+  const bad: DialogueLineAsset = { schema: 1, type: "dialogueLine", id: "bad", spokenText: "", contexts: [] };
+  const issues = validateDialogueLine(bad);
+  assert.ok(issues.some((i) => i.includes("no spokenText")));
+  assert.ok(issues.some((i) => i.includes("no context mappings")));
+
+  const dupKey: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "dup",
+    spokenText: "Hi",
+    contexts: [
+      { speakerVoiceId: "a", localizationKey: "k" },
+      { speakerVoiceId: "a", localizationKey: "k" },
+    ],
+  };
+  assert.ok(validateDialogueLine(dupKey).some((i) => i.includes("repeats localizationKey")));
+
+  const missingVoice: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "mv",
+    spokenText: "Hi",
+    contexts: [{ speakerVoiceId: "ghost" }],
+  };
+  assert.ok(
+    validateDialogueLine(missingVoice, { voiceIds: new Set(["real"]) }).some((i) =>
+      i.includes("missing speaker voice"),
+    ),
+  );
+});
+
+check("DialogueSubsystem.playLine shows a subtitle and ends after the audio duration", () => {
+  const events: DialogueSubtitleEvent[] = [];
+  const hidden: string[] = [];
+  const ended: { lineId: string; interrupted: boolean }[] = [];
+  const played: string[] = [];
+  const subsystem = new DialogueSubsystem({
+    voices: [dvNarrator],
+    lines: [dlHello],
+    playAudio: (req) => {
+      played.push(req.sourceId);
+      return { stop: () => undefined, durationSeconds: 2 } satisfies DialogueAudioPlayback;
+    },
+    onSubtitleShow: (event) => events.push(event),
+    onSubtitleHide: (lineId) => hidden.push(lineId),
+    onLineEnd: (info) => ended.push(info),
+  });
+  const result = subsystem.playLine("line-1", { locale: "en" });
+  assert.equal(result.played, true);
+  assert.equal(result.hasAudio, true);
+  assert.equal(result.durationSeconds, 2); // audio-reported duration wins over the estimate
+  assert.deepEqual(played, ["snd-en"]);
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.text, "Hello there, traveler.");
+  assert.equal(events[0]?.speakerName, "The Narrator");
+  assert.deepEqual(subsystem.activeLineIds(), ["line-1"]);
+  engineTick(subsystem, 1, 1); // not yet elapsed
+  assert.deepEqual(subsystem.activeLineIds(), ["line-1"]);
+  engineTick(subsystem, 1.5, 2); // elapses
+  assert.deepEqual(hidden, ["line-1"]);
+  assert.deepEqual(ended, [{ lineId: "line-1", interrupted: false }]);
+  assert.deepEqual(subsystem.activeLineIds(), []);
+});
+
+check("DialogueSubsystem estimates subtitle duration when a line has no audio", () => {
+  const subtitleOnly: DialogueLineAsset = {
+    schema: 1,
+    type: "dialogueLine",
+    id: "bark",
+    spokenText: "Hey!",
+    contexts: [{ speakerVoiceId: "narrator" }],
+  };
+  let shown: DialogueSubtitleEvent | null = null;
+  const subsystem = new DialogueSubsystem({
+    voices: [dvNarrator],
+    lines: [subtitleOnly],
+    playAudio: () => null,
+    onSubtitleShow: (event) => {
+      shown = event;
+    },
+  });
+  const result = subsystem.playLine("bark");
+  assert.equal(result.hasAudio, false);
+  assert.equal(result.durationSeconds, estimateSubtitleDurationSeconds("Hey!"));
+  assert.equal(shown?.durationSeconds, estimateSubtitleDurationSeconds("Hey!"));
+});
+
+check("DialogueSubsystem.stopLine interrupts audio and hides the subtitle", () => {
+  let stopped = false;
+  const ended: { lineId: string; interrupted: boolean }[] = [];
+  const subsystem = new DialogueSubsystem({
+    voices: [dvNarrator],
+    lines: [dlHello],
+    playAudio: () => ({
+      stop: () => {
+        stopped = true;
+      },
+      durationSeconds: 5,
+    }),
+    onLineEnd: (info) => ended.push(info),
+  });
+  subsystem.playLine("line-1", { locale: "en" });
+  subsystem.stopLine("line-1");
+  assert.equal(stopped, true);
+  assert.deepEqual(ended, [{ lineId: "line-1", interrupted: true }]);
+  assert.deepEqual(subsystem.activeLineIds(), []);
+});
+
+check("DialogueSubsystem.playLine returns not-played for an unknown line", () => {
+  const subsystem = new DialogueSubsystem();
+  assert.deepEqual(subsystem.playLine("nope"), {
+    played: false,
+    hasAudio: false,
+    durationSeconds: 0,
+  });
+});
+
+check("starter dialogue assets classify, validate, and resolve", () => {
+  assert.equal(
+    inferAssetTypeFromPath("assets/x/DV_Narrator.dialoguevoice.json"),
+    "dialogueVoice",
+  );
+  assert.equal(inferAssetTypeFromPath("assets/x/DL_Welcome.dialogue.json"), "dialogueLine");
+  const voice = JSON.parse(
+    readFileSync("public/assets/starter-content/Dialogue/DV_Narrator.dialoguevoice.json", "utf8"),
+  ) as DialogueVoiceAsset;
+  const dline = JSON.parse(
+    readFileSync("public/assets/starter-content/Dialogue/DL_Welcome.dialogue.json", "utf8"),
+  ) as DialogueLineAsset;
+  assert.deepEqual(validateDialogueVoice(voice), []);
+  assert.deepEqual(validateDialogueLine(dline, { voiceIds: new Set([voice.id]) }), []);
+  const resolved = resolveDialogueLine(dline, { speakerVoiceId: "dv-narrator", locale: "en" });
+  assert.equal(resolved.audioSourceId, "starter-snd-ui-confirm");
+  assert.equal(resolved.speakerVoiceId, "dv-narrator");
+  assert.ok(
+    assetManifest.assets.some((a) => a.id === "dv-narrator" && assetType(a) === "dialogueVoice"),
+  );
+  assert.ok(
+    assetManifest.assets.some((a) => a.id === "dl-welcome" && assetType(a) === "dialogueLine"),
+  );
 });
 
 // --- Audio Bus Lite (pure mix model) ------------------------------------------
@@ -10264,6 +10494,7 @@ check("resolveBlockingVolume fills defaults and overrides per field", () => {
   });
   assert.equal(resolved.brushShape, "cylinder");
   assert.deepEqual(resolved.size, [3, 5, 3]);
+  assert.equal(resolved.brushSides, BLOCKING_VOLUME_DEFAULTS.brushSides);
   assert.equal(resolved.renderInGame, true);
   assert.equal(resolved.color, "#102030");
   // Unset fields fall back to defaults; an invalid shape falls back to box.
@@ -10271,6 +10502,25 @@ check("resolveBlockingVolume fills defaults and overrides per field", () => {
   assert.equal(
     resolveBlockingVolume({ id: "x", position: [0, 0, 0], brushShape: "stairs" as never }).brushShape,
     "box",
+  );
+  // A cylinder's stored size is canonicalised to [diameter, height, diameter] so
+  // the brush and its collider agree; brushSides is clamped to [3, 128].
+  const cyl = resolveBlockingVolume({
+    id: "c",
+    position: [0, 0, 0],
+    brushShape: "cylinder",
+    size: [4, 9, 7],
+    brushSides: 6,
+  });
+  assert.deepEqual(cyl.size, [4, 9, 4]);
+  assert.equal(cyl.brushSides, 6);
+  assert.equal(
+    resolveBlockingVolume({ id: "s", position: [0, 0, 0], brushShape: "sphere", size: [5, 2, 3] }).size[1],
+    5,
+  );
+  assert.equal(
+    resolveBlockingVolume({ id: "n", position: [0, 0, 0], brushShape: "cone", brushSides: 500 }).brushSides,
+    128,
   );
 });
 
@@ -10295,6 +10545,7 @@ check("createBlockingVolumeObject builds an oriented brush; runtime variant is a
     hidden: false,
     brushShape: "box" as const,
     size: [2, 2, 2] as [number, number, number],
+    brushSides: 24,
     renderInGame: false,
     color: "#ff8c1a",
     position: [1, 2, 3] as [number, number, number],
@@ -10321,6 +10572,7 @@ check("validateBlockingVolume allowlists fields and round-trips through validate
     name: "Wall",
     brushShape: "cylinder",
     size: [4, 8, 4],
+    brushSides: 6,
     renderInGame: true,
     color: "#102030",
     rotation: [0, 90, 0],
@@ -10335,6 +10587,7 @@ check("validateBlockingVolume allowlists fields and round-trips through validate
     scale: [2, 1, 1],
     brushShape: "cylinder",
     size: [4, 8, 4],
+    brushSides: 6,
     renderInGame: true,
     color: "#102030",
   });
@@ -10342,6 +10595,27 @@ check("validateBlockingVolume allowlists fields and round-trips through validate
   assert.throws(() => validateBlockingVolume({ position: [0, 0, 0] }));
   assert.throws(() =>
     validateBlockingVolume({ id: "x", position: [0, 0, 0], brushShape: "stairs" }),
+  );
+  // brushSides must be a finite number within [3, 128]; it rounds to an integer.
+  assert.equal(
+    validateBlockingVolume({ id: "x", position: [0, 0, 0], brushSides: 7.6 }).brushSides,
+    8,
+  );
+  assert.throws(() =>
+    validateBlockingVolume({ id: "x", position: [0, 0, 0], brushSides: 2 }),
+  );
+  assert.throws(() =>
+    validateBlockingVolume({ id: "x", position: [0, 0, 0], brushSides: 500 }),
+  );
+  // Regression: moving a brush writes a uniform scale as a scalar (writeScale), so
+  // a numeric `scale` must validate — not 400 the whole save.
+  assert.equal(
+    validateBlockingVolume({ id: "x", position: [0, 0, 0], scale: 1 }).scale,
+    1,
+  );
+  assert.deepEqual(
+    validateBlockingVolume({ id: "x", position: [0, 0, 0], scale: [2, 1, 1] }).scale,
+    [2, 1, 1],
   );
 
   const layout = validateLayout({
@@ -10354,6 +10628,15 @@ check("validateBlockingVolume allowlists fields and round-trips through validate
   }) as RoomLayout;
   assert.deepEqual(layout.blockingVolumes, [{ id: "bv1", position: [0, 0, 0] }]);
   assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("cloneBlockingVolume survives a scalar (uniform) scale from writeScale", () => {
+  // Regression: `[...volume.scale]` threw "1 is not iterable" once a moved brush
+  // stored `scale: 1`, breaking delete/shape-change (both clone the volume).
+  const clone = cloneBlockingVolume({ id: "bv", position: [0, 1, 0], scale: 1 });
+  assert.equal(clone.scale, 1);
+  const tupleClone = cloneBlockingVolume({ id: "bv2", position: [0, 1, 0], scale: [2, 1, 3] });
+  assert.deepEqual(tupleClone.scale, [2, 1, 3]);
 });
 
 check("roomLayoutToSceneDocument gives a blocking volume a static blocking collider", () => {

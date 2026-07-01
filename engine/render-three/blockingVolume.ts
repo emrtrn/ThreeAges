@@ -14,15 +14,24 @@ import {
 } from "three";
 
 import type { BrushShape, Vec3 } from "@engine/scene/layout";
-import type { ResolvedBlockingVolume } from "@engine/scene/blockingVolume";
+import {
+  clampBrushSides,
+  DEFAULT_BRUSH_SIDES,
+  type ResolvedBlockingVolume,
+} from "@engine/scene/blockingVolume";
 
 export {
   BRUSH_SHAPES,
   isBrushShape,
   resolveBlockingVolume,
   blockingVolumeCollisionDef,
+  canonicalBrushSize,
+  clampBrushSides,
   BLOCKING_VOLUME_DEFAULTS,
   DEFAULT_BRUSH_SIZE,
+  DEFAULT_BRUSH_SIDES,
+  MIN_BRUSH_SIDES,
+  MAX_BRUSH_SIDES,
   uniqueBlockingVolumeId,
   uniqueBlockingVolumeName,
   type ResolvedBlockingVolume,
@@ -55,16 +64,26 @@ export interface BlockingVolumeRenderItem extends ResolvedBlockingVolume {
 /** Neutral solid colour for the runtime grey-box. */
 const RUNTIME_BLOCKING_VOLUME_COLOR = "#9aa0a6";
 
-/** Builds the parametric brush geometry (full extents = `size`). */
-export function createBlockingVolumeGeometry(shape: BrushShape, size: Vec3): BufferGeometry {
-  const [sx, sy, sz] = size;
+/**
+ * Builds the parametric brush geometry. `size` is the canonical full extents for
+ * the shape (see `canonicalBrushSize`): box `[x, y, z]`; sphere/cylinder/cone use
+ * `x` as the diameter and (for cylinder/cone) `y` as the height. `sides` is the
+ * radial-segment count for cylinder/cone (their "köşe sayısı"); box/sphere ignore it.
+ */
+export function createBlockingVolumeGeometry(
+  shape: BrushShape,
+  size: Vec3,
+  sides: number = DEFAULT_BRUSH_SIDES,
+): BufferGeometry {
+  const [sx, sy] = size;
+  const radialSegments = clampBrushSides(sides);
   switch (shape) {
     case "box":
-      return new BoxGeometry(sx, sy, sz);
+      return new BoxGeometry(size[0], size[1], size[2]);
     case "cylinder":
-      return new CylinderGeometry(sx / 2, sx / 2, sy, 24);
+      return new CylinderGeometry(sx / 2, sx / 2, sy, radialSegments);
     case "cone":
-      return new ConeGeometry(sx / 2, sy, 24);
+      return new ConeGeometry(sx / 2, sy, radialSegments);
     case "sphere":
       return new SphereGeometry(sx / 2, 24, 16);
   }
@@ -77,7 +96,7 @@ export function createBlockingVolumeGeometry(shape: BrushShape, size: Vec3): Buf
 export function createBlockingVolumeObject(item: BlockingVolumeRenderItem): BlockingVolumeObject {
   const group = new Group();
   group.name = item.name;
-  const geometry = createBlockingVolumeGeometry(item.brushShape, item.size);
+  const geometry = createBlockingVolumeGeometry(item.brushShape, item.size, item.brushSides);
   const fill = new Mesh(
     geometry,
     new MeshStandardMaterial({
@@ -117,7 +136,7 @@ export function createRuntimeBlockingVolumeObject(
   const group = new Group();
   group.name = item.name;
   const fill = new Mesh(
-    createBlockingVolumeGeometry(item.brushShape, item.size),
+    createBlockingVolumeGeometry(item.brushShape, item.size, item.brushSides),
     new MeshStandardMaterial({
       color: new Color(RUNTIME_BLOCKING_VOLUME_COLOR),
       roughness: 0.85,

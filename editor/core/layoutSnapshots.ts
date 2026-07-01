@@ -231,7 +231,7 @@ export function cloneReflectionPlane(plane: LayoutReflectionPlane): LayoutReflec
   if (plane.nodeId !== undefined) clone.nodeId = plane.nodeId;
   if (plane.parentId !== undefined) clone.parentId = plane.parentId;
   if (plane.rotation !== undefined) clone.rotation = [...plane.rotation];
-  if (plane.scale !== undefined) clone.scale = [...plane.scale];
+  if (plane.scale !== undefined) clone.scale = cloneScale(plane.scale);
   if (plane.color !== undefined) clone.color = plane.color;
   if (plane.resolution !== undefined) clone.resolution = plane.resolution;
   return clone;
@@ -252,7 +252,7 @@ export function cloneReflectiveSurface(
   if (surface.nodeId !== undefined) clone.nodeId = surface.nodeId;
   if (surface.parentId !== undefined) clone.parentId = surface.parentId;
   if (surface.rotation !== undefined) clone.rotation = [...surface.rotation];
-  if (surface.scale !== undefined) clone.scale = [...surface.scale];
+  if (surface.scale !== undefined) clone.scale = cloneScale(surface.scale);
   if (surface.material !== undefined) clone.material = surface.material;
   if (surface.reflectionStrength !== undefined) clone.reflectionStrength = surface.reflectionStrength;
   if (surface.fresnelPower !== undefined) clone.fresnelPower = surface.fresnelPower;
@@ -301,9 +301,10 @@ export function cloneBlockingVolume(volume: LayoutBlockingVolume): LayoutBlockin
   if (volume.nodeId !== undefined) clone.nodeId = volume.nodeId;
   if (volume.parentId !== undefined) clone.parentId = volume.parentId;
   if (volume.rotation !== undefined) clone.rotation = [...volume.rotation];
-  if (volume.scale !== undefined) clone.scale = [...volume.scale];
+  if (volume.scale !== undefined) clone.scale = cloneScale(volume.scale);
   if (volume.brushShape !== undefined) clone.brushShape = volume.brushShape;
   if (volume.size !== undefined) clone.size = [...volume.size];
+  if (volume.brushSides !== undefined) clone.brushSides = volume.brushSides;
   if (volume.renderInGame !== undefined) clone.renderInGame = volume.renderInGame;
   if (volume.color !== undefined) clone.color = volume.color;
   return clone;

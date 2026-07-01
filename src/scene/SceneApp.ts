@@ -141,11 +141,14 @@ import {
 } from "@engine/render-three/reflectiveSurface";
 import {
   applyBlockingVolumeTransform,
+  canonicalBrushSize,
+  clampBrushSides,
   createBlockingVolumeObject,
   disposeBlockingVolumeObject,
   resolveBlockingVolume,
   uniqueBlockingVolumeId,
   uniqueBlockingVolumeName,
+  BLOCKING_VOLUME_DEFAULTS,
   type BlockingVolumeObject,
   type BlockingVolumeRenderItem,
 } from "@engine/render-three/blockingVolume";
@@ -378,6 +381,7 @@ import {
 import { EditorSelectionOutline } from "./editorSelectionOutline";
 
 export type {
+  EditableBlockingVolume,
   EditableSceneObject,
   EditableSelection,
   EditableTransform,
@@ -3402,6 +3406,7 @@ export class SceneApp {
     patch: {
       brushShape?: LayoutBlockingVolume["brushShape"];
       size?: Vec3;
+      brushSides?: number;
       renderInGame?: boolean;
       color?: string;
     },
@@ -3413,16 +3418,36 @@ export class SceneApp {
     const next = cloneBlockingVolume(actor);
     if (patch.brushShape !== undefined) next.brushShape = patch.brushShape;
     if (patch.size !== undefined) next.size = [...patch.size];
+    if (patch.brushSides !== undefined) next.brushSides = clampBrushSides(patch.brushSides);
     if (patch.renderInGame !== undefined) next.renderInGame = patch.renderInGame;
     if (patch.color !== undefined) next.color = patch.color;
 
+    // Keep `size` canonical for its shape so the brush and its collider (both read
+    // `size`) stay consistent — a shape switch reinterprets the existing extents.
+    const resolvedShape = next.brushShape ?? BLOCKING_VOLUME_DEFAULTS.brushShape;
+    const resolvedSize = next.size ?? [...BLOCKING_VOLUME_DEFAULTS.size];
+    next.size = canonicalBrushSize(resolvedShape, resolvedSize);
+
     const needsRebuild =
-      patch.brushShape !== undefined || patch.size !== undefined || patch.color !== undefined;
+      patch.brushShape !== undefined ||
+      patch.size !== undefined ||
+      patch.brushSides !== undefined ||
+      patch.color !== undefined;
     const apply = (value: LayoutBlockingVolume): void => {
       if (!this.layout?.blockingVolumes?.[index]) return;
       this.layout.blockingVolumes[index] = cloneBlockingVolume(value);
-      if (needsRebuild) this.rebuildBlockingVolumeObject(index);
-      else this.refreshBlockingVolumeObject(index);
+      if (needsRebuild) {
+        this.rebuildBlockingVolumeObject(index);
+        // The rebuild swaps in a fresh three.js object, so the selection outline
+        // and gizmo must re-anchor to it (otherwise they keep glowing the old,
+        // disposed brush and the new shape looks like it "didn't apply").
+        if (this.selection?.kind === "blockingVolume" && this.selection.index === index) {
+          this.updateSelectionBox();
+          this.updateGizmo();
+        }
+      } else {
+        this.refreshBlockingVolumeObject(index);
+      }
       this.emitSelectionChanged();
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();
@@ -3439,6 +3464,7 @@ export class SceneApp {
   setSelectedBlockingVolume(patch: {
     brushShape?: LayoutBlockingVolume["brushShape"];
     size?: Vec3;
+    brushSides?: number;
     renderInGame?: boolean;
     color?: string;
   }): void {

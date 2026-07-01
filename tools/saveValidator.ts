@@ -789,10 +789,10 @@ export function validateReflectionPlane(value: unknown): Record<string, unknown>
     );
   }
   if (input.scale !== undefined) {
-    if (!isNumberTuple(input.scale)) throw new Error("invalid reflection plane scale");
-    plane.scale = input.scale.map((axis) =>
-      validateScaleValue(axis, "reflection plane scale component"),
-    );
+    // writeScale collapses a uniform scale to a scalar (see validateBlockingVolume).
+    plane.scale = isNumberTuple(input.scale)
+      ? input.scale.map((axis) => validateScaleValue(axis, "reflection plane scale component"))
+      : validateScaleValue(input.scale, "reflection plane scale");
   }
   if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
     plane.color = input.color;
@@ -834,10 +834,10 @@ export function validateReflectiveSurface(value: unknown): Record<string, unknow
     );
   }
   if (input.scale !== undefined) {
-    if (!isNumberTuple(input.scale)) throw new Error("invalid reflective surface scale");
-    surface.scale = input.scale.map((axis) =>
-      validateScaleValue(axis, "reflective surface scale component"),
-    );
+    // writeScale collapses a uniform scale to a scalar (see validateBlockingVolume).
+    surface.scale = isNumberTuple(input.scale)
+      ? input.scale.map((axis) => validateScaleValue(axis, "reflective surface scale component"))
+      : validateScaleValue(input.scale, "reflective surface scale");
   }
   if (typeof input.material === "string" && input.material.length > 0) {
     surface.material = input.material;
@@ -966,10 +966,11 @@ export function validateBlockingVolume(value: unknown): Record<string, unknown> 
     );
   }
   if (input.scale !== undefined) {
-    if (!isNumberTuple(input.scale)) throw new Error("invalid blocking volume scale");
-    volume.scale = input.scale.map((axis) =>
-      validateScaleValue(axis, "blocking volume scale component"),
-    );
+    // The editor's shared writeScale collapses a uniform scale to a scalar, so a
+    // moved brush arrives as `scale: 1` (number), not a tuple — accept both.
+    volume.scale = isNumberTuple(input.scale)
+      ? input.scale.map((axis) => validateScaleValue(axis, "blocking volume scale component"))
+      : validateScaleValue(input.scale, "blocking volume scale");
   }
   if (input.brushShape !== undefined) {
     if (!isBrushShape(input.brushShape)) throw new Error("invalid blocking volume brushShape");
@@ -980,6 +981,14 @@ export function validateBlockingVolume(value: unknown): Record<string, unknown> 
     volume.size = input.size.map((axis) =>
       validateScaleValue(axis, "blocking volume size component"),
     );
+  }
+  if (input.brushSides !== undefined) {
+    if (typeof input.brushSides !== "number" || !Number.isFinite(input.brushSides)) {
+      throw new Error("invalid blocking volume brushSides");
+    }
+    const sides = Math.round(input.brushSides);
+    if (sides < 3 || sides > 128) throw new Error("blocking volume brushSides out of range (3-128)");
+    volume.brushSides = sides;
   }
   if (input.renderInGame !== undefined) {
     if (typeof input.renderInGame !== "boolean") {
@@ -2872,6 +2881,8 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   material: "material",
   sound: "sound",
   soundCue: "soundCue",
+  dialogueVoice: "dialogue",
+  dialogueLine: "dialogue",
   animation: "animation",
   prefab: "prefab",
   ui: "UI",

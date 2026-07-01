@@ -22,8 +22,10 @@ export interface ResolvedBlockingVolume {
   name: string;
   hidden: boolean;
   brushShape: BrushShape;
-  /** Brush dimensions in world units (`[x, y, z]`). */
+  /** Brush dimensions in world units, canonical per shape (see {@link canonicalBrushSize}). */
   size: Vec3;
+  /** Radial segment count for cylinder/cone brushes (ignored by box/sphere). */
+  brushSides: number;
   /** Draw as a solid grey-box in Play (off = invisible-but-blocking). */
   renderInGame: boolean;
   /** Editor brush tint (hex `#rrggbb`). */
@@ -33,15 +35,48 @@ export interface ResolvedBlockingVolume {
 /** Default brush size: a ~4 m blockout cube at the ~1u≈2m scene scale. */
 export const DEFAULT_BRUSH_SIZE: Vec3 = [2, 2, 2];
 
+/** Default radial segment count for cylinder/cone brushes (smooth-ish barrel). */
+export const DEFAULT_BRUSH_SIDES = 24;
+
+/** A cylinder/cone brush can look this coarse (triangular prism) at the minimum. */
+export const MIN_BRUSH_SIDES = 3;
+export const MAX_BRUSH_SIDES = 128;
+
 export const BLOCKING_VOLUME_DEFAULTS: ResolvedBlockingVolume = {
   name: "Blocking Volume",
   hidden: false,
   brushShape: "box",
   size: [...DEFAULT_BRUSH_SIZE],
+  brushSides: DEFAULT_BRUSH_SIDES,
   renderInGame: false,
   // Unreal's brush wireframe orange.
   color: "#ff8c1a",
 };
+
+/** Clamps a radial-segment count to the `[MIN, MAX]` integer range. */
+export function clampBrushSides(sides: number): number {
+  if (!Number.isFinite(sides)) return DEFAULT_BRUSH_SIDES;
+  return Math.min(MAX_BRUSH_SIDES, Math.max(MIN_BRUSH_SIDES, Math.round(sides)));
+}
+
+/**
+ * Normalises a brush `size` to its shape's canonical form so the rendered brush
+ * and the collider (which reads the same `size`) always agree:
+ * - **box** keeps all three axes `[x, y, z]`;
+ * - **sphere** is a single diameter `[d, d, d]` (X drives it);
+ * - **cylinder / cone** are `[diameter, height, diameter]` (X drives the radius).
+ */
+export function canonicalBrushSize(shape: BrushShape, size: Vec3): Vec3 {
+  switch (shape) {
+    case "box":
+      return [size[0], size[1], size[2]];
+    case "sphere":
+      return [size[0], size[0], size[0]];
+    case "cylinder":
+    case "cone":
+      return [size[0], size[1], size[0]];
+  }
+}
 
 /** Fills every Blocking Volume field with its default, decoupled from the layout. */
 export function resolveBlockingVolume(
@@ -49,11 +84,16 @@ export function resolveBlockingVolume(
 ): ResolvedBlockingVolume {
   const defaults = BLOCKING_VOLUME_DEFAULTS;
   if (!actor) return { ...defaults, size: [...defaults.size] };
+  const brushShape = isBrushShape(actor.brushShape) ? actor.brushShape : defaults.brushShape;
+  const rawSize: Vec3 = actor.size ? [...actor.size] : [...defaults.size];
   return {
     name: actor.name ?? defaults.name,
     hidden: actor.hidden ?? defaults.hidden,
-    brushShape: isBrushShape(actor.brushShape) ? actor.brushShape : defaults.brushShape,
-    size: actor.size ? [...actor.size] : [...defaults.size],
+    brushShape,
+    // Resolve to canonical form so an older/hand-edited non-uniform size still
+    // renders and collides consistently for its shape.
+    size: canonicalBrushSize(brushShape, rawSize),
+    brushSides: actor.brushSides !== undefined ? clampBrushSides(actor.brushSides) : defaults.brushSides,
     renderInGame: actor.renderInGame ?? defaults.renderInGame,
     color: actor.color ?? defaults.color,
   };

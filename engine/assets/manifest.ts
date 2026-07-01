@@ -5,6 +5,8 @@ export type AssetType =
   | "material"
   | "sound"
   | "soundCue"
+  | "dialogueVoice"
+  | "dialogueLine"
   | "animation"
   | "prefab"
   | "ui"
@@ -120,6 +122,8 @@ const MODEL_EXTENSIONS = new Set(["glb", "gltf"]);
 const THUMBNAIL_EXTENSIONS = new Set(["png", "jpg", "jpeg", "webp"]);
 const SOUND_EXTENSIONS = new Set(["mp3", "ogg", "wav"]);
 const SOUND_CUE_EXTENSIONS = new Set(["soundcue.json"]);
+const DIALOGUE_VOICE_EXTENSIONS = new Set(["dialoguevoice.json"]);
+const DIALOGUE_LINE_EXTENSIONS = new Set(["dialogue.json"]);
 const MATERIAL_EXTENSIONS = new Set(["material.json", "mat.json"]);
 const LEVEL_EXTENSIONS = new Set(["level.json", "layout.json"]);
 const UI_EXTENSIONS = new Set(["ui.json", "theme.json"]);
@@ -147,6 +151,8 @@ export const ASSET_TYPES: readonly AssetType[] = [
   "material",
   "sound",
   "soundCue",
+  "dialogueVoice",
+  "dialogueLine",
   "animation",
   "prefab",
   "ui",
@@ -175,6 +181,8 @@ export function inferAssetTypeFromPath(path: string): AssetType | null {
   if (THUMBNAIL_EXTENSIONS.has(ext)) return "texture";
   if (SOUND_EXTENSIONS.has(ext)) return "sound";
   if (SOUND_CUE_EXTENSIONS.has(compoundExtensionOf(lower))) return "soundCue";
+  if (DIALOGUE_VOICE_EXTENSIONS.has(compoundExtensionOf(lower))) return "dialogueVoice";
+  if (DIALOGUE_LINE_EXTENSIONS.has(compoundExtensionOf(lower))) return "dialogueLine";
   if (MATERIAL_EXTENSIONS.has(compoundExtensionOf(lower))) return "material";
   if (LEVEL_EXTENSIONS.has(compoundExtensionOf(lower))) return "level";
   if (UI_EXTENSIONS.has(compoundExtensionOf(lower))) return "ui";
@@ -368,7 +376,7 @@ export function validateAssetManifest(
         code: "asset-type",
         assetId,
         message:
-          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, animation, prefab, ui, or level.",
+          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, dialogueVoice, dialogueLine, animation, prefab, ui, or level.",
       });
     }
 

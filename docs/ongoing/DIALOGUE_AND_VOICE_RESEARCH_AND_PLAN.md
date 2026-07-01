@@ -1,8 +1,8 @@
 # Diyalog ve Voice Araştırması ve Forge Planı
 
-> Tarih: 2026-06-23
+> Tarih: 2026-06-23 (Faz D1 uygulandı: 2026-07-01)
 > Kapsam: Unreal tarzı author edilmiş diyalog, dialogue voice metadata, altyazı, localization ve Sound Cue Lite ile ilişkisi.
-> Durum: Araştırma / planlama. Bu dilimde runtime veya editor uygulaması yoktur.
+> Durum: Faz D1 (Dialogue Line + subtitle dikey kesiti) main üzerinde tamamlandı ve `build:verify` yeşil. Faz D2+ hâlâ planlama.
 
 ## Kısa sonuç
 
@@ -221,19 +221,47 @@ Minimum yararlı editor yüzeyi:
 - [x] Live voice chat ve microphone capture ayrı kapsam olarak ayrıldı.
 - [x] Dialogue/Voice'un Sound Cue Lite altında değil ayrı başlıkta ele alınmasına karar verildi.
 
-### Faz D1 - Dialogue Line ve altyazı dikey kesiti
+### Faz D1 - Dialogue Line ve altyazı dikey kesiti (TAMAMLANDI 2026-07-01)
 
-- [ ] `dialogueVoice` asset schema ekle.
-- [ ] `dialogueLine` asset schema ekle.
-- [ ] Yeni JSON asset tipleri için manifest recognition ekle.
-- [ ] Loader/validator katmanını ekle.
-- [ ] `DialogueSubsystem.playLine(lineId, context)` API'ini ekle.
-- [ ] RuntimeSceneApp içinde subtitle event sink ekle.
-- [ ] Minimal subtitle UI overlay ekle.
-- [ ] Text + mevcut audio asset kullanan bir starter line ekle.
-- [ ] Missing audio durumunda subtitle'ı estimated duration ile göster.
-- [ ] Context resolution için headless test ekle.
-- [ ] `npm run build:verify` gate'ini geçir.
+- [x] `dialogueVoice` asset schema ekle. (`engine/dialogue/dialogueTypes.ts`)
+- [x] `dialogueLine` asset schema ekle. (aynı dosya + `DialogueContextMapping`)
+- [x] Yeni JSON asset tipleri için manifest recognition ekle.
+      (`engine/assets/manifest.ts`: `dialogueVoice`/`dialogueLine` tipleri +
+      `.dialoguevoice.json` / `.dialogue.json` uzantıları)
+- [x] Loader/validator katmanını ekle. (`engine/dialogue/dialogueResolver.ts`
+      pure resolver + `validateDialogueVoice`/`validateDialogueLine`; runtime
+      loader `RuntimeSceneApp.loadDialogueAssets`)
+- [x] `DialogueSubsystem.playLine(lineId, context)` API'ini ekle.
+      (`engine/dialogue/dialogueSubsystem.ts`)
+- [x] RuntimeSceneApp içinde subtitle event sink ekle. (`onSubtitleShow` /
+      `onSubtitleHide` → overlay)
+- [x] Minimal subtitle UI overlay ekle. (`src/scene/subtitleOverlay.ts` +
+      `.forge-subtitle` CSS, `#ui-overlay` içinde)
+- [x] Text + mevcut audio asset kullanan bir starter line ekle.
+      (`DV_Narrator.dialoguevoice.json` + `DL_Welcome.dialogue.json`,
+      `starter-snd-ui-confirm` sesine bağlı, manifest'e kayıtlı)
+- [x] Missing audio durumunda subtitle'ı estimated duration ile göster.
+      (`estimateSubtitleDurationSeconds`, subsystem `update()` zamanlayıcısı)
+- [x] Context resolution için headless test ekle. (`tools/engine-tests.ts`
+      resolver + subsystem + starter-asset testleri)
+- [x] `npm run build:verify` gate'ini geçir. (build + 447 test + verify:dist strict)
+
+**Uygulama notları / D2 için devir:**
+
+- Tetikleyici: `play-dialogue` script mesajı (`payload: { lineId,
+  speakerVoiceId?, targetVoiceId?, locale? }`). Runtime bunu `behaviorSubsystem`
+  üzerinden dinleyip `dialogueSubsystem.playLine` çağırıyor. Henüz bir editör
+  authoring yüzeyi veya oyun-içi emitter yok; script/interaction bu mesajı
+  yayınladığında satır oynar.
+- Dialogue sesi şu an varsayılan (master) bus'ta çalıyor; ayrı bir "dialogue"
+  bus'ı `audioBus.ts`'e eklenirse buradan yönlendirilebilir.
+- Subtitle süresi: audio süresi bilinmiyorsa (raw sound handle ve cue süre
+  raporlamıyor) metin uzunluğundan tahmin ediliyor. Plandaki opsiyonel "decoded
+  buffer duration lookup" D2/sonrası için açık kaldı.
+- Save-validator allowlist: D1'de dialogue asset'leri için editör save akışı
+  yok, bu yüzden `tools/saveValidator.ts` sidecar allowlist'ine dokunulmadı.
+  D2'de Dialogue Voice/Line editörü save eklerken bu allowlist yüzeyi gerekli
+  olacak (bkz. CLAUDE.md save-validator gotcha).
 
 ### Faz D2 - Dialogue editor
 

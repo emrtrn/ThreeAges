@@ -285,6 +285,41 @@ body {
   display: contents;
 }
 
+/*
+ * Dialogue subtitle line (Dialogue & Voice, Faz D1). Rendered into #ui-overlay
+ * by src/scene/subtitleOverlay.ts and driven by the DialogueSubsystem. Bottom
+ * centre, click-through (no .ui-interactive) so it never steals scene input.
+ */
+.forge-subtitle {
+  position: absolute;
+  left: 50%;
+  bottom: calc(env(safe-area-inset-bottom) + 6%);
+  transform: translateX(-50%);
+  max-width: min(900px, 86vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.62);
+  border-radius: 8px;
+  pointer-events: none;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+.forge-subtitle[hidden] {
+  display: none;
+}
+.forge-subtitle-speaker {
+  color: var(--forge-ui-accent, #4f8cff);
+  font: 600 13px/1.2 system-ui, sans-serif;
+  letter-spacing: 0.02em;
+}
+.forge-subtitle-text {
+  color: #f5f7fb;
+  font: 400 clamp(16px, 2.4vw, 22px)/1.35 system-ui, sans-serif;
+}
+
 /* Lightweight perf readout (qa-poki measurement standard). Debug-only. */
 #debug-stats {
   position: absolute;

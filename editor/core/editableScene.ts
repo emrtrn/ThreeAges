@@ -141,6 +141,8 @@ export interface EditableBlockingVolume {
   hidden: boolean;
   brushShape: BrushShape;
   size: Vec3;
+  /** Radial segment count for cylinder/cone brushes (ignored by box/sphere). */
+  brushSides: number;
   renderInGame: boolean;
   color: string;
 }
