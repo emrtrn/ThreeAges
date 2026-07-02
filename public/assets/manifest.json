@@ -20095,29 +20095,6 @@
       "license": "Unknown"
     },
     {
-      "id": "ambientsound-actor",
-      "name": "Ambient Sound.Actor",
-      "assetType": "prefab",
-      "category": "Script",
-      "path": "assets/starter-content/Script/AmbientSound.actor.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 346
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "cue-birds-soundcue",
       "name": "Cue Birds.Soundcue",
       "assetType": "soundCue",
@@ -20141,11 +20118,11 @@
       "license": "Unknown"
     },
     {
-      "id": "dialoguevoice001-dialoguevoice",
-      "name": "Dialoguevoice001.Dialoguevoice",
-      "assetType": "dialogueVoice",
+      "id": "script-paricle-actor",
+      "name": "Script Paricle.Actor",
+      "assetType": "prefab",
       "category": "Script",
-      "path": "assets/starter-content/Script/dialoguevoice001.dialoguevoice.json",
+      "path": "assets/starter-content/Script/Script_Paricle.actor.json",
       "tags": [],
       "placeable": false,
       "placement": {
@@ -20159,30 +20136,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 126
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "line001-dialogue",
-      "name": "Line001.Dialogue",
-      "assetType": "dialogueLine",
-      "category": "Script",
-      "path": "assets/starter-content/Script/line001.dialogue.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 108
+        "bytes": 348
       },
       "license": "Unknown"
     }

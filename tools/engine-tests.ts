@@ -7336,6 +7336,95 @@ check("checkpoint behavior: defaults to the quick slot", () => {
   assert.deepEqual(saves, [{ id: "checkpoint:0", slot: "quick" }]);
 });
 
+// P3.7 Save-Game validation: the `collectible` sensor is picked up once on contact
+// and persists a `collected` flag (opt-in), so it survives a save-game round-trip.
+check("collectible behavior: collected once on contact, persists the flag", () => {
+  const collected: string[] = [];
+  const registry = createBehaviorRegistry({
+    onCollectibleCollected: (id) => collected.push(id),
+  });
+  const physics = new PhysicsSubsystem();
+  const audio = new AudioSubsystem();
+  const coin: Entity = {
+    id: "coin:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "collectible", params: {} },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([coin, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics, audio);
+  behavior.setEntities([coin, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  // Not touching yet: nothing collected, nothing persisted.
+  app.update(0.016);
+  assert.deepEqual(collected, []);
+  assert.deepEqual(behavior.getPersistentStateSnapshot(), []);
+
+  // Walk onto the coin and tick twice: collected exactly once, flag persisted.
+  physics.setEntityTransform("player:0", { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(collected, ["coin:0"]);
+  assert.deepEqual(behavior.getPersistentStateSnapshot(), [
+    { entityId: "coin:0", key: "collected", value: true },
+  ]);
+});
+
+// A save-game restores the `collected` flag: on a fresh scene the behavior re-hides
+// the pickup without any contact (the ScriptState `hidden` latch resets per scene,
+// so hiding fires exactly once), and the restored flag stays persistent for re-save.
+check("collectible behavior: a restored collected flag re-hides the pickup without contact", () => {
+  const collected: string[] = [];
+  const registry = createBehaviorRegistry({
+    onCollectibleCollected: (id) => collected.push(id),
+  });
+  const physics = new PhysicsSubsystem();
+  const coin: Entity = {
+    id: "coin:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "collectible", params: {} },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([coin, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics);
+  behavior.setEntities([coin, player]);
+  // Simulate a save-game restore: the coin was collected in a prior session.
+  behavior.applyPersistentStateSnapshot([{ entityId: "coin:0", key: "collected", value: true }]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  // The player never touches it, but the restored flag re-hides it exactly once.
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(collected, ["coin:0"]);
+  // The restored flag stays persistent, so a subsequent save still records it.
+  assert.deepEqual(behavior.getPersistentStateSnapshot(), [
+    { entityId: "coin:0", key: "collected", value: true },
+  ]);
+});
+
 // Â§3 Interaction runtime: the pure trigger core decides fire/cooldown; the
 // `interact` behavior drives it from physics sensor contacts + the authored
 // InteractionComponent, reusing the goal-reached sensor pattern.

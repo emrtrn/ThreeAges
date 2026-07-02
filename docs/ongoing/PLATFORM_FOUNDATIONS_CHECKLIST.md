@@ -430,8 +430,35 @@ oyun-fork'unun genişletebileceği generic bir katman kurmak.
   gerekmedi; `BEHAVIOR_SCRIPT_IDS`'e eklendi (Actor Script editörü önerisi).
   Headless: authored slot'a tek-ateşleme (temas + once), slotsuz `"quick"`
   fallback. Engine 520→522.
-- [ ] **P3.7 — Doğrulama içeriği:** playground'a checkpoint + toplanabilir
-  bayrak örneği; kaydet → sayfayı yenile → yükle → aynı yer/bayrak smoke'u.
+- [~] **P3.7 — Doğrulama içeriği:** **Kod + içerik yerleştirildi; kalan tek adım
+  kullanıcının tarayıcı smoke'u.** Yeni generic `collectible` behavior'u
+  (`src/game/behaviors.ts`) — checkpoint ile aynı sensor temas + once kalıbı;
+  ilk temasta `collected` bayrağını **kalıcı** işaretler (opt-in `state.persist`),
+  pickup ses cue'sunu çalar, `Collectible.Collected` mesajı yayar ve host'a
+  nesneyi gizletir. Restore-güvenli: "hidden" latch'i registry closure yerine
+  `setEntities`'in temizlediği **ScriptState**'te tutulur, böylece save restore
+  edilen bir `collected` bayrağı yeni sahnede pickup'ı **temassız** tam bir kez
+  yeniden gizler. Host `setCollectibleCollected` (`RuntimeSceneApp`) hem actor
+  instance (`object.visible=false`) hem instanced-static (`instanceMatrix`'i
+  bir noktaya çökertme) yolunu idempotent kapsar. `BEHAVIOR_SCRIPT_IDS`'e
+  eklendi. **İçerik (`Playground.level.json`):** player start yakınına bir
+  `sm-trigger-pad` = `checkpoint` (slot `quick`) + bir `sm-pickup-coin` =
+  `collectible`, ikisi de `sensor:true`. Placement `behavior`/`sensor` alanları
+  save-validator `applyTransformFields`'te zaten allowlist'te (editör re-save
+  güvenli). Headless: pickup tek-ateşleme + bayrak persist round-trip, restore
+  edilen bayrağın temassız yeniden gizlemesi. Engine 522→524.
+  **Tarayıcı doğrulaması (2026-07-03):** checkpoint pad'i uçtan uca çalışıyor
+  (`[runtime] checkpoint saved quick`); collectible teması + davranışı da çalışıyor.
+  **Bulgu + düzeltme:** coin ilk denemede gizlenmedi — kök neden, `BehaviorSubsystem`'in
+  her tick sonrası entity transform'unu render'a geri sync'lemesi
+  (`update()` → `this.sink(...)`); coin'in davranışı olduğundan instance matrisi
+  her frame yeniden yazılıp tek-seferlik collapse'i eziyordu (`mesh.visible=false`
+  eziliyordu ama görünürlük değil). Düzeltme: toplanan slotları `collectedInstances`
+  set'inde tutup `syncInstanceTransform`'un her frame'de o slotu **yeniden
+  collapse** etmesi (per-instance; aynı asset'in diğer coin'lerini gizlemez).
+  **Kalan (kullanıcı):** tam tur — coin topla + checkpoint (veya Quick Save) →
+  sayfa yenile → Load Quick Save → aynı konum + coin toplanmış kalıyor mu.
+  (Not: dev sunucusu Playground'u autosave eder; pozisyonları editörde ayarlayabilirsin.)
 
 ## Kabul kriterleri
 
@@ -739,3 +766,27 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   520→522 (+2), `build:verify` yeşil (strict dist PASS). **Sıradaki:** P3.7 —
   doğrulama içeriği (playground'a checkpoint + toplanabilir bayrak; kaydet →
   yenile → yükle smoke'u; sanat/layout içeriği gerektirir).
+- *2026-07-02* — **P3.7 kod + içerik tarafı yerleştirildi (tarayıcı smoke'u
+  kullanıcıya kalan).** Yeni generic `collectible` behavior'u eklendi
+  (`src/game/behaviors.ts`) — "toplanabilir bayrak"ın eksik parçasıydı; layout'taki
+  `sm-coin`/`sm-pickup-*` modelleri artık davranışla işlevsel pickup olabiliyor.
+  İlk sensor temasında `collected` bayrağını opt-in `state.persist` ile kalıcı
+  işaretler, cue çalar, `Collectible.Collected` yayar, host'a gizletir. **Restore
+  tasarımı:** "hidden" latch'i registry closure Set yerine `setEntities`'in
+  temizlediği ScriptState'te — böylece save restore edilen `collected` bayrağı
+  yeni sahnede pickup'ı temassız tam bir kez yeniden gizler (closure leak yok).
+  Host `setCollectibleCollected` (`RuntimeSceneApp`) idempotent: actor instance =
+  `object.visible=false`, instanced-static = `instanceMatrix` slotunu bir noktaya
+  çökert (`parseInstanceEntityId` + `instanceMeshes`/override object). İçerik:
+  `Playground.level.json`'a player start yanına `sm-trigger-pad`=checkpoint
+  (slot quick) + `sm-pickup-coin`=collectible, ikisi de `sensor:true`. Placement
+  `behavior`/`sensor` alanları save-validator `applyTransformFields`'te zaten
+  allowlist'te (editör re-save güvenli); instanced placement `behavior`→Behavior
+  component (`legacyRoomLayoutAdapter` satır 338), entity id `parseInstanceEntityId`
+  uyumlu — akış uçtan uca bağlı. Headless +4 toplam (checkpoint 2 + collectible 2):
+  pickup tek-ateşleme + bayrak persist round-trip, restore edilen bayrağın
+  temassız yeniden gizlemesi. Engine 520→524, `build:verify` + `check:assets`
+  yeşil. **Kullanıcıya kalan smoke:** coin topla + checkpoint'ten geç (veya menü
+  Quick Save) → sayfa yenile → Load Quick Save → aynı konum + coin toplanmış mı.
+  **P3 neredeyse kapandı** (P3.1–P3.6 tam, P3.7 smoke bekliyor). **Sıradaki:** P4
+  Boot/Loading UX veya P5 Perf altyapısı.

@@ -33,6 +33,7 @@ export const BEHAVIOR_SCRIPT_IDS = [
   "goal-reached",
   "level-travel",
   "checkpoint",
+  "collectible",
   "interact",
   "use-toggleable",
   "lamp-toggle",
@@ -99,6 +100,13 @@ export interface BehaviorRegistryOptions {
    * on it. `slot` is the destination save slot key (default `"quick"`).
    */
   onCheckpoint?: (entityId: string, slot: string) => void;
+  /**
+   * Fired when a `collectible` becomes collected (P3.7 Save-Game validation): on
+   * the pickup contact, and again on a fresh scene when a save restored the
+   * `collected` flag. The runtime shell hides the pickup's rendered object;
+   * headless tests spy on it. Hiding is idempotent, so re-firing is harmless.
+   */
+  onCollectibleCollected?: (entityId: string) => void;
 }
 
 function numberParam(value: unknown, fallback: number): number {
@@ -190,6 +198,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   const onActorParticleEffect = options.onActorParticleEffect;
   const onLevelTravel = options.onLevelTravel;
   const onCheckpoint = options.onCheckpoint;
+  const onCollectibleCollected = options.onCollectibleCollected;
   const isPlayerControlled = options.isPlayerControlled ?? (() => true);
   const vertical = new Map<string, PlayerVertical>();
   const reachedGoals = new Set<string>();
@@ -302,6 +311,29 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     onCheckpoint?.(context.entityId, slot);
   };
 
+  // Collectible pickup (P3.7): a sensor-collider entity the player collects on
+  // contact. The `collected` flag is persisted (opt-in), so a save-game restores
+  // it: on a fresh scene the behavior sees the restored flag and re-hides the
+  // pickup without a contact. The `hidden` latch lives in ScriptState (cleared on
+  // every setEntities), not a registry closure, so hiding fires exactly once per
+  // scene build — on the pickup tick and again after a restore. The host hides the
+  // rendered object; hiding is idempotent, so an extra call is harmless.
+  const collectible: BehaviorUpdate = (context) => {
+    if (context.state.get("collected", false)) {
+      if (!context.state.get("hidden", false)) {
+        context.state.set("hidden", true);
+        onCollectibleCollected?.(context.entityId);
+      }
+      return;
+    }
+    if ((context.physics?.contactsForEntity(context.entityId).length ?? 0) === 0) return;
+    context.state.persist("collected", true);
+    context.state.set("hidden", true);
+    playCollisionAudioOnce(context);
+    onCollectibleCollected?.(context.entityId);
+    context.messages.emit("Collectible.Collected", { entityId: context.entityId });
+  };
+
   // Interaction trigger (§3): an interaction-marked sensor entity whose first
   // contact with the kinematic player fires its action (host-interpreted),
   // playing the optional audio cue. Re-fires on a fresh re-enter once any
@@ -383,6 +415,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     ["goal-reached", goalReached],
     ["level-travel", levelTravel],
     ["checkpoint", checkpoint],
+    ["collectible", collectible],
     ["interact", interact],
     ["use-toggleable", useToggleable],
     ["lamp-toggle", lampToggle],

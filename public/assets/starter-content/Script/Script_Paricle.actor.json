@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "type": "actor",
-  "name": "AmbientSound",
+  "name": "Script_Paricle",
   "parentClass": "actor",
   "variables": [],
   "components": [
@@ -11,14 +11,11 @@
       "props": {}
     },
     {
-      "id": "audio",
-      "component": "Audio",
+      "id": "particleEmitter",
+      "component": "ParticleEmitter",
       "props": {
-        "sourceType": "soundCue",
-        "sourceId": "denemecue-soundcue",
-        "loop": true,
-        "autoPlay": true,
-        "spatial": true
+        "effectId": "starter-fx-dust-hit",
+        "autoPlay": true
       },
       "parent": "root"
     }

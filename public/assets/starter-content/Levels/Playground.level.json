@@ -415,7 +415,22 @@
     },
     {
       "assetId": "sm-pickup-coin",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -2.2,
+            0.6,
+            2.9
+          ],
+          "name": "Collectible Coin",
+          "rotationYDeg": 0,
+          "scale": 1,
+          "sensor": true,
+          "behavior": {
+            "script": "collectible"
+          }
+        }
+      ]
     },
     {
       "assetId": "sm-picku-health",
@@ -423,7 +438,25 @@
     },
     {
       "assetId": "sm-trigger-pad",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -1.1,
+            0,
+            2.9
+          ],
+          "name": "Checkpoint",
+          "rotationYDeg": 0,
+          "scale": 1,
+          "sensor": true,
+          "behavior": {
+            "script": "checkpoint",
+            "params": {
+              "slot": "quick"
+            }
+          }
+        }
+      ]
     },
     {
       "assetId": "axe",

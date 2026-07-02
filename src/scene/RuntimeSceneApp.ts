@@ -471,6 +471,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private models = new Map<string, GLTF>();
   private instanceGroups = new Map<string, Group>();
   private instanceMeshes = new Map<string, InstancedMesh[]>();
+  /**
+   * Instanced-static placements a `collectible` behavior has collected, keyed by
+   * `overrideObjectKey(assetId, placementIndex)`. The per-frame instance-transform
+   * sink re-writes an instance's matrix, so a one-shot collapse would reappear;
+   * this set keeps the collected slot collapsed every frame instead.
+   */
+  private readonly collectedInstances = new Set<string>();
   /** Asset manifest (with `.assets`), cached once the scene begins loading. */
   private assetManifest: AssetManifest | null = null;
   private readonly textureLoader = new TextureLoader();
@@ -682,6 +689,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         },
         onCheckpoint: (_entityId, slot) => {
           this.writeCheckpointSave(slot);
+        },
+        onCollectibleCollected: (entityId) => {
+          this.setCollectibleCollected(entityId);
         },
         // The active Game Mode owns possession: only the pawn it possessed
         // (none, under the default camera mode) is driven by player input.
@@ -1194,6 +1204,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.instanceGroups.clear();
     this.instanceMeshes.clear();
     this.instanceOverrideObjects.clear();
+    this.collectedInstances.clear();
     this.disposeInstanceProbeMaterials();
 
     // Reflection captures / planar reflectors / reflective surfaces / blocking
@@ -2549,6 +2560,44 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
   }
 
+  /**
+   * Hides a collected `collectible`'s rendered object (P3.7). The behavior owns the
+   * persisted `collected` flag and re-fires this after a save restore, so this only
+   * needs to be idempotent. Works whether the collectible was authored as an Actor
+   * Script instance (its own Object3D) or as a plain static-mesh placement (one
+   * slot of an InstancedMesh, collapsed to a point).
+   */
+  private setCollectibleCollected(entityId: string): void {
+    const actorIndex = parseActorInstanceEntityIndex(entityId);
+    if (actorIndex !== null) {
+      const object = this.actorObjects.get(actorIndex);
+      if (object) object.visible = false;
+      return;
+    }
+    const instance = parseInstanceEntityId(entityId);
+    if (!instance) return;
+    // Mark the slot collected first: the per-frame transform sink honours the set
+    // and re-collapses it, so hiding survives even though the slot's matrix is
+    // rewritten each frame. A material/probe override renders as a clone, not an
+    // instanced slot, so hide that clone directly.
+    this.collectedInstances.add(overrideObjectKey(instance.assetId, instance.placementIndex));
+    const overrideObject = this.instanceOverrideObjects.get(
+      overrideObjectKey(instance.assetId, instance.placementIndex),
+    );
+    if (overrideObject) overrideObject.visible = false;
+    this.collapseInstance(instance.assetId, instance.placementIndex);
+  }
+
+  /** Collapses one instanced-static slot to a point so it renders invisibly. */
+  private collapseInstance(assetId: string, placementIndex: number): void {
+    const meshes = this.instanceMeshes.get(assetId);
+    if (!meshes) return;
+    for (const mesh of meshes) {
+      mesh.setMatrixAt(placementIndex, COLLAPSED_INSTANCE_MATRIX);
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
   private async playActorParticleEffect(entityId: string): Promise<void> {
     const actorIndex = parseActorInstanceEntityIndex(entityId);
     if (actorIndex === null) return;
@@ -2945,6 +2994,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     placementIndex: number,
     transform: TransformComponent,
   ): void {
+    // A collected collectible stays hidden: keep its slot collapsed instead of
+    // re-writing the authored transform (which would make the pickup reappear).
+    if (this.collectedInstances.has(overrideObjectKey(assetId, placementIndex))) {
+      this.collapseInstance(assetId, placementIndex);
+      return;
+    }
     const transformMatrix = composeTransformMatrix(
       transform.position,
       transform.rotation,
@@ -3210,6 +3265,9 @@ function parseCharacterEntityIndex(entityId: string): number | null {
   const index = Number(entityId.slice("character:".length));
   return Number.isInteger(index) ? index : null;
 }
+
+/** Zero-scale matrix that collapses an InstancedMesh slot to a point (invisible). */
+const COLLAPSED_INSTANCE_MATRIX = new Matrix4().makeScale(0, 0, 0);
 
 function parseInstanceEntityId(entityId: string): { assetId: string; placementIndex: number } | null {
   if (!entityId.startsWith("instance:")) return null;
