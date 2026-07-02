@@ -297,6 +297,13 @@ import {
   startSceneRuntime,
   tagSceneLightRecordIndex,
 } from "../src/scene/SceneRuntimeCore";
+import {
+  beginLoading,
+  finishTravel,
+  initialLevelTravelState,
+  isTravelBusy,
+  requestTravel,
+} from "../src/scene/levelTravel";
 import type { SceneDocument } from "../engine/scene/sceneDocument";
 import {
   buildImportedAssetRecord,
@@ -7069,6 +7076,87 @@ check("goal-reached behavior: fires once on contact, plays its cue, signals the 
   ]);
 });
 
+// P2 Level Travel: the `level-travel` sensor reuses the goal-reached contact +
+// once pattern, reading its destination level/spawn from the authored params and
+// signalling the shell exactly once so the teardown/rebuild it kicks off is never
+// re-entered by a lingering overlap.
+check("level-travel behavior: fires once on contact with the authored target + spawn", () => {
+  const travels: Array<{ id: string; level: string; spawn?: string }> = [];
+  const registry = createBehaviorRegistry({
+    onLevelTravel: (id, level, spawn) => travels.push({ id, level, spawn }),
+  });
+  const physics = new PhysicsSubsystem();
+  const audio = new AudioSubsystem();
+  const portal: Entity = {
+    id: "portal:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: {
+        scriptId: "level-travel",
+        params: { targetLevel: "Levels/TestLevel.level.json", targetSpawn: "fromPlayground" },
+      },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([portal, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics, audio);
+  behavior.setEntities([portal, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  // A sensor portal never blocks; far away there is no contact, so no travel.
+  assert.equal(physics.staticBlockerAabbs().length, 0);
+  app.update(0.016);
+  assert.deepEqual(travels, []);
+
+  // Walk onto the portal and tick twice: it requests travel exactly once.
+  physics.setEntityTransform("player:0", { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(travels, [
+    { id: "portal:0", level: "Levels/TestLevel.level.json", spawn: "fromPlayground" },
+  ]);
+});
+
+// A `level-travel` sensor without a targetLevel is inert (nothing to travel to).
+check("level-travel behavior: a trigger without a target level never fires", () => {
+  const travels: string[] = [];
+  const registry = createBehaviorRegistry({ onLevelTravel: (id) => travels.push(id) });
+  const physics = new PhysicsSubsystem();
+  const portal: Entity = {
+    id: "portal:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "level-travel", params: {} },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([portal, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics);
+  behavior.setEntities([portal, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(travels, []);
+});
+
 // Â§3 Interaction runtime: the pure trigger core decides fire/cooldown; the
 // `interact` behavior drives it from physics sensor contacts + the authored
 // InteractionComponent, reusing the goal-reached sensor pattern.
@@ -9054,6 +9142,88 @@ check("computePlayerStartSpawn: prefers a tagged player and is null without any"
   };
   assert.equal(computePlayerStartSpawn(none), null);
   assert.equal(TPS_GAME_MODE_ID, "forge.tpsCharacter");
+});
+
+// P2 Level Travel: an arriving player spawns at the Player Start whose metadata
+// `spawnTag` matches the travel request, falling back to the first marker when
+// the tag is absent or unmatched (so an untagged level still spawns correctly).
+check("findPlayerStartTransform: selects a Player Start by spawnTag, else the first", () => {
+  const layout: RoomLayout = {
+    schema: 1,
+    name: "travel",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: PLAYER_START_ASSET_ID,
+        placements: [
+          { position: [0, 0, 0], rotation: [0, 0, 0] },
+          { position: [10, 0, 5], rotation: [0, 90, 0], metadata: { spawnTag: "fromPlayground" } },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  // Tag match wins over marker order.
+  assert.deepEqual(findPlayerStartTransform(layout, "fromPlayground"), {
+    position: [10, 0, 5],
+    yawDeg: 90,
+  });
+  // Unmatched tag falls back to the first marker.
+  assert.deepEqual(findPlayerStartTransform(layout, "missing"), { position: [0, 0, 0], yawDeg: 0 });
+  // No tag also uses the first marker.
+  assert.deepEqual(findPlayerStartTransform(layout), { position: [0, 0, 0], yawDeg: 0 });
+  // No markers at all → null.
+  assert.equal(
+    findPlayerStartTransform({ schema: 1, name: "empty", loadGroups: [], instances: [], characters: [], lights: [] }, "x"),
+    null,
+  );
+});
+
+// P2 Level Travel state machine (pure): idle → unloading → loading → idle, with a
+// single pending slot (latest wins) so a request arriving mid-travel runs once the
+// current cycle settles rather than interrupting it.
+check("level-travel state machine: an idle request begins immediately", () => {
+  const idle = initialLevelTravelState();
+  assert.equal(isTravelBusy(idle), false);
+  const { state, begin } = requestTravel(idle, { layoutPath: "A", spawnTag: "s" });
+  assert.equal(begin, true);
+  assert.equal(state.phase, "unloading");
+  assert.deepEqual(state.active, { layoutPath: "A", spawnTag: "s" });
+  assert.equal(state.pending, null);
+  assert.equal(isTravelBusy(state), true);
+});
+
+check("level-travel state machine: a mid-travel request queues (latest wins), not begins", () => {
+  let { state } = requestTravel(initialLevelTravelState(), { layoutPath: "A" });
+  state = beginLoading(state); // now loading A
+  assert.equal(state.phase, "loading");
+
+  const first = requestTravel(state, { layoutPath: "B" });
+  assert.equal(first.begin, false);
+  assert.deepEqual(first.state.pending, { layoutPath: "B" });
+  // A second mid-travel request overwrites the pending slot.
+  const second = requestTravel(first.state, { layoutPath: "C" });
+  assert.equal(second.begin, false);
+  assert.deepEqual(second.state.pending, { layoutPath: "C" });
+  assert.deepEqual(second.state.active, { layoutPath: "A" });
+
+  // Settling promotes the pending request into a fresh unloading cycle.
+  const settled = finishTravel(second.state);
+  assert.deepEqual(settled.next, { layoutPath: "C" });
+  assert.equal(settled.state.phase, "unloading");
+  assert.deepEqual(settled.state.active, { layoutPath: "C" });
+  assert.equal(settled.state.pending, null);
+});
+
+check("level-travel state machine: settling with no pending returns to idle", () => {
+  let { state } = requestTravel(initialLevelTravelState(), { layoutPath: "A" });
+  state = beginLoading(state);
+  const settled = finishTravel(state);
+  assert.equal(settled.next, null);
+  assert.deepEqual(settled.state, initialLevelTravelState());
+  // beginLoading is a no-op unless unloading (keeps the phase monotonic).
+  assert.deepEqual(beginLoading(settled.state), settled.state);
 });
 
 check("hasPlayerCharacter: true for tagged or input-move, false otherwise", () => {

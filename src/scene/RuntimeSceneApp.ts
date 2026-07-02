@@ -1,4 +1,4 @@
-import { Box3, DirectionalLight, Group, Light as ThreeLight, Matrix4, MeshStandardMaterial, Object3D, TextureLoader, Vector3 } from "three";
+import { Box3, DirectionalLight, Group, Light as ThreeLight, Matrix4, Mesh, MeshStandardMaterial, Object3D, TextureLoader, Vector3 } from "three";
 import type {
   AmbientLight,
   InstancedMesh,
@@ -12,6 +12,13 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
 import { loadRoomLayout } from "./roomLayout";
+import {
+  beginLoading,
+  finishTravel,
+  initialLevelTravelState,
+  requestTravel,
+  type LevelTravelState,
+} from "./levelTravel";
 import { EngineApp } from "@engine/core/EngineApp";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
 import { ActionMap } from "@engine/input/actionMap";
@@ -497,6 +504,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private activeGameMode: GameModeDefinition | null = null;
   private gravityY = DEFAULT_SCENE_GRAVITY[1];
   private killZ = DEFAULT_SCENE_KILL_Z;
+  /** Level Travel (P2) state machine: idle unless a portal/menu requested travel. */
+  private travelState: LevelTravelState = initialLevelTravelState();
   private readonly pawnRespawnTransforms = new Map<string, TransformComponent>();
   private inputMode: InputMode = "ui";
   /** UMG Lite runtime UI host; null when the layout authors no HUD/pause widget. */
@@ -634,6 +643,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         },
         onActorParticleEffect: (entityId) => {
           void this.playActorParticleEffect(entityId);
+        },
+        onLevelTravel: (_entityId, targetLevel, targetSpawn) => {
+          this.requestLevelTravel(targetLevel, targetSpawn);
         },
         // The active Game Mode owns possession: only the pawn it possessed
         // (none, under the default camera mode) is driven by player input.
@@ -880,7 +892,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async loadActiveProjectScene(): Promise<void> {
     this.activeProject = await loadActiveProject();
     this.assetLoader = new AssetLoader(this.activeProject.manifest);
-    this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
+    await this.buildScene(this.activeProject.manifest.editor.defaultScene, undefined);
+  }
+
+  /**
+   * Builds a level's scene graph, physics/behavior world, Game Mode and UI from
+   * a layout path. Shared by the initial boot and Level Travel (P2); travel reuses
+   * the already-live engine — `startSceneRuntime` re-feeds the subsystems via
+   * `setEntities` and re-inits physics (which loads Rapier if this level newly
+   * needs it), and no subsystem implements `start()`, so re-running it is safe.
+   * `spawnTag` selects a tagged Player Start for the arriving player (travel); the
+   * initial boot passes none.
+   *
+   * Assumes a clean slate — the caller runs {@link teardownScene} before a travel
+   * rebuild so no previous scene's objects, entities or subscriptions leak in.
+   */
+  private async buildScene(layoutPath: string, spawnTag: string | undefined): Promise<void> {
+    if (!this.assetLoader || !this.activeProject) return;
+    this.layout = await loadRoomLayout(layoutPath);
     const worldSettings = resolveSceneWorldSettings(this.layout);
     this.gravityY = worldSettings.gravity[1];
     this.killZ = worldSettings.killZ;
@@ -889,7 +918,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Resolve placed Actor Script classes -> entities before models load, so their
     // mesh assets join the load list (loadActorMeshModels reads these entities).
     await this.resolveActorClasses();
-    await this.applyPlayerStartSpawn();
+    await this.applyPlayerStartSpawn(spawnTag);
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     await this.loadMissingSceneModels();
     await this.loadActorMeshModels();
@@ -988,6 +1017,193 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
+   * Requests Level Travel (P2) to another layout, respawning the player at the
+   * `spawnTag` Player Start there (or the default marker). Safe to call from a
+   * behavior tick (a portal trigger) or the menu: the state machine serializes
+   * requests — a second one arriving mid-travel is held (latest wins) and runs
+   * when the current cycle settles — and the teardown is deferred past the frame.
+   */
+  requestLevelTravel(layoutPath: string, spawnTag?: string): void {
+    const request = spawnTag !== undefined ? { layoutPath, spawnTag } : { layoutPath };
+    const { state, begin } = requestTravel(this.travelState, request);
+    this.travelState = state;
+    // `begin` is true only when the machine was idle, i.e. no runTravel loop is
+    // running; a request arriving mid-travel is queued and picked up by the loop.
+    if (begin) void this.runTravel();
+  }
+
+  /**
+   * Drives one or more queued travel cycles: tear the current scene down, load the
+   * target, then process any request that queued up while loading. Yields once
+   * before the first teardown so a travel requested from inside the engine update
+   * (portal contact) doesn't mutate the scene mid-tick; teardown then runs between
+   * frames with the subsystems already emptied, so the loop ticks nothing until
+   * the rebuild re-feeds them.
+   */
+  private async runTravel(): Promise<void> {
+    await Promise.resolve();
+    while (this.travelState.active) {
+      const request = this.travelState.active;
+      this.teardownScene();
+      this.travelState = beginLoading(this.travelState);
+      try {
+        await this.buildScene(request.layoutPath, request.spawnTag);
+      } catch (error) {
+        console.error("[runtime] level travel failed:", request.layoutPath, error);
+      }
+      this.travelState = finishTravel(this.travelState).state;
+    }
+  }
+
+  /**
+   * Disposes the current scene so a Level Travel rebuild starts from a clean
+   * slate, keeping the renderer, camera, engine spine and input/resize listeners
+   * (constructor-owned, reused across levels). Because the runtime shares loaded
+   * GLTFs through the loader cache, mesh objects that clone or instance a cached
+   * model (statics, characters, actors, override clones) are only removed from the
+   * graph — their geometry/materials stay cached for the next level. Only
+   * scene-owned GPU resources are disposed: InstancedMesh instance buffers,
+   * synthetic `shape:` primitive geometry, probe/planar/reflective/blocking
+   * objects, sky/cloud domes, reflection targets, light shadow maps, the
+   * post-process pipeline and per-scene override materials. Subsystems are emptied
+   * immediately so the engine loop ticks an empty world during the async load.
+   */
+  private teardownScene(): void {
+    // Game Mode + UI hosts first: null them before emptying the world so the
+    // frame(s) between teardown and rebuild skip their update paths.
+    this.gameModeSession?.dispose();
+    this.gameModeSession = null;
+    this.activeGameMode = null;
+    this.uiSubsystem?.dispose();
+    this.uiSubsystem = null;
+    this.worldUiSubsystem?.dispose();
+    this.worldUiSubsystem = null;
+    this.gameEventUnsub?.();
+    this.gameEventUnsub = null;
+    this.gameStateStore = null;
+    this.gameOutcomeShown = false;
+    this.pauseMenuDef = null;
+    this.winScreenDef = null;
+    this.loseScreenDef = null;
+    this.uiDefs.clear();
+    this.uiThemes.clear();
+    this.localeRegistry = null;
+    this.dialogueUnsub?.();
+    this.dialogueUnsub = null;
+    this.conversationUnsub?.();
+    this.conversationUnsub = null;
+    this.conversationDirector.stop();
+
+    // Empty the subsystems so the engine loop ticks nothing until the rebuild
+    // re-feeds them (a half-built scene must never be simulated/animated).
+    this.animationSubsystem.clear();
+    this.physicsSubsystem.setEntities([]);
+    this.movingPlatformSubsystem.clear();
+    this.characterMovementSubsystem.clear();
+    this.behaviorSubsystem.setEntities([]);
+
+    // Particle effects (own geometry/material).
+    for (const effect of this.particleEffects) {
+      this.scene.remove(effect.object3D);
+      effect.dispose();
+    }
+    this.particleEffects = [];
+
+    // Instanced statics: remove each group (their override clones are children,
+    // so they leave with it) and dispose only the InstancedMesh instance buffers
+    // — the underlying geometry/material is the shared cached GLTF's.
+    for (const group of this.instanceGroups.values()) this.scene.remove(group);
+    for (const meshes of this.instanceMeshes.values()) {
+      for (const mesh of meshes) mesh.dispose();
+    }
+    this.instanceGroups.clear();
+    this.instanceMeshes.clear();
+    this.instanceOverrideObjects.clear();
+    this.disposeInstanceProbeMaterials();
+
+    // Reflection captures / planar reflectors / reflective surfaces / blocking
+    // volumes: dedicated disposers free their render targets + owned meshes.
+    for (const bake of this.reflectionCaptureBakes) {
+      if (bake) disposeSphereReflectionCaptureBake(bake);
+    }
+    this.reflectionCaptureBakes = [];
+    for (const reflector of this.reflectionPlaneObjects) {
+      this.scene.remove(reflector);
+      disposeReflectionPlaneObject(reflector);
+    }
+    this.reflectionPlaneObjects = [];
+    for (const surface of this.reflectiveSurfaceObjects) {
+      this.scene.remove(surface);
+      disposeReflectiveSurfaceObject(surface);
+    }
+    this.reflectiveSurfaceObjects = [];
+    for (const volume of this.blockingVolumeObjects) {
+      this.scene.remove(volume);
+      disposeBlockingVolumeObject(volume);
+    }
+    this.blockingVolumeObjects = [];
+
+    // Characters + actor host objects: clones over cached GLTFs, so remove only.
+    for (const object of this.characterObjects) this.scene.remove(object);
+    this.characterObjects = [];
+    this.characterRefs = [];
+    for (const object of this.actorObjects.values()) this.scene.remove(object);
+    this.actorObjects.clear();
+    this.actorMeshScales.clear();
+    this.actorEntities = [];
+
+    // Lights: remove root (+ target) and free the shadow map.
+    for (const record of this.lightObjects) {
+      this.scene.remove(record.root);
+      if (record.target) this.scene.remove(record.target);
+      record.light.dispose();
+    }
+    this.lightObjects = [];
+    this.sun = null;
+    if (this.ambientLight) {
+      this.scene.remove(this.ambientLight);
+      this.ambientLight = null;
+    }
+
+    // Sky / cloud domes own their geometry + shader material.
+    if (this.skyObject) {
+      this.scene.remove(this.skyObject);
+      disposeSceneMeshResources(this.skyObject);
+      this.skyObject = null;
+    }
+    if (this.cloudObject) {
+      this.scene.remove(this.cloudObject);
+      disposeSceneMeshResources(this.cloudObject);
+      this.cloudObject = null;
+    }
+    this.disposeReflectionTarget();
+    this.scene.environment = null;
+    this.postProcessPipeline?.dispose();
+    this.postProcessPipeline = null;
+
+    // Synthetic `shape:` primitive models are rebuilt per scene, so their geometry
+    // is scene-owned (unlike loader-cached GLTFs) and must be disposed here.
+    for (const [assetId, gltf] of this.models) {
+      if (assetId.startsWith("shape:")) disposeSceneMeshResources(gltf.scene);
+    }
+    this.models = new Map();
+
+    // Per-scene material/bounds caches (override materials are reloaded per level).
+    for (const material of this.materialCache.values()) material.dispose();
+    this.materialCache.clear();
+    this.materialLoads.clear();
+    this.assetMaterialSlots.clear();
+    this.localBounds = new Map();
+    this.collisionDefs = new Map();
+    this.complexCollisionMeshes = new Map();
+
+    this.locomotionReports.clear();
+    this.pawnRespawnTransforms.clear();
+    this.activeInteractionPromptEntityId = null;
+    this.interactionPromptElement.hidden = true;
+  }
+
+  /**
    * Mounts the UMG Lite runtime UI host when the layout authors a HUD and/or a
    * pause-menu widget (`worldSettings.hudWidget` / `pauseMenuWidget`). No-op when
    * neither is set, so a scene with no UI pays nothing. Widget `message` actions
@@ -1024,9 +1240,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         resolveTheme: (ref) => this.uiThemes.get(ref) ?? null,
         resolveWidget: (src) => this.uiDefs.get(src) ?? null,
         onMessageAction: (action) => {
-          // Reserved `game:*` widget messages drive the rules layer in-shell; all
-          // other messages forward to gameplay as a `ui-action` script message.
+          // Reserved `game:*` / `travel:` widget messages drive the rules layer or
+          // Level Travel in-shell; all other messages forward to gameplay as a
+          // `ui-action` script message.
           if (this.handleGameUiMessage(action.message)) return;
+          if (this.handleTravelUiMessage(action.message)) return;
           this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
         },
         onScreenStackChange: (depth) => this.handleUiScreenStackChange(depth),
@@ -1065,6 +1283,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         store: this.uiStore,
         ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
         onMessageAction: (action) => {
+          if (this.handleTravelUiMessage(action.message)) return;
           this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
         },
         resolveEntityPosition: (entityId, target) => this.resolveEntityWorldPosition(entityId, target),
@@ -1264,6 +1483,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       default:
         return false;
     }
+  }
+
+  /**
+   * Intercepts a reserved `travel:` UI widget message so a menu (e.g. "New Game")
+   * can start Level Travel (P2). The message is `travel:<layoutPath>` or
+   * `travel:<layoutPath>#<spawnTag>` — the path is the destination level, the
+   * optional tag picks a Player Start there. Returns true when handled so the
+   * message isn't also forwarded to gameplay as a `ui-action`.
+   */
+  private handleTravelUiMessage(message: string): boolean {
+    if (!message.startsWith("travel:")) return false;
+    const spec = message.slice("travel:".length);
+    const hashIndex = spec.indexOf("#");
+    const layoutPath = hashIndex >= 0 ? spec.slice(0, hashIndex) : spec;
+    if (!layoutPath) return false;
+    const spawnTag = hashIndex >= 0 ? spec.slice(hashIndex + 1) : "";
+    this.requestLevelTravel(layoutPath, spawnTag || undefined);
+    return true;
   }
 
   /**
@@ -1651,12 +1888,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * Synthetic pawns are appended to the in-memory layout only — never persisted.
    * No-op for non-character modes (the default camera mode possesses nothing).
    */
-  private async applyPlayerStartSpawn(): Promise<void> {
+  private async applyPlayerStartSpawn(spawnTag?: string): Promise<void> {
     if (!this.layout) return;
     const mode = await this.resolveActiveGameMode();
     if (mode.defaultPawn.kind !== "character") return;
 
-    const spawn = computePlayerStartSpawn(this.layout);
+    const spawn = computePlayerStartSpawn(this.layout, spawnTag);
     if (spawn) {
       const character = this.layout.characters[spawn.characterIndex];
       if (!character) return;
@@ -1668,9 +1905,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (this.actorEntities.some((entity) => readCharacterMovementComponent(entity))) return;
     // No authored player: spawn the mode's default pawn at the Player Start.
     if (mode.defaultPawn.pawnClassRef) {
-      await this.spawnDefaultPawnActor(mode.defaultPawn.pawnClassRef);
+      await this.spawnDefaultPawnActor(mode.defaultPawn.pawnClassRef, spawnTag);
     } else {
-      this.spawnDefaultPlayerPawn(mode.defaultPawn);
+      this.spawnDefaultPlayerPawn(mode.defaultPawn, spawnTag);
     }
   }
 
@@ -1680,10 +1917,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * like an authored player. No-op without a character pawn asset or a Player
    * Start marker. Runtime-only; never persisted.
    */
-  private spawnDefaultPlayerPawn(pawn: PawnDefinition): void {
+  private spawnDefaultPlayerPawn(pawn: PawnDefinition, spawnTag?: string): void {
     if (!this.layout) return;
     if (pawn.kind !== "character" || !pawn.characterAssetId) return;
-    const start = findPlayerStartTransform(this.layout);
+    const start = findPlayerStartTransform(this.layout, spawnTag);
     if (!start) return;
     this.layout.characters.push(
       createDefaultPlayerCharacter(
@@ -1701,9 +1938,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * brings its own mesh + capsule + CharacterMovement from the class template).
    * No-op without a Player Start marker. Runtime-only; never persisted.
    */
-  private async spawnDefaultPawnActor(classRef: string): Promise<void> {
+  private async spawnDefaultPawnActor(classRef: string, spawnTag?: string): Promise<void> {
     if (!this.layout) return;
-    const start = findPlayerStartTransform(this.layout);
+    const start = findPlayerStartTransform(this.layout, spawnTag);
     if (!start) return;
     const instance: LayoutActorInstance = {
       classRef,
@@ -2699,6 +2936,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
 function overrideObjectKey(assetId: string, placementIndex: number): string {
   return `${assetId}:${placementIndex}`;
+}
+
+/**
+ * Disposes the geometry + materials of every mesh under a scene-owned object
+ * (sky/cloud domes, synthetic `shape:` primitives). Only call on objects whose
+ * resources are NOT shared through the loader cache — cloned/instanced cached
+ * GLTFs must not be disposed here (their geometry is reused across levels).
+ */
+function disposeSceneMeshResources(root: Object3D): void {
+  root.traverse((object) => {
+    if (!(object instanceof Mesh)) return;
+    object.geometry.dispose();
+    for (const material of Array.isArray(object.material) ? object.material : [object.material]) {
+      material?.dispose();
+    }
+  });
 }
 
 function parseCharacterEntityIndex(entityId: string): number | null {

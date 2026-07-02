@@ -285,31 +285,52 @@ sökülüp kurulması.
 
 ## Checklist
 
-- [ ] **P2.1 — Teardown/rebuild denetimi:** `RuntimeSceneApp`'in sahne kurulum
-  yolunu incele: subsystem'ler `setEntities` ile yeniden beslenebiliyor mu,
-  Three.js kaynakları (geometry/material/texture/audio) dispose ediliyor mu,
-  event listener'lar sızıyor mu? Çıktı: eksik dispose listesi + düzeltmeler.
-  Manuel doğrulama: iki level arasında 20+ gidiş-gelişte heap büyümesi
-  stabil (Chrome memory profili).
-- [ ] **P2.2 — Travel API:** `requestLevelTravel(layoutPath, spawnTag?)` —
-  mevcut sahneyi söker, hedef layout'u yükler, oyuncuyu `spawnTag` eşleşen
-  (yoksa default) PlayerStart'ta doğurur. Reentrancy guard'lı (travel
-  sürerken ikinci istek yok sayılır/kuyruğa girer — karar). Saf çekirdek
-  (state machine: idle→unloading→loading→ready) headless test edilir;
-  Three/DOM tutkalı ince kalır.
-- [ ] **P2.3 — Oyun tarafı trigger:** `level-travel` behavior'u — sensor
-  temas + metadata'dan `targetLevel`/`targetSpawn` okur, travel API'yi
-  çağırır. `goal-reached`'in temas+once kalıbını yeniden kullan.
-- [ ] **P2.4 — Veri/allowlist:** hedef level/spawn metadata schema üstünden
-  gidiyorsa allowlist işi yok; yeni `LayoutPlacement` alanı gerekirse
-  `tools/saveValidator.ts` `applyTransformFields`'a işle (CLAUDE.md
-  gotcha'sı). PlayerStart'a `spawnTag` gerekiyorsa aynı kural.
-- [ ] **P2.5 — Menüden başlatma:** UMG Lite `message` action'ı ile ana
-  menü ekranından "New Game → level X" akışı (`RuntimeUiSubsystem`
-  `onMessageAction` köprüsü zaten var, `src/ui/RuntimeUiSubsystem.ts:38`).
-- [ ] **P2.6 — Testler:** headless: travel state machine, spawn seçimi
-  (tag eşleşme/fallback), trigger'ın tek-ateşleme davranışı. Manuel smoke:
-  Playground ↔ TestLevel gidiş-geliş.
+- [x] **P2.1 — Teardown/rebuild denetimi + düzeltme.** `RuntimeSceneApp`'e
+  `teardownScene()` eklendi: renderer/kamera/engine spine + input/resize
+  listener'ları (constructor sahibi, level'lar arası paylaşılan) korunur;
+  sahne sökülür. **Kritik bulgu:** yüklü GLTF'ler `GltfModelLoader`'da id ile
+  cache'li/paylaşımlı — instanced statikler, karakterler, actor'lar ve override
+  klonları cache'li modeli klonlar/instance'lar, bu yüzden **paylaşılan
+  geometri/materyal dispose EDİLMEZ** (sonraki level için cache'te kalır),
+  yalnızca sahneden çıkarılır. Yalnız sahne-sahibi GPU kaynakları dispose
+  edilir: InstancedMesh instance buffer'ları (`mesh.dispose()`), sentetik
+  `shape:` primitive geometrisi, probe/planar/reflective/blocking objeleri,
+  sky/cloud dome'ları, reflection target'ları, ışık shadow map'leri, post-process
+  pipeline, per-scene override materyalleri. Subsystem'ler **hemen** boşaltılır
+  (`physics/behavior.setEntities([])`, `characterMovement.clear()`,
+  `animation.clear()`) — böylece async yükleme sırasında motor boş dünya tick'ler
+  (yarı-kurulu sahne asla simüle edilmez). Manuel heap doğrulaması (20+
+  gidiş-geliş, Chrome profili) kullanıcıya kalan smoke.
+- [x] **P2.2 — Travel API.** Saf state machine `src/scene/levelTravel.ts`
+  (`idle→unloading→loading→idle`, tek pending slot = latest-wins) headless test
+  edildi; `RuntimeSceneApp.requestLevelTravel(layoutPath, spawnTag?)` +
+  `runTravel()` bunu sürüyor. `runTravel` ilk teardown'dan önce bir microtask
+  yield eder (travel çoğunlukla behavior tick'inden istenir; sahne tick
+  ortasında sökülmesin). `loadActiveProjectScene` → proje-yükleme + `buildScene`
+  (ilk boot ve travel paylaşır; `startSceneRuntime` yeniden `setEntities` +
+  physics init'i güvenle çalıştırır — hiçbir subsystem `start()` implemente
+  etmiyor).
+- [x] **P2.3 — Oyun tarafı trigger.** `level-travel` behavior'u
+  (`src/game/behaviors.ts`): sensor temas + once kalıbı (`goal-reached`'ten),
+  `params.targetLevel`/`targetSpawn` okur, `onLevelTravel` host callback'i
+  çağırır; RuntimeSceneApp bunu `requestLevelTravel`'a bağlar. `targetLevel`
+  yoksa inert.
+- [x] **P2.4 — Veri/allowlist: gerek yok.** `spawnTag` placement `metadata`'sında,
+  `targetLevel`/`targetSpawn` behavior `params`'ında yaşıyor — ikisi de
+  `saveValidator`'ın `validateMetadata`'sından serbest geçiyor (Rotation Rate
+  kalıbı). Yeni `LayoutPlacement`/singleton alanı eklenmedi, allowlist
+  değişmedi.
+- [x] **P2.5 — Menüden başlatma.** Shell'de rezerve `travel:<layoutPath>` /
+  `travel:<layoutPath>#<spawnTag>` UI mesajı (`handleTravelUiMessage`),
+  `game:*` kalıbı gibi hem screen-host hem world-UI `onMessageAction`'da
+  yakalanır; `travel:` ile başlamayan mesaj yine `ui-action` olarak gameplay'e
+  iletilir.
+- [x] **P2.6 — Testler.** Engine 500→506 (+6): travel state machine (idle
+  başlangıç, mid-travel kuyruk/latest-wins, pending promote, idle'a dönüş +
+  beginLoading no-op), `findPlayerStartTransform` spawnTag (tag eşleşme > sıra,
+  eşleşmeyen/yok → ilk marker, marker yok → null), `level-travel` behavior
+  uçtan uca (temasta tek-ateşleme + target/spawn, targetLevel'siz inert).
+  Manuel smoke (Playground ↔ TestLevel portal gidiş-geliş) kullanıcıya kalan.
 
 ## Kabul kriterleri
 
@@ -591,3 +612,24 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   yeşil. **Backlog:** dönme carry'si, >~6 u/s dikey platform ease ince ayarı.
   P1 tamamen kapandı. **Sıradaki:** P1.5 (test alanı içeriği, sanat asset'i
   gerektirir) opsiyonel; ana faz **P2 — Level Travel**.
+- *2026-07-02* — **P2 tamamlandı (kod tarafı): Seviye Akışı / Level Travel.**
+  P2.1–P2.6 hepsi bitti. Saf state machine `src/scene/levelTravel.ts`
+  (`idle→unloading→loading→idle`, tek pending slot latest-wins) +
+  `RuntimeSceneApp.requestLevelTravel()`/`runTravel()`/`teardownScene()`/
+  `buildScene()`. **Teardown denetimi (P2.1) kritik bulgu:** GLTF'ler
+  `GltfModelLoader`'da paylaşımlı cache — klon/instance objelerin **paylaşılan
+  geometri/materyali dispose edilmez**, yalnız sahne-sahibi kaynaklar (InstancedMesh
+  buffer'ları, sentetik `shape:` geometrisi, sky/cloud/reflection/blocking/probe,
+  ışık shadow map, post-process, per-scene override materyalleri). Subsystem'ler
+  teardown'da hemen boşaltılır → async yüklemede motor boş dünya tick'ler.
+  `level-travel` behavior'u (sensor temas+once, `targetLevel`/`targetSpawn`
+  param'ları) + menü için rezerve `travel:<path>#<spawn>` UI mesajı. spawnTag,
+  `findPlayerStartTransform`/`computePlayerStartSpawn`'a eklendi (metadata
+  `spawnTag` eşleşme, yoksa ilk marker). **P2.4:** allowlist gerekmedi (spawnTag
+  metadata'da, target'lar behavior param'ında — hepsi free-form). Engine 500→506
+  (+6: state machine, spawnTag seçimi, level-travel behavior uçtan uca). Ağaç
+  yeşil (tsc + test:engine 506 + build). **Not:** P1.6 (moving platform) + uphill
+  ayrı bir commit'te (`0f77b6c`, başka oturumun fizik işi); bu P2 ondan
+  ayrıştırılıp ayrı commit'lendi. **Kullanıcıya kalan smoke:** iki level arası
+  portal gidiş-gelişi + 20+ turda heap stabilitesi (Chrome). **Sıradaki:** P3 —
+  Save-Game / Persistence (P2 travel API'sine dayanır).

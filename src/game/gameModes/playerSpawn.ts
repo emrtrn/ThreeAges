@@ -25,14 +25,28 @@ export interface PlayerStartSpawn {
 }
 
 /**
- * The first Player Start marker's world position + yaw, or null when the scene
- * has no marker. Yaw is the marker's Y rotation in degrees.
+ * A Player Start marker's world position + yaw, or null when the scene has no
+ * matching marker. Yaw is the marker's Y rotation in degrees.
+ *
+ * `spawnTag` selects a specific marker for Level Travel: the first marker whose
+ * `metadata.spawnTag` equals the tag. When the tag is absent, or no marker
+ * carries it, the first Player Start marker in the level is used — so an
+ * untagged level (or a travel with no spawn tag) still spawns at the default
+ * start. Markers are placements under the synthetic `marker:playerStart` asset.
  */
 export function findPlayerStartTransform(
   layout: RoomLayout,
+  spawnTag?: string,
 ): { position: Vec3; yawDeg: number | null } | null {
-  const marker = layout.instances.find((entry) => entry.assetId === PLAYER_START_ASSET_ID)
-    ?.placements[0];
+  const markers = layout.instances.find(
+    (entry) => entry.assetId === PLAYER_START_ASSET_ID,
+  )?.placements;
+  if (!markers || markers.length === 0) return null;
+  const tagged =
+    spawnTag !== undefined
+      ? markers.find((placement) => placement.metadata?.spawnTag === spawnTag)
+      : undefined;
+  const marker = tagged ?? markers[0];
   if (!marker) return null;
   return {
     position: [marker.position[0], marker.position[1], marker.position[2]],
@@ -59,11 +73,14 @@ export function hasPlayerCharacter(layout: RoomLayout): boolean {
  * position + yaw; without one it spawns at the origin keeping its authored
  * facing.
  */
-export function computePlayerStartSpawn(layout: RoomLayout): PlayerStartSpawn | null {
+export function computePlayerStartSpawn(
+  layout: RoomLayout,
+  spawnTag?: string,
+): PlayerStartSpawn | null {
   const characterIndex = resolvePlayerCharacterIndex(layout);
   if (characterIndex === null) return null;
 
-  const start = findPlayerStartTransform(layout);
+  const start = findPlayerStartTransform(layout, spawnTag);
   if (!start) {
     return { characterIndex, position: [0, 0, 0], yawDeg: null };
   }

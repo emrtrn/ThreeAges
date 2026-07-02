@@ -31,6 +31,7 @@ export const BEHAVIOR_SCRIPT_IDS = [
   "input-move",
   "collision-chime",
   "goal-reached",
+  "level-travel",
   "interact",
   "use-toggleable",
   "lamp-toggle",
@@ -83,6 +84,13 @@ export interface BehaviorRegistryOptions {
    * controlled" so headless tests drive the behavior directly.
    */
   isPlayerControlled?: (entityId: string) => boolean;
+  /**
+   * Fired once when a `level-travel` sensor first registers a contact (P2 Level
+   * Travel): the player entered a travel trigger. The runtime shell drives the
+   * scene teardown/rebuild + respawn; headless tests spy on it. `targetLevel` is
+   * the destination layout path, `targetSpawn` the optional Player Start tag.
+   */
+  onLevelTravel?: (entityId: string, targetLevel: string, targetSpawn?: string) => void;
 }
 
 function numberParam(value: unknown, fallback: number): number {
@@ -172,9 +180,11 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   const onInteractionOverlap = options.onInteractionOverlap;
   const onActorLightToggle = options.onActorLightToggle;
   const onActorParticleEffect = options.onActorParticleEffect;
+  const onLevelTravel = options.onLevelTravel;
   const isPlayerControlled = options.isPlayerControlled ?? (() => true);
   const vertical = new Map<string, PlayerVertical>();
   const reachedGoals = new Set<string>();
+  const traveledTriggers = new Set<string>();
   const interactions = new Map<string, InteractionTriggerState>();
   const interactionOverlaps = new Map<string, boolean>();
 
@@ -247,6 +257,24 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     reachedGoals.add(context.entityId);
     playCollisionAudioOnce(context);
     onGoalReached?.(context.entityId);
+  };
+
+  // Level Travel trigger (P2): a sensor-collider entity whose first contact (only
+  // the kinematic player can touch a static sensor) requests travel to another
+  // level. Reuses the goal-reached contact + once pattern: it fires exactly once
+  // per scene, so the teardown/rebuild the shell kicks off is never re-entered by
+  // a lingering overlap. `targetLevel` is the destination layout path; the
+  // optional `targetSpawn` picks a tagged Player Start there. A trigger without a
+  // `targetLevel` is inert (nothing to travel to).
+  const levelTravel: BehaviorUpdate = (context) => {
+    if (traveledTriggers.has(context.entityId)) return;
+    if ((context.physics?.contactsForEntity(context.entityId).length ?? 0) === 0) return;
+    const targetLevel = stringParam(context.params.targetLevel);
+    if (!targetLevel) return;
+    traveledTriggers.add(context.entityId);
+    playCollisionAudioOnce(context);
+    const targetSpawn = stringParam(context.params.targetSpawn);
+    onLevelTravel?.(context.entityId, targetLevel, targetSpawn ?? undefined);
   };
 
   // Interaction trigger (§3): an interaction-marked sensor entity whose first
@@ -327,6 +355,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     ["input-move", inputMove],
     ["collision-chime", collisionChime],
     ["goal-reached", goalReached],
+    ["level-travel", levelTravel],
     ["interact", interact],
     ["use-toggleable", useToggleable],
     ["lamp-toggle", lampToggle],
