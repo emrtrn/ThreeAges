@@ -334,6 +334,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
 
   const lampToggle: BehaviorUpdate = (context) => {
     const enabled = context.state.toggle("enabled", true);
+    context.state.persist("enabled", enabled);
     onActorLightToggle?.(context.entityId, enabled);
     onActorParticleEffect?.(context.entityId);
     context.messages.emit("Lamp.Toggled", { enabled });

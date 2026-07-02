@@ -63,6 +63,13 @@ export interface ScriptState {
   get<T>(key: string, fallback: T): T;
   set<T>(key: string, value: T): void;
   toggle(key: string, fallback?: boolean): boolean;
+  persist(key: string, value: SceneJsonValue): void;
+}
+
+export interface PersistentScriptStateEntry {
+  readonly entityId: EntityId;
+  readonly key: string;
+  readonly value: SceneJsonValue;
 }
 
 /** Per-tick context handed to a behavior update function. */
@@ -185,6 +192,7 @@ export class BehaviorSubsystem implements Subsystem {
   private messageSubscriptions: Array<() => void> = [];
   private messageSubscriberInfo: ScriptMessageSubscriberDebugInfo[] = [];
   private runtimeState = new Map<EntityId, Map<string, unknown>>();
+  private persistentStateKeys = new Map<EntityId, Set<string>>();
   private readonly messageBus: ScriptMessageBus;
   private lastMessageFlushResult: ScriptMessageFlushResult = {
     processed: 0,
@@ -233,6 +241,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.nodeIdIndex.clear();
     this.interfaceIndex.clear();
     this.runtimeState.clear();
+    this.persistentStateKeys.clear();
 
     for (const entity of entities) {
       const transform = readTransformComponent(entity);
@@ -318,6 +327,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.nodeIdIndex.clear();
     this.interfaceIndex.clear();
     this.runtimeState.clear();
+    this.persistentStateKeys.clear();
     this.resetMessageSubscriptions();
   }
 
@@ -355,6 +365,38 @@ export class BehaviorSubsystem implements Subsystem {
       subscribers: this.messageSubscriberInfo.filter((subscriber) => subscriber.entityId === entityId),
     };
     return info;
+  }
+
+  getPersistentStateSnapshot(): PersistentScriptStateEntry[] {
+    const entries: PersistentScriptStateEntry[] = [];
+    for (const [entityId, keys] of this.persistentStateKeys) {
+      const store = this.runtimeState.get(entityId);
+      if (!store) continue;
+      for (const key of keys) {
+        if (!store.has(key)) continue;
+        entries.push({
+          entityId,
+          key,
+          value: cloneSceneJsonValue(store.get(key) as SceneJsonValue),
+        });
+      }
+    }
+    return entries.sort(
+      (a, b) => a.entityId.localeCompare(b.entityId) || a.key.localeCompare(b.key),
+    );
+  }
+
+  applyPersistentStateSnapshot(entries: readonly PersistentScriptStateEntry[]): void {
+    for (const entry of entries) {
+      if (!this.runtimeEntities.has(entry.entityId)) continue;
+      let store = this.runtimeState.get(entry.entityId);
+      if (!store) {
+        store = new Map();
+        this.runtimeState.set(entry.entityId, store);
+      }
+      store.set(entry.key, cloneSceneJsonValue(entry.value));
+      this.markPersistentState(entry.entityId, entry.key);
+    }
   }
 
   private currentEngine: EngineUpdateContext | null = null;
@@ -502,7 +544,20 @@ export class BehaviorSubsystem implements Subsystem {
         store.set(key, next);
         return next;
       },
+      persist: (key, value) => {
+        getStore().set(key, cloneSceneJsonValue(value));
+        this.markPersistentState(entityId, key);
+      },
     };
+  }
+
+  private markPersistentState(entityId: EntityId, key: string): void {
+    let keys = this.persistentStateKeys.get(entityId);
+    if (!keys) {
+      keys = new Set();
+      this.persistentStateKeys.set(entityId, keys);
+    }
+    keys.add(key);
   }
 
   private nearestWithInterface(
@@ -572,4 +627,14 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
     rotation: [...transform.rotation],
     scale: [...transform.scale],
   };
+}
+
+function cloneSceneJsonValue(value: SceneJsonValue): SceneJsonValue {
+  if (Array.isArray(value)) return value.map(cloneSceneJsonValue);
+  if (typeof value === "object" && value !== null) {
+    const clone: Record<string, SceneJsonValue> = {};
+    for (const [key, entry] of Object.entries(value)) clone[key] = cloneSceneJsonValue(entry);
+    return clone;
+  }
+  return value;
 }

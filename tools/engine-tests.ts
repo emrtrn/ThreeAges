@@ -137,6 +137,12 @@ import {
   mergeMixSnapshot,
   normalizeBusVolume,
 } from "../engine/audio/audioBus";
+import {
+  SaveGameStore,
+  createMemoryStorageAdapter,
+  type PersistenceLogger,
+  type StorageAdapter,
+} from "../engine/persistence/saveGameStore";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
 import {
   facingYawFromMove,
@@ -198,6 +204,7 @@ import {
   normalizeGameRules,
   parseGameEvent,
 } from "../src/game/gameRules";
+import { applySaveState, collectSaveState } from "../src/game/saveGame";
 import { firstConnectedGamepad, readGamepadCodes } from "../src/input/gamepadInput";
 import { joystickMoveCodes, joystickVector } from "../src/input/virtualJoystick";
 import { parseEffectDefinition } from "../engine/render-three/particleEffect";
@@ -3520,6 +3527,50 @@ check("behavior context routes messages through world query, message bindings, a
     delivered: 2,
     warnings: [],
   });
+});
+
+check("behavior persistent state snapshots only include opt-in keys and can restore", () => {
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "writer") {
+        return (context) => {
+          context.state.set("runtimeOnly", 7);
+          context.state.persist("enabled", false);
+          context.state.persist("meta", { visits: [1, 2] });
+        };
+      }
+      return undefined;
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([
+    {
+      id: "lamp",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "writer" },
+      },
+    },
+  ]);
+
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  const snapshot = behavior.getPersistentStateSnapshot();
+  assert.deepEqual(snapshot, [
+    { entityId: "lamp", key: "enabled", value: false },
+    { entityId: "lamp", key: "meta", value: { visits: [1, 2] } },
+  ]);
+
+  const restored = new BehaviorSubsystem({ get: () => undefined }, new ActionMap({}), () => undefined);
+  restored.setEntities([
+    {
+      id: "lamp",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      },
+    },
+  ]);
+  restored.applyPersistentStateSnapshot(snapshot);
+  assert.deepEqual(restored.getPersistentStateSnapshot(), snapshot);
 });
 
 check("behavior world resolves direct actor references and rebuilds query indexes", () => {
@@ -9224,6 +9275,196 @@ check("level-travel state machine: settling with no pending returns to idle", ()
   assert.deepEqual(settled.state, initialLevelTravelState());
   // beginLoading is a no-op unless unloading (keeps the phase monotonic).
   assert.deepEqual(beginLoading(settled.state), settled.state);
+});
+
+// P3 Save-Game / Persistence: pure engine store over an injected storage adapter.
+check("save-game store: writes, lists, reads, overwrites, and deletes slots", () => {
+  const storage = createMemoryStorageAdapter();
+  const timestamps = [
+    "2026-07-02T10:00:00.000Z",
+    "2026-07-02T10:00:01.000Z",
+    "2026-07-02T10:00:02.000Z",
+  ];
+  let nowIndex = 0;
+  const now = () => timestamps[nowIndex++] ?? timestamps[timestamps.length - 1]!;
+  const store = new SaveGameStore<{ level: string; flags: Record<string, boolean> }>({
+    gameId: "forge-test",
+    schema: 1,
+    storage,
+    now,
+  });
+
+  assert.deepEqual(store.listSlots(), []);
+  assert.deepEqual(store.writeSlot("auto", { level: "Levels/A.level.json", flags: { intro: true } }), {
+    ok: true,
+  });
+  assert.deepEqual(store.writeSlot("manual 1", { level: "Levels/B.level.json", flags: {} }), {
+    ok: true,
+  });
+
+  assert.deepEqual(
+    store.listSlots().map((slot) => slot.slot),
+    ["manual 1", "auto"],
+  );
+  assert.deepEqual(store.readSlot("auto"), {
+    schema: 1,
+    gameId: "forge-test",
+    createdAt: "2026-07-02T10:00:00.000Z",
+    updatedAt: "2026-07-02T10:00:00.000Z",
+    payload: { level: "Levels/A.level.json", flags: { intro: true } },
+  });
+
+  assert.deepEqual(store.writeSlot("auto", { level: "Levels/C.level.json", flags: { intro: true } }), {
+    ok: true,
+  });
+  assert.deepEqual(store.readSlot("auto"), {
+    schema: 1,
+    gameId: "forge-test",
+    createdAt: "2026-07-02T10:00:00.000Z",
+    updatedAt: "2026-07-02T10:00:02.000Z",
+    payload: { level: "Levels/C.level.json", flags: { intro: true } },
+  });
+
+  assert.equal(store.deleteSlot("auto"), true);
+  assert.equal(store.readSlot("auto"), null);
+});
+
+check("save-game store: migrates old envelopes one schema step at a time", () => {
+  const storage = createMemoryStorageAdapter();
+  const migratedFrom: number[] = [];
+  const store = new SaveGameStore<{ coins: number; visited: string[]; label: string }>({
+    gameId: "forge-test",
+    schema: 3,
+    storage,
+    now: () => "2026-07-02T10:00:00.000Z",
+    migrate: (fromSchema, payload) => {
+      migratedFrom.push(fromSchema);
+      if (fromSchema === 1 && typeof (payload as { coins?: unknown }).coins === "string") {
+        return { coins: Number((payload as { coins: string }).coins), visited: [] };
+      }
+      if (fromSchema === 2) return { ...(payload as object), label: "v3" };
+      return payload;
+    },
+  });
+  storage.setItem(
+    store.keyForSlot("auto"),
+    JSON.stringify({
+      schema: 1,
+      gameId: "forge-test",
+      createdAt: "2026-07-02T09:00:00.000Z",
+      updatedAt: "2026-07-02T09:30:00.000Z",
+      payload: { coins: "2" },
+    }),
+  );
+
+  assert.deepEqual(store.readSlot("auto"), {
+    schema: 3,
+    gameId: "forge-test",
+    createdAt: "2026-07-02T09:00:00.000Z",
+    updatedAt: "2026-07-02T09:30:00.000Z",
+    payload: { coins: 2, visited: [], label: "v3" },
+  });
+  assert.deepEqual(migratedFrom, [1, 2]);
+});
+
+check("save-game store: corrupt JSON reads as null and logs without crashing", () => {
+  const storage = createMemoryStorageAdapter();
+  const warnings: string[] = [];
+  const logger: PersistenceLogger = {
+    warn: (message) => warnings.push(message),
+  };
+  const store = new SaveGameStore({
+    gameId: "forge-test",
+    schema: 1,
+    storage,
+    logger,
+  });
+  storage.setItem(store.keyForSlot("bad"), "{not-json");
+
+  assert.equal(store.readSlot("bad"), null);
+  assert.deepEqual(warnings, ["Save-game data is corrupt or incompatible."]);
+});
+
+check("save-game store: storage write failures return an error result", () => {
+  const storage: StorageAdapter = {
+    getItem: () => null,
+    setItem: () => {
+      throw new Error("quota");
+    },
+    removeItem: () => undefined,
+    keys: () => [],
+  };
+  const warnings: string[] = [];
+  const store = new SaveGameStore({
+    gameId: "forge-test",
+    schema: 1,
+    storage,
+    logger: { warn: (message) => warnings.push(message) },
+  });
+
+  assert.deepEqual(store.writeSlot("auto", { level: "Levels/A.level.json" }), {
+    ok: false,
+    reason: "storage-error",
+  });
+  assert.deepEqual(warnings, ["Save-game write failed."]);
+});
+
+check("game save serializer: collects level, player facing, and persistent state", () => {
+  const state = collectSaveState({
+    activeLevelPath: "Levels/Playground.level.json",
+    playerTransform: {
+      position: [3, 1, -2],
+      rotation: [0, 135, 0],
+    },
+    persistentState: [
+      { entityId: "lamp", key: "enabled", value: false },
+      { entityId: "coin", key: "collected", value: true },
+    ],
+  });
+
+  assert.deepEqual(state, {
+    activeLevelPath: "Levels/Playground.level.json",
+    player: { position: [3, 1, -2], facingYawDeg: 135 },
+    flags: [
+      { entityId: "coin", key: "collected", value: true },
+      { entityId: "lamp", key: "enabled", value: false },
+    ],
+  });
+  assert.deepEqual(applySaveState(state), {
+    levelPath: "Levels/Playground.level.json",
+    player: { position: [3, 1, -2], facingYawDeg: 135 },
+    persistentState: [
+      { entityId: "coin", key: "collected", value: true },
+      { entityId: "lamp", key: "enabled", value: false },
+    ],
+  });
+});
+
+check("game save serializer: rejects bad player transforms and drops non-json flags", () => {
+  assert.equal(
+    applySaveState({
+      activeLevelPath: "Levels/A.level.json",
+      player: { position: [0, Number.NaN, 0], facingYawDeg: 0 },
+      flags: [],
+    }),
+    null,
+  );
+  assert.deepEqual(
+    applySaveState({
+      activeLevelPath: "Levels/A.level.json",
+      player: null,
+      flags: [
+        { entityId: "ok", key: "enabled", value: true },
+        { entityId: "", key: "bad", value: true },
+        { entityId: "bad", key: "nan", value: Number.NaN },
+      ],
+    }),
+    {
+      levelPath: "Levels/A.level.json",
+      player: null,
+      persistentState: [{ entityId: "ok", key: "enabled", value: true }],
+    },
+  );
 });
 
 check("hasPlayerCharacter: true for tagged or input-move, false otherwise", () => {

@@ -370,19 +370,26 @@ oyun-fork'unun genişletebileceği generic bir katman kurmak.
 
 ## Checklist
 
-- [ ] **P3.1 — Saf çekirdek:** `engine/persistence/saveGameStore.ts` —
-  slot listeleme/yazma/okuma/silme; zarf şeması `{ schema, gameId,
-  createdAt, updatedAt, payload }`; sürüm + `migrate(from, data)` hook'u;
-  bozuk/eksik JSON'da sessiz `null` + telemetri log'u (crash yok). Storage
-  adapter arayüzü (in-memory test adapter'ı + localStorage adapter'ı).
-  Headless testler: round-trip, migration zinciri, bozuk veri, quota hatası
-  (`setItem` throw) yutma.
-- [ ] **P3.2 — Oyun serializer sözleşmesi:** `src/game/saveGame.ts` —
-  `collectSaveState()` / `applySaveState()`; ilk kapsam: aktif level path,
-  oyuncu transform + facing, gameplay bayrakları (BehaviorContext `state`
-  üzerinden kayıt-değer çiftleri — hangi bayrakların kalıcı olduğu davranış
-  başına opt-in). Karar noktası: dikey hız/havada-olma kaydedilmez (spawn
-  grounded başlar — basitlik).
+- [x] **P3.1 — Saf çekirdek:** `engine/persistence/saveGameStore.ts` —
+  generic `SaveGameStore<TPayload>` eklendi: slot listeleme/yazma/okuma/silme,
+  namespaced slot key'leri, zarf şeması `{ schema, gameId, createdAt,
+  updatedAt, payload }`, `migrate(fromSchema, payload)` ile tek-adımlı migration
+  zinciri, bozuk/uyumsuz JSON'da `null` + logger uyarısı (crash yok), storage
+  okuma/yazma/silme/listeleme hatalarında yutma + sonuç/uyarı. Storage adapter
+  arayüzü + `MemoryStorageAdapter`/`createMemoryStorageAdapter` ve
+  `createLocalStorageAdapter` eklendi. Headless: round-trip + overwrite
+  timestamp koruması, slot sıralama/silme, 1→3 migration zinciri, corrupt JSON,
+  `setItem` throw/quota yutma. Engine 506→510.
+- [x] **P3.2 — Oyun serializer sözleşmesi:** `src/game/saveGame.ts` —
+  `collectSaveState()` / `applySaveState()` eklendi. İlk payload kapsamı:
+  aktif level path, oyuncu `position` + `facingYawDeg`, gameplay bayrakları.
+  `BehaviorContext.state` artık `persist(key, value)` opt-in yüzeyi sunar;
+  `BehaviorSubsystem.getPersistentStateSnapshot()` / `applyPersistentStateSnapshot()`
+  yalnız bu opt-in kayıt-değer çiftlerini taşır. `lamp-toggle` davranışı
+  `enabled` bayrağını kalıcı işaretler. Dikey hız/havada-olma kaydedilmez
+  (spawn grounded başlar — basitlik). Headless: opt-in snapshot/restore,
+  serializer collect/apply, bozuk player transform reddi, non-JSON flag filtreleme.
+  Engine 510→513.
 - [ ] **P3.3 — Load → travel entegrasyonu:** kayıt yükleme P2
   `requestLevelTravel` üstünden akar: level'ı yükle, spawn yerine kayıtlı
   transform'u uygula, bayrakları geri bas. Headless test: state
@@ -633,3 +640,26 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   ayrıştırılıp ayrı commit'lendi. **Kullanıcıya kalan smoke:** iki level arası
   portal gidiş-gelişi + 20+ turda heap stabilitesi (Chrome). **Sıradaki:** P3 —
   Save-Game / Persistence (P2 travel API'sine dayanır).
+- *2026-07-02* — **P3.1 tamamlandı: Save-Game saf çekirdeği.**
+  `engine/persistence/saveGameStore.ts` eklendi: engine oyun şemasını bilmez,
+  payload generic/opaque kalır. `SaveGameStore<TPayload>` slot
+  listeleme/yazma/okuma/silme, namespaced slot key'leri, `{ schema, gameId,
+  createdAt, updatedAt, payload }` zarfı, tek-adımlı `migrate(fromSchema,
+  payload)` zinciri, corrupt/uyumsuz JSON'da `null` + logger, storage
+  hata-yutma ve sonuç/uyarı yüzeyi sağlar. `MemoryStorageAdapter` ve
+  `createLocalStorageAdapter` eklendi. Headless testleri P3 bloğuna eklendi:
+  round-trip/overwrite timestamp koruması, slot sıralama/silme, 1→3 migration,
+  corrupt JSON ve `setItem` throw/quota yutma. Engine 506→510. **Sıradaki:**
+  P3.2 — oyun serializer sözleşmesi (`collectSaveState` / `applySaveState`).
+- *2026-07-02* — **P3.2 tamamlandı: oyun serializer sözleşmesi.**
+  `src/game/saveGame.ts` eklendi: `collectSaveState()` aktif level path,
+  oyuncu position + `facingYawDeg` ve kalıcı gameplay bayraklarını payload'a
+  çevirir; `applySaveState()` bozuk payload'u reddedip P3.3'ün uygulayacağı
+  restore request'i üretir. `BehaviorContext.state.persist(key, value)` opt-in
+  yüzeyi eklendi; `BehaviorSubsystem` yalnız opt-in kayıt-değer çiftlerini
+  `getPersistentStateSnapshot()` ile verir ve `applyPersistentStateSnapshot()`
+  ile geri basabilir. `lamp-toggle` davranışı `enabled` bayrağını kalıcı işaretler.
+  Dikey hız/havada-olma kaydedilmez. Headless: behavior persistent
+  snapshot/restore, serializer collect/apply, geçersiz player transform reddi,
+  non-JSON flag filtreleme. Engine 510→513. **Sıradaki:** P3.3 — load→travel
+  entegrasyonu (level yükle, kayıtlı transform + persistent state geri uygula).
