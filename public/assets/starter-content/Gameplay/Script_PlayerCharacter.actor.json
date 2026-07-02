@@ -57,7 +57,7 @@
         "isStatic": false,
         "isSensor": false,
         "capsuleRadius": 0.3,
-        "capsuleHalfHeight": 0.7
+        "capsuleHalfHeight": 0.9
       },
       "parent": "root"
     },
@@ -66,7 +66,7 @@
       "component": "CharacterMovement",
       "props": {
         "maxWalkSpeed": 2,
-        "sprintMultiplier": 2,
+        "sprintMultiplier": 3,
         "jumpSpeed": 4,
         "gravityScale": 1,
         "airControl": 0.25,

@@ -4,7 +4,7 @@
   "animationSet": {
     "idle": "Idle_Loop",
     "walk": "Walk_Loop",
-    "run": "Jog_Fwd_Loop",
+    "run": "Sprint_Loop",
     "jump": "Jump_Start",
     "fall": "Jump_Land"
   },
