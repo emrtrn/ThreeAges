@@ -228,6 +228,7 @@ function defaultCharacterComponents(): ComponentTemplateNode[] {
         capsuleHalfHeight: 0.9,
         maxStepHeight: 0.45,
         maxSlopeAngleDeg: 45,
+        stepSmoothSpeed: 6,
       },
     },
   ];

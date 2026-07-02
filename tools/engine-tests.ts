@@ -8398,17 +8398,67 @@ check("CharacterMovement subsystem steps onto low platforms and falls off unsupp
   );
   movement.setEntities([entity]);
 
-  actions.advance();
-  movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: 1 / 60, frame: 1 });
-  assert.equal((transform ?? assert.fail("transform")).position[1], 0.3);
+  // The feet ease onto the platform top over a few frames (stepSmoothSpeed 6,
+  // dt 1/60 → 0.1/frame), then settle at 0.3 while staying grounded.
+  for (let frame = 1; frame <= 5; frame += 1) {
+    actions.advance();
+    movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+  }
+  assert.ok(Math.abs((transform ?? assert.fail("transform")).position[1] - 0.3) < 1e-9);
   assert.equal(report?.grounded, true);
 
   actions.handleDown("KeyW");
   actions.advance();
-  movement.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 2 });
+  movement.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 6 });
   assert.ok((transform ?? assert.fail("transform")).position[2] < -0.5);
   assert.ok(transform.position[1] < 0.3);
   assert.equal(report?.grounded, false);
+});
+
+check("CharacterMovement subsystem eases a step-up over several frames (no camera pop)", () => {
+  const actions = new ActionMap();
+  const step: Aabb3 = { min: [-5, 0, -5], max: [5, 0.3, 5] }; // flat top at y=0.3
+  const physics = {
+    staticBlockerAabbs: () => [step],
+    staticSurfaceTriangles: () => [],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:stepper",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      CharacterMovement: {
+        maxWalkSpeed: 3,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        stepSmoothSpeed: 6, // 6 * (1/60) = 0.1 per frame → a 0.3 step takes 3 frames
+      },
+    },
+  };
+  let y = 0;
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      y = next.position[1];
+    },
+    physics,
+    { getGravityY: () => -10 },
+  );
+  movement.setEntities([entity]);
+
+  actions.advance();
+  movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: 1 / 60, frame: 1 });
+  assert.ok(Math.abs(y - 0.1) < 1e-9, `frame1 eased partway, not snapped: y=${y}`);
+  actions.advance();
+  movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: 2 / 60, frame: 2 });
+  assert.ok(Math.abs(y - 0.2) < 1e-9, `frame2: y=${y}`);
+  for (let frame = 3; frame <= 5; frame += 1) {
+    actions.advance();
+    movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+  }
+  assert.ok(Math.abs(y - 0.3) < 1e-9, `settled at the step top: y=${y}`);
 });
 
 check("applyMouseLook turns with the pointer delta and clamps pitch", () => {

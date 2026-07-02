@@ -259,6 +259,13 @@ export interface CharacterMovementComponent {
   maxStepHeight: number;
   /** Steepest ramp (degrees) the character can walk up; steeper surfaces are not walkable ground. */
   maxSlopeAngleDeg: number;
+  /**
+   * Vertical speed (units/s) the grounded feet ease toward a new floor height, so
+   * a step is climbed/descended over a few frames instead of snapping in one
+   * (which pops the camera). 0 = instant snap. Ramps are unaffected (their
+   * per-frame rise is below the per-frame ease budget).
+   */
+  stepSmoothSpeed: number;
 }
 
 /**
@@ -698,6 +705,7 @@ export function readCharacterMovementComponent(
     capsuleHalfHeight: readFiniteNumber(data.capsuleHalfHeight, 0.9, 0),
     maxStepHeight: readFiniteNumber(data.maxStepHeight, 0.45, 0),
     maxSlopeAngleDeg: readFiniteNumber(data.maxSlopeAngleDeg, 45, 0),
+    stepSmoothSpeed: readFiniteNumber(data.stepSmoothSpeed, 6, 0),
   };
 }
 

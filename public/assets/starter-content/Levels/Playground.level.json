@@ -84,9 +84,9 @@
       "placements": [
         {
           "position": [
-            1.37,
+            -6.5,
             0,
-            2.28
+            -1.19
           ],
           "rotationYDeg": 0,
           "scale": 1
@@ -98,9 +98,9 @@
       "placements": [
         {
           "position": [
-            0.32,
+            -7.55,
             0,
-            1.17
+            -2.3
           ],
           "rotationYDeg": 0,
           "scale": 1
@@ -116,9 +116,9 @@
       "placements": [
         {
           "position": [
-            -1.13,
+            -9,
             0,
-            1.8
+            -1.67
           ],
           "rotationYDeg": 0,
           "scale": [
@@ -134,9 +134,9 @@
       "placements": [
         {
           "position": [
-            0.46,
+            -7.41,
             0,
-            2.8
+            -0.67
           ],
           "rotationYDeg": 0,
           "scale": 1
@@ -164,9 +164,9 @@
       "placements": [
         {
           "position": [
-            0.77,
+            -7.1,
             2.54,
-            2.1
+            -1.37
           ],
           "simulatePhysics": true,
           "rotationYDeg": 0,
@@ -211,25 +211,6 @@
         },
         {
           "position": [
-            4.01,
-            0,
-            -4
-          ],
-          "materialSlot": "white-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            0,
-            10
-          ],
-          "scale": [
-            2,
-            1,
-            2
-          ]
-        },
-        {
-          "position": [
             -2.05,
             3.2,
             -2.65
@@ -240,6 +221,110 @@
             1.1,
             1,
             1
+          ]
+        },
+        {
+          "position": [
+            -10.27,
+            0.25,
+            2.9
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            1,
+            0.9
+          ]
+        },
+        {
+          "position": [
+            -10.27,
+            1.25,
+            2.9
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            1,
+            0.5
+          ]
+        },
+        {
+          "position": [
+            -10.27,
+            0.75,
+            2.9
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            1,
+            0.7
+          ]
+        },
+        {
+          "position": [
+            -10.27,
+            1.75,
+            2.9
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            1,
+            0.3
+          ]
+        },
+        {
+          "position": [
+            -10.27,
+            0.5,
+            2.9
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            1,
+            0.8
+          ]
+        },
+        {
+          "position": [
+            -10.27,
+            1.5,
+            2.9
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            1,
+            0.4
+          ]
+        },
+        {
+          "position": [
+            -10.27,
+            1,
+            2.9
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            1,
+            0.6
+          ]
+        },
+        {
+          "position": [
+            -10.27,
+            2,
+            2.9
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            1,
+            0.2
           ]
         }
       ]

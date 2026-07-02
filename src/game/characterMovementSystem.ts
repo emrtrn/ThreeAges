@@ -175,8 +175,15 @@ export class CharacterMovementSubsystem implements Subsystem {
       if (this.actions.pressed("jump")) {
         vertical.floorY = ground?.floorY ?? vertical.floorY;
       } else if (ground) {
-        vertical.floorY = ground.floorY;
-        vertical.state = groundedAt(ground.floorY);
+        // Ease the resting height toward the new floor so a step is climbed over a
+        // few frames instead of snapping in one (which pops the camera). Ramps have
+        // a tiny per-frame rise, so they reach the target every frame (no lag).
+        vertical.floorY = approachHeight(
+          vertical.floorY,
+          ground.floorY,
+          movement.stepSmoothSpeed * engine.deltaSeconds,
+        );
+        vertical.state = groundedAt(vertical.floorY);
       } else if (!this.hasGroundProbe()) {
         vertical.state = groundedAt(vertical.floorY);
       } else {
@@ -292,6 +299,14 @@ export class CharacterMovementSubsystem implements Subsystem {
 
 function controlYawToCharacterYaw(yaw: number): number {
   return facingYawFromMove(-Math.sin(yaw), -Math.cos(yaw)) ?? 0;
+}
+
+/** Moves `current` toward `target` by at most `maxDelta`; a non-positive `maxDelta` snaps. */
+function approachHeight(current: number, target: number, maxDelta: number): number {
+  if (!(maxDelta > 0)) return target;
+  const diff = target - current;
+  if (Math.abs(diff) <= maxDelta) return target;
+  return current + Math.sign(diff) * maxDelta;
 }
 
 function cloneTransform(transform: TransformComponent): TransformComponent {

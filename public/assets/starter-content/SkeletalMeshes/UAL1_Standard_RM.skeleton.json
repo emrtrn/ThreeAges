@@ -15,7 +15,7 @@
       "axisX": {
         "name": "Speed",
         "min": 0,
-        "max": 5
+        "max": 2
       },
       "samples": []
     }

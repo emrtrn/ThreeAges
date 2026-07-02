@@ -522,3 +522,14 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   **Sıradaki:** P1.5 test alanı içeriği (rampa/merdiven gym — sanat asset'i
   gerektirir) veya P2. P1 çekirdek sertleştirmesi (tünelleme + rotasyon + eğim)
   tamam.
+- *2026-07-02* — **Step-smoothing (kullanıcı geri bildirimi: merdiven step-up'ı
+  anlık, kamera zıplıyor).** Kullanıcı collision+eğimi test edip commit etti;
+  merdiven kurunca step yüksekliğine tek frame'de snap edip kamerayı zıplattığını
+  fark etti. `characterMovementSystem` grounded zemin takibi artık
+  `approachHeight` ile yeni zemine `stepSmoothSpeed` (units/s) hızında yaklaşıyor
+  — step birkaç frame'e yayılıyor, rampalar etkilenmiyor (kare-başı yükseliş ease
+  bütçesinin altında). `stepSmoothSpeed` (varsayılan 6) yeni CharacterMovement
+  prop'u (allowlist'siz free-form; editörde "Step Smooth Speed"). Not: sabit-hız
+  ease'in "hızlı merdivende geride kalma" gerilimi var; kullanıcı prop'u ayarlar,
+  gerekirse Unreal-tarzı mesh/kamera-offset ayrıştırmasına geçilir. Engine 487,
+  build:verify PASS.

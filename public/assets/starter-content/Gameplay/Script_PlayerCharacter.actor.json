@@ -65,7 +65,7 @@
       "id": "characterMovement",
       "component": "CharacterMovement",
       "props": {
-        "maxWalkSpeed": 5,
+        "maxWalkSpeed": 2,
         "sprintMultiplier": 2,
         "jumpSpeed": 4,
         "gravityScale": 1,
@@ -82,7 +82,8 @@
         "orientRotationToControl": false,
         "movementMode": "walking",
         "capsuleRadius": 0.3,
-        "capsuleHalfHeight": 0.9
+        "capsuleHalfHeight": 0.9,
+        "stepSmoothSpeed": 2
       },
       "parent": "root"
     }
