@@ -22,6 +22,7 @@ import {
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
+import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
@@ -338,6 +339,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly inputActions = new ActionMap(DEFAULT_INPUT_BINDINGS);
   private readonly inputSubsystem = new InputSubsystem(this.inputActions);
   private readonly physicsSubsystem = new PhysicsSubsystem({ backend: "rapier" });
+  private readonly movingPlatformSubsystem: MovingPlatformSubsystem;
   private readonly characterMovementSubsystem: CharacterMovementSubsystem;
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
@@ -585,6 +587,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     this.pointerButtons = new PointerButtonSource(this.inputActions, canvas);
     this.interactionPromptElement = this.createInteractionPromptElement();
+    this.movingPlatformSubsystem = new MovingPlatformSubsystem(this.syncEntityTransform);
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
       this.syncEntityTransform,
@@ -599,12 +602,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           this.inputMode !== "ui" &&
           this.gameModeSession?.playerState.pawnEntityId === entityId &&
           !this.gameModeSession.playerState.pawnControlSuspended,
+        platforms: this.movingPlatformSubsystem,
       },
     );
 
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
     this.engineApp.registerSubsystem(this.physicsSubsystem);
+    // The platform subsystem must tick before character movement so a rider is
+    // carried by the same frame's platform delta (no one-frame lag).
+    this.engineApp.registerSubsystem(this.movingPlatformSubsystem);
     this.engineApp.registerSubsystem(this.characterMovementSubsystem);
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
@@ -957,6 +964,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await startSceneRuntime({
       sceneDocument,
       physics: this.physicsSubsystem,
+      movingPlatform: this.movingPlatformSubsystem,
       characterMovement: this.characterMovementSubsystem,
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,

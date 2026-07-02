@@ -5,6 +5,7 @@ import type {
   LayoutInteraction,
   LayoutLightActor,
   LayoutMetadata,
+  LayoutMovingPlatform,
   LayoutParticleEmitter,
   LayoutPhysics,
   LayoutPostProcess,
@@ -238,6 +239,8 @@ export interface EditableSelection {
   particle?: LayoutParticleEmitter;
   /** Authored interaction marker; absent when the object has no Interaction component. */
   interaction?: LayoutInteraction;
+  /** Authored moving-platform motion; absent when the object has no Moving Platform component. */
+  movingPlatform?: LayoutMovingPlatform;
   lightType?: LayoutLightActor["type"];
   color?: string;
   intensity?: number;

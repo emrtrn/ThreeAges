@@ -242,6 +242,7 @@ import type {
   LayoutInteraction,
   LayoutLightActor,
   LayoutHeightFog,
+  LayoutMovingPlatform,
   LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
@@ -4270,6 +4271,11 @@ export class SceneApp {
   /** Sets (or clears, when `undefined`) the selection's Particle Emitter component with undo/redo. */
   setSelectionParticle(value: LayoutParticleEmitter | undefined): void {
     this.editorSceneController.setSelectionParticle(value);
+  }
+
+  /** Sets (or clears, when `undefined`) the selection's Moving Platform component with undo/redo. */
+  setSelectionMovingPlatform(value: LayoutMovingPlatform | undefined): void {
+    this.editorSceneController.setSelectionMovingPlatform(value);
   }
 
   /** Active project's gameplay metadata schema, or null when none is declared. */

@@ -48,6 +48,7 @@ import {
   readMessageBindingsComponent,
   readMeshRendererComponent,
   readMetadataComponent,
+  readMovingPlatformComponent,
   readParticleEmitterComponent,
   readScriptActorComponent,
   readScriptDispatchersComponent,
@@ -74,6 +75,14 @@ import type { BehaviorRegistry } from "../engine/behavior/behaviorSubsystem";
 import { ScriptMessageBus } from "../engine/behavior/scriptMessages";
 import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
 import { rotatedBoxAabb } from "../engine/physics/rotatedBox";
+import {
+  initialElapsed,
+  oneWaySeconds,
+  platformFraction,
+  platformPositionAt,
+  segmentLength,
+} from "../engine/physics/movingPlatform";
+import { MovingPlatformSubsystem } from "../engine/physics/movingPlatformSubsystem";
 import {
   AudioSubsystem,
   DEFAULT_SPATIAL_ATTENUATION,
@@ -151,6 +160,12 @@ import {
   resolveSpringArmCollision,
 } from "../src/game/springArmCamera";
 import { groundedAt, stepVerticalMotion } from "../src/game/verticalMotion";
+import {
+  UPHILL_SLOWDOWN_REST,
+  climbSlopeSample,
+  updateUphillSlowdown,
+  uphillSpeedScale,
+} from "../src/game/uphillSlowdown";
 import {
   filterWalkableBlockers,
   findGroundAt,
@@ -8459,6 +8474,442 @@ check("CharacterMovement subsystem eases a step-up over several frames (no camer
     movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
   }
   assert.ok(Math.abs(y - 0.3) < 1e-9, `settled at the step top: y=${y}`);
+});
+
+check("uphill slowdown: flat, descending, and standing frames read as no climb", () => {
+  assert.equal(climbSlopeSample(0, 0.05), 0);
+  assert.equal(climbSlopeSample(-0.2, 0.05), 0); // downhill never speeds up
+  assert.equal(climbSlopeSample(0.1, 0), 0); // standing still: no climb
+  assert.equal(climbSlopeSample(100, 0.01), 8); // teleport-sized rise is clipped
+});
+
+check("uphill slowdown: smoothed slope converges on a ramp and decays after it", () => {
+  const dt = 1 / 60;
+  let state = UPHILL_SLOWDOWN_REST;
+  // 2s on a slope-0.5 ramp (rise = 0.5 * run every frame).
+  for (let i = 0; i < 120; i += 1) state = updateUphillSlowdown(state, 0.025, 0.05, dt);
+  assert.ok(Math.abs(state.smoothedSlope - 0.5) < 0.01, `converged: ${state.smoothedSlope}`);
+  // 2s back on the flat: the slowdown releases.
+  for (let i = 0; i < 120; i += 1) state = updateUphillSlowdown(state, 0, 0.05, dt);
+  assert.ok(state.smoothedSlope < 0.01, `decayed: ${state.smoothedSlope}`);
+});
+
+check("uphill slowdown: spiky stair samples average near the staircase incline", () => {
+  // A stair edge delivers the whole 0.3 rise in one frame, then 5 flat frames of
+  // 0.1 planar movement each — the same rise/run (0.5) a ramp would spread out.
+  const dt = 1 / 60;
+  let state = UPHILL_SLOWDOWN_REST;
+  const stepOnce = () => {
+    state = updateUphillSlowdown(state, 0.3, 0.1, dt);
+    let sum = state.smoothedSlope;
+    for (let i = 0; i < 5; i += 1) {
+      state = updateUphillSlowdown(state, 0, 0.1, dt);
+      sum += state.smoothedSlope;
+    }
+    return sum / 6;
+  };
+  for (let step = 0; step < 40; step += 1) stepOnce(); // converge
+  let mean = 0;
+  for (let step = 0; step < 5; step += 1) mean += stepOnce() / 5;
+  assert.ok(Math.abs(mean - 0.5) < 0.1, `stair mean slope tracks the incline: ${mean}`);
+});
+
+check("uphillSpeedScale maps the smoothed slope to a planar speed multiplier", () => {
+  assert.equal(uphillSpeedScale(UPHILL_SLOWDOWN_REST, 0.65), 1);
+  assert.ok(Math.abs(uphillSpeedScale({ smoothedSlope: 1 }, 0.65) - 0.65) < 1e-9);
+  assert.ok(Math.abs(uphillSpeedScale({ smoothedSlope: 0.5 }, 0.65) - 0.825) < 1e-9);
+  assert.ok(Math.abs(uphillSpeedScale({ smoothedSlope: 2 }, 0.65) - 0.65) < 1e-9); // clamped past 45°
+  assert.equal(uphillSpeedScale({ smoothedSlope: 1 }, 1), 1); // 1 disables the slowdown
+});
+
+check("CharacterMovement subsystem slows the walk while climbing stairs and recovers on the flat", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  const floor: Aabb3 = { min: [-2, -0.2, -2], max: [2, 0, 1] };
+  const step1: Aabb3 = { min: [-2, 0, -2.6], max: [2, 0.3, -2] };
+  const step2: Aabb3 = { min: [-2, 0, -3.2], max: [2, 0.6, -2.6] };
+  const step3: Aabb3 = { min: [-2, 0, -3.8], max: [2, 0.9, -3.2] };
+  const landing: Aabb3 = { min: [-2, 0, -8], max: [2, 0.9, -3.8] };
+  const physics = {
+    staticBlockerAabbs: () => [floor, step1, step2, step3, landing],
+    staticSurfaceTriangles: () => [],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:climber",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      CharacterMovement: {
+        maxWalkSpeed: 2,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        maxStepDown: 0.5,
+        uphillSpeedScale: 0.65,
+        stepSmoothSpeed: 6,
+      },
+    },
+  };
+  const speeds: number[] = [];
+  const grounded: boolean[] = [];
+  const movement = new CharacterMovementSubsystem(actions, () => {}, physics, {
+    getGravityY: () => -10,
+    reportLocomotion: (_id, report) => {
+      speeds.push(report.planarSpeed);
+      grounded.push(report.grounded);
+    },
+  });
+  movement.setEntities([entity]);
+  actions.handleDown("KeyW");
+  for (let frame = 1; frame <= 190; frame += 1) {
+    actions.advance();
+    movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+  }
+  assert.ok(grounded.every(Boolean), "stays grounded across the whole staircase");
+  assert.ok(Math.abs(speeds[40] - 2) < 1e-6, `full speed on the flat: ${speeds[40]}`);
+  const climbMin = Math.min(...speeds.slice(60, 110));
+  assert.ok(climbMin < 1.9 && climbMin > 1.2, `measurably slowed on the stairs: ${climbMin}`);
+  assert.ok(speeds[189] > 1.95, `recovered on the landing: ${speeds[189]}`);
+});
+
+check("CharacterMovement subsystem walks down a 0.4 ledge without entering falling", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  const platform: Aabb3 = { min: [-2, 0, -1], max: [2, 0.4, 1] };
+  const floor: Aabb3 = { min: [-2, -0.2, -6], max: [2, 0, -1] };
+  const physics = {
+    staticBlockerAabbs: () => [platform, floor],
+    staticSurfaceTriangles: () => [],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:descender",
+    components: {
+      Transform: { position: [0, 0.4, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      // maxStepDown omitted on purpose: the component default (0.5) covers the drop.
+      CharacterMovement: {
+        maxWalkSpeed: 2,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        stepSmoothSpeed: 6,
+      },
+    },
+  };
+  let y = 0.4;
+  const grounded: boolean[] = [];
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      y = next.position[1];
+    },
+    physics,
+    {
+      getGravityY: () => -10,
+      reportLocomotion: (_id, report) => {
+        grounded.push(report.grounded);
+      },
+    },
+  );
+  movement.setEntities([entity]);
+  actions.handleDown("KeyW");
+  for (let frame = 1; frame <= 90; frame += 1) {
+    actions.advance();
+    movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+  }
+  assert.ok(grounded.every(Boolean), "never enters falling on a step-sized drop");
+  assert.ok(Math.abs(y) < 1e-9, `eased down onto the lower floor: y=${y}`);
+});
+
+check("CharacterMovement subsystem still falls off a drop beyond Max Step Down", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  const platform: Aabb3 = { min: [-2, 0, -1], max: [2, 0.6, 1] }; // 0.6 > maxStepDown 0.5
+  const floor: Aabb3 = { min: [-2, -0.2, -6], max: [2, 0, -1] };
+  const physics = {
+    staticBlockerAabbs: () => [platform, floor],
+    staticSurfaceTriangles: () => [],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:faller",
+    components: {
+      Transform: { position: [0, 0.6, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      CharacterMovement: {
+        maxWalkSpeed: 2,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        stepSmoothSpeed: 6,
+      },
+    },
+  };
+  let y = 0.6;
+  const grounded: boolean[] = [];
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      y = next.position[1];
+    },
+    physics,
+    {
+      getGravityY: () => -10,
+      reportLocomotion: (_id, report) => {
+        grounded.push(report.grounded);
+      },
+    },
+  );
+  movement.setEntities([entity]);
+  actions.handleDown("KeyW");
+  for (let frame = 1; frame <= 120; frame += 1) {
+    actions.advance();
+    movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+  }
+  assert.ok(grounded.some((flag) => !flag), "a beyond-threshold drop goes airborne");
+  assert.equal(grounded[grounded.length - 1], true, "lands back on the floor");
+  assert.ok(Math.abs(y) < 1e-9, `settled on the lower floor: y=${y}`);
+});
+
+check("moving platform math: segment length, one-way time, ping-pong fraction, positions", () => {
+  assert.ok(Math.abs(segmentLength([3, 4, 0]) - 5) < 1e-9);
+  assert.equal(oneWaySeconds({ offset: [0, 0, 0], speed: 2, startPhase: 0 }), 0); // no offset
+  assert.equal(oneWaySeconds({ offset: [4, 0, 0], speed: 0, startPhase: 0 }), 0); // no speed
+  assert.ok(Math.abs(oneWaySeconds({ offset: [4, 0, 0], speed: 2, startPhase: 0 }) - 2) < 1e-9);
+  // Ping-pong triangle wave over a one-way of 2s: 0 → 1 → 0.
+  assert.equal(platformFraction(0, 2), 0);
+  assert.ok(Math.abs(platformFraction(1, 2) - 0.5) < 1e-9);
+  assert.ok(Math.abs(platformFraction(2, 2) - 1) < 1e-9);
+  assert.ok(Math.abs(platformFraction(3, 2) - 0.5) < 1e-9); // returning
+  assert.ok(Math.abs(platformFraction(4, 2) - 0) < 1e-9); // back at start
+  assert.equal(platformFraction(5, 0), 0); // a platform that can't move stays put
+  const params = { offset: [3, 0, 0] as [number, number, number], speed: 1.5, startPhase: 0 };
+  assert.deepEqual(platformPositionAt([1, 2, 3], params, 1), [2.5, 2, 3]); // fraction 0.5 → +1.5 on X
+  assert.equal(initialElapsed(params), 0);
+  assert.ok(Math.abs(initialElapsed({ ...params, startPhase: 0.5 }) - 1) < 1e-9); // half-way seed
+});
+
+check("MovingPlatformSubsystem moves a platform, publishes its AABB + delta, and ping-pongs", () => {
+  const platform: Entity = {
+    id: "platform:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [2, 1, 2], isStatic: false, isSensor: false },
+      MovingPlatform: { offset: [2, 0, 0], speed: 1, startPhase: 0 },
+    },
+  };
+  const subsystem = new MovingPlatformSubsystem();
+  subsystem.setEntities([platform]);
+  // At rest the state carries a zero delta and the authored AABB.
+  const initial = subsystem.platforms();
+  assert.equal(initial.length, 1);
+  assert.deepEqual(initial[0]?.delta, [0, 0, 0]);
+  assert.deepEqual(initial[0]?.aabb.min, [-1, -0.5, -1]);
+
+  const step = (frame: number) =>
+    subsystem.update({ deltaSeconds: 0.5, elapsedSeconds: frame * 0.5, frame });
+  for (let frame = 1; frame <= 4; frame += 1) step(frame); // reach the far end (elapsed 2s = one-way)
+  const atFar = subsystem.platforms()[0]!;
+  assert.ok(Math.abs(atFar.aabb.min[0] - 1) < 1e-9, `far end AABB shifted +2 on X: ${atFar.aabb.min[0]}`);
+  assert.ok(atFar.delta[0] > 0, "still moving outward at the far end frame");
+  step(5); // past the far end: the platform reverses
+  assert.ok(subsystem.platforms()[0]!.delta[0] < 0, "delta reverses after the far end (ping-pong)");
+});
+
+check("adapter: a movingPlatform placement becomes a kinematic body, excluded from static blockers", () => {
+  const fixture: RoomLayout = {
+    schema: 1,
+    name: "platform",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "block",
+        placements: [{ position: [0, 0, 0], movingPlatform: { offset: [4, 0, 0], speed: 2 } }],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const entity = roomLayoutToSceneDocument(fixture).entities.find(
+    (candidate) => candidate.id === instanceEntityId("block", 0),
+  );
+  assert.ok(entity, "platform entity built");
+  const collider = entity ? readColliderComponent(entity) : undefined;
+  assert.equal(collider?.isStatic, false, "movable placement is not a static collider");
+  const platform = entity ? readMovingPlatformComponent(entity) : undefined;
+  assert.deepEqual(platform, { offset: [4, 0, 0], speed: 2, startPhase: 0 });
+  // A moving platform must not leak into the cached static blockers (else a stale
+  // AABB would sit at its start while the platform drove away).
+  const physics = new PhysicsSubsystem();
+  physics.setEntities(roomLayoutToSceneDocument(fixture).entities);
+  assert.equal(physics.staticBlockerAabbs().length, 0, "not a static blocker");
+});
+
+check("CharacterMovement subsystem: a rider is carried horizontally by a moving platform", () => {
+  const actions = new ActionMap();
+  const platformSub = new MovingPlatformSubsystem();
+  platformSub.setEntities([
+    {
+      id: "platform:0",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [4, 1, 4], isStatic: false, isSensor: false },
+        MovingPlatform: { offset: [3, 0, 0], speed: 1.5, startPhase: 0 },
+      },
+    },
+  ]);
+  const physics = {
+    staticBlockerAabbs: () => [],
+    staticSurfaceTriangles: () => [],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const rider: Entity = {
+    id: "rider:0",
+    components: {
+      Transform: { position: [0, 0.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      CharacterMovement: {
+        maxWalkSpeed: 2,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        maxStepDown: 0.5,
+        stepSmoothSpeed: 6,
+      },
+    },
+  };
+  let pos: [number, number, number] = [0, 0.5, 0];
+  const grounded: boolean[] = [];
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      pos = [...next.position] as [number, number, number];
+    },
+    physics,
+    {
+      getGravityY: () => -10,
+      platforms: platformSub,
+      reportLocomotion: (_id, report) => grounded.push(report.grounded),
+    },
+  );
+  movement.setEntities([rider]);
+  // No input: the rider should be carried purely by the platform (one-way = 2s, so
+  // after 1s the platform sits at fraction 0.5 → +1.5 on X).
+  for (let frame = 1; frame <= 60; frame += 1) {
+    actions.advance();
+    platformSub.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+    movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+  }
+  assert.ok(Math.abs(pos[0] - 1.5) < 0.02, `carried along X with the platform: ${pos[0]}`);
+  assert.ok(Math.abs(pos[1] - 0.5) < 1e-6, `stayed on the platform top: ${pos[1]}`);
+  assert.ok(grounded.every(Boolean), "never goes airborne while riding");
+});
+
+check("CharacterMovement subsystem: a rising platform lifts the rider and isn't read as climbing", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  const platformSub = new MovingPlatformSubsystem();
+  platformSub.setEntities([
+    {
+      id: "elevator:0",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [8, 1, 8], isStatic: false, isSensor: false },
+        MovingPlatform: { offset: [0, 2, 0], speed: 1, startPhase: 0 },
+      },
+    },
+  ]);
+  const physics = {
+    staticBlockerAabbs: () => [],
+    staticSurfaceTriangles: () => [],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const rider: Entity = {
+    id: "rider:1",
+    components: {
+      Transform: { position: [0, 0.5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      CharacterMovement: {
+        maxWalkSpeed: 2,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        maxStepDown: 0.5,
+        uphillSpeedScale: 0.65,
+        stepSmoothSpeed: 6,
+      },
+    },
+  };
+  let pos: [number, number, number] = [0, 0.5, 0];
+  const speeds: number[] = [];
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      pos = [...next.position] as [number, number, number];
+    },
+    physics,
+    {
+      getGravityY: () => -10,
+      platforms: platformSub,
+      reportLocomotion: (_id, report) => speeds.push(report.planarSpeed),
+    },
+  );
+  movement.setEntities([rider]);
+  actions.handleDown("KeyW");
+  for (let frame = 1; frame <= 60; frame += 1) {
+    actions.advance();
+    platformSub.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+    movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+  }
+  // After 1s the elevator top rose by 1 (0.5 → 1.5); the rider follows it up.
+  assert.ok(Math.abs(pos[1] - 1.5) < 0.05, `lifted with the elevator: ${pos[1]}`);
+  // The vertical carry is subtracted from the climb measurement, so walking on the
+  // rising platform keeps full speed instead of triggering the uphill slowdown.
+  const settled = speeds.slice(40);
+  assert.ok(
+    settled.every((speed) => speed > 1.95),
+    `no false uphill slowdown while riding up: min=${Math.min(...settled)}`,
+  );
+});
+
+check("save validator preserves a movingPlatform placement and rejects malformed motion", () => {
+  const layout = validateLayout({
+    schema: 1,
+    name: "platform",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "block",
+        placements: [{ position: [0, 0, 0], movingPlatform: { offset: [4, 0, 2], speed: 1.5, startPhase: 0.25 } }],
+      },
+    ],
+    characters: [],
+  }) as RoomLayout;
+  assert.deepEqual(layout.instances[0]?.placements[0]?.movingPlatform, {
+    offset: [4, 0, 2],
+    speed: 1.5,
+    startPhase: 0.25,
+  });
+  assert.throws(() =>
+    validateLayout({
+      schema: 1,
+      name: "bad",
+      loadGroups: [],
+      instances: [
+        { assetId: "block", placements: [{ position: [0, 0, 0], movingPlatform: { offset: [1, 0], speed: 1 } }] },
+      ],
+      characters: [],
+    }),
+  );
+  assert.throws(() =>
+    validateLayout({
+      schema: 1,
+      name: "bad",
+      loadGroups: [],
+      instances: [
+        { assetId: "block", placements: [{ position: [0, 0, 0], movingPlatform: { offset: [1, 0, 0], speed: -2 } }] },
+      ],
+      characters: [],
+    }),
+  );
 });
 
 check("applyMouseLook turns with the pointer delta and clamps pitch", () => {

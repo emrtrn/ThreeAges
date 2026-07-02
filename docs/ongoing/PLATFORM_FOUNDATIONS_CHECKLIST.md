@@ -222,9 +222,28 @@ etkileşiminin A'da kirlenmesi.
   döndürülmüş engel bölümü. Dev sunucusunun demo layout'u otomatik
   kaydettiği bilinen davranışına dikkat (bkz. memory/CLAUDE.md) — gym'i
   default scene yapma.
-- [ ] **P1.6 — (Backlog, opsiyonel) Hareketli platform:** kinematik blocker
-  + üstündeki karakteri delta ile taşıma. İlk oyun gerektirmiyorsa bu
-  dosyada backlog olarak kalır; gerektiğinde ayrı maddeye açılır.
+- [x] **P1.6 — Hareketli platform (kinematik taşıyıcı + carry).** Yeni tipli
+  `MovingPlatform` component (`offset`/`speed`/`startPhase`) + saf çekirdek
+  `engine/physics/movingPlatform.ts` (ping-pong üçgen dalga, sabit hız, uçlarda
+  temiz yön dönüşü — teleport yok). `MovingPlatformSubsystem` platformu sürer,
+  transform'u render+fizik sink'ine yazar, her platform için güncel dünya AABB'si
+  + bu-frame delta'sını `platforms()` ile yayınlar; **karakter hareketinden ÖNCE**
+  register edilir (carry'de frame gecikmesi yok). Component varlığı collider'ı
+  **movable (kinematik)** yapar → statik blocker cache'inden düşer (yoksa eski
+  konumda hayalet AABB kalırdı). CharacterMovement platformları (a) blocker, (b)
+  zemin probe yüzeyi, (c) **yatay carry** olarak tüketir; carry ayrıca
+  collision-resolve edilir (platform seni duvardan içeri itemez), dikey takip
+  mevcut ground-probe + step-smoothing ile; rising-platform yükselişi uphill
+  ölçümünden **çıkarılır** (asansörde yürümek yavaşlamaz). `movingPlatform` alanı
+  `saveValidator` allowlist'ine (`validateMovingPlatform` → `applyTransformFields`)
+  işlendi; editörde Details "Moving Platform" eklenebilir component'i (yalnız
+  static-mesh instance'larda) + undo/redo snapshot cloning. Headless: saf
+  matematik, subsystem hareket+delta+ping-pong, adapter (movable + statik
+  blocker'dan hariç), uçtan uca **carry** ve **asansör + uphill muafiyeti**,
+  validator round-trip/ret. Engine 494→500. **Sınırlar (backlog):** yalnız
+  translation (dönme carry'si yok); >~6 u/s dikey platform step-smooth ease'ini
+  aşabilir; carry AABB modeli (dönük platform footprint şişmesi P1.2 kararıyla
+  aynı).
 
 ## Kabul kriterleri
 
@@ -470,7 +489,8 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
 
 ## Backlog (bu plana bilinçli alınmayanlar)
 
-- Hareketli platform (P1.6 — ilk oyun gerektirirse açılır).
+- ~~Hareketli platform (P1.6)~~ — **tamamlandı** (translation-only; dönme carry'si
+  + hızlı dikey platform ince ayarı backlog'da kaldı).
 - OBB/rotated collider tam desteği (P1.2 kararına bağlı).
 - IndexedDB storage adapter'ı (P3 tetikleyicisi: kayıt boyutu).
 - Runtime LOD + level streaming (P5 kararı: içerik ölçeği gerektirene dek).
@@ -522,6 +542,24 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   **Sıradaki:** P1.5 test alanı içeriği (rampa/merdiven gym — sanat asset'i
   gerektirir) veya P2. P1 çekirdek sertleştirmesi (tünelleme + rotasyon + eğim)
   tamam.
+- *2026-07-02* — **Fizik feel iyileştirmeleri ×2 (kullanıcı geri bildirimi, P1
+  devamı).** (1) **Merdiven inişinde erken düşme animasyonu:** ground probe'un
+  aşağı-snap eşiği `maxStepDown` hard-coded 0.2 idi; küçük basamak derinlikleri
+  karakteri airborne sayıp fall animasyonuna sokuyordu. Artık CharacterMovement
+  prop'u (editörde "Max Step Down", varsayılan **0.5**) — 50 cm'e kadar iniş
+  grounded kalır (stepSmoothSpeed ile yumuşak iner), daha büyük düşüş yine
+  falling'e girer. (2) **Yokuş/merdiven çıkarken yürüme yavaşlaması:** yeni saf
+  modül `src/game/uphillSlowdown.ts` — kare başına grounded probe hedefinin
+  yükselişi / uygulanan planar mesafe = tırmanma eğimi örneği; üstel filtre
+  (τ=0.25s) merdivenin spike'lı örneklerini gerçek rise/run eğimine yakınsatır
+  (filtre lineer olduğundan merdiven ≈ eşdeğer rampa okur). Yeni prop
+  `uphillSpeedScale` (varsayılan 0.65; 45°+ tırmanışta hız çarpanı, düze doğru
+  lineer 1'e köprülenir, 1 = kapalı) planar hızı ölçekler; iniş/duruş/havada
+  örnek 0 → hız τ ölçeğinde geri gelir. Rapor edilen `planarSpeed` de ölçekli
+  olduğundan locomotion blend'i uyumlu yavaşlar. İki prop da free-form
+  (allowlist gerekmez). Engine 487→494 (+7: saf örnekleme/yakınsama/stair-mean/
+  ölçek eşlemesi + uçtan uca merdivende yavaşlayıp düzde toparlama, 0.4 iniş
+  grounded, 0.6 iniş falling→landing), `build:verify` yeşil.
 - *2026-07-02* — **Step-smoothing (kullanıcı geri bildirimi: merdiven step-up'ı
   anlık, kamera zıplıyor).** Kullanıcı collision+eğimi test edip commit etti;
   merdiven kurunca step yüksekliğine tek frame'de snap edip kamerayı zıplattığını
@@ -533,3 +571,23 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   ease'in "hızlı merdivende geride kalma" gerilimi var; kullanıcı prop'u ayarlar,
   gerekirse Unreal-tarzı mesh/kamera-offset ayrıştırmasına geçilir. Engine 487,
   build:verify PASS.
+- *2026-07-02* — **P1.6 tamamlandı: hareketli platform (kinematik carry).**
+  Tipli `MovingPlatform` component (`offset`/`speed`/`startPhase`) + saf çekirdek
+  `engine/physics/movingPlatform.ts` (ping-pong üçgen dalga). Yeni
+  `MovingPlatformSubsystem` platformu sürer, transform'u render+fizik'e yazar,
+  güncel AABB + bu-frame delta'yı `platforms()` ile sunar; **karakter
+  hareketinden önce** register (carry lag'siz). Component varlığı collider'ı
+  movable (kinematik) yapıyor → adapter (`colliderComponent` yeni `movable`
+  param'ı) statik blocker cache'inden hariç tutuyor. CharacterMovement combined
+  blocker (statik + platform) üstünde çözüyor: platform hem yan-blocker hem
+  zemin; **yatay carry** ayrı collision-resolve (duvara itmez), dikey takip
+  ground-probe/step-smoothing; rising-platform yükselişi uphill ölçümünden
+  çıkarılıyor (asansörde yürürken yavaşlama yok). `movingPlatform` alanı
+  `saveValidator`'a (`validateMovingPlatform` → `applyTransformFields`) +
+  editör snapshot cloning'e işlendi; Details'te "Moving Platform" eklenebilir
+  component (yalnız instance). Engine 494→500 (+6: saf math, subsystem
+  hareket/delta/ping-pong, adapter movable+hariç, uçtan uca carry, asansör +
+  uphill muafiyeti, validator round-trip/ret). `build:verify` + `check:assets`
+  yeşil. **Backlog:** dönme carry'si, >~6 u/s dikey platform ease ince ayarı.
+  P1 tamamen kapandı. **Sıradaki:** P1.5 (test alanı içeriği, sanat asset'i
+  gerektirir) opsiyonel; ana faz **P2 — Level Travel**.

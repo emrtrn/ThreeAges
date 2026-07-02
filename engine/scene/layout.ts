@@ -34,6 +34,21 @@ export interface LayoutBehavior {
   params?: LayoutMetadata;
 }
 
+/**
+ * Authors a kinematic moving platform: the object ping-pongs from its placed
+ * position to `position + offset` and back at `speed` units/s. Its presence makes
+ * the collider movable (kinematic) instead of static, so the runtime carries a
+ * character standing on it and excludes it from the cached static blockers.
+ */
+export interface LayoutMovingPlatform {
+  /** Far-end offset from the placed position (world units). */
+  offset: Vec3;
+  /** Travel speed along the segment (units/s). */
+  speed: number;
+  /** Initial position along the segment, 0..1 (0 = start). Absent means 0. */
+  startPhase?: number;
+}
+
 export interface LayoutAudio {
   /**
    * Raw sound clip ID (manifest `sound` asset). Legacy field; use `sourceId` +
@@ -175,6 +190,8 @@ export interface LayoutPlacement {
   particle?: LayoutParticleEmitter;
   /** Authored interaction marker (interpreted by runtime game rules). */
   interaction?: LayoutInteraction;
+  /** Kinematic moving-platform motion; presence makes the collider movable. */
+  movingPlatform?: LayoutMovingPlatform;
 }
 
 export interface LayoutModelInstances {

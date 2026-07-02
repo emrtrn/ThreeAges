@@ -5,6 +5,7 @@ import type {
   LayoutCharacter,
   LayoutLightActor,
   LayoutMetadata,
+  LayoutMovingPlatform,
   LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
@@ -50,6 +51,15 @@ export function cloneBehavior(behavior: LayoutBehavior): LayoutBehavior {
 export function cloneParticle(particle: LayoutParticleEmitter): LayoutParticleEmitter {
   const clone: LayoutParticleEmitter = { ...particle };
   if (particle.velocity) clone.velocity = [...particle.velocity];
+  return clone;
+}
+
+export function cloneMovingPlatform(platform: LayoutMovingPlatform): LayoutMovingPlatform {
+  const clone: LayoutMovingPlatform = {
+    offset: [...platform.offset],
+    speed: platform.speed,
+  };
+  if (platform.startPhase !== undefined) clone.startPhase = platform.startPhase;
   return clone;
 }
 
@@ -103,6 +113,9 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.behavior !== undefined) clone.behavior = cloneBehavior(placement.behavior);
   if (placement.particle !== undefined) clone.particle = cloneParticle(placement.particle);
   if (placement.interaction !== undefined) clone.interaction = { ...placement.interaction };
+  if (placement.movingPlatform !== undefined) {
+    clone.movingPlatform = cloneMovingPlatform(placement.movingPlatform);
+  }
   if (placement.nodeId !== undefined) clone.nodeId = placement.nodeId;
   if (placement.parentId !== undefined) clone.parentId = placement.parentId;
   return clone;

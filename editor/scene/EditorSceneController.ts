@@ -7,6 +7,7 @@ import {
   cloneCharacter,
   cloneLightActor,
   cloneMetadataValue,
+  cloneMovingPlatform,
   cloneParticle,
   clonePhysics,
   clonePlacement,
@@ -48,6 +49,7 @@ import type {
   LayoutInteraction,
   LayoutLightActor,
   LayoutMetadata,
+  LayoutMovingPlatform,
   LayoutParticleEmitter,
   LayoutPlacement,
   LayoutPhysics,
@@ -89,6 +91,7 @@ type MutableHierarchyTransform = {
   behavior?: LayoutBehavior;
   particle?: LayoutParticleEmitter;
   interaction?: LayoutInteraction;
+  movingPlatform?: LayoutMovingPlatform;
   nodeId?: string;
   parentId?: string;
 };
@@ -310,6 +313,21 @@ function behaviorsEqual(
   return (
     left.script === right.script &&
     JSON.stringify(left.params ?? {}) === JSON.stringify(right.params ?? {})
+  );
+}
+
+function movingPlatformsEqual(
+  left: LayoutMovingPlatform | undefined,
+  right: LayoutMovingPlatform | undefined,
+): boolean {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  return (
+    left.offset[0] === right.offset[0] &&
+    left.offset[1] === right.offset[1] &&
+    left.offset[2] === right.offset[2] &&
+    left.speed === right.speed &&
+    (left.startPhase ?? 0) === (right.startPhase ?? 0)
   );
 }
 
@@ -1125,6 +1143,23 @@ export class EditorSceneController {
         clone: cloneBehavior,
         equals: behaviorsEqual,
         label: value ? "Set behavior" : "Remove behavior",
+      },
+      value,
+    );
+  }
+
+  /** Sets (or clears, when `undefined`) the per-object Moving Platform component. */
+  setSelectionMovingPlatform(value: LayoutMovingPlatform | undefined): void {
+    this.setSelectionOptionalComponent(
+      {
+        read: (target) => target.movingPlatform,
+        write: (target, next) => {
+          if (next === undefined) delete target.movingPlatform;
+          else target.movingPlatform = next;
+        },
+        clone: cloneMovingPlatform,
+        equals: movingPlatformsEqual,
+        label: value ? "Set moving platform" : "Remove moving platform",
       },
       value,
     );

@@ -187,6 +187,36 @@ function validateMetadata(value: unknown, label: string): Record<string, unknown
   return Object.keys(metadata).length > 0 ? metadata : undefined;
 }
 
+/**
+ * Validates an optional moving-platform config (`{ offset, speed, startPhase? }`).
+ * A missing field or a malformed value throws so the mistake surfaces on save
+ * instead of silently dropping the platform's motion.
+ */
+function validateMovingPlatform(value: unknown, label: string): Record<string, unknown> | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${label} movingPlatform must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (!isNumberTuple(input.offset)) {
+    throw new Error(`${label} movingPlatform.offset must be a [x, y, z] number tuple`);
+  }
+  if (typeof input.speed !== "number" || !Number.isFinite(input.speed) || input.speed < 0) {
+    throw new Error(`${label} movingPlatform.speed must be a non-negative number`);
+  }
+  const platform: Record<string, unknown> = {
+    offset: input.offset.map((axis) => Number(axis.toFixed(3))),
+    speed: Number(input.speed.toFixed(3)),
+  };
+  if (input.startPhase !== undefined) {
+    if (typeof input.startPhase !== "number" || !Number.isFinite(input.startPhase)) {
+      throw new Error(`${label} movingPlatform.startPhase must be a number`);
+    }
+    platform.startPhase = Number(Math.min(Math.max(input.startPhase, 0), 1).toFixed(3));
+  }
+  return platform;
+}
+
 /** Validates an optional behavior reference (`{ script, params? }`). */
 function validateBehavior(value: unknown, label: string): Record<string, unknown> | undefined {
   if (value === undefined) return undefined;
@@ -408,6 +438,8 @@ export function applyTransformFields(
   if (metadata) target.metadata = metadata;
   const behavior = validateBehavior(entry.behavior, label);
   if (behavior) target.behavior = behavior;
+  const movingPlatform = validateMovingPlatform(entry.movingPlatform, label);
+  if (movingPlatform) target.movingPlatform = movingPlatform;
   const audio = validateAudio(entry.audio, label);
   if (audio) target.audio = audio;
   const particle = validateParticleEmitter(entry.particle, label);

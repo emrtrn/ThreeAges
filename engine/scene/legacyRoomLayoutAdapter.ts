@@ -35,6 +35,7 @@ import {
   type LayoutAudio,
   type LayoutBlockingVolume,
   type LayoutCharacter,
+  type LayoutMovingPlatform,
   type LayoutInteraction,
   type LayoutLightActor,
   type LayoutMetadata,
@@ -67,6 +68,7 @@ import {
   LIGHT_COMPONENT,
   MESH_RENDERER_COMPONENT,
   METADATA_COMPONENT,
+  MOVING_PLATFORM_COMPONENT,
   PARTICLE_EMITTER_COMPONENT,
   TRANSFORM_COMPONENT,
   type AudioComponent,
@@ -78,6 +80,7 @@ import {
   type LightComponent,
   type MeshRendererComponent,
   type MetadataComponent,
+  type MovingPlatformComponent,
   type ParticleEmitterComponent,
   type TransformComponent,
 } from "./components";
@@ -316,8 +319,20 @@ function instanceComponents(
       meshRendererComponent(assetId, placement.castShadow, placement.materialSlot),
     ),
   };
-  const collider = colliderComponent(assetId, placement, true, resolveBox, collisionDef, complexMesh);
+  // A moving-platform placement gets a kinematic (movable) collider so the runtime
+  // drives it and carries riders; it drops out of the cached static blockers.
+  const movingPlatform = movingPlatformComponent(placement.movingPlatform);
+  const collider = colliderComponent(
+    assetId,
+    placement,
+    true,
+    resolveBox,
+    collisionDef,
+    complexMesh,
+    movingPlatform !== null,
+  );
   if (collider) components[COLLIDER_COMPONENT] = toData(collider);
+  if (movingPlatform) components[MOVING_PLATFORM_COMPONENT] = toData(movingPlatform);
   const metadata = metadataComponent(placement.metadata);
   if (metadata) components[METADATA_COMPONENT] = toData(metadata);
   const behavior = behaviorComponent(placement.behavior);
@@ -429,6 +444,17 @@ function lightComponent(light: LayoutLightActor): LightComponent {
   return component;
 }
 
+function movingPlatformComponent(
+  platform: LayoutMovingPlatform | undefined,
+): MovingPlatformComponent | null {
+  if (!platform) return null;
+  return {
+    offset: [platform.offset[0], platform.offset[1], platform.offset[2]],
+    speed: platform.speed,
+    startPhase: platform.startPhase ?? 0,
+  };
+}
+
 function behaviorComponent(behavior: LayoutBehavior | undefined): BehaviorComponent | null {
   if (!behavior) return null;
   const component: BehaviorComponent = { scriptId: behavior.script };
@@ -481,15 +507,22 @@ function colliderComponent(
   resolveBox: ColliderBoxResolver | undefined,
   collisionDef?: AssetCollisionDef,
   complexMesh?: AssetComplexCollisionMesh,
+  movable = false,
 ): ColliderComponent | null {
-  // Complex-as-simple turns the render mesh into a static trimesh collider.
-  // Rapier trimeshes can't drive a dynamic body, so it is static-only: when the
-  // asset opts in it overrides any per-placement Simulate Physics flag (and only
-  // applies to static instances, never characters) instead of silently falling
-  // back to a simple box.
+  // A moving platform is a kinematic (movable) body: it must not be static (so it
+  // drops out of the cached static blockers and the runtime carries riders), and
+  // it uses a simple box — a trimesh/dynamic body would fight the kinematic
+  // motion driver — so complex-as-simple and simulate-physics are both suppressed.
+  //
+  // Complex-as-simple otherwise turns the render mesh into a static trimesh
+  // collider. Rapier trimeshes can't drive a dynamic body, so it is static-only:
+  // when the asset opts in it overrides any per-placement Simulate Physics flag
+  // (and only applies to static instances, never characters) instead of silently
+  // falling back to a simple box.
   const complexMeshActive =
-    isStatic && collisionDef?.complexity === "complexAsSimple" ? complexMesh : undefined;
-  const simulatePhysics = source.simulatePhysics === true && complexMeshActive === undefined;
+    isStatic && !movable && collisionDef?.complexity === "complexAsSimple" ? complexMesh : undefined;
+  const simulatePhysics =
+    !movable && source.simulatePhysics === true && complexMeshActive === undefined;
   if (source.collision === false && !simulatePhysics) return null;
   // A per-placement collision preset maps onto the runtime collider: a
   // collision-disabled preset drops the collider (unless it's a simulated
@@ -524,7 +557,7 @@ function colliderComponent(
       : baseProfile;
   if (profile?.collisionEnabled === "none" && !simulatePhysics) return null;
   const isSensor = source.sensor === true || profile?.collisionEnabled === "query";
-  const isStaticFinal = isStatic && !simulatePhysics;
+  const isStaticFinal = isStatic && !movable && !simulatePhysics;
 
   let component: ColliderComponent;
   if (complexMeshActive) {
@@ -805,6 +838,7 @@ function toData(
     | BehaviorComponent
     | ColliderComponent
     | AudioComponent
+    | MovingPlatformComponent
     | ParticleEmitterComponent
     | InteractionComponent,
 ): EntityComponentData {

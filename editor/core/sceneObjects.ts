@@ -28,7 +28,13 @@ import {
   type EditableSceneObject,
   type EditableSelection,
 } from "./editableScene";
-import { cloneBehavior, cloneMetadata, cloneParticle, clonePhysics } from "./layoutSnapshots";
+import {
+  cloneBehavior,
+  cloneMetadata,
+  cloneMovingPlatform,
+  cloneParticle,
+  clonePhysics,
+} from "./layoutSnapshots";
 import { selectionId, type Selection } from "./selection";
 
 const DEFAULT_LIGHT_COLOR = "#ffffff";
@@ -639,6 +645,9 @@ export function buildEditableSelection(
       ...(placement.behavior ? { behavior: cloneBehavior(placement.behavior) } : {}),
       ...(placement.particle ? { particle: cloneParticle(placement.particle) } : {}),
       ...(placement.interaction ? { interaction: { ...placement.interaction } } : {}),
+      ...(placement.movingPlatform
+        ? { movingPlatform: cloneMovingPlatform(placement.movingPlatform) }
+        : {}),
     };
   }
 

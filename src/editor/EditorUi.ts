@@ -36,6 +36,7 @@ import type {
   LayoutCloudLayer,
   LayoutInteraction,
   LayoutHeightFog,
+  LayoutMovingPlatform,
   LayoutParticleEmitter,
   LayoutPhysics,
   LayoutPostProcess,
@@ -156,14 +157,17 @@ type ContextMenuItem =
   | { separator?: false; label: string; enabled?: boolean; danger?: boolean; run: () => void };
 
 /** Optional components the Details panel can add/remove (Transform is required). */
-const ADDABLE_COMPONENTS = ["audio", "behavior", "particle", "interaction"] as const;
+const ADDABLE_COMPONENTS = ["audio", "behavior", "particle", "interaction", "movingPlatform"] as const;
 type AddableComponent = (typeof ADDABLE_COMPONENTS)[number];
 const COMPONENT_LABELS: Record<AddableComponent, string> = {
   audio: "Audio",
   behavior: "Behavior",
   particle: "Particle",
   interaction: "Interaction",
+  movingPlatform: "Moving Platform",
 };
+/** Default motion seeded when adding a Moving Platform component (4 units along +X, 2 u/s). */
+const DEFAULT_MOVING_PLATFORM: LayoutMovingPlatform = { offset: [4, 0, 0], speed: 2 };
 /** Default audio clip seeded when adding an Audio component (a known clip id). */
 const DEFAULT_AUDIO_CLIP = "collision-chime";
 /** Default effect id seeded when adding a Particle component. */
@@ -3409,8 +3413,19 @@ export class EditorUi {
     if (selection.interaction) {
       cards.push(this.componentCard("interaction", this.renderInteractionFields(selection.interaction)));
     }
+    if (selection.movingPlatform) {
+      cards.push(
+        this.componentCard("movingPlatform", this.renderMovingPlatformFields(selection.movingPlatform)),
+      );
+    }
 
-    const absent = ADDABLE_COMPONENTS.filter((kind) => !selection[kind]);
+    const absent = ADDABLE_COMPONENTS.filter((kind) => {
+      if (selection[kind]) return false;
+      // Moving Platform only applies to static-mesh instances (kinematic body); a
+      // character/light can't be authored as a platform.
+      if (kind === "movingPlatform" && selection.kind !== "instance") return false;
+      return true;
+    });
     const addMenu =
       absent.length === 0
         ? ""
@@ -3612,6 +3627,36 @@ export class EditorUi {
       </label>`;
   }
 
+  /**
+   * Moving Platform component editor: the far-end offset (relative to the placed
+   * position) the platform ping-pongs to, its travel speed, and an optional start
+   * phase. Presence of this component makes the collider kinematic at Play, so the
+   * character can stand on it, be carried, and collide with its sides.
+   */
+  private renderMovingPlatformFields(platform: LayoutMovingPlatform): string {
+    const axis = (index: 0 | 1 | 2, label: string): string => `
+      <label class="detail-row">
+        <span>${label}</span>
+        <input type="number" data-moving-platform="offset${index}" step="0.1"
+          value="${platform.offset[index]}" />
+      </label>`;
+    return `
+      <div class="detail-hint">Offset is relative to the placed position; the platform ping-pongs there and back.</div>
+      ${axis(0, "Offset X")}
+      ${axis(1, "Offset Y")}
+      ${axis(2, "Offset Z")}
+      <label class="detail-row">
+        <span>Speed (u/s)</span>
+        <input type="number" data-moving-platform="speed" min="0" step="0.1"
+          value="${platform.speed}" />
+      </label>
+      <label class="detail-row">
+        <span>Start Phase</span>
+        <input type="number" data-moving-platform="startPhase" min="0" max="1" step="0.05"
+          value="${platform.startPhase ?? 0}" />
+      </label>`;
+  }
+
   private bindComponentsInputs(): void {
     this.detailsBody
       .querySelector<HTMLSelectElement>("[data-add-component]")
@@ -3638,6 +3683,9 @@ export class EditorUi {
     this.detailsBody
       .querySelectorAll<HTMLInputElement>("[data-interaction]")
       .forEach((input) => input.addEventListener("change", () => this.commitInteractionInput()));
+    this.detailsBody
+      .querySelectorAll<HTMLInputElement>("[data-moving-platform]")
+      .forEach((input) => input.addEventListener("change", () => this.commitMovingPlatformInput()));
   }
 
   /** Adds a component with sensible defaults (a single undo/redo command). */
@@ -3656,6 +3704,11 @@ export class EditorUi {
         effectId: firstEffect?.id ?? DEFAULT_PARTICLE_EFFECT,
         autoPlay: true,
       });
+    } else if (kind === "movingPlatform") {
+      this.app.setSelectionMovingPlatform({
+        offset: [...DEFAULT_MOVING_PLATFORM.offset],
+        speed: DEFAULT_MOVING_PLATFORM.speed,
+      });
     } else this.app.setSelectionInteraction({ action: "interact" });
   }
 
@@ -3663,6 +3716,7 @@ export class EditorUi {
     if (kind === "audio") this.app.setSelectionAudio(undefined);
     else if (kind === "behavior") this.app.setSelectionBehavior(undefined);
     else if (kind === "particle") this.app.setSelectionParticle(undefined);
+    else if (kind === "movingPlatform") this.app.setSelectionMovingPlatform(undefined);
     else this.app.setSelectionInteraction(undefined);
   }
 
@@ -3778,6 +3832,29 @@ export class EditorUi {
       if (Number.isFinite(cooldown) && cooldown > 0) interaction.cooldown = cooldown;
     }
     this.app.setSelectionInteraction(interaction);
+  }
+
+  private commitMovingPlatformInput(): void {
+    const readNumber = (field: string, fallback: number): number => {
+      const raw = this.detailsBody
+        .querySelector<HTMLInputElement>(`[data-moving-platform="${field}"]`)
+        ?.value.trim();
+      if (!raw) return fallback;
+      const value = Number(raw);
+      return Number.isFinite(value) ? value : fallback;
+    };
+    const prior = this.selected?.movingPlatform;
+    const platform: LayoutMovingPlatform = {
+      offset: [
+        readNumber("offset0", prior?.offset[0] ?? 0),
+        readNumber("offset1", prior?.offset[1] ?? 0),
+        readNumber("offset2", prior?.offset[2] ?? 0),
+      ],
+      speed: Math.max(0, readNumber("speed", prior?.speed ?? 0)),
+    };
+    const startPhase = Math.min(Math.max(readNumber("startPhase", prior?.startPhase ?? 0), 0), 1);
+    if (startPhase > 0) platform.startPhase = startPhase;
+    this.app.setSelectionMovingPlatform(platform);
   }
 
   /**

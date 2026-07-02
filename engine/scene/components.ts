@@ -14,6 +14,7 @@ export const AUDIO_COMPONENT = "Audio";
 export const PARTICLE_EMITTER_COMPONENT = "ParticleEmitter";
 export const INTERACTION_COMPONENT = "Interaction";
 export const CHARACTER_MOVEMENT_COMPONENT = "CharacterMovement";
+export const MOVING_PLATFORM_COMPONENT = "MovingPlatform";
 export const CAMERA_COMPONENT = "Camera";
 export const SPRING_ARM_COMPONENT = "SpringArm";
 export const MESSAGE_BINDINGS_COMPONENT = "MessageBindings";
@@ -182,6 +183,23 @@ export interface ColliderComponent {
   lockRotation?: LayoutPhysicsAxisLocks;
 }
 
+/**
+ * A kinematic moving platform: the entity ping-pongs from its start position to
+ * `start + offset` and back at `speed` units/s. The {@link MovingPlatformSubsystem}
+ * drives the motion; the character movement system reads the platform as a
+ * blocker, a ground surface, and a horizontal carry source. Presence of this
+ * component makes the collider movable (kinematic), so it is excluded from the
+ * cached static blockers.
+ */
+export interface MovingPlatformComponent {
+  /** Far-end offset from the placed start position (world units). */
+  offset: Vec3;
+  /** Travel speed along the segment (units/s). */
+  speed: number;
+  /** Initial position along the segment, 0..1 (0 = start). */
+  startPhase: number;
+}
+
 export interface AudioComponent {
   clipId: string;
   /** Explicit source asset ID; overrides `clipId` when present. */
@@ -257,8 +275,20 @@ export interface CharacterMovementComponent {
   capsuleRadius: number;
   capsuleHalfHeight: number;
   maxStepHeight: number;
+  /**
+   * Largest drop (units) the grounded feet follow down without going airborne, so
+   * walking down stair-sized ledges stays grounded (no fall animation). A drop
+   * beyond this enters falling.
+   */
+  maxStepDown: number;
   /** Steepest ramp (degrees) the character can walk up; steeper surfaces are not walkable ground. */
   maxSlopeAngleDeg: number;
+  /**
+   * Planar speed multiplier while climbing at/above a 45° incline (slope ratio 1);
+   * shallower climbs blend toward 1, so stairs and ramps read as effort. 1 = no
+   * uphill slowdown.
+   */
+  uphillSpeedScale: number;
   /**
    * Vertical speed (units/s) the grounded feet ease toward a new floor height, so
    * a step is climbed/descended over a few frames instead of snapping in one
@@ -580,6 +610,22 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
 }
 
 /**
+ * Reads a typed moving-platform component. Tolerant: a present-but-malformed
+ * field degrades to a safe default (zero offset / speed = a stationary movable
+ * platform) rather than rejecting the component, so a movable collider is never
+ * left without a motion record (which would make it fall out of both the static
+ * and moving blocker sets). Returns undefined only when the component is absent.
+ */
+export function readMovingPlatformComponent(entity: Entity): MovingPlatformComponent | undefined {
+  const data = entity.components[MOVING_PLATFORM_COMPONENT];
+  if (!data) return undefined;
+  const offset = readVec3(data.offset) ?? [0, 0, 0];
+  const speed = Math.max(0, readFiniteNumber(data.speed, 0, undefined));
+  const startPhase = Math.min(Math.max(readFiniteNumber(data.startPhase, 0, undefined), 0), 1);
+  return { offset, speed, startPhase };
+}
+
+/**
  * Reads a typed audio cue from an entity's serializable component data.
  *
  * Tolerant of partial component data: an Actor Blueprint Audio component stores
@@ -704,7 +750,9 @@ export function readCharacterMovementComponent(
     capsuleRadius: readFiniteNumber(data.capsuleRadius, 0.3, 0),
     capsuleHalfHeight: readFiniteNumber(data.capsuleHalfHeight, 0.9, 0),
     maxStepHeight: readFiniteNumber(data.maxStepHeight, 0.45, 0),
+    maxStepDown: readFiniteNumber(data.maxStepDown, 0.5, 0),
     maxSlopeAngleDeg: readFiniteNumber(data.maxSlopeAngleDeg, 45, 0),
+    uphillSpeedScale: readFiniteNumber(data.uphillSpeedScale, 0.65, 0),
     stepSmoothSpeed: readFiniteNumber(data.stepSmoothSpeed, 6, 0),
   };
 }

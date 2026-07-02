@@ -2142,7 +2142,9 @@ function characterMovementFields(node: ComponentTemplateNode): string {
     ${numberField("capsuleRadius", "Capsule Radius", 0.3, 'step="0.05" min="0"')}
     ${numberField("capsuleHalfHeight", "Capsule Half Height", 0.9, 'step="0.05" min="0"')}
     ${numberField("maxStepHeight", "Max Step Height", 0.45, 'step="0.05" min="0"')}
+    ${numberField("maxStepDown", "Max Step Down", 0.5, 'step="0.05" min="0"')}
     ${numberField("maxSlopeAngleDeg", "Max Slope Angle°", 45, 'step="1" min="0" max="89"')}
+    ${numberField("uphillSpeedScale", "Uphill Speed Scale", 0.65, 'step="0.05" min="0" max="1"')}
     ${numberField("stepSmoothSpeed", "Step Smooth Speed", 6, 'step="0.5" min="0"')}
     <label class="as-field as-check">
       <input type="checkbox" data-as-character-movement-orient ${
@@ -2250,7 +2252,9 @@ function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJs
       capsuleRadius: 0.3,
       capsuleHalfHeight: 0.9,
       maxStepHeight: 0.45,
+      maxStepDown: 0.5,
       maxSlopeAngleDeg: 45,
+      uphillSpeedScale: 0.65,
       stepSmoothSpeed: 6,
     };
   }
