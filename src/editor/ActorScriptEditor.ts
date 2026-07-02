@@ -2142,6 +2142,7 @@ function characterMovementFields(node: ComponentTemplateNode): string {
     ${numberField("capsuleRadius", "Capsule Radius", 0.3, 'step="0.05" min="0"')}
     ${numberField("capsuleHalfHeight", "Capsule Half Height", 0.9, 'step="0.05" min="0"')}
     ${numberField("maxStepHeight", "Max Step Height", 0.45, 'step="0.05" min="0"')}
+    ${numberField("maxSlopeAngleDeg", "Max Slope Angle°", 45, 'step="1" min="0" max="89"')}
     <label class="as-field as-check">
       <input type="checkbox" data-as-character-movement-orient ${
         props.orientRotationToMovement === false ? "" : "checked"
@@ -2248,6 +2249,7 @@ function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJs
       capsuleRadius: 0.3,
       capsuleHalfHeight: 0.9,
       maxStepHeight: 0.45,
+      maxSlopeAngleDeg: 45,
     };
   }
   if (kind === "SpringArm") {

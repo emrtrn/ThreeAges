@@ -257,6 +257,8 @@ export interface CharacterMovementComponent {
   capsuleRadius: number;
   capsuleHalfHeight: number;
   maxStepHeight: number;
+  /** Steepest ramp (degrees) the character can walk up; steeper surfaces are not walkable ground. */
+  maxSlopeAngleDeg: number;
 }
 
 /**
@@ -695,6 +697,7 @@ export function readCharacterMovementComponent(
     capsuleRadius: readFiniteNumber(data.capsuleRadius, 0.3, 0),
     capsuleHalfHeight: readFiniteNumber(data.capsuleHalfHeight, 0.9, 0),
     maxStepHeight: readFiniteNumber(data.maxStepHeight, 0.45, 0),
+    maxSlopeAngleDeg: readFiniteNumber(data.maxSlopeAngleDeg, 45, 0),
   };
 }
 

@@ -99,10 +99,25 @@ export interface PhysicsAabb {
   readonly max: readonly [number, number, number];
 }
 
+/**
+ * A world-space walkable surface triangle (from a static trimesh collider), with
+ * its upward normal component precomputed. Fed to the ground probe so a ramp is
+ * walked at its true incline height instead of a flat AABB top.
+ */
+export interface PhysicsSurfaceTriangle {
+  readonly a: readonly [number, number, number];
+  readonly b: readonly [number, number, number];
+  readonly c: readonly [number, number, number];
+  /** |normal.y| after normalization: 1 = flat floor, 0 = vertical. */
+  readonly normalY: number;
+}
+
 export interface PhysicsQuery {
   contactsForEntity(entityId: EntityId): readonly PhysicsContact[];
   /** World-space AABBs of every static, non-sensor collider (movement blockers). */
   staticBlockerAabbs(): readonly PhysicsAabb[];
+  /** World-space walkable surface triangles (static trimesh) for the ground probe. */
+  staticSurfaceTriangles(): readonly PhysicsSurfaceTriangle[];
   /** Half-extents (size*scale/2) of an entity's collider, or null if it has none. */
   colliderHalfExtents(entityId: EntityId): readonly [number, number, number] | null;
 }

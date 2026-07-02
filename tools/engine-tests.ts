@@ -73,6 +73,7 @@ import { BehaviorSubsystem } from "../engine/behavior/behaviorSubsystem";
 import type { BehaviorRegistry } from "../engine/behavior/behaviorSubsystem";
 import { ScriptMessageBus } from "../engine/behavior/scriptMessages";
 import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
+import { rotatedBoxAabb } from "../engine/physics/rotatedBox";
 import {
   AudioSubsystem,
   DEFAULT_SPATIAL_ATTENUATION,
@@ -155,8 +156,16 @@ import {
   findGroundAt,
   findLandingGround,
   resolvePlanarMovement,
+  resolvePlanarMovementSubstepped,
+  safeSubstepLength,
   type Aabb3,
 } from "../src/game/collision";
+import {
+  sampleTriangleHeight,
+  slopeCosFromDegrees,
+  triangleUpNormal,
+  type GroundTriangle,
+} from "../src/game/slopeSurface";
 import {
   classifyLocomotion,
   locomotionConfigForSkeleton,
@@ -5667,6 +5676,120 @@ check("resolvePlanarMovement: stops at the blocker in the path among several", (
   assert.ok(Math.abs(moved.dx) <= 1e-12); // flush against the near wall (x stays 0)
 });
 
+// P1.1 — tunneling guard. A single-pass resolve lets a fast move (delta longer
+// than the wall is thick) skip clean over a thin wall, because the destination no
+// longer overlaps it. The substepped wrapper must stop flush regardless of speed.
+check("safeSubstepLength: half the thinnest X/Z extent, Infinity for no blockers", () => {
+  assert.equal(safeSubstepLength([]), Infinity);
+  const thinWall: Aabb3 = { min: [0.9, -1, -5], max: [1.1, 1, 5] }; // 0.2 thick on X
+  assert.ok(Math.abs(safeSubstepLength([thinWall]) - 0.1) < 1e-12);
+  const sliver: Aabb3 = { min: [0, 0, 0], max: [0.001, 1, 1] }; // floored at 0.01
+  assert.ok(Math.abs(safeSubstepLength([sliver]) - 0.01) < 1e-12);
+});
+
+check("resolvePlanarMovementSubstepped: a fast move cannot tunnel through a thin wall", () => {
+  const thinWall: Aabb3 = { min: [0.9, -1, -5], max: [1.1, 1, 5] }; // 0.2 thick
+  const half: [number, number, number] = [0.3, 0.5, 0.3];
+  const fast = { dx: 3, dz: 0 }; // far longer than the wall is thick
+  // Single-pass resolve tunnels: the destination (x≈3) no longer overlaps the wall.
+  const naive = resolvePlanarMovement([0, 0, 0], fast, half, [thinWall]);
+  assert.ok(naive.dx > 1, "sanity: the single-pass resolve is expected to tunnel here");
+  // Substepped resolve stops flush against the wall's near face (x = 0.9 - 0.3).
+  const guarded = resolvePlanarMovementSubstepped(
+    [0, 0, 0],
+    fast,
+    half,
+    [thinWall],
+    safeSubstepLength([thinWall]),
+  );
+  assert.ok(Math.abs(guarded.dx - 0.6) < 1e-9, `guarded.dx=${guarded.dx}`);
+});
+
+check("resolvePlanarMovementSubstepped: a move within one substep matches the single pass", () => {
+  const wall: Aabb3 = { min: [0.5, -1, -5], max: [1.5, 1, 5] };
+  const half: [number, number, number] = [0.5, 0.5, 0.5];
+  const small = { dx: 0.05, dz: 0.03 };
+  const single = resolvePlanarMovement([0, 0, 0], small, half, [wall]);
+  const stepped = resolvePlanarMovementSubstepped([0, 0, 0], small, half, [wall], safeSubstepLength([wall]));
+  assert.deepEqual(stepped, single);
+});
+
+check("resolvePlanarMovementSubstepped: preserves wall slide on a fast diagonal move", () => {
+  const wall: Aabb3 = { min: [0.9, -1, -5], max: [1.1, 1, 5] }; // X-facing, thin
+  const half: [number, number, number] = [0.3, 0.5, 0.3];
+  const guarded = resolvePlanarMovementSubstepped(
+    [0, 0, 0],
+    { dx: 3, dz: 2 },
+    half,
+    [wall],
+    safeSubstepLength([wall]),
+  );
+  assert.ok(Math.abs(guarded.dx - 0.6) < 1e-9, `blocked dx=${guarded.dx}`); // flush on X
+  assert.ok(Math.abs(guarded.dz - 2) < 1e-9, `slid dz=${guarded.dz}`); // Z slides freely
+});
+
+// P1.3/P1.4 — slope surface math (src/game/slopeSurface.ts). The AABB model walks
+// on flat tops; a ramp needs the true interpolated surface height + a slope gate.
+const RAMP_NORMAL_Y = 8 / Math.hypot(4, 8, 0); // ≈0.894, a 26.57° ramp rising along +X
+
+check("triangleUpNormal: flat floor = 1, vertical wall = 0, ramp = cos(angle)", () => {
+  assert.ok(Math.abs(triangleUpNormal([0, 0, 0], [1, 0, 0], [0, 0, 1]) - 1) < 1e-9);
+  assert.ok(Math.abs(triangleUpNormal([0, 0, 0], [1, 0, 0], [0, 1, 0]) - 0) < 1e-9);
+  assert.ok(Math.abs(triangleUpNormal([0, 0, -1], [4, 2, -1], [4, 2, 1]) - RAMP_NORMAL_Y) < 1e-9);
+});
+
+check("sampleTriangleHeight: interpolates inside, null outside / for vertical triangles", () => {
+  const ramp: GroundTriangle = { a: [0, 0, -1], b: [4, 2, -1], c: [4, 2, 1], normalY: RAMP_NORMAL_Y };
+  assert.ok(Math.abs(sampleTriangleHeight(ramp, 3, 0)! - 1.5) < 1e-9); // y = 2*(3/4)
+  assert.ok(Math.abs(sampleTriangleHeight(ramp, 0, -1)! - 0) < 1e-9); // at vertex a
+  assert.equal(sampleTriangleHeight(ramp, 10, 0), null); // outside the XZ footprint
+  const vertical: GroundTriangle = { a: [0, 0, 0], b: [1, 0, 0], c: [0, 1, 0], normalY: 0 };
+  assert.equal(sampleTriangleHeight(vertical, 0.1, 0), null); // degenerate in XZ
+});
+
+check("slopeCosFromDegrees: 0°=1, 45°≈0.707, 90° clamped above 0", () => {
+  assert.ok(Math.abs(slopeCosFromDegrees(0) - 1) < 1e-9);
+  assert.ok(Math.abs(slopeCosFromDegrees(45) - Math.SQRT1_2) < 1e-9);
+  assert.ok(slopeCosFromDegrees(90) > 0); // clamped to 89.9°, never exactly vertical
+});
+
+check("findGroundAt: a walkable ramp surface supplies the interpolated floor height", () => {
+  const ramp: GroundTriangle = { a: [0, 0, -1], b: [4, 2, -1], c: [4, 2, 1], normalY: RAMP_NORMAL_Y };
+  const hit = findGroundAt([3, 1.5, 0], [], {
+    footprintHalf: [0.3, 0.3],
+    maxStepUp: 0.45,
+    maxStepDown: 0.2,
+    surfaces: [ramp],
+    maxSlopeCos: slopeCosFromDegrees(45), // 26.57° < 45° → walkable
+  });
+  assert.ok(hit && hit.blocker === null && Math.abs(hit.floorY - 1.5) < 1e-9, `floorY=${hit?.floorY}`);
+});
+
+check("findGroundAt: a ramp steeper than the slope limit is not walkable ground", () => {
+  const ramp: GroundTriangle = { a: [0, 0, -1], b: [4, 2, -1], c: [4, 2, 1], normalY: RAMP_NORMAL_Y };
+  const hit = findGroundAt([3, 1.5, 0], [], {
+    footprintHalf: [0.3, 0.3],
+    maxStepUp: 0.45,
+    maxStepDown: 0.2,
+    surfaces: [ramp],
+    maxSlopeCos: slopeCosFromDegrees(20), // 20° < 26.57° → too steep
+  });
+  assert.equal(hit, null);
+});
+
+check("findGroundAt: a flat AABB top still wins over a lower ramp surface", () => {
+  const ramp: GroundTriangle = { a: [0, 0, -1], b: [4, 2, -1], c: [4, 2, 1], normalY: RAMP_NORMAL_Y };
+  const shelf: Aabb3 = { min: [2, 0, -1], max: [4, 1.7, 1] }; // top 1.7 > ramp's 1.5 at x=3
+  const hit = findGroundAt([3, 1.7, 0], [shelf], {
+    footprintHalf: [0.3, 0.3],
+    maxStepUp: 0.45,
+    maxStepDown: 0.4,
+    surfaces: [ramp],
+    maxSlopeCos: slopeCosFromDegrees(45),
+  });
+  assert.ok(hit && Math.abs(hit.floorY - 1.7) < 1e-9, `floorY=${hit?.floorY}`);
+});
+
 check("ground probe finds walkable tops, landing crossings, and filters step-height blockers", () => {
   const floor: Aabb3 = { min: [-5, -0.2, -5], max: [5, 0, 5] };
   const lowPlatform: Aabb3 = { min: [-0.5, 0, -0.5], max: [0.5, 0.3, 0.5] };
@@ -5740,6 +5863,253 @@ check("physics subsystem offsets a collider AABB by its center", () => {
     min: [-1, 0, 0.75],
     max: [1, 4, 1.25],
   });
+});
+
+function assertAabbClose(
+  actual: { min: readonly number[]; max: readonly number[] },
+  expected: { min: readonly number[]; max: readonly number[] },
+  eps = 1e-9,
+): void {
+  for (let i = 0; i < 3; i += 1) {
+    assert.ok(
+      Math.abs((actual.min[i] ?? NaN) - (expected.min[i] ?? NaN)) < eps,
+      `min[${i}]=${actual.min[i]} expected ${expected.min[i]}`,
+    );
+    assert.ok(
+      Math.abs((actual.max[i] ?? NaN) - (expected.max[i] ?? NaN)) < eps,
+      `max[${i}]=${actual.max[i]} expected ${expected.max[i]}`,
+    );
+  }
+}
+
+// P1.2 — the movement-blocker AABB must honour placement rotation. Collider
+// size/center is authored in the body-local frame; a corner-pivoted wall (centre
+// offset [2,1.5,0]) rotated to face another way must land where it is drawn, not
+// several metres off along the un-rotated offset (the root cause of walking
+// through real walls while being blocked on open floor).
+check("rotatedBoxAabb: zero rotation returns the plain body-local box", () => {
+  const aabb = rotatedBoxAabb([0, 0, 0], [2, 1.5, 0], [2, 1.5, 0.1], [0, 0, 0]);
+  assert.deepEqual(aabb, { min: [0, 0, -0.1], max: [4, 3, 0.1] });
+});
+
+check("rotatedBoxAabb: a corner-pivoted wall rotated 90° about Y follows the mesh", () => {
+  // Wall_400x300-style box: half [2,1.5,0.1], centre offset [2,1.5,0].
+  const aabb = rotatedBoxAabb([0, 0, 0], [2, 1.5, 0], [2, 1.5, 0.1], [0, 90, 0]);
+  // +90°Y swings the local +X centre to world -Z and the thin axis becomes X.
+  assertAabbClose(aabb, { min: [-0.1, 0, -4], max: [0.1, 3, 0] });
+});
+
+check("rotatedBoxAabb: 45° rotation bloats a thin wall's footprint symmetrically", () => {
+  const aabb = rotatedBoxAabb([0, 0, 0], [0, 0, 0], [2, 1.5, 0.1], [0, 45, 0]);
+  const expectedHalf = Math.SQRT1_2 * (2 + 0.1);
+  assertAabbClose(aabb, {
+    min: [-expectedHalf, -1.5, -expectedHalf],
+    max: [expectedHalf, 1.5, expectedHalf],
+  });
+});
+
+check("rotatedBoxAabb: primitive rotation composes on top of body rotation", () => {
+  // A box with a local +90°Y primitive rotation, under a further +90°Y body
+  // rotation, is oriented +180° total: thin Z axis stays Z, extents swap back.
+  const aabb = rotatedBoxAabb([0, 0, 0], [0, 0, 0], [2, 1.5, 0.1], [0, 90, 0], [0, 90, 0]);
+  assertAabbClose(aabb, { min: [-2, -1.5, -0.1], max: [2, 1.5, 0.1] });
+});
+
+check("physics subsystem rotates a corner-pivoted compound wall's blocker AABB", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 90, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [4, 3, 0.2],
+          center: [2, 1.5, 0],
+          isStatic: true,
+          isSensor: false,
+          primitives: [{ shape: "box", size: [4, 3, 0.2], center: [2, 1.5, 0] }],
+        },
+      },
+    },
+  ]);
+  assertAabbClose(physics.staticBlockerAabbs()[0]!, { min: [-0.1, 0, -4], max: [0.1, 3, 0] });
+});
+
+check("physics subsystem rotates a single (non-compound) collider's blocker AABB", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 90, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [4, 3, 0.2], center: [2, 1.5, 0], isStatic: true, isSensor: false },
+      },
+    },
+  ]);
+  assertAabbClose(physics.staticBlockerAabbs()[0]!, { min: [-0.1, 0, -4], max: [0.1, 3, 0] });
+});
+
+// P1.3/P1.4 — a trimesh ramp is a walkable surface (ground probe), not a wall
+// blocker; a steep trimesh triangle stays a blocker. Rotation bakes into normals.
+check("physics subsystem exposes trimesh surfaces and excludes flat ones from blockers", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "ramp",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [4, 2, 2],
+          isStatic: true,
+          isSensor: false,
+          primitives: [
+            {
+              shape: "trimesh",
+              size: [4, 2, 2],
+              vertices: [[0, 0, -1], [4, 2, -1], [4, 2, 1], [0, 0, 1]], // 26.57° ramp up +X
+              indices: [0, 1, 2, 0, 2, 3],
+            },
+          ],
+        },
+      },
+    },
+  ]);
+  assert.equal(physics.staticBlockerAabbs().length, 0); // gentle ramp → not walls
+  const surfaces = physics.staticSurfaceTriangles();
+  assert.equal(surfaces.length, 2);
+  assert.ok(Math.abs(surfaces[0]!.normalY - RAMP_NORMAL_Y) < 1e-9, `normalY=${surfaces[0]!.normalY}`);
+});
+
+check("physics subsystem keeps a steep trimesh triangle as a wall blocker (not a surface)", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [2, 2, 1],
+          isStatic: true,
+          isSensor: false,
+          primitives: [
+            {
+              shape: "trimesh",
+              size: [2, 2, 1],
+              vertices: [[-1, 0, 0], [1, 0, 0], [-1, 2, 0]], // vertical wall (normalY 0)
+              indices: [0, 1, 2],
+            },
+          ],
+        },
+      },
+    },
+  ]);
+  assert.equal(physics.staticBlockerAabbs().length, 1);
+  assert.equal(physics.staticSurfaceTriangles().length, 0);
+});
+
+check("physics subsystem bakes body rotation into surface-triangle normals", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "tilted-floor",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 30], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [2, 0.1, 2],
+          isStatic: true,
+          isSensor: false,
+          primitives: [
+            {
+              shape: "trimesh",
+              size: [2, 0.1, 2],
+              vertices: [[0, 0, 0], [2, 0, 0], [0, 0, 2]], // flat, then tilted 30° about Z
+              indices: [0, 1, 2],
+            },
+          ],
+        },
+      },
+    },
+  ]);
+  const surfaces = physics.staticSurfaceTriangles();
+  assert.equal(surfaces.length, 1);
+  assert.ok(
+    Math.abs(surfaces[0]!.normalY - Math.cos((30 * Math.PI) / 180)) < 1e-9,
+    `normalY=${surfaces[0]!.normalY}`,
+  );
+});
+
+check("CharacterMovement subsystem walks up a trimesh ramp, following the incline", () => {
+  const actions = new ActionMap({ KeyD: "move-right" });
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "floor",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        // Flat run-up: top at y=0, spanning x[-2,0].
+        Collider: { shape: "box", size: [2, 1, 4], center: [-1, -0.5, 0], isStatic: true, isSensor: false },
+      },
+    },
+    {
+      id: "ramp",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [4, 2, 4],
+          isStatic: true,
+          isSensor: false,
+          primitives: [
+            {
+              shape: "trimesh",
+              size: [4, 2, 4],
+              vertices: [[0, 0, -2], [4, 2, -2], [4, 2, 2], [0, 0, 2]], // y = 0.5*x, 26.57°
+              indices: [0, 1, 2, 0, 2, 3],
+            },
+          ],
+        },
+      },
+    },
+  ]);
+  const player: Entity = {
+    id: "actor:ramp-walker",
+    components: {
+      Transform: { position: [-1.5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      CharacterMovement: {
+        maxWalkSpeed: 3,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        maxSlopeAngleDeg: 45,
+      },
+    },
+  };
+  let transform: TransformComponent | null = null;
+  const movement = new CharacterMovementSubsystem(actions, (_id, next) => {
+    transform = next;
+  }, physics, { getGravityY: () => -10 });
+  movement.setEntities([player]);
+
+  actions.handleDown("KeyD");
+  let maxY = -Infinity;
+  for (let frame = 1; frame <= 40; frame += 1) {
+    actions.advance();
+    movement.update({ deltaSeconds: 0.1, elapsedSeconds: frame * 0.1, frame });
+    const t = transform ?? assert.fail("transform");
+    const x = t.position[0];
+    const y = t.position[1];
+    maxY = Math.max(maxY, y);
+    // While on the ramp (0 ≤ x ≤ 4), the player rests on the incline: y ≈ 0.5*x.
+    if (x > 0.2 && x < 3.8) {
+      assert.ok(Math.abs(y - 0.5 * x) < 0.05, `off the incline at x=${x}: y=${y}`);
+    }
+  }
+  assert.ok(maxY > 1, `player never climbed the ramp: maxY=${maxY}`);
 });
 
 // complexAsSimple builds a trimesh collider; the AABB-based player movement must
@@ -7992,6 +8362,7 @@ check("CharacterMovement subsystem steps onto low platforms and falls off unsupp
   const platform: Aabb3 = { min: [-0.5, 0, -0.5], max: [0.5, 0.3, 0.5] };
   const physics = {
     staticBlockerAabbs: () => [platform],
+    staticSurfaceTriangles: () => [],
     colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
   };
   const entity: Entity = {

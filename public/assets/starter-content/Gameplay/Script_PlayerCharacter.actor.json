@@ -65,7 +65,7 @@
       "id": "characterMovement",
       "component": "CharacterMovement",
       "props": {
-        "maxWalkSpeed": 2,
+        "maxWalkSpeed": 5,
         "sprintMultiplier": 2,
         "jumpSpeed": 4,
         "gravityScale": 1,

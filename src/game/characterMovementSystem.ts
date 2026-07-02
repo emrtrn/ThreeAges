@@ -15,9 +15,11 @@ import {
   filterWalkableBlockers,
   findGroundAt,
   findLandingGround,
-  resolvePlanarMovement,
+  resolvePlanarMovementSubstepped,
+  safeSubstepLength,
   type PlanarDelta,
 } from "./collision";
+import { slopeCosFromDegrees } from "./slopeSurface";
 import type { LocomotionInput } from "./locomotionAnimation";
 
 export const CHARACTER_MOVEMENT_SUBSYSTEM_ID = "characterMovement";
@@ -224,17 +226,21 @@ export class CharacterMovementSubsystem implements Subsystem {
       runtime.transform.position[1] + half[1],
       runtime.transform.position[2],
     ];
-    return resolvePlanarMovement(centerPosition, planar, half, blockers);
+    // Substep the resolve so a fast move / dt spike can't tunnel a thin wall.
+    return resolvePlanarMovementSubstepped(
+      centerPosition,
+      planar,
+      half,
+      blockers,
+      safeSubstepLength(blockers),
+    );
   }
 
   private groundAt(runtime: CharacterMovementRuntime) {
-    const blockers = this.physics?.staticBlockerAabbs();
-    if (!blockers || blockers.length === 0) return null;
-    return findGroundAt(runtime.transform.position, blockers, {
-      footprintHalf: this.footprintHalf(runtime),
-      maxStepUp: this.maxStepHeight(runtime),
-      maxStepDown: DEFAULT_MAX_STEP_DOWN,
-    });
+    const blockers = this.physics?.staticBlockerAabbs() ?? [];
+    const surfaces = this.physics?.staticSurfaceTriangles() ?? [];
+    if (blockers.length === 0 && surfaces.length === 0) return null;
+    return findGroundAt(runtime.transform.position, blockers, this.groundOptions(runtime, surfaces));
   }
 
   private landingGround(
@@ -242,18 +248,36 @@ export class CharacterMovementSubsystem implements Subsystem {
     previousY: number,
     nextY: number,
   ) {
-    const blockers = this.physics?.staticBlockerAabbs();
-    if (!blockers || blockers.length === 0) return null;
-    return findLandingGround(previousY, nextY, runtime.transform.position, blockers, {
+    const blockers = this.physics?.staticBlockerAabbs() ?? [];
+    const surfaces = this.physics?.staticSurfaceTriangles() ?? [];
+    if (blockers.length === 0 && surfaces.length === 0) return null;
+    return findLandingGround(
+      previousY,
+      nextY,
+      runtime.transform.position,
+      blockers,
+      this.groundOptions(runtime, surfaces),
+    );
+  }
+
+  private groundOptions(
+    runtime: CharacterMovementRuntime,
+    surfaces: ReturnType<NonNullable<PhysicsQuery["staticSurfaceTriangles"]>>,
+  ) {
+    return {
       footprintHalf: this.footprintHalf(runtime),
       maxStepUp: this.maxStepHeight(runtime),
       maxStepDown: DEFAULT_MAX_STEP_DOWN,
-    });
+      surfaces,
+      maxSlopeCos: slopeCosFromDegrees(runtime.movement.maxSlopeAngleDeg),
+    };
   }
 
   private hasGroundProbe(): boolean {
     const blockers = this.physics?.staticBlockerAabbs();
-    return !!blockers && blockers.length > 0;
+    if (blockers && blockers.length > 0) return true;
+    const surfaces = this.physics?.staticSurfaceTriangles();
+    return !!surfaces && surfaces.length > 0;
   }
 
   private footprintHalf(runtime: CharacterMovementRuntime): [number, number] {

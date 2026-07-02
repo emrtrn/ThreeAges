@@ -15,13 +15,22 @@
       "axisX": {
         "name": "Speed",
         "min": 0,
-        "max": 4
+        "max": 5
       },
       "samples": []
     }
   ],
   "notifies": [],
-  "montages": [],
+  "montages": [
+    {
+      "name": "montage",
+      "clip": "A_TPose",
+      "slot": "upperBody",
+      "loop": false,
+      "blendInSeconds": 0.12,
+      "blendOutSeconds": 0.2
+    }
+  ],
   "rootMotion": [
     {
       "clip": "Walk_Loop",

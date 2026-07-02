@@ -1,6 +1,9 @@
-# AI Sistemi Arastirmasi ve Forge Planı
+# AI Sistemi Arastirmasi ve Forge Plani
 
 > Tarih: 2026-06-29
+> Revizyon: 2026-07-02 — plan koda karsi dogrulandi; save-path detaylari,
+> CharacterMovement AI girisi, editor Play modu, asset manifest ve dialogue
+> entegrasyonu duzeltildi/eklendi (bkz. "Revizyon notlari").
 > Durum: Gelecek faz plani. Kod uygulanmadi.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
@@ -11,25 +14,25 @@
 Bu dokuman resmi Unreal Engine dokumanlarina gore hazirlandi:
 
 - Artificial Intelligence:
-  https://dev.epicgames.com/documentation/unreal-engine/artificial-intelligence-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/artificial-intelligence-in-unreal-engine>
 - AI Controllers:
-  https://dev.epicgames.com/documentation/unreal-engine/ai-controllers-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/ai-controllers-in-unreal-engine>
 - Behavior Trees:
-  https://dev.epicgames.com/documentation/unreal-engine/behavior-trees-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/behavior-trees-in-unreal-engine>
 - Behavior Tree Overview:
-  https://dev.epicgames.com/documentation/unreal-engine/behavior-tree-in-unreal-engine---overview
+  <https://dev.epicgames.com/documentation/unreal-engine/behavior-tree-in-unreal-engine---overview>
 - Behavior Tree Node Reference:
-  https://dev.epicgames.com/documentation/unreal-engine/behavior-tree-node-reference-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/behavior-tree-node-reference-in-unreal-engine>
 - AI Perception:
-  https://dev.epicgames.com/documentation/unreal-engine/ai-perception-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/ai-perception-in-unreal-engine>
 - Environment Query System:
-  https://dev.epicgames.com/documentation/unreal-engine/environment-query-system-overview-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/environment-query-system-overview-in-unreal-engine>
 - Navigation System:
-  https://dev.epicgames.com/documentation/unreal-engine/navigation-system-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/navigation-system-in-unreal-engine>
 - State Tree:
-  https://dev.epicgames.com/documentation/unreal-engine/state-tree-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/state-tree-in-unreal-engine>
 - Smart Objects:
-  https://dev.epicgames.com/documentation/unreal-engine/smart-objects-in-unreal-engine
+  <https://dev.epicgames.com/documentation/unreal-engine/smart-objects-in-unreal-engine>
 
 ## Unreal AI sisteminin ozeti
 
@@ -37,7 +40,7 @@ Unreal tarafinda AI tek bir "zeka" sinifi degil, birkac katmanin beraber calisma
 
 | Unreal kavrami | Ne is yapar | Forge karsiligi |
 | --- | --- | --- |
-| AIController | PlayerController gibi Pawn/Character possess eder; insan inputu yerine cevre ve oyun durumuna gore karar verir. | Runtime-only `AIController` session/instance. NPC pawn'ini possess eder, input yerine karar cikisi uretir. |
+| AIController | PlayerController gibi Pawn/Character possess eder; insan inputu yerine cevre ve oyun durumuna gore karar verir. | Runtime-only `AIController` session/instance. NPC pawn'ini possess eder, input yerine karar cikisi uretir. (`src/game/playerController.ts` icindeki `possess()`/`unpossess()` modelinin AI paraleli.) |
 | Blackboard | Behavior Tree ve servislerin okudugu/yazdigi ajan hafizasi. | Agent basina typed `AiBlackboardState`; serialize edilen asset semasi ayridir, runtime degerleri layout'a yazilmaz. |
 | Behavior Tree | Karar akisidir. Unreal'da event-driven calisir; Decorator/Service/Task ayrimi vardir. | Ilk versiyonda JSON asset + TypeScript task/action registry. Visual graph sonra. |
 | Decorator | Dal calisabilir mi kararini verir. | Saf predicate: blackboard/world/perception/query okur. |
@@ -52,17 +55,47 @@ Unreal tarafinda AI tek bir "zeka" sinifi degil, birkac katmanin beraber calisma
 ## Forge mevcut durum
 
 - Runtime/editor ayrimi zaten net: `/` `RuntimeSceneApp`, `/?editor` `SceneApp`.
-  AI runtime kodu editor import etmemeli.
-- `BehaviorSubsystem` mevcut ve actor'leri `BehaviorComponent` uzerinden tick ediyor.
-  `BehaviorContext` icinde `messages`, `world`, `state`, `physics`, `audio`,
+  AI runtime kodu editor import etmemeli. Dikkat: **iki host da** gameplay
+  subsystem'lerini kurar — `SceneApp` editor Play modu icin `BehaviorSubsystem`
+  olusturur ve edit modda `setEnabled(false)` ile kapatir. AI subsystem ayni
+  cift-host modelini izlemelidir; sadece `RuntimeSceneApp`'e baglamak editor
+  Play'de AI'yi olu birakir.
+- `BehaviorSubsystem` (`engine/behavior/behaviorSubsystem.ts`) mevcut ve
+  actor'leri `BehaviorComponent` uzerinden tick ediyor. `BehaviorContext`
+  icinde `messages`, `world`, `state`, `physics`, `audio`,
   `interactionComponent` gibi AI davranislari icin kullanilabilir yuzeyler var.
-- Actor Script sistemi Unreal Actor Blueprint benzeri: parent class, component
-  template, event binding, reference/interface/message binding tasiyor.
-- Game Mode, PlayerController, Pawn/Character ve CharacterMovement hattı artik
+  Ayrica `ScriptMessageBus` non-behavior runtime kaynaklarina acik:
+  `emitScriptMessage()` / `subscribeScriptMessage()` — perception/damage
+  koprusu icin hazir giris noktasi. (Uyari: `clear()` scene teardown'da tum
+  abonelikleri dusurur; rebuild sonrasi yeniden abone olunmali.)
+- Actor Script sistemi Unreal Actor Blueprint benzeri: parent class
+  (`actor|pawn|character|playerController|gameMode` — henuz `aiController`
+  yok), component template (`ACTOR_COMPONENT_KINDS`), event binding,
+  reference/interface/message binding tasiyor (`engine/scene/actorScript.ts`).
+- Game Mode, PlayerController, Pawn/Character ve CharacterMovement hatti artik
   runtime tarafinda birinci sinif. AIController bu hattin dogal devamidir.
-- `RuntimeSceneApp` input, physics, behavior, audio, animation ve UI subsystem
-  orkestrasyonunu zaten yapiyor. AI sisteminin runtime insertion point'i burasi
-  olmalidir, editor tarafina karar mantigi konmamalidir.
+- **Kritik kisit:** `CharacterMovementSubsystem`
+  (`src/game/characterMovementSystem.ts`) bugun yalnizca possess edilmis
+  pawn'i tick eder (`isPlayerControlled` filtresi) ve hareket girisini dogrudan
+  global `ActionMap`'ten okur (`actions.held("move-forward")` vb.). AI suruslu
+  bir pawn su an CharacterMovement tarafindan **hic tick edilmez**. Faz 3'ten
+  once ajan-basina move-intent saglayan bir input-provider refactoru sart.
+- `RuntimeSceneApp` input, physics, characterMovement, behavior, audio,
+  dialogue, animation ve UI subsystem orkestrasyonunu zaten yapiyor
+  (constructor + `registerSubsystem` + scene build sonrasi `setEntities`).
+  AI sisteminin runtime insertion point'i burasi olmalidir, editor tarafina
+  karar mantigi konmamalidir.
+- Dialogue/Conversation sistemi tamam (`engine/dialogue/`: `DialogueSubsystem`,
+  `ConversationRunner`, `ConversationDirector`). NPC AI ile dogal temas
+  noktasi: bir Behavior Tree task'i konusma baslatabilir, konusma durumu
+  blackboard'a yazilabilir.
+- `?debug` overlay'inin kurulu bir deseni var (`src/scene/debugStats.ts`):
+  host uzerinde `get*DebugSnapshot()` getter + DOM'suz, unit-test edilebilir
+  `format*Debug()` formatter. AI debug ayni deseni izlemeli
+  (`getAiDebugSnapshot` + `formatAiDebug`).
+- Engine test harness'i (`tools/engine-tests.ts`, `npm run test:engine`) path
+  alias cozmez: `engine/ai/*` dosyalarindaki **value importlar relative**
+  olmali (mevcut `engine/behavior` basligindaki kuralin aynisi).
 - Mevcut `BehaviorSubsystem`, kucuk script davranislari icin yeterli; fakat uzun
   omurlu NPC karari, hedef secimi, path takip, algi hafizasi ve debug icin ayri
   bir `AISubsystem` gerekir.
@@ -87,13 +120,14 @@ Forge AI sistemi Unreal'i birebir kopyalamamali. Dogru yaklasim:
 
 | Alan | Oneri |
 | --- | --- |
-| `engine/ai/` | AIController, Blackboard, BehaviorTree runner, node contracts, debug snapshot. |
+| `engine/ai/` | AIController, Blackboard, BehaviorTree runner, node contracts, asset normalizer, debug snapshot. Value importlar relative (engine-test bundler alias cozmez). |
 | `engine/perception/` | Generic stimulus, sight/hearing/damage perception, listener/source index. |
 | `engine/navigation/` | Nav agent, path request/result, grid/graph pathfinding, avoidance adapter. |
 | `engine/query/` veya `engine/ai/eqs*` | EQS benzeri generator/test/score runner. |
 | `src/game/ai/` | Project task registry: attack, patrol, flee, use smart object, send game messages. |
 | `src/editor/` | AI asset editors, visualizers, debug panels. Editor runtime kodunu import etmez. |
-| `tools/saveValidator.ts` | Yeni AI sidecar ve layout alanlari icin allowlist/normalize fonksiyonlari. |
+| `engine/assets/manifest.ts` | Yeni `AssetType` degerleri (`behaviorTree`, `blackboard`, ileride `stateTree`, `eqsQuery`) + compound extension eslemesi. |
+| `tools/saveValidator.ts` + `vite.config.ts` | Yeni AI sidecar save endpointleri (`/__save-behavior` vb.), `WRITE_ENDPOINTS` listesi, `validateSave*Payload` fonksiyonlari — engine normalizer'i yeniden kullanarak (soundCue/dialogue/actor pattern'i). |
 
 ## Veri modeli taslagi
 
@@ -161,10 +195,40 @@ Ilk uygulanabilir secenek: Actor Script Character/Pawn uzerine bir
 }
 ```
 
+Save-path notu: `/__save-actor` payload'i `normalizeActorScriptDef`
+(`engine/scene/actorScript.ts`) uzerinden dogrulanir ve `tools/saveValidator.ts`
+bu fonksiyonu yeniden kullanir. Component kind allowlist'i
+`ACTOR_COMPONENT_KINDS` + `isActorComponentKind` gate'idir; component `props`
+ise `normalizeParams` ile **opak JSON** olarak gecer. Yani Faz 1'de
+`"AIController"`i `ACTOR_COMPONENT_KINDS`'a eklemek save tarafi icin yeterlidir;
+ayri bir props allowlist'i gerekmez. (Ileride per-instance AI override'lari
+`LayoutPlacement`'a taninirsa o zaman `applyTransformFields` allowlist gotcha'si
+devreye girer.)
+
 Ikinci, Unreal'a daha yakin secenek: `parentClass: "aiController"` Actor Script
 asset'i ve pawn uzerinde `aiControllerClassRef`. Bu daha temiz ama editor/runtime
-semalarina daha fazla dokunur. Bu yuzden Faz 1 icin component, Faz 4 icin class
-asset onerilir.
+semalarina daha fazla dokunur (`PARENT_CLASSES` + picker + spawn hatti). Bu
+yuzden Faz 1 icin component, Faz 4+ icin class asset onerilir.
+
+## Mevcut sistemlerle entegrasyon noktalari
+
+- **CharacterMovement:** AI hareketi icin `CharacterMovementSubsystem`'e
+  ajan-basina move-intent kaynagi eklenmeli (bkz. Faz 3). AI ajanlar da
+  `reportLocomotion` yolundan gecirilirse locomotion animasyon durumlari
+  (`src/game/locomotionAnimation.ts`) NPC'ler icin bedavaya gelir.
+- **ScriptMessageBus:** damage/alert/game-event stimuluslari icin
+  `BehaviorSubsystem.subscribeScriptMessage()` hazir; AI task'lari oyun
+  eylemlerini `emitScriptMessage()`/`BehaviorContext.messages` ile yayar.
+  Ilk fazlarda ayri bir AI event bus gerekmez.
+- **Dialogue/Conversation:** `forge.startConversation` gibi bir task
+  `ConversationDirector`/`DialogueSubsystem`'i tetikleyebilir; NPC bark'lari
+  (tehdit gorunce tek satir dialogue line) ucuz bir ilk entegrasyon.
+- **Audio:** hearing stimulus icin ilk kaynak, mevcut ses calma noktalarina
+  eklenecek `emitNoise(position, loudness, sourceEntityId)` koprusu.
+- **Debug overlay:** `RuntimeStatsApp`'e `getAiDebugSnapshot()` getter'i,
+  `src/scene/debugStats.ts`'e saf `formatAiDebug()` formatter'i (mevcut
+  `formatGameModeDebug`/`formatUiDebug` deseni; formatter DOM'suz oldugu icin
+  engine testinde dogrulanir).
 
 ## Fazlar
 
@@ -174,11 +238,12 @@ asset onerilir.
 - [ ] `docs/architecture/UNREAL_BASICS_LESSONS.md` icine AI planina kisa link ekle.
 - [ ] `docs/architecture/ARCHITECTURE.md` icinde AI runtime/editor sinirini bir
       paragrafla netlestir.
-- [ ] `engine/behavior` ile yeni `engine/ai` sorumluluk farkini yaz:
-      `BehaviorSubsystem` kucuk script tick/message, `AISubsystem` karar ve ajan
-      orkestrasyonu.
+- [ ] `engine/behavior` ile yeni `engine/ai` sorumluluk farkini yaz
+      (`engine/behavior/README.md` guncellenebilir): `BehaviorSubsystem` kucuk
+      script tick/message, `AISubsystem` karar ve ajan orkestrasyonu.
 - [ ] Security notu: behavior stub, generated content veya dev endpoint
-      degisecekse Codex Security diff scan oner/iste.
+      degisecekse Codex Security diff scan oner/iste (Codex oturumlari icin
+      handoff notu).
 
 ### Faz 1 - Minimal AIController + Blackboard + debug snapshot
 
@@ -190,15 +255,23 @@ debug'da izlenebilmesi.
 - [ ] `engine/ai/aiController.ts` ekle: pawn entity id, controller id,
       blackboard, current goal, debug snapshot.
 - [ ] `engine/ai/aiSubsystem.ts` ekle: AIController instance lifecycle,
-      `setEntities`, `update`, `dispose`.
-- [ ] Actor Script component listesine `AIController` ekle.
-- [ ] `engine/scene/components.ts` icine `AIControllerComponent` reader ekle.
-- [ ] `tools/saveValidator.ts` icinde component props allowlist ekle.
-- [ ] `RuntimeSceneApp` icinde `AISubsystem` kur, entity listesini runtime scene
-      build sonrasinda bagla.
-- [ ] `?debug` overlay veya debug snapshot'a aktif AI sayisi, controller id,
-      active goal, blackboard key sayisi ekle.
-- [ ] Test: headless engine test ile blackboard default/read/write.
+      `setEntities`, `update`, `dispose` + `setEnabled` gate
+      (BehaviorSubsystem/PhysicsSubsystem modeliyle ayni: edit modda kapali).
+- [ ] `ACTOR_COMPONENT_KINDS`'a (`engine/scene/actorScript.ts`) `"AIController"`
+      ekle — `isActorComponentKind` gate'i ayni zamanda `/__save-actor` save
+      allowlist'idir (`normalizeActorScriptDef` saveValidator tarafindan
+      yeniden kullanilir); ayri props allowlist gerekmez.
+- [ ] `engine/scene/components.ts` icine `AIControllerComponent` tipi +
+      `readAIControllerComponent` reader ekle.
+- [ ] `RuntimeSceneApp` icinde `AISubsystem` kur (`registerSubsystem`), entity
+      listesini runtime scene build sonrasinda bagla (`setEntities`).
+- [ ] `SceneApp` (editor) icinde de kur: edit modda `setEnabled(false)`, Play
+      modunda etkin — aksi halde editor Play'de AI calismaz.
+- [ ] `?debug` overlay: `getAiDebugSnapshot()` + `formatAiDebug()` ile aktif AI
+      sayisi, controller id, active goal, blackboard key sayisi
+      (`src/scene/debugStats.ts` deseni).
+- [ ] Test: headless engine test ile blackboard default/read/write
+      (`tools/engine-tests.ts`; `engine/ai` value importlari relative).
 - [ ] Test: runtime smoke ile AIController component'li actor crash olmadan boot eder.
 - [ ] Validation: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`.
 
@@ -207,7 +280,16 @@ debug'da izlenebilmesi.
 Hedef: Unreal Behavior Tree'nin sade JSON karsiligi; Selector/Sequence/Decorator/
 Service/Task modeli.
 
-- [ ] `*.behavior.json` schema ve normalizer tanimla.
+- [ ] `*.behavior.json` ve `*.blackboard.json` schema + engine-side normalizer
+      tanimla (orn. `engine/ai/behaviorAsset.ts`; loader ve saveValidator ayni
+      normalizer'i paylasir — `normalizeAssetSkeleton` modeliyle ayni ilke).
+- [ ] Dev save endpointleri: `vite.config.ts` icine `/__save-behavior` (+
+      `/__save-blackboard`), `WRITE_ENDPOINTS` listesine ekleme,
+      `tools/saveValidator.ts` icine `validateSave*Payload` — mevcut
+      soundCue/dialogue endpoint pattern'i.
+- [ ] `engine/assets/manifest.ts`: yeni `AssetType` degerleri (`behaviorTree`,
+      `blackboard`) + compound extension eslemesi (`.behavior.json`,
+      `.blackboard.json`); `npm run check:assets` yesil kalmali.
 - [ ] Behavior Tree runner ekle:
       - [ ] `selector`
       - [ ] `sequence`
@@ -224,9 +306,10 @@ Service/Task modeli.
 - [ ] Built-in tasklar:
       - [ ] `forge.wait`
       - [ ] `forge.setBlackboard`
-      - [ ] `forge.sendMessage`
+      - [ ] `forge.sendMessage` (ScriptMessageBus uzerinden)
       - [ ] `forge.moveToPosition`
       - [ ] `forge.moveToBlackboard`
+      - [ ] (opsiyonel) `forge.startConversation` — DialogueSubsystem koprusu.
 - [ ] Built-in decoratorlar:
       - [ ] blackboard compare
       - [ ] distance compare
@@ -248,6 +331,14 @@ Service/Task modeli.
 Hedef: AI hareketi `CharacterMovement` ile uyumlu, path tabanli ve debug
 edilebilir olsun.
 
+- [ ] **On kosul — CharacterMovement AI giris refactoru:**
+      `CharacterMovementSubsystem` bugun `isPlayerControlled` disindaki
+      entity'leri hic tick etmiyor ve inputu global `ActionMap`'ten okuyor.
+      Ajan-basina move-intent saglayan bir provider ekle (orn.
+      `getMoveIntent(entityId): { direction, speed, jump? } | null` opsiyonu):
+      player icin ActionMap'ten, AI icin AISubsystem'den beslenir. Boylece
+      yercekimi/step/collision cozumu ve `reportLocomotion` animasyon yolu
+      NPC'ler icin de calisir.
 - [ ] `engine/navigation` contract ekle:
       - [ ] `NavAgent`
       - [ ] `PathRequest`
@@ -255,10 +346,11 @@ edilebilir olsun.
       - [ ] `PathFollowingState`
 - [ ] Ilk uygulama olarak collision AABB'lerinden 2D grid/waypoint graph uret.
 - [ ] Static blocker AABB'lerini mevcut `PhysicsQuery.staticBlockerAabbs()`
-      yuzeyinden besle.
+      yuzeyinden besle (`engine/behavior/behaviorSubsystem.ts` interface'i,
+      `engine/physics/physicsSubsystem.ts` implementasyonu).
 - [ ] `forge.moveToPosition` task'ini path request + path following ile calistir.
-- [ ] Ajan hareketini transform teleport yerine CharacterMovement input benzeri
-      velocity/desired direction ile uygula.
+- [ ] Ajan hareketini transform teleport yerine yukaridaki move-intent
+      provider'i uzerinden uygula.
 - [ ] Basit local avoidance ekle: ajanlar arasi separation ve stuck recovery.
 - [ ] Debug draw:
       - [ ] nav grid/graph
@@ -291,8 +383,10 @@ beslemek.
       - [ ] radius attenuation
       - [ ] last heard position blackboard update.
 - [ ] Damage/gameplay stimulus:
-      - [ ] `damage`, `alert`, `ui-action`, `game-event` gibi mevcut message
-            bus eventlerinden perception'a bridge.
+      - [ ] `damage`, `alert`, `ui-action`, `game-event` gibi mevcut script
+            message eventlerinden perception'a bridge —
+            `BehaviorSubsystem.subscribeScriptMessage()` ile; scene rebuild
+            (`clear()`) aboneligi dusurur, yeniden abone olmayi unutma.
 - [ ] AIController component props icinde perception config expose et.
 - [ ] Behavior Tree serviceleri perception result'larini Blackboard'a yazsin.
 - [ ] Debug:
@@ -309,7 +403,8 @@ beslemek.
 Hedef: "nereye gitmeli?", "en iyi cover neresi?", "hangi pickup yakin ve guvenli?"
 gibi kararlar data-driven sorgu ile cozulsun.
 
-- [ ] `*.eqs.json` veya `*.query.json` asset schema tanimla.
+- [ ] `*.eqs.json` veya `*.query.json` asset schema tanimla (+ manifest
+      `AssetType` ve save endpoint, Faz 2 pattern'i).
 - [ ] Generatorlar:
       - [ ] points around querier
       - [ ] grid around context
@@ -342,7 +437,9 @@ gibi kararlar data-driven sorgu ile cozulsun.
 Hedef: Level'daki kullanilabilir aktiviteleri AI ve oyuncu icin ortak, rezerve
 edilebilir data haline getirmek.
 
-- [ ] `SmartObjectComponent` ekle:
+- [ ] `SmartObjectComponent` ekle (mevcut `InteractionComponent` ile iliskisini
+      netlestir: interaction oyuncu-tetiklemeli tek atim, smart object
+      rezerve edilebilir slot):
       - [ ] tags
       - [ ] slots
       - [ ] interaction position
@@ -367,7 +464,8 @@ edilebilir data haline getirmek.
 Hedef: AI sistemi kodla calismakla kalmasin, editor icinde uretilip
 baglanabilsin.
 
-- [ ] Content Browser create menu:
+- [ ] Content Browser create menu (Faz 2'de eklenen manifest `AssetType`
+      degerleri uzerine kurulur):
       - [ ] Blackboard
       - [ ] Behavior Tree
       - [ ] EQS Query
@@ -387,10 +485,12 @@ baglanabilsin.
       - [ ] active behavior path
       - [ ] perception stimuli
       - [ ] path/query overlay toggles.
-- [ ] Save validation: tum yeni sidecar formatlari ve layout fields
-      `tools/saveValidator.ts` icinde allowlist/normalize edilmeli.
+- [ ] Save validation: tum yeni sidecar formatlari `tools/saveValidator.ts`
+      icinde engine normalizer'lari yeniden kullanarak dogrulanmali; olasi yeni
+      layout alanlari icin `applyTransformFields` allowlist gotcha'si gecerli.
 - [ ] Security: AI-generated behavior stublari, dev endpoint veya file write
-      degisiklikleri icin Codex Security diff scan calistirmayi planla.
+      degisiklikleri icin Codex Security diff scan calistirmayi planla (Codex
+      oturumlari icin handoff notu).
 - [ ] Validation: full local gate + Playwright `?editor` smoke.
 
 ### Faz 8 - StateTree secenegi
@@ -422,23 +522,28 @@ En dusuk riskli ilk sprint:
 3. Behavior Tree runner icin sadece `selector`, `sequence`, `task`, basit
    blackboard decorator.
 4. `forge.wait`, `forge.setBlackboard`, `forge.sendMessage` tasklari.
-5. Debug snapshot.
+5. Debug snapshot (`getAiDebugSnapshot` + `formatAiDebug`).
 6. Bir `Enemy.behavior.json` sample'i: idle -> message emit.
 
-Bu slice navigation/perception/EQS beklemeden AI karar altyapisini dogrular.
-Sonraki sprintte path following ve perception eklenir.
+Bu slice navigation/perception/EQS beklemeden AI karar altyapisini dogrular ve
+CharacterMovement refactoru gerektirmez (hareket yok). Sonraki sprintte
+move-intent provider refactoru + path following, ardindan perception eklenir.
 
 ## Kabul kriterleri
 
 - Runtime route AI kullanirken editor import etmez.
 - Editor route AI asset'lerini author eder ama runtime decision code'u editor
   shell'e tasimaz.
+- AI, editor Play modunda da calisir (`SceneApp` wiring); edit modda
+  `setEnabled(false)` ile kapalidir.
 - AI runtime state layout JSON'a geri yazilmaz.
-- Yeni layout/sidecar alanlari save validator tarafindan bilincli allowlist edilir.
+- Yeni sidecar formatlari saveValidator'da engine normalizer'lariyla dogrulanir;
+  yeni layout alanlari bilincli allowlist edilir.
 - Behavior Tree node runtime memory'si agent basina ayridir.
 - Debug snapshot olmadan AI feature tamam sayilmaz.
 - Engine-level AI kodu DOM, Three.js ve editor bagimliligi tasimaz; render/debug
-  visualizer ayri katmanda kalir.
+  visualizer ayri katmanda kalir. Value importlar relative kalir ki
+  `npm run test:engine` harness'i kossun.
 - Oyun-spesifik combat/mission/score kararlari `src/game` tarafinda kalir.
 
 ## Acik kararlar
@@ -449,7 +554,36 @@ Sonraki sprintte path following ve perception eklenir.
   "aiController"` Actor Script class'i mi acilacak?
 - Behavior Tree visual editor ne zaman gerekli? Ilk fazlarda JSON/form editor
   yeterli gorunuyor.
-- AI task'lari mevcut `BehaviorSubsystem` mesaj API'ini mi kullanacak, yoksa
-  ayri action/event bus mi gerekecek?
+- ~~AI task'lari mevcut `BehaviorSubsystem` mesaj API'ini mi kullanacak?~~
+  Cozuldu (2026-07-02): `ScriptMessageBus` non-behavior kaynaklari zaten
+  destekliyor (`emitScriptMessage`/`subscribeScriptMessage`); ilk fazlarda ayri
+  bus yok, performans verisi cikarsa yeniden degerlendirilir.
+- Move-intent provider'in kesin sekli: `CharacterMovementSubsystemOptions`'a
+  eklenen bir callback mi, yoksa entity-basina kayitli bir input source
+  registry'si mi? (Faz 3 basinda kararlastirilacak.)
 - Multiplayer/replication su an kapsam disi; ileride AI state replication
   sozlesmesi ayrica planlanmali.
+
+## Revizyon notlari (2026-07-02)
+
+Plan koda karsi dogrulandi; su duzeltmeler yapildi:
+
+1. **Save-path duzeltmesi:** Faz 1'deki "saveValidator'a component props
+   allowlist ekle" maddesi yanlisti — `/__save-actor` zaten
+   `normalizeActorScriptDef`'i kullaniyor ve component props opak JSON olarak
+   geciyor; gercek is `ACTOR_COMPONENT_KINDS`'a kind eklemek.
+2. **CharacterMovement kisiti eklendi:** subsystem yalnizca possessed pawn'i
+   tick ediyor ve global `ActionMap` okuyor; AI hareketi icin move-intent
+   provider refactoru Faz 3'e on kosul olarak yazildi.
+3. **Editor Play modu eklendi:** `SceneApp` de gameplay subsystem'leri kuruyor
+   (`setEnabled` gate); AI subsystem cift-host wiring gerektirir.
+4. **Asset pipeline somutlastirildi:** yeni sidecar'lar icin
+   `engine/assets/manifest.ts` `AssetType` + compound extension, vite dev
+   endpoint + `WRITE_ENDPOINTS` + `validateSave*Payload` maddeleri eklendi
+   (soundCue/dialogue pattern'i).
+5. **Dialogue entegrasyonu eklendi:** tamamlanan `engine/dialogue` sistemiyle
+   temas noktalari (`forge.startConversation`, NPC bark) not edildi.
+6. **Debug/test desenleri baglandi:** `debugStats.ts` snapshot/formatter deseni
+   ve engine-test relative-import kurali ilgili maddelere islendi;
+   ScriptMessageBus'in `clear()` abonelik dusurme davranisi perception
+   koprusune uyari olarak eklendi.

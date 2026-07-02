@@ -7,8 +7,14 @@ import {
   type TransformComponent,
 } from "../scene/components";
 import { interactionGroupsInteract } from "../scene/collision";
+import { rotatePointAboutOrigin, rotatedBoxAabb } from "./rotatedBox";
 import type { Entity, EntityId } from "../scene/entity";
-import type { PhysicsAabb, PhysicsContact, PhysicsQuery } from "../behavior/behaviorSubsystem";
+import type {
+  PhysicsAabb,
+  PhysicsContact,
+  PhysicsQuery,
+  PhysicsSurfaceTriangle,
+} from "../behavior/behaviorSubsystem";
 import type { Vec3 } from "../scene/layout";
 import {
   ragdollJointAngularLimits,
@@ -80,6 +86,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private contacts: PhysicsContact[] = [];
   /** Cached movement blockers (static colliders don't move); rebuilt lazily. */
   private staticBlockerCache: Aabb[] | null = null;
+  /** Cached walkable surface triangles (static trimesh); rebuilt lazily. */
+  private staticSurfaceCache: PhysicsSurfaceTriangle[] | null = null;
   private rapierModule: RapierModule | null = null;
   private rapierWorld: RapierWorld | null = null;
   private rapierBodies = new Map<EntityId, RapierBodyRecord>();
@@ -148,6 +156,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.bodies = bodies;
     this.contacts = [];
     this.staticBlockerCache = null;
+    this.staticSurfaceCache = null;
     if (this.rapierModule) this.rebuildRapierWorld();
   }
 
@@ -156,7 +165,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!body) return;
     body.transform = cloneTransform(transform);
     // A static body moving (editor drag) invalidates the cached blocker AABBs.
-    if (body.collider.isStatic) this.staticBlockerCache = null;
+    if (body.collider.isStatic) {
+      this.staticBlockerCache = null;
+      this.staticSurfaceCache = null;
+    }
     const rapier = this.rapierBodies.get(entityId);
     if (!rapier) return;
     const translation = vectorFromTransform(transform);
@@ -191,6 +203,23 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
     this.staticBlockerCache = blockers;
     return blockers;
+  }
+
+  /**
+   * World-space walkable surface triangles from every static, non-sensor trimesh
+   * (`complexAsSimple`) collider, with the body's placement rotation baked into
+   * each vertex and the upward normal precomputed. Feeds the ground probe so a
+   * ramp is walked at its true incline height. Cached like the blocker AABBs.
+   */
+  staticSurfaceTriangles(): readonly PhysicsSurfaceTriangle[] {
+    if (this.staticSurfaceCache) return this.staticSurfaceCache;
+    const surfaces: PhysicsSurfaceTriangle[] = [];
+    for (const body of this.bodies) {
+      if (!body.collider.isStatic || body.collider.isSensor) continue;
+      appendSurfaceTriangles(surfaces, body);
+    }
+    this.staticSurfaceCache = surfaces;
+    return surfaces;
   }
 
   /**
@@ -526,40 +555,38 @@ function contactKey(a: EntityId, b: EntityId): string {
 }
 
 function bodyAabb(body: PhysicsBody): Aabb {
-  // `size` and `center` are world-space (placement scale baked at scene-build),
-  // so the AABB is centered at position + center with half-extents size / 2.
-  const half = body.collider.size.map((size) => size / 2);
+  // `size`/`center` are body-local (placement scale baked at scene-build); the
+  // body's Euler rotation is applied here so a rotated collider's world AABB
+  // tracks the rendered mesh / Rapier collider instead of staying axis-aligned.
+  const half: Vec3 = [
+    (body.collider.size[0] ?? 0) / 2,
+    (body.collider.size[1] ?? 0) / 2,
+    (body.collider.size[2] ?? 0) / 2,
+  ];
   const center = body.collider.center ?? [0, 0, 0];
-  const point = body.transform.position.map(
-    (axis, index) => axis + (center[index] ?? 0),
+  return rotatedBoxAabb(
+    body.transform.position as Vec3,
+    center as Vec3,
+    half,
+    body.transform.rotation as Vec3,
   );
-  return {
-    min: [
-      (point[0] ?? 0) - (half[0] ?? 0),
-      (point[1] ?? 0) - (half[1] ?? 0),
-      (point[2] ?? 0) - (half[2] ?? 0),
-    ],
-    max: [
-      (point[0] ?? 0) + (half[0] ?? 0),
-      (point[1] ?? 0) + (half[1] ?? 0),
-      (point[2] ?? 0) + (half[2] ?? 0),
-    ],
-  };
 }
 
 /**
  * Appends one or more movement-blocker AABBs for a static body. Plain colliders
  * yield their single body AABB; compound colliders yield one per primitive; a
- * `trimesh` primitive yields one per triangle. Rotation is ignored, matching the
- * AABB movement model (`bodyAabb`).
+ * `trimesh` primitive yields one per triangle. The body's placement rotation (and
+ * a primitive's own local rotation) is baked into the world AABB via
+ * `rotatedBoxAabb`, so a rotated corner-pivoted wall lands where it is drawn.
  */
 function appendBlockerAabbs(out: Aabb[], body: PhysicsBody): void {
   const primitives = body.collider.primitives;
+  const rotation = body.transform.rotation as Vec3;
   if (!primitives || primitives.length === 0) {
     out.push(bodyAabb(body));
     return;
   }
-  const origin = body.transform.position;
+  const origin = body.transform.position as Vec3;
   for (const primitive of primitives) {
     if (
       primitive.shape === "trimesh" &&
@@ -568,51 +595,110 @@ function appendBlockerAabbs(out: Aabb[], body: PhysicsBody): void {
       primitive.indices &&
       primitive.indices.length >= 3
     ) {
-      appendTriangleAabbs(out, origin, primitive.vertices, primitive.indices);
+      appendTriangleAabbs(out, origin, rotation, primitive.vertices, primitive.indices);
     } else {
-      out.push(primitiveAabb(origin, primitive));
+      out.push(primitiveAabb(origin, rotation, primitive));
     }
   }
 }
 
-/** World AABB of a single non-trimesh primitive (body origin + local center ± size/2). */
-function primitiveAabb(origin: readonly number[], primitive: ColliderPrimitive): Aabb {
-  const center = primitive.center ?? [0, 0, 0];
-  const hx = primitive.size[0] / 2;
-  const hy = primitive.size[1] / 2;
-  const hz = primitive.size[2] / 2;
-  const cx = (origin[0] ?? 0) + (center[0] ?? 0);
-  const cy = (origin[1] ?? 0) + (center[1] ?? 0);
-  const cz = (origin[2] ?? 0) + (center[2] ?? 0);
-  return { min: [cx - hx, cy - hy, cz - hz], max: [cx + hx, cy + hy, cz + hz] };
+/** World AABB of a single non-trimesh primitive, honouring body + primitive rotation. */
+function primitiveAabb(origin: Vec3, bodyRotation: Vec3, primitive: ColliderPrimitive): Aabb {
+  const center = (primitive.center ?? [0, 0, 0]) as Vec3;
+  const half: Vec3 = [primitive.size[0] / 2, primitive.size[1] / 2, primitive.size[2] / 2];
+  return rotatedBoxAabb(origin, center, half, bodyRotation, primitive.rotation);
 }
 
-/** One AABB per triangle of a trimesh primitive, translated by the body origin. */
-function appendTriangleAabbs(
-  out: Aabb[],
-  origin: readonly number[],
+/**
+ * A trimesh triangle is a movement blocker (wall) only when it is steeper than
+ * `SURFACE_MAX_WALL_DEGREES`; flatter triangles are walkable surfaces (ramps/floors)
+ * handled by the ground probe, so blocking them would freeze a ramp ascent. The
+ * character's authored slope limit (≤ this) then decides walkable vs. slide.
+ */
+const SURFACE_MAX_WALL_DEGREES = 50;
+const SURFACE_MIN_NORMAL_Y = Math.cos(degreesToRadians(SURFACE_MAX_WALL_DEGREES));
+
+/** Upward component of a triangle's unit normal (1 = flat, 0 = vertical); 0 if degenerate. */
+function triangleUpNormalY(a: Vec3, b: Vec3, c: Vec3): number {
+  const ux = b[0] - a[0];
+  const uy = b[1] - a[1];
+  const uz = b[2] - a[2];
+  const vx = c[0] - a[0];
+  const vy = c[1] - a[1];
+  const vz = c[2] - a[2];
+  const nx = uy * vz - uz * vy;
+  const ny = uz * vx - ux * vz;
+  const nz = ux * vy - uy * vx;
+  const len = Math.hypot(nx, ny, nz);
+  return len <= 1e-9 ? 0 : Math.abs(ny) / len;
+}
+
+/** Invokes `visit` with each trimesh triangle's world-space vertices (rotation baked). */
+function forEachWorldTriangle(
+  origin: Vec3,
+  bodyRotation: Vec3,
   vertices: readonly Vec3[],
   indices: readonly number[],
+  visit: (wa: Vec3, wb: Vec3, wc: Vec3) => void,
 ): void {
-  const ox = origin[0] ?? 0;
-  const oy = origin[1] ?? 0;
-  const oz = origin[2] ?? 0;
   for (let t = 0; t + 2 < indices.length; t += 3) {
     const a = vertices[indices[t]!];
     const b = vertices[indices[t + 1]!];
     const c = vertices[indices[t + 2]!];
     if (!a || !b || !c) continue;
+    visit(
+      rotatePointAboutOrigin(origin, a, bodyRotation),
+      rotatePointAboutOrigin(origin, b, bodyRotation),
+      rotatePointAboutOrigin(origin, c, bodyRotation),
+    );
+  }
+}
+
+/** One AABB per *wall* triangle of a trimesh (flat/walkable triangles are surfaces, not blockers). */
+function appendTriangleAabbs(
+  out: Aabb[],
+  origin: Vec3,
+  bodyRotation: Vec3,
+  vertices: readonly Vec3[],
+  indices: readonly number[],
+): void {
+  forEachWorldTriangle(origin, bodyRotation, vertices, indices, (wa, wb, wc) => {
+    if (triangleUpNormalY(wa, wb, wc) >= SURFACE_MIN_NORMAL_Y) return; // walkable surface, not a wall
     out.push({
       min: [
-        ox + Math.min(a[0], b[0], c[0]),
-        oy + Math.min(a[1], b[1], c[1]),
-        oz + Math.min(a[2], b[2], c[2]),
+        Math.min(wa[0], wb[0], wc[0]),
+        Math.min(wa[1], wb[1], wc[1]),
+        Math.min(wa[2], wb[2], wc[2]),
       ],
       max: [
-        ox + Math.max(a[0], b[0], c[0]),
-        oy + Math.max(a[1], b[1], c[1]),
-        oz + Math.max(a[2], b[2], c[2]),
+        Math.max(wa[0], wb[0], wc[0]),
+        Math.max(wa[1], wb[1], wc[1]),
+        Math.max(wa[2], wb[2], wc[2]),
       ],
+    });
+  });
+}
+
+/** Appends walkable surface triangles for a body's trimesh primitives (world-space + normalY). */
+function appendSurfaceTriangles(out: PhysicsSurfaceTriangle[], body: PhysicsBody): void {
+  const primitives = body.collider.primitives;
+  if (!primitives || primitives.length === 0) return;
+  const origin = body.transform.position as Vec3;
+  const rotation = body.transform.rotation as Vec3;
+  for (const primitive of primitives) {
+    if (
+      primitive.shape !== "trimesh" ||
+      !primitive.vertices ||
+      primitive.vertices.length < 3 ||
+      !primitive.indices ||
+      primitive.indices.length < 3
+    ) {
+      continue;
+    }
+    forEachWorldTriangle(origin, rotation, primitive.vertices, primitive.indices, (wa, wb, wc) => {
+      const normalY = triangleUpNormalY(wa, wb, wc);
+      if (normalY < SURFACE_MIN_NORMAL_Y) return; // steep → wall blocker, not a walk surface
+      out.push({ a: wa, b: wb, c: wc, normalY });
     });
   }
 }

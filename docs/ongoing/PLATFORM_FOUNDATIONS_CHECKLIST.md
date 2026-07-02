@@ -7,7 +7,7 @@
 > sertleştirme**, **Seviye Akışı (Level Travel)**, **Save-Game/Persistence**,
 > **Boot/Loading UX**, **Performans Altyapısı**.
 > Kapsam dışı (ayrı planları var/olacak): AI sistemi
-> (`docs/ongoing/AI_SYSTEM_RESEARCH_AND_PLAN.md`), VFX genişlemesi (plan
+> (`docs/planned/AI_SYSTEM_RESEARCH_AND_PLAN.md`), VFX genişlemesi (plan
 > hazırlığı kullanıcıda), networking/multiplayer, gerçek level streaming.
 
 ---
@@ -157,24 +157,66 @@ etkileşiminin A'da kirlenmesi.
 
 ## Checklist
 
-- [ ] **P1.1 — Tünelleme guard'ı (substep):** `resolvePlanarMovement`
-  çağrısını maksimum adım uzunluğuna (ör. en ince beklenen duvar / 2) bölen
-  saf bir sarmalayıcı; `characterMovementSystem` ve `input-move` bunu
-  kullanır. Headless test: yüksek hız + büyük dt'de ince duvardan geçmeme.
-- [ ] **P1.2 — Döndürülmüş collider doğrulaması:** playground'a 30–45°
-  döndürülmüş duvar/engel ekle; AABB şişmesinin his etkisini gözlemle.
-  Çıktı bir *karar kaydı*: "şişme kabul" veya "OBB desteği backlog'a".
-- [ ] **P1.3 — Eğim/rampa spike + karar:** iki aday tasarım karşılaştır:
-  (a) `slope` collider primitifi — AABB + yüzey fonksiyonu, ground probe'a
-  eğik yüzey yüksekliği öğret; (b) Rapier shape-cast'i yalnızca *grounding*
-  için kullan (planar çözüm saf kalır, zemin sorgusu Rapier'e gider).
-  Spike sonucu Kalıcı Mimari Karar olarak bu dosyaya ve
-  `UNREAL_BASICS_LESSONS.md`'ye işlenir.
-- [ ] **P1.4 — Eğim uygulaması:** P1.3 kararına göre yürüme/kayma: slope
-  limit (derece) `CharacterMovement` prop'u olur (Rotation Rate kalıbı gibi
-  authored, `tools/saveValidator.ts` aktör-script şeması etkileniyorsa
-  allowlist'e işlenir). Headless testler: limit altı rampada yürüme, limit
-  üstünde kayma/engelleme, rampa-basamak kombinasyonu.
+- [x] **P1.1 — Tünelleme guard'ı (substep):** `resolvePlanarMovementSubstepped`
+  (`src/game/collision.ts`) — hareketi `safeSubstepLength` (en ince blocker
+  X/Z kalınlığı / 2, 0.01 taban) uzunluğunda parçalara bölüp her parçayı
+  koşan-pozisyondan yeniden çözer; `MAX_MOVEMENT_SUBSTEPS = 32` tavanı.
+  `characterMovementSystem.resolvePlanarAgainstBlockers` bunu kullanır.
+  **Yan bulgu + düzeltme:** substep, `resolvePlanarMovement`'taki gizli bir
+  bug'ı ortaya çıkardı — "already inside" (zaten içeride) kontrolü flush
+  temasta float hatasına duyarlıydı (`0.9-0.3+0.3 = 0.9000000000000001`
+  "içeride" sanılıp bir sonraki itme duvardan geçiyordu; tek-geçişte de
+  karelerce sürünme riski). `alreadyPenetrating` (± `PENETRATION_EPSILON`
+  1e-6) ile sağlamlaştırıldı; gerçek derin örtüşme (zemin/platform içinde
+  durma) muaf kalır. Headless: yüksek hızda ince duvardan geçmeme, tek-adım
+  eşdeğerliği, hızlı çaprazda duvar kayması, `safeSubstepLength`.
+- [x] **P1.2 — Döndürülmüş collider — DÜZELTİLDİ (sadece doğrulama değil).**
+  İnceleme, çerçevelenen "AABB şişmesi"nden daha ciddi bir *bug* buldu:
+  hareket-blocker AABB'leri placement rotasyonunu tamamen yok sayıyordu
+  (`bodyAabb`/`primitiveAabb` yalnız `origin + center` kullanıyordu).
+  Architecture duvarlarının collision kutusu pivotu köşede (ör. `Wall_400x300`
+  center `[2,1.5,0]`); duvar döndürülünce bu offset döndürülmediği için
+  collider **metrelerce** yanlış yere gidiyordu → kullanıcının bildirdiği
+  "duvardan geçme" + "boş yolda görünmez duvar" semptomlarının kök nedeni.
+  Fizik gövdesi (Rapier) ve render-mesh rotasyonu doğru uyguluyordu; sadece
+  kinematik karakterin çözdüğü blocker yolu atlıyordu. **Çözüm:** saf
+  `engine/physics/rotatedBox.ts` (`rotatedBoxAabb`, `rotatePointAboutOrigin`);
+  `physicsSubsystem` blocker türetimi artık `body.transform.rotation` (+
+  primitive local rotasyonu) ile döndürülmüş kutunun dünya AABB'sini üretir.
+  Headless: 90° köşe-pivot duvar mesh'i takip eder, 45° şişme simetrik,
+  primitive+body rotasyon kompozisyonu, compound + tekil collider yolları.
+  **KALICI MİMARİ KARAR:** AABB hareket modeli korunur — off-axis rotasyonda
+  *şişme kabul edildi* (45° ince duvar daha dolgun bir footprint alır). Tam
+  OBB (dar-faz) collision backlog'da; tetikleyici: şişmenin hissi bozacak
+  kadar büyük olduğu gözlenirse.
+- [x] **P1.3 — Eğim/rampa spike + KALICI MİMARİ KARAR:** **Seçenek A (saf
+  çekirdek) seçildi** (kullanıcı onayı 2026-07-02). Rapier grounding'e (B)
+  gidilmedi — headless test yüzeyi ve `engine`/`game` sınırı korunur.
+  Uygulanan varyant: rampalar **`complexAsSimple` (trimesh)** collision kullanır;
+  fizik bu üçgenleri (placement rotasyonu bake edilmiş, `normalY` önceden
+  hesaplı) `staticSurfaceTriangles()` ile ayrı bir kanaldan sunar; ground probe
+  bunları örnekleyip gerçek eğim yüksekliğini interpolasyonla bulur, `normalY`
+  üstünden slope limit uygular. **Blocker/surface ayrımı:** bir trimesh üçgeni
+  `SURFACE_MAX_WALL_DEGREES` (50°) üstünde ise duvar (`staticBlockerAabbs`),
+  altında ise yürünebilir yüzey — yoksa rampanın kendi üçgen-AABB'leri çıkışı
+  dikey duvar gibi engellerdi. Karakterin authored slope limit'i (≤50°) yürür
+  vs kayar ayrımını yapar. Tetikleyici (B'ye geçiş): mesh-collider'lı organik
+  geometri veya bu ayrımın kirlenmesi.
+- [x] **P1.4 — Eğim uygulaması:** `maxSlopeAngleDeg` (varsayılan 45°)
+  `CharacterMovement` prop'u oldu (Rotation Rate kalıbı: `components.ts` reader
+  default + `actorScript.ts` default template + `ActorScriptEditor` "Max Slope
+  Angle°" alanı). Free-form component prop olduğu için `saveValidator`
+  allowlist'i gerekmedi (`normalizeParams` serbest geçirir). Saf modül
+  `src/game/slopeSurface.ts` (`triangleUpNormal`, `sampleTriangleHeight`
+  barycentric XZ, `slopeCosFromDegrees`); ground probe
+  (`findGroundAt`/`findLandingGround`) surfaces + `maxSlopeCos` tüketir;
+  `characterMovementSystem` fizikten surface'leri ve karakterin limitini geçirir.
+  Headless: üçgen normal/örnekleme, limit-altı rampada yürüme, limit-üstü
+  reddi, düz-AABB'nin alçak rampayı yenmesi, döndürülmüş yüzey normali,
+  **uçtan uca `CharacterMovementSubsystem` "rampada eğimi izleyerek yürür"**.
+  **Authoring notu:** eğim desteği için rampa asset'inin collision Complexity'si
+  Static Mesh editöründe **"Use Complex Collision As Simple"** olmalı; box/tilt
+  collision hâlâ düz-tepeli davranır.
 - [ ] **P1.5 — Test alanı içeriği:** playground'a (veya ayrı
   `CollisionGym.level.json`) merdiven, rampa, dar koridor, ince duvar,
   döndürülmüş engel bölümü. Dev sunucusunun demo layout'u otomatik
@@ -453,3 +495,30 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   henüz gözlenmedi — ilk push kullanıcı onayı gerektiriyor (working-style
   kuralı: otomatik push yok). B yolu (pre-push hook) opsiyonel backlog.
   **Sıradaki:** P1 — Fizik/Collision sertleştirme.
+- *2026-07-02* — **P1.2 + P1.1 tamamlandı.** Kullanıcı üç semptom bildirdi:
+  (1) box-collision'lı Architecture modellerinden geçme, (2) düz/açık yolda
+  görünmez engel, (3) eğimli yolda düz yürüme. Kök neden analizi: (1)+(2) aynı
+  bug'ın iki yüzü — **blocker AABB türetimi placement rotasyonunu yok sayıyordu**
+  ve Architecture duvarlarının collision pivotu köşede (center offset ~2m), bu
+  yüzden döndürülen duvarın collider'ı metrelerce kayıyordu (P1.2). Düzeltildi
+  (`engine/physics/rotatedBox.ts` + `physicsSubsystem` blocker türetimi
+  rotasyon-farkında; şişme kabul kararı). P1.1: `resolvePlanarMovementSubstepped`
+  tünelleme guard'ı + `resolvePlanarMovement`'ta flush-temas float
+  hassasiyetinin `PENETRATION_EPSILON` ile sağlamlaştırılması. Engine testleri
+  466→476 (+10), `build:verify` yeşil (strict dist PASS). (3) = eğim, halen
+  açık; gerçek slope desteği gerektiriyor (P1.3/P1.4) — AABB modelinde
+  rampa/tilt hâlâ düz-tepeli olduğundan bu ayrı bir tasarım kararı. **Sıradaki:**
+  P1.3 slope spike/karar.
+- *2026-07-02* — **P1.3 + P1.4 tamamlandı (eğim/rampa, semptom #3).** Karar:
+  **Seçenek A (saf çekirdek)** — kullanıcı onayladı. Rampalar `complexAsSimple`
+  trimesh; fizik `staticSurfaceTriangles()` (rotasyon bake + `normalY`), ground
+  probe interpolasyonla gerçek eğim yüksekliği + slope limit; trimesh üçgeni
+  >50° ise duvar/blocker, ≤50° ise yürünebilir yüzey (rampanın kendi üçgenleri
+  çıkışı engellemesin diye). `maxSlopeAngleDeg` (45°) CharacterMovement prop'u
+  (allowlist gerekmedi — free-form). Yeni saf modül `src/game/slopeSurface.ts`.
+  Engine testleri 476→486 (+10, uçtan uca "rampada eğimi izleyerek yürür"
+  dahil), `build:verify` yeşil, `check:assets` PASS. **Kullanıcı için:** mevcut
+  rampanın collision Complexity'sini "Use Complex Collision As Simple" yap.
+  **Sıradaki:** P1.5 test alanı içeriği (rampa/merdiven gym — sanat asset'i
+  gerektirir) veya P2. P1 çekirdek sertleştirmesi (tünelleme + rotasyon + eğim)
+  tamam.

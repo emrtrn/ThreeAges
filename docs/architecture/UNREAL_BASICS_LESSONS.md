@@ -351,6 +351,32 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-07-02* - **P1 Fizik/Collision sertleştirme: rotasyon + tünelleme + eğim
+  (KALICI MİMARİ KARAR).** Kullanıcı üç semptom bildirdi: (1) box-collision'lı
+  Architecture modellerinden geçme, (2) düz yolda görünmez engel, (3) eğimli
+  yolda düz yürüme. **(1)+(2) kök neden:** hareket-blocker AABB türetimi
+  placement rotasyonunu **tamamen yok sayıyordu** — 2026-06-22 kaydında "AABB
+  modeli rotasyonu yok sayar, level tipik eksen-hizalı" diye kabul edilen
+  sınırlama aslında bir bug'dı: Architecture duvarlarının collision pivotu köşede
+  (`Wall_400x300` center offset `[2,1.5,0]`), döndürülünce collider metrelerce
+  kayıyordu. **Düzeltme:** saf `engine/physics/rotatedBox.ts` (`rotatedBoxAabb`
+  döndürülmüş kutunun dünya AABB'si — center rotasyonu + kapsayıcı extent);
+  `physicsSubsystem` blocker türetimi artık `body.transform.rotation` +
+  primitive local rotasyonunu uygular. **Karar:** AABB modeli korunur, off-axis
+  şişme kabul; tam OBB backlog. **Tünelleme (P1.1):**
+  `resolvePlanarMovementSubstepped` (en ince blocker/2 uzunluğunda substep,
+  MAX 32) + `resolvePlanarMovement`'ta flush-temas float hassasiyeti
+  `PENETRATION_EPSILON` ile giderildi. **(3) Eğim (P1.3/P1.4) — KARAR: Seçenek A
+  (saf çekirdek), Rapier grounding'e gidilmedi.** Rampalar `complexAsSimple`;
+  fizik trimesh üçgenlerini `staticSurfaceTriangles()` (rotasyon bake + `normalY`)
+  ayrı kanaldan sunar; ground probe interpolasyonla gerçek eğim yüksekliği +
+  slope limit. Trimesh üçgeni >50° duvar/blocker, ≤50° yürünebilir yüzey (rampa
+  kendi üçgenleriyle çıkışı engellemesin). `maxSlopeAngleDeg` (45°)
+  CharacterMovement prop'u; saf `src/game/slopeSurface.ts`. Gate: tsc temiz,
+  test:engine 466→**486** (+20; uçtan uca "rampada eğimi izleyerek yürür" dahil),
+  build:verify + check:assets PASS. **Kalan:** rampa gym içeriği (P1.5, sanat
+  asset'i); kullanıcı mevcut rampa collision'ını "Use Complex Collision As
+  Simple" yapmalı.
 - *2026-06-30* - **Blocking Volume (parametrik blockout brush) + kategorili Add-Actor menüsü.**
   Unreal'ın BlockingVolume'ü: yeni `blockingVolumes[]` placed-actor tipi (reflection-plane şablonu,
   **instanced değil**). `brushShape` (box/cylinder/cone/sphere) + `size` Vec3 + `renderInGame` toggle +
