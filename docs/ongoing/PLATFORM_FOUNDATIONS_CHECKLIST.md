@@ -416,8 +416,20 @@ oyun-fork'unun genişletebileceği generic bir katman kurmak.
   action'ları üretir. `RuntimeSceneApp` bu mesajları `SaveGameStore<GameSaveState>`
   üzerinden `collectSaveState()` / `requestSaveGameLoad()` / `deleteSlot()` yoluna
   bağlar; slot satırları yazma/silme sonrası yenilenir. Engine 518→520.
-- [ ] **P3.6 — Checkpoint davranışı:** `checkpoint` behavior'u — sensor
-  temasında otomatik kayıt (temas+once kalıbı); parametre: slot adı/auto.
+- [x] **P3.6 — Checkpoint davranışı:** `checkpoint` behavior'u
+  (`src/game/behaviors.ts`) — `goal-reached`/`level-travel` ile aynı sensor
+  temas + once kalıbı: statik sensor'e ilk temasta (yalnız kinematik oyuncu
+  değebilir) sahne başına **tam bir kez** otomatik kayıt yazar, kalan overlap
+  storage'ı spam'lemez. `params.slot` hedef slotu seçer, yoksa **`"quick"`**
+  (yerleşik yükleme menüsü ekstra authoring'siz geri yükleyebilsin diye).
+  Host callback `onCheckpoint(entityId, slot)` → `RuntimeSceneApp.writeCheckpointSave()`:
+  manuel save menüsüyle aynı `collectCurrentSaveState()` → `SaveGameStore.writeSlot()`
+  yolu; başarısızlık konsol uyarısına düşer (checkpoint geçişi oyunu kesmez),
+  başarıda save-UI alanları yenilenir (açık menü autosave'i yansıtır). Param
+  free-form (`slot` behavior `params`'ında) → `saveValidator` allowlist'i
+  gerekmedi; `BEHAVIOR_SCRIPT_IDS`'e eklendi (Actor Script editörü önerisi).
+  Headless: authored slot'a tek-ateşleme (temas + once), slotsuz `"quick"`
+  fallback. Engine 520→522.
 - [ ] **P3.7 — Doğrulama içeriği:** playground'a checkpoint + toplanabilir
   bayrak örneği; kaydet → sayfayı yenile → yükle → aynı yer/bayrak smoke'u.
 
@@ -712,3 +724,18 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   sokar, delete sonrası slot ViewModel'ini yeniler. Headless: message parser,
   ViewModel alanları, starter UI bind/action sözleşmesi. Engine 518→520.
   **Sıradaki:** P3.6 — checkpoint behavior'u.
+- *2026-07-02* — **P3.6 tamamlandı: checkpoint behavior'u.**
+  `checkpoint` behavior'u (`src/game/behaviors.ts`) `goal-reached`/`level-travel`
+  ile aynı sensor temas + once kalıbını kullanır: statik sensor'e ilk temasta
+  (yalnız kinematik oyuncu değebilir) sahne başına tam bir kez otomatik kayıt
+  yazar. `params.slot` hedef slotu seçer, yoksa `"quick"` fallback (yerleşik
+  yükleme menüsü ekstra authoring'siz geri yükleyebilsin). Yeni host callback
+  `onCheckpoint(entityId, slot)` → `RuntimeSceneApp.writeCheckpointSave()`: manuel
+  save menüsüyle aynı `collectCurrentSaveState()` → `SaveGameStore.writeSlot()`
+  yolu, başarısızlıkta konsol uyarısı (checkpoint geçişi oyunu kesmez), başarıda
+  save-UI alanları refresh + flush. `slot` free-form behavior param'ı → allowlist
+  gerekmedi; `BEHAVIOR_SCRIPT_IDS`'e eklendi (Actor Script editörü önerisi).
+  Headless: authored slot'a tek-ateşleme + slotsuz `"quick"` fallback. Engine
+  520→522 (+2), `build:verify` yeşil (strict dist PASS). **Sıradaki:** P3.7 —
+  doğrulama içeriği (playground'a checkpoint + toplanabilir bayrak; kaydet →
+  yenile → yükle smoke'u; sanat/layout içeriği gerektirir).

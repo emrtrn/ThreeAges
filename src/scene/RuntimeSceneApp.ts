@@ -680,6 +680,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         onLevelTravel: (_entityId, targetLevel, targetSpawn) => {
           this.requestLevelTravel(targetLevel, targetSpawn);
         },
+        onCheckpoint: (_entityId, slot) => {
+          this.writeCheckpointSave(slot);
+        },
         // The active Game Mode owns possession: only the pawn it possessed
         // (none, under the default camera mode) is driven by player input.
         isPlayerControlled: (entityId) =>
@@ -1643,6 +1646,26 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.refreshSaveGameUiFields();
     if (!ok) this.setSaveGameUiStatus(slot, "Delete failed");
     else this.uiStore.flush();
+  }
+
+  /**
+   * Writes an autosave from a `checkpoint` behavior into the named slot (P3.6).
+   * Reuses the same serialization path as the manual save menu; failures degrade
+   * to a console warning (crossing a checkpoint must never interrupt play). The
+   * save-game UI fields refresh so an open menu reflects the new autosave.
+   */
+  private writeCheckpointSave(slot: string): void {
+    if (!this.saveGameStore) return;
+    const payload = this.collectCurrentSaveState();
+    if (!payload) return;
+    const result = this.saveGameStore.writeSlot(slot, payload);
+    if (!result.ok) {
+      console.warn("[runtime] checkpoint save failed", slot);
+      return;
+    }
+    console.info("[runtime] checkpoint saved", slot);
+    this.refreshSaveGameUiFields();
+    this.uiStore.flush();
   }
 
   private collectCurrentSaveState(): GameSaveState | null {

@@ -7260,6 +7260,82 @@ check("level-travel behavior: a trigger without a target level never fires", () 
   assert.deepEqual(travels, []);
 });
 
+// P3.6 Save-Game: the `checkpoint` sensor reuses the goal-reached contact + once
+// pattern to write an autosave exactly once per scene visit. The host performs the
+// serialization + write; the behavior only signals it with the authored slot.
+check("checkpoint behavior: saves once on contact with the authored slot", () => {
+  const saves: Array<{ id: string; slot: string }> = [];
+  const registry = createBehaviorRegistry({
+    onCheckpoint: (id, slot) => saves.push({ id, slot }),
+  });
+  const physics = new PhysicsSubsystem();
+  const audio = new AudioSubsystem();
+  const checkpoint: Entity = {
+    id: "checkpoint:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "checkpoint", params: { slot: "slot-1" } },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([checkpoint, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics, audio);
+  behavior.setEntities([checkpoint, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  // A sensor checkpoint never blocks; far away there is no contact, so no save.
+  assert.equal(physics.staticBlockerAabbs().length, 0);
+  app.update(0.016);
+  assert.deepEqual(saves, []);
+
+  // Step onto the checkpoint and tick twice: it saves exactly once.
+  physics.setEntityTransform("player:0", { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(saves, [{ id: "checkpoint:0", slot: "slot-1" }]);
+});
+
+// A `checkpoint` without an authored slot falls back to the "quick" slot so the
+// built-in save/load menu can restore it without extra authoring.
+check("checkpoint behavior: defaults to the quick slot", () => {
+  const saves: Array<{ id: string; slot: string }> = [];
+  const registry = createBehaviorRegistry({ onCheckpoint: (id, slot) => saves.push({ id, slot }) });
+  const physics = new PhysicsSubsystem();
+  const checkpoint: Entity = {
+    id: "checkpoint:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "checkpoint", params: {} },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([checkpoint, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics);
+  behavior.setEntities([checkpoint, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(saves, [{ id: "checkpoint:0", slot: "quick" }]);
+});
+
 // Â§3 Interaction runtime: the pure trigger core decides fire/cooldown; the
 // `interact` behavior drives it from physics sensor contacts + the authored
 // InteractionComponent, reusing the goal-reached sensor pattern.

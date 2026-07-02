@@ -32,6 +32,7 @@ export const BEHAVIOR_SCRIPT_IDS = [
   "collision-chime",
   "goal-reached",
   "level-travel",
+  "checkpoint",
   "interact",
   "use-toggleable",
   "lamp-toggle",
@@ -91,6 +92,13 @@ export interface BehaviorRegistryOptions {
    * the destination layout path, `targetSpawn` the optional Player Start tag.
    */
   onLevelTravel?: (entityId: string, targetLevel: string, targetSpawn?: string) => void;
+  /**
+   * Fired once when a `checkpoint` sensor first registers a contact (P3.6
+   * Save-Game): the player crossed a checkpoint. The runtime shell serializes the
+   * current game state and writes it to the named save slot; headless tests spy
+   * on it. `slot` is the destination save slot key (default `"quick"`).
+   */
+  onCheckpoint?: (entityId: string, slot: string) => void;
 }
 
 function numberParam(value: unknown, fallback: number): number {
@@ -181,10 +189,12 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   const onActorLightToggle = options.onActorLightToggle;
   const onActorParticleEffect = options.onActorParticleEffect;
   const onLevelTravel = options.onLevelTravel;
+  const onCheckpoint = options.onCheckpoint;
   const isPlayerControlled = options.isPlayerControlled ?? (() => true);
   const vertical = new Map<string, PlayerVertical>();
   const reachedGoals = new Set<string>();
   const traveledTriggers = new Set<string>();
+  const checkpointsSaved = new Set<string>();
   const interactions = new Map<string, InteractionTriggerState>();
   const interactionOverlaps = new Map<string, boolean>();
 
@@ -277,6 +287,21 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     onLevelTravel?.(context.entityId, targetLevel, targetSpawn ?? undefined);
   };
 
+  // Checkpoint trigger (P3.6): a sensor-collider entity whose first contact (only
+  // the kinematic player can touch a static sensor) writes an autosave. Reuses the
+  // goal-reached contact + once pattern so it saves exactly once per scene visit —
+  // a lingering overlap never spams the storage layer. `params.slot` names the
+  // save slot; it defaults to `"quick"` so the built-in load menu can restore it.
+  // The host owns serialization + the actual write.
+  const checkpoint: BehaviorUpdate = (context) => {
+    if (checkpointsSaved.has(context.entityId)) return;
+    if ((context.physics?.contactsForEntity(context.entityId).length ?? 0) === 0) return;
+    checkpointsSaved.add(context.entityId);
+    playCollisionAudioOnce(context);
+    const slot = stringParam(context.params.slot) ?? "quick";
+    onCheckpoint?.(context.entityId, slot);
+  };
+
   // Interaction trigger (§3): an interaction-marked sensor entity whose first
   // contact with the kinematic player fires its action (host-interpreted),
   // playing the optional audio cue. Re-fires on a fresh re-enter once any
@@ -357,6 +382,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     ["collision-chime", collisionChime],
     ["goal-reached", goalReached],
     ["level-travel", levelTravel],
+    ["checkpoint", checkpoint],
     ["interact", interact],
     ["use-toggleable", useToggleable],
     ["lamp-toggle", lampToggle],
