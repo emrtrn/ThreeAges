@@ -400,9 +400,14 @@ oyun-fork'unun genişletebileceği generic bir katman kurmak.
   state snapshot'ı restore eder. Headless: restore yalnız hedef level yüklendiğinde
   tüketilir; `BehaviorSubsystem.resetEntityTransform()` sonraki tick'te eski
   transform overwrite'ını önler. Engine 513→515.
-- [ ] **P3.4 — UserSettings:** ayrı anahtar; ses bus seviyeleri
-  (`engine/audio/audioBus.ts` hattı) + locale. Boot'ta uygula; ayar
-  ekranından değişince yaz.
+- [x] **P3.4 — UserSettings:** `engine/persistence/userSettingsStore.ts`
+  ayrı slotless localStorage anahtarı (`forge.userSettings`) kullanır; ses bus
+  seviyelerini (`engine/audio/audioBus.ts` hattı) ve locale tercihini saklar.
+  Boot'ta audio mix hemen uygulanır; locale tabloları yüklendikten sonra user
+  locale, `worldSettings.locale` üstüne override edilir. Runtime API:
+  `setUserAudioBusVolume()`, `setUserLocale()`; UMG Lite için rezerve message
+  action'ları: `settings:audio:<bus>:<volume>` ve `settings:locale:<locale>`.
+  Bozuk veri default ayarlara düşer, write failure `false` döner. Engine 515→518.
 - [ ] **P3.5 — UI:** UMG Lite save/load menü widget'ı (starter content'e
   `.ui.json`): slot listesi (ViewModel bind), Save/Load/Delete `message`
   action'ları; oyun tarafı `onMessageAction`'da bağlar.
@@ -681,3 +686,13 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   sonrası behavior tick'i eski transform'u geri yazmaz. Headless: save restore
   yalnız matching loaded level'da tüketilir + behavior transform reset testi.
   Engine 513→515. **Sıradaki:** P3.4 — UserSettings (audio bus volumes + locale).
+- *2026-07-02* — **P3.4 tamamlandı: UserSettings.**
+  `engine/persistence/userSettingsStore.ts` slotless `forge.userSettings`
+  dokümanını ekledi; `audio.busVolumes` ve `locale` normalize edilip schema-1
+  envelope olarak yazılır. `RuntimeSceneApp` boot'ta user audio bus seviyelerini
+  uygular, locale registry kurulduğunda kullanıcı locale'ini worldSettings
+  locale üstüne bindirir. Public runtime setter'ları ve rezerve UMG Lite
+  mesajları eklendi: `settings:audio:<bus>:<volume>`,
+  `settings:locale:<locale>`. Headless: round-trip, bozuk veri/write failure ve
+  user override uygulama testleri. Engine 515→518. **Sıradaki:** P3.5 — UMG Lite
+  save/load menü widget'ı ve oyun tarafı message bağları.

@@ -31,6 +31,7 @@ import {
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
+import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
 import {
@@ -245,6 +246,12 @@ import {
   type GameSaveRestoreRequest,
   type SavedPlayerTransform,
 } from "@/game/saveGame";
+import { createLocalStorageAdapter } from "@engine/persistence/saveGameStore";
+import {
+  UserSettingsStore,
+  defaultUserSettings,
+  type UserSettings,
+} from "@engine/persistence/userSettingsStore";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -538,6 +545,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly uiThemes = new Map<string, UiThemeDef>();
   /** Loaded UI localization tables + active locale; null when the scene authors none. */
   private localeRegistry: LocaleRegistry | null = null;
+  /** Slotless user preferences (audio mix, locale); null when storage is unavailable. */
+  private userSettingsStore: UserSettingsStore | null = null;
+  private userSettings: UserSettings = defaultUserSettings();
 
   onFrame: ((deltaMs: number) => void) | null = null;
 
@@ -603,6 +613,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     this.pointerButtons = new PointerButtonSource(this.inputActions, canvas);
     this.interactionPromptElement = this.createInteractionPromptElement();
+    this.userSettingsStore = createRuntimeUserSettingsStore();
+    this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
+    this.applyUserAudioSettings(this.userSettings);
     this.movingPlatformSubsystem = new MovingPlatformSubsystem(this.syncEntityTransform);
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
@@ -1053,6 +1066,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return true;
   }
 
+  setUserAudioBusVolume(bus: AudioBusId, volume: number): boolean {
+    this.audioSubsystem.setBusVolume(bus, volume);
+    const ok = this.userSettingsStore?.setAudioBusVolume(bus, volume) ?? false;
+    this.userSettings = this.userSettingsStore?.read() ?? {
+      ...this.userSettings,
+      audio: {
+        busVolumes: {
+          ...this.userSettings.audio.busVolumes,
+          [bus]: this.audioSubsystem.getBusVolume(bus),
+        },
+      },
+    };
+    return ok;
+  }
+
+  setUserLocale(locale: string): boolean {
+    if (!this.localeRegistry || !this.localeRegistry.availableLocales().includes(locale)) return false;
+    this.localeRegistry.setActiveLocale(locale);
+    const ok = this.userSettingsStore?.setLocale(locale) ?? false;
+    this.userSettings = this.userSettingsStore?.read() ?? { ...this.userSettings, locale };
+    return ok;
+  }
+
   /**
    * Drives one or more queued travel cycles: tear the current scene down, load the
    * target, then process any request that queued up while loading. Yields once
@@ -1266,6 +1302,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           // `ui-action` script message.
           if (this.handleGameUiMessage(action.message)) return;
           if (this.handleTravelUiMessage(action.message)) return;
+          if (this.handleSettingsUiMessage(action.message)) return;
           this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
         },
         onScreenStackChange: (depth) => this.handleUiScreenStackChange(depth),
@@ -1305,6 +1342,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
         onMessageAction: (action) => {
           if (this.handleTravelUiMessage(action.message)) return;
+          if (this.handleSettingsUiMessage(action.message)) return;
           this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
         },
         resolveEntityPosition: (entityId, target) => this.resolveEntityWorldPosition(entityId, target),
@@ -1369,7 +1407,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (registry.availableLocales().length === 0) return null;
     const desired = this.layout?.worldSettings?.locale;
     if (desired) registry.setActiveLocale(desired);
+    if (this.userSettings.locale) registry.setActiveLocale(this.userSettings.locale);
     return registry;
+  }
+
+  private applyUserAudioSettings(settings: UserSettings): void {
+    for (const [bus, volume] of Object.entries(settings.audio.busVolumes)) {
+      if (isAudioBusId(bus)) this.audioSubsystem.setBusVolume(bus, volume);
+    }
   }
 
   /**
@@ -1521,6 +1566,26 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!layoutPath) return false;
     const spawnTag = hashIndex >= 0 ? spec.slice(hashIndex + 1) : "";
     this.requestLevelTravel(layoutPath, spawnTag || undefined);
+    return true;
+  }
+
+  /**
+   * Intercepts reserved user-settings widget messages:
+   * - `settings:locale:<locale>`
+   * - `settings:audio:<bus>:<volume>`
+   */
+  private handleSettingsUiMessage(message: string): boolean {
+    if (message.startsWith("settings:locale:")) {
+      const locale = message.slice("settings:locale:".length).trim();
+      return locale.length > 0 ? this.setUserLocale(locale) : false;
+    }
+    if (!message.startsWith("settings:audio:")) return false;
+    const spec = message.slice("settings:audio:".length);
+    const [bus, rawVolume] = spec.split(":");
+    if (!bus || !isAudioBusId(bus)) return false;
+    const volume = Number(rawVolume);
+    if (!Number.isFinite(volume)) return false;
+    this.setUserAudioBusVolume(bus, volume);
     return true;
   }
 
@@ -3042,4 +3107,12 @@ function readComponentVec3(value: unknown): [number, number, number] | null {
   const [x, y, z] = value;
   if (typeof x !== "number" || typeof y !== "number" || typeof z !== "number") return null;
   return [x, y, z];
+}
+
+function createRuntimeUserSettingsStore(): UserSettingsStore | null {
+  try {
+    return new UserSettingsStore({ storage: createLocalStorageAdapter(window.localStorage) });
+  } catch {
+    return null;
+  }
 }

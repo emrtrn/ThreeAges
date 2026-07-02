@@ -143,6 +143,11 @@ import {
   type PersistenceLogger,
   type StorageAdapter,
 } from "../engine/persistence/saveGameStore";
+import {
+  UserSettingsStore,
+  defaultUserSettings,
+  normalizeUserSettings,
+} from "../engine/persistence/userSettingsStore";
 import { KeyboardInputSource } from "../src/input/keyboardInputSource";
 import {
   facingYawFromMove,
@@ -552,6 +557,7 @@ import { collectUiBindings, collectUiLocBindings, resolveUiBoundValue } from "..
 import { normalizeUiThemeDef, themeToCssVariables, tokenToCssVar } from "../engine/ui/uiTheme";
 import {
   applyLocParams,
+  defaultUiLocaleTable,
   LocaleRegistry,
   normalizeUiLocaleTable,
 } from "../engine/ui/uiLocale";
@@ -9528,6 +9534,82 @@ check("game save restore waits for the matching loaded level before applying", (
   assert.equal(matched.restore, restore);
   assert.equal(matched.pending, null);
   assert.deepEqual(finishTravel(state).state, initialLevelTravelState());
+});
+
+check("user settings store: round-trips locale and normalized audio bus volumes", () => {
+  const storage = createMemoryStorageAdapter();
+  const store = new UserSettingsStore({
+    storage,
+    now: () => "2026-07-02T11:00:00.000Z",
+  });
+
+  assert.deepEqual(store.read(), defaultUserSettings());
+  assert.equal(store.setLocale("tr"), true);
+  assert.equal(store.setAudioBusVolume("music", 0.35), true);
+  assert.equal(store.setAudioBusVolume("sfx", -1), true);
+
+  assert.deepEqual(store.read(), {
+    locale: "tr",
+    audio: { busVolumes: { music: 0.35, sfx: 0 } },
+  });
+  const raw = JSON.parse(storage.getItem(store.storageKey()) ?? "{}") as {
+    schema?: number;
+    updatedAt?: string;
+  };
+  assert.equal(raw.schema, 1);
+  assert.equal(raw.updatedAt, "2026-07-02T11:00:00.000Z");
+});
+
+check("user settings store: corrupt data falls back without crashing and write errors return false", () => {
+  const warnings: string[] = [];
+  const storage = createMemoryStorageAdapter({ "forge.userSettings": "{bad-json" });
+  const store = new UserSettingsStore({
+    storage,
+    logger: { warn: (message) => warnings.push(message) },
+  });
+  assert.deepEqual(store.read(), defaultUserSettings());
+  assert.deepEqual(warnings, ["User settings data is corrupt or incompatible."]);
+
+  const failing: StorageAdapter = {
+    getItem: () => null,
+    setItem: () => {
+      throw new Error("quota");
+    },
+    removeItem: () => undefined,
+    keys: () => [],
+  };
+  const writeWarnings: string[] = [];
+  const failingStore = new UserSettingsStore({
+    storage: failing,
+    logger: { warn: (message) => writeWarnings.push(message) },
+  });
+  assert.equal(failingStore.setLocale("tr"), false);
+  assert.deepEqual(writeWarnings, ["User settings write failed."]);
+});
+
+check("user settings normalization drops unknown buses and applies stored audio + locale", () => {
+  const normalized = normalizeUserSettings({
+    locale: "tr",
+    audio: { busVolumes: { master: 0.8, music: Number.NaN, nope: 0.2 } },
+  });
+  assert.deepEqual(normalized, {
+    locale: "tr",
+    audio: { busVolumes: { master: 0.8 } },
+  });
+
+  const audio = new AudioSubsystem();
+  for (const [bus, volume] of Object.entries(normalized.audio.busVolumes)) {
+    if (isAudioBusId(bus)) audio.setBusVolume(bus, volume);
+  }
+  assert.equal(audio.getBusVolume("master"), 0.8);
+  assert.equal(audio.getBusVolume("music"), 1);
+
+  const registry = new LocaleRegistry();
+  registry.register(defaultUiLocaleTable("en"));
+  registry.register(defaultUiLocaleTable("tr"));
+  registry.setActiveLocale("en"); // worldSettings.locale
+  if (normalized.locale) registry.setActiveLocale(normalized.locale); // user override
+  assert.equal(registry.activeLocale, "tr");
 });
 
 check("hasPlayerCharacter: true for tagged or input-move, false otherwise", () => {
