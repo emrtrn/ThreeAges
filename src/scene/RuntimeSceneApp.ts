@@ -242,16 +242,27 @@ import {
 } from "@/game/gameRules";
 import {
   applySaveState,
+  collectSaveState,
   consumeRestoreForLoadedLevel,
+  type GameSaveState,
   type GameSaveRestoreRequest,
   type SavedPlayerTransform,
 } from "@/game/saveGame";
-import { createLocalStorageAdapter } from "@engine/persistence/saveGameStore";
+import {
+  SaveGameStore,
+  createLocalStorageAdapter,
+} from "@engine/persistence/saveGameStore";
 import {
   UserSettingsStore,
   defaultUserSettings,
   type UserSettings,
 } from "@engine/persistence/userSettingsStore";
+import {
+  buildSaveGameUiFields,
+  emptySaveGameUiSlots,
+  readSaveGameUiCommand,
+  type SaveGameUiSlotId,
+} from "@/game/saveGameUi";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -451,6 +462,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private activeProject: ActiveProject | null = null;
   private assetLoader: AssetLoader | null = null;
   private layout: RoomLayout | null = null;
+  private activeLevelPath: string | null = null;
+  private saveGameStore: SaveGameStore<GameSaveState> | null = null;
   private pendingSaveRestore: GameSaveRestoreRequest | null = null;
   private collisionDefs = new Map<string, AssetCollisionDef>();
   /** Render-mesh triangle data for `complexAsSimple` assets (static trimesh collider). */
@@ -912,6 +925,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async loadActiveProjectScene(): Promise<void> {
     this.activeProject = await loadActiveProject();
     this.assetLoader = new AssetLoader(this.activeProject.manifest);
+    this.saveGameStore = createRuntimeSaveGameStore(this.activeProject.manifest.name);
     await this.buildScene(this.activeProject.manifest.editor.defaultScene, undefined);
   }
 
@@ -930,6 +944,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildScene(layoutPath: string, spawnTag: string | undefined): Promise<void> {
     if (!this.assetLoader || !this.activeProject) return;
     this.layout = await loadRoomLayout(layoutPath);
+    this.activeLevelPath = layoutPath;
     const worldSettings = resolveSceneWorldSettings(this.layout);
     this.gravityY = worldSettings.gravity[1];
     this.killZ = worldSettings.killZ;
@@ -1289,6 +1304,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Seed bound fields so the initial render shows values (not blanks/zeroes).
     this.uiStore.setField("player.speed", 0);
     this.uiStore.setField("player.speedLabel", "Speed 0.0 m/s");
+    this.refreshSaveGameUiFields();
 
     if (wantsScreenHost) {
       this.uiSubsystem = new RuntimeUiSubsystem(host, {
@@ -1302,6 +1318,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           // `ui-action` script message.
           if (this.handleGameUiMessage(action.message)) return;
           if (this.handleTravelUiMessage(action.message)) return;
+          if (this.handleSaveGameUiMessage(action.message)) return;
           if (this.handleSettingsUiMessage(action.message)) return;
           this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
         },
@@ -1342,6 +1359,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
         onMessageAction: (action) => {
           if (this.handleTravelUiMessage(action.message)) return;
+          if (this.handleSaveGameUiMessage(action.message)) return;
           if (this.handleSettingsUiMessage(action.message)) return;
           this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
         },
@@ -1567,6 +1585,94 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const spawnTag = hashIndex >= 0 ? spec.slice(hashIndex + 1) : "";
     this.requestLevelTravel(layoutPath, spawnTag || undefined);
     return true;
+  }
+
+  /**
+   * Intercepts reserved save-game widget messages:
+   * - `save:write:<slot>`
+   * - `save:load:<slot>`
+   * - `save:delete:<slot>`
+   */
+  private handleSaveGameUiMessage(message: string): boolean {
+    const command = readSaveGameUiCommand(message);
+    if (!command) return false;
+    switch (command.kind) {
+      case "write":
+        this.writeSaveGameSlot(command.slot);
+        return true;
+      case "load":
+        this.loadSaveGameSlot(command.slot);
+        return true;
+      case "delete":
+        this.deleteSaveGameSlot(command.slot);
+        return true;
+    }
+  }
+
+  private writeSaveGameSlot(slot: SaveGameUiSlotId): void {
+    const payload = this.collectCurrentSaveState();
+    if (!this.saveGameStore || !payload) {
+      this.setSaveGameUiStatus(slot, "Save unavailable");
+      return;
+    }
+    const result = this.saveGameStore.writeSlot(slot, payload);
+    this.refreshSaveGameUiFields();
+    if (!result.ok) this.setSaveGameUiStatus(slot, "Save failed");
+    else this.uiStore.flush();
+  }
+
+  private loadSaveGameSlot(slot: SaveGameUiSlotId): void {
+    const envelope = this.saveGameStore?.readSlot(slot) ?? null;
+    if (!envelope) {
+      this.setSaveGameUiStatus(slot, "Empty");
+      return;
+    }
+    if (!this.requestSaveGameLoad(envelope.payload)) {
+      this.setSaveGameUiStatus(slot, "Load failed");
+      return;
+    }
+    this.uiSubsystem?.clearScreens();
+  }
+
+  private deleteSaveGameSlot(slot: SaveGameUiSlotId): void {
+    if (!this.saveGameStore) {
+      this.setSaveGameUiStatus(slot, "Save unavailable");
+      return;
+    }
+    const ok = this.saveGameStore.deleteSlot(slot);
+    this.refreshSaveGameUiFields();
+    if (!ok) this.setSaveGameUiStatus(slot, "Delete failed");
+    else this.uiStore.flush();
+  }
+
+  private collectCurrentSaveState(): GameSaveState | null {
+    if (!this.activeLevelPath) return null;
+    const pawnId = this.gameModeSession?.playerState.pawnEntityId ?? null;
+    const playerTransform = pawnId ? this.transformForEntity(pawnId) : null;
+    return collectSaveState({
+      activeLevelPath: this.activeLevelPath,
+      playerTransform,
+      persistentState: this.behaviorSubsystem.getPersistentStateSnapshot(),
+    });
+  }
+
+  private refreshSaveGameUiFields(): void {
+    const slots = emptySaveGameUiSlots().map((view) => {
+      const envelope = this.saveGameStore?.readSlot(view.slot) ?? null;
+      return envelope
+        ? {
+            ...view,
+            updatedAt: envelope.updatedAt,
+            levelPath: envelope.payload.activeLevelPath,
+          }
+        : view;
+    });
+    this.uiStore.setFields(buildSaveGameUiFields(slots));
+  }
+
+  private setSaveGameUiStatus(slot: SaveGameUiSlotId, status: string): void {
+    this.uiStore.setField(`save.slots.${slot}.status`, status);
+    this.uiStore.flush();
   }
 
   /**
@@ -3112,6 +3218,18 @@ function readComponentVec3(value: unknown): [number, number, number] | null {
 function createRuntimeUserSettingsStore(): UserSettingsStore | null {
   try {
     return new UserSettingsStore({ storage: createLocalStorageAdapter(window.localStorage) });
+  } catch {
+    return null;
+  }
+}
+
+function createRuntimeSaveGameStore(gameId: string): SaveGameStore<GameSaveState> | null {
+  try {
+    return new SaveGameStore<GameSaveState>({
+      gameId,
+      schema: 1,
+      storage: createLocalStorageAdapter(window.localStorage),
+    });
   } catch {
     return null;
   }

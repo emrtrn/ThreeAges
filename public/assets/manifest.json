@@ -2364,6 +2364,61 @@
       "license": "Unknown"
     },
     {
+      "id": "hud",
+      "name": "Starter HUD",
+      "assetType": "ui",
+      "category": "UI",
+      "path": "assets/starter-content/UI/HUD.ui.json",
+      "tags": [
+        "starter",
+        "ui",
+        "hud"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 783
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "menu",
+      "name": "Save / Load Menu",
+      "assetType": "ui",
+      "category": "UI",
+      "path": "assets/starter-content/UI/SaveLoadMenu.ui.json",
+      "tags": [
+        "starter",
+        "ui",
+        "menu",
+        "save-game"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 9419
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "loc-en",
       "name": "Localization EN",
       "assetType": "ui",

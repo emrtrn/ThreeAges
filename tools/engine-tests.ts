@@ -214,6 +214,11 @@ import {
   collectSaveState,
   consumeRestoreForLoadedLevel,
 } from "../src/game/saveGame";
+import {
+  buildSaveGameUiFields,
+  emptySaveGameUiSlots,
+  readSaveGameUiCommand,
+} from "../src/game/saveGameUi";
 import { firstConnectedGamepad, readGamepadCodes } from "../src/input/gamepadInput";
 import { joystickMoveCodes, joystickVector } from "../src/input/virtualJoystick";
 import { parseEffectDefinition } from "../engine/render-three/particleEffect";
@@ -9610,6 +9615,61 @@ check("user settings normalization drops unknown buses and applies stored audio 
   registry.setActiveLocale("en"); // worldSettings.locale
   if (normalized.locale) registry.setActiveLocale(normalized.locale); // user override
   assert.equal(registry.activeLocale, "tr");
+});
+
+check("save-game UI commands and ViewModel fields stay slot-scoped", () => {
+  assert.deepEqual(readSaveGameUiCommand("save:write:quick"), { kind: "write", slot: "quick" });
+  assert.deepEqual(readSaveGameUiCommand("save:load:slot-1"), { kind: "load", slot: "slot-1" });
+  assert.deepEqual(readSaveGameUiCommand("save:delete:slot-2"), { kind: "delete", slot: "slot-2" });
+  assert.equal(readSaveGameUiCommand("save:load:unknown"), null);
+  assert.equal(readSaveGameUiCommand("travel:foo"), null);
+
+  const fields = buildSaveGameUiFields([
+    {
+      slot: "quick",
+      label: "Quick Save",
+      updatedAt: "2026-07-02T10:30:00.000Z",
+      levelPath: "assets/starter-content/Levels/Playground.level.json",
+    },
+    ...emptySaveGameUiSlots().slice(1),
+  ]);
+  assert.equal(fields["save.slots.quick.label"], "Quick Save");
+  assert.match(String(fields["save.slots.quick.status"]), /^Saved /);
+  assert.equal(fields["save.slots.quick.level"], "Playground.level.json");
+  assert.equal(fields["save.slots.slot-1.status"], "Empty");
+  assert.equal(fields["save.slots.slot-1.level"], "No saved level");
+});
+
+check("starter save/load UI asset binds slots and emits reserved save messages", () => {
+  const menu = normalizeUiWidgetDef(
+    JSON.parse(readFileSync("public/assets/starter-content/UI/SaveLoadMenu.ui.json", "utf8")),
+    "Save / Load Menu",
+  );
+  const hud = normalizeUiWidgetDef(
+    JSON.parse(readFileSync("public/assets/starter-content/UI/HUD.ui.json", "utf8")),
+    "Starter HUD",
+  );
+
+  const messages: string[] = [];
+  const walk = (node: UiNode): void => {
+    const action = readUiAction(node);
+    if (action?.type === "message") messages.push(action.message);
+    node.children.forEach(walk);
+  };
+  walk(menu.root);
+  for (const slot of ["quick", "slot-1", "slot-2"] as const) {
+    assert.ok(messages.includes(`save:write:${slot}`));
+    assert.ok(messages.includes(`save:load:${slot}`));
+    assert.ok(messages.includes(`save:delete:${slot}`));
+  }
+  assert.equal(messages.every((message) => readSaveGameUiCommand(message) !== null), true);
+
+  const menuBindings = collectUiBindings(menu).flatMap((entry) => entry.binds.map((bind) => bind.path));
+  assert.ok(menuBindings.includes("save.slots.quick.status"));
+  assert.ok(menuBindings.includes("save.slots.slot-1.level"));
+  assert.ok(menuBindings.includes("save.slots.slot-2.label"));
+  const hudBindings = collectUiBindings(hud).flatMap((entry) => entry.binds.map((bind) => bind.path));
+  assert.deepEqual(hudBindings, ["player.speedLabel"]);
 });
 
 check("hasPlayerCharacter: true for tagged or input-move, false otherwise", () => {

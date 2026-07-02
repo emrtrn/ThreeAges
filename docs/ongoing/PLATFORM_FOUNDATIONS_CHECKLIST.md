@@ -408,9 +408,14 @@ oyun-fork'unun genişletebileceği generic bir katman kurmak.
   `setUserAudioBusVolume()`, `setUserLocale()`; UMG Lite için rezerve message
   action'ları: `settings:audio:<bus>:<volume>` ve `settings:locale:<locale>`.
   Bozuk veri default ayarlara düşer, write failure `false` döner. Engine 515→518.
-- [ ] **P3.5 — UI:** UMG Lite save/load menü widget'ı (starter content'e
-  `.ui.json`): slot listesi (ViewModel bind), Save/Load/Delete `message`
-  action'ları; oyun tarafı `onMessageAction`'da bağlar.
+- [x] **P3.5 — UI:** starter content'e `hud` ve `menu` `.ui.json` assetleri
+  eklendi; manifest'te `hud` / `menu` id'leri `worldSettings.hudWidget` ve
+  `pauseMenuWidget` referanslarını karşılar. Save/load menüsü üç sabit slotu
+  (`quick`, `slot-1`, `slot-2`) ViewModel bind alanlarıyla gösterir ve
+  `save:write:<slot>`, `save:load:<slot>`, `save:delete:<slot>` message
+  action'ları üretir. `RuntimeSceneApp` bu mesajları `SaveGameStore<GameSaveState>`
+  üzerinden `collectSaveState()` / `requestSaveGameLoad()` / `deleteSlot()` yoluna
+  bağlar; slot satırları yazma/silme sonrası yenilenir. Engine 518→520.
 - [ ] **P3.6 — Checkpoint davranışı:** `checkpoint` behavior'u — sensor
   temasında otomatik kayıt (temas+once kalıbı); parametre: slot adı/auto.
 - [ ] **P3.7 — Doğrulama içeriği:** playground'a checkpoint + toplanabilir
@@ -696,3 +701,14 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   `settings:locale:<locale>`. Headless: round-trip, bozuk veri/write failure ve
   user override uygulama testleri. Engine 515→518. **Sıradaki:** P3.5 — UMG Lite
   save/load menü widget'ı ve oyun tarafı message bağları.
+- *2026-07-02* — **P3.5 tamamlandı: UMG Lite save/load UI.**
+  Starter `hud` ve `menu` `.ui.json` assetleri eklendi, manifest'teki `hud` /
+  `menu` id'leri Playground worldSettings referanslarıyla eşlendi. `menu`
+  widget'ı `quick`, `slot-1`, `slot-2` satırlarını ViewModel bind'larıyla gösterir
+  ve Save/Load/Delete için `save:*:<slot>` message action'ları üretir. Oyun
+  tarafında `src/game/saveGameUi.ts` slot/message sözleşmesini saf helper olarak
+  tutar; `RuntimeSceneApp` aktif level path + pawn transform + persistent state'i
+  `SaveGameStore<GameSaveState>` slotlarına yazar, load'u P3.3 restore akışına
+  sokar, delete sonrası slot ViewModel'ini yeniler. Headless: message parser,
+  ViewModel alanları, starter UI bind/action sözleşmesi. Engine 518→520.
+  **Sıradaki:** P3.6 — checkpoint behavior'u.

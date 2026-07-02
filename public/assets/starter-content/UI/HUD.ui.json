@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "type": "ui",
+  "name": "Starter HUD",
+  "preview": {
+    "width": 1280,
+    "height": 720
+  },
+  "root": {
+    "id": "root",
+    "widget": "Canvas",
+    "props": {
+      "align": "start",
+      "justify": "end",
+      "padding": 18
+    },
+    "children": [
+      {
+        "id": "hud-panel",
+        "widget": "Panel",
+        "props": {
+          "padding": 12,
+          "background": "rgba(16, 19, 26, 0.72)",
+          "radius": 6,
+          "maxWidth": 260
+        },
+        "children": [
+          {
+            "id": "speed-label",
+            "widget": "Text",
+            "props": {
+              "text": {
+                "bind": "player.speedLabel"
+              },
+              "fontSize": 14
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
