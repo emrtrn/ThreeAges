@@ -204,7 +204,11 @@ import {
   normalizeGameRules,
   parseGameEvent,
 } from "../src/game/gameRules";
-import { applySaveState, collectSaveState } from "../src/game/saveGame";
+import {
+  applySaveState,
+  collectSaveState,
+  consumeRestoreForLoadedLevel,
+} from "../src/game/saveGame";
 import { firstConnectedGamepad, readGamepadCodes } from "../src/input/gamepadInput";
 import { joystickMoveCodes, joystickVector } from "../src/input/virtualJoystick";
 import { parseEffectDefinition } from "../engine/render-three/particleEffect";
@@ -3571,6 +3575,43 @@ check("behavior persistent state snapshots only include opt-in keys and can rest
   ]);
   restored.applyPersistentStateSnapshot(snapshot);
   assert.deepEqual(restored.getPersistentStateSnapshot(), snapshot);
+});
+
+check("behavior resetEntityTransform updates the runtime transform before the next tick", () => {
+  const seen: number[] = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId !== "probe") return undefined;
+      return (context) => {
+        seen.push(context.transform.position[0]);
+        context.transform.position[0] += 1;
+      };
+    },
+  };
+  const synced: number[] = [];
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    (_id, transform) => synced.push(transform.position[0]),
+  );
+  behavior.setEntities([
+    {
+      id: "pawn",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "probe" },
+      },
+    },
+  ]);
+  behavior.resetEntityTransform("pawn", {
+    position: [5, 0, 0],
+    rotation: [0, 90, 0],
+    scale: [1, 1, 1],
+  });
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+
+  assert.deepEqual(seen, [5]);
+  assert.deepEqual(synced, [6]);
 });
 
 check("behavior world resolves direct actor references and rebuilds query indexes", () => {
@@ -9465,6 +9506,28 @@ check("game save serializer: rejects bad player transforms and drops non-json fl
       persistentState: [{ entityId: "ok", key: "enabled", value: true }],
     },
   );
+});
+
+check("game save restore waits for the matching loaded level before applying", () => {
+  const restore = applySaveState({
+    activeLevelPath: "Levels/SaveTarget.level.json",
+    player: { position: [1, 2, 3], facingYawDeg: 90 },
+    flags: [{ entityId: "lamp", key: "enabled", value: false }],
+  });
+  assert.ok(restore);
+  let state = initialLevelTravelState();
+  const requested = requestTravel(state, { layoutPath: restore.levelPath });
+  state = beginLoading(requested.state);
+  assert.equal(state.phase, "loading");
+
+  const early = consumeRestoreForLoadedLevel(restore, "Levels/Other.level.json");
+  assert.equal(early.restore, null);
+  assert.equal(early.pending, restore);
+
+  const matched = consumeRestoreForLoadedLevel(early.pending, "Levels/SaveTarget.level.json");
+  assert.equal(matched.restore, restore);
+  assert.equal(matched.pending, null);
+  assert.deepEqual(finishTravel(state).state, initialLevelTravelState());
 });
 
 check("hasPlayerCharacter: true for tagged or input-move, false otherwise", () => {

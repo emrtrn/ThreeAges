@@ -239,6 +239,12 @@ import {
   parseGameEvent,
   type GamePhase,
 } from "@/game/gameRules";
+import {
+  applySaveState,
+  consumeRestoreForLoadedLevel,
+  type GameSaveRestoreRequest,
+  type SavedPlayerTransform,
+} from "@/game/saveGame";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -438,6 +444,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private activeProject: ActiveProject | null = null;
   private assetLoader: AssetLoader | null = null;
   private layout: RoomLayout | null = null;
+  private pendingSaveRestore: GameSaveRestoreRequest | null = null;
   private collisionDefs = new Map<string, AssetCollisionDef>();
   /** Render-mesh triangle data for `complexAsSimple` assets (static trimesh collider). */
   private complexCollisionMeshes = new Map<string, AssetComplexCollisionMesh>();
@@ -1012,6 +1019,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // locomotion animator, so attach it to the refs before the session possesses.
     await this.loadCharacterSkeletons();
     await this.startGameMode();
+    this.applyPendingSaveRestore(layoutPath);
     await this.setupRuntimeUi();
     await this.setupDialogue();
   }
@@ -1024,12 +1032,25 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * when the current cycle settles — and the teardown is deferred past the frame.
    */
   requestLevelTravel(layoutPath: string, spawnTag?: string): void {
+    this.pendingSaveRestore = null;
+    this.enqueueLevelTravel(layoutPath, spawnTag);
+  }
+
+  private enqueueLevelTravel(layoutPath: string, spawnTag?: string): void {
     const request = spawnTag !== undefined ? { layoutPath, spawnTag } : { layoutPath };
     const { state, begin } = requestTravel(this.travelState, request);
     this.travelState = state;
     // `begin` is true only when the machine was idle, i.e. no runTravel loop is
     // running; a request arriving mid-travel is queued and picked up by the loop.
     if (begin) void this.runTravel();
+  }
+
+  requestSaveGameLoad(payload: unknown): boolean {
+    const restore = applySaveState(payload);
+    if (!restore) return false;
+    this.pendingSaveRestore = restore;
+    this.enqueueLevelTravel(restore.levelPath);
+    return true;
   }
 
   /**
@@ -2008,6 +2029,42 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.locomotionReports.delete(entityId);
     this.characterMovementSubsystem.resetEntityTransform(entityId, reset);
     this.syncEntityTransform(entityId, reset);
+  }
+
+  private applyPendingSaveRestore(loadedLevelPath: string): void {
+    const result = consumeRestoreForLoadedLevel(this.pendingSaveRestore, loadedLevelPath);
+    this.pendingSaveRestore = result.pending;
+    if (!result.restore) return;
+    this.behaviorSubsystem.applyPersistentStateSnapshot(result.restore.persistentState);
+    if (result.restore.player) this.applySavedPlayerTransform(result.restore.player);
+  }
+
+  private applySavedPlayerTransform(player: SavedPlayerTransform): void {
+    const entityId = this.gameModeSession?.playerState.pawnEntityId;
+    if (!entityId) return;
+    const current = this.transformForEntity(entityId);
+    if (!current) return;
+    const restored: TransformComponent = {
+      position: [player.position[0], player.position[1], player.position[2]],
+      rotation: [current.rotation[0], player.facingYawDeg, current.rotation[2]],
+      scale: [...current.scale],
+    };
+    this.locomotionReports.delete(entityId);
+    this.characterMovementSubsystem.resetEntityTransform(entityId, restored);
+    this.behaviorSubsystem.resetEntityTransform(entityId, restored);
+    this.syncEntityTransform(entityId, restored);
+    this.pawnRespawnTransforms.set(entityId, cloneTransform(restored));
+  }
+
+  private transformForEntity(entityId: string): TransformComponent | null {
+    const character = this.transformForCharacterEntity(entityId);
+    if (character) return character;
+    const actorIndex = parseActorInstanceEntityIndex(entityId);
+    if (actorIndex === null) return null;
+    const entity = this.actorEntities[actorIndex];
+    if (!entity) return null;
+    const transform = readTransformComponent(entity);
+    return transform ? cloneTransform(transform) : null;
   }
 
   private transformForCharacterEntity(entityId: string): TransformComponent | null {

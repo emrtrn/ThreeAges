@@ -124,3 +124,12 @@ export function applySaveState(value: unknown): GameSaveRestoreRequest | null {
     persistentState: normalizePersistentState(value.flags),
   };
 }
+
+export function consumeRestoreForLoadedLevel(
+  pending: GameSaveRestoreRequest | null,
+  loadedLevelPath: string,
+): { readonly restore: GameSaveRestoreRequest | null; readonly pending: GameSaveRestoreRequest | null } {
+  if (!pending) return { restore: null, pending: null };
+  if (pending.levelPath !== loadedLevelPath) return { restore: null, pending };
+  return { restore: pending, pending: null };
+}

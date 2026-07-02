@@ -390,10 +390,16 @@ oyun-fork'unun genişletebileceği generic bir katman kurmak.
   (spawn grounded başlar — basitlik). Headless: opt-in snapshot/restore,
   serializer collect/apply, bozuk player transform reddi, non-JSON flag filtreleme.
   Engine 510→513.
-- [ ] **P3.3 — Load → travel entegrasyonu:** kayıt yükleme P2
-  `requestLevelTravel` üstünden akar: level'ı yükle, spawn yerine kayıtlı
-  transform'u uygula, bayrakları geri bas. Headless test: state
-  restore'un travel state machine'iyle sıralaması.
+- [x] **P3.3 — Load → travel entegrasyonu:** `RuntimeSceneApp.requestSaveGameLoad(payload)`
+  eklendi: payload `applySaveState()` ile doğrulanır, hedef level P2 travel
+  kuyruğuna alınır, normal portal/menu travel gelirse bekleyen save restore
+  temizlenir. Hedef level build + GameMode possession sonrası kayıtlı player
+  transform'u spawn yerine uygulanır; `CharacterMovementSubsystem`,
+  `BehaviorSubsystem`, render ve physics transform'ları aynı anda resetlenir;
+  respawn baseline kayıtlı pozisyona alınır. `BehaviorSubsystem` persistent
+  state snapshot'ı restore eder. Headless: restore yalnız hedef level yüklendiğinde
+  tüketilir; `BehaviorSubsystem.resetEntityTransform()` sonraki tick'te eski
+  transform overwrite'ını önler. Engine 513→515.
 - [ ] **P3.4 — UserSettings:** ayrı anahtar; ses bus seviyeleri
   (`engine/audio/audioBus.ts` hattı) + locale. Boot'ta uygula; ayar
   ekranından değişince yaz.
@@ -663,3 +669,15 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   snapshot/restore, serializer collect/apply, geçersiz player transform reddi,
   non-JSON flag filtreleme. Engine 510→513. **Sıradaki:** P3.3 — load→travel
   entegrasyonu (level yükle, kayıtlı transform + persistent state geri uygula).
+- *2026-07-02* — **P3.3 tamamlandı: load→travel entegrasyonu.**
+  `RuntimeSceneApp.requestSaveGameLoad(payload)` public seam'i eklendi:
+  `applySaveState()` ile doğrulanan payload hedef level'ı P2 travel kuyruğuna
+  alır; normal `requestLevelTravel()` çağrısı gelirse bekleyen save restore
+  temizlenir (eski kayıt daha sonra yanlış level'da uygulanmaz). Hedef level
+  build + GameMode possession bittikten sonra restore tüketilir: player transform
+  render/physics/CharacterMovement/BehaviorSubsystem taraflarına birlikte basılır,
+  respawn baseline kayıtlı pozisyona çekilir, persistent behavior state snapshot'ı
+  geri yüklenir. `BehaviorSubsystem.resetEntityTransform()` eklendi; save restore
+  sonrası behavior tick'i eski transform'u geri yazmaz. Headless: save restore
+  yalnız matching loaded level'da tüketilir + behavior transform reset testi.
+  Engine 513→515. **Sıradaki:** P3.4 — UserSettings (audio bus volumes + locale).

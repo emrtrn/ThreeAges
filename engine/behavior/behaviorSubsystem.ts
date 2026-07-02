@@ -331,6 +331,12 @@ export class BehaviorSubsystem implements Subsystem {
     this.resetMessageSubscriptions();
   }
 
+  resetEntityTransform(entityId: EntityId, transform: TransformComponent): void {
+    const runtime = this.runtimeEntities.get(entityId);
+    if (!runtime) return;
+    runtime.transform = cloneTransform(transform);
+  }
+
   /**
    * Enables or disables behavior simulation. When disabled, update() is a no-op
    * so edit-mode hosts can keep authored scenes static until Play mode runs.
