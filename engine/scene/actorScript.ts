@@ -93,6 +93,14 @@ export const ACTOR_EVENT_LABELS: Record<ActorEventKind, string> = {
   interact: "On Interact",
 };
 
+export const ACTOR_EVENT_DESCRIPTIONS: Record<ActorEventKind, string> = {
+  beginPlay: "Runs once on the actor's first runtime tick after the scene is built.",
+  tick: "Runs every runtime frame while the actor exists.",
+  overlap: "Runs on sensor overlap begin and end edges; context.event.phase identifies the edge.",
+  hit: "Runs on blocking contact begin and end edges; context.event.otherEntityId identifies the other actor.",
+  interact: "Runs when a host/runtime source emits an interact event for this actor.",
+};
+
 export function isActorEventKind(value: unknown): value is ActorEventKind {
   return typeof value === "string" && (ACTOR_EVENT_KINDS as readonly string[]).includes(value);
 }

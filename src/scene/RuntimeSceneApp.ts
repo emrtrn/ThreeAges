@@ -28,6 +28,7 @@ import { DEFAULT_INPUT_BINDINGS } from "@/game/defaultInputBindings";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
 import {
   BehaviorSubsystem,
+  type ActorSpawnRequest,
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
@@ -207,7 +208,7 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import {
   actorInstanceToEntity,
-  parseActorInstanceEntityIndex,
+  spawnedActorEntityId,
 } from "@engine/scene/actorInstance";
 import {
   normalizeActorScriptDef,
@@ -533,16 +534,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private lightObjects: LightObjectRecord[] = [];
   /** Entities flattened from placed Actor Script instances (`layout.actors`). */
   private actorEntities: Entity[] = [];
-  /** Rendered object per actor instance index (absent for mesh-less logic actors). */
-  private readonly actorObjects = new Map<number, Object3D>();
+  /** Live actor entities keyed by entity id (`actor:<n>` and runtime `spawned:<n>`). */
+  private readonly actorEntityById = new Map<string, Entity>();
+  /** Rendered object per actor entity id (absent for mesh-less logic actors). */
+  private readonly actorObjects = new Map<string, Object3D>();
   /**
-   * Authored MeshRenderer local scale per actor index, multiplied into the
+   * Authored MeshRenderer local scale per actor entity id, multiplied into the
    * placement scale on every transform sync so a class's visual scale survives
    * the per-frame override (the sync writes the placement scale, which omits it).
    */
-  private readonly actorMeshScales = new Map<number, Vec3>();
+  private readonly actorMeshScales = new Map<string, Vec3>();
   /** Resolved `*.actor.json` classes, cached by classRef across instances. */
   private readonly actorClassCache = new Map<string, ActorScriptDef>();
+  /** Runtime-only spawned Actor Script id counter; reset on scene rebuild. */
+  private nextRuntimeActorId = 0;
   private localBounds = new Map<string, Box3>();
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
@@ -618,16 +623,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       return;
     }
 
-    const actorIndex = parseActorInstanceEntityIndex(entityId);
-    if (actorIndex !== null) {
-      const actorObject = this.actorObjects.get(actorIndex);
+    const actorObject = this.actorObjects.get(entityId);
+    if (actorObject) {
       if (!actorObject) return;
       actorObject.position.set(transform.position[0], transform.position[1], transform.position[2]);
       applyEulerDegrees(actorObject, transform.rotation);
       // Re-apply the class's MeshRenderer scale: the synced transform carries only
       // the placement scale, so without this the per-frame override would reset a
       // shrunk/grown character to full size.
-      const meshScale = this.actorMeshScales.get(actorIndex) ?? [1, 1, 1];
+      const meshScale = this.actorMeshScales.get(entityId) ?? [1, 1, 1];
       actorObject.scale.set(
         transform.scale[0] * meshScale[0],
         transform.scale[1] * meshScale[1],
@@ -756,6 +760,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         actorCommandSink: {
           setVisibility: (entityId, visible) => this.setActorObjectVisible(entityId, visible),
           destroy: (entityId) => this.destroyActorEntity(entityId),
+          spawn: (request) => {
+            void this.spawnRuntimeActor(request);
+          },
         },
       },
     );
@@ -982,9 +989,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Authored CharacterMovement mode of a possessed Actor Script pawn, else null. */
   private possessedMovementMode(entityId: string | null): string | null {
     if (entityId === null) return null;
-    const actorIndex = parseActorInstanceEntityIndex(entityId);
-    if (actorIndex === null) return null;
-    const entity = this.actorEntities[actorIndex];
+    const entity = this.actorEntityById.get(entityId);
     if (!entity) return null;
     return readCharacterMovementComponent(entity)?.movementMode ?? null;
   }
@@ -1430,7 +1435,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     for (const object of this.actorObjects.values()) this.scene.remove(object);
     this.actorObjects.clear();
     this.actorMeshScales.clear();
+    this.actorEntityById.clear();
     this.actorEntities = [];
+    this.nextRuntimeActorId = 0;
 
     // Lights: remove root (+ target) and free the shadow map.
     for (const record of this.lightObjects) {
@@ -1968,9 +1975,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * instanced placement — unsupported for entity anchors), so its billboard hides.
    */
   private resolveEntityWorldPosition(entityId: string, target: Vector3): boolean {
-    const actorIndex = parseActorInstanceEntityIndex(entityId);
-    if (actorIndex !== null) {
-      const object = this.actorObjects.get(actorIndex);
+    const actorObject = this.actorObjects.get(entityId);
+    if (actorObject) {
+      const object = actorObject;
       if (!object) return false;
       object.getWorldPosition(target);
       return true;
@@ -2221,19 +2228,23 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private async playAutoPlayParticles(document: SceneDocument): Promise<void> {
     for (const entity of document.entities) {
-      const particle = readParticleEmitterComponent(entity);
-      if (!particle?.autoPlay) continue;
-      const transform = readTransformComponent(entity);
-      if (!transform) continue;
-      const url = this.effectUrlById.get(particle.effectId);
-      if (!url) continue;
-      const definition = await this.loadEffect(particle.effectId, url);
-      if (!definition) continue;
-      const effect = new ParticleEffect(definition);
-      effect.setOrigin(transform.position[0], transform.position[1], transform.position[2]);
-      this.scene.add(effect.object3D);
-      this.particleEffects.push(effect);
+      await this.playAutoPlayParticleEntity(entity);
     }
+  }
+
+  private async playAutoPlayParticleEntity(entity: Entity): Promise<void> {
+    const particle = readParticleEmitterComponent(entity);
+    if (!particle?.autoPlay) return;
+    const transform = readTransformComponent(entity);
+    if (!transform) return;
+    const url = this.effectUrlById.get(particle.effectId);
+    if (!url) return;
+    const definition = await this.loadEffect(particle.effectId, url);
+    if (!definition) return;
+    const effect = new ParticleEffect(definition);
+    effect.setOrigin(transform.position[0], transform.position[1], transform.position[2]);
+    this.scene.add(effect.object3D);
+    this.particleEffects.push(effect);
   }
 
   /** Fetches + parses an effect definition, caching the result (including misses). */
@@ -2372,7 +2383,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const index = this.layout.actors.length;
     this.layout.actors.push(instance);
     const def = await this.loadActorClass(classRef);
-    this.actorEntities.push(actorInstanceToEntity(def, instance, index));
+    this.registerActorEntity(actorInstanceToEntity(def, instance, index));
   }
 
   /**
@@ -2458,9 +2469,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private transformForEntity(entityId: string): TransformComponent | null {
     const character = this.transformForCharacterEntity(entityId);
     if (character) return character;
-    const actorIndex = parseActorInstanceEntityIndex(entityId);
-    if (actorIndex === null) return null;
-    const entity = this.actorEntities[actorIndex];
+    const entity = this.actorEntityById.get(entityId);
     if (!entity) return null;
     const transform = readTransformComponent(entity);
     return transform ? cloneTransform(transform) : null;
@@ -2607,12 +2616,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private async resolveActorClasses(): Promise<void> {
     const actors = this.layout?.actors ?? [];
-    this.actorEntities = await Promise.all(
+    const entities = await Promise.all(
       actors.map(async (instance, index) => {
         const def = await this.loadActorClass(instance.classRef);
         return actorInstanceToEntity(def, instance, index);
       }),
     );
+    this.actorEntities = [];
+    this.actorEntityById.clear();
+    for (const entity of entities) this.registerActorEntity(entity);
   }
 
   /** Fetches + normalizes an `*.actor.json` class, caching by classRef (never throws). */
@@ -2630,6 +2642,48 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return def;
   }
 
+  private registerActorEntity(entity: Entity): void {
+    this.actorEntities = this.actorEntities.filter((candidate) => candidate.id !== entity.id);
+    this.actorEntities.push(entity);
+    this.actorEntityById.set(entity.id, entity);
+  }
+
+  private nextSpawnedActorEntityId(): string {
+    let id = spawnedActorEntityId(this.nextRuntimeActorId);
+    this.nextRuntimeActorId += 1;
+    while (this.actorEntityById.has(id)) {
+      id = spawnedActorEntityId(this.nextRuntimeActorId);
+      this.nextRuntimeActorId += 1;
+    }
+    return id;
+  }
+
+  private async spawnRuntimeActor(request: ActorSpawnRequest): Promise<void> {
+    if (!this.layout) return;
+    const def = await this.loadActorClass(request.classRef);
+    const entity = actorInstanceToEntity(
+      def,
+      {
+        classRef: request.classRef,
+        position: [...request.transform.position],
+        rotation: [...request.transform.rotation],
+        scale: [...request.transform.scale],
+      },
+      this.nextRuntimeActorId,
+      {
+        entityId: this.nextSpawnedActorEntityId(),
+        ...(request.params !== undefined ? { params: request.params } : {}),
+      },
+    );
+    this.registerActorEntity(entity);
+    await this.loadActorMeshModels([entity]);
+    this.addActorObject(entity);
+    this.physicsSubsystem.addEntity(entity);
+    this.behaviorSubsystem.addEntity(entity);
+    this.playAutoPlayAudioEntity(entity);
+    void this.playAutoPlayParticleEntity(entity);
+  }
+
   /**
    * Loads the mesh assets referenced by actor classes' MeshRenderer components.
    * Guards against ids that are absent from the manifest or are not loadable
@@ -2637,10 +2691,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * can't abort the scene). Procedural `shape:<type>` meshes in actors are not
    * supported in this version (manifest assets only).
    */
-  private async loadActorMeshModels(): Promise<void> {
+  private async loadActorMeshModels(entities: readonly Entity[] = this.actorEntities): Promise<void> {
     if (!this.assetLoader) return;
     const needed = new Set<string>();
-    for (const entity of this.actorEntities) {
+    for (const entity of entities) {
       const renderer = readMeshRendererComponent(entity);
       if (renderer && !this.models.has(renderer.assetId)) needed.add(renderer.assetId);
     }
@@ -2667,16 +2721,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * it tracks the host as it moves.
    */
   private addActorObjects(): void {
-    this.actorEntities.forEach((entity, index) => {
-      const object = this.buildActorHostObject(entity);
-      if (!object) return;
-      object.userData.actorIndex = index;
-      this.scene.add(object);
-      this.actorObjects.set(index, object);
-      const meshScale = readMeshRendererComponent(entity)?.scale;
-      if (meshScale) this.actorMeshScales.set(index, meshScale);
-      this.addActorCharacterRef(entity, object);
-    });
+    this.actorEntities.forEach((entity) => this.addActorObject(entity));
+  }
+
+  private addActorObject(entity: Entity): void {
+    const object = this.buildActorHostObject(entity);
+    if (!object) return;
+    object.userData.actorEntityId = entity.id;
+    this.scene.add(object);
+    this.actorObjects.set(entity.id, object);
+    const meshScale = readMeshRendererComponent(entity)?.scale;
+    if (meshScale) this.actorMeshScales.set(entity.id, meshScale);
+    this.addActorCharacterRef(entity, object);
   }
 
   private addActorCharacterRef(entity: Entity, object: Object3D): void {
@@ -2735,9 +2791,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   private setActorLightEnabled(entityId: string, enabled: boolean): void {
-    const actorIndex = parseActorInstanceEntityIndex(entityId);
-    if (actorIndex === null) return;
-    const object = this.actorObjects.get(actorIndex);
+    const object = this.actorObjects.get(entityId);
     if (!object) return;
     const lights: ThreeLight[] = [];
     object.traverse((child) => {
@@ -2763,9 +2817,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * kept collapsed by the per-frame transform sink via `collectedInstances`).
    */
   private setActorObjectVisible = (entityId: string, visible: boolean): void => {
-    const actorIndex = parseActorInstanceEntityIndex(entityId);
-    if (actorIndex !== null) {
-      const object = this.actorObjects.get(actorIndex);
+    if (this.actorEntityById.has(entityId)) {
+      const object = this.actorObjects.get(entityId);
       if (object) object.visible = visible;
       return;
     }
@@ -2798,14 +2851,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private destroyActorEntity = (entityId: string): void => {
     this.physicsSubsystem.removeEntity(entityId);
-    const actorIndex = parseActorInstanceEntityIndex(entityId);
-    if (actorIndex !== null) {
-      const object = this.actorObjects.get(actorIndex);
+    if (this.actorEntityById.has(entityId)) {
+      const object = this.actorObjects.get(entityId);
       if (object) {
         this.scene.remove(object);
-        this.actorObjects.delete(actorIndex);
+        this.actorObjects.delete(entityId);
       }
-      this.actorMeshScales.delete(actorIndex);
+      this.actorMeshScales.delete(entityId);
+      this.actorEntityById.delete(entityId);
+      this.actorEntities = this.actorEntities.filter((entity) => entity.id !== entityId);
       this.characterRefs = this.characterRefs.filter((ref) => ref.entityId !== entityId);
       return;
     }
@@ -2825,9 +2879,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   private async playActorParticleEffect(entityId: string): Promise<void> {
-    const actorIndex = parseActorInstanceEntityIndex(entityId);
-    if (actorIndex === null) return;
-    const entity = this.actorEntities[actorIndex];
+    const entity = this.actorEntityById.get(entityId);
     if (!entity) return;
     const particle = readParticleEmitterComponent(entity);
     if (!particle) return;
@@ -3059,10 +3111,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const bake = character.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
       applyProbeEnvMapToObject(object, bake, globalEnv, globalEnvIntensity);
     });
-    for (const [index, object] of this.actorObjects) {
-      const actor = this.layout?.actors?.[index];
-      if (!actor) continue;
-      const bake = actor.hidden ? null : this.probeBakeForPoint(this.objectWorldCenter(object));
+    for (const [entityId, object] of this.actorObjects) {
+      const entity = this.actorEntityById.get(entityId);
+      const bake = entity?.tags?.includes("hidden")
+        ? null
+        : this.probeBakeForPoint(this.objectWorldCenter(object));
       applyProbeEnvMapToObject(object, bake, globalEnv, globalEnvIntensity);
     }
   }

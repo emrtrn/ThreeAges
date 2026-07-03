@@ -1,6 +1,7 @@
 import type { Entity, SceneJsonValue } from "./entity";
 import type { LayoutPhysicsAxisLocks, ParticleMaterialMode, Vec3 } from "./layout";
 import { resolveCapsuleDimensions } from "./capsule";
+import { isActorEventKind, type ActorEventKind } from "./actorScript";
 
 export type { ParticleMaterialMode };
 
@@ -9,6 +10,7 @@ export const MESH_RENDERER_COMPONENT = "MeshRenderer";
 export const LIGHT_COMPONENT = "Light";
 export const METADATA_COMPONENT = "Metadata";
 export const BEHAVIOR_COMPONENT = "Behavior";
+export const EVENT_BINDINGS_COMPONENT = "EventBindings";
 export const COLLIDER_COMPONENT = "Collider";
 export const AUDIO_COMPONENT = "Audio";
 export const PARTICLE_EMITTER_COMPONENT = "ParticleEmitter";
@@ -75,6 +77,16 @@ export interface MetadataComponent {
 export interface BehaviorComponent {
   scriptId: string;
   params?: Record<string, SceneJsonValue>;
+}
+
+export interface EventBindingComponentEntry {
+  event: ActorEventKind;
+  scriptId: string;
+  params?: Record<string, SceneJsonValue>;
+}
+
+export interface EventBindingsComponent {
+  bindings: EventBindingComponentEntry[];
 }
 
 export type MessageBindingTarget = "self" | "any";
@@ -397,6 +409,29 @@ export function readBehaviorComponent(entity: Entity): BehaviorComponent | undef
     component.params = { ...(params as Record<string, SceneJsonValue>) };
   }
   return component;
+}
+
+/** Reads runtime actor event bindings from an entity. */
+export function readEventBindingsComponent(entity: Entity): EventBindingsComponent | undefined {
+  const data = entity.components[EVENT_BINDINGS_COMPONENT];
+  if (!data) return undefined;
+  const rawBindings = Array.isArray(data.bindings) ? data.bindings : [];
+  const bindings: EventBindingComponentEntry[] = [];
+  for (const raw of rawBindings) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+    const record = raw as Record<string, SceneJsonValue>;
+    if (!isActorEventKind(record.event)) continue;
+    if (typeof record.scriptId !== "string" || record.scriptId.length === 0) continue;
+    const binding: EventBindingComponentEntry = {
+      event: record.event,
+      scriptId: record.scriptId,
+    };
+    if (typeof record.params === "object" && record.params !== null && !Array.isArray(record.params)) {
+      binding.params = { ...(record.params as Record<string, SceneJsonValue>) };
+    }
+    bindings.push(binding);
+  }
+  return bindings.length > 0 ? { bindings } : undefined;
 }
 
 /** Reads runtime script message bindings from an entity. */

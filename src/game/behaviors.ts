@@ -156,6 +156,13 @@ function playCollisionAudioOnce(
 
 const collisionChime: BehaviorUpdate = playCollisionAudioOnce;
 
+function triggerOverlapBegins(context: Parameters<BehaviorUpdate>[0]): boolean {
+  if (context.event) {
+    return context.event.kind === "overlap" && context.event.phase === "begin";
+  }
+  return (context.physics?.contactsForEntity(context.entityId).length ?? 0) > 0;
+}
+
 /**
  * Clamps a proposed planar move so the entity cannot enter static colliders,
  * using the AABBs the physics subsystem already derives. Falls back to the raw
@@ -263,46 +270,46 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     playCollisionAudioOnce(context);
   };
 
-  // Goal trigger (G6): a sensor-collider entity whose first contact (only the
-  // kinematic player can touch a static sensor) plays its audio cue once and
-  // signals the shell. Reuses the contact + once pattern; no HUD.
+  // Goal trigger (G6): a sensor-collider entity whose overlap-begin event plays
+  // its audio cue once and signals the shell. Legacy flat Behavior components
+  // still fall back to contact polling for existing layout content.
   const goalReached: BehaviorUpdate = (context) => {
     if (reachedGoals.has(context.entityId)) return;
-    if ((context.physics?.contactsForEntity(context.entityId).length ?? 0) === 0) return;
+    if (!triggerOverlapBegins(context)) return;
     reachedGoals.add(context.entityId);
-    playCollisionAudioOnce(context);
+    playAudioCue(context);
     onGoalReached?.(context.entityId);
   };
 
-  // Level Travel trigger (P2): a sensor-collider entity whose first contact (only
-  // the kinematic player can touch a static sensor) requests travel to another
-  // level. Reuses the goal-reached contact + once pattern: it fires exactly once
-  // per scene, so the teardown/rebuild the shell kicks off is never re-entered by
-  // a lingering overlap. `targetLevel` is the destination layout path; the
-  // optional `targetSpawn` picks a tagged Player Start there. A trigger without a
-  // `targetLevel` is inert (nothing to travel to).
+  // Level Travel trigger (P2): a sensor-collider entity whose overlap-begin event
+  // requests travel to another level. It fires exactly once per scene, so the
+  // teardown/rebuild the shell kicks off is never re-entered by a lingering
+  // overlap. `targetLevel` is the destination layout path; the optional
+  // `targetSpawn` picks a tagged Player Start there. A trigger without a
+  // `targetLevel` is inert. Legacy flat Behavior components still fall back to
+  // contact polling for existing layout content.
   const levelTravel: BehaviorUpdate = (context) => {
     if (traveledTriggers.has(context.entityId)) return;
-    if ((context.physics?.contactsForEntity(context.entityId).length ?? 0) === 0) return;
+    if (!triggerOverlapBegins(context)) return;
     const targetLevel = stringParam(context.params.targetLevel);
     if (!targetLevel) return;
     traveledTriggers.add(context.entityId);
-    playCollisionAudioOnce(context);
+    playAudioCue(context);
     const targetSpawn = stringParam(context.params.targetSpawn);
     onLevelTravel?.(context.entityId, targetLevel, targetSpawn ?? undefined);
   };
 
-  // Checkpoint trigger (P3.6): a sensor-collider entity whose first contact (only
-  // the kinematic player can touch a static sensor) writes an autosave. Reuses the
+  // Checkpoint trigger (P3.6): a sensor-collider entity whose overlap-begin event
+  // writes an autosave. Legacy flat Behavior components still fall back to the old
   // goal-reached contact + once pattern so it saves exactly once per scene visit —
   // a lingering overlap never spams the storage layer. `params.slot` names the
   // save slot; it defaults to `"quick"` so the built-in load menu can restore it.
   // The host owns serialization + the actual write.
   const checkpoint: BehaviorUpdate = (context) => {
     if (checkpointsSaved.has(context.entityId)) return;
-    if ((context.physics?.contactsForEntity(context.entityId).length ?? 0) === 0) return;
+    if (!triggerOverlapBegins(context)) return;
     checkpointsSaved.add(context.entityId);
-    playCollisionAudioOnce(context);
+    playAudioCue(context);
     const slot = stringParam(context.params.slot) ?? "quick";
     onCheckpoint?.(context.entityId, slot);
   };

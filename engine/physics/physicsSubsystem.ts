@@ -144,20 +144,29 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   setEntities(entities: readonly Entity[]): void {
     const bodies: PhysicsBody[] = [];
     for (const entity of entities) {
-      const transform = readTransformComponent(entity);
-      const collider = readColliderComponent(entity);
-      if (!transform || !collider) continue;
-      bodies.push({
-        id: entity.id,
-        transform: cloneTransform(transform),
-        collider: cloneCollider(collider),
-      });
+      const body = bodyFromEntity(entity);
+      if (body) bodies.push(body);
     }
     this.bodies = bodies;
     this.contacts = [];
     this.staticBlockerCache = null;
     this.staticSurfaceCache = null;
     if (this.rapierModule) this.rebuildRapierWorld();
+  }
+
+  /** Incrementally adds one entity's collider body for runtime SpawnActor. */
+  addEntity(entity: Entity): boolean {
+    if (this.bodies.some((body) => body.id === entity.id)) return false;
+    const body = bodyFromEntity(entity);
+    if (!body) return false;
+    this.bodies.push(body);
+    this.contacts = [];
+    if (body.collider.isStatic) {
+      this.staticBlockerCache = null;
+      this.staticSurfaceCache = null;
+    }
+    if (this.rapierWorld && this.rapierModule) this.addRapierBody(body);
+    return true;
   }
 
   setEntityTransform(entityId: EntityId, transform: TransformComponent): void {
@@ -475,29 +484,33 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     // Ragdoll bodies belonged to the freed world; their handles are now invalid.
     this.ragdollGroups.clear();
 
-    for (const body of this.bodies) {
-      const desc = rigidBodyDescForBody(RAPIER, body);
-      desc.setTranslation(
-        body.transform.position[0],
-        body.transform.position[1],
-        body.transform.position[2],
-      );
-      desc.setRotation(quaternionFromEulerDegrees(body.transform.rotation));
-      const rigidBody = this.rapierWorld.createRigidBody(desc);
-      const colliders = colliderDescsForBody(RAPIER, body).map((colliderDesc) =>
-        this.rapierWorld!.createCollider(
-          colliderDesc.setSensor(body.collider.isSensor),
-          rigidBody,
-        ),
-      );
-      this.rapierBodies.set(body.id, {
-        id: body.id,
-        body: rigidBody,
-        colliders,
-        isSensor: body.collider.isSensor,
-      });
-      for (const collider of colliders) this.rapierColliderToEntity.set(collider.handle, body.id);
-    }
+    for (const body of this.bodies) this.addRapierBody(body);
+  }
+
+  private addRapierBody(body: PhysicsBody): void {
+    const RAPIER = this.rapierModule;
+    if (!RAPIER || !this.rapierWorld || this.rapierBodies.has(body.id)) return;
+    const desc = rigidBodyDescForBody(RAPIER, body);
+    desc.setTranslation(
+      body.transform.position[0],
+      body.transform.position[1],
+      body.transform.position[2],
+    );
+    desc.setRotation(quaternionFromEulerDegrees(body.transform.rotation));
+    const rigidBody = this.rapierWorld.createRigidBody(desc);
+    const colliders = colliderDescsForBody(RAPIER, body).map((colliderDesc) =>
+      this.rapierWorld!.createCollider(
+        colliderDesc.setSensor(body.collider.isSensor),
+        rigidBody,
+      ),
+    );
+    this.rapierBodies.set(body.id, {
+      id: body.id,
+      body: rigidBody,
+      colliders,
+      isSensor: body.collider.isSensor,
+    });
+    for (const collider of colliders) this.rapierColliderToEntity.set(collider.handle, body.id);
   }
 
   private updateRapierContacts(): void {
@@ -750,6 +763,17 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
     position: [...transform.position],
     rotation: [...transform.rotation],
     scale: [...transform.scale],
+  };
+}
+
+function bodyFromEntity(entity: Entity): PhysicsBody | null {
+  const transform = readTransformComponent(entity);
+  const collider = readColliderComponent(entity);
+  if (!transform || !collider) return null;
+  return {
+    id: entity.id,
+    transform: cloneTransform(transform),
+    collider: cloneCollider(collider),
   };
 }
 

@@ -285,26 +285,29 @@ Unreal karşılığı: `Event BeginPlay`, `Event ActorBeginOverlap/EndOverlap`,
 
 ## Checklist
 
-- [ ] **A4.1 — Veri modeli:** entity çoklu behavior taşır (öneri: mevcut tek
+- [x] **A4.1 — Veri modeli:** entity çoklu behavior taşır (öneri: mevcut tek
   `Behavior` bileşeni yerine `bindings: [{event, scriptId, params}]` listesi
   taşıyan bileşen; geriye uyum: tekil `Behavior` okunmaya devam eder).
   `actorInstanceToEntity` ilk-binding çökmesini kaldırır. `normalizeActorScriptDef`
   zaten listeyi taşıyor — validator etkisi yalnız yeni bileşen alanı.
-- [ ] **A4.2 — Dispatch çekirdeği:** BehaviorSubsystem event yönlendirmesi:
+- [x] **A4.2 — Dispatch çekirdeği:** BehaviorSubsystem event yönlendirmesi:
   `beginPlay` = setEntities sonrası ilk tick'te bir kez; `tick` = her kare;
   `overlap` = contact diff'inden begin/end kenarları (envelope'ta other-actor
   id + begin/end bayrağı); `hit` = non-sensor contact; `interact` = mevcut
   interaction akışına bağlanır. Kenar algılama subsystem'de bir kez yaşar,
-  behavior'lardaki kopya "once" kalıpları ölür.
-- [ ] **A4.3 — Karar: `endPlay` kind'ı** eklenip eklenmeyeceği (destroy +
-  sahne teardown'unda ateşlenir). Ucuzsa A4 içinde, değilse A6'ya.
-- [ ] **A4.4 — Editör uyumu:** `ActorScriptEditor` Event Bindings UI'ının
+  behavior'lardaki kopya "once" kalıpları ölür. Not: `interact` için engine
+  `emitActorEvent(entityId, "interact", payload)` hook'u eklendi; mevcut game
+  `interact` behavior'ı cooldown/input gating nedeniyle ayrı kalır.
+- [x] **A4.3 — Karar: `endPlay` kind'ı** eklenip eklenmeyeceği (destroy +
+  sahne teardown'unda ateşlenir). Karar: A4'e alınmadı; destroy/teardown
+  lifecycle garantileriyle birlikte A6 backlog'a bırakıldı.
+- [x] **A4.4 — Editör uyumu:** `ActorScriptEditor` Event Bindings UI'ının
   çoklu binding + yeni event kind semantiğiyle uyumu doğrulanır (kind başına
   açıklama metni güncellenir).
-- [ ] **A4.5 — Davranış migrasyonu:** `goal-reached`/`checkpoint`/`level-travel`
+- [x] **A4.5 — Davranış migrasyonu:** `goal-reached`/`checkpoint`/`level-travel`
   "ilk contact + once" kalıbı overlap-begin event'ine sadeleştirilir —
   davranış birebir korunarak (mevcut testler referans).
-- [ ] **A4.6 — Test:** çoklu binding (beginPlay+tick+overlap aynı class'ta),
+- [x] **A4.6 — Test:** çoklu binding (beginPlay+tick+overlap aynı class'ta),
   beginPlay tek ateşleme, overlap begin/end kenarları, reload sonrası
   beginPlay yeniden ateşlenir.
 
@@ -334,25 +337,48 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
 
 ## Checklist
 
-- [ ] **A5.1 — Karar: ekleme stratejisi.** İncremental entity ekleme (öneri:
+- [x] **A5.1 — Karar: ekleme stratejisi.** İncremental entity ekleme (öneri:
   `physics/behavior/render`'a `addEntity` yolu — spawn başına tam rebuild
   maliyeti yok) vs `setEntities` rebuild (basit ama pahalı ve state sıfırlar —
-  timer/persist etkileşimi kirli). Karar gerekçesiyle buraya işlenir.
-- [ ] **A5.2 — Komut:** `actor.spawn(classRef, transform, params?)` (A1
+  timer/persist etkileşimi kirli). Karar: **incremental addEntity**. `setEntities`
+  rebuild'i A2 timer/lifespan state'ini, A4 beginPlay/message subscription
+  durumunu ve mevcut runtime state'i spawn başına sıfırlayacağı için v1'de
+  kullanılmadı. `PhysicsSubsystem.addEntity`, `BehaviorSubsystem.addEntity` ve
+  runtime render shell tekil ekleme yolu eklendi.
+- [x] **A5.2 — Komut:** `actor.spawn(classRef, transform, params?)` (A1
   komut yüzeyine eklenir). Id tahsisi: layout `actor:<n>` şemasıyla çakışmayan
   ayrı namespace (öneri: `spawned:<n>`). Class çözümü: `*.actor.json`
   fetch/cache — async; spawn komutu kuyruklanır, class hazır olunca instantiate.
-- [ ] **A5.3 — Render shell instantiation:** mesh/light/particle/audio
+  Uygulama: `ActorCommands.spawn` tick sonu host sink'ine `ActorSpawnRequest`
+  düşürüyor; runtime shell `loadActorClass` cache'ini kullanıp `spawned:<n>`
+  id'siyle entity üretiyor. `params`, spawned class'ın behavior/event/message
+  binding param'larına merge ediliyor (exposed-on-spawn v1).
+- [x] **A5.3 — Render shell instantiation:** mesh/light/particle/audio
   bileşenlerinin host'ta kurulumu; asset async yüklemesinin spawn gecikmesine
   etkisi belgelenir (öneri: sık spawn'lanacak class'lar için pre-warm cache).
-- [ ] **A5.4 — Yaşam döngüsü bütünlüğü:** spawn edilen aktör tick/contact/
+  Uygulama: spawned actor mesh asset'i eksikse async yükleniyor, host object
+  entity id ile track ediliyor (`actor:<n>` ve `spawned:<n>` aynı yol), Light
+  component attach ediliyor, `autoPlay` Audio/ParticleEmitter tekil entity için
+  çalıştırılıyor. Not: ilk spawn, class/mesh/effect/audio cache miss kadar
+  gecikebilir; sık spawn edilecek sınıflar için sonraki işte pre-warm API'si
+  eklenebilir.
+- [x] **A5.4 — Yaşam döngüsü bütünlüğü:** spawn edilen aktör tick/contact/
   mesaj alır; `destroy()` ile temiz söküm (A1 yolu); `beginPlay` binding'i
   spawn'da ateşlenir (A4 sonrası). Save-game etkileşimi **karar noktası**:
   v1'de spawned aktörler snapshot'a girmez (belgelenir) — kalıcı spawn
-  ihtiyacı doğarsa ayrı iş.
-- [ ] **A5.5 — Test:** headless (behavior/fizik kaydı, id çakışmasızlığı,
+  ihtiyacı doğarsa ayrı iş. Karar: v1 spawned aktörler save-game snapshot'a
+  yazılmaz ve sahne reload/level travel sırasında düşer; `destroy()` A1 host
+  sink'iyle physics/render/behavior kayıtlarını temizler. `beginPlay`, spawned
+  entity `BehaviorSubsystem.addEntity` ile eklendikten sonraki ilk behavior
+  update'inde çalışır.
+- [~] **A5.5 — Test:** headless (behavior/fizik kaydı, id çakışmasızlığı,
   destroy sökümü, reload sızıntısızlığı) + render smoke (spawn edilen mesh
-  görünür).
+  görünür). Headless kapsam eklendi: spawn request clone/params, `spawned:<n>`
+  id helper'ları, incremental behavior+physics add, beginPlay/tick/overlap/
+  message delivery, destroy cleanup ve rebuild sonrası spawned entity düşmesi.
+  Full local gate yeşil: `npm run build:verify`. Browser/render smoke bu
+  oturumda Playwright aracı callable olmadığı için çalıştırılamadı; kalan iş
+  yalnızca spawned mesh'in gerçek browser sahnesinde görünür olduğunu doğrulamak.
 
 ## Kabul kriterleri
 
@@ -384,6 +410,9 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   kısmen karşılıyor). Tetikleyici: A5 sonrası "kim spawn etti" ihtiyacı.
 - [ ] **Hız erişimi (A3.3 devri):** `velocityOf` — CharacterMovement state'ini
   engine yüzeyine açma sınır kararıyla birlikte.
+- [ ] **EndPlay lifecycle (A4.3 devri):** `endPlay` event kind'ı; destroy,
+  scene teardown ve runtime spawn/despawn sırasındaki ateşleme garantileriyle
+  birlikte ele alınacak.
 
 ---
 
@@ -415,3 +444,35 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   `proximity-toggle` behavior kataloğa eklendi ve `world.byTag` + `world.distanceTo`
   ile yakınlık kenarı mesajı yayıyor. A3.3 `velocityOf` kapsam dışı kalmaya devam
   ediyor. Gate yeşil: tsc + vite build + 547 engine check + verify:dist --strict.
+- 2026-07-03: **A4 çekirdeği kodlandı** (event binding dispatch). Engine:
+  `EventBindings` component reader eklendi; `actorInstanceToEntity` artık
+  Actor Script `eventBindings` listesini tek `Behavior`'a çökertmeden taşıyor,
+  legacy `Behavior` component node'u geriye uyumlu tick fallback olarak kalıyor.
+  `BehaviorSubsystem` beginPlay/tick/overlap/hit/interact event envelope'larını
+  `context.event` üzerinden teslim ediyor; overlap/hit contact diff'i subsystem'de
+  tutuluyor; host/runtime kaynakları için `emitActorEvent` hook'u eklendi. Testler:
+  beginPlay/tick/interact, reload sonrası beginPlay, overlap/hit begin/end ve
+  actorInstance flattening. Gate yeşil: tsc + vite build + 550 engine check +
+  verify:dist --strict.
+- 2026-07-03: **A4.4/A4.5 tamamlandı.** Editor Event Binding Details paneli
+  event kind açıklamalarını tek kaynak olan `ACTOR_EVENT_DESCRIPTIONS` üzerinden
+  gösteriyor. `goal-reached`/`checkpoint`/`level-travel` artık Actor Script
+  `overlap` begin event'iyle çalışıyor; legacy düz `Behavior` bileşeni için
+  contact polling fallback'i korunuyor. Testler EventBindings yoluna taşındı.
+  Gate yeşil: tsc + vite build + 550 engine check + verify:dist --strict.
+- 2026-07-03: **A5 kodlandı** (Runtime SpawnActor). Karar: spawn için
+  `setEntities` rebuild yerine incremental ekleme seçildi; böylece timer,
+  message subscription, beginPlay state ve runtime state spawn başına
+  sıfırlanmıyor. Engine: `ActorCommands.spawn(classRef, transform, params?)`,
+  `ActorSpawnRequest`, `BehaviorSubsystem.addEntity`, `PhysicsSubsystem.addEntity`,
+  `spawned:<n>` id helper'ları ve spawn params merge'i eklendi. Host:
+  `RuntimeSceneApp` runtime-only spawned actor id üretip class cache'ten resolve
+  ediyor, mesh asset'i gerekirse async yüklüyor, mesh/light/audio/particle render
+  shell'ini kuruyor, physics + behavior world'e tekil entity ekliyor. Spawned
+  aktörler v1'de save-game snapshot'a yazılmıyor ve scene reload/level travel'da
+  düşüyor. Testler: spawn request clone/params, incremental behavior+physics
+  lifecycle, beginPlay/tick/overlap/message delivery, destroy cleanup ve spawned
+  id/params flattening. Gate yeşil: `npm run build:verify` (tsc + Vite build +
+  552 engine check + strict dist scan). Browser/render smoke bu oturumda
+  Playwright aracı callable olmadığı için çalıştırılamadı; A5.5 bu doğrulama
+  için `[~]` bırakıldı.

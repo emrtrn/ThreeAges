@@ -12,9 +12,9 @@
  * component per type. An actor's component *tree* (which can hold several nodes
  * of the same kind) collapses to a single entity taking the FIRST node of each
  * kind. The instance's world transform is authoritative (the root Transform
- * node's props are ignored for placement). Event bindings collapse to a single
- * Behavior (the first binding); per-instance overrides and multi-behavior /
- * multi-node hierarchy are later phases (see docs B4).
+ * node's props are ignored for placement). Event bindings are preserved as an
+ * `EventBindings` list; per-instance overrides and multi-node hierarchy are
+ * later phases (see docs B4).
  *
  * Pure module: no Three.js, no DOM. Both the runtime (spawning) and headless
  * tests read this; `props` flow straight through as component data because
@@ -23,6 +23,7 @@
 import type { ActorScriptDef } from "./actorScript";
 import {
   BEHAVIOR_COMPONENT,
+  EVENT_BINDINGS_COMPONENT,
   MESSAGE_BINDINGS_COMPONENT,
   SCRIPT_ACTOR_COMPONENT,
   SCRIPT_DISPATCHERS_COMPONENT,
@@ -31,7 +32,7 @@ import {
   TRANSFORM_COMPONENT,
   type TransformComponent,
 } from "./components";
-import type { Entity, EntityComponentData, EntityComponentMap } from "./entity";
+import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
 import type { LayoutActorInstance } from "./layout";
 import { readRotation, readScale } from "./transform";
 
@@ -47,6 +48,18 @@ export function actorInstanceEntityId(index: number): string {
   return `actor:${index}`;
 }
 
+/** Entity id for a runtime-spawned actor (not backed by layout.actors). */
+export function spawnedActorEntityId(index: number): string {
+  return `spawned:${index}`;
+}
+
+/** Parses a `spawned:<index>` runtime actor id, or null. */
+export function parseSpawnedActorEntityIndex(entityId: string): number | null {
+  if (!entityId.startsWith("spawned:")) return null;
+  const index = Number(entityId.slice("spawned:".length));
+  return Number.isInteger(index) && index >= 0 ? index : null;
+}
+
 /** Parses an `actor:<index>` entity id back to its layout index, or null. */
 export function parseActorInstanceEntityIndex(entityId: string): number | null {
   if (!entityId.startsWith("actor:")) return null;
@@ -54,21 +67,26 @@ export function parseActorInstanceEntityIndex(entityId: string): number | null {
   return Number.isInteger(index) && index >= 0 ? index : null;
 }
 
-/**
- * Selects the single behavior an instance runs this version. Event bindings are
- * the authored "event graph" surface, so the first binding wins; a `Behavior`
- * component node in the tree is the fallback. Returns null when the class has
- * neither. (Multiple bindings/behaviors per entity = B4.)
- */
+export interface ActorInstanceToEntityOptions {
+  /** Override the default layout-backed `actor:<index>` id (runtime spawn uses `spawned:<n>`). */
+  readonly entityId?: string;
+  /** Exposed-on-spawn params merged into every behavior/event/message binding params object. */
+  readonly params?: Record<string, SceneJsonValue>;
+}
+
+function mergeSpawnParams(
+  params: Record<string, SceneJsonValue> | undefined,
+  spawnParams: Record<string, SceneJsonValue> | undefined,
+): Record<string, SceneJsonValue> | undefined {
+  if (!params && !spawnParams) return undefined;
+  return {
+    ...(params ?? {}),
+    ...(spawnParams ?? {}),
+  };
+}
+
+/** Selects a legacy Behavior component node, used as a fallback tick behavior. */
 function selectBehaviorData(def: ActorScriptDef): EntityComponentData | null {
-  const binding = def.eventBindings[0];
-  if (binding) {
-    const data: EntityComponentData = { scriptId: binding.scriptId };
-    if (binding.params && Object.keys(binding.params).length > 0) {
-      data.params = { ...binding.params };
-    }
-    return data;
-  }
   const behaviorNode = def.components.find((node) => node.component === BEHAVIOR_COMPONENT);
   if (behaviorNode && typeof behaviorNode.props.scriptId === "string") {
     return { ...behaviorNode.props } as EntityComponentData;
@@ -90,14 +108,16 @@ function instanceTransform(instance: LayoutActorInstance): TransformComponent {
  *
  * The component map is seeded with the instance's Transform, then each non-root
  * component node contributes its props as that component's data (first node of
- * each kind wins). Authored event bindings compile to a Behavior when the tree
- * did not already place one. `parentId` is left to the caller to resolve from
- * the layout `nodeId`/`parentId` space (like the legacy adapter's second pass).
+ * each kind wins). Authored event bindings are carried separately so multiple
+ * event-specific behaviors can run on the same actor. `parentId` is left to the
+ * caller to resolve from the layout `nodeId`/`parentId` space (like the legacy
+ * adapter's second pass).
  */
 export function actorInstanceToEntity(
   def: ActorScriptDef,
   instance: LayoutActorInstance,
   index: number,
+  options: ActorInstanceToEntityOptions = {},
 ): Entity {
   const components: EntityComponentMap = {
     [TRANSFORM_COMPONENT]: instanceTransform(instance) as unknown as EntityComponentData,
@@ -113,7 +133,21 @@ export function actorInstanceToEntity(
 
   if (!components[BEHAVIOR_COMPONENT]) {
     const behavior = selectBehaviorData(def);
-    if (behavior) components[BEHAVIOR_COMPONENT] = behavior;
+    if (behavior) {
+      const params = mergeSpawnParams(
+        behavior.params as Record<string, SceneJsonValue> | undefined,
+        options.params,
+      );
+      components[BEHAVIOR_COMPONENT] = params ? { ...behavior, params } : behavior;
+    }
+  }
+  if (def.eventBindings.length > 0) {
+    components[EVENT_BINDINGS_COMPONENT] = {
+      bindings: def.eventBindings.map((binding) => ({
+        ...binding,
+        params: mergeSpawnParams(binding.params, options.params),
+      })),
+    } as unknown as EntityComponentData;
   }
   if (def.interfaces.length > 0) {
     components[SCRIPT_INTERFACES_COMPONENT] = {
@@ -122,7 +156,10 @@ export function actorInstanceToEntity(
   }
   if (def.messageBindings.length > 0) {
     components[MESSAGE_BINDINGS_COMPONENT] = {
-      bindings: def.messageBindings.map((binding) => ({ ...binding })),
+      bindings: def.messageBindings.map((binding) => ({
+        ...binding,
+        params: mergeSpawnParams(binding.params, options.params),
+      })),
     } as unknown as EntityComponentData;
   }
   if (def.dispatchers.length > 0) {
@@ -148,7 +185,7 @@ export function actorInstanceToEntity(
   if (instance.locked) tags.push("locked");
 
   const entity: Entity = {
-    id: actorInstanceEntityId(index),
+    id: options.entityId ?? actorInstanceEntityId(index),
     components,
   };
   const name = instance.name ?? def.name;

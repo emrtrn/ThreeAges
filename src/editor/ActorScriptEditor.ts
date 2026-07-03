@@ -16,6 +16,7 @@
  */
 import {
   ACTOR_COMPONENT_KINDS,
+  ACTOR_EVENT_DESCRIPTIONS,
   ACTOR_EVENT_KINDS,
   ACTOR_EVENT_LABELS,
   GAME_MODE_DEFAULT_PAWN_VARIABLE,
@@ -1538,6 +1539,7 @@ export class ActorScriptEditor {
         <span>Event</span>
         <select data-as-event-kind>${eventOptions}</select>
       </label>
+      <p class="as-details-note" data-as-event-description>${escapeHtml(ACTOR_EVENT_DESCRIPTIONS[binding.event])}</p>
       <label class="as-field">
         <span>Behavior Script Id</span>
         <input type="text" data-as-event-script list="as-script-ids" value="${escapeHtml(binding.scriptId)}" placeholder="e.g. spin" />
@@ -1564,6 +1566,8 @@ export class ActorScriptEditor {
     const kind = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-event-kind]");
     kind?.addEventListener("change", () => {
       binding.event = kind.value as ActorEventKind;
+      const description = this.detailsHost.querySelector<HTMLElement>("[data-as-event-description]");
+      if (description) description.textContent = ACTOR_EVENT_DESCRIPTIONS[binding.event];
       this.markDirty();
       this.refreshLists();
     });

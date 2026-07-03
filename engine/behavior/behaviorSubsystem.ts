@@ -13,6 +13,7 @@
 import {
   readAudioComponent,
   readBehaviorComponent,
+  readEventBindingsComponent,
   readInteractionComponent,
   readMessageBindingsComponent,
   readScriptActorComponent,
@@ -24,6 +25,7 @@ import {
 import type { AudioComponent, InteractionComponent, TransformComponent } from "../scene/components";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId, SceneJsonValue } from "../scene/entity";
+import type { ActorEventKind } from "../scene/actorScript";
 import type { ActionMap } from "../input/actionMap";
 import type { AudioBus } from "../audio/audioSubsystem";
 import {
@@ -84,11 +86,30 @@ export interface ScriptState {
   persist(key: string, value: SceneJsonValue): void;
 }
 
+export type ActorEventPhase = "begin" | "end";
+
+export interface ActorEventEnvelope {
+  readonly kind: ActorEventKind;
+  readonly frame: number;
+  readonly entityId: EntityId;
+  readonly phase?: ActorEventPhase;
+  readonly otherEntityId?: EntityId;
+  readonly contact?: PhysicsContact;
+  readonly payload?: ScriptMessagePayload;
+}
+
 export type ScriptTimerHandle = string;
 
 export interface ScriptTimers {
   after(seconds: number, message: string, payload?: ScriptMessagePayload): ScriptTimerHandle;
   clear(handle: ScriptTimerHandle): void;
+}
+
+export interface ActorSpawnRequest {
+  readonly sourceEntityId: EntityId;
+  readonly classRef: string;
+  readonly transform: TransformComponent;
+  readonly params?: Record<string, SceneJsonValue>;
 }
 
 /** Options shared by the actor commands: opt in to save-game persistence. */
@@ -125,6 +146,16 @@ export interface ActorCommands {
    * SetLifeSpan(0) cancel semantics.
    */
   setLifeSpan(seconds: number): void;
+  /**
+   * Queues a runtime actor spawn from an Actor Script class. The host resolves
+   * the class/ref and instantiates render + physics incrementally; exposed params
+   * are merged into the spawned class's behavior binding params.
+   */
+  spawn(
+    classRef: string,
+    transform: TransformComponent,
+    params?: Record<string, SceneJsonValue>,
+  ): void;
 }
 
 /**
@@ -138,12 +169,14 @@ export interface ActorCommands {
 export interface ActorCommandSink {
   setVisibility(entityId: EntityId, visible: boolean): void;
   destroy(entityId: EntityId): void;
+  spawn?(request: ActorSpawnRequest): void;
 }
 
 /** A queued actor command, applied at the end of the tick it was issued in. */
 type ActorCommand =
   | { readonly entityId: EntityId; readonly kind: "visibility"; readonly visible: boolean }
-  | { readonly entityId: EntityId; readonly kind: "destroy" };
+  | { readonly entityId: EntityId; readonly kind: "destroy" }
+  | { readonly entityId: EntityId; readonly kind: "spawn"; readonly request: ActorSpawnRequest };
 
 interface ScriptTimerRecord {
   readonly handle: ScriptTimerHandle;
@@ -184,6 +217,8 @@ export interface BehaviorContext {
   /** This entity's authored interaction marker, when it carries one. */
   readonly interactionComponent?: InteractionComponent;
   readonly params: Record<string, SceneJsonValue>;
+  /** Present when this behavior was invoked by an actor event binding. */
+  readonly event?: ActorEventEnvelope;
   /** Present when this behavior was invoked by a script message binding. */
   readonly message?: ScriptMessageEnvelope;
   /** This entity's transform; behaviors mutate it in place. */
@@ -278,6 +313,8 @@ interface BehaviorInstance {
   runtime: RuntimeEntityState;
   update: BehaviorUpdate;
   params: Record<string, SceneJsonValue>;
+  event: ActorEventKind;
+  firedBeginPlay: boolean;
 }
 
 export class BehaviorSubsystem implements Subsystem {
@@ -298,6 +335,7 @@ export class BehaviorSubsystem implements Subsystem {
   private timers = new Map<ScriptTimerHandle, ScriptTimerRecord>();
   private lifeSpans = new Map<EntityId, { remainingSeconds: number; createdFrame: number }>();
   private nextTimerId = 1;
+  private previousContactKeys = new Set<string>();
   private readonly messageBus: ScriptMessageBus;
   private lastMessageFlushResult: ScriptMessageFlushResult = {
     processed: 0,
@@ -353,78 +391,33 @@ export class BehaviorSubsystem implements Subsystem {
     this.commandQueue = [];
     this.timers.clear();
     this.lifeSpans.clear();
+    this.previousContactKeys.clear();
+
+    for (const entity of entities) this.registerRuntimeEntity(entity);
 
     for (const entity of entities) {
-      const transform = readTransformComponent(entity);
-      if (!transform) continue;
-      const runtime: RuntimeEntityState = {
-        id: entity.id,
-        entity,
-        transform: cloneTransform(transform),
-        audioComponent: readAudioComponent(entity),
-        interactionComponent: readInteractionComponent(entity),
-      };
-      this.runtimeEntities.set(entity.id, runtime);
-      if (entity.name) this.nameIndex.set(entity.name, entity.id);
-      for (const tag of entity.tags ?? []) this.addToIndex(this.tagIndex, tag, entity.id);
-      const scriptActor = readScriptActorComponent(entity);
-      if (scriptActor) {
-        this.addToIndex(this.classRefIndex, scriptActor.classRef, entity.id);
-        if (scriptActor.nodeId) this.nodeIdIndex.set(scriptActor.nodeId, entity.id);
-      }
-      const interfaces = readScriptInterfacesComponent(entity);
-      for (const name of interfaces?.interfaces ?? []) {
-        this.addToIndex(this.interfaceIndex, name, entity.id);
-      }
-    }
-
-    for (const entity of entities) {
-      const behavior = readBehaviorComponent(entity);
-      if (!behavior) continue;
-      const update = this.registry.get(behavior.scriptId);
-      if (!update) continue;
       const runtime = this.runtimeEntities.get(entity.id);
       if (!runtime) continue;
-      instances.push({
-        runtime,
-        update,
-        params: behavior.params ?? {},
-      });
+      this.appendBehaviorInstances(entity, runtime, instances);
     }
     this.instances = instances;
 
-    for (const entity of entities) {
-      const runtime = this.runtimeEntities.get(entity.id);
-      if (!runtime) continue;
-      const messageBindings = readMessageBindingsComponent(entity);
-      for (const binding of messageBindings?.bindings ?? []) {
-        const update = this.registry.get(binding.scriptId);
-        if (!update) continue;
-        const unsubscribe = this.messageBus.subscribe(
-          binding.message,
-          (envelope) => {
-            const engine = this.currentEngine;
-            if (!engine) return;
-            const context = this.createContext(
-              runtime,
-              engine,
-              binding.params ?? {},
-              envelope,
-            );
-            update(context);
-            this.sink(runtime.id, runtime.transform);
-          },
-          binding.target === "self" ? { target: runtime.id } : {},
-        );
-        this.messageSubscriptions.push({ entityId: runtime.id, unsubscribe });
-        this.messageSubscriberInfo.push({
-          entityId: runtime.id,
-          message: binding.message,
-          scriptId: binding.scriptId,
-          target: binding.target,
-        });
-      }
-    }
+    for (const entity of entities) this.subscribeEntityMessages(entity);
+  }
+
+  /**
+   * Incrementally adds one entity to the live behavior world (runtime SpawnActor).
+   * Unlike `setEntities`, this preserves timers, runtime state and message bus
+   * subscriptions for existing actors. Returns false when the entity has no
+   * transform or its id already exists.
+   */
+  addEntity(entity: Entity): boolean {
+    if (this.runtimeEntities.has(entity.id)) return false;
+    const runtime = this.registerRuntimeEntity(entity);
+    if (!runtime) return false;
+    this.appendBehaviorInstances(entity, runtime, this.instances);
+    this.subscribeEntityMessages(entity);
+    return true;
   }
 
   /** Drops all behavior instances (e.g. on scene teardown/reload). */
@@ -442,6 +435,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.commandQueue = [];
     this.timers.clear();
     this.lifeSpans.clear();
+    this.previousContactKeys.clear();
     this.resetMessageSubscriptions();
   }
 
@@ -563,15 +557,39 @@ export class BehaviorSubsystem implements Subsystem {
     );
   }
 
+  /** Emits an actor event from a host/runtime source (e.g. interaction input). */
+  emitActorEvent(
+    entityId: EntityId,
+    kind: ActorEventKind,
+    payload?: ScriptMessagePayload,
+  ): void {
+    const engine = this.currentEngine ?? {
+      deltaSeconds: 0,
+      elapsedSeconds: 0,
+      frame: this.lastEngineFrame,
+    };
+    this.dispatchEntityEvent(entityId, engine, {
+      kind,
+      frame: engine.frame,
+      entityId,
+      ...(payload !== undefined ? { payload } : {}),
+    });
+  }
+
   update(engine: EngineUpdateContext): void {
     if (!this.enabled) return;
     this.currentEngine = engine;
     this.lastEngineFrame = engine.frame;
+    this.dispatchBeginPlayEvents(engine);
     for (const instance of this.instances) {
-      const context = this.createContext(instance.runtime, engine, instance.params);
-      instance.update(context);
-      this.sink(instance.runtime.id, instance.runtime.transform);
+      if (instance.event !== "tick") continue;
+      this.invokeBehavior(instance, engine, {
+        kind: "tick",
+        frame: engine.frame,
+        entityId: instance.runtime.id,
+      });
     }
+    this.dispatchContactEvents(engine);
     this.advanceTimers(engine);
     this.advanceLifeSpans(engine);
     this.lastMessageFlushResult = this.messageBus.flush();
@@ -588,11 +606,98 @@ export class BehaviorSubsystem implements Subsystem {
     this.clear();
   }
 
+  private dispatchBeginPlayEvents(engine: EngineUpdateContext): void {
+    for (const instance of this.instances) {
+      if (instance.event !== "beginPlay" || instance.firedBeginPlay) continue;
+      instance.firedBeginPlay = true;
+      this.invokeBehavior(instance, engine, {
+        kind: "beginPlay",
+        frame: engine.frame,
+        entityId: instance.runtime.id,
+      });
+    }
+  }
+
+  private dispatchContactEvents(engine: EngineUpdateContext): void {
+    if (!this.physics) return;
+    const current = new Map<string, PhysicsContact>();
+    for (const runtime of this.runtimeEntities.values()) {
+      for (const contact of this.physics.contactsForEntity(runtime.id)) {
+        current.set(contactKey(contact), contact);
+      }
+    }
+
+    for (const [key, contact] of current) {
+      if (this.previousContactKeys.has(key)) continue;
+      this.dispatchContactEvent(engine, contact, "begin");
+    }
+    for (const key of this.previousContactKeys) {
+      if (current.has(key)) continue;
+      const contact = contactFromKey(key);
+      if (!contact) continue;
+      this.dispatchContactEvent(engine, contact, "end");
+    }
+    this.previousContactKeys = new Set(current.keys());
+  }
+
+  private dispatchContactEvent(
+    engine: EngineUpdateContext,
+    contact: PhysicsContact,
+    phase: ActorEventPhase,
+  ): void {
+    const kind: ActorEventKind = contact.isSensor ? "overlap" : "hit";
+    this.dispatchEntityEvent(contact.a, engine, {
+      kind,
+      frame: engine.frame,
+      entityId: contact.a,
+      phase,
+      otherEntityId: contact.b,
+      contact,
+    });
+    this.dispatchEntityEvent(contact.b, engine, {
+      kind,
+      frame: engine.frame,
+      entityId: contact.b,
+      phase,
+      otherEntityId: contact.a,
+      contact,
+    });
+  }
+
+  private dispatchEntityEvent(
+    entityId: EntityId,
+    engine: EngineUpdateContext,
+    event: ActorEventEnvelope,
+  ): void {
+    for (const instance of this.instances) {
+      if (instance.runtime.id !== entityId || instance.event !== event.kind) continue;
+      this.invokeBehavior(instance, engine, event);
+    }
+  }
+
+  private invokeBehavior(
+    instance: BehaviorInstance,
+    engine: EngineUpdateContext,
+    event?: ActorEventEnvelope,
+  ): void {
+    if (!this.runtimeEntities.has(instance.runtime.id)) return;
+    const context = this.createContext(
+      instance.runtime,
+      engine,
+      instance.params,
+      undefined,
+      event,
+    );
+    instance.update(context);
+    this.sink(instance.runtime.id, instance.runtime.transform);
+  }
+
   private createContext(
     runtime: RuntimeEntityState,
     engine: EngineUpdateContext,
     params: Record<string, SceneJsonValue>,
     message?: ScriptMessageEnvelope,
+    event?: ActorEventEnvelope,
   ): BehaviorContext {
     const context: BehaviorContext = {
       entityId: runtime.id,
@@ -622,6 +727,9 @@ export class BehaviorSubsystem implements Subsystem {
     }
     if (message) {
       (context as BehaviorContext & { message: ScriptMessageEnvelope }).message = message;
+    }
+    if (event) {
+      (context as BehaviorContext & { event: ActorEventEnvelope }).event = event;
     }
     return context;
   }
@@ -725,6 +833,16 @@ export class BehaviorSubsystem implements Subsystem {
           createdFrame: this.currentEngine?.frame ?? this.lastEngineFrame,
         });
       },
+      spawn: (classRef, transform, params) => {
+        if (!classRef.trim()) return;
+        const request: ActorSpawnRequest = {
+          sourceEntityId: entityId,
+          classRef,
+          transform: cloneTransform(transform),
+          ...(params !== undefined ? { params: cloneSceneJsonObject(params) } : {}),
+        };
+        this.commandQueue.push({ entityId, kind: "spawn", request });
+      },
     };
   }
 
@@ -786,6 +904,10 @@ export class BehaviorSubsystem implements Subsystem {
       this.actorCommandSink?.setVisibility(command.entityId, command.visible);
       return;
     }
+    if (command.kind === "spawn") {
+      if (this.runtimeEntities.has(command.entityId)) this.actorCommandSink?.spawn?.(command.request);
+      return;
+    }
     // Destroy: drop the entity from the subsystem's own bookkeeping first (so it
     // stops ticking / being indexed / receiving messages this frame), then let
     // the host tear down its render object + physics body. Idempotent: a second
@@ -818,6 +940,9 @@ export class BehaviorSubsystem implements Subsystem {
       if (timer.entityId === entityId) this.timers.delete(handle);
     }
     this.lifeSpans.delete(entityId);
+    this.previousContactKeys = new Set(
+      [...this.previousContactKeys].filter((key) => !contactKeyIncludesEntity(key, entityId)),
+    );
     const kept: Array<{ entityId: EntityId; unsubscribe: () => void }> = [];
     for (const subscription of this.messageSubscriptions) {
       if (subscription.entityId === entityId) subscription.unsubscribe();
@@ -933,6 +1058,94 @@ export class BehaviorSubsystem implements Subsystem {
     set.add(entityId);
   }
 
+  private registerRuntimeEntity(entity: Entity): RuntimeEntityState | null {
+    const transform = readTransformComponent(entity);
+    if (!transform) return null;
+    const runtime: RuntimeEntityState = {
+      id: entity.id,
+      entity,
+      transform: cloneTransform(transform),
+      audioComponent: readAudioComponent(entity),
+      interactionComponent: readInteractionComponent(entity),
+    };
+    this.runtimeEntities.set(entity.id, runtime);
+    if (entity.name) this.nameIndex.set(entity.name, entity.id);
+    for (const tag of entity.tags ?? []) this.addToIndex(this.tagIndex, tag, entity.id);
+    const scriptActor = readScriptActorComponent(entity);
+    if (scriptActor) {
+      this.addToIndex(this.classRefIndex, scriptActor.classRef, entity.id);
+      if (scriptActor.nodeId) this.nodeIdIndex.set(scriptActor.nodeId, entity.id);
+    }
+    const interfaces = readScriptInterfacesComponent(entity);
+    for (const name of interfaces?.interfaces ?? []) {
+      this.addToIndex(this.interfaceIndex, name, entity.id);
+    }
+    return runtime;
+  }
+
+  private appendBehaviorInstances(
+    entity: Entity,
+    runtime: RuntimeEntityState,
+    out: BehaviorInstance[],
+  ): void {
+    const eventBindings = readEventBindingsComponent(entity);
+    for (const binding of eventBindings?.bindings ?? []) {
+      const update = this.registry.get(binding.scriptId);
+      if (!update) continue;
+      out.push({
+        runtime,
+        update,
+        params: binding.params ?? {},
+        event: binding.event,
+        firedBeginPlay: false,
+      });
+    }
+    const behavior = readBehaviorComponent(entity);
+    if (!behavior) return;
+    const update = this.registry.get(behavior.scriptId);
+    if (!update) return;
+    out.push({
+      runtime,
+      update,
+      params: behavior.params ?? {},
+      event: "tick",
+      firedBeginPlay: true,
+    });
+  }
+
+  private subscribeEntityMessages(entity: Entity): void {
+    const runtime = this.runtimeEntities.get(entity.id);
+    if (!runtime) return;
+    const messageBindings = readMessageBindingsComponent(entity);
+    for (const binding of messageBindings?.bindings ?? []) {
+      const update = this.registry.get(binding.scriptId);
+      if (!update) continue;
+      const unsubscribe = this.messageBus.subscribe(
+        binding.message,
+        (envelope) => {
+          const engine = this.currentEngine;
+          if (!engine) return;
+          const context = this.createContext(
+            runtime,
+            engine,
+            binding.params ?? {},
+            envelope,
+          );
+          update(context);
+          this.sink(runtime.id, runtime.transform);
+        },
+        binding.target === "self" ? { target: runtime.id } : {},
+      );
+      this.messageSubscriptions.push({ entityId: runtime.id, unsubscribe });
+      this.messageSubscriberInfo.push({
+        entityId: runtime.id,
+        message: binding.message,
+        scriptId: binding.scriptId,
+        target: binding.target,
+      });
+    }
+  }
+
   private resetMessageSubscriptions(): void {
     for (const subscription of this.messageSubscriptions) subscription.unsubscribe();
     this.messageSubscriptions = [];
@@ -955,6 +1168,22 @@ function distanceBetweenTransforms(a: TransformComponent, b: TransformComponent)
   return Math.hypot(dx, dy, dz);
 }
 
+function contactKey(contact: PhysicsContact): string {
+  const [left, right] = contact.a < contact.b ? [contact.a, contact.b] : [contact.b, contact.a];
+  return `${contact.isSensor ? "overlap" : "hit"}\n${left}\n${right}`;
+}
+
+function contactFromKey(key: string): PhysicsContact | null {
+  const [kind, a, b] = key.split("\n");
+  if (!a || !b) return null;
+  return { a, b, isSensor: kind === "overlap" };
+}
+
+function contactKeyIncludesEntity(key: string, entityId: EntityId): boolean {
+  const [, a, b] = key.split("\n");
+  return a === entityId || b === entityId;
+}
+
 function cloneSceneJsonValue(value: SceneJsonValue): SceneJsonValue {
   if (Array.isArray(value)) return value.map(cloneSceneJsonValue);
   if (typeof value === "object" && value !== null) {
@@ -963,4 +1192,12 @@ function cloneSceneJsonValue(value: SceneJsonValue): SceneJsonValue {
     return clone;
   }
   return value;
+}
+
+function cloneSceneJsonObject(
+  value: Record<string, SceneJsonValue>,
+): Record<string, SceneJsonValue> {
+  const clone: Record<string, SceneJsonValue> = {};
+  for (const [key, entry] of Object.entries(value)) clone[key] = cloneSceneJsonValue(entry);
+  return clone;
 }

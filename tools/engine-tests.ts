@@ -43,6 +43,7 @@ import {
   readCameraComponent,
   readCharacterMovementComponent,
   readColliderComponent,
+  readEventBindingsComponent,
   readInteractionComponent,
   readLightComponent,
   readMessageBindingsComponent,
@@ -57,6 +58,7 @@ import {
   readSpringArmComponent,
   readTransformComponent,
   INTERACTION_COMPONENT,
+  EVENT_BINDINGS_COMPONENT,
   MESSAGE_BINDINGS_COMPONENT,
   PARTICLE_EMITTER_COMPONENT,
   SCRIPT_ACTOR_COMPONENT,
@@ -419,6 +421,8 @@ import {
   actorInstanceEntityId,
   actorInstanceToEntity,
   parseActorInstanceEntityIndex,
+  parseSpawnedActorEntityIndex,
+  spawnedActorEntityId,
 } from "../engine/scene/actorInstance";
 import {
   assetByteSize,
@@ -4026,6 +4030,183 @@ check("behavior subsystem smoke: 1000 actors receive 1000 targeted script messag
   );
 });
 
+check("behavior event bindings run beginPlay, tick, and externally emitted interact", () => {
+  const events: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: () => (context) => {
+      events.push(
+        `${context.entityId}:${context.event?.kind}:${context.event?.payload?.action ?? ""}`,
+      );
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  const actor: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [
+          { event: "beginPlay", scriptId: "record" },
+          { event: "tick", scriptId: "record" },
+          { event: "interact", scriptId: "record", params: { source: "test" } },
+        ],
+      },
+    },
+  };
+  behavior.setEntities([actor]);
+
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  behavior.emitActorEvent("actor:0", "interact", { action: "Use" });
+  behavior.setEntities([actor]);
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.048, frame: 3 });
+
+  assert.deepEqual(events, [
+    "actor:0:beginPlay:",
+    "actor:0:tick:",
+    "actor:0:tick:",
+    "actor:0:interact:Use",
+    "actor:0:beginPlay:",
+    "actor:0:tick:",
+  ]);
+});
+
+check("behavior event bindings allow beginPlay, tick, and overlap on the same actor", () => {
+  const events: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: () => (context) => {
+      events.push(`${context.entityId}:${context.event?.kind}:${context.event?.phase ?? ""}`);
+    },
+  };
+  const physics = new PhysicsSubsystem();
+  const sensor: Entity = {
+    id: "sensor",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [
+          { event: "beginPlay", scriptId: "record" },
+          { event: "tick", scriptId: "record" },
+          { event: "overlap", scriptId: "record" },
+        ],
+      },
+    },
+  };
+  const player: Entity = {
+    id: "player",
+    components: {
+      Transform: { position: [10, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([sensor, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics);
+  behavior.setEntities([sensor, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  app.update(0.016);
+  physics.setEntityTransform("player", {
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+
+  assert.deepEqual(events, [
+    "sensor:beginPlay:",
+    "sensor:tick:",
+    "sensor:tick:",
+    "sensor:overlap:begin",
+  ]);
+});
+
+check("behavior event bindings dispatch overlap and hit begin/end edges", () => {
+  const events: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: () => (context) => {
+      events.push(
+        `${context.entityId}:${context.event?.kind}:${context.event?.phase}:${context.event?.otherEntityId}`,
+      );
+    },
+  };
+  const physics = new PhysicsSubsystem();
+  const sensor: Entity = {
+    id: "sensor",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [{ event: "overlap", scriptId: "record" }],
+      },
+    },
+  };
+  const blocker: Entity = {
+    id: "blocker",
+    components: {
+      Transform: { position: [4, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: false },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [{ event: "hit", scriptId: "record" }],
+      },
+    },
+  };
+  const player: Entity = {
+    id: "player",
+    components: {
+      Transform: { position: [10, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([sensor, blocker, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics);
+  behavior.setEntities([sensor, blocker, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  app.update(0.016);
+  assert.deepEqual(events, []);
+
+  physics.setEntityTransform("player", {
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(events, ["sensor:overlap:begin:player"]);
+
+  physics.setEntityTransform("player", {
+    position: [10, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+  assert.deepEqual(events, ["sensor:overlap:begin:player", "sensor:overlap:end:player"]);
+
+  physics.setEntityTransform("player", {
+    position: [4, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+  physics.setEntityTransform("player", {
+    position: [10, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  app.update(0.016);
+  assert.deepEqual(events, [
+    "sensor:overlap:begin:player",
+    "sensor:overlap:end:player",
+    "blocker:hit:begin:player",
+    "blocker:hit:end:player",
+  ]);
+});
+
 check("physics subsystem reports deterministic placeholder contacts", () => {
   const physics = new PhysicsSubsystem();
   physics.setEntities([
@@ -7243,7 +7424,7 @@ check("save validator allowlist keeps a placement sensor flag", () => {
   assert.equal(layout.instances[0]?.placements[0]?.sensor, true);
 });
 
-check("goal-reached behavior: fires once on contact, plays its cue, signals the shell", () => {
+check("goal-reached behavior: fires once on overlap begin, plays its cue, signals the shell", () => {
   const reached: string[] = [];
   const registry = createBehaviorRegistry({ onGoalReached: (id) => reached.push(id) });
   const physics = new PhysicsSubsystem();
@@ -7253,7 +7434,9 @@ check("goal-reached behavior: fires once on contact, plays its cue, signals the 
     components: {
       Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
       Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
-      Behavior: { scriptId: "goal-reached" },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [{ event: "overlap", scriptId: "goal-reached" }],
+      },
       Audio: { clipId: "collision-chime", volume: 0.6, loop: false, spatial: false },
     },
   };
@@ -7278,7 +7461,7 @@ check("goal-reached behavior: fires once on contact, plays its cue, signals the 
   assert.deepEqual(reached, []);
   assert.deepEqual(audio.playedRequests(), []);
 
-  // Walk the player onto the goal and tick twice: it fires exactly once.
+  // Walk the player onto the goal and tick twice: the overlap begin fires exactly once.
   physics.setEntityTransform("player:0", {
     position: [0, 0, 0],
     rotation: [0, 0, 0],
@@ -7292,11 +7475,11 @@ check("goal-reached behavior: fires once on contact, plays its cue, signals the 
   ]);
 });
 
-// P2 Level Travel: the `level-travel` sensor reuses the goal-reached contact +
-// once pattern, reading its destination level/spawn from the authored params and
-// signalling the shell exactly once so the teardown/rebuild it kicks off is never
-// re-entered by a lingering overlap.
-check("level-travel behavior: fires once on contact with the authored target + spawn", () => {
+// P2 Level Travel: the `level-travel` sensor listens to the overlap begin event,
+// reading its destination level/spawn from the authored params and signalling the
+// shell exactly once so the teardown/rebuild it kicks off is never re-entered by
+// a lingering overlap.
+check("level-travel behavior: fires once on overlap begin with the authored target + spawn", () => {
   const travels: Array<{ id: string; level: string; spawn?: string }> = [];
   const registry = createBehaviorRegistry({
     onLevelTravel: (id, level, spawn) => travels.push({ id, level, spawn }),
@@ -7308,9 +7491,14 @@ check("level-travel behavior: fires once on contact with the authored target + s
     components: {
       Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
       Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
-      Behavior: {
-        scriptId: "level-travel",
-        params: { targetLevel: "Levels/TestLevel.level.json", targetSpawn: "fromPlayground" },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [
+          {
+            event: "overlap",
+            scriptId: "level-travel",
+            params: { targetLevel: "Levels/TestLevel.level.json", targetSpawn: "fromPlayground" },
+          },
+        ],
       },
     },
   };
@@ -7333,7 +7521,7 @@ check("level-travel behavior: fires once on contact with the authored target + s
   app.update(0.016);
   assert.deepEqual(travels, []);
 
-  // Walk onto the portal and tick twice: it requests travel exactly once.
+  // Walk onto the portal and tick twice: the overlap begin requests travel exactly once.
   physics.setEntityTransform("player:0", { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
   app.update(0.016);
   app.update(0.016);
@@ -7352,7 +7540,9 @@ check("level-travel behavior: a trigger without a target level never fires", () 
     components: {
       Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
       Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
-      Behavior: { scriptId: "level-travel", params: {} },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [{ event: "overlap", scriptId: "level-travel", params: {} }],
+      },
     },
   };
   const player: Entity = {
@@ -7373,10 +7563,10 @@ check("level-travel behavior: a trigger without a target level never fires", () 
   assert.deepEqual(travels, []);
 });
 
-// P3.6 Save-Game: the `checkpoint` sensor reuses the goal-reached contact + once
-// pattern to write an autosave exactly once per scene visit. The host performs the
+// P3.6 Save-Game: the `checkpoint` sensor uses the overlap begin event to write
+// an autosave exactly once per scene visit. The host performs the
 // serialization + write; the behavior only signals it with the authored slot.
-check("checkpoint behavior: saves once on contact with the authored slot", () => {
+check("checkpoint behavior: saves once on overlap begin with the authored slot", () => {
   const saves: Array<{ id: string; slot: string }> = [];
   const registry = createBehaviorRegistry({
     onCheckpoint: (id, slot) => saves.push({ id, slot }),
@@ -7388,7 +7578,9 @@ check("checkpoint behavior: saves once on contact with the authored slot", () =>
     components: {
       Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
       Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
-      Behavior: { scriptId: "checkpoint", params: { slot: "slot-1" } },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [{ event: "overlap", scriptId: "checkpoint", params: { slot: "slot-1" } }],
+      },
     },
   };
   const player: Entity = {
@@ -7410,7 +7602,7 @@ check("checkpoint behavior: saves once on contact with the authored slot", () =>
   app.update(0.016);
   assert.deepEqual(saves, []);
 
-  // Step onto the checkpoint and tick twice: it saves exactly once.
+  // Step onto the checkpoint and tick twice: the overlap begin saves exactly once.
   physics.setEntityTransform("player:0", { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
   app.update(0.016);
   app.update(0.016);
@@ -7428,7 +7620,9 @@ check("checkpoint behavior: defaults to the quick slot", () => {
     components: {
       Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
       Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
-      Behavior: { scriptId: "checkpoint", params: {} },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [{ event: "overlap", scriptId: "checkpoint", params: {} }],
+      },
     },
   };
   const player: Entity = {
@@ -7904,6 +8098,166 @@ check("actor command: setLifeSpan destroys through the actor command sink", () =
   behavior.update({ deltaSeconds: 1, elapsedSeconds: 1.07, frame: 4 });
   assert.deepEqual(destroyed, ["actor:0"]);
   assert.equal(ticks, 3);
+});
+
+// A5 SpawnActor: the engine surface is still host-owned. A behavior queues the
+// class ref + transform + exposed params; the runtime shell resolves the class
+// async and incrementally adds render/physics/behavior.
+check("actor command: spawn delivers a cloned host request", () => {
+  const requests: Array<{
+    sourceEntityId: string;
+    classRef: string;
+    transform: { position: number[]; rotation: number[]; scale: number[] };
+    params?: Record<string, unknown>;
+  }> = [];
+  const registry: BehaviorRegistry = {
+    get: () => (context) => {
+      if (context.state.get("spawned", false)) return;
+      context.state.set("spawned", true);
+      const transform = {
+        position: [1, 2, 3],
+        rotation: [0, 90, 0],
+        scale: [2, 2, 2],
+      } as const;
+      const params = { damage: 12, nested: { team: "blue" } };
+      context.actor.spawn("Blueprints/Projectile.actor.json", transform, params);
+      (transform.position as number[])[0] = 99;
+      params.damage = 99;
+      params.nested.team = "red";
+    },
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "spawner", params: {} },
+    },
+  };
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    {
+      actorCommandSink: {
+        setVisibility: () => undefined,
+        destroy: () => undefined,
+        spawn: (request) => {
+          requests.push(request);
+        },
+      },
+    },
+  );
+  behavior.setEntities([entity]);
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+
+  assert.deepEqual(requests, [
+    {
+      sourceEntityId: "actor:0",
+      classRef: "Blueprints/Projectile.actor.json",
+      transform: { position: [1, 2, 3], rotation: [0, 90, 0], scale: [2, 2, 2] },
+      params: { damage: 12, nested: { team: "blue" } },
+    },
+  ]);
+});
+
+check("runtime spawn: addEntity joins behavior, physics, messages and destroy cleanup", () => {
+  const events: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "begin") return (context) => events.push(`begin:${context.entityId}`);
+      if (scriptId === "tick") return (context) => events.push(`tick:${context.entityId}`);
+      if (scriptId === "overlap") {
+        return (context) => {
+          events.push(`${context.event?.phase}:${context.entityId}:${context.event?.otherEntityId}`);
+        };
+      }
+      if (scriptId === "ping") return (context) => events.push(`ping:${context.entityId}`);
+      if (scriptId === "destroy") return (context) => context.actor.destroy();
+      return undefined;
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  const spawned: Entity = {
+    id: spawnedActorEntityId(0),
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      ScriptActor: { classRef: "Blueprints/Pickup.actor.json" },
+      EventBindings: {
+        bindings: [
+          { event: "beginPlay", scriptId: "begin" },
+          { event: "tick", scriptId: "tick" },
+          { event: "overlap", scriptId: "overlap" },
+        ],
+      },
+      MessageBindings: {
+        bindings: [
+          { message: "Ping", scriptId: "ping", target: "self" },
+          { message: "Destroy", scriptId: "destroy", target: "self" },
+        ],
+      },
+    },
+  };
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([player]);
+  const destroyed: string[] = [];
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    physics,
+    undefined,
+    {
+      actorCommandSink: {
+        setVisibility: () => undefined,
+        destroy: (id) => {
+          destroyed.push(id);
+          physics.removeEntity(id);
+        },
+      },
+    },
+  );
+  behavior.setEntities([player]);
+  assert.equal(physics.addEntity(spawned), true);
+  assert.equal(behavior.addEntity(spawned), true);
+  assert.equal(behavior.addEntity(spawned), false, "duplicate spawned ids are rejected");
+  assert.equal(behavior.getScriptActorDebugInfo("spawned:0")?.classRef, "Blueprints/Pickup.actor.json");
+
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+  assert.deepEqual(events, [
+    "begin:spawned:0",
+    "tick:spawned:0",
+    "begin:spawned:0:player:0",
+  ]);
+
+  behavior.emitScriptMessage("Ping", "player:0", undefined, "spawned:0");
+  app.update(0.016);
+  assert.ok(events.includes("ping:spawned:0"));
+  assert.ok(events.includes("tick:spawned:0"));
+
+  behavior.emitScriptMessage("Destroy", "player:0", undefined, "spawned:0");
+  app.update(0.016);
+  assert.deepEqual(destroyed, ["spawned:0"]);
+  assert.deepEqual(physics.contactsForEntity("spawned:0"), []);
+
+  const eventCountAfterDestroy = events.length;
+  behavior.emitScriptMessage("Ping", "player:0", undefined, "spawned:0");
+  app.update(0.016);
+  assert.equal(events.length, eventCountAfterDestroy);
+
+  behavior.setEntities([player]);
+  assert.equal(behavior.getScriptActorDebugInfo("spawned:0"), null);
 });
 
 check("proximity-toggle behavior emits edges from ScriptWorld distance queries", () => {
@@ -12930,10 +13284,11 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
   assert.equal(movement?.jumpSpeed, 6);
   assert.deepEqual(movement?.rotationRate, [0, 0, 360]);
   assert.equal(movement?.orientRotationToControl, true);
-  // The first event binding compiles to the single Behavior.
-  const behavior = readBehaviorComponent(entity);
-  assert.equal(behavior?.scriptId, "spin");
-  assert.deepEqual(behavior?.params, { speedDeg: 45 });
+  // Event bindings stay as a list; no single Behavior is synthesized from the first binding.
+  assert.equal(readBehaviorComponent(entity), undefined);
+  assert.deepEqual(readEventBindingsComponent(entity), {
+    bindings: [{ event: "tick", scriptId: "spin", params: { speedDeg: 45 } }],
+  });
   assert.deepEqual(readScriptActorComponent(entity), {
     classRef: "blueprints/DoorBP.actor.json",
   });
@@ -12971,7 +13326,30 @@ check("actorInstanceToEntity flattens a class + placement into one entity", () =
 
   // Round-trips through the entity-id helpers.
   assert.equal(parseActorInstanceEntityIndex(actorInstanceEntityId(7)), 7);
+  assert.equal(parseSpawnedActorEntityIndex(spawnedActorEntityId(3)), 3);
   assert.equal(parseActorInstanceEntityIndex("character:7"), null);
+  assert.equal(parseSpawnedActorEntityIndex("actor:3"), null);
+
+  const spawned = actorInstanceToEntity(
+    def,
+    { classRef: "blueprints/DoorBP.actor.json", position: [0, 0, 0] },
+    99,
+    { entityId: spawnedActorEntityId(0), params: { speedDeg: 90, instigator: "player" } },
+  );
+  assert.equal(spawned.id, "spawned:0");
+  assert.deepEqual(readEventBindingsComponent(spawned), {
+    bindings: [{ event: "tick", scriptId: "spin", params: { speedDeg: 90, instigator: "player" } }],
+  });
+  assert.deepEqual(readMessageBindingsComponent(spawned), {
+    bindings: [
+      {
+        message: "Toggleable.Toggle",
+        scriptId: "door-toggle",
+        params: { sound: "door", speedDeg: 90, instigator: "player" },
+        target: "self",
+      },
+    ],
+  });
 });
 
 check("readCameraComponent reads authored projection, else runtime-camera defaults", () => {
