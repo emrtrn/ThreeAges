@@ -8459,6 +8459,99 @@ check("damage convention: damage-zone overlap deals Damage.Apply to the touched 
   assert.deepEqual(health, [{ health: 75, instigator: "zone:0" }]);
 });
 
+// A6 impulse/launch: a behavior's addImpulse/launch queue during the tick and are
+// delivered to the host sink after the tick's behaviors run, carrying the vector
+// (and launch options). The physics/character effects themselves need a live
+// backend, so this asserts the command surface reaches the host.
+check("actor command: addImpulse/launch reach the host sink at end of tick", () => {
+  const impulses: Array<{ id: string; v: readonly number[] }> = [];
+  const launches: Array<{ id: string; v: readonly number[]; opts: unknown }> = [];
+  const registry: BehaviorRegistry = {
+    get: () => (context) => {
+      context.actor.addImpulse([0, 5, 0]);
+      context.actor.launch([1, 8, 0], { zOverride: true });
+    },
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "knock", params: {} },
+    },
+  };
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    {
+      actorCommandSink: {
+        setVisibility: () => undefined,
+        destroy: () => undefined,
+        addImpulse: (id, v) => impulses.push({ id, v }),
+        launch: (id, v, opts) => launches.push({ id, v, opts }),
+      },
+    },
+  );
+  behavior.setEntities([entity]);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+  assert.deepEqual(impulses, [{ id: "actor:0", v: [0, 5, 0] }]);
+  assert.deepEqual(launches, [{ id: "actor:0", v: [1, 8, 0], opts: { zOverride: true } }]);
+});
+
+// A6 LaunchCharacter: an upward launch drives the character airborne (it rises
+// then lands back on its floor via the existing vertical/landing logic), and the
+// horizontal launch is a knockback that decays to rest.
+check("CharacterMovement launch: upward launch arcs and lands; horizontal knockback decays", () => {
+  const actions = new ActionMap({});
+  const entity: Entity = {
+    id: "actor:k",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      CharacterMovement: {
+        maxWalkSpeed: 4,
+        sprintMultiplier: 2,
+        jumpSpeed: 5,
+        gravityScale: 1,
+        rotationRate: [0, 0, 0],
+        orientRotationToMovement: false,
+        movementMode: "walking",
+      },
+    },
+  };
+  let transform: TransformComponent | null = null;
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      transform = next;
+    },
+    undefined,
+    { isPlayerControlled: () => true },
+  );
+  movement.setEntities([entity]);
+  let frame = 0;
+  const step = (n: number) => {
+    for (let i = 0; i < n; i += 1) {
+      movement.update({ deltaSeconds: 0.05, elapsedSeconds: 0.05 * frame, frame });
+      frame += 1;
+    }
+  };
+  step(1); // settle grounded at y≈0
+  assert.ok(transform && Math.abs(transform.position[1]) < 1e-6, "starts grounded");
+  movement.launch("actor:k", [6, 6, 0]); // up + +x knockback
+  step(1);
+  assert.ok(transform.position[1] > 0.1, "went airborne");
+  assert.ok(transform.position[0] > 0.1, "knocked back on +x");
+  step(60); // ~3s: arc completes, lands, knockback decays
+  assert.ok(Math.abs(transform.position[1]) < 0.05, "landed back on the floor");
+  const restX = transform.position[0];
+  step(5);
+  assert.ok(Math.abs(transform.position[0] - restX) < 1e-6, "knockback fully decayed");
+});
+
 // A2 timers: delayed callbacks travel through the existing self-targeted script
 // message binding path, so behaviors can consume them without a second event API.
 check("script timers: after delivers one self-targeted message", () => {

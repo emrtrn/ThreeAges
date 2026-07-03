@@ -763,6 +763,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           setCollisionEnabled: (entityId, enabled) =>
             this.physicsSubsystem.setEntityCollisionEnabled(entityId, enabled),
           destroy: (entityId) => this.destroyActorEntity(entityId),
+          // Impulse routes to the simulated body; launch to the (kinematic)
+          // character subsystem — the two write surfaces Unreal splits as
+          // AddImpulse vs LaunchCharacter (A6).
+          addImpulse: (entityId, impulse) => this.physicsSubsystem.applyImpulse(entityId, impulse),
+          launch: (entityId, velocity, launchOptions) =>
+            this.characterMovementSubsystem.launch(entityId, velocity, launchOptions),
           spawn: (request) => {
             void this.spawnRuntimeActor(request);
           },

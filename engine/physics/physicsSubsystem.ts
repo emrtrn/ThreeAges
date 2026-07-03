@@ -332,6 +332,21 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   /**
+   * Applies an instantaneous linear impulse to a simulated (dynamic) body
+   * (A6 AddImpulse / knockback). No-op unless Rapier is live and the entity is a
+   * `simulatePhysics` body — static/kinematic bodies (including the character
+   * capsule) are position-driven, so they use `launch` instead. Wakes the body so
+   * a resting object reacts.
+   */
+  applyImpulse(entityId: EntityId, impulse: readonly [number, number, number]): void {
+    const record = this.rapierBodies.get(entityId);
+    if (!record) return;
+    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    if (!body?.collider.simulatePhysics) return;
+    record.body.applyImpulse({ x: impulse[0], y: impulse[1], z: impulse[2] }, true);
+  }
+
+  /**
    * Spawns a transient ragdoll: a dynamic Rapier body per desc body, linked by
    * spherical impulse joints, dropped into the live world. The bodies collide
    * with the level's static colliders but never each other (see

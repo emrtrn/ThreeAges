@@ -3,7 +3,7 @@ import type { CharacterMovementComponent, TransformComponent } from "@engine/sce
 import type { EngineUpdateContext, Subsystem } from "@engine/core/Subsystem";
 import type { Entity, EntityId } from "@engine/scene/entity";
 import type { ActionMap } from "@engine/input/actionMap";
-import type { PhysicsQuery, TransformSink } from "@engine/behavior/behaviorSubsystem";
+import type { LaunchOptions, PhysicsQuery, TransformSink } from "@engine/behavior/behaviorSubsystem";
 import type {
   MovingPlatformQuery,
   PlatformState,
@@ -73,6 +73,9 @@ const DEFAULT_GRAVITY_Y = -9.81;
 const DEFAULT_MAX_STEP_HEIGHT = 0.45;
 const DEFAULT_MAX_STEP_DOWN = 0.5;
 const ZERO_DELTA: readonly [number, number, number] = [0, 0, 0];
+/** Horizontal knockback damping (per second) and the speed below which it stops. */
+const LAUNCH_HORIZONTAL_DAMPING = 4;
+const LAUNCH_MIN_SPEED = 0.05;
 
 export class CharacterMovementSubsystem implements Subsystem {
   readonly id = CHARACTER_MOVEMENT_SUBSYSTEM_ID;
@@ -83,6 +86,12 @@ export class CharacterMovementSubsystem implements Subsystem {
    * delta. Feeds the runtime `world.velocityOf` provider (A6, Unreal GetVelocity).
    */
   private velocity = new Map<EntityId, [number, number, number]>();
+  /**
+   * Active horizontal knockback velocity (units/s) per character from
+   * {@link launch} (A6 LaunchCharacter); decays each frame and is applied on top
+   * of input movement. Vertical launch feeds the existing vertical-motion state.
+   */
+  private launchXZ = new Map<EntityId, [number, number]>();
   private readonly getGravityY: () => number;
   private readonly getControlYaw: (entityId: EntityId) => number | null | undefined;
   private readonly isPlayerControlled: (entityId: EntityId) => boolean;
@@ -105,6 +114,7 @@ export class CharacterMovementSubsystem implements Subsystem {
   setEntities(entities: readonly Entity[]): void {
     this.vertical.clear();
     this.velocity.clear();
+    this.launchXZ.clear();
     this.runtimes = [];
     for (const entity of entities) {
       const transform = readTransformComponent(entity);
@@ -122,6 +132,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     this.runtimes = [];
     this.vertical.clear();
     this.velocity.clear();
+    this.launchXZ.clear();
   }
 
   resetEntityTransform(entityId: EntityId, transform: TransformComponent): void {
@@ -130,8 +141,10 @@ export class CharacterMovementSubsystem implements Subsystem {
     runtime.transform = cloneTransform(transform);
     this.vertical.set(entityId, freshVertical(transform.position[1]));
     // A teleport/respawn is not motion; drop stale velocity so a probe after the
-    // jump doesn't read the warp distance as a huge one-frame speed.
+    // jump doesn't read the warp distance as a huge one-frame speed. Any active
+    // knockback is cancelled too — a respawned pawn starts at rest.
     this.velocity.delete(entityId);
+    this.launchXZ.delete(entityId);
   }
 
   update(engine: EngineUpdateContext): void {
@@ -159,6 +172,42 @@ export class CharacterMovementSubsystem implements Subsystem {
    */
   velocityOf(entityId: EntityId): readonly [number, number, number] | null {
     return this.velocity.get(entityId) ?? null;
+  }
+
+  /**
+   * Launches a character (A6 LaunchCharacter / knockback): an upward launch drives
+   * the vertical-motion state so it goes airborne and arcs under gravity, while the
+   * horizontal launch becomes a decaying knockback applied on top of input each
+   * frame. Additive by default; {@link LaunchOptions} overrides a component
+   * (`xyOverride` horizontal, `zOverride` vertical). No-op for a non-character id.
+   */
+  launch(
+    entityId: EntityId,
+    velocity: readonly [number, number, number],
+    options: LaunchOptions = {},
+  ): void {
+    const runtime = this.runtimes.find((entry) => entry.id === entityId);
+    if (!runtime) return;
+    let vertical = this.vertical.get(entityId);
+    if (!vertical) {
+      vertical = freshVertical(runtime.transform.position[1]);
+      this.vertical.set(entityId, vertical);
+    }
+    const currentVy = vertical.state.grounded ? 0 : vertical.state.velocityY;
+    const nextVy = options.zOverride ? velocity[1] : currentVy + velocity[1];
+    if (nextVy > 0) {
+      // Go airborne with the upward launch; the existing landing logic lands it.
+      vertical.state = { y: runtime.transform.position[1], velocityY: nextVy, grounded: false };
+    } else if (!vertical.state.grounded) {
+      vertical.state = { ...vertical.state, velocityY: nextVy };
+    }
+    const prev = this.launchXZ.get(entityId) ?? [0, 0];
+    this.launchXZ.set(
+      entityId,
+      options.xyOverride
+        ? [velocity[0], velocity[2]]
+        : [prev[0] + velocity[0], prev[1] + velocity[2]],
+    );
   }
 
   dispose(): void {
@@ -202,6 +251,10 @@ export class CharacterMovementSubsystem implements Subsystem {
       runtime.transform.position[0] += carried.dx;
       runtime.transform.position[2] += carried.dz;
     }
+    // Knockback (A6 LaunchCharacter): a decaying horizontal launch velocity is
+    // applied on top of input/carry, resolved against blockers so it can't push
+    // through a wall. Facing follows the player's own move (dx/dz), not knockback.
+    this.applyLaunchHorizontal(runtime, engine, platformCtx.aabbs);
     const yaw = facingYawFromMove(dx, dz);
     let targetYaw: number | null = null;
     if (
@@ -307,6 +360,31 @@ export class CharacterMovementSubsystem implements Subsystem {
     }
     runtime.transform.position[1] = vertical.state.y;
     return vertical.state;
+  }
+
+  /** Applies + decays this frame's horizontal knockback (A6 LaunchCharacter). */
+  private applyLaunchHorizontal(
+    runtime: CharacterMovementRuntime,
+    engine: EngineUpdateContext,
+    platformAabbs: readonly Aabb3[],
+  ): void {
+    const launch = this.launchXZ.get(runtime.id);
+    if (!launch) return;
+    const dt = Math.max(0, engine.deltaSeconds);
+    if (dt > 0) {
+      const moved = this.resolvePlanarAgainstBlockers(
+        runtime,
+        { dx: launch[0] * dt, dz: launch[1] * dt },
+        platformAabbs,
+      );
+      runtime.transform.position[0] += moved.dx;
+      runtime.transform.position[2] += moved.dz;
+    }
+    const decay = Math.exp(-LAUNCH_HORIZONTAL_DAMPING * dt);
+    const nx = launch[0] * decay;
+    const nz = launch[1] * decay;
+    if (Math.hypot(nx, nz) < LAUNCH_MIN_SPEED) this.launchXZ.delete(runtime.id);
+    else this.launchXZ.set(runtime.id, [nx, nz]);
   }
 
   private resolvePlanarAgainstBlockers(

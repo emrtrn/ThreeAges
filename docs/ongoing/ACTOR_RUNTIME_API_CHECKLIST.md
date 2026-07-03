@@ -405,9 +405,19 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   (komut sink'e ulaşır; disable contact+blocker düşürür ve re-enable/rebuild geri
   getirir; persist restore hide'dan bağımsız yeniden uygular). Gate yeşil:
   `npm run build:verify` (tsc + build + 555 engine check + strict dist scan).
-- [ ] **İtki/fırlatma:** `AddImpulse` / `LaunchCharacter` karşılığı — fizik
-  sorgu yüzeyi (`PhysicsQuery`) salt-okunur; yazma yüzeyi ayrı tasarım ister.
-  Tetikleyici: knockback/patlama/fırlatma mekaniği.
+- [x] **İtki/fırlatma:** `AddImpulse` / `LaunchCharacter`. Yazma yüzeyi salt-okunur
+  `PhysicsQuery`'den ayrı tutuldu: `ActorCommands.addImpulse(vec)` (simüle dinamik
+  gövde) + `launch(vec, options?)` (karakter) tick-sonu kuyruğa giriyor,
+  `ActorCommandSink.addImpulse?`/`launch?` (opsiyonel emsal). Engine:
+  `PhysicsSubsystem.applyImpulse` (Rapier canlı + `simulatePhysics` ise
+  `body.applyImpulse`, aksi no-op). Game: `CharacterMovementSubsystem.launch` —
+  yukarı bileşen mevcut vertical-motion state'ine enjekte olup airborne/arc
+  sağlıyor, yatay bileşen decay eden knockback (blocker'lara karşı resolve,
+  `LAUNCH_HORIZONTAL_DAMPING`); `xyOverride`/`zOverride` (Unreal semantiği);
+  `setEntities`/`clear`/`resetEntityTransform`'da sıfırlanıyor. Host:
+  `RuntimeSceneApp` impulse→physics, launch→character. 2 headless test (komut→sink
+  vektör+options teslimi; karakter launch airborne/land + yatay decay). Gate yeşil:
+  `npm run build:verify` (tsc + build + 566 engine check + strict dist scan).
 - [x] **Hasar konvansiyonu:** `Damage.Apply` mesaj standardı + `AnyDamage`
   şablonu (motor değil, `src/game` konvansiyonu + doc). Mesaj payload'ı
   `{ amount, instigator?, damageType? }`; iki şablon behavior: `apply-damage`
@@ -610,3 +620,12 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   belgeliyor. Engine dokunulmadı. 2 headless test. Gate yeşil: `npm run build:verify`
   (tsc + Vite build + 564 engine check + strict dist scan). Kalan A6:
   impulse/launch, runtime attach/detach.
+- 2026-07-03: **A6 — İtki/fırlatma kodlandı** (`AddImpulse` / `LaunchCharacter`).
+  Yazma yüzeyi salt-okunur `PhysicsQuery`'den ayrı: `ActorCommands.addImpulse(vec)` +
+  `launch(vec, options?)` tick-sonu kuyruğu + opsiyonel `ActorCommandSink.addImpulse?`/
+  `launch?`. Engine: `PhysicsSubsystem.applyImpulse` (Rapier `body.applyImpulse`,
+  aksi no-op). Game: `CharacterMovementSubsystem.launch` (yukarı → vertical-motion
+  airborne/arc; yatay → decay eden knockback, blocker-resolve; `xy/zOverride`;
+  lifecycle temizlik). Host: impulse→physics, launch→character. 2 headless test.
+  Gate yeşil: `npm run build:verify` (tsc + Vite build + 566 engine check +
+  strict dist scan). Kalan A6: runtime attach/detach.

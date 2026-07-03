@@ -143,6 +143,17 @@ export interface ActorSpawnRequest {
   readonly params?: Record<string, SceneJsonValue>;
 }
 
+/**
+ * Options for {@link ActorCommands.launch} (Unreal `LaunchCharacter`): by default
+ * the launch velocity is *added* to the character's current motion; the override
+ * flags replace a component instead (horizontal for `xyOverride`, vertical for
+ * `zOverride`).
+ */
+export interface LaunchOptions {
+  readonly xyOverride?: boolean;
+  readonly zOverride?: boolean;
+}
+
 /** Options shared by the actor commands: opt in to save-game persistence. */
 export interface ActorCommandOptions {
   /**
@@ -199,6 +210,19 @@ export interface ActorCommands {
    */
   setTickInterval(seconds: number): void;
   /**
+   * Applies an instantaneous linear impulse to this entity's *simulated* (dynamic)
+   * physics body (Unreal `AddImpulse`). No-op on a body that isn't simulating
+   * physics (static/kinematic); use {@link launch} for characters.
+   */
+  addImpulse(impulse: ReadonlyVec3): void;
+  /**
+   * Launches this entity if it is a character (Unreal `LaunchCharacter`): injects
+   * a launch velocity into its CharacterMovement so it goes airborne and arcs /
+   * is knocked back. Additive by default; {@link LaunchOptions} overrides a
+   * component. No-op on a non-character entity.
+   */
+  launch(velocity: ReadonlyVec3, options?: LaunchOptions): void;
+  /**
    * Queues a runtime actor spawn from an Actor Script class. The host resolves
    * the class/ref and instantiates render + physics incrementally; exposed params
    * are merged into the spawned class's behavior binding params.
@@ -223,6 +247,10 @@ export interface ActorCommandSink {
   destroy(entityId: EntityId): void;
   /** Enables/disables the entity's physics collision (A6 SetActorEnableCollision). */
   setCollisionEnabled?(entityId: EntityId, enabled: boolean): void;
+  /** Applies an impulse to the entity's simulated body (A6 AddImpulse). */
+  addImpulse?(entityId: EntityId, impulse: ReadonlyVec3): void;
+  /** Launches the entity if it is a character (A6 LaunchCharacter). */
+  launch?(entityId: EntityId, velocity: ReadonlyVec3, options: LaunchOptions): void;
   spawn?(request: ActorSpawnRequest): void;
 }
 
@@ -231,6 +259,13 @@ type ActorCommand =
   | { readonly entityId: EntityId; readonly kind: "visibility"; readonly visible: boolean }
   | { readonly entityId: EntityId; readonly kind: "collision"; readonly enabled: boolean }
   | { readonly entityId: EntityId; readonly kind: "destroy" }
+  | { readonly entityId: EntityId; readonly kind: "impulse"; readonly impulse: ReadonlyVec3 }
+  | {
+      readonly entityId: EntityId;
+      readonly kind: "launch";
+      readonly velocity: ReadonlyVec3;
+      readonly options: LaunchOptions;
+    }
   | { readonly entityId: EntityId; readonly kind: "spawn"; readonly request: ActorSpawnRequest };
 
 interface ScriptTimerRecord {
@@ -994,6 +1029,21 @@ export class BehaviorSubsystem implements Subsystem {
         control.interval = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
         control.accumulator = 0;
       },
+      addImpulse: (impulse) => {
+        this.commandQueue.push({
+          entityId,
+          kind: "impulse",
+          impulse: [impulse[0], impulse[1], impulse[2]],
+        });
+      },
+      launch: (velocity, options) => {
+        this.commandQueue.push({
+          entityId,
+          kind: "launch",
+          velocity: [velocity[0], velocity[1], velocity[2]],
+          options: options ?? {},
+        });
+      },
       spawn: (classRef, transform, params) => {
         if (!classRef.trim()) return;
         const request: ActorSpawnRequest = {
@@ -1113,6 +1163,18 @@ export class BehaviorSubsystem implements Subsystem {
     }
     if (command.kind === "collision") {
       this.actorCommandSink?.setCollisionEnabled?.(command.entityId, command.enabled);
+      return;
+    }
+    if (command.kind === "impulse") {
+      if (this.runtimeEntities.has(command.entityId)) {
+        this.actorCommandSink?.addImpulse?.(command.entityId, command.impulse);
+      }
+      return;
+    }
+    if (command.kind === "launch") {
+      if (this.runtimeEntities.has(command.entityId)) {
+        this.actorCommandSink?.launch?.(command.entityId, command.velocity, command.options);
+      }
       return;
     }
     if (command.kind === "spawn") {
