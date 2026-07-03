@@ -1049,20 +1049,64 @@ loop glow).
 
 ---
 
-## Faz 3 — Preview Viewport ve Diagnostics
+## Faz 3 — Preview Viewport ve Diagnostics  ✅ TAMAMLANDI (3 Temmuz 2026)
 
-- [ ] Ayrı Three.js preview viewport oluştur (`src/editor/assetViewportCamera.ts`
+- [x] Ayrı Three.js preview viewport oluştur (`src/editor/assetViewportCamera.ts`
       orbit kamera yardımcıları ve mevcut mesh editörlerinin viewport kalıbı
       yeniden kullanılır).
-- [ ] Axis, grid, origin marker ekle.
-- [ ] Fixed bounds görünümü ekle.
-- [ ] Preview speed kontrollerini ekle.
-- [ ] Alive particle, cap, estimated cost bilgisini ekle.
-- [ ] Warning panelini ekle.
-- [ ] Preview dispose lifecycle’ını test et.
-- [ ] Aynı effect asset tekrar açıldığında renderer/resource sızıntısı olmadığını kontrol et.
+      *(Faz 2’de `ParticleEffectPreviewViewport` kendi `WebGLRenderer`/`Scene`/raf
+      loop’u + paylaşılan `OrbitViewportCamera` + `createAssetViewportRig` ile
+      kuruldu; Faz 3 bunun üzerine cila ekledi.)*
+- [x] Axis, grid, origin marker ekle.
+      *(`AxesHelper(0.6)` XYZ eksenleri + rig’in floor grid’i + origin’de küçük
+      turuncu `Mesh` küre işaretçisi.)*
+- [x] Fixed bounds görünümü ekle.
+      *(`Box3Helper`, `system.bounds` min/max’ından kurulur; `showInPreview`
+      false ya da mode `fixed` değilse gizlenir. Details’taki “Show In Preview”
+      checkbox’ı doğrudan preview kutusunu açıp kapatır.)*
+- [x] Preview speed kontrollerini ekle.
+      *(Preview overlay bar: 0.25×/0.5×/1×/2× hız + `↻ Loop` (one-shot
+      auto-replay aç/kapa) + `✦ Burst` (tek burst restart). `setSpeed` tick’te
+      `dt`’yi ölçekler.)*
+- [x] Alive particle, cap, estimated cost bilgisini ekle.
+      *(Sol üstte canlı HUD “Alive N / capacity”; `ParticleEffect.aliveCount()` +
+      `maxCapacity` üzerinden 150 ms’de bir güncellenir.)*
+- [x] Warning panelini ekle.
+      *(Sol Diagnostics paneli §11’e göre genişletildi: no-spawn-source,
+      rate-mode-zero-duration, additive-dark-source, bounds-clip heuristiği;
+      preview’de kompakt `⚠ N warnings` rozeti tam listeyi tooltip’te gösterir.)*
+- [x] Preview dispose lifecycle’ını test et.
+      *(3 yeni headless test: capacity floor/cap, one-shot drain→finished,
+      dispose-after-lifecycle throw etmez.)*
+- [x] Aynı effect asset tekrar açıldığında renderer/resource sızıntısı olmadığını kontrol et.
+      *(`dispose()` artık bounds helper + axes + origin geometry/material’lerini de
+      dispose eder; `ParticleEffectEditor.open` önceki `activeInstance`’ı kapatır;
+      “instances hold independent buffers” testi paylaşımsızlığı doğrular.)*
 
-**Kabul kriteri:** Preview viewport effect asset’i sahneden bağımsız olarak güvenli biçimde tekrar oynatabilir.
+**Kabul kriteri:** Preview viewport effect asset’i sahneden bağımsız olarak
+güvenli biçimde tekrar oynatabilir. ✅ `build:verify` yeşil (tsc + vite build +
+578 engine check + verify:dist --strict), `verify:dist` editör string’i
+sızdırmıyor. **Kalan:** canlı browser smoke (kullanıcı) — §15 tam akış.
+
+### Faz 3 karar kaydı (3 Temmuz 2026)
+
+**Bounds-clip uyarısı heuristiktir.** `boundsMayClip`, origin’den (preview daima
+`[0,0,0]`’dan spawn eder) `direction × speed.max × lifetime.max` erişimini +
+spawn genişliği + end-size marjıyla fixed bounds kutusuna karşı test eder;
+gravity/drag/acceleration’ı hesaba katmaz. Amaç kesin culling değil, yazarı
+“efekt kutunun dışına taşabilir” diye uyarmaktır (§11 ruhu: “same effect
+impression”).
+
+**Invalid color/vector uyarıları eklenmedi (ulaşılamaz).** §11 listesi geçersiz
+renk/vektör uyarıları sayar; fakat editördeki `def` her zaman normalize edilmiş
+ve form girişleri guard’lı (`Number.isFinite`, `<input type=color>`), bu yüzden
+bu durumlar editör içinde oluşamaz — save validator zaten normalize eder.
+Uyarılar yalnızca gerçekten ulaşılabilir koşullar için yazıldı.
+
+**HUD polling (raf callback değil).** Alive/cap sayacı editörden `setInterval`
+(150 ms) ile `preview.getStats()` okunarak güncellenir; viewport’u editöre
+callback ile bağlamamak daha basit ve dispose’da tek `clearInterval` ile
+temizlenir. Statik veriler (uyarılar, footer) zaten düzenlemede güncelleniyor.
 
 ---
 

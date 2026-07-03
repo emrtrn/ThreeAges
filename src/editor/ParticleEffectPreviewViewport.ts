@@ -8,18 +8,25 @@
  * {@link ParticleEffectDefinition} — so what the author sees here is what the
  * `/` route renders.
  *
- * Preview state (elapsed time, particle buffers, play/pause) lives entirely in
- * this class and the `ParticleEffect` instance, never in the asset data (plan
- * task: "editor preview state ayrı tutulur"). One-shot effects auto-replay after
- * a short pause so the author keeps seeing the burst.
+ * Preview state (elapsed time, particle buffers, play/pause, speed, loop-preview)
+ * lives entirely in this class and the `ParticleEffect` instance, never in the
+ * asset data (plan task: "editor preview state ayrı tutulur").
  *
- * VFX Lite Faz 2 keeps this minimal (grid from the rig + play/pause/restart);
- * Faz 3 layers on axis/origin/bounds helpers, a speed control, alive-particle
- * diagnostics and a warning overlay.
+ * VFX Lite Faz 3 layers authoring affordances on the Faz 2 minimum: an axis +
+ * origin marker, the fixed-bounds box (driven by `system.bounds`), a preview
+ * speed multiplier, a loop-preview toggle (auto-replay one-shots on/off), a
+ * single-burst restart, and a live alive/capacity stat readout for the HUD.
  */
 import {
+  AxesHelper,
+  Box3,
+  Box3Helper,
+  Color,
+  Mesh,
+  MeshBasicMaterial,
   PerspectiveCamera,
   Scene,
+  SphereGeometry,
   Spherical,
   Vector3,
   WebGLRenderer,
@@ -32,6 +39,12 @@ import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewp
 /** Seconds a finished one-shot waits before it auto-replays in the preview. */
 const ONE_SHOT_REPLAY_DELAY = 0.4;
 
+/** Live simulation stats surfaced to the editor HUD each frame. */
+export interface PreviewStats {
+  alive: number;
+  capacity: number;
+}
+
 export class ParticleEffectPreviewViewport {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
@@ -41,11 +54,17 @@ export class ParticleEffectPreviewViewport {
   private readonly target = new Vector3(0, 1, 0);
   private readonly resizeObserver: ResizeObserver;
 
+  private readonly axes: AxesHelper;
+  private readonly originMarker: Mesh;
+  private boundsHelper: Box3Helper | null = null;
+
   private definition: ParticleEffectDefinition | null = null;
   private effect: ParticleEffect | null = null;
   private rafId = 0;
   private lastTime = 0;
   private playing = true;
+  private speed = 1;
+  private loopPreview = true;
   private replayCooldown = 0;
   private disposed = false;
 
@@ -55,6 +74,14 @@ export class ParticleEffectPreviewViewport {
     host.append(this.renderer.domElement);
 
     createAssetViewportRig(this.scene);
+
+    this.axes = new AxesHelper(0.6);
+    this.scene.add(this.axes);
+    this.originMarker = new Mesh(
+      new SphereGeometry(0.045, 12, 8),
+      new MeshBasicMaterial({ color: 0xf0a54a }),
+    );
+    this.scene.add(this.originMarker);
 
     this.orbit = new OrbitViewportCamera(this.camera, this.spherical, this.target, () => 4);
     this.orbit.update();
@@ -72,6 +99,7 @@ export class ParticleEffectPreviewViewport {
   setDefinition(definition: ParticleEffectDefinition): void {
     this.definition = definition;
     this.rebuildEffect();
+    this.rebuildBounds();
   }
 
   setPlaying(playing: boolean): void {
@@ -82,11 +110,43 @@ export class ParticleEffectPreviewViewport {
     return this.playing;
   }
 
+  /** Sets the simulation time multiplier (0.25×–2× in the UI). */
+  setSpeed(multiplier: number): void {
+    this.speed = multiplier > 0 ? multiplier : 1;
+  }
+
+  getSpeed(): number {
+    return this.speed;
+  }
+
+  /** When off, a finished one-shot stays finished instead of auto-replaying. */
+  setLoopPreview(enabled: boolean): void {
+    this.loopPreview = enabled;
+    if (enabled && this.effect?.isFinished() && this.replayCooldown <= 0) {
+      this.replayCooldown = ONE_SHOT_REPLAY_DELAY;
+    }
+  }
+
+  isLoopPreview(): boolean {
+    return this.loopPreview;
+  }
+
+  /** Emits a fresh burst (restart from the beginning) and resumes playback. */
+  burst(): void {
+    this.restart();
+  }
+
   /** Restarts the effect from the beginning (fresh particle buffers). */
   restart(): void {
     this.replayCooldown = 0;
     this.rebuildEffect();
     this.playing = true;
+  }
+
+  /** Live alive/capacity counts for the HUD (0/0 when no effect is built). */
+  getStats(): PreviewStats {
+    if (!this.effect) return { alive: 0, capacity: 0 };
+    return { alive: this.effect.aliveCount(), capacity: this.effect.maxCapacity };
   }
 
   private rebuildEffect(): void {
@@ -102,18 +162,39 @@ export class ParticleEffectPreviewViewport {
     this.scene.add(this.effect.object3D);
   }
 
+  /** Rebuilds the fixed-bounds wireframe from `system.bounds` (or hides it). */
+  private rebuildBounds(): void {
+    if (this.boundsHelper) {
+      this.scene.remove(this.boundsHelper);
+      this.boundsHelper.geometry.dispose();
+      (this.boundsHelper.material as MeshBasicMaterial).dispose();
+      this.boundsHelper = null;
+    }
+    const bounds = this.definition?.system.bounds;
+    if (!bounds || !bounds.showInPreview || bounds.mode !== "fixed") return;
+    const box = new Box3(
+      new Vector3(bounds.min[0], bounds.min[1], bounds.min[2]),
+      new Vector3(bounds.max[0], bounds.max[1], bounds.max[2]),
+    );
+    if (box.isEmpty()) return;
+    this.boundsHelper = new Box3Helper(box, new Color(0x4a90d9));
+    this.scene.add(this.boundsHelper);
+  }
+
   private readonly tick = (now: number): void => {
     if (this.disposed) return;
-    const dt = Math.min(0.05, (now - this.lastTime) / 1000);
+    const dt = Math.min(0.05, (now - this.lastTime) / 1000) * this.speed;
     this.lastTime = now;
 
-    if (this.playing && this.effect) {
+    if (this.playing && this.effect && dt > 0) {
       if (this.replayCooldown > 0) {
         this.replayCooldown -= dt;
         if (this.replayCooldown <= 0) this.rebuildEffect();
       } else {
         this.effect.update(dt);
-        if (this.effect.isFinished()) this.replayCooldown = ONE_SHOT_REPLAY_DELAY;
+        if (this.effect.isFinished() && this.loopPreview) {
+          this.replayCooldown = ONE_SHOT_REPLAY_DELAY;
+        }
       }
     }
 
@@ -140,6 +221,15 @@ export class ParticleEffectPreviewViewport {
       this.effect.dispose();
       this.effect = null;
     }
+    if (this.boundsHelper) {
+      this.scene.remove(this.boundsHelper);
+      this.boundsHelper.geometry.dispose();
+      (this.boundsHelper.material as MeshBasicMaterial).dispose();
+      this.boundsHelper = null;
+    }
+    this.axes.dispose();
+    this.originMarker.geometry.dispose();
+    (this.originMarker.material as MeshBasicMaterial).dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

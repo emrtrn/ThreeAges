@@ -165,6 +165,20 @@ export class ParticleEffect {
     return true;
   }
 
+  /** Particles currently alive (age >= 0). Preview/diagnostics only. */
+  aliveCount(): number {
+    let alive = 0;
+    for (let i = 0; i < this.capacity; i += 1) {
+      if (this.ages[i]! >= 0) alive += 1;
+    }
+    return alive;
+  }
+
+  /** Max particles this instance can hold at once (simulation buffer size). */
+  get maxCapacity(): number {
+    return this.capacity;
+  }
+
   dispose(): void {
     this.geometry.dispose();
     this.material.dispose();

@@ -254,6 +254,8 @@ import {
   parseRuntimeParticleEffect,
   toRuntimeParticleEffect,
 } from "../engine/vfx/particleEffectParser";
+import { ParticleEffect } from "../engine/render-three/particleEffect";
+import type { RuntimeParticleEffect } from "../engine/vfx/particleEffectTypes";
 import {
   PARTICLE_EFFECT_PRESETS,
   buildParticleEffectPresetBody,
@@ -12237,6 +12239,65 @@ check("normalizeEffectDefinition maps burst count to an approximate runtime rate
   );
   // burst count 30 over a ~1s lifetime window â†’ ~30/s continuous approximation.
   assert.equal(runtime.rate, 30);
+});
+
+// VFX Lite Faz 3 — the preview viewport reads alive/capacity off the runtime
+// ParticleEffect to drive its HUD, so those counts must track the simulation.
+function runtimeFx(overrides: Partial<RuntimeParticleEffect> = {}): RuntimeParticleEffect {
+  return {
+    loop: false,
+    rate: 10,
+    lifetime: 1,
+    startSize: 0.2,
+    endSize: 0.2,
+    velocity: [0, 1, 0],
+    spread: 0,
+    materialMode: "alpha",
+    color: "#ffffff",
+    ...overrides,
+  };
+}
+
+check("ParticleEffect reports capacity and never exceeds it while alive", () => {
+  // capacity = max(8, ceil(rate*lifetime)+4). Idle emitters still get the floor.
+  assert.equal(new ParticleEffect(runtimeFx({ rate: 0, lifetime: 1 })).maxCapacity, 8);
+  const fx = new ParticleEffect(runtimeFx({ loop: true, rate: 10, lifetime: 1 }));
+  assert.equal(fx.maxCapacity, 14);
+  assert.equal(fx.aliveCount(), 0);
+  fx.update(0.5); // spawnAccumulator 5 → 5 particles, aged 0.5s (none expired yet)
+  assert.equal(fx.aliveCount(), 5);
+  fx.dispose();
+
+  // A dense emitter drops spawns rather than overrunning the buffer.
+  const dense = new ParticleEffect(runtimeFx({ loop: true, rate: 1000, lifetime: 1 }));
+  for (let i = 0; i < 10; i += 1) dense.update(0.1);
+  assert.ok(dense.aliveCount() <= dense.maxCapacity);
+  dense.dispose();
+});
+
+check("ParticleEffect one-shot drains to zero alive and reports finished", () => {
+  const fx = new ParticleEffect(runtimeFx({ loop: false, rate: 20, lifetime: 0.5 }));
+  assert.equal(fx.isFinished(), false);
+  fx.update(0.25);
+  assert.ok(fx.aliveCount() > 0); // emitting inside the one lifetime window
+  // Run well past the emission window + lifetime; every particle must age out.
+  for (let i = 0; i < 40; i += 1) fx.update(0.05);
+  assert.equal(fx.aliveCount(), 0);
+  assert.equal(fx.isFinished(), true);
+  fx.dispose(); // dispose after a full lifecycle must not throw
+});
+
+check("ParticleEffect dispose is safe and instances hold independent buffers", () => {
+  const a = new ParticleEffect(runtimeFx({ loop: true, rate: 30, lifetime: 1 }));
+  const b = new ParticleEffect(runtimeFx({ loop: true, rate: 30, lifetime: 1 }));
+  // Distinct Three.js objects — rebuilding in the preview never shares buffers.
+  assert.notEqual(a.object3D, b.object3D);
+  assert.notEqual(a.object3D.geometry, b.object3D.geometry);
+  a.update(0.3);
+  assert.ok(a.aliveCount() > 0);
+  assert.equal(b.aliveCount(), 0); // advancing one never touches the other
+  a.dispose();
+  b.dispose();
 });
 
 check("validateEffectAsset canonicalizes a schema-2 body and guards junk numbers", () => {
