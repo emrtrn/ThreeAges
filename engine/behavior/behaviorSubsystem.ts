@@ -89,6 +89,11 @@ export interface ScriptWorld {
    * velocity for it (no provider wired, or a static/behavior-parked actor).
    */
   velocityOf(ref: EntityRef): ReadonlyVec3 | null;
+  /**
+   * The actor that spawned `ref` (Unreal Owner/Instigator), or null when `ref`
+   * was authored into the layout, has no owner, or its owner has left play.
+   */
+  ownerOf(ref: EntityRef): EntityRef | null;
   nearestWithInterface(
     name: string,
     from: EntityRef,
@@ -273,6 +278,12 @@ export interface BehaviorContext {
   readonly timers: ScriptTimers;
   /** Generic per-actor commands (visibility/destroy) targeting this entity. */
   readonly actor: ActorCommands;
+  /**
+   * The actor that spawned this entity (Unreal Owner/Instigator), or null when it
+   * was authored into the layout or its owner has left play. Convenience for
+   * `world.ownerOf(world.self())`.
+   */
+  readonly owner: EntityRef | null;
   readonly physics?: PhysicsQuery;
   readonly audio?: AudioBus;
   readonly audioComponent?: AudioComponent;
@@ -401,6 +412,8 @@ export class BehaviorSubsystem implements Subsystem {
   private lifeSpans = new Map<EntityId, { remainingSeconds: number; createdFrame: number }>();
   /** Per-actor tick gating (A6 SetActorTickEnabled / tick interval); default is every-frame. */
   private tickControl = new Map<EntityId, TickControl>();
+  /** Spawned entity -> the actor that spawned it (A6 Owner/Instigator). */
+  private owners = new Map<EntityId, EntityId>();
   private nextTimerId = 1;
   private previousContactKeys = new Set<string>();
   private readonly messageBus: ScriptMessageBus;
@@ -466,6 +479,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.timers.clear();
     this.lifeSpans.clear();
     this.tickControl.clear();
+    this.owners.clear();
     this.previousContactKeys.clear();
 
     for (const entity of entities) this.registerRuntimeEntity(entity);
@@ -486,10 +500,11 @@ export class BehaviorSubsystem implements Subsystem {
    * subscriptions for existing actors. Returns false when the entity has no
    * transform or its id already exists.
    */
-  addEntity(entity: Entity): boolean {
+  addEntity(entity: Entity, options: { owner?: EntityId } = {}): boolean {
     if (this.runtimeEntities.has(entity.id)) return false;
     const runtime = this.registerRuntimeEntity(entity);
     if (!runtime) return false;
+    if (options.owner !== undefined) this.owners.set(entity.id, options.owner);
     this.appendBehaviorInstances(entity, runtime, this.instances);
     this.subscribeEntityMessages(entity);
     return true;
@@ -513,6 +528,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.timers.clear();
     this.lifeSpans.clear();
     this.tickControl.clear();
+    this.owners.clear();
     this.previousContactKeys.clear();
     this.resetMessageSubscriptions();
   }
@@ -835,6 +851,7 @@ export class BehaviorSubsystem implements Subsystem {
       state: this.scriptState(runtime.id),
       timers: this.scriptTimers(runtime.id, engine),
       actor: this.actorCommands(runtime.id),
+      owner: this.ownerOf(runtime.id),
       params,
       transform: runtime.transform,
     };
@@ -910,6 +927,7 @@ export class BehaviorSubsystem implements Subsystem {
       upOf: (ref) => this.directionOf(ref, upVectorFromRotation),
       velocityOf: (ref) =>
         this.runtimeEntities.has(ref) ? (this.velocityProvider?.velocityOf(ref) ?? null) : null,
+      ownerOf: (ref) => this.ownerOf(ref),
       nearestWithInterface: (name, from, maxDistance) =>
         this.nearestWithInterface(name, from, maxDistance),
     };
@@ -1138,6 +1156,12 @@ export class BehaviorSubsystem implements Subsystem {
     }
     this.lifeSpans.delete(entityId);
     this.tickControl.delete(entityId);
+    // Drop this entity both as an owned child and as an owner of others (a
+    // destroyed spawner leaves its children unowned; ownerOf then returns null).
+    this.owners.delete(entityId);
+    for (const [child, owner] of [...this.owners.entries()]) {
+      if (owner === entityId) this.owners.delete(child);
+    }
     this.previousContactKeys = new Set(
       [...this.previousContactKeys].filter((key) => !contactKeyIncludesEntity(key, entityId)),
     );
@@ -1217,6 +1241,13 @@ export class BehaviorSubsystem implements Subsystem {
     const runtime = this.runtimeEntities.get(entityId);
     if (!runtime) return null;
     return cloneTransform(runtime.transform);
+  }
+
+  /** The live spawner of `entityId`, or null when unowned / the owner left play. */
+  private ownerOf(entityId: EntityId): EntityId | null {
+    const owner = this.owners.get(entityId);
+    if (owner === undefined || !this.runtimeEntities.has(owner)) return null;
+    return owner;
   }
 
   private distanceBetween(from: EntityId, to: EntityId): number | null {

@@ -8301,6 +8301,67 @@ check("CharacterMovement subsystem exposes last-frame velocity from applied moti
   assert.equal(movement.velocityOf("actor:vel"), null, "teleport drops stale velocity");
 });
 
+// A6 owner/instigator (Unreal Owner): a spawned actor resolves the actor that
+// spawned it via world.ownerOf / context.owner; an authored (unowned) actor reads
+// null, and the owner leaving play clears the ownership so ownerOf returns null.
+check("owner/instigator: spawned actor resolves its spawner; unowned + owner-death read null", () => {
+  const owners = new Map<string, string | null>();
+  let childOwner: string | null | undefined;
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "report") {
+        return (context) => {
+          owners.set(context.entityId, context.world.ownerOf(context.entityId));
+          if (context.entityId === spawnedActorEntityId(0)) childOwner = context.owner;
+        };
+      }
+      if (scriptId === "destroy") return (context) => context.actor.destroy();
+      return undefined;
+    },
+  };
+  const spawner: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      MessageBindings: { bindings: [{ message: "Die", scriptId: "destroy", target: "self" }] },
+    },
+  };
+  const orphan: Entity = {
+    id: "actor:9",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      EventBindings: { bindings: [{ event: "tick", scriptId: "report" }] },
+    },
+  };
+  const child: Entity = {
+    id: spawnedActorEntityId(0),
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      EventBindings: { bindings: [{ event: "tick", scriptId: "report" }] },
+    },
+  };
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    { actorCommandSink: { setVisibility: () => undefined, destroy: () => undefined } },
+  );
+  behavior.setEntities([spawner, orphan]);
+  assert.equal(behavior.addEntity(child, { owner: "actor:0" }), true);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+  assert.equal(owners.get(spawnedActorEntityId(0)), "actor:0", "spawned child knows its spawner");
+  assert.equal(childOwner, "actor:0", "context.owner mirrors world.ownerOf(self)");
+  assert.equal(owners.get("actor:9"), null, "authored actor has no owner");
+  behavior.emitScriptMessage("Die", "actor:0", undefined, "actor:0");
+  app.update(0.016); // owner ticks + destroy queued/flushed this frame
+  app.update(0.016); // owner gone → child ownerOf reads null
+  assert.equal(owners.get(spawnedActorEntityId(0)), null, "owner leaving play clears ownerOf");
+});
+
 // A2 timers: delayed callbacks travel through the existing self-targeted script
 // message binding path, so behaviors can consume them without a second event API.
 check("script timers: after delivers one self-targeted message", () => {

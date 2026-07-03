@@ -2690,7 +2690,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await this.loadActorMeshModels([entity]);
     this.addActorObject(entity);
     this.physicsSubsystem.addEntity(entity);
-    this.behaviorSubsystem.addEntity(entity);
+    // The spawner owns the spawned actor (A6 Owner/Instigator) so the new actor
+    // can attribute itself back to whoever spawned it (e.g. projectile → shooter).
+    this.behaviorSubsystem.addEntity(entity, { owner: request.sourceEntityId });
     this.playAutoPlayAudioEntity(entity);
     void this.playAutoPlayParticleEntity(entity);
   }

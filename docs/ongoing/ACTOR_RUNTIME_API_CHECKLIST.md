@@ -424,8 +424,17 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   temizlenir. 2 headless test (interval throttle + accumulated dt + reload reset;
   enable/disable geçişi). Gate yeşil: `npm run build:verify` (tsc + build +
   559 engine check + strict dist scan).
-- [ ] **Owner/Instigator:** spawn eden aktörün kimliği (mesaj `source`'u
-  kısmen karşılıyor). Tetikleyici: A5 sonrası "kim spawn etti" ihtiyacı.
+- [x] **Owner/Instigator:** spawn eden aktörün kimliği (Unreal Owner). Engine:
+  `BehaviorSubsystem.addEntity(entity, { owner })` spawn edilen entity → spawner
+  eşlemesini `owners` map'inde tutuyor; `ScriptWorld.ownerOf(ref)` +
+  `BehaviorContext.owner` (self kısayolu) çözüyor. `ownerOf`, owner canlı runtime
+  entity değilse null döner (layout aktörü, unowned, ya da owner play'den çıkmış);
+  `detachEntity` entity'yi hem owned-child hem owner tarafından temizliyor,
+  `setEntities`/`clear` sıfırlıyor. Host: `RuntimeSceneApp.spawnRuntimeActor`
+  `addEntity`'ye `{ owner: request.sourceEntityId }` geçiyor (A5 spawn simetrisi).
+  1 headless test (spawner çözümü + `context.owner` aynası + authored actor null +
+  owner ölünce null). Gate yeşil: `npm run build:verify` (tsc + build +
+  562 engine check + strict dist scan).
 - [x] **Hız erişimi (A3.3 devri):** `world.velocityOf(ref)` (Unreal GetVelocity).
   Sınır kararı: hız kaynağı `src/game`'de kalmaya devam ediyor; engine yalnız salt-
   okunur `EntityVelocityProvider` interface'ini tüketiyor (`AudioBus`/PhysicsQuery
@@ -574,3 +583,12 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   3 headless test. Gate yeşil: `npm run build:verify` (tsc + Vite build +
   561 engine check + strict dist scan). Kalan A6: impulse/launch, hasar
   konvansiyonu, runtime attach/detach, owner/instigator.
+- 2026-07-03: **A6 — Owner/Instigator kodlandı** (Unreal Owner). Engine:
+  `BehaviorSubsystem.addEntity(entity, { owner })` spawn edilen entity → spawner
+  eşlemesini `owners` map'inde tutuyor; `ScriptWorld.ownerOf(ref)` +
+  `BehaviorContext.owner` çözüyor (owner canlı değilse null). `detachEntity`
+  hem child hem owner tarafını temizliyor, `setEntities`/`clear` sıfırlıyor. Host:
+  `spawnRuntimeActor` `addEntity`'ye `{ owner: request.sourceEntityId }` geçiyor.
+  1 headless test. Gate yeşil: `npm run build:verify` (tsc + Vite build +
+  562 engine check + strict dist scan). Kalan A6: impulse/launch, hasar
+  konvansiyonu, runtime attach/detach.
