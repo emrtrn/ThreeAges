@@ -33,13 +33,27 @@ export type {
   PlacementSurface,
 } from "@engine/assets/manifest";
 
+/**
+ * Optional per-model load reporter (Boot / Loading UX, P4). Every model that
+ * passes through {@link AssetLoader.loadModel} — across load groups, missing
+ * scene models and actor meshes — reports its settle here, so the runtime can
+ * drive a loading bar without the loader knowing what a "progress tracker" is.
+ */
+export interface ModelLoadProgress {
+  onLoaded(id: string): void;
+  onFailed(id: string, error: unknown): void;
+}
+
 export class AssetLoader {
   private manifestPromise: Promise<AssetManifest> | null = null;
   private catalogPromise: Promise<AssetCatalog | null> | null = null;
   private metadataSchemaPromise: Promise<MetadataSchema | null> | null = null;
   private readonly modelLoader = new GltfModelLoader();
 
-  constructor(private readonly project: ProjectManifest) {}
+  constructor(
+    private readonly project: ProjectManifest,
+    private readonly modelProgress?: ModelLoadProgress,
+  ) {}
 
   /** Drops the cached manifest so the next load re-fetches it (after edits). */
   invalidateManifest(): void {
@@ -133,10 +147,17 @@ export class AssetLoader {
     if (!isModelAssetType(assetType(record))) {
       throw new Error(`Asset is not a loadable mesh: ${id}`);
     }
-    return this.modelLoader.load(
-      id,
-      projectPublicFileUrl(this.project, assetPath(record)),
-    );
+    try {
+      const gltf = await this.modelLoader.load(
+        id,
+        projectPublicFileUrl(this.project, assetPath(record)),
+      );
+      this.modelProgress?.onLoaded(id);
+      return gltf;
+    } catch (error) {
+      this.modelProgress?.onFailed(id, error);
+      throw error;
+    }
   }
 
   async totalBytesForGroups(loadGroups: string[]): Promise<number> {

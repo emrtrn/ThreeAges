@@ -43,7 +43,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const app = new RuntimeSceneApp(canvas, { scriptMessageTraceLimit });
+  const app = new RuntimeSceneApp(canvas, { scriptMessageTraceLimit, debug: params.has("debug") });
 
   // Perf readout (qa-poki standard) behind ?debug — invisible in production.
   if (params.has("debug")) {

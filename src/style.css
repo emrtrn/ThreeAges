@@ -376,6 +376,100 @@ body {
   outline: none;
 }
 
+/*
+ * Boot / Level-travel loading overlay (Boot / Loading UX, P4). Built in code by
+ * src/scene/loadingOverlay.ts, mounted into #ui-overlay above the gameplay UI
+ * (z-index) and taking pointer events so clicks can't reach the canvas while a
+ * level loads. Restyle-friendly: forks can override any .forge-loading* class.
+ */
+.forge-loading {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: #0b0e14;
+  color: var(--forge-ui-color, #f5f7fb);
+  font-family: system-ui, sans-serif;
+}
+.forge-loading[hidden] {
+  display: none;
+}
+.forge-loading-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: min(420px, 80vw);
+  padding: 24px;
+  text-align: center;
+}
+.forge-loading-title {
+  font: 600 20px/1.3 system-ui, sans-serif;
+  letter-spacing: 0.01em;
+}
+.forge-loading-bar {
+  position: relative;
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--forge-ui-surface, rgba(255, 255, 255, 0.12));
+  overflow: hidden;
+}
+.forge-loading-bar__fill {
+  height: 100%;
+  width: 0%;
+  background: var(--forge-ui-accent, #4f8cff);
+  border-radius: inherit;
+  transition: width 0.15s ease;
+}
+.forge-loading-status {
+  font: 400 14px/1.35 system-ui, sans-serif;
+  opacity: 0.85;
+}
+.forge-loading-detail {
+  font: 400 12px/1.3 monospace;
+  opacity: 0.6;
+}
+.forge-loading-detail[hidden] {
+  display: none;
+}
+.forge-loading-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-top: 4px;
+}
+.forge-loading-error[hidden] {
+  display: none;
+}
+.forge-loading-error-message {
+  font: 400 13px/1.4 system-ui, sans-serif;
+  color: #ff9a8a;
+  max-width: 36ch;
+}
+.forge-loading-retry {
+  pointer-events: auto;
+  padding: 8px 18px;
+  border: none;
+  border-radius: var(--forge-ui-radius, 6px);
+  background: var(--forge-ui-accent, #4f8cff);
+  color: #fff;
+  font: 600 14px/1 system-ui, sans-serif;
+  cursor: pointer;
+}
+.forge-loading-retry:hover {
+  filter: brightness(1.08);
+}
+@media (prefers-reduced-motion: reduce) {
+  .forge-loading-bar__fill {
+    transition: none;
+  }
+}
+
 /* Lightweight perf readout (qa-poki measurement standard). Debug-only. */
 #debug-stats {
   position: absolute;

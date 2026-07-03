@@ -11,6 +11,8 @@ import type {
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import { AssetLoader } from "./assetLoader";
+import { LoadingOverlay } from "./loadingOverlay";
+import { LoadProgressTracker, formatLoadDetail } from "@engine/loading/loadProgress";
 import { loadRoomLayout } from "./roomLayout";
 import {
   beginLoading,
@@ -347,6 +349,8 @@ export interface RuntimeStatsApp {
 
 export interface RuntimeSceneAppOptions {
   readonly scriptMessageTraceLimit?: number;
+  /** `?debug`: logs boot/travel load timing + asset counts to the console. */
+  readonly debug?: boolean;
 }
 
 /** Mounts the dialogue subtitle overlay into `#ui-overlay`, or null when absent. */
@@ -359,6 +363,12 @@ function mountSubtitleOverlay(): SubtitleOverlay | null {
 function mountConversationOverlay(): ConversationOverlay | null {
   const host = typeof document !== "undefined" ? document.getElementById("ui-overlay") : null;
   return host ? new ConversationOverlay(host) : null;
+}
+
+/** Compact one-line reason for a failed asset load (for the load-progress detail). */
+function describeLoadError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : "load failed";
 }
 
 export class RuntimeSceneApp implements RuntimeStatsApp {
@@ -568,6 +578,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Slotless user preferences (audio mix, locale); null when storage is unavailable. */
   private userSettingsStore: UserSettingsStore | null = null;
   private userSettings: UserSettings = defaultUserSettings();
+  /** Boot/travel model-load progress (P4); drives the loading overlay + `loading.*` fields. */
+  private readonly loadProgress = new LoadProgressTracker();
+  /** Full-screen loading overlay shown during boot + level travel; null with no DOM host. */
+  private loadingOverlay: LoadingOverlay | null = null;
+  /** `?debug`: logs load timing + asset counts. */
+  private readonly debug: boolean;
+  /** performance.now() at the current load's start, for the `?debug` timing readout. */
+  private loadStartMs = 0;
 
   onFrame: ((deltaMs: number) => void) | null = null;
 
@@ -614,6 +632,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   };
 
   constructor(canvas: HTMLCanvasElement, options: RuntimeSceneAppOptions = {}) {
+    this.debug = options.debug ?? false;
     const runtimeCore = createSceneRuntimeCore(canvas, {
       backgroundColor: DEFAULT_SCENE_BACKGROUND_COLOR,
     });
@@ -728,9 +747,35 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.pointerButtons.attach();
     this.resumeAudioOnFirstGesture();
 
+    this.setupLoadingOverlay();
     void this.loadActiveProjectScene();
     this.handleResize();
     window.addEventListener("resize", this.handleResize);
+  }
+
+  /**
+   * Mounts the boot/travel loading overlay (P4) and subscribes it to the model
+   * load tracker: every settle updates the bar + detail line and mirrors the same
+   * values into the UI ViewModel (`loading.*`) for any fork HUD binding them.
+   * Shown immediately so boot never flashes a black canvas.
+   */
+  private setupLoadingOverlay(): void {
+    const host = typeof document !== "undefined" ? document.getElementById("ui-overlay") : null;
+    if (!host) return;
+    this.loadingOverlay = new LoadingOverlay(host);
+    this.loadProgress.subscribe((snapshot) => {
+      const detail = formatLoadDetail(snapshot);
+      this.loadingOverlay?.setProgress(snapshot.fraction, detail);
+      this.uiStore.setField("loading.percent", Math.round(snapshot.fraction * 100));
+      this.uiStore.setField("loading.detail", detail);
+    });
+    // Shown/hidden by beginLoadingUi / finishLoadingUi around each boot + travel.
+  }
+
+  /** Sets the loading overlay's phase status line + the `loading.status` field. */
+  private setLoadingStatus(status: string): void {
+    this.loadingOverlay?.setStatus(status);
+    this.uiStore.setField("loading.status", status);
   }
 
   start(): void {
@@ -782,6 +827,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.conversationDirector.stop();
     this.subtitleOverlay?.dispose();
     this.conversationOverlay?.dispose();
+    this.loadingOverlay?.dispose();
+    this.loadingOverlay = null;
     this.keyboardInput.detach();
     this.gamepadInput.detach();
     this.touchInput?.detach();
@@ -936,10 +983,80 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   private async loadActiveProjectScene(): Promise<void> {
-    this.activeProject = await loadActiveProject();
-    this.assetLoader = new AssetLoader(this.activeProject.manifest);
-    this.saveGameStore = createRuntimeSaveGameStore(this.activeProject.manifest.name);
-    await this.buildScene(this.activeProject.manifest.editor.defaultScene, undefined);
+    this.beginLoadingUi("Loading project");
+    try {
+      this.activeProject = await loadActiveProject();
+      this.assetLoader = new AssetLoader(this.activeProject.manifest, {
+        onLoaded: (id) => this.loadProgress.markLoaded(id),
+        onFailed: (id, error) => this.loadProgress.markFailed(id, describeLoadError(error)),
+      });
+      this.saveGameStore = createRuntimeSaveGameStore(this.activeProject.manifest.name);
+      await this.buildScene(this.activeProject.manifest.editor.defaultScene, undefined);
+      this.finishLoadingUi();
+    } catch (error) {
+      // A critical boot failure (project/manifest/layout unreachable) leaves a
+      // black canvas; surface an error screen with a Retry (a fresh page load is
+      // the safe recovery from a half-built boot).
+      console.error("[runtime] boot failed:", error);
+      this.loadingOverlay?.showError(
+        "Failed to load the game. Check your connection and try again.",
+        () => {
+          if (typeof location !== "undefined") location.reload();
+        },
+      );
+    }
+  }
+
+  /** Resets the loading overlay to an empty bar and shows it (boot/travel start). */
+  private beginLoadingUi(status: string): void {
+    this.loadStartMs = typeof performance !== "undefined" ? performance.now() : 0;
+    this.loadingOverlay?.clearError();
+    this.loadingOverlay?.setProgress(0, "");
+    this.setLoadingStatus(status);
+    this.loadingOverlay?.show();
+  }
+
+  /** Hides the loading overlay after one painted frame (so the built scene shows first). */
+  private finishLoadingUi(): void {
+    const hide = (): void => {
+      this.loadingOverlay?.hide();
+      if (this.debug && typeof performance !== "undefined") {
+        const ms = (performance.now() - this.loadStartMs).toFixed(0);
+        const snap = this.loadProgress.snapshot();
+        console.info(
+          `[loading] ready in ${ms}ms — ${snap.loaded} model(s) loaded, ${snap.failed} failed`,
+        );
+      }
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => requestAnimationFrame(hide));
+    } else {
+      hide();
+    }
+  }
+
+  /**
+   * The set of model ids this level will load, across all three phases (load
+   * groups, layout-referenced meshes, actor meshes), filtered to ids the manifest
+   * still knows as loadable meshes. Declared up front so the loading bar's total
+   * is accurate and never jumps as later phases discover more work.
+   */
+  private async collectExpectedModelIds(): Promise<string[]> {
+    if (!this.assetLoader || !this.layout) return [];
+    const manifest = await this.assetLoader.loadManifest();
+    const loadable = new Set(
+      manifest.assets.filter((asset) => isModelAssetType(assetType(asset))).map((asset) => asset.id),
+    );
+    const ids = new Set<string>();
+    for (const group of this.layout.loadGroups) {
+      for (const record of await this.assetLoader.recordsForGroup(group)) ids.add(record.id);
+    }
+    for (const id of sceneModelAssetIds(this.layout)) if (loadable.has(id)) ids.add(id);
+    for (const entity of this.actorEntities) {
+      const renderer = readMeshRendererComponent(entity);
+      if (renderer && loadable.has(renderer.assetId)) ids.add(renderer.assetId);
+    }
+    return [...ids];
   }
 
   /**
@@ -967,9 +1084,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // mesh assets join the load list (loadActorMeshModels reads these entities).
     await this.resolveActorClasses();
     await this.applyPlayerStartSpawn(spawnTag);
+    // Declare every model this level will load up front (P4) so the loading bar's
+    // total is right before the first GLB streams in; the loader marks each done.
+    this.setLoadingStatus("Loading models");
+    const expectedModelIds = await this.collectExpectedModelIds();
+    this.loadProgress.clear();
+    this.loadProgress.expectAll(expectedModelIds);
     this.models = await this.assetLoader.loadGroups(this.layout.loadGroups);
     await this.loadMissingSceneModels();
     await this.loadActorMeshModels();
+    this.setLoadingStatus("Preparing scene");
     const convertedUnlitMaterials = convertUnlitModelMaterialsToLit(this.models);
     this.localBounds = computeModelLocalBounds(this.models);
     // Shape actors persist as `shape:<type>` instances whose synthetic models are
@@ -1058,6 +1182,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     // Character skeletal metadata (blend spaces / anim-set) drives the Game Mode's
     // locomotion animator, so attach it to the refs before the session possesses.
+    this.setLoadingStatus("Starting");
     await this.loadCharacterSkeletons();
     await this.startGameMode();
     this.applyPendingSaveRestore(layoutPath);
@@ -1129,15 +1254,37 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await Promise.resolve();
     while (this.travelState.active) {
       const request = this.travelState.active;
+      // Show the loading overlay for the whole travel (P4.4); a minimum on-screen
+      // time keeps a fast (cached) transition from flashing it for a single frame.
+      this.beginLoadingUi("Loading level");
+      const shownAtMs = typeof performance !== "undefined" ? performance.now() : 0;
       this.teardownScene();
       this.travelState = beginLoading(this.travelState);
+      let failed = false;
       try {
         await this.buildScene(request.layoutPath, request.spawnTag);
       } catch (error) {
         console.error("[runtime] level travel failed:", request.layoutPath, error);
+        failed = true;
+        this.loadingOverlay?.showError("Failed to load the level.", () => {
+          if (typeof location !== "undefined") location.reload();
+        });
       }
       this.travelState = finishTravel(this.travelState).state;
+      // Hold + hide only once no further travel is queued (a queued request re-shows
+      // it, so hiding between cycles would flicker); leave the error screen up.
+      if (!this.travelState.active && !failed) {
+        await this.holdLoadingMinimum(shownAtMs);
+        this.finishLoadingUi();
+      }
     }
+  }
+
+  /** Waits until the loading overlay has been visible for at least `minMs` (anti-flicker). */
+  private async holdLoadingMinimum(shownAtMs: number, minMs = 300): Promise<void> {
+    if (typeof performance === "undefined") return;
+    const remaining = minMs - (performance.now() - shownAtMs);
+    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
   }
 
   /**

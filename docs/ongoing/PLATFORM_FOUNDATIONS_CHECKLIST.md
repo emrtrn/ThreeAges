@@ -1,7 +1,8 @@
 # Platform Temelleri — Eksik Sistemler Planı ve Checklist
 
-> Tarih: 2026-07-01
-> Durum: Aktif plan. Kod henüz yazılmadı.
+> Tarih: 2026-07-01 (son güncelleme 2026-07-03)
+> Durum: Aktif. P0–P4 kod tarafı tamam (P1.5 test-alanı içeriği + çeşitli
+> tarayıcı smoke'ları kullanıcıda); kalan tek faz **P5 — Performans Altyapısı**.
 > Amaç: Platform yeterlilik değerlendirmesinde tespit edilen, henüz hiçbir
 > plana bağlanmamış temel eksikleri kapatmak: **CI/CD**, **Fizik/Collision
 > sertleştirme**, **Seviye Akışı (Level Travel)**, **Save-Game/Persistence**,
@@ -487,32 +488,59 @@ hata durumunu yakalayan bir yükleme deneyimi.
 
 ## Checklist
 
-- [ ] **P4.1 — İlerleme sayacı (saf):** manifest'ten türetilen ön-yükleme
-  listesi (GLB'ler, texture'lar, ses dosyaları, locale/ui json'ları) +
-  `{loaded, total, failed}` sayan saf bir progress aggregator; loader
-  hattına (GLTF/texture/audio yükleyicileri) tamamlanma callback'leri
-  bağlanır. Headless test: sayaç, hata toplama, boş liste.
-- [ ] **P4.2 — Loading ekranı:** starter content'e `UI_Loading.ui.json`;
-  boot'ta screen stack'e push, progress bind (ViewModel), asset'ler hazır +
-  ilk frame render olunca pop. `?debug`'da asset sayısı/süre dökümü.
-- [ ] **P4.3 — Hata durumu:** kritik asset başarısızlığında retry butonlu
-  hata ekranı (message action); kritik-olmayan (ör. tek ses dosyası)
-  eksikte konsol uyarısı + devam. "Kritik" tanımı: layout'un referansladığı
-  model asset'leri — karar netleşince buraya işlenir.
-- [ ] **P4.4 — Travel loading:** P2 travel state machine'inin
-  `loading` durumu aynı loading ekranını gösterir; kısa geçişlerde
-  flicker'ı önlemek için minimum gösterim süresi (ör. 300ms) veya eşikli
-  gecikme — karar.
-- [ ] **P4.5 — "Başlamak için tıkla" (karar):** pointer-lock/fullscreen
-  isteyen oyun modları için loading→başlangıç arasına opsiyonel etkileşim
-  kapısı. Template default'u: kapı yok (mevcut pointerdown unlock yeterli);
-  fork'lar açabilir.
+- [x] **P4.1 — İlerleme sayacı (saf):** `engine/loading/loadProgress.ts` —
+  generic `LoadProgressTracker`: `expect`/`expectAll`/`markLoaded`/`markFailed`,
+  `{ total, loaded, failed, pending, fraction, done, failedIds }` snapshot,
+  `subscribe` (anında + her değişimde ateşler), idempotent geçişler
+  (bildirilmemiş id auto-register, `failed→loaded` retry), `resetFailed`/`clear`.
+  Saf `formatLoadDetail(snapshot)` → "3 / 8 · 1 failed". Headless: sayaç/fraction/
+  done, idempotency + retry, subscribe/clear, detail formatı. Engine 524→528.
+- [x] **P4.2 — Loading ekranı + KALICI MİMARİ KARAR:** boot/travel loading
+  **built-in kod overlay** (`src/scene/loadingOverlay.ts` `LoadingOverlay` +
+  `.forge-loading*` CSS), `RuntimeSceneApp`'e mount. **Karar (UI_Loading.ui.json
+  yerine built-in):** loading ekranı *hiçbir asset yüklenmeden önce* render
+  olmalı (manifest, ui.json, locale tabloları hepsi boot'ta fetch edilir), bu
+  yüzden authored bir widget'ı önce yüklemeye bağlanamaz — chicken-and-egg. Overlay
+  generic (oyun kuralı yok), her `.forge-loading*` class'ı restyle'a açık, ve
+  ilerleme yine UI ViewModel'e (`loading.percent/detail/status`) yansıtılır (fork
+  HUD'u isterse bind edebilir). **Model wiring:** `AssetLoader`'a `ModelLoadProgress`
+  opsiyonu; her `loadModel` (load-group + missing scene + actor mesh) settle'ını
+  raporlar. `buildScene` beklenen model id kümesini **önden** bildirir
+  (`collectExpectedModelIds` — 3 fazın birleşimi, loadable filtreli) → bar geriye
+  zıplamaz. Faz durumları: "Loading models" → "Preparing scene" → "Starting".
+  Pop: buildScene bittikten sonra **2 rAF** (built sahne önce görünür). `?debug`'da
+  "ready in Xms — N model loaded, M failed" dökümü.
+- [x] **P4.3 — Hata durumu:** kritik boot/travel başarısızlığında (project/
+  manifest/layout ulaşılamaz → buildScene throw) overlay error state'e geçer:
+  mesaj + **Retry** butonu (yeniden sayfa yükleme — yarı-kurulu boot'tan güvenli
+  kurtarma). Kritik-olmayanlar zaten dayanıklı: eksik texture/theme/ui/locale
+  skip + warn (mevcut try/catch'ler), manifest'te olmayan model id'leri warn +
+  skip (`loadMissingSceneModels`/`loadActorMeshModels`); tek bozuk cue oyunu
+  kesmez. Başarısız model settle'ı `markFailed` ile detail satırına düşer
+  ("N failed") ama boot'u throw etmez (mevcut davranış korunur).
+- [x] **P4.4 — Travel loading:** `runTravel` her travel için overlay'i gösterir
+  (`beginLoadingUi`/`finishLoadingUi`); **minimum gösterim süresi 300ms**
+  (`holdLoadingMinimum`) hızlı (cached) geçişin tek-frame flicker'ını önler.
+  Kuyruğa yeni travel varsa overlay gizlenmeden bir sonraki cycle'a devreder
+  (cycle'lar arası flicker yok); travel hatası error state'i açık bırakır.
+- [x] **P4.5 — "Başlamak için tıkla" — KARAR: kapı yok (template default).**
+  Mevcut `resumeContext()` ilk `pointerdown`'a bağlı audio unlock yeterli;
+  loading→başlangıç arası ek etkileşim kapısı eklenmedi. Pointer-lock/fullscreen
+  isteyen fork'lar kendi kapısını ekler.
 
 ## Kabul kriterleri
 
 - Soğuk yüklemede progress görünür; yükleme bitmeden oyun input'u akmaz.
+  *(Overlay `pointer-events:auto` + z-index 30 ile ekranı kaplar, ilk frame'e
+  kadar canvas'a input geçmez.)*
 - Travel sırasında loading durumu görünür, geçiş sonrası temiz kapanır.
-- Editor moduna sızıntı yok (loading UI yalnız runtime shell'de).
+- Editor moduna sızıntı yok (loading UI yalnız runtime shell'de —
+  `RuntimeSceneApp`, editor `SceneApp` değil).
+
+**Kod tarafı tamam; kalan kullanıcı smoke'u:** `?debug` ile boot → overlay
+görünür, "Loading models" bar dolar, konsolda "ready in Xms"; portal ile
+travel → overlay tekrar (min 300ms); bilerek koparılmış bağlantı → error state
+ve Retry butonu.
 
 ---
 
@@ -578,6 +606,11 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
 - IndexedDB storage adapter'ı (P3 tetikleyicisi: kayıt boyutu).
 - Runtime LOD + level streaming (P5 kararı: içerik ölçeği gerektirene dek).
 - Cloud save / çoklu profil, networking, replay.
+- Loading bar'a texture/audio/locale ilerlemesi (P4.2 kararı: şu an yalnız model
+  fazı sayılıyor — dominant maliyet; `LoadProgressTracker` generic olduğundan
+  ek kaynaklar aynı aggregator'a beslenebilir).
+- Authored `UI_Loading.ui.json` varyantı (P4.2 kararı: built-in overlay yeterli;
+  fork tam UMG kontrolü isterse eklenir).
 
 ## Progress Log
 
@@ -790,3 +823,26 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   Quick Save) → sayfa yenile → Load Quick Save → aynı konum + coin toplanmış mı.
   **P3 neredeyse kapandı** (P3.1–P3.6 tam, P3.7 smoke bekliyor). **Sıradaki:** P4
   Boot/Loading UX veya P5 Perf altyapısı.
+- *2026-07-03* — **P4 tamamlandı (kod tarafı): Boot / Loading UX.** P4.1–P4.5
+  hepsi bitti. Saf çekirdek `engine/loading/loadProgress.ts`
+  (`LoadProgressTracker` ve `formatLoadDetail`) headless test edildi.
+  **KALICI MİMARİ KARAR (P4.2):**
+  loading ekranı authored `UI_Loading.ui.json` değil, **built-in kod overlay**
+  (`src/scene/loadingOverlay.ts` + `.forge-loading*` CSS) — çünkü loading ekranı
+  hiçbir asset (manifest/ui/locale dahil) yüklenmeden render olmalı; authored
+  widget'a bağlamak chicken-and-egg olurdu. Generic + restyle'a açık; ilerleme
+  yine `loading.*` ViewModel alanlarına yansır. **Wiring:** `AssetLoader`'a
+  `ModelLoadProgress` opsiyonu → her `loadModel` settle'ını raporlar; `buildScene`
+  beklenen model id kümesini önden bildirir (`collectExpectedModelIds`, 3 fazın
+  loadable birleşimi) → bar geriye zıplamaz. Faz durumları "Loading models →
+  Preparing scene → Starting"; pop 2 rAF sonra (built sahne önce görünür);
+  `?debug`'da "ready in Xms" dökümü. **P4.3 hata:** kritik boot/travel throw →
+  overlay error state + Retry (reload); kritik-olmayanlar zaten skip+warn.
+  **P4.4 travel:** `runTravel` overlay'i gösterir + min 300ms (`holdLoadingMinimum`)
+  anti-flicker, kuyruklu travel'da cycle'lar arası gizlemez. **P4.5 karar:** tıkla-
+  başla kapısı yok (mevcut pointerdown audio unlock yeterli). Overlay app-lifetime
+  (teardown'da değil, `dispose`'da yıkılır); `main.ts` `?debug`'ı geçirir. Engine
+  524→528 (+4: sayaç/fraction/done, idempotency+retry, subscribe/clear, detail
+  formatı), `tsc` temiz, `build:verify` yeşil (strict dist PASS). **Kullanıcıya
+  kalan smoke:** `?debug` boot/travel overlay + error/Retry (kabul kriterleri
+  bloğu). **Sıradaki:** P5 — Performans altyapısı (son faz).
