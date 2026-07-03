@@ -8362,6 +8362,103 @@ check("owner/instigator: spawned actor resolves its spawner; unowned + owner-dea
   assert.equal(owners.get(spawnedActorEntityId(0)), null, "owner leaving play clears ownerOf");
 });
 
+// A6 damage convention (receiver): the `apply-damage` template subtracts the
+// Damage.Apply payload amount from ScriptState health, emits Health.Changed each
+// hit, and on depletion emits Damage.Died + (opt-in) destroys the actor.
+check("damage convention: apply-damage subtracts health, then Damage.Died + destroy", () => {
+  const registry = createBehaviorRegistry({});
+  const victim: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      MessageBindings: {
+        bindings: [
+          {
+            message: "Damage.Apply",
+            scriptId: "apply-damage",
+            target: "self",
+            params: { maxHealth: 30, destroyOnDeath: true },
+          },
+        ],
+      },
+    },
+  };
+  const destroyed: string[] = [];
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    { actorCommandSink: { setVisibility: () => undefined, destroy: (id) => destroyed.push(id) } },
+  );
+  behavior.setEntities([victim]);
+  const health: number[] = [];
+  const deaths: Array<{ id: string; instigator: string }> = [];
+  behavior.subscribeScriptMessage("Health.Changed", (env) =>
+    health.push(env.payload?.health as number),
+  );
+  behavior.subscribeScriptMessage("Damage.Died", (env) =>
+    deaths.push({ id: env.payload?.entityId as string, instigator: env.payload?.instigator as string }),
+  );
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+
+  behavior.emitScriptMessage("Damage.Apply", "shooter:0", { amount: 20 }, "actor:0");
+  app.update(0.016);
+  assert.deepEqual(health, [10]);
+  assert.deepEqual(deaths, []);
+  assert.deepEqual(destroyed, []);
+
+  behavior.emitScriptMessage("Damage.Apply", "shooter:0", { amount: 15 }, "actor:0");
+  app.update(0.016);
+  assert.deepEqual(health, [10, 0]); // clamped at 0, not -5
+  assert.deepEqual(deaths, [{ id: "actor:0", instigator: "shooter:0" }]);
+  assert.deepEqual(destroyed, ["actor:0"]);
+});
+
+// A6 damage convention (sender→receiver): a `damage-zone` overlap routes
+// Damage.Apply to the touched actor, whose `apply-damage` binding applies it — all
+// within the one update (contact event → message send → flush deliver).
+check("damage convention: damage-zone overlap deals Damage.Apply to the touched actor", () => {
+  const registry = createBehaviorRegistry({});
+  const physics = new PhysicsSubsystem();
+  const zone: Entity = {
+    id: "zone:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [2, 2, 2], isStatic: true, isSensor: true },
+      EventBindings: {
+        bindings: [{ event: "overlap", scriptId: "damage-zone", params: { damage: 25 } }],
+      },
+    },
+  };
+  const victim: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+      MessageBindings: {
+        bindings: [
+          { message: "Damage.Apply", scriptId: "apply-damage", target: "self", params: { maxHealth: 100 } },
+        ],
+      },
+    },
+  };
+  physics.setEntities([zone, victim]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics);
+  behavior.setEntities([zone, victim]);
+  const health: Array<{ health: number; instigator: string }> = [];
+  behavior.subscribeScriptMessage("Health.Changed", (env) =>
+    health.push({ health: env.payload?.health as number, instigator: env.payload?.instigator as string }),
+  );
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+  assert.deepEqual(health, [{ health: 75, instigator: "zone:0" }]);
+});
+
 // A2 timers: delayed callbacks travel through the existing self-targeted script
 // message binding path, so behaviors can consume them without a second event API.
 check("script timers: after delivers one self-targeted message", () => {

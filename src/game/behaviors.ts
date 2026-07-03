@@ -40,6 +40,8 @@ export const BEHAVIOR_SCRIPT_IDS = [
   "begin-conversation",
   "proximity-toggle",
   "velocity-gate",
+  "apply-damage",
+  "damage-zone",
 ] as const;
 export type BehaviorScriptId = (typeof BEHAVIOR_SCRIPT_IDS)[number];
 
@@ -113,6 +115,10 @@ function numberParam(value: unknown, fallback: number): number {
 
 function stringParam(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+function boolParam(value: unknown): boolean {
+  return value === true;
 }
 
 /** Spins an entity around one axis at `speedDeg` degrees per second. */
@@ -454,6 +460,65 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     });
   };
 
+  // A6 damage convention (receiver). The `Damage.Apply` message standard: a
+  // sender routes damage to a target actor with `context.messages.send(target,
+  // "Damage.Apply", { amount, instigator?, damageType? })`. This template behavior
+  // is bound to that message (target `self`), tracks health in ScriptState from the
+  // `maxHealth` param, subtracts the incoming amount, and re-broadcasts the result
+  // as `Health.Changed`; on depletion it emits `Damage.Died` and (opt-in) destroys
+  // the actor. Generic on purpose — a fork owns the concrete health rules/UI by
+  // binding to `Health.Changed`/`Damage.Died`, not by editing the engine.
+  const applyDamage: BehaviorUpdate = (context) => {
+    const payload = context.message?.payload;
+    const amount = numberParam(payload?.amount, 0);
+    if (amount <= 0) return;
+    const maxHealth = numberParam(context.params.maxHealth, 100);
+    const current = numberParam(context.state.get("health", maxHealth), maxHealth);
+    if (current <= 0) return; // already dead — ignore further damage
+    const next = Math.max(0, current - amount);
+    context.state.set("health", next);
+    if (boolParam(context.params.persistHealth)) context.state.persist("health", next);
+    const rawInstigator = payload?.instigator;
+    const instigator =
+      (typeof rawInstigator === "string" && rawInstigator) ||
+      context.message?.source ||
+      context.entityId;
+    context.messages.emit("Health.Changed", {
+      entityId: context.entityId,
+      health: next,
+      maxHealth,
+      delta: -amount,
+      instigator,
+    });
+    if (next <= 0) {
+      context.messages.emit("Damage.Died", { entityId: context.entityId, instigator });
+      if (boolParam(context.params.destroyOnDeath)) context.actor.destroy();
+    }
+  };
+
+  // A6 damage convention (sender): a hazard/projectile actor that deals damage to
+  // whatever it touches. On a begin overlap or hit edge it routes `params.damage`
+  // to the other actor via the `Damage.Apply` standard, tagging itself as the
+  // instigator. A per-target `once` latch (opt-in) makes it a one-shot per victim
+  // (projectile), otherwise every fresh contact re-applies (walk-in spikes).
+  const damageZone: BehaviorUpdate = (context) => {
+    const event = context.event;
+    if (!event || event.phase !== "begin") return;
+    if (event.kind !== "overlap" && event.kind !== "hit") return;
+    const other = event.otherEntityId;
+    if (!other) return;
+    const amount = numberParam(context.params.damage, 10);
+    if (amount <= 0) return;
+    if (boolParam(context.params.once)) {
+      if (context.state.get(`hit:${other}`, false)) return;
+      context.state.set(`hit:${other}`, true);
+    }
+    const payload: Record<string, unknown> = { amount, instigator: context.entityId };
+    const damageType = stringParam(context.params.damageType);
+    if (damageType) payload.damageType = damageType;
+    context.messages.send(other, "Damage.Apply", payload);
+  };
+
   const behaviors = new Map<string, BehaviorUpdate>([
     ["spin", spin],
     ["input-move", inputMove],
@@ -468,6 +533,8 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     ["begin-conversation", beginConversation],
     ["proximity-toggle", proximityToggle],
     ["velocity-gate", velocityGate],
+    ["apply-damage", applyDamage],
+    ["damage-zone", damageZone],
   ]);
   return { get: (scriptId) => behaviors.get(scriptId) };
 }

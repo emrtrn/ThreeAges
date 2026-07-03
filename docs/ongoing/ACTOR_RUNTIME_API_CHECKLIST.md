@@ -408,9 +408,17 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
 - [ ] **İtki/fırlatma:** `AddImpulse` / `LaunchCharacter` karşılığı — fizik
   sorgu yüzeyi (`PhysicsQuery`) salt-okunur; yazma yüzeyi ayrı tasarım ister.
   Tetikleyici: knockback/patlama/fırlatma mekaniği.
-- [ ] **Hasar konvansiyonu:** `Damage.Apply` mesaj standardı + `AnyDamage`
-  message-binding şablonu (motor değil, `src/game` konvansiyonu + doc).
-  Tetikleyici: can/hasar isteyen ilk oyun fork'u.
+- [x] **Hasar konvansiyonu:** `Damage.Apply` mesaj standardı + `AnyDamage`
+  şablonu (motor değil, `src/game` konvansiyonu + doc). Mesaj payload'ı
+  `{ amount, instigator?, damageType? }`; iki şablon behavior: `apply-damage`
+  (receiver — Message Binding `Damage.Apply`/self; ScriptState health,
+  `maxHealth`/`persistHealth`/`destroyOnDeath` param; `Health.Changed` +
+  ölümde `Damage.Died` yayıyor) ve `damage-zone` (sender — overlap/hit begin'de
+  dokunduğu aktöre `Damage.Apply` yolluyor, `damage`/`damageType`/`once` param).
+  Doc: `docs/reference/DAMAGE_CONVENTION.md` (payload sözleşmesi + fork'ta kalan
+  kurallar). Motor değişmedi; yalnız `src/game` + doc. 2 headless test (receiver
+  health→Died→destroy; sender overlap→receiver aynı update'te). Gate yeşil:
+  `npm run build:verify` (tsc + build + 564 engine check + strict dist scan).
 - [ ] **Runtime attach/detach:** `AttachToActor` karşılığı (editörde parenting
   var, runtime'da yok). Tetikleyici: taşınan/tutulan obje mekaniği.
 - [x] **Tick kontrolü:** aktör-başına tick enable/interval (`SetActorTickEnabled`
@@ -592,3 +600,13 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   1 headless test. Gate yeşil: `npm run build:verify` (tsc + Vite build +
   562 engine check + strict dist scan). Kalan A6: impulse/launch, hasar
   konvansiyonu, runtime attach/detach.
+- 2026-07-03: **A6 — Hasar konvansiyonu kodlandı** (`Damage.Apply`, motor değil).
+  `src/game` konvansiyonu + doc: `Damage.Apply` mesajı payload'ı
+  `{ amount, instigator?, damageType? }`; `apply-damage` receiver behavior
+  (ScriptState health, `maxHealth`/`persistHealth`/`destroyOnDeath`,
+  `Health.Changed` + ölümde `Damage.Died`) ve `damage-zone` sender behavior
+  (overlap/hit begin → `Damage.Apply`, `damage`/`damageType`/`once`).
+  `docs/reference/DAMAGE_CONVENTION.md` payload sözleşmesini + fork sorumluluğunu
+  belgeliyor. Engine dokunulmadı. 2 headless test. Gate yeşil: `npm run build:verify`
+  (tsc + Vite build + 564 engine check + strict dist scan). Kalan A6:
+  impulse/launch, runtime attach/detach.
