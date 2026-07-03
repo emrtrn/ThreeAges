@@ -4071,6 +4071,79 @@ check("behavior event bindings run beginPlay, tick, and externally emitted inter
   ]);
 });
 
+// A6 endPlay: an explicit `actor.destroy()` fires the endPlay one-shot exactly
+// once, with reason `destroyed` in the event payload, before the entity is
+// detached — and it never fires again afterwards.
+check("endPlay fires once on destroy with reason 'destroyed'", () => {
+  const events: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "self-destruct") return (context) => context.actor.destroy();
+      if (scriptId === "record-end") {
+        return (context) => events.push(`${context.entityId}:${String(context.event?.payload?.reason)}`);
+      }
+      return undefined;
+    },
+  };
+  const actor: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [
+          { event: "tick", scriptId: "self-destruct" },
+          { event: "endPlay", scriptId: "record-end" },
+        ],
+      },
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([actor]);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.016); // tick queues destroy; endPlay fires at end of the tick
+  app.update(0.016); // entity is gone — no re-fire
+  assert.deepEqual(events, ["actor:0:destroyed"]);
+});
+
+// A6 endPlay: a scene reload (`setEntities` rebuild) fires endPlay with reason
+// `teardown` for the outgoing actors while their state is intact, then re-arms —
+// beginPlay + endPlay fire fresh on the next life; each fires once per life.
+check("endPlay fires on teardown and re-arms across a scene reload", () => {
+  const events: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: () => (context) =>
+      events.push(`${context.entityId}:${context.event?.kind}:${context.event?.reason ?? ""}`),
+  };
+  const actor: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [
+          { event: "beginPlay", scriptId: "record" },
+          { event: "endPlay", scriptId: "record" },
+        ],
+      },
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([actor]);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.016); // beginPlay (endPlay stays armed while live)
+  assert.deepEqual(events, ["actor:0:beginPlay:"]);
+  behavior.setEntities([actor]); // reload: endPlay(teardown) for the outgoing, then re-arm
+  app.update(0.016); // beginPlay again on the fresh life
+  behavior.clear(); // disposal: endPlay(teardown) again
+  assert.deepEqual(events, [
+    "actor:0:beginPlay:",
+    "actor:0:endPlay:teardown",
+    "actor:0:beginPlay:",
+    "actor:0:endPlay:teardown",
+  ]);
+});
+
 check("behavior event bindings allow beginPlay, tick, and overlap on the same actor", () => {
   const events: string[] = [];
   const registry: BehaviorRegistry = {

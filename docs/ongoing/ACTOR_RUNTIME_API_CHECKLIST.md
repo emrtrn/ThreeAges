@@ -420,9 +420,20 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   kısmen karşılıyor). Tetikleyici: A5 sonrası "kim spawn etti" ihtiyacı.
 - [ ] **Hız erişimi (A3.3 devri):** `velocityOf` — CharacterMovement state'ini
   engine yüzeyine açma sınır kararıyla birlikte.
-- [ ] **EndPlay lifecycle (A4.3 devri):** `endPlay` event kind'ı; destroy,
-  scene teardown ve runtime spawn/despawn sırasındaki ateşleme garantileriyle
-  birlikte ele alınacak.
+- [x] **EndPlay lifecycle (A4.3 devri):** `endPlay` event kind'ı. Engine:
+  `ACTOR_EVENT_KINDS`/`LABELS`/`DESCRIPTIONS`'e `endPlay` eklendi (normalize +
+  saveValidator + editör picker `isActorEventKind`/tek-kaynak sabitlerden otomatik
+  akıyor); `ActorEndPlayReason` (`"destroyed" | "teardown"`) +
+  `ActorEventEnvelope.reason` + `payload.reason`; `BehaviorInstance.firedEndPlay`
+  ile yaşam başına tek ateşleme. Ateşleme noktaları: `actor.destroy()` /
+  lifespan → `processActorCommand` detach'ten **önce** `reason: "destroyed"`;
+  scene reload (`setEntities` rebuild) + disposal (`clear`) → `dispatchEndPlayForAll`
+  `reason: "teardown"` (dünya wipe'ından önce, state sağlam). Runtime spawn/despawn:
+  despawn = destroy yolu → kapsanıyor. Mesajlaşma teardown'da best-effort
+  (bus temizlenir); yerel cleanup garanti. Host değişikliği yok (davranış-yönlü
+  event). 2 headless test (destroy tek ateşleme + reason; teardown + reload re-arm,
+  yaşam başına tek). Gate yeşil: `npm run build:verify` (tsc + build + 557 engine
+  check + strict dist scan).
 
 ---
 
@@ -505,3 +516,19 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   check + strict dist scan). Kalan A6: impulse/launch, hasar konvansiyonu, runtime
   attach/detach, tick kontrolü, owner/instigator, velocity, endPlay — hepsi
   tetikleyici bekliyor.
+- 2026-07-03: **A6 — EndPlay lifecycle kodlandı** (A4.3 devri). Engine:
+  `ACTOR_EVENT_KINDS`/`LABELS`/`DESCRIPTIONS`'e `endPlay` eklendi — loader
+  `normalizeEventBinding` (`isActorEventKind`), saveValidator (aynı normalize) ve
+  editör Event Binding picker (tek-kaynak sabitler) otomatik kapsıyor, ek editör
+  kodu yok. `ActorEndPlayReason` (`"destroyed" | "teardown"`),
+  `ActorEventEnvelope.reason` + `payload.reason`, `BehaviorInstance.firedEndPlay`
+  (yaşam başına tek). `dispatchEndPlayEvents`/`dispatchEndPlayForAll` eklendi;
+  `actor.destroy()`/lifespan → detach'ten önce `reason:"destroyed"`, scene reload
+  (`setEntities` rebuild) + disposal (`clear`) → wipe'tan önce `reason:"teardown"`.
+  Runtime despawn = destroy yolu → kapsanıyor. Teardown'da mesaj best-effort
+  (bus temizlenir), yerel cleanup garanti; host değişikliği yok. 2 headless test
+  (destroy tek ateşleme + reason payload; teardown + reload re-arm, yaşam başına
+  tek). Gate yeşil: `npm run build:verify` (tsc + Vite build + 557 engine check +
+  strict dist scan). Kalan A6: impulse/launch, hasar konvansiyonu, runtime
+  attach/detach, tick kontrolü, owner/instigator, velocity — hepsi tetikleyici
+  bekliyor.

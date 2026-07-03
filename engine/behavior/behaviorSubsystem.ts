@@ -88,6 +88,13 @@ export interface ScriptState {
 
 export type ActorEventPhase = "begin" | "end";
 
+/**
+ * Why an `endPlay` event fired: `destroyed` for an explicit `actor.destroy()` /
+ * lifespan expiry, `teardown` for scene reload / disposal. Mirrors the useful
+ * subset of Unreal's `EEndPlayReason`.
+ */
+export type ActorEndPlayReason = "destroyed" | "teardown";
+
 export interface ActorEventEnvelope {
   readonly kind: ActorEventKind;
   readonly frame: number;
@@ -95,6 +102,8 @@ export interface ActorEventEnvelope {
   readonly phase?: ActorEventPhase;
   readonly otherEntityId?: EntityId;
   readonly contact?: PhysicsContact;
+  /** Present on `endPlay` events: why the actor left play. */
+  readonly reason?: ActorEndPlayReason;
   readonly payload?: ScriptMessagePayload;
 }
 
@@ -327,6 +336,7 @@ interface BehaviorInstance {
   params: Record<string, SceneJsonValue>;
   event: ActorEventKind;
   firedBeginPlay: boolean;
+  firedEndPlay: boolean;
 }
 
 export class BehaviorSubsystem implements Subsystem {
@@ -389,6 +399,10 @@ export class BehaviorSubsystem implements Subsystem {
    * transform copy (the runtime source of truth behaviors edit).
    */
   setEntities(entities: readonly Entity[]): void {
+    // Outgoing actors leave play (scene reload / level travel): fire endPlay
+    // before the world is wiped, while their state is still intact. The initial
+    // load has no prior instances, so this is a no-op there.
+    this.dispatchEndPlayForAll("teardown");
     this.resetMessageSubscriptions();
     this.messageBus.clear();
     const instances: BehaviorInstance[] = [];
@@ -434,6 +448,8 @@ export class BehaviorSubsystem implements Subsystem {
 
   /** Drops all behavior instances (e.g. on scene teardown/reload). */
   clear(): void {
+    // Live actors leave play on disposal — fire endPlay before the wipe.
+    this.dispatchEndPlayForAll("teardown");
     this.instances = [];
     this.messageBus.clear();
     this.runtimeEntities.clear();
@@ -628,6 +644,48 @@ export class BehaviorSubsystem implements Subsystem {
         entityId: instance.runtime.id,
       });
     }
+  }
+
+  /**
+   * Fires the `endPlay` one-shot for a single entity's endPlay bindings (Unreal
+   * `Event EndPlay`), each at most once. Called just before a destroyed entity is
+   * detached, so its state/transform/world are still intact. `teardown` fans this
+   * out over the whole live set. Uses the live engine context when firing mid-tick
+   * (destroy), else a synthesized one (scene teardown runs outside `update()`).
+   */
+  private dispatchEndPlayEvents(entityId: EntityId, reason: ActorEndPlayReason): void {
+    if (!this.runtimeEntities.has(entityId)) return;
+    const engine = this.currentEngine ?? {
+      deltaSeconds: 0,
+      elapsedSeconds: 0,
+      frame: this.lastEngineFrame,
+    };
+    for (const instance of this.instances) {
+      if (instance.runtime.id !== entityId || instance.event !== "endPlay" || instance.firedEndPlay) {
+        continue;
+      }
+      instance.firedEndPlay = true;
+      this.invokeBehavior(instance, engine, {
+        kind: "endPlay",
+        frame: engine.frame,
+        entityId,
+        reason,
+        payload: { reason },
+      });
+    }
+  }
+
+  /**
+   * Fires `endPlay` for every live entity that still carries an unfired endPlay
+   * binding — the scene-teardown / disposal path (`setEntities` rebuild, `clear`).
+   * Snapshots the target ids first so a behavior cannot perturb the iteration.
+   */
+  private dispatchEndPlayForAll(reason: ActorEndPlayReason): void {
+    const targets = new Set<EntityId>();
+    for (const instance of this.instances) {
+      if (instance.event === "endPlay" && !instance.firedEndPlay) targets.add(instance.runtime.id);
+    }
+    for (const entityId of targets) this.dispatchEndPlayEvents(entityId, reason);
   }
 
   private dispatchContactEvents(engine: EngineUpdateContext): void {
@@ -930,11 +988,15 @@ export class BehaviorSubsystem implements Subsystem {
       if (this.runtimeEntities.has(command.entityId)) this.actorCommandSink?.spawn?.(command.request);
       return;
     }
-    // Destroy: drop the entity from the subsystem's own bookkeeping first (so it
-    // stops ticking / being indexed / receiving messages this frame), then let
-    // the host tear down its render object + physics body. Idempotent: a second
-    // destroy for the same entity still notifies the host but skips re-detaching.
-    if (this.runtimeEntities.has(command.entityId)) this.detachEntity(command.entityId);
+    // Destroy: fire endPlay (reason `destroyed`) while the entity is still live,
+    // then drop it from the subsystem's own bookkeeping (so it stops ticking /
+    // being indexed / receiving messages this frame), then let the host tear down
+    // its render object + physics body. Idempotent: a second destroy for the same
+    // entity still notifies the host but skips re-firing endPlay + re-detaching.
+    if (this.runtimeEntities.has(command.entityId)) {
+      this.dispatchEndPlayEvents(command.entityId, "destroyed");
+      this.detachEntity(command.entityId);
+    }
     this.actorCommandSink?.destroy(command.entityId);
   }
 
@@ -1128,6 +1190,7 @@ export class BehaviorSubsystem implements Subsystem {
         params: binding.params ?? {},
         event: binding.event,
         firedBeginPlay: false,
+        firedEndPlay: false,
       });
     }
     const behavior = readBehaviorComponent(entity);
@@ -1140,6 +1203,7 @@ export class BehaviorSubsystem implements Subsystem {
       params: behavior.params ?? {},
       event: "tick",
       firedBeginPlay: true,
+      firedEndPlay: false,
     });
   }
 

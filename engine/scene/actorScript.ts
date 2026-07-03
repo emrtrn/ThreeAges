@@ -74,7 +74,8 @@ export function readGameModeDefaultPawnClassRef(def: ActorScriptDef): string | u
 /**
  * Runtime event a binding hooks into. A small fixed set mirroring the existing
  * behavior triggers (`src/game/behaviors.ts`): begin-play one-shots, per-tick
- * updates, sensor overlap, physics hit, and interaction.
+ * updates, sensor overlap, physics hit, interaction, and the end-play teardown
+ * one-shot (Unreal `Event EndPlay`).
  */
 export const ACTOR_EVENT_KINDS = [
   "beginPlay",
@@ -82,6 +83,7 @@ export const ACTOR_EVENT_KINDS = [
   "overlap",
   "hit",
   "interact",
+  "endPlay",
 ] as const;
 export type ActorEventKind = (typeof ACTOR_EVENT_KINDS)[number];
 
@@ -91,6 +93,7 @@ export const ACTOR_EVENT_LABELS: Record<ActorEventKind, string> = {
   overlap: "On Overlap",
   hit: "On Hit",
   interact: "On Interact",
+  endPlay: "End Play",
 };
 
 export const ACTOR_EVENT_DESCRIPTIONS: Record<ActorEventKind, string> = {
@@ -99,6 +102,7 @@ export const ACTOR_EVENT_DESCRIPTIONS: Record<ActorEventKind, string> = {
   overlap: "Runs on sensor overlap begin and end edges; context.event.phase identifies the edge.",
   hit: "Runs on blocking contact begin and end edges; context.event.otherEntityId identifies the other actor.",
   interact: "Runs when a host/runtime source emits an interact event for this actor.",
+  endPlay: "Runs once as the actor leaves play (destroyed or scene teardown); context.event.reason says which. Cleanup only — cross-actor messaging is best-effort here.",
 };
 
 export function isActorEventKind(value: unknown): value is ActorEventKind {
