@@ -20139,6 +20139,121 @@
         "bytes": 348
       },
       "license": "Unknown"
+    },
+    {
+      "id": "sm-bump",
+      "name": "SM Bump",
+      "assetType": "staticMesh",
+      "category": "Prototype",
+      "path": "assets/starter-content/StaticMeshes/Prototype/SM_Bump.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Prototype",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 4080
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-leftarm",
+      "name": "SM_LeftArm2",
+      "assetType": "staticMesh",
+      "category": "Prototype",
+      "path": "assets/starter-content/StaticMeshes/Prototype/SM_LeftArm2.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Prototype",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3224
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-linearstair",
+      "name": "SM Linear Stair",
+      "assetType": "staticMesh",
+      "category": "Prototype",
+      "path": "assets/starter-content/StaticMeshes/Prototype/SM_LinearStair.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Prototype",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 8924
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-ramp",
+      "name": "SM Ramp",
+      "assetType": "staticMesh",
+      "category": "Prototype",
+      "path": "assets/starter-content/StaticMeshes/Prototype/SM_Ramp.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Prototype",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3520
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-rightarm",
+      "name": "SM Right Arm",
+      "assetType": "staticMesh",
+      "category": "Prototype",
+      "path": "assets/starter-content/StaticMeshes/Prototype/SM_RightArm.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Prototype",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3228
+      },
+      "license": "Unknown"
     }
   ]
 }

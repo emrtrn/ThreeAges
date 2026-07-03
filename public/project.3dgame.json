@@ -9,9 +9,9 @@
     "defaultScene": "assets/starter-content/Levels/Playground.level.json",
     "assetManifest": "assets/manifest.json",
     "gridSize": 0.25,
-    "gridEnabled": true,
+    "gridEnabled": false,
     "snapRotationDeg": 15,
-    "snapRotationEnabled": false,
+    "snapRotationEnabled": true,
     "snapScale": 0.1,
     "snapScaleEnabled": true
   },
