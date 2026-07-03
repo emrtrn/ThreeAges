@@ -195,20 +195,22 @@ yazmadan ifade edebilmesi.
 
 ## Checklist
 
-- [ ] **A2.1 — Engine timer çekirdeği:** `ScriptTimers`
+- [x] **A2.1 — Engine timer çekirdeği:** `ScriptTimers`
   (`after(seconds, message, payload?)` → handle, `clear(handle)`) —
   `BehaviorContext.timers`. Süre dolunca self-targeted script mesajı
   kuyruklanır (mevcut flush düzenine girer). Timer'lar subsystem tick'iyle
   ilerler (Play duraklarsa timer da durur), `setEntities`/`clear`'da sıfırlanır.
-- [ ] **A2.2 — LifeSpan:** `actor.setLifeSpan(seconds)` komutu (A1 destroy'a
+- [x] **A2.2 — LifeSpan:** `actor.setLifeSpan(seconds)` komutu (A1 destroy'a
   bağlanır); 0 = iptal (Unreal semantiği). Karar noktası: class'ta opsiyonel
   `lifeSpan` değişkeni mi (spawn edilen geçici efekt aktörleri için), yalnız
   komut yüzeyi mi — instance→entity düzleştirmesine özel alan sokma maliyetiyle
-  birlikte değerlendirilir.
+  birlikte değerlendirilir. Karar: A2 v1 yalnız komut yüzeyini ekledi; authored
+  class/instance `lifeSpan` alanı A5 spawn edilen geçici actor ihtiyacıyla birlikte
+  tekrar değerlendirilecek.
 - [ ] **A2.3 — (Opsiyonel temizlik) cooldown migrasyonu:** interaction
   cooldown'unun timer çekirdeğine taşınması *değerlendirilir* — davranış
   değişmeyecekse dokunma (saf `stepInteractionTrigger` test yüzeyi değerli).
-- [ ] **A2.4 — Test:** deterministik headless testler (sahte dt ile: tek
+- [x] **A2.4 — Test:** deterministik headless testler (sahte dt ile: tek
   ateşleme, clear, reload'da sızıntı yok, duraklatılmış subsystem'de ilerlemez).
 
 ## Kabul kriterleri
@@ -398,3 +400,11 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   `setActorObjectVisible` + `destroyActorEntity`. `collectible` generic yüzeye
   taşındı, `onCollectibleCollected` kaldırıldı. 3 yeni + 2 uyarlanmış test; gate
   yeşil (tsc + vite build + 540 engine check + verify:dist --strict). Sıradaki: A2.
+- 2026-07-03: **A2 kodlandı** (Timer / Delay / LifeSpan). Engine:
+  `ScriptTimers` (`context.timers.after/clear`) eklendi; süre dolumu self-targeted
+  script mesajı olarak mevcut `messageBindings` yolundan teslim ediliyor.
+  `actor.setLifeSpan(seconds)` A1 destroy kuyruğuna bağlandı; `0`/geçersiz süre
+  aktif lifespan'ı iptal ediyor. Timer/lifespan state'i `setEntities`/`clear` ve
+  destroy cleanup'ta düşüyor; disabled subsystem'de ilerlemiyor. A2.3 cooldown
+  migrasyonu davranış değişikliği getirmediği için bu turda yapılmadı. Gate yeşil:
+  tsc + vite build + 544 engine check + verify:dist --strict.

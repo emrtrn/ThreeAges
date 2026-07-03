@@ -66,6 +66,13 @@ export interface ScriptState {
   persist(key: string, value: SceneJsonValue): void;
 }
 
+export type ScriptTimerHandle = string;
+
+export interface ScriptTimers {
+  after(seconds: number, message: string, payload?: ScriptMessagePayload): ScriptTimerHandle;
+  clear(handle: ScriptTimerHandle): void;
+}
+
 /** Options shared by the actor commands: opt in to save-game persistence. */
 export interface ActorCommandOptions {
   /**
@@ -94,6 +101,12 @@ export interface ActorCommands {
    * render object + physics body. Subsequent ticks/messages/contacts skip it.
    */
   destroy(options?: ActorCommandOptions): void;
+  /**
+   * Destroys this entity after `seconds` of behavior simulation time. Passing 0
+   * or a negative/non-finite value clears the active lifespan, matching Unreal's
+   * SetLifeSpan(0) cancel semantics.
+   */
+  setLifeSpan(seconds: number): void;
 }
 
 /**
@@ -113,6 +126,15 @@ export interface ActorCommandSink {
 type ActorCommand =
   | { readonly entityId: EntityId; readonly kind: "visibility"; readonly visible: boolean }
   | { readonly entityId: EntityId; readonly kind: "destroy" };
+
+interface ScriptTimerRecord {
+  readonly handle: ScriptTimerHandle;
+  readonly entityId: EntityId;
+  readonly message: string;
+  readonly payload: ScriptMessagePayload | undefined;
+  readonly createdFrame: number;
+  remainingSeconds: number;
+}
 
 /**
  * Reserved persistent-state keys the actor commands use when `persist` is set.
@@ -135,6 +157,7 @@ export interface BehaviorContext {
   readonly messages: ScriptMessages;
   readonly world: ScriptWorld;
   readonly state: ScriptState;
+  readonly timers: ScriptTimers;
   /** Generic per-actor commands (visibility/destroy) targeting this entity. */
   readonly actor: ActorCommands;
   readonly physics?: PhysicsQuery;
@@ -254,6 +277,9 @@ export class BehaviorSubsystem implements Subsystem {
   private persistentStateKeys = new Map<EntityId, Set<string>>();
   /** Actor commands queued this tick, applied after the message flush. */
   private commandQueue: ActorCommand[] = [];
+  private timers = new Map<ScriptTimerHandle, ScriptTimerRecord>();
+  private lifeSpans = new Map<EntityId, { remainingSeconds: number; createdFrame: number }>();
+  private nextTimerId = 1;
   private readonly messageBus: ScriptMessageBus;
   private lastMessageFlushResult: ScriptMessageFlushResult = {
     processed: 0,
@@ -307,6 +333,8 @@ export class BehaviorSubsystem implements Subsystem {
     this.runtimeState.clear();
     this.persistentStateKeys.clear();
     this.commandQueue = [];
+    this.timers.clear();
+    this.lifeSpans.clear();
 
     for (const entity of entities) {
       const transform = readTransformComponent(entity);
@@ -394,6 +422,8 @@ export class BehaviorSubsystem implements Subsystem {
     this.runtimeState.clear();
     this.persistentStateKeys.clear();
     this.commandQueue = [];
+    this.timers.clear();
+    this.lifeSpans.clear();
     this.resetMessageSubscriptions();
   }
 
@@ -524,6 +554,8 @@ export class BehaviorSubsystem implements Subsystem {
       instance.update(context);
       this.sink(instance.runtime.id, instance.runtime.transform);
     }
+    this.advanceTimers(engine);
+    this.advanceLifeSpans(engine);
     this.lastMessageFlushResult = this.messageBus.flush();
     if (this.lastMessageFlushResult.warnings.length > 0) {
       this.onMessageWarnings?.(this.lastMessageFlushResult.warnings);
@@ -551,6 +583,7 @@ export class BehaviorSubsystem implements Subsystem {
       messages: this.scriptMessages(runtime.id, engine),
       world: this.scriptWorld(runtime.id),
       state: this.scriptState(runtime.id),
+      timers: this.scriptTimers(runtime.id, engine),
       actor: this.actorCommands(runtime.id),
       params,
       transform: runtime.transform,
@@ -573,6 +606,27 @@ export class BehaviorSubsystem implements Subsystem {
       (context as BehaviorContext & { message: ScriptMessageEnvelope }).message = message;
     }
     return context;
+  }
+
+  private scriptTimers(entityId: EntityId, engine: EngineUpdateContext): ScriptTimers {
+    return {
+      after: (seconds, message, payload) => {
+        const handle = `script-timer:${this.nextTimerId}`;
+        this.nextTimerId += 1;
+        this.timers.set(handle, {
+          handle,
+          entityId,
+          message,
+          payload: payload ? { ...payload } : undefined,
+          createdFrame: engine.frame,
+          remainingSeconds: Math.max(0, Number.isFinite(seconds) ? seconds : 0),
+        });
+        return handle;
+      },
+      clear: (handle) => {
+        this.timers.delete(handle);
+      },
+    };
   }
 
   private scriptMessages(source: EntityId, engine: EngineUpdateContext): ScriptMessages {
@@ -638,7 +692,62 @@ export class BehaviorSubsystem implements Subsystem {
         this.commandQueue.push({ entityId, kind: "destroy" });
         if (options?.persist) this.scriptState(entityId).persist(RESERVED_DESTROYED_KEY, true);
       },
+      setLifeSpan: (seconds) => {
+        if (!Number.isFinite(seconds) || seconds <= 0) {
+          this.lifeSpans.delete(entityId);
+          return;
+        }
+        this.lifeSpans.set(entityId, {
+          remainingSeconds: seconds,
+          createdFrame: this.currentEngine?.frame ?? this.lastEngineFrame,
+        });
+      },
     };
+  }
+
+  private advanceTimers(engine: EngineUpdateContext): void {
+    if (this.timers.size === 0) return;
+    const deltaSeconds = Math.max(0, engine.deltaSeconds);
+    const due: ScriptTimerRecord[] = [];
+    for (const timer of this.timers.values()) {
+      if (!this.runtimeEntities.has(timer.entityId)) {
+        this.timers.delete(timer.handle);
+        continue;
+      }
+      if (timer.createdFrame === engine.frame) continue;
+      timer.remainingSeconds -= deltaSeconds;
+      if (timer.remainingSeconds > 0) continue;
+      due.push(timer);
+      this.timers.delete(timer.handle);
+    }
+    for (const timer of due) {
+      if (!this.runtimeEntities.has(timer.entityId)) continue;
+      const input = {
+        frame: engine.frame,
+        type: timer.message,
+        source: timer.entityId,
+        target: timer.entityId,
+      };
+      this.messageBus.send(
+        timer.payload === undefined ? input : { ...input, payload: timer.payload },
+      );
+    }
+  }
+
+  private advanceLifeSpans(engine: EngineUpdateContext): void {
+    if (this.lifeSpans.size === 0) return;
+    const deltaSeconds = Math.max(0, engine.deltaSeconds);
+    for (const [entityId, lifeSpan] of [...this.lifeSpans.entries()]) {
+      if (!this.runtimeEntities.has(entityId)) {
+        this.lifeSpans.delete(entityId);
+        continue;
+      }
+      if (lifeSpan.createdFrame === engine.frame) continue;
+      lifeSpan.remainingSeconds -= deltaSeconds;
+      if (lifeSpan.remainingSeconds > 0) continue;
+      this.lifeSpans.delete(entityId);
+      this.commandQueue.push({ entityId, kind: "destroy" });
+    }
   }
 
   /** Applies every queued actor command in issue order, then empties the queue. */
@@ -682,6 +791,10 @@ export class BehaviorSubsystem implements Subsystem {
     for (const set of this.tagIndex.values()) set.delete(entityId);
     for (const set of this.classRefIndex.values()) set.delete(entityId);
     for (const set of this.interfaceIndex.values()) set.delete(entityId);
+    for (const [handle, timer] of [...this.timers.entries()]) {
+      if (timer.entityId === entityId) this.timers.delete(handle);
+    }
+    this.lifeSpans.delete(entityId);
     const kept: Array<{ entityId: EntityId; unsubscribe: () => void }> = [];
     for (const subscription of this.messageSubscriptions) {
       if (subscription.entityId === entityId) subscription.unsubscribe();

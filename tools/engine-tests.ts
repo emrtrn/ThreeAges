@@ -7638,6 +7638,188 @@ check("actor command: persisted destroy + hide re-apply on a snapshot restore", 
   assert.deepEqual(effects.sort(), ["destroy:actor:0", "hide:actor:1:false"]);
 });
 
+// A2 timers: delayed callbacks travel through the existing self-targeted script
+// message binding path, so behaviors can consume them without a second event API.
+check("script timers: after delivers one self-targeted message", () => {
+  const events: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "timer-start") {
+        return (context) => {
+          if (context.state.get("scheduled", false)) return;
+          context.state.set("scheduled", true);
+          context.timers.after(0.05, "Timer.Done", { value: 7 });
+        };
+      }
+      if (scriptId === "timer-done") {
+        return (context) => {
+          events.push(`${context.entityId}:${String(context.message?.payload.value)}`);
+        };
+      }
+      return undefined;
+    },
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "timer-start", params: {} },
+      MessageBindings: {
+        bindings: [{ message: "Timer.Done", scriptId: "timer-done", target: "self" }],
+      },
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([entity]);
+  behavior.update({ deltaSeconds: 0.02, elapsedSeconds: 0.02, frame: 1 });
+  behavior.update({ deltaSeconds: 0.02, elapsedSeconds: 0.04, frame: 2 });
+  assert.deepEqual(events, []);
+  behavior.update({ deltaSeconds: 0.03, elapsedSeconds: 0.07, frame: 3 });
+  behavior.update({ deltaSeconds: 1, elapsedSeconds: 1.07, frame: 4 });
+  assert.deepEqual(events, ["actor:0:7"]);
+});
+
+check("script timers: clear prevents delivery and setEntities drops pending timers", () => {
+  const events: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "timer-clear") {
+        return (context) => {
+          if (context.state.get("scheduled", false)) return;
+          context.state.set("scheduled", true);
+          const handle = context.timers.after(0.01, "Timer.Done");
+          context.timers.clear(handle);
+        };
+      }
+      if (scriptId === "timer-leak") {
+        return (context) => {
+          if (context.state.get("scheduled", false)) return;
+          context.state.set("scheduled", true);
+          context.timers.after(0.01, "Timer.Done");
+        };
+      }
+      if (scriptId === "timer-done") {
+        return (context) => {
+          events.push(context.entityId);
+        };
+      }
+      return undefined;
+    },
+  };
+  const cleared: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "timer-clear", params: {} },
+      MessageBindings: {
+        bindings: [{ message: "Timer.Done", scriptId: "timer-done", target: "self" }],
+      },
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([cleared]);
+  behavior.update({ deltaSeconds: 0.001, elapsedSeconds: 0.001, frame: 1 });
+  behavior.update({ deltaSeconds: 1, elapsedSeconds: 1.001, frame: 2 });
+  assert.deepEqual(events, []);
+
+  const pending: Entity = {
+    ...cleared,
+    id: "actor:1",
+    components: {
+      ...cleared.components,
+      Behavior: { scriptId: "timer-leak", params: {} },
+    },
+  };
+  behavior.setEntities([pending]);
+  behavior.update({ deltaSeconds: 0.001, elapsedSeconds: 0.001, frame: 3 });
+  behavior.setEntities([]);
+  behavior.update({ deltaSeconds: 1, elapsedSeconds: 1.001, frame: 4 });
+  assert.deepEqual(events, []);
+});
+
+check("script timers: disabled subsystem does not advance timer time", () => {
+  const events: string[] = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "timer-start") {
+        return (context) => {
+          if (context.state.get("scheduled", false)) return;
+          context.state.set("scheduled", true);
+          context.timers.after(0.1, "Timer.Done");
+        };
+      }
+      if (scriptId === "timer-done") {
+        return () => {
+          events.push("done");
+        };
+      }
+      return undefined;
+    },
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "timer-start", params: {} },
+      MessageBindings: {
+        bindings: [{ message: "Timer.Done", scriptId: "timer-done", target: "self" }],
+      },
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([entity]);
+  behavior.update({ deltaSeconds: 0.001, elapsedSeconds: 0.001, frame: 1 });
+  behavior.setEnabled(false);
+  behavior.update({ deltaSeconds: 10, elapsedSeconds: 10.001, frame: 2 });
+  behavior.setEnabled(true);
+  behavior.update({ deltaSeconds: 0.09, elapsedSeconds: 10.091, frame: 3 });
+  assert.deepEqual(events, []);
+  behavior.update({ deltaSeconds: 0.02, elapsedSeconds: 10.111, frame: 4 });
+  assert.deepEqual(events, ["done"]);
+});
+
+check("actor command: setLifeSpan destroys through the actor command sink", () => {
+  const destroyed: string[] = [];
+  let ticks = 0;
+  const registry: BehaviorRegistry = {
+    get: () => (context) => {
+      ticks += 1;
+      if (!context.state.get("lifespanSet", false)) {
+        context.state.set("lifespanSet", true);
+        context.actor.setLifeSpan(0.05);
+      }
+    },
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "life", params: {} },
+    },
+  };
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    {
+      actorCommandSink: {
+        setVisibility: () => undefined,
+        destroy: (id) => destroyed.push(id),
+      },
+    },
+  );
+  behavior.setEntities([entity]);
+  behavior.update({ deltaSeconds: 0.01, elapsedSeconds: 0.01, frame: 1 });
+  behavior.update({ deltaSeconds: 0.04, elapsedSeconds: 0.05, frame: 2 });
+  assert.deepEqual(destroyed, []);
+  behavior.update({ deltaSeconds: 0.02, elapsedSeconds: 0.07, frame: 3 });
+  behavior.update({ deltaSeconds: 1, elapsedSeconds: 1.07, frame: 4 });
+  assert.deepEqual(destroyed, ["actor:0"]);
+  assert.equal(ticks, 3);
+});
+
 // Â§3 Interaction runtime: the pure trigger core decides fire/cooldown; the
 // `interact` behavior drives it from physics sensor contacts + the authored
 // InteractionComponent, reusing the goal-reached sensor pattern.
