@@ -7365,11 +7365,12 @@ check("checkpoint behavior: defaults to the quick slot", () => {
 
 // P3.7 Save-Game validation: the `collectible` sensor is picked up once on contact
 // and persists a `collected` flag (opt-in), so it survives a save-game round-trip.
+// Hiding now flows through the generic actor command surface (A1): the pickup asks
+// its own object to hide via `context.actor.setVisibility(false)`, which the test
+// captures through the `actorCommandSink`.
 check("collectible behavior: collected once on contact, persists the flag", () => {
-  const collected: string[] = [];
-  const registry = createBehaviorRegistry({
-    onCollectibleCollected: (id) => collected.push(id),
-  });
+  const hidden: string[] = [];
+  const registry = createBehaviorRegistry({});
   const physics = new PhysicsSubsystem();
   const audio = new AudioSubsystem();
   const coin: Entity = {
@@ -7388,7 +7389,14 @@ check("collectible behavior: collected once on contact, persists the flag", () =
     },
   };
   physics.setEntities([coin, player]);
-  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics, audio);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics, audio, {
+    actorCommandSink: {
+      setVisibility: (id, visible) => {
+        if (!visible) hidden.push(id);
+      },
+      destroy: () => undefined,
+    },
+  });
   behavior.setEntities([coin, player]);
   const app = new EngineApp();
   app.registerSubsystem(physics);
@@ -7396,14 +7404,14 @@ check("collectible behavior: collected once on contact, persists the flag", () =
 
   // Not touching yet: nothing collected, nothing persisted.
   app.update(0.016);
-  assert.deepEqual(collected, []);
+  assert.deepEqual(hidden, []);
   assert.deepEqual(behavior.getPersistentStateSnapshot(), []);
 
-  // Walk onto the coin and tick twice: collected exactly once, flag persisted.
+  // Walk onto the coin and tick twice: hidden exactly once, flag persisted.
   physics.setEntityTransform("player:0", { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
   app.update(0.016);
   app.update(0.016);
-  assert.deepEqual(collected, ["coin:0"]);
+  assert.deepEqual(hidden, ["coin:0"]);
   assert.deepEqual(behavior.getPersistentStateSnapshot(), [
     { entityId: "coin:0", key: "collected", value: true },
   ]);
@@ -7413,10 +7421,8 @@ check("collectible behavior: collected once on contact, persists the flag", () =
 // the pickup without any contact (the ScriptState `hidden` latch resets per scene,
 // so hiding fires exactly once), and the restored flag stays persistent for re-save.
 check("collectible behavior: a restored collected flag re-hides the pickup without contact", () => {
-  const collected: string[] = [];
-  const registry = createBehaviorRegistry({
-    onCollectibleCollected: (id) => collected.push(id),
-  });
+  const hidden: string[] = [];
+  const registry = createBehaviorRegistry({});
   const physics = new PhysicsSubsystem();
   const coin: Entity = {
     id: "coin:0",
@@ -7434,7 +7440,14 @@ check("collectible behavior: a restored collected flag re-hides the pickup witho
     },
   };
   physics.setEntities([coin, player]);
-  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics, undefined, {
+    actorCommandSink: {
+      setVisibility: (id, visible) => {
+        if (!visible) hidden.push(id);
+      },
+      destroy: () => undefined,
+    },
+  });
   behavior.setEntities([coin, player]);
   // Simulate a save-game restore: the coin was collected in a prior session.
   behavior.applyPersistentStateSnapshot([{ entityId: "coin:0", key: "collected", value: true }]);
@@ -7445,11 +7458,184 @@ check("collectible behavior: a restored collected flag re-hides the pickup witho
   // The player never touches it, but the restored flag re-hides it exactly once.
   app.update(0.016);
   app.update(0.016);
-  assert.deepEqual(collected, ["coin:0"]);
+  assert.deepEqual(hidden, ["coin:0"]);
   // The restored flag stays persistent, so a subsequent save still records it.
   assert.deepEqual(behavior.getPersistentStateSnapshot(), [
     { entityId: "coin:0", key: "collected", value: true },
   ]);
+});
+
+// A1 actor command surface: a behavior's `setVisibility` is queued during the tick
+// and delivered to the host sink after the tick's behaviors + message flush run.
+check("actor command: setVisibility reaches the host sink at end of tick", () => {
+  const calls: Array<{ id: string; visible: boolean }> = [];
+  const registry: BehaviorRegistry = {
+    get: () => (context) => context.actor.setVisibility(false),
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "hide-self", params: {} },
+    },
+  };
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    {
+      actorCommandSink: {
+        setVisibility: (id, visible) => calls.push({ id, visible }),
+        destroy: () => undefined,
+      },
+    },
+  );
+  behavior.setEntities([entity]);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+  assert.deepEqual(calls, [{ id: "actor:0", visible: false }]);
+});
+
+// A1 DestroyActor: a destroyed entity leaves the behavior set the same tick — it no
+// longer ticks, its physics body is gone (contacts read empty), and its message
+// subscriptions are dropped (a later send never reaches it).
+check("actor command: destroy cuts subsequent ticks, contacts and messages", () => {
+  let ticks = 0;
+  let pings = 0;
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "self-destruct") {
+        return (context) => {
+          ticks += 1;
+          context.actor.destroy();
+        };
+      }
+      if (scriptId === "on-ping") {
+        return () => {
+          pings += 1;
+        };
+      }
+      return undefined;
+    },
+  };
+  const physics = new PhysicsSubsystem();
+  const actor: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      Behavior: { scriptId: "self-destruct", params: {} },
+      MessageBindings: { bindings: [{ message: "Ping", scriptId: "on-ping", target: "self" }] },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([actor, player]);
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    physics,
+    undefined,
+    {
+      // The host sink removes the physics body so contact queries read empty.
+      actorCommandSink: {
+        setVisibility: () => undefined,
+        destroy: (id) => physics.removeEntity(id),
+      },
+    },
+  );
+  behavior.setEntities([actor, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  // Overlapping the player: before destroy there is a contact; after the tick the
+  // self-destruct fires and the host removes the body.
+  app.update(0.016);
+  assert.equal(ticks, 1);
+  assert.deepEqual(physics.contactsForEntity("actor:0"), []);
+
+  // A message aimed at the destroyed actor reaches no subscriber, and it never ticks again.
+  behavior.emitScriptMessage("Ping", "player:0", undefined, "actor:0");
+  app.update(0.016);
+  assert.equal(ticks, 1);
+  assert.equal(pings, 0);
+});
+
+// A1.3 persistence: `destroy`/`setVisibility(false)` with `{ persist: true }` writes a
+// reserved key into the persistent snapshot; applying that snapshot to a fresh scene
+// re-issues the effect through the host sink (the save-game restore path).
+check("actor command: persisted destroy + hide re-apply on a snapshot restore", () => {
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "persist-destroy") {
+        return (context) => context.actor.destroy({ persist: true });
+      }
+      if (scriptId === "persist-hide") {
+        return (context) => context.actor.setVisibility(false, { persist: true });
+      }
+      return undefined;
+    },
+  };
+  const doomed: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "persist-destroy", params: {} },
+    },
+  };
+  const dimmed: Entity = {
+    id: "actor:1",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "persist-hide", params: {} },
+    },
+  };
+  const source = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    { actorCommandSink: { setVisibility: () => undefined, destroy: () => undefined } },
+  );
+  source.setEntities([doomed, dimmed]);
+  const app = new EngineApp();
+  app.registerSubsystem(source);
+  app.update(0.016);
+  assert.deepEqual(source.getPersistentStateSnapshot(), [
+    { entityId: "actor:0", key: "__actorDestroyed", value: true },
+    { entityId: "actor:1", key: "__actorHidden", value: true },
+  ]);
+
+  // A fresh scene rebuilds the same entities; applying the snapshot re-issues the
+  // effects immediately (restore runs after the scene is built, before the first tick).
+  const effects: string[] = [];
+  const restored = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    {
+      actorCommandSink: {
+        setVisibility: (id, visible) => effects.push(`hide:${id}:${visible}`),
+        destroy: (id) => effects.push(`destroy:${id}`),
+      },
+    },
+  );
+  restored.setEntities([doomed, dimmed]);
+  restored.applyPersistentStateSnapshot(source.getPersistentStateSnapshot());
+  assert.deepEqual(effects.sort(), ["destroy:actor:0", "hide:actor:1:false"]);
 });
 
 // Â§3 Interaction runtime: the pure trigger core decides fire/cooldown; the

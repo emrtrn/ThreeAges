@@ -78,6 +78,9 @@ export interface BehaviorRegistryOptions {
   onActorLightToggle?: (entityId: string, enabled: boolean) => void;
   /** Runtime shell sink for one-shot actor VFX triggered by message behaviors. */
   onActorParticleEffect?: (entityId: string) => void;
+  // Note: collectible hiding now flows through the generic actor command surface
+  // (`context.actor.setVisibility(false)` → host `actorCommandSink`, A1), not a
+  // bespoke sink option.
   /**
    * Whether the named entity is the player-controlled (possessed) pawn this Play
    * boot. `input-move` only reads input + moves when this is true, so a character
@@ -100,13 +103,6 @@ export interface BehaviorRegistryOptions {
    * on it. `slot` is the destination save slot key (default `"quick"`).
    */
   onCheckpoint?: (entityId: string, slot: string) => void;
-  /**
-   * Fired when a `collectible` becomes collected (P3.7 Save-Game validation): on
-   * the pickup contact, and again on a fresh scene when a save restored the
-   * `collected` flag. The runtime shell hides the pickup's rendered object;
-   * headless tests spy on it. Hiding is idempotent, so re-firing is harmless.
-   */
-  onCollectibleCollected?: (entityId: string) => void;
 }
 
 function numberParam(value: unknown, fallback: number): number {
@@ -198,7 +194,6 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   const onActorParticleEffect = options.onActorParticleEffect;
   const onLevelTravel = options.onLevelTravel;
   const onCheckpoint = options.onCheckpoint;
-  const onCollectibleCollected = options.onCollectibleCollected;
   const isPlayerControlled = options.isPlayerControlled ?? (() => true);
   const vertical = new Map<string, PlayerVertical>();
   const reachedGoals = new Set<string>();
@@ -316,13 +311,16 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   // it: on a fresh scene the behavior sees the restored flag and re-hides the
   // pickup without a contact. The `hidden` latch lives in ScriptState (cleared on
   // every setEntities), not a registry closure, so hiding fires exactly once per
-  // scene build — on the pickup tick and again after a restore. The host hides the
-  // rendered object; hiding is idempotent, so an extra call is harmless.
+  // scene build — on the pickup tick and again after a restore. Hiding goes
+  // through the generic actor command (`setVisibility(false)` → host sink, A1);
+  // it is idempotent, so an extra call is harmless. Persistence stays the
+  // behavior's own `collected` flag (not the command's `persist`), so the
+  // re-hide-on-restore semantics are unchanged.
   const collectible: BehaviorUpdate = (context) => {
     if (context.state.get("collected", false)) {
       if (!context.state.get("hidden", false)) {
         context.state.set("hidden", true);
-        onCollectibleCollected?.(context.entityId);
+        context.actor.setVisibility(false);
       }
       return;
     }
@@ -330,7 +328,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     context.state.persist("collected", true);
     context.state.set("hidden", true);
     playCollisionAudioOnce(context);
-    onCollectibleCollected?.(context.entityId);
+    context.actor.setVisibility(false);
     context.messages.emit("Collectible.Collected", { entityId: context.entityId });
   };
 

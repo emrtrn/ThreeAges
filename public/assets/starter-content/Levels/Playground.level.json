@@ -423,12 +423,12 @@
             2.9
           ],
           "name": "Collectible Coin",
-          "rotationYDeg": 0,
-          "scale": 1,
           "sensor": true,
           "behavior": {
             "script": "collectible"
-          }
+          },
+          "rotationYDeg": 0,
+          "scale": 1
         }
       ]
     },
@@ -446,15 +446,15 @@
             2.9
           ],
           "name": "Checkpoint",
-          "rotationYDeg": 0,
-          "scale": 1,
           "sensor": true,
           "behavior": {
             "script": "checkpoint",
             "params": {
               "slot": "quick"
             }
-          }
+          },
+          "rotationYDeg": 0,
+          "scale": 1
         }
       ]
     },

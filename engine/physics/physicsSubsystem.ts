@@ -182,6 +182,37 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
   }
 
+  /**
+   * Removes a single entity's body from the world (runtime DestroyActor, A1),
+   * incrementally so a destroy doesn't pay a full `setEntities` rebuild. Drops it
+   * from the placeholder body list, clears any contact that referenced it (so the
+   * very next query already reads empty), invalidates the static caches when a
+   * static body left, and — when Rapier is live — frees the rigid body (its
+   * colliders go with it) and forgets its collider→entity handles.
+   */
+  removeEntity(entityId: EntityId): void {
+    const remaining = this.bodies.filter((body) => body.id !== entityId);
+    if (remaining.length !== this.bodies.length) {
+      const removedStatic = this.bodies.some(
+        (body) => body.id === entityId && body.collider.isStatic,
+      );
+      this.bodies = remaining;
+      if (removedStatic) {
+        this.staticBlockerCache = null;
+        this.staticSurfaceCache = null;
+      }
+    }
+    this.contacts = this.contacts.filter(
+      (contact) => contact.a !== entityId && contact.b !== entityId,
+    );
+    const record = this.rapierBodies.get(entityId);
+    if (record) {
+      for (const collider of record.colliders) this.rapierColliderToEntity.delete(collider.handle);
+      this.rapierWorld?.removeRigidBody(record.body);
+      this.rapierBodies.delete(entityId);
+    }
+  }
+
   contactsForEntity(entityId: EntityId): readonly PhysicsContact[] {
     return this.contacts.filter((contact) => contact.a === entityId || contact.b === entityId);
   }

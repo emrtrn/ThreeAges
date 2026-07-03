@@ -66,6 +66,61 @@ export interface ScriptState {
   persist(key: string, value: SceneJsonValue): void;
 }
 
+/** Options shared by the actor commands: opt in to save-game persistence. */
+export interface ActorCommandOptions {
+  /**
+   * When true, the effect is written to this entity's persistent script state
+   * ({@link getPersistentStateSnapshot}) so a save-game restores it on a fresh
+   * scene. Never touches the layout file — runtime state only.
+   */
+  readonly persist?: boolean;
+}
+
+/**
+ * The generic per-actor command surface (Unreal `SetActorHiddenInGame` /
+ * `DestroyActor`). A behavior calls these on {@link BehaviorContext.actor} to
+ * act on *its own* entity; the subsystem queues them and applies them once the
+ * current tick's behaviors + message flush have run (deterministic end-of-tick
+ * mutation), delivering visibility/teardown to the host via an
+ * {@link ActorCommandSink}. Targeting other actors is intentionally not exposed
+ * here — cross-actor effects go through script messages.
+ */
+export interface ActorCommands {
+  /** Shows/hides this entity's rendered object (host-applied). */
+  setVisibility(visible: boolean, options?: ActorCommandOptions): void;
+  /**
+   * Destroys this entity: after this tick it leaves the behavior instance set,
+   * the world indexes and its message subscriptions, and the host removes its
+   * render object + physics body. Subsequent ticks/messages/contacts skip it.
+   */
+  destroy(options?: ActorCommandOptions): void;
+}
+
+/**
+ * Host sink for {@link ActorCommands}, wired by the runtime shell (the
+ * `AudioBus` precedent: engine defines the surface, the host implements it).
+ * `setVisibility` toggles the entity's rendered object; `destroy` tears down its
+ * render object and physics body. The subsystem does its own internal cleanup
+ * (indexes/instances/subscriptions) before calling `destroy`, so the sink only
+ * owns render + physics.
+ */
+export interface ActorCommandSink {
+  setVisibility(entityId: EntityId, visible: boolean): void;
+  destroy(entityId: EntityId): void;
+}
+
+/** A queued actor command, applied at the end of the tick it was issued in. */
+type ActorCommand =
+  | { readonly entityId: EntityId; readonly kind: "visibility"; readonly visible: boolean }
+  | { readonly entityId: EntityId; readonly kind: "destroy" };
+
+/**
+ * Reserved persistent-state keys the actor commands use when `persist` is set.
+ * Namespaced so they never collide with an authored `state`/`persist` key.
+ */
+const RESERVED_HIDDEN_KEY = "__actorHidden";
+const RESERVED_DESTROYED_KEY = "__actorDestroyed";
+
 export interface PersistentScriptStateEntry {
   readonly entityId: EntityId;
   readonly key: string;
@@ -80,6 +135,8 @@ export interface BehaviorContext {
   readonly messages: ScriptMessages;
   readonly world: ScriptWorld;
   readonly state: ScriptState;
+  /** Generic per-actor commands (visibility/destroy) targeting this entity. */
+  readonly actor: ActorCommands;
   readonly physics?: PhysicsQuery;
   readonly audio?: AudioBus;
   readonly audioComponent?: AudioComponent;
@@ -141,6 +198,8 @@ export interface BehaviorSubsystemOptions {
   readonly messageBus?: ScriptMessageBus;
   readonly messageTraceLimit?: number;
   readonly onMessageWarnings?: (warnings: readonly ScriptMessageWarning[]) => void;
+  /** Host sink for actor visibility/destroy commands (A1); omitted in pure tests. */
+  readonly actorCommandSink?: ActorCommandSink;
 }
 
 export interface ScriptMessageSubscriberDebugInfo {
@@ -189,10 +248,12 @@ export class BehaviorSubsystem implements Subsystem {
   private classRefIndex = new Map<string, Set<EntityId>>();
   private nodeIdIndex = new Map<string, EntityId>();
   private interfaceIndex = new Map<string, Set<EntityId>>();
-  private messageSubscriptions: Array<() => void> = [];
+  private messageSubscriptions: Array<{ entityId: EntityId; unsubscribe: () => void }> = [];
   private messageSubscriberInfo: ScriptMessageSubscriberDebugInfo[] = [];
   private runtimeState = new Map<EntityId, Map<string, unknown>>();
   private persistentStateKeys = new Map<EntityId, Set<string>>();
+  /** Actor commands queued this tick, applied after the message flush. */
+  private commandQueue: ActorCommand[] = [];
   private readonly messageBus: ScriptMessageBus;
   private lastMessageFlushResult: ScriptMessageFlushResult = {
     processed: 0,
@@ -218,11 +279,14 @@ export class BehaviorSubsystem implements Subsystem {
           : {}),
       });
     this.onMessageWarnings = options.onMessageWarnings;
+    this.actorCommandSink = options.actorCommandSink;
   }
 
   private readonly onMessageWarnings:
     | ((warnings: readonly ScriptMessageWarning[]) => void)
     | undefined;
+
+  private readonly actorCommandSink: ActorCommandSink | undefined;
 
   /**
    * Derives the live behavior set from a scene's entities. An entity becomes a
@@ -242,6 +306,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.interfaceIndex.clear();
     this.runtimeState.clear();
     this.persistentStateKeys.clear();
+    this.commandQueue = [];
 
     for (const entity of entities) {
       const transform = readTransformComponent(entity);
@@ -305,7 +370,7 @@ export class BehaviorSubsystem implements Subsystem {
           },
           binding.target === "self" ? { target: runtime.id } : {},
         );
-        this.messageSubscriptions.push(unsubscribe);
+        this.messageSubscriptions.push({ entityId: runtime.id, unsubscribe });
         this.messageSubscriberInfo.push({
           entityId: runtime.id,
           message: binding.message,
@@ -328,6 +393,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.interfaceIndex.clear();
     this.runtimeState.clear();
     this.persistentStateKeys.clear();
+    this.commandQueue = [];
     this.resetMessageSubscriptions();
   }
 
@@ -403,6 +469,7 @@ export class BehaviorSubsystem implements Subsystem {
       store.set(entry.key, cloneSceneJsonValue(entry.value));
       this.markPersistentState(entry.entityId, entry.key);
     }
+    this.applyPersistedActorEffects();
   }
 
   private currentEngine: EngineUpdateContext | null = null;
@@ -461,6 +528,9 @@ export class BehaviorSubsystem implements Subsystem {
     if (this.lastMessageFlushResult.warnings.length > 0) {
       this.onMessageWarnings?.(this.lastMessageFlushResult.warnings);
     }
+    // Actor commands (visibility/destroy) apply once the tick's behaviors and
+    // message handlers have all run, so a mutation is deterministic end-of-tick.
+    this.flushActorCommands();
     this.currentEngine = null;
   }
 
@@ -481,6 +551,7 @@ export class BehaviorSubsystem implements Subsystem {
       messages: this.scriptMessages(runtime.id, engine),
       world: this.scriptWorld(runtime.id),
       state: this.scriptState(runtime.id),
+      actor: this.actorCommands(runtime.id),
       params,
       transform: runtime.transform,
     };
@@ -557,6 +628,90 @@ export class BehaviorSubsystem implements Subsystem {
     };
   }
 
+  private actorCommands(entityId: EntityId): ActorCommands {
+    return {
+      setVisibility: (visible, options) => {
+        this.commandQueue.push({ entityId, kind: "visibility", visible });
+        if (options?.persist) this.scriptState(entityId).persist(RESERVED_HIDDEN_KEY, !visible);
+      },
+      destroy: (options) => {
+        this.commandQueue.push({ entityId, kind: "destroy" });
+        if (options?.persist) this.scriptState(entityId).persist(RESERVED_DESTROYED_KEY, true);
+      },
+    };
+  }
+
+  /** Applies every queued actor command in issue order, then empties the queue. */
+  private flushActorCommands(): void {
+    if (this.commandQueue.length === 0) return;
+    const commands = this.commandQueue;
+    this.commandQueue = [];
+    for (const command of commands) this.processActorCommand(command);
+  }
+
+  private processActorCommand(command: ActorCommand): void {
+    if (command.kind === "visibility") {
+      this.actorCommandSink?.setVisibility(command.entityId, command.visible);
+      return;
+    }
+    // Destroy: drop the entity from the subsystem's own bookkeeping first (so it
+    // stops ticking / being indexed / receiving messages this frame), then let
+    // the host tear down its render object + physics body. Idempotent: a second
+    // destroy for the same entity still notifies the host but skips re-detaching.
+    if (this.runtimeEntities.has(command.entityId)) this.detachEntity(command.entityId);
+    this.actorCommandSink?.destroy(command.entityId);
+  }
+
+  /**
+   * Removes a destroyed entity from the live behavior set: its instance, world
+   * indexes and message subscriptions. Its `runtimeState` is deliberately kept so
+   * a persisted destroy/hide marker survives for a re-save ({@link getPersistentStateSnapshot});
+   * `setEntities`/`clear` wipe it on the next rebuild.
+   */
+  private detachEntity(entityId: EntityId): void {
+    const runtime = this.runtimeEntities.get(entityId);
+    if (!runtime) return;
+    this.instances = this.instances.filter((instance) => instance.runtime.id !== entityId);
+    this.runtimeEntities.delete(entityId);
+    if (runtime.entity.name && this.nameIndex.get(runtime.entity.name) === entityId) {
+      this.nameIndex.delete(runtime.entity.name);
+    }
+    for (const [nodeId, id] of this.nodeIdIndex) {
+      if (id === entityId) this.nodeIdIndex.delete(nodeId);
+    }
+    for (const set of this.tagIndex.values()) set.delete(entityId);
+    for (const set of this.classRefIndex.values()) set.delete(entityId);
+    for (const set of this.interfaceIndex.values()) set.delete(entityId);
+    const kept: Array<{ entityId: EntityId; unsubscribe: () => void }> = [];
+    for (const subscription of this.messageSubscriptions) {
+      if (subscription.entityId === entityId) subscription.unsubscribe();
+      else kept.push(subscription);
+    }
+    this.messageSubscriptions = kept;
+    this.messageSubscriberInfo = this.messageSubscriberInfo.filter(
+      (subscriber) => subscriber.entityId !== entityId,
+    );
+  }
+
+  /**
+   * Re-applies persisted hide/destroy markers after a save-game restore (A1.3):
+   * a fresh scene rebuilt the entities, the snapshot repopulated their reserved
+   * keys, so an entity flagged destroyed/hidden in the save is brought back to
+   * that state via the host sink. Applied immediately (restore runs after the
+   * scene is fully built), not queued, so the effect lands before the first tick.
+   */
+  private applyPersistedActorEffects(): void {
+    const effects: ActorCommand[] = [];
+    for (const [entityId, store] of this.runtimeState) {
+      if (store.get(RESERVED_DESTROYED_KEY) === true) {
+        effects.push({ entityId, kind: "destroy" });
+      } else if (store.get(RESERVED_HIDDEN_KEY) === true) {
+        effects.push({ entityId, kind: "visibility", visible: false });
+      }
+    }
+    for (const effect of effects) this.processActorCommand(effect);
+  }
+
   private markPersistentState(entityId: EntityId, key: string): void {
     let keys = this.persistentStateKeys.get(entityId);
     if (!keys) {
@@ -621,7 +776,7 @@ export class BehaviorSubsystem implements Subsystem {
   }
 
   private resetMessageSubscriptions(): void {
-    for (const unsubscribe of this.messageSubscriptions) unsubscribe();
+    for (const subscription of this.messageSubscriptions) subscription.unsubscribe();
     this.messageSubscriptions = [];
     this.messageSubscriberInfo = [];
   }

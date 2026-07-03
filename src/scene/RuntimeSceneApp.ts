@@ -728,9 +728,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         onCheckpoint: (_entityId, slot) => {
           this.writeCheckpointSave(slot);
         },
-        onCollectibleCollected: (entityId) => {
-          this.setCollectibleCollected(entityId);
-        },
         // The active Game Mode owns possession: only the pawn it possessed
         // (none, under the default camera mode) is driven by player input.
         isPlayerControlled: (entityId) =>
@@ -753,6 +750,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             }
             console.warn("[script-message]", warning.message, warning.envelope ?? "");
           }
+        },
+        // Generic actor command surface (A1): a behavior's setVisibility/destroy
+        // is applied here to the rendered object + physics body.
+        actorCommandSink: {
+          setVisibility: (entityId, visible) => this.setActorObjectVisible(entityId, visible),
+          destroy: (entityId) => this.destroyActorEntity(entityId),
         },
       },
     );
@@ -2752,32 +2755,64 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Hides a collected `collectible`'s rendered object (P3.7). The behavior owns the
-   * persisted `collected` flag and re-fires this after a save restore, so this only
-   * needs to be idempotent. Works whether the collectible was authored as an Actor
-   * Script instance (its own Object3D) or as a plain static-mesh placement (one
-   * slot of an InstancedMesh, collapsed to a point).
+   * Host sink for the generic actor `setVisibility` command (A1): shows/hides an
+   * entity's rendered object. Idempotent, so a behavior re-applying a hide after a
+   * save restore (the `collectible` pattern) is harmless. Works whether the actor
+   * was authored as an Actor Script instance (its own Object3D) or as a plain
+   * static-mesh placement (one slot of an InstancedMesh, collapsed to a point;
+   * kept collapsed by the per-frame transform sink via `collectedInstances`).
    */
-  private setCollectibleCollected(entityId: string): void {
+  private setActorObjectVisible = (entityId: string, visible: boolean): void => {
     const actorIndex = parseActorInstanceEntityIndex(entityId);
     if (actorIndex !== null) {
       const object = this.actorObjects.get(actorIndex);
-      if (object) object.visible = false;
+      if (object) object.visible = visible;
       return;
     }
     const instance = parseInstanceEntityId(entityId);
     if (!instance) return;
-    // Mark the slot collected first: the per-frame transform sink honours the set
-    // and re-collapses it, so hiding survives even though the slot's matrix is
-    // rewritten each frame. A material/probe override renders as a clone, not an
-    // instanced slot, so hide that clone directly.
-    this.collectedInstances.add(overrideObjectKey(instance.assetId, instance.placementIndex));
-    const overrideObject = this.instanceOverrideObjects.get(
-      overrideObjectKey(instance.assetId, instance.placementIndex),
-    );
-    if (overrideObject) overrideObject.visible = false;
-    this.collapseInstance(instance.assetId, instance.placementIndex);
-  }
+    // A material/probe override renders as a clone, not an instanced slot, so
+    // toggle that clone directly when present.
+    const key = overrideObjectKey(instance.assetId, instance.placementIndex);
+    const overrideObject = this.instanceOverrideObjects.get(key);
+    if (visible) {
+      this.collectedInstances.delete(key);
+      if (overrideObject) overrideObject.visible = true;
+      // The per-frame transform sink rewrites the slot's matrix next tick, so the
+      // pickup reappears at its authored pose once it leaves the hidden set.
+    } else {
+      // Add to the hidden set first: the per-frame transform sink honours it and
+      // re-collapses the slot, so hiding survives the per-frame matrix rewrite.
+      this.collectedInstances.add(key);
+      if (overrideObject) overrideObject.visible = false;
+      this.collapseInstance(instance.assetId, instance.placementIndex);
+    }
+  };
+
+  /**
+   * Host sink for the generic actor `destroy` command (A1): tears down an entity's
+   * physics body (so contact queries read empty next frame) and its rendered
+   * object. The BehaviorSubsystem has already dropped the entity from its own
+   * instance set / indexes / message subscriptions before calling this. The
+   * authored `actorEntities` list is left intact (rebuilt fresh on scene reload).
+   */
+  private destroyActorEntity = (entityId: string): void => {
+    this.physicsSubsystem.removeEntity(entityId);
+    const actorIndex = parseActorInstanceEntityIndex(entityId);
+    if (actorIndex !== null) {
+      const object = this.actorObjects.get(actorIndex);
+      if (object) {
+        this.scene.remove(object);
+        this.actorObjects.delete(actorIndex);
+      }
+      this.actorMeshScales.delete(actorIndex);
+      this.characterRefs = this.characterRefs.filter((ref) => ref.entityId !== entityId);
+      return;
+    }
+    // A plain instanced static placement can't be freed mid-scene without a
+    // rebuild, so collapse its slot to a point (renders as destroyed).
+    if (parseInstanceEntityId(entityId)) this.setActorObjectVisible(entityId, false);
+  };
 
   /** Collapses one instanced-static slot to a point so it renders invisibly. */
   private collapseInstance(assetId: string, placementIndex: number): void {

@@ -125,29 +125,42 @@ mesaj busına biner ama stringly-typed'dır ve payload doğrulaması dağılır.
 
 ## Checklist
 
-- [ ] **A1.1 — Engine komut çekirdeği:** `ActorCommands` interface'i
+- [x] **A1.1 — Engine komut çekirdeği:** `ActorCommands` interface'i
   (`setVisibility(visible: boolean)`, `destroy()`; hedef self) +
-  `BehaviorContext.actor` opsiyonel alanı. BehaviorSubsystem komutları tick
-  içinde kuyruklar, flush sonrası host sink'ine sıralı teslim eder. Destroy
-  edilen entity aynı tick'ten sonra: instance listesinden, indekslerden,
-  mesaj aboneliklerinden düşer; sonraki contact sorguları boş döner.
-- [ ] **A1.2 — Host uygulaması:** `RuntimeSceneApp` (+ `SceneApp` Play modu)
-  sink'i: visibility → render objesinin `visible` bayrağı (collectible hide
-  yolu yeniden kullanılır); destroy → render objesi söküm + fizik gövdesi
-  kaldırma + behavior/message temizliği. İki host arasında davranış birebir;
-  editör tarafında authored obje korunur, Play bitince geri gelir.
-- [ ] **A1.3 — Kalıcılık etkileşimi:** komutlara `persist` opsiyonu
+  `BehaviorContext.actor` alanı (opsiyonel yerine her zaman-mevcut yapıldı —
+  subsystem her context'te sağlıyor; `messages`/`world`/`state` ile tutarlı).
+  BehaviorSubsystem komutları tick içinde kuyruklar, message flush sonrası host
+  sink'ine sıralı teslim eder. Destroy edilen entity aynı tick'ten sonra:
+  instance listesinden, indekslerden, mesaj aboneliklerinden düşer; `runtimeState`
+  korunur (persist markerı re-save için yaşar); host `physics.removeEntity` ile
+  gövdeyi kaldırdığından sonraki contact sorguları boş döner.
+- [x] **A1.2 — Host uygulaması:** `RuntimeSceneApp` `actorCommandSink`:
+  visibility → `setActorObjectVisible` (actor instance objesi + instanced-static
+  slot collapse yolu genelleştirildi); destroy → `destroyActorEntity`
+  (`physics.removeEntity` + render objesi söküm + `actorObjects`/`actorMeshScales`/
+  `characterRefs` temizliği). Engine tarafı behavior/mesaj temizliğini kendi yapar.
+  `PhysicsSubsystem.removeEntity` eklendi (incremental; rapier gövdesi free +
+  contact filtresi). `actorEntities` authored liste korunur (reload'da yeniden
+  kurulur). Not: possessed character-parent aktör mid-play destroy'u A6 kapsamı
+  (character movement/anim subsystem kaydı kalır); A1 hedefi trigger/pickup/efekt
+  aktörleri.
+- [x] **A1.3 — Kalıcılık etkileşimi:** komutlara `persist` opsiyonu
   (`setVisibility(false, { persist: true })` / `destroy({ persist: true })`).
-  Persist edilen etki `ScriptState.persist` kanalına yazılır
-  (`getPersistentStateSnapshot`'a girer); save restore sonrası fresh sahnede
-  yeniden uygulanır. Layout dosyasına asla yazılmaz.
-- [ ] **A1.4 — Sink migrasyonu:** `collectible` gizlemesi yeni yüzeye taşınır
-  (davranış korunur: idempotent hide + save-restore'da yeniden uygulama);
-  `onCollectibleCollected` sink'i deprecate/kaldır. `lamp-toggle` ışık
-  görünürlüğü ayrı kalır (ışık `enabled` ≠ aktör görünürlüğü — karar not edilir).
-- [ ] **A1.5 — Test + docs:** headless testler (visibility komutu sink'e
-  ulaşır; destroy sonrası tick/mesaj/contact kesilir; persist restore'da
-  yeniden uygulanır). `ARCHITECTURE.md` boundary notu + bu doküman güncellenir.
+  Rezerve `ScriptState` anahtarları (`__actorHidden`/`__actorDestroyed`) persist
+  kanalına yazılır (`getPersistentStateSnapshot`'a girer); `applyPersistentStateSnapshot`
+  sonu `applyPersistedActorEffects` ile fresh sahnede etkiyi anında yeniden
+  uygular (restore sahne kurulduktan sonra koşuyor). Layout dosyasına asla yazılmaz.
+- [x] **A1.4 — Sink migrasyonu:** `collectible` gizlemesi generic yüzeye taşındı
+  (`context.actor.setVisibility(false)`); davranış birebir korundu — kendi
+  `collected` persist + `hidden` latch mantığıyla save-restore'da yeniden hide.
+  `onCollectibleCollected` opsiyonu + host `setCollectibleCollected` kaldırıldı.
+  `lamp-toggle` ışık görünürlüğü ayrı kaldı (ışık `enabled` ≠ aktör görünürlüğü —
+  karar: ışık toggle intensity/visible'ı ayrı `onActorLightToggle` sink'inde).
+- [x] **A1.5 — Test + docs:** 3 headless test eklendi (visibility komutu sink'e
+  ulaşır; destroy sonrası tick/mesaj/contact kesilir; persist restore'da yeniden
+  uygulanır) + 2 collectible testi yeni sink'e uyarlandı. `ARCHITECTURE.md`
+  boundary notu + bu doküman güncellendi. Gate yeşil: tsc + build + 540 engine
+  check + verify:dist --strict.
 
 ## Kabul kriterleri
 
@@ -377,3 +390,11 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
 - 2026-07-03: Doküman oluşturuldu (Unreal ortak aktör API'si ↔ Forge
   behavior yüzeyi karşılaştırma araştırmasından). Kod yazılmadı; tüm maddeler
   `[ ]`.
+- 2026-07-03: **A1 tamamlandı** (SetVisibility + Destroy). Engine:
+  `ActorCommands` (`context.actor`), tick-sonu komut kuyruğu, `ActorCommandSink`,
+  destroy internal cleanup (instance/index/mesaj aboneliği düşürme, runtimeState
+  koruma), rezerve-anahtar persist/restore (`__actorHidden`/`__actorDestroyed`);
+  `PhysicsSubsystem.removeEntity` eklendi. Host: `actorCommandSink` →
+  `setActorObjectVisible` + `destroyActorEntity`. `collectible` generic yüzeye
+  taşındı, `onCollectibleCollected` kaldırıldı. 3 yeni + 2 uyarlanmış test; gate
+  yeşil (tsc + vite build + 540 engine check + verify:dist --strict). Sıradaki: A2.
