@@ -861,23 +861,64 @@ Forge web-first bir sistemdir. Bu nedenle V1 CPU simulation ile başlar.
 
 ## 14. Uygulama Fazları
 
-## Faz 0 — Mevcut Hattı Sabitle
+## Faz 0 — Mevcut Hattı Sabitle  ✅ TAMAMLANDI (3 Temmuz 2026)
 
-- [ ] Mevcut `*.effect.json` schema-1 parserını tek normalizer altında topla.
-- [ ] `effectId → manifest entry → URL` çözümünü testle.
-- [ ] Starter effect asset’lerini açılış presetleri olarak belirle.
-- [ ] Mevcut runtime particle testlerini koru (`tools/engine-tests.ts` içinde
+- [x] Mevcut `*.effect.json` schema-1 parserını tek normalizer altında topla.
+      *(Tek giriş noktası zaten var: `parseEffectDefinition`,
+      `engine/render-three/particleEffect.ts`; runtime `RuntimeSceneApp.loadEffect`
+      üzerinden yalnızca bunu çağırır.)*
+- [x] `effectId → manifest entry → URL` çözümünü testle.
+      *(`RuntimeSceneApp.effectUrlById` manifest'ten `.effect.json` girdilerini
+      indeksler; `engine-tests.ts` içinde `parseEffectDefinition` round-trip'i
+      manifest içeriğinden çözülen effectId'yi doğrular.)*
+- [x] Starter effect asset’lerini açılış presetleri olarak belirle.
+      *(4 starter: `FX_Smoke_Puff`, `FX_Spark_Burst`, `FX_Dust_Hit`,
+      `FX_Interaction_Glow` — Faz 2 preset picker'ının kaynağı.)*
+- [x] Mevcut runtime particle testlerini koru (`tools/engine-tests.ts` içinde
       `parseEffectDefinition` + `readParticleEmitterComponent` testleri zaten
       vardır; taşıma sırasında yeşil kalmalıdır).
-- [ ] Legacy instance override alanları için karar kaydı: alanlar §8
+      *(568 check yeşil; particle testleri değişmedi.)*
+- [x] Legacy instance override alanları için karar kaydı: alanlar §8
       politikasına göre Faz 4’te temizlenecek; Faz 0’da yalnızca tespit ve not.
-- [ ] `RuntimeSceneApp.playActorParticleEffect` içindeki tipsiz
+      *(Aşağıdaki "Faz 0 karar kaydı"na bkz.)*
+- [x] `RuntimeSceneApp.playActorParticleEffect` içindeki tipsiz
       `ParticleEmitter.position` offset okumasını typed component alanına taşı
       veya kaldır (bugün reader’ı ve validator’ı bypass ediyor).
-- [ ] Save validator için effect asset validation giriş noktasını planla.
-- [ ] Effect runtime state’inin layout’a yazılmadığını doğrula.
+      *(KALDIRILDI: `position` tipte/reader'da/validator'da yoktu — plan §8'e göre
+      geçerli bir instance override değil. Metod artık `playAutoPlayParticleEntity`
+      ile tutarlı: efekt aktörün transform konumunda oynar. Kullanılmayan
+      `readComponentVec3` yardımcısı da silindi.)*
+- [x] Save validator için effect asset validation giriş noktasını planla.
+      *(Aşağıdaki "Faz 0 karar kaydı"na bkz.)*
+- [x] Effect runtime state’inin layout’a yazılmadığını doğrula.
+      *(`particleEffects` dizisi yalnızca runtime'da yaşar; hiçbir
+      save/serialize/layout yolunda referans verilmez. `ParticleEffect`
+      `THREE.Points` nesneleri `this.scene`'de geçici olarak durur, frame loop'ta
+      dispose edilir; sahne serileştirmesi layout dokümanından çalışır, THREE
+      sahne grafiğinden değil.)*
 
-**Kabul kriteri:** Mevcut starter effect asset’leri oyun route’unda bozulmadan çalışır.
+**Kabul kriteri:** Mevcut starter effect asset’leri oyun route’unda bozulmadan
+çalışır. ✅ `tsc --noEmit` temiz, `test:engine` 568 check yeşil.
+
+### Faz 0 karar kaydı (3 Temmuz 2026)
+
+**Legacy instance override alanları — Faz 4'e ertelendi.** `ParticleEmitterComponent`
+(`engine/scene/components.ts:242`) bugün `loop`, `rate`, `lifetime`, `startSize`,
+`endSize`, `velocity`, `spread`, `materialMode`, `worldSpace` alanlarını taşır;
+`readParticleEmitterComponent` okur ve `validateParticleEmitter`
+(`tools/saveValidator.ts:300`) allowlist'ler. **Runtime bunların hiçbirini
+kullanmaz** — `playAutoPlayParticleEntity` / `playActorParticleEffect` yalnızca
+`effectId`'yi çözer ve asset tanımını olduğu gibi oynatır. Faz 0'da bunlar
+bilinçli olarak *bırakıldı* (silinmedi): silme işlemi component tipi + reader +
+validator + `engine-tests.ts`'i birlikte değiştirir ve §8 "Legacy alan temizliği"
+politikasıyla Faz 4'e aittir. Böylece Faz 0 diff'i küçük ve davranış-nötr kalır.
+
+**Save validator giriş noktası — Faz 1'de eklenecek.** Bugün effect asset'lerini
+kaydeden bir yol yok (editör henüz yok); `validateParticleEmitter` yalnızca sahne
+*component'ini* doğrular, asset dosyasını değil. Faz 1 planı: `tools/saveValidator.ts`
+içine `validateEffectAsset` + `vite.config.ts`'e `/__save-effect` dev endpoint'i
+(`/__save-soundcue` kalıbı). Bu, layout ve skeleton allowlist'lerinden sonra
+CLAUDE.md'de belgelenecek **üçüncü allowlist yüzeyi** olur.
 
 ---
 

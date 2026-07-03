@@ -2908,13 +2908,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!definition) return;
     const transform = readTransformComponent(entity);
     if (!transform) return;
-    const offset = readComponentVec3(entity.components.ParticleEmitter?.position) ?? [0, 0, 0];
     const effect = new ParticleEffect(definition);
-    effect.setOrigin(
-      transform.position[0] + offset[0],
-      transform.position[1] + offset[1],
-      transform.position[2] + offset[2],
-    );
+    effect.setOrigin(transform.position[0], transform.position[1], transform.position[2]);
     this.scene.add(effect.object3D);
     this.particleEffects.push(effect);
   }
@@ -3585,13 +3580,6 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
     rotation: [...transform.rotation],
     scale: [...transform.scale],
   };
-}
-
-function readComponentVec3(value: unknown): [number, number, number] | null {
-  if (!Array.isArray(value) || value.length !== 3) return null;
-  const [x, y, z] = value;
-  if (typeof x !== "number" || typeof y !== "number" || typeof z !== "number") return null;
-  return [x, y, z];
 }
 
 function createRuntimeUserSettingsStore(): UserSettingsStore | null {
