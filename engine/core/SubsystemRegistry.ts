@@ -1,7 +1,11 @@
 import type { EngineUpdateContext, Subsystem } from "./Subsystem";
+import type { SubsystemTimingRecorder } from "./subsystemProfiler";
 
 export class SubsystemRegistry {
   private readonly subsystems = new Map<string, Subsystem>();
+  /** When set (only under `?debug`), each subsystem's `update()` is timed. */
+  private profiler: SubsystemTimingRecorder | null = null;
+  private now: () => number = defaultNow;
 
   register(subsystem: Subsystem): Subsystem {
     if (this.subsystems.has(subsystem.id)) {
@@ -41,10 +45,33 @@ export class SubsystemRegistry {
     }
   }
 
+  /**
+   * Attaches (or clears) a timing recorder. With no recorder the update loop
+   * keeps its plain, un-timed path so production pays nothing; with one, each
+   * subsystem's `update()` is wrapped in a `now()` measurement. The `now` clock
+   * is injectable so the wiring is deterministic in headless tests.
+   */
+  setProfiler(profiler: SubsystemTimingRecorder | null, now?: () => number): void {
+    this.profiler = profiler;
+    if (now) this.now = now;
+  }
+
   update(context: EngineUpdateContext): void {
-    for (const subsystem of this.subsystems.values()) {
-      subsystem.update?.(context);
+    const { profiler } = this;
+    if (!profiler) {
+      for (const subsystem of this.subsystems.values()) {
+        subsystem.update?.(context);
+      }
+      return;
     }
+    const now = this.now;
+    for (const subsystem of this.subsystems.values()) {
+      if (!subsystem.update) continue;
+      const start = now();
+      subsystem.update(context);
+      profiler.record(subsystem.id, now() - start);
+    }
+    profiler.endFrame();
   }
 
   async dispose(): Promise<void> {
@@ -53,4 +80,9 @@ export class SubsystemRegistry {
       await ordered[index]?.dispose?.();
     }
   }
+}
+
+/** High-resolution clock when available, else a millisecond fallback. */
+function defaultNow(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
 }

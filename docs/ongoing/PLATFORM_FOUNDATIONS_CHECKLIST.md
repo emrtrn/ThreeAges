@@ -1,8 +1,10 @@
 # Platform Temelleri — Eksik Sistemler Planı ve Checklist
 
 > Tarih: 2026-07-01 (son güncelleme 2026-07-03)
-> Durum: Aktif. P0–P4 kod tarafı tamam (P1.5 test-alanı içeriği + çeşitli
-> tarayıcı smoke'ları kullanıcıda); kalan tek faz **P5 — Performans Altyapısı**.
+> Durum: **P0–P5 kod tarafı tamam.** Altı fazın hepsi (CI, fizik, level travel,
+> save-game, boot/loading UX, performans altyapısı) kodlandı ve gate yeşil.
+> Kalan işler yalnız kullanıcı tarafı smoke/içerik: P1.5 collision-gym içeriği +
+> P2/P3/P4 tarayıcı smoke'ları (heap stabilitesi, save round-trip, overlay/Retry).
 > Amaç: Platform yeterlilik değerlendirmesinde tespit edilen, henüz hiçbir
 > plana bağlanmamış temel eksikleri kapatmak: **CI/CD**, **Fizik/Collision
 > sertleştirme**, **Seviye Akışı (Level Travel)**, **Save-Game/Persistence**,
@@ -570,24 +572,46 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
 
 ## Checklist
 
-- [ ] **P5.1 — Subsystem tick timing:** engine update döngüsünde
-  (`engine/core/EngineApp.ts` hattı) debug-etkinken subsystem başına ms
-  ölçümü; overlay'e "en pahalı 3 subsystem" satırı. Saf toplama/istatistik
-  (rolling ortalama) headless test edilir.
-- [ ] **P5.2 — Bellek sayaçları:** `renderer.info` (geometries, textures,
-  programs) + varsa `performance.memory` (Chrome-only, guard'lı) overlay'e.
-- [ ] **P5.3 — Bütçe eşikleri:** basit sabitler (ör. draw call, üçgen,
-  texture sayısı) — aşımda overlay satırı vurgulanır. Bütçelerin nerede
-  yaşayacağı karar noktası: kod sabiti (basit, öneri) vs
-  `project.3dgame.json` editor alanı (fork-başına ayar; manifest şeması +
-  doküman notu gerektirir).
-- [ ] **P5.4 — Offline asset raporu:** `tools/`'a perf raporu (yeni script
-  veya `check:assets` genişletmesi): GLB başına üçgen/vertex sayısı, texture
-  boyutları/çözünürlükleri, en büyük 10 asset; eşik aşımı uyarısı. CI'a
-  (P0) bilgi-amaçlı adım olarak eklenebilir (fail etmez).
-- [ ] **P5.5 — Doküman:** `?debug` overlay'inin okunuşu + bütçe felsefesi
-  kısa notu (`docs/architecture/LAUNCH_WORKFLOW.md` veya bu dosyanın
-  sonuna).
+- [x] **P5.1 — Subsystem tick timing:** saf çekirdek
+  `engine/core/subsystemProfiler.ts` (`SubsystemProfiler` — 60-frame rolling
+  window per subsystem, average/last/peak ms, worst-first sıralı snapshot, `top(n)`,
+  negatif clock-skew'i 0'a clamp). `SubsystemRegistry.update` opsiyonel bir
+  `SubsystemTimingRecorder` + enjekte edilebilir `now()` saatiyle her subsystem
+  `update()`'ini ölçer; recorder yoksa **eski un-timed döngü** korunur (production
+  maliyet 0). `EngineApp.enableProfiling()` (idempotent) / `getProfileSnapshot()`.
+  `RuntimeSceneApp` yalnız `?debug`'ta profiling'i açar, `getSubsystemProfileSnapshot()`
+  ile yayar; overlay "perf (avg/frame Xms)" + en pahalı 3 subsystem satırı.
+  Headless: rolling ortalama/sıralama/peak, window eviction + clamp + top/clear,
+  **registry enjekte saatle her subsystem'i ölçer** (idempotent enable).
+- [x] **P5.2 — Bellek sayaçları:** `readRenderMemory(renderer)`
+  (`engine/render-three/renderer.ts`) → `renderer.info` geometries/textures/programs;
+  `RuntimeSceneApp.getPerfMemorySnapshot()` bunu + guard'lı `performance.memory`
+  (Chrome-only usedJSHeapSize/jsHeapSizeLimit, yoksa `null`) taşır. Overlay
+  "memory" bloğu: `geo/tex/prog` + `heap used / limit` (Chrome dışında heap satırı
+  tamamen atlanır). Headless: `formatMemory` heap'li/heap'siz.
+- [x] **P5.3 — Bütçe eşikleri — KARAR: kod sabiti.** Saf
+  `engine/perf/perfBudget.ts` — `DEFAULT_PERF_BUDGET` (drawCalls 500, tris 1M,
+  textures 128) template default'u kod sabiti olarak tutuldu (`project.3dgame.json`
+  editor alanı yerine — basit, öneri edilen yol; fork sabiti veya kendi `PerfBudget`'ını
+  geçirir). `evaluatePerfBudget` her metriği sabit sırada değerlendirir, `isOverBudget`,
+  saf `formatByteSize` (decimal/1000 birim). Overlay "budget" bloğu: aşan satır `!`
+  ön ekli, herhangi biri aşınca başlık `(OVER)`. **Eşikler tavsiye niteliğinde —
+  build'i düşürmez.** Headless: aşım bayrakları + sıra, `formatByteSize`,
+  `formatPerfBudget` + `groupThousands`.
+- [x] **P5.4 — Offline asset raporu:** yeni `npm run perf:assets`
+  (`tools/run-asset-perf-report.mjs` → `tools/asset-perf-report.ts` IO +
+  saf `tools/assetPerfReport.ts`). GLB container'ı **elle** parse eder (glTF JSON
+  chunk'tan accessor sayıları — heavy bağımlılık yok, tam saf): GLB başına üçgen/
+  vertex/byte, gömülü texture sayısı + max çözünürlük; standalone PNG/JPEG/WebP
+  boyut+çözünürlük (küçük header parser'ları); en büyük 10 model + 10 texture;
+  `DEFAULT_ASSET_THRESHOLDS` aşımında `!!` uyarısı. **Bilgi-amaçlı — fail etmez**
+  (CI'a non-gating adım eklenebilir). İlk koşu: 34 model / 752 texture, 4 model
+  byte-bütçesi üstünde. Headless: GLB parse + tris/vertex (indexed/non-indexed/
+  line-mode), PNG/JPEG/WebP + gömülü GLB texture çözünürlüğü, eşik + `topBy`.
+- [x] **P5.5 — Doküman:** `docs/architecture/LAUNCH_WORKFLOW.md`'ye "Performance
+  readout (`?debug`)" (overlay satır-satır okunuşu: fps/draw/tris → CPU vs GPU
+  ayrımı, memory leak sinyali, budget `!` işareti) + "budget philosophy" (kod
+  sabiti, gate değil tanı aracı, LOD kapsam dışı) + "Offline asset report" bölümleri.
 
 ## Kabul kriterleri
 
@@ -846,3 +870,27 @@ zamanlamaları, bellek sayaçları, bütçe eşikleri ve offline asset raporu.
   formatı), `tsc` temiz, `build:verify` yeşil (strict dist PASS). **Kullanıcıya
   kalan smoke:** `?debug` boot/travel overlay + error/Retry (kabul kriterleri
   bloğu). **Sıradaki:** P5 — Performans altyapısı (son faz).
+- *2026-07-03* — **P5 tamamlandı (kod tarafı): Performans Altyapısı — son faz.**
+  P5.1–P5.5 hepsi bitti; planın altı fazı da (P0–P5) kodlandı. **P5.1 subsystem
+  timing:** saf `engine/core/subsystemProfiler.ts` (`SubsystemProfiler`, 60-frame
+  rolling window, worst-first snapshot, clock-skew clamp); `SubsystemRegistry.update`
+  opsiyonel recorder + enjekte saatiyle ölçer — **recorder yoksa eski un-timed
+  döngü** (production 0 maliyet); `EngineApp.enableProfiling()`/`getProfileSnapshot()`,
+  `RuntimeSceneApp` yalnız `?debug`'ta açar. **P5.2 bellek:** `readRenderMemory`
+  (`renderer.info` geo/tex/prog) + guard'lı `performance.memory` (Chrome-only).
+  **P5.3 bütçe — KARAR kod sabiti:** saf `engine/perf/perfBudget.ts`
+  (`DEFAULT_PERF_BUDGET`, `evaluatePerfBudget`, `formatByteSize`); overlay aşan
+  satırı `!` + başlık `(OVER)`, **tavsiye niteliğinde, gate değil**. Overlay
+  (`src/scene/debugStats.ts`) "perf / memory / budget" bloklarını saf formatter'larla
+  (`formatSubsystemTiming`/`formatMemory`/`formatPerfBudget`/`groupThousands`) basar.
+  **P5.4 offline rapor:** `npm run perf:assets` — GLB'yi **elle** parse eden saf
+  `tools/assetPerfReport.ts` (glTF JSON chunk accessor sayımı, heavy bağımlılık
+  yok) ve PNG/JPEG/WebP header parser'ları; GLB tris/vertex/byte + texture, top-10,
+  eşik uyarısı; **fail etmez**. İlk koşu 34 model / 752 texture (4 model byte-bütçesi
+  üstünde). **P5.5 doküman:** LAUNCH_WORKFLOW'a overlay okunuşu + budget felsefesi +
+  offline rapor. Engine 528→537 (+9: profiler ×3, budget ×2, overlay format,
+  asset-perf ×3), `tsc` temiz, `build:verify` yeşil (strict dist PASS),
+  `check:assets` PASS. **Kullanıcıya kalan smoke:** `?debug` ile bir sahnede
+  overlay'den darboğaz okunuşu (CPU subsystem vs GPU render) + `npm run perf:assets`
+  çıktısı. **Plan kapandı** — P0–P5 kod tarafı bitti; kalan tek şey çeşitli
+  faz-içi kullanıcı smoke'ları (backlog dışı yeni iş yok).

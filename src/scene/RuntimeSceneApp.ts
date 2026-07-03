@@ -97,6 +97,7 @@ import {
   fitDirectionalShadowToBounds,
   isSceneSunLight,
   readSceneRuntimeStats,
+  readSceneRuntimeMemory,
   registerSceneShapeModels,
   resolveSceneWorldSettings,
   resizeSceneRuntimeViewport,
@@ -104,6 +105,8 @@ import {
   startSceneRuntime,
   tagSceneLightRecordIndex,
 } from "./SceneRuntimeCore";
+import type { RenderMemoryStats } from "@engine/render-three/renderer";
+import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { attachActorLight } from "@engine/render-three/lights";
 import {
@@ -337,6 +340,18 @@ export interface UiDebugSnapshot {
   world: WorldUiDebugSnapshot;
 }
 
+/**
+ * Memory readout for the `?debug` overlay: GPU resource counts (always present)
+ * plus the JS heap when the browser exposes `performance.memory` (Chrome-only).
+ */
+export interface PerfMemorySnapshot {
+  render: RenderMemoryStats;
+  /** `performance.memory.usedJSHeapSize` in bytes, or null off Chrome. */
+  jsHeapBytes: number | null;
+  /** `performance.memory.jsHeapSizeLimit` in bytes, or null off Chrome. */
+  jsHeapLimitBytes: number | null;
+}
+
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
   getRenderStats(): { drawCalls: number; triangles: number };
@@ -345,6 +360,10 @@ export interface RuntimeStatsApp {
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getUiDebugSnapshot?(): UiDebugSnapshot;
+  /** Optional: per-subsystem tick timing when `?debug` profiling is on, else null. */
+  getSubsystemProfileSnapshot?(): SubsystemProfileSnapshot | null;
+  /** Optional: GPU/JS memory counters for the `?debug` memory readout. */
+  getPerfMemorySnapshot?(): PerfMemorySnapshot;
 }
 
 export interface RuntimeSceneAppOptions {
@@ -740,6 +759,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
     this.engineApp.registerSubsystem(this.dialogueSubsystem);
+    // Per-subsystem tick timing (P5.1) is `?debug`-only: enabling it wraps each
+    // subsystem update in a clock read; production keeps the un-timed loop.
+    if (this.debug) this.engineApp.enableProfiling();
     this.keyboardInput.attach();
     this.gamepadInput.attach();
     this.attachTouchControls(canvas);
@@ -884,6 +906,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   getRenderStats(): { drawCalls: number; triangles: number } {
     return readSceneRuntimeStats(this.renderer);
+  }
+
+  /** Per-subsystem tick timing for the `?debug` overlay, or null when profiling is off. */
+  getSubsystemProfileSnapshot(): SubsystemProfileSnapshot | null {
+    return this.engineApp.getProfileSnapshot();
+  }
+
+  /**
+   * GPU resource counts (always) plus the JS heap when the browser exposes
+   * `performance.memory` (Chrome-only, guarded) for the `?debug` memory readout.
+   */
+  getPerfMemorySnapshot(): PerfMemorySnapshot {
+    const perfMemory =
+      typeof performance !== "undefined"
+        ? (performance as { memory?: { usedJSHeapSize?: number; jsHeapSizeLimit?: number } }).memory
+        : undefined;
+    return {
+      render: readSceneRuntimeMemory(this.renderer),
+      jsHeapBytes: typeof perfMemory?.usedJSHeapSize === "number" ? perfMemory.usedJSHeapSize : null,
+      jsHeapLimitBytes:
+        typeof perfMemory?.jsHeapSizeLimit === "number" ? perfMemory.jsHeapSizeLimit : null,
+    };
   }
 
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot {

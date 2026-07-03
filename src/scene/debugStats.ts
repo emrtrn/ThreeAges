@@ -4,9 +4,24 @@
  * lil-gui (devDependency) is dynamically imported on demand later, when
  * scene parameters need live tweaking — keeps it out of the base bundle.
  */
-import type { GameModeDebugSnapshot, RuntimeStatsApp, UiDebugSnapshot } from "./RuntimeSceneApp";
+import {
+  DEFAULT_PERF_BUDGET,
+  evaluatePerfBudget,
+  formatByteSize,
+  isOverBudget,
+  type BudgetMetric,
+} from "@engine/perf/perfBudget";
+import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
+import type {
+  GameModeDebugSnapshot,
+  PerfMemorySnapshot,
+  RuntimeStatsApp,
+  UiDebugSnapshot,
+} from "./RuntimeSceneApp";
 
 const UPDATE_INTERVAL_MS = 500;
+/** How many of the most expensive subsystems the overlay lists. */
+const TOP_SUBSYSTEMS = 3;
 
 export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): void {
   let accumMs = 0;
@@ -23,12 +38,97 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       `${fps.toFixed(0)} fps\n` +
       `${drawCalls} draw calls\n` +
       `${triangles} tris` +
+      subsystemTimingText(app) +
+      memoryText(app) +
+      budgetText(app, drawCalls, triangles) +
       gameModeDebugText(app) +
       uiDebugText(app) +
       scriptMessageDebugText(app);
     accumMs = 0;
     frames = 0;
   };
+}
+
+/** The subsystem-timing block, or "" when profiling is off / no samples yet. */
+function subsystemTimingText(app: RuntimeStatsApp): string {
+  const snapshot = app.getSubsystemProfileSnapshot?.();
+  if (!snapshot || snapshot.subsystems.length === 0) return "";
+  return `\n${formatSubsystemTiming(snapshot, TOP_SUBSYSTEMS).join("\n")}`;
+}
+
+/**
+ * Formats a {@link SubsystemProfileSnapshot} into overlay lines (pure, DOM-free
+ * for unit tests): a header with the total windowed tick cost, then the `topN`
+ * most expensive subsystems with their average / last / peak millisecond cost.
+ */
+export function formatSubsystemTiming(
+  snapshot: SubsystemProfileSnapshot,
+  topN: number,
+): string[] {
+  const lines = [`perf (avg/frame ${snapshot.totalAverageMs.toFixed(2)}ms)`];
+  for (const timing of snapshot.subsystems.slice(0, Math.max(0, topN))) {
+    lines.push(
+      `  ${timing.id} ${timing.averageMs.toFixed(2)}ms ` +
+        `(last ${timing.lastMs.toFixed(2)} peak ${timing.maxMs.toFixed(2)})`,
+    );
+  }
+  return lines;
+}
+
+/** The memory-counter block, or "" when the app exposes no memory snapshot. */
+function memoryText(app: RuntimeStatsApp): string {
+  if (!app.getPerfMemorySnapshot) return "";
+  return `\n${formatMemory(app.getPerfMemorySnapshot()).join("\n")}`;
+}
+
+/**
+ * Formats a {@link PerfMemorySnapshot} into overlay lines (pure, DOM-free): GPU
+ * geometry/texture/program counts, and the JS heap when the browser reports it
+ * (Chrome-only); the heap line is omitted entirely off Chrome.
+ */
+export function formatMemory(snapshot: PerfMemorySnapshot): string[] {
+  const { geometries, textures, programs } = snapshot.render;
+  const lines = ["memory", `  geo ${geometries} tex ${textures} prog ${programs}`];
+  if (snapshot.jsHeapBytes !== null) {
+    const used = formatByteSize(snapshot.jsHeapBytes);
+    const limit = snapshot.jsHeapLimitBytes !== null ? ` / ${formatByteSize(snapshot.jsHeapLimitBytes)}` : "";
+    lines.push(`  heap ${used}${limit}`);
+  }
+  return lines;
+}
+
+/** The budget block, or "" when the app exposes no memory snapshot (texture count). */
+function budgetText(app: RuntimeStatsApp, drawCalls: number, triangles: number): string {
+  const memory = app.getPerfMemorySnapshot?.();
+  if (!memory) return "";
+  const metrics = evaluatePerfBudget(
+    { drawCalls, triangles, textures: memory.render.textures },
+    DEFAULT_PERF_BUDGET,
+  );
+  return `\n${formatPerfBudget(metrics).join("\n")}`;
+}
+
+/**
+ * Formats budget rows into overlay lines (pure, DOM-free). Over-budget rows are
+ * prefixed with `!` (the overlay is single-color plain text, so a marker is the
+ * only affordance); the header gains an `(OVER)` tag when anything is over.
+ */
+export function formatPerfBudget(metrics: BudgetMetric[]): string[] {
+  const lines = [isOverBudget(metrics) ? "budget (OVER)" : "budget"];
+  for (const metric of metrics) {
+    const marker = metric.over ? "!" : " ";
+    lines.push(`${marker} ${metric.label} ${groupThousands(metric.value)}/${groupThousands(metric.budget)}`);
+  }
+  return lines;
+}
+
+/** Inserts thousands separators (deterministic, locale-independent for tests). */
+export function groupThousands(value: number): string {
+  if (!Number.isFinite(value)) return String(value);
+  const negative = value < 0;
+  const digits = Math.trunc(Math.abs(value)).toString();
+  const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return negative ? `-${grouped}` : grouped;
 }
 
 /** The Game Mode / possessed-pawn block, or "" when the app exposes no snapshot. */

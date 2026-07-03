@@ -27,6 +27,8 @@ import {
 import {
   createSceneRenderer,
   readRenderStats,
+  readRenderMemory,
+  type RenderMemoryStats,
 } from "@engine/render-three/renderer";
 import { composePlacementMatrix } from "@engine/render-three/transforms";
 import {
@@ -109,6 +111,10 @@ export function readSceneRuntimeStats(
   renderer: WebGLRenderer,
 ): { drawCalls: number; triangles: number } {
   return readRenderStats(renderer);
+}
+
+export function readSceneRuntimeMemory(renderer: WebGLRenderer): RenderMemoryStats {
+  return readRenderMemory(renderer);
 }
 
 export function resizeSceneRuntimeViewport(options: {

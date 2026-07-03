@@ -5,6 +5,16 @@ export interface RenderStats {
   triangles: number;
 }
 
+/** GPU resource counts from `renderer.info` (for the `?debug` memory readout). */
+export interface RenderMemoryStats {
+  /** Live geometries retained on the GPU. */
+  geometries: number;
+  /** Live textures retained on the GPU. */
+  textures: number;
+  /** Compiled shader programs. */
+  programs: number;
+}
+
 export function createSceneRenderer(
   canvas: HTMLCanvasElement,
   maxPixelRatio: number,
@@ -27,4 +37,13 @@ export function createSceneRenderer(
 export function readRenderStats(renderer: WebGLRenderer): RenderStats {
   const { calls, triangles } = renderer.info.render;
   return { drawCalls: calls, triangles };
+}
+
+export function readRenderMemory(renderer: WebGLRenderer): RenderMemoryStats {
+  const { memory, programs } = renderer.info;
+  return {
+    geometries: memory.geometries,
+    textures: memory.textures,
+    programs: programs?.length ?? 0,
+  };
 }
