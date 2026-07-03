@@ -26,6 +26,7 @@ import {
   validateSaveUiPayload,
   validateSaveUvwPayload,
   validateSaveSoundCuePayload,
+  validateSaveEffectPayload,
   validateSaveDialogueVoicePayload,
   validateSaveDialogueLinePayload,
   validateOpenLevelPayload,
@@ -675,6 +676,7 @@ const PRIVILEGED_URLS = new Set([
   "/__save-material-slots",
   "/__save-skeleton",
   "/__save-soundcue",
+  "/__save-effect",
   "/__save-dialogue-voice",
   "/__save-dialogue-line",
   "/__save-ui",
@@ -955,6 +957,33 @@ function layoutEditorPlugin(): Plugin {
             const filePath = resolvePublicPath(payload.path);
             const previous = await readFile(filePath, "utf8").catch(() => null);
             const next = `${JSON.stringify(payload.cue, null, 2)}\n`;
+            await writeFile(filePath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // VFX Lite particle effect editor save: writes a `<name>.effect.json`
+        // asset. Validated/normalized server-side (validateSaveEffectPayload),
+        // kept inside public/ by resolvePublicPath.
+        if (req.url === "/__save-effect") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveEffectPayload(await readJsonBody(req));
+            const filePath = resolvePublicPath(payload.path);
+            const previous = await readFile(filePath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.effect, null, 2)}\n`;
             await writeFile(filePath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));

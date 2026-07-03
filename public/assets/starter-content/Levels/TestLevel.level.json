@@ -45,6 +45,14 @@
           "scale": 1
         }
       ]
+    },
+    {
+      "assetId": "sm-chair",
+      "placements": []
+    },
+    {
+      "assetId": "sm-chair-ktx2",
+      "placements": []
     }
   ],
   "characters": [],

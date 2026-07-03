@@ -84,6 +84,12 @@ import {
   type ForgeMaterialPreset,
 } from "@engine/assets/material";
 import {
+  PARTICLE_EFFECT_PRESETS,
+  PARTICLE_PRESET_DESCRIPTIONS,
+  PARTICLE_PRESET_LABELS,
+  type ParticleEffectPreset,
+} from "@engine/vfx/particleEffectPresets";
+import {
   COLLISION_CHANNELS,
   COLLISION_ENABLED_VALUES,
   COLLISION_OBJECT_CHANNELS,
@@ -1508,6 +1514,12 @@ export class EditorUi {
         void this.openSoundCueEditor(item);
       });
     }
+    if (item.type === "effect") {
+      card.addEventListener("dblclick", (event) => {
+        event.preventDefault();
+        void this.openParticleEffectEditor(item);
+      });
+    }
     if (item.type === "dialogueVoice" || item.type === "dialogueLine") {
       card.addEventListener("dblclick", (event) => {
         event.preventDefault();
@@ -1659,6 +1671,7 @@ export class EditorUi {
     if (isUiWidgetItem(item)) return () => void this.openUiWidgetEditor(item);
     if (isActorScriptItem(item)) return () => void this.openActorScriptEditor(item);
     if (item.type === "soundCue") return () => void this.openSoundCueEditor(item);
+    if (item.type === "effect") return () => void this.openParticleEffectEditor(item);
     if (item.type === "dialogueVoice" || item.type === "dialogueLine") {
       return () => void this.openDialogueEditor(item);
     }
@@ -2180,6 +2193,27 @@ export class EditorUi {
     }
   }
 
+  /**
+   * Opens the VFX Lite Particle Effect editor for a `*.effect.json` asset.
+   * Kept behind a dynamic import like the other asset editors.
+   */
+  private async openParticleEffectEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { ParticleEffectEditor } = await import("@/editor/ParticleEffectEditor");
+      await ParticleEffectEditor.open({
+        path: item.path,
+        label: item.label.replace(/\.effect\.json$/i, ""),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+        onSaved: () => this.renderContentAssets(),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Particle Effect editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
   private async openDialogueEditor(item: BrowserAssetItem): Promise<void> {
     try {
       const { DialogueEditor } = await import("@/editor/DialogueEditor");
@@ -2516,6 +2550,7 @@ export class EditorUi {
     // (Unreal's Pick Parent Class dialog), like creating a Blueprint Class.
     let parentClass: ParentClass | undefined;
     let materialPreset: ForgeMaterialPreset | undefined;
+    let particlePreset: ParticleEffectPreset | undefined;
     if (kind === "script") {
       const picked = await this.pickParentClass();
       if (!picked) return;
@@ -2524,6 +2559,10 @@ export class EditorUi {
       const picked = await this.pickMaterialPreset();
       if (!picked) return;
       materialPreset = picked;
+    } else if (kind === "particle") {
+      const picked = await this.pickParticlePreset();
+      if (!picked) return;
+      particlePreset = picked;
     }
     const label = kind === "folder" ? "folder" : kind === "script" ? "Actor Script" : `${kind} asset`;
     const name = window.prompt(`New ${label} name`, "");
@@ -2535,6 +2574,7 @@ export class EditorUi {
         name: name.trim(),
         ...(parentClass ? { parentClass } : {}),
         ...(materialPreset ? { materialPreset } : {}),
+        ...(particlePreset ? { particlePreset } : {}),
       });
       this.setStatus(`Created ${result.path}`, "success");
       if (result.registeredId) {
@@ -2645,6 +2685,56 @@ export class EditorUi {
         }
         const option = target.closest<HTMLElement>("[data-material-preset]");
         if (option) finish(option.dataset.materialPreset as ForgeMaterialPreset);
+      });
+    });
+  }
+
+  /**
+   * Particle effect creation starts with a starter preset picker (§5.1). The
+   * preset seeds the `*.effect.json` body; the Particle Effect Editor is free to
+   * change everything afterwards.
+   */
+  private pickParticlePreset(): Promise<ParticleEffectPreset | null> {
+    return new Promise((resolvePick) => {
+      const overlay = document.createElement("div");
+      overlay.className = "parent-class-overlay";
+      const options = PARTICLE_EFFECT_PRESETS.map(
+        (preset) => `
+        <button type="button" class="parent-class-option" data-particle-preset="${preset}">
+          <span class="parent-class-name">${escapeHtml(PARTICLE_PRESET_LABELS[preset])}</span>
+          <span class="parent-class-desc">${escapeHtml(PARTICLE_PRESET_DESCRIPTIONS[preset])}</span>
+        </button>`,
+      ).join("");
+      overlay.innerHTML = `
+        <div class="parent-class-dialog" role="dialog" aria-label="Pick Particle Preset">
+          <header class="parent-class-head">Pick Particle Preset</header>
+          <div class="parent-class-list">${options}</div>
+          <footer class="parent-class-foot">
+            <button type="button" class="parent-class-cancel" data-particle-preset-cancel>Cancel</button>
+          </footer>
+        </div>
+      `;
+      document.body.append(overlay);
+      const finish = (value: ParticleEffectPreset | null): void => {
+        cleanup();
+        resolvePick(value);
+      };
+      const onKey = (event: KeyboardEvent): void => {
+        if (event.key === "Escape") finish(null);
+      };
+      const cleanup = (): void => {
+        window.removeEventListener("keydown", onKey, true);
+        overlay.remove();
+      };
+      window.addEventListener("keydown", onKey, true);
+      overlay.addEventListener("click", (event) => {
+        const target = event.target as HTMLElement;
+        if (target === overlay || target.closest("[data-particle-preset-cancel]")) {
+          finish(null);
+          return;
+        }
+        const option = target.closest<HTMLElement>("[data-particle-preset]");
+        if (option) finish(option.dataset.particlePreset as ParticleEffectPreset);
       });
     });
   }

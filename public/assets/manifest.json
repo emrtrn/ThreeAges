@@ -1808,7 +1808,7 @@
     {
       "id": "starter-fx-smoke-puff",
       "name": "Smoke Puff Effect",
-      "assetType": "prefab",
+      "assetType": "effect",
       "category": "starter-effects",
       "path": "assets/starter-content/Effects/FX_Smoke_Puff.effect.json",
       "tags": [
@@ -1840,7 +1840,7 @@
     {
       "id": "starter-fx-spark-burst",
       "name": "Spark Burst Effect",
-      "assetType": "prefab",
+      "assetType": "effect",
       "category": "starter-effects",
       "path": "assets/starter-content/Effects/FX_Spark_Burst.effect.json",
       "tags": [
@@ -1872,7 +1872,7 @@
     {
       "id": "starter-fx-dust-hit",
       "name": "Dust Hit Effect",
-      "assetType": "prefab",
+      "assetType": "effect",
       "category": "starter-effects",
       "path": "assets/starter-content/Effects/FX_Dust_Hit.effect.json",
       "tags": [
@@ -1904,7 +1904,7 @@
     {
       "id": "starter-fx-interaction-glow",
       "name": "Interaction Glow Effect",
-      "assetType": "prefab",
+      "assetType": "effect",
       "category": "starter-effects",
       "path": "assets/starter-content/Effects/FX_Interaction_Glow.effect.json",
       "tags": [
@@ -3462,52 +3462,6 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 367
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "t-chair-m",
-      "name": "T Chair M",
-      "assetType": "texture",
-      "category": "Textures",
-      "path": "assets/starter-content/Textures/T_Chair_M.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Textures",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 63301
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "t-chair-n",
-      "name": "T Chair N",
-      "assetType": "texture",
-      "category": "Textures",
-      "path": "assets/starter-content/Textures/T_Chair_N.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Textures",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 181580
       },
       "license": "Unknown"
     },
@@ -20252,6 +20206,75 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 3228
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-chair-ktx2",
+      "name": "SM_Chair",
+      "assetType": "staticMesh",
+      "category": "Props",
+      "path": "assets/starter-content/StaticMeshes/Props/SM_Chair.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 383856
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "george-ktx2",
+      "name": "George",
+      "assetType": "skeletalMesh",
+      "category": "Props",
+      "path": "assets/starter-content/StaticMeshes/Props/George.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "character",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1639008
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "script-george-actor",
+      "name": "Script George.Actor",
+      "assetType": "prefab",
+      "category": "Props",
+      "path": "assets/starter-content/StaticMeshes/Props/Script_George.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Props",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 347
       },
       "license": "Unknown"
     }

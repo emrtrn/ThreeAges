@@ -79,6 +79,16 @@ engine/editor.
   added to the matching `validate*` there, mirroring the loader's
   `normalizeAssetSkeleton` (`src/scene/assetSkeletonLoader.ts`), or it is silently
   dropped on save.
+- **Third allowlist surface — `*.effect.json` particle effect (schema 2):**
+  `/__save-effect` validates through `validateSaveEffectPayload` →
+  `validateEffectAsset` (also in `tools/saveValidator.ts`, imported by
+  `vite.config.ts`). `validateEffectAsset` reuses the runtime normalizer
+  `normalizeEffectDefinition` (`engine/vfx/particleEffectParser.ts`) as the single
+  source of field shape, so any new `ParticleEffectDefinition` field
+  (`engine/vfx/particleEffectTypes.ts`) must be added to the matching `normalize*`
+  block in the parser, or it is silently dropped on save. Effect assets carry
+  `assetType: "effect"` in the manifest (`engine/assets/manifest.ts`); the runtime
+  still falls back to the `.effect.json` suffix for older `prefab`-typed manifests.
 
 ## Codex Tooling Context
 

@@ -922,48 +922,130 @@ CLAUDE.md'de belgelenecek **üçüncü allowlist yüzeyi** olur.
 
 ---
 
-## Faz 1 — Effect Asset Schema ve Validation
+## Faz 1 — Effect Asset Schema ve Validation  ✅ TAMAMLANDI (3 Temmuz 2026)
 
-- [ ] `ParticleEffectDefinition` ve normalize edilmiş runtime tiplerini
+- [x] `ParticleEffectDefinition` ve normalize edilmiş runtime tiplerini
       `engine/vfx/` altında tanımla (mevcut parser
       `engine/render-three/particleEffect.ts`’ten buraya taşınır; Three.js
       adapter yerinde kalır — §9 geçiş notları).
-- [ ] Schema-1 → internal representation uyumluluğu ekle (best-effort eşleme,
+      *(`engine/vfx/particleEffectTypes.ts` = zengin `ParticleEffectDefinition`
+      + flat `RuntimeParticleEffect`; `engine/vfx/particleEffectParser.ts` =
+      normalizer + collapse. `particleEffect.ts` adapter yerinde kaldı ve
+      `RuntimeParticleEffect` tüketiyor; `parseEffectDefinition`/`EffectDefinition`
+      back-compat alias olarak re-export edildi.)*
+- [x] Schema-1 → internal representation uyumluluğu ekle (best-effort eşleme,
       §7 tablosu).
-- [ ] Schema-2 save formatını uygula.
-- [ ] Dört starter effect asset’ini schema-2’ye elle çevir ve preview’de
-      görsel olarak doğrula (§7 “eşleme birebir değildir” kararı).
-- [ ] `tools/saveValidator.ts` içinde `validateEffectAsset` ekle ve
+      *(`normalizeSchema1`: velocity→direction+speed, spread→spreadAngleDeg
+      (×45, tersinir), color→start/end, materialMode→blendMode, rate→spawn.rate.)*
+- [x] Schema-2 save formatını uygula (`normalizeSchema2` + §6 varsayılanları).
+- [x] Dört starter effect asset’ini schema-2’ye elle çevir ve görsel olarak
+      doğrula (§7 “eşleme birebir değildir” kararı).
+      *(Mekanik dönüşüm: collapse **birebir aynı** runtime params üretir —
+      "schema-1 ve hand-converted schema-2 starter collapse identically"
+      headless testi görsel doğrulamanın yerine geçer. Zengin burst/hand-tuning
+      preview viewport (Faz 3) geldiğinde yapılır.)*
+- [x] `tools/saveValidator.ts` içinde `validateEffectAsset` ekle ve
       `vite.config.ts`’e `/__save-effect` dev endpoint’ini kaydet
-      (`/__save-soundcue` kalıbı).
-- [ ] Aralık, enum, vec3, color ve bounds doğrulamalarını ekle.
-- [ ] Manifest’e `assetType: "effect"` ekle (bugün effect asset’leri
-      `assetType: "prefab"` + `.effect.json` suffix koklamasıyla bulunuyor);
-      suffix tespitini geriye dönük uyumlulukla kaldır.
-- [ ] CLAUDE.md Working Rules’a üçüncü allowlist yüzeyini (effect asset save)
+      (`/__save-soundcue` kalıbı). *(`validateSaveEffectPayload` +
+      `validateEffectAsset`; validator normalizer'ı tek doğruluk kaynağı olarak
+      yeniden kullanır.)*
+- [x] Aralık, enum, vec3, color ve bounds doğrulamalarını ekle.
+      *(Normalizer üzerinden: `readRange` min<=max sıralar, `readEnum` geçerli
+      değere düşer, `readVec3`/`readColor`/`normalizeBounds` guard'lar,
+      `finiteNumber`+`clampMin` NaN/Infinity/negatif korur.)*
+- [x] Manifest’e `assetType: "effect"` ekle; suffix tespitini geriye dönük
+      uyumlulukla kaldır.
+      *(`AssetType`+`ASSET_TYPES`+`EFFECT_EXTENSIONS`+`inferAssetTypeFromPath`;
+      4 starter manifest kaydı `prefab`→`effect`. `RuntimeSceneApp.populateAssetUrls`
+      artık `assetType === "effect" || .effect.json` — eski manifestler çalışır.)*
+- [x] CLAUDE.md Working Rules’a üçüncü allowlist yüzeyini (effect asset save)
       layout/skeleton maddeleriyle aynı formatta ekle.
-- [ ] Headless test: valid, invalid, legacy, defaulted effect definitions.
+- [x] Headless test: valid, invalid, legacy, defaulted effect definitions.
+      *(6 yeni test: schema-1 collapse, schema-2 defaults, starter round-trip
+      identity, burst→rate, `validateEffectAsset` junk-guard, save payload gate.)*
 
-**Kabul kriteri:** Geçersiz effect JSON’u runtime crash yaratmaz; editor kayıt yolu geçersiz alanları kontrol eder.
+**Kabul kriteri:** Geçersiz effect JSON’u runtime crash yaratmaz; editor kayıt
+yolu geçersiz alanları kontrol eder. ✅ `build:verify` yeşil (tsc + vite build +
+573 engine check + verify:dist --strict), `check:assets` errors=0.
+
+### Faz 1 karar kaydı (3 Temmuz 2026)
+
+**Renderer flat kontratı korundu (staged bridge).** Zengin schema-2, *authoring +
+validation* katmanıdır; mevcut basit `THREE.Points` CPU simülasyonu Faz 1'de
+değişmedi. Normalizer zengin formu üretir, `toRuntimeParticleEffect` bunu
+renderer'ın tükettiği flat `RuntimeParticleEffect`'e indirir. Bu, riski küçük
+tutar (renderer dokunulmadı) ve gerçek zengin simülasyonu (ranges/curves/burst
+shapes) Faz 3+'a bırakır. Flat kontrat schema-1'in tam semantiğini korur, bu
+yüzden 4 starter render'ı birebir aynıdır.
+
+**`effectId` runtime shape'ten düştü.** Flat `RuntimeParticleEffect` artık
+`effectId` taşımaz — kimlik manifest'ten gelir (schema-2 gövdesinde de yoktur).
+Runtime zaten `def.effectId` okumuyordu; `RuntimeSceneApp` cache'i çağrıya
+verilen `effectId` ile anahtarlıyor.
 
 ---
 
-## Faz 2 — Particle Effect Editor Lite
+## Faz 2 — Particle Effect Editor Lite  ✅ TAMAMLANDI (3 Temmuz 2026)
 
-- [ ] Content Browser çift tıklama rotasını `*.effect.json` editorüne bağla
+- [x] Content Browser çift tıklama rotasını `*.effect.json` editorüne bağla
       (`EditorUi` içindeki `openMaterialEditor` / `openSoundCueEditor` dinamik
       import kalıbı birebir uygulanır).
-- [ ] Mevcut `New → Particle` akışını preset picker + schema-2 üretimine
+      *(`item.type === "effect"` için dblclick + `assetEditorOpener` +
+      `openParticleEffectEditor` → `import("@/editor/ParticleEffectEditor")`.)*
+- [x] Mevcut `New → Particle` akışını preset picker + schema-2 üretimine
       yükselt (akış bugün var, minimal schema-1 dosyası yazıyor —
       `CONTENT_NEW_KINDS`).
-- [ ] Sabit stack panelini ekle.
-- [ ] Details formunu System / Spawn / Initialize / Update / Renderer gruplarına ayır.
-- [ ] Save, Duplicate, Play, Pause, Restart kontrolünü ekle.
-- [ ] Undo/redo için property command’leri bağla.
-- [ ] Editor preview state’ini asset verisinden ayrı tut.
-- [ ] Editor CSS’in game production build’e sızmadığını doğrula.
+      *(Akış zaten schema-2 yazıyordu (Faz 1); `pickParticlePreset` modal’ı +
+      `particlePreset` alanı `ContentNewPayload`/`ContentNewRequest`’e eklendi;
+      preset gövdeleri paylaşılan `engine/vfx/particleEffectPresets.ts`’ten gelir
+      — `materialPreset` kalıbının birebir eşi.)*
+- [x] Sabit stack panelini ekle.
+      *(Sol `pfx-stack`: System/Spawn/Initialize/Update/Renderer/Bounds; tıklama
+      ilgili Details grubuna smooth-scroll + flash.)*
+- [x] Details formunu System / Spawn / Initialize / Update / Renderer gruplarına ayır.
+      *(6 grup — Bounds dahil; `data-path` tabanlı row builder’lar:
+      num/range/vec3/color/enum/bool/text.)*
+- [x] Save, Duplicate, Play, Pause, Restart kontrolünü ekle.
+      *(Save → `/__save-effect`; Duplicate → sibling kopya + editörü kopyaya
+      yönlendirir; Play/Pause/Restart preview viewport’u sürer.)*
+- [x] Undo/redo için property command’leri bağla.
+      *(Snapshot tabanlı history: alan-düzenleme oturumu başında baseline
+      yakalanır, `change`’de commit; Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z.)*
+- [x] Editor preview state’ini asset verisinden ayrı tut.
+      *(Preview zamanı/buffer/play-pause tamamen `ParticleEffectPreviewViewport`
+      + `ParticleEffect` içinde; `def` yalnızca asset verisi, Save yalnızca onu
+      yazar.)*
+- [x] Editor CSS’in game production build’e sızmadığını doğrula.
+      *(Editör tümüyle `import.meta.env.DEV` arkasında → Vite üretim derlemesinde
+      DCE; dist’te `pfx-*`/`__save-effect` string’i yok, `verify:dist --strict`
+      temiz.)*
 
-**Kabul kriteri:** Kullanıcı starter preset’ten yeni bir effect üretebilir, preview eder, kaydeder ve tekrar açtığında aynı sonucu görür.
+**Kabul kriteri:** Kullanıcı starter preset’ten yeni bir effect üretebilir, preview eder, kaydeder ve tekrar açtığında aynı sonucu görür. ✅ `build:verify` yeşil (tsc + vite build + 575 engine check + verify:dist --strict), `check:assets` errors=0. Dev sunucusu editör modüllerini hatasız transform ediyor. **Kalan:** canlı browser smoke (kullanıcı) — §15 tam akış.
+
+### Faz 2 karar kaydı (3 Temmuz 2026)
+
+**Preview viewport Faz 2’de işlevsel yapıldı, cila Faz 3’e bırakıldı.** Faz 2
+kabul kriteri "preview eder" olduğu için `ParticleEffectPreviewViewport.ts`
+çalışır halde eklendi: mevcut runtime `ParticleEffect` renderer’ı +
+`OrbitViewportCamera` + `createAssetViewportRig` (grid/ışık) + kendi raf loop’u;
+Play/Pause/Restart onu sürer; one-shot’lar kısa duraklamayla otomatik tekrar
+oynar. **Faz 3’e bilinçli bırakılanlar:** axis/origin/bounds helper’ları, preview
+speed (0.25×–2×) + loop toggle, alive/cap/cost diagnostics paneli, tam warning
+overlay (§11) ve dispose/leak lifecycle testleri. Faz 2 yalnızca hafif bir
+Diagnostics kutusu (4 temel uyarı) + footer özeti taşır.
+
+**Undo snapshot tabanlı (property-command değil).** Form editörü için en sağlam
+model: alan başına bir `def` snapshot’ı. `input` canlı preview’i günceller
+(re-render yok → caret korunur), `change` commit eder (baseline ≠ def ise undo
+stack’e itilir). Bu, "property command" ifadesinin pratik karşılığıdır.
+
+**Preset’ler paylaşılan tek kaynak.** 4 starter kimliği (renk/blend/kategori) +
+`blank`, `engine/vfx/particleEffectPresets.ts`’te normalize-şekilli
+`ParticleEffectDefinition` olarak yaşar; `contentStubJson` (saveValidator) ve
+editör preset picker aynı modülü kullanır. Starter dosyaları (mekanik Faz 1
+dönüşümleri) olduğu gibi kaldı; preset gövdeleri kasıtlı olarak daha ayırt
+edici/kullanışlı tunlandı (yükselen duman, oturan toz, additive kıvılcım, mavi
+loop glow).
 
 ---
 

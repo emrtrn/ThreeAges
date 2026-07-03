@@ -405,7 +405,20 @@
       ]
     }
   ],
-  "characters": [],
+  "characters": [
+    {
+      "assetId": "george-ktx2",
+      "position": [
+        -14.22,
+        0.01,
+        -18.13
+      ],
+      "animation": "idle",
+      "name": "george-ktx2",
+      "rotationYDeg": 0,
+      "scale": 0.42
+    }
+  ],
   "worldSettings": {
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",

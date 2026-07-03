@@ -1055,7 +1055,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.beginLoadingUi("Loading project");
     try {
       this.activeProject = await loadActiveProject();
-      this.assetLoader = new AssetLoader(this.activeProject.manifest, {
+      this.assetLoader = new AssetLoader(this.activeProject.manifest, this.renderer, {
         onLoaded: (id) => this.loadProgress.markLoaded(id),
         onFailed: (id, error) => this.loadProgress.markFailed(id, describeLoadError(error)),
       });
@@ -2043,7 +2043,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const path = assetPath(asset);
       if (assetType(asset) === "sound") this.soundUrlById.set(asset.id, projectFileUrl(path));
       if (assetType(asset) === "soundCue") this.soundCueUrlById.set(asset.id, projectFileUrl(path));
-      if (path.endsWith(".effect.json")) this.effectUrlById.set(asset.id, projectFileUrl(path));
+      // Prefer the `effect` asset type; fall back to the `.effect.json` suffix so
+      // older manifests (effect assets typed as `prefab`) keep resolving.
+      if (assetType(asset) === "effect" || path.endsWith(".effect.json")) {
+        this.effectUrlById.set(asset.id, projectFileUrl(path));
+      }
     }
   }
 

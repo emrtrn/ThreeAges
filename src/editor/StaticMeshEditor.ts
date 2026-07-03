@@ -34,7 +34,6 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js";
@@ -70,6 +69,7 @@ import {
 } from "@/editor/assetMaterialSlotsStore";
 import type { AssetManifest, AssetRecord } from "@engine/assets/manifest";
 import { loadForgeMaterial } from "@/scene/materialAssets";
+import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 
 export interface StaticMeshEditorOptions {
   /** Public-relative path to the model file (e.g. `assets/props/chair.glb`). */
@@ -161,7 +161,7 @@ export class StaticMeshEditor {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(45, 1, 0.01, 1000);
-  private readonly loader = new GLTFLoader();
+  private readonly loader: GLTFLoader;
   private readonly textureLoader = new TextureLoader();
   private readonly modelGroup = new Group();
   private readonly overlayGroup = new Group();
@@ -210,8 +210,6 @@ export class StaticMeshEditor {
   private readonly raycaster = new Raycaster();
 
   private constructor(private readonly options: StaticMeshEditorOptions) {
-    this.loader.setMeshoptDecoder(MeshoptDecoder);
-
     this.overlay = document.createElement("div");
     this.overlay.className = "sm-editor-overlay";
     this.overlay.innerHTML = `
@@ -252,6 +250,7 @@ export class StaticMeshEditor {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.viewportHost.append(this.renderer.domElement);
+    this.loader = createForgeGltfLoader(this.renderer);
 
     this.buildScene();
     this.bindCameraControls();

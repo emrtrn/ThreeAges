@@ -1,14 +1,15 @@
 /**
  * Minimal CPU-simulated particle effect for the runtime VFX path. Renders a
- * pre-authored effect asset (`.effect.json`, parsed by {@link parseEffectDefinition})
- * as a `THREE.Points` cloud with soft round, color-tinted particles. Emission is
- * driven by `rate`/`lifetime`; each particle ages out, growing `startSize`→`endSize`
- * and fading. A non-looping effect emits for one `lifetime` window then finishes.
+ * pre-authored effect asset (`.effect.json`) as a `THREE.Points` cloud with soft
+ * round, color-tinted particles. Emission is driven by `rate`/`lifetime`; each
+ * particle ages out, growing `startSize`→`endSize` and fading. A non-looping
+ * effect emits for one `lifetime` window then finishes.
  *
  * Deliberately simple (no textures, no GPU sim, no sub-emitters) — a first VFX
- * version that makes authored effects visible on Play. The pure parser is
- * headless-testable; the renderer class is Three.js glue like the other
- * render-three modules.
+ * version that makes authored effects visible on Play. The class consumes the
+ * flat {@link RuntimeParticleEffect} collapsed by `engine/vfx/particleEffectParser`
+ * from either schema; parsing/normalization is pure and headless-testable, while
+ * this renderer class is Three.js glue like the other render-three modules.
  */
 import {
   AdditiveBlending,
@@ -20,67 +21,18 @@ import {
   ShaderMaterial,
 } from "three";
 
-export type EffectMaterialMode = "additive" | "alpha";
+import type { RuntimeParticleEffect } from "../vfx/particleEffectTypes";
 
-/** Typed `.effect.json` definition (schema 1). */
-export interface EffectDefinition {
-  effectId: string;
-  name?: string;
-  loop: boolean;
-  /** Particles spawned per second. */
-  rate: number;
-  /** Particle lifetime in seconds. */
-  lifetime: number;
-  startSize: number;
-  endSize: number;
-  velocity: [number, number, number];
-  /** Random spread applied to spawn velocity/position. */
-  spread: number;
-  materialMode: EffectMaterialMode;
-  /** Particle tint (hex). */
-  color: string;
-}
-
-function finiteNumber(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
-}
-
-/**
- * Parses + validates a `.effect.json` effect definition. Returns null when the
- * value is not a schema-1 object with a non-empty `effectId`; missing optional
- * fields fall back to sensible defaults.
- */
-export function parseEffectDefinition(value: unknown): EffectDefinition | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const data = value as Record<string, unknown>;
-  if (data.schema !== 1) return null;
-  if (typeof data.effectId !== "string" || data.effectId.length === 0) return null;
-
-  const velocity: [number, number, number] =
-    Array.isArray(data.velocity) &&
-    data.velocity.length === 3 &&
-    data.velocity.every((axis) => typeof axis === "number" && Number.isFinite(axis))
-      ? [data.velocity[0] as number, data.velocity[1] as number, data.velocity[2] as number]
-      : [0, 0, 0];
-
-  const definition: EffectDefinition = {
-    effectId: data.effectId,
-    loop: data.loop === true,
-    rate: Math.max(0, finiteNumber(data.rate, 10)),
-    lifetime: Math.max(0.01, finiteNumber(data.lifetime, 1)),
-    startSize: Math.max(0, finiteNumber(data.startSize, 0.2)),
-    endSize: Math.max(0, finiteNumber(data.endSize, 0.2)),
-    velocity,
-    spread: Math.max(0, finiteNumber(data.spread, 0)),
-    materialMode: data.materialMode === "additive" ? "additive" : "alpha",
-    color:
-      typeof data.color === "string" && /^#[0-9a-fA-F]{6}$/.test(data.color)
-        ? data.color
-        : "#ffffff",
-  };
-  if (typeof data.name === "string") definition.name = data.name;
-  return definition;
-}
+// Back-compat aliases: the runtime path (RuntimeSceneApp) and tests reference the
+// flat runtime effect + the normalize→collapse entry point through these names.
+export {
+  normalizeEffectDefinition,
+  parseRuntimeParticleEffect,
+  parseRuntimeParticleEffect as parseEffectDefinition,
+  toRuntimeParticleEffect,
+} from "../vfx/particleEffectParser";
+export type { RuntimeParticleEffect as EffectDefinition } from "../vfx/particleEffectTypes";
+export type { ParticleBlendMode as EffectMaterialMode } from "../vfx/particleEffectTypes";
 
 const POINT_PIXEL_SCALE = 320;
 
@@ -112,7 +64,7 @@ void main() {
 /** A live, CPU-simulated instance of an effect definition, ready to add to a scene. */
 export class ParticleEffect {
   readonly object3D: Points;
-  private readonly definition: EffectDefinition;
+  private readonly definition: RuntimeParticleEffect;
   private readonly capacity: number;
   private readonly positions: Float32Array;
   private readonly sizes: Float32Array;
@@ -126,7 +78,7 @@ export class ParticleEffect {
   private elapsed = 0;
   private spawnAccumulator = 0;
 
-  constructor(definition: EffectDefinition) {
+  constructor(definition: RuntimeParticleEffect) {
     this.definition = definition;
     // Max particles alive at once ≈ rate * lifetime; pad for spawn jitter.
     this.capacity = Math.max(8, Math.ceil(definition.rate * definition.lifetime) + 4);

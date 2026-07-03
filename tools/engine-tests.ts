@@ -249,7 +249,16 @@ import {
 } from "../src/game/saveGameUi";
 import { firstConnectedGamepad, readGamepadCodes } from "../src/input/gamepadInput";
 import { joystickMoveCodes, joystickVector } from "../src/input/virtualJoystick";
-import { parseEffectDefinition } from "../engine/render-three/particleEffect";
+import {
+  normalizeEffectDefinition,
+  parseRuntimeParticleEffect,
+  toRuntimeParticleEffect,
+} from "../engine/vfx/particleEffectParser";
+import {
+  PARTICLE_EFFECT_PRESETS,
+  buildParticleEffectPresetBody,
+  particleEffectPresetDefinition,
+} from "../engine/vfx/particleEffectPresets";
 import { CrossfadeAnimator } from "../engine/render-three/characterAnimator";
 import { collectSubtreeNodeNames, splitClipsByUpperBody } from "../engine/render-three/bodyMask";
 import { LayeredCharacterAnimator } from "../engine/render-three/layeredCharacterAnimator";
@@ -399,6 +408,8 @@ import {
   validateDialogueLineAsset,
   validateSaveDialogueVoicePayload,
   validateSaveDialogueLinePayload,
+  validateEffectAsset,
+  validateSaveEffectPayload,
 } from "./saveValidator";
 import {
   defaultActorScriptDef,
@@ -12084,9 +12095,11 @@ check("placement validator allowlists audio.autoPlay and rejects a non-boolean",
     validatePlacement({ position: [0, 0, 0], audio: { clipId: "x", autoPlay: "yes" } }),
   );
 });
-check("parseEffectDefinition reads a schema-1 effect and rejects bad input", () => {
+check("parseRuntimeParticleEffect collapses a schema-1 effect and rejects bad input", () => {
+  // A schema-1 body collapses to the flat runtime params the renderer needs
+  // (effectId is dropped — the manifest is the id source of truth).
   assert.deepEqual(
-    parseEffectDefinition({
+    parseRuntimeParticleEffect({
       schema: 1,
       effectId: "starter-fx-smoke-puff",
       name: "Smoke Puff Effect",
@@ -12101,7 +12114,6 @@ check("parseEffectDefinition reads a schema-1 effect and rejects bad input", () 
       color: "#a7a7a7",
     }),
     {
-      effectId: "starter-fx-smoke-puff",
       name: "Smoke Puff Effect",
       loop: false,
       rate: 18,
@@ -12114,11 +12126,12 @@ check("parseEffectDefinition reads a schema-1 effect and rejects bad input", () 
       color: "#a7a7a7",
     },
   );
-  // Wrong schema or empty effectId â†’ null.
-  assert.equal(parseEffectDefinition({ schema: 2, effectId: "x" }), null);
-  assert.equal(parseEffectDefinition({ schema: 1, effectId: "" }), null);
+  // Non-object, unknown schema, or empty schema-1 effectId â†’ null.
+  assert.equal(parseRuntimeParticleEffect(null), null);
+  assert.equal(parseRuntimeParticleEffect({ schema: 3 }), null);
+  assert.equal(parseRuntimeParticleEffect({ schema: 1, effectId: "" }), null);
   // Unknown materialMode falls back to alpha; a malformed color falls back to white.
-  const fallback = parseEffectDefinition({
+  const fallback = parseRuntimeParticleEffect({
     schema: 1,
     effectId: "fx",
     materialMode: "neon",
@@ -12126,6 +12139,208 @@ check("parseEffectDefinition reads a schema-1 effect and rejects bad input", () 
   });
   assert.equal(fallback?.materialMode, "alpha");
   assert.equal(fallback?.color, "#ffffff");
+});
+
+check("normalizeEffectDefinition reads a schema-2 effect and applies defaults", () => {
+  const def = normalizeEffectDefinition({
+    schema: 2,
+    type: "particleEffect",
+    name: "Smoke Puff Effect",
+    category: "Smoke",
+    tags: ["smoke"],
+    system: { loop: true, duration: 0.35, maxParticles: 96 },
+    spawn: { mode: "burst", count: 30, shape: "sphere", radius: 0.12 },
+    initialize: { lifetime: [0.5, 1.1], startColor: "#bfc3c8", speed: [0.7, 1.8], spreadAngleDeg: 42 },
+    update: { endColor: "#6d7378", endSize: [0.55, 0.95] },
+    renderer: { blendMode: "additive", softness: 0.6 },
+  });
+  assert.ok(def);
+  assert.equal(def.name, "Smoke Puff Effect");
+  assert.equal(def.category, "Smoke");
+  assert.deepEqual(def.tags, ["smoke"]);
+  assert.equal(def.system.loop, true);
+  assert.equal(def.system.maxParticles, 96);
+  assert.equal(def.spawn.mode, "burst");
+  assert.equal(def.spawn.count, 30);
+  assert.equal(def.spawn.shape, "sphere");
+  assert.deepEqual(def.initialize.lifetime, [0.5, 1.1]);
+  assert.equal(def.initialize.startColor, "#bfc3c8");
+  assert.equal(def.renderer.blendMode, "additive");
+  // Untouched fields fall back to §6 defaults, not undefined.
+  assert.deepEqual(def.initialize.startSize, [0.1, 0.2]);
+  assert.equal(def.update.fadeOutTime, 0.1);
+  assert.equal(def.renderer.sortMode, "none");
+
+  // An out-of-order range is reordered min<=max; a single number widens to [n,n];
+  // a bad enum/color falls back; missing sub-blocks default whole-cloth.
+  const messy = normalizeEffectDefinition({
+    schema: 2,
+    initialize: { lifetime: [1.2, 0.4], startSize: 0.3, startColor: "nope" },
+    renderer: { blendMode: "screen" },
+  });
+  assert.ok(messy);
+  assert.deepEqual(messy.initialize.lifetime, [0.4, 1.2]);
+  assert.deepEqual(messy.initialize.startSize, [0.3, 0.3]);
+  assert.equal(messy.initialize.startColor, "#ffffff");
+  assert.equal(messy.renderer.blendMode, "alpha");
+});
+
+check("schema-1 and its hand-converted schema-2 starter collapse identically", () => {
+  // The Faz 1 starter conversion is mechanical: the schema-2 files are authored
+  // so the normalize→collapse pipeline reproduces the original schema-1 runtime
+  // params exactly. This stands in for the plan's "visually verify" step.
+  const legacy = {
+    schema: 1,
+    effectId: "starter-fx-smoke-puff",
+    name: "Smoke Puff Effect",
+    loop: false,
+    rate: 18,
+    lifetime: 0.8,
+    startSize: 0.12,
+    endSize: 0.8,
+    velocity: [0, 1, 0],
+    spread: 0.4,
+    materialMode: "alpha",
+    color: "#a7a7a7",
+  };
+  const converted = {
+    schema: 2,
+    type: "particleEffect",
+    name: "Smoke Puff Effect",
+    system: { loop: false, duration: 0.8 },
+    spawn: { mode: "rate", rate: 18 },
+    initialize: {
+      lifetime: [0.8, 0.8],
+      startSize: [0.12, 0.12],
+      startColor: "#a7a7a7",
+      direction: [0, 1, 0],
+      speed: [1, 1],
+      spreadAngleDeg: 18,
+    },
+    update: { endSize: [0.8, 0.8], endColor: "#a7a7a7" },
+    renderer: { blendMode: "alpha" },
+  };
+  assert.deepEqual(
+    parseRuntimeParticleEffect(converted),
+    parseRuntimeParticleEffect(legacy),
+  );
+});
+
+check("normalizeEffectDefinition maps burst count to an approximate runtime rate", () => {
+  const runtime = toRuntimeParticleEffect(
+    normalizeEffectDefinition({
+      schema: 2,
+      system: { loop: false },
+      spawn: { mode: "burst", count: 30 },
+      initialize: { lifetime: [1, 1] },
+    })!,
+  );
+  // burst count 30 over a ~1s lifetime window â†’ ~30/s continuous approximation.
+  assert.equal(runtime.rate, 30);
+});
+
+check("validateEffectAsset canonicalizes a schema-2 body and guards junk numbers", () => {
+  const canonical = validateEffectAsset({
+    schema: 2,
+    type: "particleEffect",
+    name: "FX_Test",
+    // Junk that must be dropped/guarded: unknown field, NaN duration, bad enum,
+    // out-of-order range, malformed colour.
+    bogus: "drop me",
+    system: { loop: true, duration: Number.NaN, maxParticles: -5 },
+    spawn: { mode: "spiral", count: 12 },
+    initialize: { lifetime: [1.5, 0.5], startColor: "chartreuse" },
+    renderer: { blendMode: "additive" },
+  });
+  assert.equal(canonical.schema, 2);
+  assert.equal(canonical.type, "particleEffect");
+  assert.equal("bogus" in canonical, false);
+  const system = canonical.system as Record<string, unknown>;
+  assert.equal(system.loop, true);
+  assert.equal(system.duration, 0.5); // NaN â†’ default
+  assert.equal(system.maxParticles, 1); // clamped to >= 1
+  const spawn = canonical.spawn as Record<string, unknown>;
+  assert.equal(spawn.mode, "burst"); // unknown enum â†’ default
+  const initialize = canonical.initialize as Record<string, unknown>;
+  assert.deepEqual(initialize.lifetime, [0.5, 1.5]); // reordered
+  assert.equal(initialize.startColor, "#ffffff"); // bad colour â†’ white
+
+  // Envelope gate: wrong schema / type / non-object are hard errors.
+  assert.throws(() => validateEffectAsset({ schema: 1, type: "particleEffect" }));
+  assert.throws(() => validateEffectAsset({ schema: 2, type: "prefab" }));
+  assert.throws(() => validateEffectAsset(null));
+});
+
+check("validateSaveEffectPayload requires a .effect.json path", () => {
+  const ok = validateSaveEffectPayload({
+    path: "assets/effects/FX_Test.effect.json",
+    effect: { schema: 2, type: "particleEffect", name: "FX_Test" },
+  });
+  assert.equal(ok.path, "assets/effects/FX_Test.effect.json");
+  assert.equal((ok.effect as Record<string, unknown>).schema, 2);
+  assert.throws(() => validateSaveEffectPayload({ path: "assets/x.json", effect: {} }));
+  assert.throws(() =>
+    validateSaveEffectPayload({ path: "../escape.effect.json", effect: {} }),
+  );
+});
+
+check("every starter preset body is a valid, save-clean schema-2 effect", () => {
+  for (const preset of PARTICLE_EFFECT_PRESETS) {
+    const body = buildParticleEffectPresetBody(preset, `FX_${preset}`);
+    assert.equal(body.schema, 2);
+    assert.equal(body.type, "particleEffect");
+    assert.equal(body.name, `FX_${preset}`);
+    // The seeded body must normalize (no null) and survive the save validator
+    // unchanged in identity fields — presets are the single source of shape.
+    const def = normalizeEffectDefinition(body);
+    assert.ok(def, `${preset} normalizes`);
+    const canonical = validateEffectAsset(body);
+    assert.equal(canonical.name, `FX_${preset}`);
+    // A runtime collapse always yields a finite, non-negative capacity driver.
+    const runtime = parseRuntimeParticleEffect(body);
+    assert.ok(runtime && runtime.rate >= 0 && Number.isFinite(runtime.rate));
+  }
+  // The distinctive preset identities survive: smoke is a one-shot alpha burst,
+  // glow is an additive loop.
+  const smoke = particleEffectPresetDefinition("smoke");
+  assert.equal(smoke.system.loop, false);
+  assert.equal(smoke.spawn.mode, "burst");
+  assert.equal(smoke.renderer.blendMode, "alpha");
+  const glow = particleEffectPresetDefinition("glow");
+  assert.equal(glow.system.loop, true);
+  assert.equal(glow.renderer.blendMode, "additive");
+  // Definitions are deep-cloned per call — mutating one never leaks to the next.
+  smoke.system.loop = true;
+  assert.equal(particleEffectPresetDefinition("smoke").system.loop, false);
+});
+
+check("content-new particle honours the picked preset (and defaults to blank)", () => {
+  // validateContentNewPayload accepts a known preset and falls back to blank.
+  assert.equal(
+    validateContentNewPayload({ kind: "particle", dir: "", name: "Fx", particlePreset: "spark" }).particlePreset,
+    "spark",
+  );
+  assert.equal(
+    validateContentNewPayload({ kind: "particle", dir: "", name: "Fx", particlePreset: "nope" }).particlePreset,
+    "blank",
+  );
+  // The resolved stub carries the preset's identity (spark = additive one-shot).
+  const spark = resolveContentNewFile({
+    kind: "particle",
+    dir: "assets/effects",
+    name: "Sparks",
+    particlePreset: "spark",
+  });
+  assert.equal(spark.path, "assets/effects/Sparks.effect.json");
+  const sparkBody = JSON.parse(spark.content ?? "");
+  assert.equal(sparkBody.name, "Sparks");
+  assert.equal(sparkBody.renderer.blendMode, "additive");
+  assert.equal(sparkBody.system.loop, false);
+  // No preset → blank looping rate emitter (back-compat with the old stub).
+  const blank = resolveContentNewFile({ kind: "particle", dir: "", name: "Plain" });
+  const blankRuntime = parseRuntimeParticleEffect(JSON.parse(blank.content ?? ""));
+  assert.equal(blankRuntime?.loop, true);
+  assert.equal(blankRuntime?.rate, 10);
 });
 check("collision save payload requires a .collision.json path", () => {
   const payload = validateSaveCollisionPayload({
@@ -13634,7 +13849,12 @@ check("content-new resolves to typed stub files and folders", () => {
 
   const particle = resolveContentNewFile({ kind: "particle", dir: "assets/effects", name: "Dust Hit" });
   assert.equal(particle.path, "assets/effects/Dust Hit.effect.json");
-  assert.equal(parseEffectDefinition(JSON.parse(particle.content ?? ""))?.effectId, "dust-hit");
+  // The stub is a schema-2 body that normalizes to a valid looping rate emitter.
+  const particleBody = JSON.parse(particle.content ?? "");
+  assert.equal(particleBody.schema, 2);
+  const particleRuntime = parseRuntimeParticleEffect(particleBody);
+  assert.equal(particleRuntime?.loop, true);
+  assert.equal(particleRuntime?.rate, 10);
 
   const cue = resolveContentNewFile({ kind: "soundCue", dir: "assets/sounds", name: "Footstep Cue" });
   assert.equal(cue.path, "assets/sounds/Footstep Cue.soundcue.json");
@@ -15973,7 +16193,7 @@ check("buildImportedAssetRecord derives a valid manifest entry per type", () => 
   assert.equal(actor?.category, "blueprints");
 
   const effect = buildImportedAssetRecord("assets/effects/Dust.effect.json", 80, []);
-  assert.equal(effect?.assetType, "prefab");
+  assert.equal(effect?.assetType, "effect");
   assert.equal(effect?.placeable, false);
 
   const legacyScript = buildImportedAssetRecord("assets/blueprints/Old.script.json", 75, []);

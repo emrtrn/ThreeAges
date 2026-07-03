@@ -17,7 +17,6 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type {
   ForgeMaterialAlphaMode,
@@ -28,6 +27,7 @@ import type {
   ForgeMaterialUvTiling,
 } from "@engine/assets/material";
 import { createThreeMaterialFromForgeDef } from "@engine/render-three/materials";
+import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 
 export interface ThumbnailMaterialPreview {
   materialType: ForgeMaterialType;
@@ -62,13 +62,12 @@ export interface ThumbnailMaterialPreview {
 }
 
 export class ThumbnailRenderer {
-  private readonly loader = new GLTFLoader();
+  private readonly loader: GLTFLoader;
   private readonly textureLoader = new TextureLoader();
   private readonly renderer: WebGLRenderer;
   private readonly cache = new Map<string, Promise<string>>();
 
   constructor(size = 192) {
-    this.loader.setMeshoptDecoder(MeshoptDecoder);
     this.renderer = new WebGLRenderer({
       antialias: true,
       alpha: false,
@@ -77,6 +76,7 @@ export class ThumbnailRenderer {
     this.renderer.setPixelRatio(1);
     this.renderer.setSize(size, size, false);
     this.renderer.outputColorSpace = SRGBColorSpace;
+    this.loader = createForgeGltfLoader(this.renderer);
   }
 
   renderModel(url: string, material?: ThumbnailMaterialPreview): Promise<string> {

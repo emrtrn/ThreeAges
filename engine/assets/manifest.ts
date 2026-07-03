@@ -9,6 +9,7 @@ export type AssetType =
   | "dialogueLine"
   | "conversation"
   | "animation"
+  | "effect"
   | "prefab"
   | "ui"
   | "level";
@@ -129,9 +130,12 @@ const CONVERSATION_EXTENSIONS = new Set(["conversation.json"]);
 const MATERIAL_EXTENSIONS = new Set(["material.json", "mat.json"]);
 const LEVEL_EXTENSIONS = new Set(["level.json", "layout.json"]);
 const UI_EXTENSIONS = new Set(["ui.json", "theme.json", "loc.json"]);
+// VFX Lite particle effect assets (engine/vfx/particleEffectTypes.ts). Split out
+// of PREFAB_EXTENSIONS so effect assets carry `assetType: "effect"` rather than
+// being sniffed as generic prefabs.
+const EFFECT_EXTENSIONS = new Set(["effect.json"]);
 const PREFAB_EXTENSIONS = new Set([
   "actor.json",
-  "effect.json",
   "particle.json",
   "prefab.json",
   "script.json",
@@ -157,6 +161,7 @@ export const ASSET_TYPES: readonly AssetType[] = [
   "dialogueLine",
   "conversation",
   "animation",
+  "effect",
   "prefab",
   "ui",
   "level",
@@ -190,6 +195,7 @@ export function inferAssetTypeFromPath(path: string): AssetType | null {
   if (MATERIAL_EXTENSIONS.has(compoundExtensionOf(lower))) return "material";
   if (LEVEL_EXTENSIONS.has(compoundExtensionOf(lower))) return "level";
   if (UI_EXTENSIONS.has(compoundExtensionOf(lower))) return "ui";
+  if (EFFECT_EXTENSIONS.has(compoundExtensionOf(lower))) return "effect";
   if (PREFAB_EXTENSIONS.has(compoundExtensionOf(lower))) return "prefab";
   return null;
 }
@@ -380,7 +386,7 @@ export function validateAssetManifest(
         code: "asset-type",
         assetId,
         message:
-          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, dialogueVoice, dialogueLine, conversation, animation, prefab, ui, or level.",
+          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, dialogueVoice, dialogueLine, conversation, animation, effect, prefab, ui, or level.",
       });
     }
 

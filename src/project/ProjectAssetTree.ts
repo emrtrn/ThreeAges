@@ -1,4 +1,5 @@
 import type { ForgeMaterialPreset } from "@engine/assets/material";
+import type { ParticleEffectPreset } from "@engine/vfx/particleEffectPresets";
 
 export interface ProjectDirNode {
   name: string;
@@ -89,6 +90,8 @@ export interface ContentNewRequest {
   parentClass?: ScriptParentClass;
   /** For `kind: "material"`, the initial material template. */
   materialPreset?: ForgeMaterialPreset;
+  /** For `kind: "particle"`, the picked VFX Lite starter preset. */
+  particlePreset?: ParticleEffectPreset;
 }
 
 /**

@@ -29,56 +29,413 @@ Her baslik ayni formatla doldurulacak:
 Kanit siralamasi: calisan kod ve testler > editor/runtime davranisi > proje
 manifestleri ve veri dosyalari > mimari dokumanlar > sohbet notlari.
 
-## 1. Urun Kimligi ve Platform Hedefi `[ ] Incelenmedi`
+## 1. Urun Kimligi ve Platform Hedefi `[~] Kismi`
 
 Forge'un hangi oyun/app turleri icin yeterli bir temel sundugu, hangi sinirlari
 bilerek disarida biraktigi ve reusable platform hedefinin netligi incelenecek.
 
-- Durum:
+- Durum: Incelendi (2026-07-03). Kimlik tanimi tutarli ve kodla destekleniyor;
+  urun zarfi (hedef tur/cihaz listesi, "app" iddiasi) ve sablon-uretme akisi
+  henuz beyan/kanit duzeyinde eksik.
 - Kanit:
+  - Kimlik cumleleri birbirini tutuyor: `CLAUDE.md:3` ("general-purpose,
+    reusable Three.js game/app platform template", editor `?editor` ile yerlesik
+    mod), `AGENTS.md:3`, `docs/architecture/ARCHITECTURE.md:14` ("reusable,
+    single-codebase Three.js game template"; yeni oyun = repo kopyala + GDD/
+    asset/layout degistir), `package.json` description ("Reusable Three.js game
+    template with a built-in editor mode"), `public/project.3dgame.json`
+    (`name: "forge-template"`, `type: "three-game"`).
+  - Kanonik formul: `docs/architecture/UNREAL_BASICS_LESSONS.md:16-40` — 6
+    mimari ayrim (Project != Level, Layout Data != Save Game Data vb.) +
+    "reusable template + built-in dev editor + manifest-driven assets +
+    layout-driven levels + runtime-only production package".
+  - Bilincli disarida birakilanlar yazili: `ARCHITECTURE.md` "Not In Scope Yet"
+    (monorepo, node editor, shader/material graph, tam Material Instance,
+    physics editor, plugin marketplace, Project Browser'in geri getirilmesi) +
+    "Removed architecture" (launcher, studio CLI, external-project middleware).
+    Kalici kararlar roadmap'te tarihli: Material Instance Lite, ayri Texture
+    Editor yok, Sound Cue Lite, Dialogue ayri alan
+    (`UNREAL_BASICS_LESSONS.md:85+`).
+  - Kanitlanmis dikey: tek oyunculu 3. sahis 3D web oyunu — Gameplay track
+    G1-G6, Platform Foundations P0-P5 (CI, fizik, travel, save-game,
+    boot/loading, perf altyapisi) ve Actor Runtime API A1-A6 tamam
+    (`docs/completed/PLATFORM_FOUNDATIONS_CHECKLIST.md`,
+    `docs/completed/ACTOR_RUNTIME_API_CHECKLIST.md`).
+  - Cihaz/girdi genisligi kod olarak var: `src/input/` keyboard, pointer,
+    gamepad, touch + virtual joystick kaynaklari iceriyor (yalniz plan degil).
+  - Dagitim modeli: oyun basina git fork + upstream sync
+    (`docs/planned/GAME_FORK_WORKFLOW.md`, durum: "Kod uygulanmadi");
+    `tools/create-project.mjs` scaffold'i henuz yok (`CLAUDE.md` Near-Term #4).
+  - Repo kokunde `README.md` yok; kimlik yalnizca ajan-yuzlu dosyalarda
+    (CLAUDE.md/AGENTS.md) ve mimari sozlesmede yaziyor.
 - Yeterli olanlar:
+  - "Yerlesik editorlu, yeniden kullanilabilir Three.js oyun sablonu" kimligi
+    net, tum kaynaklarda tutarli ve kod sinirlarıyla (engine/editor/game ayrimi,
+    dev-gated editor, runtime-only dist) fiilen uygulanmis.
+  - Neyin bilerek disarida kaldigi (editor ozellik duzeyinde) yazili ve tarihli
+    kararlarla korunuyor; kapsam suruklenmesine karsi gercek bir fren var.
+  - Tek oyunculu 3D karakter oyunu dikeyi ucuca calisir durumda; platform
+    iddiasinin cekirdegi kanitli.
 - Eksikler / riskler:
-- Karar:
+  - "game/app" ifadesindeki **"app" iddiasi kanitsiz**: yalnizca
+    CLAUDE.md/AGENTS.md'de geciyor; ARCHITECTURE.md ve package.json "game
+    template" diyor. Oyun disi tek bir kullanim hedefi/ornegi yok. Kucuk ama
+    gercek bir kimlik suruklenmesi.
+  - **Urun zarfi beyan edilmemis**: hangi oyun turleri hedef (3. sahis kanitli;
+    yarıs/bulmaca/FPS?), hangi cihazlar birincil (masaustu tarayici fiilen;
+    mobil/touch girdi kodu var ama hedef mi?), multiplayer/VR/2D'nin non-goal
+    oldugu hicbir yerde acikca yazmiyor (multiplayer yalnizca imported source
+    planinda gecici olarak geciyor). Aday bir oyun icin "Forge yeterli mi?"
+    sorusu bugun ancak sohbet bilgisiyle cevaplanabiliyor.
+  - **Sablon-uretme akisi kanitsiz**: fork workflow dokumani planda, scaffold
+    yok, ilk gercek oyun forku henuz acilmamis. "Reusable platform" hedefi su an
+    disipline dayaniyor, aracla/deneyimle dogrulanmamis (detay: Baslik 16).
+  - Terminoloji kaymasi: ARCHITECTURE.md (2026-06-16) "copy this repository"
+    derken GAME_FORK_WORKFLOW.md (2026-06-26) fork+upstream modelini tanimliyor;
+    sozlesme dokumani guncel modeli yansitmiyor.
+  - Insan-yuzlu giris noktasi yok: README'siz repo, fork tuketicisi veya yeni
+    gelistirici icin urun cumlesi sunmuyor (Baslik 15 ile kesisir).
+- Karar: `[~] Kismi`. Kimlik net ve kodla tutarli; veri kaybi/mimari borc riski
+  yok. Eksik olan yeterlilik degil **beyan**: urun zarfi, "app" iddiasi ve
+  fork/scaffold hikayesi netlesmeden "platform hedefi net" denemez.
 - Aksiyonlar:
+  1. Kok `README.md` yaz: tek paragraf kimlik + kanitli dikey (3. sahis 3D web
+     oyunu) + bilincli non-goal listesi (Not-In-Scope'un urun-dili ozeti).
+  2. "app" iddiasini karara bagla: ya CLAUDE.md/AGENTS.md'den cikar ya da
+     ARCHITECTURE.md Direction'a somut bir oyun-disi kullanim hedefi ekle.
+  3. Urun zarfini tek yerde beyan et (ARCHITECTURE.md Direction veya README):
+     hedef turler, birincil cihaz (masaustu tarayici; touch/gamepad "girdi var,
+     birinci sinif degil"), acik non-goal'lar (multiplayer/replication, VR/AR,
+     2D, native mobil).
+  4. ARCHITECTURE.md Direction'i fork+upstream modeline guncelle ve
+     `GAME_FORK_WORKFLOW.md`'ye baglanti ver.
+  5. (Baslik 16 ile ortak) Ilk gercek oyun forkunu acarak platform hedefini
+     pratikte dogrula; scaffold karari (`tools/create-project.mjs`) bu denemeden
+     sonra verilsin.
 
-## 2. Mimari Sinirlar ve Sahiplik Kurallari `[ ] Incelenmedi`
+## 2. Mimari Sinirlar ve Sahiplik Kurallari `[~] Kismi`
 
 Engine, editor, runtime, game, project ve public asset katmanlarinin net ayrilip
 ayrilmadigi; generic platform kodu ile oyuna ozel kurallarin karisip karismadigi
 degerlendirilecek.
 
-- Durum:
+- Durum: Incelendi (2026-07-03). Import grafigi grep ile, dist siniri calisan
+  scan ile dogrulandi. Urun-kritik sinir (editor kodu production'a sizmaz)
+  saglam; kaynak-duzeyi kurallar disipline dayaniyor ve editor->game yonunde
+  yazili kuralla gerilimli 5 import var.
 - Kanit:
+  - Yazili sozlesme: `ARCHITECTURE.md` Dependency Rules + Ownership Boundaries,
+    `CLAUDE.md` Working Rules, `game/README.md` + `project/README.md` kural
+    ozetleri. Uc kaynak birbiriyle tutarli.
+  - Dogrulanan import grafigi (grep, 2026-07-03):
+    - `engine/` (91 dosya, ~18k satir, 14 alt sistem) hicbir ust katmandan
+      import yapmiyor (editor/game/builder/src sifir); tamamen kendi icinde.
+    - `editor/` (ust-duzey, 25 dosya ~5k satir) `@game`'den import yapmiyor.
+    - `src/game` -> editor importu yok; `RuntimeSceneApp` -> editor importu yok.
+    - `src/main.ts:30-44`: `SceneApp` + `EditorUi` + `layoutSaver` ucu birden
+      `?editor && import.meta.env.DEV` arkasinda dinamik import — production
+      build'de DCE ile tamamen dusuyor.
+    - Engine olu sinir degil: `src/`den `@engine` importu 41 adet / 15 dosya.
+  - Otomatik kapi: `builder/web/verify-dist.mjs` — 13 FAIL + 2 WARN token'lik
+    dist string taramasi, CI'da `--strict` (`.github/workflows/ci.yml`).
+    Yerelde calistirildi: `[PASS] dist/ is runtime-only`, sifir uyari.
+  - Engine/editor icinde projeye ozel sabit yok: playground/kenney/quaternius
+    taramasi temiz (tek eslesme bir yorum, `engine/render-three/bodyMask.ts:11`).
+  - Sinir ihlali bulgusu: `src/editor` -> `@/game` 5 import
+    (`ActorScriptEditor.ts:49-50` montage/input binding'ler,
+    `SkeletalMeshEditor.ts:49` ragdollDriver, `EditorUi.ts:72,74`
+    gameModes/catalog + behaviors).
+  - Kutle dagilimi: `src/editor` 17.3k satir > `editor/` 5.1k; `src/scene`
+    11.9k; `game/` ve `project/` ust-duzey klasorleri README-only placeholder —
+    gercek oyun kodu `src/game`'de (30 dosya, ~5k satir).
 - Yeterli olanlar:
+  - Urun-kritik sinir cift katmanli korunuyor: yapisal (DEV-gated dynamic
+    import + DCE) ve otomatik (CI strict dist scan). Bu, sablonun "runtime-only
+    production package" vaadinin kanitli hali.
+  - `engine/` izolasyonu ornek-temiz; headless engine testleri (CI'da calisan
+    kontrol seti) bu katmani ayrica sabitliyor.
+  - Yasak yonlerde (game->editor, runtime->editor, engine->ust katman) sifir
+    ihlal; engine/editor icinde oyuna ozel sabit veri yok.
 - Eksikler / riskler:
-- Karar:
+  - **Editor -> game bagimliligi (5 import):** editor, game katmaninin
+    katalog/binding exportlarina (`GAME_MODE_OPTIONS`, `BEHAVIOR_SCRIPT_IDS`,
+    montage binding'ler, ragdoll driver) dogrudan bagli. Fork'ta `src/game`
+    degistirilirse bu exportlar sekil-uyumlu kalmak zorunda — yazili olmayan
+    bir sozlesme. "Editor core generic" kuraliyla gerilim; dogru yon game'in
+    editore kayit olmasi (registry/data), editorun game import etmesi degil.
+  - **Kaynak-duzeyi import kurallari otomatik denetimsiz:** verify-dist yalniz
+    dist ciktisini tarar; ornegin bir `engine -> game` importunu bugun hicbir
+    kapi yakalamaz (tsc derler, testler gecer). Kurallar disiplin + review'a
+    dayaniyor.
+  - **Cifte yapi / yanlis tarafa inme riski:** ust-duzey `engine/`+`editor/`
+    gercek kod tasirken `game/`+`project/` placeholder; asil kutle hala
+    `src/`de. Iki "editor", iki "input" konumu var. ARCHITECTURE.md bunu kabul
+    ediyor ("src/* remains the active implementation") ama CLAUDE.md'nin
+    "boundaries are extracted under ... game/" cumlesi game/project icin henuz
+    dogru degil.
+  - **Bayat dokuman notlari:** CLAUDE.md Near-Term #1 ("SceneApp still ships
+    gizmo/authoring code in the game chunk") artik dogru degil — SceneApp da
+    dinamik importta ve strict scan sifir uyariyla geciyor. verify-dist.mjs
+    basligindaki WARN-debt aciklamasi ayni bayat varsayimi tasiyor.
+  - verify-dist kendi beyaniyla heuristik string taramasi; minification token
+    bozarsa sessiz gecebilir. Kabul edilmis sinirlama, ama dist'in tek kapisi.
+- Karar: `[~] Kismi` — guclu tarafta. Sinir mimarisi calisiyor ve en kritik
+  yuzeyi otomatik korunuyor; `[x]` icin editor->game bagimliliginin karara
+  baglanmasi, kaynak-duzeyi import denetimi ve bayat notlarin duzeltilmesi
+  gerekir. Veri kaybi riski yok; risk, fork'larda sessiz sozlesme kirilmasi.
 - Aksiyonlar:
+  1. Editor<->game baglantisini karara bagla: ya (a) `src/game`'in editore
+     sundugu katalog exportlarini yazili sozlesme yap (fork rehberine ekle),
+     ya (b) registry/DI'ya cevir — game acilista kayit olur, editor `@/game`
+     import etmez. (b) generic-editor hedefiyle uyumlu olan.
+  2. Kaynak-duzeyi import-graph denetimi ekle (engine testlerine veya ayri
+     script): engine -> editor/game/builder/src yasak, game -> editor yasak,
+     RuntimeSceneApp -> editor yasak; CI'ya bagla. (1. aksiyonun karari
+     editor->game kuralini belirler.)
+  3. CLAUDE.md Near-Term #1'i ve verify-dist.mjs baslik notunu guncelle: WARN
+     debt kapandi, strict geciyor.
+  4. `game/` ve `project/` placeholder'larinin kaderini netlestir: ya
+     `src/game -> game/` tasima plani (kucuk yesil adimlar) ya da
+     placeholder'lari kaldirip src-tabanli sahipligi sozlesmeye yaz (Baslik 1
+     ve Baslik 16 aksiyonlariyla baglantili).
+  5. (Dusuk oncelik) Yeni editor-only sembollerin verify-dist FAIL listesine
+     eklenmesi disiplinini fork/katki rehberine not et.
 
-## 3. Editor Deneyimi ve Uretim Akislari `[ ] Incelenmedi`
+## 3. Editor Deneyimi ve Uretim Akislari `[~] Kismi`
 
 `?editor` deneyimi, scene/level authoring, selection, gizmo, details panel,
 Content Browser, asset atama, undo/redo, coklu secim ve temel uretilirlik
 akislari incelenecek.
 
-- Durum:
+- Durum: Incelendi (2026-07-03). Ozellik genisligi ve akis butunlugu guclu:
+  tam authoring dongusu + 7 ozel alt-editor + 13 dev yazma endpoint'i. Zayif
+  ayak dogrulama: UI katmaninin hicbir otomatik smoke'u yok ve ana kabuk
+  5.8k satirlik monolit.
 - Kanit:
+  - Cekirdek authoring dongusu kodda: gizmo (`editor/gizmos/` axes/builder/
+    handles/interaction/transformDrag), secim + coklu secim + hiyerarsi
+    (`editor/core/selection*`, `hierarchy.ts`), outliner + history paneli +
+    World Settings + Details paneli (`EditorUi.ts` renderOutliner/
+    renderHistory/renderWorldSettings/renderDetails; transform + material/
+    collision/physics/components/audio/behavior/particle/interaction/
+    moving-platform/metadata bolumleri + 10 aktor-tipi detayi: light,
+    reflection plane, reflective surface, blocking volume, world widget,
+    reflection capture, sky, fog, cloud, post-process).
+  - Content Browser: klasor agaci + filtreler + asset kartlari + thumbnail
+    (`ThumbnailRenderer.ts`, texture thumbnail) + viewport'a drag-drop
+    yerlestirme (asset drag preview, Player Start dahil).
+  - Undo/redo komut disiplini gercek: `EditorCommandStore` + SceneApp'te 23
+    komut label'i (Add/Place/Delete/Rename/Move/Edit pivot/Update world
+    settings + toplu `${verb} N objects`) + flag komutlari (hide/lock/
+    scale-lock/simulate-physics/cast-shadow/collision,
+    `editor/core/commandLabels.ts`). Surekli drag pointer-up'ta tek komut
+    (ARCHITECTURE.md kurali).
+  - Ozel alt-editorler ayni kalipla: ActorScript (2.2k satir + viewport),
+    SkeletalMesh/Persona (3.0k), StaticMesh (1.7k), Material (898), Dialogue
+    (725), UI Widget (732), SoundCue (581) — her biri kendi store'u + dev-save
+    endpoint'iyle.
+  - Yazma yuzeyi: `vite.config.ts`'te 13 dev endpoint (`__save-layout/
+    collision/material-slots/skeleton/soundcue/effect/dialogue-voice/
+    dialogue-line/ui/uvw/actor/material` + `__import-asset`); layout +
+    skeleton yollari validator'lu.
+  - Play akisi: toolbar "Play (P)" = layout'u kaydet + runtime route'unu (`/`)
+    yeni sekmede ac + kamera pozu handoff (`src/play/cameraHandoff.ts`,
+    `EditorUi.ts:949-962`).
+  - Snap: grid/rotation/scale ayarlari `project.3dgame.json`'a kalici;
+    floor/wall snap saf helper (`editor/render-three/floorSnap.ts`,
+    `wallSnap.ts`).
+  - Test kapsami: engine testleri yerelde calistirildi — **573 check gecti**
+    (2026-07-03). Editorden saf cikarilan mantik test altinda: Section 7
+    EditorSceneController state, Section 8 gizmo drag matematigi, Section 9
+    wall-snap, Section 10 save validator.
 - Yeterli olanlar:
+  - Unreal-esintili cekirdek dongu (sec → tasi → duzenle → kaydet → geri al →
+    oynat) ucuca kodda; komut disiplini, snap, hiyerarsi, coklu secim dahil.
+  - Uretim akislari tek desen: her icerik turu icin ozel editor + store +
+    validator'lu dev endpoint. Desenin genisletilebilirligi kanitli — 7
+    alt-editor ayni kalipla eklenmis.
+  - Editor mantiginin saf cekirdegi headless testte; dist siniri Baslik 2'de
+    kanitlandi (editor production'a sizmiyor).
 - Eksikler / riskler:
-- Karar:
+  - **UI katmaninda sifir otomatik dogrulama:** Playwright/browser test yok
+    (package.json'da dep yok); CLAUDE.md Near-Term #2 acik. Editor deneyimi
+    manuel smoke'a dayaniyor ve acik kullanici smoke borclari birikiyor
+    (A5.5 browser smoke, platform foundations smoke'lari). 5.8k satirlik
+    `EditorUi` + 3k `SkeletalMeshEditor` DOM'a gomulu — regresyon ancak elle
+    yakalanir.
+  - **Monolit kabuk:** `EditorUi.ts` 5,800 satir tek sinif (+ 2,889 satir
+    css). Details panel render'lari dahil her sey icinde; yeni aktor tipi =
+    monolite bir render metodu daha. Buyume bu bicimde surdurulebilir degil.
+  - **Dokuman/kod kaymasi:** CLAUDE.md + ARCHITECTURE.md yalniz 2 dev
+    endpoint dokumante ediyor, gercekte 13 + import var. ARCHITECTURE'daki
+    "editor SceneApp Play mode" ifadesinin kodda karsiligi yok (Play = route
+    acar; in-viewport PIE yok — bilincli gorunuyor ama beyansiz). Near-Term
+    #3'un "previews" kismi bayat (thumbnail'lar zaten var).
+  - **Autosave yan etkisi:** dev server acikken default layout/world settings
+    otomatik yeniden yaziliyor (hafiza notu + CLAUDE.md autosave ifadesi) —
+    fork/template hijyeni icin tuzak; repo dokumaninda yazili degil.
+- Karar: `[~] Kismi` — ozellik genisligi platform iddiasini tasiyor;
+  `[x]`'i engelleyen, UI dogrulama acigi (otomatik smoke yok + manuel smoke
+  borcu) ve monolit kabugun bakim riski. Veri kaybi riski Baslik 6'nin konusu
+  (validator allowlist) — burada akut risk yok.
 - Aksiyonlar:
+  1. Minimal Playwright smoke kur: `?editor` boot → asset yerlestir →
+     transform → undo → save → reload → `/` Play boot. CLAUDE Near-Term #2'yi
+     kapatir; acik kullanici smoke'larini (A5.5 vb.) ayni kapsama al.
+  2. `EditorUi.ts` dilimleme plani: once details-panel renderer'larini panel
+     modullerine cikar (saf-cekirdek cikarma deseni zaten isliyor); "yeni
+     ozellik monolite eklenmez" kuralini yaz.
+  3. Dokuman duzeltmeleri: 13+1 dev endpoint listesini CLAUDE/ARCHITECTURE'a
+     isle; "editor SceneApp Play mode" ifadesini gercek akisla degistir;
+     Near-Term #3'u kalan kisma (placement-rule affordances) daralt.
+  4. Autosave davranisini dokumante et (hangi eylem neyi ne zaman yazar) ve
+     fork rehberine "dev server acikken default layout kirlenir" notunu ekle;
+     gerekirse autosave'i opt-in yap.
+  5. (Yol haritasi) VFX editoru (`docs/ongoing/VFX_Lite_Plan.md`) bu alt-editor
+     kalibiyla uygulanacak ilk yeni ornek olarak siralansin; Content Browser
+     placement-rule affordances onu izlesin.
 
-## 4. Runtime ve Gameplay Temelleri `[ ] Incelenmedi`
+## 4. Runtime ve Gameplay Temelleri `[~] Kismi`
 
 Game mode, pawn/character, input, camera, actor/component modeli, behavior
 baglama, level travel, save/load, boot/loading ve playable runtime akisi
 degerlendirilecek.
 
-- Durum:
+- Durum: Incelendi (2026-07-03). Unreal-analog gameplay cercevesi (Game Mode /
+  PlayerController / PlayerState / Pawn) ucuca kodda; saf cekirdekler genis
+  headless test altinda (573 check gecti). Zayif ayaklar: runtime kabugu 3.6k
+  satirlik ikinci monolit, tarayici smoke borclarinin tamami runtime'da
+  birikmis, ve travel'da sahne-omru sanilan behavior state'inin app-omru
+  yasadigina dair bir sizinti bulgusu (kod/yorum celiskisi + muhtemel
+  round-trip portal bug'i).
 - Kanit:
+  - Kompozisyon: `src/main.ts` (56 satir) ince giris — `/` = `RuntimeSceneApp`
+    (3,607 satir), editor DEV+`?editor` dinamik importta (Baslik 2 ile tutarli).
+  - Frame dongusu acik siralamali (`RuntimeSceneApp.start`, :830-860): gamepad
+    poll → session.beforeEngineUpdate → `engineApp.update` (subsystem'ler) →
+    killZ → UI input edge → session.update → gameRules → UI store → world UI →
+    audio listener → partikuller → sky/cloud takip → post-process/render.
+    Delta 100ms'e, fizik adimi 1/20s'ye clamp'li — degisken timestep
+    (`engine/physics/physicsSubsystem.ts:480`), sabit-adim accumulator yok.
+  - Game Framework sozlesmeleri: `src/game/gameModes/types.ts` (231 satir,
+    zengin dokumante) — GameModeDefinition/Session, PawnDefinition,
+    PlayerControllerDefinition (input mode / pointer-look / cursor politikasi),
+    PlayerState (ragdoll/get-up icin `pawnControlSuspended`), GameState. 2
+    yerlesik mod (`forge.defaultCamera` flythrough, `forge.tpsCharacter`) +
+    proje Game Mode'u Actor Script class-ref'iyle (`catalog.ts:53`,
+    `createProjectGameMode`); bilinmeyen id guvenli fallback (`registry.ts:23`)
+    — eski layout'lar default kamerayla acilir.
+  - TPS dikeyi tam teskil (`tpsCharacterGameMode.ts` 579 satir + saf
+    yardimcilar): spring-arm kamera + pointer-look, crossfade/layered
+    locomotion, montage input binding, anim-notify tracker, ragdoll driver +
+    get-up blender; possess secimi acik kural (metadata `player` > ilk
+    `input-move`).
+  - Karakter hareketi engine Subsystem olarak (`characterMovementSystem.ts`,
+    554 satir): kameraya-gore planar hareket, substep'li AABB cozumleme,
+    step-up/down (0.45/0.5), slope yurunebilirlik + uphill slowdown, moving
+    platform binme/tasima (subsystem sirasi yorumla sabitlenmis: platform →
+    character), launch/impulse sonumu, yercekimi worldSettings'ten.
+    `CharacterMovement` component'i authored (`components.ts:274`).
+  - Actor/component modeli: 19 component turu
+    (`engine/scene/components.ts:8-26` — Transform/MeshRenderer/Light/Collider/
+    Audio/ParticleEmitter/Interaction/CharacterMovement/MovingPlatform/Camera/
+    SpringArm + 6 script component'i). `BehaviorSubsystem` saf; ScriptWorld
+    sorgu yuzeyi (byName/byTag/byClassRef/withInterface/velocityOf/ownerOf),
+    ScriptMessageBus, runtime actor spawn/destroy. Actor Runtime API A1-A6
+    tamam (`docs/completed/ACTOR_RUNTIME_API_CHECKLIST.md`; tek acik A5.5
+    browser smoke).
+  - Input genisligi: `ActionMap` + 5 kaynak — keyboard, gamepad (poll,
+    stick+dpad eslemesi headless testli), touch + virtual joystick
+    (`isTouchLikely`), pointer look (right-drag / pointer-lock; kilit kaybinda
+    pause menu, `RuntimeSceneApp.ts:666-675`), pointer button. Binding'ler
+    oyun-tarafi (`defaultInputBindings.ts`).
+  - Level travel: saf state machine (`levelTravel.ts`, 97 satir; unloading →
+    loading, pending slot latest-wins) + kabukta teardown/rebuild;
+    tetikleyiciler `level-travel` sensor behavior'u + `travel:` UI mesaji;
+    spawnTag hedefli Player Start (`playerSpawn.ts`).
+  - Save/load: engine `SaveGameStore` (slot + JSON envelope + schema/migrate
+    hook + quota-korumali adapter, `engine/persistence/saveGameStore.ts`) +
+    oyun-sahibi serializer (`src/game/saveGame.ts`: level path + player
+    transform + opt-in persistent script state; savunmaci normalize). Restore =
+    kayitli level'a travel, yukleme sonrasi uygula (`applyPendingSaveRestore`,
+    :2465). Checkpoint behavior'u + save UI slotlari; UserSettings ayri store.
+  - Kill Z + respawn: her frame `applyKillZ` (:2452); respawn transformu
+    Player Start'tan cache'li (:2439).
+  - Boot/loading UX (P4): `LoadProgressTracker` + `LoadingOverlay` + 300ms
+    minimum gosterim + hata durumu; editor Play → kamera pozu handoff (:2520).
+  - Oyun kurallari katmani: `gameRules.ts` (442 satir) + GameStateStore —
+    degisken/objective/timer, win/lose ekranlari, restart; testlerde ayri
+    "Game Framework (rules layer)" bolumu.
+  - Test: 573 check gecti (yerelde kosuldu, 2026-07-03); ~150 check etiketi
+    runtime/gameplay alanina isaret ediyor (movement/travel/save/camera/pawn/
+    ragdoll/montage/notify) ve testlerde "Vertical Slice Readiness Gate"
+    bolumu var (`tools/engine-tests.ts:1452`).
 - Yeterli olanlar:
+  - Cerceve sozlesmeleri gercek ve dokumante: Game Mode/Controller/State
+    ayrimlari, possession disiplini, "runtime state layout'a yazilmaz"
+    guardrail'i kodda tutuyor. Eski/bozuk veriye karsi her katman guvenli
+    fallback'li.
+  - Saf-cekirdek deseni gameplay'de de isliyor: hareket/dikey/carpisma/kamera/
+    locomotion/travel/save mantiklari Three'siz modullerde ve test altinda;
+    kabuk yalniz kompozisyon + kopru.
+  - Oynanabilir dongu ucuca: boot → possess → yuru/zipla/carp → etkiles →
+    portal travel → checkpoint/save → kill-Z respawn → win/lose → restart.
+    Platform iddiasinin runtime cekirdegi kanitli.
+  - Input ve cihaz genisligi (klavye/gamepad/touch/pointer-lock) tek ActionMap
+    sozlesmesinde toplanmis; UI/game input modu Unreal-esintili ve tutarli.
 - Eksikler / riskler:
-- Karar:
+  - **Behavior state sizintisi (bulgu — dogrulanmali, muhtemel bug):**
+    `behaviors.ts:200` yorumu registry'nin "her sahne yuklemesinde" yaratilip
+    "sahneler arasi sizmadigini" soyluyor; gercekte `createBehaviorRegistry`
+    yalnizca constructor'da bir kez cagriliyor (`RuntimeSceneApp.ts:708`).
+    Closure setleri (`traveledTriggers`/`reachedGoals`/`checkpointsSaved`/
+    `vertical`, behaviors.ts:213-216) + module-global `collisionAudioPlayed`
+    (behaviors.ts:135) travel'da sifirlanmiyor. Entity id'ler index-tabanli ve
+    level-bagimsiz (`actor:<n>`, `actorInstance.ts:47`;
+    `instance:<assetId>:<n>`), yani: ayni level'a donuste portal olu kalir;
+    farkli level'larin ayni-index aktorleri birbirinin state'ini gorur. P2'nin
+    kullaniciya kalan "Playground ↔ TestLevel gidis-gelis" smoke'u tam bu
+    yuzeyi dogrulayacakti — henuz kosulmadi.
+  - **Ikinci monolit kabuk:** `RuntimeSceneApp.ts` 3,607 satir; scene build +
+    travel + save + UI koprusu + VFX + reflection hepsi icinde. EditorUi ile
+    ayni buyume deseni (Baslik 3), ayni surdurulebilirlik riski. Devam eden
+    VFX Lite isi de kabuga ekliyor.
+  - **Tarayici smoke borclari runtime'da toplanmis:** P1.5 collision-gym, P2
+    travel gidis-gelis + heap, P3 save round-trip, P4 overlay/Retry, A5.5
+    actor API — hepsi acik (`PLATFORM_FOUNDATIONS_CHECKLIST.md`,
+    `ACTOR_RUNTIME_API_CHECKLIST.md`). Oynanabilir dongu yalnizca manuel
+    dogrulanmis durumda; yukaridaki sizinti bulgusu bu borcun somut maliyeti.
+  - **Kucuk bilinen sinirlar:** facing matematigi +z-forward mesh varsayiyor
+    (`playerMovement.ts:90`, yorumla kabul edilmis — baska asset ters bakar);
+    fizik degisken timestep (clamp var, determinizm sinirli — kabul edilebilir
+    ama beyansiz); possess edilmeyen karakterler tek authored klip oynatir —
+    AI/NPC hareketi yok (bilincli: AI plani move-intent refactoru bekliyor);
+    save zarfi dar (level + player + opt-in flag'ler; spawn/destroy edilen
+    aktorler kaydedilmez) — bilincli tasarim ama sozlesme beyansiz.
+- Karar: `[~] Kismi` — cerceve genisligi ve saf-cekirdek test disiplini guclu,
+  oynanabilir dongu kanitli. `[x]`'i engelleyen: behavior-state sizintisi
+  bulgusunun dogrulanip kapatilmasi, otomatik runtime smoke yoklugu ve monolit
+  kabuk. Sizinti dogrulanirsa travel ozelinde `[!]` sinifinda bir davranis
+  hatasi (veri kaybi degil, oynanis kilidi).
 - Aksiyonlar:
+  1. Behavior state sizintisini dogrula ve kapat: registry'yi scene-load
+     basina yeniden yarat (veya reset API'si ekle), `collisionAudioPlayed`'i
+     registry kapsamina tasi; headless travel round-trip regresyon testi ekle
+     (ayni entity id iki kez travel tetikleyebilmeli). `behaviors.ts:200`
+     yorumunu gercek sozlesmeyle esitle.
+  2. Runtime smoke otomasyonu (Baslik 3 Aksiyon 1 ile ayni Playwright
+     kurulumu): `/` boot → yuru/zipla → portal gidis-gelis → checkpoint +
+     save/load round-trip → `?debug` overlay. P2/P3/P4 + A5.5 kullanici smoke
+     borcunu tek kapsamda kapat.
+  3. `RuntimeSceneApp` dilimleme plani (EditorUi ile ortak karar): travel,
+     save-game ve actor-spawn koordinatorlerini modullere cikar; "yeni ozellik
+     kabuga eklenmez, modul olarak gelir" kuralini yaz.
+  4. Save zarfi sozlesmesini dokumante et: neyin kaydedildigi/kaydedilmedigi,
+     opt-in persistent-state deseni, schema/migrate hook kullanimi — fork
+     tuketicisinin save tasarimi icin gerekli.
+  5. (Yol haritasi) AI oncosulu move-intent refactorunun siralamasini koru;
+     +z-forward facing varsayimini skeleton sidecar'ina tasinabilir hale
+     getirmeyi ayni refactor paketine not et.
 
 ## 5. Asset Pipeline ve Icerik Yonetimi `[ ] Incelenmedi`
 
@@ -254,3 +611,7 @@ eklenecek.
 | Tarih | Baslik | Bulgu | Aksiyon | Durum |
 | --- | --- | --- | --- | --- |
 | 2026-07-03 | Dokuman iskeleti | Analiz basliklari olusturuldu. | Basliklar tek tek kanitla doldurulacak. | `[ ]` |
+| 2026-07-03 | 1. Urun Kimligi | Kimlik net/tutarli, urun zarfi + "app" iddiasi + fork hikayesi beyansiz; README yok. | README + urun zarfi beyani + ARCHITECTURE.md fork guncellemesi (5 aksiyon, baslikta). | `[~]` |
+| 2026-07-03 | 2. Mimari Sinirlar | Dist siniri cift katmanli ve kanitli (strict scan PASS); editor->game 5 import sozlesmesiz; kaynak-duzeyi import denetimi yok; CLAUDE.md Near-Term #1 bayat. | Editor<->game karari + import-graph check + bayat not duzeltme (5 aksiyon, baslikta). | `[~]` |
+| 2026-07-03 | 3. Editor Deneyimi | Tam authoring dongusu + 7 alt-editor + 13 dev endpoint; 573 engine check gecti; UI katmaninda otomatik smoke yok, EditorUi 5.8k satir monolit, endpoint dokumantasyonu eksik. | Playwright smoke + EditorUi dilimleme + dokuman duzeltmeleri (5 aksiyon, baslikta). | `[~]` |
+| 2026-07-03 | 4. Runtime/Gameplay | Unreal-analog cerceve ucuca + saf cekirdekler testli (573 check); **bulgu:** behavior registry app-omru yasiyor (yorum sahne-omru diyor), travel'da `traveledTriggers` vb. sifirlanmiyor + entity id'ler level-bagimsiz → round-trip portal muhtemelen olu; RuntimeSceneApp 3.6k satir ikinci monolit; tum tarayici smoke'lari acik. | Sizintiyi dogrula+kapat (headless travel testi) + runtime Playwright smoke + kabuk dilimleme + save sozlesme dokumani (5 aksiyon, baslikta). | `[~]` |

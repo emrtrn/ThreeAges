@@ -5,8 +5,10 @@ This folder owns Three.js adapter code as it is extracted from the current
 
 Current files:
 
-- `gltfModelLoader.ts`: GLTFLoader + meshoptimizer adapter with per-asset
-  promise caching.
+- `gltfLoader.ts`: shared GLTFLoader setup for meshoptimizer and KTX2/Basis
+  texture transcoding.
+- `gltfModelLoader.ts`: per-asset GLTF promise caching on top of the shared
+  loader setup.
 - `transforms.ts`: Three.js transform helpers for layout placement matrices and
   Euler-degree application.
 - `materials.ts`: renderable mesh guard, material stats, and unlit-to-lit

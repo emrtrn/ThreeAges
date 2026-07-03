@@ -2087,7 +2087,7 @@ export class SceneApp {
 
   private async loadActiveProjectScene(): Promise<void> {
     this.activeProject = await loadActiveProject();
-    this.assetLoader = new AssetLoader(this.activeProject.manifest);
+    this.assetLoader = new AssetLoader(this.activeProject.manifest, this.renderer);
     this.snapSettings.move = this.activeProject.manifest.editor.gridSize ?? this.snapSettings.move;
     this.snapSettings.moveEnabled =
       this.activeProject.manifest.editor.gridEnabled ?? this.snapSettings.moveEnabled;

@@ -1,13 +1,13 @@
-import { MeshoptDecoder } from "meshoptimizer";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { createForgeGltfLoader } from "./gltfLoader";
 
 export class GltfModelLoader {
   private readonly modelPromises = new Map<string, Promise<GLTF>>();
-  private readonly gltfLoader = new GLTFLoader();
+  private readonly gltfLoader;
 
-  constructor() {
-    this.gltfLoader.setMeshoptDecoder(MeshoptDecoder);
+  constructor(renderer?: WebGLRenderer) {
+    this.gltfLoader = createForgeGltfLoader(renderer);
   }
 
   load(id: string, url: string): Promise<GLTF> {

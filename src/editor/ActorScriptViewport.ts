@@ -46,7 +46,6 @@ import {
   Vector3,
   WebGLRenderer,
 } from "three";
-import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
@@ -68,6 +67,7 @@ import {
   type LightObjectRecord,
   type LightRenderItem,
 } from "@engine/render-three/lights";
+import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import { applyEulerDegrees } from "@engine/render-three/transforms";
 import { projectFileUrl } from "@/project/ProjectSystem";
 
@@ -117,7 +117,7 @@ export class ActorScriptViewport {
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(45, 1, 0.01, 1000);
   private readonly modelGroup = new Group();
-  private readonly loader = new GLTFLoader();
+  private readonly loader: GLTFLoader;
   private readonly resizeObserver: ResizeObserver;
   private readonly raycaster = new Raycaster();
   private readonly hintEl: HTMLElement;
@@ -150,12 +150,11 @@ export class ActorScriptViewport {
   private disposed = false;
 
   constructor(private readonly options: ActorScriptViewportOptions) {
-    this.loader.setMeshoptDecoder(MeshoptDecoder);
-
     this.renderer = new WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
     options.host.append(this.renderer.domElement);
+    this.loader = createForgeGltfLoader(this.renderer);
 
     this.hintEl = document.createElement("div");
     this.hintEl.className = "as-viewport-hint";

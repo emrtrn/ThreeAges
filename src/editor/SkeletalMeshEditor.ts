@@ -33,11 +33,11 @@ import {
   type AnimationMixer,
   type Material,
 } from "three";
-import { MeshoptDecoder } from "meshoptimizer";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { TransformControls } from "three/examples/jsm/controls/TransformControls.js";
 import { VertexNormalsHelper } from "three/examples/jsm/helpers/VertexNormalsHelper.js";
 import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
+import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import { applyRootMotionToClips, rootMotionPositionNodes } from "@engine/render-three/rootMotion";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import type { Entity } from "@engine/scene/entity";
@@ -170,7 +170,7 @@ export class SkeletalMeshEditor {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(45, 1, 0.01, 1000);
-  private readonly loader = new GLTFLoader();
+  private readonly loader: GLTFLoader;
   private readonly modelGroup = new Group();
   private readonly helperGroup = new Group();
   private readonly resizeObserver: ResizeObserver;
@@ -248,7 +248,6 @@ export class SkeletalMeshEditor {
   private wireframe = false;
 
   private constructor(private readonly options: SkeletalMeshEditorOptions) {
-    this.loader.setMeshoptDecoder(MeshoptDecoder);
     this.boneMarker.visible = false;
     this.boneMarker.renderOrder = 5;
 
@@ -291,6 +290,7 @@ export class SkeletalMeshEditor {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.outputColorSpace = SRGBColorSpace;
     this.viewportHost.append(this.renderer.domElement);
+    this.loader = createForgeGltfLoader(this.renderer);
 
     this.buildScene();
     this.bindCameraControls();

@@ -1,4 +1,5 @@
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import type { WebGLRenderer } from "three";
 
 import {
   projectFileUrl,
@@ -48,12 +49,15 @@ export class AssetLoader {
   private manifestPromise: Promise<AssetManifest> | null = null;
   private catalogPromise: Promise<AssetCatalog | null> | null = null;
   private metadataSchemaPromise: Promise<MetadataSchema | null> | null = null;
-  private readonly modelLoader = new GltfModelLoader();
+  private readonly modelLoader: GltfModelLoader;
 
   constructor(
     private readonly project: ProjectManifest,
+    renderer?: WebGLRenderer,
     private readonly modelProgress?: ModelLoadProgress,
-  ) {}
+  ) {
+    this.modelLoader = new GltfModelLoader(renderer);
+  }
 
   /** Drops the cached manifest so the next load re-fetches it (after edits). */
   invalidateManifest(): void {

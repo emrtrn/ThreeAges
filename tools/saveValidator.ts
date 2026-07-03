@@ -46,6 +46,12 @@ import {
 } from "../engine/scene/actorScript";
 import { defaultUiWidgetDef, normalizeUiWidgetDef } from "../engine/ui/uiWidget";
 import { normalizeWorldWidgets } from "../engine/ui/uiWorldWidget";
+import { normalizeEffectDefinition } from "../engine/vfx/particleEffectParser";
+import {
+  buildParticleEffectPresetBody,
+  isParticleEffectPreset,
+  type ParticleEffectPreset,
+} from "../engine/vfx/particleEffectPresets";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -2602,6 +2608,53 @@ export function validateSaveSoundCuePayload(value: unknown): {
   };
 }
 
+// ─── VFX Lite particle effect (VFX Faz 1 editor save) ────────────────────────
+//
+// THIRD save-validator allowlist surface (after layout placements and skeleton
+// sidecars — see CLAUDE.md). A `*.effect.json` schema-2 body is normalized by
+// engine/vfx/particleEffectParser (the single source of field shape: unknown
+// fields are dropped, numbers are clamped/finite-guarded, enums fall back to a
+// valid value, ranges are ordered min<=max, bounds default). Any new
+// ParticleEffectDefinition field must be added to the parser's normalize* (which
+// this reuses) or it is silently dropped on save.
+
+/**
+ * Validates + canonicalizes a schema-2 particle effect asset body. Gates on the
+ * `{ schema: 2, type: "particleEffect" }` envelope, then runs it through the vfx
+ * normalizer and re-attaches the envelope so the saved file round-trips on load.
+ */
+export function validateEffectAsset(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("effect must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.schema !== 2) throw new Error("effect.schema must be 2");
+  if (input.type !== "particleEffect") throw new Error('effect.type must be "particleEffect"');
+  const def = normalizeEffectDefinition(input);
+  if (!def) throw new Error("effect body is not a valid particle effect");
+  return { schema: 2, type: "particleEffect", ...def } as unknown as Record<string, unknown>;
+}
+
+export function validateSaveEffectPayload(value: unknown): {
+  path: string;
+  effect: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("effect payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".effect.json")) {
+    throw new Error("effect payload path must end with .effect.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("effect payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    effect: validateEffectAsset(input.effect),
+  };
+}
+
 // ─── Dialogue & Voice (D2 editor save) ───────────────────────────────────────
 //
 // Allowlist for `*.dialoguevoice.json` / `*.dialogue.json` editor saves. Mirrors
@@ -2798,6 +2851,8 @@ export interface ContentNewPayload {
   parentClass?: ParentClass;
   /** For `kind: "material"`, the initial material template. */
   materialPreset?: ForgeMaterialPreset;
+  /** For `kind: "particle"`, the picked VFX Lite starter preset. */
+  particlePreset?: ParticleEffectPreset;
 }
 
 function isContentNewKind(value: unknown): value is ContentNewKind {
@@ -2839,6 +2894,10 @@ export function validateContentNewPayload(value: unknown): ContentNewPayload {
     payload.materialPreset = isForgeMaterialPreset(input.materialPreset)
       ? input.materialPreset
       : "standard";
+  } else if (input.kind === "particle") {
+    payload.particlePreset = isParticleEffectPreset(input.particlePreset)
+      ? input.particlePreset
+      : "blank";
   }
   return payload;
 }
@@ -2865,20 +2924,10 @@ function contentStubJson(payload: ContentNewPayload): string {
       name,
     ) as unknown as Record<string, unknown>;
   } else if (kind === "particle") {
-    body = {
-      schema: 1,
-      effectId: slugifyId(name),
-      name,
-      loop: true,
-      rate: 10,
-      lifetime: 1,
-      startSize: 0.2,
-      endSize: 0.2,
-      velocity: [0, 1, 0],
-      spread: 0.2,
-      materialMode: "alpha",
-      color: "#ffffff",
-    };
+    // VFX Lite schema-2 body seeded from the picked starter preset (§5.1). The
+    // preset bodies live in engine/vfx/particleEffectPresets (single source);
+    // the effect id is the manifest join key, not a body field.
+    body = buildParticleEffectPresetBody(payload.particlePreset ?? "blank", name);
   } else if (kind === "sound") {
     body = { schema: 1, type: "sound", name, clip: "" };
   } else if (kind === "soundCue") {
@@ -3083,6 +3132,7 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   dialogueLine: "dialogue",
   conversation: "dialogue",
   animation: "animation",
+  effect: "effect",
   prefab: "prefab",
   ui: "UI",
   level: "level",
