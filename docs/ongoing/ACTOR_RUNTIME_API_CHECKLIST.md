@@ -1,7 +1,8 @@
 # Actor Runtime API — Unreal Ortak Aktör Fonksiyonları Kapanış Planı
 
 > Tarih: 2026-07-03
-> Durum: Aktif plan. Kod henüz yazılmadı.
+> Durum: A1–A5 tamamlandı; **A6 backlog'un tüm maddeleri de kapandı (2026-07-03)**.
+> Kalan tek açık nokta A5.5 browser/render smoke doğrulaması. Ayrıntı Progress Log'da.
 > Amaç: Unreal'ın her aktörde bulunan ortak blueprint fonksiyonları (Set
 > Visibility, Destroy Actor, Spawn Actor, Set Timer, GetActorLocation…) ile
 > Forge'un aktör-script/behavior yüzeyi karşılaştırıldı; eksik çıkan runtime
@@ -429,8 +430,21 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   kurallar). Motor değişmedi; yalnız `src/game` + doc. 2 headless test (receiver
   health→Died→destroy; sender overlap→receiver aynı update'te). Gate yeşil:
   `npm run build:verify` (tsc + build + 564 engine check + strict dist scan).
-- [ ] **Runtime attach/detach:** `AttachToActor` karşılığı (editörde parenting
-  var, runtime'da yok). Tetikleyici: taşınan/tutulan obje mekaniği.
+- [x] **Runtime attach/detach:** `AttachToActor` / `DetachFromActor`. Tamamen
+  engine-içi kinematik follow (host sink yok — mevcut `TransformSink` kullanılıyor).
+  `ActorCommands.attachTo(parent, options?)` + `detach()` tick-sonu kuyruğu;
+  `AttachOptions.rule` `keepWorld` (default, dünya offset+rotasyon yakalar) /
+  `snapToTarget` (parent'a yapışır). `BehaviorSubsystem.attachments` map'i child →
+  `{parent, worldOffset, parentRotAtAttach, childRotAtAttach}` tutuyor;
+  `applyAttachments` her tick sonunda child world pose'unu parent'tan yeniden
+  hesaplıyor (parent döndükçe offset `rotateVectorByEulerDegrees` ile orbit +
+  co-rotate) ve `sink`'e yazıyor. `detachEntity` hem child hem parent tarafını
+  çözüyor (parent yok olursa çocuklar oldukları yerde kalır); `setEntities`/`clear`
+  sıfırlıyor. Sınır: parent'ın transform'unu behavior subsystem sürmeli
+  (behavior-driven/spawned aktör); saf physics/character-driven parent v1 dışı.
+  2 headless test (translate follow + detach; orbit/co-rotate + snapToTarget).
+  Gate yeşil: `npm run build:verify` (tsc + build + 568 engine check +
+  strict dist scan).
 - [x] **Tick kontrolü:** aktör-başına tick enable/interval (`SetActorTickEnabled`
   + Actor Tick Interval). Engine: `ActorCommands.setTickEnabled(bool)` +
   `setTickInterval(seconds)` A1 komut yüzeyine eklendi; `BehaviorSubsystem` her
@@ -629,3 +643,15 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   lifecycle temizlik). Host: impulse→physics, launch→character. 2 headless test.
   Gate yeşil: `npm run build:verify` (tsc + Vite build + 566 engine check +
   strict dist scan). Kalan A6: runtime attach/detach.
+- 2026-07-03: **A6 — Runtime attach/detach kodlandı** (`AttachToActor`); **A6
+  backlog kapandı.** Tamamen engine-içi kinematik follow (host sink yok):
+  `ActorCommands.attachTo(parent, options?)` + `detach()`, `AttachOptions.rule`
+  `keepWorld`/`snapToTarget`. `BehaviorSubsystem.attachments` map'i +
+  `applyAttachments` her tick sonunda child pose'unu parent'tan yeniden hesaplıyor
+  (`rotateVectorByEulerDegrees` ile orbit/co-rotate), mevcut `TransformSink`'e
+  yazıyor. `detachEntity` child+parent tarafını çözüyor, `setEntities`/`clear`
+  sıfırlıyor. Sınır: parent transform'u behavior subsystem tarafından sürülmeli
+  (v1). 2 headless test. Gate yeşil: `npm run build:verify` (tsc + Vite build +
+  568 engine check + strict dist scan). **A6 backlog'un tüm maddeleri (`[x]`):**
+  collision toggle, endPlay lifecycle, tick kontrolü, velocity, owner/instigator,
+  hasar konvansiyonu, impulse/launch, runtime attach/detach.

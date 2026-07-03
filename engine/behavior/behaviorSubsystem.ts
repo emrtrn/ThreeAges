@@ -39,8 +39,10 @@ import {
 import {
   forwardVectorFromRotation,
   rightVectorFromRotation,
+  rotateVectorByEulerDegrees,
   upVectorFromRotation,
 } from "../scene/transform";
+import type { Vec3 } from "../scene/layout";
 
 /** Stable registry id for the behavior subsystem. */
 export const BEHAVIOR_SUBSYSTEM_ID = "behavior";
@@ -154,6 +156,16 @@ export interface LaunchOptions {
   readonly zOverride?: boolean;
 }
 
+/**
+ * Options for {@link ActorCommands.attachTo} (Unreal `AttachToActor` location
+ * rule): `keepWorld` (default) preserves the child's current world pose and
+ * captures it as a relative offset; `snapToTarget` snaps the child onto the
+ * parent's transform.
+ */
+export interface AttachOptions {
+  readonly rule?: "keepWorld" | "snapToTarget";
+}
+
 /** Options shared by the actor commands: opt in to save-game persistence. */
 export interface ActorCommandOptions {
   /**
@@ -223,6 +235,16 @@ export interface ActorCommands {
    */
   launch(velocity: ReadonlyVec3, options?: LaunchOptions): void;
   /**
+   * Attaches this entity to `parent` (Unreal `AttachToActor`): from the next frame
+   * its world transform follows the parent's (translating + orbiting/co-rotating
+   * as the parent moves), until {@link detach}. Kinematic follow — the parent must
+   * be an actor whose transform the behavior subsystem drives (a behavior-moved /
+   * spawned actor); a purely physics/character-driven parent is out of scope.
+   */
+  attachTo(parent: EntityRef, options?: AttachOptions): void;
+  /** Detaches this entity from its parent (Unreal `DetachFromActor`); keeps its pose. */
+  detach(): void;
+  /**
    * Queues a runtime actor spawn from an Actor Script class. The host resolves
    * the class/ref and instantiates render + physics incrementally; exposed params
    * are merged into the spawned class's behavior binding params.
@@ -266,6 +288,13 @@ type ActorCommand =
       readonly velocity: ReadonlyVec3;
       readonly options: LaunchOptions;
     }
+  | {
+      readonly entityId: EntityId;
+      readonly kind: "attach";
+      readonly parent: EntityId;
+      readonly options: AttachOptions;
+    }
+  | { readonly entityId: EntityId; readonly kind: "detach" }
   | { readonly entityId: EntityId; readonly kind: "spawn"; readonly request: ActorSpawnRequest };
 
 interface ScriptTimerRecord {
@@ -286,6 +315,18 @@ interface TickControl {
   enabled: boolean;
   interval: number;
   accumulator: number;
+}
+
+/**
+ * A runtime attachment (A6 AttachToActor): the child's world pose is recomputed
+ * each frame from the parent's pose plus the relative offset + rotation captured
+ * at attach time, so the child translates with and orbits/co-rotates the parent.
+ */
+interface AttachmentRecord {
+  parent: EntityId;
+  worldOffset: Vec3;
+  parentRotAtAttach: Vec3;
+  childRotAtAttach: Vec3;
 }
 
 /**
@@ -449,6 +490,8 @@ export class BehaviorSubsystem implements Subsystem {
   private tickControl = new Map<EntityId, TickControl>();
   /** Spawned entity -> the actor that spawned it (A6 Owner/Instigator). */
   private owners = new Map<EntityId, EntityId>();
+  /** Child entity -> its runtime attachment to a parent (A6 AttachToActor). */
+  private attachments = new Map<EntityId, AttachmentRecord>();
   private nextTimerId = 1;
   private previousContactKeys = new Set<string>();
   private readonly messageBus: ScriptMessageBus;
@@ -515,6 +558,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.lifeSpans.clear();
     this.tickControl.clear();
     this.owners.clear();
+    this.attachments.clear();
     this.previousContactKeys.clear();
 
     for (const entity of entities) this.registerRuntimeEntity(entity);
@@ -564,6 +608,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.lifeSpans.clear();
     this.tickControl.clear();
     this.owners.clear();
+    this.attachments.clear();
     this.previousContactKeys.clear();
     this.resetMessageSubscriptions();
   }
@@ -735,6 +780,9 @@ export class BehaviorSubsystem implements Subsystem {
     // Actor commands (visibility/destroy) apply once the tick's behaviors and
     // message handlers have all run, so a mutation is deterministic end-of-tick.
     this.flushActorCommands();
+    // Attached children follow their parent's final pose for this frame (after any
+    // command, including a freshly issued attach, has been applied).
+    this.applyAttachments();
     this.currentEngine = null;
   }
 
@@ -1044,6 +1092,13 @@ export class BehaviorSubsystem implements Subsystem {
           options: options ?? {},
         });
       },
+      attachTo: (parent, options) => {
+        if (parent === entityId) return;
+        this.commandQueue.push({ entityId, kind: "attach", parent, options: options ?? {} });
+      },
+      detach: () => {
+        this.commandQueue.push({ entityId, kind: "detach" });
+      },
       spawn: (classRef, transform, params) => {
         if (!classRef.trim()) return;
         const request: ActorSpawnRequest = {
@@ -1177,6 +1232,14 @@ export class BehaviorSubsystem implements Subsystem {
       }
       return;
     }
+    if (command.kind === "attach") {
+      this.processAttach(command.entityId, command.parent, command.options);
+      return;
+    }
+    if (command.kind === "detach") {
+      this.attachments.delete(command.entityId);
+      return;
+    }
     if (command.kind === "spawn") {
       if (this.runtimeEntities.has(command.entityId)) this.actorCommandSink?.spawn?.(command.request);
       return;
@@ -1191,6 +1254,69 @@ export class BehaviorSubsystem implements Subsystem {
       this.detachEntity(command.entityId);
     }
     this.actorCommandSink?.destroy(command.entityId);
+  }
+
+  /**
+   * Records a runtime attachment (A6 AttachToActor). `keepWorld` (default) captures
+   * the child's current world offset + rotation from the parent so its pose is
+   * preserved; `snapToTarget` zeroes the offset so the child snaps onto the parent.
+   * A missing child/parent (or self-parenting) is a no-op.
+   */
+  private processAttach(child: EntityId, parent: EntityId, options: AttachOptions): void {
+    if (child === parent) return;
+    const childRuntime = this.runtimeEntities.get(child);
+    const parentRuntime = this.runtimeEntities.get(parent);
+    if (!childRuntime || !parentRuntime) return;
+    const c = childRuntime.transform;
+    const p = parentRuntime.transform;
+    const snap = options.rule === "snapToTarget";
+    this.attachments.set(child, {
+      parent,
+      worldOffset: snap
+        ? [0, 0, 0]
+        : [c.position[0] - p.position[0], c.position[1] - p.position[1], c.position[2] - p.position[2]],
+      parentRotAtAttach: [p.rotation[0], p.rotation[1], p.rotation[2]],
+      childRotAtAttach: snap
+        ? [p.rotation[0], p.rotation[1], p.rotation[2]]
+        : [c.rotation[0], c.rotation[1], c.rotation[2]],
+    });
+    this.applyAttachment(child);
+  }
+
+  /**
+   * Positions every attached child from its parent's current pose. Runs at the end
+   * of each tick (after behaviors + commands), so the child follows this frame's
+   * parent motion. A child whose parent has left play is silently detached.
+   */
+  private applyAttachments(): void {
+    if (this.attachments.size === 0) return;
+    for (const child of [...this.attachments.keys()]) this.applyAttachment(child);
+  }
+
+  private applyAttachment(child: EntityId): void {
+    const record = this.attachments.get(child);
+    if (!record) return;
+    const childRuntime = this.runtimeEntities.get(child);
+    const parentRuntime = this.runtimeEntities.get(record.parent);
+    if (!childRuntime || !parentRuntime) {
+      this.attachments.delete(child);
+      return;
+    }
+    const p = parentRuntime.transform;
+    const deltaRot: Vec3 = [
+      p.rotation[0] - record.parentRotAtAttach[0],
+      p.rotation[1] - record.parentRotAtAttach[1],
+      p.rotation[2] - record.parentRotAtAttach[2],
+    ];
+    const rotatedOffset = rotateVectorByEulerDegrees(record.worldOffset, deltaRot);
+    const t = childRuntime.transform;
+    t.position[0] = p.position[0] + rotatedOffset[0];
+    t.position[1] = p.position[1] + rotatedOffset[1];
+    t.position[2] = p.position[2] + rotatedOffset[2];
+    t.rotation[0] = record.childRotAtAttach[0] + deltaRot[0];
+    t.rotation[1] = record.childRotAtAttach[1] + deltaRot[1];
+    t.rotation[2] = record.childRotAtAttach[2] + deltaRot[2];
+    this.sink(child, t);
   }
 
   /**
@@ -1223,6 +1349,12 @@ export class BehaviorSubsystem implements Subsystem {
     this.owners.delete(entityId);
     for (const [child, owner] of [...this.owners.entries()]) {
       if (owner === entityId) this.owners.delete(child);
+    }
+    // Drop attachments where this entity is the child, and detach any children
+    // parented to it (a destroyed parent leaves its children where they are).
+    this.attachments.delete(entityId);
+    for (const [child, record] of [...this.attachments.entries()]) {
+      if (record.parent === entityId) this.attachments.delete(child);
     }
     this.previousContactKeys = new Set(
       [...this.previousContactKeys].filter((key) => !contactKeyIncludesEntity(key, entityId)),

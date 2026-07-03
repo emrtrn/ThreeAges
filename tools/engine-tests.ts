@@ -8552,6 +8552,123 @@ check("CharacterMovement launch: upward launch arcs and lands; horizontal knockb
   assert.ok(Math.abs(transform.position[0] - restX) < 1e-6, "knockback fully decayed");
 });
 
+// A6 AttachToActor (keepWorld): an attached child follows its parent's motion at
+// the world offset captured on attach; detaching leaves it where it is.
+check("actor command: attachTo makes a child follow its parent; detach stops it", () => {
+  const positions = new Map<string, [number, number, number]>();
+  const record: TransformSink = (id, t) => {
+    positions.set(id, [t.position[0], t.position[1], t.position[2]]);
+  };
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "move") {
+        return (context) => {
+          context.transform.position[0] += 3;
+          context.transform.position[2] += 1;
+        };
+      }
+      if (scriptId === "attach") return (context) => context.actor.attachTo("parent:0");
+      if (scriptId === "detach") return (context) => context.actor.detach();
+      return undefined;
+    },
+  };
+  const parent: Entity = {
+    id: "parent:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      MessageBindings: { bindings: [{ message: "Move", scriptId: "move", target: "self" }] },
+    },
+  };
+  const child: Entity = {
+    id: "child:0",
+    components: {
+      Transform: { position: [1, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      MessageBindings: {
+        bindings: [
+          { message: "Attach", scriptId: "attach", target: "self" },
+          { message: "Detach", scriptId: "detach", target: "self" },
+        ],
+      },
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), record);
+  behavior.setEntities([parent, child]);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.016); // settle
+  behavior.emitScriptMessage("Attach", "child:0", undefined, "child:0");
+  app.update(0.016); // captures offset [1,0,0]; child stays at [1,0,0]
+  assert.deepEqual(positions.get("child:0"), [1, 0, 0]);
+  behavior.emitScriptMessage("Move", "parent:0", undefined, "parent:0");
+  app.update(0.016); // parent -> [3,0,1]; child follows to [4,0,1]
+  assert.deepEqual(positions.get("child:0"), [4, 0, 1]);
+  behavior.emitScriptMessage("Detach", "child:0", undefined, "child:0");
+  app.update(0.016);
+  behavior.emitScriptMessage("Move", "parent:0", undefined, "parent:0");
+  app.update(0.016); // parent -> [6,0,2]; detached child stays put
+  assert.deepEqual(positions.get("child:0"), [4, 0, 1]);
+});
+
+// A6 AttachToActor: a keepWorld child orbits + co-rotates as the parent turns; a
+// snapToTarget child glues onto the parent's transform.
+check("actor command: attachTo orbits a keepWorld child and snaps a snapToTarget child", () => {
+  const transforms = new Map<string, { position: number[]; rotation: number[] }>();
+  const record: TransformSink = (id, t) => {
+    transforms.set(id, { position: [...t.position], rotation: [...t.rotation] });
+  };
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "spin90") return (context) => (context.transform.rotation[1] += 90);
+      if (scriptId === "attachKeep") return (context) => context.actor.attachTo("parent:0");
+      if (scriptId === "attachSnap") {
+        return (context) => context.actor.attachTo("parent:0", { rule: "snapToTarget" });
+      }
+      return undefined;
+    },
+  };
+  const parent: Entity = {
+    id: "parent:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      MessageBindings: { bindings: [{ message: "Spin", scriptId: "spin90", target: "self" }] },
+    },
+  };
+  const keepChild: Entity = {
+    id: "keep:0",
+    components: {
+      Transform: { position: [1, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      MessageBindings: { bindings: [{ message: "Attach", scriptId: "attachKeep", target: "self" }] },
+    },
+  };
+  const snapChild: Entity = {
+    id: "snap:0",
+    components: {
+      Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      MessageBindings: { bindings: [{ message: "Attach", scriptId: "attachSnap", target: "self" }] },
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), record);
+  behavior.setEntities([parent, keepChild, snapChild]);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+  behavior.emitScriptMessage("Attach", "keep:0", undefined, "keep:0");
+  behavior.emitScriptMessage("Attach", "snap:0", undefined, "snap:0");
+  app.update(0.016);
+  // snapToTarget glued onto the parent immediately.
+  assert.deepEqual(transforms.get("snap:0")?.position, [0, 0, 0]);
+  behavior.emitScriptMessage("Spin", "parent:0", undefined, "parent:0");
+  app.update(0.016); // parent yaw -> 90
+  const keep = transforms.get("keep:0");
+  const snap = transforms.get("snap:0");
+  const near = (a: number[] | undefined, b: number[]) =>
+    a !== undefined && a.every((v, i) => Math.abs(v - (b[i] as number)) < 1e-9);
+  assert.ok(near(keep?.position, [0, 0, -1]), `keep orbited: ${keep?.position}`);
+  assert.ok(Math.abs((keep?.rotation[1] ?? 0) - 90) < 1e-9, "keep co-rotated to yaw 90");
+  assert.ok(near(snap?.position, [0, 0, 0]), `snap stayed glued: ${snap?.position}`);
+  assert.ok(Math.abs((snap?.rotation[1] ?? 0) - 90) < 1e-9, "snap tracks parent yaw");
+});
+
 // A2 timers: delayed callbacks travel through the existing self-targeted script
 // message binding path, so behaviors can consume them without a second event API.
 check("script timers: after delivers one self-targeted message", () => {
