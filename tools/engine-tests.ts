@@ -8140,6 +8140,85 @@ check("actor command: persisted collision-disable re-applies on a snapshot resto
   assert.deepEqual(effects.sort(), ["collision:actor:0:false", "hide:actor:0:false"]);
 });
 
+// A6 tick control (SetActorTickEnabled / tick interval): a throttled tick runs at
+// most every N seconds and sees the accumulated elapsed time as its deltaSeconds,
+// so time-integrated logic (spin, timers) stays correct despite the throttle.
+check("actor command: setTickInterval throttles ticks and passes accumulated dt", () => {
+  const seenDeltas: number[] = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "configure") return (context) => context.actor.setTickInterval(0.1);
+      if (scriptId === "count") return (context) => seenDeltas.push(context.engine.deltaSeconds);
+      return undefined;
+    },
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      EventBindings: {
+        bindings: [
+          { event: "beginPlay", scriptId: "configure" },
+          { event: "tick", scriptId: "count" },
+        ],
+      },
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([entity]);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.04); // beginPlay sets the interval; accumulator 0.04 < 0.1 → no tick
+  app.update(0.04); // accumulator 0.08 < 0.1 → no tick
+  assert.deepEqual(seenDeltas, []);
+  app.update(0.04); // accumulator 0.12 ≥ 0.1 → one tick sees the accumulated 0.12
+  assert.equal(seenDeltas.length, 1);
+  assert.ok(Math.abs((seenDeltas[0] ?? 0) - 0.12) < 1e-9, `expected ~0.12, got ${seenDeltas[0]}`);
+  // Reload resets the accumulator: beginPlay re-arms 0.1s, so a 0.04s frame does
+  // not immediately fire again (no stale throttle state leaks across rebuilds).
+  behavior.setEntities([entity]);
+  app.update(0.04);
+  assert.equal(seenDeltas.length, 1);
+});
+
+// A6 tick control: setTickEnabled(false) stops only the entity's tick bindings;
+// re-enabling resumes them from the next tick.
+check("actor command: setTickEnabled gates the tick binding, re-enable resumes", () => {
+  let ticks = 0;
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId === "count") return () => (ticks += 1);
+      if (scriptId === "disable") return (context) => context.actor.setTickEnabled(false);
+      if (scriptId === "enable") return (context) => context.actor.setTickEnabled(true);
+      return undefined;
+    },
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      EventBindings: {
+        bindings: [
+          { event: "beginPlay", scriptId: "disable" },
+          { event: "tick", scriptId: "count" },
+        ],
+      },
+      MessageBindings: { bindings: [{ message: "Enable", scriptId: "enable", target: "self" }] },
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([entity]);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.016); // beginPlay disables before the tick loop → no tick
+  app.update(0.016);
+  assert.equal(ticks, 0, "tick stays gated while disabled");
+  behavior.emitScriptMessage("Enable", "actor:0", undefined, "actor:0");
+  app.update(0.016); // message flush re-enables after this frame's (skipped) tick
+  app.update(0.016); // now the tick fires again
+  assert.equal(ticks, 1, "tick resumes after re-enable");
+});
+
 // A2 timers: delayed callbacks travel through the existing self-targeted script
 // message binding path, so behaviors can consume them without a second event API.
 check("script timers: after delivers one self-targeted message", () => {

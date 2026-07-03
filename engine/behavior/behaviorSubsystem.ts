@@ -164,6 +164,19 @@ export interface ActorCommands {
    */
   setLifeSpan(seconds: number): void;
   /**
+   * Enables/disables this entity's `tick` bindings (Unreal `SetActorTickEnabled`).
+   * Disabled, its per-frame behaviors stop running while its other event bindings
+   * (beginPlay/overlap/hit/interact) keep firing. Takes effect from the next tick.
+   */
+  setTickEnabled(enabled: boolean): void;
+  /**
+   * Throttles this entity's `tick` bindings to run at most every `seconds`
+   * (Unreal `Actor Tick Interval`). The throttled tick receives the accumulated
+   * elapsed time as `engine.deltaSeconds` so time-integrated logic stays correct.
+   * Passing 0 or a negative/non-finite value restores every-frame ticking.
+   */
+  setTickInterval(seconds: number): void;
+  /**
    * Queues a runtime actor spawn from an Actor Script class. The host resolves
    * the class/ref and instantiates render + physics incrementally; exposed params
    * are merged into the spawned class's behavior binding params.
@@ -205,6 +218,17 @@ interface ScriptTimerRecord {
   readonly payload: ScriptMessagePayload | undefined;
   readonly createdFrame: number;
   remainingSeconds: number;
+}
+
+/**
+ * Per-actor tick gating: `enabled` toggles the entity's `tick` bindings,
+ * `interval` (>0) throttles them to run at most every N seconds, and
+ * `accumulator` carries elapsed time between throttled ticks.
+ */
+interface TickControl {
+  enabled: boolean;
+  interval: number;
+  accumulator: number;
 }
 
 /**
@@ -356,6 +380,8 @@ export class BehaviorSubsystem implements Subsystem {
   private commandQueue: ActorCommand[] = [];
   private timers = new Map<ScriptTimerHandle, ScriptTimerRecord>();
   private lifeSpans = new Map<EntityId, { remainingSeconds: number; createdFrame: number }>();
+  /** Per-actor tick gating (A6 SetActorTickEnabled / tick interval); default is every-frame. */
+  private tickControl = new Map<EntityId, TickControl>();
   private nextTimerId = 1;
   private previousContactKeys = new Set<string>();
   private readonly messageBus: ScriptMessageBus;
@@ -417,6 +443,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.commandQueue = [];
     this.timers.clear();
     this.lifeSpans.clear();
+    this.tickControl.clear();
     this.previousContactKeys.clear();
 
     for (const entity of entities) this.registerRuntimeEntity(entity);
@@ -463,6 +490,7 @@ export class BehaviorSubsystem implements Subsystem {
     this.commandQueue = [];
     this.timers.clear();
     this.lifeSpans.clear();
+    this.tickControl.clear();
     this.previousContactKeys.clear();
     this.resetMessageSubscriptions();
   }
@@ -609,9 +637,16 @@ export class BehaviorSubsystem implements Subsystem {
     this.currentEngine = engine;
     this.lastEngineFrame = engine.frame;
     this.dispatchBeginPlayEvents(engine);
+    const tickDecisions = this.computeTickDecisions(engine);
     for (const instance of this.instances) {
       if (instance.event !== "tick") continue;
-      this.invokeBehavior(instance, engine, {
+      const decision = tickDecisions.get(instance.runtime.id);
+      if (decision && !decision.fire) continue;
+      const tickEngine =
+        decision && decision.deltaSeconds !== engine.deltaSeconds
+          ? { ...engine, deltaSeconds: decision.deltaSeconds }
+          : engine;
+      this.invokeBehavior(instance, tickEngine, {
         kind: "tick",
         frame: engine.frame,
         entityId: instance.runtime.id,
@@ -909,6 +944,14 @@ export class BehaviorSubsystem implements Subsystem {
           createdFrame: this.currentEngine?.frame ?? this.lastEngineFrame,
         });
       },
+      setTickEnabled: (enabled) => {
+        this.ensureTickControl(entityId).enabled = enabled;
+      },
+      setTickInterval: (seconds) => {
+        const control = this.ensureTickControl(entityId);
+        control.interval = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+        control.accumulator = 0;
+      },
       spawn: (classRef, transform, params) => {
         if (!classRef.trim()) return;
         const request: ActorSpawnRequest = {
@@ -920,6 +963,52 @@ export class BehaviorSubsystem implements Subsystem {
         this.commandQueue.push({ entityId, kind: "spawn", request });
       },
     };
+  }
+
+  private ensureTickControl(entityId: EntityId): TickControl {
+    let control = this.tickControl.get(entityId);
+    if (!control) {
+      control = { enabled: true, interval: 0, accumulator: 0 };
+      this.tickControl.set(entityId, control);
+    }
+    return control;
+  }
+
+  /**
+   * Resolves this frame's tick gating for every entity with custom tick control
+   * (A6): whether its `tick` bindings fire and, for a throttled interval, the
+   * accumulated `deltaSeconds` the fired tick should see. Entities without an entry
+   * are absent from the map and default to firing every frame with the raw dt.
+   */
+  private computeTickDecisions(
+    engine: EngineUpdateContext,
+  ): Map<EntityId, { fire: boolean; deltaSeconds: number }> {
+    const decisions = new Map<EntityId, { fire: boolean; deltaSeconds: number }>();
+    if (this.tickControl.size === 0) return decisions;
+    const dt = Math.max(0, engine.deltaSeconds);
+    for (const [entityId, control] of [...this.tickControl.entries()]) {
+      if (!this.runtimeEntities.has(entityId)) {
+        this.tickControl.delete(entityId);
+        continue;
+      }
+      if (!control.enabled) {
+        decisions.set(entityId, { fire: false, deltaSeconds: dt });
+        continue;
+      }
+      if (control.interval <= 0) {
+        decisions.set(entityId, { fire: true, deltaSeconds: dt });
+        continue;
+      }
+      control.accumulator += dt;
+      if (control.accumulator + 1e-9 < control.interval) {
+        decisions.set(entityId, { fire: false, deltaSeconds: dt });
+        continue;
+      }
+      const elapsed = control.accumulator;
+      control.accumulator = 0;
+      decisions.set(entityId, { fire: true, deltaSeconds: elapsed });
+    }
+    return decisions;
   }
 
   private advanceTimers(engine: EngineUpdateContext): void {
@@ -1024,6 +1113,7 @@ export class BehaviorSubsystem implements Subsystem {
       if (timer.entityId === entityId) this.timers.delete(handle);
     }
     this.lifeSpans.delete(entityId);
+    this.tickControl.delete(entityId);
     this.previousContactKeys = new Set(
       [...this.previousContactKeys].filter((key) => !contactKeyIncludesEntity(key, entityId)),
     );

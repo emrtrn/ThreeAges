@@ -413,9 +413,17 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   Tetikleyici: can/hasar isteyen ilk oyun fork'u.
 - [ ] **Runtime attach/detach:** `AttachToActor` karşılığı (editörde parenting
   var, runtime'da yok). Tetikleyici: taşınan/tutulan obje mekaniği.
-- [ ] **Tick kontrolü:** aktör-başına tick enable/interval (bugün yalnız
-  subsystem-geneli `setEnabled`). Tetikleyici: kalabalık sahnede behavior
-  tick maliyeti ölçülür hale gelirse.
+- [x] **Tick kontrolü:** aktör-başına tick enable/interval (`SetActorTickEnabled`
+  + Actor Tick Interval). Engine: `ActorCommands.setTickEnabled(bool)` +
+  `setTickInterval(seconds)` A1 komut yüzeyine eklendi; `BehaviorSubsystem` her
+  entity için opsiyonel `TickControl` (`enabled`/`interval`/`accumulator`) tutuyor,
+  yalnız `tick` kind'ı gated (beginPlay/overlap/hit/interact etkilenmez). Throttled
+  tick, biriken elapsed süreyi `engine.deltaSeconds` olarak alır (time-integrated
+  mantık bozulmaz); komutlar tick içinde anında etki eder (host sink gerekmez).
+  `tickControl` seti `setEntities`/`clear`/`detachEntity` ve entity yok olduğunda
+  temizlenir. 2 headless test (interval throttle + accumulated dt + reload reset;
+  enable/disable geçişi). Gate yeşil: `npm run build:verify` (tsc + build +
+  559 engine check + strict dist scan).
 - [ ] **Owner/Instigator:** spawn eden aktörün kimliği (mesaj `source`'u
   kısmen karşılıyor). Tetikleyici: A5 sonrası "kim spawn etti" ihtiyacı.
 - [ ] **Hız erişimi (A3.3 devri):** `velocityOf` — CharacterMovement state'ini
@@ -532,3 +540,15 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   strict dist scan). Kalan A6: impulse/launch, hasar konvansiyonu, runtime
   attach/detach, tick kontrolü, owner/instigator, velocity — hepsi tetikleyici
   bekliyor.
+- 2026-07-03: **A6 — Tick kontrolü kodlandı** (`SetActorTickEnabled` + tick
+  interval). Engine: `ActorCommands.setTickEnabled(bool)` + `setTickInterval(seconds)`
+  A1 komut yüzeyine eklendi; `BehaviorSubsystem` entity başına opsiyonel `TickControl`
+  (`enabled`/`interval`/`accumulator`) tutuyor, `computeTickDecisions` her frame
+  yalnız `tick` kind'ını gate'liyor (beginPlay/overlap/hit/interact etkilenmez),
+  throttled tick biriken süreyi `deltaSeconds` olarak alıyor. Komutlar tick içinde
+  anında etki ediyor (host sink yok); `tickControl` `setEntities`/`clear`/
+  `detachEntity`/entity-yokluğunda temizleniyor. 2 headless test (interval
+  throttle + accumulated dt + reload reset; enable/disable geçişi). Gate yeşil:
+  `npm run build:verify` (tsc + Vite build + 559 engine check + strict dist scan).
+  Kalan A6: impulse/launch, hasar konvansiyonu, runtime attach/detach,
+  owner/instigator, velocity.
