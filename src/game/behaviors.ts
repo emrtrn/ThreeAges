@@ -38,6 +38,7 @@ export const BEHAVIOR_SCRIPT_IDS = [
   "use-toggleable",
   "lamp-toggle",
   "begin-conversation",
+  "proximity-toggle",
 ] as const;
 export type BehaviorScriptId = (typeof BEHAVIOR_SCRIPT_IDS)[number];
 
@@ -406,6 +407,25 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     context.messages.emit("start-conversation", { conversationId });
   };
 
+  // A3 ScriptWorld example: finds a tagged target, reads the self->target
+  // distance via the read-only world query API, and emits an edge only when the
+  // target crosses the configured range. Game rules can bind to
+  // `Proximity.Changed`; the behavior owns no project-specific outcome.
+  const proximityToggle: BehaviorUpdate = (context) => {
+    const targetTag = stringParam(context.params.targetTag) ?? "player";
+    const target = context.world.byTag(targetTag)[0];
+    if (!target) return;
+    const range = numberParam(context.params.range, 2);
+    const near = (context.world.distanceTo(target) ?? Infinity) <= range;
+    if (context.state.get("near", false) === near) return;
+    context.state.set("near", near);
+    context.messages.emit("Proximity.Changed", {
+      entityId: context.entityId,
+      target,
+      near,
+    });
+  };
+
   const behaviors = new Map<string, BehaviorUpdate>([
     ["spin", spin],
     ["input-move", inputMove],
@@ -418,6 +438,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     ["use-toggleable", useToggleable],
     ["lamp-toggle", lampToggle],
     ["begin-conversation", beginConversation],
+    ["proximity-toggle", proximityToggle],
   ]);
   return { get: (scriptId) => behaviors.get(scriptId) };
 }

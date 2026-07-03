@@ -34,6 +34,11 @@ import {
   type ScriptMessageTraceEntry,
   type ScriptMessageWarning,
 } from "./scriptMessages";
+import {
+  forwardVectorFromRotation,
+  rightVectorFromRotation,
+  upVectorFromRotation,
+} from "../scene/transform";
 
 /** Stable registry id for the behavior subsystem. */
 export const BEHAVIOR_SUBSYSTEM_ID = "behavior";
@@ -45,6 +50,14 @@ export interface ScriptMessages {
   emit(type: string, payload?: ScriptMessagePayload): void;
 }
 
+export type ReadonlyVec3 = readonly [number, number, number];
+
+export interface ScriptTransformSnapshot {
+  readonly position: ReadonlyVec3;
+  readonly rotation: ReadonlyVec3;
+  readonly scale: ReadonlyVec3;
+}
+
 export interface ScriptWorld {
   self(): EntityRef;
   ref(key: string): EntityRef | null;
@@ -52,6 +65,11 @@ export interface ScriptWorld {
   byTag(tag: string): EntityRef[];
   byClassRef(classRef: string): EntityRef[];
   withInterface(name: string): EntityRef[];
+  transformOf(ref: EntityRef): ScriptTransformSnapshot | null;
+  distanceTo(ref: EntityRef): number | null;
+  forwardOf(ref: EntityRef): ReadonlyVec3 | null;
+  rightOf(ref: EntityRef): ReadonlyVec3 | null;
+  upOf(ref: EntityRef): ReadonlyVec3 | null;
   nearestWithInterface(
     name: string,
     from: EntityRef,
@@ -650,6 +668,11 @@ export class BehaviorSubsystem implements Subsystem {
       byTag: (tag) => [...(this.tagIndex.get(tag) ?? [])],
       byClassRef: (classRef) => [...(this.classRefIndex.get(classRef) ?? [])],
       withInterface: (name) => [...(this.interfaceIndex.get(name) ?? [])],
+      transformOf: (ref) => this.transformOf(ref),
+      distanceTo: (ref) => this.distanceBetween(self, ref),
+      forwardOf: (ref) => this.directionOf(ref, forwardVectorFromRotation),
+      rightOf: (ref) => this.directionOf(ref, rightVectorFromRotation),
+      upOf: (ref) => this.directionOf(ref, upVectorFromRotation),
       nearestWithInterface: (name, from, maxDistance) =>
         this.nearestWithInterface(name, from, maxDistance),
     };
@@ -859,6 +882,28 @@ export class BehaviorSubsystem implements Subsystem {
     return best;
   }
 
+  private transformOf(entityId: EntityId): ScriptTransformSnapshot | null {
+    const runtime = this.runtimeEntities.get(entityId);
+    if (!runtime) return null;
+    return cloneTransform(runtime.transform);
+  }
+
+  private distanceBetween(from: EntityId, to: EntityId): number | null {
+    const source = this.runtimeEntities.get(from);
+    const target = this.runtimeEntities.get(to);
+    if (!source || !target) return null;
+    return distanceBetweenTransforms(source.transform, target.transform);
+  }
+
+  private directionOf(
+    entityId: EntityId,
+    resolve: (rotation: [number, number, number]) => [number, number, number],
+  ): ReadonlyVec3 | null {
+    const runtime = this.runtimeEntities.get(entityId);
+    if (!runtime) return null;
+    return resolve(runtime.transform.rotation);
+  }
+
   private resolveReference(sourceEntityId: EntityId, key: string): EntityId | null {
     const source = this.runtimeEntities.get(sourceEntityId);
     if (!source) return null;
@@ -901,6 +946,13 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
     rotation: [...transform.rotation],
     scale: [...transform.scale],
   };
+}
+
+function distanceBetweenTransforms(a: TransformComponent, b: TransformComponent): number {
+  const dx = b.position[0] - a.position[0];
+  const dy = b.position[1] - a.position[1];
+  const dz = b.position[2] - a.position[2];
+  return Math.hypot(dx, dy, dz);
 }
 
 function cloneSceneJsonValue(value: SceneJsonValue): SceneJsonValue {

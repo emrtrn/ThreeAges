@@ -64,7 +64,13 @@ import {
   SCRIPT_INTERFACES_COMPONENT,
   SCRIPT_REFERENCES_COMPONENT,
 } from "../engine/scene/components";
-import { readRotation, readScale } from "../engine/scene/transform";
+import {
+  forwardVectorFromRotation,
+  readRotation,
+  readScale,
+  rightVectorFromRotation,
+  upVectorFromRotation,
+} from "../engine/scene/transform";
 import { EngineApp } from "../engine/core/EngineApp";
 import type { Subsystem } from "../engine/core/Subsystem";
 import { AnimationSubsystem } from "../engine/render-three/animationSubsystem";
@@ -3753,6 +3759,86 @@ check("behavior world resolves direct actor references and rebuilds query indexe
       refByTag: null,
       refByClass: null,
       refByInterface: null,
+    },
+  ]);
+});
+
+check("transform direction helpers rotate actor local axes without render imports", () => {
+  const approx = (actual: readonly number[], expected: readonly number[]) => {
+    assert.equal(actual.length, expected.length);
+    actual.forEach((value, index) => {
+      assert.ok(Math.abs(value - expected[index]!) < 1e-9, `${value} != ${expected[index]}`);
+    });
+  };
+  approx(forwardVectorFromRotation([0, 0, 0]), [0, 0, 1]);
+  approx(forwardVectorFromRotation([0, 90, 0]), [1, 0, 0]);
+  approx(rightVectorFromRotation([0, 90, 0]), [0, 0, -1]);
+  approx(upVectorFromRotation([90, 0, 0]), [0, 0, 1]);
+});
+
+check("behavior world exposes read-only transform snapshots, distance and direction vectors", () => {
+  const reports: Array<{
+    targetX: number | null;
+    mutatedSourceX: number | null;
+    nextTargetX: number | null;
+    distance: number | null;
+    missingDistance: number | null;
+    forward: readonly number[] | null;
+    right: readonly number[] | null;
+    up: readonly number[] | null;
+  }> = [];
+  const registry: BehaviorRegistry = {
+    get: (scriptId) => {
+      if (scriptId !== "probe") return undefined;
+      return (context) => {
+        const target = context.world.byTag("target")[0] ?? null;
+        if (!target) return;
+        const snapshot = context.world.transformOf(target);
+        const mutableSnapshot = snapshot as { position: [number, number, number] } | null;
+        if (mutableSnapshot) mutableSnapshot.position[0] = 99;
+        reports.push({
+          targetX: snapshot?.position[0] ?? null,
+          mutatedSourceX: context.world.transformOf(target)?.position[0] ?? null,
+          nextTargetX: context.world.transformOf(context.world.byName("Missing") ?? "")?.position[0] ?? null,
+          distance: context.world.distanceTo(target),
+          missingDistance: context.world.distanceTo("missing"),
+          forward: context.world.forwardOf(target),
+          right: context.world.rightOf(target),
+          up: context.world.upOf(target),
+        });
+      };
+    },
+  };
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  behavior.setEntities([
+    {
+      id: "probe",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Behavior: { scriptId: "probe" },
+      },
+    },
+    {
+      id: "target",
+      name: "Target",
+      tags: ["target"],
+      components: {
+        Transform: { position: [3, 4, 0], rotation: [0, 90, 0], scale: [2, 2, 2] },
+      },
+    },
+  ]);
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+
+  assert.deepEqual(reports, [
+    {
+      targetX: 99,
+      mutatedSourceX: 3,
+      nextTargetX: null,
+      distance: 5,
+      missingDistance: null,
+      forward: [1, 0, 0],
+      right: [0, 0, -1],
+      up: [0, 1, 0],
     },
   ]);
 });
@@ -7818,6 +7904,51 @@ check("actor command: setLifeSpan destroys through the actor command sink", () =
   behavior.update({ deltaSeconds: 1, elapsedSeconds: 1.07, frame: 4 });
   assert.deepEqual(destroyed, ["actor:0"]);
   assert.equal(ticks, 3);
+});
+
+check("proximity-toggle behavior emits edges from ScriptWorld distance queries", () => {
+  const events: string[] = [];
+  const behavior = new BehaviorSubsystem(
+    createBehaviorRegistry(),
+    new ActionMap({}),
+    () => undefined,
+  );
+  const watcher: Entity = {
+    id: "watcher",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "proximity-toggle", params: { targetTag: "player", range: 2 } },
+    },
+  };
+  const player: Entity = {
+    id: "player",
+    tags: ["player"],
+    components: {
+      Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    },
+  };
+  behavior.setEntities([watcher, player]);
+  behavior.subscribeScriptMessage("Proximity.Changed", (envelope) => {
+    events.push(`${String(envelope.payload.entityId)}:${String(envelope.payload.target)}:${String(envelope.payload.near)}`);
+  });
+
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.deepEqual(events, []);
+  behavior.resetEntityTransform("player", {
+    position: [1, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.048, frame: 3 });
+  behavior.resetEntityTransform("player", {
+    position: [4, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  behavior.update({ deltaSeconds: 0.016, elapsedSeconds: 0.064, frame: 4 });
+
+  assert.deepEqual(events, ["watcher:player:true", "watcher:player:false"]);
 });
 
 // Â§3 Interaction runtime: the pure trigger core decides fire/cooldown; the
