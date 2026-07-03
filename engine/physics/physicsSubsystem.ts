@@ -317,6 +317,21 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   /**
+   * World-space linear velocity (units/s) of a simulated body, backing the
+   * runtime `world.velocityOf` (A6). Only meaningful for a live Rapier dynamic
+   * body; kinematic/placeholder bodies (whose motion is driven externally) return
+   * null so the host can fall back to another velocity source (character movement).
+   */
+  velocityOf(entityId: EntityId): readonly [number, number, number] | null {
+    const record = this.rapierBodies.get(entityId);
+    if (!record) return null;
+    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    if (!body?.collider.simulatePhysics) return null;
+    const v = record.body.linvel();
+    return [v.x, v.y, v.z];
+  }
+
+  /**
    * Spawns a transient ragdoll: a dynamic Rapier body per desc body, linked by
    * spherical impulse joints, dropped into the live world. The bodies collide
    * with the level's static colliders but never each other (see

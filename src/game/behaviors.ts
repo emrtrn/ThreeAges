@@ -39,6 +39,7 @@ export const BEHAVIOR_SCRIPT_IDS = [
   "lamp-toggle",
   "begin-conversation",
   "proximity-toggle",
+  "velocity-gate",
 ] as const;
 export type BehaviorScriptId = (typeof BEHAVIOR_SCRIPT_IDS)[number];
 
@@ -433,6 +434,26 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     });
   };
 
+  // A6 velocity example: reads the entity's own world velocity (Unreal
+  // GetVelocity) via the read-only `world.velocityOf` provider and emits a
+  // `Velocity.Changed` edge when its speed crosses the configured threshold. Game
+  // rules bind to the message (e.g. play a run VFX above speed); the behavior
+  // itself owns no project outcome. Inert when no velocity source is wired.
+  const velocityGate: BehaviorUpdate = (context) => {
+    const velocity = context.world.velocityOf(context.entityId);
+    if (!velocity) return;
+    const speed = Math.hypot(velocity[0], velocity[1], velocity[2]);
+    const threshold = numberParam(context.params.speedThreshold, 1);
+    const moving = speed >= threshold;
+    if (context.state.get("moving", false) === moving) return;
+    context.state.set("moving", moving);
+    context.messages.emit("Velocity.Changed", {
+      entityId: context.entityId,
+      speed,
+      moving,
+    });
+  };
+
   const behaviors = new Map<string, BehaviorUpdate>([
     ["spin", spin],
     ["input-move", inputMove],
@@ -446,6 +467,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     ["lamp-toggle", lampToggle],
     ["begin-conversation", beginConversation],
     ["proximity-toggle", proximityToggle],
+    ["velocity-gate", velocityGate],
   ]);
   return { get: (scriptId) => behaviors.get(scriptId) };
 }

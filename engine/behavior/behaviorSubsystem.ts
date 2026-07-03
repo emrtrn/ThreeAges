@@ -60,6 +60,18 @@ export interface ScriptTransformSnapshot {
   readonly scale: ReadonlyVec3;
 }
 
+/**
+ * Host-provided read-only velocity source (A6, Unreal `GetVelocity`). Character
+ * (kinematic) velocity lives in the game's CharacterMovement subsystem and
+ * simulated bodies in the physics subsystem, so the runtime shell implements this
+ * by combining those sources; the engine only consumes it through
+ * {@link ScriptWorld.velocityOf}. Absent in pure tests, where a stub is passed.
+ */
+export interface EntityVelocityProvider {
+  /** World-space linear velocity (units/s) of an entity, or null when unknown. */
+  velocityOf(entityId: EntityId): ReadonlyVec3 | null;
+}
+
 export interface ScriptWorld {
   self(): EntityRef;
   ref(key: string): EntityRef | null;
@@ -72,6 +84,11 @@ export interface ScriptWorld {
   forwardOf(ref: EntityRef): ReadonlyVec3 | null;
   rightOf(ref: EntityRef): ReadonlyVec3 | null;
   upOf(ref: EntityRef): ReadonlyVec3 | null;
+  /**
+   * World-space linear velocity (units/s) of `ref`, or null when the host has no
+   * velocity for it (no provider wired, or a static/behavior-parked actor).
+   */
+  velocityOf(ref: EntityRef): ReadonlyVec3 | null;
   nearestWithInterface(
     name: string,
     from: EntityRef,
@@ -321,6 +338,8 @@ export interface BehaviorSubsystemOptions {
   readonly onMessageWarnings?: (warnings: readonly ScriptMessageWarning[]) => void;
   /** Host sink for actor visibility/destroy commands (A1); omitted in pure tests. */
   readonly actorCommandSink?: ActorCommandSink;
+  /** Host velocity source for `world.velocityOf` (A6); omitted in pure tests. */
+  readonly velocityProvider?: EntityVelocityProvider;
 }
 
 export interface ScriptMessageSubscriberDebugInfo {
@@ -410,6 +429,7 @@ export class BehaviorSubsystem implements Subsystem {
       });
     this.onMessageWarnings = options.onMessageWarnings;
     this.actorCommandSink = options.actorCommandSink;
+    this.velocityProvider = options.velocityProvider;
   }
 
   private readonly onMessageWarnings:
@@ -417,6 +437,8 @@ export class BehaviorSubsystem implements Subsystem {
     | undefined;
 
   private readonly actorCommandSink: ActorCommandSink | undefined;
+
+  private readonly velocityProvider: EntityVelocityProvider | undefined;
 
   /**
    * Derives the live behavior set from a scene's entities. An entity becomes a
@@ -886,6 +908,8 @@ export class BehaviorSubsystem implements Subsystem {
       forwardOf: (ref) => this.directionOf(ref, forwardVectorFromRotation),
       rightOf: (ref) => this.directionOf(ref, rightVectorFromRotation),
       upOf: (ref) => this.directionOf(ref, upVectorFromRotation),
+      velocityOf: (ref) =>
+        this.runtimeEntities.has(ref) ? (this.velocityProvider?.velocityOf(ref) ?? null) : null,
       nearestWithInterface: (name, from, maxDistance) =>
         this.nearestWithInterface(name, from, maxDistance),
     };

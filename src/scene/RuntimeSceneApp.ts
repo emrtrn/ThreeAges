@@ -767,6 +767,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             void this.spawnRuntimeActor(request);
           },
         },
+        // Velocity source for `world.velocityOf` (A6, Unreal GetVelocity): the
+        // character subsystem owns the (kinematic) pawn velocity, the physics
+        // subsystem the simulated dynamic bodies; character wins when both exist.
+        velocityProvider: {
+          velocityOf: (entityId) =>
+            this.characterMovementSubsystem.velocityOf(entityId) ??
+            this.physicsSubsystem.velocityOf(entityId),
+        },
       },
     );
     this.engineApp.registerSubsystem(this.behaviorSubsystem);

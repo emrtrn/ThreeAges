@@ -78,6 +78,11 @@ export class CharacterMovementSubsystem implements Subsystem {
   readonly id = CHARACTER_MOVEMENT_SUBSYSTEM_ID;
   private runtimes: CharacterMovementRuntime[] = [];
   private vertical = new Map<EntityId, CharacterVertical>();
+  /**
+   * Last-frame world velocity (units/s) per character, from the applied position
+   * delta. Feeds the runtime `world.velocityOf` provider (A6, Unreal GetVelocity).
+   */
+  private velocity = new Map<EntityId, [number, number, number]>();
   private readonly getGravityY: () => number;
   private readonly getControlYaw: (entityId: EntityId) => number | null | undefined;
   private readonly isPlayerControlled: (entityId: EntityId) => boolean;
@@ -99,6 +104,7 @@ export class CharacterMovementSubsystem implements Subsystem {
 
   setEntities(entities: readonly Entity[]): void {
     this.vertical.clear();
+    this.velocity.clear();
     this.runtimes = [];
     for (const entity of entities) {
       const transform = readTransformComponent(entity);
@@ -115,6 +121,7 @@ export class CharacterMovementSubsystem implements Subsystem {
   clear(): void {
     this.runtimes = [];
     this.vertical.clear();
+    this.velocity.clear();
   }
 
   resetEntityTransform(entityId: EntityId, transform: TransformComponent): void {
@@ -122,14 +129,36 @@ export class CharacterMovementSubsystem implements Subsystem {
     if (!runtime) return;
     runtime.transform = cloneTransform(transform);
     this.vertical.set(entityId, freshVertical(transform.position[1]));
+    // A teleport/respawn is not motion; drop stale velocity so a probe after the
+    // jump doesn't read the warp distance as a huge one-frame speed.
+    this.velocity.delete(entityId);
   }
 
   update(engine: EngineUpdateContext): void {
     for (const runtime of this.runtimes) {
       if (!this.isPlayerControlled(runtime.id)) continue;
+      const prevX = runtime.transform.position[0];
+      const prevY = runtime.transform.position[1];
+      const prevZ = runtime.transform.position[2];
       this.updateRuntime(runtime, engine);
+      if (engine.deltaSeconds > 0) {
+        this.velocity.set(runtime.id, [
+          (runtime.transform.position[0] - prevX) / engine.deltaSeconds,
+          (runtime.transform.position[1] - prevY) / engine.deltaSeconds,
+          (runtime.transform.position[2] - prevZ) / engine.deltaSeconds,
+        ]);
+      }
       this.sink(runtime.id, runtime.transform);
     }
+  }
+
+  /**
+   * Last-frame world velocity (units/s) of a character, or null if it has none yet
+   * (not a character, unpossessed, or not yet ticked). Backs the runtime
+   * `world.velocityOf` provider (A6).
+   */
+  velocityOf(entityId: EntityId): readonly [number, number, number] | null {
+    return this.velocity.get(entityId) ?? null;
   }
 
   dispose(): void {

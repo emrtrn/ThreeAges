@@ -426,8 +426,18 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   559 engine check + strict dist scan).
 - [ ] **Owner/Instigator:** spawn eden aktörün kimliği (mesaj `source`'u
   kısmen karşılıyor). Tetikleyici: A5 sonrası "kim spawn etti" ihtiyacı.
-- [ ] **Hız erişimi (A3.3 devri):** `velocityOf` — CharacterMovement state'ini
-  engine yüzeyine açma sınır kararıyla birlikte.
+- [x] **Hız erişimi (A3.3 devri):** `world.velocityOf(ref)` (Unreal GetVelocity).
+  Sınır kararı: hız kaynağı `src/game`'de kalmaya devam ediyor; engine yalnız salt-
+  okunur `EntityVelocityProvider` interface'ini tüketiyor (`AudioBus`/PhysicsQuery
+  emsali), host onu birleştiriyor. `CharacterMovementSubsystem.velocityOf`
+  (kinematik pawn için uygulanan pozisyon deltasından; teleport/respawn stale hızı
+  düşürüyor) + `PhysicsSubsystem.velocityOf` (Rapier dinamik gövde `linvel`);
+  `RuntimeSceneApp` provider'da karakter-önce fizik-sonra sıralıyor.
+  `world.velocityOf` bilinmeyen ref/provider'sızda null. Örnek behavior
+  `velocity-gate` (self hızını okuyup eşik geçişinde `Velocity.Changed` yayıyor).
+  3 headless test (provider delegasyonu + unknown ref null + provider'sız null;
+  karakter uygulanan-hareket hızı + teleport reset). Gate yeşil:
+  `npm run build:verify` (tsc + build + 561 engine check + strict dist scan).
 - [x] **EndPlay lifecycle (A4.3 devri):** `endPlay` event kind'ı. Engine:
   `ACTOR_EVENT_KINDS`/`LABELS`/`DESCRIPTIONS`'e `endPlay` eklendi (normalize +
   saveValidator + editör picker `isActorEventKind`/tek-kaynak sabitlerden otomatik
@@ -552,3 +562,15 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   `npm run build:verify` (tsc + Vite build + 559 engine check + strict dist scan).
   Kalan A6: impulse/launch, hasar konvansiyonu, runtime attach/detach,
   owner/instigator, velocity.
+- 2026-07-03: **A6 — Hız erişimi kodlandı** (A3.3 devri; Unreal GetVelocity).
+  Engine: `EntityVelocityProvider` interface + `ScriptWorld.velocityOf(ref)` +
+  `BehaviorSubsystemOptions.velocityProvider`; `world.velocityOf` bilinmeyen ref/
+  provider'sızda null. `PhysicsSubsystem.velocityOf` (Rapier dinamik `linvel`, aksi
+  null). Game: `CharacterMovementSubsystem` frame başına uygulanan pozisyon
+  deltasından hız tutuyor + `velocityOf`; `setEntities`/`clear`'da sıfırlanıyor,
+  `resetEntityTransform` (teleport/respawn) stale hızı düşürüyor. Host:
+  `RuntimeSceneApp` velocityProvider'ı karakter-önce fizik-sonra birleştiriyor.
+  Örnek behavior `velocity-gate` (self hızı eşik geçişinde `Velocity.Changed`).
+  3 headless test. Gate yeşil: `npm run build:verify` (tsc + Vite build +
+  561 engine check + strict dist scan). Kalan A6: impulse/launch, hasar
+  konvansiyonu, runtime attach/detach, owner/instigator.

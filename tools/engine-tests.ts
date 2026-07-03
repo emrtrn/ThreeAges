@@ -8219,6 +8219,88 @@ check("actor command: setTickEnabled gates the tick binding, re-enable resumes",
   assert.equal(ticks, 1, "tick resumes after re-enable");
 });
 
+// A6 velocity access (Unreal GetVelocity): `world.velocityOf` delegates to the
+// host-wired provider, returns null for an unknown ref, and is null with no
+// provider wired (pure engine tests, static/parked actors).
+check("world.velocityOf delegates to the wired provider and is null otherwise", () => {
+  const seen: Array<readonly [number, number, number] | null> = [];
+  const registry: BehaviorRegistry = {
+    get: () => (context) => {
+      seen.push(context.world.velocityOf(context.entityId));
+      seen.push(context.world.velocityOf("ghost:0"));
+    },
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "probe", params: {} },
+    },
+  };
+  const withProvider = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    { velocityProvider: { velocityOf: (id) => (id === "actor:0" ? [2, 0, -1] : null) } },
+  );
+  withProvider.setEntities([entity]);
+  const app = new EngineApp();
+  app.registerSubsystem(withProvider);
+  app.update(0.016);
+  assert.deepEqual(seen[0], [2, 0, -1]);
+  assert.equal(seen[1], null, "unknown ref has no velocity");
+
+  seen.length = 0;
+  const noProvider = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined);
+  noProvider.setEntities([entity]);
+  const app2 = new EngineApp();
+  app2.registerSubsystem(noProvider);
+  app2.update(0.016);
+  assert.equal(seen[0], null, "no provider → null velocity");
+});
+
+// A6 velocity access: the character subsystem (the host's velocity source for the
+// possessed pawn) exposes last-frame velocity from the applied position delta, and
+// a teleport/respawn drops the stale value so it isn't read as a huge one-frame speed.
+check("CharacterMovement subsystem exposes last-frame velocity from applied motion", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  actions.handleDown("KeyW");
+  actions.advance();
+  const entity: Entity = {
+    id: "actor:vel",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      CharacterMovement: {
+        maxWalkSpeed: 4,
+        sprintMultiplier: 2,
+        jumpSpeed: 5,
+        gravityScale: 1,
+        rotationRate: [0, 0, 0],
+        orientRotationToMovement: false,
+        movementMode: "walking",
+      },
+    },
+  };
+  const movement = new CharacterMovementSubsystem(actions, () => undefined, undefined, {
+    isPlayerControlled: () => true,
+  });
+  movement.setEntities([entity]);
+  assert.equal(movement.velocityOf("actor:vel"), null, "no velocity before the first tick");
+  movement.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+  const v = movement.velocityOf("actor:vel");
+  assert.ok(v, "velocity available after a tick");
+  const speed = Math.hypot(v[0], v[1], v[2]);
+  assert.ok(Math.abs(speed - 4) < 0.5, `expected ~4 u/s, got ${speed}`);
+  movement.resetEntityTransform("actor:vel", {
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  assert.equal(movement.velocityOf("actor:vel"), null, "teleport drops stale velocity");
+});
+
 // A2 timers: delayed callbacks travel through the existing self-targeted script
 // message binding path, so behaviors can consume them without a second event API.
 check("script timers: after delivers one self-targeted message", () => {
