@@ -84,6 +84,12 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private readonly backend: PhysicsBackend;
   private bodies: PhysicsBody[] = [];
   private contacts: PhysicsContact[] = [];
+  /**
+   * Entities whose collision is runtime-disabled (A6 SetActorEnableCollision).
+   * They are skipped by contact generation and the movement-blocker/surface
+   * collectors; with Rapier their colliders are also `setEnabled(false)`.
+   */
+  private collisionDisabled = new Set<EntityId>();
   /** Cached movement blockers (static colliders don't move); rebuilt lazily. */
   private staticBlockerCache: Aabb[] | null = null;
   /** Cached walkable surface triangles (static trimesh); rebuilt lazily. */
@@ -149,6 +155,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
     this.bodies = bodies;
     this.contacts = [];
+    this.collisionDisabled.clear();
     this.staticBlockerCache = null;
     this.staticSurfaceCache = null;
     if (this.rapierModule) this.rebuildRapierWorld();
@@ -214,11 +221,41 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.contacts = this.contacts.filter(
       (contact) => contact.a !== entityId && contact.b !== entityId,
     );
+    this.collisionDisabled.delete(entityId);
     const record = this.rapierBodies.get(entityId);
     if (record) {
       for (const collider of record.colliders) this.rapierColliderToEntity.delete(collider.handle);
       this.rapierWorld?.removeRigidBody(record.body);
       this.rapierBodies.delete(entityId);
+    }
+  }
+
+  /**
+   * Runtime collision toggle (A6 `SetActorEnableCollision`). A disabled entity is
+   * dropped from contact generation and from the movement blockers/surfaces (so a
+   * possessed pawn walks through an opened door), and — when Rapier is live — its
+   * colliders are `setEnabled(false)` so the dynamic simulation ignores them too.
+   * The entity keeps its body record and transform, so re-enabling restores the
+   * original collider without a rebuild. No-op when the state is unchanged.
+   */
+  setEntityCollisionEnabled(entityId: EntityId, enabled: boolean): void {
+    const alreadyDisabled = this.collisionDisabled.has(entityId);
+    if (enabled === !alreadyDisabled) return;
+    if (enabled) this.collisionDisabled.delete(entityId);
+    else this.collisionDisabled.add(entityId);
+    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    if (body?.collider.isStatic) {
+      this.staticBlockerCache = null;
+      this.staticSurfaceCache = null;
+    }
+    // Clear any live contact for this entity so the next query already reads the
+    // new state (mirrors removeEntity); the placeholder loop won't regenerate it.
+    this.contacts = this.contacts.filter(
+      (contact) => contact.a !== entityId && contact.b !== entityId,
+    );
+    const record = this.rapierBodies.get(entityId);
+    if (record) {
+      for (const collider of record.colliders) collider.setEnabled(enabled);
     }
   }
 
@@ -239,6 +276,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const blockers: Aabb[] = [];
     for (const body of this.bodies) {
       if (!body.collider.isStatic || body.collider.isSensor) continue;
+      if (this.collisionDisabled.has(body.id)) continue;
       appendBlockerAabbs(blockers, body);
     }
     this.staticBlockerCache = blockers;
@@ -256,6 +294,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const surfaces: PhysicsSurfaceTriangle[] = [];
     for (const body of this.bodies) {
       if (!body.collider.isStatic || body.collider.isSensor) continue;
+      if (this.collisionDisabled.has(body.id)) continue;
       appendSurfaceTriangles(surfaces, body);
     }
     this.staticSurfaceCache = surfaces;
@@ -422,6 +461,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         const b = this.bodies[j];
         if (!a || !b) continue;
         if (a.collider.isStatic && b.collider.isStatic) continue;
+        if (this.collisionDisabled.has(a.id) || this.collisionDisabled.has(b.id)) continue;
         if (!interactionGroupsInteract(a.collider.collisionGroups, b.collider.collisionGroups)) {
           continue;
         }
@@ -463,6 +503,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   clear(): void {
     this.bodies = [];
     this.contacts = [];
+    this.collisionDisabled.clear();
   }
 
   dispose(): void {
@@ -539,6 +580,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         if (!a || !b) continue;
         if (!a.collider.isSensor && !b.collider.isSensor) continue;
         if (a.collider.isStatic && b.collider.isStatic) continue;
+        if (this.collisionDisabled.has(a.id) || this.collisionDisabled.has(b.id)) continue;
         if (!interactionGroupsInteract(a.collider.collisionGroups, b.collider.collisionGroups)) {
           continue;
         }

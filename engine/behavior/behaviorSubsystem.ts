@@ -135,6 +135,14 @@ export interface ActorCommands {
   /** Shows/hides this entity's rendered object (host-applied). */
   setVisibility(visible: boolean, options?: ActorCommandOptions): void;
   /**
+   * Toggles this entity's collision (Unreal `SetActorEnableCollision`). Disabled,
+   * it stops generating overlap/hit contacts and stops blocking character
+   * movement (e.g. an opened door/platform becomes walk-through), while its
+   * rendered object and transform are untouched. Applied at end of tick like the
+   * other commands.
+   */
+  setCollisionEnabled(enabled: boolean, options?: ActorCommandOptions): void;
+  /**
    * Destroys this entity: after this tick it leaves the behavior instance set,
    * the world indexes and its message subscriptions, and the host removes its
    * render object + physics body. Subsequent ticks/messages/contacts skip it.
@@ -169,12 +177,15 @@ export interface ActorCommands {
 export interface ActorCommandSink {
   setVisibility(entityId: EntityId, visible: boolean): void;
   destroy(entityId: EntityId): void;
+  /** Enables/disables the entity's physics collision (A6 SetActorEnableCollision). */
+  setCollisionEnabled?(entityId: EntityId, enabled: boolean): void;
   spawn?(request: ActorSpawnRequest): void;
 }
 
 /** A queued actor command, applied at the end of the tick it was issued in. */
 type ActorCommand =
   | { readonly entityId: EntityId; readonly kind: "visibility"; readonly visible: boolean }
+  | { readonly entityId: EntityId; readonly kind: "collision"; readonly enabled: boolean }
   | { readonly entityId: EntityId; readonly kind: "destroy" }
   | { readonly entityId: EntityId; readonly kind: "spawn"; readonly request: ActorSpawnRequest };
 
@@ -193,6 +204,7 @@ interface ScriptTimerRecord {
  */
 const RESERVED_HIDDEN_KEY = "__actorHidden";
 const RESERVED_DESTROYED_KEY = "__actorDestroyed";
+const RESERVED_COLLISION_DISABLED_KEY = "__actorCollisionDisabled";
 
 export interface PersistentScriptStateEntry {
   readonly entityId: EntityId;
@@ -819,6 +831,12 @@ export class BehaviorSubsystem implements Subsystem {
         this.commandQueue.push({ entityId, kind: "visibility", visible });
         if (options?.persist) this.scriptState(entityId).persist(RESERVED_HIDDEN_KEY, !visible);
       },
+      setCollisionEnabled: (enabled, options) => {
+        this.commandQueue.push({ entityId, kind: "collision", enabled });
+        if (options?.persist) {
+          this.scriptState(entityId).persist(RESERVED_COLLISION_DISABLED_KEY, !enabled);
+        }
+      },
       destroy: (options) => {
         this.commandQueue.push({ entityId, kind: "destroy" });
         if (options?.persist) this.scriptState(entityId).persist(RESERVED_DESTROYED_KEY, true);
@@ -904,6 +922,10 @@ export class BehaviorSubsystem implements Subsystem {
       this.actorCommandSink?.setVisibility(command.entityId, command.visible);
       return;
     }
+    if (command.kind === "collision") {
+      this.actorCommandSink?.setCollisionEnabled?.(command.entityId, command.enabled);
+      return;
+    }
     if (command.kind === "spawn") {
       if (this.runtimeEntities.has(command.entityId)) this.actorCommandSink?.spawn?.(command.request);
       return;
@@ -964,10 +986,18 @@ export class BehaviorSubsystem implements Subsystem {
   private applyPersistedActorEffects(): void {
     const effects: ActorCommand[] = [];
     for (const [entityId, store] of this.runtimeState) {
+      // A destroyed entity is gone; its render/physics teardown supersedes the
+      // hide/collision markers, so skip them. Hide and collision-disable are
+      // independent and can both apply to the same (surviving) entity.
       if (store.get(RESERVED_DESTROYED_KEY) === true) {
         effects.push({ entityId, kind: "destroy" });
-      } else if (store.get(RESERVED_HIDDEN_KEY) === true) {
+        continue;
+      }
+      if (store.get(RESERVED_HIDDEN_KEY) === true) {
         effects.push({ entityId, kind: "visibility", visible: false });
+      }
+      if (store.get(RESERVED_COLLISION_DISABLED_KEY) === true) {
+        effects.push({ entityId, kind: "collision", enabled: false });
       }
     }
     for (const effect of effects) this.processActorCommand(effect);

@@ -106,12 +106,15 @@ Runtime command surfaces follow **engine-interface / host-implementation** (the
 `AudioBus` and `TransformSink` precedent): the engine defines a typed interface,
 the host (`RuntimeSceneApp` / editor `SceneApp` Play mode) implements it. The
 generic actor commands (`ActorCommands` on `BehaviorContext.actor`:
-`setVisibility`, `destroy`) are queued by the `BehaviorSubsystem` during a tick
-and applied end-of-tick — the subsystem does its own bookkeeping (drops a
-destroyed entity from its instance set, world indexes and message subscriptions)
-and delivers render/physics teardown to the host via an `ActorCommandSink`.
-Runtime visibility/destroy state is never written to layout files; opt-in
-`{ persist: true }` routes it through the save-game snapshot
+`setVisibility`, `setCollisionEnabled`, `destroy`, `setLifeSpan`, `spawn`) are
+queued by the `BehaviorSubsystem` during a tick and applied end-of-tick — the
+subsystem does its own bookkeeping (drops a destroyed entity from its instance
+set, world indexes and message subscriptions) and delivers render/physics
+teardown to the host via an `ActorCommandSink` (`setCollisionEnabled` routes to
+`PhysicsSubsystem.setEntityCollisionEnabled`, which drops the body from contact
+generation and the movement blockers). Runtime visibility/collision/destroy state
+is never written to layout files; opt-in `{ persist: true }` routes it through the
+save-game snapshot
 (`getPersistentStateSnapshot`) only. `Layout Data ≠ Save Game Data`.
 
 ## Project Manifest

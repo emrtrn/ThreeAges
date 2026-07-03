@@ -7918,6 +7918,155 @@ check("actor command: persisted destroy + hide re-apply on a snapshot restore", 
   assert.deepEqual(effects.sort(), ["destroy:actor:0", "hide:actor:1:false"]);
 });
 
+// A6 SetActorEnableCollision: a behavior's `setCollisionEnabled` is queued during
+// the tick and delivered to the host sink after the tick's behaviors run.
+check("actor command: setCollisionEnabled reaches the host sink at end of tick", () => {
+  const calls: Array<{ id: string; enabled: boolean }> = [];
+  const registry: BehaviorRegistry = {
+    get: () => (context) => context.actor.setCollisionEnabled(false),
+  };
+  const entity: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "open-door", params: {} },
+    },
+  };
+  const behavior = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    {
+      actorCommandSink: {
+        setVisibility: () => undefined,
+        destroy: () => undefined,
+        setCollisionEnabled: (id, enabled) => calls.push({ id, enabled }),
+      },
+    },
+  );
+  behavior.setEntities([entity]);
+  const app = new EngineApp();
+  app.registerSubsystem(behavior);
+  app.update(0.016);
+  assert.deepEqual(calls, [{ id: "actor:0", enabled: false }]);
+});
+
+// A6: disabling an entity's collision drops it from contact generation and from
+// the static movement blockers (a possessed pawn would walk through it);
+// re-enabling restores both.
+check("physics subsystem: setEntityCollisionEnabled toggles contacts and blockers", () => {
+  const physics = new PhysicsSubsystem();
+  const wall: Entity = {
+    id: "wall:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: false },
+    },
+  };
+  const trigger: Entity = {
+    id: "trigger:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [2, 2, 2], isStatic: true, isSensor: true },
+    },
+  };
+  const mover: Entity = {
+    id: "mover:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([wall, trigger, mover]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+
+  app.update(0.016);
+  assert.equal(physics.staticBlockerAabbs().length, 1); // the wall blocks movement
+  assert.equal(physics.contactsForEntity("trigger:0").length, 1); // sensor overlaps the mover
+
+  // Disable both: the wall leaves the blockers, the trigger stops overlapping.
+  physics.setEntityCollisionEnabled("wall:0", false);
+  physics.setEntityCollisionEnabled("trigger:0", false);
+  app.update(0.016);
+  assert.equal(physics.staticBlockerAabbs().length, 0);
+  assert.deepEqual(physics.contactsForEntity("trigger:0"), []);
+
+  // Re-enable: both come back.
+  physics.setEntityCollisionEnabled("wall:0", true);
+  physics.setEntityCollisionEnabled("trigger:0", true);
+  app.update(0.016);
+  assert.equal(physics.staticBlockerAabbs().length, 1);
+  assert.equal(physics.contactsForEntity("trigger:0").length, 1);
+
+  // setEntities rebuild clears the disabled set (runtime-only state).
+  physics.setEntityCollisionEnabled("wall:0", false);
+  physics.setEntities([wall, trigger, mover]);
+  assert.equal(physics.staticBlockerAabbs().length, 1);
+});
+
+// A6.3 persistence: `setCollisionEnabled(false, { persist: true })` writes a
+// reserved key into the snapshot; applying it to a fresh scene re-issues the
+// collision-disable through the host sink (independent of a hide marker).
+check("actor command: persisted collision-disable re-applies on a snapshot restore", () => {
+  const registry: BehaviorRegistry = {
+    get: () => (context) => {
+      context.actor.setCollisionEnabled(false, { persist: true });
+      context.actor.setVisibility(false, { persist: true });
+    },
+  };
+  const door: Entity = {
+    id: "actor:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Behavior: { scriptId: "open-and-hide", params: {} },
+    },
+  };
+  const source = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    {
+      actorCommandSink: {
+        setVisibility: () => undefined,
+        destroy: () => undefined,
+        setCollisionEnabled: () => undefined,
+      },
+    },
+  );
+  source.setEntities([door]);
+  const app = new EngineApp();
+  app.registerSubsystem(source);
+  app.update(0.016);
+  assert.deepEqual(source.getPersistentStateSnapshot(), [
+    { entityId: "actor:0", key: "__actorCollisionDisabled", value: true },
+    { entityId: "actor:0", key: "__actorHidden", value: true },
+  ]);
+
+  const effects: string[] = [];
+  const restored = new BehaviorSubsystem(
+    registry,
+    new ActionMap({}),
+    () => undefined,
+    undefined,
+    undefined,
+    {
+      actorCommandSink: {
+        setVisibility: (id, visible) => effects.push(`hide:${id}:${visible}`),
+        destroy: (id) => effects.push(`destroy:${id}`),
+        setCollisionEnabled: (id, enabled) => effects.push(`collision:${id}:${enabled}`),
+      },
+    },
+  );
+  restored.setEntities([door]);
+  restored.applyPersistentStateSnapshot(source.getPersistentStateSnapshot());
+  assert.deepEqual(effects.sort(), ["collision:actor:0:false", "hide:actor:0:false"]);
+});
+
 // A2 timers: delayed callbacks travel through the existing self-targeted script
 // message binding path, so behaviors can consume them without a second event API.
 check("script timers: after delivers one self-targeted message", () => {

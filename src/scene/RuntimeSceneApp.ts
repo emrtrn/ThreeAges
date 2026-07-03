@@ -755,10 +755,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             console.warn("[script-message]", warning.message, warning.envelope ?? "");
           }
         },
-        // Generic actor command surface (A1): a behavior's setVisibility/destroy
-        // is applied here to the rendered object + physics body.
+        // Generic actor command surface (A1/A6): a behavior's setVisibility/
+        // setCollisionEnabled/destroy is applied here to the rendered object +
+        // physics body.
         actorCommandSink: {
           setVisibility: (entityId, visible) => this.setActorObjectVisible(entityId, visible),
+          setCollisionEnabled: (entityId, enabled) =>
+            this.physicsSubsystem.setEntityCollisionEnabled(entityId, enabled),
           destroy: (entityId) => this.destroyActorEntity(entityId),
           spawn: (request) => {
             void this.spawnRuntimeActor(request);

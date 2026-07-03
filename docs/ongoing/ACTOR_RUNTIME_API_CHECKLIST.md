@@ -392,9 +392,19 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
 
 # A6 — Backlog (tetikleyici bazlı, sıra yok)
 
-- [ ] **Collision toggle:** `actor.setCollisionEnabled(bool)`
-  (SetActorEnableCollision). Tetikleyici: kapı/platform gibi aç-kapa collision
-  ihtiyacı olan ilk gerçek içerik.
+- [x] **Collision toggle:** `actor.setCollisionEnabled(bool)`
+  (SetActorEnableCollision). Engine: `ActorCommands.setCollisionEnabled`
+  (`ActorCommandOptions.persist` destekli, rezerve anahtar
+  `__actorCollisionDisabled`), `ActorCommandSink.setCollisionEnabled?` (opsiyonel,
+  `spawn?` emsali), tick-sonu komut kuyruğu + `applyPersistedActorEffects`
+  restore (hide'dan bağımsız). Physics: `PhysicsSubsystem.setEntityCollisionEnabled`
+  — disabled entity contact üretiminden ve movement blocker/surface
+  toplayıcılarından düşer (possessed pawn açılmış kapıdan geçer), Rapier canlıysa
+  collider'lar `setEnabled(false)`; `setEntities`/`clear`/`removeEntity`'de sıfırlanır.
+  Host: `RuntimeSceneApp` sink → `setEntityCollisionEnabled`. 3 headless test
+  (komut sink'e ulaşır; disable contact+blocker düşürür ve re-enable/rebuild geri
+  getirir; persist restore hide'dan bağımsız yeniden uygular). Gate yeşil:
+  `npm run build:verify` (tsc + build + 555 engine check + strict dist scan).
 - [ ] **İtki/fırlatma:** `AddImpulse` / `LaunchCharacter` karşılığı — fizik
   sorgu yüzeyi (`PhysicsQuery`) salt-okunur; yazma yüzeyi ayrı tasarım ister.
   Tetikleyici: knockback/patlama/fırlatma mekaniği.
@@ -476,3 +486,22 @@ Destroy (A1) ile birlikte tam yaşam döngüsü kapanır.
   552 engine check + strict dist scan). Browser/render smoke bu oturumda
   Playwright aracı callable olmadığı için çalıştırılamadı; A5.5 bu doğrulama
   için `[~]` bırakıldı.
+- 2026-07-03: **A6 — Collision toggle kodlandı** (`SetActorEnableCollision`).
+  Engine: `ActorCommands.setCollisionEnabled(enabled, options?)` A1 komut yüzeyine
+  eklendi; tick-sonu kuyruğa `collision` komutu düşüyor, `{ persist: true }`
+  rezerve `__actorCollisionDisabled` anahtarını yazıyor, `applyPersistedActorEffects`
+  restore'da hide'dan bağımsız olarak yeniden uyguluyor. `ActorCommandSink`'e
+  opsiyonel `setCollisionEnabled?` (mevcut `spawn?` emsali — test sink'leri
+  kırılmadı). Physics: `PhysicsSubsystem.setEntityCollisionEnabled(entityId, enabled)`
+  — disabled entity placeholder contact döngüsünden + `addAabbSensorContacts` +
+  `staticBlockerAabbs` + `staticSurfaceTriangles`'dan atlanıyor, Rapier canlıysa
+  collider'lar `collider.setEnabled(false)`; `collisionDisabled` seti
+  `setEntities`/`clear`/`removeEntity`'de temizleniyor, static toggle blocker
+  cache'ini invalide ediyor. Host: `RuntimeSceneApp` actorCommandSink →
+  `setEntityCollisionEnabled`. 3 yeni headless test (komut sink'e ulaşır; disable
+  contact+blocker düşürür, re-enable + setEntities rebuild geri getirir; persist
+  restore hide'dan bağımsız yeniden uygular). ARCHITECTURE.md komut yüzeyi notu
+  güncellendi. Gate yeşil: `npm run build:verify` (tsc + Vite build + 555 engine
+  check + strict dist scan). Kalan A6: impulse/launch, hasar konvansiyonu, runtime
+  attach/detach, tick kontrolü, owner/instigator, velocity, endPlay — hepsi
+  tetikleyici bekliyor.
