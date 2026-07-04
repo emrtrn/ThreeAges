@@ -275,6 +275,7 @@ export class EditorUi {
   private contentStatus: HTMLElement;
   private contentSearch: HTMLInputElement;
   private contentTypeFilter: HTMLSelectElement;
+  private contentDevelopmentToggle: HTMLInputElement;
   private contentSizeToggle: HTMLButtonElement;
   private folderTree: HTMLElement;
   private outlinerList: HTMLDivElement;
@@ -310,6 +311,7 @@ export class EditorUi {
   private contentType: ContentTypeFilter = CONTENT_FILTER_ALL;
   private contentDrawerOpen = false;
   private contentDrawerTall = false;
+  private showDevelopmentContent = false;
   private contentRefreshTimer = 0;
   private outlinerObjects: EditableSceneObject[] = [];
   private outlinerFilter = "";
@@ -513,6 +515,10 @@ export class EditorUi {
             <select class="content-filter" data-content-type-filter aria-label="Asset type">
               <option value="${CONTENT_FILTER_ALL}">All types</option>
             </select>
+            <label class="content-dev-toggle" title="Show DevelopmentContent assets">
+              <input type="checkbox" data-content-development-toggle />
+              <span>Dev Content</span>
+            </label>
           </div>
           <button
             type="button"
@@ -552,6 +558,7 @@ export class EditorUi {
     this.contentStatus = requireElement(this.root, "[data-content-status]");
     this.contentSearch = requireElement(this.root, "[data-content-search]");
     this.contentTypeFilter = requireElement(this.root, "[data-content-type-filter]");
+    this.contentDevelopmentToggle = requireElement(this.root, "[data-content-development-toggle]");
     this.contentSizeToggle = requireElement(this.root, "[data-content-size-toggle]");
     this.folderTree = requireElement(this.root, "[data-folder-tree]");
     this.outlinerList = requireElement(this.root, "[data-outliner-list]");
@@ -837,6 +844,10 @@ export class EditorUi {
       this.renderContentAssets();
     });
 
+    this.contentDevelopmentToggle.addEventListener("change", () => {
+      this.setDevelopmentContentVisible(this.contentDevelopmentToggle.checked);
+    });
+
     this.root.querySelectorAll<HTMLSelectElement>("[data-snap]").forEach((select) => {
       select.addEventListener("change", () => {
         const value = Number(select.value);
@@ -1025,6 +1036,15 @@ export class EditorUi {
     this.contentSizeToggle.textContent = tall ? "Short" : "Tall";
   }
 
+  private setDevelopmentContentVisible(visible: boolean): void {
+    this.showDevelopmentContent = visible;
+    this.contentDevelopmentToggle.checked = visible;
+    this.ensureVisibleSelectedFolder();
+    this.renderFolderTree();
+    this.renderContentFilters();
+    this.renderContentAssets();
+  }
+
   /**
    * Reveals an asset in the Content Browser (Toolbar â†’ Browse from an open
    * editor): opens the drawer, navigates to the asset's folder (expanding
@@ -1041,6 +1061,10 @@ export class EditorUi {
       return;
     }
     const normalized = normalizeProjectPath(path);
+    if (isDevelopmentContentPath(normalized)) {
+      this.showDevelopmentContent = true;
+      this.contentDevelopmentToggle.checked = true;
+    }
     const root = this.assetTreeRoot.path;
     const parentDir = normalized.includes("/")
       ? normalized.slice(0, normalized.lastIndexOf("/"))
@@ -1062,6 +1086,7 @@ export class EditorUi {
     this.contentQuery = "";
     this.contentSearch.value = "";
     this.renderFolderTree();
+    this.renderContentFilters();
     this.renderContentAssets();
     this.flashContentCard(path);
   }
@@ -1099,8 +1124,9 @@ export class EditorUi {
       if (this.selectedFolder !== tree.root && !findProjectDir(tree.children, this.selectedFolder)) {
         this.selectedFolder = tree.root;
       }
+      this.ensureVisibleSelectedFolder();
       this.contentRootLabel.textContent = `${this.projectInfo.rootName} / ${tree.root}`;
-      this.contentStatus.textContent = `${flattenProjectFiles([this.assetTreeRoot]).length} files`;
+      this.contentStatus.textContent = `${this.visibleProjectFiles().length} files`;
       this.renderFolderTree();
       this.renderContentFilters();
       this.renderContentAssets();
@@ -1154,13 +1180,16 @@ export class EditorUi {
       this.folderTree.innerHTML = `<div class="empty-details">No asset folders</div>`;
       return;
     }
+    this.ensureVisibleSelectedFolder();
     this.folderTree.replaceChildren(this.createFolderRow(this.assetTreeRoot, 0));
   }
 
   private createFolderRow(node: ProjectDirNode, depth: number): HTMLElement {
     const wrapper = document.createElement("div");
     wrapper.className = "folder-node";
-    const childDirs = node.children?.filter((child) => child.type === "dir") ?? [];
+    const childDirs =
+      node.children?.filter((child) => child.type === "dir" && this.shouldShowContentPath(child.path)) ??
+      [];
     const hasChildDirs = childDirs.length > 0;
     const isCollapsed = hasChildDirs && this.collapsedFolderPaths.has(node.path);
 
@@ -1224,7 +1253,7 @@ export class EditorUi {
         : findProjectDir(this.assetTreeRoot.children ?? [], this.selectedFolder);
     const children = selected?.children ?? [];
     const folders = children
-      .filter((child) => child.type === "dir")
+      .filter((child) => child.type === "dir" && this.shouldShowContentPath(child.path))
       .map((folder) => this.toBrowserFolderItem(folder))
       .filter((item) => this.contentItemMatchesQuery(item));
     const files = children.filter((child) => child.type === "file");
@@ -1303,6 +1332,7 @@ export class EditorUi {
 
   private shouldDisplayAssetFile(file: ProjectDirNode): boolean {
     if (file.type !== "file") return false;
+    if (!this.shouldShowContentPath(file.path)) return false;
     const name = file.name.toLocaleLowerCase();
     return !(
       name === "manifest.json" ||
@@ -1360,14 +1390,30 @@ export class EditorUi {
     return byPath;
   }
 
+  private shouldShowContentPath(path: string): boolean {
+    return this.showDevelopmentContent || !isDevelopmentContentPath(path);
+  }
+
+  private ensureVisibleSelectedFolder(): void {
+    if (!this.assetTreeRoot) return;
+    if (!this.shouldShowContentPath(this.selectedFolder)) {
+      this.selectedFolder = this.assetTreeRoot.path;
+    }
+  }
+
+  private visibleProjectFiles(): ProjectDirNode[] {
+    return this.assetTreeRoot
+      ? flattenProjectFiles([this.assetTreeRoot]).filter((file) => this.shouldDisplayAssetFile(file))
+      : [];
+  }
+
   private countMissingManifestAssetFiles(): number {
     if (!this.assetTreeRoot || !this.projectInfo) return 0;
     const publicDir = this.projectInfo.manifest.publicDir ?? "public";
-    const filePaths = new Set(
-      flattenProjectFiles([this.assetTreeRoot]).map((file) => normalizeProjectPath(file.path)),
-    );
+    const filePaths = new Set(this.visibleProjectFiles().map((file) => normalizeProjectPath(file.path)));
     return this.editableAssets.filter((asset) => {
       const path = normalizeProjectPath(assetPath(asset));
+      if (!this.shouldShowContentPath(path)) return false;
       if (filePaths.has(path)) return false;
       return !filePaths.has(normalizeProjectPath(`${publicDir}/${path}`));
     }).length;
@@ -2125,6 +2171,7 @@ export class EditorUi {
           assetType: assetType(asset),
           path: assetPath(asset),
         })),
+        hideDevelopmentContent: !this.showDevelopmentContent,
         onStatus: (message, tone) => this.setStatus(message, tone),
         onSaved: () => {
           const key = item.editable?.id ?? item.path;
@@ -2209,6 +2256,7 @@ export class EditorUi {
           assetType: assetType(asset),
           path: assetPath(asset),
         })),
+        hideDevelopmentContent: !this.showDevelopmentContent,
         onStatus: (message, tone) => this.setStatus(message, tone),
         onSaved: () => this.renderContentAssets(),
       });
@@ -6146,6 +6194,14 @@ function formatContentTypeLabel(value: string): string {
   if (value === "level") return "Levels";
   if (value === "file") return "Files";
   return formatAssetTypeFallbackLabel(value);
+}
+
+function isDevelopmentContentPath(path: string): boolean {
+  const normalizedPath = normalizeProjectPath(path).toLocaleLowerCase();
+  const normalized = normalizedPath.startsWith("public/assets/")
+    ? normalizedPath.slice("public/".length)
+    : normalizedPath;
+  return normalized === "assets/developmentcontent" || normalized.startsWith("assets/developmentcontent/");
 }
 
 /** True when a Content Browser item is an Actor Script class-asset (`*.actor.json`). */

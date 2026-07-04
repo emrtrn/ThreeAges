@@ -288,26 +288,7 @@
     },
     {
       "assetId": "marker:ambientSound",
-      "placements": [
-        {
-          "position": [
-            4.29,
-            -0.08,
-            -4.91
-          ],
-          "name": "Ambient Sound",
-          "collision": false,
-          "audio": {
-            "clipId": "",
-            "sourceId": "cue-birds-soundcue",
-            "sourceType": "soundCue",
-            "loop": true,
-            "autoPlay": true
-          },
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-leftarm",
@@ -406,29 +387,7 @@
     },
     {
       "assetId": "sm-chair-ktx2",
-      "placements": [
-        {
-          "position": [
-            -14.62,
-            0,
-            -18.17
-          ],
-          "particle": {
-            "effectId": "starter-fx-smoke-puff",
-            "autoPlay": true,
-            "loop": true,
-            "scale": 2,
-            "tint": "#ff0000"
-          },
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -45,
-            0
-          ],
-          "scale": 1
-        }
-      ]
+      "placements": []
     }
   ],
   "characters": [
@@ -557,5 +516,16 @@
   ],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "actors": []
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Script/Script_Paricle.actor.json",
+      "position": [
+        -12.83,
+        0,
+        11.04
+      ],
+      "rotationYDeg": 0,
+      "scale": 1
+    }
+  ]
 }

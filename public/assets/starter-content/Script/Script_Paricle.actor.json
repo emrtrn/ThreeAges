@@ -14,8 +14,24 @@
       "id": "particleEmitter",
       "component": "ParticleEmitter",
       "props": {
-        "effectId": "starter-fx-dust-hit",
+        "effectId": "starter-fx-fire-loop",
         "autoPlay": true
+      },
+      "parent": "root"
+    },
+    {
+      "id": "audio",
+      "component": "Audio",
+      "props": {
+        "clipId": "starter-snd-fire-01",
+        "volume": 1,
+        "loop": true,
+        "spatial": false,
+        "autoPlay": true,
+        "maxDistance": 3,
+        "refDistance": 1,
+        "sourceType": "soundCue",
+        "sourceId": "soundcue-fire-soundcue"
       },
       "parent": "root"
     }

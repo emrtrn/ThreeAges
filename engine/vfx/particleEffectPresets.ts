@@ -19,6 +19,8 @@ import type { ParticleEffectDefinition } from "./particleEffectTypes";
 
 export const PARTICLE_EFFECT_PRESETS = [
   "fire",
+  "fireAnimated",
+  "explosion",
   "smoke",
   "dust",
   "spark",
@@ -37,6 +39,8 @@ export function isParticleEffectPreset(value: unknown): value is ParticleEffectP
 
 export const PARTICLE_PRESET_LABELS: Record<ParticleEffectPreset, string> = {
   fire: "Fire Loop",
+  fireAnimated: "Fire (Animated)",
+  explosion: "Explosion",
   smoke: "Smoke Puff",
   dust: "Dust Hit",
   spark: "Spark Burst",
@@ -46,6 +50,8 @@ export const PARTICLE_PRESET_LABELS: Record<ParticleEffectPreset, string> = {
 
 export const PARTICLE_PRESET_DESCRIPTIONS: Record<ParticleEffectPreset, string> = {
   fire: "Textured additive flames rising and cooling — a looping fire sprite.",
+  fireAnimated: "SubUV flipbook fire (6×6): each particle plays the flame animation as it rises.",
+  explosion: "SubUV flipbook explosion (6×6) — a one-shot additive burst.",
   smoke: "Soft grey smoke that rises, grows and fades — one-shot burst.",
   dust: "Tan dust kicked up on impact, settling under light gravity.",
   spark: "Fast additive sparks flung outward, falling as they cool.",
@@ -101,7 +107,7 @@ const SMOKE: ParticleEffectDefinition = {
     fadeInTime: 0.03,
     fadeOutTime: 0.2,
   },
-  renderer: { type: "sprite", blendMode: "alpha", softness: 0.6, sortMode: "none", texture: null },
+  renderer: { type: "sprite", blendMode: "alpha", softness: 0.6, sortMode: "none", texture: null, subUV: { cols: 1, rows: 1 } },
 };
 
 const DUST: ParticleEffectDefinition = {
@@ -147,7 +153,7 @@ const DUST: ParticleEffectDefinition = {
     fadeInTime: 0.02,
     fadeOutTime: 0.18,
   },
-  renderer: { type: "sprite", blendMode: "alpha", softness: 0.5, sortMode: "none", texture: null },
+  renderer: { type: "sprite", blendMode: "alpha", softness: 0.5, sortMode: "none", texture: null, subUV: { cols: 1, rows: 1 } },
 };
 
 const SPARK: ParticleEffectDefinition = {
@@ -193,7 +199,7 @@ const SPARK: ParticleEffectDefinition = {
     fadeInTime: 0,
     fadeOutTime: 0.12,
   },
-  renderer: { type: "sprite", blendMode: "additive", softness: 0.4, sortMode: "none", texture: null },
+  renderer: { type: "sprite", blendMode: "additive", softness: 0.4, sortMode: "none", texture: null, subUV: { cols: 1, rows: 1 } },
 };
 
 const GLOW: ParticleEffectDefinition = {
@@ -239,7 +245,7 @@ const GLOW: ParticleEffectDefinition = {
     fadeInTime: 0.15,
     fadeOutTime: 0.35,
   },
-  renderer: { type: "sprite", blendMode: "additive", softness: 0.7, sortMode: "none", texture: null },
+  renderer: { type: "sprite", blendMode: "additive", softness: 0.7, sortMode: "none", texture: null, subUV: { cols: 1, rows: 1 } },
 };
 
 const BLANK: ParticleEffectDefinition = {
@@ -285,7 +291,7 @@ const BLANK: ParticleEffectDefinition = {
     fadeInTime: 0,
     fadeOutTime: 0.1,
   },
-  renderer: { type: "sprite", blendMode: "alpha", softness: 0.5, sortMode: "none", texture: null },
+  renderer: { type: "sprite", blendMode: "alpha", softness: 0.5, sortMode: "none", texture: null, subUV: { cols: 1, rows: 1 } },
 };
 
 /**
@@ -342,11 +348,129 @@ const FIRE: ParticleEffectDefinition = {
     softness: 0.6,
     sortMode: "none",
     texture: "fire-01-2",
+    subUV: { cols: 1, rows: 1 },
+  },
+};
+
+/**
+ * Animated (SubUV flipbook) fire (VFX Lite Faz 6b): the UE `T_Fire_SubUV` 6×6
+ * atlas, each particle cycling all 36 frames across its life. A looping plume
+ * that reads as real, flickering fire rather than a static blob.
+ */
+const FIRE_ANIMATED: ParticleEffectDefinition = {
+  name: "Fire Animated",
+  category: "Fire",
+  tags: ["fire", "flame", "flipbook", "loop"],
+  system: {
+    enabled: true,
+    loop: true,
+    duration: 1,
+    seed: null,
+    maxParticles: 64,
+    bounds: { mode: "fixed", min: [-1, 0, -1], max: [1, 3.5, 1], showInPreview: true },
+  },
+  spawn: {
+    mode: "rate",
+    rate: 14,
+    count: 16,
+    delay: 0,
+    interval: 0,
+    shape: "circle",
+    radius: 0.2,
+    boxSize: [0, 0, 0],
+  },
+  initialize: {
+    lifetime: [0.9, 1.4],
+    startSize: [0.9, 1.4],
+    startColor: "#ff7a1a",
+    startOpacity: 1,
+    direction: [0, 1, 0],
+    speed: [0.5, 1],
+    spreadAngleDeg: 10,
+    rotation: [0, 0],
+    angularVelocity: [0, 0],
+  },
+  update: {
+    gravityScale: 0,
+    drag: 0.5,
+    acceleration: [0, 0.5, 0],
+    endSize: [0.5, 0.9],
+    endColor: "#7a1600",
+    endOpacity: 0,
+    fadeInTime: 0.05,
+    fadeOutTime: 0.3,
+  },
+  renderer: {
+    type: "sprite",
+    blendMode: "additive",
+    softness: 0.5,
+    sortMode: "none",
+    texture: "t-fire-subuv",
+    subUV: { cols: 6, rows: 6 },
+  },
+};
+
+/**
+ * Explosion burst (VFX Lite Faz 6b): the UE `T_Explosion_SubUV` 6×6 atlas as a
+ * one-shot burst — every particle plays the full explosion animation once.
+ */
+const EXPLOSION: ParticleEffectDefinition = {
+  name: "Explosion",
+  category: "Fire",
+  tags: ["explosion", "fire", "flipbook", "impact"],
+  system: {
+    enabled: true,
+    loop: false,
+    duration: 0.1,
+    seed: null,
+    maxParticles: 48,
+    bounds: { mode: "fixed", min: [-2.5, -0.5, -2.5], max: [2.5, 3, 2.5], showInPreview: true },
+  },
+  spawn: {
+    mode: "burst",
+    rate: 10,
+    count: 14,
+    delay: 0,
+    interval: 0,
+    shape: "sphere",
+    radius: 0.3,
+    boxSize: [0, 0, 0],
+  },
+  initialize: {
+    lifetime: [0.6, 0.9],
+    startSize: [1.2, 2],
+    startColor: "#ffd27a",
+    startOpacity: 1,
+    direction: [0, 1, 0],
+    speed: [0.4, 1.2],
+    spreadAngleDeg: 90,
+    rotation: [0, 0],
+    angularVelocity: [0, 0],
+  },
+  update: {
+    gravityScale: -0.1,
+    drag: 1.2,
+    acceleration: [0, 0, 0],
+    endSize: [1.6, 2.6],
+    endColor: "#5a1400",
+    endOpacity: 0,
+    fadeInTime: 0,
+    fadeOutTime: 0.25,
+  },
+  renderer: {
+    type: "sprite",
+    blendMode: "additive",
+    softness: 0.5,
+    sortMode: "none",
+    texture: "t-explosion-subuv",
+    subUV: { cols: 6, rows: 6 },
   },
 };
 
 const PRESET_DEFS: Record<ParticleEffectPreset, ParticleEffectDefinition> = {
   fire: FIRE,
+  fireAnimated: FIRE_ANIMATED,
+  explosion: EXPLOSION,
   smoke: SMOKE,
   dust: DUST,
   spark: SPARK,

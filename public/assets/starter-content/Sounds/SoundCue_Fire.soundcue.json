@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "type": "soundCue",
+  "name": "SoundCue_Fire",
+  "output": {
+    "volume": 1,
+    "pitch": 1,
+    "bus": "sfx"
+  },
+  "nodes": [
+    {
+      "id": "output",
+      "kind": "output",
+      "volume": 1,
+      "pitch": 1
+    },
+    {
+      "id": "source-1",
+      "kind": "source",
+      "clipId": "starter-snd-fire-01",
+      "volume": 1,
+      "pitch": 1
+    },
+    {
+      "id": "source-2",
+      "kind": "source",
+      "clipId": "starter-snd-fire-sparks-01",
+      "volume": 1,
+      "pitch": 1
+    }
+  ],
+  "connections": [
+    {
+      "from": "source-2",
+      "to": "output"
+    },
+    {
+      "from": "source-1",
+      "to": "output"
+    }
+  ]
+}

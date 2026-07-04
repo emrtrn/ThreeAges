@@ -21,6 +21,7 @@ import {
   ShaderMaterial,
   type Texture,
   TextureLoader,
+  Vector2,
 } from "three";
 
 import type { RuntimeParticleEffect, Vec3 } from "../vfx/particleEffectTypes";
@@ -57,25 +58,38 @@ const POINT_PIXEL_SCALE = 320;
 const VERTEX_SHADER = `
 attribute float aSize;
 attribute float aAlpha;
+attribute float aLifeT;
 varying float vAlpha;
+varying float vLifeT;
 uniform float uScale;
 void main() {
   vAlpha = aAlpha;
+  vLifeT = aLifeT;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   gl_PointSize = aSize * (uScale / max(0.001, -mv.z));
   gl_Position = projectionMatrix * mv;
 }
 `;
 
+// Textures are loaded with flipY = false, so gl_PointCoord (top-left origin) maps
+// straight to image space: no per-axis flip, and a SubUV atlas indexes frame 0 at
+// the top-left cell. A 1×1 grid samples the whole texture (single sprite, Faz 6a).
 const FRAGMENT_SHADER = `
 uniform vec3 uColor;
 uniform sampler2D uMap;
 uniform float uHasTexture;
+uniform vec2 uSubUV;
 varying float vAlpha;
+varying float vLifeT;
 void main() {
   if (uHasTexture > 0.5) {
-    // Point-sprite UV: gl_PointCoord is top-left origin, textures are bottom-left.
-    vec4 tex = texture2D(uMap, vec2(gl_PointCoord.x, 1.0 - gl_PointCoord.y));
+    vec2 cell = 1.0 / uSubUV;
+    float frames = uSubUV.x * uSubUV.y;
+    float f = min(floor(vLifeT * frames), frames - 1.0);
+    float col = mod(f, uSubUV.x);
+    float row = floor(f / uSubUV.x);
+    vec2 uv = (vec2(col, row) + gl_PointCoord) * cell;
+    vec4 tex = texture2D(uMap, uv);
     gl_FragColor = vec4(uColor * tex.rgb, vAlpha * tex.a);
   } else {
     vec2 coord = gl_PointCoord - vec2(0.5);
@@ -106,6 +120,8 @@ export class ParticleEffect {
   private readonly positions: Float32Array;
   private readonly sizes: Float32Array;
   private readonly alphas: Float32Array;
+  /** Per-particle life fraction (age/lifetime, 0→1); drives the flipbook frame. */
+  private readonly lifeTs: Float32Array;
   private readonly velocities: Float32Array;
   /** Per-particle age in seconds; negative marks an inactive slot. */
   private readonly ages: Float32Array;
@@ -142,6 +158,7 @@ export class ParticleEffect {
     this.positions = new Float32Array(this.capacity * 3);
     this.sizes = new Float32Array(this.capacity);
     this.alphas = new Float32Array(this.capacity);
+    this.lifeTs = new Float32Array(this.capacity);
     this.velocities = new Float32Array(this.capacity * 3);
     this.ages = new Float32Array(this.capacity).fill(-1);
 
@@ -149,12 +166,15 @@ export class ParticleEffect {
     this.geometry.setAttribute("position", new BufferAttribute(this.positions, 3));
     this.geometry.setAttribute("aSize", new BufferAttribute(this.sizes, 1));
     this.geometry.setAttribute("aAlpha", new BufferAttribute(this.alphas, 1));
+    this.geometry.setAttribute("aLifeT", new BufferAttribute(this.lifeTs, 1));
+    const subUV = definition.subUV ?? { cols: 1, rows: 1 };
     this.material = new ShaderMaterial({
       uniforms: {
         uColor: { value: new Color(definition.color) },
         uScale: { value: POINT_PIXEL_SCALE },
         uMap: { value: null },
         uHasTexture: { value: 0 },
+        uSubUV: { value: new Vector2(subUV.cols, subUV.rows) },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
@@ -174,6 +194,10 @@ export class ParticleEffect {
   /** Loads the sprite texture and binds it to the shader once it arrives. */
   private loadTexture(url: string): void {
     new TextureLoader().load(url, (texture) => {
+      // flipY = false so gl_PointCoord (top-left) maps straight to image space and
+      // a SubUV atlas indexes frame 0 at the top-left cell (see FRAGMENT_SHADER).
+      texture.flipY = false;
+      texture.needsUpdate = true;
       this.texture = texture;
       this.material.uniforms.uMap!.value = texture;
       this.material.uniforms.uHasTexture!.value = 1;
@@ -217,10 +241,12 @@ export class ParticleEffect {
     this.positions.fill(0);
     this.sizes.fill(0);
     this.alphas.fill(0);
+    this.lifeTs.fill(0);
     this.velocities.fill(0);
     this.geometry.attributes.position!.needsUpdate = true;
     this.geometry.attributes.aSize!.needsUpdate = true;
     this.geometry.attributes.aAlpha!.needsUpdate = true;
+    this.geometry.attributes.aLifeT!.needsUpdate = true;
   }
 
   /** Sets the emitter origin (world space) new particles spawn from. */
@@ -253,6 +279,7 @@ export class ParticleEffect {
       this.positions[base + 2] = this.positions[base + 2]! + this.velocities[base + 2]! * dt;
       this.sizes[i] = startSize + (endSize - startSize) * t;
       this.alphas[i] = 1 - t;
+      this.lifeTs[i] = t;
     }
 
     // A looping effect emits forever; a one-shot emits for one lifetime window.
@@ -267,6 +294,7 @@ export class ParticleEffect {
     this.geometry.attributes.position!.needsUpdate = true;
     this.geometry.attributes.aSize!.needsUpdate = true;
     this.geometry.attributes.aAlpha!.needsUpdate = true;
+    this.geometry.attributes.aLifeT!.needsUpdate = true;
   }
 
   /** A non-looping effect is finished once it stopped emitting and all particles died. */
@@ -320,5 +348,6 @@ export class ParticleEffect {
     this.velocities[slot * 3 + 2] = velocity[2] + jitter();
     this.sizes[slot] = startSize;
     this.alphas[slot] = 1;
+    this.lifeTs[slot] = 0;
   }
 }

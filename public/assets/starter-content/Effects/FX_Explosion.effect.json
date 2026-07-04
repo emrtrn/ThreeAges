@@ -1,0 +1,59 @@
+{
+  "schema": 2,
+  "type": "particleEffect",
+  "name": "Explosion Effect",
+  "category": "Fire",
+  "tags": ["explosion", "fire", "flipbook", "impact"],
+  "system": {
+    "enabled": true,
+    "loop": false,
+    "duration": 0.1,
+    "seed": null,
+    "maxParticles": 48,
+    "bounds": {
+      "mode": "fixed",
+      "min": [-2.5, -0.5, -2.5],
+      "max": [2.5, 3, 2.5],
+      "showInPreview": true
+    }
+  },
+  "spawn": {
+    "mode": "burst",
+    "rate": 10,
+    "count": 14,
+    "delay": 0,
+    "interval": 0,
+    "shape": "sphere",
+    "radius": 0.3,
+    "boxSize": [0, 0, 0]
+  },
+  "initialize": {
+    "lifetime": [0.6, 0.9],
+    "startSize": [1.2, 2],
+    "startColor": "#ffd27a",
+    "startOpacity": 1,
+    "direction": [0, 1, 0],
+    "speed": [0.4, 1.2],
+    "spreadAngleDeg": 90,
+    "rotation": [0, 0],
+    "angularVelocity": [0, 0]
+  },
+  "update": {
+    "gravityScale": -0.1,
+    "drag": 1.2,
+    "acceleration": [0, 0, 0],
+    "endSize": [1.6, 2.6],
+    "endColor": "#5a1400",
+    "endOpacity": 0,
+    "fadeInTime": 0,
+    "fadeOutTime": 0.25
+  },
+  "renderer": {
+    "type": "sprite",
+    "blendMode": "additive",
+    "softness": 0.5,
+    "sortMode": "none",
+    "texture": "t-explosion-subuv",
+    "subUV": { "cols": 6, "rows": 6 }
+  }
+}

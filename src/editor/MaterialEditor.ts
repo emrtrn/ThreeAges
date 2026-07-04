@@ -46,6 +46,7 @@ export interface MaterialEditorOptions {
   label: string;
   materialId?: string;
   assets?: readonly MaterialEditorAssetOption[];
+  hideDevelopmentContent?: boolean;
   onStatus?: (message: string, tone?: StatusTone) => void;
   onSaved?: () => void;
   onApplyToSelected?: (materialId: string) => void;
@@ -85,6 +86,14 @@ function escapeHtml(value: string): string {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isDevelopmentContentPath(path: string): boolean {
+  const normalizedPath = path.replace(/\\/g, "/").replace(/^\/+/, "").toLocaleLowerCase();
+  const normalized = normalizedPath.startsWith("public/assets/")
+    ? normalizedPath.slice("public/".length)
+    : normalizedPath;
+  return normalized === "assets/developmentcontent" || normalized.startsWith("assets/developmentcontent/");
 }
 
 export class MaterialEditor {
@@ -518,7 +527,7 @@ export class MaterialEditor {
     const current = isLayerTextureField(field)
       ? this.layerTextureValue(field)
       : this.def[field];
-    const textures = this.sortedTextureAssets();
+    const textures = this.sortedTextureAssets(current);
     return [`<option value="" ${current ? "" : "selected"}>None</option>`]
       .concat(
         textures.map(
@@ -531,8 +540,14 @@ export class MaterialEditor {
       .join("");
   }
 
-  private sortedTextureAssets(): MaterialEditorAssetOption[] {
+  private sortedTextureAssets(currentTextureId?: string | null): MaterialEditorAssetOption[] {
     return (this.options.assets?.filter((asset) => asset.assetType === "texture") ?? [])
+      .filter(
+        (asset) =>
+          !this.options.hideDevelopmentContent ||
+          asset.id === currentTextureId ||
+          !isDevelopmentContentPath(asset.path),
+      )
       .slice()
       .sort((a, b) => {
         const byName = textureAssetCollator.compare(a.name, b.name);
@@ -565,16 +580,19 @@ export class MaterialEditor {
   private updateTextureSearch(select: HTMLSelectElement, text: string): void {
     this.textureSearchText = text.toLowerCase();
     this.textureSearchUntil = window.performance.now() + 1200;
-    const asset = this.findTextureSearchMatch(this.textureSearchText);
+    const asset = this.findTextureSearchMatch(this.textureSearchText, select.value || null);
     if (!asset || select.value === asset.id) return;
     select.value = asset.id;
     void this.applyField(select);
   }
 
-  private findTextureSearchMatch(query: string): MaterialEditorAssetOption | null {
+  private findTextureSearchMatch(
+    query: string,
+    currentTextureId?: string | null,
+  ): MaterialEditorAssetOption | null {
     const normalizedQuery = normalizeTextureSearchText(query);
     if (!normalizedQuery) return null;
-    const textures = this.sortedTextureAssets();
+    const textures = this.sortedTextureAssets(currentTextureId);
     return (
       textures.find((asset) => normalizeTextureSearchText(asset.name).startsWith(normalizedQuery)) ??
       textures.find((asset) => textureSearchTokens(asset).some((token) => token.startsWith(normalizedQuery))) ??

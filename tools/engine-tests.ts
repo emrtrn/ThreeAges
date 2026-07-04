@@ -12223,6 +12223,45 @@ check("renderer.texture (VFX Lite Faz 6a) normalizes and collapses through to ru
   assert.equal(canonical.renderer.texture, "fire-01-2");
 });
 
+check("renderer.subUV flipbook (VFX Lite Faz 6b) normalizes, clamps, and collapses", () => {
+  // Default grid is 1×1 (whole texture, no animation) when absent.
+  const bare = normalizeEffectDefinition({ schema: 2, type: "particleEffect" });
+  assert.ok(bare);
+  assert.deepEqual(bare.renderer.subUV, { cols: 1, rows: 1 });
+
+  // cols/rows round to ints and clamp to [1, 32].
+  const grid = normalizeEffectDefinition({
+    schema: 2,
+    renderer: { subUV: { cols: 6.4, rows: 0 } },
+  });
+  assert.ok(grid);
+  assert.deepEqual(grid.renderer.subUV, { cols: 6, rows: 1 });
+  const huge = normalizeEffectDefinition({ schema: 2, renderer: { subUV: { cols: 999, rows: 8 } } });
+  assert.deepEqual(huge?.renderer.subUV, { cols: 32, rows: 8 });
+
+  // Collapse emits the grid only when it animates (frames > 1); 1×1 is omitted.
+  const animated = parseRuntimeParticleEffect({
+    schema: 2,
+    type: "particleEffect",
+    renderer: { texture: "t-fire-subuv", subUV: { cols: 6, rows: 6 } },
+  });
+  assert.deepEqual(animated?.subUV, { cols: 6, rows: 6 });
+  const still = parseRuntimeParticleEffect({
+    schema: 2,
+    type: "particleEffect",
+    renderer: { texture: "fire-01-2", subUV: { cols: 1, rows: 1 } },
+  });
+  assert.equal(still?.subUV, undefined);
+
+  // validateEffectAsset (save path) keeps the grid through the round-trip.
+  const canonical = validateEffectAsset({
+    schema: 2,
+    type: "particleEffect",
+    renderer: { texture: "t-fire-subuv", subUV: { cols: 6, rows: 6 } },
+  }) as { renderer: { subUV: { cols: number; rows: number } } };
+  assert.deepEqual(canonical.renderer.subUV, { cols: 6, rows: 6 });
+});
+
 check("schema-1 and its hand-converted schema-2 starter collapse identically", () => {
   // The Faz 1 starter conversion is mechanical: the schema-2 files are authored
   // so the normalize→collapse pipeline reproduces the original schema-1 runtime

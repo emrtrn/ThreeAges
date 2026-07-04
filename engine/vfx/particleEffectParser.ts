@@ -32,6 +32,7 @@ import type {
   ParticleUpdateBlock,
   RuntimeParticleEffect,
   SortMode,
+  SubUVGrid,
   SpawnMode,
   SpawnShape,
   Vec3,
@@ -183,6 +184,17 @@ function readTextureRef(value: unknown): string | null {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
 }
 
+/** Upper bound on flipbook grid dimensions (guards against absurd atlases). */
+const MAX_SUBUV_AXIS = 32;
+
+/** A flipbook grid clamped to positive integers in [1, {@link MAX_SUBUV_AXIS}]. */
+function readSubUV(value: unknown): SubUVGrid {
+  const data = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const axis = (raw: unknown): number =>
+    Math.min(MAX_SUBUV_AXIS, Math.max(1, Math.round(finiteNumber(raw, 1))));
+  return { cols: axis(data.cols), rows: axis(data.rows) };
+}
+
 function normalizeRenderer(value: unknown): ParticleRendererBlock {
   const data = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   return {
@@ -191,6 +203,7 @@ function normalizeRenderer(value: unknown): ParticleRendererBlock {
     softness: Math.min(1, clampMin(finiteNumber(data.softness, 0.5), 0)),
     sortMode: readEnum(data.sortMode, SORT_MODES, "none"),
     texture: readTextureRef(data.texture),
+    subUV: readSubUV(data.subUV),
   };
 }
 
@@ -284,7 +297,14 @@ function normalizeSchema1(data: Record<string, unknown>): ParticleEffectDefiniti
       fadeInTime: 0,
       fadeOutTime: 0.1,
     },
-    renderer: { type: "sprite", blendMode: materialMode, softness: 0.5, sortMode: "none", texture: null },
+    renderer: {
+      type: "sprite",
+      blendMode: materialMode,
+      softness: 0.5,
+      sortMode: "none",
+      texture: null,
+      subUV: { cols: 1, rows: 1 },
+    },
   };
 }
 
@@ -330,6 +350,10 @@ export function toRuntimeParticleEffect(def: ParticleEffectDefinition): RuntimeP
     materialMode: def.renderer.blendMode,
     color: def.initialize.startColor,
     ...(def.renderer.texture ? { texture: def.renderer.texture } : {}),
+    // Emit the flipbook grid only when it actually animates (frames > 1).
+    ...(def.renderer.subUV.cols * def.renderer.subUV.rows > 1
+      ? { subUV: { cols: def.renderer.subUV.cols, rows: def.renderer.subUV.rows } }
+      : {}),
   };
 }
 

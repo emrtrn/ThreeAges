@@ -1967,6 +1967,74 @@
       "license": "Project-local placeholder; replace before distribution if needed"
     },
     {
+      "id": "starter-fx-fire-subuv",
+      "name": "Fire Animated Effect",
+      "assetType": "effect",
+      "category": "starter-effects",
+      "path": "assets/starter-content/Effects/FX_Fire_SubUV.effect.json",
+      "tags": [
+        "starter",
+        "effect",
+        "vfx",
+        "fire",
+        "flipbook"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-effects",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1231
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "starter-fx-explosion",
+      "name": "Explosion Effect",
+      "assetType": "effect",
+      "category": "starter-effects",
+      "path": "assets/starter-content/Effects/FX_Explosion.effect.json",
+      "tags": [
+        "starter",
+        "effect",
+        "vfx",
+        "explosion",
+        "flipbook"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-effects",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1250
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
       "id": "t-cobblestone-pebble-d",
       "name": "T Cobble Stone Pebble D",
       "assetType": "texture",
@@ -20308,6 +20376,29 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 347
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "soundcue-fire-soundcue",
+      "name": "Sound Cue Fire.Soundcue",
+      "assetType": "soundCue",
+      "category": "Sounds",
+      "path": "assets/starter-content/Sounds/SoundCue_Fire.soundcue.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Sounds",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 269
       },
       "license": "Unknown"
     }

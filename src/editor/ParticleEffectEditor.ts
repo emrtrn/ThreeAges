@@ -41,6 +41,7 @@ export interface ParticleEffectEditorOptions {
   label: string;
   /** Project asset records (for the Renderer sprite-texture picker); optional. */
   assets?: ParticleEffectEditorAsset[];
+  hideDevelopmentContent?: boolean;
   onStatus?: (message: string, tone?: StatusTone) => void;
   onSaved?: () => void;
 }
@@ -81,6 +82,14 @@ function esc(value: string): string {
 
 function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function isDevelopmentContentPath(path: string): boolean {
+  const normalizedPath = path.replace(/\\/g, "/").replace(/^\/+/, "").toLocaleLowerCase();
+  const normalized = normalizedPath.startsWith("public/assets/")
+    ? normalizedPath.slice("public/".length)
+    : normalizedPath;
+  return normalized === "assets/developmentcontent" || normalized.startsWith("assets/developmentcontent/");
 }
 
 /** Perceived brightness of a `#rrggbb` colour in [0, 1] (1 for unparseable). */
@@ -373,6 +382,11 @@ export class ParticleEffectEditor {
     html.push(this.groupOpen("renderer", "Renderer"));
     html.push(this.roRow("Type", "sprite"));
     html.push(this.textureRow("Texture", "renderer.texture", d.renderer.texture));
+    if (d.renderer.texture) {
+      // Flipbook (SubUV) only applies to a texture; 1×1 = whole texture (no animation).
+      html.push(this.numRow("Flipbook Cols", "renderer.subUV.cols", d.renderer.subUV.cols, 1, 32, 1));
+      html.push(this.numRow("Flipbook Rows", "renderer.subUV.rows", d.renderer.subUV.rows, 1, 32, 1));
+    }
     html.push(this.enumRow("Blend Mode", "renderer.blendMode", d.renderer.blendMode, BLEND_MODES));
     html.push(this.numRow("Softness", "renderer.softness", d.renderer.softness, 0, 1, 0.05));
     html.push(this.enumRow("Sort Mode", "renderer.sortMode", d.renderer.sortMode, SORT_MODES));
@@ -454,7 +468,7 @@ export class ParticleEffectEditor {
   /** Sprite-texture picker: `<none>` + the project's texture assets (by name). */
   private textureRow(label: string, path: string, value: string | null): string {
     const none = `<option value=""${value ? "" : " selected"}>&lt;none — procedural sprite&gt;</option>`;
-    const opts = this.textureAssets()
+    const opts = this.textureAssets(value)
       .map(
         (t) =>
           `<option value="${esc(t.id)}"${t.id === value ? " selected" : ""}>${esc(t.name)}</option>`,
@@ -467,9 +481,15 @@ export class ParticleEffectEditor {
   }
 
   /** The project's texture assets, sorted by display name for the picker. */
-  private textureAssets(): ParticleEffectEditorAsset[] {
+  private textureAssets(currentTextureId?: string | null): ParticleEffectEditorAsset[] {
     return this.assets
       .filter((asset) => asset.assetType === "texture")
+      .filter(
+        (asset) =>
+          !this.options.hideDevelopmentContent ||
+          asset.id === currentTextureId ||
+          !isDevelopmentContentPath(asset.path),
+      )
       .slice()
       .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   }

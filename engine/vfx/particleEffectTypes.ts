@@ -85,6 +85,17 @@ export interface ParticleUpdateBlock {
   fadeOutTime: number;
 }
 
+/**
+ * A sprite-sheet (flipbook) grid: the texture is `cols × rows` frames animated
+ * over a particle's life (VFX Lite Faz 6b). `{ cols: 1, rows: 1 }` (the default)
+ * means "whole texture, no animation" — so a single-sprite texture is just the
+ * degenerate 1×1 flipbook.
+ */
+export interface SubUVGrid {
+  cols: number;
+  rows: number;
+}
+
 export interface ParticleRendererBlock {
   type: RendererType;
   blendMode: ParticleBlendMode;
@@ -97,6 +108,8 @@ export interface ParticleRendererBlock {
    * the manifest (VFX Lite Faz 6a); `engine/vfx` stays manifest-free.
    */
   texture: string | null;
+  /** Flipbook grid for the sprite texture; `{1,1}` = no animation (Faz 6b). */
+  subUV: SubUVGrid;
 }
 
 /** The normalized, fully-defaulted authoring form (schema-2 shaped). */
@@ -132,4 +145,6 @@ export interface RuntimeParticleEffect {
   color: string;
   /** Optional sprite texture asset id; absent renders the procedural sprite. */
   texture?: string;
+  /** Flipbook grid; present only when animating (`cols*rows > 1`), Faz 6b. */
+  subUV?: SubUVGrid;
 }
