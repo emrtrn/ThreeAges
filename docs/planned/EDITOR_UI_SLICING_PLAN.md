@@ -210,17 +210,29 @@ Evidence (2026-07-04):
   (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
   (1 Chromium smoke).
 
-## Ninth Extraction Slice `[ ] Planned`
+## Ninth Extraction Slice `[x] Completed 2026-07-04`
 
-1. `[ ]` Move Outliner row rendering, selection state, visibility/lock controls,
+1. `[x]` Move Outliner row rendering, selection state, visibility/lock controls,
    hierarchy affordances, and drag/drop binding into
    `src/editor/panels/outliner/outlinerPanel.ts`.
-2. `[ ]` Keep `EditorUi.ts` responsible for app command callbacks and selected
+2. `[x]` Keep `EditorUi.ts` responsible for app command callbacks and selected
    object state.
-3. `[ ]` Leave History panel extraction separate unless it becomes naturally
+3. `[x]` Leave History panel extraction separate unless it becomes naturally
    small; otherwise move it to `src/editor/panels/outliner/historyPanel.ts` in a
    follow-up slice.
-4. `[ ]` Prove with the same validation gate as the fifth slice.
+4. `[x]` Prove with the same validation gate as the fifth slice.
+
+Evidence (2026-07-04):
+
+- `src/editor/panels/outliner/outlinerPanel.ts` owns Outliner filtering, tree
+  ordering, row HTML, selection click binding, visibility/lock buttons, and
+  hierarchy drag/drop binding.
+- `EditorUi.ts` keeps the current scene-object snapshot, search-filter state,
+  outliner context-menu commands, and app command callback wiring.
+- History rendering remains in `EditorUi.ts`; it was not folded into this slice.
+- Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
+  (1 Chromium smoke).
 
 ## Tenth Extraction Slice `[ ] Planned`
 
