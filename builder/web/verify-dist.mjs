@@ -13,11 +13,12 @@
  * Two severities:
  *   FAIL  — a broken editor/runtime boundary (e.g. EditorUi in the bundle).
  *           Exits non-zero. These must never appear in a correct build.
- *   WARN  — known authoring-code-in-game-chunk debt (e.g. the dev `/__save-*`
- *           endpoint strings still shipped by src/scene/SceneApp.ts). Reported
- *           but non-fatal until that code is split out (CLAUDE.md Near-Term
- *           Order #1). Use `--strict` to promote warnings to failures once the
- *           split lands, so the gate can enforce a fully clean bundle.
+ *   WARN  — lower-severity authoring-code-in-game-chunk signal (e.g. dev
+ *           `/__save-*` endpoint strings). The split has landed: `SceneApp` /
+ *           `EditorUi` / the layout saver are dev-gated dynamic `?editor`
+ *           imports, DCE'd from the game build, so a clean dist has none of
+ *           these. `build:verify` runs `--strict` (warnings fail), so this tier
+ *           is now a regression net, not accepted debt.
  *
  * How the FAIL boundary is supposed to hold: src/main.ts gates the dynamic
  * `import("@/editor/EditorUi")` behind `import.meta.env.DEV`, so Vite
@@ -72,8 +73,9 @@ const FAIL_TOKENS = [
   { token: "editor-shell", reason: "editor UI CSS leaked into the runtime stylesheet (Item 1 regression)" },
 ];
 
-// Warnings: known authoring-code-in-game-chunk debt, expected to disappear once
-// authoring logic is split out of SceneApp. Non-fatal unless --strict.
+// Warnings: lower-severity authoring-code-in-game-chunk signal. The SceneApp
+// split has landed (dist is clean under --strict); kept as a regression net.
+// Non-fatal unless --strict — and build:verify always runs --strict.
 const WARN_TOKENS = [
   { token: "/__save-layout", reason: "dev save endpoint shipped by SceneApp (authoring code in game chunk)" },
   { token: "/__project-dir", reason: "dev content-tree endpoint shipped in game chunk" },

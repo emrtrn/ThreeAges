@@ -28,11 +28,23 @@ async function main(): Promise<void> {
   // — including the dynamic import — from the production game build, so the
   // package ships no editor UI at all. In dev, ?editor still loads it on demand.
   if (editorEnabled && import.meta.env.DEV) {
-    const [{ SceneApp }, { EditorUi }, { saveLayoutViaDevEndpoint }] = await Promise.all([
+    const [
+      { SceneApp },
+      { EditorUi },
+      { saveLayoutViaDevEndpoint },
+      { setGameEditorCatalog },
+      { GAME_EDITOR_CATALOG },
+    ] = await Promise.all([
       import("@/scene/SceneApp"),
       import("@/editor/EditorUi"),
       import("@/editor/layoutSaver"),
+      import("@/editor/gameEditorRegistry"),
+      import("@/game/editorCatalog"),
     ]);
+    // Inversion of control: the game supplies its editor catalogs here so the
+    // editor stays generic (never imports @/game). This composition root is the
+    // only module allowed to see both layers, so the contract check lives here.
+    setGameEditorCatalog(GAME_EDITOR_CATALOG);
     const app = new SceneApp(canvas, { enabled: true, scriptMessageTraceLimit });
     app.setLayoutSaver(saveLayoutViaDevEndpoint);
     new EditorUi(app);

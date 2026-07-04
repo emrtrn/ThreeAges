@@ -34,10 +34,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # build:verify = build (tsc --noEmit + vite build) + test:engine
-      # (466 checks) + verify:dist -- --strict. Single gate, matches the
-      # local pre-`[x]` ritual.
-      - name: Verify (type-check, engine tests, build, strict dist scan)
+      # build:verify = verify:imports (source-level module-boundary scan) +
+      # build (tsc --noEmit + vite build) + test:engine + verify:dist --strict.
+      # Single gate, matches the local pre-`[x]` ritual.
+      - name: Verify (import graph, type-check, engine tests, build, strict dist scan)
         run: npm run build:verify
 
       - name: Asset manifest health

@@ -188,6 +188,22 @@ git cherry-pick <sha>
 git push origin main
 ```
 
+### Platform katkısı yaparken (engine/editor'a dokunuyorsan)
+
+Forge çekirdeğine (engine/editor/builder) katkı verirken iki otomatik sınır
+kapısını koru — ikisi de `build:verify` içinde ve CI'da çalışır:
+
+- **`verify:imports`** (`builder/web/verify-imports.mjs`): modül sınırlarını
+  kaynak düzeyinde tarar. `editor/*` **`@/game` import edemez** (editör generic
+  kalır); editörün gösterdiği oyun verisi başlangıçta
+  `@/editor/gameEditorRegistry` ile enjekte edilir (`src/main.ts` bağlar).
+  Ayrıca `engine/*` üst katmanları, `game/*` editörü import edemez.
+- **`verify:dist`** (`builder/web/verify-dist.mjs`): yeni bir **editor-only**
+  modül/sembol çıkardığında (editör kodunu ayırırken), o sembolü
+  `FAIL_TOKENS` listesine ekle — böylece production `dist/`'e sızarsa kapı
+  kırmızıya döner. Yeni editör state store'ları, viewport controller'ları vb.
+  bu listeye eklenmelidir.
+
 ---
 
 ## GDD Politikası

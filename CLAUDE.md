@@ -4,8 +4,11 @@
 whose editor is a built-in mode of the runtime (`?editor`), not a separate app.
 It is not tied to any single project — each concrete project is a copy of this
 template with its own data, assets, and game rules. One `SceneApp` renders both
-the runtime and the editor viewport; the engine/editor/builder/game module
-boundaries are extracted under `engine/`, `editor/`, `builder/`, and `game/`.
+the runtime and the editor viewport. The engine, editor, and builder boundaries
+hold real extracted modules under `engine/`, `editor/`, and `builder/`; the
+game/project boundary stays in `src/game` and `src/project` (top-level `game/`
+and `project/` are reserved placeholders — game code lives in `src/game` so
+forks own it there).
 The architecture is Unreal-inspired (viewport gizmos, outliner, details,
 content browser, undo/redo, snapping, Play mode) but web-first and lightweight.
 
@@ -122,8 +125,12 @@ engine/editor.
 
 ## Near-Term Order
 
-1. Optional: split editor-only logic out of the main bundle (`SceneApp` still
-   ships gizmo/authoring code in the game chunk).
+1. ~~Split editor-only logic out of the main bundle.~~ **Done:** `SceneApp`,
+   `EditorUi`, and the layout saver load only behind the dev-gated `?editor`
+   dynamic import, so Vite DCEs them from the game build; `verify:dist --strict`
+   passes with zero warnings, and a source-level `verify:imports` gate now
+   enforces the module boundaries. (Numbering kept stable — later items are
+   referenced by number.)
 2. Smoke tests around load/save and the game/editor mode split.
 3. Improve asset catalog UI with previews and placement-rule affordances.
 4. Later: a `tools/create-project.mjs` scaffold that stamps out a new project

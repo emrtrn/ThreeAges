@@ -46,8 +46,7 @@ import { loadActorScript, saveActorScript } from "@/editor/actorScriptStore";
 import { createBehaviorStub } from "@/editor/behaviorStubStore";
 import { ActorScriptViewport } from "@/editor/ActorScriptViewport";
 import { loadAssetSkeleton, type AssetSkeletonMontageDef } from "@/scene/assetSkeletonLoader";
-import { resolveMontageBindings } from "@/game/montageInputBindings";
-import { formatInputCode, keysForAction } from "@/game/defaultInputBindings";
+import { getGameEditorCatalog } from "@/editor/gameEditorRegistry";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -857,15 +856,16 @@ export class ActorScriptEditor {
 
   private montageInputRows(montages: readonly AssetSkeletonMontageDef[]): string {
     if (montages.length === 0) return `<li class="as-inspect-empty">no montages</li>`;
+    const catalog = getGameEditorCatalog();
     const bindingByMontage = new Map(
-      resolveMontageBindings(montages).map((binding) => [binding.montage, binding] as const),
+      catalog.resolveMontageBindings(montages).map((binding) => [binding.montage, binding] as const),
     );
     return montages
       .map((montage) => {
         const binding = bindingByMontage.get(montage.name);
         let detail: string;
         if (binding) {
-          const keys = keysForAction(binding.action).map(formatInputCode);
+          const keys = catalog.keysForAction(binding.action).map((code) => catalog.formatInputCode(code));
           const keyText = keys.length ? keys.join(" / ") : "unbound key";
           detail = `${escapeHtml(binding.action)} → ${escapeHtml(keyText)} <small>(${binding.mode})</small>`;
         } else if (montage.slot === "fullBody") {

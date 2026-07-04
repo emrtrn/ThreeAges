@@ -69,9 +69,11 @@ import {
 } from "@/project/ProjectAssetTree";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { loadAssetMaterialSlots } from "@/scene/assetMaterialSlotsLoader";
-import { GAME_MODE_OPTIONS, type GameModeOption } from "@/game/gameModes/catalog";
+import {
+  getGameEditorCatalog,
+  type EditorGameModeOption,
+} from "@/editor/gameEditorRegistry";
 import { loadActorScript } from "@/editor/actorScriptStore";
-import { BEHAVIOR_SCRIPT_IDS } from "@/game/behaviors";
 import {
   PARENT_CLASSES,
   PARENT_CLASS_DESCRIPTIONS,
@@ -296,7 +298,7 @@ export class EditorUi {
   /** All project Actor Script classes discovered for editor pickers (game mode / pawn). */
   private projectActorClasses: { path: string; name: string; parentClass: ParentClass }[] = [];
   /** Project `gameMode` Actor Scripts discovered for the World Settings dropdown. */
-  private projectGameModes: GameModeOption[] = [];
+  private projectGameModes: EditorGameModeOption[] = [];
   private selectedFolder = "";
   private collapsedFolderPaths = new Set<string>();
   /** Content Browser asset card highlighted as selected (orange). */
@@ -1157,7 +1159,7 @@ export class EditorUi {
       }),
     );
 
-    const next: GameModeOption[] = this.projectActorClasses
+    const next: EditorGameModeOption[] = this.projectActorClasses
       .filter((cls) => cls.parentClass === "gameMode")
       .map((cls) => ({
         id: cls.path,
@@ -2810,7 +2812,7 @@ export class EditorUi {
       await ActorScriptEditor.open({
         path: item.path,
         label: item.label.replace(/\.actor\.json$/i, ""),
-        behaviorScriptIds: BEHAVIOR_SCRIPT_IDS,
+        behaviorScriptIds: getGameEditorCatalog().behaviorScriptIds,
         assetIds: this.editableAssets.map((asset) => asset.id),
         assets: this.editableAssets.map((asset) => ({
           id: asset.id,
@@ -2918,7 +2920,10 @@ export class EditorUi {
     // Built-in modes plus discovered project `gameMode` Actor Scripts. Include the
     // current selection even if it is a not-yet-discovered class ref so it stays
     // selected (and round-trips) instead of silently resetting to the default.
-    const modeOptions: GameModeOption[] = [...GAME_MODE_OPTIONS, ...this.projectGameModes];
+    const modeOptions: EditorGameModeOption[] = [
+      ...getGameEditorCatalog().gameModeOptions,
+      ...this.projectGameModes,
+    ];
     if (settings.gameMode && !modeOptions.some((option) => option.id === settings.gameMode)) {
       modeOptions.push({
         id: settings.gameMode,

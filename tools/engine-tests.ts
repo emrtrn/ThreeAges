@@ -647,6 +647,8 @@ import {
   normalizeWorldWidgets,
   resolveWorldWidgetVisibility,
 } from "../engine/ui/uiWorldWidget";
+import { getGameEditorCatalog, setGameEditorCatalog } from "../src/editor/gameEditorRegistry";
+import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 
 let checks = 0;
 const check = (label: string, fn: () => void): void => {
@@ -17785,6 +17787,31 @@ check("formatAiDebug renders controller count, goal + blackboard size, tagging d
   assert.deepEqual(lines, ["ai", "controllers: 1", "  enemy-1 goal:patrol bb:3"]);
   const off = formatAiDebug({ enabled: false, controllerCount: 0, controllers: [] });
   assert.deepEqual(off, ["ai", "controllers: 0 (off)"]);
+});
+
+// --- Editor↔game DI seam (gameEditorRegistry) --------------------------------
+// Guards the inversion that keeps the editor generic: the editor reads game data
+// through the injected catalog, never importing @/game. The throw-before-inject
+// check must run before the register call below (module-singleton state).
+
+check("gameEditorRegistry throws until the composition root injects a catalog", () => {
+  assert.throws(() => getGameEditorCatalog(), /was not registered/);
+});
+
+check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected", () => {
+  setGameEditorCatalog(GAME_EDITOR_CATALOG);
+  const catalog = getGameEditorCatalog();
+  // Game Modes: the default camera mode leads the World Settings dropdown.
+  assert.ok(catalog.gameModeOptions.length >= 1);
+  assert.equal(catalog.gameModeOptions[0]?.id, "forge.defaultCamera");
+  // Behavior ids offered as Event Binding suggestions.
+  assert.ok(catalog.behaviorScriptIds.includes("input-move"));
+  // Input helpers resolve real bindings for the Actor Script montage→input panel.
+  assert.equal(catalog.formatInputCode("KeyQ"), "Q");
+  assert.ok(catalog.keysForAction("jump").includes("Space"));
+  // Montage resolver is pure and safe on empty/absent input.
+  assert.deepEqual(catalog.resolveMontageBindings(undefined), []);
+  assert.deepEqual(catalog.resolveMontageBindings([]), []);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

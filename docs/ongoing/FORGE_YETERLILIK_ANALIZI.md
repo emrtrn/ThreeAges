@@ -152,7 +152,7 @@ bilerek disarida biraktigi ve reusable platform hedefinin netligi incelenecek.
      dogrulandi. Kalan (dusuk oncelik, Baslik 16): scaffold araci karari
      (`tools/create-project.mjs`) — manuel fork calistigi icin bloklamiyor.
 
-## 2. Mimari Sinirlar ve Sahiplik Kurallari `[~] Kismi`
+## 2. Mimari Sinirlar ve Sahiplik Kurallari `[x] Yeterli`
 
 Engine, editor, runtime, game, project ve public asset katmanlarinin net ayrilip
 ayrilmadigi; generic platform kodu ile oyuna ozel kurallarin karisip karismadigi
@@ -162,6 +162,21 @@ degerlendirilecek.
   scan ile dogrulandi. Urun-kritik sinir (editor kodu production'a sizmaz)
   saglam; kaynak-duzeyi kurallar disipline dayaniyor ve editor->game yonunde
   yazili kuralla gerilimli 5 import var.
+- Guncelleme (2026-07-04): Bes aksiyon da uygulandi. (1) Editor->game bagimliligi
+  registry/DI ile TERS CEVRILDI: yeni `src/editor/gameEditorRegistry.ts`
+  (editor-sahipli sozlesme) + `src/game/editorCatalog.ts` (game saglayici),
+  kompozisyon kokunde (`src/main.ts`) enjekte edilir; `src/editor`'da artik SIFIR
+  `@/game` importu (tsc yesil). (2) Kaynak-duzeyi import-graph denetimi eklendi
+  (`builder/web/verify-imports.mjs` -> `npm run verify:imports`, `build:verify` +
+  CI icinde): engine->ust katman/src, editor->game, game->editor,
+  RuntimeSceneApp->editor yasak; negatif self-test guard'in isirdigini kanitladi.
+  (3) CLAUDE.md Near-Term #1 + verify-dist.mjs baslik/WARN notu guncellendi (WARN
+  debt kapandi, strict geciyor). (4) CLAUDE.md + ARCHITECTURE.md'nin "extracted
+  under game/" asiri-iddiasi duzeltildi; game/+project/ README'leri "reserved;
+  kod src/game+src/project'te" olarak yeniden yazildi (src-tabanli sahiplik
+  karari; tasima reddedildi). (5) Disiplin notu fork rehberine islendi. DI
+  sozlesmesi icin 2 headless check eklendi (engine-tests 596). Karar `[x]`'e
+  yukseltildi.
 - Kanit:
   - Yazili sozlesme: `ARCHITECTURE.md` Dependency Rules + Ownership Boundaries,
     `CLAUDE.md` Working Rules, `game/README.md` + `project/README.md` kural
@@ -183,7 +198,9 @@ degerlendirilecek.
   - Sinir ihlali bulgusu: `src/editor` -> `@/game` 5 import
     (`ActorScriptEditor.ts:49-50` montage/input binding'ler,
     `SkeletalMeshEditor.ts:49` ragdollDriver, `EditorUi.ts:72,74`
-    gameModes/catalog + behaviors).
+    gameModes/catalog + behaviors). **Duzeltme (2026-07-04): bu 5 import
+    registry/DI ile kaldirildi** — editor artik `@/editor/gameEditorRegistry`
+    uzerinden okur, `@/game` import etmez; `verify:imports` bunu zorunlu kilar.
   - Kutle dagilimi: `src/editor` 17.3k satir > `editor/` 5.1k; `src/scene`
     11.9k; `game/` ve `project/` ust-duzey klasorleri README-only placeholder —
     gercek oyun kodu `src/game`'de (30 dosya, ~5k satir).
@@ -202,43 +219,62 @@ degerlendirilecek.
     degistirilirse bu exportlar sekil-uyumlu kalmak zorunda — yazili olmayan
     bir sozlesme. "Editor core generic" kuraliyla gerilim; dogru yon game'in
     editore kayit olmasi (registry/data), editorun game import etmesi degil.
+    **(Cozuldu 2026-07-04, Aksiyon 1 — secenek (b): registry/DI inversiyonu;
+    editor->game importu sifir, `verify:imports` ile korunuyor.)**
   - **Kaynak-duzeyi import kurallari otomatik denetimsiz:** verify-dist yalniz
     dist ciktisini tarar; ornegin bir `engine -> game` importunu bugun hicbir
     kapi yakalamaz (tsc derler, testler gecer). Kurallar disiplin + review'a
-    dayaniyor.
+    dayaniyor. **(Cozuldu 2026-07-04, Aksiyon 2: `builder/web/verify-imports.mjs`
+    kaynak-duzeyi tarama; `build:verify`+CI, negatif self-test'le dogrulandi.)**
   - **Cifte yapi / yanlis tarafa inme riski:** ust-duzey `engine/`+`editor/`
     gercek kod tasirken `game/`+`project/` placeholder; asil kutle hala
     `src/`de. Iki "editor", iki "input" konumu var. ARCHITECTURE.md bunu kabul
     ediyor ("src/* remains the active implementation") ama CLAUDE.md'nin
     "boundaries are extracted under ... game/" cumlesi game/project icin henuz
-    dogru degil.
+    dogru degil. **(Kismen cozuldu 2026-07-04, Aksiyon 4: CLAUDE.md +
+    ARCHITECTURE.md asiri-iddiasi duzeltildi; game/+project/ "reserved" olarak
+    belgelendi. Cifte yapi BILINCLI korunuyor — `src/game` fork-sahipli kalici
+    ev; `game/`'e tasima forklarin merge'lerini kirardigi icin reddedildi.)**
   - **Bayat dokuman notlari:** CLAUDE.md Near-Term #1 ("SceneApp still ships
     gizmo/authoring code in the game chunk") artik dogru degil — SceneApp da
     dinamik importta ve strict scan sifir uyariyla geciyor. verify-dist.mjs
-    basligindaki WARN-debt aciklamasi ayni bayat varsayimi tasiyor.
+    basligindaki WARN-debt aciklamasi ayni bayat varsayimi tasiyor. **(Cozuldu
+    2026-07-04, Aksiyon 3: her iki not da guncellendi.)**
   - verify-dist kendi beyaniyla heuristik string taramasi; minification token
     bozarsa sessiz gecebilir. Kabul edilmis sinirlama, ama dist'in tek kapisi.
-- Karar: `[~] Kismi` — guclu tarafta. Sinir mimarisi calisiyor ve en kritik
-  yuzeyi otomatik korunuyor; `[x]` icin editor->game bagimliliginin karara
-  baglanmasi, kaynak-duzeyi import denetimi ve bayat notlarin duzeltilmesi
-  gerekir. Veri kaybi riski yok; risk, fork'larda sessiz sozlesme kirilmasi.
+    **(Not 2026-07-04: dist heuristigi kabul edilmis sinir olarak DURUYOR; ancak
+    import kurallari artik ayrica kaynak-duzeyinde `verify:imports` ile
+    korunuyor — dist artik "tek kapi" degil.)**
+- Karar: `[x] Yeterli` (2026-07-04). Sinir mimarisi calisiyor; en kritik yuzey
+  (editor kodu production'a sizmaz) cift katmanli otomatik korunuyor. Bu turda
+  editor->game bagimliligi registry/DI ile ters cevrildi (editor artik generic),
+  kaynak-duzeyi import denetimi eklendi (`verify:imports`, `build:verify`+CI) ve
+  bayat notlar + game/project sahiplik iddiasi duzeltildi. `build:verify` yesil
+  (596 engine check + strict dist scan + import scan, exit 0). Veri kaybi riski
+  yok; eski "fork'ta sessiz sozlesme kirilmasi" riski hem yapisal (inversiyon)
+  hem otomatik (import gate) kapatildi. Kalan yalnizca kabul edilmis sinir:
+  verify-dist heuristik string taramasi (minification token'i bozarsa sessiz
+  gecebilir) — ama import kurallari icin `verify:imports` ayri bir kaynak-duzeyi
+  guvence.
 - Aksiyonlar:
-  1. Editor<->game baglantisini karara bagla: ya (a) `src/game`'in editore
-     sundugu katalog exportlarini yazili sozlesme yap (fork rehberine ekle),
-     ya (b) registry/DI'ya cevir — game acilista kayit olur, editor `@/game`
-     import etmez. (b) generic-editor hedefiyle uyumlu olan.
-  2. Kaynak-duzeyi import-graph denetimi ekle (engine testlerine veya ayri
-     script): engine -> editor/game/builder/src yasak, game -> editor yasak,
-     RuntimeSceneApp -> editor yasak; CI'ya bagla. (1. aksiyonun karari
-     editor->game kuralini belirler.)
-  3. CLAUDE.md Near-Term #1'i ve verify-dist.mjs baslik notunu guncelle: WARN
-     debt kapandi, strict geciyor.
-  4. `game/` ve `project/` placeholder'larinin kaderini netlestir: ya
-     `src/game -> game/` tasima plani (kucuk yesil adimlar) ya da
-     placeholder'lari kaldirip src-tabanli sahipligi sozlesmeye yaz (Baslik 1
-     ve Baslik 16 aksiyonlariyla baglantili).
-  5. (Dusuk oncelik) Yeni editor-only sembollerin verify-dist FAIL listesine
-     eklenmesi disiplinini fork/katki rehberine not et.
+  1. ✓ (2026-07-04) Editor<->game: secenek (b) registry/DI uygulandi. Yeni
+     `src/editor/gameEditorRegistry.ts` (editor-sahipli sozlesme + set/get) +
+     `src/game/editorCatalog.ts` (game saglayici, editor import etmez); enjekte
+     `src/main.ts` kompozisyon kokunde. `src/editor`'da sifir `@/game` importu;
+     game'in beton tipleri sozlesmeyi yapisal olarak karsiliyor (tsc yesil).
+  2. ✓ (2026-07-04) `builder/web/verify-imports.mjs` eklendi (`verify:imports`,
+     `build:verify`+CI): engine->editor/game/builder/src/project, editor->game,
+     game->editor, RuntimeSceneApp->editor yasak. Negatif self-test guard'i
+     dogruladi (FAIL+exit1), pozitif PASS.
+  3. ✓ (2026-07-04) CLAUDE.md Near-Term #1 "Done" olarak isaretlendi +
+     verify-dist.mjs baslik/WARN notu guncellendi (split landed, strict = net).
+  4. ✓ (2026-07-04) src-tabanli sahiplik: CLAUDE.md + ARCHITECTURE.md "extracted
+     under game/" / "project+game now hold real extracted code" iddialari
+     duzeltildi; game/+project/ README'leri "reserved placeholder; kod
+     src/game+src/project" olarak yeniden yazildi. `src/game -> game/` tasima
+     REDDEDILDI (fork maliyeti; minigolf gibi forklar src/game kullaniyor).
+  5. ✓ (2026-07-04) verify-dist FAIL-listesi + `verify:imports` disiplini
+     `GAME_FORK_WORKFLOW.md` "Platform katkisi yaparken" alt-basligina islendi.
 
 ## 3. Editor Deneyimi ve Uretim Akislari `[~] Kismi`
 
@@ -653,5 +689,6 @@ eklenecek.
 | 2026-07-03 | 1. Urun Kimligi | Kimlik net/tutarli, urun zarfi + "app" iddiasi + fork hikayesi beyansiz; README yok. | README + urun zarfi beyani + ARCHITECTURE.md fork guncellemesi (5 aksiyon, baslikta). | `[~]` |
 | 2026-07-04 | 1. Urun Kimligi | Beyan aksiyonlari (1-4) uygulandi: README.md eklendi, "app" iddiasi CLAUDE.md/AGENTS.md'den cikarildi ("game template" hizalamasi), urun zarfi + fork+upstream modeli ARCHITECTURE.md Direction'a beyan edildi. **Olgu duzeltmesi:** ilk fork "acilmamis" degildi — `minigolf` forku mevcut (origin=minigolf/upstream=Forge), upstream sync tekrarli calismis; reusable-platform hedefi ampirik dogrulandi. Karar `[x]`'e yukseltildi. | Kalan backlog (dusuk oncelik): `tools/create-project.mjs` scaffold + `GAME_FORK_WORKFLOW.md` statusunun guncellenmesi. | `[x]` |
 | 2026-07-03 | 2. Mimari Sinirlar | Dist siniri cift katmanli ve kanitli (strict scan PASS); editor->game 5 import sozlesmesiz; kaynak-duzeyi import denetimi yok; CLAUDE.md Near-Term #1 bayat. | Editor<->game karari + import-graph check + bayat not duzeltme (5 aksiyon, baslikta). | `[~]` |
+| 2026-07-04 | 2. Mimari Sinirlar | 5 aksiyon uygulandi: editor->game registry/DI ile ters cevrildi (yeni `gameEditorRegistry`+`editorCatalog`, `src/main.ts` enjekte; editor'da sifir `@/game`), kaynak-duzeyi `verify:imports` gate eklendi (`build:verify`+CI, negatif test dogrulandi), Near-Term #1 + verify-dist notu guncellendi, "extracted under game/" asiri-iddiasi duzeltildi + game/project "reserved" belgelendi (tasima reddedildi), fork rehberine disiplin notu. `build:verify` yesil (596 check + strict dist + import scan). | Kalan: yalnizca verify-dist heuristik sinirlamasi (kabul edilmis). | `[x]` |
 | 2026-07-03 | 3. Editor Deneyimi | Tam authoring dongusu + 7 alt-editor + 13 dev endpoint; 573 engine check gecti; UI katmaninda otomatik smoke yok, EditorUi 5.8k satir monolit, endpoint dokumantasyonu eksik. | Playwright smoke + EditorUi dilimleme + dokuman duzeltmeleri (5 aksiyon, baslikta). | `[~]` |
 | 2026-07-03 | 4. Runtime/Gameplay | Unreal-analog cerceve ucuca + saf cekirdekler testli (573 check); **bulgu:** behavior registry app-omru yasiyor (yorum sahne-omru diyor), travel'da `traveledTriggers` vb. sifirlanmiyor + entity id'ler level-bagimsiz → round-trip portal muhtemelen olu; RuntimeSceneApp 3.6k satir ikinci monolit; tum tarayici smoke'lari acik. | Sizintiyi dogrula+kapat (headless travel testi) + runtime Playwright smoke + kabuk dilimleme + save sozlesme dokumani (5 aksiyon, baslikta). | `[~]` |

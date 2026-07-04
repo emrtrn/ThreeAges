@@ -43,10 +43,10 @@ import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import type { Entity } from "@engine/scene/entity";
 import type { Vec3 } from "@engine/scene/layout";
 import {
-  createRagdollDriver,
-  type RagdollDriver,
-  type RagdollPhysicsBridge,
-} from "@/game/ragdollDriver";
+  getGameEditorCatalog,
+  type EditorRagdollDriver,
+  type EditorRagdollPhysicsBridge,
+} from "@/editor/gameEditorRegistry";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
 import {
@@ -192,7 +192,7 @@ export class SkeletalMeshEditor {
   /** Live PhAT "Simulate" preview: a local Rapier world driving the model's bones. */
   private physicsSim: {
     readonly physics: PhysicsSubsystem;
-    readonly driver: RagdollDriver;
+    readonly driver: EditorRagdollDriver;
     /** Pre-sim local transforms, restored on stop so authoring resumes from rest. */
     readonly restore: Map<Object3D, { position: Vector3; quaternion: Quaternion; scale: Vector3 }>;
   } | null = null;
@@ -1627,13 +1627,18 @@ export class SkeletalMeshEditor {
       physics.dispose();
       return;
     }
-    const bridge: RagdollPhysicsBridge = {
+    const bridge: EditorRagdollPhysicsBridge = {
       spawnRagdoll: (desc, options) => physics.spawnRagdoll(desc, options),
       sampleRagdoll: (id) => physics.sampleRagdoll(id),
       despawnRagdoll: (id) => physics.despawnRagdoll(id),
     };
     const restore = this.snapshotModelPose();
-    const driver = createRagdollDriver(this.modelGroup, bodies, this.skeleton.physicsConstraints, bridge);
+    const driver = getGameEditorCatalog().createRagdollDriver(
+      this.modelGroup,
+      bodies,
+      this.skeleton.physicsConstraints,
+      bridge,
+    );
     if (!driver) {
       physics.dispose();
       return;

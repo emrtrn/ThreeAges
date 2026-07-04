@@ -117,14 +117,26 @@ docs, raw authoring assets, or local dev scripts.
 
 Top-level migration dependency rules:
 
-- `engine/*` must not import `editor/*`, `builder/*`, or `game/*`.
-- `editor/*` may import `engine/*`, but must remain dev/editor-route owned.
+- `engine/*` must not import `editor/*`, `builder/*`, `game/*`, or `src/*` (the
+  engine layer is self-contained: engine + externals only).
+- `editor/*` may import `engine/*`, but must remain dev/editor-route owned and
+  must not import `game/*` — the editor core stays generic. Game data the editor
+  renders (Game Modes, behavior ids, montage/input bindings, the ragdoll driver)
+  is injected via `@/editor/gameEditorRegistry`, wired by `src/main.ts`.
 - `game/*` may import `engine/*`, but must not import `editor/*`.
 - `builder/*` may read project/engine metadata and built output, but should not
   become runtime code.
-- `project/*` is data/config ownership, not runtime implementation.
-- `src/*` remains the active implementation; the `engine/*`, `editor/*`,
-  `builder/*`, and `game/*` boundaries hold the extracted modules.
+- `project/*` is data/config ownership, not runtime implementation (currently
+  `src/project` + `public/`; top-level `project/` is a reserved placeholder).
+- `src/*` remains the active implementation; the `engine/*`, `editor/*`, and
+  `builder/*` boundaries hold the extracted modules, while the game boundary
+  stays in `src/game` (top-level `game/` is a reserved placeholder). The editor
+  never imports `@/game`: game data the editor renders is injected at startup
+  via `@/editor/gameEditorRegistry` (wired in `src/main.ts`).
+
+These directions are enforced at the gate by `builder/web/verify-imports.mjs`
+(`npm run verify:imports`, part of `build:verify`), a source-level scan that
+fails on a forbidden cross-layer import.
 
 Runtime command surfaces follow **engine-interface / host-implementation** (the
 `AudioBus` and `TransformSink` precedent): the engine defines a typed interface,
@@ -366,9 +378,12 @@ Forge/
 
 Package boundaries such as `engine/core`, `engine/scene`,
 `engine/render-three`, `engine/assets`, `editor/core`, `editor/gizmos`,
-`editor/inspector`, `builder/web`, `project`, and `game` now hold real
-extracted code. Keep new code inside the boundary that owns it; do not
-introduce empty architecture for its own sake.
+`editor/inspector`, and `builder/web` now hold real extracted code. The
+`game`/`project` boundary is **not** extracted to the top level: game code lives
+in `src/game` and project ownership in `src/project` + `public/`, so downstream
+forks own `src/game` without a disruptive move (top-level `game/` and `project/`
+are reserved placeholders — see their READMEs). Keep new code inside the
+boundary that owns it; do not introduce empty architecture for its own sake.
 
 ## Not In Scope Yet
 

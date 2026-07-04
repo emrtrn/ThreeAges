@@ -1,13 +1,18 @@
 # Project
 
-Project configuration and authoring data will move here when the project data
-boundary is migrated from `public/`.
+**Project ownership lives in `public/` (data) and `src/project` (manifest/path
+helpers), not here.** This top-level `project/` is a **reserved placeholder**;
+the `@project/*` path alias points here and is currently unused. Keeping live
+project files in `public/` (loaded through `src/project`) avoids a disruptive
+move that every downstream fork would have to merge.
 
 Current state:
 
-- `public/project.3dgame.json` is still the active manifest.
-- `public/layouts/` still stores active layout JSON.
-- `public/assets/` still stores active runtime assets and manifests.
+- `public/project.3dgame.json` is the active manifest.
+- `public/layouts/` stores active layout JSON.
+- `public/assets/` stores active runtime assets and manifests.
+- `src/project/` holds the loader / public-path helpers (`ProjectSystem`,
+  content/asset tree).
 
 Rules:
 
