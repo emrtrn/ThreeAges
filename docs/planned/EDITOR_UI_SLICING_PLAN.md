@@ -18,16 +18,26 @@ composition/wiring layer.
 - `src/editor/panels/outliner/`: outliner row rendering and hierarchy DnD.
 - `src/editor/panels/world/`: World Settings renderer/binders.
 
-## First Extraction Slice
+## First Extraction Slice `[x] Completed 2026-07-04`
 
-1. Move pure Details HTML helpers (`vectorRow`, `scaleRow`, `pivotRow`,
+1. `[x]` Move pure Details HTML helpers (`vectorRow`, `scaleRow`, `pivotRow`,
    `axisField`) into `src/editor/panels/details/transformRows.ts`.
-2. Move generic instance/character Details rendering and binding into
+2. `[x]` Move generic instance/character Details rendering and binding into
    `src/editor/panels/details/instanceDetails.ts`.
-3. Keep behavior identical and prove with:
+3. `[x]` Keep behavior identical and prove with:
    - `npx tsc --noEmit`
    - `npm run test:engine`
    - `npm run smoke:browser`
+
+Evidence (2026-07-04):
+
+- `src/editor/panels/details/transformRows.ts` owns the transform row helpers.
+- `src/editor/panels/details/instanceDetails.ts` owns generic Details HTML and
+  DOM binding for instance/character/actor selections.
+- `EditorUi.ts` still owns composition, status, toolbar, save/load, and the
+  larger material/collision/physics/components/metadata sub-renderers.
+- Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (596 checks), `npm.cmd run smoke:browser` (1 Chromium smoke).
 
 ## Rules
 

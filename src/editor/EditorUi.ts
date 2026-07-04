@@ -110,6 +110,11 @@ import {
   type EditorTool,
   type TransformSpace,
 } from "@editor/core/tools";
+import {
+  bindInstanceDetails,
+  renderInstanceDetails,
+} from "./panels/details/instanceDetails";
+import { scaleRow, vectorRow } from "./panels/details/transformRows";
 
 type InspectorTab = "details" | "world";
 
@@ -3104,168 +3109,40 @@ export class EditorUi {
     }
 
     this.detailsScale = [...selection.scale];
-
-    // An Ambient Sound emitter is a transform + Audio component only: it has no
-    // mesh/material, no collision/physics, and no pivot/placement affordances, so
-    // those Details sections are hidden to keep the panel focused on the sound.
-    const isAmbientSound =
-      selection.kind === "instance" && selection.assetId === AMBIENT_SOUND_ASSET_ID;
-
-    const lockedAttr = selection.locked ? "disabled" : "";
-    const wallDisabled = selection.locked || selection.kind === "character" ? "disabled" : "";
-    const castShadowToggle =
-      selection.kind === "character"
-        ? `<label class="detail-toggle">
-          <input type="checkbox" data-detail-toggle="castShadow" ${
-            selection.castShadow ? "checked" : ""
-          } />
-          <span>Cast Shadow</span>
-        </label>`
-        : "";
-    this.detailsBody.innerHTML = `
-      <div class="detail-heading">
-        <strong>${escapeHtml(selection.label)}</strong>
-        <span>${selection.kind} / ${escapeHtml(selection.assetId)}</span>
-      </div>
-      <label class="detail-row">
-        <span>Name</span>
-        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
-          placeholder="${escapeHtml(selection.assetId)}" />
-      </label>
-      <div class="detail-row">
-        <span>Category</span>
-        <span class="detail-value">${
-          selection.category ? escapeHtml(selection.category) : "â€”"
-        }</span>
-      </div>
-      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
-      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
-      ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
-      ${isAmbientSound ? "" : pivotRow(selection.pivot, selection.locked, this.app.isPivotEditMode())}
-      ${isAmbientSound ? "" : this.renderMaterialSection(selection)}
-      <div class="detail-section">
-        <div class="detail-actions-row">
-          <button type="button" data-detail-action="reset" ${lockedAttr}
-            title="Reset rotation to 0 and scale to 1">Reset</button>
-          <button type="button" data-detail-action="copy"
-            title="Copy this transform">Copy</button>
-          <button type="button" data-detail-action="paste" ${lockedAttr}
-            title="Paste the copied transform">Paste</button>
-        </div>
-      </div>
-      ${
-        isAmbientSound
-          ? ""
-          : `<div class="detail-section">
-        <div class="detail-section-title">Placement</div>
-        <div class="detail-actions-row">
-          <button type="button" data-detail-action="snap-floor" ${lockedAttr}
-            title="Drop onto the surface below (End)">Snap to Floor</button>
-          <button type="button" data-detail-action="snap-wall" ${wallDisabled}
-            title="Snap flush against the nearest wall">Snap to Wall</button>
-        </div>
-        <label class="detail-toggle">
-          <input type="checkbox" data-detail-toggle="locked" ${selection.locked ? "checked" : ""} />
-          <span>Lock Movement</span>
-        </label>
-        ${castShadowToggle}
-      </div>`
-      }
-      ${isAmbientSound ? "" : this.renderCollisionSection(selection)}
-      ${isAmbientSound ? "" : this.renderPhysicsSection(selection, selection.locked)}
-      ${this.renderComponentsSection(selection)}
-      ${this.renderMetadataSections(selection)}
-    `;
-
-    this.detailsBody
-      .querySelectorAll<HTMLInputElement>('input[data-detail="pr"]')
-      .forEach((input) => {
-        input.addEventListener("focus", () => this.beginDetailsEdit());
-        input.addEventListener("input", () => {
-          this.beginDetailsEdit();
-          this.applyDetails();
-        });
-        input.addEventListener("change", () => this.commitDetailsEdit());
-      });
-
-    this.detailsBody
-      .querySelectorAll<HTMLInputElement>('input[data-detail="scale"]')
-      .forEach((input) => {
-        input.addEventListener("focus", () => this.beginDetailsEdit());
-        input.addEventListener("input", () => {
-          this.beginDetailsEdit();
-          this.applyScaleInput(input);
-          this.applyDetails();
-        });
-        input.addEventListener("change", () => this.commitDetailsEdit());
-      });
-
-    this.detailsBody
-      .querySelector<HTMLButtonElement>("[data-scale-lock]")
-      ?.addEventListener("click", () => {
-        this.app.setSelectionScaleLocked(!selection.scaleLocked);
-      });
-
-    this.detailsBody
-      .querySelectorAll<HTMLInputElement>("input[data-pivot]")
-      .forEach((input) => {
-        input.addEventListener("change", () => this.commitPivotInput());
-      });
-
-    this.detailsBody
-      .querySelectorAll<HTMLButtonElement>("[data-pivot-preset]")
-      .forEach((button) => {
-        button.addEventListener("click", () => {
-          const preset = button.dataset.pivotPreset;
-          if (preset === "reset" || preset === "center" || preset === "base") {
-            this.app.applySelectionPivotPreset(preset);
-          }
-        });
-      });
-
-    this.detailsBody
-      .querySelector<HTMLButtonElement>("[data-pivot-drag]")
-      ?.addEventListener("click", () => this.app.togglePivotEditMode());
-
-    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-detail-name]");
-    nameInput?.addEventListener("change", () => {
-      this.app.renameSceneObject(selection.id, nameInput.value);
+    this.detailsBody.innerHTML = renderInstanceDetails({
+      selection,
+      pivotEditActive: this.app.isPivotEditMode(),
+      sections: {
+        material: this.renderMaterialSection(selection),
+        collision: this.renderCollisionSection(selection),
+        physics: this.renderPhysicsSection(selection, selection.locked),
+        components: this.renderComponentsSection(selection),
+        metadata: this.renderMetadataSections(selection),
+      },
     });
 
-    this.detailsBody
-      .querySelectorAll<HTMLButtonElement>("[data-detail-action]")
-      .forEach((button) => {
-        button.addEventListener("click", () =>
-          this.handleDetailAction(button.dataset.detailAction ?? ""),
-        );
-      });
-
-    this.detailsBody
-      .querySelectorAll<HTMLInputElement>("[data-detail-toggle]")
-      .forEach((toggle) => {
-        toggle.addEventListener("change", () =>
-          this.handleDetailToggle(toggle.dataset.detailToggle ?? "", toggle.checked),
-        );
-      });
-
-    this.detailsBody
-      .querySelector<HTMLSelectElement>("[data-collision-preset]")
-      ?.addEventListener("change", (event) => {
-        const value = (event.target as HTMLSelectElement).value;
-        this.app.setSelectionCollisionPreset(value ? (value as CollisionPresetId) : undefined);
-      });
-    this.bindCollisionOverrideInputs(selection);
-
-    this.detailsBody
-      .querySelector<HTMLSelectElement>("[data-material-slot]")
-      ?.addEventListener("change", (event) => {
-        const value = (event.target as HTMLSelectElement).value;
-        this.app.setSelectionMaterialSlot(value || undefined);
-      });
-
-    this.bindPhysicsInputs();
-    this.bindComponentsInputs();
-    this.bindMetadataInputs();
+    bindInstanceDetails({
+      body: this.detailsBody,
+      selection,
+      beginDetailsEdit: () => this.beginDetailsEdit(),
+      applyDetails: () => this.applyDetails(),
+      applyScaleInput: (input) => this.applyScaleInput(input),
+      commitDetailsEdit: () => this.commitDetailsEdit(),
+      setSelectionScaleLocked: (locked) => this.app.setSelectionScaleLocked(locked),
+      commitPivotInput: () => this.commitPivotInput(),
+      applySelectionPivotPreset: (preset) => this.app.applySelectionPivotPreset(preset),
+      togglePivotEditMode: () => this.app.togglePivotEditMode(),
+      renameSceneObject: (id, name) => this.app.renameSceneObject(id, name),
+      handleDetailAction: (action) => this.handleDetailAction(action),
+      handleDetailToggle: (toggle, checked) => this.handleDetailToggle(toggle, checked),
+      setSelectionCollisionPreset: (preset) => this.app.setSelectionCollisionPreset(preset),
+      bindCollisionOverrideInputs: (currentSelection) =>
+        this.bindCollisionOverrideInputs(currentSelection),
+      setSelectionMaterialSlot: (assetId) => this.app.setSelectionMaterialSlot(assetId),
+      bindPhysicsInputs: () => this.bindPhysicsInputs(),
+      bindComponentsInputs: () => this.bindComponentsInputs(),
+      bindMetadataInputs: () => this.bindMetadataInputs(),
+    });
   }
 
   /**
@@ -6001,121 +5878,6 @@ function requireElement<T extends HTMLElement>(root: ParentNode, selector: strin
   const element = root.querySelector(selector);
   if (!element) throw new Error(`Missing editor element: ${selector}`);
   return element as T;
-}
-
-const AXES = ["X", "Y", "Z"] as const;
-
-/** A Location/Rotation row: three labelled, colour-coded X/Y/Z fields side by side. */
-function vectorRow(
-  label: string,
-  prefix: "p" | "r",
-  values: readonly [number, number, number],
-  step: number,
-  disabled = false,
-): string {
-  const fields = AXES.map((axis, index) =>
-    axisField(
-      `${prefix}${axis.toLowerCase()}`,
-      axis,
-      index,
-      values[index] ?? 0,
-      step,
-      "pr",
-      disabled,
-    ),
-  ).join("");
-  return `
-    <div class="detail-vector">
-      <span class="detail-vector-label">${label}</span>
-      <div class="vector-fields">${fields}</div>
-    </div>
-  `;
-}
-
-/** The Scale row: three X/Y/Z fields plus a proportional-lock toggle. */
-function scaleRow(
-  values: readonly [number, number, number],
-  locked: boolean,
-  transformLocked = false,
-): string {
-  const fields = AXES.map((axis, index) =>
-    axisField(
-      `s${axis.toLowerCase()}`,
-      axis,
-      index,
-      values[index] ?? 0,
-      0.05,
-      "scale",
-      transformLocked,
-    ),
-  ).join("");
-  return `
-    <div class="detail-vector detail-vector-scale">
-      <span class="detail-vector-label">
-        <span>Scale</span>
-        <button type="button" class="scale-lock${locked ? " on" : ""}"
-          data-scale-lock title="${locked ? "Unlock scale ratio" : "Lock scale ratio"}"
-          aria-pressed="${locked}">${locked ? "ğŸ”’" : "ğŸ”“"}</button>
-      </span>
-      <div class="vector-fields">${fields}</div>
-    </div>
-  `;
-}
-
-/** The Pivot row: three X/Y/Z fields (local model space), drag toggle, presets. */
-function pivotRow(
-  values: readonly [number, number, number],
-  disabled = false,
-  dragActive = false,
-): string {
-  const fields = AXES.map(
-    (axis, index) => `
-    <label class="axis-field axis-${axis.toLowerCase()}">
-      <span class="axis-tag">${axis}</span>
-      <input data-pivot data-axis="${index}" type="number" step="0.05"
-        value="${Number((values[index] ?? 0).toFixed(3))}" ${disabled ? "disabled" : ""} />
-    </label>`,
-  ).join("");
-  const off = disabled ? "disabled" : "";
-  return `
-    <div class="detail-vector">
-      <span class="detail-vector-label">Pivot</span>
-      <div class="vector-fields">${fields}</div>
-    </div>
-    <div class="detail-actions-row">
-      <button type="button" class="pivot-drag-toggle${dragActive ? " on" : ""}"
-        data-pivot-drag aria-pressed="${dragActive}" ${off}
-        title="Drag the gizmo in the viewport to set the pivot">${
-          dragActive ? "â— Dragging pivot" : "Drag in viewport"
-        }</button>
-    </div>
-    <div class="detail-actions-row">
-      <button type="button" data-pivot-preset="reset" ${off}
-        title="Pivot at the model origin">Reset</button>
-      <button type="button" data-pivot-preset="center" ${off}
-        title="Pivot at the bounds centre">Center</button>
-      <button type="button" data-pivot-preset="base" ${off}
-        title="Pivot at the bottom centre (e.g. a hinge resting on the floor)">Base</button>
-    </div>
-  `;
-}
-
-function axisField(
-  name: string,
-  axis: string,
-  index: number,
-  value: number,
-  step: number,
-  detail: "pr" | "scale",
-  disabled = false,
-): string {
-  return `
-    <label class="axis-field axis-${axis.toLowerCase()}">
-      <span class="axis-tag">${axis}</span>
-      <input name="${name}" data-testid="detail-${name}" data-detail="${detail}" data-axis="${index}"
-        type="number" step="${step}" value="${Number(value.toFixed(3))}" ${disabled ? "disabled" : ""} />
-    </label>
-  `;
 }
 
 function physicsLockRow(
