@@ -291,9 +291,9 @@ akislari incelenecek.
   4. Autosave davranisini dokumante et (hangi eylem neyi ne zaman yazar) ve
      fork rehberine "dev server acikken default layout kirlenir" notunu ekle;
      gerekirse autosave'i opt-in yap.
-  5. (Yol haritasi) VFX editoru (`docs/ongoing/VFX_Lite_Plan.md`) bu alt-editor
-     kalibiyla uygulanacak ilk yeni ornek olarak siralansin; Content Browser
-     placement-rule affordances onu izlesin.
+  5. (Yol haritasi) VFX editoru (`docs/completed/VFX_Lite_Plan.md`, tamamlandi)
+     bu alt-editor kalibiyla uygulanan ilk ornekti; Content Browser
+     placement-rule affordances siradaki adim olarak kalsin.
 
 ## 4. Runtime ve Gameplay Temelleri `[~] Kismi`
 
