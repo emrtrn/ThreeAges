@@ -286,6 +286,13 @@ akislari incelenecek.
   tam authoring dongusu + 7 ozel alt-editor + 13 dev yazma endpoint'i. Zayif
   ayak dogrulama: UI katmaninin hicbir otomatik smoke'u yok ve ana kabuk
   5.8k satirlik monolit.
+- Guncelleme (2026-07-04): Aksiyon 1/3/4/5 uygulandi; Aksiyon 2 icin
+  dilimleme plani yazildi. Playwright Chromium smoke eklendi
+  (`npm run smoke:browser`): `?editor` boot, shape asset placement, Details
+  transform, undo/redo, Save Layout, temiz editor reload ve runtime `/` boot
+  geciyor. Smoke aktif layout'u gecici kopyaya alir ve manifest'i test sonunda
+  geri yukler; template layout'u kirlenmez. Karar simdilik `[~]`: browser
+  dogrulama acigi kapandi, fakat `EditorUi.ts` dilimleme henuz uygulanmadi.
 - Kanit:
   - Cekirdek authoring dongusu kodda: gizmo (`editor/gizmos/` axes/builder/
     handles/interaction/transformDrag), secim + coklu secim + hiyerarsi
@@ -309,10 +316,10 @@ akislari incelenecek.
     SkeletalMesh/Persona (3.0k), StaticMesh (1.7k), Material (898), Dialogue
     (725), UI Widget (732), SoundCue (581) — her biri kendi store'u + dev-save
     endpoint'iyle.
-  - Yazma yuzeyi: `vite.config.ts`'te 13 dev endpoint (`__save-layout/
-    collision/material-slots/skeleton/soundcue/effect/dialogue-voice/
-    dialogue-line/ui/uvw/actor/material` + `__import-asset`); layout +
-    skeleton yollari validator'lu.
+  - Yazma yuzeyi: `vite.config.ts`'te 18 dev mutasyon endpoint'i (`__save-layout`,
+    sidecar/asset save endpointleri, Content Browser create/rename/delete/import,
+    `__new-behavior`, `__open-level`) + read-only `__project-dir`; structured
+    yollarin validator/normalizer kapilari var.
   - Play akisi: toolbar "Play (P)" = layout'u kaydet + runtime route'unu (`/`)
     yeni sekmede ac + kamera pozu handoff (`src/play/cameraHandoff.ts`,
     `EditorUi.ts:949-962`).
@@ -322,7 +329,8 @@ akislari incelenecek.
   - Test kapsami: engine testleri yerelde calistirildi — **573 check gecti**
     (2026-07-03). Editorden saf cikarilan mantik test altinda: Section 7
     EditorSceneController state, Section 8 gizmo drag matematigi, Section 9
-    wall-snap, Section 10 save validator.
+    wall-snap, Section 10 save validator. **Guncelleme 2026-07-04:** browser
+    smoke da var ve yesil (`npm run smoke:browser`, 1 Chromium test, 1.8m).
 - Yeterli olanlar:
   - Unreal-esintili cekirdek dongu (sec → tasi → duzenle → kaydet → geri al →
     oynat) ucuca kodda; komut disiplini, snap, hiyerarsi, coklu secim dahil.
@@ -337,7 +345,8 @@ akislari incelenecek.
     manuel smoke'a dayaniyor ve acik kullanici smoke borclari birikiyor
     (A5.5 browser smoke, platform foundations smoke'lari). 5.8k satirlik
     `EditorUi` + 3k `SkeletalMeshEditor` DOM'a gomulu — regresyon ancak elle
-    yakalanir.
+    yakalanir. **(Cozuldu 2026-07-04, Aksiyon 1: Playwright smoke + Chromium
+    kurulumu + `smoke:browser`; CLAUDE Near-Term #2 kapandi.)**
   - **Monolit kabuk:** `EditorUi.ts` 5,800 satir tek sinif (+ 2,889 satir
     css). Details panel render'lari dahil her sey icinde; yeni aktor tipi =
     monolite bir render metodu daha. Buyume bu bicimde surdurulebilir degil.
@@ -345,10 +354,15 @@ akislari incelenecek.
     endpoint dokumante ediyor, gercekte 13 + import var. ARCHITECTURE'daki
     "editor SceneApp Play mode" ifadesinin kodda karsiligi yok (Play = route
     acar; in-viewport PIE yok — bilincli gorunuyor ama beyansiz). Near-Term
-    #3'un "previews" kismi bayat (thumbnail'lar zaten var).
+    #3'un "previews" kismi bayat (thumbnail'lar zaten var). **(Cozuldu
+    2026-07-04, Aksiyon 3: CLAUDE/ARCHITECTURE endpoint listesi guncellendi;
+    Play route handoff olarak beyan edildi; Near-Term #3 placement-rule
+    affordances'a daraltildi.)**
   - **Autosave yan etkisi:** dev server acikken default layout/world settings
     otomatik yeniden yaziliyor (hafiza notu + CLAUDE.md autosave ifadesi) —
-    fork/template hijyeni icin tuzak; repo dokumaninda yazili degil.
+    fork/template hijyeni icin tuzak; repo dokumaninda yazili degil. **(Cozuldu
+    2026-07-04, Aksiyon 4: CLAUDE ve fork rehberi dev editor yazma/hijyen
+    notuyla guncellendi.)**
 - Karar: `[~] Kismi` — ozellik genisligi platform iddiasini tasiyor;
   `[x]`'i engelleyen, UI dogrulama acigi (otomatik smoke yok + manuel smoke
   borcu) ve monolit kabugun bakim riski. Veri kaybi riski Baslik 6'nin konusu
@@ -369,6 +383,12 @@ akislari incelenecek.
   5. (Yol haritasi) VFX editoru (`docs/completed/VFX_Lite_Plan.md`, tamamlandi)
      bu alt-editor kalibiyla uygulanan ilk ornekti; Content Browser
      placement-rule affordances siradaki adim olarak kalsin.
+  - **Guncel aksiyon durumu (2026-07-04):** Aksiyon 1 tamamlandi
+    (`smoke:browser` yesil); Aksiyon 2 plan olarak tamamlandi
+    (`docs/planned/EDITOR_UI_SLICING_PLAN.md`, refactor uygulamasi kaldi);
+    Aksiyon 3/4 dokumanlari guncellendi; Aksiyon 5 backlog karari olarak
+    korundu. Guncel karar hala `[~]`: browser dogrulama acigi kapandi, fakat
+    `EditorUi.ts` monolit refactoru uygulanmadan `[x]` degil.
 
 ## 4. Runtime ve Gameplay Temelleri `[~] Kismi`
 
@@ -691,4 +711,5 @@ eklenecek.
 | 2026-07-03 | 2. Mimari Sinirlar | Dist siniri cift katmanli ve kanitli (strict scan PASS); editor->game 5 import sozlesmesiz; kaynak-duzeyi import denetimi yok; CLAUDE.md Near-Term #1 bayat. | Editor<->game karari + import-graph check + bayat not duzeltme (5 aksiyon, baslikta). | `[~]` |
 | 2026-07-04 | 2. Mimari Sinirlar | 5 aksiyon uygulandi: editor->game registry/DI ile ters cevrildi (yeni `gameEditorRegistry`+`editorCatalog`, `src/main.ts` enjekte; editor'da sifir `@/game`), kaynak-duzeyi `verify:imports` gate eklendi (`build:verify`+CI, negatif test dogrulandi), Near-Term #1 + verify-dist notu guncellendi, "extracted under game/" asiri-iddiasi duzeltildi + game/project "reserved" belgelendi (tasima reddedildi), fork rehberine disiplin notu. `build:verify` yesil (596 check + strict dist + import scan). | Kalan: yalnizca verify-dist heuristik sinirlamasi (kabul edilmis). | `[x]` |
 | 2026-07-03 | 3. Editor Deneyimi | Tam authoring dongusu + 7 alt-editor + 13 dev endpoint; 573 engine check gecti; UI katmaninda otomatik smoke yok, EditorUi 5.8k satir monolit, endpoint dokumantasyonu eksik. | Playwright smoke + EditorUi dilimleme + dokuman duzeltmeleri (5 aksiyon, baslikta). | `[~]` |
+| 2026-07-04 | 3. Editor Deneyimi | Playwright Chromium smoke eklendi ve yesil (`npm run smoke:browser`, 1 test, 1.8m): `?editor` boot, shape placement, Details transform, undo/redo, Save Layout, temiz editor reload, runtime `/` boot. Endpoint/Play/dev-editor-yazma dokumanlari guncellendi; `EDITOR_UI_SLICING_PLAN.md` eklendi. | Kalan uygulama: `EditorUi.ts` details/content/outliner/world panel dilimleme refactoru. | `[~]` |
 | 2026-07-03 | 4. Runtime/Gameplay | Unreal-analog cerceve ucuca + saf cekirdekler testli (573 check); **bulgu:** behavior registry app-omru yasiyor (yorum sahne-omru diyor), travel'da `traveledTriggers` vb. sifirlanmiyor + entity id'ler level-bagimsiz → round-trip portal muhtemelen olu; RuntimeSceneApp 3.6k satir ikinci monolit; tum tarayici smoke'lari acik. | Sizintiyi dogrula+kapat (headless travel testi) + runtime Playwright smoke + kabuk dilimleme + save sozlesme dokumani (5 aksiyon, baslikta). | `[~]` |

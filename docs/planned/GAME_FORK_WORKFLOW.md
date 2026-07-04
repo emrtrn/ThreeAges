@@ -106,6 +106,13 @@ Oyun reposunda yapılacaklar (yalnızca `public/` ve `src/game` içinde):
    - `engine/`, `editor/`, `builder/`'a oyun-özel kod **ekleme**.
 
 4. **Layout data** → `public/layouts/`, `public/project.3dgame.json`.
+   - Dev editor (`?editor`) ayni repo dosyalarina yazar: **Save Layout** aktif
+     layout'u, snap ayarlarini ve World Settings degisikliklerini kaydeder;
+     **Open Level** `project.3dgame.json` icindeki `editor.defaultScene`
+     degerini degistirir; Content Browser create/rename/delete/import
+     aksiyonlari `public/` altindaki asset/layout referanslarini gunceller.
+     Editor/dev server acikken fork hijyeni icin `git status` kontrolunu
+     aliskanlik yap; template/default layout'u istemeden kirletme.
 
 ---
 

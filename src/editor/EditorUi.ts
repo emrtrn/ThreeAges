@@ -339,6 +339,7 @@ export class EditorUi {
     this.root = document.createElement("div");
     this.root.id = "editor-ui";
     this.root.className = "editor-shell";
+    this.root.dataset.testid = "forge-editor";
     this.root.addEventListener("contextmenu", (event) => event.preventDefault());
     this.root.innerHTML = `
       <header class="editor-topbar">
@@ -392,7 +393,7 @@ export class EditorUi {
         </div>
         <div class="editor-actions">
           <div class="add-actor-menu">
-            <button type="button" data-add-actor-button title="Add actor">+ Add Actor</button>
+            <button type="button" data-add-actor-button data-testid="add-actor-button" title="Add actor">+ Add Actor</button>
             <div class="add-actor-popover" data-add-actor-popover>
               <div class="add-actor-category">
                 <button type="button" class="add-actor-category-label">Lights</button>
@@ -405,7 +406,7 @@ export class EditorUi {
               <div class="add-actor-category">
                 <button type="button" class="add-actor-category-label">Shapes</button>
                 <div class="add-actor-submenu">
-                  <button type="button" data-add-shape="cube">Cube</button>
+                  <button type="button" data-add-shape="cube" data-testid="add-shape-cube">Cube</button>
                   <button type="button" data-add-shape="sphere">Sphere</button>
                   <button type="button" data-add-shape="cylinder">Cylinder</button>
                   <button type="button" data-add-shape="cone">Cone</button>
@@ -460,11 +461,11 @@ export class EditorUi {
               </label>
             </div>
           </div>
-          <button type="button" data-action="undo" title="Undo">Undo</button>
-          <button type="button" data-action="redo" title="Redo">Redo</button>
+          <button type="button" data-action="undo" data-testid="editor-undo" title="Undo">Undo</button>
+          <button type="button" data-action="redo" data-testid="editor-redo" title="Redo">Redo</button>
           <button type="button" data-action="delete">Delete</button>
-          <button type="button" data-action="play" title="Save & open runtime (P)">Play</button>
-          <button type="button" data-action="save" class="primary">Save Layout</button>
+          <button type="button" data-action="play" data-testid="editor-play" title="Save & open runtime (P)">Play</button>
+          <button type="button" data-action="save" data-testid="editor-save" class="primary">Save Layout</button>
         </div>
       </header>
       <aside class="editor-panel editor-outliner">
@@ -544,7 +545,7 @@ export class EditorUi {
         <button type="button" class="content-drawer-toggle" data-content-toggle aria-expanded="false">
           Content Drawer
         </button>
-        <span data-status>Ready</span>
+        <span data-status data-testid="editor-status">Ready</span>
       </footer>
     `;
 
@@ -2374,6 +2375,7 @@ export class EditorUi {
     const row = document.createElement("div");
     row.className = "outliner-row";
     row.dataset.objectId = object.id;
+    row.dataset.testid = "outliner-row";
     row.draggable = true;
     if (object.selected) row.classList.add("active");
     if (object.hidden) row.classList.add("is-hidden");
@@ -6110,7 +6112,7 @@ function axisField(
   return `
     <label class="axis-field axis-${axis.toLowerCase()}">
       <span class="axis-tag">${axis}</span>
-      <input name="${name}" data-detail="${detail}" data-axis="${index}"
+      <input name="${name}" data-testid="detail-${name}" data-detail="${detail}" data-axis="${index}"
         type="number" step="${step}" value="${Number(value.toFixed(3))}" ${disabled ? "disabled" : ""} />
     </label>
   `;

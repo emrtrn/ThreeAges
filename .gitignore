@@ -3,6 +3,9 @@ node_modules/
 dist/
 builds/
 .dev-server/
+.playwright-smoke/
+playwright-report/
+test-results/
 *.local
 
 # Claude Code local settings (machine-specific permissions)

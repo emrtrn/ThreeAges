@@ -68,7 +68,15 @@ Removed architecture:
 Kept dev middleware:
 
 - `/__save-layout`: writes local authoring data under this repo's `public/`.
-- `/__project-dir`: read-only Content Browser directory tree scoped to `public/`.
+- `/__project-dir/<path>`: read-only Content Browser directory tree scoped to
+  `public/`.
+- Structured sidecar/content writes: `/__save-collision`, `/__save-actor`,
+  `/__new-behavior`, `/__save-material-slots`, `/__save-skeleton`,
+  `/__save-material`, `/__save-ui`, `/__save-soundcue`, `/__save-effect`,
+  `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
+  `/__content-new`, `/__content-rename`, `/__content-delete`,
+  `/__import-asset`, and `/__open-level`. These are Vite dev-server only; they
+  are not production runtime APIs.
 
 ## Ownership Boundaries
 
@@ -307,6 +315,10 @@ Not allowed:
 
 - relying on editor code in production builds;
 - writing outside the local copied repo's public data.
+
+Editor Play is a route handoff, not an in-viewport PIE mode: the editor saves
+the current layout, stores a temporary camera pose handoff, and opens the Game
+Mode route (`/`) in a new tab/window.
 
 ### Package Mode
 

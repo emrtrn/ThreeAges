@@ -35,6 +35,8 @@ engine/editor.
 - `docs/architecture/ARCHITECTURE.md`: boundary contract.
 - `docs/architecture/ARCHITECTURE_PLAN_SOURCE.md`: imported source architecture plan.
 - `docs/architecture/LAUNCH_WORKFLOW.md`: practical VS Code and URL launch path.
+- `docs/planned/EDITOR_UI_SLICING_PLAN.md`: first extraction plan for keeping
+  `EditorUi.ts` from growing as a monolith.
 - `docs/architecture/UNREAL_BASICS_LESSONS.md`: the canonical roadmap. Top section is the
   **active execution track** (Gameplay/Runtime, G1–G6, with status legend +
   Progress Log); §1–§6 are the Unreal-derived architecture lessons (north star +
@@ -105,10 +107,21 @@ engine/editor.
 
 ## Authoring Data Flow
 
-- `/__save-layout` writes the layout to `public/<defaultScene>` and snap settings
-  to `public/project.3dgame.json`.
-- `/__project-dir` is the read-only Content Browser directory tree, scoped to
-  `public/`.
+- `/__save-layout` writes the active layout to `public/<defaultScene>` and snap
+  settings to `public/project.3dgame.json`.
+- `/__project-dir/<path>` is the read-only Content Browser directory tree,
+  scoped to `public/`.
+- Dev-only mutation endpoints are public-root or source-stub scoped and
+  validator guarded where they write structured data:
+  `/__save-collision`, `/__save-actor`, `/__new-behavior`,
+  `/__save-material-slots`, `/__save-skeleton`, `/__save-material`,
+  `/__save-ui`, `/__save-soundcue`, `/__save-effect`,
+  `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
+  `/__content-new`, `/__content-rename`, `/__content-delete`,
+  `/__import-asset`, and `/__open-level`.
+- Editor Play is not an in-viewport PIE mode: the toolbar saves the layout,
+  stores a temporary camera handoff, and opens the runtime route (`/`) in a new
+  tab/window.
 - These dev endpoints do not exist in the production build.
 
 ## Current Capabilities
@@ -120,8 +133,11 @@ engine/editor.
   drag-to-parent, cascade move/rotate/scale), pivot editing (numeric + presets
   + drag-in-viewport).
 - Scene Outliner, Details panel (transform + schema-driven gameplay metadata),
-  Content Browser, undo/redo command stack, World Settings (background/ambient
-  with autosave).
+  Content Browser, undo/redo command stack, World Settings (background/ambient).
+  Dev authoring writes are explicit through Save Layout / Open Level / Content
+  Browser actions; opening the editor dev server can still leave local layout
+  files dirty after those actions, so fork/template hygiene starts with checking
+  `git status`.
 
 ## Near-Term Order
 
@@ -131,7 +147,11 @@ engine/editor.
    passes with zero warnings, and a source-level `verify:imports` gate now
    enforces the module boundaries. (Numbering kept stable — later items are
    referenced by number.)
-2. Smoke tests around load/save and the game/editor mode split.
-3. Improve asset catalog UI with previews and placement-rule affordances.
+2. ~~Smoke tests around load/save and the game/editor mode split.~~ **Done:**
+   `npm run smoke:browser` runs a Playwright Chromium smoke for `?editor` boot,
+   shape placement, Details transform, undo/redo, Save Layout, clean editor
+   reload, and runtime `/` boot. It uses a temporary copied layout so the
+   template scene is restored after the run.
+3. Improve asset catalog UI placement-rule affordances.
 4. Later: a `tools/create-project.mjs` scaffold that stamps out a new project
    from the template (copy + rename + reset project data).
