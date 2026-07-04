@@ -35,9 +35,28 @@ Evidence (2026-07-04):
 - `src/editor/panels/details/instanceDetails.ts` owns generic Details HTML and
   DOM binding for instance/character/actor selections.
 - `EditorUi.ts` still owns composition, status, toolbar, save/load, and the
-  larger material/collision/physics/components/metadata sub-renderers.
+  larger physics/components/metadata sub-renderers.
 - Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
   (596 checks), `npm.cmd run smoke:browser` (1 Chromium smoke).
+
+## Second Extraction Slice `[x] Completed 2026-07-04`
+
+1. `[x]` Move the instance Materials Details renderer into
+   `src/editor/panels/details/materialDetails.ts`.
+2. `[x]` Move Collision Details rendering, label maps, optional boolean parsing,
+   and collision override DOM binding into
+   `src/editor/panels/details/collisionDetails.ts`.
+3. `[x]` Keep `EditorUi.ts` as the composition layer for the remaining Details
+   sections and app command callbacks.
+
+Evidence (2026-07-04):
+
+- `src/editor/panels/details/materialDetails.ts` owns the material slot HTML.
+- `src/editor/panels/details/collisionDetails.ts` owns Collision Details HTML
+  and override binding while preserving the current-selection response merge.
+- Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
+  (1 Chromium smoke).
 
 ## Rules
 

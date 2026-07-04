@@ -287,14 +287,16 @@ akislari incelenecek.
   ayak dogrulama: UI katmaninin hicbir otomatik smoke'u yok ve ana kabuk
   5.8k satirlik monolit.
 - Guncelleme (2026-07-04): Aksiyon 1/3/4/5 uygulandi; Aksiyon 2 icin
-  dilimleme plani yazildi ve ilk Details extraction slice uygulandi
+  dilimleme plani yazildi ve iki Details extraction slice'i uygulandi
   (`src/editor/panels/details/transformRows.ts`,
-  `src/editor/panels/details/instanceDetails.ts`). Playwright Chromium smoke
+  `src/editor/panels/details/instanceDetails.ts`,
+  `src/editor/panels/details/materialDetails.ts`,
+  `src/editor/panels/details/collisionDetails.ts`). Playwright Chromium smoke
   eklendi (`npm run smoke:browser`): `?editor` boot, shape asset placement,
   Details transform, undo/redo, Save Layout, temiz editor reload ve runtime `/`
   boot geciyor. Smoke aktif layout'u gecici kopyaya alir ve manifest'i test
   sonunda geri yukler; template layout'u kirlenmez. Karar simdilik `[~]`:
-  browser dogrulama acigi kapandi ve `EditorUi.ts` ilk dilimi cikti, fakat
+  browser dogrulama acigi kapandi ve `EditorUi.ts` iki details dilimi cikti, fakat
   content/outliner/world panelleri ve buyuk details alt bolumleri henuz kabukta.
 - Kanit:
   - Cekirdek authoring dongusu kodda: gizmo (`editor/gizmos/` axes/builder/
@@ -335,9 +337,10 @@ akislari incelenecek.
     EditorSceneController state, Section 8 gizmo drag matematigi, Section 9
     wall-snap, Section 10 save validator. **Guncelleme 2026-07-04:** browser
     smoke da var ve yesil (`npm run smoke:browser`, 1 Chromium test, 1.8m).
-    **Guncelleme 2026-07-04:** ilk details slicing slice'i dogrulandi:
+    **Guncelleme 2026-07-04:** details slicing slice'lari dogrulandi:
     `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` (596 check),
-    `npm.cmd run smoke:browser` (1 Chromium test, 1.9m).
+    `npm.cmd run verify:imports`, `npm.cmd run smoke:browser` (1 Chromium
+    test, 1.9m-2.0m).
 - Yeterli olanlar:
   - Unreal-esintili cekirdek dongu (sec → tasi → duzenle → kaydet → geri al →
     oynat) ucuca kodda; komut disiplini, snap, hiyerarsi, coklu secim dahil.
@@ -357,11 +360,12 @@ akislari incelenecek.
   - **Monolit kabuk:** `EditorUi.ts` 5,800 satir tek sinif (+ 2,889 satir
     css). Details panel render'lari dahil her sey icinde; yeni aktor tipi =
     monolite bir render metodu daha. Buyume bu bicimde surdurulebilir degil.
-    **(Kismen azaltildi 2026-07-04, Aksiyon 2 ilk slice: transform row
-    helperlari ve generic instance/character/actor Details render+binding
-    `src/editor/panels/details/` altina cikarildi. Kalan risk: material/
-    collision/physics/components/metadata alt bolumleri, content/outliner/world
-    panelleri ve ozel aktor details render'lari hala `EditorUi.ts` icinde.)**
+    **(Kismen azaltildi 2026-07-04, Aksiyon 2 iki slice: transform row
+    helperlari, generic instance/character/actor Details render+binding,
+    Materials Details ve Collision Details render+binding
+    `src/editor/panels/details/` altina cikarildi. Kalan risk:
+    physics/components/metadata alt bolumleri, content/outliner/world panelleri
+    ve ozel aktor details render'lari hala `EditorUi.ts` icinde.)**
   - **Dokuman/kod kaymasi:** CLAUDE.md + ARCHITECTURE.md yalniz 2 dev
     endpoint dokumante ediyor, gercekte 13 + import var. ARCHITECTURE'daki
     "editor SceneApp Play mode" ifadesinin kodda karsiligi yok (Play = route
@@ -396,13 +400,14 @@ akislari incelenecek.
      bu alt-editor kalibiyla uygulanan ilk ornekti; Content Browser
      placement-rule affordances siradaki adim olarak kalsin.
   - **Guncel aksiyon durumu (2026-07-04):** Aksiyon 1 tamamlandi
-    (`smoke:browser` yesil); Aksiyon 2 plan + ilk uygulama dilimi olarak
+    (`smoke:browser` yesil); Aksiyon 2 plan + iki uygulama dilimi olarak
     tamamlandi (`docs/planned/EDITOR_UI_SLICING_PLAN.md`, `transformRows.ts`,
-    `instanceDetails.ts`; tsc + engine tests + smoke yesil); Aksiyon 3/4
-    dokumanlari guncellendi; Aksiyon 5 backlog karari olarak korundu. Guncel
-    karar hala `[~]`: browser dogrulama acigi kapandi ve ilk details slice'i
-    cikti, fakat `EditorUi.ts` content/outliner/world + buyuk details alt
-    bolumleri refactor edilmeden `[x]` degil.
+    `instanceDetails.ts`, `materialDetails.ts`, `collisionDetails.ts`; tsc +
+    engine tests + verify:imports + smoke yesil); Aksiyon 3/4 dokumanlari
+    guncellendi; Aksiyon 5 backlog karari olarak korundu. Guncel karar hala
+    `[~]`: browser dogrulama acigi kapandi ve iki details slice'i cikti, fakat
+    `EditorUi.ts` content/outliner/world + buyuk details alt bolumleri refactor
+    edilmeden `[x]` degil.
 
 ## 4. Runtime ve Gameplay Temelleri `[~] Kismi`
 
@@ -725,5 +730,5 @@ eklenecek.
 | 2026-07-03 | 2. Mimari Sinirlar | Dist siniri cift katmanli ve kanitli (strict scan PASS); editor->game 5 import sozlesmesiz; kaynak-duzeyi import denetimi yok; CLAUDE.md Near-Term #1 bayat. | Editor<->game karari + import-graph check + bayat not duzeltme (5 aksiyon, baslikta). | `[~]` |
 | 2026-07-04 | 2. Mimari Sinirlar | 5 aksiyon uygulandi: editor->game registry/DI ile ters cevrildi (yeni `gameEditorRegistry`+`editorCatalog`, `src/main.ts` enjekte; editor'da sifir `@/game`), kaynak-duzeyi `verify:imports` gate eklendi (`build:verify`+CI, negatif test dogrulandi), Near-Term #1 + verify-dist notu guncellendi, "extracted under game/" asiri-iddiasi duzeltildi + game/project "reserved" belgelendi (tasima reddedildi), fork rehberine disiplin notu. `build:verify` yesil (596 check + strict dist + import scan). | Kalan: yalnizca verify-dist heuristik sinirlamasi (kabul edilmis). | `[x]` |
 | 2026-07-03 | 3. Editor Deneyimi | Tam authoring dongusu + 7 alt-editor + 13 dev endpoint; 573 engine check gecti; UI katmaninda otomatik smoke yok, EditorUi 5.8k satir monolit, endpoint dokumantasyonu eksik. | Playwright smoke + EditorUi dilimleme + dokuman duzeltmeleri (5 aksiyon, baslikta). | `[~]` |
-| 2026-07-04 | 3. Editor Deneyimi | Playwright Chromium smoke eklendi ve yesil (`npm run smoke:browser`, 1 test, 1.8m): `?editor` boot, shape placement, Details transform, undo/redo, Save Layout, temiz editor reload, runtime `/` boot. Endpoint/Play/dev-editor-yazma dokumanlari guncellendi; `EDITOR_UI_SLICING_PLAN.md` eklendi. | Kalan uygulama: `EditorUi.ts` details/content/outliner/world panel dilimleme refactoru. | `[~]` |
+| 2026-07-04 | 3. Editor Deneyimi | Playwright Chromium smoke eklendi ve yesil (`npm run smoke:browser`, 1 test, 1.8m): `?editor` boot, shape placement, Details transform, undo/redo, Save Layout, temiz editor reload, runtime `/` boot. Endpoint/Play/dev-editor-yazma dokumanlari guncellendi; `EDITOR_UI_SLICING_PLAN.md` eklendi. Ilk iki Details slicing dilimi uygulandi: `transformRows.ts`, `instanceDetails.ts`, `materialDetails.ts`, `collisionDetails.ts`; tsc + engine tests (596) + verify:imports + smoke yesil. | Kalan uygulama: `EditorUi.ts` physics/components/metadata details, ozel aktor details ve content/outliner/world panel dilimleme refactoru. | `[~]` |
 | 2026-07-03 | 4. Runtime/Gameplay | Unreal-analog cerceve ucuca + saf cekirdekler testli (573 check); **bulgu:** behavior registry app-omru yasiyor (yorum sahne-omru diyor), travel'da `traveledTriggers` vb. sifirlanmiyor + entity id'ler level-bagimsiz → round-trip portal muhtemelen olu; RuntimeSceneApp 3.6k satir ikinci monolit; tum tarayici smoke'lari acik. | Sizintiyi dogrula+kapat (headless travel testi) + runtime Playwright smoke + kabuk dilimleme + save sozlesme dokumani (5 aksiyon, baslikta). | `[~]` |
