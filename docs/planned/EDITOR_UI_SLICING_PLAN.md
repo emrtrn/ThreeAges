@@ -58,6 +58,23 @@ Evidence (2026-07-04):
   (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
   (1 Chromium smoke).
 
+## Third Extraction Slice `[x] Completed 2026-07-04`
+
+1. `[x]` Move Physics Details rendering, default damping constants, constraint
+   row helpers, and physics input binding into
+   `src/editor/panels/details/physicsDetails.ts`.
+2. `[x]` Keep `EditorUi.ts` responsible only for passing
+   `assetCollisionComplexity(...) === "complexAsSimple"` and the
+   `setSelectionPhysics` callback.
+
+Evidence (2026-07-04):
+
+- `src/editor/panels/details/physicsDetails.ts` owns Physics Details HTML and
+  input binding for mass/damping/gravity/constraint fields.
+- Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
+  (1 Chromium smoke).
+
 ## Rules
 
 - Do not move save/load ownership while slicing; `/__save-*` stores stay as-is.

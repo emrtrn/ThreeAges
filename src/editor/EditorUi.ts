@@ -38,7 +38,6 @@ import type {
   LayoutHeightFog,
   LayoutMovingPlatform,
   LayoutParticleEmitter,
-  LayoutPhysics,
   LayoutPostProcess,
   LayoutSkyAtmosphere,
   MetadataValue,
@@ -105,6 +104,10 @@ import {
   renderCollisionSection,
 } from "./panels/details/collisionDetails";
 import { renderMaterialSection } from "./panels/details/materialDetails";
+import {
+  bindPhysicsInputs,
+  renderPhysicsSection,
+} from "./panels/details/physicsDetails";
 import { scaleRow, vectorRow } from "./panels/details/transformRows";
 
 type InspectorTab = "details" | "world";
@@ -119,10 +122,6 @@ type SurfaceNumericKey =
   | "fresnelBias"
   | "distortion"
   | "resolution";
-
-const DEFAULT_LINEAR_DAMPING = 0.12;
-const DEFAULT_ANGULAR_DAMPING = 0.45;
-const PHYSICS_AXIS_LABELS = ["X", "Y", "Z"] as const;
 
 /** Typed assets the Content Browser context menu can create (besides folders). */
 const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> = [
@@ -3063,7 +3062,11 @@ export class EditorUi {
       sections: {
         material: renderMaterialSection(selection, this.editableAssets),
         collision: renderCollisionSection(selection),
-        physics: this.renderPhysicsSection(selection, selection.locked),
+        physics: renderPhysicsSection({
+          selection,
+          locked: selection.locked,
+          complexAsSimple: this.app.assetCollisionComplexity(selection.assetId) === "complexAsSimple",
+        }),
         components: this.renderComponentsSection(selection),
         metadata: this.renderMetadataSections(selection),
       },
@@ -3093,68 +3096,14 @@ export class EditorUi {
             this.app.setSelectionCollisionOverrides(patch),
         }),
       setSelectionMaterialSlot: (assetId) => this.app.setSelectionMaterialSlot(assetId),
-      bindPhysicsInputs: () => this.bindPhysicsInputs(),
+      bindPhysicsInputs: () =>
+        bindPhysicsInputs({
+          body: this.detailsBody,
+          setSelectionPhysics: (patch) => this.app.setSelectionPhysics(patch),
+        }),
       bindComponentsInputs: () => this.bindComponentsInputs(),
       bindMetadataInputs: () => this.bindMetadataInputs(),
     });
-  }
-
-  private renderPhysicsSection(selection: EditableSelection, locked: boolean): string {
-    if (selection.kind === "actor") return "";
-    const physics = selection.physics;
-    const disabled = locked ? "disabled" : "";
-    const linearDamping = physics.linearDamping ?? DEFAULT_LINEAR_DAMPING;
-    const angularDamping = physics.angularDamping ?? DEFAULT_ANGULAR_DAMPING;
-    const enableGravity = physics.enableGravity ?? true;
-    const lockPosition = physics.lockPosition ?? [false, false, false];
-    const lockRotation = physics.lockRotation ?? [false, false, false];
-    // `complexAsSimple` collision uses the render mesh as a static trimesh, which
-    // Rapier can't drive dynamically — so Simulate Physics is unavailable and
-    // forced off for these assets (the runtime ignores the flag regardless).
-    const complexAsSimple =
-      this.app.assetCollisionComplexity(selection.assetId) === "complexAsSimple";
-    const simulateDisabled = locked || complexAsSimple ? "disabled" : "";
-
-    return `
-      <div class="detail-section detail-physics-section">
-        <div class="detail-section-title">Physics</div>
-        <label class="detail-toggle">
-          <input type="checkbox" data-detail-toggle="simulatePhysics" ${
-            selection.simulatePhysics && !complexAsSimple ? "checked" : ""
-          } ${simulateDisabled} />
-          <span>Simulate Physics</span>
-        </label>
-        ${
-          complexAsSimple
-            ? `<div class="detail-hint detail-hint-warning">Static-only: this asset uses “Use Complex Collision As Simple” collision.</div>`
-            : ""
-        }
-        <label class="detail-row">
-          <span>Mass (kg)</span>
-          <input data-physics-number="massKg" type="number" step="0.1" min="0.001"
-            max="1000000" value="${physics.massKg ?? ""}" placeholder="Auto" ${disabled} />
-        </label>
-        <label class="detail-row">
-          <span>Linear Damping</span>
-          <input data-physics-number="linearDamping" type="number" step="0.01" min="0"
-            max="100" value="${linearDamping}" ${disabled} />
-        </label>
-        <label class="detail-row">
-          <span>Angular Damping</span>
-          <input data-physics-number="angularDamping" type="number" step="0.01" min="0"
-            max="100" value="${angularDamping}" ${disabled} />
-        </label>
-        <label class="detail-toggle">
-          <input type="checkbox" data-physics-toggle="enableGravity" ${
-            enableGravity ? "checked" : ""
-          } ${disabled} />
-          <span>Enable Gravity</span>
-        </label>
-        <div class="detail-subsection-title">Constraints</div>
-        ${physicsLockRow("Lock Position", "position", lockPosition, locked)}
-        ${physicsLockRow("Lock Rotation", "rotation", lockRotation, locked)}
-      </div>
-    `;
   }
 
   /**
@@ -3792,59 +3741,6 @@ export class EditorUi {
       .forEach((input) => {
         input.addEventListener("change", () => this.commitMetadataInput(input));
       });
-  }
-
-  private bindPhysicsInputs(): void {
-    this.detailsBody
-      .querySelectorAll<HTMLInputElement>("[data-physics-number]")
-      .forEach((input) => {
-        input.addEventListener("change", () => this.commitPhysicsNumber(input));
-      });
-
-    this.detailsBody
-      .querySelector<HTMLInputElement>('[data-physics-toggle="enableGravity"]')
-      ?.addEventListener("change", (event) => {
-        this.app.setSelectionPhysics({
-          enableGravity: (event.currentTarget as HTMLInputElement).checked,
-        });
-      });
-
-    this.detailsBody
-      .querySelectorAll<HTMLInputElement>("[data-physics-lock]")
-      .forEach((input) => {
-        input.addEventListener("change", () => this.commitPhysicsLocks());
-      });
-  }
-
-  private commitPhysicsNumber(input: HTMLInputElement): void {
-    const key = input.dataset.physicsNumber as keyof Pick<
-      LayoutPhysics,
-      "massKg" | "linearDamping" | "angularDamping"
-    > | undefined;
-    if (!key) return;
-    const trimmed = input.value.trim();
-    if (trimmed === "") {
-      this.app.setSelectionPhysics({ [key]: undefined });
-      return;
-    }
-    const value = Number(trimmed);
-    if (!Number.isFinite(value)) return;
-    this.app.setSelectionPhysics({ [key]: value });
-  }
-
-  private commitPhysicsLocks(): void {
-    const readLocks = (kind: "position" | "rotation"): [boolean, boolean, boolean] => {
-      return [0, 1, 2].map((axis) => {
-        const input = this.detailsBody.querySelector<HTMLInputElement>(
-          `input[data-physics-lock="${kind}"][data-axis="${axis}"]`,
-        );
-        return input?.checked ?? false;
-      }) as [boolean, boolean, boolean];
-    };
-    this.app.setSelectionPhysics({
-      lockPosition: readLocks("position"),
-      lockRotation: readLocks("rotation"),
-    });
   }
 
   private commitMetadataInput(input: HTMLInputElement | HTMLSelectElement): void {
@@ -5614,28 +5510,6 @@ function requireElement<T extends HTMLElement>(root: ParentNode, selector: strin
   const element = root.querySelector(selector);
   if (!element) throw new Error(`Missing editor element: ${selector}`);
   return element as T;
-}
-
-function physicsLockRow(
-  label: string,
-  kind: "position" | "rotation",
-  locks: readonly [boolean, boolean, boolean],
-  disabled = false,
-): string {
-  const fields = PHYSICS_AXIS_LABELS.map(
-    (axis, index) => `
-      <label class="physics-axis-lock">
-        <span>${axis}</span>
-        <input type="checkbox" data-physics-lock="${kind}" data-axis="${index}"
-          ${locks[index] ? "checked" : ""} ${disabled ? "disabled" : ""} />
-      </label>`,
-  ).join("");
-  return `
-    <div class="detail-row detail-constraint-row">
-      <span>${label}</span>
-      <div class="physics-lock-fields">${fields}</div>
-    </div>
-  `;
 }
 
 function escapeHtml(value: string): string {
