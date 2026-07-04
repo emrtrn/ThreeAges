@@ -21,7 +21,23 @@ import {
   ShaderMaterial,
 } from "three";
 
-import type { RuntimeParticleEffect } from "../vfx/particleEffectTypes";
+import type { RuntimeParticleEffect, Vec3 } from "../vfx/particleEffectTypes";
+
+/**
+ * Per-instance overrides a {@link ParticleEmitterComponent} applies on top of the
+ * shared effect asset (VFX Lite §8). All optional; absent means "use the asset's
+ * own value", so an emitter with no overrides renders identically to the asset.
+ */
+export interface ParticleEffectOverrides {
+  /** Uniform scale on particle size, spawn spread and velocity (default 1). */
+  scale?: number;
+  /** Hex tint (`#rrggbb`) replacing the effect's colour. */
+  tint?: string;
+  /** Force looping on/off for this instance; absent keeps the asset's own loop. */
+  loop?: boolean;
+}
+
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
 // Back-compat aliases: the runtime path (RuntimeSceneApp) and tests reference the
 // flat runtime effect + the normalize→collapse entry point through these names.
@@ -64,8 +80,15 @@ void main() {
 /** A live, CPU-simulated instance of an effect definition, ready to add to a scene. */
 export class ParticleEffect {
   readonly object3D: Points;
-  private readonly definition: RuntimeParticleEffect;
   private readonly capacity: number;
+  // Effective (override-applied) simulation params; see ParticleEffectOverrides.
+  private readonly loop: boolean;
+  private readonly lifetime: number;
+  private readonly rate: number;
+  private readonly startSize: number;
+  private readonly endSize: number;
+  private readonly velocity: Vec3;
+  private readonly spread: number;
   private readonly positions: Float32Array;
   private readonly sizes: Float32Array;
   private readonly alphas: Float32Array;
@@ -78,10 +101,31 @@ export class ParticleEffect {
   private elapsed = 0;
   private spawnAccumulator = 0;
 
-  constructor(definition: RuntimeParticleEffect) {
-    this.definition = definition;
+  constructor(definition: RuntimeParticleEffect, overrides?: ParticleEffectOverrides) {
+    // `scale` uniformly grows sizes, spawn spread and velocity (so particles reach
+    // a proportionally larger extent in the same lifetime); rate/lifetime are
+    // unaffected, so buffer capacity matches the un-scaled effect.
+    const scale =
+      typeof overrides?.scale === "number" && Number.isFinite(overrides.scale) && overrides.scale > 0
+        ? overrides.scale
+        : 1;
+    this.loop = overrides?.loop ?? definition.loop;
+    this.lifetime = definition.lifetime;
+    this.rate = definition.rate;
+    this.startSize = definition.startSize * scale;
+    this.endSize = definition.endSize * scale;
+    this.velocity = [
+      definition.velocity[0] * scale,
+      definition.velocity[1] * scale,
+      definition.velocity[2] * scale,
+    ];
+    this.spread = definition.spread * scale;
+    const color =
+      typeof overrides?.tint === "string" && HEX_COLOR.test(overrides.tint)
+        ? overrides.tint
+        : definition.color;
     // Max particles alive at once ≈ rate * lifetime; pad for spawn jitter.
-    this.capacity = Math.max(8, Math.ceil(definition.rate * definition.lifetime) + 4);
+    this.capacity = Math.max(8, Math.ceil(this.rate * this.lifetime) + 4);
     this.positions = new Float32Array(this.capacity * 3);
     this.sizes = new Float32Array(this.capacity);
     this.alphas = new Float32Array(this.capacity);
@@ -94,7 +138,7 @@ export class ParticleEffect {
     this.geometry.setAttribute("aAlpha", new BufferAttribute(this.alphas, 1));
     this.material = new ShaderMaterial({
       uniforms: {
-        uColor: { value: new Color(definition.color) },
+        uColor: { value: new Color(color) },
         uScale: { value: POINT_PIXEL_SCALE },
       },
       vertexShader: VERTEX_SHADER,
@@ -119,7 +163,7 @@ export class ParticleEffect {
   /** Advances the simulation by `dt` seconds and uploads the updated buffers. */
   update(dt: number): void {
     if (dt <= 0) return;
-    const { lifetime, rate, startSize, endSize, loop } = this.definition;
+    const { lifetime, rate, startSize, endSize, loop } = this;
     this.elapsed += dt;
 
     for (let i = 0; i < this.capacity; i += 1) {
@@ -157,8 +201,8 @@ export class ParticleEffect {
 
   /** A non-looping effect is finished once it stopped emitting and all particles died. */
   isFinished(): boolean {
-    if (this.definition.loop) return false;
-    if (this.elapsed <= this.definition.lifetime) return false;
+    if (this.loop) return false;
+    if (this.elapsed <= this.lifetime) return false;
     for (let i = 0; i < this.capacity; i += 1) {
       if (this.ages[i]! >= 0) return false;
     }
@@ -193,7 +237,7 @@ export class ParticleEffect {
       }
     }
     if (slot < 0) return;
-    const { spread, velocity, startSize } = this.definition;
+    const { spread, velocity, startSize } = this;
     const jitter = (): number => (Math.random() * 2 - 1) * spread;
     this.ages[slot] = 0;
     this.positions[slot * 3] = this.origin[0] + jitter() * 0.2;

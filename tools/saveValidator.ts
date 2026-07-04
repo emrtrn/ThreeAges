@@ -300,9 +300,13 @@ function validateAudio(value: unknown, label: string): Record<string, unknown> |
   return audio;
 }
 
-const PARTICLE_MATERIAL_MODES = new Set(["additive", "alpha"]);
-
-/** Validates an optional particle emitter (`{ effectId, ...emitter params }`). */
+/**
+ * Validates an optional particle emitter component. Only the small §8 instance
+ * override set is allowlisted (`effectId` + `enabled`/`autoPlay`/`scale`/`tint`/
+ * `loop`); emitter *behaviour* lives in the effect asset (`.effect.json`), so any
+ * legacy inline field (`rate`, `lifetime`, `velocity`, `materialMode`, …) is
+ * silently dropped here rather than round-tripped.
+ */
 function validateParticleEmitter(value: unknown, label: string): Record<string, unknown> | undefined {
   if (value === undefined) return undefined;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -313,32 +317,15 @@ function validateParticleEmitter(value: unknown, label: string): Record<string, 
     throw new Error(`${label} particle.effectId must be a non-empty string`);
   }
   const particle: Record<string, unknown> = { effectId: input.effectId };
-  for (const flag of ["loop", "worldSpace", "autoPlay"] as const) {
+  for (const flag of ["enabled", "autoPlay", "loop"] as const) {
     if (input[flag] === undefined) continue;
     if (typeof input[flag] !== "boolean") throw new Error(`${label} particle.${flag} must be boolean`);
     particle[flag] = input[flag];
   }
-  const rate = validateOptionalNumber(input.rate, `${label} particle.rate`, 0, 10000);
-  if (rate !== undefined) particle.rate = rate;
-  const lifetime = validateOptionalNumber(input.lifetime, `${label} particle.lifetime`, 0, 60);
-  if (lifetime !== undefined) particle.lifetime = lifetime;
-  const startSize = validateOptionalNumber(input.startSize, `${label} particle.startSize`, 0, 100);
-  if (startSize !== undefined) particle.startSize = startSize;
-  const endSize = validateOptionalNumber(input.endSize, `${label} particle.endSize`, 0, 100);
-  if (endSize !== undefined) particle.endSize = endSize;
-  const spread = validateOptionalNumber(input.spread, `${label} particle.spread`, 0, 10);
-  if (spread !== undefined) particle.spread = spread;
-  if (input.velocity !== undefined) {
-    if (!isNumberTuple(input.velocity)) {
-      throw new Error(`${label} particle.velocity must be a [x, y, z] number tuple`);
-    }
-    particle.velocity = input.velocity.map((axis) => Number(axis.toFixed(3)));
-  }
-  if (input.materialMode !== undefined) {
-    if (typeof input.materialMode !== "string" || !PARTICLE_MATERIAL_MODES.has(input.materialMode)) {
-      throw new Error(`${label} particle.materialMode must be additive or alpha`);
-    }
-    particle.materialMode = input.materialMode;
+  const scale = validateOptionalNumber(input.scale, `${label} particle.scale`, 0.01, 100);
+  if (scale !== undefined) particle.scale = scale;
+  if (input.tint !== undefined) {
+    particle.tint = validateHexColor(input.tint, `${label} particle.tint`);
   }
   return particle;
 }

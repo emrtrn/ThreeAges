@@ -765,16 +765,11 @@ function particleEmitterComponent(
 ): ParticleEmitterComponent | null {
   if (!particle) return null;
   const component: ParticleEmitterComponent = { effectId: particle.effectId };
-  if (particle.loop !== undefined) component.loop = particle.loop;
-  if (particle.rate !== undefined) component.rate = particle.rate;
-  if (particle.lifetime !== undefined) component.lifetime = particle.lifetime;
-  if (particle.startSize !== undefined) component.startSize = particle.startSize;
-  if (particle.endSize !== undefined) component.endSize = particle.endSize;
-  if (particle.velocity) component.velocity = [...particle.velocity];
-  if (particle.spread !== undefined) component.spread = particle.spread;
-  if (particle.materialMode !== undefined) component.materialMode = particle.materialMode;
-  if (particle.worldSpace !== undefined) component.worldSpace = particle.worldSpace;
+  if (particle.enabled !== undefined) component.enabled = particle.enabled;
   if (particle.autoPlay !== undefined) component.autoPlay = particle.autoPlay;
+  if (particle.scale !== undefined) component.scale = particle.scale;
+  if (particle.tint !== undefined) component.tint = particle.tint;
+  if (particle.loop !== undefined) component.loop = particle.loop;
   return component;
 }
 

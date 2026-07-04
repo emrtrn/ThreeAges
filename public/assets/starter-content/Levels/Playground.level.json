@@ -403,13 +403,32 @@
           "scale": 1
         }
       ]
+    },
+    {
+      "assetId": "sm-chair-ktx2",
+      "placements": [
+        {
+          "position": [
+            -14.62,
+            0,
+            -18.17
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -45,
+            0
+          ],
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [
     {
       "assetId": "george-ktx2",
       "position": [
-        -14.22,
+        -12.7,
         0.01,
         -18.13
       ],

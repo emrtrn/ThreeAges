@@ -49,9 +49,8 @@ export function cloneBehavior(behavior: LayoutBehavior): LayoutBehavior {
 }
 
 export function cloneParticle(particle: LayoutParticleEmitter): LayoutParticleEmitter {
-  const clone: LayoutParticleEmitter = { ...particle };
-  if (particle.velocity) clone.velocity = [...particle.velocity];
-  return clone;
+  // All override fields are primitives now, so a shallow spread is a full copy.
+  return { ...particle };
 }
 
 export function cloneMovingPlatform(platform: LayoutMovingPlatform): LayoutMovingPlatform {

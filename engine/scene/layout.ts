@@ -13,8 +13,6 @@ export type LayoutLightType = "directional" | "point" | "spot";
  * the four primitive builders; stair/spiral builders are intentionally out of scope.
  */
 export type BrushShape = "box" | "cylinder" | "cone" | "sphere";
-/** Particle blend mode (authoring + runtime VFX). */
-export type ParticleMaterialMode = "additive" | "alpha";
 
 /**
  * Generic, project-defined gameplay metadata value. The base editor stays
@@ -82,22 +80,22 @@ export interface LayoutAudio {
 }
 
 /**
- * Authoring reference to a particle/VFX emitter: a manifest `effectId` plus
- * optional emitter params. The runtime VFX system resolves `effectId` and
- * simulates; the saved layout only stores the reference + overrides.
+ * Authoring reference to a particle/VFX emitter: a manifest `effectId` plus a
+ * small set of per-instance overrides. Behaviour (spawn/lifetime/velocity/…)
+ * lives in the effect asset (`.effect.json`) — the single source of truth — so a
+ * reused effect looks the same in every scene. Overrides only re-skin/re-time
+ * this one placement: `enabled` (default true) toggles the emitter, `autoPlay`
+ * plays it on scene load, `scale` uniformly grows the effect, `tint` recolours
+ * it, and `loop` forces looping on/off for this instance. The runtime VFX system
+ * resolves `effectId` and simulates (see `engine/render-three/particleEffect`).
  */
 export interface LayoutParticleEmitter {
   effectId: string;
-  loop?: boolean;
-  rate?: number;
-  lifetime?: number;
-  startSize?: number;
-  endSize?: number;
-  velocity?: Vec3;
-  spread?: number;
-  materialMode?: ParticleMaterialMode;
-  worldSpace?: boolean;
+  enabled?: boolean;
   autoPlay?: boolean;
+  scale?: number;
+  tint?: string;
+  loop?: boolean;
 }
 
 /**

@@ -2255,14 +2255,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private async playAutoPlayParticleEntity(entity: Entity): Promise<void> {
     const particle = readParticleEmitterComponent(entity);
-    if (!particle?.autoPlay) return;
+    if (!particle?.autoPlay || particle.enabled === false) return;
     const transform = readTransformComponent(entity);
     if (!transform) return;
     const url = this.effectUrlById.get(particle.effectId);
     if (!url) return;
     const definition = await this.loadEffect(particle.effectId, url);
     if (!definition) return;
-    const effect = new ParticleEffect(definition);
+    // The component's scale/tint/loop fields are the §8 instance overrides.
+    const effect = new ParticleEffect(definition, particle);
     effect.setOrigin(transform.position[0], transform.position[1], transform.position[2]);
     this.scene.add(effect.object3D);
     this.particleEffects.push(effect);
@@ -2905,14 +2906,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const entity = this.actorEntityById.get(entityId);
     if (!entity) return;
     const particle = readParticleEmitterComponent(entity);
-    if (!particle) return;
+    if (!particle || particle.enabled === false) return;
     const url = this.effectUrlById.get(particle.effectId);
     if (!url) return;
     const definition = await this.loadEffect(particle.effectId, url);
     if (!definition) return;
     const transform = readTransformComponent(entity);
     if (!transform) return;
-    const effect = new ParticleEffect(definition);
+    // The component's scale/tint/loop fields are the §8 instance overrides.
+    const effect = new ParticleEffect(definition, particle);
     effect.setOrigin(transform.position[0], transform.position[1], transform.position[2]);
     this.scene.add(effect.object3D);
     this.particleEffects.push(effect);

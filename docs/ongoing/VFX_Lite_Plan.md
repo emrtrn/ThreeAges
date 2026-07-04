@@ -1110,25 +1110,71 @@ temizlenir. Statik veriler (uyarılar, footer) zaten düzenlemede güncelleniyor
 
 ---
 
-## Faz 4 — Scene Component UX
+## Faz 4 — Scene Component UX  ✅ TAMAMLANDI (4 Temmuz 2026)
 
-- [ ] Details > Add Component > Particle akışını koru (bugün çalışıyor).
-- [ ] `effectId` dropdown’ını koru; bilinmeyen id’yi seçenek olarak saklama
+- [x] Details > Add Component > Particle akışını koru (bugün çalışıyor).
+      *(`addComponent("particle")` ilk effect asset'i + `autoPlay:true` ile
+      seed'ler; dokunulmadı.)*
+- [x] `effectId` dropdown’ını koru; bilinmeyen id’yi seçenek olarak saklama
       davranışı bugün vardır, sürdürülür (`renderParticleFields`).
-- [ ] `enabled` alanını ekle (`autoPlay` bugün var); yeni override alanlarını
-      (`scale`, `tint`, `seedOffset`, opsiyonel `loop`) düz alan olarak ekle
-      ve bunlarla sınırla (§8).
-- [ ] Legacy override alanlarını (`rate`, `lifetime`, `startSize`, `endSize`,
+      *(`preserved` option korundu; ayrıca bilinmeyen id için görünür uyarı
+      eklendi — aşağı bkz.)*
+- [x] `enabled` alanını ekle (`autoPlay` bugün var); yeni override alanlarını
+      (`scale`, `tint`, opsiyonel `loop`) düz alan olarak ekle ve bunlarla
+      sınırla (§8). *(`LayoutParticleEmitter` = `effectId` + `enabled` +
+      `autoPlay` + `scale` + `tint` + `loop`. `seedOffset` bilinçli ertelendi —
+      aşağıdaki karar kaydına bkz.)*
+- [x] Legacy override alanlarını (`rate`, `lifetime`, `startSize`, `endSize`,
       `velocity`, `spread`, `materialMode`, `worldSpace`) component tipinden,
       `readParticleEmitterComponent`’ten ve `validateParticleEmitter`
       allowlist’inden kaldır; `tools/engine-tests.ts` testlerini yeni
       sözleşmeye güncelle (§8 “Legacy alan temizliği”).
-- [ ] Unknown/missing asset referansı için fallback ve warning göster.
-- [ ] Component add/remove/edit işlemlerini undo/redo ile çalıştır.
-- [ ] Yeni layout alanları için save validator allowlist’ini güncelle
+      *(`ParticleMaterialMode` tipi tümüyle silindi; `legacyRoomLayoutAdapter`
+      mapping'i + `cloneParticle` snapshot'ı + 5 test yeni sözleşmeye
+      güncellendi. Eski layout'lar sessizce düşürülür — crash değil.)*
+- [x] Unknown/missing asset referansı için fallback ve warning göster.
+      *(`renderParticleFields` içinde `inList` false ise `detail-hint-warning`
+      "⚠ Effect … is not a known effect asset — nothing plays until the id
+      resolves"; referans yine korunur.)*
+- [x] Component add/remove/edit işlemlerini undo/redo ile çalıştır.
+      *(`setSelectionParticle(value | undefined)` zaten `editorSceneController`
+      üzerinden undo command'i itiyor; controller testi undo'yu doğruluyor.)*
+- [x] Yeni layout alanları için save validator allowlist’ini güncelle
       (CLAUDE.md’deki “sessizce düşer” kuralı burada da geçerlidir).
+      *(`validateParticleEmitter`: `enabled`/`autoPlay`/`loop` bool,
+      `scale` 0.01–100, `tint` hex; legacy alanlar allowlist'ten çıktı.)*
 
-**Kabul kriteri:** Sahneye yerleştirilen bir nesne effect dropdown’ından VFX seçer; Play modunda auto-play doğru çalışır.
+**Kabul kriteri:** Sahneye yerleştirilen bir nesne effect dropdown’ından VFX
+seçer; Play modunda auto-play doğru çalışır. ✅ `build:verify` yeşil (tsc + vite
+build + 579 engine check + verify:dist --strict), `check:assets` errors=0.
+**Kalan:** canlı browser smoke (kullanıcı) — §15 tam akış.
+
+### Faz 4 karar kaydı (4 Temmuz 2026)
+
+**Override'lar ölü alan bırakılmadı — hepsi runtime'da tüketiliyor.** Faz 4'ün
+amacı legacy ölü alanları temizlemekti; yerine ölü alan koymamak için eklenen
+her override runtime'a bağlandı: `ParticleEffect` constructor'ı artık opsiyonel
+`ParticleEffectOverrides` (`scale`/`tint`/`loop`) alıyor — `scale` boyut+hız+
+spread'i üniform ölçekler (rate/lifetime ve dolayısıyla kapasite değişmez),
+`tint` shader `uColor`'ını değiştirir, `loop` asset'in loop bayrağını instance
+bazında ezer. `RuntimeSceneApp`'in iki spawn yolu (`playAutoPlayParticleEntity`,
+`playActorParticleEffect`) component'i olduğu gibi overrides olarak geçirir ve
+`enabled === false` emitter'ı susturur. Override'sız çağrı davranış-nötr
+(preview viewport dokunulmadı).
+
+**`seedOffset` Faz 5'e ertelendi (bilinçli).** §8 `seedOffset`'i "izin verilecek"
+listesine koyar; fakat mevcut renderer `Math.random()` kullanır ve `RuntimeParticleEffect`
+`system.seed`'i taşımaz, dolayısıyla seed offset'in anlamlı tüketimi seeded-RNG
+determinizmi + seed'in flat runtime kontratına iplenmesini gerektirir — bu
+runtime sağlamlaştırma işidir (Faz 5, §12 `VfxPlayOptions`). Ölü alan koymamak
+için `seedOffset` Faz 4 sözleşmesine hiç eklenmedi; Faz 5'te seed determinizmiyle
+birlikte gelecek.
+
+**Runtime tüketimi Faz 5'te `VfxSubsystem`'e taşınacak.** Bugün override mantığı
+`ParticleEffect` + `RuntimeSceneApp` inline'ında; §12'deki `VfxSubsystem` /
+`VfxPlayOptions` geldiğinde bu davranış aynen subsystem'e taşınır (audio
+hattının `AudioSubsystem`'e taşınmasıyla aynı model) — davranış doğru olduğundan
+Faz 5 yalnızca yeniden konumlandırır.
 
 ---
 

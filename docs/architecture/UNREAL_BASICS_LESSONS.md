@@ -1622,18 +1622,18 @@ type ActorComponent =
 
 ### ParticleEmitterComponent
 
+Emitter *behaviour* (spawn/lifetime/velocity/blend/…) lives in the effect asset
+(`.effect.json`) — the single source of truth — so a reused effect looks the same
+in every scene. The component carries only an `effectId` reference plus the small
+VFX Lite §8 instance-override set (legacy inline fields were removed in Faz 4):
+
 ```text
 - effectId
-- loop
-- rate
-- lifetime
-- startSize
-- endSize
-- velocity
-- spread
-- materialMode
-- worldSpace
-- autoPlay
+- enabled   (default true; false turns the emitter off)
+- autoPlay  (play on scene load)
+- scale     (uniform size/velocity/spread multiplier)
+- tint      (#rrggbb colour override)
+- loop      (force loop on/off; absent = asset default)
 ```
 
 Örnek:
@@ -1642,14 +1642,10 @@ type ActorComponent =
 {
   "kind": "particleEmitter",
   "effectId": "fx.smoke_soft_01",
-  "loop": true,
-  "rate": 12,
-  "lifetime": 2.5,
-  "startSize": 0.4,
-  "endSize": 1.2,
-  "velocity": [0, 1.2, 0],
-  "spread": 0.35,
-  "autoPlay": true
+  "autoPlay": true,
+  "scale": 1.5,
+  "tint": "#bfc3c8",
+  "loop": true
 }
 ```
 

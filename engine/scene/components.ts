@@ -1,9 +1,7 @@
 import type { Entity, SceneJsonValue } from "./entity";
-import type { LayoutPhysicsAxisLocks, ParticleMaterialMode, Vec3 } from "./layout";
+import type { LayoutPhysicsAxisLocks, Vec3 } from "./layout";
 import { resolveCapsuleDimensions } from "./capsule";
 import { isActorEventKind, type ActorEventKind } from "./actorScript";
-
-export type { ParticleMaterialMode };
 
 export const TRANSFORM_COMPONENT = "Transform";
 export const MESH_RENDERER_COMPONENT = "MeshRenderer";
@@ -232,25 +230,22 @@ export interface AudioComponent {
 }
 
 /**
- * Drives a particle/VFX emitter from a manifest `effectId`. Sizes are in world
- * units, `rate` in particles/second, `lifetime` in seconds; `materialMode` picks
- * the blend and `worldSpace` keeps spawned particles in world space (vs. local to
- * the moving emitter). Absent optional fields let the VFX system apply its
- * defaults. The engine layer only stores the reference; a VFX system (a runtime
- * concern) resolves `effectId` and simulates, like Behavior resolves `scriptId`.
+ * Drives a particle/VFX emitter from a manifest `effectId` plus a small set of
+ * per-instance overrides. Emitter behaviour (spawn/lifetime/velocity/blend/…)
+ * lives in the effect asset, so a reused effect looks the same everywhere; the
+ * overrides only re-skin/re-time this instance: `enabled` (default true) toggles
+ * it, `autoPlay` plays it on scene load, `scale` uniformly grows the effect,
+ * `tint` recolours it, and `loop` forces looping on/off. The engine layer only
+ * stores the reference; a VFX system (a runtime concern) resolves `effectId` and
+ * simulates, like Behavior resolves `scriptId`.
  */
 export interface ParticleEmitterComponent {
   effectId: string;
-  loop?: boolean;
-  rate?: number;
-  lifetime?: number;
-  startSize?: number;
-  endSize?: number;
-  velocity?: Vec3;
-  spread?: number;
-  materialMode?: ParticleMaterialMode;
-  worldSpace?: boolean;
+  enabled?: boolean;
   autoPlay?: boolean;
+  scale?: number;
+  tint?: string;
+  loop?: boolean;
 }
 
 /**
@@ -698,9 +693,14 @@ export function readAudioComponent(entity: Entity): AudioComponent | undefined {
   return component;
 }
 
-const PARTICLE_MATERIAL_MODES: readonly ParticleMaterialMode[] = ["additive", "alpha"];
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
-/** Reads a typed particle emitter from an entity's serializable component data. */
+/**
+ * Reads a typed particle emitter from an entity's serializable component data.
+ * Only the small §8 override set is honoured; legacy inline emitter fields
+ * (`rate`, `lifetime`, `velocity`, …) are no longer part of the contract and are
+ * silently dropped, since the effect asset owns that behaviour.
+ */
 export function readParticleEmitterComponent(
   entity: Entity,
 ): ParticleEmitterComponent | undefined {
@@ -708,22 +708,13 @@ export function readParticleEmitterComponent(
   if (!data) return undefined;
   if (typeof data.effectId !== "string" || data.effectId.length === 0) return undefined;
   const component: ParticleEmitterComponent = { effectId: data.effectId };
-  if (typeof data.loop === "boolean") component.loop = data.loop;
-  if (typeof data.rate === "number") component.rate = data.rate;
-  if (typeof data.lifetime === "number") component.lifetime = data.lifetime;
-  if (typeof data.startSize === "number") component.startSize = data.startSize;
-  if (typeof data.endSize === "number") component.endSize = data.endSize;
-  const velocity = readVec3(data.velocity);
-  if (velocity) component.velocity = velocity;
-  if (typeof data.spread === "number") component.spread = data.spread;
-  if (
-    typeof data.materialMode === "string" &&
-    PARTICLE_MATERIAL_MODES.includes(data.materialMode as ParticleMaterialMode)
-  ) {
-    component.materialMode = data.materialMode as ParticleMaterialMode;
-  }
-  if (typeof data.worldSpace === "boolean") component.worldSpace = data.worldSpace;
+  if (typeof data.enabled === "boolean") component.enabled = data.enabled;
   if (typeof data.autoPlay === "boolean") component.autoPlay = data.autoPlay;
+  if (typeof data.scale === "number" && Number.isFinite(data.scale) && data.scale > 0) {
+    component.scale = data.scale;
+  }
+  if (typeof data.tint === "string" && HEX_COLOR.test(data.tint)) component.tint = data.tint;
+  if (typeof data.loop === "boolean") component.loop = data.loop;
   return component;
 }
 

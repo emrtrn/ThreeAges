@@ -1961,52 +1961,46 @@ check("readAudioComponent tolerates partial Actor Blueprint props (cue, no clipI
 // ParticleEmitter and Interaction. They have no adapter authoring path yet
 // (next slice), so these check the reader validation directly off a hand-built
 // entity, mirroring how the runtime systems will read them.
-check("particle emitter reader parses a full authored emitter", () => {
+check("particle emitter reader parses the full override set (§8)", () => {
   const entity: Entity = {
     id: "fx",
     components: {
       [PARTICLE_EMITTER_COMPONENT]: {
         effectId: "fx.smoke_soft_01",
-        loop: true,
-        rate: 12,
-        lifetime: 2.5,
-        startSize: 0.4,
-        endSize: 1.2,
-        velocity: [0, 1.2, 0],
-        spread: 0.35,
-        materialMode: "additive",
-        worldSpace: true,
+        enabled: false,
         autoPlay: true,
+        scale: 1.5,
+        tint: "#aabbcc",
+        loop: true,
       },
     },
   };
   assert.deepEqual(readParticleEmitterComponent(entity), {
     effectId: "fx.smoke_soft_01",
-    loop: true,
-    rate: 12,
-    lifetime: 2.5,
-    startSize: 0.4,
-    endSize: 1.2,
-    velocity: [0, 1.2, 0],
-    spread: 0.35,
-    materialMode: "additive",
-    worldSpace: true,
+    enabled: false,
     autoPlay: true,
+    scale: 1.5,
+    tint: "#aabbcc",
+    loop: true,
   });
 });
 
-check("particle emitter reader rejects empty effectId and drops invalid fields", () => {
+check("particle emitter reader rejects empty effectId and drops invalid/legacy fields", () => {
   const missing: Entity = { id: "a", components: { [PARTICLE_EMITTER_COMPONENT]: { effectId: "" } } };
   assert.equal(readParticleEmitterComponent(missing), undefined);
-  // A minimal emitter keeps only effectId; an out-of-set materialMode and a
-  // malformed velocity are dropped rather than passed through.
+  // A minimal emitter keeps only effectId; a malformed tint, a non-positive
+  // scale, and legacy inline fields (rate/velocity/materialMode) — no longer part
+  // of the contract — are all dropped rather than passed through.
   const minimal: Entity = {
     id: "b",
     components: {
       [PARTICLE_EMITTER_COMPONENT]: {
         effectId: "fx.spark",
-        materialMode: "neon",
-        velocity: [0, 1],
+        tint: "red",
+        scale: 0,
+        rate: 12,
+        velocity: [0, 1, 0],
+        materialMode: "additive",
       },
     },
   };
@@ -2052,12 +2046,11 @@ check("layout particle + interaction map through the adapter to readable compone
             position: [0, 0, 0],
             particle: {
               effectId: "fx.smoke_soft_01",
-              loop: true,
-              rate: 12,
-              lifetime: 2.5,
-              velocity: [0, 1.2, 0],
-              materialMode: "additive",
+              enabled: false,
               autoPlay: true,
+              scale: 2,
+              tint: "#112233",
+              loop: true,
             },
             interaction: { action: "light-fire", prompt: "Light", cooldown: 2 },
           },
@@ -2072,12 +2065,11 @@ check("layout particle + interaction map through the adapter to readable compone
   );
   assert.deepEqual(entity ? readParticleEmitterComponent(entity) : undefined, {
     effectId: "fx.smoke_soft_01",
-    loop: true,
-    rate: 12,
-    lifetime: 2.5,
-    velocity: [0, 1.2, 0],
-    materialMode: "additive",
+    enabled: false,
     autoPlay: true,
+    scale: 2,
+    tint: "#112233",
+    loop: true,
   });
   assert.deepEqual(entity ? readInteractionComponent(entity) : undefined, {
     action: "light-fire",
@@ -5495,10 +5487,11 @@ check("EditorSceneController applies Details edits to the multi-selection", () =
   controller.undo();
   assert.equal(layout.characters[0]?.behavior, undefined);
 
-  controller.setSelectionParticle({ effectId: "fx.smoke", velocity: [0, 1, 0] });
+  controller.setSelectionParticle({ effectId: "fx.smoke", scale: 1.5, tint: "#8899aa" });
   assert.deepEqual(layout.instances[0]?.placements[0]?.particle, {
     effectId: "fx.smoke",
-    velocity: [0, 1, 0],
+    scale: 1.5,
+    tint: "#8899aa",
   });
   controller.undo();
   assert.equal(layout.instances[0]?.placements[0]?.particle, undefined);
@@ -5511,19 +5504,17 @@ check("clonePlacement/cloneCharacter preserve and deep-copy component fields", (
     position: [1, 2, 3],
     audio: { clipId: "chime" },
     behavior: { script: "spin", params: { speedDeg: 45 } },
-    particle: { effectId: "fx.smoke", velocity: [0, 1, 0] },
+    particle: { effectId: "fx.smoke", scale: 1.5, tint: "#8899aa" },
     interaction: { action: "open", cooldown: 2 },
   };
   const clone = clonePlacement(placement);
   assert.deepEqual(clone.audio, { clipId: "chime" });
   assert.deepEqual(clone.behavior, { script: "spin", params: { speedDeg: 45 } });
-  assert.deepEqual(clone.particle, { effectId: "fx.smoke", velocity: [0, 1, 0] });
+  assert.deepEqual(clone.particle, { effectId: "fx.smoke", scale: 1.5, tint: "#8899aa" });
   assert.deepEqual(clone.interaction, { action: "open", cooldown: 2 });
   // Deep copy: mutating the clone's nested data leaves the source untouched.
   clone.behavior!.params!.speedDeg = 90;
-  clone.particle!.velocity![1] = 5;
   assert.equal(placement.behavior?.params?.speedDeg, 45);
-  assert.equal(placement.particle?.velocity?.[1], 1);
 
   const character: LayoutCharacter = {
     assetId: "npc",
@@ -12058,7 +12049,11 @@ check("placement validator allowlists particle + interaction and rejects bad one
     position: [0, 0, 0],
     particle: {
       effectId: "fx.smoke_soft_01",
+      enabled: false,
+      scale: 2,
+      tint: "#112233",
       loop: true,
+      // Legacy inline fields are silently dropped (behaviour lives in the asset).
       rate: 12,
       velocity: [0, 1.2, 0],
       materialMode: "additive",
@@ -12067,16 +12062,19 @@ check("placement validator allowlists particle + interaction and rejects bad one
   });
   assert.deepEqual(placement.particle, {
     effectId: "fx.smoke_soft_01",
+    enabled: false,
+    scale: 2,
+    tint: "#112233",
     loop: true,
-    rate: 12,
-    velocity: [0, 1.2, 0],
-    materialMode: "additive",
   });
   assert.deepEqual(placement.interaction, { action: "open", prompt: "Open", cooldown: 1.5 });
-  // Empty effectId, out-of-set materialMode, and empty action are rejected.
+  // Empty effectId, malformed tint, out-of-range scale, and empty action are rejected.
   assert.throws(() => validatePlacement({ position: [0, 0, 0], particle: { effectId: "" } }));
   assert.throws(() =>
-    validatePlacement({ position: [0, 0, 0], particle: { effectId: "fx.x", materialMode: "neon" } }),
+    validatePlacement({ position: [0, 0, 0], particle: { effectId: "fx.x", tint: "red" } }),
+  );
+  assert.throws(() =>
+    validatePlacement({ position: [0, 0, 0], particle: { effectId: "fx.x", scale: 0 } }),
   );
   assert.throws(() => validatePlacement({ position: [0, 0, 0], interaction: { action: "" } }));
   // Absent stays absent.
@@ -12298,6 +12296,40 @@ check("ParticleEffect dispose is safe and instances hold independent buffers", (
   assert.equal(b.aliveCount(), 0); // advancing one never touches the other
   a.dispose();
   b.dispose();
+});
+
+// VFX Lite Faz 4 — a ParticleEmitterComponent applies a small set of per-instance
+// overrides (§8) on top of the shared asset. The runtime consumes them here.
+check("ParticleEffect applies §8 instance overrides (scale/tint/loop)", () => {
+  // tint replaces the effect colour on the shader material's uColor uniform.
+  const tinted = new ParticleEffect(runtimeFx({ color: "#ffffff" }), { tint: "#aabbcc" });
+  const uColor = (
+    tinted.object3D.material as unknown as {
+      uniforms: { uColor: { value: { getHexString(): string } } };
+    }
+  ).uniforms.uColor.value;
+  assert.equal(uColor.getHexString(), "aabbcc");
+  tinted.dispose();
+
+  // scale grows sizes/velocity but not rate/lifetime, so capacity is unchanged
+  // (max(8, ceil(10*1)+4) = 14) — a scaled effect never overruns its buffer.
+  const scaled = new ParticleEffect(runtimeFx({ loop: true, rate: 10, lifetime: 1 }), { scale: 3 });
+  assert.equal(scaled.maxCapacity, 14);
+  scaled.dispose();
+
+  // loop:true override keeps a one-shot asset emitting past its window.
+  const forced = new ParticleEffect(runtimeFx({ loop: false, rate: 20, lifetime: 0.3 }), { loop: true });
+  for (let i = 0; i < 40; i += 1) forced.update(0.05);
+  assert.equal(forced.isFinished(), false);
+  assert.ok(forced.aliveCount() > 0);
+  forced.dispose();
+
+  // loop:false override forces a looping asset to finish after its window.
+  const oneShot = new ParticleEffect(runtimeFx({ loop: true, rate: 20, lifetime: 0.3 }), { loop: false });
+  for (let i = 0; i < 40; i += 1) oneShot.update(0.05);
+  assert.equal(oneShot.isFinished(), true);
+  assert.equal(oneShot.aliveCount(), 0);
+  oneShot.dispose();
 });
 
 check("validateEffectAsset canonicalizes a schema-2 body and guards junk numbers", () => {

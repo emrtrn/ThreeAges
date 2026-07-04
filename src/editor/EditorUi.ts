@@ -3680,16 +3680,57 @@ export class EditorUi {
             }>${escapeHtml(asset.displayName)}</option>`,
         )
         .join("");
+    // Warn when the referenced effect isn't a known asset: the reference is kept
+    // (see `preserved` above) but plays nothing until the id resolves.
+    const missing = inList
+      ? ""
+      : `<div class="detail-hint detail-hint-warning">⚠ Effect “${escapeHtml(
+          particle.effectId,
+        )}” is not a known effect asset — nothing plays until the id resolves.</div>`;
+    const tintOn = typeof particle.tint === "string";
+    const loopValue = particle.loop === undefined ? "default" : particle.loop ? "on" : "off";
+    const loopOption = (value: string, label: string): string =>
+      `<option value="${value}" ${loopValue === value ? "selected" : ""}>${label}</option>`;
     return `
       <label class="detail-row">
         <span>Effect</span>
         <select data-particle="effectId">${options}</select>
       </label>
+      ${missing}
+      <label class="detail-toggle">
+        <input type="checkbox" data-particle="enabled" ${particle.enabled !== false ? "checked" : ""} />
+        <span>Enabled</span>
+      </label>
       <label class="detail-toggle">
         <input type="checkbox" data-particle="autoPlay" ${particle.autoPlay ? "checked" : ""} />
         <span>Auto Play</span>
       </label>
-      <div class="detail-hint">Emitter settings live in the effect asset (.effect.json).</div>`;
+      <label class="detail-row">
+        <span>Scale</span>
+        <input type="number" data-particle="scale" min="0.01" max="100" step="0.05"
+          value="${particle.scale ?? ""}" placeholder="1" />
+      </label>
+      <label class="detail-toggle">
+        <input type="checkbox" data-particle="tintEnabled" ${tintOn ? "checked" : ""} />
+        <span>Tint</span>
+      </label>
+      ${
+        tintOn
+          ? `<label class="detail-row">
+        <span>Tint Color</span>
+        <input type="color" data-particle="tint" value="${escapeHtml(particle.tint ?? "#ffffff")}" />
+      </label>`
+          : ""
+      }
+      <label class="detail-row">
+        <span>Loop</span>
+        <select data-particle="loop">
+          ${loopOption("default", "Asset default")}
+          ${loopOption("on", "Force loop")}
+          ${loopOption("off", "Force one-shot")}
+        </select>
+      </label>
+      <div class="detail-hint">Emitter behaviour lives in the effect asset (.effect.json); these override only this placement.</div>`;
   }
 
   private renderInteractionFields(interaction: LayoutInteraction): string {
@@ -3883,9 +3924,10 @@ export class EditorUi {
   }
 
   /**
-   * Commits the Particle component as a reference to an effect asset + Auto Play.
-   * Any previously-authored inline emitter fields are preserved (spread) but no
-   * longer edited here â€” the effect asset is the source of truth.
+   * Rebuilds the Particle component from the current inputs: an `effectId`
+   * reference plus the small §8 instance-override set (enabled/autoPlay/scale/
+   * tint/loop). Emitter behaviour lives in the effect asset, not here, so only
+   * meaningful deviations from the defaults are stored.
    */
   private commitParticleInput(): void {
     const effect = this.detailsBody.querySelector<HTMLSelectElement | HTMLInputElement>(
@@ -3893,14 +3935,33 @@ export class EditorUi {
     );
     const effectId = effect?.value.trim();
     if (!effectId) return;
-    const base: LayoutParticleEmitter = { ...(this.selected?.particle ?? { effectId }) };
-    base.effectId = effectId;
-    if (this.detailsBody.querySelector<HTMLInputElement>('[data-particle="autoPlay"]')?.checked) {
-      base.autoPlay = true;
-    } else {
-      delete base.autoPlay;
+    const particle: LayoutParticleEmitter = { effectId };
+    // Enabled defaults to true; only the meaningful `false` is stored.
+    if (this.detailsBody.querySelector<HTMLInputElement>('[data-particle="enabled"]')?.checked === false) {
+      particle.enabled = false;
     }
-    this.app.setSelectionParticle(base);
+    if (this.detailsBody.querySelector<HTMLInputElement>('[data-particle="autoPlay"]')?.checked) {
+      particle.autoPlay = true;
+    }
+    const scaleRaw = this.detailsBody
+      .querySelector<HTMLInputElement>('[data-particle="scale"]')
+      ?.value.trim();
+    if (scaleRaw) {
+      const scale = Number(scaleRaw);
+      // Store scale only when it's a valid, non-default deviation.
+      if (Number.isFinite(scale) && scale > 0 && scale !== 1) particle.scale = scale;
+    }
+    // The color input only exists while Tint is enabled (conditional re-render);
+    // when just enabled it may not be mounted yet, so fall back to the prior tint.
+    if (this.detailsBody.querySelector<HTMLInputElement>('[data-particle="tintEnabled"]')?.checked) {
+      const color = this.detailsBody.querySelector<HTMLInputElement>('[data-particle="tint"]')?.value;
+      particle.tint =
+        color && /^#[0-9a-fA-F]{6}$/.test(color) ? color : this.selected?.particle?.tint ?? "#ffffff";
+    }
+    const loop = this.detailsBody.querySelector<HTMLSelectElement>('[data-particle="loop"]')?.value;
+    if (loop === "on") particle.loop = true;
+    else if (loop === "off") particle.loop = false;
+    this.app.setSelectionParticle(particle);
   }
 
   /** Rebuilds the Interaction component from the current inputs and commits it. */
