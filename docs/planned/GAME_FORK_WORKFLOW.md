@@ -90,12 +90,17 @@ Oyun reposunda yapılacaklar (yalnızca `public/` ve `src/game` içinde):
 
 1. **GDD yaz** → `docs/GDD.md`
    - Çekirdek döngü, asset listesi, gereken sistemler, dikey kesit.
-   - Fikir havuzuna (`Forge/docs/kenney/KENNEY_GAME_IDEAS.md`) bakarak bağlam kur.
+   - Fikir havuzuna (`GameDesign/docs/kenney/KENNEY_GAME_IDEAS.md`,
+     `C:\Users\emret\Desktop\GameDesign`) bakarak bağlam kur. Oyun tasarım
+     fikirleri/GDD'ler artık **GameDesign** stüdyo deposunda yaşar — Forge
+     yalnızca platform (engine/editor/builder) geliştirir (2026-07-04 karar).
 
 2. **Asset'leri çek** — Kenney arşivinden (`C:/Users/emret/Documents/Kenney`)
    yalnızca ihtiyaç duyulan dosyaları `public/assets/...`'a kopyala.
    - Her asset için kaynak paket + CC0 lisans notunu `docs/ASSET_CREDITS.md`'ye ekle.
-   - Arama: `tools/kenney/kenney-assets.tsv` veya `docs/kenney/KENNEY_CATALOG.md`.
+   - Arama: **Forge**'daki `tools/kenney/kenney-assets.tsv` (aranabilir index,
+     Forge'da kalır — asset-çekme aracı) veya **GameDesign**'daki
+     `docs/kenney/KENNEY_CATALOG.md` (paket/tema kataloğu).
 
 3. **Oyun kurallarını yaz** → `src/game/` (GameMode, GameState, kurallar, HUD binding).
    - `engine/`, `editor/`, `builder/`'a oyun-özel kod **ekleme**.
@@ -189,10 +194,19 @@ git push origin main
 
 | Doküman | Repo | Açıklama |
 | --- | --- | --- |
-| `KENNEY_GAME_IDEAS.md` | **Forge** `docs/kenney/` | Genel fikir havuzu, tüm oyunlara ortak |
+| `KENNEY_GAME_IDEAS.md`, `QUATERNIUS_GAME_IDEAS.md` | **GameDesign** `docs/kenney/`, `docs/quaternius/` | Genel fikir havuzu, tüm oyunlara ortak (2026-07-04'ten beri Forge'da değil) |
 | `GAME_FORK_WORKFLOW.md` | **Forge** `docs/planned/` | Bu doküman — iş akışı referansı |
 | `docs/GDD.md` | **Oyun reposu** | O oyuna özel tasarım dokümanı |
 | `docs/ASSET_CREDITS.md` | **Oyun reposu** | O oyunda kullanılan Kenney asset'leri + lisans |
+
+> **2026-07-04 politika notu:** Forge artık oyun tasarım fikri/GDD üretmiyor —
+> yalnızca Forge platformuna (engine/editor/builder) yönelik geliştirme yapılır.
+> `docs/kenney/` ve `docs/quaternius/` (katalog + fikir havuzu + GDD taslakları)
+> `C:\Users\emret\Desktop\GameDesign\docs\` altına taşındı. Forge'da yalnız
+> `tools/kenney/kenney-assets.tsv` + `tools/kenney/kenney-index.json` (asset arama
+> index'i, `tools/asset-library-index.mjs` ile üretilir) kaldı — bunlar oyun
+> kodlarken asset çekmek için Forge'un kendi geliştirme aracıdır, tasarım
+> dokümanı değildir.
 
 ---
 

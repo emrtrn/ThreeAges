@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 // Quaternius asset-library indexer.
 //
-// Walks the local Quaternius archive and emits docs/quaternius artifacts:
-//   docs/quaternius/QUATERNIUS_CATALOG.md
-//   docs/quaternius/quaternius-assets.tsv
-//   docs/quaternius/quaternius-index.json
+// Walks the local Quaternius archive and emits docs/quaternius artifacts to the
+// GameDesign studio repo (sibling dir), NOT this repo — Forge does platform
+// work only; game-design/ideation docs (catalog + searchable index + game-idea
+// pool) live in GameDesign (2026-07-04 policy). Override with
+// QUATERNIUS_DOCS_ROOT.
+//   <docsRoot>/quaternius/QUATERNIUS_CATALOG.md
+//   <docsRoot>/quaternius/quaternius-assets.tsv
+//   <docsRoot>/quaternius/quaternius-index.json
 //
 // Usage:
 //   node tools/quaternius-library-index.mjs [libraryRoot]
@@ -21,8 +25,10 @@ const LIBRARY_ROOT =
   process.argv[2] ||
   process.env.QUATERNIUS_LIBRARY_ROOT ||
   'C:/Users/emret/Documents/Quaternius';
+const DOCS_ROOT =
+  process.env.QUATERNIUS_DOCS_ROOT || 'C:/Users/emret/Desktop/GameDesign/docs';
 
-const OUT_DIR = path.join(repoRoot, 'docs', LIBRARY_NAME);
+const OUT_DIR = path.join(DOCS_ROOT, LIBRARY_NAME);
 const OUT_JSON = path.join(OUT_DIR, `${LIBRARY_NAME}-index.json`);
 const OUT_TSV = path.join(OUT_DIR, `${LIBRARY_NAME}-assets.tsv`);
 const OUT_MD = path.join(OUT_DIR, 'QUATERNIUS_CATALOG.md');
@@ -396,9 +402,10 @@ async function main() {
 
   console.log(`Indexed ${totals.packs} packs / ${totals.assets} assets from ${LIBRARY_ROOT}`);
   console.log(`  kinds: ${kindBreakdown(totals.kindCounts)}`);
-  console.log(`  -> ${path.relative(repoRoot, OUT_MD)}`);
-  console.log(`  -> ${path.relative(repoRoot, OUT_TSV)}`);
-  console.log(`  -> ${path.relative(repoRoot, OUT_JSON)}`);
+  // OUT_DIR is outside repoRoot (GameDesign) — log absolute paths.
+  console.log(`  -> ${OUT_MD}`);
+  console.log(`  -> ${OUT_TSV}`);
+  console.log(`  -> ${OUT_JSON}`);
 }
 
 main().catch((err) => {

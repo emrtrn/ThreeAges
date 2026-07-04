@@ -2,11 +2,19 @@
 // Generic CC0 asset-library indexer.
 //
 // Walks an external asset library (organised as <root>/<category>/<pack>/...)
-// and emits three dev-only artifacts inside this repo:
+// and emits three dev-only artifacts:
 //
 //   tools/<lib>/<lib>-index.json   structured (packs + every asset) for tooling
+//                                  — stays in THIS repo (Forge dev tool, used
+//                                    while pulling assets into any game fork).
 //   tools/<lib>/<lib>-assets.tsv   flat, one asset per line, grep-friendly
+//                                  — stays in THIS repo, same reason.
 //   docs/<lib>/<LIB>_CATALOG.md     human pack catalog + game-theme -> packs map
+//                                  — written to the GameDesign studio repo
+//                                    (sibling dir), NOT this repo. Forge does
+//                                    platform work only; game-design/ideation
+//                                    docs live in GameDesign (2026-07-04 policy).
+//                                    Override with ASSET_LIBRARY_DOCS_ROOT.
 //
 // First/only consumer today is the Kenney library, but nothing here is
 // Kenney-specific: point ASSET_LIBRARY_ROOT (or argv[2]) at any CC0 library
@@ -28,10 +36,12 @@ const LIBRARY_ROOT =
   process.argv[2] ||
   process.env.ASSET_LIBRARY_ROOT ||
   'C:/Users/emret/Documents/Kenney';
+const DOCS_ROOT =
+  process.env.ASSET_LIBRARY_DOCS_ROOT || 'C:/Users/emret/Desktop/GameDesign/docs';
 
 const OUT_JSON = path.join(repoRoot, 'tools', LIBRARY_NAME, `${LIBRARY_NAME}-index.json`);
 const OUT_TSV = path.join(repoRoot, 'tools', LIBRARY_NAME, `${LIBRARY_NAME}-assets.tsv`);
-const OUT_MD = path.join(repoRoot, 'docs', LIBRARY_NAME, `${LIBRARY_NAME.toUpperCase()}_CATALOG.md`);
+const OUT_MD = path.join(DOCS_ROOT, LIBRARY_NAME, `${LIBRARY_NAME.toUpperCase()}_CATALOG.md`);
 
 const MODEL_EXT = new Set(['.glb', '.gltf', '.obj', '.fbx']);
 const AUDIO_EXT = new Set(['.ogg', '.wav', '.mp3']);
@@ -325,7 +335,7 @@ async function main() {
   console.log(`  kinds: ${kindBreakdown(totals.kindCounts)}`);
   console.log(`  -> ${path.relative(repoRoot, OUT_JSON)}`);
   console.log(`  -> ${path.relative(repoRoot, OUT_TSV)}`);
-  console.log(`  -> ${path.relative(repoRoot, OUT_MD)}`);
+  console.log(`  -> ${OUT_MD}`); // outside repoRoot (GameDesign) — log the absolute path
 }
 
 main().catch((err) => {
