@@ -137,9 +137,9 @@ Evidence (2026-07-04):
   (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
   (1 Chromium smoke).
 
-## Sixth Extraction Slice `[ ] Planned`
+## Sixth Extraction Slice `[x] Completed 2026-07-04`
 
-1. `[ ]` Move placed special actor Details renderers into
+1. `[x]` Move placed special actor Details renderers into
    `src/editor/panels/details/specialActorDetails.ts`:
    - light
    - reflection plane
@@ -147,12 +147,23 @@ Evidence (2026-07-04):
    - blocking volume
    - world widget
    - reflection capture
-2. `[ ]` Reuse existing transform row helpers instead of duplicating location /
+2. `[x]` Reuse existing transform row helpers instead of duplicating location /
    rotation / scale HTML.
-3. `[ ]` Keep `EditorUi.ts` responsible for routing by `selection.kind` and
+3. `[x]` Keep `EditorUi.ts` responsible for routing by `selection.kind` and
    passing app callbacks such as recapture, setter commands, and details edit
    lifecycle hooks.
-4. `[ ]` Prove with the same validation gate as the fifth slice.
+4. `[x]` Prove with the same validation gate as the fifth slice.
+
+Evidence (2026-07-04):
+
+- `src/editor/panels/details/specialActorDetails.ts` owns placed special actor
+  Details HTML and DOM binding for lights, reflection planes, reflective
+  surfaces, blocking volumes, world widgets, and reflection captures.
+- `EditorUi.ts` keeps the `selection.kind` routing and passes app callbacks,
+  editor edit lifecycle hooks, editable assets, and capture recapture commands.
+- Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
+  (1 Chromium smoke).
 
 ## Seventh Extraction Slice `[ ] Planned`
 
