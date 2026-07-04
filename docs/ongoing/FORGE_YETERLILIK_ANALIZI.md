@@ -411,7 +411,10 @@ akislari incelenecek.
     guncellendi; Aksiyon 5 backlog karari olarak korundu. Guncel karar hala
     `[~]`: browser dogrulama acigi kapandi ve dort details slice'i cikti, fakat
     `EditorUi.ts` metadata, ozel aktor details, content/outliner/world refactor
-    edilmeden `[x]` degil.
+    edilmeden `[x]` degil. Devam plani `EDITOR_UI_SLICING_PLAN.md` icinde
+    5-10. slice checklist'leri olarak acildi: metadata details, special actor
+    details, environment details, world settings, outliner/history ve Content
+    Drawer.
 
 ## 4. Runtime ve Gameplay Temelleri `[~] Kismi`
 

@@ -94,6 +94,108 @@ Evidence (2026-07-04):
   (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
   (1 Chromium smoke).
 
+## Remaining Roadmap `[ ] Not Started`
+
+Current `EditorUi.ts` remainder map after the first four slices:
+
+- Metadata Details: `renderMetadataSections(...)`, `bindMetadataInputs(...)`.
+- Special actor Details: light, reflection plane, reflective surface, blocking
+  volume, world widget, reflection capture.
+- Environment singleton Details: sky, fog, cloud, post-process.
+- World Settings: `renderWorldSettings(...)`.
+- Outliner and History: `renderOutliner(...)`, `renderHistory(...)`.
+- Content Drawer: asset list/filter rendering, asset detail popover, context
+  menu actions, drag/drop card wiring.
+
+The next work should continue as small behavior-preserving extractions. Do not
+start by moving save/load endpoints, editor boot, toolbar commands, or overlay
+editor launching.
+
+## Fifth Extraction Slice `[ ] Planned`
+
+1. `[ ]` Move schema-driven Metadata Details rendering into
+   `src/editor/panels/details/metadataDetails.ts`.
+2. `[ ]` Move metadata field lookup, default handling, and DOM input binding
+   into the same module.
+3. `[ ]` Keep `EditorUi.ts` responsible only for passing the current
+   `MetadataSchema`, selection, and the metadata update callback.
+4. `[ ]` Preserve current behavior for string, number, boolean, enum, tag, and
+   default-value clearing.
+5. `[ ]` Prove with:
+   - `npx.cmd tsc --noEmit`
+   - `npm.cmd run test:engine`
+   - `npm.cmd run verify:imports`
+   - `npm.cmd run smoke:browser`
+
+## Sixth Extraction Slice `[ ] Planned`
+
+1. `[ ]` Move placed special actor Details renderers into
+   `src/editor/panels/details/specialActorDetails.ts`:
+   - light
+   - reflection plane
+   - reflective surface
+   - blocking volume
+   - world widget
+   - reflection capture
+2. `[ ]` Reuse existing transform row helpers instead of duplicating location /
+   rotation / scale HTML.
+3. `[ ]` Keep `EditorUi.ts` responsible for routing by `selection.kind` and
+   passing app callbacks such as recapture, setter commands, and details edit
+   lifecycle hooks.
+4. `[ ]` Prove with the same validation gate as the fifth slice.
+
+## Seventh Extraction Slice `[ ] Planned`
+
+1. `[ ]` Move environment singleton Details renderers into
+   `src/editor/panels/details/environmentDetails.ts`:
+   - sky atmosphere
+   - height fog
+   - cloud layer
+   - post-process
+2. `[ ]` Keep singleton visibility/hidden behavior and numeric clamping exactly
+   as-is.
+3. `[ ]` Keep `EditorUi.ts` responsible only for routing and app callbacks.
+4. `[ ]` Prove with the same validation gate as the fifth slice.
+
+## Eighth Extraction Slice `[ ] Planned`
+
+1. `[ ]` Move World Settings rendering and DOM binding into
+   `src/editor/panels/world/worldSettingsPanel.ts`.
+2. `[ ]` Keep `EditorUi.ts` responsible for owning the panel element and passing
+   `setWorldSettings(...)`.
+3. `[ ]` Preserve snap settings, game mode selection, gravity, ambient light, and
+   Kill Z behavior.
+4. `[ ]` Prove with the same validation gate as the fifth slice.
+
+## Ninth Extraction Slice `[ ] Planned`
+
+1. `[ ]` Move Outliner row rendering, selection state, visibility/lock controls,
+   hierarchy affordances, and drag/drop binding into
+   `src/editor/panels/outliner/outlinerPanel.ts`.
+2. `[ ]` Keep `EditorUi.ts` responsible for app command callbacks and selected
+   object state.
+3. `[ ]` Leave History panel extraction separate unless it becomes naturally
+   small; otherwise move it to `src/editor/panels/outliner/historyPanel.ts` in a
+   follow-up slice.
+4. `[ ]` Prove with the same validation gate as the fifth slice.
+
+## Tenth Extraction Slice `[ ] Planned`
+
+1. `[ ]` Move Content Drawer asset rendering, filters, asset detail popover, and
+   card interaction binding into `src/editor/panels/content/contentPanel.ts`.
+2. `[ ]` Keep Content Browser create/rename/delete/import endpoint ownership in
+   `EditorUi.ts` or existing project/content services until a separate
+   endpoint-focused plan exists.
+3. `[ ]` Preserve asset drag/drop placement, context menus, active folder/filter
+   state, and thumbnail behavior.
+4. `[ ]` Prove with:
+   - `npx.cmd tsc --noEmit`
+   - `npm.cmd run test:engine`
+   - `npm.cmd run verify:imports`
+   - `npm.cmd run smoke:browser`
+   - a manual or Playwright check for Content Drawer asset placement if the
+     existing smoke does not cover the moved path deeply enough.
+
 ## Rules
 
 - Do not move save/load ownership while slicing; `/__save-*` stores stay as-is.
