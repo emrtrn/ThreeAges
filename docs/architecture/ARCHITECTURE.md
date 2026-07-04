@@ -1,6 +1,6 @@
 # Forge Architecture Contract
 
-> Created: 2026-06-13 | Updated: 2026-06-16
+> Created: 2026-06-13 | Updated: 2026-07-04
 > Scope: architecture-v2 migration workspace for the single-codebase template.
 > Migration status: complete (phases 0-7 done); this file is the steady-state
 > contract going forward.
@@ -25,13 +25,37 @@ scene/runtime helpers:
 - Default route `/` is Game Mode: runtime render, no editor UI.
 - `/?editor` is Editor Mode: `SceneApp` plus `EditorUi`.
 - `?debug` adds the perf overlay in either mode.
-- A new game starts by copying this repository, then replacing the GDD, assets,
-  layouts, and project-specific game content.
+- A new game is produced by **forking** this repository (not a throwaway copy):
+  the fork sets `upstream` to Forge, keeps all game-specific code and data
+  confined to `public/` + `src/game`, and pulls platform improvements with
+  `git fetch upstream && git merge upstream/main`. See
+  `docs/planned/GAME_FORK_WORKFLOW.md` for the full fork/sync workflow.
 - The editor travels with each game during development, but is gated behind the
   dev-only `?editor` dynamic import and is excluded from production builds.
 - The stable reference repo is `C:\Users\emret\Desktop\3DGameDev`; use it to
   compare behavior if the migrated boundaries ever drift from it.
 - `docs/architecture/ARCHITECTURE_PLAN_SOURCE.md` is the imported source plan.
+
+### Product envelope
+
+Forge's identity is a **reusable Three.js game template**, not a general 3D app
+framework. The envelope it targets — and the boundaries it deliberately leaves
+out — are declared here so a candidate game can be evaluated against Forge
+without relying on tribal knowledge:
+
+- **Proven vertical:** single-player, third-person 3D web game, wired end to end
+  — Game Mode / PlayerController / PlayerState / Pawn, character movement, level
+  travel, slot-based save-game, and boot/loading. Other single-player 3D genres
+  are feasible on the same generic core (a free-fly camera mode also ships), but
+  only the third-person vertical is proven end to end today.
+- **Primary target:** desktop browser; keyboard + mouse (pointer-look) is the
+  first-class input path.
+- **Secondary input, not first-class:** gamepad and touch / virtual-joystick
+  sources exist in `src/input/` and work, but are not the primary tuning target.
+- **Explicit non-goals** (deliberately out of scope, not backlog): networked
+  multiplayer / replication, VR / AR (WebXR), 2D / sprite engines, and native
+  mobile packaging. Any of these is a fork's own concern, not a platform
+  promise.
 
 Removed architecture:
 

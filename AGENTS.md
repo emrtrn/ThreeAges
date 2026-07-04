@@ -1,6 +1,6 @@
 # Forge Codex Instructions
 
-Forge is a reusable Three.js game/app platform template with a built-in editor
+Forge is a reusable Three.js game platform template with a built-in editor
 mode at `?editor`. Keep engine/editor code generic; project-specific game rules
 belong in game runtime code or data.
 

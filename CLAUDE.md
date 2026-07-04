@@ -1,6 +1,6 @@
 # Forge
 
-**Forge** is a general-purpose, reusable Three.js **game/app platform template**
+**Forge** is a general-purpose, reusable Three.js **game platform template**
 whose editor is a built-in mode of the runtime (`?editor`), not a separate app.
 It is not tied to any single project — each concrete project is a copy of this
 template with its own data, assets, and game rules. One `SceneApp` renders both

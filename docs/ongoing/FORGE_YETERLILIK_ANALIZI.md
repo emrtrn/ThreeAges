@@ -2,7 +2,7 @@
 
 Olusturulma tarihi: 2026-07-03
 
-Bu dokuman Forge projesinin yeniden kullanilabilir Three.js oyun/app platformu
+Bu dokuman Forge projesinin yeniden kullanilabilir Three.js oyun platformu
 olarak yeterlilik durumunu baslik baslik degerlendirmek icin canli analiz
 iskeletidir. Analiz ilerledikce her baslik altina kanit, karar, eksik ve
 aksiyon notlari eklenecek.
@@ -29,7 +29,7 @@ Her baslik ayni formatla doldurulacak:
 Kanit siralamasi: calisan kod ve testler > editor/runtime davranisi > proje
 manifestleri ve veri dosyalari > mimari dokumanlar > sohbet notlari.
 
-## 1. Urun Kimligi ve Platform Hedefi `[~] Kismi`
+## 1. Urun Kimligi ve Platform Hedefi `[x] Yeterli`
 
 Forge'un hangi oyun/app turleri icin yeterli bir temel sundugu, hangi sinirlari
 bilerek disarida biraktigi ve reusable platform hedefinin netligi incelenecek.
@@ -37,6 +37,16 @@ bilerek disarida biraktigi ve reusable platform hedefinin netligi incelenecek.
 - Durum: Incelendi (2026-07-03). Kimlik tanimi tutarli ve kodla destekleniyor;
   urun zarfi (hedef tur/cihaz listesi, "app" iddiasi) ve sablon-uretme akisi
   henuz beyan/kanit duzeyinde eksik.
+- Guncelleme (2026-07-04): Beyan aksiyonlari (1-4) uygulandi. Kok `README.md`
+  eklendi; "app" iddiasi karara baglandi ("app" CLAUDE.md/AGENTS.md'den
+  cikarildi, her yerde "game template" — package.json/ARCHITECTURE.md ile
+  hizali); urun zarfi ve fork+upstream modeli ARCHITECTURE.md Direction'a beyan
+  edildi. Ayrica **Aksiyon 5 olgu duzeltmesi**: 2026-07-03 analizi ilk gercek
+  oyun forkunu "henuz acilmamis" sanmisti; aslinda `minigolf` forku mevcut ve
+  fork+upstream modeli pratikte dogrulanmis (Kanit + Eksikler duzeltmesi).
+  Geriye yalnizca ergonomi backlog'u kaliyor: `tools/create-project.mjs`
+  scaffold'i yok — manuel fork zaten calisiyor. Bu duzeltmeyle basligin karari
+  `[x]`'e yukseltildi.
 - Kanit:
   - Kimlik cumleleri birbirini tutuyor: `CLAUDE.md:3` ("general-purpose,
     reusable Three.js game/app platform template", editor `?editor` ile yerlesik
@@ -64,8 +74,16 @@ bilerek disarida biraktigi ve reusable platform hedefinin netligi incelenecek.
   - Cihaz/girdi genisligi kod olarak var: `src/input/` keyboard, pointer,
     gamepad, touch + virtual joystick kaynaklari iceriyor (yalniz plan degil).
   - Dagitim modeli: oyun basina git fork + upstream sync
-    (`docs/planned/GAME_FORK_WORKFLOW.md`, durum: "Kod uygulanmadi");
-    `tools/create-project.mjs` scaffold'i henuz yok (`CLAUDE.md` Near-Term #4).
+    (`docs/planned/GAME_FORK_WORKFLOW.md`, doc basligi hala "Kod uygulanmadi" —
+    bayat); `tools/create-project.mjs` scaffold'i henuz yok (`CLAUDE.md`
+    Near-Term #4).
+    **Duzeltme (2026-07-04): model pratikte uygulanmis.**
+    `C:\Users\emret\Desktop\Games\minigolf` gercek bir Forge forku:
+    origin=minigolf / upstream=Forge, ~24 oyun-commit'i + tekrarli
+    `Merge upstream/main` (son sync 2026-06-30), golf oyun kodu `src/game` +
+    `public/assets/minigolf` + `docs/GDD.md` + `docs/ASSET_CREDITS.md`'de izole
+    (hole 1-9, cup sensor, fizik). Manuel fork calisti; yalniz scaffold araci
+    yok.
   - Repo kokunde `README.md` yok; kimlik yalnizca ajan-yuzlu dosyalarda
     (CLAUDE.md/AGENTS.md) ve mimari sozlesmede yaziyor.
 - Yeterli olanlar:
@@ -76,42 +94,63 @@ bilerek disarida biraktigi ve reusable platform hedefinin netligi incelenecek.
     kararlarla korunuyor; kapsam suruklenmesine karsi gercek bir fren var.
   - Tek oyunculu 3D karakter oyunu dikeyi ucuca calisir durumda; platform
     iddiasinin cekirdegi kanitli.
+  - **(2026-07-04)** Reusable-platform hedefi ampirik olarak dogrulandi: `minigolf`
+    gercek bir Forge forku (origin/upstream ayrimi dokumante modelde), oyun kodu
+    `public/` + `src/game`'de izole, upstream sync tekrarli calistirilmis.
 - Eksikler / riskler:
   - "game/app" ifadesindeki **"app" iddiasi kanitsiz**: yalnizca
     CLAUDE.md/AGENTS.md'de geciyor; ARCHITECTURE.md ve package.json "game
     template" diyor. Oyun disi tek bir kullanim hedefi/ornegi yok. Kucuk ama
-    gercek bir kimlik suruklenmesi.
+    gercek bir kimlik suruklenmesi. **(Cozuldu 2026-07-04, Aksiyon 2: "app"
+    cikarildi, her yerde "game template".)**
   - **Urun zarfi beyan edilmemis**: hangi oyun turleri hedef (3. sahis kanitli;
     yarıs/bulmaca/FPS?), hangi cihazlar birincil (masaustu tarayici fiilen;
     mobil/touch girdi kodu var ama hedef mi?), multiplayer/VR/2D'nin non-goal
     oldugu hicbir yerde acikca yazmiyor (multiplayer yalnizca imported source
     planinda gecici olarak geciyor). Aday bir oyun icin "Forge yeterli mi?"
-    sorusu bugun ancak sohbet bilgisiyle cevaplanabiliyor.
-  - **Sablon-uretme akisi kanitsiz**: fork workflow dokumani planda, scaffold
-    yok, ilk gercek oyun forku henuz acilmamis. "Reusable platform" hedefi su an
-    disipline dayaniyor, aracla/deneyimle dogrulanmamis (detay: Baslik 16).
-  - Terminoloji kaymasi: ARCHITECTURE.md (2026-06-16) "copy this repository"
-    derken GAME_FORK_WORKFLOW.md (2026-06-26) fork+upstream modelini tanimliyor;
-    sozlesme dokumani guncel modeli yansitmiyor.
+    sorusu bugun ancak sohbet bilgisiyle cevaplanabiliyor. **(Cozuldu
+    2026-07-04, Aksiyon 3: ARCHITECTURE.md Direction "Product envelope" +
+    README ozeti.)**
+  - ~~**Sablon-uretme akisi kanitsiz**~~ → **Buyuk olcude kanitli (2026-07-04
+    duzeltmesi):** ilk gercek oyun forku acildi ve calisiyor (`minigolf`;
+    Kanit'teki duzeltme). "Reusable platform" hedefi manuel fork + tekrarli
+    upstream sync ile pratikte dogrulandi. Kalan bosluk yalnizca ergonomi:
+    `tools/create-project.mjs` scaffold'i yok (her fork elle kurulur) ve
+    `GAME_FORK_WORKFLOW.md` hala docs/planned altinda "Kod uygulanmadi" diyor
+    (bayat; detay: Baslik 16).
+  - ~~Terminoloji kaymasi~~ **(Cozuldu 2026-07-04, Aksiyon 4):** ARCHITECTURE.md
+    Direction artik "copy this repository" yerine fork+upstream modelini
+    tanimliyor ve `GAME_FORK_WORKFLOW.md`'ye baglaniyor; "Updated" tarihi
+    2026-07-04.
   - Insan-yuzlu giris noktasi yok: README'siz repo, fork tuketicisi veya yeni
-    gelistirici icin urun cumlesi sunmuyor (Baslik 15 ile kesisir).
-- Karar: `[~] Kismi`. Kimlik net ve kodla tutarli; veri kaybi/mimari borc riski
-  yok. Eksik olan yeterlilik degil **beyan**: urun zarfi, "app" iddiasi ve
-  fork/scaffold hikayesi netlesmeden "platform hedefi net" denemez.
+    gelistirici icin urun cumlesi sunmuyor (Baslik 15 ile kesisir). **(Cozuldu
+    2026-07-04, Aksiyon 1: kok README.md.)**
+- Karar: `[x] Yeterli` (2026-07-04). Kimlik net ve tum kaynaklarda tutarli;
+  beyan eksikleri kapatildi (README + urun zarfi + "app" karari + fork modeli
+  sozlesmede) ve reusable-platform hedefi ampirik olarak dogrulandi: `minigolf`
+  gercek Forge forku, oyun kodu `public/` + `src/game`'de izole, upstream sync
+  tekrarli calistirilmis. Veri kaybi/mimari borc riski yok. Kalan backlog
+  yeterliligi engellemez (bilincli "Later"): `tools/create-project.mjs`
+  scaffold'i (manuel fork zaten calisiyor) ve `GAME_FORK_WORKFLOW.md`'nin
+  docs/planned'dan guncel statuye tasinmasi (Baslik 15/16).
 - Aksiyonlar:
-  1. Kok `README.md` yaz: tek paragraf kimlik + kanitli dikey (3. sahis 3D web
-     oyunu) + bilincli non-goal listesi (Not-In-Scope'un urun-dili ozeti).
-  2. "app" iddiasini karara bagla: ya CLAUDE.md/AGENTS.md'den cikar ya da
-     ARCHITECTURE.md Direction'a somut bir oyun-disi kullanim hedefi ekle.
-  3. Urun zarfini tek yerde beyan et (ARCHITECTURE.md Direction veya README):
-     hedef turler, birincil cihaz (masaustu tarayici; touch/gamepad "girdi var,
-     birinci sinif degil"), acik non-goal'lar (multiplayer/replication, VR/AR,
-     2D, native mobil).
-  4. ARCHITECTURE.md Direction'i fork+upstream modeline guncelle ve
-     `GAME_FORK_WORKFLOW.md`'ye baglanti ver.
-  5. (Baslik 16 ile ortak) Ilk gercek oyun forkunu acarak platform hedefini
-     pratikte dogrula; scaffold karari (`tools/create-project.mjs`) bu denemeden
-     sonra verilsin.
+  1. ✓ (2026-07-04) Kok `README.md` yazildi: kimlik + kanitli dikey (3. sahis
+     3D web oyunu) + urun zarfi + bilincli non-goal listesi.
+  2. ✓ (2026-07-04) "app" iddiasi karara baglandi: CLAUDE.md + AGENTS.md'den
+     "app" cikarildi, her yerde "game template" (package.json/ARCHITECTURE.md
+     ile hizali).
+  3. ✓ (2026-07-04) Urun zarfi ARCHITECTURE.md Direction "Product envelope"
+     alt-basliginda beyan edildi (kanitli dikey; birincil cihaz = masaustu
+     tarayici; gamepad/touch birinci sinif degil; non-goal'lar:
+     multiplayer/replication, VR/AR, 2D, native mobil) + README ozeti.
+  4. ✓ (2026-07-04) ARCHITECTURE.md Direction fork+upstream modeline
+     guncellendi ve `GAME_FORK_WORKFLOW.md`'ye baglanti verildi; "Updated"
+     tarihi 2026-07-04.
+  5. ✓ (buyuk olcude, 2026-07-04) Ilk gercek oyun forku zaten acilmis ve
+     calisiyor (`minigolf`: origin=minigolf / upstream=Forge, tekrarli upstream
+     sync, golf oyunu `public/` + `src/game`'de). Platform hedefi pratikte
+     dogrulandi. Kalan (dusuk oncelik, Baslik 16): scaffold araci karari
+     (`tools/create-project.mjs`) — manuel fork calistigi icin bloklamiyor.
 
 ## 2. Mimari Sinirlar ve Sahiplik Kurallari `[~] Kismi`
 
@@ -612,6 +651,7 @@ eklenecek.
 | --- | --- | --- | --- | --- |
 | 2026-07-03 | Dokuman iskeleti | Analiz basliklari olusturuldu. | Basliklar tek tek kanitla doldurulacak. | `[ ]` |
 | 2026-07-03 | 1. Urun Kimligi | Kimlik net/tutarli, urun zarfi + "app" iddiasi + fork hikayesi beyansiz; README yok. | README + urun zarfi beyani + ARCHITECTURE.md fork guncellemesi (5 aksiyon, baslikta). | `[~]` |
+| 2026-07-04 | 1. Urun Kimligi | Beyan aksiyonlari (1-4) uygulandi: README.md eklendi, "app" iddiasi CLAUDE.md/AGENTS.md'den cikarildi ("game template" hizalamasi), urun zarfi + fork+upstream modeli ARCHITECTURE.md Direction'a beyan edildi. **Olgu duzeltmesi:** ilk fork "acilmamis" degildi — `minigolf` forku mevcut (origin=minigolf/upstream=Forge), upstream sync tekrarli calismis; reusable-platform hedefi ampirik dogrulandi. Karar `[x]`'e yukseltildi. | Kalan backlog (dusuk oncelik): `tools/create-project.mjs` scaffold + `GAME_FORK_WORKFLOW.md` statusunun guncellenmesi. | `[x]` |
 | 2026-07-03 | 2. Mimari Sinirlar | Dist siniri cift katmanli ve kanitli (strict scan PASS); editor->game 5 import sozlesmesiz; kaynak-duzeyi import denetimi yok; CLAUDE.md Near-Term #1 bayat. | Editor<->game karari + import-graph check + bayat not duzeltme (5 aksiyon, baslikta). | `[~]` |
 | 2026-07-03 | 3. Editor Deneyimi | Tam authoring dongusu + 7 alt-editor + 13 dev endpoint; 573 engine check gecti; UI katmaninda otomatik smoke yok, EditorUi 5.8k satir monolit, endpoint dokumantasyonu eksik. | Playwright smoke + EditorUi dilimleme + dokuman duzeltmeleri (5 aksiyon, baslikta). | `[~]` |
 | 2026-07-03 | 4. Runtime/Gameplay | Unreal-analog cerceve ucuca + saf cekirdekler testli (573 check); **bulgu:** behavior registry app-omru yasiyor (yorum sahne-omru diyor), travel'da `traveledTriggers` vb. sifirlanmiyor + entity id'ler level-bagimsiz → round-trip portal muhtemelen olu; RuntimeSceneApp 3.6k satir ikinci monolit; tum tarayici smoke'lari acik. | Sizintiyi dogrula+kapat (headless travel testi) + runtime Playwright smoke + kabuk dilimleme + save sozlesme dokumani (5 aksiyon, baslikta). | `[~]` |
