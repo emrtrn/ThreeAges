@@ -19,6 +19,8 @@ import {
   NormalBlending,
   Points,
   ShaderMaterial,
+  type Texture,
+  TextureLoader,
 } from "three";
 
 import type { RuntimeParticleEffect, Vec3 } from "../vfx/particleEffectTypes";
@@ -67,13 +69,21 @@ void main() {
 
 const FRAGMENT_SHADER = `
 uniform vec3 uColor;
+uniform sampler2D uMap;
+uniform float uHasTexture;
 varying float vAlpha;
 void main() {
-  vec2 coord = gl_PointCoord - vec2(0.5);
-  float dist = length(coord);
-  if (dist > 0.5) discard;
-  float soft = smoothstep(0.5, 0.0, dist);
-  gl_FragColor = vec4(uColor, vAlpha * soft);
+  if (uHasTexture > 0.5) {
+    // Point-sprite UV: gl_PointCoord is top-left origin, textures are bottom-left.
+    vec4 tex = texture2D(uMap, vec2(gl_PointCoord.x, 1.0 - gl_PointCoord.y));
+    gl_FragColor = vec4(uColor * tex.rgb, vAlpha * tex.a);
+  } else {
+    vec2 coord = gl_PointCoord - vec2(0.5);
+    float dist = length(coord);
+    if (dist > 0.5) discard;
+    float soft = smoothstep(0.5, 0.0, dist);
+    gl_FragColor = vec4(uColor, vAlpha * soft);
+  }
 }
 `;
 
@@ -101,11 +111,22 @@ export class ParticleEffect {
   private readonly ages: Float32Array;
   private readonly geometry: BufferGeometry;
   private readonly material: ShaderMaterial;
+  /** Loaded sprite texture (VFX Lite Faz 6a), or null for the procedural sprite. */
+  private texture: Texture | null = null;
   private readonly origin: [number, number, number] = [0, 0, 0];
   private elapsed = 0;
   private spawnAccumulator = 0;
 
-  constructor(definition: RuntimeParticleEffect, overrides?: ParticleEffectOverrides) {
+  /**
+   * @param textureUrl Resolved sprite-texture URL (the app boundary turns the
+   *   definition's texture asset id into a URL). Absent/null keeps the procedural
+   *   soft-round sprite. Loaded asynchronously; the sprite pops in when ready.
+   */
+  constructor(
+    definition: RuntimeParticleEffect,
+    overrides?: ParticleEffectOverrides,
+    textureUrl?: string | null,
+  ) {
     this.definition = definition;
     this.lifetime = definition.lifetime;
     this.rate = definition.rate;
@@ -132,6 +153,8 @@ export class ParticleEffect {
       uniforms: {
         uColor: { value: new Color(definition.color) },
         uScale: { value: POINT_PIXEL_SCALE },
+        uMap: { value: null },
+        uHasTexture: { value: 0 },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
@@ -141,10 +164,20 @@ export class ParticleEffect {
       blending: definition.materialMode === "additive" ? AdditiveBlending : NormalBlending,
     });
     this.applyOverrides(overrides);
+    if (textureUrl) this.loadTexture(textureUrl);
     this.object3D = new Points(this.geometry, this.material);
     // Particles move past the emitter origin; skip frustum culling so the cloud
     // is not clipped by its (stationary) bounding sphere.
     this.object3D.frustumCulled = false;
+  }
+
+  /** Loads the sprite texture and binds it to the shader once it arrives. */
+  private loadTexture(url: string): void {
+    new TextureLoader().load(url, (texture) => {
+      this.texture = texture;
+      this.material.uniforms.uMap!.value = texture;
+      this.material.uniforms.uHasTexture!.value = 1;
+    });
   }
 
   /**
@@ -263,6 +296,8 @@ export class ParticleEffect {
   dispose(): void {
     this.geometry.dispose();
     this.material.dispose();
+    this.texture?.dispose();
+    this.texture = null;
   }
 
   private spawnParticle(): void {

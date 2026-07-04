@@ -68,7 +68,15 @@ export class ParticleEffectPreviewViewport {
   private replayCooldown = 0;
   private disposed = false;
 
-  constructor(private readonly host: HTMLElement) {
+  /**
+   * @param resolveTextureUrl Turns a `renderer.texture` asset id into a fetchable
+   *   image URL (the editor injects a manifest-backed resolver). Absent keeps the
+   *   procedural sprite, matching a texture-less effect.
+   */
+  constructor(
+    private readonly host: HTMLElement,
+    private readonly resolveTextureUrl?: (textureId: string) => string | null,
+  ) {
     this.renderer = new WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     host.append(this.renderer.domElement);
@@ -157,7 +165,9 @@ export class ParticleEffectPreviewViewport {
     }
     if (!this.definition) return;
     const runtime = toRuntimeParticleEffect(this.definition);
-    this.effect = new ParticleEffect(runtime);
+    const textureUrl =
+      runtime.texture && this.resolveTextureUrl ? this.resolveTextureUrl(runtime.texture) : null;
+    this.effect = new ParticleEffect(runtime, undefined, textureUrl);
     this.effect.setOrigin(0, 0, 0);
     this.scene.add(this.effect.object3D);
   }

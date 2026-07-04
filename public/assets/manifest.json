@@ -1934,6 +1934,39 @@
       "license": "Project-local placeholder; replace before distribution if needed"
     },
     {
+      "id": "starter-fx-fire-loop",
+      "name": "Fire Loop Effect",
+      "assetType": "effect",
+      "category": "starter-effects",
+      "path": "assets/starter-content/Effects/FX_Fire_Loop.effect.json",
+      "tags": [
+        "starter",
+        "effect",
+        "vfx",
+        "fire"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "starter-effects",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1186
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Forge Starter Content",
+        "packVersion": "0.1"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
       "id": "t-cobblestone-pebble-d",
       "name": "T Cobble Stone Pebble D",
       "assetType": "texture",

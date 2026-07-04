@@ -2203,6 +2203,12 @@ export class EditorUi {
       await ParticleEffectEditor.open({
         path: item.path,
         label: item.label.replace(/\.effect\.json$/i, ""),
+        assets: this.editableAssets.map((asset) => ({
+          id: asset.id,
+          name: asset.displayName ?? asset.name,
+          assetType: assetType(asset),
+          path: assetPath(asset),
+        })),
         onStatus: (message, tone) => this.setStatus(message, tone),
         onSaved: () => this.renderContentAssets(),
       });

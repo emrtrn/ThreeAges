@@ -24,12 +24,23 @@ import type { ParticleEffectDefinition } from "@engine/vfx/particleEffectTypes";
 import { loadEffectAsset, saveEffectAsset } from "@/editor/particleEffectStore";
 import { ParticleEffectPreviewViewport } from "@/editor/ParticleEffectPreviewViewport";
 import { particleEffectPresetDefinition } from "@engine/vfx/particleEffectPresets";
+import { projectFileUrl } from "@/project/ProjectSystem";
 
 type StatusTone = "info" | "success" | "warning" | "error";
+
+/** Minimal asset record the editor needs to populate the sprite-texture picker. */
+export interface ParticleEffectEditorAsset {
+  id: string;
+  name: string;
+  assetType: string;
+  path: string;
+}
 
 export interface ParticleEffectEditorOptions {
   path: string;
   label: string;
+  /** Project asset records (for the Renderer sprite-texture picker); optional. */
+  assets?: ParticleEffectEditorAsset[];
   onStatus?: (message: string, tone?: StatusTone) => void;
   onSaved?: () => void;
 }
@@ -134,6 +145,7 @@ export class ParticleEffectEditor {
   private def: ParticleEffectDefinition = particleEffectPresetDefinition("blank");
   private path: string;
   private label: string;
+  private readonly assets: readonly ParticleEffectEditorAsset[];
 
   private readonly undoStack: ParticleEffectDefinition[] = [];
   private readonly redoStack: ParticleEffectDefinition[] = [];
@@ -145,6 +157,7 @@ export class ParticleEffectEditor {
   private constructor(private readonly options: ParticleEffectEditorOptions) {
     this.path = options.path;
     this.label = options.label;
+    this.assets = options.assets ?? [];
 
     this.overlay = document.createElement("div");
     this.overlay.className = "pfx-overlay";
@@ -236,7 +249,9 @@ export class ParticleEffectEditor {
       this.undoStack.length = 0;
       this.redoStack.length = 0;
       this.dirty = false;
-      this.preview = new ParticleEffectPreviewViewport(this.previewHost);
+      this.preview = new ParticleEffectPreviewViewport(this.previewHost, (id) =>
+        this.resolveTextureUrl(id),
+      );
       this.preview.setDefinition(this.def);
       this.statsTimer = window.setInterval(() => this.updateHud(), 150);
       this.renderAll();
@@ -357,6 +372,7 @@ export class ParticleEffectEditor {
 
     html.push(this.groupOpen("renderer", "Renderer"));
     html.push(this.roRow("Type", "sprite"));
+    html.push(this.textureRow("Texture", "renderer.texture", d.renderer.texture));
     html.push(this.enumRow("Blend Mode", "renderer.blendMode", d.renderer.blendMode, BLEND_MODES));
     html.push(this.numRow("Softness", "renderer.softness", d.renderer.softness, 0, 1, 0.05));
     html.push(this.enumRow("Sort Mode", "renderer.sortMode", d.renderer.sortMode, SORT_MODES));
@@ -435,6 +451,35 @@ export class ParticleEffectEditor {
     return this.row(label, `<select class="pfx-input" data-path="${esc(path)}" data-kind="enum">${opts}</select>`);
   }
 
+  /** Sprite-texture picker: `<none>` + the project's texture assets (by name). */
+  private textureRow(label: string, path: string, value: string | null): string {
+    const none = `<option value=""${value ? "" : " selected"}>&lt;none — procedural sprite&gt;</option>`;
+    const opts = this.textureAssets()
+      .map(
+        (t) =>
+          `<option value="${esc(t.id)}"${t.id === value ? " selected" : ""}>${esc(t.name)}</option>`,
+      )
+      .join("");
+    return this.row(
+      label,
+      `<select class="pfx-input" data-path="${esc(path)}" data-kind="texture">${none}${opts}</select>`,
+    );
+  }
+
+  /** The project's texture assets, sorted by display name for the picker. */
+  private textureAssets(): ParticleEffectEditorAsset[] {
+    return this.assets
+      .filter((asset) => asset.assetType === "texture")
+      .slice()
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  }
+
+  /** Resolves a texture asset id to a fetchable image URL for the preview. */
+  private resolveTextureUrl(textureId: string): string | null {
+    const asset = this.assets.find((a) => a.id === textureId && a.assetType === "texture");
+    return asset ? projectFileUrl(asset.path) : null;
+  }
+
   private bindDetailInputs(): void {
     for (const el of this.detailsHost.querySelectorAll<HTMLElement>("[data-path]")) {
       const path = el.dataset.path!;
@@ -480,6 +525,10 @@ export class ParticleEffectEditor {
     this.beginEdit();
     if (kind === "bool") {
       setPath(this.def as unknown as Record<string, unknown>, path, (el as HTMLInputElement).checked);
+    } else if (kind === "texture") {
+      // Empty option = "<none>" → store null so the renderer keeps its procedural sprite.
+      const value = (el as HTMLSelectElement).value;
+      setPath(this.def as unknown as Record<string, unknown>, path, value ? value : null);
     } else {
       setPath(this.def as unknown as Record<string, unknown>, path, (el as HTMLSelectElement).value);
     }

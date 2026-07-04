@@ -408,12 +408,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly soundCueDefs = new Map<string, SoundCueAsset | null>();
   /** Manifest effect (`.effect.json`) asset id -> fetchable file URL. */
   private readonly effectUrlById = new Map<string, string>();
+  /** Manifest texture asset id -> fetchable image URL (particle sprite textures). */
+  private readonly textureUrlById = new Map<string, string>();
   /**
    * Owns every live particle effect: definition cache, pooling, per-frame advance
-   * and one-shot recycling. Resolves ids to URLs through {@link effectUrlById}.
+   * and one-shot recycling. Resolves effect ids to URLs through
+   * {@link effectUrlById} and sprite-texture ids through {@link textureUrlById}.
    */
   private readonly vfxSubsystem = new VfxSubsystem({
     resolveEffectUrl: (effectId) => this.effectUrlById.get(effectId) ?? null,
+    resolveTextureUrl: (textureId) => this.textureUrlById.get(textureId) ?? null,
   });
   private readonly audioSubsystem = new AudioSubsystem({
     backend: "web-audio",
@@ -2033,6 +2037,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       const path = assetPath(asset);
       if (assetType(asset) === "sound") this.soundUrlById.set(asset.id, projectFileUrl(path));
       if (assetType(asset) === "soundCue") this.soundCueUrlById.set(asset.id, projectFileUrl(path));
+      if (assetType(asset) === "texture") this.textureUrlById.set(asset.id, projectFileUrl(path));
       // Prefer the `effect` asset type; fall back to the `.effect.json` suffix so
       // older manifests (effect assets typed as `prefab`) keep resolving.
       if (assetType(asset) === "effect" || path.endsWith(".effect.json")) {

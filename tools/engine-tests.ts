@@ -12187,6 +12187,42 @@ check("normalizeEffectDefinition reads a schema-2 effect and applies defaults", 
   assert.equal(messy.renderer.blendMode, "alpha");
 });
 
+check("renderer.texture (VFX Lite Faz 6a) normalizes and collapses through to runtime", () => {
+  // A texture asset id is preserved on the normalized def and carried to the flat
+  // runtime effect so the app boundary can resolve it to a sprite URL.
+  const textured = normalizeEffectDefinition({
+    schema: 2,
+    type: "particleEffect",
+    renderer: { blendMode: "additive", texture: "fire-01-2" },
+  });
+  assert.ok(textured);
+  assert.equal(textured.renderer.texture, "fire-01-2");
+  assert.equal(parseRuntimeParticleEffect({
+    schema: 2,
+    type: "particleEffect",
+    renderer: { blendMode: "additive", texture: "fire-01-2" },
+  })?.texture, "fire-01-2");
+
+  // Empty / whitespace / non-string → null, and the runtime effect omits `texture`.
+  const bare = normalizeEffectDefinition({ schema: 2, renderer: { texture: "   " } });
+  assert.ok(bare);
+  assert.equal(bare.renderer.texture, null);
+  assert.equal(toRuntimeParticleEffect(bare).texture, undefined);
+
+  // A schema-1 body has no texture concept → null on the def, absent at runtime.
+  const legacy = parseRuntimeParticleEffect({ schema: 1, effectId: "fx", color: "#ffffff" });
+  assert.ok(legacy);
+  assert.equal("texture" in legacy, false);
+
+  // validateEffectAsset (save path) keeps the texture through the round-trip.
+  const canonical = validateEffectAsset({
+    schema: 2,
+    type: "particleEffect",
+    renderer: { blendMode: "additive", texture: "fire-01-2" },
+  }) as { renderer: { texture: string | null } };
+  assert.equal(canonical.renderer.texture, "fire-01-2");
+});
+
 check("schema-1 and its hand-converted schema-2 starter collapse identically", () => {
   // The Faz 1 starter conversion is mechanical: the schema-2 files are authored
   // so the normalize→collapse pipeline reproduces the original schema-1 runtime

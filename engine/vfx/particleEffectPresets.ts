@@ -18,6 +18,7 @@
 import type { ParticleEffectDefinition } from "./particleEffectTypes";
 
 export const PARTICLE_EFFECT_PRESETS = [
+  "fire",
   "smoke",
   "dust",
   "spark",
@@ -35,6 +36,7 @@ export function isParticleEffectPreset(value: unknown): value is ParticleEffectP
 }
 
 export const PARTICLE_PRESET_LABELS: Record<ParticleEffectPreset, string> = {
+  fire: "Fire Loop",
   smoke: "Smoke Puff",
   dust: "Dust Hit",
   spark: "Spark Burst",
@@ -43,6 +45,7 @@ export const PARTICLE_PRESET_LABELS: Record<ParticleEffectPreset, string> = {
 };
 
 export const PARTICLE_PRESET_DESCRIPTIONS: Record<ParticleEffectPreset, string> = {
+  fire: "Textured additive flames rising and cooling — a looping fire sprite.",
   smoke: "Soft grey smoke that rises, grows and fades — one-shot burst.",
   dust: "Tan dust kicked up on impact, settling under light gravity.",
   spark: "Fast additive sparks flung outward, falling as they cool.",
@@ -98,7 +101,7 @@ const SMOKE: ParticleEffectDefinition = {
     fadeInTime: 0.03,
     fadeOutTime: 0.2,
   },
-  renderer: { type: "sprite", blendMode: "alpha", softness: 0.6, sortMode: "none" },
+  renderer: { type: "sprite", blendMode: "alpha", softness: 0.6, sortMode: "none", texture: null },
 };
 
 const DUST: ParticleEffectDefinition = {
@@ -144,7 +147,7 @@ const DUST: ParticleEffectDefinition = {
     fadeInTime: 0.02,
     fadeOutTime: 0.18,
   },
-  renderer: { type: "sprite", blendMode: "alpha", softness: 0.5, sortMode: "none" },
+  renderer: { type: "sprite", blendMode: "alpha", softness: 0.5, sortMode: "none", texture: null },
 };
 
 const SPARK: ParticleEffectDefinition = {
@@ -190,7 +193,7 @@ const SPARK: ParticleEffectDefinition = {
     fadeInTime: 0,
     fadeOutTime: 0.12,
   },
-  renderer: { type: "sprite", blendMode: "additive", softness: 0.4, sortMode: "none" },
+  renderer: { type: "sprite", blendMode: "additive", softness: 0.4, sortMode: "none", texture: null },
 };
 
 const GLOW: ParticleEffectDefinition = {
@@ -236,7 +239,7 @@ const GLOW: ParticleEffectDefinition = {
     fadeInTime: 0.15,
     fadeOutTime: 0.35,
   },
-  renderer: { type: "sprite", blendMode: "additive", softness: 0.7, sortMode: "none" },
+  renderer: { type: "sprite", blendMode: "additive", softness: 0.7, sortMode: "none", texture: null },
 };
 
 const BLANK: ParticleEffectDefinition = {
@@ -282,10 +285,68 @@ const BLANK: ParticleEffectDefinition = {
     fadeInTime: 0,
     fadeOutTime: 0.1,
   },
-  renderer: { type: "sprite", blendMode: "alpha", softness: 0.5, sortMode: "none" },
+  renderer: { type: "sprite", blendMode: "alpha", softness: 0.5, sortMode: "none", texture: null },
+};
+
+/**
+ * Textured additive fire (VFX Lite Faz 6a): a rising, tinted sprite plume using
+ * the Kenney soft fire blob (`fire-01-2`). The first preset that ships a
+ * `renderer.texture`, demonstrating the single-sprite texture path end-to-end.
+ */
+const FIRE: ParticleEffectDefinition = {
+  name: "Fire Loop",
+  category: "Fire",
+  tags: ["fire", "flame", "loop"],
+  system: {
+    enabled: true,
+    loop: true,
+    duration: 1,
+    seed: null,
+    maxParticles: 96,
+    bounds: { mode: "fixed", min: [-0.9, 0, -0.9], max: [0.9, 3, 0.9], showInPreview: true },
+  },
+  spawn: {
+    mode: "rate",
+    rate: 32,
+    count: 16,
+    delay: 0,
+    interval: 0,
+    shape: "circle",
+    radius: 0.18,
+    boxSize: [0, 0, 0],
+  },
+  initialize: {
+    lifetime: [0.5, 0.9],
+    startSize: [0.35, 0.55],
+    startColor: "#ffb038",
+    startOpacity: 1,
+    direction: [0, 1, 0],
+    speed: [0.8, 1.6],
+    spreadAngleDeg: 18,
+    rotation: [0, 0],
+    angularVelocity: [0, 0],
+  },
+  update: {
+    gravityScale: 0,
+    drag: 0.6,
+    acceleration: [0, 0.4, 0],
+    endSize: [0.12, 0.2],
+    endColor: "#8a1a05",
+    endOpacity: 0,
+    fadeInTime: 0.05,
+    fadeOutTime: 0.25,
+  },
+  renderer: {
+    type: "sprite",
+    blendMode: "additive",
+    softness: 0.6,
+    sortMode: "none",
+    texture: "fire-01-2",
+  },
 };
 
 const PRESET_DEFS: Record<ParticleEffectPreset, ParticleEffectDefinition> = {
+  fire: FIRE,
   smoke: SMOKE,
   dust: DUST,
   spark: SPARK,

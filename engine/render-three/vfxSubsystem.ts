@@ -55,6 +55,12 @@ export interface VfxSubsystemOptions {
    */
   resolveEffectUrl?: (effectId: string) => string | null;
   /**
+   * Resolves a sprite-texture asset id (from `renderer.texture`) to a fetchable
+   * image URL (VFX Lite Faz 6a). Injected by the host so the engine layer stays
+   * manifest-agnostic; absent/returning null keeps the procedural sprite.
+   */
+  resolveTextureUrl?: (textureId: string) => string | null;
+  /**
    * Loads + parses a definition from a resolved URL. Defaults to `fetch` + JSON +
    * {@link parseRuntimeParticleEffect}; tests inject a synchronous fixture loader.
    */
@@ -82,6 +88,7 @@ export class VfxSubsystem implements Subsystem {
   /** Scene container the host adds once; effects live/come/go as its children. */
   readonly root = new Group();
   private readonly resolveEffectUrl: (effectId: string) => string | null;
+  private readonly resolveTextureUrl: (textureId: string) => string | null;
   private readonly loadDefinition: (url: string) => Promise<RuntimeParticleEffect | null>;
   /** Parsed definitions keyed by effectId; a cached `null` marks a known miss. */
   private readonly definitions = new Map<string, RuntimeParticleEffect | null>();
@@ -95,6 +102,7 @@ export class VfxSubsystem implements Subsystem {
   constructor(options: VfxSubsystemOptions = {}) {
     this.root.name = "vfx-root";
     this.resolveEffectUrl = options.resolveEffectUrl ?? (() => null);
+    this.resolveTextureUrl = options.resolveTextureUrl ?? (() => null);
     this.loadDefinition = options.loadDefinition ?? fetchDefinition;
   }
 
@@ -243,7 +251,10 @@ export class VfxSubsystem implements Subsystem {
       pooled.reset(overrides);
       return pooled;
     }
-    return new ParticleEffect(definition, overrides);
+    // Same effectId always resolves to the same texture, so a pooled instance
+    // (built with it once) needs no texture re-resolution on reuse.
+    const textureUrl = definition.texture ? this.resolveTextureUrl(definition.texture) : null;
+    return new ParticleEffect(definition, overrides, textureUrl);
   }
 
   /** Detaches an instance's object and returns its effect to the (bounded) pool. */

@@ -90,6 +90,13 @@ export interface ParticleRendererBlock {
   blendMode: ParticleBlendMode;
   softness: number;
   sortMode: SortMode;
+  /**
+   * Optional sprite texture, referenced as a manifest texture asset id (matching
+   * the material convention). `null` keeps the procedural soft-round sprite. The
+   * id → URL → `THREE.Texture` resolution happens at the app boundary that owns
+   * the manifest (VFX Lite Faz 6a); `engine/vfx` stays manifest-free.
+   */
+  texture: string | null;
 }
 
 /** The normalized, fully-defaulted authoring form (schema-2 shaped). */
@@ -123,4 +130,6 @@ export interface RuntimeParticleEffect {
   materialMode: ParticleBlendMode;
   /** Particle tint (hex `#rrggbb`). */
   color: string;
+  /** Optional sprite texture asset id; absent renders the procedural sprite. */
+  texture?: string;
 }

@@ -178,6 +178,11 @@ function normalizeUpdate(value: unknown): ParticleUpdateBlock {
   };
 }
 
+/** A non-empty texture asset id, or null (empty/whitespace/non-string → null). */
+function readTextureRef(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
 function normalizeRenderer(value: unknown): ParticleRendererBlock {
   const data = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   return {
@@ -185,6 +190,7 @@ function normalizeRenderer(value: unknown): ParticleRendererBlock {
     blendMode: readEnum(data.blendMode, BLEND_MODES, "alpha"),
     softness: Math.min(1, clampMin(finiteNumber(data.softness, 0.5), 0)),
     sortMode: readEnum(data.sortMode, SORT_MODES, "none"),
+    texture: readTextureRef(data.texture),
   };
 }
 
@@ -278,7 +284,7 @@ function normalizeSchema1(data: Record<string, unknown>): ParticleEffectDefiniti
       fadeInTime: 0,
       fadeOutTime: 0.1,
     },
-    renderer: { type: "sprite", blendMode: materialMode, softness: 0.5, sortMode: "none" },
+    renderer: { type: "sprite", blendMode: materialMode, softness: 0.5, sortMode: "none", texture: null },
   };
 }
 
@@ -323,6 +329,7 @@ export function toRuntimeParticleEffect(def: ParticleEffectDefinition): RuntimeP
     spread: def.initialize.spreadAngleDeg / SPREAD_SCALE,
     materialMode: def.renderer.blendMode,
     color: def.initialize.startColor,
+    ...(def.renderer.texture ? { texture: def.renderer.texture } : {}),
   };
 }
 
