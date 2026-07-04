@@ -165,18 +165,29 @@ Evidence (2026-07-04):
   (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
   (1 Chromium smoke).
 
-## Seventh Extraction Slice `[ ] Planned`
+## Seventh Extraction Slice `[x] Completed 2026-07-04`
 
-1. `[ ]` Move environment singleton Details renderers into
+1. `[x]` Move environment singleton Details renderers into
    `src/editor/panels/details/environmentDetails.ts`:
    - sky atmosphere
    - height fog
    - cloud layer
    - post-process
-2. `[ ]` Keep singleton visibility/hidden behavior and numeric clamping exactly
+2. `[x]` Keep singleton visibility/hidden behavior and numeric clamping exactly
    as-is.
-3. `[ ]` Keep `EditorUi.ts` responsible only for routing and app callbacks.
-4. `[ ]` Prove with the same validation gate as the fifth slice.
+3. `[x]` Keep `EditorUi.ts` responsible only for routing and app callbacks.
+4. `[x]` Prove with the same validation gate as the fifth slice.
+
+Evidence (2026-07-04):
+
+- `src/editor/panels/details/environmentDetails.ts` owns environment singleton
+  Details HTML and DOM binding for Sky Atmosphere, Height Fog, Cloud Layer, and
+  Post Process.
+- `EditorUi.ts` keeps the `selection.kind` routing and passes only Details body,
+  scale assignment, environment setter callbacks, and sky-light recapture.
+- Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
+  (1 Chromium smoke).
 
 ## Eighth Extraction Slice `[ ] Planned`
 
