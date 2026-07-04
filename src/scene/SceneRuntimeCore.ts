@@ -508,11 +508,13 @@ export async function startSceneRuntime(options: {
   behavior: SceneEntitySink;
   characterMovement?: SceneEntitySink;
   movingPlatform?: SceneEntitySink;
+  ai?: SceneEntitySink;
   engineApp: SceneEngineSpine;
 }): Promise<void> {
   options.physics.setEntities(options.sceneDocument.entities);
   options.movingPlatform?.setEntities(options.sceneDocument.entities);
   options.characterMovement?.setEntities(options.sceneDocument.entities);
+  options.ai?.setEntities(options.sceneDocument.entities);
   options.behavior.setEntities(options.sceneDocument.entities);
   await options.engineApp.init();
   await options.engineApp.start();

@@ -104,6 +104,7 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   CharacterMovement: "CM",
   SpringArm: "⌐",
   Camera: "🎥",
+  AIController: "🧠",
 };
 
 function escapeHtml(value: string): string {
@@ -2273,6 +2274,17 @@ function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJs
     // `autoPlay` defaults true (Unreal AudioComponent Auto Activate parity) so a
     // picked sound is audible in Play without an extra toggle.
     return { clipId: "", volume: 1, loop: false, spatial: false, autoPlay: true };
+  }
+  if (kind === "AIController") {
+    // Marks the actor as an AI-controlled pawn. `behaviorTree` / `blackboard`
+    // asset paths are wired by the Faz 2 loader; the perception/nav-agent tuning
+    // round-trips as opaque props now (consumed in Faz 3/Faz 4).
+    return {
+      behaviorTree: "",
+      blackboard: "",
+      perception: { sightRadius: 18, fieldOfViewDeg: 110, hearingRadius: 12 },
+      navAgent: { radius: 0.35, height: 1.8, maxSpeed: 3.2 },
+    };
   }
   return {};
 }

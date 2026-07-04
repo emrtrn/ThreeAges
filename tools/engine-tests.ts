@@ -38,6 +38,7 @@ import {
 } from "../engine/scene/legacyRoomLayoutAdapter";
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
 import {
+  readAIControllerComponent,
   readAudioComponent,
   readBehaviorComponent,
   readCameraComponent,
@@ -65,7 +66,15 @@ import {
   SCRIPT_DISPATCHERS_COMPONENT,
   SCRIPT_INTERFACES_COMPONENT,
   SCRIPT_REFERENCES_COMPONENT,
+  AI_CONTROLLER_COMPONENT,
 } from "../engine/scene/components";
+import {
+  Blackboard,
+  normalizeBlackboardKeys,
+  type BlackboardKeyDef,
+} from "../engine/ai/blackboard";
+import { AIController } from "../engine/ai/aiController";
+import { AISubsystem } from "../engine/ai/aiSubsystem";
 import {
   forwardVectorFromRotation,
   readRotation,
@@ -278,6 +287,7 @@ import {
 import { resolveGameMode } from "../src/game/gameModes/registry";
 import { createProjectGameMode } from "../src/game/gameModes/projectGameMode";
 import {
+  formatAiDebug,
   formatGameModeDebug,
   formatMemory,
   formatPerfBudget,
@@ -17588,6 +17598,193 @@ check("joystickMoveCodes thresholds a stick vector into move codes", () => {
   assert.deepEqual(joystickMoveCodes({ x: 1, y: 0, magnitude: 1 }), ["Pad_LStickRight"]);
   // Below threshold ⇒ nothing.
   assert.deepEqual(joystickMoveCodes({ x: 0.2, y: 0.2, magnitude: 0.28 }), []);
+});
+
+// ---------------------------------------------------------------------------
+// AI (Faz 1): Blackboard memory, AIController, AISubsystem, component reader.
+// ---------------------------------------------------------------------------
+
+check("Blackboard applies declared defaults and rejects unknown/mistyped writes", () => {
+  const bb = new Blackboard([
+    { key: "target", kind: "entity", default: null },
+    { key: "hasLineOfSight", kind: "boolean", default: false },
+    { key: "aggro", kind: "number" },
+    { key: "patrolPoint", kind: "vec3", default: null },
+  ]);
+  // Declared defaults (and each kind's zero value when no default is authored).
+  assert.equal(bb.getEntity("target"), null);
+  assert.equal(bb.getBoolean("hasLineOfSight"), false);
+  assert.equal(bb.getNumber("aggro"), 0);
+  assert.equal(bb.getVec3("patrolPoint"), null);
+  assert.equal(bb.keyCount(), 4);
+  // Typed writes update and read back.
+  assert.equal(bb.set("hasLineOfSight", true), true);
+  assert.equal(bb.getBoolean("hasLineOfSight"), true);
+  assert.equal(bb.set("target", "enemy-1"), true);
+  assert.equal(bb.getEntity("target"), "enemy-1");
+  assert.equal(bb.set("aggro", 5), true);
+  assert.equal(bb.getNumber("aggro"), 5);
+  // An undeclared key can never be written (no phantom keys).
+  assert.equal(bb.set("nope", true), false);
+  assert.equal(bb.has("nope"), false);
+  assert.equal(bb.get("nope"), undefined);
+  // A wrong-typed write is a no-op; the prior value stands.
+  assert.equal(bb.set("hasLineOfSight", "yes"), false);
+  assert.equal(bb.getBoolean("hasLineOfSight"), true);
+});
+
+check("Blackboard clones vec3 in/out (no aliasing) and reset restores defaults", () => {
+  const bb = new Blackboard([
+    { key: "patrolPoint", kind: "vec3", default: [1, 2, 3] },
+    { key: "hasLineOfSight", kind: "boolean", default: false },
+  ]);
+  const read = bb.getVec3("patrolPoint");
+  assert.deepEqual(read, [1, 2, 3]);
+  // Mutating the returned tuple must not reach the store.
+  if (read) read[0] = 99;
+  assert.deepEqual(bb.getVec3("patrolPoint"), [1, 2, 3]);
+  // A caller-owned array is copied in, not aliased.
+  const src: [number, number, number] = [4, 5, 6];
+  bb.set("patrolPoint", src);
+  src[1] = 0;
+  assert.deepEqual(bb.getVec3("patrolPoint"), [4, 5, 6]);
+  bb.set("hasLineOfSight", true);
+  assert.equal(bb.clear("patrolPoint"), true);
+  assert.equal(bb.getVec3("patrolPoint"), null);
+  bb.reset();
+  assert.deepEqual(bb.getVec3("patrolPoint"), [1, 2, 3]);
+  assert.equal(bb.getBoolean("hasLineOfSight"), false);
+});
+
+check("normalizeBlackboardKeys keeps valid keys, drops malformed, dedupes", () => {
+  const keys: BlackboardKeyDef[] = normalizeBlackboardKeys([
+    { key: "target", kind: "entity", default: null },
+    { key: "speed", kind: "number", default: 2 },
+    { key: "target", kind: "boolean" }, // duplicate key dropped
+    { key: "", kind: "number" }, // empty key dropped
+    { key: "bad", kind: "banana" }, // unknown kind dropped
+    { key: "loose", kind: "vec3", default: [1, 2] }, // bad default dropped, key kept
+    "nope",
+  ]);
+  assert.deepEqual(
+    keys.map((entry) => entry.key),
+    ["target", "speed", "loose"],
+  );
+  assert.equal(keys[0]?.kind, "entity");
+  assert.equal(keys.find((entry) => entry.key === "loose")?.default, undefined);
+});
+
+check("AIController exposes goal + blackboard in its debug snapshot", () => {
+  const bb = new Blackboard([{ key: "target", kind: "entity", default: null }]);
+  const controller = new AIController("ai:npc-1", "npc-1", bb, {
+    behaviorTreeAsset: "assets/AI/Enemy.behavior.json",
+  });
+  let snap = controller.getDebugSnapshot();
+  assert.equal(snap.controllerId, "ai:npc-1");
+  assert.equal(snap.pawnEntityId, "npc-1");
+  assert.equal(snap.goal, null);
+  assert.equal(snap.behaviorTreeAsset, "assets/AI/Enemy.behavior.json");
+  assert.equal(snap.blackboard.keyCount, 1);
+  controller.setGoal("patrol");
+  assert.equal(controller.goal, "patrol");
+  controller.setGoal(""); // empty clears the goal
+  assert.equal(controller.goal, null);
+  snap = controller.getDebugSnapshot();
+  assert.equal(snap.goal, null);
+});
+
+check("readAIControllerComponent parses props and marks empty components", () => {
+  assert.equal(readAIControllerComponent({ id: "x", components: {} }), undefined);
+  const component = readAIControllerComponent({
+    id: "npc",
+    components: {
+      [AI_CONTROLLER_COMPONENT]: {
+        behaviorTree: "assets/AI/Enemy.behavior.json",
+        blackboard: "assets/AI/Enemy.blackboard.json",
+        perception: { sightRadius: 18, fieldOfViewDeg: 110, hearingRadius: 12 },
+        navAgent: { radius: 0.35, height: 1.8, maxSpeed: 3.2 },
+        blackboardKeys: [
+          { key: "target", kind: "entity", default: null },
+          { key: "hasLineOfSight", kind: "boolean", default: false },
+        ],
+      },
+    },
+  });
+  assert.ok(component);
+  assert.equal(component?.behaviorTree, "assets/AI/Enemy.behavior.json");
+  assert.equal(component?.blackboard, "assets/AI/Enemy.blackboard.json");
+  assert.equal(component?.perception?.sightRadius, 18);
+  assert.equal(component?.navAgent?.maxSpeed, 3.2);
+  assert.equal(component?.blackboardKeys?.length, 2);
+  // Presence alone (empty props) still marks the entity as AI-controlled.
+  const empty = readAIControllerComponent({
+    id: "npc2",
+    components: { [AI_CONTROLLER_COMPONENT]: {} },
+  });
+  assert.ok(empty);
+  assert.equal(Object.keys(empty ?? {}).length, 0);
+});
+
+check("AISubsystem derives one controller per AIController entity, ticks safely, and gates", () => {
+  const ai = new AISubsystem();
+  ai.setEntities([
+    {
+      id: "enemy-1",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: {
+          behaviorTree: "assets/AI/Enemy.behavior.json",
+          blackboardKeys: [{ key: "target", kind: "entity", default: null }],
+        },
+      },
+    },
+    { id: "prop-1", components: {} },
+  ]);
+  assert.equal(ai.controllerCount(), 1);
+  const controller = ai.getControllerForPawn("enemy-1");
+  assert.ok(controller);
+  assert.equal(controller?.pawnEntityId, "enemy-1");
+  assert.equal(controller?.blackboard.keyCount(), 1);
+  assert.equal(controller?.behaviorTreeAsset, "assets/AI/Enemy.behavior.json");
+  assert.equal(ai.getControllerForPawn("prop-1"), undefined);
+
+  const snap = ai.getDebugSnapshot();
+  assert.equal(snap.enabled, true);
+  assert.equal(snap.controllerCount, 1);
+  assert.equal(snap.controllers[0]?.pawnEntityId, "enemy-1");
+  assert.equal(snap.controllers[0]?.blackboard.keyCount, 1);
+
+  // Runtime smoke: ticking (enabled and gated off) must not throw and must leave
+  // the controller set intact.
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  ai.setEnabled(false);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  assert.equal(ai.isEnabled(), false);
+  assert.equal(ai.getDebugSnapshot().enabled, false);
+  assert.equal(ai.controllerCount(), 1);
+
+  // A rebuild with an empty set clears controllers (scene teardown/reload).
+  ai.setEntities([]);
+  assert.equal(ai.controllerCount(), 0);
+});
+
+check("formatAiDebug renders controller count, goal + blackboard size, tagging disabled", () => {
+  const lines = formatAiDebug({
+    enabled: true,
+    controllerCount: 1,
+    controllers: [
+      {
+        controllerId: "ai:enemy-1",
+        pawnEntityId: "enemy-1",
+        goal: "patrol",
+        behaviorTreeAsset: null,
+        blackboard: { keyCount: 3, entries: [] },
+      },
+    ],
+  });
+  assert.deepEqual(lines, ["ai", "controllers: 1", "  enemy-1 goal:patrol bb:3"]);
+  const off = formatAiDebug({ enabled: false, controllerCount: 0, controllers: [] });
+  assert.deepEqual(off, ["ai", "controllers: 0 (off)"]);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

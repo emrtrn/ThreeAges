@@ -31,6 +31,7 @@ import {
   type ActorSpawnRequest,
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
+import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
@@ -353,6 +354,8 @@ export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
   getRenderStats(): { drawCalls: number; triangles: number };
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot;
+  /** Optional: AI controllers + blackboards for the `?debug` overlay. */
+  getAiDebugSnapshot?(): AiDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
@@ -400,6 +403,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly physicsSubsystem = new PhysicsSubsystem({ backend: "rapier" });
   private readonly movingPlatformSubsystem: MovingPlatformSubsystem;
   private readonly characterMovementSubsystem: CharacterMovementSubsystem;
+  /** Owns every AIController possessing an NPC pawn (decision tick lands in Faz 2). */
+  private readonly aiSubsystem = new AISubsystem();
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
   /** Manifest soundCue asset id -> fetchable file URL. */
@@ -711,6 +716,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // The platform subsystem must tick before character movement so a rider is
     // carried by the same frame's platform delta (no one-frame lag).
     this.engineApp.registerSubsystem(this.movingPlatformSubsystem);
+    // AI decisions tick before character movement so an agent's move-intent (Faz 3)
+    // is consumed by the same frame's movement resolve. In Faz 1 the subsystem
+    // holds controllers + blackboards only and does no per-frame work.
+    this.engineApp.registerSubsystem(this.aiSubsystem);
     this.engineApp.registerSubsystem(this.characterMovementSubsystem);
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
@@ -956,6 +965,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot {
     return this.behaviorSubsystem.getScriptMessageDebugSnapshot();
+  }
+
+  /** Snapshots the AI subsystem (active controllers + blackboards) for `?debug`. */
+  getAiDebugSnapshot(): AiDebugSnapshot {
+    return this.aiSubsystem.getDebugSnapshot();
   }
 
   /**
@@ -1233,6 +1247,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       physics: this.physicsSubsystem,
       movingPlatform: this.movingPlatformSubsystem,
       characterMovement: this.characterMovementSubsystem,
+      ai: this.aiSubsystem,
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
@@ -1398,6 +1413,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.physicsSubsystem.setEntities([]);
     this.movingPlatformSubsystem.clear();
     this.characterMovementSubsystem.clear();
+    this.aiSubsystem.setEntities([]);
     this.behaviorSubsystem.setEntities([]);
 
     // Particle effects: stop live instances (definition cache + pool stay warm

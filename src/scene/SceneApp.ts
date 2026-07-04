@@ -46,6 +46,7 @@ import {
   BehaviorSubsystem,
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
+import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
@@ -490,6 +491,8 @@ export class SceneApp {
   private readonly keyboardInput = new KeyboardInputSource(this.inputActions);
   /** Ticks scene behaviors against the derived entity set (assigned in ctor). */
   private readonly behaviorSubsystem: BehaviorSubsystem;
+  /** Owns AIControllers in editor Play mode; gated off (`setEnabled(false)`) while editing. */
+  private readonly aiSubsystem = new AISubsystem();
   /**
    * BehaviorSubsystem transform sink: writes a behavior-mutated entity transform
    * back onto its rendered object. This slice targets characters (each is its
@@ -724,6 +727,7 @@ export class SceneApp {
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
     this.engineApp.registerSubsystem(this.physicsSubsystem);
+    this.engineApp.registerSubsystem(this.aiSubsystem);
     // Registered after input so behaviors read current-tick action state.
     this.behaviorSubsystem = new BehaviorSubsystem(
       createBehaviorRegistry(),
@@ -746,6 +750,7 @@ export class SceneApp {
     if (this.editorEnabled) {
       this.behaviorSubsystem.setEnabled(false);
       this.physicsSubsystem.setEnabled(false);
+      this.aiSubsystem.setEnabled(false);
     }
 
     // Observer-only keyboard source: records raw codes into the action map in
@@ -828,6 +833,11 @@ export class SceneApp {
 
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot {
     return this.behaviorSubsystem.getScriptMessageDebugSnapshot();
+  }
+
+  /** Snapshots the AI subsystem for `?debug` (editor Play mode); off while editing. */
+  getAiDebugSnapshot(): AiDebugSnapshot {
+    return this.aiSubsystem.getDebugSnapshot();
   }
 
   async getManifest(): Promise<AssetManifest> {
@@ -2184,6 +2194,7 @@ export class SceneApp {
     await startSceneRuntime({
       sceneDocument: this.getSceneDocument(),
       physics: this.physicsSubsystem,
+      ai: this.aiSubsystem,
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });

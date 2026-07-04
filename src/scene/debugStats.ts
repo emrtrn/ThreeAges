@@ -13,6 +13,7 @@ import {
 } from "@engine/perf/perfBudget";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
+import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import type {
   GameModeDebugSnapshot,
   PerfMemorySnapshot,
@@ -44,6 +45,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       budgetText(app, drawCalls, triangles) +
       vfxDebugText(app) +
       gameModeDebugText(app) +
+      aiDebugText(app) +
       uiDebugText(app) +
       scriptMessageDebugText(app);
     accumMs = 0;
@@ -186,6 +188,31 @@ export function formatGameModeDebug(snapshot: GameModeDebugSnapshot): string[] {
     `camera: ${snapshot.cameraSource ?? "â€”"}`,
     `input: ${snapshot.inputMode}`,
   ];
+}
+
+/** The AI controllers block, or "" when the app exposes no snapshot. */
+function aiDebugText(app: RuntimeStatsApp): string {
+  if (!app.getAiDebugSnapshot) return "";
+  return `\n${formatAiDebug(app.getAiDebugSnapshot()).join("\n")}`;
+}
+
+/**
+ * Formats an {@link AiDebugSnapshot} into overlay lines (pure, DOM-free for unit
+ * tests): the active-controller count (tagged `(off)` while the subsystem is
+ * gated in editor edit mode), then each controller's possessed pawn, current
+ * goal and blackboard key count. Caps the list so a crowd of NPCs can't flood it.
+ */
+export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
+  const lines = [
+    "ai",
+    `controllers: ${snapshot.controllerCount}${snapshot.enabled ? "" : " (off)"}`,
+  ];
+  for (const controller of snapshot.controllers.slice(0, Math.max(0, topN))) {
+    lines.push(
+      `  ${controller.pawnEntityId} goal:${controller.goal ?? "—"} bb:${controller.blackboard.keyCount}`,
+    );
+  }
+  return lines;
 }
 
 /** The UI inspector block, or "" when the app exposes no snapshot (editor). */

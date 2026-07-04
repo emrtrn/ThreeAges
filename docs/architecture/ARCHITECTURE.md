@@ -117,6 +117,22 @@ is never written to layout files; opt-in `{ persist: true }` routes it through t
 save-game snapshot
 (`getPersistentStateSnapshot`) only. `Layout Data ≠ Save Game Data`.
 
+### AI runtime / editor boundary
+
+AI decision-making (`engine/ai`: `AISubsystem`, `AIController`, `Blackboard`, and
+the later Behavior Tree / perception / navigation layers) is **runtime code**,
+not editor code. It follows the same dual-host wiring as the other gameplay
+subsystems: both `RuntimeSceneApp` and the editor `SceneApp` construct and
+register the `AISubsystem`, and the editor gates it off (`setEnabled(false)`)
+while editing so authored NPCs stay static until Play. The editor's only AI role
+is **authoring** — creating and binding AI data assets (`*.blackboard.json`,
+`*.behavior.json`, …) and the `AIController` component — never running decision
+logic in the editor shell. Engine-level AI code carries no DOM / Three.js /
+editor imports (its render/debug visualizers live in a separate layer), and AI
+runtime state (blackboard values, active node, perception, paths) is never
+written back to layout files — it is a debug-inspect / save-game concern only.
+See `docs/planned/AI_SYSTEM_RESEARCH_AND_PLAN.md`.
+
 ## Project Manifest
 
 File:

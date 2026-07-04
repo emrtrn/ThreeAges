@@ -2,6 +2,7 @@ import type { Entity, SceneJsonValue } from "./entity";
 import type { LayoutPhysicsAxisLocks, Vec3 } from "./layout";
 import { resolveCapsuleDimensions } from "./capsule";
 import { isActorEventKind, type ActorEventKind } from "./actorScript";
+import { normalizeBlackboardKeys, type BlackboardKeyDef } from "../ai/blackboard";
 
 export const TRANSFORM_COMPONENT = "Transform";
 export const MESH_RENDERER_COMPONENT = "MeshRenderer";
@@ -22,6 +23,7 @@ export const SCRIPT_INTERFACES_COMPONENT = "ScriptInterfaces";
 export const SCRIPT_ACTOR_COMPONENT = "ScriptActor";
 export const SCRIPT_REFERENCES_COMPONENT = "ScriptReferences";
 export const SCRIPT_DISPATCHERS_COMPONENT = "ScriptDispatchers";
+export const AI_CONTROLLER_COMPONENT = "AIController";
 
 export type SceneLightType = "directional" | "point" | "spot";
 export type ColliderShape =
@@ -339,6 +341,48 @@ export interface SpringArmComponent {
   enableCameraLag: boolean;
   cameraLagSpeed: number;
   doCollisionTest: boolean;
+}
+
+/**
+ * AI perception tuning authored on an AIController (Unreal `AIPerceptionComponent`
+ * senses). Sight is a radius + horizontal FOV cone; hearing is a radius. Consumed
+ * by the perception subsystem in Faz 4; stored here so it round-trips and shows in
+ * debug from Faz 1.
+ */
+export interface AIPerceptionConfig {
+  sightRadius?: number;
+  fieldOfViewDeg?: number;
+  hearingRadius?: number;
+}
+
+/**
+ * Navigation agent tuning authored on an AIController (Unreal `Nav Agent Props`):
+ * the agent's capsule radius/height for pathfinding and its max movement speed.
+ * Consumed by the navigation/path-following work in Faz 3.
+ */
+export interface AINavAgentConfig {
+  radius?: number;
+  height?: number;
+  maxSpeed?: number;
+}
+
+/**
+ * Marks an entity as an AI-controlled pawn (Unreal: a Pawn with an `AIControllerClass`).
+ * The AISubsystem derives one AIController per entity carrying this component. In
+ * Faz 1 the runtime blackboard is built from the inline `blackboardKeys` schema;
+ * the `behaviorTree` / `blackboard` asset paths are recorded for the Faz 2 loader.
+ * Like Behavior/Metadata, the engine only stores the authored reference — the AI
+ * runtime resolves and acts on it.
+ */
+export interface AIControllerComponent {
+  /** Authored `*.behavior.json` asset path (resolved by the Faz 2 loader). */
+  behaviorTree?: string;
+  /** Authored `*.blackboard.json` asset path (resolved by the Faz 2 loader). */
+  blackboard?: string;
+  perception?: AIPerceptionConfig;
+  navAgent?: AINavAgentConfig;
+  /** Inline blackboard key schema, used to build the runtime memory in Faz 1. */
+  blackboardKeys?: BlackboardKeyDef[];
 }
 
 function readVec3(value: SceneJsonValue | undefined): Vec3 | undefined {
@@ -809,6 +853,56 @@ export function readSpringArmComponent(entity: Entity): SpringArmComponent | und
     cameraLagSpeed: readFiniteNumber(data.cameraLagSpeed, 10, 0),
     doCollisionTest: data.doCollisionTest !== false,
   };
+}
+
+function readPerceptionConfig(value: SceneJsonValue | undefined): AIPerceptionConfig | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const data = value as Record<string, SceneJsonValue>;
+  const config: AIPerceptionConfig = {};
+  if (typeof data.sightRadius === "number" && Number.isFinite(data.sightRadius)) {
+    config.sightRadius = data.sightRadius;
+  }
+  if (typeof data.fieldOfViewDeg === "number" && Number.isFinite(data.fieldOfViewDeg)) {
+    config.fieldOfViewDeg = data.fieldOfViewDeg;
+  }
+  if (typeof data.hearingRadius === "number" && Number.isFinite(data.hearingRadius)) {
+    config.hearingRadius = data.hearingRadius;
+  }
+  return Object.keys(config).length > 0 ? config : undefined;
+}
+
+function readNavAgentConfig(value: SceneJsonValue | undefined): AINavAgentConfig | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const data = value as Record<string, SceneJsonValue>;
+  const config: AINavAgentConfig = {};
+  if (typeof data.radius === "number" && Number.isFinite(data.radius)) config.radius = data.radius;
+  if (typeof data.height === "number" && Number.isFinite(data.height)) config.height = data.height;
+  if (typeof data.maxSpeed === "number" && Number.isFinite(data.maxSpeed)) config.maxSpeed = data.maxSpeed;
+  return Object.keys(config).length > 0 ? config : undefined;
+}
+
+/**
+ * Reads an AIController marker from an entity. Presence of the component (even
+ * with no props) makes the entity an AI-controlled pawn; the AISubsystem uses
+ * that to derive a controller. Returns undefined only when the component is absent.
+ */
+export function readAIControllerComponent(entity: Entity): AIControllerComponent | undefined {
+  const data = entity.components[AI_CONTROLLER_COMPONENT];
+  if (!data) return undefined;
+  const component: AIControllerComponent = {};
+  if (typeof data.behaviorTree === "string" && data.behaviorTree.length > 0) {
+    component.behaviorTree = data.behaviorTree;
+  }
+  if (typeof data.blackboard === "string" && data.blackboard.length > 0) {
+    component.blackboard = data.blackboard;
+  }
+  const perception = readPerceptionConfig(data.perception);
+  if (perception) component.perception = perception;
+  const navAgent = readNavAgentConfig(data.navAgent);
+  if (navAgent) component.navAgent = navAgent;
+  const blackboardKeys = normalizeBlackboardKeys(data.blackboardKeys);
+  if (blackboardKeys.length > 0) component.blackboardKeys = blackboardKeys;
+  return component;
 }
 
 const LIGHT_TYPES: readonly SceneLightType[] = ["directional", "point", "spot"];

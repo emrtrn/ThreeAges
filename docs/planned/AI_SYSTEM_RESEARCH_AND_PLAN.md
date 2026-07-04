@@ -4,7 +4,9 @@
 > Revizyon: 2026-07-02 — plan koda karsi dogrulandi; save-path detaylari,
 > CharacterMovement AI girisi, editor Play modu, asset manifest ve dialogue
 > entegrasyonu duzeltildi/eklendi (bkz. "Revizyon notlari").
-> Durum: Gelecek faz plani. Kod uygulanmadi.
+> Revizyon: 2026-07-04 — Faz 0 + Faz 1 uygulandi (bkz. asagidaki checkbox'lar).
+> Durum: Faz 1 uygulandi ve tam gate yesil (`tsc`, `test:engine` 594 check,
+> `build:verify`, `check:assets`). Faz 2+ planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -234,46 +236,53 @@ yuzden Faz 1 icin component, Faz 4+ icin class asset onerilir.
 
 ### Faz 0 - Arastirma kapatma ve mimari sozlesme
 
-- [ ] Bu dokumani AI sistemi icin kaynak plan kabul et.
-- [ ] `docs/architecture/UNREAL_BASICS_LESSONS.md` icine AI planina kisa link ekle.
-- [ ] `docs/architecture/ARCHITECTURE.md` icinde AI runtime/editor sinirini bir
-      paragrafla netlestir.
-- [ ] `engine/behavior` ile yeni `engine/ai` sorumluluk farkini yaz
-      (`engine/behavior/README.md` guncellenebilir): `BehaviorSubsystem` kucuk
-      script tick/message, `AISubsystem` karar ve ajan orkestrasyonu.
-- [ ] Security notu: behavior stub, generated content veya dev endpoint
-      degisecekse Codex Security diff scan oner/iste (Codex oturumlari icin
-      handoff notu).
+- [x] Bu dokumani AI sistemi icin kaynak plan kabul et.
+- [x] `docs/architecture/UNREAL_BASICS_LESSONS.md` icine AI planina kisa link ekle.
+- [x] `docs/architecture/ARCHITECTURE.md` icinde AI runtime/editor sinirini bir
+      paragrafla netlestir. ("AI runtime / editor boundary" alt basligi eklendi.)
+- [x] `engine/behavior` ile yeni `engine/ai` sorumluluk farkini yaz
+      (`engine/behavior/README.md` guncellendi + yeni `engine/ai/README.md`):
+      `BehaviorSubsystem` kucuk script tick/message, `AISubsystem` karar ve ajan
+      orkestrasyonu.
+- [x] Security notu: Faz 1 yeni dev endpoint / generated content / behavior stub
+      *eklemedi* (yalnizca engine runtime + component reader + editor icon/kind).
+      Codex Security diff scan gerektiren yuzey Faz 2'de (`/__save-behavior`
+      endpoint) devreye girecek — o zaman istenecek (Codex oturumlari icin handoff).
 
 ### Faz 1 - Minimal AIController + Blackboard + debug snapshot
 
 Hedef: Bir NPC ajaninin runtime'da possess edilmesi, kendi hafizasini tutmasi ve
 debug'da izlenebilmesi.
 
-- [ ] `engine/ai/blackboard.ts` ekle: typed key schema, runtime value store,
-      serialize edilmeyen per-agent state.
-- [ ] `engine/ai/aiController.ts` ekle: pawn entity id, controller id,
+- [x] `engine/ai/blackboard.ts` ekle: typed key schema, runtime value store,
+      serialize edilmeyen per-agent state. (Declared-key-only, kind-validated
+      set/clear/reset, vec3 clone-in/out, debug snapshot.)
+- [x] `engine/ai/aiController.ts` ekle: pawn entity id, controller id,
       blackboard, current goal, debug snapshot.
-- [ ] `engine/ai/aiSubsystem.ts` ekle: AIController instance lifecycle,
+- [x] `engine/ai/aiSubsystem.ts` ekle: AIController instance lifecycle,
       `setEntities`, `update`, `dispose` + `setEnabled` gate
       (BehaviorSubsystem/PhysicsSubsystem modeliyle ayni: edit modda kapali).
-- [ ] `ACTOR_COMPONENT_KINDS`'a (`engine/scene/actorScript.ts`) `"AIController"`
+- [x] `ACTOR_COMPONENT_KINDS`'a (`engine/scene/actorScript.ts`) `"AIController"`
       ekle — `isActorComponentKind` gate'i ayni zamanda `/__save-actor` save
       allowlist'idir (`normalizeActorScriptDef` saveValidator tarafindan
-      yeniden kullanilir); ayri props allowlist gerekmez.
-- [ ] `engine/scene/components.ts` icine `AIControllerComponent` tipi +
-      `readAIControllerComponent` reader ekle.
-- [ ] `RuntimeSceneApp` icinde `AISubsystem` kur (`registerSubsystem`), entity
-      listesini runtime scene build sonrasinda bagla (`setEntities`).
-- [ ] `SceneApp` (editor) icinde de kur: edit modda `setEnabled(false)`, Play
+      yeniden kullanilir); ayri props allowlist gerekmez. (Editor: `COMPONENT_ICONS`
+      + `defaultComponentProps` girisleri de eklendi.)
+- [x] `engine/scene/components.ts` icine `AIControllerComponent` tipi +
+      `readAIControllerComponent` reader ekle. (Ayrica `AIPerceptionConfig` /
+      `AINavAgentConfig` + inline `blackboardKeys` sema okumasi.)
+- [x] `RuntimeSceneApp` icinde `AISubsystem` kur (`registerSubsystem`), entity
+      listesini runtime scene build sonrasinda bagla (`startSceneRuntime` `ai:`).
+- [x] `SceneApp` (editor) icinde de kur: edit modda `setEnabled(false)`, Play
       modunda etkin — aksi halde editor Play'de AI calismaz.
-- [ ] `?debug` overlay: `getAiDebugSnapshot()` + `formatAiDebug()` ile aktif AI
-      sayisi, controller id, active goal, blackboard key sayisi
+- [x] `?debug` overlay: `getAiDebugSnapshot()` (her iki host) + `formatAiDebug()`
+      ile aktif AI sayisi, possessed pawn, active goal, blackboard key sayisi
       (`src/scene/debugStats.ts` deseni).
-- [ ] Test: headless engine test ile blackboard default/read/write
+- [x] Test: headless engine test ile blackboard default/read/write
       (`tools/engine-tests.ts`; `engine/ai` value importlari relative).
-- [ ] Test: runtime smoke ile AIController component'li actor crash olmadan boot eder.
-- [ ] Validation: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`.
+- [x] Test: runtime smoke — AIController component'li entity AISubsystem uzerinden
+      derive + tick edilir, crash yok (headless).
+- [x] Validation: `npx tsc --noEmit`, `npm run test:engine` (594 check),
+      `npm run build:verify`, `npm run check:assets` — hepsi yesil.
 
 ### Faz 2 - Behavior Tree runtime, visual editor olmadan
 
