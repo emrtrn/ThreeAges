@@ -189,15 +189,26 @@ Evidence (2026-07-04):
   (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
   (1 Chromium smoke).
 
-## Eighth Extraction Slice `[ ] Planned`
+## Eighth Extraction Slice `[x] Completed 2026-07-04`
 
-1. `[ ]` Move World Settings rendering and DOM binding into
+1. `[x]` Move World Settings rendering and DOM binding into
    `src/editor/panels/world/worldSettingsPanel.ts`.
-2. `[ ]` Keep `EditorUi.ts` responsible for owning the panel element and passing
+2. `[x]` Keep `EditorUi.ts` responsible for owning the panel element and passing
    `setWorldSettings(...)`.
-3. `[ ]` Preserve snap settings, game mode selection, gravity, ambient light, and
+3. `[x]` Preserve snap settings, game mode selection, gravity, ambient light, and
    Kill Z behavior.
-4. `[ ]` Prove with the same validation gate as the fifth slice.
+4. `[x]` Prove with the same validation gate as the fifth slice.
+
+Evidence (2026-07-04):
+
+- `src/editor/panels/world/worldSettingsPanel.ts` owns World Settings HTML and
+  DOM binding for Game Mode, Kill Z, background color, ambient light, and static
+  object shadow toggles.
+- `EditorUi.ts` owns the World Settings body element, cached settings, tab
+  routing, and the `setWorldSettings(...)` callback handoff.
+- Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
+  (1 Chromium smoke).
 
 ## Ninth Extraction Slice `[ ] Planned`
 
