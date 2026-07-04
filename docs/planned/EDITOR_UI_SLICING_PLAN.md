@@ -111,21 +111,31 @@ The next work should continue as small behavior-preserving extractions. Do not
 start by moving save/load endpoints, editor boot, toolbar commands, or overlay
 editor launching.
 
-## Fifth Extraction Slice `[ ] Planned`
+## Fifth Extraction Slice `[x] Completed 2026-07-04`
 
-1. `[ ]` Move schema-driven Metadata Details rendering into
+1. `[x]` Move schema-driven Metadata Details rendering into
    `src/editor/panels/details/metadataDetails.ts`.
-2. `[ ]` Move metadata field lookup, default handling, and DOM input binding
+2. `[x]` Move metadata field lookup, default handling, and DOM input binding
    into the same module.
-3. `[ ]` Keep `EditorUi.ts` responsible only for passing the current
+3. `[x]` Keep `EditorUi.ts` responsible only for passing the current
    `MetadataSchema`, selection, and the metadata update callback.
-4. `[ ]` Preserve current behavior for string, number, boolean, enum, tag, and
+4. `[x]` Preserve current behavior for string, number, boolean, enum, tag, and
    default-value clearing.
-5. `[ ]` Prove with:
+5. `[x]` Prove with:
    - `npx.cmd tsc --noEmit`
    - `npm.cmd run test:engine`
    - `npm.cmd run verify:imports`
    - `npm.cmd run smoke:browser`
+
+Evidence (2026-07-04):
+
+- `src/editor/panels/details/metadataDetails.ts` owns Metadata Details HTML,
+  field lookup, default-value clearing, and DOM input binding.
+- `EditorUi.ts` now passes only the active `MetadataSchema`, current selection,
+  and `setSelectionMetadata(...)` callback for metadata editing.
+- Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
+  (1 Chromium smoke).
 
 ## Sixth Extraction Slice `[ ] Planned`
 

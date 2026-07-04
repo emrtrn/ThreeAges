@@ -23,19 +23,13 @@ import type {
   EditableTransformSnapshot,
   SceneApp,
 } from "@/scene/SceneApp";
-import {
-  isDefaultMetadataValue,
-  metadataGroupsForTarget,
-  type MetadataFieldDef,
-  type MetadataSchema,
-} from "@engine/scene/metadataSchema";
+import type { MetadataSchema } from "@engine/scene/metadataSchema";
 import type {
   BrushShape,
   LayoutCloudLayer,
   LayoutHeightFog,
   LayoutPostProcess,
   LayoutSkyAtmosphere,
-  MetadataValue,
   Vec3,
 } from "@engine/scene/layout";
 import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
@@ -107,6 +101,10 @@ import {
   bindComponentsInputs,
   renderComponentsSection,
 } from "./panels/details/componentDetails";
+import {
+  bindMetadataInputs,
+  renderMetadataSections,
+} from "./panels/details/metadataDetails";
 import { scaleRow, vectorRow } from "./panels/details/transformRows";
 
 type InspectorTab = "details" | "world";
@@ -3048,7 +3046,7 @@ export class EditorUi {
           complexAsSimple: this.app.assetCollisionComplexity(selection.assetId) === "complexAsSimple",
         }),
         components: renderComponentsSection(selection, this.editableAssets),
-        metadata: this.renderMetadataSections(selection),
+        metadata: renderMetadataSections(selection, this.metadataSchema),
       },
     });
 
@@ -3092,172 +3090,15 @@ export class EditorUi {
           setSelectionInteraction: (interaction) => this.app.setSelectionInteraction(interaction),
           setSelectionMovingPlatform: (platform) => this.app.setSelectionMovingPlatform(platform),
         }),
-      bindMetadataInputs: () => this.bindMetadataInputs(),
+      bindMetadataInputs: () =>
+        bindMetadataInputs({
+          body: this.detailsBody,
+          schema: this.metadataSchema,
+          currentSelection: () => this.selected,
+          setSelectionMetadata: (key, value, label) =>
+            this.app.setSelectionMetadata(key, value, label),
+        }),
     });
-  }
-
-  /**
-   * Renders schema-driven gameplay metadata groups for the selection. The editor
-   * core stays generic: groups/fields come from the project's metadata schema.
-   */
-  private renderMetadataSections(selection: EditableSelection): string {
-    // Environment singletons + reflection planes + world widgets carry no
-    // schema-driven metadata.
-    if (
-      selection.kind === "sky" ||
-      selection.kind === "fog" ||
-      selection.kind === "cloud" ||
-      selection.kind === "reflectionPlane" ||
-      selection.kind === "reflectiveSurface" ||
-      selection.kind === "reflectionCapture" ||
-      selection.kind === "blockingVolume" ||
-      selection.kind === "worldWidget" ||
-      selection.kind === "post"
-    ) {
-      return "";
-    }
-    const groups = metadataGroupsForTarget(this.metadataSchema, {
-      kind: selection.kind,
-      category: selection.category,
-    });
-    if (groups.length === 0) return "";
-    return groups
-      .map(
-        (group) => `
-      <div class="detail-section">
-        <div class="detail-section-title">${escapeHtml(group.title)}</div>
-        ${group.fields.map((field) => this.renderMetadataField(field, selection)).join("")}
-      </div>`,
-      )
-      .join("");
-  }
-
-  private renderMetadataField(field: MetadataFieldDef, selection: EditableSelection): string {
-    const raw = selection.metadata[field.key] ?? field.default;
-    const attr = `data-meta-key="${escapeHtml(field.key)}" data-meta-type="${field.type}"`;
-    const label = escapeHtml(field.label);
-
-    if (field.type === "boolean") {
-      const checked = raw === true ? "checked" : "";
-      return `<label class="detail-toggle">
-        <input type="checkbox" ${attr} ${checked} />
-        <span>${label}</span>
-      </label>`;
-    }
-
-    if (field.type === "select") {
-      const current = typeof raw === "string" ? raw : "";
-      const options = [`<option value="">â€”</option>`]
-        .concat(
-          (field.options ?? []).map(
-            (option) =>
-              `<option value="${escapeHtml(option)}" ${
-                option === current ? "selected" : ""
-              }>${escapeHtml(option)}</option>`,
-          ),
-        )
-        .join("");
-      return `<label class="detail-row">
-        <span>${label}</span>
-        <select ${attr}>${options}</select>
-      </label>`;
-    }
-
-    if (field.type === "number") {
-      const value = typeof raw === "number" ? String(raw) : "";
-      const min = field.min !== undefined ? `min="${field.min}"` : "";
-      const max = field.max !== undefined ? `max="${field.max}"` : "";
-      const step = field.step !== undefined ? `step="${field.step}"` : "";
-      return `<label class="detail-row">
-        <span>${label}</span>
-        <input type="number" ${attr} ${min} ${max} ${step}
-          value="${escapeHtml(value)}" placeholder="${escapeHtml(field.placeholder ?? "")}" />
-      </label>`;
-    }
-
-    // text + tags share a free-text input; tags is comma-separated.
-    const value =
-      field.type === "tags"
-        ? (Array.isArray(raw) ? raw : []).join(", ")
-        : typeof raw === "string"
-          ? raw
-          : "";
-    const placeholder =
-      field.placeholder ?? (field.type === "tags" ? "comma, separated, tags" : "");
-    const listAttr = field.suggestions?.length
-      ? `list="meta-list-${escapeHtml(field.key)}"`
-      : "";
-    const datalist = field.suggestions?.length
-      ? `<datalist id="meta-list-${escapeHtml(field.key)}">${field.suggestions
-          .map((option) => `<option value="${escapeHtml(option)}"></option>`)
-          .join("")}</datalist>`
-      : "";
-    return `<label class="detail-row">
-      <span>${label}</span>
-      <input type="text" ${attr} ${listAttr} value="${escapeHtml(value)}"
-        placeholder="${escapeHtml(placeholder)}" />
-      ${datalist}
-    </label>`;
-  }
-
-  private bindMetadataInputs(): void {
-    this.detailsBody
-      .querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-meta-key]")
-      .forEach((input) => {
-        input.addEventListener("change", () => this.commitMetadataInput(input));
-      });
-  }
-
-  private commitMetadataInput(input: HTMLInputElement | HTMLSelectElement): void {
-    const key = input.dataset.metaKey;
-    const type = input.dataset.metaType as MetadataFieldDef["type"] | undefined;
-    if (!key || !type) return;
-    const field = this.metadataFieldFor(key);
-    if (!field) return;
-
-    let value: MetadataValue | undefined;
-    if (type === "boolean") {
-      value = (input as HTMLInputElement).checked;
-    } else if (type === "number") {
-      const num = Number(input.value);
-      value = input.value.trim() === "" || Number.isNaN(num) ? undefined : num;
-    } else if (type === "tags") {
-      value = input.value
-        .split(",")
-        .map((part) => part.trim())
-        .filter((part) => part.length > 0);
-    } else {
-      value = input.value;
-    }
-
-    if (value !== undefined && isDefaultMetadataValue(field, value)) value = undefined;
-    this.app.setSelectionMetadata(key, value, `Set ${field.label}`);
-  }
-
-  private metadataFieldFor(key: string): MetadataFieldDef | null {
-    if (
-      !this.selected ||
-      this.selected.kind === "sky" ||
-      this.selected.kind === "fog" ||
-      this.selected.kind === "cloud" ||
-      this.selected.kind === "reflectionPlane" ||
-      this.selected.kind === "reflectiveSurface" ||
-      this.selected.kind === "reflectionCapture" ||
-      this.selected.kind === "blockingVolume" ||
-      this.selected.kind === "worldWidget" ||
-      this.selected.kind === "post"
-    ) {
-      return null;
-    }
-    const groups = metadataGroupsForTarget(this.metadataSchema, {
-      kind: this.selected.kind,
-      category: this.selected.category,
-    });
-    for (const group of groups) {
-      const field = group.fields.find((entry) => entry.key === key);
-      if (field) return field;
-    }
-    return null;
   }
 
   private renderLightDetails(selection: EditableSelection): void {
