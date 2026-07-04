@@ -1178,16 +1178,73 @@ Faz 5 yalnızca yeniden konumlandırır.
 
 ---
 
-## Faz 5 — Runtime Sağlamlaştırma
+## Faz 5 — Runtime Sağlamlaştırma  ✅ TAMAMLANDI (4 Temmuz 2026)
 
-- [ ] VFX instance pooling ekle.
-- [ ] One-shot cleanup ve loop enable/disable akışını doğrula.
-- [ ] Runtime debug snapshot ekle.
-- [ ] Active instance / alive particle / effect ID debug verisini göster.
-- [ ] Manifest lookup cache ve effect definition cache ekle.
-- [ ] `play`, `stop`, `setEnabled`, `dispose` yaşam döngüsünü test et.
+- [x] VFX instance pooling ekle.
+      *(`VfxSubsystem` biten one-shot’ları `effectId` başına havuzda tutar
+      (`MAX_POOL_PER_EFFECT = 32`); sonraki play havuzdan alıp
+      `ParticleEffect.reset(overrides)` ile yeniden kullanır — yeni buffer/geometry
+      allocation yok. Havuz kapağı aşılırsa dispose edilir → sınırlı bellek.)*
+- [x] One-shot cleanup ve loop enable/disable akışını doğrula.
+      *(`advance()` her enabled instance’ı ilerletir, `isFinished()` olanı havuza
+      geri verir; `setEnabled(id, false)` simülasyonu dondurur + `object3D.visible`
+      kapatır; `loop` override asset bayrağını ezer. Lifecycle testleriyle
+      doğrulandı.)*
+- [x] Runtime debug snapshot ekle.
+      *(`getDebugSnapshot(): VfxDebugSnapshot` — activeInstances / aliveParticles /
+      pooledInstances / cachedDefinitions + per-instance `{id, effectId, alive,
+      enabled}`.)*
+- [x] Active instance / alive particle / effect ID debug verisini göster.
+      *(`RuntimeSceneApp.getVfxDebugSnapshot()` → `?debug` overlay’de `formatVfxDebug`
+      "vfx" bloğu: sayaçlar + en yoğun instance’lar (alive’a göre, disabled "(off)"
+      etiketli). Pure formatter headless test edildi.)*
+- [x] Manifest lookup cache ve effect definition cache ekle.
+      *(Def cache subsystem içinde: `definitions` Map (miss’ler null olarak cache’lenir)
+      + `loading` Map ile eşzamanlı warm’lar tek fetch. URL çözümü host’un
+      `effectUrlById` manifest indeksinden `resolveEffectUrl` callback’i ile gelir —
+      `audioSubsystem.resolveClipUrl` kalıbı.)*
+- [x] `play`, `stop`, `setEnabled`, `dispose` yaşam döngüsünü test et.
+      *(6 yeni test: warm→play→advance→recycle, havuz aynı Three nesnesini yeniden
+      kullanır, warm de-dup + setEnabled freeze + stop, bilinmeyen id null +
+      dispose caches sıfırlar, `ParticleEffect.reset`, `formatVfxDebug`.)*
 
-**Kabul kriteri:** Uzun bir oyun oturumunda one-shot VFX instance’ları ve Three.js kaynakları büyüyerek sızıntı yaratmaz.
+**Kabul kriteri:** Uzun bir oyun oturumunda one-shot VFX instance’ları ve Three.js
+kaynakları büyüyerek sızıntı yaratmaz. ✅ `build:verify` yeşil (tsc + vite build +
+585 engine check + verify:dist --strict), `check:assets` PASS. **Kalan:** canlı
+browser smoke (kullanıcı) — uzun oturumda VFX oynat, `?debug` "vfx" bloğunda
+active/pool sayaçlarının sınırlı kaldığını gözle.
+
+### Faz 5 karar kaydı (4 Temmuz 2026)
+
+**Subsystem `render-three/` altında (engine/vfx değil).** §9 ideali `engine/vfx/`
+altında Three-free bir subsystem + ayrı `particleEffectRenderer.ts` adapter idi;
+fakat bu, çalışan `ParticleEffect` sim+render’ını saf-sim/adapter olarak ikiye
+bölmeyi (büyük rewrite) gerektirir. "Küçük, build-passing adımlar / sıfırdan
+yazma" kuralı gereği subsystem `ParticleEffect`’in yanına `render-three/
+vfxSubsystem.ts` olarak kondu (Three-aware; `ParticleEffect` gibi headless
+kurulabildiğinden test edilebilirliği bozmaz). Saf-sim/adapter ayrımı gerçek
+ihtiyaç doğarsa Faz 6’da yapılır.
+
+**`play` senkron; async yükleme `warm`’a ayrıldı.** §12 `play(effectId): id | null`
+senkron; fakat def yükleme fetch (async). Çözüm: host spawn’dan önce
+`await warm(effectId)` ile cache’i ısıtır, sonra `play` senkron olarak cache’e
+vurur. Isıtılmamış bir `play` frame’i bloklamaz — null döner ve arka planda warm
+tetikler (bir sonraki play çalışır). Bilinmeyen id sessizce hiçbir şey oynatmaz.
+
+**RuntimeSceneApp artık particle’ı elle yönetmiyor.** `effectDefs` / `particleEffects`
+/ `loadEffect` / `updateParticleEffects` kaldırıldı; subsystem engineApp’e register
+edildi (update tick + P5.1 profiler timing + registry-dispose, audio ile aynı).
+Sahne rebuild’inde `clear()` (aktifleri durdurur, cache/pool sıcak kalır); root
+`Group` sahneye bir kez eklenir ve rebuild’lerde kalıcıdır.
+
+**`seedOffset` + rotation + parentEntityId ertelendi.** §12 `VfxPlayOptions`
+listesi bunları içerir; Faz 5 `position` + §8 override alt kümesini (scale/tint/
+loop) uyguladı. `seedOffset` anlamlı olması için seeded-RNG determinizmi +
+`system.seed`’in flat `RuntimeParticleEffect` kontratına iplenmesini (+ collapse
+identity testlerinin güncellenmesini) gerektirir; rotation/parentEntityId ise
+effect’lerin bir entity’yi takip etmesini (quad renderer / follow mekanizması)
+gerektirir. Hiçbiri Faz 5 kabul kriterinde (sızıntısızlık) değil ve §16 "gerçek
+ihtiyaç doğmadan başlama" ethos’una uyarak gerçekten gerektiğinde eklenecek.
 
 ---
 

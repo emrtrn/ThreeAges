@@ -413,6 +413,13 @@
             0,
             -18.17
           ],
+          "particle": {
+            "effectId": "starter-fx-smoke-puff",
+            "autoPlay": true,
+            "loop": true,
+            "scale": 2,
+            "tint": "#ff0000"
+          },
           "rotationYDeg": 0,
           "rotation": [
             0,

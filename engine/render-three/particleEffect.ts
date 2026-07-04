@@ -80,15 +80,19 @@ void main() {
 /** A live, CPU-simulated instance of an effect definition, ready to add to a scene. */
 export class ParticleEffect {
   readonly object3D: Points;
+  /** The base asset; retained so {@link reset} can re-apply new overrides on reuse. */
+  private readonly definition: RuntimeParticleEffect;
+  // Buffer capacity + rate/lifetime are fixed by the definition (scale never grows
+  // them), so a pooled instance can be reset with new overrides in place.
   private readonly capacity: number;
-  // Effective (override-applied) simulation params; see ParticleEffectOverrides.
-  private readonly loop: boolean;
   private readonly lifetime: number;
   private readonly rate: number;
-  private readonly startSize: number;
-  private readonly endSize: number;
-  private readonly velocity: Vec3;
-  private readonly spread: number;
+  // Effective (override-applied) simulation params; recomputed by applyOverrides.
+  private loop: boolean;
+  private startSize: number;
+  private endSize: number;
+  private velocity: Vec3;
+  private spread: number;
   private readonly positions: Float32Array;
   private readonly sizes: Float32Array;
   private readonly alphas: Float32Array;
@@ -102,28 +106,16 @@ export class ParticleEffect {
   private spawnAccumulator = 0;
 
   constructor(definition: RuntimeParticleEffect, overrides?: ParticleEffectOverrides) {
-    // `scale` uniformly grows sizes, spawn spread and velocity (so particles reach
-    // a proportionally larger extent in the same lifetime); rate/lifetime are
-    // unaffected, so buffer capacity matches the un-scaled effect.
-    const scale =
-      typeof overrides?.scale === "number" && Number.isFinite(overrides.scale) && overrides.scale > 0
-        ? overrides.scale
-        : 1;
-    this.loop = overrides?.loop ?? definition.loop;
+    this.definition = definition;
     this.lifetime = definition.lifetime;
     this.rate = definition.rate;
-    this.startSize = definition.startSize * scale;
-    this.endSize = definition.endSize * scale;
-    this.velocity = [
-      definition.velocity[0] * scale,
-      definition.velocity[1] * scale,
-      definition.velocity[2] * scale,
-    ];
-    this.spread = definition.spread * scale;
-    const color =
-      typeof overrides?.tint === "string" && HEX_COLOR.test(overrides.tint)
-        ? overrides.tint
-        : definition.color;
+    // Effective params default to the un-scaled asset; applyOverrides() below
+    // re-derives them (and the shader colour) from `overrides`.
+    this.loop = definition.loop;
+    this.startSize = definition.startSize;
+    this.endSize = definition.endSize;
+    this.velocity = [...definition.velocity];
+    this.spread = definition.spread;
     // Max particles alive at once ≈ rate * lifetime; pad for spawn jitter.
     this.capacity = Math.max(8, Math.ceil(this.rate * this.lifetime) + 4);
     this.positions = new Float32Array(this.capacity * 3);
@@ -138,19 +130,64 @@ export class ParticleEffect {
     this.geometry.setAttribute("aAlpha", new BufferAttribute(this.alphas, 1));
     this.material = new ShaderMaterial({
       uniforms: {
-        uColor: { value: new Color(color) },
+        uColor: { value: new Color(definition.color) },
         uScale: { value: POINT_PIXEL_SCALE },
       },
       vertexShader: VERTEX_SHADER,
       fragmentShader: FRAGMENT_SHADER,
       transparent: true,
       depthWrite: false,
+      // Blend comes from the definition, so it is constant across pool reuse.
       blending: definition.materialMode === "additive" ? AdditiveBlending : NormalBlending,
     });
+    this.applyOverrides(overrides);
     this.object3D = new Points(this.geometry, this.material);
     // Particles move past the emitter origin; skip frustum culling so the cloud
     // is not clipped by its (stationary) bounding sphere.
     this.object3D.frustumCulled = false;
+  }
+
+  /**
+   * Re-derives the override-affected params from `overrides`: `scale` uniformly
+   * grows sizes/spread/velocity (so particles reach a proportionally larger extent
+   * in the same lifetime — capacity is unchanged), `tint` recolours the shader,
+   * and `loop` overrides the asset's own loop flag. Called by the constructor and
+   * by {@link reset} (pool reuse). Absent fields fall back to the asset value.
+   */
+  private applyOverrides(overrides?: ParticleEffectOverrides): void {
+    const d = this.definition;
+    const scale =
+      typeof overrides?.scale === "number" && Number.isFinite(overrides.scale) && overrides.scale > 0
+        ? overrides.scale
+        : 1;
+    this.loop = overrides?.loop ?? d.loop;
+    this.startSize = d.startSize * scale;
+    this.endSize = d.endSize * scale;
+    this.velocity = [d.velocity[0] * scale, d.velocity[1] * scale, d.velocity[2] * scale];
+    this.spread = d.spread * scale;
+    const color =
+      typeof overrides?.tint === "string" && HEX_COLOR.test(overrides.tint) ? overrides.tint : d.color;
+    (this.material.uniforms.uColor!.value as Color).set(color);
+  }
+
+  /**
+   * Rewinds this instance to a fresh, un-emitted state and applies a new set of
+   * overrides — so a pooled effect can be reused for another play without a new
+   * allocation. Same definition (hence same capacity/blend), so only the buffers,
+   * timers and override-derived params are reset.
+   */
+  reset(overrides?: ParticleEffectOverrides): void {
+    this.applyOverrides(overrides);
+    this.elapsed = 0;
+    this.spawnAccumulator = 0;
+    this.ages.fill(-1);
+    this.positions.fill(0);
+    this.sizes.fill(0);
+    this.alphas.fill(0);
+    this.velocities.fill(0);
+    this.geometry.attributes.position!.needsUpdate = true;
+    this.geometry.attributes.aSize!.needsUpdate = true;
+    this.geometry.attributes.aAlpha!.needsUpdate = true;
   }
 
   /** Sets the emitter origin (world space) new particles spawn from. */

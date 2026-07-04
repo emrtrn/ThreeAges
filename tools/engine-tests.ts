@@ -255,6 +255,7 @@ import {
   toRuntimeParticleEffect,
 } from "../engine/vfx/particleEffectParser";
 import { ParticleEffect } from "../engine/render-three/particleEffect";
+import { VfxSubsystem } from "../engine/render-three/vfxSubsystem";
 import type { RuntimeParticleEffect } from "../engine/vfx/particleEffectTypes";
 import {
   PARTICLE_EFFECT_PRESETS,
@@ -282,6 +283,7 @@ import {
   formatPerfBudget,
   formatSubsystemTiming,
   formatUiDebug,
+  formatVfxDebug,
   groupThousands,
 } from "../src/scene/debugStats";
 import {
@@ -12330,6 +12332,127 @@ check("ParticleEffect applies §8 instance overrides (scale/tint/loop)", () => {
   assert.equal(oneShot.isFinished(), true);
   assert.equal(oneShot.aliveCount(), 0);
   oneShot.dispose();
+});
+
+check("ParticleEffect.reset rewinds buffers and re-applies overrides (pool reuse)", () => {
+  const fx = new ParticleEffect(runtimeFx({ loop: false, rate: 20, lifetime: 0.3, color: "#ffffff" }));
+  for (let i = 0; i < 40; i += 1) fx.update(0.05);
+  assert.equal(fx.isFinished(), true);
+  assert.equal(fx.aliveCount(), 0);
+  // reset rewinds elapsed/buffers and applies a fresh tint override.
+  fx.reset({ tint: "#112233" });
+  assert.equal(fx.isFinished(), false);
+  const uColor = (
+    fx.object3D.material as unknown as { uniforms: { uColor: { value: { getHexString(): string } } } }
+  ).uniforms.uColor.value;
+  assert.equal(uColor.getHexString(), "112233");
+  fx.update(0.1); // emits again after reset
+  assert.ok(fx.aliveCount() > 0);
+  fx.dispose();
+});
+
+// VFX Lite Faz 5 — the VfxSubsystem owns every live effect: definition cache,
+// pooling, per-frame advance and one-shot recycling. A fixture loader stands in
+// for the fetch so the lifecycle is exercised headlessly.
+function makeVfx(def: RuntimeParticleEffect | null = runtimeFx({ loop: false, rate: 20, lifetime: 0.3 })) {
+  let loads = 0;
+  const vfx = new VfxSubsystem({
+    resolveEffectUrl: (id) => (id === "fx" ? "mem://fx" : null),
+    loadDefinition: async () => {
+      loads += 1;
+      return def;
+    },
+  });
+  return { vfx, loads: () => loads };
+}
+
+await checkAsync("VfxSubsystem warms, plays, advances and recycles a one-shot into the pool", async () => {
+  const { vfx } = makeVfx();
+  // Playing before warming spawns nothing (returns null) but kicks off a warm.
+  assert.equal(vfx.play("fx"), null);
+  assert.ok(await vfx.warm("fx"));
+  const id = vfx.play("fx", { position: [1, 2, 3] });
+  assert.ok(id !== null);
+  assert.equal(vfx.root.children.length, 1);
+  assert.equal(vfx.getDebugSnapshot().activeInstances, 1);
+  vfx.advance(0.1);
+  assert.ok(vfx.getDebugSnapshot().aliveParticles > 0);
+  // Advance well past the emission window + lifetime → finishes and recycles.
+  for (let i = 0; i < 40; i += 1) vfx.advance(0.05);
+  const snap = vfx.getDebugSnapshot();
+  assert.equal(snap.activeInstances, 0);
+  assert.equal(vfx.root.children.length, 0);
+  assert.equal(snap.pooledInstances, 1);
+  vfx.dispose();
+});
+
+await checkAsync("VfxSubsystem reuses the pooled effect object on the next play", async () => {
+  const { vfx } = makeVfx();
+  await vfx.warm("fx");
+  const id1 = vfx.play("fx")!;
+  const pointsObject = vfx.root.children[0];
+  for (let i = 0; i < 40; i += 1) vfx.advance(0.05); // drain → pooled
+  assert.equal(vfx.getDebugSnapshot().pooledInstances, 1);
+  const id2 = vfx.play("fx")!;
+  assert.notEqual(id1, id2);
+  assert.equal(vfx.root.children.length, 1);
+  assert.equal(vfx.root.children[0], pointsObject); // same Three object reused
+  assert.equal(vfx.getDebugSnapshot().pooledInstances, 0);
+  vfx.dispose();
+});
+
+await checkAsync("VfxSubsystem de-dupes warms, freezes on setEnabled, stops on demand", async () => {
+  const { vfx, loads } = makeVfx(runtimeFx({ loop: true, rate: 10, lifetime: 1 }));
+  await vfx.warm("fx");
+  await vfx.warm("fx"); // cached → no second load
+  assert.equal(loads(), 1);
+  const id = vfx.play("fx")!;
+  vfx.advance(0.3);
+  const alive = vfx.getDebugSnapshot().aliveParticles;
+  assert.ok(alive > 0);
+  // setEnabled(false) freezes the sim + hides the object.
+  vfx.setEnabled(id, false);
+  assert.equal(vfx.getDebugSnapshot().instances[0]?.enabled, false);
+  vfx.advance(0.3);
+  assert.equal(vfx.getDebugSnapshot().aliveParticles, alive); // frozen, not advanced
+  // A looping effect never finishes on its own; stop() removes it (idempotent).
+  vfx.stop(id);
+  assert.equal(vfx.getDebugSnapshot().activeInstances, 0);
+  vfx.stop(id);
+  vfx.dispose();
+});
+
+await checkAsync("VfxSubsystem plays nothing for an unknown effect id and disposes cleanly", async () => {
+  const { vfx } = makeVfx();
+  assert.equal(await vfx.warm("nope"), null); // resolveEffectUrl → null (cached miss)
+  assert.equal(vfx.play("nope"), null);
+  assert.equal(vfx.getDebugSnapshot().activeInstances, 0);
+  // dispose empties instances, pool and caches (defs reset to zero).
+  await vfx.warm("fx");
+  vfx.play("fx");
+  vfx.dispose();
+  const snap = vfx.getDebugSnapshot();
+  assert.equal(snap.activeInstances, 0);
+  assert.equal(snap.pooledInstances, 0);
+  assert.equal(snap.cachedDefinitions, 0);
+});
+
+check("formatVfxDebug renders counts and busiest instances, tagging disabled", () => {
+  const lines = formatVfxDebug({
+    activeInstances: 2,
+    aliveParticles: 12,
+    pooledInstances: 3,
+    cachedDefinitions: 1,
+    instances: [
+      { id: 1, effectId: "fx.smoke", aliveParticles: 4, enabled: true },
+      { id: 2, effectId: "fx.spark", aliveParticles: 8, enabled: false },
+    ],
+  });
+  assert.equal(lines[0], "vfx");
+  assert.equal(lines[1], "active:2 alive:12 pool:3 defs:1");
+  // Sorted by alive desc: spark (8) before smoke (4); disabled tagged "(off)".
+  assert.equal(lines[2], "  fx.spark 8 (off)");
+  assert.equal(lines[3], "  fx.smoke 4");
 });
 
 check("validateEffectAsset canonicalizes a schema-2 body and guards junk numbers", () => {

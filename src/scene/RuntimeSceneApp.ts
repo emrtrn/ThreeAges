@@ -286,11 +286,7 @@ import {
 import type { TransformComponent } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
-import {
-  ParticleEffect,
-  parseEffectDefinition,
-  type EffectDefinition,
-} from "@engine/render-three/particleEffect";
+import { VfxSubsystem, type VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 
 /**
  * Live gameplay readout for the `?debug` overlay: the active Game Mode, the pawn
@@ -365,6 +361,8 @@ export interface RuntimeStatsApp {
   getSubsystemProfileSnapshot?(): SubsystemProfileSnapshot | null;
   /** Optional: GPU/JS memory counters for the `?debug` memory readout. */
   getPerfMemorySnapshot?(): PerfMemorySnapshot;
+  /** Optional: live VFX runtime counts (active instances / alive particles / pool). */
+  getVfxDebugSnapshot?(): VfxDebugSnapshot;
 }
 
 export interface RuntimeSceneAppOptions {
@@ -410,10 +408,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly soundCueDefs = new Map<string, SoundCueAsset | null>();
   /** Manifest effect (`.effect.json`) asset id -> fetchable file URL. */
   private readonly effectUrlById = new Map<string, string>();
-  /** Parsed effect definitions, cached by effect id. */
-  private readonly effectDefs = new Map<string, EffectDefinition | null>();
-  /** Live particle effects updated each frame; finished one-shots are removed. */
-  private particleEffects: ParticleEffect[] = [];
+  /**
+   * Owns every live particle effect: definition cache, pooling, per-frame advance
+   * and one-shot recycling. Resolves ids to URLs through {@link effectUrlById}.
+   */
+  private readonly vfxSubsystem = new VfxSubsystem({
+    resolveEffectUrl: (effectId) => this.effectUrlById.get(effectId) ?? null,
+  });
   private readonly audioSubsystem = new AudioSubsystem({
     backend: "web-audio",
     resolveClipUrl: (clipId) => this.soundUrlById.get(clipId) ?? null,
@@ -662,6 +663,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.renderer = runtimeCore.renderer;
     applyEditorMatchedPlayLook(this.renderer);
     this.scene = runtimeCore.scene;
+    // The VFX subsystem owns one persistent container; live effects come and go
+    // as its children (survives scene rebuilds — only its instances are cleared).
+    this.scene.add(this.vfxSubsystem.root);
     this.camera = runtimeCore.camera;
     this.pointerLook = new PointerLookSource(canvas, {
       onInputModeChange: (mode) => {
@@ -786,6 +790,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
     this.engineApp.registerSubsystem(this.dialogueSubsystem);
+    this.engineApp.registerSubsystem(this.vfxSubsystem);
     // Per-subsystem tick timing (P5.1) is `?debug`-only: enabling it wraps each
     // subsystem update in a clock read; production keeps the un-timed loop.
     if (this.debug) this.engineApp.enableProfiling();
@@ -846,7 +851,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.updateUiStore();
       this.updateWorldUi();
       this.updateAudioListener();
-      this.updateParticleEffects(deltaMs / 1000);
       if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
       if (this.cloudObject) {
         followCameraWithClouds(this.cloudObject, this.camera);
@@ -884,11 +888,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.touchInput = null;
     this.pointerLook.detach();
     this.pointerButtons.detach();
-    for (const effect of this.particleEffects) {
-      this.scene.remove(effect.object3D);
-      effect.dispose();
-    }
-    this.particleEffects = [];
+    // The VFX subsystem is registered, so engineApp.dispose() (below) tears down
+    // its effects + caches through the subsystem registry, like the audio one.
     this.gameModeSession?.dispose();
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
@@ -918,19 +919,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.renderer.dispose();
   }
 
-  /** Advances live particle effects and removes finished one-shot effects. */
-  private updateParticleEffects(dt: number): void {
-    for (let i = this.particleEffects.length - 1; i >= 0; i -= 1) {
-      const effect = this.particleEffects[i]!;
-      effect.update(dt);
-      if (effect.isFinished()) {
-        this.scene.remove(effect.object3D);
-        effect.dispose();
-        this.particleEffects.splice(i, 1);
-      }
-    }
-  }
-
   getRenderStats(): { drawCalls: number; triangles: number } {
     return readSceneRuntimeStats(this.renderer);
   }
@@ -938,6 +926,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Per-subsystem tick timing for the `?debug` overlay, or null when profiling is off. */
   getSubsystemProfileSnapshot(): SubsystemProfileSnapshot | null {
     return this.engineApp.getProfileSnapshot();
+  }
+
+  /** Live VFX runtime counts for the `?debug` overlay (active/alive/pool/cache). */
+  getVfxDebugSnapshot(): VfxDebugSnapshot {
+    return this.vfxSubsystem.getDebugSnapshot();
   }
 
   /**
@@ -1403,12 +1396,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.characterMovementSubsystem.clear();
     this.behaviorSubsystem.setEntities([]);
 
-    // Particle effects (own geometry/material).
-    for (const effect of this.particleEffects) {
-      this.scene.remove(effect.object3D);
-      effect.dispose();
-    }
-    this.particleEffects = [];
+    // Particle effects: stop live instances (definition cache + pool stay warm
+    // for the rebuild, which re-spawns the same project's effects).
+    this.vfxSubsystem.clear();
 
     // Instanced statics: remove each group (their override clones are children,
     // so they leave with it) and dispose only the InstancedMesh instance buffers
@@ -2258,30 +2248,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!particle?.autoPlay || particle.enabled === false) return;
     const transform = readTransformComponent(entity);
     if (!transform) return;
-    const url = this.effectUrlById.get(particle.effectId);
-    if (!url) return;
-    const definition = await this.loadEffect(particle.effectId, url);
-    if (!definition) return;
-    // The component's scale/tint/loop fields are the §8 instance overrides.
-    const effect = new ParticleEffect(definition, particle);
-    effect.setOrigin(transform.position[0], transform.position[1], transform.position[2]);
-    this.scene.add(effect.object3D);
-    this.particleEffects.push(effect);
-  }
-
-  /** Fetches + parses an effect definition, caching the result (including misses). */
-  private async loadEffect(effectId: string, url: string): Promise<EffectDefinition | null> {
-    const cached = this.effectDefs.get(effectId);
-    if (cached !== undefined) return cached;
-    let definition: EffectDefinition | null = null;
-    try {
-      const response = await fetch(url);
-      definition = parseEffectDefinition((await response.json()) as unknown);
-    } catch {
-      definition = null;
-    }
-    this.effectDefs.set(effectId, definition);
-    return definition;
+    // Warm the definition so the synchronous play() below hits the cache; the
+    // component's scale/tint/loop fields are the §8 instance overrides.
+    await this.vfxSubsystem.warm(particle.effectId);
+    this.vfxSubsystem.play(particle.effectId, { ...particle, position: transform.position });
   }
 
   /**
@@ -2907,17 +2877,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!entity) return;
     const particle = readParticleEmitterComponent(entity);
     if (!particle || particle.enabled === false) return;
-    const url = this.effectUrlById.get(particle.effectId);
-    if (!url) return;
-    const definition = await this.loadEffect(particle.effectId, url);
-    if (!definition) return;
     const transform = readTransformComponent(entity);
     if (!transform) return;
-    // The component's scale/tint/loop fields are the §8 instance overrides.
-    const effect = new ParticleEffect(definition, particle);
-    effect.setOrigin(transform.position[0], transform.position[1], transform.position[2]);
-    this.scene.add(effect.object3D);
-    this.particleEffects.push(effect);
+    // Warm the definition so the synchronous play() below hits the cache; the
+    // component's scale/tint/loop fields are the §8 instance overrides.
+    await this.vfxSubsystem.warm(particle.effectId);
+    this.vfxSubsystem.play(particle.effectId, { ...particle, position: transform.position });
   }
 
   private async applyAssetUvwMappings(): Promise<void> {

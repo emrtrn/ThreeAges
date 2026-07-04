@@ -12,6 +12,7 @@ import {
   type BudgetMetric,
 } from "@engine/perf/perfBudget";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
+import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type {
   GameModeDebugSnapshot,
   PerfMemorySnapshot,
@@ -41,6 +42,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       subsystemTimingText(app) +
       memoryText(app) +
       budgetText(app, drawCalls, triangles) +
+      vfxDebugText(app) +
       gameModeDebugText(app) +
       uiDebugText(app) +
       scriptMessageDebugText(app);
@@ -129,6 +131,34 @@ export function groupThousands(value: number): string {
   const digits = Math.trunc(Math.abs(value)).toString();
   const grouped = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   return negative ? `-${grouped}` : grouped;
+}
+
+/** The VFX runtime block, or "" when the app exposes no snapshot (editor). */
+function vfxDebugText(app: RuntimeStatsApp): string {
+  if (!app.getVfxDebugSnapshot) return "";
+  return `\n${formatVfxDebug(app.getVfxDebugSnapshot()).join("\n")}`;
+}
+
+/**
+ * Formats a {@link VfxDebugSnapshot} into overlay lines (pure, DOM-free for unit
+ * tests): the active-instance / alive-particle / pooled / cached counts, then the
+ * busiest instances (effect id + alive count, disabled ones tagged). Caps the list
+ * so a scene full of emitters can't flood the overlay.
+ */
+export function formatVfxDebug(snapshot: VfxDebugSnapshot, topN = 4): string[] {
+  const lines = [
+    "vfx",
+    `active:${snapshot.activeInstances} alive:${snapshot.aliveParticles} ` +
+      `pool:${snapshot.pooledInstances} defs:${snapshot.cachedDefinitions}`,
+  ];
+  const busiest = [...snapshot.instances]
+    .sort((a, b) => b.aliveParticles - a.aliveParticles)
+    .slice(0, Math.max(0, topN));
+  for (const instance of busiest) {
+    const off = instance.enabled ? "" : " (off)";
+    lines.push(`  ${instance.effectId} ${instance.aliveParticles}${off}`);
+  }
+  return lines;
 }
 
 /** The Game Mode / possessed-pawn block, or "" when the app exposes no snapshot. */
