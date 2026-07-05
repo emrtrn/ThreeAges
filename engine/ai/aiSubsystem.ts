@@ -18,6 +18,16 @@ import type { Entity, EntityId } from "../scene/entity";
 import { readAIControllerComponent } from "../scene/components";
 import { Blackboard } from "./blackboard";
 import { AIController, type AIControllerDebugSnapshot, type AIControllerOptions } from "./aiController";
+import type { AiBlackboardAsset, AiBehaviorTreeAsset } from "./behaviorAsset";
+import {
+  AiBehaviorRunner,
+  createDefaultAiTaskRegistry,
+  type AiBehaviorRunnerOptions,
+  type AiTaskRegistry,
+  type AiServiceRegistry,
+  type AiMessageEmitInput,
+  type AiMoveRequest,
+} from "./behaviorRunner";
 
 /** Stable registry id for the AI subsystem. */
 export const AI_SUBSYSTEM_ID = "ai";
@@ -30,12 +40,51 @@ export interface AiDebugSnapshot {
   readonly controllers: readonly AIControllerDebugSnapshot[];
 }
 
+export interface AiAssetLibrary {
+  readonly blackboards?: ReadonlyMap<string, AiBlackboardAsset>;
+  readonly behaviors?: ReadonlyMap<string, AiBehaviorTreeAsset>;
+}
+
+export interface AISubsystemOptions {
+  readonly taskRegistry?: AiTaskRegistry;
+  readonly serviceRegistry?: AiServiceRegistry;
+  readonly emitMessage?: (input: AiMessageEmitInput) => void;
+  readonly moveTo?: (request: AiMoveRequest) => "success" | "failure" | "running";
+}
+
 export class AISubsystem implements Subsystem {
   readonly id = AI_SUBSYSTEM_ID;
 
   /** One controller per possessed NPC pawn, keyed by the pawn's entity id. */
   private controllers = new Map<EntityId, AIController>();
+  private runners = new Map<EntityId, AiBehaviorRunner>();
+  private blackboardAssets: ReadonlyMap<string, AiBlackboardAsset> = new Map();
+  private behaviorAssets: ReadonlyMap<string, AiBehaviorTreeAsset> = new Map();
   private enabled = true;
+  private taskRegistry: AiTaskRegistry;
+  private serviceRegistry: AiServiceRegistry | undefined;
+  private emitMessage: ((input: AiMessageEmitInput) => void) | undefined;
+  private moveTo: ((request: AiMoveRequest) => "success" | "failure" | "running") | undefined;
+
+  constructor(options: AISubsystemOptions = {}) {
+    this.taskRegistry = options.taskRegistry ?? createDefaultAiTaskRegistry();
+    this.serviceRegistry = options.serviceRegistry;
+    this.emitMessage = options.emitMessage;
+    this.moveTo = options.moveTo;
+  }
+
+  configure(options: AISubsystemOptions): void {
+    if (options.taskRegistry) this.taskRegistry = options.taskRegistry;
+    if (options.serviceRegistry) this.serviceRegistry = options.serviceRegistry;
+    if (options.emitMessage) this.emitMessage = options.emitMessage;
+    if (options.moveTo) this.moveTo = options.moveTo;
+  }
+
+  setAssetLibrary(library: AiAssetLibrary): void {
+    this.blackboardAssets = library.blackboards ?? new Map();
+    this.behaviorAssets = library.behaviors ?? new Map();
+    this.rebuildRunners();
+  }
 
   /**
    * Derives the live controller set from the scene's entities: every entity with
@@ -46,24 +95,30 @@ export class AISubsystem implements Subsystem {
    */
   setEntities(entities: readonly Entity[]): void {
     this.controllers.clear();
+    this.runners.clear();
     for (const entity of entities) {
       const component = readAIControllerComponent(entity);
       if (!component) continue;
-      const blackboard = new Blackboard(component.blackboardKeys ?? []);
+      const behaviorAsset = component.behaviorTree
+        ? this.behaviorAssets.get(component.behaviorTree)
+        : undefined;
+      const blackboardRef = component.blackboard ?? behaviorAsset?.blackboard;
+      const blackboardKeys = blackboardRef
+        ? this.blackboardAssets.get(blackboardRef)?.keys
+        : undefined;
+      const blackboard = new Blackboard(blackboardKeys ?? component.blackboardKeys ?? []);
       const options: AIControllerOptions = {
         ...(component.behaviorTree ? { behaviorTreeAsset: component.behaviorTree } : {}),
-        ...(component.blackboard ? { blackboardAsset: component.blackboard } : {}),
+        ...(blackboardRef ? { blackboardAsset: blackboardRef } : {}),
       };
       this.controllers.set(entity.id, new AIController(`ai:${entity.id}`, entity.id, blackboard, options));
     }
+    this.rebuildRunners();
   }
 
-  update(_engine: EngineUpdateContext): void {
+  update(engine: EngineUpdateContext): void {
     if (!this.enabled) return;
-    // Faz 1: AIControllers are possession + blackboard-memory containers only.
-    // The per-frame Behavior Tree decision tick (which reads world/perception and
-    // writes the blackboard + drives move-intent) is added in Faz 2/Faz 3. This
-    // method is registered now so the tick order is fixed before that logic exists.
+    for (const runner of this.runners.values()) runner.tick(engine);
   }
 
   /**
@@ -91,6 +146,7 @@ export class AISubsystem implements Subsystem {
   /** Drops all controllers (scene teardown / reload). */
   clear(): void {
     this.controllers.clear();
+    this.runners.clear();
   }
 
   dispose(): void {
@@ -101,7 +157,33 @@ export class AISubsystem implements Subsystem {
     return {
       enabled: this.enabled,
       controllerCount: this.controllers.size,
-      controllers: [...this.controllers.values()].map((controller) => controller.getDebugSnapshot()),
+      controllers: [...this.controllers.entries()].map(([pawnEntityId, controller]) =>
+        controller.getDebugSnapshot(this.runners.get(pawnEntityId)?.getDebugSnapshot() ?? null),
+      ),
+    };
+  }
+
+  private rebuildRunners(): void {
+    this.runners.clear();
+    for (const [pawnEntityId, controller] of this.controllers) {
+      const behaviorTreeAsset = controller.behaviorTreeAsset;
+      if (!behaviorTreeAsset) continue;
+      const asset = this.behaviorAssets.get(behaviorTreeAsset);
+      if (!asset) continue;
+      this.runners.set(
+        pawnEntityId,
+        new AiBehaviorRunner(controller, asset, this.runnerOptions()),
+      );
+    }
+  }
+
+  private runnerOptions(): AiBehaviorRunnerOptions {
+    return {
+      taskRegistry: this.taskRegistry,
+      ...(this.serviceRegistry ? { serviceRegistry: this.serviceRegistry } : {}),
+      resolveSubtree: (assetPath) => this.behaviorAssets.get(assetPath),
+      ...(this.emitMessage ? { emitMessage: this.emitMessage } : {}),
+      ...(this.moveTo ? { moveTo: this.moveTo } : {}),
     };
   }
 }

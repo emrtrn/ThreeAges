@@ -32,6 +32,12 @@ import {
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
+import {
+  normalizeAiBehaviorTreeAsset,
+  normalizeAiBlackboardAsset,
+  type AiBehaviorTreeAsset,
+  type AiBlackboardAsset,
+} from "@engine/ai/behaviorAsset";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
@@ -59,6 +65,7 @@ import { PointerLookSource } from "@/input/pointerLookSource";
 import { PointerButtonSource } from "@/input/pointerButtonSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
+import { createGameAiTaskRegistry } from "@/game/ai/tasks";
 import { CharacterMovementSubsystem } from "@/game/characterMovementSystem";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 import { resolveGameMode } from "@/game/gameModes/registry";
@@ -404,7 +411,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly movingPlatformSubsystem: MovingPlatformSubsystem;
   private readonly characterMovementSubsystem: CharacterMovementSubsystem;
   /** Owns every AIController possessing an NPC pawn (decision tick lands in Faz 2). */
-  private readonly aiSubsystem = new AISubsystem();
+  private readonly aiSubsystem = new AISubsystem({
+    taskRegistry: createGameAiTaskRegistry(),
+  });
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
   /** Manifest soundCue asset id -> fetchable file URL. */
@@ -768,6 +777,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         },
       },
     );
+    this.aiSubsystem.configure({
+      emitMessage: (message) =>
+        this.behaviorSubsystem.emitScriptMessage(
+          message.type,
+          message.source,
+          message.payload,
+          message.target,
+        ),
+    });
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
     this.engineApp.registerSubsystem(this.dialogueSubsystem);
@@ -1236,6 +1254,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
     await this.loadCollisionDefs();
     await this.populateAssetUrls();
+    await this.loadAiAssets();
     const baseDocument = roomLayoutToSceneDocument(this.layout, {
       colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
       collisionDefs: this.collisionDefs,
@@ -1274,6 +1293,37 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.applyPendingSaveRestore(layoutPath);
     await this.setupRuntimeUi();
     await this.setupDialogue();
+  }
+
+  private async loadAiAssets(): Promise<void> {
+    if (!this.assetLoader) return;
+    const manifest = await this.assetLoader.loadManifest();
+    const blackboards = new Map<string, AiBlackboardAsset>();
+    const behaviors = new Map<string, AiBehaviorTreeAsset>();
+    await Promise.all(
+      manifest.assets.map(async (asset) => {
+        const type = assetType(asset);
+        if (type !== "blackboard" && type !== "behaviorTree") return;
+        const path = assetPath(asset);
+        try {
+          const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
+          if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+          const json = await response.json();
+          if (type === "blackboard") {
+            const blackboard = normalizeAiBlackboardAsset(json);
+            blackboards.set(asset.id, blackboard);
+            blackboards.set(path, blackboard);
+          } else {
+            const behavior = normalizeAiBehaviorTreeAsset(json);
+            behaviors.set(asset.id, behavior);
+            behaviors.set(path, behavior);
+          }
+        } catch (error) {
+          console.warn("[ai] failed to load AI asset", path, describeLoadError(error));
+        }
+      }),
+    );
+    this.aiSubsystem.setAssetLibrary({ blackboards, behaviors });
   }
 
   /**

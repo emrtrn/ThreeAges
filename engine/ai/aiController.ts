@@ -16,6 +16,7 @@
  */
 import { Blackboard } from "./blackboard";
 import type { BlackboardDebugSnapshot } from "./blackboard";
+import type { AiBehaviorRunnerDebugSnapshot } from "./behaviorRunner";
 import type { EntityId } from "../scene/entity";
 
 /** Stable controller id, derived from the possessed pawn's entity id. */
@@ -36,6 +37,7 @@ export interface AIControllerDebugSnapshot {
   readonly goal: string | null;
   /** Referenced behavior tree asset path, or null when none is authored. */
   readonly behaviorTreeAsset: string | null;
+  readonly behavior: AiBehaviorRunnerDebugSnapshot | null;
   readonly blackboard: BlackboardDebugSnapshot;
 }
 
@@ -72,12 +74,13 @@ export class AIController {
     this.currentGoal = goal && goal.length > 0 ? goal : null;
   }
 
-  getDebugSnapshot(): AIControllerDebugSnapshot {
+  getDebugSnapshot(behavior: AiBehaviorRunnerDebugSnapshot | null = null): AIControllerDebugSnapshot {
     return {
       controllerId: this.id,
       pawnEntityId: this.pawnEntityId,
       goal: this.currentGoal,
       behaviorTreeAsset: this.behaviorTreeAsset,
+      behavior,
       blackboard: this.blackboard.getDebugSnapshot(),
     };
   }

@@ -79,6 +79,7 @@ import {
 } from "../engine/ai/behaviorAsset";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
+import { AiBehaviorRunner, createDefaultAiTaskRegistry } from "../engine/ai/behaviorRunner";
 import {
   forwardVectorFromRotation,
   readRotation,
@@ -17902,6 +17903,101 @@ check("AI behavior tree asset normalizer canonicalizes supported node shapes", (
   );
 });
 
+check("AiBehaviorRunner executes selector/sequence/decorator/wait task and messages", () => {
+  const bb = new Blackboard([
+    { key: "hasLineOfSight", kind: "boolean", default: false },
+    { key: "mode", kind: "string", default: "idle" },
+  ]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "selector",
+      children: [
+        {
+          kind: "task",
+          task: "forge.sendMessage",
+          decorators: [{ kind: "blackboard", key: "hasLineOfSight", op: "equals", value: true }],
+          params: { type: "enemy.see", payload: { alert: true } },
+        },
+        {
+          kind: "sequence",
+          children: [
+            { kind: "task", task: "forge.setBlackboard", params: { key: "mode", value: "alert" } },
+            { kind: "task", task: "forge.wait", params: { seconds: 0.03 } },
+            { kind: "task", task: "forge.sendMessage", params: { type: "enemy.idle-done" } },
+          ],
+        },
+      ],
+    },
+  });
+  const messages: Array<{ type: string; source: string; payload?: Record<string, unknown> }> = [];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    emitMessage: (message) => messages.push(message),
+  });
+
+  assert.equal(runner.tick({ deltaSeconds: 0.01, elapsedSeconds: 0.01, frame: 1 }), "running");
+  assert.equal(bb.getString("mode"), "alert");
+  assert.equal(messages.length, 0);
+  assert.equal(controller.goal, "forge.wait");
+  assert.equal(runner.tick({ deltaSeconds: 0.05, elapsedSeconds: 0.06, frame: 2 }), "success");
+  assert.equal(messages[0]?.type, "enemy.idle-done");
+  assert.equal(messages[0]?.source, "enemy");
+  assert.equal(controller.goal, null);
+
+  bb.set("hasLineOfSight", true);
+  assert.equal(runner.tick({ deltaSeconds: 0.01, elapsedSeconds: 0.07, frame: 3 }), "success");
+  assert.equal(messages[1]?.type, "enemy.see");
+  assert.deepEqual(messages[1]?.payload, { alert: true });
+  const debug = runner.getDebugSnapshot();
+  assert.equal(debug.lastStatus, "success");
+  assert.equal(debug.lastTask, "forge.sendMessage");
+  assert.equal(debug.failedDecorator, null);
+});
+
+check("AiBehaviorRunner ticks services on interval and resolves subtree assets", () => {
+  const bb = new Blackboard([{ key: "mode", kind: "string", default: "idle" }]);
+  const controller = new AIController("ai:worker", "worker", bb);
+  const root = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "sequence",
+      services: [{ service: "test.count", interval: 0.5, params: { key: "mode" } }],
+      children: [{ kind: "subtree", behavior: "assets/AI/Sub.behavior.json" }],
+    },
+  });
+  const subtree = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.setBlackboard", params: { key: "mode", value: "subtree" } },
+  });
+  let serviceTicks = 0;
+  const runner = new AiBehaviorRunner(controller, root, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    serviceRegistry: {
+      get: (serviceId) =>
+        serviceId === "test.count"
+          ? () => {
+              serviceTicks += 1;
+            }
+          : undefined,
+    },
+    resolveSubtree: (assetPath) =>
+      assetPath === "assets/AI/Sub.behavior.json" ? subtree : undefined,
+  });
+
+  assert.equal(runner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 }), "success");
+  assert.equal(serviceTicks, 1);
+  assert.equal(bb.getString("mode"), "subtree");
+  runner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.2, frame: 2 });
+  assert.equal(serviceTicks, 1);
+  runner.tick({ deltaSeconds: 0.4, elapsedSeconds: 0.6, frame: 3 });
+  assert.equal(serviceTicks, 2);
+});
+
 check("AI save payloads enforce compound extensions, traversal guard, and normalizers", () => {
   const blackboard = { schema: 1, type: "blackboard", keys: [{ key: "target", kind: "entity" }] };
   const behavior = {
@@ -18037,6 +18133,7 @@ check("formatAiDebug renders controller count, goal + blackboard size, tagging d
         pawnEntityId: "enemy-1",
         goal: "patrol",
         behaviorTreeAsset: null,
+        behavior: null,
         blackboard: { keyCount: 3, entries: [] },
       },
     ],

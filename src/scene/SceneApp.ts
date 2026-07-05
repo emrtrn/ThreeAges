@@ -47,10 +47,17 @@ import {
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
+import {
+  normalizeAiBehaviorTreeAsset,
+  normalizeAiBlackboardAsset,
+  type AiBehaviorTreeAsset,
+  type AiBlackboardAsset,
+} from "@engine/ai/behaviorAsset";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
+import { createGameAiTaskRegistry } from "@/game/ai/tasks";
 import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
 import type { PlayCameraPose } from "@/play/cameraHandoff";
 import {
@@ -492,7 +499,9 @@ export class SceneApp {
   /** Ticks scene behaviors against the derived entity set (assigned in ctor). */
   private readonly behaviorSubsystem: BehaviorSubsystem;
   /** Owns AIControllers in editor Play mode; gated off (`setEnabled(false)`) while editing. */
-  private readonly aiSubsystem = new AISubsystem();
+  private readonly aiSubsystem = new AISubsystem({
+    taskRegistry: createGameAiTaskRegistry(),
+  });
   /**
    * BehaviorSubsystem transform sink: writes a behavior-mutated entity transform
    * back onto its rendered object. This slice targets characters (each is its
@@ -742,6 +751,15 @@ export class SceneApp {
         },
       },
     );
+    this.aiSubsystem.configure({
+      emitMessage: (message) =>
+        this.behaviorSubsystem.emitScriptMessage(
+          message.type,
+          message.source,
+          message.payload,
+          message.target,
+        ),
+    });
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
 
@@ -2191,6 +2209,7 @@ export class SceneApp {
     // Load authored collision sidecars first so the runtime collider (and the
     // "Show > Collision" overlay) use the compound shapes, not the auto box.
     await this.refreshCollisionDefs();
+    await this.loadAiAssets();
     await startSceneRuntime({
       sceneDocument: this.getSceneDocument(),
       physics: this.physicsSubsystem,
@@ -2198,6 +2217,39 @@ export class SceneApp {
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
+  }
+
+  private async loadAiAssets(): Promise<void> {
+    if (!this.assetLoader) return;
+    const manifest = await this.assetLoader.loadManifest();
+    const blackboards = new Map<string, AiBlackboardAsset>();
+    const behaviors = new Map<string, AiBehaviorTreeAsset>();
+    await Promise.all(
+      manifest.assets.map(async (asset) => {
+        const type = assetType(asset);
+        if (type !== "blackboard" && type !== "behaviorTree") return;
+        const path = assetPath(asset);
+        try {
+          const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
+          if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+          const json = await response.json();
+          if (type === "blackboard") {
+            const blackboard = normalizeAiBlackboardAsset(json);
+            blackboards.set(asset.id, blackboard);
+            blackboards.set(path, blackboard);
+          } else {
+            const behavior = normalizeAiBehaviorTreeAsset(json);
+            behaviors.set(asset.id, behavior);
+            behaviors.set(path, behavior);
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.warn("[ai] failed to load AI asset", path, message);
+          this.onStatus?.(`AI asset load failed: ${path}`, "warning");
+        }
+      }),
+    );
+    this.aiSubsystem.setAssetLibrary({ blackboards, behaviors });
   }
 
   /** Register synthetic models for any `shape:<type>` instances in the layout. */

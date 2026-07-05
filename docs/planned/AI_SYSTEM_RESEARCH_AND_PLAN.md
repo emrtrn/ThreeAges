@@ -7,9 +7,12 @@
 > Revizyon: 2026-07-04 — Faz 0 + Faz 1 uygulandi (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-05 - Faz 2 asset schema/save/manifest altyapi dilimi
 > uygulandi (bkz. asagidaki checkbox'lar).
-> Durum: Faz 1 uygulandi; Faz 2'nin ilk altyapi dilimi tamamlandi. Son tam gate
-> yesil (`tsc`, `test:engine` 602 check, `build:verify`, `check:assets`).
-> Faz 2 runtime runner + editor form isleri planli.
+> Revizyon: 2026-07-05 - Faz 2 runtime runner + temel task/decorator dilimi
+> uygulandi (bkz. asagidaki checkbox'lar).
+> Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 604 check,
+> `build:verify`, `check:assets`). Faz 2 editor form ve gelismis
+> service/decorator isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -302,28 +305,28 @@ Service/Task modeli.
 - [x] `engine/assets/manifest.ts`: yeni `AssetType` degerleri (`behaviorTree`,
       `blackboard`) + compound extension eslemesi (`.behavior.json`,
       `.blackboard.json`); `npm run check:assets` yesil kalmali.
-- [ ] Behavior Tree runner ekle:
-      - [ ] `selector`
-      - [ ] `sequence`
-      - [ ] `task`
-      - [ ] `decorator`
-      - [ ] `service`
-      - [ ] `wait`
-      - [ ] `subtree` icin basit asset referansi.
+- [x] Behavior Tree runner ekle:
+      - [x] `selector`
+      - [x] `sequence`
+      - [x] `task`
+      - [x] `decorator`
+      - [x] `service`
+      - [x] `wait`
+      - [x] `subtree` icin basit asset referansi.
 - [ ] Event-driven yaklasim icin blackboard key change ve perception event
       invalidation modeli ekle; her frame tum agaci pahali sekilde tarama.
-- [ ] Node-specific mutable data'yi node asset'inde degil agent runtime memory'de
+- [x] Node-specific mutable data'yi node asset'inde degil agent runtime memory'de
       tut; Unreal'in shared node instance riskini Forge'da bastan engelle.
-- [ ] `src/game/ai/tasks.ts` icinde task registry kur.
+- [x] `src/game/ai/tasks.ts` icinde task registry kur.
 - [ ] Built-in tasklar:
-      - [ ] `forge.wait`
-      - [ ] `forge.setBlackboard`
-      - [ ] `forge.sendMessage` (ScriptMessageBus uzerinden)
-      - [ ] `forge.moveToPosition`
-      - [ ] `forge.moveToBlackboard`
+      - [x] `forge.wait`
+      - [x] `forge.setBlackboard`
+      - [x] `forge.sendMessage` (ScriptMessageBus uzerinden)
+      - [x] `forge.moveToPosition`
+      - [x] `forge.moveToBlackboard`
       - [ ] (opsiyonel) `forge.startConversation` — DialogueSubsystem koprusu.
 - [ ] Built-in decoratorlar:
-      - [ ] blackboard compare
+      - [x] blackboard compare
       - [ ] distance compare
       - [ ] cooldown
       - [ ] has perception stimulus
@@ -334,9 +337,9 @@ Service/Task modeli.
 - [ ] Editor ilk surum: JSON asset create/edit formu, node tree text outline,
       task/decorator/service parametre editoru.
 - [ ] Debug: active node path, last status, task duration, failed decorator.
-- [ ] Test: selector/sequence/decorator/task runner unit tests.
+- [x] Test: selector/sequence/decorator/task runner unit tests.
 - [ ] Test: enemy patrol/chase sample layout.
-- [ ] Validation: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`.
+- [x] Validation: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`.
 
 Tamamlanan Faz 2 altyapi notu (2026-07-05):
 
@@ -349,6 +352,21 @@ Tamamlanan Faz 2 altyapi notu (2026-07-05):
   AI asset type olarak siniflandiriyor.
 - Dogrulama: `npx.cmd tsc --noEmit` ve `npm.cmd run test:engine` yesil
   (`602 checks passed`). Full `build:verify` ayrica calistirildi.
+
+Tamamlanan Faz 2 runtime runner notu (2026-07-05):
+
+- `engine/ai/behaviorRunner.ts` eklendi; selector/sequence/task/wait/subtree,
+  blackboard decorator, service interval tick'i ve agent-basina node memory
+  destekleniyor.
+- `AISubsystem` behavior/blackboard asset library aliyor, runtime/editor Play
+  host'lari manifest'teki AI asset'lerini engine normalizer'lariyla yukluyor ve
+  AI task registry `src/game/ai/tasks.ts` uzerinden enjekte ediliyor.
+- Built-in tasklar: `forge.wait`, `forge.setBlackboard`, `forge.sendMessage`,
+  `forge.moveToPosition`, `forge.moveToBlackboard`. Hareket task'lari Faz 3
+  move-intent/path following callback'i gelene kadar callback yoksa failure
+  dondurur.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`604 checks passed`), `npm.cmd run build:verify`, `npm.cmd run check:assets`.
 
 ### Faz 3 - Navigation ve path following
 
