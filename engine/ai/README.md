@@ -4,7 +4,7 @@ Generic, DOM-free AI decision layer for the engine spine (Unreal-inspired
 AIController / Blackboard / Behavior Tree, adapted to Forge — see
 `docs/planned/AI_SYSTEM_RESEARCH_AND_PLAN.md`).
 
-Current files (Faz 1):
+Current files:
 
 - `blackboard.ts`: a per-agent typed key/value memory (`UBlackboardComponent`).
   Keys are declared up front; writes are validated against each key's kind and
@@ -15,6 +15,9 @@ Current files (Faz 1):
 - `aiSubsystem.ts`: a `Subsystem` that derives one `AIController` per entity
   carrying an `AIController` component, ticks them, exposes a debug snapshot, and
   carries a `setEnabled` Play-mode gate.
+- `behaviorAsset.ts`: authored `*.blackboard.json` and `*.behavior.json`
+  schemas/normalizers. Save validators and future runtime loaders share this
+  module so editor saves and runtime execution agree on the canonical shape.
 
 ## engine/behavior vs engine/ai
 

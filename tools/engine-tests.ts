@@ -73,6 +73,10 @@ import {
   normalizeBlackboardKeys,
   type BlackboardKeyDef,
 } from "../engine/ai/blackboard";
+import {
+  normalizeAiBehaviorTreeAsset,
+  normalizeAiBlackboardAsset,
+} from "../engine/ai/behaviorAsset";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
 import {
@@ -422,6 +426,8 @@ import {
   validateDialogueLineAsset,
   validateSaveDialogueVoicePayload,
   validateSaveDialogueLinePayload,
+  validateSaveAiBlackboardPayload,
+  validateSaveAiBehaviorPayload,
   validateEffectAsset,
   validateSaveEffectPayload,
 } from "./saveValidator";
@@ -801,6 +807,8 @@ check("asset manifest classifies Sound Cue assets separately from prefab JSON", 
   assert.equal(assetType(cue), "soundCue");
   assert.equal(inferAssetTypeFromPath("assets/Sounds/SC_Footstep_Stone.soundcue.json"), "soundCue");
   assert.equal(inferAssetTypeFromPath("assets/Sounds/Warning.sound.json"), "prefab");
+  assert.equal(inferAssetTypeFromPath("assets/AI/Enemy.blackboard.json"), "blackboard");
+  assert.equal(inferAssetTypeFromPath("assets/AI/Enemy.behavior.json"), "behaviorTree");
 });
 check("asset manifest helpers tolerate the legacy file/loadGroup/bytes shape", () => {
   const legacy = {
@@ -14292,6 +14300,23 @@ check("content-new dialogue kinds create typed stubs with the right extension", 
   assert.deepEqual(validateDialogueLineAsset(lineDef), lineDef);
 });
 
+check("content-new AI kinds create behavior tree and blackboard stubs", () => {
+  const blackboard = resolveContentNewFile({ kind: "blackboard", dir: "assets/AI", name: "Enemy" });
+  assert.equal(blackboard.path, "assets/AI/Enemy.blackboard.json");
+  const blackboardDef = JSON.parse(blackboard.content ?? "");
+  assert.deepEqual(normalizeAiBlackboardAsset(blackboardDef), {
+    schema: 1,
+    type: "blackboard",
+    keys: [],
+  });
+
+  const behavior = resolveContentNewFile({ kind: "behaviorTree", dir: "assets/AI", name: "Enemy" });
+  assert.equal(behavior.path, "assets/AI/Enemy.behavior.json");
+  const behaviorDef = normalizeAiBehaviorTreeAsset(JSON.parse(behavior.content ?? ""));
+  assert.equal(behaviorDef.type, "behaviorTree");
+  assert.equal(behaviorDef.root.kind, "selector");
+});
+
 check("validateDialogueVoiceAsset keeps allowed fields and rejects bad ones", () => {
   const out = validateDialogueVoiceAsset({
     schema: 1,
@@ -16610,6 +16635,16 @@ check("buildImportedAssetRecord derives a valid manifest entry per type", () => 
   assert.equal(soundCue?.category, "sounds");
   assert.equal(soundCue?.placeable, false);
 
+  const blackboard = buildImportedAssetRecord("assets/AI/Enemy.blackboard.json", 90, []);
+  assert.equal(blackboard?.assetType, "blackboard");
+  assert.equal(blackboard?.category, "AI");
+  assert.equal(blackboard?.placeable, false);
+
+  const behavior = buildImportedAssetRecord("assets/AI/Enemy.behavior.json", 120, []);
+  assert.equal(behavior?.assetType, "behaviorTree");
+  assert.equal(behavior?.category, "AI");
+  assert.equal(behavior?.placeable, false);
+
   // Unknown/companion types are not auto-registered.
   assert.equal(buildImportedAssetRecord("assets/models/props/chair.bin", 10, []), null);
 
@@ -17777,6 +17812,125 @@ check("normalizeBlackboardKeys keeps valid keys, drops malformed, dedupes", () =
   );
   assert.equal(keys[0]?.kind, "entity");
   assert.equal(keys.find((entry) => entry.key === "loose")?.default, undefined);
+});
+
+check("AI blackboard asset normalizer validates schema, kinds, defaults, and duplicates", () => {
+  const asset = normalizeAiBlackboardAsset({
+    schema: 1,
+    type: "blackboard",
+    keys: [
+      { key: "target", kind: "entity", default: null },
+      { key: "patrolPoint", kind: "vec3", default: [1, 2, 3] },
+      { key: "hasLineOfSight", kind: "boolean", default: false },
+    ],
+  });
+  assert.equal(asset.type, "blackboard");
+  assert.equal(asset.keys.length, 3);
+  assert.deepEqual(asset.keys[1]?.default, [1, 2, 3]);
+  assert.throws(
+    () => normalizeAiBlackboardAsset({ schema: 1, type: "blackboard", keys: [{ key: "x", kind: "banana" }] }),
+    /kind is invalid/,
+  );
+  assert.throws(
+    () => normalizeAiBlackboardAsset({
+      schema: 1,
+      type: "blackboard",
+      keys: [
+        { key: "target", kind: "entity" },
+        { key: "target", kind: "entity" },
+      ],
+    }),
+    /duplicated/,
+  );
+  assert.throws(
+    () => normalizeAiBlackboardAsset({
+      schema: 1,
+      type: "blackboard",
+      keys: [{ key: "bad", kind: "number", default: "fast" }],
+    }),
+    /does not match kind/,
+  );
+});
+
+check("AI behavior tree asset normalizer canonicalizes supported node shapes", () => {
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    blackboard: "assets/AI/Enemy.blackboard.json",
+    root: {
+      kind: "selector",
+      children: [
+        {
+          kind: "sequence",
+          decorators: [{ kind: "blackboard", key: "hasLineOfSight", op: "equals", value: true }],
+          services: [{ service: "forge.updateTargetDistance", interval: 0.5, params: { key: "target" } }],
+          children: [
+            { kind: "task", task: "forge.sendMessage", params: { type: "enemy.alert", count: 1 } },
+            { kind: "wait", seconds: 0.25 },
+          ],
+        },
+        { kind: "subtree", behavior: "assets/AI/Idle.behavior.json" },
+      ],
+    },
+  });
+  assert.equal(asset.type, "behaviorTree");
+  assert.equal(asset.blackboard, "assets/AI/Enemy.blackboard.json");
+  const root = asset.root;
+  if (root.kind !== "selector") throw new Error("expected selector root");
+  assert.equal(root.children.length, 2);
+  const first = root.children[0];
+  assert.equal(first?.kind, "sequence");
+  if (first?.kind === "sequence") {
+    assert.equal(first.children[0]?.kind, "task");
+    assert.equal(first.decorators?.[0]?.key, "hasLineOfSight");
+    assert.equal(first.services?.[0]?.interval, 0.5);
+  }
+  assert.throws(
+    () => normalizeAiBehaviorTreeAsset({ schema: 1, type: "behaviorTree", root: { kind: "task" } }),
+    /task.task/,
+  );
+  assert.throws(
+    () => normalizeAiBehaviorTreeAsset({
+      schema: 1,
+      type: "behaviorTree",
+      root: {
+        kind: "selector",
+        children: [{ kind: "task", task: "x", decorators: [{ kind: "blackboard", key: "k", op: "equals" }] }],
+      },
+    }),
+    /value is required/,
+  );
+});
+
+check("AI save payloads enforce compound extensions, traversal guard, and normalizers", () => {
+  const blackboard = { schema: 1, type: "blackboard", keys: [{ key: "target", kind: "entity" }] };
+  const behavior = {
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.wait" },
+  };
+  assert.equal(
+    validateSaveAiBlackboardPayload({
+      path: "assets/AI/Enemy.blackboard.json",
+      blackboard,
+    }).blackboard.type,
+    "blackboard",
+  );
+  assert.equal(
+    validateSaveAiBehaviorPayload({
+      path: "assets/AI/Enemy.behavior.json",
+      behavior,
+    }).behavior.type,
+    "behaviorTree",
+  );
+  assert.throws(
+    () => validateSaveAiBlackboardPayload({ path: "assets/AI/Enemy.json", blackboard }),
+    /\.blackboard\.json/,
+  );
+  assert.throws(
+    () => validateSaveAiBehaviorPayload({ path: "../Enemy.behavior.json", behavior }),
+    /must not contain \.\./,
+  );
 });
 
 check("AIController exposes goal + blackboard in its debug snapshot", () => {

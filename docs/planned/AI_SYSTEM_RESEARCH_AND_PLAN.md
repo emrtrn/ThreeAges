@@ -5,8 +5,11 @@
 > CharacterMovement AI girisi, editor Play modu, asset manifest ve dialogue
 > entegrasyonu duzeltildi/eklendi (bkz. "Revizyon notlari").
 > Revizyon: 2026-07-04 — Faz 0 + Faz 1 uygulandi (bkz. asagidaki checkbox'lar).
-> Durum: Faz 1 uygulandi ve tam gate yesil (`tsc`, `test:engine` 594 check,
-> `build:verify`, `check:assets`). Faz 2+ planli.
+> Revizyon: 2026-07-05 - Faz 2 asset schema/save/manifest altyapi dilimi
+> uygulandi (bkz. asagidaki checkbox'lar).
+> Durum: Faz 1 uygulandi; Faz 2'nin ilk altyapi dilimi tamamlandi. Son tam gate
+> yesil (`tsc`, `test:engine` 602 check, `build:verify`, `check:assets`).
+> Faz 2 runtime runner + editor form isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -289,14 +292,14 @@ debug'da izlenebilmesi.
 Hedef: Unreal Behavior Tree'nin sade JSON karsiligi; Selector/Sequence/Decorator/
 Service/Task modeli.
 
-- [ ] `*.behavior.json` ve `*.blackboard.json` schema + engine-side normalizer
+- [x] `*.behavior.json` ve `*.blackboard.json` schema + engine-side normalizer
       tanimla (orn. `engine/ai/behaviorAsset.ts`; loader ve saveValidator ayni
       normalizer'i paylasir — `normalizeAssetSkeleton` modeliyle ayni ilke).
-- [ ] Dev save endpointleri: `vite.config.ts` icine `/__save-behavior` (+
+- [x] Dev save endpointleri: `vite.config.ts` icine `/__save-behavior` (+
       `/__save-blackboard`), `WRITE_ENDPOINTS` listesine ekleme,
       `tools/saveValidator.ts` icine `validateSave*Payload` — mevcut
       soundCue/dialogue endpoint pattern'i.
-- [ ] `engine/assets/manifest.ts`: yeni `AssetType` degerleri (`behaviorTree`,
+- [x] `engine/assets/manifest.ts`: yeni `AssetType` degerleri (`behaviorTree`,
       `blackboard`) + compound extension eslemesi (`.behavior.json`,
       `.blackboard.json`); `npm run check:assets` yesil kalmali.
 - [ ] Behavior Tree runner ekle:
@@ -334,6 +337,18 @@ Service/Task modeli.
 - [ ] Test: selector/sequence/decorator/task runner unit tests.
 - [ ] Test: enemy patrol/chase sample layout.
 - [ ] Validation: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`.
+
+Tamamlanan Faz 2 altyapi notu (2026-07-05):
+
+- `engine/ai/behaviorAsset.ts` eklendi; Blackboard ve Behavior Tree asset
+  normalizer'lari `tools/saveValidator.ts` tarafindan da kullaniliyor.
+- `/__save-blackboard` ve `/__save-behavior` localhost-only authoring endpointleri
+  eklendi; path traversal ve compound extension guard'lari test edildi.
+- Content Browser typed stub uretimi `blackboard` / `behaviorTree` icin acildi.
+- `engine/assets/manifest.ts` `.blackboard.json` ve `.behavior.json` dosyalarini
+  AI asset type olarak siniflandiriyor.
+- Dogrulama: `npx.cmd tsc --noEmit` ve `npm.cmd run test:engine` yesil
+  (`602 checks passed`). Full `build:verify` ayrica calistirildi.
 
 ### Faz 3 - Navigation ve path following
 

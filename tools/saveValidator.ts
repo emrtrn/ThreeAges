@@ -52,6 +52,10 @@ import {
   isParticleEffectPreset,
   type ParticleEffectPreset,
 } from "../engine/vfx/particleEffectPresets";
+import {
+  normalizeAiBehaviorTreeAsset,
+  normalizeAiBlackboardAsset,
+} from "../engine/ai/behaviorAsset";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -2815,6 +2819,46 @@ export function validateSaveUvwPayload(value: unknown): {
   };
 }
 
+export function validateSaveAiBlackboardPayload(value: unknown): {
+  path: string;
+  blackboard: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("blackboard payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".blackboard.json")) {
+    throw new Error("blackboard payload path must end with .blackboard.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("blackboard payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    blackboard: normalizeAiBlackboardAsset(input.blackboard) as unknown as Record<string, unknown>,
+  };
+}
+
+export function validateSaveAiBehaviorPayload(value: unknown): {
+  path: string;
+  behavior: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("behavior payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".behavior.json")) {
+    throw new Error("behavior payload path must end with .behavior.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("behavior payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    behavior: normalizeAiBehaviorTreeAsset(input.behavior) as unknown as Record<string, unknown>,
+  };
+}
+
 /** Content Browser "new content" kinds the `/__content-new` endpoint accepts. */
 export const CONTENT_NEW_KINDS = [
   "folder",
@@ -2827,6 +2871,8 @@ export const CONTENT_NEW_KINDS = [
   "dialogueVoice",
   "dialogueLine",
   "ui",
+  "blackboard",
+  "behaviorTree",
 ] as const;
 export type ContentNewKind = (typeof CONTENT_NEW_KINDS)[number];
 
@@ -2936,6 +2982,14 @@ function contentStubJson(payload: ContentNewPayload): string {
   } else if (kind === "ui") {
     // UI Widget (UMG Lite) class-asset: a minimal empty Canvas root.
     body = defaultUiWidgetDef(name) as unknown as Record<string, unknown>;
+  } else if (kind === "blackboard") {
+    body = { schema: 1, type: "blackboard", keys: [] };
+  } else if (kind === "behaviorTree") {
+    body = {
+      schema: 1,
+      type: "behaviorTree",
+      root: { kind: "selector", children: [] },
+    };
   } else if (kind === "material") {
     body = { ...defaultForgeMaterialDef(name, payload.materialPreset ?? "standard") };
   } else {
@@ -2967,6 +3021,8 @@ export function resolveContentNewFile(payload: ContentNewPayload): ContentNewFil
             ? "dialoguevoice"
             : payload.kind === "dialogueLine"
               ? "dialogue"
+              : payload.kind === "behaviorTree"
+                ? "behavior"
               : payload.kind;
   return {
     path: join(`${payload.name}.${ext}.json`),
@@ -3118,6 +3174,8 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   dialogueVoice: "dialogue",
   dialogueLine: "dialogue",
   conversation: "dialogue",
+  blackboard: "AI",
+  behaviorTree: "AI",
   animation: "animation",
   effect: "effect",
   prefab: "prefab",
