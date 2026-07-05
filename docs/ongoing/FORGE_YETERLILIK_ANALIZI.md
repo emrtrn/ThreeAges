@@ -575,6 +575,8 @@ degerlendirilecek.
 - Guncel karar notu (2026-07-05): Behavior-state sizintisi kapatildi; `[x]`'i
   artik otomatik runtime smoke yoklugu, monolit kabuk ve save zarfi sozlesme
   eksigi engelliyor.
+- Planlama notu (2026-07-05): Kalan isler fazlara ayrildi ve takip kaynagi
+  olarak `docs/ongoing/RUNTIME_GAMEPLAY_REMAINING_CHECKLIST.md` eklendi.
 - Aksiyonlar:
   1. Behavior state sizintisini dogrula ve kapat: registry'yi scene-load
      basina yeniden yarat (veya reset API'si ekle), `collisionAudioPlayed`'i
@@ -784,3 +786,4 @@ eklenecek.
 | 2026-07-03 | 4. Runtime/Gameplay | Unreal-analog cerceve ucuca + saf cekirdekler testli (573 check); **bulgu:** behavior registry app-omru yasiyor (yorum sahne-omru diyor), travel'da `traveledTriggers` vb. sifirlanmiyor + entity id'ler level-bagimsiz → round-trip portal muhtemelen olu; RuntimeSceneApp 3.6k satir ikinci monolit; tum tarayici smoke'lari acik. | Sizintiyi dogrula+kapat (headless travel testi) + runtime Playwright smoke + kabuk dilimleme + save sozlesme dokumani (5 aksiyon, baslikta). | `[~]` |
 | 2026-07-05 | 4. Runtime/Gameplay | Behavior state sizintisi dogrulandi ve kapatildi: runtime her `buildScene` basinda taze behavior registry atiyor; `collisionAudioPlayed` registry kapsamina tasindi; headless testler ayni trigger/entity id'nin yeni scene visit'te tekrar calistigini dogruluyor. | Runtime smoke, kabuk dilimleme ve save zarfi dokumani acik kaldi. | `[~]` |
 | 2026-07-05 | 4. Runtime/Gameplay | Runtime Playwright smoke eklendi: gecici smoke layout/menu fixture'lariyla `/` boot, loading overlay kapanisi, HUD, Save/Load UI quick write+load ve `travel:` UI mesaji ile target level load dogrulaniyor. `npm run smoke:browser` yesil (2 Chromium test). | Kalan browser smoke: yuru/zipla, portal sensor gidis-gelis, checkpoint sensor autosave. | `[~]` |
+| 2026-07-05 | 4. Runtime/Gameplay | Kalan isler fazlara ayrildi: runtime browser smoke kapsami, `RuntimeSceneApp` dilimleme, save-game zarfi sozlesmesi, AI/facing yol haritasi ve kapanis gate'i. | Yeni takip dokumani: `docs/ongoing/RUNTIME_GAMEPLAY_REMAINING_CHECKLIST.md`. | `[~]` |
