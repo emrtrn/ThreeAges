@@ -15,6 +15,7 @@ import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import type {
+  AiNavigationDebugSnapshot,
   GameModeDebugSnapshot,
   PerfMemorySnapshot,
   RuntimeStatsApp,
@@ -46,6 +47,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       vfxDebugText(app) +
       gameModeDebugText(app) +
       aiDebugText(app) +
+      aiNavDebugText(app) +
       uiDebugText(app) +
       scriptMessageDebugText(app);
     accumMs = 0;
@@ -219,6 +221,34 @@ export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
     lines.push(
       `  ${controller.pawnEntityId} goal:${controller.goal ?? "—"} bb:${controller.blackboard.keyCount}`,
     );
+  }
+  return lines;
+}
+
+/** The AI navigation block, or "" without a snapshot or with no live followers. */
+function aiNavDebugText(app: RuntimeStatsApp): string {
+  const snapshot = app.getAiNavigationDebugSnapshot?.();
+  if (!snapshot || snapshot.followers.length === 0) return "";
+  return `\n${formatAiNavDebug(snapshot).join("\n")}`;
+}
+
+/**
+ * Formats an {@link AiNavigationDebugSnapshot} into overlay lines (pure, DOM-free
+ * for unit tests): each path follower's status, waypoint progress, stuck-recovery
+ * replans and the seconds it has stalled without progress. Caps the list so a
+ * crowd of moving NPCs can't flood the overlay.
+ */
+export function formatAiNavDebug(snapshot: AiNavigationDebugSnapshot, topN = 4): string[] {
+  const lines = [`ai nav (${snapshot.followers.length})`];
+  for (const follower of snapshot.followers.slice(0, Math.max(0, topN))) {
+    const waypoint =
+      follower.pathLength > 0 ? ` wp:${follower.waypointIndex}/${follower.pathLength}` : "";
+    const replans = follower.replans > 0 ? ` replans:${follower.replans}` : "";
+    const stall =
+      follower.secondsWithoutProgress >= 0.5
+        ? ` stall:${follower.secondsWithoutProgress.toFixed(1)}s`
+        : "";
+    lines.push(`  ${follower.entityId}: ${follower.status}${waypoint}${replans}${stall}`);
   }
   return lines;
 }

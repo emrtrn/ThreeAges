@@ -75,6 +75,7 @@ export interface CharacterMovementSubsystemOptions {
   getMoveIntent?: (
     entityId: EntityId,
     transform: Readonly<TransformComponent>,
+    deltaSeconds: number,
   ) => CharacterMoveIntent | null | undefined;
   reportLocomotion?: (entityId: EntityId, report: LocomotionInput) => void;
   /** Live kinematic platforms the character can stand on, collide with, and ride. */
@@ -108,7 +109,11 @@ export class CharacterMovementSubsystem implements Subsystem {
   private readonly getControlYaw: (entityId: EntityId) => number | null | undefined;
   private readonly isPlayerControlled: (entityId: EntityId) => boolean;
   private readonly getMoveIntent:
-    | ((entityId: EntityId, transform: Readonly<TransformComponent>) => CharacterMoveIntent | null | undefined)
+    | ((
+        entityId: EntityId,
+        transform: Readonly<TransformComponent>,
+        deltaSeconds: number,
+      ) => CharacterMoveIntent | null | undefined)
     | undefined;
   private readonly reportLocomotion: ((entityId: EntityId, report: LocomotionInput) => void) | undefined;
   private readonly platforms: MovingPlatformQuery | undefined;
@@ -195,6 +200,16 @@ export class CharacterMovementSubsystem implements Subsystem {
   transformOf(entityId: EntityId): TransformComponent | null {
     const runtime = this.runtimes.find((entry) => entry.id === entityId);
     return runtime ? cloneTransform(runtime.transform) : null;
+  }
+
+  /**
+   * Iterates every live character's id + current transform without cloning
+   * (read-only). Backs the AI separation steering's neighbor scan.
+   */
+  forEachCharacter(
+    callback: (entityId: EntityId, transform: Readonly<TransformComponent>) => void,
+  ): void {
+    for (const runtime of this.runtimes) callback(runtime.id, runtime.transform);
   }
 
   /**
@@ -541,7 +556,11 @@ export class CharacterMovementSubsystem implements Subsystem {
   ): RuntimeMovementInput | null {
     const playerControlled = this.isPlayerControlled(runtime.id);
     if (playerControlled) return this.playerMovementInput(runtime, engine);
-    const intent = this.getMoveIntent?.(runtime.id, cloneTransform(runtime.transform));
+    const intent = this.getMoveIntent?.(
+      runtime.id,
+      cloneTransform(runtime.transform),
+      engine.deltaSeconds,
+    );
     if (!intent) return null;
     return this.intentMovementInput(runtime, engine, intent);
   }

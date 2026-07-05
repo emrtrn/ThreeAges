@@ -47,6 +47,14 @@ import {
   type NavAgent,
   type PathFollowingState,
 } from "@engine/navigation/gridNavigation";
+import {
+  freshStuckState,
+  isStuck,
+  separationSteering,
+  updateStuckState,
+  type AvoidanceNeighbor,
+  type StuckState,
+} from "@engine/navigation/localAvoidance";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
@@ -367,10 +375,32 @@ export interface PerfMemorySnapshot {
 interface RuntimeAiPathFollowing {
   goal: Vec3;
   state: PathFollowingState;
+  /** Progress window feeding stuck detection (replan / give up). */
+  stuck: StuckState;
+  /** Stuck-recovery replans burned on the current goal. */
+  replans: number;
+}
+
+/** One AI path follower's live state for the `?debug` overlay. */
+export interface AiNavFollowerDebug {
+  readonly entityId: string;
+  readonly status: PathFollowingState["status"];
+  readonly waypointIndex: number;
+  readonly pathLength: number;
+  readonly replans: number;
+  readonly secondsWithoutProgress: number;
+}
+
+export interface AiNavigationDebugSnapshot {
+  readonly followers: readonly AiNavFollowerDebug[];
 }
 
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
+/** How strongly agent-separation steering blends into the desired path direction. */
+const AI_SEPARATION_WEIGHT = 0.75;
+/** Stuck recoveries (replans) per goal before the move fails outright. */
+const AI_MAX_STUCK_REPLANS = 2;
 
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
@@ -378,6 +408,8 @@ export interface RuntimeStatsApp {
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot;
   /** Optional: AI controllers + blackboards for the `?debug` overlay. */
   getAiDebugSnapshot?(): AiDebugSnapshot;
+  /** Optional: AI path-following (waypoints, replans, stalls) for the `?debug` overlay. */
+  getAiNavigationDebugSnapshot?(): AiNavigationDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
@@ -731,7 +763,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           this.inputMode !== "ui" &&
           this.gameModeSession?.playerState.pawnEntityId === entityId &&
           !this.gameModeSession.playerState.pawnControlSuspended,
-        getMoveIntent: (entityId, transform) => this.aiMoveIntentForEntity(entityId, transform),
+        getMoveIntent: (entityId, transform, deltaSeconds) =>
+          this.aiMoveIntentForEntity(entityId, transform, deltaSeconds),
         platforms: this.movingPlatformSubsystem,
       },
     );
@@ -1012,6 +1045,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.aiSubsystem.getDebugSnapshot();
   }
 
+  /** Snapshots AI path following (waypoints, stuck recovery) for `?debug`. */
+  getAiNavigationDebugSnapshot(): AiNavigationDebugSnapshot {
+    return {
+      followers: [...this.aiPathFollowing.entries()].map(([entityId, follow]) => ({
+        entityId,
+        status: follow.state.status,
+        waypointIndex: follow.state.waypointIndex,
+        pathLength: follow.state.path.length,
+        replans: follow.replans,
+        secondsWithoutProgress: follow.stuck.secondsWithoutProgress,
+      })),
+    };
+  }
+
   private requestAiMove(request: AiMoveRequest): AiBehaviorStatus {
     const entityId = request.controller.pawnEntityId;
     const transform = this.characterMovementSubsystem.transformOf(entityId);
@@ -1027,15 +1074,23 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.aiPathFollowing.set(entityId, {
           goal: [...request.position],
           state: { path: [], waypointIndex: 0, status: "failure" },
+          stuck: freshStuckState(transform.position),
+          replans: 0,
         });
         return "failure";
       }
       this.aiPathFollowing.set(entityId, {
         goal: [...request.position],
         state: { path: path.points, waypointIndex: 1, status: "following" },
+        stuck: freshStuckState(transform.position),
+        replans: 0,
       });
+      return "running";
     }
-    return "running";
+    // A memoized failure (unreachable goal or exhausted stuck recovery) keeps
+    // failing this goal until the task asks for a different one — replanning
+    // the same unreachable goal every behavior tick would re-run A* for nothing.
+    return existing.state.status === "failure" ? "failure" : "running";
   }
 
   private buildAiPath(entityId: string, start: Vec3, goal: Vec3) {
@@ -1063,6 +1118,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private aiMoveIntentForEntity(
     entityId: string,
     transform: Readonly<TransformComponent>,
+    deltaSeconds: number,
   ): CharacterMoveIntent | null {
     const follow = this.aiPathFollowing.get(entityId);
     if (!follow || follow.state.status !== "following") return null;
@@ -1082,9 +1138,55 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.aiPathFollowing.delete(entityId);
       return null;
     }
+    // Stuck recovery: no planar progress for a while means something the grid
+    // doesn't know about (usually another agent) is blocking the lane. Replan
+    // from the current position, and fail the move once replanning stops helping.
+    follow.stuck = updateStuckState(follow.stuck, transform.position, deltaSeconds);
+    if (isStuck(follow.stuck)) {
+      follow.stuck = freshStuckState(transform.position);
+      follow.replans += 1;
+      const path =
+        follow.replans > AI_MAX_STUCK_REPLANS
+          ? null
+          : this.buildAiPath(entityId, transform.position, follow.goal);
+      if (!path || path.status === "failure" || path.points.length < 2) {
+        follow.state = { path: [], waypointIndex: 0, status: "failure" };
+        return null;
+      }
+      follow.state = { path: path.points, waypointIndex: 1, status: "following" };
+      target = follow.state.path[1]!;
+    }
     const dx = target[0] - transform.position[0];
     const dz = target[2] - transform.position[2];
-    return { direction: [dx, dz] };
+    const length = Math.hypot(dx, dz);
+    // Local avoidance: blend a separation push away from nearby characters into
+    // the path direction so agents shoulder past each other instead of stacking.
+    const separation = separationSteering(
+      transform.position,
+      this.aiNavAgentForEntity(entityId).radius,
+      this.aiSeparationNeighbors(entityId),
+    );
+    const direction: [number, number] =
+      length > 0
+        ? [
+            dx / length + separation[0] * AI_SEPARATION_WEIGHT,
+            dz / length + separation[1] * AI_SEPARATION_WEIGHT,
+          ]
+        : [separation[0], separation[1]];
+    return { direction };
+  }
+
+  /** Every other live character (player + NPCs) as a separation neighbor. */
+  private aiSeparationNeighbors(entityId: string): AvoidanceNeighbor[] {
+    const neighbors: AvoidanceNeighbor[] = [];
+    this.characterMovementSubsystem.forEachCharacter((otherId, other) => {
+      if (otherId === entityId) return;
+      neighbors.push({
+        position: other.position,
+        radius: this.aiNavAgentForEntity(otherId).radius,
+      });
+    });
+    return neighbors;
   }
 
   /**

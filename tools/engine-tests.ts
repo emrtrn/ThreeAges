@@ -82,6 +82,12 @@ import { AISubsystem } from "../engine/ai/aiSubsystem";
 import { AiBehaviorRunner, createDefaultAiTaskRegistry } from "../engine/ai/behaviorRunner";
 import { findGridPath } from "../engine/navigation/gridNavigation";
 import {
+  freshStuckState,
+  isStuck,
+  separationSteering,
+  updateStuckState,
+} from "../engine/navigation/localAvoidance";
+import {
   forwardVectorFromRotation,
   readRotation,
   readScale,
@@ -294,6 +300,7 @@ import { resolveGameMode } from "../src/game/gameModes/registry";
 import { createProjectGameMode } from "../src/game/gameModes/projectGameMode";
 import {
   formatAiDebug,
+  formatAiNavDebug,
   formatGameModeDebug,
   formatMemory,
   formatPerfBudget,
@@ -6332,6 +6339,68 @@ check("grid navigation fails when the goal cell is blocked", () => {
   });
   assert.equal(path.status, "failure");
   assert.deepEqual(path.points, []);
+});
+
+check("separation steering pushes away from overlapping neighbors and clamps", () => {
+  // Neighbor directly ahead (+X) within range: push is straight back (-X).
+  const push = separationSteering([0, 0, 0], 0.35, [
+    { position: [0.5, 0, 0], radius: 0.35 },
+  ]);
+  assert.ok(push[0] < 0, `expected -X push, got ${push}`);
+  assert.ok(Math.abs(push[1]) < 1e-9);
+
+  // A clear neighbor (outside radius + buffer) contributes nothing.
+  const clear = separationSteering([0, 0, 0], 0.35, [
+    { position: [3, 0, 0], radius: 0.35 },
+  ]);
+  assert.deepEqual(clear, [0, 0]);
+
+  // Y separation is ignored: the check is planar.
+  const planar = separationSteering([0, 0, 0], 0.35, [
+    { position: [0.5, 5, 0], radius: 0.35 },
+  ]);
+  assert.ok(planar[0] < 0);
+
+  // Many close neighbors: the summed push is clamped to maxMagnitude.
+  const crowded = separationSteering(
+    [0, 0, 0],
+    0.35,
+    [
+      { position: [0.1, 0, 0], radius: 0.35 },
+      { position: [0.1, 0, 0.05], radius: 0.35 },
+      { position: [0.1, 0, -0.05], radius: 0.35 },
+    ],
+    { maxMagnitude: 1 },
+  );
+  assert.ok(Math.hypot(crowded[0], crowded[1]) <= 1 + 1e-9);
+
+  // Exactly co-located agents still separate (deterministic +X fallback).
+  const stacked = separationSteering([1, 0, 1], 0.35, [
+    { position: [1, 0, 1], radius: 0.35 },
+  ]);
+  assert.ok(stacked[0] > 0);
+  assert.equal(stacked[1], 0);
+});
+
+check("stuck state flags a stalled agent and resets on progress", () => {
+  let state = freshStuckState([0, 0, 0]);
+  assert.equal(isStuck(state), false);
+
+  // Stalling accumulates: stuck after the threshold (default 1.25s).
+  for (let i = 0; i < 10; i += 1) {
+    state = updateStuckState(state, [0.05, 0, 0.05], 0.2);
+  }
+  assert.equal(isStuck(state), true);
+
+  // Real progress re-anchors and clears the timer.
+  state = updateStuckState(state, [1, 0, 0], 0.2);
+  assert.equal(isStuck(state), false);
+  assert.equal(state.secondsWithoutProgress, 0);
+
+  // Custom thresholds are honored.
+  let tight = freshStuckState([0, 0, 0]);
+  tight = updateStuckState(tight, [0, 0, 0], 0.3, { stuckAfterSeconds: 0.25 });
+  assert.equal(isStuck(tight, { stuckAfterSeconds: 0.25 }), true);
 });
 
 const RAMP_NORMAL_Y = 8 / Math.hypot(4, 8, 0); // ≈0.894, a 26.57° ramp rising along +X
@@ -18333,6 +18402,34 @@ check("formatAiDebug includes behavior runner status when present", () => {
     "controllers: 1",
     "  bt enemy-1: success 0.02s root/task:0 fail:blackboard:target:isSet",
     "  enemy-1 goal:— bb:1",
+  ]);
+});
+
+check("formatAiNavDebug renders follower status, waypoints, replans and stalls", () => {
+  const lines = formatAiNavDebug({
+    followers: [
+      {
+        entityId: "actor:enemy",
+        status: "following",
+        waypointIndex: 2,
+        pathLength: 5,
+        replans: 1,
+        secondsWithoutProgress: 0.8,
+      },
+      {
+        entityId: "actor:blocked",
+        status: "failure",
+        waypointIndex: 0,
+        pathLength: 0,
+        replans: 3,
+        secondsWithoutProgress: 0,
+      },
+    ],
+  });
+  assert.deepEqual(lines, [
+    "ai nav (2)",
+    "  actor:enemy: following wp:2/5 replans:1 stall:0.8s",
+    "  actor:blocked: failure replans:3",
   ]);
 });
 
