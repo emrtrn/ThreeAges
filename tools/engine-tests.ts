@@ -17998,6 +17998,30 @@ check("AiBehaviorRunner ticks services on interval and resolves subtree assets",
   assert.equal(serviceTicks, 2);
 });
 
+check("AiBehaviorRunner built-in startConversation emits the conversation trigger message", () => {
+  const controller = new AIController("ai:npc", "npc", new Blackboard());
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "task",
+      task: "forge.startConversation",
+      params: { conversationId: "assets/Dialog/CONV_Welcome.conversation.json" },
+    },
+  });
+  const messages: Array<{ type: string; source: string; payload?: Record<string, unknown> }> = [];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    emitMessage: (message) => messages.push(message),
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "success");
+  assert.equal(messages[0]?.type, "start-conversation");
+  assert.equal(messages[0]?.source, "npc");
+  assert.deepEqual(messages[0]?.payload, {
+    conversationId: "assets/Dialog/CONV_Welcome.conversation.json",
+  });
+});
+
 check("AI save payloads enforce compound extensions, traversal guard, and normalizers", () => {
   const blackboard = { schema: 1, type: "blackboard", keys: [{ key: "target", kind: "entity" }] };
   const behavior = {
@@ -18123,6 +18147,66 @@ check("AISubsystem derives one controller per AIController entity, ticks safely,
   assert.equal(ai.controllerCount(), 0);
 });
 
+check("AISubsystem resolves blackboard and behavior assets, ticks runner, and emits messages", () => {
+  const messages: Array<{ type: string; source: string; target?: string; payload?: Record<string, unknown> }> = [];
+  const ai = new AISubsystem({
+    emitMessage: (message) => messages.push(message),
+  });
+  ai.setAssetLibrary({
+    blackboards: new Map([
+      [
+        "assets/AI/Enemy.blackboard.json",
+        normalizeAiBlackboardAsset({
+          schema: 1,
+          type: "blackboard",
+          keys: [{ key: "mood", kind: "string", default: "idle" }],
+        }),
+      ],
+    ]),
+    behaviors: new Map([
+      [
+        "assets/AI/Enemy.behavior.json",
+        normalizeAiBehaviorTreeAsset({
+          schema: 1,
+          type: "behaviorTree",
+          blackboard: "assets/AI/Enemy.blackboard.json",
+          root: {
+            kind: "sequence",
+            children: [
+              { kind: "task", task: "forge.setBlackboard", params: { key: "mood", value: "awake" } },
+              { kind: "task", task: "forge.sendMessage", params: { type: "enemy.awake", target: "player" } },
+            ],
+          },
+        }),
+      ],
+    ]),
+  });
+  ai.setEntities([
+    {
+      id: "enemy-asset",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: {
+          behaviorTree: "assets/AI/Enemy.behavior.json",
+        },
+      },
+    },
+  ]);
+
+  const controller = ai.getControllerForPawn("enemy-asset");
+  assert.ok(controller);
+  assert.equal(controller?.blackboard.keyCount(), 1);
+  assert.equal(controller?.blackboard.getString("mood"), "idle");
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.equal(controller?.blackboard.getString("mood"), "awake");
+  assert.equal(messages[0]?.type, "enemy.awake");
+  assert.equal(messages[0]?.source, "enemy-asset");
+  assert.equal(messages[0]?.target, "player");
+  const behavior = ai.getDebugSnapshot().controllers[0]?.behavior;
+  assert.equal(behavior?.lastStatus, "success");
+  assert.equal(behavior?.lastTask, "forge.sendMessage");
+});
+
 check("formatAiDebug renders controller count, goal + blackboard size, tagging disabled", () => {
   const lines = formatAiDebug({
     enabled: true,
@@ -18141,6 +18225,35 @@ check("formatAiDebug renders controller count, goal + blackboard size, tagging d
   assert.deepEqual(lines, ["ai", "controllers: 1", "  enemy-1 goal:patrol bb:3"]);
   const off = formatAiDebug({ enabled: false, controllerCount: 0, controllers: [] });
   assert.deepEqual(off, ["ai", "controllers: 0 (off)"]);
+});
+
+check("formatAiDebug includes behavior runner status when present", () => {
+  const lines = formatAiDebug({
+    enabled: true,
+    controllerCount: 1,
+    controllers: [
+      {
+        controllerId: "ai:enemy-1",
+        pawnEntityId: "enemy-1",
+        goal: null,
+        behaviorTreeAsset: "assets/AI/Enemy.behavior.json",
+        behavior: {
+          activePath: ["root", "root/task:0"],
+          lastStatus: "success",
+          lastTask: "forge.sendMessage",
+          failedDecorator: "blackboard:target:isSet",
+          elapsedSeconds: 0.016,
+        },
+        blackboard: { keyCount: 1, entries: [] },
+      },
+    ],
+  });
+  assert.deepEqual(lines, [
+    "ai",
+    "controllers: 1",
+    "  bt enemy-1: success 0.02s root/task:0 fail:blackboard:target:isSet",
+    "  enemy-1 goal:— bb:1",
+  ]);
 });
 
 // --- Editor↔game DI seam (gameEditorRegistry) --------------------------------

@@ -93,6 +93,7 @@ export function createDefaultAiTaskRegistry(): AiTaskRegistry {
     ["forge.sendMessage", sendMessageTask],
     ["forge.moveToPosition", moveToPositionTask],
     ["forge.moveToBlackboard", moveToBlackboardTask],
+    ["forge.startConversation", startConversationTask],
   ]);
   return { get: (taskId) => tasks.get(taskId) };
 }
@@ -371,6 +372,17 @@ function moveToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
   const position = Array.isArray(value) ? vec3Param(value) : null;
   if (!position) return "failure";
   return context.moveTo({ controller: context.controller, position });
+}
+
+function startConversationTask(context: AiTaskContext): AiBehaviorStatus {
+  const conversationId = stringParam(context.params.conversationId);
+  if (!conversationId || !context.emitMessage) return "failure";
+  context.emitMessage({
+    type: "start-conversation",
+    source: context.controller.pawnEntityId,
+    payload: { conversationId },
+  });
+  return "success";
 }
 
 function numberParam(value: AiJsonValue | undefined, fallback: number): number {

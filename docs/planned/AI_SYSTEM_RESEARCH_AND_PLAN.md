@@ -10,7 +10,7 @@
 > Revizyon: 2026-07-05 - Faz 2 runtime runner + temel task/decorator dilimi
 > uygulandi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 604 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 607 check,
 > `build:verify`, `check:assets`). Faz 2 editor form ve gelismis
 > service/decorator isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
@@ -324,7 +324,7 @@ Service/Task modeli.
       - [x] `forge.sendMessage` (ScriptMessageBus uzerinden)
       - [x] `forge.moveToPosition`
       - [x] `forge.moveToBlackboard`
-      - [ ] (opsiyonel) `forge.startConversation` — DialogueSubsystem koprusu.
+      - [x] (opsiyonel) `forge.startConversation` — DialogueSubsystem koprusu.
 - [ ] Built-in decoratorlar:
       - [x] blackboard compare
       - [ ] distance compare
@@ -336,7 +336,7 @@ Service/Task modeli.
       - [ ] refresh query result
 - [ ] Editor ilk surum: JSON asset create/edit formu, node tree text outline,
       task/decorator/service parametre editoru.
-- [ ] Debug: active node path, last status, task duration, failed decorator.
+- [x] Debug: active node path, last status, task duration, failed decorator.
 - [x] Test: selector/sequence/decorator/task runner unit tests.
 - [ ] Test: enemy patrol/chase sample layout.
 - [x] Validation: `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`.
@@ -362,11 +362,11 @@ Tamamlanan Faz 2 runtime runner notu (2026-07-05):
   host'lari manifest'teki AI asset'lerini engine normalizer'lariyla yukluyor ve
   AI task registry `src/game/ai/tasks.ts` uzerinden enjekte ediliyor.
 - Built-in tasklar: `forge.wait`, `forge.setBlackboard`, `forge.sendMessage`,
-  `forge.moveToPosition`, `forge.moveToBlackboard`. Hareket task'lari Faz 3
+  `forge.startConversation`, `forge.moveToPosition`, `forge.moveToBlackboard`. Hareket task'lari Faz 3
   move-intent/path following callback'i gelene kadar callback yoksa failure
   dondurur.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
-  (`604 checks passed`), `npm.cmd run build:verify`, `npm.cmd run check:assets`.
+  (`607 checks passed`), `npm.cmd run build:verify`, `npm.cmd run check:assets`.
 
 ### Faz 3 - Navigation ve path following
 

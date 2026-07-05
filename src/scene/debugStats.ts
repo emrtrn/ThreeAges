@@ -208,6 +208,14 @@ export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
     `controllers: ${snapshot.controllerCount}${snapshot.enabled ? "" : " (off)"}`,
   ];
   for (const controller of snapshot.controllers.slice(0, Math.max(0, topN))) {
+    const behaviorStatus = controller.behavior?.lastStatus;
+    if (behaviorStatus) {
+      const behavior = controller.behavior;
+      const path = behavior?.activePath.at(-1);
+      const elapsed = behavior ? ` ${behavior.elapsedSeconds.toFixed(2)}s` : "";
+      const failed = behavior?.failedDecorator ? ` fail:${behavior.failedDecorator}` : "";
+      lines.push(`  bt ${controller.pawnEntityId}: ${behaviorStatus}${elapsed}${path ? ` ${path}` : ""}${failed}`);
+    }
     lines.push(
       `  ${controller.pawnEntityId} goal:${controller.goal ?? "—"} bb:${controller.blackboard.keyCount}`,
     );
