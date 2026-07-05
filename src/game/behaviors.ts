@@ -132,8 +132,6 @@ const spin: BehaviorUpdate = ({ engine, params, transform }) => {
  * Moves an entity on the XZ plane from the named movement actions at `speed`
  * units per second. Demonstrates the spine driving gameplay from input.
  */
-const collisionAudioPlayed = new Set<string>();
-
 /** Plays the entity's authored audio cue once, immediately (no contact gating). */
 function playAudioCue(context: Parameters<BehaviorUpdate>[0]): void {
   const { audio, audioComponent, transform } = context;
@@ -149,19 +147,6 @@ function playAudioCue(context: Parameters<BehaviorUpdate>[0]): void {
       : {}),
   });
 }
-
-function playCollisionAudioOnce(
-  context: Parameters<BehaviorUpdate>[0],
-): void {
-  const { audio, audioComponent, entityId, physics } = context;
-  if (!audio || !audioComponent) return;
-  if ((physics?.contactsForEntity(entityId).length ?? 0) === 0) return;
-  if (collisionAudioPlayed.has(entityId)) return;
-  collisionAudioPlayed.add(entityId);
-  playAudioCue(context);
-}
-
-const collisionChime: BehaviorUpdate = playCollisionAudioOnce;
 
 function triggerOverlapBegins(context: Parameters<BehaviorUpdate>[0]): boolean {
   if (context.event) {
@@ -196,8 +181,8 @@ interface PlayerVertical {
 
 /**
  * Builds the runtime behavior registry used by the BehaviorSubsystem. Vertical
- * (gravity/jump) state is scoped to this registry instance, so it starts fresh
- * on each scene load and never leaks between scenes.
+ * (gravity/jump) and one-shot trigger state is scoped to this registry instance,
+ * so it starts fresh on each scene load and never leaks between scenes.
  */
 export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): BehaviorRegistry {
   const getGravityY = options.getGravityY ?? (() => DEFAULT_GRAVITY_Y);
@@ -214,8 +199,20 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
   const reachedGoals = new Set<string>();
   const traveledTriggers = new Set<string>();
   const checkpointsSaved = new Set<string>();
+  const collisionAudioPlayed = new Set<string>();
   const interactions = new Map<string, InteractionTriggerState>();
   const interactionOverlaps = new Map<string, boolean>();
+
+  const playCollisionAudioOnce = (context: Parameters<BehaviorUpdate>[0]): void => {
+    const { audio, audioComponent, entityId, physics } = context;
+    if (!audio || !audioComponent) return;
+    if ((physics?.contactsForEntity(entityId).length ?? 0) === 0) return;
+    if (collisionAudioPlayed.has(entityId)) return;
+    collisionAudioPlayed.add(entityId);
+    playAudioCue(context);
+  };
+
+  const collisionChime: BehaviorUpdate = playCollisionAudioOnce;
 
   const inputMove: BehaviorUpdate = (context) => {
     // Only the possessed pawn responds to input. An authored `input-move`

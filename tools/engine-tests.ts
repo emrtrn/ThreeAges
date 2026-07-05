@@ -4895,6 +4895,55 @@ check("audio subsystem records one-shot requests from a collision behavior", () 
   ]);
 });
 
+check("collision-chime behavior: fresh scene registry lets the same entity id play again", () => {
+  const physics = new PhysicsSubsystem();
+  const audio = new AudioSubsystem();
+  const behavior = new BehaviorSubsystem(
+    createBehaviorRegistry(),
+    new ActionMap({}),
+    () => undefined,
+    physics,
+    audio,
+  );
+  const entities: Entity[] = [
+    {
+      id: "mover",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+        Behavior: { scriptId: "collision-chime" },
+        Audio: { clipId: "collision-chime", volume: 0.5, loop: false, spatial: false },
+      },
+    },
+    {
+      id: "wall",
+      components: {
+        Transform: { position: [0.25, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: false },
+      },
+    },
+  ];
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+  app.registerSubsystem(audio);
+
+  physics.setEntities(entities);
+  behavior.setEntities(entities);
+  app.update(0.016);
+
+  physics.setEntities([]);
+  behavior.setRegistry(createBehaviorRegistry());
+  physics.setEntities(entities);
+  behavior.setEntities(entities);
+  app.update(0.016);
+
+  assert.deepEqual(audio.playedRequests(), [
+    { clipId: "collision-chime", volume: 0.5, loop: false, spatial: false },
+    { clipId: "collision-chime", volume: 0.5, loop: false, spatial: false },
+  ]);
+});
+
 // 6.1.5 The real KeyboardInputSource feeds raw DOM key codes into the action
 // map (the only runtime input link a browser would otherwise be needed to
 // exercise). Uses an injected fake window, so no DOM/jsdom is required.
@@ -7618,6 +7667,60 @@ check("level-travel behavior: fires once on overlap begin with the authored targ
   app.update(0.016);
   assert.deepEqual(travels, [
     { id: "portal:0", level: "Levels/TestLevel.level.json", spawn: "fromPlayground" },
+  ]);
+});
+
+check("level-travel behavior: fresh scene registry lets the same trigger id fire again", () => {
+  const travels: Array<{ id: string; level: string }> = [];
+  const createRegistry = (): BehaviorRegistry =>
+    createBehaviorRegistry({
+      onLevelTravel: (id, level) => travels.push({ id, level }),
+    });
+  const physics = new PhysicsSubsystem();
+  const behavior = new BehaviorSubsystem(createRegistry(), new ActionMap({}), () => undefined, physics);
+  const portal: Entity = {
+    id: "portal:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: true, isSensor: true },
+      [EVENT_BINDINGS_COMPONENT]: {
+        bindings: [
+          {
+            event: "overlap",
+            scriptId: "level-travel",
+            params: { targetLevel: "Levels/TestLevel.level.json" },
+          },
+        ],
+      },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  const entities = [portal, player];
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  physics.setEntities(entities);
+  behavior.setEntities(entities);
+  app.update(0.016);
+  app.update(0.016);
+
+  physics.setEntities([]);
+  behavior.setRegistry(createRegistry());
+  physics.setEntities(entities);
+  behavior.setEntities(entities);
+  app.update(0.016);
+  app.update(0.016);
+
+  assert.deepEqual(travels, [
+    { id: "portal:0", level: "Levels/TestLevel.level.json" },
+    { id: "portal:0", level: "Levels/TestLevel.level.json" },
   ]);
 });
 

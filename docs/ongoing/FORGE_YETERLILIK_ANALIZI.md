@@ -429,6 +429,23 @@ degerlendirilecek.
   birikmis, ve travel'da sahne-omru sanilan behavior state'inin app-omru
   yasadigina dair bir sizinti bulgusu (kod/yorum celiskisi + muhtemel
   round-trip portal bug'i).
+- Guncelleme (2026-07-05): Aksiyon 1 uygulandi. Behavior registry artik
+  sahne-yukleme omrune indirildi: `BehaviorSubsystem.setRegistry(...)` eklendi,
+  `RuntimeSceneApp.buildScene(...)` her boot/travel rebuild basinda taze
+  `createBehaviorRegistry(...)` kuruyor, `collisionAudioPlayed` module-global
+  set'ten registry-kapsamli set'e tasindi. Headless regresyonlar eklendi:
+  ayni `portal:0` yeni sahne registry'siyle tekrar travel tetikleyebiliyor ve
+  ayni `mover` collision-chime yeni registry'de tekrar audio cue calabiliyor.
+  Karar hala `[~]`: runtime browser smoke, kabuk dilimleme ve save zarfi
+  dokumani acik.
+- Guncelleme (2026-07-05, Aksiyon 2 kismi): Runtime Playwright smoke eklendi.
+  `npm run smoke:browser` artik 2 Chromium test calistiriyor: mevcut editor
+  authoring smoke + yeni runtime playflow smoke. Yeni smoke gecici
+  `__playwright-smoke` layout/menu fixture'lariyla `/` boot, loading overlay
+  kapanisi, HUD mount, Save/Load UI quick slot write+load round-trip ve runtime
+  `travel:` UI mesajiyla hedef level load akisini dogruluyor. Kalan browser
+  borcu: yuru/zipla input, portal sensor gidis-gelis ve checkpoint sensor
+  autosave smoke'u.
 - Kanit:
   - Kompozisyon: `src/main.ts` (56 satir) ince giris — `/` = `RuntimeSceneApp`
     (3,607 satir), editor DEV+`?editor` dinamik importta (Baslik 2 ile tutarli).
@@ -491,6 +508,18 @@ degerlendirilecek.
     runtime/gameplay alanina isaret ediyor (movement/travel/save/camera/pawn/
     ragdoll/montage/notify) ve testlerde "Vertical Slice Readiness Gate"
     bolumu var (`tools/engine-tests.ts:1452`).
+  - **Guncelleme (2026-07-05):** scene-lifecycle regresyonlari eklendi:
+    `level-travel behavior: fresh scene registry lets the same trigger id fire
+    again` ve `collision-chime behavior: fresh scene registry lets the same
+    entity id play again`. Runtime artik `buildScene` basinda taze behavior
+    registry atiyor; registry icindeki one-shot latch'ler scene visit basina
+    sifirlaniyor.
+  - **Guncelleme (2026-07-05):** Browser runtime smoke eklendi:
+    `tests/smoke/runtime-playflow.spec.ts` + global setup/teardown fixture
+    genisletmesi (`layouts/__playwright-smoke*.level.json` ve gecici
+    `assets/__playwright-smoke-menu.ui.json`, manifestler teardown'da restore).
+    `npm run smoke:browser` yesil: 2 Chromium test, editor authoring + runtime
+    playflow.
 - Yeterli olanlar:
   - Cerceve sozlesmeleri gercek ve dokumante: Game Mode/Controller/State
     ayrimlari, possession disiplini, "runtime state layout'a yazilmaz"
@@ -505,6 +534,11 @@ degerlendirilecek.
   - Input ve cihaz genisligi (klavye/gamepad/touch/pointer-lock) tek ActionMap
     sozlesmesinde toplanmis; UI/game input modu Unreal-esintili ve tutarli.
 - Eksikler / riskler:
+  - **Behavior state sizintisi kapatildi (2026-07-05):** Asagidaki eski bulgu
+    dogrulandi ve duzeltildi. Runtime artik `buildScene` basinda taze behavior
+    registry atiyor; `collisionAudioPlayed` registry kapsamina tasindi. Eklenen
+    headless regresyonlar ayni `portal:0` ve `mover` id'lerinin yeni scene
+    ziyaretinde tekrar calistigini dogruluyor.
   - **Behavior state sizintisi (bulgu — dogrulanmali, muhtemel bug):**
     `behaviors.ts:200` yorumu registry'nin "her sahne yuklemesinde" yaratilip
     "sahneler arasi sizmadigini" soyluyor; gercekte `createBehaviorRegistry`
@@ -538,16 +572,25 @@ degerlendirilecek.
   bulgusunun dogrulanip kapatilmasi, otomatik runtime smoke yoklugu ve monolit
   kabuk. Sizinti dogrulanirsa travel ozelinde `[!]` sinifinda bir davranis
   hatasi (veri kaybi degil, oynanis kilidi).
+- Guncel karar notu (2026-07-05): Behavior-state sizintisi kapatildi; `[x]`'i
+  artik otomatik runtime smoke yoklugu, monolit kabuk ve save zarfi sozlesme
+  eksigi engelliyor.
 - Aksiyonlar:
   1. Behavior state sizintisini dogrula ve kapat: registry'yi scene-load
      basina yeniden yarat (veya reset API'si ekle), `collisionAudioPlayed`'i
      registry kapsamina tasi; headless travel round-trip regresyon testi ekle
      (ayni entity id iki kez travel tetikleyebilmeli). `behaviors.ts:200`
      yorumunu gercek sozlesmeyle esitle.
+     **Durum (2026-07-05): tamamlandi.**
   2. Runtime smoke otomasyonu (Baslik 3 Aksiyon 1 ile ayni Playwright
      kurulumu): `/` boot → yuru/zipla → portal gidis-gelis → checkpoint +
      save/load round-trip → `?debug` overlay. P2/P3/P4 + A5.5 kullanici smoke
      borcunu tek kapsamda kapat.
+     **Durum (2026-07-05): kismi.** Browser smoke artik `/` boot, HUD,
+     loading overlay kapanisi, Save/Load UI quick write+load round-trip ve
+     runtime `travel:` UI mesaji ile level travel'i dogruluyor. Yuru/zipla,
+     portal sensor gidis-gelis ve checkpoint sensor autosave browser smoke'u
+     acik kaldi; portal/checkpoint davranislari headless test kapsaminda.
   3. `RuntimeSceneApp` dilimleme plani (EditorUi ile ortak karar): travel,
      save-game ve actor-spawn koordinatorlerini modullere cikar; "yeni ozellik
      kabuga eklenmez, modul olarak gelir" kuralini yaz.
@@ -739,3 +782,5 @@ eklenecek.
 | 2026-07-03 | 3. Editor Deneyimi | Tam authoring dongusu + 7 alt-editor + 13 dev endpoint; 573 engine check gecti; UI katmaninda otomatik smoke yok, EditorUi 5.8k satir monolit, endpoint dokumantasyonu eksik. | Playwright smoke + EditorUi dilimleme + dokuman duzeltmeleri (5 aksiyon, baslikta). | `[~]` |
 | 2026-07-04 | 3. Editor Deneyimi | Playwright Chromium smoke eklendi ve yesil (`npm run smoke:browser`, 1 test, 1.8m): `?editor` boot, shape placement, Details transform, undo/redo, Save Layout, temiz editor reload, runtime `/` boot. Endpoint/Play/dev-editor-yazma dokumanlari guncellendi; `EDITOR_UI_SLICING_PLAN.md` eklendi. Ilk dort Details slicing dilimi uygulandi: `transformRows.ts`, `instanceDetails.ts`, `materialDetails.ts`, `collisionDetails.ts`, `physicsDetails.ts`, `componentDetails.ts`; tsc + engine tests (596) + verify:imports + smoke yesil. | Kalan uygulama: `EditorUi.ts` metadata details, ozel aktor details ve content/outliner/world panel dilimleme refactoru. | `[~]` |
 | 2026-07-03 | 4. Runtime/Gameplay | Unreal-analog cerceve ucuca + saf cekirdekler testli (573 check); **bulgu:** behavior registry app-omru yasiyor (yorum sahne-omru diyor), travel'da `traveledTriggers` vb. sifirlanmiyor + entity id'ler level-bagimsiz → round-trip portal muhtemelen olu; RuntimeSceneApp 3.6k satir ikinci monolit; tum tarayici smoke'lari acik. | Sizintiyi dogrula+kapat (headless travel testi) + runtime Playwright smoke + kabuk dilimleme + save sozlesme dokumani (5 aksiyon, baslikta). | `[~]` |
+| 2026-07-05 | 4. Runtime/Gameplay | Behavior state sizintisi dogrulandi ve kapatildi: runtime her `buildScene` basinda taze behavior registry atiyor; `collisionAudioPlayed` registry kapsamina tasindi; headless testler ayni trigger/entity id'nin yeni scene visit'te tekrar calistigini dogruluyor. | Runtime smoke, kabuk dilimleme ve save zarfi dokumani acik kaldi. | `[~]` |
+| 2026-07-05 | 4. Runtime/Gameplay | Runtime Playwright smoke eklendi: gecici smoke layout/menu fixture'lariyla `/` boot, loading overlay kapanisi, HUD, Save/Load UI quick write+load ve `travel:` UI mesaji ile target level load dogrulaniyor. `npm run smoke:browser` yesil (2 Chromium test). | Kalan browser smoke: yuru/zipla, portal sensor gidis-gelis, checkpoint sensor autosave. | `[~]` |

@@ -723,39 +723,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.characterMovementSubsystem);
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
-      createBehaviorRegistry({
-        getGravityY: () => this.gravityY,
-        reportLocomotion: (entityId, report) => {
-          this.locomotionReports.set(entityId, report);
-        },
-        onGoalReached: (entityId) => {
-          console.info("[runtime] goal reached", entityId);
-        },
-        onInteraction: (entityId, action) => {
-          console.info("[runtime] interaction", action, entityId);
-        },
-        onInteractionOverlap: (entityId, action, prompt, overlapping) => {
-          this.setInteractionPrompt(entityId, action, prompt, overlapping);
-        },
-        onActorLightToggle: (entityId, enabled) => {
-          this.setActorLightEnabled(entityId, enabled);
-        },
-        onActorParticleEffect: (entityId) => {
-          void this.playActorParticleEffect(entityId);
-        },
-        onLevelTravel: (_entityId, targetLevel, targetSpawn) => {
-          this.requestLevelTravel(targetLevel, targetSpawn);
-        },
-        onCheckpoint: (_entityId, slot) => {
-          this.writeCheckpointSave(slot);
-        },
-        // The active Game Mode owns possession: only the pawn it possessed
-        // (none, under the default camera mode) is driven by player input.
-        isPlayerControlled: (entityId) =>
-          this.inputMode !== "ui" &&
-          this.gameModeSession?.playerState.pawnEntityId === entityId &&
-          !this.gameModeSession.playerState.pawnControlSuspended,
-      }),
+      this.createSceneBehaviorRegistry(),
       this.inputActions,
       this.syncEntityTransform,
       this.physicsSubsystem,
@@ -818,6 +786,42 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     void this.loadActiveProjectScene();
     this.handleResize();
     window.addEventListener("resize", this.handleResize);
+  }
+
+  private createSceneBehaviorRegistry(): ReturnType<typeof createBehaviorRegistry> {
+    return createBehaviorRegistry({
+      getGravityY: () => this.gravityY,
+      reportLocomotion: (entityId, report) => {
+        this.locomotionReports.set(entityId, report);
+      },
+      onGoalReached: (entityId) => {
+        console.info("[runtime] goal reached", entityId);
+      },
+      onInteraction: (entityId, action) => {
+        console.info("[runtime] interaction", action, entityId);
+      },
+      onInteractionOverlap: (entityId, action, prompt, overlapping) => {
+        this.setInteractionPrompt(entityId, action, prompt, overlapping);
+      },
+      onActorLightToggle: (entityId, enabled) => {
+        this.setActorLightEnabled(entityId, enabled);
+      },
+      onActorParticleEffect: (entityId) => {
+        void this.playActorParticleEffect(entityId);
+      },
+      onLevelTravel: (_entityId, targetLevel, targetSpawn) => {
+        this.requestLevelTravel(targetLevel, targetSpawn);
+      },
+      onCheckpoint: (_entityId, slot) => {
+        this.writeCheckpointSave(slot);
+      },
+      // The active Game Mode owns possession: only the pawn it possessed
+      // (none, under the default camera mode) is driven by player input.
+      isPlayerControlled: (entityId) =>
+        this.inputMode !== "ui" &&
+        this.gameModeSession?.playerState.pawnEntityId === entityId &&
+        !this.gameModeSession.playerState.pawnControlSuspended,
+    });
   }
 
   /**
@@ -1153,6 +1157,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private async buildScene(layoutPath: string, spawnTag: string | undefined): Promise<void> {
     if (!this.assetLoader || !this.activeProject) return;
+    this.behaviorSubsystem.setRegistry(this.createSceneBehaviorRegistry());
     this.layout = await loadRoomLayout(layoutPath);
     this.activeLevelPath = layoutPath;
     const worldSettings = resolveSceneWorldSettings(this.layout);

@@ -503,7 +503,7 @@ export class BehaviorSubsystem implements Subsystem {
   private enabled = true;
 
   constructor(
-    private readonly registry: BehaviorRegistry,
+    private registry: BehaviorRegistry,
     private readonly actions: ActionMap,
     private readonly sink: TransformSink,
     private readonly physics?: PhysicsQuery,
@@ -521,6 +521,16 @@ export class BehaviorSubsystem implements Subsystem {
     this.onMessageWarnings = options.onMessageWarnings;
     this.actorCommandSink = options.actorCommandSink;
     this.velocityProvider = options.velocityProvider;
+  }
+
+  /**
+   * Replaces the game-owned script registry for a fresh scene visit. Existing
+   * behavior instances keep resolved function refs, so the live world is cleared
+   * before the new registry can resolve the next scene's entities.
+   */
+  setRegistry(registry: BehaviorRegistry): void {
+    this.clear();
+    this.registry = registry;
   }
 
   private readonly onMessageWarnings:

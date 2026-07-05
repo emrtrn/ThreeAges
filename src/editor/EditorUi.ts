@@ -2,13 +2,11 @@
 // keeps them in the dev-only editor chunk, out of the production game build.
 import "./editorUi.css";
 import {
-  ASSET_TYPES,
   assetPath,
   assetRecordById,
   assetType,
   inferAssetTypeFromPath,
   isModelAssetType,
-  type AssetType,
   type EditableAsset,
 } from "@engine/assets/manifest";
 import type {
@@ -113,6 +111,19 @@ import {
 } from "./panels/details/environmentDetails";
 import { renderWorldSettingsPanel } from "./panels/world/worldSettingsPanel";
 import { renderOutlinerPanel } from "./panels/outliner/outlinerPanel";
+import {
+  CONTENT_FILTER_ALL,
+  contentItemMatchesQuery,
+  isActorScriptItem,
+  isContentTypeFilter,
+  isLevelItem,
+  isUiWidgetItem,
+  renderContentAssetsPanel,
+  renderContentFilterOptions,
+  type BrowserAssetItem,
+  type BrowserFolderItem,
+  type ContentTypeFilter,
+} from "./panels/content/contentPanel";
 
 type InspectorTab = "details" | "world";
 
@@ -158,40 +169,6 @@ const TOOL_LABELS: Record<EditorTool, string> = {
   rotate: "Rotate",
   scale: "Scale",
 };
-
-interface BrowserAssetItem {
-  key: string;
-  label: string;
-  category: string;
-  path: string;
-  ext: string;
-  type: AssetType | "file";
-  editable?: EditableAsset;
-}
-
-interface BrowserFolderItem {
-  key: string;
-  label: string;
-  path: string;
-  type: "folder";
-  fileCount: number;
-  descendantFileCount: number;
-}
-
-type BrowserContentItem = BrowserFolderItem | BrowserAssetItem;
-
-interface BrowserAssetIssue {
-  code:
-    | "loose-file"
-    | "unsupported-file"
-    | "missing-placement"
-    | "missing-collision-setting"
-    | "not-placeable";
-  label: string;
-}
-
-const CONTENT_FILTER_ALL = "__all__";
-type ContentTypeFilter = BrowserAssetItem["type"] | typeof CONTENT_FILTER_ALL;
 
 export class EditorUi {
   private root: HTMLDivElement;
@@ -1165,12 +1142,42 @@ export class EditorUi {
 
   private renderContentAssets(): void {
     if (!this.assetTreeRoot || !this.projectInfo) {
-      this.contentList.innerHTML = `
-        <div class="empty-details">
-          <strong>No assets</strong>
-          <span>Project folder is not loaded.</span>
-        </div>
-      `;
+      this.contentListStatus = renderContentAssetsPanel({
+        contentList: this.contentList,
+        contentPathLabel: this.contentPathLabel,
+        contentStatus: this.contentStatus,
+        projectLoaded: false,
+        rootPath: null,
+        selectedFolder: this.selectedFolder,
+        folders: [],
+        assets: [],
+        fileCount: 0,
+        missingManifestAssetCount: 0,
+        selectedAssetId: this.selectedAssetId,
+        selectedContentFolderPath: this.selectedContentFolderPath,
+        isActiveLevel: (item) => this.isActiveLevel(item),
+        getEmptyDragImage: () => this.getEmptyDragImage(),
+        setSelectedAsset: (assetId) => this.setSelectedAsset(assetId),
+        setSelectedContentFolder: (path) => this.setSelectedContentFolder(path),
+        navigateToContentFolder: (path) => this.navigateToContentFolder(path),
+        openAssetContextMenu: (event, item) => this.openAssetContextMenu(event, item),
+        openContentFolderContextMenu: (event, item) =>
+          this.openContentFolderContextMenu(event, item),
+        openMeshEditor: (item) => this.openMeshEditor(item),
+        openActorScriptEditor: (item) => this.openActorScriptEditor(item),
+        openMaterialEditor: (item) => this.openMaterialEditor(item),
+        openSoundCueEditor: (item) => this.openSoundCueEditor(item),
+        openParticleEffectEditor: (item) => this.openParticleEffectEditor(item),
+        openDialogueEditor: (item) => this.openDialogueEditor(item),
+        openLevel: (item) => this.openLevel(item),
+        openUiWidgetEditor: (item) => this.openUiWidgetEditor(item),
+        renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
+        renderMaterialThumbnail: (item, thumb) => this.renderMaterialThumbnail(item, thumb),
+        renderTextureThumbnail: (item, thumb) => this.renderTextureThumbnail(item, thumb),
+        beginAssetDragPreview: (assetId) => this.app.beginAssetDragPreview(assetId),
+        endAssetDragPreview: () => this.app.endAssetDragPreview(),
+        setStatus: (message, tone) => this.setStatus(message, tone),
+      });
       return;
     }
 
@@ -1182,42 +1189,48 @@ export class EditorUi {
     const folders = children
       .filter((child) => child.type === "dir" && this.shouldShowContentPath(child.path))
       .map((folder) => this.toBrowserFolderItem(folder))
-      .filter((item) => this.contentItemMatchesQuery(item));
+      .filter((item) => contentItemMatchesQuery(item, this.contentQuery));
     const files = children.filter((child) => child.type === "file");
     const assets = files
       .filter((file) => this.shouldDisplayAssetFile(file))
       .map((file) => this.toBrowserAssetItem(file))
       .filter((item) => this.contentType === CONTENT_FILTER_ALL || item.type === this.contentType)
-      .filter((item) => this.contentItemMatchesQuery(item));
-    const items: BrowserContentItem[] = [...folders, ...assets];
-    const issueCount = assets.filter((item) => contentAssetIssues(item).length > 0).length;
-    const missingManifestAssetCount = this.countMissingManifestAssetFiles();
-
-    this.contentPathLabel.textContent = this.selectedFolder || this.assetTreeRoot.path;
-    this.contentListStatus = formatContentListStatus(
-      items.length,
-      folders.length,
-      files.length,
-      issueCount,
-      missingManifestAssetCount,
-    );
-    this.contentStatus.textContent = this.contentListStatus;
-
-    if (items.length === 0) {
-      this.contentList.innerHTML = `
-        <div class="empty-details">
-          <strong>No matching content</strong>
-          <span>${escapeHtml(this.selectedFolder)}</span>
-        </div>
-      `;
-      return;
-    }
-
-    this.contentList.replaceChildren(
-      ...items.map((item) =>
-        item.type === "folder" ? this.createFolderCard(item) : this.createAssetCard(item),
-      ),
-    );
+      .filter((item) => contentItemMatchesQuery(item, this.contentQuery));
+    this.contentListStatus = renderContentAssetsPanel({
+      contentList: this.contentList,
+      contentPathLabel: this.contentPathLabel,
+      contentStatus: this.contentStatus,
+      projectLoaded: true,
+      rootPath: this.assetTreeRoot.path,
+      selectedFolder: this.selectedFolder,
+      folders,
+      assets,
+      fileCount: files.length,
+      missingManifestAssetCount: this.countMissingManifestAssetFiles(),
+      selectedAssetId: this.selectedAssetId,
+      selectedContentFolderPath: this.selectedContentFolderPath,
+      isActiveLevel: (item) => this.isActiveLevel(item),
+      getEmptyDragImage: () => this.getEmptyDragImage(),
+      setSelectedAsset: (assetId) => this.setSelectedAsset(assetId),
+      setSelectedContentFolder: (path) => this.setSelectedContentFolder(path),
+      navigateToContentFolder: (path) => this.navigateToContentFolder(path),
+      openAssetContextMenu: (event, item) => this.openAssetContextMenu(event, item),
+      openContentFolderContextMenu: (event, item) => this.openContentFolderContextMenu(event, item),
+      openMeshEditor: (item) => this.openMeshEditor(item),
+      openActorScriptEditor: (item) => this.openActorScriptEditor(item),
+      openMaterialEditor: (item) => this.openMaterialEditor(item),
+      openSoundCueEditor: (item) => this.openSoundCueEditor(item),
+      openParticleEffectEditor: (item) => this.openParticleEffectEditor(item),
+      openDialogueEditor: (item) => this.openDialogueEditor(item),
+      openLevel: (item) => this.openLevel(item),
+      openUiWidgetEditor: (item) => this.openUiWidgetEditor(item),
+      renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
+      renderMaterialThumbnail: (item, thumb) => this.renderMaterialThumbnail(item, thumb),
+      renderTextureThumbnail: (item, thumb) => this.renderTextureThumbnail(item, thumb),
+      beginAssetDragPreview: (assetId) => this.app.beginAssetDragPreview(assetId),
+      endAssetDragPreview: () => this.app.endAssetDragPreview(),
+      setStatus: (message, tone) => this.setStatus(message, tone),
+    });
   }
 
   private renderContentFilters(): void {
@@ -1226,35 +1239,7 @@ export class EditorUi {
           .filter((file) => this.shouldDisplayAssetFile(file))
           .map((file) => this.toBrowserAssetItem(file))
       : [];
-    const types: BrowserAssetItem["type"][] = [...ASSET_TYPES];
-    if (allItems.some((item) => item.type === "file")) types.push("file");
-
-    this.contentType = this.replaceContentFilterOptions(
-      this.contentTypeFilter,
-      "All types",
-      types,
-      this.contentType,
-      formatContentTypeLabel,
-    ) as ContentTypeFilter;
-  }
-
-  private replaceContentFilterOptions(
-    select: HTMLSelectElement,
-    allLabel: string,
-    values: string[],
-    selected: string,
-    labelForValue: (value: string) => string,
-  ): string {
-    const validValues = new Set([CONTENT_FILTER_ALL, ...values]);
-    const nextValue = validValues.has(selected) ? selected : CONTENT_FILTER_ALL;
-    const options = [
-      new Option(allLabel, CONTENT_FILTER_ALL),
-      ...values.map((value) => new Option(labelForValue(value), value)),
-    ];
-    select.replaceChildren(...options);
-    select.value = nextValue;
-    select.disabled = values.length === 0;
-    return nextValue;
+    this.contentType = renderContentFilterOptions(this.contentTypeFilter, allItems, this.contentType);
   }
 
   private shouldDisplayAssetFile(file: ProjectDirNode): boolean {
@@ -1293,11 +1278,6 @@ export class EditorUi {
       type: editable ? assetType(editable) : (inferAssetTypeFromPath(file.path) ?? "file"),
     } satisfies Omit<BrowserAssetItem, "editable">;
     return editable ? { ...base, editable } : base;
-  }
-
-  private contentItemMatchesQuery(item: BrowserContentItem): boolean {
-    if (!this.contentQuery) return true;
-    return `${item.label} ${item.type} ${item.path}`.toLocaleLowerCase().includes(this.contentQuery);
   }
 
   private editableAssetByProjectPath(): Map<string, EditableAsset> {
@@ -1376,184 +1356,6 @@ export class EditorUi {
     }
   }
 
-  private createAssetCard(item: BrowserAssetItem): HTMLElement {
-    const canPlace = Boolean(item.editable?.placeable);
-    const canAssignMaterial = Boolean(item.editable && item.type === "material");
-    const activeLevel = this.isActiveLevel(item);
-    const issues = contentAssetIssues(item);
-    const issueTooltip = contentAssetIssueTooltip(issues);
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "asset-card";
-    card.classList.toggle("is-unregistered", !item.editable);
-    card.classList.toggle("has-issues", issues.length > 0);
-    // The active level is visually marked and locked against destructive actions.
-    card.classList.toggle("is-active-level", activeLevel);
-    card.classList.toggle(
-      "is-selected",
-      Boolean(item.editable && item.editable.id === this.selectedAssetId),
-    );
-    const canPlaceActorClass = isActorScriptItem(item);
-    card.draggable = canPlace || canAssignMaterial || canPlaceActorClass;
-    card.dataset.assetPath = item.path;
-    if (item.editable) card.dataset.assetId = item.editable.id;
-    card.innerHTML = `
-      ${
-        issues.length > 0
-          ? `<span class="asset-issue-dot" title="${escapeHtml(issueTooltip)}" aria-label="${escapeHtml(issueTooltip)}"></span>`
-          : ""
-      }
-      ${
-        activeLevel
-          ? `<span class="asset-active-badge" title="Active level — locked against rename/delete">Active</span>`
-          : ""
-      }
-      <span class="asset-thumb" data-asset-thumb>${escapeHtml(item.ext.toUpperCase())}</span>
-      <span class="asset-meta">
-        <strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong>
-        <span class="asset-type-line">${escapeHtml(formatContentTypeBadge(item.type))}</span>
-      </span>
-    `;
-    card.addEventListener("dragstart", (event) => {
-      if (canPlaceActorClass) {
-        // Actor Script classes place by reference (classRef = public-relative path),
-        // not by manifest asset id, so they drag even when not manifest-registered.
-        event.dataTransfer?.setData("application/x-forge-actor-class", item.path);
-        event.dataTransfer!.effectAllowed = "copy";
-        event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
-        this.setStatus(`Dragging ${item.label} â€” drop in the viewport to place.`);
-        return;
-      }
-      if (!item.editable || (!canPlace && !canAssignMaterial)) return;
-      if (canAssignMaterial) {
-        event.dataTransfer?.setData("application/x-forge-material", item.editable.id);
-      } else {
-        event.dataTransfer?.setData("application/x-3dgamedev-asset", item.editable.id);
-      }
-      event.dataTransfer!.effectAllowed = "copy";
-      // Hide the browser's default drag image (a snapshot of the card) so only
-      // the 3D placement ghost in the viewport tracks the cursor.
-      event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
-      this.setSelectedAsset(item.editable.id);
-      if (canPlace) this.app.beginAssetDragPreview(item.editable.id);
-      this.setStatus(
-        canAssignMaterial
-          ? `Dragging ${item.editable.id} â€” drop on a static mesh.`
-          : `Dragging ${item.editable.id} â€” drop in the viewport to place.`,
-      );
-    });
-    card.addEventListener("dragend", () => {
-      this.app.endAssetDragPreview();
-    });
-    card.addEventListener("click", () => {
-      if (!item.editable) {
-        this.showContentAssetDetails(item, issues);
-        return;
-      }
-      // Click only selects; placement is drag-and-drop into the viewport.
-      this.setSelectedAsset(item.editable.id);
-      this.showContentAssetDetails(item, issues);
-    });
-    card.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      // Stop the bubble so the asset-grid's "new content" menu doesn't replace this.
-      event.stopPropagation();
-      if (item.editable) this.setSelectedAsset(item.editable.id);
-      this.showContentAssetDetails(item, issues);
-      this.openAssetContextMenu(event, item);
-    });
-    if (item.type !== "file" && isModelAssetType(item.type)) {
-      card.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        void this.openMeshEditor(item);
-      });
-    }
-    if (isActorScriptItem(item)) {
-      card.classList.add("is-actor-script");
-      card.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        void this.openActorScriptEditor(item);
-      });
-    }
-    if (item.type === "material") {
-      card.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        void this.openMaterialEditor(item);
-      });
-    }
-    if (item.type === "soundCue") {
-      card.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        void this.openSoundCueEditor(item);
-      });
-    }
-    if (item.type === "effect") {
-      card.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        void this.openParticleEffectEditor(item);
-      });
-    }
-    if (item.type === "dialogueVoice" || item.type === "dialogueLine") {
-      card.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        void this.openDialogueEditor(item);
-      });
-    }
-    if (isLevelItem(item) && !activeLevel) {
-      card.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        void this.openLevel(item);
-      });
-    }
-    if (isUiWidgetItem(item)) {
-      card.addEventListener("dblclick", (event) => {
-        event.preventDefault();
-        void this.openUiWidgetEditor(item);
-      });
-    }
-    const thumb = card.querySelector<HTMLElement>("[data-asset-thumb]");
-    if (thumb && isActorScriptItem(item)) thumb.textContent = "BP";
-    if (thumb && item.type !== "file" && isModelAssetType(item.type)) {
-      void this.renderAssetThumbnail(item, thumb);
-    } else if (thumb && item.type === "material") {
-      void this.renderMaterialThumbnail(item, thumb);
-    } else if (thumb && item.type === "texture") {
-      this.renderTextureThumbnail(item, thumb);
-    }
-    return card;
-  }
-
-  private createFolderCard(item: BrowserFolderItem): HTMLElement {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "asset-card is-folder";
-    card.classList.toggle("is-selected", item.path === this.selectedContentFolderPath);
-    card.dataset.folderPath = item.path;
-    card.title = item.path;
-    card.innerHTML = `
-      <span class="asset-thumb folder-thumb">DIR</span>
-      <span class="asset-meta">
-        <strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong>
-        <span class="asset-type-line">Folder</span>
-      </span>
-    `;
-    card.addEventListener("click", () => {
-      this.setSelectedContentFolder(item.path);
-      this.contentStatus.textContent = `${item.label} - Folder`;
-    });
-    card.addEventListener("dblclick", (event) => {
-      event.preventDefault();
-      this.navigateToContentFolder(item.path);
-    });
-    card.addEventListener("contextmenu", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      this.setSelectedContentFolder(item.path);
-      this.openContentFolderContextMenu(event, item);
-    });
-    return card;
-  }
-
   private navigateToContentFolder(path: string): void {
     this.selectedFolder = path;
     const segments = path.split("/");
@@ -1563,12 +1365,6 @@ export class EditorUi {
     this.clearContentSelection();
     this.renderFolderTree();
     this.renderContentAssets();
-  }
-
-  private showContentAssetDetails(item: BrowserAssetItem, issues: BrowserAssetIssue[]): void {
-    const prefix = `${item.label} Â· ${formatContentTypeBadge(item.type)}`;
-    this.contentStatus.textContent =
-      issues.length > 0 ? `${prefix} Â· ${contentAssetIssueTooltip(issues)}` : `${prefix} Â· No issues`;
   }
 
   /** Drops the Content Browser asset selection and restores the grid summary. */
@@ -3091,132 +2887,12 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function isContentTypeFilter(value: string): value is ContentTypeFilter {
-  return (
-    value === CONTENT_FILTER_ALL ||
-    value === "staticMesh" ||
-    value === "skeletalMesh" ||
-    value === "texture" ||
-    value === "material" ||
-    value === "sound" ||
-    value === "soundCue" ||
-    value === "dialogueVoice" ||
-    value === "dialogueLine" ||
-    value === "conversation" ||
-    value === "animation" ||
-    value === "prefab" ||
-    value === "ui" ||
-    value === "level" ||
-    value === "file"
-  );
-}
-
-function formatContentTypeLabel(value: string): string {
-  if (value === "staticMesh") return "Static Meshes";
-  if (value === "skeletalMesh") return "Skeletal Meshes";
-  if (value === "texture") return "Textures";
-  if (value === "material") return "Materials";
-  if (value === "sound") return "Sounds";
-  if (value === "soundCue") return "Sound Cues";
-  if (value === "dialogueVoice") return "Dialogue Voices";
-  if (value === "dialogueLine") return "Dialogue Lines";
-  if (value === "conversation") return "Conversations";
-  if (value === "animation") return "Animations";
-  if (value === "prefab") return "Prefabs";
-  if (value === "level") return "Levels";
-  if (value === "file") return "Files";
-  return formatAssetTypeFallbackLabel(value);
-}
-
 function isDevelopmentContentPath(path: string): boolean {
   const normalizedPath = normalizeProjectPath(path).toLocaleLowerCase();
   const normalized = normalizedPath.startsWith("public/assets/")
     ? normalizedPath.slice("public/".length)
     : normalizedPath;
   return normalized === "assets/developmentcontent" || normalized.startsWith("assets/developmentcontent/");
-}
-
-/** True when a Content Browser item is an Actor Script class-asset (`*.actor.json`). */
-function isActorScriptItem(item: BrowserAssetItem): boolean {
-  return item.path.toLowerCase().endsWith(".actor.json");
-}
-
-/** True when a Content Browser item is a level/layout asset (`*.level.json` / `*.layout.json`). */
-function isLevelItem(item: BrowserAssetItem): boolean {
-  return item.type === "level";
-}
-
-/**
- * True for a UI Widget asset (`*.ui.json`). The `ui` asset type also covers
- * `*.theme.json` token files, which must NOT open in the widget editor (saving
- * would overwrite the theme with a widget tree).
- */
-function isUiWidgetItem(item: BrowserAssetItem): boolean {
-  return item.type === "ui" && item.path.toLowerCase().endsWith(".ui.json");
-}
-
-function formatContentTypeBadge(value: BrowserAssetItem["type"]): string {
-  if (value === "staticMesh") return "Static Mesh";
-  if (value === "skeletalMesh") return "Skeletal Mesh";
-  if (value === "texture") return "Texture";
-  if (value === "material") return "Material";
-  if (value === "sound") return "Sound";
-  if (value === "soundCue") return "Sound Cue";
-  if (value === "dialogueVoice") return "Dialogue Voice";
-  if (value === "dialogueLine") return "Dialogue Line";
-  if (value === "conversation") return "Conversation";
-  if (value === "animation") return "Animation";
-  if (value === "prefab") return "Prefab";
-  if (value === "ui") return "UI Widget";
-  if (value === "level") return "Level";
-  return "File";
-}
-
-function contentAssetIssues(item: BrowserAssetItem): BrowserAssetIssue[] {
-  const issues: BrowserAssetIssue[] = [];
-  if (!item.editable) {
-    issues.push({
-      code: "loose-file",
-      label: "File exists but is not registered in the manifest",
-    });
-    if (item.type === "file") {
-      issues.push({ code: "unsupported-file", label: "Unsupported file type" });
-    }
-    return issues;
-  }
-
-  if (!item.editable.placement) {
-    issues.push({ code: "missing-placement", label: "Missing placement rule" });
-  }
-  if (typeof item.editable.runtime?.collision !== "boolean") {
-    issues.push({ code: "missing-collision-setting", label: "No collision setting" });
-  }
-  if (item.type !== "file" && isModelAssetType(item.type) && !item.editable.placeable) {
-    issues.push({ code: "not-placeable", label: "Not placeable" });
-  }
-  if (item.type === "file") {
-    issues.push({ code: "unsupported-file", label: "Unsupported file type" });
-  }
-  return issues;
-}
-
-function contentAssetIssueTooltip(issues: readonly BrowserAssetIssue[]): string {
-  return issues.map((issue) => issue.label).join("; ");
-}
-
-function formatContentListStatus(
-  shownCount: number,
-  folderCount: number,
-  fileCount: number,
-  issueCount: number,
-  missingManifestAssetCount: number,
-): string {
-  const parts = [`${shownCount} shown / ${folderCount} folders / ${fileCount} files`];
-  if (issueCount > 0) parts.push(`${issueCount} with issues`);
-  if (missingManifestAssetCount > 0) {
-    parts.push(`${missingManifestAssetCount} manifest asset file missing`);
-  }
-  return parts.join(" Â· ");
 }
 
 function isSameOrDescendantContentPath(path: string, folder: string): boolean {
@@ -3239,14 +2915,6 @@ function parentContentPath(path: string): string | null {
   const slash = normalized.lastIndexOf("/");
   if (slash <= 0) return null;
   return normalized.slice(0, slash);
-}
-
-function formatAssetTypeFallbackLabel(value: string): string {
-  return value
-    .split(/[-_\s]+/)
-    .filter(Boolean)
-    .map((part) => `${part.slice(0, 1).toLocaleUpperCase()}${part.slice(1)}`)
-    .join(" ");
 }
 
 function formatShapeTypeLabel(type: ShapePrimitiveType): string {
