@@ -96,16 +96,9 @@ Evidence (2026-07-04):
 
 ## Remaining Roadmap `[ ] Not Started`
 
-Current `EditorUi.ts` remainder map after the first four slices:
+Current `EditorUi.ts` remainder map after the first ten slices:
 
-- Metadata Details: `renderMetadataSections(...)`, `bindMetadataInputs(...)`.
-- Special actor Details: light, reflection plane, reflective surface, blocking
-  volume, world widget, reflection capture.
-- Environment singleton Details: sky, fog, cloud, post-process.
-- World Settings: `renderWorldSettings(...)`.
-- Outliner and History: `renderOutliner(...)`, `renderHistory(...)`.
-- Content Drawer: asset list/filter rendering, asset detail popover, context
-  menu actions, drag/drop card wiring.
+- History panel: `renderHistory(...)`.
 
 The next work should continue as small behavior-preserving extractions. Do not
 start by moving save/load endpoints, editor boot, toolbar commands, or overlay
@@ -234,22 +227,39 @@ Evidence (2026-07-04):
   (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
   (1 Chromium smoke).
 
-## Tenth Extraction Slice `[ ] Planned`
+## Tenth Extraction Slice `[x] Completed 2026-07-05`
 
-1. `[ ]` Move Content Drawer asset rendering, filters, asset detail popover, and
+1. `[x]` Move Content Drawer asset rendering, filters, asset detail popover, and
    card interaction binding into `src/editor/panels/content/contentPanel.ts`.
-2. `[ ]` Keep Content Browser create/rename/delete/import endpoint ownership in
+2. `[x]` Keep Content Browser create/rename/delete/import endpoint ownership in
    `EditorUi.ts` or existing project/content services until a separate
    endpoint-focused plan exists.
-3. `[ ]` Preserve asset drag/drop placement, context menus, active folder/filter
+3. `[x]` Preserve asset drag/drop placement, context menus, active folder/filter
    state, and thumbnail behavior.
-4. `[ ]` Prove with:
+4. `[x]` Prove with:
    - `npx.cmd tsc --noEmit`
    - `npm.cmd run test:engine`
    - `npm.cmd run verify:imports`
    - `npm.cmd run smoke:browser`
    - a manual or Playwright check for Content Drawer asset placement if the
      existing smoke does not cover the moved path deeply enough.
+
+Evidence (2026-07-05):
+
+- `src/editor/panels/content/contentPanel.ts` owns Content Drawer asset/folder
+  card rendering, filter option rendering, card selection/status details,
+  drag/drop data binding, context-menu entry points, editor-open double clicks,
+  and thumbnail dispatch.
+- `EditorUi.ts` keeps project tree data shaping, active folder/filter state,
+  Content Browser create/rename/delete/import endpoint ownership, overlay editor
+  open/save callbacks, and shared status/selection state.
+- Verification passed: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (596 checks), `npm.cmd run verify:imports`, `npm.cmd run smoke:browser`
+  (1 Chromium smoke).
+- Additional Playwright check passed: opened Content Drawer, navigated to
+  `starter-content/StaticMeshes/Shapes`, clicked the `shape-cube` card and saw
+  `Shape Cube - Static Mesh - No issues`, then dragged the card to the canvas
+  and observed the outliner count increase from 19 to 20.
 
 ## Rules
 
