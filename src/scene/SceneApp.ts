@@ -81,10 +81,15 @@ import {
 } from "@engine/render-three/transforms";
 import { collisionWireboxes } from "@engine/render-three/collisionView";
 import {
+  createAiNavigationView,
+  disposeAiNavigationView,
+} from "@engine/render-three/aiNavigationView";
+import {
   collectMaterialStats,
   convertUnlitModelMaterialsToLit,
   isRenderableMesh,
 } from "@engine/render-three/materials";
+import type { NavAabb } from "@engine/navigation/gridNavigation";
 import {
   attachActorLight,
   entityLightItem,
@@ -424,6 +429,8 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
   Space: "jump",
 };
 
+const AI_NAV_DEBUG_CELL_SIZE = 0.5;
+
 interface EditorOptions {
   enabled: boolean;
   scriptMessageTraceLimit?: number;
@@ -576,6 +583,9 @@ export class SceneApp {
   /** "Show > Collision" overlay: wireframe boxes of every collider, off by default. */
   private readonly collisionBoxes: LineSegments[] = [];
   private showCollision = false;
+  /** "Show > AI Navigation" overlay: nav grid + blocking footprints, off by default. */
+  private aiNavigationView: Group | null = null;
+  private showAiNavigation = false;
   private readonly gizmoGroup = new Group();
   private readonly gizmoPickables: Object3D[] = [];
   /** Owns active/hovered gizmo handle state (editor-only interaction state). */
@@ -833,6 +843,7 @@ export class SceneApp {
     this.keyboardInput.detach();
     this.selectionOutline?.dispose();
     this.selectionOutline = null;
+    this.removeAiNavigationView();
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     this.disposeReflectionCaptureBakes();
@@ -5615,6 +5626,7 @@ export class SceneApp {
     // Collision overlay refreshes with the same cadence as selection boxes, so it
     // tracks live transform edits (drag/cascade all route through here).
     this.updateCollisionBoxes();
+    this.updateAiNavigationView();
     if (!this.layout || !this.selectionOutline) return;
 
     const outlineTargets: Object3D[] = [];
@@ -5764,6 +5776,20 @@ export class SceneApp {
     if (visible) void this.refreshCollisionDefs();
   }
 
+  /** Whether the "Show > AI Navigation" overlay is on. */
+  getShowAiNavigation(): boolean {
+    return this.showAiNavigation;
+  }
+
+  /** Toggles the "Show > AI Navigation" authoring overlay. */
+  setShowAiNavigation(visible: boolean): void {
+    if (this.showAiNavigation === visible) return;
+    this.showAiNavigation = visible;
+    this.updateAiNavigationView();
+    // Pick up sidecars authored/edited since the scene loaded, then rebuild.
+    if (visible) void this.refreshCollisionDefs();
+  }
+
   /**
    * Loads authored collision sidecars (`*.collision.json`) for the assets in the
    * current layout into `collisionDefs`, then rebuilds the overlay. Async and
@@ -5795,6 +5821,7 @@ export class SceneApp {
       complexAsSimpleAssetIds(next),
     );
     this.updateCollisionBoxes();
+    this.updateAiNavigationView();
   }
 
   /** Returns the authored collision complexity for an asset, if a sidecar is loaded. */
@@ -5909,6 +5936,38 @@ export class SceneApp {
     }
   }
 
+  private updateAiNavigationView(): void {
+    this.removeAiNavigationView();
+    if (!this.showAiNavigation || !this.layout) return;
+    const blockers = this.editorNavBlockers();
+    if (blockers.length === 0) return;
+    this.aiNavigationView = createAiNavigationView({
+      blockers,
+      cellSize: AI_NAV_DEBUG_CELL_SIZE,
+    });
+    this.scene.add(this.aiNavigationView);
+  }
+
+  private editorNavBlockers(): NavAabb[] {
+    if (!this.layout) return [];
+    const physicsBlockers = this.physicsSubsystem.staticBlockerAabbs().map((blocker) => ({
+      min: [blocker.min[0], blocker.min[1], blocker.min[2]] satisfies [number, number, number],
+      max: [blocker.max[0], blocker.max[1], blocker.max[2]] satisfies [number, number, number],
+    }));
+    if (physicsBlockers.length > 0) return physicsBlockers;
+    return collisionWireboxes(
+      this.layout,
+      this.localBounds,
+      this.collisionDefs,
+      this.complexCollisionMeshes,
+    )
+      .filter((wirebox) => !wirebox.sensor && !wirebox.box.isEmpty())
+      .map((wirebox) => ({
+        min: [wirebox.box.min.x, wirebox.box.min.y, wirebox.box.min.z],
+        max: [wirebox.box.max.x, wirebox.box.max.y, wirebox.box.max.z],
+      }));
+  }
+
   private removeCollisionBoxes(): void {
     for (const collisionBox of this.collisionBoxes) {
       this.scene.remove(collisionBox);
@@ -5919,6 +5978,13 @@ export class SceneApp {
       for (const material of materials) material.dispose();
     }
     this.collisionBoxes.length = 0;
+  }
+
+  private removeAiNavigationView(): void {
+    if (!this.aiNavigationView) return;
+    this.scene.remove(this.aiNavigationView);
+    disposeAiNavigationView(this.aiNavigationView);
+    this.aiNavigationView = null;
   }
 
   /** Shows a light's wireframe reach only while it is selected. */

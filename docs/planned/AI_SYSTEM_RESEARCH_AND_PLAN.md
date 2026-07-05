@@ -13,12 +13,18 @@
 > uygulandi (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-05 - Faz 3 grid navigation + runtime path-following ilk
 > dilimi uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-05 - Faz 3 local avoidance + stuck recovery dilimi
+> uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-05 - Faz 3 AI navigation debug draw + editor Show gorunumu
+> uygulandi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 607 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
-> Basit local avoidance, debug draw ve editor navigation gorunumu siradaki Faz 3
-> isleri. Faz 2 editor form ve gelismis service/decorator isleri planli.
+> Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
+> ve editor `Show > AI Navigation` gorunumu tamamlandi. Playwright/browser
+> viewport smoke siradaki dogrulama isi. Faz 2 editor form ve gelismis
+> service/decorator isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -399,17 +405,17 @@ edilebilir olsun.
 - [x] `forge.moveToPosition` task'ini path request + path following ile calistir.
 - [x] Ajan hareketini transform teleport yerine yukaridaki move-intent
       provider'i uzerinden uygula.
-- [ ] Basit local avoidance ekle: ajanlar arasi separation ve stuck recovery.
-- [ ] Debug draw:
-      - [ ] nav grid/graph
-      - [ ] path polyline
-      - [ ] current waypoint
-      - [ ] blocked/stuck state.
-- [ ] Editor `Show > AI Navigation` gorunumunu ekle.
+- [x] Basit local avoidance ekle: ajanlar arasi separation ve stuck recovery.
+- [x] Debug draw:
+      - [x] nav grid/graph
+      - [x] path polyline
+      - [x] current waypoint
+      - [x] blocked/stuck state.
+- [x] Editor `Show > AI Navigation` gorunumunu ekle.
 - [x] Test: obstacle etrafini dolasan path.
 - [x] Test: path yoksa task failure.
-- [ ] Validation: TypeScript, engine tests, build verify, mumkunse Playwright
-      viewport smoke.
+- [x] Validation: TypeScript, engine tests, build verify.
+- [x] Playwright/browser viewport smoke.
 
 Tamamlanan Faz 3 move-intent notu (2026-07-05):
 
@@ -438,6 +444,40 @@ Tamamlanan Faz 3 grid navigation/path-following notu (2026-07-05):
   failure doner.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`610 checks passed`).
+
+Tamamlanan Faz 3 local avoidance/stuck recovery notu (2026-07-05):
+
+- `engine/navigation/localAvoidance.ts` eklendi; planar ajan separation steering,
+  co-located ajanlar icin deterministik itme, magnitude clamp ve stuck progress
+  window yardimcilari var.
+- Runtime path-following `CharacterMovementSubsystem` move-intent provider'ina
+  `deltaSeconds` geciyor; AI ajanlari yakin karakterlerden separation vektoru
+  aliyor, progress kaybi algilaninca ayni hedef icin sinirli replan yapiyor ve
+  recovery tukenirse task failure durumunu sakliyor.
+- `?debug` overlay'i AI nav snapshot satirlarini gosteriyor: follower status,
+  waypoint ilerlemesi, replan sayisi ve stall suresi. Bu metinsel debug'dir;
+  nav grid/path cizimi ve editor `Show > AI Navigation` gorunumu hala acik.
+- Test: separation steering overlap/clear/planar/clamp/co-located davranislari,
+  stuck state threshold/reset ve AI nav formatter kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`613 checks passed`), `npm.cmd run build:verify` yesil. Playwright/browser
+  viewport smoke bu dilimde calistirilmadi.
+
+Tamamlanan Faz 3 AI navigation debug draw notu (2026-07-05):
+
+- `engine/render-three/aiNavigationView.ts` eklendi; nav grid, static blocker
+  footprint, path polyline, current waypoint ve failure goal isaretleri ortak
+  Three.js helper'iyle ciziliyor.
+- Runtime `?debug` modu `AiNavigationDebugSnapshot` icine blocker AABB'lerini,
+  cell size bilgisini ve takip edilen path noktalarini ekleyip sahneye live AI
+  navigation overlay'i basiyor. Stuck follower path'i sari, failure kirmizi
+  gosteriliyor.
+- Editor toolbar `Show > AI Navigation` toggle'i eklendi; collision overlay ile
+  ayni collider verisinden nav blocker footprint + grid gorunumu uretiliyor ve
+  transform/collision sidecar degisimlerinde yeniden kuruluyor.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run build:verify` yesil; hedefli
+  Playwright smoke `Show > AI Navigation` toggle'inin checkbox state'ini, canvas
+  degisimini ve browser error olmamasini dogruladi.
 
 ### Faz 4 - Perception
 

@@ -45,6 +45,7 @@ import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem
 import {
   findGridPath,
   type NavAgent,
+  type NavAabb,
   type PathFollowingState,
 } from "@engine/navigation/gridNavigation";
 import {
@@ -55,6 +56,10 @@ import {
   type AvoidanceNeighbor,
   type StuckState,
 } from "@engine/navigation/localAvoidance";
+import {
+  createAiNavigationView,
+  disposeAiNavigationView,
+} from "@engine/render-three/aiNavigationView";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
@@ -387,11 +392,15 @@ export interface AiNavFollowerDebug {
   readonly status: PathFollowingState["status"];
   readonly waypointIndex: number;
   readonly pathLength: number;
+  readonly path: readonly Vec3[];
+  readonly goal: Vec3;
   readonly replans: number;
   readonly secondsWithoutProgress: number;
 }
 
 export interface AiNavigationDebugSnapshot {
+  readonly blockers: readonly NavAabb[];
+  readonly cellSize: number;
   readonly followers: readonly AiNavFollowerDebug[];
 }
 
@@ -462,6 +471,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     taskRegistry: createGameAiTaskRegistry(),
   });
   private readonly aiPathFollowing = new Map<string, RuntimeAiPathFollowing>();
+  private aiNavigationView: Group | null = null;
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
   /** Manifest soundCue asset id -> fetchable file URL. */
@@ -942,6 +952,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         followCameraWithClouds(this.cloudObject, this.camera);
         advanceCloudTime(this.cloudObject, deltaMs / 1000);
       }
+      if (this.debug) this.updateAiNavigationDebugView();
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaMs / 1000);
       else this.renderer.render(this.scene, this.camera);
       this.onFrame?.(deltaMs);
@@ -968,6 +979,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.conversationOverlay?.dispose();
     this.loadingOverlay?.dispose();
     this.loadingOverlay = null;
+    this.removeAiNavigationDebugView();
     this.keyboardInput.detach();
     this.gamepadInput.detach();
     this.touchInput?.detach();
@@ -1048,15 +1060,38 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Snapshots AI path following (waypoints, stuck recovery) for `?debug`. */
   getAiNavigationDebugSnapshot(): AiNavigationDebugSnapshot {
     return {
+      blockers: this.physicsSubsystem.staticBlockerAabbs(),
+      cellSize: AI_NAV_CELL_SIZE,
       followers: [...this.aiPathFollowing.entries()].map(([entityId, follow]) => ({
         entityId,
         status: follow.state.status,
         waypointIndex: follow.state.waypointIndex,
         pathLength: follow.state.path.length,
+        path: follow.state.path,
+        goal: follow.goal,
         replans: follow.replans,
         secondsWithoutProgress: follow.stuck.secondsWithoutProgress,
       })),
     };
+  }
+
+  private updateAiNavigationDebugView(): void {
+    this.removeAiNavigationDebugView();
+    const snapshot = this.getAiNavigationDebugSnapshot();
+    if (snapshot.followers.length === 0 && snapshot.blockers.length === 0) return;
+    this.aiNavigationView = createAiNavigationView({
+      blockers: snapshot.blockers,
+      cellSize: snapshot.cellSize,
+      followers: snapshot.followers,
+    });
+    this.scene.add(this.aiNavigationView);
+  }
+
+  private removeAiNavigationDebugView(): void {
+    if (!this.aiNavigationView) return;
+    this.scene.remove(this.aiNavigationView);
+    disposeAiNavigationView(this.aiNavigationView);
+    this.aiNavigationView = null;
   }
 
   private requestAiMove(request: AiMoveRequest): AiBehaviorStatus {

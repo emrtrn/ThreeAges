@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "AI_Test",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "aIController",
+      "component": "AIController",
+      "props": {
+        "behaviorTree": "",
+        "blackboard": "",
+        "perception": {
+          "sightRadius": 18,
+          "fieldOfViewDeg": 110,
+          "hearingRadius": 12
+        },
+        "navAgent": {
+          "radius": 0.35,
+          "height": 1.8,
+          "maxSpeed": 3.2
+        }
+      },
+      "parent": "root"
+    },
+    {
+      "id": "meshRenderer",
+      "component": "MeshRenderer",
+      "props": {
+        "assetId": "george-ktx2"
+      },
+      "parent": "collider"
+    },
+    {
+      "id": "collider",
+      "component": "Collider",
+      "props": {
+        "shape": "capsule",
+        "isStatic": false,
+        "isSensor": false,
+        "capsuleRadius": 1.5,
+        "capsuleHalfHeight": 3
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

@@ -360,6 +360,10 @@ export class EditorUi {
                 <input type="checkbox" data-show-flag="collision" />
                 Collision
               </label>
+              <label>
+                <input type="checkbox" data-show-flag="ai-navigation" />
+                AI Navigation
+              </label>
             </div>
           </div>
           <button type="button" data-action="undo" data-testid="editor-undo" title="Undo">Undo</button>
@@ -555,6 +559,15 @@ export class EditorUi {
       collisionToggle.checked = this.app.getShowCollision();
       collisionToggle.addEventListener("change", () => {
         this.app.setShowCollision(collisionToggle.checked);
+      });
+    }
+    const aiNavigationToggle = this.root.querySelector<HTMLInputElement>(
+      '[data-show-flag="ai-navigation"]',
+    );
+    if (aiNavigationToggle) {
+      aiNavigationToggle.checked = this.app.getShowAiNavigation();
+      aiNavigationToggle.addEventListener("change", () => {
+        this.app.setShowAiNavigation(aiNavigationToggle.checked);
       });
     }
     this.root.querySelector('[data-action="save"]')?.addEventListener("click", () => {
