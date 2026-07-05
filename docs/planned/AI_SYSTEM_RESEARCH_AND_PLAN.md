@@ -11,11 +11,14 @@
 > uygulandi (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-05 - Faz 3 CharacterMovement AI move-intent on kosulu
 > uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-05 - Faz 3 grid navigation + runtime path-following ilk
+> dilimi uygulandi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 607 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
-> provider on kosulu tamamlandi; navigation/path following dilimi siradaki
-> is. Faz 2 editor form ve gelismis service/decorator isleri planli.
+> provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
+> Basit local avoidance, debug draw ve editor navigation gorunumu siradaki Faz 3
+> isleri. Faz 2 editor form ve gelismis service/decorator isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -384,17 +387,17 @@ edilebilir olsun.
       player icin ActionMap'ten, AI icin AISubsystem'den beslenir. Boylece
       yercekimi/step/collision cozumu ve `reportLocomotion` animasyon yolu
       NPC'ler icin de calisir.
-- [ ] `engine/navigation` contract ekle:
-      - [ ] `NavAgent`
-      - [ ] `PathRequest`
-      - [ ] `PathResult`
-      - [ ] `PathFollowingState`
-- [ ] Ilk uygulama olarak collision AABB'lerinden 2D grid/waypoint graph uret.
-- [ ] Static blocker AABB'lerini mevcut `PhysicsQuery.staticBlockerAabbs()`
+- [x] `engine/navigation` contract ekle:
+      - [x] `NavAgent`
+      - [x] `PathRequest`
+      - [x] `PathResult`
+      - [x] `PathFollowingState`
+- [x] Ilk uygulama olarak collision AABB'lerinden 2D grid/waypoint graph uret.
+- [x] Static blocker AABB'lerini mevcut `PhysicsQuery.staticBlockerAabbs()`
       yuzeyinden besle (`engine/behavior/behaviorSubsystem.ts` interface'i,
       `engine/physics/physicsSubsystem.ts` implementasyonu).
-- [ ] `forge.moveToPosition` task'ini path request + path following ile calistir.
-- [ ] Ajan hareketini transform teleport yerine yukaridaki move-intent
+- [x] `forge.moveToPosition` task'ini path request + path following ile calistir.
+- [x] Ajan hareketini transform teleport yerine yukaridaki move-intent
       provider'i uzerinden uygula.
 - [ ] Basit local avoidance ekle: ajanlar arasi separation ve stuck recovery.
 - [ ] Debug draw:
@@ -403,8 +406,8 @@ edilebilir olsun.
       - [ ] current waypoint
       - [ ] blocked/stuck state.
 - [ ] Editor `Show > AI Navigation` gorunumunu ekle.
-- [ ] Test: obstacle etrafini dolasan path.
-- [ ] Test: path yoksa task failure.
+- [x] Test: obstacle etrafini dolasan path.
+- [x] Test: path yoksa task failure.
 - [ ] Validation: TypeScript, engine tests, build verify, mumkunse Playwright
       viewport smoke.
 
@@ -421,6 +424,20 @@ Tamamlanan Faz 3 move-intent notu (2026-07-05):
   locomotion raporu uretilir.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`608 checks passed`), `npm.cmd run build:verify`, `npm.cmd run check:assets`.
+
+Tamamlanan Faz 3 grid navigation/path-following notu (2026-07-05):
+
+- `engine/navigation/gridNavigation.ts` eklendi; `NavAgent`, `PathRequest`,
+  `PathResult`, `PathFollowingState` sozlesmeleri ve AABB blocker'lardan
+  agent-radius ile sisirilmis 2D grid pathfinding var.
+- Runtime `AISubsystem.moveTo` callback'i artik `PhysicsQuery.staticBlockerAabbs()`
+  uzerinden path request kuruyor, bulunan path'i waypoint state olarak sakliyor
+  ve `CharacterMovementSubsystem` move-intent provider'ina siradaki waypoint'i
+  veriyor. Transform teleport yok.
+- Test: grid navigation static blocker etrafindan rota bulur; blocked goal
+  failure doner.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`610 checks passed`).
 
 ### Faz 4 - Perception
 

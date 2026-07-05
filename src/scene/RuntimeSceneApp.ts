@@ -42,6 +42,11 @@ import {
 } from "@engine/ai/behaviorAsset";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
+import {
+  findGridPath,
+  type NavAgent,
+  type PathFollowingState,
+} from "@engine/navigation/gridNavigation";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
@@ -359,7 +364,13 @@ export interface PerfMemorySnapshot {
   jsHeapLimitBytes: number | null;
 }
 
+interface RuntimeAiPathFollowing {
+  goal: Vec3;
+  state: PathFollowingState;
+}
+
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
+const AI_NAV_CELL_SIZE = 0.5;
 
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
@@ -418,7 +429,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly aiSubsystem = new AISubsystem({
     taskRegistry: createGameAiTaskRegistry(),
   });
-  private readonly aiMoveTargets = new Map<string, Vec3>();
+  private readonly aiPathFollowing = new Map<string, RuntimeAiPathFollowing>();
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
   /** Manifest soundCue asset id -> fetchable file URL. */
@@ -1006,25 +1017,73 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const transform = this.characterMovementSubsystem.transformOf(entityId);
     if (!transform) return "failure";
     if (planarDistance(transform.position, request.position) <= AI_MOVE_ACCEPTANCE_RADIUS) {
-      this.aiMoveTargets.delete(entityId);
+      this.aiPathFollowing.delete(entityId);
       return "success";
     }
-    this.aiMoveTargets.set(entityId, [...request.position]);
+    const existing = this.aiPathFollowing.get(entityId);
+    if (!existing || !samePlanarPoint(existing.goal, request.position)) {
+      const path = this.buildAiPath(entityId, transform.position, request.position);
+      if (path.status === "failure" || path.points.length < 2) {
+        this.aiPathFollowing.set(entityId, {
+          goal: [...request.position],
+          state: { path: [], waypointIndex: 0, status: "failure" },
+        });
+        return "failure";
+      }
+      this.aiPathFollowing.set(entityId, {
+        goal: [...request.position],
+        state: { path: path.points, waypointIndex: 1, status: "following" },
+      });
+    }
     return "running";
+  }
+
+  private buildAiPath(entityId: string, start: Vec3, goal: Vec3) {
+    return findGridPath({
+      start,
+      goal: [...goal],
+      agent: this.aiNavAgentForEntity(entityId),
+      blockers: this.physicsSubsystem.staticBlockerAabbs(),
+      cellSize: AI_NAV_CELL_SIZE,
+    });
+  }
+
+  private aiNavAgentForEntity(entityId: string): NavAgent {
+    const half = this.physicsSubsystem.colliderHalfExtents(entityId);
+    const movement = this.actorEntityById.get(entityId)
+      ? readCharacterMovementComponent(this.actorEntityById.get(entityId)!)
+      : undefined;
+    return {
+      radius: half ? Math.max(half[0], half[2]) : Math.max(movement?.capsuleRadius ?? 0.35, 0.01),
+      height: half ? half[1] * 2 : Math.max((movement?.capsuleHalfHeight ?? 0.9) * 2, 0.01),
+      stepHeight: movement?.maxStepHeight ?? 0.45,
+    };
   }
 
   private aiMoveIntentForEntity(
     entityId: string,
     transform: Readonly<TransformComponent>,
   ): CharacterMoveIntent | null {
-    const target = this.aiMoveTargets.get(entityId);
-    if (!target) return null;
+    const follow = this.aiPathFollowing.get(entityId);
+    if (!follow || follow.state.status !== "following") return null;
+    let state = follow.state;
+    let target = state.path[state.waypointIndex];
+    while (target && planarDistance(transform.position, target) <= AI_MOVE_ACCEPTANCE_RADIUS) {
+      const nextIndex = state.waypointIndex + 1;
+      if (nextIndex >= state.path.length) {
+        this.aiPathFollowing.delete(entityId);
+        return { direction: [0, 0], speed: 0 };
+      }
+      state = { ...state, waypointIndex: nextIndex };
+      follow.state = state;
+      target = state.path[state.waypointIndex];
+    }
+    if (!target) {
+      this.aiPathFollowing.delete(entityId);
+      return null;
+    }
     const dx = target[0] - transform.position[0];
     const dz = target[2] - transform.position[2];
-    if (Math.hypot(dx, dz) <= AI_MOVE_ACCEPTANCE_RADIUS) {
-      this.aiMoveTargets.delete(entityId);
-      return { direction: [0, 0], speed: 0 };
-    }
     return { direction: [dx, dz] };
   }
 
@@ -1502,7 +1561,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.physicsSubsystem.setEntities([]);
     this.movingPlatformSubsystem.clear();
     this.characterMovementSubsystem.clear();
-    this.aiMoveTargets.clear();
+    this.aiPathFollowing.clear();
     this.aiSubsystem.setEntities([]);
     this.behaviorSubsystem.setEntities([]);
 
@@ -3666,6 +3725,10 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
 
 function planarDistance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
   return Math.hypot(b[0] - a[0], b[2] - a[2]);
+}
+
+function samePlanarPoint(a: readonly [number, number, number], b: readonly [number, number, number]): boolean {
+  return planarDistance(a, b) <= 1e-6;
 }
 
 function createRuntimeUserSettingsStore(): UserSettingsStore | null {

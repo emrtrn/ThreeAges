@@ -80,6 +80,7 @@ import {
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
 import { AiBehaviorRunner, createDefaultAiTaskRegistry } from "../engine/ai/behaviorRunner";
+import { findGridPath } from "../engine/navigation/gridNavigation";
 import {
   forwardVectorFromRotation,
   readRotation,
@@ -6298,6 +6299,41 @@ check("resolvePlanarMovementSubstepped: preserves wall slide on a fast diagonal 
 
 // P1.3/P1.4 — slope surface math (src/game/slopeSurface.ts). The AABB model walks
 // on flat tops; a ramp needs the true interpolated surface height + a slope gate.
+check("grid navigation finds a path around a static blocker", () => {
+  const wall: Aabb3 = { min: [-0.25, 0, -1], max: [0.25, 2, 1] };
+  const path = findGridPath({
+    start: [-2, 0, 0],
+    goal: [2, 0, 0],
+    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
+    blockers: [wall],
+    cellSize: 0.5,
+    boundsPadding: 1,
+  });
+  assert.equal(path.status, "success");
+  assert.deepEqual(path.points[0], [-2, 0, 0]);
+  assert.deepEqual(path.points[path.points.length - 1], [2, 0, 0]);
+  assert.ok(path.points.some((point) => Math.abs(point[2]) > 1.25), `path=${JSON.stringify(path.points)}`);
+  for (const point of path.points) {
+    const insideWallX = point[0] >= wall.min[0] - 0.25 && point[0] <= wall.max[0] + 0.25;
+    const insideWallZ = point[2] >= wall.min[2] - 0.25 && point[2] <= wall.max[2] + 0.25;
+    assert.equal(insideWallX && insideWallZ, false, `waypoint inside inflated wall: ${point}`);
+  }
+});
+
+check("grid navigation fails when the goal cell is blocked", () => {
+  const box: Aabb3 = { min: [0.5, 0, -0.5], max: [1.5, 2, 0.5] };
+  const path = findGridPath({
+    start: [-1, 0, 0],
+    goal: [1, 0, 0],
+    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
+    blockers: [box],
+    cellSize: 0.5,
+    boundsPadding: 1,
+  });
+  assert.equal(path.status, "failure");
+  assert.deepEqual(path.points, []);
+});
+
 const RAMP_NORMAL_Y = 8 / Math.hypot(4, 8, 0); // ≈0.894, a 26.57° ramp rising along +X
 
 check("triangleUpNormal: flat floor = 1, vertical wall = 0, ramp = cos(angle)", () => {
