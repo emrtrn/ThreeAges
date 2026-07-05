@@ -32,9 +32,11 @@ import {
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
+import type { AiMoveRequest } from "@engine/ai/behaviorRunner";
 import {
   normalizeAiBehaviorTreeAsset,
   normalizeAiBlackboardAsset,
+  type AiBehaviorStatus,
   type AiBehaviorTreeAsset,
   type AiBlackboardAsset,
 } from "@engine/ai/behaviorAsset";
@@ -66,7 +68,7 @@ import { PointerButtonSource } from "@/input/pointerButtonSource";
 import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
-import { CharacterMovementSubsystem } from "@/game/characterMovementSystem";
+import { CharacterMovementSubsystem, type CharacterMoveIntent } from "@/game/characterMovementSystem";
 import type { LocomotionInput } from "@/game/locomotionAnimation";
 import { resolveGameMode } from "@/game/gameModes/registry";
 import { isGameModeClassRef } from "@/game/gameModes/catalog";
@@ -357,6 +359,8 @@ export interface PerfMemorySnapshot {
   jsHeapLimitBytes: number | null;
 }
 
+const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
+
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
   getRenderStats(): { drawCalls: number; triangles: number };
@@ -414,6 +418,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly aiSubsystem = new AISubsystem({
     taskRegistry: createGameAiTaskRegistry(),
   });
+  private readonly aiMoveTargets = new Map<string, Vec3>();
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
   /** Manifest soundCue asset id -> fetchable file URL. */
@@ -715,6 +720,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           this.inputMode !== "ui" &&
           this.gameModeSession?.playerState.pawnEntityId === entityId &&
           !this.gameModeSession.playerState.pawnControlSuspended,
+        getMoveIntent: (entityId, transform) => this.aiMoveIntentForEntity(entityId, transform),
         platforms: this.movingPlatformSubsystem,
       },
     );
@@ -785,6 +791,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           message.payload,
           message.target,
         ),
+      moveTo: (request) => this.requestAiMove(request),
     });
     this.engineApp.registerSubsystem(this.behaviorSubsystem);
     this.engineApp.registerSubsystem(this.audioSubsystem);
@@ -992,6 +999,33 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Snapshots the AI subsystem (active controllers + blackboards) for `?debug`. */
   getAiDebugSnapshot(): AiDebugSnapshot {
     return this.aiSubsystem.getDebugSnapshot();
+  }
+
+  private requestAiMove(request: AiMoveRequest): AiBehaviorStatus {
+    const entityId = request.controller.pawnEntityId;
+    const transform = this.characterMovementSubsystem.transformOf(entityId);
+    if (!transform) return "failure";
+    if (planarDistance(transform.position, request.position) <= AI_MOVE_ACCEPTANCE_RADIUS) {
+      this.aiMoveTargets.delete(entityId);
+      return "success";
+    }
+    this.aiMoveTargets.set(entityId, [...request.position]);
+    return "running";
+  }
+
+  private aiMoveIntentForEntity(
+    entityId: string,
+    transform: Readonly<TransformComponent>,
+  ): CharacterMoveIntent | null {
+    const target = this.aiMoveTargets.get(entityId);
+    if (!target) return null;
+    const dx = target[0] - transform.position[0];
+    const dz = target[2] - transform.position[2];
+    if (Math.hypot(dx, dz) <= AI_MOVE_ACCEPTANCE_RADIUS) {
+      this.aiMoveTargets.delete(entityId);
+      return { direction: [0, 0], speed: 0 };
+    }
+    return { direction: [dx, dz] };
   }
 
   /**
@@ -1468,6 +1502,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.physicsSubsystem.setEntities([]);
     this.movingPlatformSubsystem.clear();
     this.characterMovementSubsystem.clear();
+    this.aiMoveTargets.clear();
     this.aiSubsystem.setEntities([]);
     this.behaviorSubsystem.setEntities([]);
 
@@ -3627,6 +3662,10 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
     rotation: [...transform.rotation],
     scale: [...transform.scale],
   };
+}
+
+function planarDistance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
+  return Math.hypot(b[0] - a[0], b[2] - a[2]);
 }
 
 function createRuntimeUserSettingsStore(): UserSettingsStore | null {

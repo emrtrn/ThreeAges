@@ -60,10 +60,22 @@ interface PlatformContext {
 
 const EMPTY_PLATFORM_CONTEXT: PlatformContext = { aabbs: [], carry: [0, 0, 0] };
 
+export interface CharacterMoveIntent {
+  /** World-space X/Z direction. It is normalized by the subsystem before use. */
+  readonly direction: readonly [number, number];
+  /** Units per second. When absent, the character's authored walk speed is used. */
+  readonly speed?: number;
+  readonly jump?: boolean;
+}
+
 export interface CharacterMovementSubsystemOptions {
   getGravityY?: () => number;
   getControlYaw?: (entityId: EntityId) => number | null | undefined;
   isPlayerControlled?: (entityId: EntityId) => boolean;
+  getMoveIntent?: (
+    entityId: EntityId,
+    transform: Readonly<TransformComponent>,
+  ) => CharacterMoveIntent | null | undefined;
   reportLocomotion?: (entityId: EntityId, report: LocomotionInput) => void;
   /** Live kinematic platforms the character can stand on, collide with, and ride. */
   platforms?: MovingPlatformQuery;
@@ -95,6 +107,9 @@ export class CharacterMovementSubsystem implements Subsystem {
   private readonly getGravityY: () => number;
   private readonly getControlYaw: (entityId: EntityId) => number | null | undefined;
   private readonly isPlayerControlled: (entityId: EntityId) => boolean;
+  private readonly getMoveIntent:
+    | ((entityId: EntityId, transform: Readonly<TransformComponent>) => CharacterMoveIntent | null | undefined)
+    | undefined;
   private readonly reportLocomotion: ((entityId: EntityId, report: LocomotionInput) => void) | undefined;
   private readonly platforms: MovingPlatformQuery | undefined;
 
@@ -107,6 +122,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     this.getGravityY = options.getGravityY ?? (() => DEFAULT_GRAVITY_Y);
     this.getControlYaw = options.getControlYaw ?? (() => null);
     this.isPlayerControlled = options.isPlayerControlled ?? (() => true);
+    this.getMoveIntent = options.getMoveIntent;
     this.reportLocomotion = options.reportLocomotion;
     this.platforms = options.platforms;
   }
@@ -149,11 +165,12 @@ export class CharacterMovementSubsystem implements Subsystem {
 
   update(engine: EngineUpdateContext): void {
     for (const runtime of this.runtimes) {
-      if (!this.isPlayerControlled(runtime.id)) continue;
+      const input = this.movementInput(runtime, engine);
+      if (!input) continue;
       const prevX = runtime.transform.position[0];
       const prevY = runtime.transform.position[1];
       const prevZ = runtime.transform.position[2];
-      this.updateRuntime(runtime, engine);
+      this.updateRuntime(runtime, engine, input);
       if (engine.deltaSeconds > 0) {
         this.velocity.set(runtime.id, [
           (runtime.transform.position[0] - prevX) / engine.deltaSeconds,
@@ -172,6 +189,12 @@ export class CharacterMovementSubsystem implements Subsystem {
    */
   velocityOf(entityId: EntityId): readonly [number, number, number] | null {
     return this.velocity.get(entityId) ?? null;
+  }
+
+  /** Current runtime transform of a character (including kinematic movement), or null. */
+  transformOf(entityId: EntityId): TransformComponent | null {
+    const runtime = this.runtimes.find((entry) => entry.id === entityId);
+    return runtime ? cloneTransform(runtime.transform) : null;
   }
 
   /**
@@ -214,26 +237,14 @@ export class CharacterMovementSubsystem implements Subsystem {
     this.clear();
   }
 
-  private updateRuntime(runtime: CharacterMovementRuntime, engine: EngineUpdateContext): void {
+  private updateRuntime(
+    runtime: CharacterMovementRuntime,
+    engine: EngineUpdateContext,
+    input: RuntimeMovementInput,
+  ): void {
     const movement = runtime.movement;
-    // Climbing (stairs or a ramp) slows the walk: the smoothed slope measured by
-    // the previous frames' ground probes scales this frame's planar speed.
-    const climbScale = this.uphillScale(runtime);
-    const speed =
-      (this.actions.held("sprint")
-        ? movement.maxWalkSpeed * movement.sprintMultiplier
-        : movement.maxWalkSpeed) * climbScale;
-    const input = {
-      forward: this.actions.held("move-forward"),
-      back: this.actions.held("move-back"),
-      left: this.actions.held("move-left"),
-      right: this.actions.held("move-right"),
-    };
-    const controlYaw = this.getControlYaw(runtime.id);
-    const planar =
-      typeof controlYaw === "number" && Number.isFinite(controlYaw)
-        ? planarMoveStepRelativeToYaw(input, speed, engine.deltaSeconds, controlYaw)
-        : planarMoveStep(input, speed, engine.deltaSeconds);
+    const controlYaw = input.controlYaw;
+    const planar = input.planar;
     // Snapshot the live platforms once so blocker/probe/carry all see the same
     // frame (the platform subsystem already ticked this frame's motion).
     const platformCtx = this.platformContext(runtime);
@@ -275,7 +286,7 @@ export class CharacterMovementSubsystem implements Subsystem {
       );
     }
 
-    const vertical = this.updateVertical(runtime, engine, Math.hypot(dx, dz), platformCtx);
+    const vertical = this.updateVertical(runtime, engine, Math.hypot(dx, dz), platformCtx, input.jump);
     this.reportLocomotion?.(runtime.id, {
       planarSpeed:
         engine.deltaSeconds > 0 ? Math.hypot(planar.dx, planar.dz) / engine.deltaSeconds : 0,
@@ -289,6 +300,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     engine: EngineUpdateContext,
     planarDistance: number,
     platformCtx: PlatformContext,
+    jump: boolean,
   ): VerticalMotionState {
     const movement = runtime.movement;
     if (movement.movementMode !== "walking" && movement.movementMode !== "falling") {
@@ -306,7 +318,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     // feed a flat sample, decaying the slowdown back toward full speed. A rising
     // platform's carry is subtracted so riding an elevator isn't read as climbing.
     const climbGround =
-      vertical.state.grounded && !this.actions.pressed("jump") ? ground : null;
+      vertical.state.grounded && !jump ? ground : null;
     const floorRise =
       climbGround && vertical.lastGroundTargetY !== null
         ? climbGround.floorY - vertical.lastGroundTargetY - platformCtx.carry[1]
@@ -319,7 +331,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     );
     vertical.lastGroundTargetY = climbGround ? climbGround.floorY : null;
     if (vertical.state.grounded) {
-      if (this.actions.pressed("jump")) {
+      if (jump) {
         vertical.floorY = ground?.floorY ?? vertical.floorY;
       } else if (ground) {
         // Ease the resting height toward the new floor so a step is climbed over a
@@ -343,7 +355,7 @@ export class CharacterMovementSubsystem implements Subsystem {
       jumpSpeed: movement.jumpSpeed,
       floorY: vertical.state.grounded ? vertical.floorY : null,
       dt: engine.deltaSeconds,
-      jump: this.actions.pressed("jump"),
+      jump,
     });
     if (!vertical.state.grounded) {
       const landing = this.landingGround(runtime, previousY, vertical.state.y, platformCtx.aabbs);
@@ -522,6 +534,66 @@ export class CharacterMovementSubsystem implements Subsystem {
     if (!vertical) return 1;
     return uphillSpeedScale(vertical.climb, runtime.movement.uphillSpeedScale ?? 1);
   }
+
+  private movementInput(
+    runtime: CharacterMovementRuntime,
+    engine: EngineUpdateContext,
+  ): RuntimeMovementInput | null {
+    const playerControlled = this.isPlayerControlled(runtime.id);
+    if (playerControlled) return this.playerMovementInput(runtime, engine);
+    const intent = this.getMoveIntent?.(runtime.id, cloneTransform(runtime.transform));
+    if (!intent) return null;
+    return this.intentMovementInput(runtime, engine, intent);
+  }
+
+  private playerMovementInput(
+    runtime: CharacterMovementRuntime,
+    engine: EngineUpdateContext,
+  ): RuntimeMovementInput {
+    const movement = runtime.movement;
+    const climbScale = this.uphillScale(runtime);
+    const speed =
+      (this.actions.held("sprint")
+        ? movement.maxWalkSpeed * movement.sprintMultiplier
+        : movement.maxWalkSpeed) * climbScale;
+    const held = {
+      forward: this.actions.held("move-forward"),
+      back: this.actions.held("move-back"),
+      left: this.actions.held("move-left"),
+      right: this.actions.held("move-right"),
+    };
+    const controlYaw = this.getControlYaw(runtime.id);
+    const planar =
+      typeof controlYaw === "number" && Number.isFinite(controlYaw)
+        ? planarMoveStepRelativeToYaw(held, speed, engine.deltaSeconds, controlYaw)
+        : planarMoveStep(held, speed, engine.deltaSeconds);
+    return { planar, jump: this.actions.pressed("jump"), controlYaw };
+  }
+
+  private intentMovementInput(
+    runtime: CharacterMovementRuntime,
+    engine: EngineUpdateContext,
+    intent: CharacterMoveIntent,
+  ): RuntimeMovementInput {
+    const [rawX, rawZ] = intent.direction;
+    const magnitude = Math.hypot(rawX, rawZ);
+    const speed =
+      (typeof intent.speed === "number" && Number.isFinite(intent.speed)
+        ? Math.max(0, intent.speed)
+        : runtime.movement.maxWalkSpeed) * this.uphillScale(runtime);
+    const distance = speed * engine.deltaSeconds;
+    const planar =
+      magnitude > 0 && distance > 0
+        ? { dx: (rawX / magnitude) * distance, dz: (rawZ / magnitude) * distance }
+        : { dx: 0, dz: 0 };
+    return { planar, jump: intent.jump === true, controlYaw: this.getControlYaw(runtime.id) };
+  }
+}
+
+interface RuntimeMovementInput {
+  readonly planar: PlanarDelta;
+  readonly jump: boolean;
+  readonly controlYaw: number | null | undefined;
 }
 
 function controlYawToCharacterYaw(yaw: number): number {

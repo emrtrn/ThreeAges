@@ -10379,6 +10379,50 @@ check("CharacterMovement subsystem only moves the possessed character", () => {
   assert.equal(reports.get("actor:0")?.grounded, true);
 });
 
+check("CharacterMovement subsystem moves an AI-driven character from move intent", () => {
+  const actions = new ActionMap({});
+  const entity: Entity = {
+    id: "actor:ai",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      CharacterMovement: {
+        maxWalkSpeed: 4,
+        sprintMultiplier: 2,
+        jumpSpeed: 5,
+        gravityScale: 1,
+        orientRotationToMovement: true,
+      },
+    },
+  };
+
+  let transform: TransformComponent | null = null;
+  const reports = new Map<string, LocomotionInput>();
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      transform = next;
+    },
+    undefined,
+    {
+      isPlayerControlled: () => false,
+      getMoveIntent: (entityId) =>
+        entityId === "actor:ai" ? { direction: [1, 0], speed: 2 } : null,
+      reportLocomotion: (entityId, report) => reports.set(entityId, report),
+    },
+  );
+  movement.setEntities([entity]);
+  assert.equal(movement.transformOf("actor:ai")?.position[0], 0);
+  movement.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+
+  assert.ok(transform);
+  assert.equal(transform.position[0], 1);
+  assert.equal(transform.position[2], 0);
+  yawApproxEqual(transform.rotation[1], 90);
+  assert.equal(reports.get("actor:ai")?.planarSpeed, 2);
+  assert.equal(movement.velocityOf("actor:ai")?.[0], 2);
+  assert.equal(movement.transformOf("actor:ai")?.position[0], 1);
+});
+
 check("CharacterMovement subsystem can orient a character to controller yaw", () => {
   const actions = new ActionMap({});
   actions.advance();

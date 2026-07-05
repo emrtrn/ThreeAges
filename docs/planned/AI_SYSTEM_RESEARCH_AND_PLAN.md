@@ -9,10 +9,13 @@
 > uygulandi (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-05 - Faz 2 runtime runner + temel task/decorator dilimi
 > uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-05 - Faz 3 CharacterMovement AI move-intent on kosulu
+> uygulandi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 607 check,
-> `build:verify`, `check:assets`). Faz 2 editor form ve gelismis
-> service/decorator isleri planli.
+> `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
+> provider on kosulu tamamlandi; navigation/path following dilimi siradaki
+> is. Faz 2 editor form ve gelismis service/decorator isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -373,7 +376,7 @@ Tamamlanan Faz 2 runtime runner notu (2026-07-05):
 Hedef: AI hareketi `CharacterMovement` ile uyumlu, path tabanli ve debug
 edilebilir olsun.
 
-- [ ] **On kosul — CharacterMovement AI giris refactoru:**
+- [x] **On kosul — CharacterMovement AI giris refactoru:**
       `CharacterMovementSubsystem` bugun `isPlayerControlled` disindaki
       entity'leri hic tick etmiyor ve inputu global `ActionMap`'ten okuyor.
       Ajan-basina move-intent saglayan bir provider ekle (orn.
@@ -404,6 +407,20 @@ edilebilir olsun.
 - [ ] Test: path yoksa task failure.
 - [ ] Validation: TypeScript, engine tests, build verify, mumkunse Playwright
       viewport smoke.
+
+Tamamlanan Faz 3 move-intent notu (2026-07-05):
+
+- `CharacterMovementSubsystem` artik player input ile AI world-space
+  `CharacterMoveIntent` kaynagini ayni collision/step/gravity/locomotion
+  hattindan geciriyor; player possession filtresi korunuyor.
+- Runtime host `AISubsystem.moveTo` callback'ini `forge.moveToPosition` /
+  `forge.moveToBlackboard` icin duz-cizgi move-intent hedeflerine bagliyor.
+  Gercek path request/path following ve obstacle etrafi dolasma hala Faz 3'te
+  siradaki is.
+- Test: AI-driven unpossessed character intent ile hareket eder, yaw/velocity ve
+  locomotion raporu uretilir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`608 checks passed`), `npm.cmd run build:verify`, `npm.cmd run check:assets`.
 
 ### Faz 4 - Perception
 
