@@ -45,8 +45,10 @@
 > uygulandi.
 > Revizyon: 2026-07-06 - Faz 5/6 Smart Object component, runtime reservation
 > store ve query generator/filter ilk dilimi uygulandi.
+> Revizyon: 2026-07-06 - Faz 6 Smart Object Behavior Tree claim/use task ve
+> script message bridge dilimi uygulandi.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 644 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 645 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -75,6 +77,8 @@
 > pahali query tekrarlarini sinirlayabiliyor. Smart Object authored component
 > reader'i, runtime-only reservation store'u, `smartObjectsByTag` query
 > generator'i ve `reservationFree` query testi ilk dilim olarak eklendi.
+> Behavior Tree task'lari Smart Object claim/use akisini calistirabiliyor ve
+> use basladiginda hedef actor'a script message emit edebiliyor.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -813,12 +817,19 @@ Tamamlanan Faz 5/6 Smart Object query/reservation ilk dilim notu (2026-07-06):
   sagliyor ve `AISubsystem` query calistirirken bu store'u runner'a bagliyor.
 - Query semasi `smartObjectsByTag` generator'i ve `reservationFree` testini
   destekliyor; slot adaylari query debug snapshot'inda slot id tasiyabiliyor.
+- `forge.runQueryToBlackboard` opsiyonel `slotResultKey` ile query winner slot
+  id'sini Blackboard'a yazabiliyor.
+- `forge.claimSmartObject` ve `forge.useSmartObject` Behavior Tree task'lari
+  Blackboard entity/slot key'lerinden hedefi cozer; `use` basladiginda hedef
+  actor'a `smart-object.use` veya authored `messageType` ile script message
+  emit eder.
 - Actor Script Editor add-component listesine `SmartObject` eklendi ve raw props
   ile baslanabilir varsayilan component data'si seed ediliyor.
 - Test: SmartObject component reader, claim/use/release/expire davranisi ve
-  rezerve edilmis slotlarin query'de elenmesi kapsandi.
+  rezerve edilmis slotlarin query'de elenmesi; Behavior Tree query -> claim ->
+  use -> targeted message akisi kapsandi.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
-  (`644 checks passed`), `npm.cmd run build:verify` yesil.
+  (`645 checks passed`), `npm.cmd run build:verify` yesil.
 
 ### Faz 6 - Smart Objects
 
@@ -840,8 +851,8 @@ edilebilir data haline getirmek.
       - [x] release
       - [x] expire.
 - [x] EQS generator: smart objects by tag/search radius.
-- [ ] Behavior Tree task: `forge.claimSmartObject`, `forge.useSmartObject`.
-- [ ] Message bridge: use baslayinca actor script message emit et.
+- [x] Behavior Tree task: `forge.claimSmartObject`, `forge.useSmartObject`.
+- [x] Message bridge: use baslayinca actor script message emit et.
 - [ ] Editor marker/Details UI: slot gizmo, tag editor, reservation debug.
 - [x] Test: iki ajan ayni slotu ayni anda alamaz.
 - [x] Test: claim timeout release eder.

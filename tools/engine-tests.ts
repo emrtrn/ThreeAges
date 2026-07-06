@@ -18771,6 +18771,93 @@ check("AiBehaviorRunner runQueryToBlackboard stores the winning query entity", (
   assert.equal(bb.getEntity("bestCover"), "cover-a");
 });
 
+check("AiBehaviorRunner Smart Object tasks claim, use, and emit a targeted message", () => {
+  const bb = new Blackboard([
+    { key: "smartObject", kind: "entity", default: null },
+    { key: "smartObjectSlot", kind: "string", default: "" },
+  ]);
+  const controller = new AIController("ai:worker", "worker", bb);
+  const smartObjects = new SmartObjectReservationStore();
+  smartObjects.setEntities([
+    {
+      id: "worker",
+      components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+    },
+    {
+      id: "bench",
+      components: {
+        Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [SMART_OBJECT_COMPONENT]: {
+          tags: ["workbench"],
+          slots: [{ id: "slot-a", tags: ["workbench"] }],
+        },
+      },
+    },
+  ]);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "sequence",
+      children: [
+        {
+          kind: "task",
+          task: "forge.runQueryToBlackboard",
+          params: {
+            query: "assets/AI/BestWorkbench.query.json",
+            resultKey: "smartObject",
+            slotResultKey: "smartObjectSlot",
+          },
+        },
+        { kind: "task", task: "forge.claimSmartObject", params: { entityKey: "smartObject", slotKey: "smartObjectSlot" } },
+        {
+          kind: "task",
+          task: "forge.useSmartObject",
+          params: {
+            entityKey: "smartObject",
+            slotKey: "smartObjectSlot",
+            messageType: "workbench.use",
+            payload: { action: "craft" },
+          },
+        },
+      ],
+    },
+  });
+  const messages: Array<{ type: string; source: string; target?: string; payload?: Record<string, unknown> }> = [];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    smartObjects,
+    emitMessage: (message) => messages.push(message),
+    runQuery: () => ({
+      status: "success",
+      candidates: [],
+      winner: {
+        id: "smart-object:bench:slot-a",
+        kind: "entity",
+        entityId: "bench",
+        smartObjectSlotId: "slot-a",
+        position: [2, 0, 0],
+        score: 1,
+        failedTests: [],
+      },
+    }),
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 1, frame: 1 }), "success");
+  assert.equal(bb.getEntity("smartObject"), "bench");
+  assert.equal(bb.getString("smartObjectSlot"), "slot-a");
+  assert.equal(smartObjects.reservation("bench", "slot-a")?.state, "inUse");
+  assert.equal(smartObjects.reservation("bench", "slot-a")?.reservedBy, "worker");
+  assert.equal(messages[0]?.type, "workbench.use");
+  assert.equal(messages[0]?.source, "worker");
+  assert.equal(messages[0]?.target, "bench");
+  assert.deepEqual(messages[0]?.payload, {
+    action: "craft",
+    smartObject: "bench",
+    reservedBy: "worker",
+    slotId: "slot-a",
+  });
+});
+
 check("AiBehaviorRunner runQueryToBlackboard throttles repeated query runs", () => {
   const bb = new Blackboard([{ key: "bestCover", kind: "entity", default: null }]);
   const controller = new AIController("ai:enemy", "enemy", bb);

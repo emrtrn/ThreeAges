@@ -386,6 +386,7 @@ export class AISubsystem implements Subsystem {
       resolveSubtree: (assetPath) => this.behaviorAssets.get(assetPath),
       ...(this.emitMessage ? { emitMessage: this.emitMessage } : {}),
       ...(this.moveTo ? { moveTo: this.moveTo } : {}),
+      smartObjects: this.smartObjects,
       runQuery: ({ controller, query }) => {
         const asset = this.queryAssets.get(query);
         if (!asset) {

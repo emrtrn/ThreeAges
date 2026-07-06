@@ -35,7 +35,7 @@
       "props": {
         "assetId": "george-ktx2"
       },
-      "parent": "collider"
+      "parent": "root"
     },
     {
       "id": "collider",

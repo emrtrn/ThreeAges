@@ -28,11 +28,18 @@ export interface SmartObjectReservationQuery {
   reservation(entityId: EntityId, slotId?: string | null): SmartObjectReservation | null;
 }
 
+export interface SmartObjectRuntime extends SmartObjectReservationQuery {
+  claim(input: SmartObjectClaimInput): boolean;
+  use(input: SmartObjectClaimInput): boolean;
+  release(input: SmartObjectReleaseInput): boolean;
+  expire(nowSeconds: number): number;
+}
+
 /**
  * Runtime-only Smart Object claim state. Authored SmartObjectComponent data stays
  * immutable; this store tracks which AI currently owns a claim/use slot.
  */
-export class SmartObjectReservationStore implements SmartObjectReservationQuery {
+export class SmartObjectReservationStore implements SmartObjectRuntime {
   private readonly reservations = new Map<string, SmartObjectReservation>();
   private validSlots = new Set<string>();
 

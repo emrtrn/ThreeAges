@@ -20,6 +20,7 @@ import type {
 } from "./behaviorAsset";
 import { aiQueryParams } from "./queryAsset";
 import type { AiQueryResult } from "./queryRunner";
+import type { SmartObjectRuntime } from "./smartObjects";
 
 export type AiTaskHandler = (context: AiTaskContext) => AiBehaviorStatus;
 export type AiServiceHandler = (context: AiServiceContext) => void;
@@ -56,6 +57,7 @@ export interface AiBehaviorRunnerOptions {
   readonly emitMessage?: (input: AiMessageEmitInput) => void;
   readonly moveTo?: (request: AiMoveRequest) => AiBehaviorStatus;
   readonly runQuery?: (request: AiQueryRequest) => AiQueryResult;
+  readonly smartObjects?: SmartObjectRuntime;
 }
 
 export interface AiTaskContext {
@@ -67,6 +69,7 @@ export interface AiTaskContext {
   readonly emitMessage?: (input: AiMessageEmitInput) => void;
   readonly moveTo?: (request: AiMoveRequest) => AiBehaviorStatus;
   readonly runQuery?: (request: AiQueryRequest) => AiQueryResult;
+  readonly smartObjects?: SmartObjectRuntime;
 }
 
 export interface AiServiceContext extends AiTaskContext {
@@ -102,6 +105,7 @@ interface CachedQueryTaskResult {
   elapsedSeconds: number;
   readonly status: AiBehaviorStatus;
   readonly value?: BlackboardValue;
+  readonly slotValue?: BlackboardValue;
 }
 
 export function createDefaultAiTaskRegistry(): AiTaskRegistry {
@@ -113,6 +117,8 @@ export function createDefaultAiTaskRegistry(): AiTaskRegistry {
     ["forge.moveToBlackboard", moveToBlackboardTask],
     ["forge.startConversation", startConversationTask],
     ["forge.runQueryToBlackboard", runQueryToBlackboardTask],
+    ["forge.claimSmartObject", claimSmartObjectTask],
+    ["forge.useSmartObject", useSmartObjectTask],
   ]);
   return { get: (taskId) => tasks.get(taskId) };
 }
@@ -253,6 +259,7 @@ export class AiBehaviorRunner {
       ...(this.options.emitMessage ? { emitMessage: this.options.emitMessage } : {}),
       ...(this.options.moveTo ? { moveTo: this.options.moveTo } : {}),
       ...(this.options.runQuery ? { runQuery: this.options.runQuery } : {}),
+      ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
     });
     if (status !== "running" && memory.get(PRESERVE_TASK_MEMORY) !== true) memory.clear();
     return this.record(path, status);
@@ -330,6 +337,7 @@ export class AiBehaviorRunner {
         ...(this.options.emitMessage ? { emitMessage: this.options.emitMessage } : {}),
         ...(this.options.moveTo ? { moveTo: this.options.moveTo } : {}),
         ...(this.options.runQuery ? { runQuery: this.options.runQuery } : {}),
+        ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
       });
     }
   }
@@ -418,7 +426,7 @@ function runQueryToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
   if (!context.runQuery) return "failure";
   const params = aiQueryParams(context.params);
   if (!params.query || !params.resultKey) return "failure";
-  const signature = `${params.query}\n${params.resultKey}`;
+  const signature = `${params.query}\n${params.resultKey}\n${params.slotResultKey ?? ""}`;
   if (params.intervalSeconds) {
     context.memory.set(PRESERVE_TASK_MEMORY, true);
     const cached = context.memory.get("cachedQuery") as CachedQueryTaskResult | undefined;
@@ -426,7 +434,11 @@ function runQueryToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
       cached.elapsedSeconds += Math.max(0, context.engine.deltaSeconds);
       if (cached.elapsedSeconds + 1e-9 < params.intervalSeconds) {
         if (cached.value !== undefined) {
-          return context.blackboard.set(params.resultKey, cached.value) ? cached.status : "failure";
+          const valueWritten = context.blackboard.set(params.resultKey, cached.value);
+          const slotWritten = !params.slotResultKey || cached.slotValue === undefined
+            ? true
+            : context.blackboard.set(params.slotResultKey, cached.slotValue);
+          return valueWritten && slotWritten ? cached.status : "failure";
         }
         return cached.status;
       }
@@ -448,16 +460,61 @@ function runQueryToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
     return "failure";
   }
   const value = winner.entityId ?? winner.position;
-  const status = context.blackboard.set(params.resultKey, value) ? "success" : "failure";
+  const valueWritten = context.blackboard.set(params.resultKey, value);
+  const slotValue = winner.smartObjectSlotId ?? null;
+  const slotWritten = params.slotResultKey ? context.blackboard.set(params.slotResultKey, slotValue) : true;
+  const status = valueWritten && slotWritten ? "success" : "failure";
   if (params.intervalSeconds) {
     context.memory.set("cachedQuery", {
       signature,
       elapsedSeconds: 0,
       status,
       ...(status === "success" ? { value } : {}),
+      ...(status === "success" && params.slotResultKey ? { slotValue } : {}),
     } satisfies CachedQueryTaskResult);
   }
   return status;
+}
+
+function claimSmartObjectTask(context: AiTaskContext): AiBehaviorStatus {
+  if (!context.smartObjects) return "failure";
+  const target = smartObjectTargetFromParams(context);
+  if (!target) return "failure";
+  return context.smartObjects.claim({
+    entityId: target.entityId,
+    reservedBy: context.controller.pawnEntityId,
+    ...(target.slotId !== null ? { slotId: target.slotId } : {}),
+    ttlSeconds: smartObjectTtlSeconds(context.params),
+    nowSeconds: context.engine.elapsedSeconds,
+  }) ? "success" : "failure";
+}
+
+function useSmartObjectTask(context: AiTaskContext): AiBehaviorStatus {
+  if (!context.smartObjects) return "failure";
+  const target = smartObjectTargetFromParams(context);
+  if (!target) return "failure";
+  const used = context.smartObjects.use({
+    entityId: target.entityId,
+    reservedBy: context.controller.pawnEntityId,
+    ...(target.slotId !== null ? { slotId: target.slotId } : {}),
+    ttlSeconds: smartObjectTtlSeconds(context.params),
+    nowSeconds: context.engine.elapsedSeconds,
+  });
+  if (!used) return "failure";
+  const type = stringParam(context.params.messageType) ?? "smart-object.use";
+  const payload = {
+    ...(plainPayload(context.params.payload) ?? {}),
+    smartObject: target.entityId,
+    reservedBy: context.controller.pawnEntityId,
+    ...(target.slotId !== null ? { slotId: target.slotId } : {}),
+  };
+  context.emitMessage?.({
+    type,
+    source: context.controller.pawnEntityId,
+    target: target.entityId,
+    payload,
+  });
+  return "success";
 }
 
 function updatePerceptionBlackboardService(context: AiServiceContext): void {
@@ -528,6 +585,22 @@ function strongestGameplayStimulus(stimuli: readonly PerceivedStimulus[]): Perce
     }
   }
   return best;
+}
+
+function smartObjectTargetFromParams(context: AiTaskContext): { entityId: EntityId; slotId: string | null } | null {
+  const directEntityId = stringParam(context.params.entityId);
+  const entityKey = stringParam(context.params.entityKey) ?? stringParam(context.params.key) ?? "smartObject";
+  const entityId = directEntityId ?? context.blackboard.getEntity(entityKey);
+  if (!entityId) return null;
+  const directSlotId = stringParam(context.params.slotId) ?? stringParam(context.params.slot);
+  const slotKey = stringParam(context.params.slotKey);
+  const slotId = directSlotId ?? (slotKey ? context.blackboard.getString(slotKey) : null);
+  return { entityId, slotId };
+}
+
+function smartObjectTtlSeconds(params: Record<string, AiJsonValue>): number | null {
+  const ttl = params.ttlSeconds ?? params.ttl;
+  return typeof ttl === "number" && Number.isFinite(ttl) && ttl > 0 ? ttl : null;
 }
 
 function stringParam(value: AiJsonValue | undefined): string | null {
