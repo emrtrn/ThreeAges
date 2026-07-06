@@ -15,7 +15,12 @@
  */
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId } from "../scene/entity";
-import { readAIControllerComponent, readTransformComponent } from "../scene/components";
+import {
+  readAIControllerComponent,
+  readCharacterMovementComponent,
+  readTransformComponent,
+  type TransformComponent,
+} from "../scene/components";
 import { forwardVectorFromRotation } from "../scene/transform";
 import {
   comparePerceivedStimuli,
@@ -159,6 +164,27 @@ export class AISubsystem implements Subsystem {
     this.rebuildRunners();
   }
 
+  updateEntityTransform(entityId: EntityId, transform: TransformComponent): void {
+    const index = this.entities.findIndex((candidate) => candidate.id === entityId);
+    const entity = this.entities[index];
+    if (!entity) return;
+    this.entities = [
+      ...this.entities.slice(0, index),
+      {
+        ...entity,
+        components: {
+          ...entity.components,
+          Transform: {
+            position: [transform.position[0], transform.position[1], transform.position[2]],
+            rotation: [transform.rotation[0], transform.rotation[1], transform.rotation[2]],
+            scale: [transform.scale[0], transform.scale[1], transform.scale[2]],
+          },
+        },
+      },
+      ...this.entities.slice(index + 1),
+    ];
+  }
+
   update(engine: EngineUpdateContext): void {
     if (!this.enabled) {
       this.pendingNoises = [];
@@ -269,16 +295,18 @@ export class AISubsystem implements Subsystem {
       const entity = this.entities.find((candidate) => candidate.id === pawnEntityId);
       const transform = entity ? readTransformComponent(entity) : undefined;
       const config = controller.perceptionConfig;
-      if (!transform || !config) {
+      if (!entity || !transform || !config) {
         controller.setPerception([]);
         this.sightGrace.delete(pawnEntityId);
         continue;
       }
+      const sightOrigin = sightTracePoint(entity);
       const perceived = evaluatePerception({
         listener: {
           entityId: pawnEntityId,
           position: transform.position,
           forward: forwardVectorFromRotation(transform.rotation),
+          ...(sightOrigin ? { sightOrigin } : {}),
           ...config,
         },
         sources,
@@ -438,9 +466,28 @@ function perceptionSources(
     if (filter && !filter(entity)) continue;
     const transform = readTransformComponent(entity);
     if (!transform) continue;
-    sources.push({ entityId: entity.id, position: transform.position });
+    const sightTarget = sightTracePoint(entity);
+    sources.push({
+      entityId: entity.id,
+      position: transform.position,
+      ...(sightTarget ? { sightTarget } : {}),
+    });
   }
   return sources;
+}
+
+function sightTracePoint(entity: Entity): [number, number, number] | undefined {
+  const transform = readTransformComponent(entity);
+  if (!transform) return undefined;
+  const movement = readCharacterMovementComponent(entity);
+  const height = movement
+    ? Math.max(0.1, movement.capsuleHalfHeight * 1.25)
+    : 0.1;
+  return [
+    transform.position[0],
+    transform.position[1] + height,
+    transform.position[2],
+  ];
 }
 
 function senseForScriptMessage(type: string): GameplayPerceptionSense | null {

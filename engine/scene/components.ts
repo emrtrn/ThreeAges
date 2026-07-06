@@ -372,6 +372,7 @@ export interface SpringArmComponent {
  */
 export interface AIPerceptionConfig {
   sightRadius?: number;
+  nearSightRadius?: number;
   fieldOfViewDeg?: number;
   hearingRadius?: number;
   targetLostGraceSeconds?: number;
@@ -924,6 +925,9 @@ function readPerceptionConfig(value: SceneJsonValue | undefined): AIPerceptionCo
   const config: AIPerceptionConfig = {};
   if (typeof data.sightRadius === "number" && Number.isFinite(data.sightRadius)) {
     config.sightRadius = data.sightRadius;
+  }
+  if (typeof data.nearSightRadius === "number" && Number.isFinite(data.nearSightRadius)) {
+    config.nearSightRadius = data.nearSightRadius;
   }
   if (typeof data.fieldOfViewDeg === "number" && Number.isFinite(data.fieldOfViewDeg)) {
     config.fieldOfViewDeg = data.fieldOfViewDeg;

@@ -2283,7 +2283,7 @@ function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJs
     return {
       behaviorTree: "",
       blackboard: "",
-      perception: { sightRadius: 18, fieldOfViewDeg: 110, hearingRadius: 12 },
+      perception: { sightRadius: 18, nearSightRadius: 2, fieldOfViewDeg: 110, hearingRadius: 12 },
       navAgent: { radius: 0.35, height: 1.8, maxSpeed: 3.2 },
     };
   }

@@ -10602,6 +10602,50 @@ check("CharacterMovement subsystem moves an AI-driven character from move intent
   assert.equal(movement.transformOf("actor:ai")?.position[0], 1);
 });
 
+check("CharacterMovement subsystem blocks planar movement against dynamic character blockers", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  actions.handleDown("KeyW");
+  actions.advance();
+  const physics = {
+    staticBlockerAabbs: () => [],
+    staticSurfaceTriangles: () => [],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:mover",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      CharacterMovement: {
+        maxWalkSpeed: 4,
+        sprintMultiplier: 1,
+        jumpSpeed: 5,
+        gravityScale: 1,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        orientRotationToMovement: true,
+      },
+    },
+  };
+  const other: Aabb3 = { min: [-0.3, 0, -1.1], max: [0.3, 1.8, -0.5] };
+  let transform: TransformComponent | null = null;
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      transform = next;
+    },
+    physics,
+    {
+      isPlayerControlled: () => true,
+      dynamicBlockers: () => [other],
+    },
+  );
+  movement.setEntities([entity]);
+  movement.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+
+  assert.ok(transform);
+  assert.equal(transform.position[2], -0.2);
+});
+
 check("CharacterMovement subsystem can orient a character to controller yaw", () => {
   const actions = new ActionMap({});
   actions.advance();
@@ -19183,7 +19227,13 @@ check("readAIControllerComponent parses props and marks empty components", () =>
       [AI_CONTROLLER_COMPONENT]: {
         behaviorTree: "assets/AI/Enemy.behavior.json",
         blackboard: "assets/AI/Enemy.blackboard.json",
-        perception: { sightRadius: 18, fieldOfViewDeg: 110, hearingRadius: 12, targetLostGraceSeconds: 0.2 },
+        perception: {
+          sightRadius: 18,
+          nearSightRadius: 2.5,
+          fieldOfViewDeg: 110,
+          hearingRadius: 12,
+          targetLostGraceSeconds: 0.2,
+        },
         navAgent: { radius: 0.35, height: 1.8, maxSpeed: 3.2 },
         blackboardKeys: [
           { key: "target", kind: "entity", default: null },
@@ -19196,6 +19246,7 @@ check("readAIControllerComponent parses props and marks empty components", () =>
   assert.equal(component?.behaviorTree, "assets/AI/Enemy.behavior.json");
   assert.equal(component?.blackboard, "assets/AI/Enemy.blackboard.json");
   assert.equal(component?.perception?.sightRadius, 18);
+  assert.equal(component?.perception?.nearSightRadius, 2.5);
   assert.equal(component?.perception?.targetLostGraceSeconds, 0.2);
   assert.equal(component?.navAgent?.maxSpeed, 3.2);
   assert.equal(component?.blackboardKeys?.length, 2);
@@ -19231,6 +19282,14 @@ check("AI perception sight respects radius, horizontal FOV, and blocker LOS", ()
   assert.equal(
     evaluateSight(listener, [{ entityId: "front", position: [0, 0, 4] }], [wall]).length,
     0,
+  );
+  assert.deepEqual(
+    evaluateSight(
+      { ...listener, nearSightRadius: 1 },
+      [{ entityId: "near-blocked", position: [0, 0, 0.8] }],
+      [{ min: [-1, -1, 0.3], max: [1, 2, 0.4] }],
+    ).map((stimulus) => stimulus.sourceEntityId),
+    ["near-blocked"],
   );
 });
 
@@ -19363,6 +19422,67 @@ check("AISubsystem derives perception listeners from AIController props and cons
   assert.equal(perceived[0]?.sourceEntityId, "target");
   ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.048, frame: 3 });
   assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0, "noise is transient");
+});
+
+check("AISubsystem sight traces from character height so floor blockers do not hide targets", () => {
+  const floor: Aabb3 = { min: [-10, -0.1, -10], max: [10, 0.1, 10] };
+  const ai = new AISubsystem({ blockers: () => [floor] });
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        CharacterMovement: { capsuleRadius: 0.3, capsuleHalfHeight: 0.9 },
+        [AI_CONTROLLER_COMPONENT]: {
+          perception: { sightRadius: 6, fieldOfViewDeg: 360 },
+        },
+      },
+    },
+    {
+      id: "player",
+      components: {
+        Transform: { position: [0, 0, 4], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        CharacterMovement: { capsuleRadius: 0.3, capsuleHalfHeight: 0.9 },
+      },
+    },
+  ]);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  const perceived = ai.getDebugSnapshot().controllers[0]?.perception ?? [];
+  assert.equal(perceived[0]?.sense, "sight");
+  assert.equal(perceived[0]?.sourceEntityId, "player");
+  assert.deepEqual(perceived[0]?.position, [0, 0, 4]);
+});
+
+check("AISubsystem updates perception source positions from live transform syncs", () => {
+  const ai = new AISubsystem();
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        CharacterMovement: { capsuleRadius: 0.3, capsuleHalfHeight: 0.9 },
+        [AI_CONTROLLER_COMPONENT]: {
+          perception: { sightRadius: 4, fieldOfViewDeg: 360 },
+        },
+      },
+    },
+    {
+      id: "player",
+      components: {
+        Transform: { position: [0, 0, 8], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        CharacterMovement: { capsuleRadius: 0.3, capsuleHalfHeight: 0.9 },
+      },
+    },
+  ]);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0);
+  ai.updateEntityTransform("player", {
+    position: [0, 0, 2],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.[0]?.sourceEntityId, "player");
 });
 
 check("AISubsystem perception source filter can exclude static props from sight targets", () => {

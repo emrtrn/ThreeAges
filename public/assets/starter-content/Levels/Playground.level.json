@@ -85,18 +85,7 @@
     },
     {
       "assetId": "shape-cube",
-      "placements": [
-        {
-          "position": [
-            -13,
-            4,
-            -9
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 4
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "shape-cylender",
@@ -310,6 +299,125 @@
     {
       "assetId": "test",
       "placements": []
+    },
+    {
+      "assetId": "wall-400x400",
+      "placements": [
+        {
+          "position": [
+            -18,
+            0,
+            6
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -14,
+            0,
+            6
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -10,
+            0,
+            6
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -10,
+            0,
+            10
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -18,
+            0,
+            2
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -18,
+            0,
+            2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -14,
+            0,
+            2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -10,
+            0,
+            2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -10,
+            0,
+            -2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -14,
+            0,
+            -2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -18,
+            0,
+            -2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [],
@@ -460,7 +568,7 @@
         75,
         0
       ],
-      "scale": 0.42
+      "scale": 0.3
     }
   ]
 }

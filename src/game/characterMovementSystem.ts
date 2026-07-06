@@ -78,6 +78,11 @@ export interface CharacterMovementSubsystemOptions {
     deltaSeconds: number,
   ) => CharacterMoveIntent | null | undefined;
   reportLocomotion?: (entityId: EntityId, report: LocomotionInput) => void;
+  /** Dynamic character/kinematic AABBs that should block planar movement. */
+  dynamicBlockers?: (
+    entityId: EntityId,
+    transform: Readonly<TransformComponent>,
+  ) => readonly Aabb3[];
   /** Live kinematic platforms the character can stand on, collide with, and ride. */
   platforms?: MovingPlatformQuery;
 }
@@ -116,6 +121,9 @@ export class CharacterMovementSubsystem implements Subsystem {
       ) => CharacterMoveIntent | null | undefined)
     | undefined;
   private readonly reportLocomotion: ((entityId: EntityId, report: LocomotionInput) => void) | undefined;
+  private readonly dynamicBlockers:
+    | ((entityId: EntityId, transform: Readonly<TransformComponent>) => readonly Aabb3[])
+    | undefined;
   private readonly platforms: MovingPlatformQuery | undefined;
 
   constructor(
@@ -129,6 +137,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     this.isPlayerControlled = options.isPlayerControlled ?? (() => true);
     this.getMoveIntent = options.getMoveIntent;
     this.reportLocomotion = options.reportLocomotion;
+    this.dynamicBlockers = options.dynamicBlockers;
     this.platforms = options.platforms;
   }
 
@@ -426,9 +435,14 @@ export class CharacterMovementSubsystem implements Subsystem {
     // you stand on, including the platform under your feet) is not a wall, so
     // carry along it isn't self-blocked; a taller side is.
     const staticBlockers = filterWalkableBlockers(footY, this.physics.staticBlockerAabbs(), stepUp);
+    const dynamicBlockers = this.dynamicBlockers?.(runtime.id, runtime.transform) ?? [];
     const blockers =
-      platformAabbs.length > 0
-        ? [...staticBlockers, ...filterWalkableBlockers(footY, platformAabbs, stepUp)]
+      platformAabbs.length > 0 || dynamicBlockers.length > 0
+        ? [
+            ...staticBlockers,
+            ...filterWalkableBlockers(footY, platformAabbs, stepUp),
+            ...filterWalkableBlockers(footY, dynamicBlockers, stepUp),
+          ]
         : staticBlockers;
     if (blockers.length === 0) return planar;
     const half = this.physics.colliderHalfExtents(runtime.id);

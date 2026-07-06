@@ -16,9 +16,13 @@ export interface PerceptionAabb {
 export interface PerceptionListener {
   readonly entityId: EntityId;
   readonly position: Vec3;
+  /** Optional world-space point used as the sight trace origin. */
+  readonly sightOrigin?: Vec3;
   /** World-space forward direction. Only X/Z are used for horizontal FOV. */
   readonly forward: Vec3;
   readonly sightRadius?: number;
+  /** Optional close awareness radius that bypasses FOV/blocker checks. */
+  readonly nearSightRadius?: number;
   readonly fieldOfViewDeg?: number;
   readonly hearingRadius?: number;
 }
@@ -26,6 +30,8 @@ export interface PerceptionListener {
 export interface StimulusSource {
   readonly entityId: EntityId;
   readonly position: Vec3;
+  /** Optional world-space point used as the sight trace target. */
+  readonly sightTarget?: Vec3;
 }
 
 export interface NoiseStimulus {
@@ -100,15 +106,19 @@ export function evaluateSight(
 ): PerceivedStimulus[] {
   const radius = positiveOr(listener.sightRadius, 0);
   if (radius <= 0) return [];
+  const nearRadius = positiveOr(listener.nearSightRadius, 0);
   const fov = clamp(positiveOr(listener.fieldOfViewDeg, 360), 0, 360);
+  const sightOrigin = listener.sightOrigin ?? listener.position;
   const result: PerceivedStimulus[] = [];
   for (const source of sources) {
     if (source.entityId === listener.entityId) continue;
+    const sightTarget = source.sightTarget ?? source.position;
     const distance = planarDistance(listener.position, source.position);
     if (distance > radius) continue;
-    if (!insideHorizontalFov(listener.position, listener.forward, source.position, fov)) continue;
-    const blocked = blockers.some((blocker) => segmentIntersectsAabb(listener.position, source.position, blocker));
-    if (blocked) continue;
+    const nearAware = nearRadius > 0 && distance <= nearRadius;
+    if (!nearAware && !insideHorizontalFov(sightOrigin, listener.forward, sightTarget, fov)) continue;
+    const blocked = blockers.some((blocker) => segmentIntersectsAabb(sightOrigin, sightTarget, blocker));
+    if (blocked && !nearAware) continue;
     result.push({
       sense: "sight",
       sourceEntityId: source.entityId,

@@ -89,6 +89,7 @@ import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
 import { CharacterMovementSubsystem, type CharacterMoveIntent } from "@/game/characterMovementSystem";
+import type { Aabb3 } from "@/game/collision";
 import {
   DEFAULT_LOCOMOTION_THRESHOLDS,
   locomotionConfigForSkeleton,
@@ -769,6 +770,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly syncEntityTransform = (entityId: string, transform: TransformComponent): void => {
     this.applyEntityTransformToRender(entityId, transform);
     this.physicsSubsystem.setEntityTransform(entityId, transform);
+    this.aiSubsystem.updateEntityTransform(entityId, transform);
   };
 
   constructor(canvas: HTMLCanvasElement, options: RuntimeSceneAppOptions = {}) {
@@ -809,6 +811,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         reportLocomotion: (entityId, report) => {
           this.locomotionReports.set(entityId, report);
         },
+        dynamicBlockers: (entityId) => this.characterBlockerAabbs(entityId),
         isPlayerControlled: (entityId) =>
           this.inputMode !== "ui" &&
           this.gameModeSession?.playerState.pawnEntityId === entityId &&
@@ -1365,6 +1368,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (readCharacterMovementComponent(entity)) return true;
     if (readAIControllerComponent(entity)) return true;
     return readBehaviorComponent(entity)?.scriptId === "input-move";
+  }
+
+  private characterBlockerAabbs(excludeEntityId: string): Aabb3[] {
+    const blockers: Aabb3[] = [];
+    this.characterMovementSubsystem.forEachCharacter((entityId, transform) => {
+      if (entityId === excludeEntityId) return;
+      const half = this.physicsSubsystem.colliderHalfExtents(entityId);
+      if (!half) return;
+      blockers.push({
+        min: [
+          transform.position[0] - half[0],
+          transform.position[1],
+          transform.position[2] - half[2],
+        ],
+        max: [
+          transform.position[0] + half[0],
+          transform.position[1] + half[1] * 2,
+          transform.position[2] + half[2],
+        ],
+      });
+    });
+    return blockers;
   }
 
   /**

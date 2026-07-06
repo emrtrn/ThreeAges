@@ -18,6 +18,7 @@
         "blackboard": "assets/starter-content/AI/AI_Test.blackboard.json",
         "perception": {
           "sightRadius": 24,
+          "nearSightRadius": 3.5,
           "fieldOfViewDeg": 360,
           "hearingRadius": 12
         },
@@ -44,8 +45,8 @@
         "shape": "capsule",
         "isStatic": false,
         "isSensor": false,
-        "capsuleRadius": 0.3,
-        "capsuleHalfHeight": 0.9
+        "capsuleRadius": 1,
+        "capsuleHalfHeight": 3
       },
       "parent": "root"
     },

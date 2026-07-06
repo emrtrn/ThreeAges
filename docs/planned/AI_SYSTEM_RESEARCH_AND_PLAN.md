@@ -54,8 +54,14 @@
 > Revizyon: 2026-07-06 - Behavior Tree selector'lari reactive priority
 > davranisina gecirildi; patrol sirasinda gorus/chase dallari her tick yeniden
 > degerlendirilir.
+> Revizyon: 2026-07-06 - AI sight trace'i karakter kok pozisyonu yerine
+> kapsul/goz yuksekliginden atilir; CharacterMovement runtime diger karakter
+> kapsullerini dinamik blocker olarak kullanir.
+> Revizyon: 2026-07-06 - AI perception yakin awareness radius ve canlı
+> transform sync destegi eklendi; hareket eden player/AI pozisyonlari algida
+> guncel kalir.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 650 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -94,7 +100,13 @@
 > hedef listesinden cikarir; `moveTo` task'lari authored `acceptanceRadius`
 > ile hedefe varis toleransi tasiyabilir. Behavior Tree selector'lari her tick
 > oncelikli dallari bastan yokladigi icin devriye gibi running dalda kalan ajan
-> guncel perception blackboard'una gore chase/attack dallarina kesebilir.
+> guncel perception blackboard'una gore chase/attack dallarina kesebilir. AI
+> sight trace'i artik karakterin kapsul/goz yuksekliginden atildigi icin zemin
+> collider'i gorusu perdelemez; CharacterMovement runtime diger karakter
+> kapsullerini gecici blocker olarak cozer, bu da player/AI ic ice gecmesini
+> engeller. Runtime transform sink'i AI subsystem entity snapshot'ini da
+> gunceller; `nearSightRadius` yakin temas algisi ile chase/attack dallarinin
+> oyuncu yaklastiginda LOS blocker'ina takilmadan tetiklenmesini saglar.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
