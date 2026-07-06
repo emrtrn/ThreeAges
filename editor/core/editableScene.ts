@@ -159,6 +159,18 @@ export interface EditableAiNavigationVolume {
   color: string;
 }
 
+/** Resolved Target Point fields for AI patrol authoring details. */
+export interface EditableTargetPoint {
+  name: string;
+  hidden: boolean;
+  nextTargetPoint: string;
+  waitTime: number;
+  acceptanceRadius: number;
+  speedOverride: number | null;
+  patrolTag: string;
+  color: string;
+}
+
 /** Resolved global Post Process fields for the Details panel. */
 export interface EditablePostProcess {
   name: string;
@@ -275,6 +287,8 @@ export interface EditableSelection {
   blockingVolume?: EditableBlockingVolume;
   /** Resolved AI Navigation Volume settings; present only when `kind === "aiNavigationVolume"`. */
   aiNavigationVolume?: EditableAiNavigationVolume;
+  /** Resolved Target Point settings; present only when `kind === "targetPoint"`. */
+  targetPoint?: EditableTargetPoint;
   /** Resolved Post Process settings; present only when `kind === "post"`. */
   post?: EditablePostProcess;
   /** Resolved world-space UI widget settings; present only when `kind === "worldWidget"`. */

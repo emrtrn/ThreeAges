@@ -11,6 +11,7 @@ import {
   findParentReflectionCapture,
   findParentReflectionPlane,
   findParentReflectiveSurface,
+  findParentTargetPoint,
   findParentWorldWidget,
 } from "@engine/render-three/picking";
 import type { InstanceSelection, Selection } from "@editor/core/selection";
@@ -131,6 +132,12 @@ export class ScenePicker {
         if (Number.isInteger(index)) return { kind: "aiNavigationVolume", index };
       }
 
+      const targetPoint = findParentTargetPoint(hit.object);
+      if (targetPoint) {
+        const index = Number(targetPoint.userData.targetPointIndex);
+        if (Number.isInteger(index)) return { kind: "targetPoint", index };
+      }
+
       const worldWidget = findParentWorldWidget(hit.object);
       if (worldWidget) {
         const index = Number(worldWidget.userData.worldWidgetIndex);
@@ -218,6 +225,10 @@ export class ScenePicker {
     if (selection.kind === "aiNavigationVolume") {
       const volume = findParentAiNavigationVolume(hit.object);
       return volume ? Number(volume.userData.aiNavigationVolumeIndex) === selection.index : false;
+    }
+    if (selection.kind === "targetPoint") {
+      const point = findParentTargetPoint(hit.object);
+      return point ? Number(point.userData.targetPointIndex) === selection.index : false;
     }
     if (selection.kind === "worldWidget") {
       const widget = findParentWorldWidget(hit.object);

@@ -7,6 +7,7 @@ import { resolveReflectiveSurface } from "@engine/scene/reflectiveSurface";
 import { resolveSphereReflectionCapture } from "@engine/scene/reflectionCapture";
 import { resolveBlockingVolume } from "@engine/scene/blockingVolume";
 import { resolveAiNavigationVolume } from "@engine/scene/aiNavigationVolume";
+import { resolveTargetPoint } from "@engine/scene/targetPoint";
 import { resolvePostProcess } from "@engine/scene/postProcess";
 import { readPivot, readRotation, readScale } from "@engine/scene/transform";
 import type {
@@ -22,6 +23,7 @@ import type {
   LayoutReflectiveSurface,
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
+  LayoutTargetPoint,
   RoomLayout,
 } from "@engine/scene/layout";
 import type { WorldUiWidget } from "@engine/ui/uiWorldWidget";
@@ -350,6 +352,39 @@ function buildAiNavigationVolumeEditableSelection(
 }
 
 /**
+ * Builds the Details/Outliner view-model for a placed Target Point. It is a
+ * lightweight editor marker for AI patrol routes, hidden in Play by default.
+ */
+function buildTargetPointEditableSelection(
+  point: LayoutTargetPoint,
+  index: number,
+): EditableSelection {
+  const resolved = resolveTargetPoint(point);
+  return {
+    id: selectionId({ kind: "targetPoint", index }),
+    kind: "targetPoint",
+    assetId: "target-point",
+    category: "ai",
+    label: resolved.name,
+    position: [...point.position],
+    rotation: readRotation(point),
+    scale: readScale(point),
+    pivot: [0, 0, 0],
+    scaleLocked: point.scaleLocked ?? false,
+    locked: point.locked ?? false,
+    castShadow: false,
+    collision: false,
+    simulatePhysics: false,
+    physics: {},
+    targetPoint: {
+      ...resolved,
+      nextTargetPoint: point.nextTargetPoint ?? "",
+    },
+    metadata: {},
+  };
+}
+
+/**
  * Builds the Details/Outliner view-model for a placed world-space UI widget. Its
  * anchor world point rides in the shared `position` transform field (so the
  * Outliner/Details numeric position works); the widget reference + anchor/offset
@@ -634,6 +669,19 @@ export function buildSceneObjects(
     });
   });
 
+  layout.targetPoints?.forEach((point, index) => {
+    const selection: Selection = { kind: "targetPoint", index };
+    objects.push({
+      ...buildTargetPointEditableSelection(point, index),
+      selected: deps.isSelected(selection),
+      hidden: point.hidden ?? false,
+      locked: point.locked ?? false,
+      groupId: point.groupId,
+      nodeId: point.nodeId,
+      parentId: point.parentId,
+    });
+  });
+
   layout.worldWidgets?.forEach((widget, index) => {
     const selection: Selection = { kind: "worldWidget", index };
     objects.push({
@@ -773,6 +821,12 @@ export function buildEditableSelection(
     const volume = layout.aiNavigationVolumes?.[selection.index];
     if (!volume) return null;
     return buildAiNavigationVolumeEditableSelection(volume, selection.index);
+  }
+
+  if (selection.kind === "targetPoint") {
+    const point = layout.targetPoints?.[selection.index];
+    if (!point) return null;
+    return buildTargetPointEditableSelection(point, selection.index);
   }
 
   if (selection.kind === "worldWidget") {

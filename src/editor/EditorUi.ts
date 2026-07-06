@@ -96,6 +96,7 @@ import {
 import {
   renderAiNavigationVolumeDetails,
   renderBlockingVolumeDetails,
+  renderTargetPointDetails,
   renderLightDetails,
   renderReflectionCaptureDetails,
   renderReflectionPlaneDetails,
@@ -350,6 +351,7 @@ export class EditorUi {
                 <button type="button" class="add-actor-category-label">Gameplay</button>
                 <div class="add-actor-submenu">
                   <button type="button" data-add-player-start>Player Start</button>
+                  <button type="button" data-add-target-point>Target Point</button>
                 </div>
               </div>
             </div>
@@ -710,6 +712,13 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-ai-navigation-volume]")
       ?.addEventListener("click", () => {
         this.app.addAiNavigationVolume();
+      });
+
+    // Target Point (Unreal-style AI patrol route marker).
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-target-point]")
+      ?.addEventListener("click", () => {
+        this.app.addTargetPoint();
       });
 
     // Post Process is a transform-less singleton environment actor.
@@ -2545,6 +2554,7 @@ export class EditorUi {
       setSelectedReflectiveSurface: (patch) => this.app.setSelectedReflectiveSurface(patch),
       setSelectedBlockingVolume: (patch) => this.app.setSelectedBlockingVolume(patch),
       setSelectedAiNavigationVolume: (patch) => this.app.setSelectedAiNavigationVolume(patch),
+      setSelectedTargetPoint: (patch) => this.app.setSelectedTargetPoint(patch),
       setSelectedReflectionCapture: (patch) => this.app.setSelectedReflectionCapture(patch),
       setSelectedWorldWidget: (patch) => this.app.setSelectedWorldWidget(patch),
       isSelectedReflectionCaptureBakeStale: () =>
@@ -2614,6 +2624,10 @@ export class EditorUi {
     }
     if (selection.kind === "aiNavigationVolume" && selection.aiNavigationVolume) {
       renderAiNavigationVolumeDetails(this.specialActorDetailsOptions(selection));
+      return;
+    }
+    if (selection.kind === "targetPoint" && selection.targetPoint) {
+      renderTargetPointDetails(this.specialActorDetailsOptions(selection));
       return;
     }
     if (selection.kind === "reflectionCapture" && selection.reflectionCapture) {

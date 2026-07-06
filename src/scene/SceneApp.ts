@@ -180,6 +180,16 @@ import {
   type AiNavigationVolumeRenderItem,
 } from "@engine/render-three/aiNavigationVolume";
 import {
+  applyTargetPointTransform,
+  createTargetPointObject,
+  disposeTargetPointObject,
+  resolveTargetPoint,
+  uniqueTargetPointId,
+  uniqueTargetPointName,
+  type TargetPointObject,
+  type TargetPointRenderItem,
+} from "@engine/render-three/targetPoint";
+import {
   applyProbeEnvMapToObject,
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -280,6 +290,7 @@ import type {
   LayoutReflectiveSurface,
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
+  LayoutTargetPoint,
   LayoutWorldSettings,
   MetadataValue,
   RoomLayout,
@@ -335,6 +346,7 @@ import {
   cloneReflectionPlane,
   cloneReflectiveSurface,
   cloneSphereReflectionCapture,
+  cloneTargetPoint,
   cloneWorldWidget,
   lightActorsEqual,
   transformsEqual,
@@ -419,6 +431,7 @@ export type {
   EditableBlockingVolume,
   EditableSceneObject,
   EditableSelection,
+  EditableTargetPoint,
   EditableTransform,
   EditorProjectInfo,
   EditorSnapSettings,
@@ -505,6 +518,8 @@ export class SceneApp {
   private blockingVolumeObjects: BlockingVolumeObject[] = [];
   /** Editor box volumes limiting AI grid navigation, by index. */
   private aiNavigationVolumeObjects: AiNavigationVolumeObject[] = [];
+  /** Editor markers for AI patrol Target Points, by index. */
+  private targetPointObjects: TargetPointObject[] = [];
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
   private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
   /** Billboard icons (clickable handles) for placed Sphere Reflection Capture actors, by index. */
@@ -739,6 +754,7 @@ export class SceneApp {
         objects.push(...this.reflectionCaptureIcons);
         objects.push(...this.worldWidgetIcons);
         objects.push(...this.aiNavigationVolumeObjects);
+        objects.push(...this.targetPointObjects);
         return objects;
       },
       surfacePickables: () => {
@@ -886,6 +902,11 @@ export class SceneApp {
       disposeAiNavigationVolumeObject(object);
     }
     this.aiNavigationVolumeObjects = [];
+    for (const object of this.targetPointObjects) {
+      this.scene.remove(object);
+      disposeTargetPointObject(object);
+    }
+    this.targetPointObjects = [];
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     this.disposeReflectionCaptureBakes();
@@ -1749,6 +1770,13 @@ export class SceneApp {
       return;
     }
     if (
+      this.selection?.kind === "targetPoint" &&
+      this.editorSceneController.selectedCount <= 1
+    ) {
+      this.removeTargetPoint(this.selection.index);
+      return;
+    }
+    if (
       this.selection?.kind === "worldWidget" &&
       this.editorSceneController.selectedCount <= 1
     ) {
@@ -2239,6 +2267,7 @@ export class SceneApp {
     this.buildReflectionCaptures();
     this.buildBlockingVolumes();
     this.buildAiNavigationVolumes();
+    this.buildTargetPoints();
     this.buildWorldWidgetMarkers();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
@@ -2686,6 +2715,11 @@ export class SceneApp {
 
     if (selection.kind === "aiNavigationVolume") {
       this.refreshAiNavigationVolumeObject(selection.index);
+      return;
+    }
+
+    if (selection.kind === "targetPoint") {
+      this.refreshTargetPointObject(selection.index);
       return;
     }
 
@@ -3820,6 +3854,200 @@ export class SceneApp {
     this.setAiNavigationVolume(this.selection.index, patch);
   }
 
+  // --- Target Point actors --------------------------------------------------
+
+  private targetPointItem(point: LayoutTargetPoint): TargetPointRenderItem {
+    return {
+      ...resolveTargetPoint(point),
+      position: [...point.position],
+      rotation: point.rotation ? [...point.rotation] : [0, 0, 0],
+      scale: readScale(point),
+    };
+  }
+
+  private buildTargetPoints(): void {
+    for (const object of this.targetPointObjects) {
+      this.scene.remove(object);
+      disposeTargetPointObject(object);
+    }
+    this.targetPointObjects = [];
+    const points = this.layout?.targetPoints ?? [];
+    points.forEach((point, index) => {
+      const object = createTargetPointObject(this.targetPointItem(point));
+      object.userData.targetPointIndex = index;
+      this.targetPointObjects.push(object);
+      this.scene.add(object);
+    });
+  }
+
+  private refreshTargetPointObject(index: number): void {
+    const point = this.layout?.targetPoints?.[index];
+    const object = this.targetPointObjects[index];
+    if (!point || !object) return;
+    applyTargetPointTransform(object, this.targetPointItem(point));
+  }
+
+  private rebuildTargetPointObject(index: number): void {
+    const old = this.targetPointObjects[index];
+    if (old) {
+      this.scene.remove(old);
+      disposeTargetPointObject(old);
+    }
+    const point = this.layout?.targetPoints?.[index];
+    if (!point) return;
+    const object = createTargetPointObject(this.targetPointItem(point));
+    object.userData.targetPointIndex = index;
+    this.targetPointObjects[index] = object;
+    this.scene.add(object);
+  }
+
+  private refreshTargetPointIndices(): void {
+    this.targetPointObjects.forEach((object, index) => {
+      object.userData.targetPointIndex = index;
+    });
+  }
+
+  private insertTargetPoint(index: number, point: LayoutTargetPoint): void {
+    if (!this.layout) return;
+    this.layout.targetPoints ??= [];
+    const insertionIndex = clampIndex(index, this.layout.targetPoints.length);
+    this.layout.targetPoints.splice(insertionIndex, 0, cloneTargetPoint(point));
+    const object = createTargetPointObject(this.targetPointItem(point));
+    object.userData.targetPointIndex = insertionIndex;
+    this.targetPointObjects.splice(insertionIndex, 0, object);
+    this.scene.add(object);
+    this.refreshTargetPointIndices();
+  }
+
+  private removeTargetPointAt(index: number): LayoutTargetPoint | null {
+    if (!this.layout?.targetPoints) return null;
+    const [removed] = this.layout.targetPoints.splice(index, 1);
+    const [object] = this.targetPointObjects.splice(index, 1);
+    if (object) {
+      this.scene.remove(object);
+      disposeTargetPointObject(object);
+    }
+    this.refreshTargetPointIndices();
+    return removed ? cloneTargetPoint(removed) : null;
+  }
+
+  /** Adds a Target Point actor and selects it. */
+  addTargetPoint(): void {
+    if (!this.layout) return;
+    const points = this.layout.targetPoints ?? [];
+    const point: LayoutTargetPoint = {
+      id: uniqueTargetPointId(points),
+      name: uniqueTargetPointName("Target Point", points),
+      position: [0, 0, 0],
+    };
+    const index = points.length;
+    this.executeCommand({
+      label: "Add Target Point",
+      redo: () => {
+        this.insertTargetPoint(index, point);
+        this.select({ kind: "targetPoint", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.removeTargetPointAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Added Target Point.", "info");
+  }
+
+  /** Removes a Target Point actor (undoable). */
+  removeTargetPoint(index: number): void {
+    const point = this.layout?.targetPoints?.[index];
+    if (!point) return;
+    const snapshot = cloneTargetPoint(point);
+    this.executeCommand({
+      label: "Delete Target Point",
+      redo: () => {
+        this.removeTargetPointAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.insertTargetPoint(index, snapshot);
+        this.select({ kind: "targetPoint", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Deleted Target Point.", "info");
+  }
+
+  setTargetPoint(
+    index: number,
+    patch: {
+      nextTargetPoint?: string | undefined;
+      waitTime?: number;
+      acceptanceRadius?: number;
+      speedOverride?: number | null;
+      patrolTag?: string;
+      color?: string;
+    },
+    label = "Edit Target Point",
+  ): void {
+    const point = this.layout?.targetPoints?.[index];
+    if (!point) return;
+    const previous = cloneTargetPoint(point);
+    const next = cloneTargetPoint(point);
+    if (patch.nextTargetPoint !== undefined) {
+      if (patch.nextTargetPoint.trim().length > 0) next.nextTargetPoint = patch.nextTargetPoint.trim();
+      else delete next.nextTargetPoint;
+    }
+    if (patch.waitTime !== undefined) next.waitTime = Math.max(0, patch.waitTime);
+    if (patch.acceptanceRadius !== undefined) {
+      next.acceptanceRadius = Math.max(0.01, patch.acceptanceRadius);
+    }
+    if (patch.speedOverride !== undefined) {
+      if (patch.speedOverride !== null && patch.speedOverride > 0) next.speedOverride = patch.speedOverride;
+      else delete next.speedOverride;
+    }
+    if (patch.patrolTag !== undefined) {
+      if (patch.patrolTag.trim().length > 0) next.patrolTag = patch.patrolTag.trim();
+      else delete next.patrolTag;
+    }
+    if (patch.color !== undefined) next.color = patch.color;
+    const needsRebuild = patch.color !== undefined;
+    const apply = (value: LayoutTargetPoint): void => {
+      if (!this.layout?.targetPoints?.[index]) return;
+      this.layout.targetPoints[index] = cloneTargetPoint(value);
+      if (needsRebuild) this.rebuildTargetPointObject(index);
+      else this.refreshTargetPointObject(index);
+      if (this.selection?.kind === "targetPoint" && this.selection.index === index) {
+        this.updateSelectionBox();
+        this.updateGizmo();
+      }
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label,
+      redo: () => apply(next),
+      undo: () => apply(previous),
+    });
+  }
+
+  setSelectedTargetPoint(patch: {
+    nextTargetPoint?: string | undefined;
+    waitTime?: number;
+    acceptanceRadius?: number;
+    speedOverride?: number | null;
+    patrolTag?: string;
+    color?: string;
+  }): void {
+    if (this.selection?.kind !== "targetPoint") return;
+    this.setTargetPoint(this.selection.index, patch);
+  }
+
   // --- Sphere Reflection Capture (probe) actors ----------------------------
 
   /** Resolved settings + world transform for a reflection-capture layout actor. */
@@ -4022,6 +4250,7 @@ export class SceneApp {
     for (const surface of this.reflectiveSurfaceObjects) hide(surface);
     for (const volume of this.blockingVolumeObjects) hide(volume);
     for (const volume of this.aiNavigationVolumeObjects) hide(volume);
+    for (const point of this.targetPointObjects) hide(point);
     for (const record of this.lightObjects) hide(record.gizmo);
     try {
       return fn();
@@ -5264,6 +5493,14 @@ export class SceneApp {
       this.refreshBlockingVolumeObject(selection.index);
       return;
     }
+    if (selection.kind === "aiNavigationVolume") {
+      this.refreshAiNavigationVolumeObject(selection.index);
+      return;
+    }
+    if (selection.kind === "targetPoint") {
+      this.refreshTargetPointObject(selection.index);
+      return;
+    }
     // The Sky Atmosphere's visibility is applied through applySkyAtmosphere().
     if (selection.kind === "sky") {
       this.applySkyAtmosphere();
@@ -5767,6 +6004,10 @@ export class SceneApp {
       if (!options.includeHidden && volume.hidden) return;
       selections.push({ kind: "aiNavigationVolume", index });
     });
+    this.layout.targetPoints?.forEach((point, index) => {
+      if (!options.includeHidden && point.hidden) return;
+      selections.push({ kind: "targetPoint", index });
+    });
     return selections;
   }
 
@@ -5802,6 +6043,9 @@ export class SceneApp {
     if (selection.kind === "aiNavigationVolume") {
       return resolveAiNavigationVolume(this.layout?.aiNavigationVolumes?.[selection.index] ?? null).name;
     }
+    if (selection.kind === "targetPoint") {
+      return resolveTargetPoint(this.layout?.targetPoints?.[selection.index] ?? null).name;
+    }
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
       return transform?.name ?? selection.assetId;
@@ -5824,7 +6068,8 @@ export class SceneApp {
       selection.kind === "light" ||
       selection.kind === "actor" ||
       selection.kind === "reflectionCapture" ||
-      selection.kind === "aiNavigationVolume"
+      selection.kind === "aiNavigationVolume" ||
+      selection.kind === "targetPoint"
     ) {
       return [0, 0, 0];
     }
@@ -5885,6 +6130,10 @@ export class SceneApp {
     }
     if (selection.kind === "aiNavigationVolume") {
       const object = this.aiNavigationVolumeObjects[selection.index];
+      return object ? new Box3().setFromObject(object) : null;
+    }
+    if (selection.kind === "targetPoint") {
+      const object = this.targetPointObjects[selection.index];
       return object ? new Box3().setFromObject(object) : null;
     }
     if (selection.kind === "worldWidget") {
@@ -5963,6 +6212,13 @@ export class SceneApp {
       const object = this.aiNavigationVolumeObjects[selection.index];
       const actor = this.layout.aiNavigationVolumes?.[selection.index];
       if (!object || actor?.hidden) return null;
+      return this.selectionOutline.cloneRenderableMeshes(object);
+    }
+
+    if (selection.kind === "targetPoint") {
+      const object = this.targetPointObjects[selection.index];
+      const point = this.layout.targetPoints?.[selection.index];
+      if (!object || point?.hidden) return null;
       return this.selectionOutline.cloneRenderableMeshes(object);
     }
 
@@ -6423,6 +6679,7 @@ export class SceneApp {
     | LayoutSphereReflectionCapture
     | LayoutBlockingVolume
     | LayoutAiNavigationVolume
+    | LayoutTargetPoint
     | null {
     if (!this.layout) return null;
     if (selection.kind === "instance") {
@@ -6445,6 +6702,9 @@ export class SceneApp {
     }
     if (selection.kind === "aiNavigationVolume") {
       return this.layout.aiNavigationVolumes?.[selection.index] ?? null;
+    }
+    if (selection.kind === "targetPoint") {
+      return this.layout.targetPoints?.[selection.index] ?? null;
     }
     // Environment singletons are transform-less (no gizmo / move target). World
     // widgets are placed via the Details panel + marker, not the gizmo (v1).
@@ -6475,7 +6735,8 @@ export class SceneApp {
                 | LayoutCharacter
                 | LayoutActorInstance
                 | LayoutBlockingVolume
-                | LayoutAiNavigationVolume,
+                | LayoutAiNavigationVolume
+                | LayoutTargetPoint,
             ),
     };
   }
@@ -6643,6 +6904,9 @@ export class SceneApp {
     }
     if (selection.kind === "aiNavigationVolume") {
       return Boolean(this.layout.aiNavigationVolumes?.[selection.index]);
+    }
+    if (selection.kind === "targetPoint") {
+      return Boolean(this.layout.targetPoints?.[selection.index]);
     }
     if (selection.kind === "worldWidget") {
       return Boolean(this.layout.worldWidgets?.[selection.index]);

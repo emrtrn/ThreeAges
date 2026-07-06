@@ -13,6 +13,7 @@ import type {
   LayoutReflectionPlane,
   LayoutReflectiveSurface,
   LayoutSphereReflectionCapture,
+  LayoutTargetPoint,
   MetadataValue,
   Vec3,
 } from "@engine/scene/layout";
@@ -341,6 +342,29 @@ export function cloneAiNavigationVolume(
   if (volume.scale !== undefined) clone.scale = cloneScale(volume.scale);
   if (volume.size !== undefined) clone.size = [...volume.size];
   if (volume.color !== undefined) clone.color = volume.color;
+  return clone;
+}
+
+export function cloneTargetPoint(point: LayoutTargetPoint): LayoutTargetPoint {
+  const clone: LayoutTargetPoint = {
+    id: point.id,
+    position: [...point.position],
+  };
+  if (point.name !== undefined) clone.name = point.name;
+  if (point.hidden !== undefined) clone.hidden = point.hidden;
+  if (point.locked !== undefined) clone.locked = point.locked;
+  if (point.scaleLocked !== undefined) clone.scaleLocked = point.scaleLocked;
+  if (point.groupId !== undefined) clone.groupId = point.groupId;
+  if (point.nodeId !== undefined) clone.nodeId = point.nodeId;
+  if (point.parentId !== undefined) clone.parentId = point.parentId;
+  if (point.rotation !== undefined) clone.rotation = [...point.rotation];
+  if (point.scale !== undefined) clone.scale = cloneScale(point.scale);
+  if (point.nextTargetPoint !== undefined) clone.nextTargetPoint = point.nextTargetPoint;
+  if (point.waitTime !== undefined) clone.waitTime = point.waitTime;
+  if (point.acceptanceRadius !== undefined) clone.acceptanceRadius = point.acceptanceRadius;
+  if (point.speedOverride !== undefined) clone.speedOverride = point.speedOverride;
+  if (point.patrolTag !== undefined) clone.patrolTag = point.patrolTag;
+  if (point.color !== undefined) clone.color = point.color;
   return clone;
 }
 

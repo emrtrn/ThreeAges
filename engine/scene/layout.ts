@@ -748,6 +748,35 @@ export interface LayoutAiNavigationVolume {
   color?: string;
 }
 
+/**
+ * Placed Target Point actor (Unreal Target Point-style authoring marker). It is
+ * visible/editable in the editor and hidden in Play by default; runtime AI can
+ * later index these points for patrol routes.
+ */
+export interface LayoutTargetPoint {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  position: Vec3;
+  /** Optional facing direction for route visualization / future movement hints. */
+  rotation?: Vec3;
+  /** Marker display scale only; gameplay acceptance is `acceptanceRadius`. */
+  scale?: number | Vec3;
+  /** Next Target Point id in a simple single-link patrol route. */
+  nextTargetPoint?: string;
+  waitTime?: number;
+  acceptanceRadius?: number;
+  speedOverride?: number;
+  patrolTag?: string;
+  /** Editor tint (hex `#rrggbb`). */
+  color?: string;
+}
+
 export interface RoomLayout {
   schema: 1;
   name: string;
@@ -774,6 +803,8 @@ export interface RoomLayout {
   blockingVolumes?: LayoutBlockingVolume[];
   /** Placed AI Navigation Volumes (NavMesh Bounds Volume-style pathfinding bounds). */
   aiNavigationVolumes?: LayoutAiNavigationVolume[];
+  /** Placed Target Points for AI patrol route authoring. */
+  targetPoints?: LayoutTargetPoint[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

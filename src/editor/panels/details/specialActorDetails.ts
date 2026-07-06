@@ -53,6 +53,14 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     size?: Vec3;
     color?: string;
   }) => void;
+  setSelectedTargetPoint: (patch: {
+    nextTargetPoint?: string | undefined;
+    waitTime?: number;
+    acceptanceRadius?: number;
+    speedOverride?: number | null;
+    patrolTag?: string;
+    color?: string;
+  }) => void;
   setSelectedReflectionCapture: (patch: {
     radius?: number;
     intensity?: number;
@@ -486,6 +494,103 @@ export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOpti
     .querySelector<HTMLInputElement>("[data-ai-nav-color]")
     ?.addEventListener("change", (event) => {
       options.setSelectedAiNavigationVolume({
+        color: (event.currentTarget as HTMLInputElement).value,
+      });
+    });
+}
+
+export function renderTargetPointDetails(options: SpecialActorDetailsOptions): void {
+  const { body, selection } = options;
+  const point = selection.targetPoint;
+  if (!point) return;
+  options.setDetailsScale([...selection.scale]);
+  const lockedAttr = selection.locked ? "disabled" : "";
+  body.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>ai / target point</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="Target Point" />
+      </label>
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
+      ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
+      <div class="detail-section">
+        <div class="detail-section-title">Patrol</div>
+        <label class="detail-row">
+          <span>Next Target</span>
+          <input data-target-point-field="nextTargetPoint" type="text"
+            value="${escapeHtml(point.nextTargetPoint)}" placeholder="target-point-2" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Wait Time</span>
+          <input data-target-point-number="waitTime" type="number" min="0" step="0.1"
+            value="${point.waitTime}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Acceptance</span>
+          <input data-target-point-number="acceptanceRadius" type="number" min="0.01" step="0.05"
+            value="${point.acceptanceRadius}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Speed</span>
+          <input data-target-point-number="speedOverride" type="number" min="0" step="0.1"
+            value="${point.speedOverride ?? ""}" placeholder="default" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Route Tag</span>
+          <input data-target-point-field="patrolTag" type="text"
+            value="${escapeHtml(point.patrolTag)}" placeholder="route id" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Color</span>
+          <input data-target-point-color type="color" value="${escapeHtml(point.color)}" ${lockedAttr} />
+        </label>
+      </div>
+      ${actorLockSection(selection)}
+    `;
+
+  bindTransformInputs(options, true);
+  bindNameAndLock(options);
+
+  body
+    .querySelectorAll<HTMLInputElement>("[data-target-point-field]")
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.targetPointField as "nextTargetPoint" | "patrolTag" | undefined;
+        if (!key) return;
+        options.setSelectedTargetPoint({ [key]: input.value });
+      });
+    });
+
+  body
+    .querySelectorAll<HTMLInputElement>("[data-target-point-number]")
+    .forEach((input) => {
+      input.addEventListener("change", () => {
+        const key = input.dataset.targetPointNumber as
+          | "waitTime"
+          | "acceptanceRadius"
+          | "speedOverride"
+          | undefined;
+        if (!key) return;
+        const value = input.value.trim() === "" ? null : Number(input.value);
+        if (value !== null && !Number.isFinite(value)) return;
+        if (key === "speedOverride") {
+          options.setSelectedTargetPoint({ speedOverride: value });
+          return;
+        }
+        if (value === null) return;
+        options.setSelectedTargetPoint({ [key]: value });
+      });
+    });
+
+  body
+    .querySelector<HTMLInputElement>("[data-target-point-color]")
+    ?.addEventListener("change", (event) => {
+      options.setSelectedTargetPoint({
         color: (event.currentTarget as HTMLInputElement).value,
       });
     });

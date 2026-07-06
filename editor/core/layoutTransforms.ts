@@ -1,7 +1,10 @@
 import type {
   LayoutCharacter,
+  LayoutAiNavigationVolume,
+  LayoutBlockingVolume,
   LayoutLightActor,
   LayoutPlacement,
+  LayoutTargetPoint,
   Vec3,
 } from "@engine/scene/layout";
 
@@ -11,7 +14,13 @@ import type {
  * non-zero rotation in `rotation`.
  */
 export function writeRotation(
-  target: LayoutPlacement | LayoutCharacter | LayoutLightActor,
+  target:
+    | LayoutPlacement
+    | LayoutCharacter
+    | LayoutLightActor
+    | LayoutBlockingVolume
+    | LayoutAiNavigationVolume
+    | LayoutTargetPoint,
   rotation: Vec3,
 ): void {
   const [x, y, z] = [round(rotation[0]), round(rotation[1]), round(rotation[2])];
@@ -27,7 +36,13 @@ export function writeRotation(
 
 /** Writes a scale vector back to a placement (scalar when uniform, else array). */
 export function writeScale(
-  target: LayoutPlacement | LayoutCharacter | LayoutLightActor,
+  target:
+    | LayoutPlacement
+    | LayoutCharacter
+    | LayoutLightActor
+    | LayoutBlockingVolume
+    | LayoutAiNavigationVolume
+    | LayoutTargetPoint,
   scale: Vec3,
 ): void {
   if ("type" in target) return;

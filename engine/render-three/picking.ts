@@ -81,6 +81,15 @@ export function findParentAiNavigationVolume(object: Object3D): Object3D | null 
   return null;
 }
 
+export function findParentTargetPoint(object: Object3D): Object3D | null {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current.userData.targetPointIndex !== undefined) return current;
+    current = current.parent;
+  }
+  return null;
+}
+
 export function findParentWorldWidget(object: Object3D): Object3D | null {
   let current: Object3D | null = object;
   while (current) {

@@ -441,6 +441,7 @@ import {
   validateSphereReflectionCapture,
   validateBlockingVolume,
   validateAiNavigationVolume,
+  validateTargetPoint,
   validatePostProcess,
   validateSaveActorPayload,
   validateSaveUiPayload,
@@ -581,6 +582,14 @@ import {
   uniqueAiNavigationVolumeId,
   uniqueAiNavigationVolumeName,
 } from "../engine/render-three/aiNavigationVolume";
+import {
+  createTargetPointObject,
+  disposeTargetPointObject,
+  resolveTargetPoint,
+  TARGET_POINT_DEFAULTS,
+  uniqueTargetPointId,
+  uniqueTargetPointName,
+} from "../engine/render-three/targetPoint";
 import {
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -15954,6 +15963,94 @@ check("validateAiNavigationVolume allowlists fields and round-trips through vali
     aiNavigationVolumes: [{ id: "nav1", position: [0, 2, 0] }],
   }) as RoomLayout;
   assert.deepEqual(layout.aiNavigationVolumes, [{ id: "nav1", position: [0, 2, 0] }]);
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("resolveTargetPoint fills defaults and unique helpers avoid collisions", () => {
+  assert.deepEqual(resolveTargetPoint(null), TARGET_POINT_DEFAULTS);
+  const resolved = resolveTargetPoint({
+    id: "tp-1",
+    name: "Patrol A",
+    position: [0, 0, 0],
+    waitTime: 1.5,
+    acceptanceRadius: 0.75,
+    speedOverride: 2.25,
+    patrolTag: "outer",
+    color: "#abcdef",
+  });
+  assert.equal(resolved.name, "Patrol A");
+  assert.equal(resolved.waitTime, 1.5);
+  assert.equal(resolved.acceptanceRadius, 0.75);
+  assert.equal(resolved.speedOverride, 2.25);
+  assert.equal(resolved.patrolTag, "outer");
+  assert.equal(resolved.color, "#abcdef");
+
+  const points = [{ id: "target-point-1", name: "Target Point", position: [0, 0, 0] }];
+  assert.equal(uniqueTargetPointId(points), "target-point-2");
+  assert.equal(uniqueTargetPointName("Target Point", points), "Target Point 2");
+});
+
+check("createTargetPointObject produces a pickable editor marker", () => {
+  const object = createTargetPointObject({
+    ...TARGET_POINT_DEFAULTS,
+    name: "Target Point",
+    position: [1, 0, 2],
+    rotation: [0, 45, 0],
+    scale: [1, 1, 1],
+  });
+  object.userData.targetPointIndex = 3;
+  assert.equal(object.position.x, 1);
+  assert.equal(object.position.z, 2);
+  assert.equal(object.userData.targetPointIndex, 3);
+  assert.ok(object.getObjectByName("target-point-lines"));
+  assert.ok(object.getObjectByName("target-point-ring"));
+  disposeTargetPointObject(object);
+});
+
+check("validateTargetPoint allowlists authored patrol fields and round-trips layout", () => {
+  const point = validateTargetPoint({
+    id: "target-point-1",
+    position: [1.2345, 0, -2],
+    name: "Patrol A",
+    locked: true,
+    rotation: [0, 90, 0],
+    scale: 1.25,
+    nextTargetPoint: "target-point-2",
+    waitTime: 1.5,
+    acceptanceRadius: 0.75,
+    speedOverride: 2.25,
+    patrolTag: "outer",
+    color: "#abcdef",
+    runtimeState: "dropped",
+  });
+  assert.deepEqual(point, {
+    id: "target-point-1",
+    position: [1.234, 0, -2],
+    name: "Patrol A",
+    locked: true,
+    rotation: [0, 90, 0],
+    scale: 1.25,
+    nextTargetPoint: "target-point-2",
+    waitTime: 1.5,
+    acceptanceRadius: 0.75,
+    speedOverride: 2.25,
+    patrolTag: "outer",
+    color: "#abcdef",
+  });
+  assert.throws(() => validateTargetPoint({ id: "bad", position: [0, 0] }));
+  assert.throws(() =>
+    validateTargetPoint({ id: "bad", position: [0, 0, 0], acceptanceRadius: 0 }),
+  );
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithTargetPoints",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    targetPoints: [{ id: "target-point-1", position: [0, 0, 0] }],
+  }) as RoomLayout;
+  assert.deepEqual(layout.targetPoints, [{ id: "target-point-1", position: [0, 0, 0] }]);
   assert.deepEqual(validateLayout(layout), layout);
 });
 

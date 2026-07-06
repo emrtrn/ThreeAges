@@ -64,6 +64,8 @@
 > isi checklist olarak eklendi.
 > Revizyon: 2026-07-06 - NavMesh agent radius / clearance benzeri AI path
 > guvenlik mesafesi isi checklist olarak eklendi.
+> Revizyon: 2026-07-06 - Target Point actor authoring ilk dilimi uygulandi
+> (bkz. asagidaki checklist).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -892,20 +894,20 @@ Tamamlanan Playground `AI_Test` demo notu (2026-07-06):
 
 Planlanan Target Point tabanli patrol route authoring checklist'i:
 
-- [ ] Unreal `Target Point` karsiligi genel amacli `TargetPoint` sahne aktoru
+- [x] Unreal `Target Point` karsiligi genel amacli `TargetPoint` sahne aktoru
       tanimla; `Add Actor` menusuyle sahneye eklenebilsin.
-- [ ] Target Point editor/render temsili ekle: edit modda ikon/gizmo gorunsun,
+- [x] Target Point editor/render temsili ekle: edit modda ikon/gizmo gorunsun,
       Play/runtime'da varsayilan olarak gizli kalsin.
-- [ ] Target Point Details panel alanlari:
-      - [ ] `name`
-      - [ ] `nextTargetPoint`
-      - [ ] `waitTime`
-      - [ ] `acceptanceRadius`
-      - [ ] `speedOverride`
-      - [ ] `patrolTag` veya `routeId`.
+- [x] Target Point Details panel alanlari:
+      - [x] `name`
+      - [x] `nextTargetPoint`
+      - [x] `waitTime`
+      - [x] `acceptanceRadius`
+      - [x] `speedOverride`
+      - [x] `patrolTag` veya `routeId`.
 - [ ] `nextTargetPoint` icin actor reference picker ekle; ayni level icindeki
       Target Point aktorlerini listeleyip secime izin versin.
-- [ ] Save/load validation: yeni Target Point layout alanlari
+- [x] Save/load validation: yeni Target Point layout alanlari
       `tools/saveValidator.ts` allowlist'ine eklensin ve round-trip testlensin.
 - [ ] Runtime query/lookup: Target Point entity'lerini id/tag/route bilgisiyle
       AI task'larinin okuyabilecegi generic indeks haline getir.
@@ -927,7 +929,7 @@ Planlanan Target Point tabanli patrol route authoring checklist'i:
 - [ ] Ilerleme yolu: ilk surum tek `nextTargetPoint`; sonraki surumde
       `nextTargets[]` + agirlik/branch ile patrol graph destekle.
 - [ ] Testler:
-      - [ ] Target Point save/load round-trip.
+      - [x] Target Point save/load round-trip.
       - [ ] `nextTargetPoint` referansi kirik oldugunda guvenli failure.
       - [ ] patrol task'i hedefe varinca siradaki Target Point'e gecer.
       - [ ] loop rota deterministik calisir.
@@ -935,6 +937,20 @@ Planlanan Target Point tabanli patrol route authoring checklist'i:
 - [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` Add Actor + Details smoke
       ve runtime Playground patrol smoke.
+
+Tamamlanan Target Point actor authoring ilk dilim notu (2026-07-06):
+
+- `LayoutTargetPoint`, `resolveTargetPoint`, unique id/name helper'lari ve
+  editor-only `createTargetPointObject()` marker'i eklendi.
+- `Add Actor > Gameplay > Target Point`, Outliner/selection/picking/gizmo,
+  Details panel alanlari ve undoable add/delete/edit akisi baglandi.
+- `tools/saveValidator.ts` `targetPoints` allowlist'i authored patrol alanlarini
+  round-trip eder; runtime state/unknown alanlar kayda gecmez.
+- Test: Target Point defaults/unique helper, render marker ve save/load
+  round-trip kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`656 checks passed`), `npm.cmd run build:verify` yesil, Playwright
+  `target-point.spec.ts` editor Add Actor + Details save/reload smoke yesil.
 
 Planlanan AI Navigation clearance / agent radius checklist'i:
 

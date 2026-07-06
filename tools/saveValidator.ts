@@ -1080,6 +1080,78 @@ export function validateAiNavigationVolume(value: unknown): Record<string, unkno
 }
 
 /**
+ * Allowlist validator for one placed Target Point. Runtime route state is not
+ * stored here; only authored patrol-route fields survive save.
+ */
+export function validateTargetPoint(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") throw new Error("target point must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) {
+    throw new Error("target point id must be a string");
+  }
+  if (!isNumberTuple(input.position)) throw new Error("invalid target point position");
+
+  const point: Record<string, unknown> = {
+    id: input.id,
+    position: input.position.map((number) => Number(number.toFixed(3))),
+  };
+  if (typeof input.name === "string") point.name = input.name;
+  if (input.hidden === true) point.hidden = true;
+  if (input.locked === true) point.locked = true;
+  if (input.scaleLocked === true) point.scaleLocked = true;
+  if (typeof input.groupId === "string") point.groupId = input.groupId;
+  if (typeof input.nodeId === "string") point.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") point.parentId = input.parentId;
+  if (input.rotation !== undefined) {
+    if (!isNumberTuple(input.rotation)) throw new Error("invalid target point rotation");
+    point.rotation = input.rotation.map((axis) =>
+      validateRotationDeg(axis, "target point rotation component"),
+    );
+  }
+  if (input.scale !== undefined) {
+    point.scale = isNumberTuple(input.scale)
+      ? input.scale.map((axis) => validateScaleValue(axis, "target point scale component"))
+      : validateScaleValue(input.scale, "target point scale");
+  }
+  if (typeof input.nextTargetPoint === "string" && input.nextTargetPoint.length > 0) {
+    point.nextTargetPoint = input.nextTargetPoint;
+  }
+  if (input.waitTime !== undefined) {
+    if (typeof input.waitTime !== "number" || !Number.isFinite(input.waitTime) || input.waitTime < 0) {
+      throw new Error("invalid target point waitTime");
+    }
+    point.waitTime = Number(input.waitTime.toFixed(3));
+  }
+  if (input.acceptanceRadius !== undefined) {
+    if (
+      typeof input.acceptanceRadius !== "number" ||
+      !Number.isFinite(input.acceptanceRadius) ||
+      input.acceptanceRadius <= 0
+    ) {
+      throw new Error("invalid target point acceptanceRadius");
+    }
+    point.acceptanceRadius = Number(input.acceptanceRadius.toFixed(3));
+  }
+  if (input.speedOverride !== undefined) {
+    if (
+      typeof input.speedOverride !== "number" ||
+      !Number.isFinite(input.speedOverride) ||
+      input.speedOverride <= 0
+    ) {
+      throw new Error("invalid target point speedOverride");
+    }
+    point.speedOverride = Number(input.speedOverride.toFixed(3));
+  }
+  if (typeof input.patrolTag === "string" && input.patrolTag.length > 0) {
+    point.patrolTag = input.patrolTag;
+  }
+  if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
+    point.color = input.color;
+  }
+  return point;
+}
+
+/**
  * Allowlist validator for the singleton Sky Atmosphere actor. Every field that
  * survives a save is copied explicitly; omitted/out-of-range values are dropped
  * so the runtime falls back to {@link resolveSkyAtmosphere} defaults. Returns null
@@ -1464,6 +1536,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("aiNavigationVolumes must be an array");
         })();
+  const targetPoints = layout.targetPoints === undefined
+    ? null
+    : Array.isArray(layout.targetPoints)
+      ? layout.targetPoints.map(validateTargetPoint)
+      : (() => {
+          throw new Error("targetPoints must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -1545,6 +1624,7 @@ export function validateLayout(value: unknown): unknown {
   if (reflectionCaptures) output.reflectionCaptures = reflectionCaptures;
   if (blockingVolumes) output.blockingVolumes = blockingVolumes;
   if (aiNavigationVolumes) output.aiNavigationVolumes = aiNavigationVolumes;
+  if (targetPoints) output.targetPoints = targetPoints;
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;

@@ -5,6 +5,7 @@ export type {
   LayoutMetadata,
   LayoutModelInstances,
   LayoutPlacement,
+  LayoutTargetPoint,
   LayoutWorldSettings,
   MetadataValue,
   RoomLayout,
