@@ -20,9 +20,9 @@ Current files:
   module so editor saves and runtime execution agree on the canonical shape.
 - `behaviorRunner.ts`: runtime Behavior Tree runner plus built-in task/service
   registries. `forge.updatePerceptionBlackboard` bridges sensed sight/hearing
-  stimuli into declared Blackboard keys.
-- `../perception/perception.ts`: pure sight/hearing evaluation contracts used by
-  `AISubsystem` to keep per-controller sensed-target debug state.
+  and gameplay-script stimuli into declared Blackboard keys.
+- `../perception/perception.ts`: pure sight/hearing/gameplay-stimulus contracts
+  used by `AISubsystem` to keep per-controller sensed-target debug state.
 
 ## engine/behavior vs engine/ai
 
@@ -37,6 +37,9 @@ Both tick entities derived from the scene, but they own different altitudes:
 
 AI tasks reach game actions through the existing `ScriptMessageBus`
 (`emitScriptMessage` / `subscribeScriptMessage`); there is no separate AI bus.
+Runtime hosts also bridge selected script messages (`Damage.*`, `alert`,
+`ui-action`, `game-event`) back into AI perception as one-tick stimuli, so
+Behavior Tree services can react without polling game-specific state.
 
 Rules:
 

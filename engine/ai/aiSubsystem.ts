@@ -19,6 +19,7 @@ import { readAIControllerComponent, readTransformComponent } from "../scene/comp
 import { forwardVectorFromRotation } from "../scene/transform";
 import {
   evaluatePerception,
+  type GameplayPerceptionSense,
   type NoiseStimulus,
   type PerceptionAabb,
   type PerceivedStimulus,
@@ -62,6 +63,13 @@ export interface AISubsystemOptions {
   readonly blockers?: () => readonly PerceptionAabb[];
 }
 
+export interface AiScriptStimulusInput {
+  readonly type: string;
+  readonly source: EntityId;
+  readonly target?: EntityId;
+  readonly payload?: Record<string, unknown>;
+}
+
 export class AISubsystem implements Subsystem {
   readonly id = AI_SUBSYSTEM_ID;
 
@@ -78,6 +86,7 @@ export class AISubsystem implements Subsystem {
   private blockers: (() => readonly PerceptionAabb[]) | undefined;
   private entities: readonly Entity[] = [];
   private pendingNoises: NoiseStimulus[] = [];
+  private pendingScriptStimuli: ScriptStimulus[] = [];
   private sightGrace = new Map<EntityId, SightGraceState>();
 
   constructor(options: AISubsystemOptions = {}) {
@@ -114,6 +123,7 @@ export class AISubsystem implements Subsystem {
     this.runners.clear();
     this.entities = entities;
     this.pendingNoises = [];
+    this.pendingScriptStimuli = [];
     this.sightGrace.clear();
     for (const entity of entities) {
       const component = readAIControllerComponent(entity);
@@ -139,11 +149,13 @@ export class AISubsystem implements Subsystem {
   update(engine: EngineUpdateContext): void {
     if (!this.enabled) {
       this.pendingNoises = [];
+      this.pendingScriptStimuli = [];
       return;
     }
     this.updatePerception(engine.deltaSeconds);
     for (const runner of this.runners.values()) runner.tick(engine);
     this.pendingNoises = [];
+    this.pendingScriptStimuli = [];
   }
 
   emitNoise(position: readonly [number, number, number], sourceEntityId: EntityId, loudness = 1): void {
@@ -152,6 +164,13 @@ export class AISubsystem implements Subsystem {
       position: [position[0], position[1], position[2]],
       loudness,
     });
+  }
+
+  emitScriptStimulus(input: AiScriptStimulusInput): boolean {
+    const stimulus = this.scriptStimulusFromMessage(input);
+    if (!stimulus) return false;
+    this.pendingScriptStimuli.push(stimulus);
+    return true;
   }
 
   /**
@@ -182,6 +201,7 @@ export class AISubsystem implements Subsystem {
     this.runners.clear();
     this.entities = [];
     this.pendingNoises = [];
+    this.pendingScriptStimuli = [];
     this.sightGrace.clear();
   }
 
@@ -236,10 +256,65 @@ export class AISubsystem implements Subsystem {
         noises: this.pendingNoises,
         blockers,
       });
+      perceived.push(...this.scriptStimuliFor(pawnEntityId, transform.position, config.hearingRadius));
+      perceived.sort((a, b) => b.strength - a.strength || a.distance - b.distance);
       controller.setPerception(
         this.applySightGrace(pawnEntityId, perceived, config.targetLostGraceSeconds, deltaSeconds),
       );
     }
+  }
+
+  private scriptStimuliFor(
+    pawnEntityId: EntityId,
+    listenerPosition: readonly [number, number, number],
+    hearingRadius: number | undefined,
+  ): PerceivedStimulus[] {
+    const result: PerceivedStimulus[] = [];
+    const radius = positiveFinite(hearingRadius);
+    for (const stimulus of this.pendingScriptStimuli) {
+      const isDirect = stimulus.target === pawnEntityId || stimulus.sourceEntityId === pawnEntityId;
+      const distance = planarDistance(listenerPosition, stimulus.position);
+      if (!isDirect) {
+        if (radius <= 0 || distance > radius) continue;
+      }
+      const strength = isDirect || radius <= 0
+        ? stimulus.strength
+        : stimulus.strength * Math.max(0, 1 - distance / radius);
+      if (strength <= 0) continue;
+      result.push({
+        sense: stimulus.sense,
+        sourceEntityId: stimulus.sourceEntityId,
+        position: [stimulus.position[0], stimulus.position[1], stimulus.position[2]],
+        distance,
+        strength,
+        eventType: stimulus.eventType,
+      });
+    }
+    return result;
+  }
+
+  private scriptStimulusFromMessage(input: AiScriptStimulusInput): ScriptStimulus | null {
+    const sense = senseForScriptMessage(input.type);
+    if (!sense) return null;
+    const position =
+      vec3FromUnknown(input.payload?.position) ??
+      this.positionForEntity(input.source) ??
+      (input.target ? this.positionForEntity(input.target) : null);
+    if (!position) return null;
+    return {
+      sense,
+      sourceEntityId: input.source,
+      ...(input.target !== undefined ? { target: input.target } : {}),
+      position,
+      strength: strengthForScriptStimulus(sense),
+      eventType: input.type,
+    };
+  }
+
+  private positionForEntity(entityId: EntityId): [number, number, number] | null {
+    const entity = this.entities.find((candidate) => candidate.id === entityId);
+    const transform = entity ? readTransformComponent(entity) : undefined;
+    return transform ? [transform.position[0], transform.position[1], transform.position[2]] : null;
   }
 
   private applySightGrace(
@@ -296,6 +371,15 @@ interface SightGraceState {
   readonly totalSeconds: number;
 }
 
+interface ScriptStimulus {
+  readonly sense: GameplayPerceptionSense;
+  readonly sourceEntityId: EntityId;
+  readonly target?: EntityId;
+  readonly position: [number, number, number];
+  readonly strength: number;
+  readonly eventType: string;
+}
+
 function perceptionSources(entities: readonly Entity[]): StimulusSource[] {
   const sources: StimulusSource[] = [];
   for (const entity of entities) {
@@ -304,4 +388,43 @@ function perceptionSources(entities: readonly Entity[]): StimulusSource[] {
     sources.push({ entityId: entity.id, position: transform.position });
   }
   return sources;
+}
+
+function senseForScriptMessage(type: string): GameplayPerceptionSense | null {
+  const normalized = type.trim().toLowerCase();
+  if (!normalized) return null;
+  if (normalized === "damage" || normalized.startsWith("damage.")) return "damage";
+  if (normalized === "alert" || normalized.endsWith(".alert")) return "alert";
+  if (normalized === "ui-action" || normalized === "game-event") return "gameplay";
+  return null;
+}
+
+function strengthForScriptStimulus(sense: GameplayPerceptionSense): number {
+  switch (sense) {
+    case "damage":
+      return 1;
+    case "alert":
+      return 0.9;
+    case "gameplay":
+      return 0.7;
+  }
+}
+
+function vec3FromUnknown(value: unknown): [number, number, number] | null {
+  if (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((entry) => typeof entry === "number" && Number.isFinite(entry))
+  ) {
+    return [value[0] as number, value[1] as number, value[2] as number];
+  }
+  return null;
+}
+
+function planarDistance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
+  return Math.hypot(b[0] - a[0], b[2] - a[2]);
+}
+
+function positiveFinite(value: number | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }

@@ -469,6 +469,15 @@ export interface LayoutSaveResult {
 
 export type LayoutSaver = (payload: LayoutSavePayload) => Promise<LayoutSaveResult>;
 
+const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
+  "Damage.Apply",
+  "Damage.Died",
+  "damage",
+  "alert",
+  "ui-action",
+  "game-event",
+] as const;
+
 export class SceneApp {
   private renderer: WebGLRenderer;
   private scene: Scene;
@@ -527,6 +536,8 @@ export class SceneApp {
     taskRegistry: createGameAiTaskRegistry(),
     blockers: () => this.physicsSubsystem.staticBlockerAabbs(),
   });
+  /** Unsubscribes script-message -> AI perception stimulus bridge handlers. */
+  private aiStimulusUnsubs: Array<() => void> = [];
   /**
    * BehaviorSubsystem transform sink: writes a behavior-mutated entity transform
    * back onto its rendered object. This slice targets characters (each is its
@@ -859,6 +870,7 @@ export class SceneApp {
     window.removeEventListener("resize", this.handleResize);
     this.unbindEditorInput?.();
     this.unbindEditorInput = null;
+    this.clearAiScriptStimulusBridge();
     this.keyboardInput.detach();
     this.selectionOutline?.dispose();
     this.selectionOutline = null;
@@ -2260,6 +2272,26 @@ export class SceneApp {
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
+    this.bindAiScriptStimulusBridge();
+  }
+
+  private bindAiScriptStimulusBridge(): void {
+    this.clearAiScriptStimulusBridge();
+    this.aiStimulusUnsubs = AI_SCRIPT_STIMULUS_MESSAGE_TYPES.map((type) =>
+      this.behaviorSubsystem.subscribeScriptMessage(type, (envelope) => {
+        this.aiSubsystem.emitScriptStimulus({
+          type: envelope.type,
+          source: envelope.source,
+          ...(envelope.target !== undefined ? { target: envelope.target } : {}),
+          payload: envelope.payload,
+        });
+      }),
+    );
+  }
+
+  private clearAiScriptStimulusBridge(): void {
+    for (const unsubscribe of this.aiStimulusUnsubs) unsubscribe();
+    this.aiStimulusUnsubs = [];
   }
 
   private async loadAiAssets(): Promise<void> {

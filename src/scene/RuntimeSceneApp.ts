@@ -451,6 +451,15 @@ function mountConversationOverlay(): ConversationOverlay | null {
   return host ? new ConversationOverlay(host) : null;
 }
 
+const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
+  "Damage.Apply",
+  "Damage.Died",
+  "damage",
+  "alert",
+  "ui-action",
+  "game-event",
+] as const;
+
 /** Compact one-line reason for a failed asset load (for the load-progress detail). */
 function describeLoadError(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -668,6 +677,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private gameStateStore: GameStateStore | null = null;
   /** Unsubscribe for the `game-event` script-message bridge into the rules store. */
   private gameEventUnsub: (() => void) | null = null;
+  /** Unsubscribes script-message -> AI perception stimulus bridge handlers. */
+  private aiStimulusUnsubs: Array<() => void> = [];
   /** Modal screens shown when the rules layer resolves a win/loss; null when none. */
   private winScreenDef: UiWidgetDef | null = null;
   private loseScreenDef: UiWidgetDef | null = null;
@@ -972,6 +983,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.worldUiSubsystem = null;
     this.gameEventUnsub?.();
     this.gameEventUnsub = null;
+    this.clearAiScriptStimulusBridge();
     this.gameStateStore = null;
     this.dialogueUnsub?.();
     this.dialogueUnsub = null;
@@ -1529,6 +1541,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       behavior: this.behaviorSubsystem,
       engineApp: this.engineApp,
     });
+    this.bindAiScriptStimulusBridge();
     // Auto-play audio/particles must never abort scene start: a single bad cue or
     // emitter cannot be allowed to stop the game mode + UI (lines below) from
     // initialising, which would look like "Play won't start".
@@ -1702,6 +1715,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.worldUiSubsystem = null;
     this.gameEventUnsub?.();
     this.gameEventUnsub = null;
+    this.clearAiScriptStimulusBridge();
     this.gameStateStore = null;
     this.gameOutcomeShown = false;
     this.pauseMenuDef = null;
@@ -1825,6 +1839,25 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.pawnRespawnTransforms.clear();
     this.activeInteractionPromptEntityId = null;
     this.interactionPromptElement.hidden = true;
+  }
+
+  private bindAiScriptStimulusBridge(): void {
+    this.clearAiScriptStimulusBridge();
+    this.aiStimulusUnsubs = AI_SCRIPT_STIMULUS_MESSAGE_TYPES.map((type) =>
+      this.behaviorSubsystem.subscribeScriptMessage(type, (envelope) => {
+        this.aiSubsystem.emitScriptStimulus({
+          type: envelope.type,
+          source: envelope.source,
+          ...(envelope.target !== undefined ? { target: envelope.target } : {}),
+          payload: envelope.payload,
+        });
+      }),
+    );
+  }
+
+  private clearAiScriptStimulusBridge(): void {
+    for (const unsubscribe of this.aiStimulusUnsubs) unsubscribe();
+    this.aiStimulusUnsubs = [];
   }
 
   /**

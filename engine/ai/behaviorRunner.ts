@@ -397,12 +397,17 @@ function updatePerceptionBlackboardService(context: AiServiceContext): void {
   const stimuli = context.controller.getPerception();
   const sight = strongestStimulus(stimuli, "sight");
   const hearing = strongestStimulus(stimuli, "hearing");
+  const gameplay = strongestGameplayStimulus(stimuli);
 
   const targetKey = stringParam(context.params.targetKey);
   const hasLineOfSightKey = stringParam(context.params.hasLineOfSightKey);
   const lastKnownPositionKey = stringParam(context.params.lastKnownPositionKey);
   const lastHeardPositionKey = stringParam(context.params.lastHeardPositionKey);
   const lastHeardSourceKey = stringParam(context.params.lastHeardSourceKey);
+  const lastStimulusPositionKey = stringParam(context.params.lastStimulusPositionKey);
+  const lastStimulusSourceKey = stringParam(context.params.lastStimulusSourceKey);
+  const lastStimulusSenseKey = stringParam(context.params.lastStimulusSenseKey);
+  const lastStimulusEventKey = stringParam(context.params.lastStimulusEventKey);
 
   if (hasLineOfSightKey) context.blackboard.set(hasLineOfSightKey, sight?.lineOfSight === true);
   if (sight) {
@@ -412,6 +417,12 @@ function updatePerceptionBlackboardService(context: AiServiceContext): void {
   if (hearing) {
     if (lastHeardPositionKey) context.blackboard.set(lastHeardPositionKey, hearing.position);
     if (lastHeardSourceKey) context.blackboard.set(lastHeardSourceKey, hearing.sourceEntityId);
+  }
+  if (gameplay) {
+    if (lastStimulusPositionKey) context.blackboard.set(lastStimulusPositionKey, gameplay.position);
+    if (lastStimulusSourceKey) context.blackboard.set(lastStimulusSourceKey, gameplay.sourceEntityId);
+    if (lastStimulusSenseKey) context.blackboard.set(lastStimulusSenseKey, gameplay.sense);
+    if (lastStimulusEventKey) context.blackboard.set(lastStimulusEventKey, gameplay.eventType ?? gameplay.sense);
   }
 }
 
@@ -426,6 +437,21 @@ function strongestStimulus(
   let best: PerceivedStimulus | null = null;
   for (const stimulus of stimuli) {
     if (stimulus.sense !== sense) continue;
+    if (
+      !best ||
+      stimulus.strength > best.strength ||
+      (stimulus.strength === best.strength && stimulus.distance < best.distance)
+    ) {
+      best = stimulus;
+    }
+  }
+  return best;
+}
+
+function strongestGameplayStimulus(stimuli: readonly PerceivedStimulus[]): PerceivedStimulus | null {
+  let best: PerceivedStimulus | null = null;
+  for (const stimulus of stimuli) {
+    if (stimulus.sense === "sight" || stimulus.sense === "hearing") continue;
     if (
       !best ||
       stimulus.strength > best.strength ||

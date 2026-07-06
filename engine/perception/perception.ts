@@ -35,7 +35,8 @@ export interface NoiseStimulus {
   readonly loudness?: number;
 }
 
-export type PerceptionSense = "sight" | "hearing";
+export type GameplayPerceptionSense = "damage" | "alert" | "gameplay";
+export type PerceptionSense = "sight" | "hearing" | GameplayPerceptionSense;
 
 export interface PerceivedStimulus {
   readonly sense: PerceptionSense;
@@ -45,6 +46,8 @@ export interface PerceivedStimulus {
   /** 1 is strongest, 0 is just inside range. */
   readonly strength: number;
   readonly lineOfSight?: boolean;
+  /** Original gameplay/script event type, when this came from the message bus. */
+  readonly eventType?: string;
 }
 
 export interface PerceptionEvaluationInput {

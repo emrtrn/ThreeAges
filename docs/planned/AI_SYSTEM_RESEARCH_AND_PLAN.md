@@ -25,8 +25,10 @@
 > bridge dilimi uygulandi (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-06 - Faz 4 sight target-lost grace dilimi uygulandi
 > (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 4 script message -> gameplay stimulus bridge
+> dilimi uygulandi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 625 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 626 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -36,8 +38,10 @@
 > runtime `AISubsystem` perception snapshot'i ve `?debug` sensed-target satiri
 > eklendi. Faz 4 service bridge ile sight/hearing perception sonuclari Behavior
 > Tree servisinden Blackboard'a yazilabiliyor. Sight target-lost grace ile kisa
-> LOS kopmalarinda son hedef bilgisi korunabiliyor. Faz 2 editor form, gelismis
-> decorator isleri ve Faz 4 debug overlay/message bridge isleri planli.
+> LOS kopmalarinda son hedef bilgisi korunabiliyor. Script message bridge ile
+> `Damage.*`, `alert`, `ui-action` ve `game-event` mesajlari gameplay stimulus
+> olarak AI perception'a dusuyor. Faz 2 editor form, gelismis decorator isleri
+> ve Faz 4 debug overlay isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -539,8 +543,8 @@ beslemek.
       - [x] `emitNoise(position, loudness, sourceEntityId)`
       - [x] radius attenuation
       - [x] last heard position blackboard update.
-- [ ] Damage/gameplay stimulus:
-      - [ ] `damage`, `alert`, `ui-action`, `game-event` gibi mevcut script
+- [x] Damage/gameplay stimulus:
+      - [x] `damage`, `alert`, `ui-action`, `game-event` gibi mevcut script
             message eventlerinden perception'a bridge —
             `BehaviorSubsystem.subscribeScriptMessage()` ile; scene rebuild
             (`clear()`) aboneligi dusurur, yeniden abone olmayi unutma.
@@ -606,6 +610,26 @@ Tamamlanan Faz 4 target-lost grace notu (2026-07-06):
   `hasLineOfSight=false` olur -> sure dolunca sight stimulus'u temizlenir.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`625 checks passed`).
+
+Tamamlanan Faz 4 script message gameplay stimulus notu (2026-07-06):
+
+- `PerceptionSense` `damage`, `alert` ve `gameplay` sense'lerini tasiyabilir;
+  script kaynakli stimulus'lar orijinal `eventType` bilgisini de korur.
+- `AISubsystem.emitScriptStimulus()` mevcut `Damage.*`, `damage`, `alert`,
+  `ui-action` ve `game-event` mesajlarini bir tick'lik perception stimulus'una
+  cevirir. Target/source AI'yi dogrudan ilgilendiriyorsa mesafe siniri aranmaz;
+  diger ajanlar authored `hearingRadius` icinde duyabilir.
+- Runtime host ve editor Play host, `startSceneRuntime()` sonrasi
+  `BehaviorSubsystem.subscribeScriptMessage()` ile bridge aboneliklerini yeniden
+  kurar; scene teardown/dispose yolunda unsubscribe edilir.
+- `forge.updatePerceptionBlackboard` opsiyonel
+  `lastStimulusPositionKey`, `lastStimulusSourceKey`,
+  `lastStimulusSenseKey`, `lastStimulusEventKey` parametrelerini destekler.
+- Test: targeted `Damage.Apply` mesaji AI perception'a `damage` stimulus'u olarak
+  duser, service blackboard stimulus key'lerini yazar ve stimulus sonraki tick'te
+  debug snapshot'tan temizlenir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`626 checks passed`), `npm.cmd run build:verify` yesil.
 
 ### Faz 5 - EQS benzeri query sistemi
 

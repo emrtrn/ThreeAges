@@ -18624,6 +18624,94 @@ check("AISubsystem perception service writes a noise event to last heard blackbo
   assert.equal(controller?.blackboard.getBoolean("hasLineOfSight"), false);
 });
 
+check("AISubsystem bridges script damage messages into gameplay perception blackboard keys", () => {
+  const ai = new AISubsystem();
+  ai.setAssetLibrary({
+    blackboards: new Map([
+      [
+        "assets/AI/Stimulus.blackboard.json",
+        normalizeAiBlackboardAsset({
+          schema: 1,
+          type: "blackboard",
+          keys: [
+            { key: "lastStimulusPosition", kind: "vec3", default: null },
+            { key: "lastStimulusSource", kind: "entity", default: null },
+            { key: "lastStimulusSense", kind: "string", default: "" },
+            { key: "lastStimulusEvent", kind: "string", default: "" },
+          ],
+        }),
+      ],
+    ]),
+    behaviors: new Map([
+      [
+        "assets/AI/Stimulus.behavior.json",
+        normalizeAiBehaviorTreeAsset({
+          schema: 1,
+          type: "behaviorTree",
+          blackboard: "assets/AI/Stimulus.blackboard.json",
+          root: {
+            kind: "sequence",
+            services: [
+              {
+                service: "forge.updatePerceptionBlackboard",
+                interval: 0.01,
+                params: {
+                  lastStimulusPositionKey: "lastStimulusPosition",
+                  lastStimulusSourceKey: "lastStimulusSource",
+                  lastStimulusSenseKey: "lastStimulusSense",
+                  lastStimulusEventKey: "lastStimulusEvent",
+                },
+              },
+            ],
+            children: [{ kind: "task", task: "forge.wait", params: { seconds: 1 } }],
+          },
+        }),
+      ],
+    ]),
+  });
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: {
+          behaviorTree: "assets/AI/Stimulus.behavior.json",
+          perception: { hearingRadius: 2 },
+        },
+      },
+    },
+    {
+      id: "player",
+      components: {
+        Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      },
+    },
+  ]);
+  const controller = ai.getControllerForPawn("enemy");
+  assert.ok(controller);
+  assert.equal(
+    ai.emitScriptStimulus({
+      type: "Damage.Apply",
+      source: "player",
+      target: "enemy",
+      payload: { position: [5, 0, 0], amount: 20 },
+    }),
+    true,
+  );
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  const stimulus = ai.getDebugSnapshot().controllers[0]?.perception?.[0];
+  assert.equal(stimulus?.sense, "damage");
+  assert.equal(stimulus?.sourceEntityId, "player");
+  assert.equal(stimulus?.eventType, "Damage.Apply");
+  assert.deepEqual(controller?.blackboard.getVec3("lastStimulusPosition"), [5, 0, 0]);
+  assert.equal(controller?.blackboard.getEntity("lastStimulusSource"), "player");
+  assert.equal(controller?.blackboard.getString("lastStimulusSense"), "damage");
+  assert.equal(controller?.blackboard.getString("lastStimulusEvent"), "Damage.Apply");
+
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0, "script stimulus is transient");
+});
+
 check("AISubsystem sight target-lost grace keeps last target briefly without line of sight", () => {
   let blockers: Array<{ min: [number, number, number]; max: [number, number, number] }> = [];
   const ai = new AISubsystem({ blockers: () => blockers });
