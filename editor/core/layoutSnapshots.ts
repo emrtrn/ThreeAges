@@ -1,5 +1,6 @@
 import type {
   LayoutActorInstance,
+  LayoutAiNavigationVolume,
   LayoutBehavior,
   LayoutBlockingVolume,
   LayoutCharacter,
@@ -318,6 +319,27 @@ export function cloneBlockingVolume(volume: LayoutBlockingVolume): LayoutBlockin
   if (volume.size !== undefined) clone.size = [...volume.size];
   if (volume.brushSides !== undefined) clone.brushSides = volume.brushSides;
   if (volume.renderInGame !== undefined) clone.renderInGame = volume.renderInGame;
+  if (volume.color !== undefined) clone.color = volume.color;
+  return clone;
+}
+
+export function cloneAiNavigationVolume(
+  volume: LayoutAiNavigationVolume,
+): LayoutAiNavigationVolume {
+  const clone: LayoutAiNavigationVolume = {
+    id: volume.id,
+    position: [...volume.position],
+  };
+  if (volume.name !== undefined) clone.name = volume.name;
+  if (volume.hidden !== undefined) clone.hidden = volume.hidden;
+  if (volume.locked !== undefined) clone.locked = volume.locked;
+  if (volume.scaleLocked !== undefined) clone.scaleLocked = volume.scaleLocked;
+  if (volume.groupId !== undefined) clone.groupId = volume.groupId;
+  if (volume.nodeId !== undefined) clone.nodeId = volume.nodeId;
+  if (volume.parentId !== undefined) clone.parentId = volume.parentId;
+  if (volume.rotation !== undefined) clone.rotation = [...volume.rotation];
+  if (volume.scale !== undefined) clone.scale = cloneScale(volume.scale);
+  if (volume.size !== undefined) clone.size = [...volume.size];
   if (volume.color !== undefined) clone.color = volume.color;
   return clone;
 }

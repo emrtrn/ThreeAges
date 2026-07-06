@@ -94,6 +94,7 @@ import {
   renderMetadataSections,
 } from "./panels/details/metadataDetails";
 import {
+  renderAiNavigationVolumeDetails,
   renderBlockingVolumeDetails,
   renderLightDetails,
   renderReflectionCaptureDetails,
@@ -318,6 +319,7 @@ export class EditorUi {
                 <button type="button" class="add-actor-category-label">Volumes</button>
                 <div class="add-actor-submenu">
                   <button type="button" data-add-blocking-volume>Blocking Volume</button>
+                  <button type="button" data-add-ai-navigation-volume>AI Navigation Volume</button>
                 </div>
               </div>
               <div class="add-actor-category">
@@ -701,6 +703,13 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-blocking-volume]")
       ?.addEventListener("click", () => {
         this.app.addBlockingVolume();
+      });
+
+    // AI Navigation Volume (NavMesh Bounds Volume-style pathfinding bounds).
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-ai-navigation-volume]")
+      ?.addEventListener("click", () => {
+        this.app.addAiNavigationVolume();
       });
 
     // Post Process is a transform-less singleton environment actor.
@@ -2535,6 +2544,7 @@ export class EditorUi {
       setSelectedReflectionPlane: (patch) => this.app.setSelectedReflectionPlane(patch),
       setSelectedReflectiveSurface: (patch) => this.app.setSelectedReflectiveSurface(patch),
       setSelectedBlockingVolume: (patch) => this.app.setSelectedBlockingVolume(patch),
+      setSelectedAiNavigationVolume: (patch) => this.app.setSelectedAiNavigationVolume(patch),
       setSelectedReflectionCapture: (patch) => this.app.setSelectedReflectionCapture(patch),
       setSelectedWorldWidget: (patch) => this.app.setSelectedWorldWidget(patch),
       isSelectedReflectionCaptureBakeStale: () =>
@@ -2600,6 +2610,10 @@ export class EditorUi {
     }
     if (selection.kind === "blockingVolume" && selection.blockingVolume) {
       renderBlockingVolumeDetails(this.specialActorDetailsOptions(selection));
+      return;
+    }
+    if (selection.kind === "aiNavigationVolume" && selection.aiNavigationVolume) {
+      renderAiNavigationVolumeDetails(this.specialActorDetailsOptions(selection));
       return;
     }
     if (selection.kind === "reflectionCapture" && selection.reflectionCapture) {

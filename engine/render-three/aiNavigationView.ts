@@ -19,6 +19,7 @@ export interface AiNavigationFollowerView {
 
 export interface AiNavigationViewInput {
   readonly blockers?: readonly NavAabb[];
+  readonly bounds?: readonly NavAabb[];
   readonly followers?: readonly AiNavigationFollowerView[];
   readonly cellSize?: number;
   readonly y?: number;
@@ -28,6 +29,7 @@ const DEFAULT_CELL_SIZE = 0.5;
 const MAX_GRID_LINES_PER_AXIS = 80;
 const GRID_COLOR = 0x4386ff;
 const BLOCKER_COLOR = 0xff6b4a;
+const BOUNDS_COLOR = 0x52a3ff;
 const PATH_COLOR = 0x3fd47f;
 const PATH_STALLED_COLOR = 0xffc857;
 const PATH_FAILED_COLOR = 0xff4d6d;
@@ -37,11 +39,14 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
   const group = new Group();
   group.name = "ai-navigation-debug-view";
   const y = input.y ?? 0.04;
-  const bounds = computeBounds(input.blockers ?? [], input.followers ?? []);
+  const bounds = computeBounds(input.blockers ?? [], input.bounds ?? [], input.followers ?? []);
   if (!bounds) return group;
 
   const grid = gridSegments(bounds, input.cellSize ?? DEFAULT_CELL_SIZE, y);
   if (grid.length > 0) group.add(lineSegments("ai-nav-grid", grid, GRID_COLOR, 0.18));
+
+  const navBounds = blockerFootprintSegments(input.bounds ?? [], y + 0.01);
+  if (navBounds.length > 0) group.add(lineSegments("ai-nav-bounds", navBounds, BOUNDS_COLOR, 0.95));
 
   const blockers = blockerFootprintSegments(input.blockers ?? [], y + 0.015);
   if (blockers.length > 0) group.add(lineSegments("ai-nav-blockers", blockers, BLOCKER_COLOR, 0.8));
@@ -99,6 +104,7 @@ function lineSegments(name: string, points: readonly Vec3[], color: number, opac
 
 function computeBounds(
   blockers: readonly NavAabb[],
+  bounds: readonly NavAabb[],
   followers: readonly AiNavigationFollowerView[],
 ): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
   let minX = Infinity;
@@ -114,6 +120,10 @@ function computeBounds(
   for (const blocker of blockers) {
     include(blocker.min);
     include(blocker.max);
+  }
+  for (const bound of bounds) {
+    include(bound.min);
+    include(bound.max);
   }
   for (const follower of followers) {
     for (const point of follower.path) include(point);

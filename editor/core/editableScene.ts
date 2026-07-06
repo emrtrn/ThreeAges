@@ -148,6 +148,17 @@ export interface EditableBlockingVolume {
   color: string;
 }
 
+/**
+ * Resolved AI Navigation Volume fields for the Details panel. It is a placed box
+ * volume whose transform + size define the pathfinding bounds.
+ */
+export interface EditableAiNavigationVolume {
+  name: string;
+  hidden: boolean;
+  size: Vec3;
+  color: string;
+}
+
 /** Resolved global Post Process fields for the Details panel. */
 export interface EditablePostProcess {
   name: string;
@@ -262,6 +273,8 @@ export interface EditableSelection {
   reflectiveSurface?: EditableReflectiveSurface;
   /** Resolved Blocking Volume settings; present only when `kind === "blockingVolume"`. */
   blockingVolume?: EditableBlockingVolume;
+  /** Resolved AI Navigation Volume settings; present only when `kind === "aiNavigationVolume"`. */
+  aiNavigationVolume?: EditableAiNavigationVolume;
   /** Resolved Post Process settings; present only when `kind === "post"`. */
   post?: EditablePostProcess;
   /** Resolved world-space UI widget settings; present only when `kind === "worldWidget"`. */

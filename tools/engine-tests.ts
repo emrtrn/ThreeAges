@@ -420,6 +420,7 @@ import {
   validateReflectiveSurface,
   validateSphereReflectionCapture,
   validateBlockingVolume,
+  validateAiNavigationVolume,
   validatePostProcess,
   validateSaveActorPayload,
   validateSaveUiPayload,
@@ -548,6 +549,13 @@ import {
   uniqueBlockingVolumeName,
   BLOCKING_VOLUME_DEFAULTS,
 } from "../engine/render-three/blockingVolume";
+import {
+  aiNavigationVolumeAabb,
+  AI_NAVIGATION_VOLUME_DEFAULTS,
+  resolveAiNavigationVolume,
+  uniqueAiNavigationVolumeId,
+  uniqueAiNavigationVolumeName,
+} from "../engine/render-three/aiNavigationVolume";
 import {
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -6339,6 +6347,32 @@ check("grid navigation fails when the goal cell is blocked", () => {
   });
   assert.equal(path.status, "failure");
   assert.deepEqual(path.points, []);
+});
+
+check("grid navigation honors authored navigation bounds", () => {
+  const bounds: Aabb3[] = [{ min: [-2, -1, -2], max: [2, 3, 2] }];
+  const inside = findGridPath({
+    start: [-1, 0, 0],
+    goal: [1, 0, 0],
+    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
+    blockers: [],
+    bounds,
+    cellSize: 0.5,
+  });
+  assert.equal(inside.status, "success");
+  assert.deepEqual(inside.points[0], [-1, 0, 0]);
+  assert.deepEqual(inside.points[inside.points.length - 1], [1, 0, 0]);
+
+  const outside = findGridPath({
+    start: [-1, 0, 0],
+    goal: [3, 0, 0],
+    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
+    blockers: [],
+    bounds,
+    cellSize: 0.5,
+  });
+  assert.equal(outside.status, "failure");
+  assert.deepEqual(outside.points, []);
 });
 
 check("separation steering pushes away from overlapping neighbors and clamps", () => {
@@ -15727,6 +15761,82 @@ check("validateBlockingVolume allowlists fields and round-trips through validate
     blockingVolumes: [{ id: "bv1", position: [0, 0, 0] }],
   }) as RoomLayout;
   assert.deepEqual(layout.blockingVolumes, [{ id: "bv1", position: [0, 0, 0] }]);
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("resolveAiNavigationVolume fills defaults and overrides per field", () => {
+  assert.deepEqual(resolveAiNavigationVolume(null), AI_NAVIGATION_VOLUME_DEFAULTS);
+  const resolved = resolveAiNavigationVolume({
+    id: "nav",
+    position: [0, 2, 0],
+    name: "Patrol Area",
+    hidden: true,
+    size: [8, 3, 6],
+    color: "#123456",
+  });
+  assert.equal(resolved.name, "Patrol Area");
+  assert.equal(resolved.hidden, true);
+  assert.deepEqual(resolved.size, [8, 3, 6]);
+  assert.equal(resolved.color, "#123456");
+});
+
+check("uniqueAiNavigationVolumeId/Name avoid collisions", () => {
+  const volumes = [{ id: "ai-navigation-volume-1", name: "AI Navigation Volume", position: [0, 2, 0] }];
+  assert.equal(uniqueAiNavigationVolumeId(volumes), "ai-navigation-volume-2");
+  assert.equal(uniqueAiNavigationVolumeName("AI Navigation Volume", volumes), "AI Navigation Volume 2");
+});
+
+check("aiNavigationVolumeAabb resolves scaled box bounds and skips hidden volumes", () => {
+  const bounds = aiNavigationVolumeAabb({
+    id: "nav",
+    position: [1, 2, 3],
+    size: [4, 2, 6],
+    scale: [2, 1, 1],
+  });
+  assert.deepEqual(bounds, { min: [-3, 1, 0], max: [5, 3, 6] });
+  assert.equal(aiNavigationVolumeAabb({ id: "hidden", position: [0, 0, 0], hidden: true }), null);
+});
+
+check("validateAiNavigationVolume allowlists fields and round-trips through validateLayout", () => {
+  const volume = validateAiNavigationVolume({
+    id: "nav1",
+    position: [1, 2, 3],
+    name: "Patrol",
+    hidden: false,
+    locked: true,
+    scaleLocked: true,
+    rotation: [0, 90, 0],
+    scale: 1,
+    size: [8, 4, 6],
+    color: "#123456",
+    bogusField: "dropped",
+  });
+  assert.deepEqual(volume, {
+    id: "nav1",
+    name: "Patrol",
+    locked: true,
+    scaleLocked: true,
+    position: [1, 2, 3],
+    rotation: [0, 90, 0],
+    scale: 1,
+    size: [8, 4, 6],
+    color: "#123456",
+  });
+  assert.throws(() => validateAiNavigationVolume({ position: [0, 0, 0] }));
+  assert.deepEqual(
+    validateAiNavigationVolume({ id: "nav", position: [0, 2, 0], scale: [2, 1, 1] }).scale,
+    [2, 1, 1],
+  );
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithNavVolume",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    aiNavigationVolumes: [{ id: "nav1", position: [0, 2, 0] }],
+  }) as RoomLayout;
+  assert.deepEqual(layout.aiNavigationVolumes, [{ id: "nav1", position: [0, 2, 0] }]);
   assert.deepEqual(validateLayout(layout), layout);
 });
 

@@ -1032,6 +1032,53 @@ export function validateBlockingVolume(value: unknown): Record<string, unknown> 
 }
 
 /**
+ * Allowlist validator for one placed AI Navigation Volume. This mirrors the
+ * transform/flag fields of Blocking Volume, but keeps only box-volume navigation
+ * bounds fields (`size` + editor `color`).
+ */
+export function validateAiNavigationVolume(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") throw new Error("AI navigation volume must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) {
+    throw new Error("AI navigation volume id must be a string");
+  }
+  if (!isNumberTuple(input.position)) throw new Error("invalid AI navigation volume position");
+
+  const volume: Record<string, unknown> = {
+    id: input.id,
+    position: input.position.map((number) => Number(number.toFixed(3))),
+  };
+  if (typeof input.name === "string") volume.name = input.name;
+  if (input.hidden === true) volume.hidden = true;
+  if (input.locked === true) volume.locked = true;
+  if (input.scaleLocked === true) volume.scaleLocked = true;
+  if (typeof input.groupId === "string") volume.groupId = input.groupId;
+  if (typeof input.nodeId === "string") volume.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") volume.parentId = input.parentId;
+  if (input.rotation !== undefined) {
+    if (!isNumberTuple(input.rotation)) throw new Error("invalid AI navigation volume rotation");
+    volume.rotation = input.rotation.map((axis) =>
+      validateRotationDeg(axis, "AI navigation volume rotation component"),
+    );
+  }
+  if (input.scale !== undefined) {
+    volume.scale = isNumberTuple(input.scale)
+      ? input.scale.map((axis) => validateScaleValue(axis, "AI navigation volume scale component"))
+      : validateScaleValue(input.scale, "AI navigation volume scale");
+  }
+  if (input.size !== undefined) {
+    if (!isNumberTuple(input.size)) throw new Error("invalid AI navigation volume size");
+    volume.size = input.size.map((axis) =>
+      validateScaleValue(axis, "AI navigation volume size component"),
+    );
+  }
+  if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
+    volume.color = input.color;
+  }
+  return volume;
+}
+
+/**
  * Allowlist validator for the singleton Sky Atmosphere actor. Every field that
  * survives a save is copied explicitly; omitted/out-of-range values are dropped
  * so the runtime falls back to {@link resolveSkyAtmosphere} defaults. Returns null
@@ -1409,6 +1456,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("blockingVolumes must be an array");
         })();
+  const aiNavigationVolumes = layout.aiNavigationVolumes === undefined
+    ? null
+    : Array.isArray(layout.aiNavigationVolumes)
+      ? layout.aiNavigationVolumes.map(validateAiNavigationVolume)
+      : (() => {
+          throw new Error("aiNavigationVolumes must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -1489,6 +1543,7 @@ export function validateLayout(value: unknown): unknown {
   if (reflectiveSurfaces) output.reflectiveSurfaces = reflectiveSurfaces;
   if (reflectionCaptures) output.reflectionCaptures = reflectionCaptures;
   if (blockingVolumes) output.blockingVolumes = blockingVolumes;
+  if (aiNavigationVolumes) output.aiNavigationVolumes = aiNavigationVolumes;
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;

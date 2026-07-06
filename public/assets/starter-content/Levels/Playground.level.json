@@ -497,25 +497,6 @@
   ],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "actors": [
-    {
-      "classRef": "assets/starter-content/Script/Script_Paricle.actor.json",
-      "position": [
-        -12.83,
-        0,
-        11.04
-      ],
-      "rotationYDeg": 0,
-      "scale": 1
-    },
-    {
-      "classRef": "assets/starter-content/Script/AI_Test.actor.json",
-      "position": [
-        -13.76,
-        0,
-        -5.9
-      ],
-      "rotationYDeg": 0
-    }
-  ]
+  "aiNavigationVolumes": [],
+  "actors": []
 }

@@ -24,6 +24,8 @@ export interface PathRequest {
   readonly goal: Vec3;
   readonly agent: NavAgent;
   readonly blockers: readonly NavAabb[];
+  /** Optional authored navigation bounds; when present both start and goal must be inside one. */
+  readonly bounds?: readonly NavAabb[];
   readonly cellSize?: number;
   readonly boundsPadding?: number;
 }
@@ -62,7 +64,16 @@ export function findGridPath(request: PathRequest): PathResult {
   const blockers = request.blockers.filter((blocker) =>
     blocksAgentVertically(blocker, request.start[1], height, stepHeight),
   );
-  const bounds = navBounds(request.start, request.goal, blockers, radius, request.boundsPadding);
+  const authoredBounds = request.bounds && request.bounds.length > 0 ? request.bounds : undefined;
+  if (authoredBounds && !pointInsideAnyAabb2d(request.start, authoredBounds)) {
+    return { status: "failure", points: [], visited: 0 };
+  }
+  if (authoredBounds && !pointInsideAnyAabb2d(request.goal, authoredBounds)) {
+    return { status: "failure", points: [], visited: 0 };
+  }
+  const bounds = authoredBounds
+    ? navBoundsFromAuthored(authoredBounds, radius)
+    : navBounds(request.start, request.goal, blockers, radius, request.boundsPadding);
   const cols = Math.max(1, Math.ceil((bounds.maxX - bounds.minX) / cellSize) + 1);
   const rows = Math.max(1, Math.ceil((bounds.maxZ - bounds.minZ) / cellSize) + 1);
   if (cols * rows > MAX_GRID_CELLS) return { status: "failure", points: [], visited: 0 };
@@ -79,7 +90,7 @@ export function findGridPath(request: PathRequest): PathResult {
   const passable = (coord: GridCoord): boolean => {
     if (coord.x < 0 || coord.z < 0 || coord.x >= cols || coord.z >= rows) return false;
     const point = toPoint(coord);
-    return !pointBlocked(point, blockers, radius);
+    return !pointBlocked(point, blockers, radius) && (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
   };
 
   const start = toCoord(request.start);
@@ -138,6 +149,31 @@ function navBounds(
     maxZ = Math.max(maxZ, blocker.max[2] + pad);
   }
   return { minX, maxX, minZ, maxZ };
+}
+
+function navBoundsFromAuthored(bounds: readonly NavAabb[], radius: number) {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const bound of bounds) {
+    minX = Math.min(minX, bound.min[0] + radius);
+    maxX = Math.max(maxX, bound.max[0] - radius);
+    minZ = Math.min(minZ, bound.min[2] + radius);
+    maxZ = Math.max(maxZ, bound.max[2] - radius);
+  }
+  return { minX, maxX, minZ, maxZ };
+}
+
+function pointInsideAnyAabb2d(point: Vec3, bounds: readonly NavAabb[]): boolean {
+  return bounds.some((bound) => pointInsideAabb2d(point, bound));
+}
+
+function pointInsideAabb2d(point: Vec3, bound: NavAabb): boolean {
+  return point[0] >= bound.min[0] &&
+    point[0] <= bound.max[0] &&
+    point[2] >= bound.min[2] &&
+    point[2] <= bound.max[2];
 }
 
 function blocksAgentVertically(

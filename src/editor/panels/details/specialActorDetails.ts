@@ -2,6 +2,7 @@ import { assetType, type EditableAsset } from "@engine/assets/manifest";
 import type { BrushShape, LayoutLightActor, Vec3 } from "@engine/scene/layout";
 import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
 import type {
+  EditableAiNavigationVolume,
   EditableBlockingVolume,
   EditableSelection,
 } from "@/scene/SceneApp";
@@ -46,6 +47,10 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     size?: Vec3;
     brushSides?: number;
     renderInGame?: boolean;
+    color?: string;
+  }) => void;
+  setSelectedAiNavigationVolume: (patch: {
+    size?: Vec3;
     color?: string;
   }) => void;
   setSelectedReflectionCapture: (patch: {
@@ -437,6 +442,55 @@ export function renderBlockingVolumeDetails(options: SpecialActorDetailsOptions)
     });
 }
 
+export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOptions): void {
+  const { body, selection } = options;
+  const volume = selection.aiNavigationVolume;
+  if (!volume) return;
+  options.setDetailsScale([...selection.scale]);
+  const lockedAttr = selection.locked ? "disabled" : "";
+  body.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>volume / AI navigation volume</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="AI Navigation Volume" />
+      </label>
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
+      ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
+      <div class="detail-section">
+        <div class="detail-section-title">Navigation Bounds</div>
+        ${navigationVolumeDimensionRows(volume, lockedAttr)}
+        <label class="detail-row">
+          <span>Color</span>
+          <input data-ai-nav-color type="color" value="${escapeHtml(volume.color)}" ${lockedAttr} />
+        </label>
+        <div class="detail-hint">AI pathfinding is allowed inside this volume; the transform scale multiplies its size.</div>
+      </div>
+      ${actorLockSection(selection)}
+    `;
+
+  bindTransformInputs(options, true);
+  bindNameAndLock(options);
+
+  body.querySelectorAll<HTMLInputElement>("[data-ai-nav-size]").forEach((input) => {
+    input.addEventListener("change", () => {
+      options.setSelectedAiNavigationVolume({ size: readNavigationVolumeSize(body, volume) });
+    });
+  });
+
+  body
+    .querySelector<HTMLInputElement>("[data-ai-nav-color]")
+    ?.addEventListener("change", (event) => {
+      options.setSelectedAiNavigationVolume({
+        color: (event.currentTarget as HTMLInputElement).value,
+      });
+    });
+}
+
 export function renderWorldWidgetDetails(options: SpecialActorDetailsOptions): void {
   const { body, selection } = options;
   const widget = selection.worldWidget;
@@ -716,6 +770,31 @@ function brushDimensionRows(volume: EditableBlockingVolume, lockedAttr: string):
             value="${volume.brushSides}" ${lockedAttr} />
         </label>`
   );
+}
+
+function navigationVolumeDimensionRows(volume: EditableAiNavigationVolume, lockedAttr: string): string {
+  return [0, 1, 2]
+    .map((axis) => {
+      const label = axis === 0 ? "X" : axis === 1 ? "Y" : "Z";
+      return `
+        <label class="detail-row">
+          <span>${label}</span>
+          <input data-ai-nav-size="${axis}" type="number" min="0.01" step="0.1"
+            value="${volume.size[axis]}" ${lockedAttr} />
+        </label>`;
+    })
+    .join("");
+}
+
+function readNavigationVolumeSize(body: HTMLElement, volume: EditableAiNavigationVolume): Vec3 {
+  const size: Vec3 = [volume.size[0], volume.size[1], volume.size[2]];
+  for (let axis = 0; axis < 3; axis += 1) {
+    const input = body.querySelector<HTMLInputElement>(`[data-ai-nav-size="${axis}"]`);
+    if (!input) continue;
+    const value = Number(input.value);
+    if (Number.isFinite(value) && value > 0) size[axis] = value;
+  }
+  return size;
 }
 
 function readBrushDimensions(

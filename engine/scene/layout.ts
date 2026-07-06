@@ -722,6 +722,32 @@ export interface LayoutBlockingVolume {
   color?: string;
 }
 
+/**
+ * Placed AI Navigation Volume (à la Unreal's NavMesh Bounds Volume): a box-shaped
+ * authoring volume that limits where the first grid navigation implementation is
+ * allowed to search. When no volume exists, runtime keeps the legacy automatic
+ * start/goal bounds fallback for old levels.
+ */
+export interface LayoutAiNavigationVolume {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  position: Vec3;
+  /** Full Euler rotation (XYZ order) in degrees. Rotation is enclosed as an AABB for grid nav. */
+  rotation?: Vec3;
+  /** Transform scale multiplied onto the volume `size`; accepts scalar from editor writeScale. */
+  scale?: number | Vec3;
+  /** Box dimensions in world units. */
+  size?: Vec3;
+  /** Editor tint (hex `#rrggbb`). */
+  color?: string;
+}
+
 export interface RoomLayout {
   schema: 1;
   name: string;
@@ -746,6 +772,8 @@ export interface RoomLayout {
   reflectionCaptures?: LayoutSphereReflectionCapture[];
   /** Placed Blocking Volume (parametric blockout brush) actors. */
   blockingVolumes?: LayoutBlockingVolume[];
+  /** Placed AI Navigation Volumes (NavMesh Bounds Volume-style pathfinding bounds). */
+  aiNavigationVolumes?: LayoutAiNavigationVolume[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

@@ -166,6 +166,18 @@ import {
   type BlockingVolumeRenderItem,
 } from "@engine/render-three/blockingVolume";
 import {
+  aiNavigationVolumeAabb,
+  applyAiNavigationVolumeTransform,
+  createAiNavigationVolumeObject,
+  disposeAiNavigationVolumeObject,
+  readVolumeScale,
+  resolveAiNavigationVolume,
+  uniqueAiNavigationVolumeId,
+  uniqueAiNavigationVolumeName,
+  type AiNavigationVolumeObject,
+  type AiNavigationVolumeRenderItem,
+} from "@engine/render-three/aiNavigationVolume";
+import {
   applyProbeEnvMapToObject,
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -248,6 +260,7 @@ import {
 } from "@engine/scene/transform";
 import type {
   LayoutActorInstance,
+  LayoutAiNavigationVolume,
   LayoutAudio,
   LayoutBehavior,
   LayoutCharacter,
@@ -308,6 +321,7 @@ import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/acto
 import type { MetadataSchema } from "@engine/scene/metadataSchema";
 import {
   cloneActorInstance,
+  cloneAiNavigationVolume,
   cloneBlockingVolume,
   cloneCharacter,
   cloneLightActor,
@@ -395,6 +409,7 @@ import {
 import { EditorSelectionOutline } from "./editorSelectionOutline";
 
 export type {
+  EditableAiNavigationVolume,
   EditableBlockingVolume,
   EditableSceneObject,
   EditableSelection,
@@ -473,6 +488,8 @@ export class SceneApp {
   private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
   /** Editor brush objects (translucent + wireframe) for placed Blocking Volume actors, by index. */
   private blockingVolumeObjects: BlockingVolumeObject[] = [];
+  /** Editor box volumes limiting AI grid navigation, by index. */
+  private aiNavigationVolumeObjects: AiNavigationVolumeObject[] = [];
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
   private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
   /** Billboard icons (clickable handles) for placed Sphere Reflection Capture actors, by index. */
@@ -703,6 +720,7 @@ export class SceneApp {
         // probe is selected. The probe is selected through its billboard icon.
         objects.push(...this.reflectionCaptureIcons);
         objects.push(...this.worldWidgetIcons);
+        objects.push(...this.aiNavigationVolumeObjects);
         return objects;
       },
       surfacePickables: () => {
@@ -844,6 +862,11 @@ export class SceneApp {
     this.selectionOutline?.dispose();
     this.selectionOutline = null;
     this.removeAiNavigationView();
+    for (const object of this.aiNavigationVolumeObjects) {
+      this.scene.remove(object);
+      disposeAiNavigationVolumeObject(object);
+    }
+    this.aiNavigationVolumeObjects = [];
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     this.disposeReflectionCaptureBakes();
@@ -1700,6 +1723,13 @@ export class SceneApp {
       return;
     }
     if (
+      this.selection?.kind === "aiNavigationVolume" &&
+      this.editorSceneController.selectedCount <= 1
+    ) {
+      this.removeAiNavigationVolume(this.selection.index);
+      return;
+    }
+    if (
       this.selection?.kind === "worldWidget" &&
       this.editorSceneController.selectedCount <= 1
     ) {
@@ -2189,6 +2219,7 @@ export class SceneApp {
     this.buildReflectiveSurfaces();
     this.buildReflectionCaptures();
     this.buildBlockingVolumes();
+    this.buildAiNavigationVolumes();
     this.buildWorldWidgetMarkers();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
@@ -2582,6 +2613,11 @@ export class SceneApp {
 
     if (selection.kind === "blockingVolume") {
       this.refreshBlockingVolumeObject(selection.index);
+      return;
+    }
+
+    if (selection.kind === "aiNavigationVolume") {
+      this.refreshAiNavigationVolumeObject(selection.index);
       return;
     }
 
@@ -3547,6 +3583,175 @@ export class SceneApp {
     this.setBlockingVolume(this.selection.index, patch);
   }
 
+  // --- AI Navigation Volume actors -----------------------------------------
+
+  private aiNavigationVolumeItem(actor: LayoutAiNavigationVolume): AiNavigationVolumeRenderItem {
+    return {
+      ...resolveAiNavigationVolume(actor),
+      position: [...actor.position],
+      rotation: actor.rotation ? [...actor.rotation] : [0, 0, 0],
+      scale: readVolumeScale(actor.scale),
+    };
+  }
+
+  private buildAiNavigationVolumes(): void {
+    for (const object of this.aiNavigationVolumeObjects) {
+      this.scene.remove(object);
+      disposeAiNavigationVolumeObject(object);
+    }
+    this.aiNavigationVolumeObjects = [];
+    const volumes = this.layout?.aiNavigationVolumes ?? [];
+    volumes.forEach((actor, index) => {
+      const object = createAiNavigationVolumeObject(this.aiNavigationVolumeItem(actor));
+      object.userData.aiNavigationVolumeIndex = index;
+      this.aiNavigationVolumeObjects.push(object);
+      this.scene.add(object);
+    });
+    this.updateAiNavigationView();
+  }
+
+  private refreshAiNavigationVolumeObject(index: number): void {
+    const actor = this.layout?.aiNavigationVolumes?.[index];
+    const object = this.aiNavigationVolumeObjects[index];
+    if (!actor || !object) return;
+    applyAiNavigationVolumeTransform(object, this.aiNavigationVolumeItem(actor));
+  }
+
+  private rebuildAiNavigationVolumeObject(index: number): void {
+    const old = this.aiNavigationVolumeObjects[index];
+    if (old) {
+      this.scene.remove(old);
+      disposeAiNavigationVolumeObject(old);
+    }
+    const actor = this.layout?.aiNavigationVolumes?.[index];
+    if (!actor) return;
+    const object = createAiNavigationVolumeObject(this.aiNavigationVolumeItem(actor));
+    object.userData.aiNavigationVolumeIndex = index;
+    this.aiNavigationVolumeObjects[index] = object;
+    this.scene.add(object);
+  }
+
+  private refreshAiNavigationVolumeIndices(): void {
+    this.aiNavigationVolumeObjects.forEach((object, index) => {
+      object.userData.aiNavigationVolumeIndex = index;
+    });
+  }
+
+  private insertAiNavigationVolume(index: number, actor: LayoutAiNavigationVolume): void {
+    if (!this.layout) return;
+    this.layout.aiNavigationVolumes ??= [];
+    const insertionIndex = clampIndex(index, this.layout.aiNavigationVolumes.length);
+    this.layout.aiNavigationVolumes.splice(insertionIndex, 0, cloneAiNavigationVolume(actor));
+    const object = createAiNavigationVolumeObject(this.aiNavigationVolumeItem(actor));
+    this.aiNavigationVolumeObjects.splice(insertionIndex, 0, object);
+    this.scene.add(object);
+    this.refreshAiNavigationVolumeIndices();
+    this.updateAiNavigationView();
+  }
+
+  private removeAiNavigationVolumeAt(index: number): LayoutAiNavigationVolume | null {
+    if (!this.layout?.aiNavigationVolumes) return null;
+    const [removed] = this.layout.aiNavigationVolumes.splice(index, 1);
+    const [object] = this.aiNavigationVolumeObjects.splice(index, 1);
+    if (object) {
+      this.scene.remove(object);
+      disposeAiNavigationVolumeObject(object);
+    }
+    this.refreshAiNavigationVolumeIndices();
+    this.updateAiNavigationView();
+    return removed ? cloneAiNavigationVolume(removed) : null;
+  }
+
+  /** Adds an AI Navigation Volume actor and selects it. */
+  addAiNavigationVolume(): void {
+    if (!this.layout) return;
+    const volumes = this.layout.aiNavigationVolumes ?? [];
+    const actor: LayoutAiNavigationVolume = {
+      id: uniqueAiNavigationVolumeId(volumes),
+      name: uniqueAiNavigationVolumeName("AI Navigation Volume", volumes),
+      position: [0, 2, 0],
+      size: [10, 4, 10],
+    };
+    const index = volumes.length;
+    this.executeCommand({
+      label: "Add AI Navigation Volume",
+      redo: () => {
+        this.insertAiNavigationVolume(index, actor);
+        this.select({ kind: "aiNavigationVolume", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.removeAiNavigationVolumeAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Added AI Navigation Volume.", "info");
+  }
+
+  /** Removes an AI Navigation Volume actor (undoable). */
+  removeAiNavigationVolume(index: number): void {
+    const actor = this.layout?.aiNavigationVolumes?.[index];
+    if (!actor) return;
+    const snapshot = cloneAiNavigationVolume(actor);
+    this.executeCommand({
+      label: "Delete AI Navigation Volume",
+      redo: () => {
+        this.removeAiNavigationVolumeAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.insertAiNavigationVolume(index, snapshot);
+        this.select({ kind: "aiNavigationVolume", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Deleted AI Navigation Volume.", "info");
+  }
+
+  setAiNavigationVolume(
+    index: number,
+    patch: { size?: Vec3; color?: string },
+    label = "Edit AI Navigation Volume",
+  ): void {
+    const actor = this.layout?.aiNavigationVolumes?.[index];
+    if (!actor) return;
+    const previous = cloneAiNavigationVolume(actor);
+    const next = cloneAiNavigationVolume(actor);
+    if (patch.size) next.size = [...patch.size];
+    if (patch.color !== undefined) next.color = patch.color;
+    const needsRebuild = patch.size !== undefined || patch.color !== undefined;
+    const apply = (value: LayoutAiNavigationVolume): void => {
+      if (!this.layout?.aiNavigationVolumes?.[index]) return;
+      this.layout.aiNavigationVolumes[index] = cloneAiNavigationVolume(value);
+      if (needsRebuild) this.rebuildAiNavigationVolumeObject(index);
+      else this.refreshAiNavigationVolumeObject(index);
+      this.updateAiNavigationView();
+      if (this.selection?.kind === "aiNavigationVolume" && this.selection.index === index) {
+        this.updateSelectionBox();
+        this.updateGizmo();
+      }
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label,
+      redo: () => apply(next),
+      undo: () => apply(previous),
+    });
+  }
+
+  setSelectedAiNavigationVolume(patch: { size?: Vec3; color?: string }): void {
+    if (this.selection?.kind !== "aiNavigationVolume") return;
+    this.setAiNavigationVolume(this.selection.index, patch);
+  }
+
   // --- Sphere Reflection Capture (probe) actors ----------------------------
 
   /** Resolved settings + world transform for a reflection-capture layout actor. */
@@ -3748,6 +3953,7 @@ export class SceneApp {
     for (const icon of this.reflectionPlaneIcons) hide(icon);
     for (const surface of this.reflectiveSurfaceObjects) hide(surface);
     for (const volume of this.blockingVolumeObjects) hide(volume);
+    for (const volume of this.aiNavigationVolumeObjects) hide(volume);
     for (const record of this.lightObjects) hide(record.gizmo);
     try {
       return fn();
@@ -5489,6 +5695,10 @@ export class SceneApp {
       if (!options.includeHidden && volume.hidden) return;
       selections.push({ kind: "blockingVolume", index });
     });
+    this.layout.aiNavigationVolumes?.forEach((volume, index) => {
+      if (!options.includeHidden && volume.hidden) return;
+      selections.push({ kind: "aiNavigationVolume", index });
+    });
     return selections;
   }
 
@@ -5521,6 +5731,9 @@ export class SceneApp {
     if (selection.kind === "blockingVolume") {
       return resolveBlockingVolume(this.layout?.blockingVolumes?.[selection.index] ?? null).name;
     }
+    if (selection.kind === "aiNavigationVolume") {
+      return resolveAiNavigationVolume(this.layout?.aiNavigationVolumes?.[selection.index] ?? null).name;
+    }
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
       return transform?.name ?? selection.assetId;
@@ -5542,7 +5755,8 @@ export class SceneApp {
     if (
       selection.kind === "light" ||
       selection.kind === "actor" ||
-      selection.kind === "reflectionCapture"
+      selection.kind === "reflectionCapture" ||
+      selection.kind === "aiNavigationVolume"
     ) {
       return [0, 0, 0];
     }
@@ -5599,6 +5813,10 @@ export class SceneApp {
     }
     if (selection.kind === "blockingVolume") {
       const object = this.blockingVolumeObjects[selection.index];
+      return object ? new Box3().setFromObject(object) : null;
+    }
+    if (selection.kind === "aiNavigationVolume") {
+      const object = this.aiNavigationVolumeObjects[selection.index];
       return object ? new Box3().setFromObject(object) : null;
     }
     if (selection.kind === "worldWidget") {
@@ -5669,6 +5887,13 @@ export class SceneApp {
     if (selection.kind === "blockingVolume") {
       const object = this.blockingVolumeObjects[selection.index];
       const actor = this.layout.blockingVolumes?.[selection.index];
+      if (!object || actor?.hidden) return null;
+      return this.selectionOutline.cloneRenderableMeshes(object);
+    }
+
+    if (selection.kind === "aiNavigationVolume") {
+      const object = this.aiNavigationVolumeObjects[selection.index];
+      const actor = this.layout.aiNavigationVolumes?.[selection.index];
       if (!object || actor?.hidden) return null;
       return this.selectionOutline.cloneRenderableMeshes(object);
     }
@@ -5940,12 +6165,27 @@ export class SceneApp {
     this.removeAiNavigationView();
     if (!this.showAiNavigation || !this.layout) return;
     const blockers = this.editorNavBlockers();
-    if (blockers.length === 0) return;
+    const bounds = this.aiNavigationBounds();
+    if (blockers.length === 0 && bounds.length === 0) return;
     this.aiNavigationView = createAiNavigationView({
       blockers,
+      bounds,
       cellSize: AI_NAV_DEBUG_CELL_SIZE,
     });
     this.scene.add(this.aiNavigationView);
+  }
+
+  private aiNavigationBounds(): NavAabb[] {
+    const bounds: NavAabb[] = [];
+    for (const volume of this.layout?.aiNavigationVolumes ?? []) {
+      const bound = aiNavigationVolumeAabb(volume);
+      if (!bound) continue;
+      bounds.push({
+        min: [bound.min[0], bound.min[1], bound.min[2]],
+        max: [bound.max[0], bound.max[1], bound.max[2]],
+      });
+    }
+    return bounds;
   }
 
   private editorNavBlockers(): NavAabb[] {
@@ -6065,6 +6305,7 @@ export class SceneApp {
     | LayoutReflectiveSurface
     | LayoutSphereReflectionCapture
     | LayoutBlockingVolume
+    | LayoutAiNavigationVolume
     | null {
     if (!this.layout) return null;
     if (selection.kind === "instance") {
@@ -6084,6 +6325,9 @@ export class SceneApp {
     }
     if (selection.kind === "blockingVolume") {
       return this.layout.blockingVolumes?.[selection.index] ?? null;
+    }
+    if (selection.kind === "aiNavigationVolume") {
+      return this.layout.aiNavigationVolumes?.[selection.index] ?? null;
     }
     // Environment singletons are transform-less (no gizmo / move target). World
     // widgets are placed via the Details panel + marker, not the gizmo (v1).
@@ -6108,7 +6352,14 @@ export class SceneApp {
       scale:
         selection.kind === "light" || selection.kind === "reflectionCapture"
           ? [1, 1, 1]
-          : readScale(transform as LayoutPlacement | LayoutCharacter | LayoutActorInstance),
+          : readScale(
+              transform as
+                | LayoutPlacement
+                | LayoutCharacter
+                | LayoutActorInstance
+                | LayoutBlockingVolume
+                | LayoutAiNavigationVolume,
+            ),
     };
   }
 
@@ -6272,6 +6523,9 @@ export class SceneApp {
     }
     if (selection.kind === "blockingVolume") {
       return Boolean(this.layout.blockingVolumes?.[selection.index]);
+    }
+    if (selection.kind === "aiNavigationVolume") {
+      return Boolean(this.layout.aiNavigationVolumes?.[selection.index]);
     }
     if (selection.kind === "worldWidget") {
       return Boolean(this.layout.worldWidgets?.[selection.index]);

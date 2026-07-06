@@ -204,6 +204,7 @@ import {
   type BlockingVolumeObject,
   type BlockingVolumeRenderItem,
 } from "@engine/render-three/blockingVolume";
+import { aiNavigationVolumeAabb } from "@engine/render-three/aiNavigationVolume";
 import { readRotation, readScale } from "@engine/scene/transform";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
@@ -400,6 +401,7 @@ export interface AiNavFollowerDebug {
 
 export interface AiNavigationDebugSnapshot {
   readonly blockers: readonly NavAabb[];
+  readonly bounds: readonly NavAabb[];
   readonly cellSize: number;
   readonly followers: readonly AiNavFollowerDebug[];
 }
@@ -1061,6 +1063,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   getAiNavigationDebugSnapshot(): AiNavigationDebugSnapshot {
     return {
       blockers: this.physicsSubsystem.staticBlockerAabbs(),
+      bounds: this.aiNavigationBounds(),
       cellSize: AI_NAV_CELL_SIZE,
       followers: [...this.aiPathFollowing.entries()].map(([entityId, follow]) => ({
         entityId,
@@ -1078,9 +1081,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private updateAiNavigationDebugView(): void {
     this.removeAiNavigationDebugView();
     const snapshot = this.getAiNavigationDebugSnapshot();
-    if (snapshot.followers.length === 0 && snapshot.blockers.length === 0) return;
+    if (
+      snapshot.followers.length === 0 &&
+      snapshot.blockers.length === 0 &&
+      snapshot.bounds.length === 0
+    ) return;
     this.aiNavigationView = createAiNavigationView({
       blockers: snapshot.blockers,
+      bounds: snapshot.bounds,
       cellSize: snapshot.cellSize,
       followers: snapshot.followers,
     });
@@ -1129,13 +1137,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   private buildAiPath(entityId: string, start: Vec3, goal: Vec3) {
+    const bounds = this.aiNavigationBounds();
     return findGridPath({
       start,
       goal: [...goal],
       agent: this.aiNavAgentForEntity(entityId),
       blockers: this.physicsSubsystem.staticBlockerAabbs(),
+      ...(bounds.length > 0 ? { bounds } : {}),
       cellSize: AI_NAV_CELL_SIZE,
     });
+  }
+
+  private aiNavigationBounds(): NavAabb[] {
+    const bounds: NavAabb[] = [];
+    for (const volume of this.layout?.aiNavigationVolumes ?? []) {
+      const bound = aiNavigationVolumeAabb(volume);
+      if (!bound) continue;
+      bounds.push({
+        min: [bound.min[0], bound.min[1], bound.min[2]],
+        max: [bound.max[0], bound.max[1], bound.max[2]],
+      });
+    }
+    return bounds;
   }
 
   private aiNavAgentForEntity(entityId: string): NavAgent {

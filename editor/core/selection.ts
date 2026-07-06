@@ -7,6 +7,7 @@ export type Selection =
   | { kind: "reflectiveSurface"; index: number }
   | { kind: "reflectionCapture"; index: number }
   | { kind: "blockingVolume"; index: number }
+  | { kind: "aiNavigationVolume"; index: number }
   | { kind: "worldWidget"; index: number }
   | { kind: "sky" }
   | { kind: "fog" }
@@ -25,6 +26,8 @@ export type ReflectiveSurfaceSelection = Extract<Selection, { kind: "reflectiveS
 export type ReflectionCaptureSelection = Extract<Selection, { kind: "reflectionCapture" }>;
 /** A placed Blocking Volume (parametric blockout brush) actor. */
 export type BlockingVolumeSelection = Extract<Selection, { kind: "blockingVolume" }>;
+/** A placed AI Navigation Volume (NavMesh Bounds Volume-style pathfinding bounds). */
+export type AiNavigationVolumeSelection = Extract<Selection, { kind: "aiNavigationVolume" }>;
 /** A placed world-space UI widget (screen-projected DOM billboard). */
 export type WorldWidgetSelection = Extract<Selection, { kind: "worldWidget" }>;
 /** The singleton Sky Atmosphere environment actor (no index/transform). */
@@ -50,6 +53,7 @@ export function cloneSelection(selection: Selection): Selection {
   if (selection.kind === "reflectiveSurface") return { kind: "reflectiveSurface", index: selection.index };
   if (selection.kind === "reflectionCapture") return { kind: "reflectionCapture", index: selection.index };
   if (selection.kind === "blockingVolume") return { kind: "blockingVolume", index: selection.index };
+  if (selection.kind === "aiNavigationVolume") return { kind: "aiNavigationVolume", index: selection.index };
   if (selection.kind === "worldWidget") return { kind: "worldWidget", index: selection.index };
   if (selection.kind === "sky") return { kind: "sky" };
   if (selection.kind === "fog") return { kind: "fog" };
@@ -66,6 +70,7 @@ export function selectionId(selection: Selection): string {
   if (selection.kind === "reflectiveSurface") return `reflectiveSurface:${selection.index}`;
   if (selection.kind === "reflectionCapture") return `reflectionCapture:${selection.index}`;
   if (selection.kind === "blockingVolume") return `blockingVolume:${selection.index}`;
+  if (selection.kind === "aiNavigationVolume") return `aiNavigationVolume:${selection.index}`;
   if (selection.kind === "worldWidget") return `worldWidget:${selection.index}`;
   if (selection.kind === "sky") return "sky";
   if (selection.kind === "fog") return "fog";
@@ -108,6 +113,10 @@ export function parseSelectionId(id: string): Selection | null {
     const index = Number(encodedAssetId);
     return Number.isInteger(index) ? { kind: "blockingVolume", index } : null;
   }
+  if (kind === "aiNavigationVolume") {
+    const index = Number(encodedAssetId);
+    return Number.isInteger(index) ? { kind: "aiNavigationVolume", index } : null;
+  }
   if (kind === "worldWidget") {
     const index = Number(encodedAssetId);
     return Number.isInteger(index) ? { kind: "worldWidget", index } : null;
@@ -146,6 +155,9 @@ export function selectionsEqual(
     return left.index === right.index;
   }
   if (left.kind === "blockingVolume" && right.kind === "blockingVolume") {
+    return left.index === right.index;
+  }
+  if (left.kind === "aiNavigationVolume" && right.kind === "aiNavigationVolume") {
     return left.index === right.index;
   }
   if (left.kind === "worldWidget" && right.kind === "worldWidget") {

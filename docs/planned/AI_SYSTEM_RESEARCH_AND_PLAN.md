@@ -17,14 +17,16 @@
 > uygulandi (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-05 - Faz 3 AI navigation debug draw + editor Show gorunumu
 > uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 3 AI Navigation Volume authoring ve runtime
+> bounds dilimi uygulandi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 607 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 618 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
-> ve editor `Show > AI Navigation` gorunumu tamamlandi. Playwright/browser
-> viewport smoke siradaki dogrulama isi. Faz 2 editor form ve gelismis
-> service/decorator isleri planli.
+> ve editor `Show > AI Navigation` gorunumu tamamlandi. AI Navigation Volume
+> (Unreal NavMesh Bounds Volume karsiligi) editor authoring + runtime bounds
+> olarak eklendi. Faz 2 editor form ve gelismis service/decorator isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -412,8 +414,13 @@ edilebilir olsun.
       - [x] current waypoint
       - [x] blocked/stuck state.
 - [x] Editor `Show > AI Navigation` gorunumunu ekle.
+- [x] Editor/runtime `AI Navigation Volume` ekle: Unreal NavMesh Bounds
+      Volume benzeri authored bounds; volume varsa pathfinding bu alanla
+      sinirlanir, volume yoksa mevcut collision/blocker tabanli otomatik bounds
+      davranisi korunur.
 - [x] Test: obstacle etrafini dolasan path.
 - [x] Test: path yoksa task failure.
+- [x] Test: authored nav bounds icinde path success, disinda failure.
 - [x] Validation: TypeScript, engine tests, build verify.
 - [x] Playwright/browser viewport smoke.
 
@@ -478,6 +485,29 @@ Tamamlanan Faz 3 AI navigation debug draw notu (2026-07-05):
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run build:verify` yesil; hedefli
   Playwright smoke `Show > AI Navigation` toggle'inin checkbox state'ini, canvas
   degisimini ve browser error olmamasini dogruladi.
+
+Tamamlanan Faz 3 AI Navigation Volume notu (2026-07-06):
+
+- `LayoutAiNavigationVolume` ve `engine/scene/aiNavigationVolume.ts` eklendi;
+  editor/runtime icin boyut, transform, renk, hidden/locked ve save validator
+  allowlist'i tanimli.
+- Editor `Add Actor > Volumes > AI Navigation Volume` komutu eklendi. Volume
+  secilebilir, Outliner/Details yuzeyi vardir; Location/Rotation/Scale, Size
+  X/Y/Z ve Color duzenlenebilir. Selection outline, picking, delete, undo/redo
+  ve autosave mevcut editor actor kalibina baglandi.
+- Runtime pathfinding `aiNavigationVolumes` alanindan AABB bounds uretir.
+  Sahnede en az bir volume varsa `findGridPath` start/goal icin authored bounds
+  zorunlu tutar ve grid'i bu volume'lerin birlesimiyle sinirlar; volume yoksa
+  onceki otomatik blocker tabanli bounds davranisi devam eder.
+- AI Navigation debug draw helper'i authored bounds footprint'lerini de cizer;
+  editor `Show > AI Navigation` ve runtime `?debug` bu bounds bilgisini
+  gosterir.
+- Test: grid navigation authored bounds success/failure, AI Navigation Volume
+  resolve/unique/AABB/save validator round-trip kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`618 checks passed`), `npm.cmd run build:verify` yesil. Hedefli Playwright
+  smoke `tests/smoke/ai-navigation-volume.spec.ts` ile volume ekleme, Details,
+  Show flag, save/reload kaliciligi ve browser error olmamasi dogrulandi.
 
 ### Faz 4 - Perception
 

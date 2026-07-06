@@ -6,10 +6,12 @@ import { resolveReflectionPlane } from "@engine/scene/reflectionPlane";
 import { resolveReflectiveSurface } from "@engine/scene/reflectiveSurface";
 import { resolveSphereReflectionCapture } from "@engine/scene/reflectionCapture";
 import { resolveBlockingVolume } from "@engine/scene/blockingVolume";
+import { resolveAiNavigationVolume } from "@engine/scene/aiNavigationVolume";
 import { resolvePostProcess } from "@engine/scene/postProcess";
 import { readPivot, readRotation, readScale } from "@engine/scene/transform";
 import type {
   LayoutBlockingVolume,
+  LayoutAiNavigationVolume,
   LayoutCloudLayer,
   LayoutCharacter,
   LayoutHeightFog,
@@ -317,6 +319,37 @@ function buildBlockingVolumeEditableSelection(
 }
 
 /**
+ * Builds the Details/Outliner view-model for a placed AI Navigation Volume. It
+ * mirrors Unreal's NavMesh Bounds Volume at the authoring level: transform + size
+ * define where AI grid navigation is allowed.
+ */
+function buildAiNavigationVolumeEditableSelection(
+  volume: LayoutAiNavigationVolume,
+  index: number,
+): EditableSelection {
+  const resolved = resolveAiNavigationVolume(volume);
+  return {
+    id: selectionId({ kind: "aiNavigationVolume", index }),
+    kind: "aiNavigationVolume",
+    assetId: "ai-navigation-volume",
+    category: "volume",
+    label: resolved.name,
+    position: [...volume.position],
+    rotation: readRotation(volume),
+    scale: readScale(volume),
+    pivot: [0, 0, 0],
+    scaleLocked: volume.scaleLocked ?? false,
+    locked: volume.locked ?? false,
+    castShadow: false,
+    collision: false,
+    simulatePhysics: false,
+    physics: {},
+    aiNavigationVolume: { ...resolved },
+    metadata: {},
+  };
+}
+
+/**
  * Builds the Details/Outliner view-model for a placed world-space UI widget. Its
  * anchor world point rides in the shared `position` transform field (so the
  * Outliner/Details numeric position works); the widget reference + anchor/offset
@@ -588,6 +621,19 @@ export function buildSceneObjects(
     });
   });
 
+  layout.aiNavigationVolumes?.forEach((volume, index) => {
+    const selection: Selection = { kind: "aiNavigationVolume", index };
+    objects.push({
+      ...buildAiNavigationVolumeEditableSelection(volume, index),
+      selected: deps.isSelected(selection),
+      hidden: volume.hidden ?? false,
+      locked: volume.locked ?? false,
+      groupId: volume.groupId,
+      nodeId: volume.nodeId,
+      parentId: volume.parentId,
+    });
+  });
+
   layout.worldWidgets?.forEach((widget, index) => {
     const selection: Selection = { kind: "worldWidget", index };
     objects.push({
@@ -721,6 +767,12 @@ export function buildEditableSelection(
     const volume = layout.blockingVolumes?.[selection.index];
     if (!volume) return null;
     return buildBlockingVolumeEditableSelection(volume, selection.index);
+  }
+
+  if (selection.kind === "aiNavigationVolume") {
+    const volume = layout.aiNavigationVolumes?.[selection.index];
+    if (!volume) return null;
+    return buildAiNavigationVolumeEditableSelection(volume, selection.index);
   }
 
   if (selection.kind === "worldWidget") {
