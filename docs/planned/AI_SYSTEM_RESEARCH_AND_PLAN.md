@@ -66,6 +66,8 @@
 > guvenlik mesafesi isi checklist olarak eklendi.
 > Revizyon: 2026-07-06 - Target Point actor authoring ilk dilimi uygulandi
 > (bkz. asagidaki checklist).
+> Revizyon: 2026-07-06 - Target Point `nextTargetPoint` editor picker dilimi
+> uygulandi (bkz. asagidaki checklist).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -905,7 +907,7 @@ Planlanan Target Point tabanli patrol route authoring checklist'i:
       - [x] `acceptanceRadius`
       - [x] `speedOverride`
       - [x] `patrolTag` veya `routeId`.
-- [ ] `nextTargetPoint` icin actor reference picker ekle; ayni level icindeki
+- [x] `nextTargetPoint` icin actor reference picker ekle; ayni level icindeki
       Target Point aktorlerini listeleyip secime izin versin.
 - [x] Save/load validation: yeni Target Point layout alanlari
       `tools/saveValidator.ts` allowlist'ine eklensin ve round-trip testlensin.
@@ -951,6 +953,17 @@ Tamamlanan Target Point actor authoring ilk dilim notu (2026-07-06):
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`656 checks passed`), `npm.cmd run build:verify` yesil, Playwright
   `target-point.spec.ts` editor Add Actor + Details save/reload smoke yesil.
+
+Tamamlanan Target Point next picker dilim notu (2026-07-06):
+
+- Details panelindeki `nextTargetPoint` serbest metin alani, sahnedeki diger
+  Target Point aktorlerini listeleyen select picker'a cevrildi.
+- Picker kendi Target Point'ini seceneklerden cikarir; eski/kirik authored id
+  varsa `Missing: <id>` olarak gorunur ve kullanici degistirene kadar korunur.
+- Playwright `target-point.spec.ts` iki Target Point olusturup ilk noktada
+  `target-point-2` secimini save/reload sonrasi dogrular.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run build:verify` ve
+  `npx.cmd playwright test target-point.spec.ts` yesil.
 
 Planlanan AI Navigation clearance / agent radius checklist'i:
 

@@ -446,6 +446,11 @@ export interface EditableTransformSnapshot {
   transform: EditableTransform;
 }
 
+export interface TargetPointReference {
+  id: string;
+  name: string;
+}
+
 /**
  * Default raw-code -> action bindings for the runtime input map. Game-specific
  * config lives in runtime code, not the engine. Observer-only: these share keys
@@ -4046,6 +4051,13 @@ export class SceneApp {
   }): void {
     if (this.selection?.kind !== "targetPoint") return;
     this.setTargetPoint(this.selection.index, patch);
+  }
+
+  getTargetPointReferences(): TargetPointReference[] {
+    return (this.layout?.targetPoints ?? []).map((point) => ({
+      id: point.id,
+      name: resolveTargetPoint(point).name,
+    }));
   }
 
   // --- Sphere Reflection Capture (probe) actors ----------------------------

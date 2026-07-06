@@ -2539,6 +2539,7 @@ export class EditorUi {
       body: this.detailsBody,
       selection,
       editableAssets: this.editableAssets,
+      targetPoints: this.app.getTargetPointReferences(),
       setDetailsScale: (scale) => {
         this.detailsScale = scale;
       },

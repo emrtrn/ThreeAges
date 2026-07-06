@@ -378,6 +378,7 @@ function buildTargetPointEditableSelection(
     physics: {},
     targetPoint: {
       ...resolved,
+      id: point.id,
       nextTargetPoint: point.nextTargetPoint ?? "",
     },
     metadata: {},

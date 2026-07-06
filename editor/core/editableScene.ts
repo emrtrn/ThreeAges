@@ -161,6 +161,7 @@ export interface EditableAiNavigationVolume {
 
 /** Resolved Target Point fields for AI patrol authoring details. */
 export interface EditableTargetPoint {
+  id: string;
   name: string;
   hidden: boolean;
   nextTargetPoint: string;

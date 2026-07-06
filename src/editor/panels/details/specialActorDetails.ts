@@ -5,6 +5,7 @@ import type {
   EditableAiNavigationVolume,
   EditableBlockingVolume,
   EditableSelection,
+  TargetPointReference,
 } from "@/scene/SceneApp";
 import { scaleRow, vectorRow } from "./transformRows";
 
@@ -30,6 +31,7 @@ interface TransformBindOptions {
 
 export interface SpecialActorDetailsOptions extends TransformBindOptions {
   editableAssets: readonly EditableAsset[];
+  targetPoints: readonly TargetPointReference[];
   setDetailsScale: (scale: Vec3) => void;
   setSelectedLightSettings: (values: Partial<LayoutLightActor>) => void;
   setSelectedReflectionPlane: (patch: { color?: string; resolution?: number | undefined }) => void;
@@ -522,8 +524,7 @@ export function renderTargetPointDetails(options: SpecialActorDetailsOptions): v
         <div class="detail-section-title">Patrol</div>
         <label class="detail-row">
           <span>Next Target</span>
-          <input data-target-point-field="nextTargetPoint" type="text"
-            value="${escapeHtml(point.nextTargetPoint)}" placeholder="target-point-2" ${lockedAttr} />
+          ${targetPointSelect(point, options.targetPoints, lockedAttr)}
         </label>
         <label class="detail-row">
           <span>Wait Time</span>
@@ -557,10 +558,18 @@ export function renderTargetPointDetails(options: SpecialActorDetailsOptions): v
   bindNameAndLock(options);
 
   body
+    .querySelector<HTMLSelectElement>("[data-target-point-next]")
+    ?.addEventListener("change", (event) => {
+      options.setSelectedTargetPoint({
+        nextTargetPoint: (event.currentTarget as HTMLSelectElement).value,
+      });
+    });
+
+  body
     .querySelectorAll<HTMLInputElement>("[data-target-point-field]")
     .forEach((input) => {
       input.addEventListener("change", () => {
-        const key = input.dataset.targetPointField as "nextTargetPoint" | "patrolTag" | undefined;
+        const key = input.dataset.targetPointField as "patrolTag" | undefined;
         if (!key) return;
         options.setSelectedTargetPoint({ [key]: input.value });
       });
@@ -846,6 +855,34 @@ function actorLockSection(selection: EditableSelection): string {
           <span>Lock Movement</span>
         </label>
       </div>`;
+}
+
+function targetPointSelect(
+  point: NonNullable<EditableSelection["targetPoint"]>,
+  targetPoints: readonly TargetPointReference[],
+  lockedAttr: string,
+): string {
+  const candidates = targetPoints.filter((candidate) => candidate.id !== point.id);
+  const selected = point.nextTargetPoint;
+  const hasSelected = candidates.some((candidate) => candidate.id === selected);
+  const missingOption =
+    selected && !hasSelected
+      ? `<option value="${escapeHtml(selected)}" selected>Missing: ${escapeHtml(selected)}</option>`
+      : "";
+  const options = candidates
+    .map((candidate) => {
+      const label = `${candidate.name} (${candidate.id})`;
+      return `<option value="${escapeHtml(candidate.id)}" ${
+        candidate.id === selected ? "selected" : ""
+      }>${escapeHtml(label)}</option>`;
+    })
+    .join("");
+  return `
+          <select data-target-point-next ${lockedAttr}>
+            <option value="" ${selected ? "" : "selected"}>None</option>
+            ${missingOption}
+            ${options}
+          </select>`;
 }
 
 function brushDimensionRows(volume: EditableBlockingVolume, lockedAttr: string): string {
