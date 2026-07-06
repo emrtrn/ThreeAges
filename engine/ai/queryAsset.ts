@@ -292,9 +292,13 @@ export function normalizeAiQueryAsset(value: unknown): AiQueryAsset {
   };
 }
 
-export function aiQueryParams(value: Record<string, AiJsonValue>): { query: string | null; resultKey: string | null } {
+export function aiQueryParams(
+  value: Record<string, AiJsonValue>,
+): { query: string | null; resultKey: string | null; intervalSeconds: number | null } {
+  const interval = value.intervalSeconds ?? value.interval;
   return {
     query: typeof value.query === "string" && value.query.length > 0 ? value.query : null,
     resultKey: typeof value.resultKey === "string" && value.resultKey.length > 0 ? value.resultKey : null,
+    intervalSeconds: typeof interval === "number" && Number.isFinite(interval) && interval > 0 ? interval : null,
   };
 }

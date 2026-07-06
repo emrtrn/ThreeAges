@@ -95,6 +95,14 @@ interface TickState {
 }
 
 const EMPTY_PARAMS: Record<string, AiJsonValue> = {};
+const PRESERVE_TASK_MEMORY = "__forgePreserveTaskMemory";
+
+interface CachedQueryTaskResult {
+  readonly signature: string;
+  elapsedSeconds: number;
+  readonly status: AiBehaviorStatus;
+  readonly value?: BlackboardValue;
+}
 
 export function createDefaultAiTaskRegistry(): AiTaskRegistry {
   const tasks = new Map<string, AiTaskHandler>([
@@ -235,17 +243,18 @@ export class AiBehaviorRunner {
     state.lastTask = taskId;
     const task = this.options.taskRegistry?.get(taskId);
     if (!task) return this.record(path, "failure");
+    const memory = this.memoryFor(path).taskMemory;
     const status = task({
       controller: this.controller,
       blackboard: this.controller.blackboard,
       engine,
       params,
-      memory: this.memoryFor(path).taskMemory,
+      memory,
       ...(this.options.emitMessage ? { emitMessage: this.options.emitMessage } : {}),
       ...(this.options.moveTo ? { moveTo: this.options.moveTo } : {}),
       ...(this.options.runQuery ? { runQuery: this.options.runQuery } : {}),
     });
-    if (status !== "running") this.memoryFor(path).taskMemory.clear();
+    if (status !== "running" && memory.get(PRESERVE_TASK_MEMORY) !== true) memory.clear();
     return this.record(path, status);
   }
 
@@ -409,11 +418,46 @@ function runQueryToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
   if (!context.runQuery) return "failure";
   const params = aiQueryParams(context.params);
   if (!params.query || !params.resultKey) return "failure";
+  const signature = `${params.query}\n${params.resultKey}`;
+  if (params.intervalSeconds) {
+    context.memory.set(PRESERVE_TASK_MEMORY, true);
+    const cached = context.memory.get("cachedQuery") as CachedQueryTaskResult | undefined;
+    if (cached?.signature === signature) {
+      cached.elapsedSeconds += Math.max(0, context.engine.deltaSeconds);
+      if (cached.elapsedSeconds + 1e-9 < params.intervalSeconds) {
+        if (cached.value !== undefined) {
+          return context.blackboard.set(params.resultKey, cached.value) ? cached.status : "failure";
+        }
+        return cached.status;
+      }
+    }
+  } else {
+    context.memory.delete(PRESERVE_TASK_MEMORY);
+    context.memory.delete("cachedQuery");
+  }
   const result = context.runQuery({ controller: context.controller, query: params.query });
   const winner = result.winner;
-  if (!winner) return "failure";
+  if (!winner) {
+    if (params.intervalSeconds) {
+      context.memory.set("cachedQuery", {
+        signature,
+        elapsedSeconds: 0,
+        status: "failure",
+      } satisfies CachedQueryTaskResult);
+    }
+    return "failure";
+  }
   const value = winner.entityId ?? winner.position;
-  return context.blackboard.set(params.resultKey, value) ? "success" : "failure";
+  const status = context.blackboard.set(params.resultKey, value) ? "success" : "failure";
+  if (params.intervalSeconds) {
+    context.memory.set("cachedQuery", {
+      signature,
+      elapsedSeconds: 0,
+      status,
+      ...(status === "success" ? { value } : {}),
+    } satisfies CachedQueryTaskResult);
+  }
+  return status;
 }
 
 function updatePerceptionBlackboardService(context: AiServiceContext): void {

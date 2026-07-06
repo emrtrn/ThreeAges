@@ -18627,6 +18627,49 @@ check("AiBehaviorRunner runQueryToBlackboard stores the winning query entity", (
   assert.equal(bb.getEntity("bestCover"), "cover-a");
 });
 
+check("AiBehaviorRunner runQueryToBlackboard throttles repeated query runs", () => {
+  const bb = new Blackboard([{ key: "bestCover", kind: "entity", default: null }]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "task",
+      task: "forge.runQueryToBlackboard",
+      params: { query: "assets/AI/BestCover.query.json", resultKey: "bestCover", interval: 0.5 },
+    },
+  });
+  let runs = 0;
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    runQuery: () => {
+      runs += 1;
+      const entityId = runs === 1 ? "cover-a" : "cover-b";
+      return {
+        status: "success",
+        candidates: [],
+        winner: {
+          id: `entity:${entityId}`,
+          kind: "entity",
+          entityId,
+          position: [runs, 0, 0],
+          score: 1,
+          failedTests: [],
+        },
+      };
+    },
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "success");
+  assert.equal(bb.getEntity("bestCover"), "cover-a");
+  assert.equal(runs, 1);
+  assert.equal(runner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.116, frame: 2 }), "success");
+  assert.equal(bb.getEntity("bestCover"), "cover-a");
+  assert.equal(runs, 1);
+  assert.equal(runner.tick({ deltaSeconds: 0.4, elapsedSeconds: 0.516, frame: 3 }), "success");
+  assert.equal(bb.getEntity("bestCover"), "cover-b");
+  assert.equal(runs, 2);
+});
+
 check("AISubsystem records last query result in controller debug snapshots", () => {
   const ai = new AISubsystem();
   ai.setAssetLibrary({

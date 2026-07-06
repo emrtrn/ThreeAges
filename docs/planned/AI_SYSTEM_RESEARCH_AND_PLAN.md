@@ -41,6 +41,8 @@
 > uygulandi.
 > Revizyon: 2026-07-06 - Faz 5 all-actors tag/interface query context dilimi
 > uygulandi.
+> Revizyon: 2026-07-06 - Faz 5 query task interval/cache performans dilimi
+> uygulandi.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 638 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -66,7 +68,9 @@
 > Runtime `?debug` ve editor `Show > AI Navigation`, son query adaylarini ve
 > kazanan item'i viewport wireframe overlay olarak cizebiliyor. Query
 > context'leri artik tag/interface ile bulunan tum aktor referanslarini
-> distance/LOS/nav/dot testlerinde kullanabiliyor.
+> distance/LOS/nav/dot testlerinde kullanabiliyor. `forge.runQueryToBlackboard`
+> task'i opsiyonel `interval` / `intervalSeconds` ile son sonucu cache'leyip
+> pahali query tekrarlarini sinirlayabiliyor.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -732,7 +736,7 @@ gibi kararlar data-driven sorgu ile cozulsun.
       - [x] failure reason.
 - [ ] Editor ilk surum: query asset formu.
 - [x] Runtime/editor `AI Navigation` viewport candidate overlay.
-- [ ] Performance: query tick interval, candidate cap, debug-only expensive details.
+- [x] Performance: query tick interval, candidate cap, debug-only expensive details.
 - [x] Test: best patrol point / best cover point deterministic sample.
 - [x] Validation: full local gate ve Playwright AI Navigation smoke.
 
@@ -784,6 +788,17 @@ Tamamlanan Faz 5 all-actors context notu (2026-07-06):
   herhangi basarili referansi, dot ise en iyi aciyi kullanir.
 - Test: tag/interface context normalizer hatalari ve deterministik best-cover
   secimi kapsandi.
+
+Tamamlanan Faz 5 query performans notu (2026-07-06):
+
+- `forge.runQueryToBlackboard` task'i opsiyonel `interval` veya
+  `intervalSeconds` parametresiyle ayni query/resultKey icin son sonucu cache'ler.
+  Aralik dolmadan pahali query runner tekrar cagrilmaz; son kazanan Blackboard'a
+  yeniden yazilarak Behavior Tree akisi success/failure semantigini korur.
+- Query asset `maxCandidates` cap'i runtime runner'da aday degerlendirmesini
+  sinirlamaya devam eder; debug snapshot zaten top-N candidate ile kisitlidir.
+- Test: cached query sonucu aralik icinde tekrar kullanilir, aralik dolunca query
+  tekrar calisir ve Blackboard yeni kazanana guncellenir.
 
 ### Faz 6 - Smart Objects
 
