@@ -79,7 +79,11 @@ import {
 } from "../engine/ai/behaviorAsset";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
-import { AiBehaviorRunner, createDefaultAiTaskRegistry } from "../engine/ai/behaviorRunner";
+import {
+  AiBehaviorRunner,
+  createDefaultAiServiceRegistry,
+  createDefaultAiTaskRegistry,
+} from "../engine/ai/behaviorRunner";
 import { findGridPath } from "../engine/navigation/gridNavigation";
 import {
   freshStuckState,
@@ -18263,6 +18267,70 @@ check("AiBehaviorRunner ticks services on interval and resolves subtree assets",
   assert.equal(serviceTicks, 2);
 });
 
+check("AiBehaviorRunner default perception service writes sight and hearing to blackboard", () => {
+  const bb = new Blackboard([
+    { key: "target", kind: "entity", default: null },
+    { key: "hasLineOfSight", kind: "boolean", default: false },
+    { key: "lastKnownTargetPosition", kind: "vec3", default: null },
+    { key: "lastHeardPosition", kind: "vec3", default: null },
+    { key: "lastHeardSource", kind: "entity", default: null },
+  ]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  controller.setPerception([
+    {
+      sense: "sight",
+      sourceEntityId: "player",
+      position: [0, 0, 4],
+      distance: 4,
+      strength: 0.3,
+      lineOfSight: true,
+    },
+    {
+      sense: "hearing",
+      sourceEntityId: "noise",
+      position: [2, 0, 1],
+      distance: 2.2,
+      strength: 0.8,
+    },
+  ]);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "sequence",
+      services: [
+        {
+          service: "forge.updatePerceptionBlackboard",
+          interval: 0.1,
+          params: {
+            targetKey: "target",
+            hasLineOfSightKey: "hasLineOfSight",
+            lastKnownPositionKey: "lastKnownTargetPosition",
+            lastHeardPositionKey: "lastHeardPosition",
+            lastHeardSourceKey: "lastHeardSource",
+          },
+        },
+      ],
+      children: [{ kind: "task", task: "forge.wait", params: { seconds: 0.2 } }],
+    },
+  });
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    serviceRegistry: createDefaultAiServiceRegistry(),
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
+  assert.equal(bb.getEntity("target"), "player");
+  assert.equal(bb.getBoolean("hasLineOfSight"), true);
+  assert.deepEqual(bb.getVec3("lastKnownTargetPosition"), [0, 0, 4]);
+  assert.deepEqual(bb.getVec3("lastHeardPosition"), [2, 0, 1]);
+  assert.equal(bb.getEntity("lastHeardSource"), "noise");
+
+  controller.setPerception([]);
+  runner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.116, frame: 2 });
+  assert.equal(bb.getBoolean("hasLineOfSight"), false);
+  assert.equal(bb.getEntity("target"), "player", "lost sight does not erase the last target");
+});
+
 check("AiBehaviorRunner built-in startConversation emits the conversation trigger message", () => {
   const controller = new AIController("ai:npc", "npc", new Blackboard());
   const asset = normalizeAiBehaviorTreeAsset({
@@ -18345,7 +18413,7 @@ check("readAIControllerComponent parses props and marks empty components", () =>
       [AI_CONTROLLER_COMPONENT]: {
         behaviorTree: "assets/AI/Enemy.behavior.json",
         blackboard: "assets/AI/Enemy.blackboard.json",
-        perception: { sightRadius: 18, fieldOfViewDeg: 110, hearingRadius: 12 },
+        perception: { sightRadius: 18, fieldOfViewDeg: 110, hearingRadius: 12, targetLostGraceSeconds: 0.2 },
         navAgent: { radius: 0.35, height: 1.8, maxSpeed: 3.2 },
         blackboardKeys: [
           { key: "target", kind: "entity", default: null },
@@ -18358,6 +18426,7 @@ check("readAIControllerComponent parses props and marks empty components", () =>
   assert.equal(component?.behaviorTree, "assets/AI/Enemy.behavior.json");
   assert.equal(component?.blackboard, "assets/AI/Enemy.blackboard.json");
   assert.equal(component?.perception?.sightRadius, 18);
+  assert.equal(component?.perception?.targetLostGraceSeconds, 0.2);
   assert.equal(component?.navAgent?.maxSpeed, 3.2);
   assert.equal(component?.blackboardKeys?.length, 2);
   // Presence alone (empty props) still marks the entity as AI-controlled.
@@ -18484,6 +18553,155 @@ check("AISubsystem derives perception listeners from AIController props and cons
   assert.equal(perceived[0]?.sourceEntityId, "target");
   ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.048, frame: 3 });
   assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0, "noise is transient");
+});
+
+check("AISubsystem perception service writes a noise event to last heard blackboard position", () => {
+  const ai = new AISubsystem();
+  ai.setAssetLibrary({
+    blackboards: new Map([
+      [
+        "assets/AI/Hearing.blackboard.json",
+        normalizeAiBlackboardAsset({
+          schema: 1,
+          type: "blackboard",
+          keys: [
+            { key: "lastHeardPosition", kind: "vec3", default: null },
+            { key: "lastHeardSource", kind: "entity", default: null },
+            { key: "hasLineOfSight", kind: "boolean", default: false },
+          ],
+        }),
+      ],
+    ]),
+    behaviors: new Map([
+      [
+        "assets/AI/Hearing.behavior.json",
+        normalizeAiBehaviorTreeAsset({
+          schema: 1,
+          type: "behaviorTree",
+          blackboard: "assets/AI/Hearing.blackboard.json",
+          root: {
+            kind: "sequence",
+            services: [
+              {
+                service: "forge.updatePerceptionBlackboard",
+                params: {
+                  lastHeardPositionKey: "lastHeardPosition",
+                  lastHeardSourceKey: "lastHeardSource",
+                  hasLineOfSightKey: "hasLineOfSight",
+                },
+              },
+            ],
+            children: [{ kind: "task", task: "forge.wait", params: { seconds: 0.2 } }],
+          },
+        }),
+      ],
+    ]),
+  });
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: {
+          behaviorTree: "assets/AI/Hearing.behavior.json",
+          perception: { hearingRadius: 6 },
+        },
+      },
+    },
+    {
+      id: "noisemaker",
+      components: {
+        Transform: { position: [3, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      },
+    },
+  ]);
+  const controller = ai.getControllerForPawn("enemy");
+  assert.ok(controller);
+  ai.emitNoise([3, 0, 1], "noisemaker");
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.deepEqual(controller?.blackboard.getVec3("lastHeardPosition"), [3, 0, 1]);
+  assert.equal(controller?.blackboard.getEntity("lastHeardSource"), "noisemaker");
+  assert.equal(controller?.blackboard.getBoolean("hasLineOfSight"), false);
+});
+
+check("AISubsystem sight target-lost grace keeps last target briefly without line of sight", () => {
+  let blockers: Array<{ min: [number, number, number]; max: [number, number, number] }> = [];
+  const ai = new AISubsystem({ blockers: () => blockers });
+  ai.setAssetLibrary({
+    blackboards: new Map([
+      [
+        "assets/AI/Sight.blackboard.json",
+        normalizeAiBlackboardAsset({
+          schema: 1,
+          type: "blackboard",
+          keys: [
+            { key: "target", kind: "entity", default: null },
+            { key: "hasLineOfSight", kind: "boolean", default: false },
+            { key: "lastKnownTargetPosition", kind: "vec3", default: null },
+          ],
+        }),
+      ],
+    ]),
+    behaviors: new Map([
+      [
+        "assets/AI/Sight.behavior.json",
+        normalizeAiBehaviorTreeAsset({
+          schema: 1,
+          type: "behaviorTree",
+          blackboard: "assets/AI/Sight.blackboard.json",
+          root: {
+            kind: "sequence",
+            services: [
+              {
+                service: "forge.updatePerceptionBlackboard",
+                interval: 0.01,
+                params: {
+                  targetKey: "target",
+                  hasLineOfSightKey: "hasLineOfSight",
+                  lastKnownPositionKey: "lastKnownTargetPosition",
+                },
+              },
+            ],
+            children: [{ kind: "task", task: "forge.wait", params: { seconds: 1 } }],
+          },
+        }),
+      ],
+    ]),
+  });
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: {
+          behaviorTree: "assets/AI/Sight.behavior.json",
+          perception: { sightRadius: 6, fieldOfViewDeg: 90, targetLostGraceSeconds: 0.1 },
+        },
+      },
+    },
+    {
+      id: "player",
+      components: {
+        Transform: { position: [0, 0, 4], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      },
+    },
+  ]);
+  const controller = ai.getControllerForPawn("enemy");
+  assert.ok(controller);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.equal(controller?.blackboard.getEntity("target"), "player");
+  assert.equal(controller?.blackboard.getBoolean("hasLineOfSight"), true);
+  assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.[0]?.lineOfSight, true);
+
+  blockers = [{ min: [-1, -1, 2], max: [1, 2, 2.2] }];
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  assert.equal(controller?.blackboard.getEntity("target"), "player");
+  assert.equal(controller?.blackboard.getBoolean("hasLineOfSight"), false);
+  assert.deepEqual(controller?.blackboard.getVec3("lastKnownTargetPosition"), [0, 0, 4]);
+  assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.[0]?.lineOfSight, false);
+
+  ai.update({ deltaSeconds: 0.2, elapsedSeconds: 0.232, frame: 3 });
+  assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0);
 });
 
 check("AISubsystem resolves blackboard and behavior assets, ticks runner, and emits messages", () => {

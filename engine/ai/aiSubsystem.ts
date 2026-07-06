@@ -21,6 +21,7 @@ import {
   evaluatePerception,
   type NoiseStimulus,
   type PerceptionAabb,
+  type PerceivedStimulus,
   type StimulusSource,
 } from "../perception/perception";
 import { Blackboard } from "./blackboard";
@@ -28,6 +29,7 @@ import { AIController, type AIControllerDebugSnapshot, type AIControllerOptions 
 import type { AiBlackboardAsset, AiBehaviorTreeAsset } from "./behaviorAsset";
 import {
   AiBehaviorRunner,
+  createDefaultAiServiceRegistry,
   createDefaultAiTaskRegistry,
   type AiBehaviorRunnerOptions,
   type AiTaskRegistry,
@@ -76,10 +78,11 @@ export class AISubsystem implements Subsystem {
   private blockers: (() => readonly PerceptionAabb[]) | undefined;
   private entities: readonly Entity[] = [];
   private pendingNoises: NoiseStimulus[] = [];
+  private sightGrace = new Map<EntityId, SightGraceState>();
 
   constructor(options: AISubsystemOptions = {}) {
     this.taskRegistry = options.taskRegistry ?? createDefaultAiTaskRegistry();
-    this.serviceRegistry = options.serviceRegistry;
+    this.serviceRegistry = options.serviceRegistry ?? createDefaultAiServiceRegistry();
     this.emitMessage = options.emitMessage;
     this.moveTo = options.moveTo;
     this.blockers = options.blockers;
@@ -111,6 +114,7 @@ export class AISubsystem implements Subsystem {
     this.runners.clear();
     this.entities = entities;
     this.pendingNoises = [];
+    this.sightGrace.clear();
     for (const entity of entities) {
       const component = readAIControllerComponent(entity);
       if (!component) continue;
@@ -137,7 +141,7 @@ export class AISubsystem implements Subsystem {
       this.pendingNoises = [];
       return;
     }
-    this.updatePerception();
+    this.updatePerception(engine.deltaSeconds);
     for (const runner of this.runners.values()) runner.tick(engine);
     this.pendingNoises = [];
   }
@@ -178,6 +182,7 @@ export class AISubsystem implements Subsystem {
     this.runners.clear();
     this.entities = [];
     this.pendingNoises = [];
+    this.sightGrace.clear();
   }
 
   dispose(): void {
@@ -208,7 +213,7 @@ export class AISubsystem implements Subsystem {
     }
   }
 
-  private updatePerception(): void {
+  private updatePerception(deltaSeconds: number): void {
     const sources = perceptionSources(this.entities);
     const blockers = this.blockers?.() ?? [];
     for (const [pawnEntityId, controller] of this.controllers) {
@@ -217,22 +222,61 @@ export class AISubsystem implements Subsystem {
       const config = controller.perceptionConfig;
       if (!transform || !config) {
         controller.setPerception([]);
+        this.sightGrace.delete(pawnEntityId);
         continue;
       }
+      const perceived = evaluatePerception({
+        listener: {
+          entityId: pawnEntityId,
+          position: transform.position,
+          forward: forwardVectorFromRotation(transform.rotation),
+          ...config,
+        },
+        sources,
+        noises: this.pendingNoises,
+        blockers,
+      });
       controller.setPerception(
-        evaluatePerception({
-          listener: {
-            entityId: pawnEntityId,
-            position: transform.position,
-            forward: forwardVectorFromRotation(transform.rotation),
-            ...config,
-          },
-          sources,
-          noises: this.pendingNoises,
-          blockers,
-        }),
+        this.applySightGrace(pawnEntityId, perceived, config.targetLostGraceSeconds, deltaSeconds),
       );
     }
+  }
+
+  private applySightGrace(
+    pawnEntityId: EntityId,
+    perceived: readonly PerceivedStimulus[],
+    graceSeconds: number | undefined,
+    deltaSeconds: number,
+  ): PerceivedStimulus[] {
+    const sight = perceived.find((stimulus) => stimulus.sense === "sight" && stimulus.lineOfSight !== false);
+    const grace = typeof graceSeconds === "number" && Number.isFinite(graceSeconds) && graceSeconds > 0
+      ? graceSeconds
+      : 0;
+    if (sight) {
+      if (grace > 0) {
+        this.sightGrace.set(pawnEntityId, { stimulus: sight, remainingSeconds: grace, totalSeconds: grace });
+      } else {
+        this.sightGrace.delete(pawnEntityId);
+      }
+      return [...perceived];
+    }
+    const memory = this.sightGrace.get(pawnEntityId);
+    if (!memory || grace <= 0) {
+      this.sightGrace.delete(pawnEntityId);
+      return [...perceived];
+    }
+    const remaining = memory.remainingSeconds - Math.max(0, deltaSeconds);
+    if (remaining <= 0) {
+      this.sightGrace.delete(pawnEntityId);
+      return [...perceived];
+    }
+    this.sightGrace.set(pawnEntityId, { ...memory, remainingSeconds: remaining });
+    const remembered = {
+      ...memory.stimulus,
+      lineOfSight: false,
+      strength: memory.stimulus.strength * (remaining / Math.max(memory.totalSeconds, 1e-6)),
+    };
+    return [remembered, ...perceived].sort((a, b) => b.strength - a.strength || a.distance - b.distance);
   }
 
   private runnerOptions(): AiBehaviorRunnerOptions {
@@ -244,6 +288,12 @@ export class AISubsystem implements Subsystem {
       ...(this.moveTo ? { moveTo: this.moveTo } : {}),
     };
   }
+}
+
+interface SightGraceState {
+  readonly stimulus: PerceivedStimulus;
+  readonly remainingSeconds: number;
+  readonly totalSeconds: number;
 }
 
 function perceptionSources(entities: readonly Entity[]): StimulusSource[] {

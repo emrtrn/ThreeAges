@@ -353,6 +353,7 @@ export interface AIPerceptionConfig {
   sightRadius?: number;
   fieldOfViewDeg?: number;
   hearingRadius?: number;
+  targetLostGraceSeconds?: number;
 }
 
 /**
@@ -867,6 +868,13 @@ function readPerceptionConfig(value: SceneJsonValue | undefined): AIPerceptionCo
   }
   if (typeof data.hearingRadius === "number" && Number.isFinite(data.hearingRadius)) {
     config.hearingRadius = data.hearingRadius;
+  }
+  if (
+    typeof data.targetLostGraceSeconds === "number" &&
+    Number.isFinite(data.targetLostGraceSeconds) &&
+    data.targetLostGraceSeconds >= 0
+  ) {
+    config.targetLostGraceSeconds = data.targetLostGraceSeconds;
   }
   return Object.keys(config).length > 0 ? config : undefined;
 }

@@ -10,6 +10,7 @@ import type { EntityId } from "../scene/entity";
 import type { Vec3 } from "../scene/layout";
 import type { AIController } from "./aiController";
 import type { Blackboard, BlackboardValue } from "./blackboard";
+import type { PerceivedStimulus, PerceptionSense } from "../perception/perception";
 import type {
   AiBehaviorNode,
   AiBehaviorServiceDef,
@@ -96,6 +97,13 @@ export function createDefaultAiTaskRegistry(): AiTaskRegistry {
     ["forge.startConversation", startConversationTask],
   ]);
   return { get: (taskId) => tasks.get(taskId) };
+}
+
+export function createDefaultAiServiceRegistry(): AiServiceRegistry {
+  const services = new Map<string, AiServiceHandler>([
+    ["forge.updatePerceptionBlackboard", updatePerceptionBlackboardService],
+  ]);
+  return { get: (serviceId) => services.get(serviceId) };
 }
 
 export class AiBehaviorRunner {
@@ -385,8 +393,48 @@ function startConversationTask(context: AiTaskContext): AiBehaviorStatus {
   return "success";
 }
 
+function updatePerceptionBlackboardService(context: AiServiceContext): void {
+  const stimuli = context.controller.getPerception();
+  const sight = strongestStimulus(stimuli, "sight");
+  const hearing = strongestStimulus(stimuli, "hearing");
+
+  const targetKey = stringParam(context.params.targetKey);
+  const hasLineOfSightKey = stringParam(context.params.hasLineOfSightKey);
+  const lastKnownPositionKey = stringParam(context.params.lastKnownPositionKey);
+  const lastHeardPositionKey = stringParam(context.params.lastHeardPositionKey);
+  const lastHeardSourceKey = stringParam(context.params.lastHeardSourceKey);
+
+  if (hasLineOfSightKey) context.blackboard.set(hasLineOfSightKey, sight?.lineOfSight === true);
+  if (sight) {
+    if (targetKey) context.blackboard.set(targetKey, sight.sourceEntityId);
+    if (lastKnownPositionKey) context.blackboard.set(lastKnownPositionKey, sight.position);
+  }
+  if (hearing) {
+    if (lastHeardPositionKey) context.blackboard.set(lastHeardPositionKey, hearing.position);
+    if (lastHeardSourceKey) context.blackboard.set(lastHeardSourceKey, hearing.sourceEntityId);
+  }
+}
+
 function numberParam(value: AiJsonValue | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function strongestStimulus(
+  stimuli: readonly PerceivedStimulus[],
+  sense: PerceptionSense,
+): PerceivedStimulus | null {
+  let best: PerceivedStimulus | null = null;
+  for (const stimulus of stimuli) {
+    if (stimulus.sense !== sense) continue;
+    if (
+      !best ||
+      stimulus.strength > best.strength ||
+      (stimulus.strength === best.strength && stimulus.distance < best.distance)
+    ) {
+      best = stimulus;
+    }
+  }
+  return best;
 }
 
 function stringParam(value: AiJsonValue | undefined): string | null {

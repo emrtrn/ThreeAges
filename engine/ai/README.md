@@ -18,6 +18,9 @@ Current files:
 - `behaviorAsset.ts`: authored `*.blackboard.json` and `*.behavior.json`
   schemas/normalizers. Save validators and future runtime loaders share this
   module so editor saves and runtime execution agree on the canonical shape.
+- `behaviorRunner.ts`: runtime Behavior Tree runner plus built-in task/service
+  registries. `forge.updatePerceptionBlackboard` bridges sensed sight/hearing
+  stimuli into declared Blackboard keys.
 - `../perception/perception.ts`: pure sight/hearing evaluation contracts used by
   `AISubsystem` to keep per-controller sensed-target debug state.
 

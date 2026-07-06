@@ -89,6 +89,13 @@ export class AIController {
     }));
   }
 
+  getPerception(): readonly PerceivedStimulus[] {
+    return this.perceived.map((stimulus) => ({
+      ...stimulus,
+      position: [stimulus.position[0], stimulus.position[1], stimulus.position[2]],
+    }));
+  }
+
   getDebugSnapshot(behavior: AiBehaviorRunnerDebugSnapshot | null = null): AIControllerDebugSnapshot {
     return {
       controllerId: this.id,

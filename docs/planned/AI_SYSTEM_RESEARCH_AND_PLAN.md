@@ -21,8 +21,12 @@
 > bounds dilimi uygulandi (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-06 - Faz 4 Perception contract + sight/hearing debug state
 > ilk dilimi uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 4 Behavior Tree perception service + Blackboard
+> bridge dilimi uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 4 sight target-lost grace dilimi uygulandi
+> (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 622 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 625 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -30,8 +34,10 @@
 > (Unreal NavMesh Bounds Volume karsiligi) editor authoring + runtime bounds
 > olarak eklendi. Faz 4 Perception ilk diliminde saf sight/hearing contract'i,
 > runtime `AISubsystem` perception snapshot'i ve `?debug` sensed-target satiri
-> eklendi. Faz 2 editor form, gelismis service/decorator isleri ve Faz 4
-> Blackboard service bridge/debug overlay isleri planli.
+> eklendi. Faz 4 service bridge ile sight/hearing perception sonuclari Behavior
+> Tree servisinden Blackboard'a yazilabiliyor. Sight target-lost grace ile kisa
+> LOS kopmalarinda son hedef bilgisi korunabiliyor. Faz 2 editor form, gelismis
+> decorator isleri ve Faz 4 debug overlay/message bridge isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -528,25 +534,25 @@ beslemek.
       - [x] radius
       - [x] field of view
       - [x] line-of-sight ray/AABB test
-      - [ ] target lost grace period.
+      - [x] target lost grace period.
 - [ ] Hearing:
       - [x] `emitNoise(position, loudness, sourceEntityId)`
       - [x] radius attenuation
-      - [ ] last heard position blackboard update.
+      - [x] last heard position blackboard update.
 - [ ] Damage/gameplay stimulus:
       - [ ] `damage`, `alert`, `ui-action`, `game-event` gibi mevcut script
             message eventlerinden perception'a bridge —
             `BehaviorSubsystem.subscribeScriptMessage()` ile; scene rebuild
             (`clear()`) aboneligi dusurur, yeniden abone olmayi unutma.
 - [x] AIController component props icinde perception config expose et.
-- [ ] Behavior Tree serviceleri perception result'larini Blackboard'a yazsin.
+- [x] Behavior Tree serviceleri perception result'larini Blackboard'a yazsin.
 - [ ] Debug:
       - [ ] sight cone
       - [ ] hearing radius
       - [x] current sensed targets
       - [ ] last known positions.
 - [x] Test: target FOV disindayken gorulmez, FOV icinde ve obstruction yokken gorulur.
-- [ ] Test: noise event blackboard'a last heard position yazar.
+- [x] Test: noise event blackboard'a last heard position yazar.
 - [ ] Validation: TypeScript, engine tests, build verify, Playwright editor debug smoke.
 
 Tamamlanan Faz 4 Perception contract/sight-hearing notu (2026-07-06):
@@ -568,6 +574,38 @@ Tamamlanan Faz 4 Perception contract/sight-hearing notu (2026-07-06):
   perception snapshot/noise tuketimi ve debug formatter kapsandi.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`622 checks passed`), `npm.cmd run build:verify` yesil.
+
+Tamamlanan Faz 4 Behavior Tree perception service notu (2026-07-06):
+
+- `createDefaultAiServiceRegistry()` eklendi ve `AISubsystem` varsayilan service
+  registry olarak bunu kullanir.
+- Built-in `forge.updatePerceptionBlackboard` service'i controller'in runtime
+  perception snapshot'indeki en guclu sight/hearing stimulus'larini authored
+  Blackboard key'lerine yazar:
+  `targetKey`, `hasLineOfSightKey`, `lastKnownPositionKey`,
+  `lastHeardPositionKey`, `lastHeardSourceKey`.
+- Sight kayboldugunda `hasLineOfSightKey` false olur; son target silinmez.
+  Hearing stimulus'u bir tick'lik event olarak tuketilir, ancak service
+  `lastHeardPosition` / `lastHeardSource` blackboard degerlerini kalici runtime
+  hafiza olarak gunceller.
+- Test: runner-level service write, `AISubsystem` noise -> Blackboard
+  `lastHeardPosition` akisi kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`624 checks passed`).
+
+Tamamlanan Faz 4 target-lost grace notu (2026-07-06):
+
+- `AIController` perception config'i `targetLostGraceSeconds` alanini okuyabilir.
+  Deger verilmezse onceki anlik sight davranisi korunur.
+- `AISubsystem`, aktif sight kesildiginde son sight stimulus'unu tanimli grace
+  suresi boyunca `lineOfSight: false` olarak tutar; bu sayede service son hedef
+  ve son bilinen pozisyonu kullanabilir ama `hasLineOfSight` false kalir.
+- Grace state'i scene rebuild/clear ve perception config/transform yoklugunda
+  temizlenir; sure doldugunda stimulus debug snapshot'tan duser.
+- Test: hedef gorulur -> blocker LOS'u keser -> grace boyunca target korunur ve
+  `hasLineOfSight=false` olur -> sure dolunca sight stimulus'u temizlenir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`625 checks passed`).
 
 ### Faz 5 - EQS benzeri query sistemi
 
