@@ -20421,7 +20421,59 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 341
+        "bytes": 2052
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ai-test-blackboard",
+      "name": "AI Test.Blackboard",
+      "assetType": "blackboard",
+      "category": "AI",
+      "path": "assets/starter-content/AI/AI_Test.blackboard.json",
+      "tags": [
+        "demo",
+        "ai"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 693
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "ai-test-behavior-tree",
+      "name": "AI Test.Behavior",
+      "assetType": "behaviorTree",
+      "category": "AI",
+      "path": "assets/starter-content/AI/AI_Test.behavior.json",
+      "tags": [
+        "demo",
+        "ai"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 5579
       },
       "license": "Unknown"
     }

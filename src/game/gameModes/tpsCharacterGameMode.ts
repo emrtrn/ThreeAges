@@ -95,7 +95,7 @@ export function resolvePlayerCharacter(
 ): RuntimeCharacterRef | undefined {
   const tagged = characters.find((ref) => ref.placement.metadata?.player === true);
   if (tagged) return tagged;
-  const actorCharacter = characters.find((ref) => ref.hasCharacterMovement);
+  const actorCharacter = characters.find((ref) => ref.hasCharacterMovement && !ref.isAiControlled);
   if (actorCharacter) return actorCharacter;
   return characters.find((ref) => ref.placement.behavior?.script === "input-move");
 }

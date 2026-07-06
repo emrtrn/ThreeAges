@@ -345,7 +345,7 @@ import {
   hasPlayerCharacter,
 } from "../src/game/gameModes/playerSpawn";
 import { defaultCameraGameMode } from "../src/game/gameModes/defaultCameraGameMode";
-import { tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
+import { resolvePlayerCharacter, tpsCharacterGameMode } from "../src/game/gameModes/tpsCharacterGameMode";
 import { resolveMontageBindings } from "../src/game/montageInputBindings";
 import {
   AnimationNotifyTracker,
@@ -9710,6 +9710,7 @@ function makeCharacterRef(
     input?: boolean;
     player?: boolean;
     actorMovement?: boolean;
+    aiControlled?: boolean;
     animations?: AnimationClip[];
     entity?: Entity;
   } = {},
@@ -9731,6 +9732,7 @@ function makeCharacterRef(
           classRef: "assets/starter-content/Script/Player.actor.json",
           parentClass: "character" as const,
           hasCharacterMovement: true,
+          ...(opts.aiControlled ? { isAiControlled: true } : {}),
         }
       : {}),
     ...(opts.entity ? { entity: opts.entity } : {}),
@@ -10201,6 +10203,18 @@ check("tps mode can possess an Actor Script character with CharacterMovement", (
   const session = tpsCharacterGameMode.createSession(context);
   session.spawnDefaultPawn();
   assert.equal(session.playerState.pawnEntityId, actorInstanceEntityId(0));
+});
+
+check("tps mode skips AI-controlled CharacterMovement actors when resolving the player", () => {
+  const characters = [
+    makeCharacterRef(0, { actorMovement: true, aiControlled: true }),
+    makeCharacterRef(1, { input: true }),
+  ];
+  assert.equal(resolvePlayerCharacter(characters)?.entityId, characterEntityId(1));
+  const { context } = makeGameModeContext({ characters });
+  const session = tpsCharacterGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  assert.equal(session.playerState.pawnEntityId, characterEntityId(1));
 });
 
 check("tps mode animates + follows a possessed Actor Script character", () => {
@@ -18714,6 +18728,80 @@ check("AiBehaviorRunner default perception service writes sight and hearing to b
   runner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.116, frame: 2 });
   assert.equal(bb.getBoolean("hasLineOfSight"), false);
   assert.equal(bb.getEntity("target"), "player", "lost sight does not erase the last target");
+});
+
+check("AiBehaviorRunner target distance service writes range state and live target position", () => {
+  const bb = new Blackboard([
+    { key: "target", kind: "entity", default: "player" },
+    { key: "targetDistance", kind: "number", default: null },
+    { key: "inAttackRange", kind: "boolean", default: false },
+    { key: "liveTargetPosition", kind: "vec3", default: null },
+  ]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "sequence",
+      services: [
+        {
+          service: "forge.updateTargetDistanceBlackboard",
+          interval: 0.1,
+          params: {
+            targetKey: "target",
+            distanceKey: "targetDistance",
+            inRangeKey: "inAttackRange",
+            targetPositionKey: "liveTargetPosition",
+            range: 2,
+          },
+        },
+      ],
+      children: [{ kind: "task", task: "forge.wait", params: { seconds: 0.2 } }],
+    },
+  });
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    serviceRegistry: createDefaultAiServiceRegistry(),
+    world: {
+      entityPosition: (entityId) => {
+        if (entityId === "enemy") return [0, 0, 0];
+        if (entityId === "player") return [0, 0, 1.5];
+        return null;
+      },
+    },
+  });
+
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
+  assert.equal(bb.getNumber("targetDistance"), 1.5);
+  assert.equal(bb.getBoolean("inAttackRange"), true);
+  assert.deepEqual(bb.getVec3("liveTargetPosition"), [0, 0, 1.5]);
+});
+
+check("AiBehaviorRunner move tasks forward authored speed to runtime movement", () => {
+  const controller = new AIController("ai:enemy", "enemy", new Blackboard());
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "task",
+      task: "forge.moveToPosition",
+      params: { position: [1, 0, 2], speed: 5.5 },
+    },
+  });
+  const requests: Array<{ position: [number, number, number]; speed?: number }> = [];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    moveTo: (request) => {
+      requests.push({
+        position: [request.position[0], request.position[1], request.position[2]],
+        ...(request.speed !== undefined ? { speed: request.speed } : {}),
+      });
+      return "running";
+    },
+  });
+
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
+  assert.deepEqual(requests, [{ position: [1, 0, 2], speed: 5.5 }]);
 });
 
 check("AiBehaviorRunner built-in startConversation emits the conversation trigger message", () => {

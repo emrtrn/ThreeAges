@@ -43,11 +43,16 @@ export interface AiMessageEmitInput {
 export interface AiMoveRequest {
   readonly controller: AIController;
   readonly position: Vec3;
+  readonly speed?: number;
 }
 
 export interface AiQueryRequest {
   readonly controller: AIController;
   readonly query: string;
+}
+
+export interface AiWorldQuery {
+  readonly entityPosition: (entityId: EntityId) => Vec3 | null;
 }
 
 export interface AiBehaviorRunnerOptions {
@@ -58,6 +63,7 @@ export interface AiBehaviorRunnerOptions {
   readonly moveTo?: (request: AiMoveRequest) => AiBehaviorStatus;
   readonly runQuery?: (request: AiQueryRequest) => AiQueryResult;
   readonly smartObjects?: SmartObjectRuntime;
+  readonly world?: AiWorldQuery;
 }
 
 export interface AiTaskContext {
@@ -70,6 +76,7 @@ export interface AiTaskContext {
   readonly moveTo?: (request: AiMoveRequest) => AiBehaviorStatus;
   readonly runQuery?: (request: AiQueryRequest) => AiQueryResult;
   readonly smartObjects?: SmartObjectRuntime;
+  readonly world?: AiWorldQuery;
 }
 
 export interface AiServiceContext extends AiTaskContext {
@@ -126,6 +133,7 @@ export function createDefaultAiTaskRegistry(): AiTaskRegistry {
 export function createDefaultAiServiceRegistry(): AiServiceRegistry {
   const services = new Map<string, AiServiceHandler>([
     ["forge.updatePerceptionBlackboard", updatePerceptionBlackboardService],
+    ["forge.updateTargetDistanceBlackboard", updateTargetDistanceBlackboardService],
   ]);
   return { get: (serviceId) => services.get(serviceId) };
 }
@@ -260,6 +268,7 @@ export class AiBehaviorRunner {
       ...(this.options.moveTo ? { moveTo: this.options.moveTo } : {}),
       ...(this.options.runQuery ? { runQuery: this.options.runQuery } : {}),
       ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
+      ...(this.options.world ? { world: this.options.world } : {}),
     });
     if (status !== "running" && memory.get(PRESERVE_TASK_MEMORY) !== true) memory.clear();
     return this.record(path, status);
@@ -338,6 +347,7 @@ export class AiBehaviorRunner {
         ...(this.options.moveTo ? { moveTo: this.options.moveTo } : {}),
         ...(this.options.runQuery ? { runQuery: this.options.runQuery } : {}),
         ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
+        ...(this.options.world ? { world: this.options.world } : {}),
       });
     }
   }
@@ -398,7 +408,12 @@ function moveToPositionTask(context: AiTaskContext): AiBehaviorStatus {
   if (!context.moveTo) return "failure";
   const position = vec3Param(context.params.position);
   if (!position) return "failure";
-  return context.moveTo({ controller: context.controller, position });
+  const speed = optionalNonNegativeNumberParam(context.params.speed);
+  return context.moveTo({
+    controller: context.controller,
+    position,
+    ...(speed !== null ? { speed } : {}),
+  });
 }
 
 function moveToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
@@ -408,7 +423,12 @@ function moveToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
   const value = context.blackboard.get(key);
   const position = Array.isArray(value) ? vec3Param(value) : null;
   if (!position) return "failure";
-  return context.moveTo({ controller: context.controller, position });
+  const speed = optionalNonNegativeNumberParam(context.params.speed);
+  return context.moveTo({
+    controller: context.controller,
+    position,
+    ...(speed !== null ? { speed } : {}),
+  });
 }
 
 function startConversationTask(context: AiTaskContext): AiBehaviorStatus {
@@ -550,8 +570,41 @@ function updatePerceptionBlackboardService(context: AiServiceContext): void {
   }
 }
 
+function updateTargetDistanceBlackboardService(context: AiServiceContext): void {
+  const targetKey = stringParam(context.params.targetKey) ?? "target";
+  const distanceKey = stringParam(context.params.distanceKey);
+  const inRangeKey = stringParam(context.params.inRangeKey);
+  const targetPositionKey = stringParam(context.params.targetPositionKey);
+  const range = numberParam(context.params.range ?? context.params.attackRange, 1.5);
+  const target = context.blackboard.getEntity(targetKey);
+  const pawnPosition = context.world?.entityPosition(context.controller.pawnEntityId) ?? null;
+  const targetPosition = target ? context.world?.entityPosition(target) ?? null : null;
+
+  if (!pawnPosition || !targetPosition) {
+    if (distanceKey) context.blackboard.set(distanceKey, null);
+    if (inRangeKey) context.blackboard.set(inRangeKey, false);
+    return;
+  }
+
+  const distance = distanceBetween(pawnPosition, targetPosition);
+  if (distanceKey) context.blackboard.set(distanceKey, distance);
+  if (inRangeKey) context.blackboard.set(inRangeKey, distance <= range);
+  if (targetPositionKey) context.blackboard.set(targetPositionKey, targetPosition);
+}
+
 function numberParam(value: AiJsonValue | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
+}
+
+function optionalNonNegativeNumberParam(value: AiJsonValue | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+function distanceBetween(left: Vec3, right: Vec3): number {
+  const dx = left[0] - right[0];
+  const dy = left[1] - right[1];
+  const dz = left[2] - right[2];
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
 }
 
 function strongestStimulus(

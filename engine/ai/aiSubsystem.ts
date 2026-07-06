@@ -387,6 +387,9 @@ export class AISubsystem implements Subsystem {
       ...(this.emitMessage ? { emitMessage: this.emitMessage } : {}),
       ...(this.moveTo ? { moveTo: this.moveTo } : {}),
       smartObjects: this.smartObjects,
+      world: {
+        entityPosition: (entityId) => this.positionForEntity(entityId),
+      },
       runQuery: ({ controller, query }) => {
         const asset = this.queryAssets.get(query);
         if (!asset) {

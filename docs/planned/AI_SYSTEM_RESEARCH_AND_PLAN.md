@@ -47,8 +47,12 @@
 > store ve query generator/filter ilk dilimi uygulandi.
 > Revizyon: 2026-07-06 - Faz 6 Smart Object Behavior Tree claim/use task ve
 > script message bridge dilimi uygulandi.
+> Revizyon: 2026-07-06 - Playground `AI_Test` demo davranisi, target distance
+> service ve `moveTo` speed parametresi eklendi.
+> Revizyon: 2026-07-06 - AI controlled CharacterMovement actor'lar player spawn/
+> possession adayindan ayrildi; AI character locomotion animasyonu eklendi.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 645 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 648 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -78,7 +82,12 @@
 > reader'i, runtime-only reservation store'u, `smartObjectsByTag` query
 > generator'i ve `reservationFree` query testi ilk dilim olarak eklendi.
 > Behavior Tree task'lari Smart Object claim/use akisini calistirabiliyor ve
-> use basladiginda hedef actor'a script message emit edebiliyor.
+> use basladiginda hedef actor'a script message emit edebiliyor. Playground
+> `AI_Test` actor'u blackboard/behavior asset'lerine baglanarak devriye,
+> goruste kovalamaca ve yakin mesafede punch intent mesaji demosu calistirir.
+> AI controlled CharacterMovement actor'lar artik default player pawn spawn'ini
+> engellemez ve AI character ref'leri hareket raporundan idle/walk/run animasyon
+> secimini runtime'da yapar.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -830,6 +839,28 @@ Tamamlanan Faz 5/6 Smart Object query/reservation ilk dilim notu (2026-07-06):
   use -> targeted message akisi kapsandi.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`645 checks passed`), `npm.cmd run build:verify` yesil.
+
+Tamamlanan Playground `AI_Test` demo notu (2026-07-06):
+
+- `public/assets/starter-content/AI/AI_Test.blackboard.json` ve
+  `AI_Test.behavior.json` eklendi; `AI_Test.actor.json` bu asset'lere baglandi.
+- Behavior akisi: patrol noktalarinda yavas gezin, goruste oyuncunun canli
+  pozisyonuna hizli kos, gorus kaybinda son bilinen noktayi arastir, saldiri
+  menzilinde `ai.attack.intent` / `punch` mesaji emit et.
+- `forge.updateTargetDistanceBlackboard` servisi hedef entity pozisyonundan
+  `targetDistance`, `inAttackRange` ve opsiyonel live target position key'lerini
+  yazar.
+- `forge.moveToPosition` ve `forge.moveToBlackboard` task'lari opsiyonel
+  `speed` parametresini runtime path-following intent'ine tasir; demo patrol ve
+  chase hizlarini authored data ile ayirir.
+- AI controlled Actor Script character'lar TPS GameMode player seciminden
+  filtrelenir; default player pawn Player Start'ta spawn/possess edilmeye devam
+  eder.
+- AI character locomotion animator'u CharacterMovement raporunu okuyup skeleton
+  sidecar'daki anim-set/blend-space ile idle/walk/run secimini yapar.
+- Not: George animasyon setinde punch montage yok; bu dilim saldiri kararini ve
+  intent mesajini gosterir. Gercek punch animasyonu icin skeletal sidecar'a
+  montage/clip tanimi eklenmeli.
 
 ### Faz 6 - Smart Objects
 

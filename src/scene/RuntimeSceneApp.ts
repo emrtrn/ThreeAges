@@ -89,7 +89,12 @@ import { consumePlayCameraPose } from "@/play/cameraHandoff";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
 import { CharacterMovementSubsystem, type CharacterMoveIntent } from "@/game/characterMovementSystem";
-import type { LocomotionInput } from "@/game/locomotionAnimation";
+import {
+  DEFAULT_LOCOMOTION_THRESHOLDS,
+  locomotionConfigForSkeleton,
+  resolveLocomotionAnimation,
+  type LocomotionInput,
+} from "@/game/locomotionAnimation";
 import { resolveGameMode } from "@/game/gameModes/registry";
 import { isGameModeClassRef } from "@/game/gameModes/catalog";
 import { createProjectGameMode } from "@/game/gameModes/projectGameMode";
@@ -247,6 +252,7 @@ import {
   type ActorScriptDef,
 } from "@engine/scene/actorScript";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
+import { CrossfadeAnimator } from "@engine/render-three/characterAnimator";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import {
@@ -311,6 +317,7 @@ import {
 } from "@engine/scene/collision";
 import {
   readAudioComponent,
+  readAIControllerComponent,
   readCharacterMovementComponent,
   readLightComponent,
   readMeshRendererComponent,
@@ -386,11 +393,18 @@ export interface PerfMemorySnapshot {
 
 interface RuntimeAiPathFollowing {
   goal: Vec3;
+  speed?: number;
   state: PathFollowingState;
   /** Progress window feeding stuck detection (replan / give up). */
   stuck: StuckState;
   /** Stuck-recovery replans burned on the current goal. */
   replans: number;
+}
+
+interface RuntimeAiCharacterAnimator {
+  readonly ref: RuntimeCharacterRef;
+  readonly animator: CrossfadeAnimator;
+  readonly config: ReturnType<typeof locomotionConfigForSkeleton>;
 }
 
 /** One AI path follower's live state for the `?debug` overlay. */
@@ -401,6 +415,7 @@ export interface AiNavFollowerDebug {
   readonly pathLength: number;
   readonly path: readonly Vec3[];
   readonly goal: Vec3;
+  readonly speed?: number;
   readonly replans: number;
   readonly secondsWithoutProgress: number;
 }
@@ -489,6 +504,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     blockers: () => this.physicsSubsystem.staticBlockerAabbs(),
   });
   private readonly aiPathFollowing = new Map<string, RuntimeAiPathFollowing>();
+  private readonly aiCharacterAnimators = new Map<string, RuntimeAiCharacterAnimator>();
   private aiNavigationView: Group | null = null;
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
   private readonly soundUrlById = new Map<string, string>();
@@ -963,6 +979,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // input, so opening a screen suppresses this frame's camera/movement.
       this.updateUiInput();
       this.gameModeSession?.update(deltaMs / 1000);
+      this.updateAiCharacterAnimations(deltaMs / 1000);
       this.updateGameRules(deltaMs / 1000);
       this.updateUiStore();
       this.updateWorldUi();
@@ -1091,6 +1108,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         pathLength: follow.state.path.length,
         path: follow.state.path,
         goal: follow.goal,
+        ...(follow.speed !== undefined ? { speed: follow.speed } : {}),
         replans: follow.replans,
         secondsWithoutProgress: follow.stuck.secondsWithoutProgress,
       })),
@@ -1184,6 +1202,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (path.status === "failure" || path.points.length < 2) {
         this.aiPathFollowing.set(entityId, {
           goal: [...request.position],
+          ...(request.speed !== undefined ? { speed: request.speed } : {}),
           state: { path: [], waypointIndex: 0, status: "failure" },
           stuck: freshStuckState(transform.position),
           replans: 0,
@@ -1192,11 +1211,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
       this.aiPathFollowing.set(entityId, {
         goal: [...request.position],
+        ...(request.speed !== undefined ? { speed: request.speed } : {}),
         state: { path: path.points, waypointIndex: 1, status: "following" },
         stuck: freshStuckState(transform.position),
         replans: 0,
       });
       return "running";
+    }
+    if (existing.speed !== request.speed) {
+      if (request.speed === undefined) {
+        delete existing.speed;
+      } else {
+        existing.speed = request.speed;
+      }
     }
     // A memoized failure (unreachable goal or exhausted stuck recovery) keeps
     // failing this goal until the task asks for a different one — replanning
@@ -1299,7 +1326,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             dz / length + separation[1] * AI_SEPARATION_WEIGHT,
           ]
         : [separation[0], separation[1]];
-    return { direction };
+    return {
+      direction,
+      ...(follow.speed !== undefined ? { speed: follow.speed } : {}),
+    };
   }
 
   /** Every other live character (player + NPCs) as a separation neighbor. */
@@ -1792,6 +1822,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.movingPlatformSubsystem.clear();
     this.characterMovementSubsystem.clear();
     this.aiPathFollowing.clear();
+    this.aiCharacterAnimators.clear();
     this.aiSubsystem.setEntities([]);
     this.behaviorSubsystem.setEntities([]);
 
@@ -2743,8 +2774,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (spawn.yawDeg !== null) character.rotation = [0, spawn.yawDeg, 0];
       return;
     }
-    // An authored player Actor (character class with movement) already is a pawn.
-    if (this.actorEntities.some((entity) => readCharacterMovementComponent(entity))) return;
+    // An authored player Actor (character class with movement, not AI-controlled)
+    // already is a pawn.
+    if (
+      this.actorEntities.some(
+        (entity) => readCharacterMovementComponent(entity) && !readAIControllerComponent(entity),
+      )
+    ) {
+      return;
+    }
     // No authored player: spawn the mode's default pawn at the Player Start.
     if (mode.defaultPawn.pawnClassRef) {
       await this.spawnDefaultPawnActor(mode.defaultPawn.pawnClassRef, spawnTag);
@@ -2816,6 +2854,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const possessedEntityId = session.playerState.pawnEntityId;
     for (const ref of this.characterRefs) {
       if (ref.entityId === possessedEntityId) continue;
+      if (ref.isAiControlled && ref.hasCharacterMovement) {
+        this.registerAiCharacterAnimator(ref);
+        continue;
+      }
       const mixer = createSceneCharacterMixer(
         ref.object,
         ref.gltf,
@@ -2823,6 +2865,38 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         ref.skeleton?.rootMotion,
       );
       if (mixer) this.animationSubsystem.add(mixer);
+    }
+  }
+
+  private registerAiCharacterAnimator(ref: RuntimeCharacterRef): void {
+    const config = locomotionConfigForSkeleton(ref.skeleton);
+    const animator = new CrossfadeAnimator(ref.object, ref.gltf.animations, {
+      ...(ref.skeleton?.rootMotion ? { rootMotion: ref.skeleton.rootMotion } : {}),
+    });
+    const initial = resolveLocomotionAnimation(
+      { planarSpeed: 0, grounded: true, velocityY: 0 },
+      animator.clips,
+      config,
+      DEFAULT_LOCOMOTION_THRESHOLDS,
+    );
+    if (initial.kind === "blend") animator.playBlend(initial.weights);
+    else if (initial.clip) animator.play(initial.clip, 0);
+    this.animationSubsystem.add(animator.mixer);
+    this.aiCharacterAnimators.set(ref.entityId, { ref, animator, config });
+  }
+
+  private updateAiCharacterAnimations(deltaSeconds: number): void {
+    for (const [entityId, runtime] of this.aiCharacterAnimators) {
+      if (entityId === this.gameModeSession?.playerState.pawnEntityId) continue;
+      const report = this.locomotionReports.get(entityId);
+      const result = resolveLocomotionAnimation(
+        report ?? { planarSpeed: 0, grounded: true, velocityY: 0 },
+        runtime.animator.clips,
+        runtime.config,
+        DEFAULT_LOCOMOTION_THRESHOLDS,
+      );
+      if (result.kind === "blend") runtime.animator.playBlend(result.weights);
+      else if (result.clip) runtime.animator.play(result.clip, deltaSeconds > 0 ? 0.18 : 0);
     }
   }
 
@@ -3172,6 +3246,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       classRef: actor.classRef,
       parentClass: "character",
       hasCharacterMovement: readCharacterMovementComponent(entity) !== undefined,
+      isAiControlled: readAIControllerComponent(entity) !== undefined,
       entity,
     });
   }

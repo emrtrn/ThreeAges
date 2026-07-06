@@ -127,6 +127,7 @@ export interface RuntimeCharacterRef {
   readonly classRef?: string;
   readonly parentClass?: "character";
   readonly hasCharacterMovement?: boolean;
+  readonly isAiControlled?: boolean;
   readonly entity?: Entity;
   /**
    * Authored skeletal metadata (`*.skeleton.json`) for this character's asset:
