@@ -473,6 +473,10 @@ import {
   type AssetSkeletonBlendSpaceDef,
 } from "../src/scene/assetSkeletonLoader";
 import {
+  applyMaterialSlotOverrides,
+  collectAssetMaterialElements,
+} from "../src/scene/assetMaterialSlotsLoader";
+import {
   createThreeMaterialFromForgeDef,
   EMISSIVE_INTENSITY_SCALE,
 } from "../engine/render-three/materials";
@@ -12976,12 +12980,12 @@ check("collision save payload requires a .collision.json path", () => {
 check("material slots save payload requires a .materials.json path", () => {
   const payload = validateSaveMaterialSlotsPayload({
     path: "assets/props/chair.materials.json",
-    materialSlots: { schema: 1, slots: ["starter-mat-brick-clay-old"] },
+    materialSlots: { schema: 1, slots: ["starter-mat-brick-clay-old", "", "white-material"] },
   });
   assert.equal(payload.path, "assets/props/chair.materials.json");
   assert.deepEqual(payload.materialSlots, {
     schema: 1,
-    slots: ["starter-mat-brick-clay-old"],
+    slots: ["starter-mat-brick-clay-old", "", "white-material"],
   });
   assert.throws(() =>
     validateSaveMaterialSlotsPayload({ path: "assets/props/chair.json", materialSlots: { slots: [] } }),
@@ -12995,6 +12999,33 @@ check("material slots save payload requires a .materials.json path", () => {
       materialSlots: { slots: [false] },
     }),
   );
+});
+
+check("static mesh material slots follow unique GLB material order across primitive meshes", () => {
+  const root = new Object3D();
+  const bodyMaterial = new MeshStandardMaterial({ name: "Body" });
+  const trimMaterial = new MeshStandardMaterial({ name: "Trim" });
+  const overrideMaterial = new MeshStandardMaterial({ name: "Override Trim" });
+  const body = new Mesh(new BoxGeometry(1, 1, 1), bodyMaterial);
+  const trim = new Mesh(new BoxGeometry(1, 1, 1), trimMaterial);
+  root.add(body, trim);
+
+  assert.deepEqual(collectAssetMaterialElements(root), [
+    { slotIndex: 0, label: "Element 0", sourceMaterialName: "Body" },
+    { slotIndex: 1, label: "Element 1", sourceMaterialName: "Trim" },
+  ]);
+
+  applyMaterialSlotOverrides(root, { schema: 1, slots: ["", "trim-override"] }, (id) =>
+    id === "trim-override" ? overrideMaterial : undefined,
+  );
+  assert.equal(body.material, bodyMaterial);
+  assert.equal(trim.material, overrideMaterial);
+
+  body.geometry.dispose();
+  trim.geometry.dispose();
+  bodyMaterial.dispose();
+  trimMaterial.dispose();
+  overrideMaterial.dispose();
 });
 
 check("skeleton save payload requires a .skeleton.json path and canonical metadata", () => {

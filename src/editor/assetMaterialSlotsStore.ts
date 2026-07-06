@@ -8,12 +8,17 @@ import {
 } from "@/scene/assetMaterialSlotsLoader";
 
 export {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  collectAssetMaterialElements,
   defaultAssetMaterialSlots,
+  hasAssignedMaterialSlots,
   loadAssetMaterialSlots,
   materialSlotsSidecarPath,
   normalizeAssetMaterialSlots,
+  resolveMeshMaterialSlots,
 } from "@/scene/assetMaterialSlotsLoader";
-export type { AssetMaterialSlotsDef } from "@/scene/assetMaterialSlotsLoader";
+export type { AssetMaterialElement, AssetMaterialSlotsDef } from "@/scene/assetMaterialSlotsLoader";
 
 export async function saveAssetMaterialSlots(
   modelPath: string,

@@ -301,7 +301,11 @@ import {
 } from "@engine/scene/collision";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
 import {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  hasAssignedMaterialSlots,
   loadAssetMaterialSlots,
+  resolveMeshMaterialSlots,
   type AssetMaterialSlotsDef,
 } from "@/scene/assetMaterialSlotsLoader";
 import {
@@ -2379,16 +2383,25 @@ export class SceneApp {
     // an override material OR a probe envMap (clone-fallback per the plan); picking
     // stays intact because the clone carries `userData.placementIndex`.
     const decisions = placements.map((placement) => {
-      const materialSlot = this.resolvePlacementMaterialSlot(assetId, placement);
-      const overrideMaterial =
-        materialSlot && this.materialCache.has(materialSlot)
+      const materialSlot = placement.materialSlot;
+      const materialSlots = materialSlot ? undefined : this.resolveAssetMaterialSlots(assetId);
+      const overrideMaterial = materialSlot && this.materialCache.has(materialSlot)
           ? this.materialCache.get(materialSlot)
           : undefined;
       if (materialSlot && !overrideMaterial) this.ensureMaterialLoaded(materialSlot, assetId);
+      for (const slotId of assignedMaterialSlotIds(materialSlots)) {
+        if (!this.materialCache.has(slotId)) this.ensureMaterialLoaded(slotId, assetId);
+      }
       const bake = placement.hidden
         ? null
         : this.probeBakeForPoint(this.placementWorldCenter(assetId, placement));
-      return { placement, overrideMaterial, bake, asClone: Boolean(overrideMaterial) || Boolean(bake) };
+      return {
+        placement,
+        overrideMaterial,
+        materialSlots,
+        bake,
+        asClone: Boolean(overrideMaterial) || hasAssignedMaterialSlots(materialSlots) || Boolean(bake),
+      };
     });
 
     const instancedPlacements = decisions.map((decision) =>
@@ -2410,6 +2423,7 @@ export class SceneApp {
         decision.placement,
         gltf,
         decision.overrideMaterial,
+        decision.materialSlots,
         decision.bake,
         clonedMaterials,
       );
@@ -2483,8 +2497,9 @@ export class SceneApp {
     return group;
   }
 
-  private resolvePlacementMaterialSlot(assetId: string, placement: LayoutPlacement): string | undefined {
-    return placement.materialSlot ?? this.assetMaterialSlots.get(assetId)?.slots[0];
+  private resolveAssetMaterialSlots(assetId: string): AssetMaterialSlotsDef | undefined {
+    const slots = this.assetMaterialSlots.get(assetId);
+    return hasAssignedMaterialSlots(slots) ? slots : undefined;
   }
 
   /**
@@ -2500,6 +2515,7 @@ export class SceneApp {
     placement: LayoutPlacement,
     gltf: GLTF,
     overrideMaterial: Material | undefined,
+    materialSlots: AssetMaterialSlotsDef | undefined,
     bake: SphereReflectionCaptureBake | null,
     clonedMaterials: Material[],
   ): Object3D {
@@ -2514,7 +2530,7 @@ export class SceneApp {
       child.userData.assetId = assetId;
       child.userData.placementIndex = placementIndex;
       if (!isRenderableMesh(child)) return;
-      const resolveMaterial = (source: Material): Material => {
+      const applyBake = (source: Material): Material => {
         const base = overrideMaterial ?? source;
         return bake
           ? assignProbeEnvMapMaterial(
@@ -2526,12 +2542,29 @@ export class SceneApp {
             )
           : base;
       };
-      child.material = Array.isArray(child.material)
-        ? child.material.map(resolveMaterial)
-        : resolveMaterial(child.material);
+      if (overrideMaterial || !hasAssignedMaterialSlots(materialSlots)) {
+        child.material = resolveMeshMaterialSlots(child.material, undefined, () => undefined, applyBake);
+      }
       child.castShadow = this.staticObjectsCastShadow();
       child.receiveShadow = this.staticObjectsReceiveShadow();
     });
+    if (!overrideMaterial && hasAssignedMaterialSlots(materialSlots)) {
+      applyMaterialSlotOverrides(
+        object,
+        materialSlots,
+        (materialId) => this.materialCache.get(materialId),
+        (material) =>
+          bake
+            ? assignProbeEnvMapMaterial(
+                material,
+                bake,
+                clonedMaterials,
+                this.scene.environment,
+                this.scene.environmentIntensity,
+              )
+            : material,
+      );
+    }
     return object;
   }
 
@@ -6113,9 +6146,11 @@ export class SceneApp {
         const asset = this.manifest?.assets.find((entry) => entry.id === assetId);
         if (!asset) return;
         const materialSlots = await loadAssetMaterialSlots(assetPath(asset));
-        if (materialSlots.slots.length > 0) {
+        if (hasAssignedMaterialSlots(materialSlots)) {
           this.assetMaterialSlots.set(assetId, materialSlots);
-          await this.ensureMaterialLoaded(materialSlots.slots[0]!);
+          await Promise.all(assignedMaterialSlotIds(materialSlots).map((slotId) =>
+            this.ensureMaterialLoaded(slotId),
+          ));
         } else {
           this.assetMaterialSlots.delete(assetId);
         }

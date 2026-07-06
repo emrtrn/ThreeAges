@@ -255,7 +255,11 @@ import {
 } from "@/scene/assetUvwLoader";
 import { loadForgeMaterial } from "@/scene/materialAssets";
 import {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  hasAssignedMaterialSlots,
   loadAssetMaterialSlots,
+  resolveMeshMaterialSlots,
   type AssetMaterialSlotsDef,
 } from "@/scene/assetMaterialSlotsLoader";
 import {
@@ -3327,15 +3331,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // are hidden in the instanced mesh and rendered as a separate clone (clone-
     // fallback), matching the editor so Play renders identically.
     const decisions = placements.map((placement) => {
-      const materialSlot = this.resolvePlacementMaterialSlot(assetId, placement);
-      const overrideMaterial =
-        materialSlot && this.materialCache.has(materialSlot)
+      const materialSlot = placement.materialSlot;
+      const materialSlots = materialSlot ? undefined : this.resolveAssetMaterialSlots(assetId);
+      const overrideMaterial = materialSlot && this.materialCache.has(materialSlot)
           ? this.materialCache.get(materialSlot)
           : undefined;
       const bake = placement.hidden
         ? null
         : this.probeBakeForPoint(this.placementWorldCenter(assetId, placement));
-      return { placement, overrideMaterial, bake, asClone: Boolean(overrideMaterial) || Boolean(bake) };
+      return {
+        placement,
+        overrideMaterial,
+        materialSlots,
+        bake,
+        asClone: Boolean(overrideMaterial) || hasAssignedMaterialSlots(materialSlots) || Boolean(bake),
+      };
     });
     const instancedPlacements = decisions.map((decision) =>
       decision.asClone ? { ...decision.placement, hidden: true } : decision.placement,
@@ -3355,6 +3365,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         decision.placement,
         gltf,
         decision.overrideMaterial,
+        decision.materialSlots,
         decision.bake,
         clonedMaterials,
       );
@@ -3367,8 +3378,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return group;
   }
 
-  private resolvePlacementMaterialSlot(assetId: string, placement: LayoutPlacement): string | undefined {
-    return placement.materialSlot ?? this.assetMaterialSlots.get(assetId)?.slots[0];
+  private resolveAssetMaterialSlots(assetId: string): AssetMaterialSlotsDef | undefined {
+    const slots = this.assetMaterialSlots.get(assetId);
+    return hasAssignedMaterialSlots(slots) ? slots : undefined;
   }
 
   /**
@@ -3384,6 +3396,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     placement: LayoutPlacement,
     gltf: GLTF,
     overrideMaterial: Material | undefined,
+    materialSlots: AssetMaterialSlotsDef | undefined,
     bake: SphereReflectionCaptureBake | null,
     clonedMaterials: Material[],
   ): Object3D {
@@ -3396,7 +3409,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     object.userData.placementIndex = placementIndex;
     object.traverse((child) => {
       if (!isRenderableMesh(child)) return;
-      const resolveMaterial = (source: Material): Material => {
+      const applyBake = (source: Material): Material => {
         const base = overrideMaterial ?? source;
         return bake
           ? assignProbeEnvMapMaterial(
@@ -3408,12 +3421,29 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             )
           : base;
       };
-      child.material = Array.isArray(child.material)
-        ? child.material.map(resolveMaterial)
-        : resolveMaterial(child.material);
+      if (overrideMaterial || !hasAssignedMaterialSlots(materialSlots)) {
+        child.material = resolveMeshMaterialSlots(child.material, undefined, () => undefined, applyBake);
+      }
       child.castShadow = this.staticObjectsCastShadow();
       child.receiveShadow = this.staticObjectsReceiveShadow();
     });
+    if (!overrideMaterial && hasAssignedMaterialSlots(materialSlots)) {
+      applyMaterialSlotOverrides(
+        object,
+        materialSlots,
+        (materialId) => this.materialCache.get(materialId),
+        (material) =>
+          bake
+            ? assignProbeEnvMapMaterial(
+                material,
+                bake,
+                clonedMaterials,
+                this.scene.environment,
+                this.scene.environmentIntensity,
+              )
+            : material,
+      );
+    }
     return object;
   }
 
@@ -3622,14 +3652,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const asset = manifest.assets.find((entry) => entry.id === assetId);
         if (!asset) return;
         const slots = await loadAssetMaterialSlots(assetPath(asset));
-        if (slots.slots.length > 0) this.assetMaterialSlots.set(assetId, slots);
+        if (hasAssignedMaterialSlots(slots)) this.assetMaterialSlots.set(assetId, slots);
       }),
     );
     const materialIds = new Set<string>();
     for (const instance of this.layout.instances) {
+      const defaultSlots = this.resolveAssetMaterialSlots(instance.assetId);
+      for (const id of assignedMaterialSlotIds(defaultSlots)) materialIds.add(id);
       for (const placement of instance.placements) {
-        const id = this.resolvePlacementMaterialSlot(instance.assetId, placement);
-        if (id) materialIds.add(id);
+        if (placement.materialSlot) materialIds.add(placement.materialSlot);
       }
     }
     for (const surface of this.layout.reflectiveSurfaces ?? []) {

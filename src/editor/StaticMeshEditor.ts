@@ -62,9 +62,13 @@ import {
   type UvwMapType,
 } from "@/editor/assetUvwStore";
 import {
+  applyMaterialSlotOverrides,
+  assignedMaterialSlotIds,
+  collectAssetMaterialElements,
   defaultAssetMaterialSlots,
   loadAssetMaterialSlots,
   saveAssetMaterialSlots,
+  type AssetMaterialElement,
   type AssetMaterialSlotsDef,
 } from "@/editor/assetMaterialSlotsStore";
 import type { AssetManifest, AssetRecord } from "@engine/assets/manifest";
@@ -185,8 +189,8 @@ export class StaticMeshEditor {
   private collision: AssetCollisionDef = defaultAssetCollisionDef();
   private uvw: AssetUvwDef = defaultAssetUvw();
   private materialSlots: AssetMaterialSlotsDef = defaultAssetMaterialSlots();
-  private selectedMaterialId = "";
-  private previewMaterial: MeshBasicMaterial | MeshStandardMaterial | null = null;
+  private materialElements: AssetMaterialElement[] = [{ slotIndex: 0, label: "Element 0", sourceMaterialName: "Element 0" }];
+  private previewMaterials = new Map<string, MeshBasicMaterial | MeshStandardMaterial>();
   private readonly originalMeshMaterials = new Map<Mesh, Mesh["material"]>();
   private modelBounds = new Box3();
   private selectedPrimitive = -1;
@@ -389,6 +393,8 @@ export class StaticMeshEditor {
           this.originalMeshMaterials.set(object, object.material);
         }
       });
+      this.materialElements = collectAssetMaterialElements(model);
+      this.renderDetails();
       this.rebuildComplexCollisionOverlay();
       this.modelBounds = new Box3().setFromObject(model);
       const center = this.modelBounds.getCenter(new Vector3());
@@ -399,8 +405,8 @@ export class StaticMeshEditor {
       this.updateCamera();
       this.applyCurrentUvw();
       this.rebuildUvwOverlay();
-      if (this.selectedMaterialId) {
-        void this.applyPreviewMaterial(this.selectedMaterialId, { dirty: false, status: false });
+      if (assignedMaterialSlotIds(this.materialSlots).length > 0) {
+        void this.applyPreviewMaterials({ dirty: false, status: false });
       }
       this.setStatus("Ready.");
     } catch (error) {
@@ -426,10 +432,9 @@ export class StaticMeshEditor {
   private async loadMaterialSlots(): Promise<void> {
     this.materialSlots = await loadAssetMaterialSlots(this.options.modelPath);
     if (this.disposed) return;
-    this.selectedMaterialId = this.materialSlots.slots[0] ?? "";
     this.renderDetails();
-    if (this.selectedMaterialId) {
-      await this.applyPreviewMaterial(this.selectedMaterialId, { dirty: false, status: false });
+    if (assignedMaterialSlotIds(this.materialSlots).length > 0) {
+      await this.applyPreviewMaterials({ dirty: false, status: false });
     }
   }
 
@@ -1095,15 +1100,25 @@ export class StaticMeshEditor {
           <button type="button" class="sm-prim-del" data-sm-uvw-remove title="Remove">✕</button>
         </div>`
       : `<div class="sm-empty">No UVW map. Use the UVW Map menu to apply a projection.</div>`;
+    const materialRows = this.materialElements
+      .map((element) => {
+        const suffix =
+          element.sourceMaterialName && element.sourceMaterialName !== element.label
+            ? `<small>${escapeHtml(element.sourceMaterialName)}</small>`
+            : "";
+        return `
+        <label class="sm-row">
+          <span>${escapeHtml(element.label)}${suffix}</span>
+          <select data-sm-material-slot="${element.slotIndex}">${this.materialSlotOptions(element.slotIndex)}</select>
+        </label>`;
+      })
+      .join("");
 
     this.detailsHost.innerHTML = `
       <div class="sm-details-heading">Details</div>
       <div class="sm-section">
         <div class="sm-section-title">Materials</div>
-        <label class="sm-row">
-          <span>Element 0</span>
-          <select data-sm-field="materialSlot">${this.materialSlotOptions()}</select>
-        </label>
+        ${materialRows}
       </div>
       <div class="sm-section">
         <div class="sm-section-title">UVW Map</div>
@@ -1151,12 +1166,13 @@ export class StaticMeshEditor {
       </div>
     `;
 
-    this.detailsHost
-      .querySelector<HTMLSelectElement>('[data-sm-field="materialSlot"]')
-      ?.addEventListener("change", (event) => {
+    this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-sm-material-slot]").forEach((select) => {
+      select.addEventListener("change", (event) => {
+        const slotIndex = Number(select.dataset.smMaterialSlot);
         const value = (event.target as HTMLSelectElement).value;
-        void this.applyPreviewMaterial(value, { dirty: true, status: true });
+        void this.applyPreviewMaterial(slotIndex, value, { dirty: true, status: true });
       });
+    });
     this.detailsHost
       .querySelector<HTMLSelectElement>('[data-sm-field="preset"]')
       ?.addEventListener("change", (event) => {
@@ -1217,14 +1233,15 @@ export class StaticMeshEditor {
     if (readout) readout.textContent = this.uvwReadout();
   }
 
-  private materialSlotOptions(): string {
+  private materialSlotOptions(slotIndex: number): string {
     const materials = this.options.assets?.filter((asset) => asset.assetType === "material") ?? [];
-    return [`<option value="" ${this.selectedMaterialId ? "" : "selected"}>None</option>`]
+    const selectedMaterialId = this.materialSlots.slots[slotIndex] ?? "";
+    return [`<option value="" ${selectedMaterialId ? "" : "selected"}>None</option>`]
       .concat(
         materials.map(
           (asset) =>
             `<option value="${escapeHtml(asset.id)}" ${
-              this.selectedMaterialId === asset.id ? "selected" : ""
+              selectedMaterialId === asset.id ? "selected" : ""
             }>${escapeHtml(asset.name)}</option>`,
         ),
       )
@@ -1232,37 +1249,47 @@ export class StaticMeshEditor {
   }
 
   private async applyPreviewMaterial(
+    slotIndex: number,
     materialId: string,
     options: { dirty?: boolean; status?: boolean } = {},
   ): Promise<void> {
-    this.selectedMaterialId = materialId;
-    this.materialSlots = { schema: 1, slots: materialId ? [materialId] : [] };
-    this.disposePreviewMaterial();
-    if (!materialId) {
-      this.restoreOriginalMaterials();
+    const slots = [...this.materialSlots.slots];
+    slots[slotIndex] = materialId;
+    while (slots.length > 0 && !slots[slots.length - 1]) slots.pop();
+    this.materialSlots = { schema: 1, slots };
+    await this.applyPreviewMaterials(options);
+  }
+
+  private async applyPreviewMaterials(options: { dirty?: boolean; status?: boolean } = {}): Promise<void> {
+    this.disposePreviewMaterials();
+    this.restoreOriginalMaterials();
+    const materialIds = [...new Set(assignedMaterialSlotIds(this.materialSlots))];
+    if (materialIds.length === 0) {
       if (options.dirty) this.markDirty();
-      if (options.status !== false) this.setStatus("Material slot cleared.");
-      return;
-    }
-    const record = this.options.assets?.find((asset) => asset.id === materialId);
-    if (!record) {
-      this.setStatus(`Material not found: ${materialId}`, "warning");
+      if (options.status !== false) this.setStatus("Material slots cleared.");
       return;
     }
     try {
-      const material = await loadForgeMaterial(
-        this.previewAssetManifest(),
-        materialId,
-        this.textureLoader,
-        { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },
+      const manifest = this.previewAssetManifest();
+      for (const id of materialIds) {
+        const record = this.options.assets?.find((asset) => asset.id === id);
+        if (!record) {
+          this.setStatus(`Material not found: ${id}`, "warning");
+          return;
+        }
+        const material = await loadForgeMaterial(
+          manifest,
+          id,
+          this.textureLoader,
+          { maxAnisotropy: this.renderer.capabilities.getMaxAnisotropy() },
+        );
+        this.previewMaterials.set(id, material);
+      }
+      applyMaterialSlotOverrides(this.modelGroup, this.materialSlots, (id) =>
+        this.previewMaterials.get(id),
       );
-      this.previewMaterial = material;
-      this.modelGroup.traverse((object) => {
-        if (!(object instanceof Mesh)) return;
-        object.material = material;
-      });
       if (options.dirty) this.markDirty();
-      if (options.status !== false) this.setStatus(`Preview material: ${record.name}`);
+      if (options.status !== false) this.setStatus("Preview material slots updated.");
     } catch (error) {
       this.setStatus(`Material preview failed: ${describeError(error)}`, "error");
     }
@@ -1304,14 +1331,15 @@ export class StaticMeshEditor {
     };
   }
 
-  private disposePreviewMaterial(): void {
-    if (!this.previewMaterial) return;
-    this.previewMaterial.map?.dispose();
-    if (this.previewMaterial instanceof MeshStandardMaterial) {
-      this.previewMaterial.normalMap?.dispose();
+  private disposePreviewMaterials(): void {
+    for (const material of this.previewMaterials.values()) {
+      material.map?.dispose();
+      if (material instanceof MeshStandardMaterial) {
+        material.normalMap?.dispose();
+      }
+      material.dispose();
     }
-    this.previewMaterial.dispose();
-    this.previewMaterial = null;
+    this.previewMaterials.clear();
   }
 
   private restoreOriginalMaterials(): void {
@@ -1383,7 +1411,7 @@ export class StaticMeshEditor {
     this.resizeObserver.disconnect();
     this.transformControls?.detach();
     this.transformControls?.dispose();
-    this.disposePreviewMaterial();
+    this.disposePreviewMaterials();
     for (const overlay of this.overlays) disposeOverlay(overlay);
     this.disposeUvwOverlay();
     this.disposeComplexCollisionOverlay();

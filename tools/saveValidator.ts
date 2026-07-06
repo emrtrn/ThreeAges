@@ -1848,8 +1848,8 @@ export function validateAssetMaterialSlotsDef(value: unknown): Record<string, un
   const input = value as Record<string, unknown>;
   if (!Array.isArray(input.slots)) throw new Error("materialSlots.slots must be an array");
   const slots = input.slots.map((slot, index) => {
-    if (typeof slot !== "string" || slot.length === 0) {
-      throw new Error(`materialSlots.slots[${index}] must be a non-empty string`);
+    if (typeof slot !== "string") {
+      throw new Error(`materialSlots.slots[${index}] must be a string`);
     }
     return slot;
   });
