@@ -15,7 +15,14 @@
  */
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId } from "../scene/entity";
-import { readAIControllerComponent } from "../scene/components";
+import { readAIControllerComponent, readTransformComponent } from "../scene/components";
+import { forwardVectorFromRotation } from "../scene/transform";
+import {
+  evaluatePerception,
+  type NoiseStimulus,
+  type PerceptionAabb,
+  type StimulusSource,
+} from "../perception/perception";
 import { Blackboard } from "./blackboard";
 import { AIController, type AIControllerDebugSnapshot, type AIControllerOptions } from "./aiController";
 import type { AiBlackboardAsset, AiBehaviorTreeAsset } from "./behaviorAsset";
@@ -50,6 +57,7 @@ export interface AISubsystemOptions {
   readonly serviceRegistry?: AiServiceRegistry;
   readonly emitMessage?: (input: AiMessageEmitInput) => void;
   readonly moveTo?: (request: AiMoveRequest) => "success" | "failure" | "running";
+  readonly blockers?: () => readonly PerceptionAabb[];
 }
 
 export class AISubsystem implements Subsystem {
@@ -65,12 +73,16 @@ export class AISubsystem implements Subsystem {
   private serviceRegistry: AiServiceRegistry | undefined;
   private emitMessage: ((input: AiMessageEmitInput) => void) | undefined;
   private moveTo: ((request: AiMoveRequest) => "success" | "failure" | "running") | undefined;
+  private blockers: (() => readonly PerceptionAabb[]) | undefined;
+  private entities: readonly Entity[] = [];
+  private pendingNoises: NoiseStimulus[] = [];
 
   constructor(options: AISubsystemOptions = {}) {
     this.taskRegistry = options.taskRegistry ?? createDefaultAiTaskRegistry();
     this.serviceRegistry = options.serviceRegistry;
     this.emitMessage = options.emitMessage;
     this.moveTo = options.moveTo;
+    this.blockers = options.blockers;
   }
 
   configure(options: AISubsystemOptions): void {
@@ -78,6 +90,7 @@ export class AISubsystem implements Subsystem {
     if (options.serviceRegistry) this.serviceRegistry = options.serviceRegistry;
     if (options.emitMessage) this.emitMessage = options.emitMessage;
     if (options.moveTo) this.moveTo = options.moveTo;
+    if (options.blockers) this.blockers = options.blockers;
   }
 
   setAssetLibrary(library: AiAssetLibrary): void {
@@ -96,6 +109,8 @@ export class AISubsystem implements Subsystem {
   setEntities(entities: readonly Entity[]): void {
     this.controllers.clear();
     this.runners.clear();
+    this.entities = entities;
+    this.pendingNoises = [];
     for (const entity of entities) {
       const component = readAIControllerComponent(entity);
       if (!component) continue;
@@ -110,6 +125,7 @@ export class AISubsystem implements Subsystem {
       const options: AIControllerOptions = {
         ...(component.behaviorTree ? { behaviorTreeAsset: component.behaviorTree } : {}),
         ...(blackboardRef ? { blackboardAsset: blackboardRef } : {}),
+        ...(component.perception ? { perception: component.perception } : {}),
       };
       this.controllers.set(entity.id, new AIController(`ai:${entity.id}`, entity.id, blackboard, options));
     }
@@ -117,8 +133,21 @@ export class AISubsystem implements Subsystem {
   }
 
   update(engine: EngineUpdateContext): void {
-    if (!this.enabled) return;
+    if (!this.enabled) {
+      this.pendingNoises = [];
+      return;
+    }
+    this.updatePerception();
     for (const runner of this.runners.values()) runner.tick(engine);
+    this.pendingNoises = [];
+  }
+
+  emitNoise(position: readonly [number, number, number], sourceEntityId: EntityId, loudness = 1): void {
+    this.pendingNoises.push({
+      sourceEntityId,
+      position: [position[0], position[1], position[2]],
+      loudness,
+    });
   }
 
   /**
@@ -147,6 +176,8 @@ export class AISubsystem implements Subsystem {
   clear(): void {
     this.controllers.clear();
     this.runners.clear();
+    this.entities = [];
+    this.pendingNoises = [];
   }
 
   dispose(): void {
@@ -177,6 +208,33 @@ export class AISubsystem implements Subsystem {
     }
   }
 
+  private updatePerception(): void {
+    const sources = perceptionSources(this.entities);
+    const blockers = this.blockers?.() ?? [];
+    for (const [pawnEntityId, controller] of this.controllers) {
+      const entity = this.entities.find((candidate) => candidate.id === pawnEntityId);
+      const transform = entity ? readTransformComponent(entity) : undefined;
+      const config = controller.perceptionConfig;
+      if (!transform || !config) {
+        controller.setPerception([]);
+        continue;
+      }
+      controller.setPerception(
+        evaluatePerception({
+          listener: {
+            entityId: pawnEntityId,
+            position: transform.position,
+            forward: forwardVectorFromRotation(transform.rotation),
+            ...config,
+          },
+          sources,
+          noises: this.pendingNoises,
+          blockers,
+        }),
+      );
+    }
+  }
+
   private runnerOptions(): AiBehaviorRunnerOptions {
     return {
       taskRegistry: this.taskRegistry,
@@ -186,4 +244,14 @@ export class AISubsystem implements Subsystem {
       ...(this.moveTo ? { moveTo: this.moveTo } : {}),
     };
   }
+}
+
+function perceptionSources(entities: readonly Entity[]): StimulusSource[] {
+  const sources: StimulusSource[] = [];
+  for (const entity of entities) {
+    const transform = readTransformComponent(entity);
+    if (!transform) continue;
+    sources.push({ entityId: entity.id, position: transform.position });
+  }
+  return sources;
 }

@@ -471,6 +471,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Owns every AIController possessing an NPC pawn (decision tick lands in Faz 2). */
   private readonly aiSubsystem = new AISubsystem({
     taskRegistry: createGameAiTaskRegistry(),
+    blockers: () => this.physicsSubsystem.staticBlockerAabbs(),
   });
   private readonly aiPathFollowing = new Map<string, RuntimeAiPathFollowing>();
   private aiNavigationView: Group | null = null;

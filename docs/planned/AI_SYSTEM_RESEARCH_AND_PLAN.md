@@ -19,14 +19,19 @@
 > uygulandi (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-06 - Faz 3 AI Navigation Volume authoring ve runtime
 > bounds dilimi uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 4 Perception contract + sight/hearing debug state
+> ilk dilimi uygulandi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 618 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 622 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
 > ve editor `Show > AI Navigation` gorunumu tamamlandi. AI Navigation Volume
 > (Unreal NavMesh Bounds Volume karsiligi) editor authoring + runtime bounds
-> olarak eklendi. Faz 2 editor form ve gelismis service/decorator isleri planli.
+> olarak eklendi. Faz 4 Perception ilk diliminde saf sight/hearing contract'i,
+> runtime `AISubsystem` perception snapshot'i ve `?debug` sensed-target satiri
+> eklendi. Faz 2 editor form, gelismis service/decorator isleri ve Faz 4
+> Blackboard service bridge/debug overlay isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -515,34 +520,54 @@ Hedef: NPC kararlarini game-state polling yerine stimulus ve algi eventleriyle
 beslemek.
 
 - [ ] `engine/perception` contract ekle:
-      - [ ] `PerceptionListener`
-      - [ ] `StimulusSource`
-      - [ ] `PerceivedStimulus`
+      - [x] `PerceptionListener`
+      - [x] `StimulusSource`
+      - [x] `PerceivedStimulus`
       - [ ] dominant/priority sense.
 - [ ] Sight:
-      - [ ] radius
-      - [ ] field of view
-      - [ ] line-of-sight ray/AABB test
+      - [x] radius
+      - [x] field of view
+      - [x] line-of-sight ray/AABB test
       - [ ] target lost grace period.
 - [ ] Hearing:
-      - [ ] `emitNoise(position, loudness, sourceEntityId)`
-      - [ ] radius attenuation
+      - [x] `emitNoise(position, loudness, sourceEntityId)`
+      - [x] radius attenuation
       - [ ] last heard position blackboard update.
 - [ ] Damage/gameplay stimulus:
       - [ ] `damage`, `alert`, `ui-action`, `game-event` gibi mevcut script
             message eventlerinden perception'a bridge —
             `BehaviorSubsystem.subscribeScriptMessage()` ile; scene rebuild
             (`clear()`) aboneligi dusurur, yeniden abone olmayi unutma.
-- [ ] AIController component props icinde perception config expose et.
+- [x] AIController component props icinde perception config expose et.
 - [ ] Behavior Tree serviceleri perception result'larini Blackboard'a yazsin.
 - [ ] Debug:
       - [ ] sight cone
       - [ ] hearing radius
-      - [ ] current sensed targets
+      - [x] current sensed targets
       - [ ] last known positions.
-- [ ] Test: target FOV disindayken gorulmez, FOV icinde ve obstruction yokken gorulur.
+- [x] Test: target FOV disindayken gorulmez, FOV icinde ve obstruction yokken gorulur.
 - [ ] Test: noise event blackboard'a last heard position yazar.
 - [ ] Validation: TypeScript, engine tests, build verify, Playwright editor debug smoke.
+
+Tamamlanan Faz 4 Perception contract/sight-hearing notu (2026-07-06):
+
+- `engine/perception/perception.ts` eklendi; `PerceptionListener`,
+  `StimulusSource`, `PerceivedStimulus`, sight FOV/radius/LOS AABB testi ve
+  hearing noise radius attenuation saf engine modulu olarak tanimli.
+- `AIController` artik authored perception config'ini ve runtime sensed stimulus
+  snapshot'ini tasiyor; runtime state layout'a yazilmiyor.
+- `AISubsystem` entity transform'larindan perception source/listener uretir,
+  `emitNoise(position, sourceEntityId, loudness)` ile bir tick'lik hearing
+  stimulus'u tuketir ve LOS icin host'un `PhysicsSubsystem.staticBlockerAabbs()`
+  yuzeyini kullanir.
+- Runtime ve editor Play host'lari `AISubsystem` perception blocker provider'ini
+  physics subsystem'e baglar; editor edit-mode AI gate davranisi korunur.
+- `?debug` AI formatter'i en guclu sensed stimulus'u kisa metin satiri olarak
+  gosterir (`sense enemy: sight:player d:4.0`).
+- Test: sight radius/FOV/LOS, hearing loudness attenuation, `AISubsystem`
+  perception snapshot/noise tuketimi ve debug formatter kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`622 checks passed`), `npm.cmd run build:verify` yesil.
 
 ### Faz 5 - EQS benzeri query sistemi
 

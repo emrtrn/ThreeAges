@@ -88,6 +88,12 @@ import {
   updateStuckState,
 } from "../engine/navigation/localAvoidance";
 import {
+  evaluateHearing,
+  evaluateSight,
+  insideHorizontalFov,
+  segmentIntersectsAabb,
+} from "../engine/perception/perception";
+import {
   forwardVectorFromRotation,
   readRotation,
   readScale,
@@ -18363,6 +18369,49 @@ check("readAIControllerComponent parses props and marks empty components", () =>
   assert.equal(Object.keys(empty ?? {}).length, 0);
 });
 
+check("AI perception sight respects radius, horizontal FOV, and blocker LOS", () => {
+  const listener = {
+    entityId: "enemy",
+    position: [0, 0, 0] as [number, number, number],
+    forward: [0, 0, 1] as [number, number, number],
+    sightRadius: 6,
+    fieldOfViewDeg: 90,
+  };
+  assert.equal(insideHorizontalFov(listener.position, listener.forward, [0, 0, 4], 90), true);
+  assert.equal(insideHorizontalFov(listener.position, listener.forward, [4, 0, 0], 90), false);
+  assert.deepEqual(
+    evaluateSight(listener, [
+      { entityId: "front", position: [0, 0, 4] },
+      { entityId: "side", position: [4, 0, 0] },
+      { entityId: "far", position: [0, 0, 8] },
+    ]).map((stimulus) => stimulus.sourceEntityId),
+    ["front"],
+  );
+  const wall = { min: [-1, -1, 2], max: [1, 2, 2.2] };
+  assert.equal(segmentIntersectsAabb([0, 0, 0], [0, 0, 4], wall), true);
+  assert.equal(
+    evaluateSight(listener, [{ entityId: "front", position: [0, 0, 4] }], [wall]).length,
+    0,
+  );
+});
+
+check("AI perception hearing applies loudness-scaled radius", () => {
+  const listener = {
+    entityId: "enemy",
+    position: [0, 0, 0] as [number, number, number],
+    forward: [0, 0, 1] as [number, number, number],
+    hearingRadius: 5,
+  };
+  const heard = evaluateHearing(listener, [
+    { sourceEntityId: "step", position: [3, 0, 0], loudness: 1 },
+    { sourceEntityId: "quiet", position: [6, 0, 0], loudness: 1 },
+    { sourceEntityId: "loud", position: [8, 0, 0], loudness: 2 },
+  ]);
+  assert.deepEqual(heard.map((stimulus) => stimulus.sourceEntityId), ["step", "loud"]);
+  assert.equal(heard[0]?.sense, "hearing");
+  assert.ok((heard[0]?.strength ?? 0) > (heard[1]?.strength ?? 0));
+});
+
 check("AISubsystem derives one controller per AIController entity, ticks safely, and gates", () => {
   const ai = new AISubsystem();
   ai.setEntities([
@@ -18404,6 +18453,37 @@ check("AISubsystem derives one controller per AIController entity, ticks safely,
   // A rebuild with an empty set clears controllers (scene teardown/reload).
   ai.setEntities([]);
   assert.equal(ai.controllerCount(), 0);
+});
+
+check("AISubsystem derives perception listeners from AIController props and consumes noise events", () => {
+  const wall = { min: [-1, -1, 2], max: [1, 2, 2.2] };
+  const ai = new AISubsystem({ blockers: () => [wall] });
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: {
+          perception: { sightRadius: 6, fieldOfViewDeg: 90, hearingRadius: 5 },
+        },
+      },
+    },
+    {
+      id: "target",
+      components: {
+        Transform: { position: [0, 0, 4], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      },
+    },
+  ]);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0, "wall blocks sight");
+  ai.emitNoise([0, 0, 4], "target");
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 });
+  const perceived = ai.getDebugSnapshot().controllers[0]?.perception ?? [];
+  assert.equal(perceived[0]?.sense, "hearing");
+  assert.equal(perceived[0]?.sourceEntityId, "target");
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.048, frame: 3 });
+  assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0, "noise is transient");
 });
 
 check("AISubsystem resolves blackboard and behavior assets, ticks runner, and emits messages", () => {
@@ -18512,6 +18592,39 @@ check("formatAiDebug includes behavior runner status when present", () => {
     "controllers: 1",
     "  bt enemy-1: success 0.02s root/task:0 fail:blackboard:target:isSet",
     "  enemy-1 goal:— bb:1",
+  ]);
+});
+
+check("formatAiDebug includes the strongest perceived stimulus when present", () => {
+  const lines = formatAiDebug({
+    enabled: true,
+    controllerCount: 1,
+    controllers: [
+      {
+        controllerId: "ai:enemy-1",
+        pawnEntityId: "enemy-1",
+        goal: null,
+        behaviorTreeAsset: null,
+        behavior: null,
+        perception: [
+          {
+            sense: "sight",
+            sourceEntityId: "player",
+            position: [0, 0, 4],
+            distance: 4,
+            strength: 0.5,
+            lineOfSight: true,
+          },
+        ],
+        blackboard: { keyCount: 1, entries: [] },
+      },
+    ],
+  });
+  assert.deepEqual(lines, [
+    "ai",
+    "controllers: 1",
+    "  sense enemy-1: sight:player d:4.0",
+    "  enemy-1 goal:\u2014 bb:1",
   ]);
 });
 

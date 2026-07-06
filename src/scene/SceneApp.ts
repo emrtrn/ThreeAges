@@ -525,6 +525,7 @@ export class SceneApp {
   /** Owns AIControllers in editor Play mode; gated off (`setEnabled(false)`) while editing. */
   private readonly aiSubsystem = new AISubsystem({
     taskRegistry: createGameAiTaskRegistry(),
+    blockers: () => this.physicsSubsystem.staticBlockerAabbs(),
   });
   /**
    * BehaviorSubsystem transform sink: writes a behavior-mutated entity transform

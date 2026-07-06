@@ -218,6 +218,12 @@ export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
       const failed = behavior?.failedDecorator ? ` fail:${behavior.failedDecorator}` : "";
       lines.push(`  bt ${controller.pawnEntityId}: ${behaviorStatus}${elapsed}${path ? ` ${path}` : ""}${failed}`);
     }
+    const sensed = controller.perception?.[0];
+    if (sensed) {
+      lines.push(
+        `  sense ${controller.pawnEntityId}: ${sensed.sense}:${sensed.sourceEntityId} d:${sensed.distance.toFixed(1)}`,
+      );
+    }
     lines.push(
       `  ${controller.pawnEntityId} goal:${controller.goal ?? "—"} bb:${controller.blackboard.keyCount}`,
     );
