@@ -60,6 +60,10 @@
 > Revizyon: 2026-07-06 - AI perception yakin awareness radius ve canlı
 > transform sync destegi eklendi; hareket eden player/AI pozisyonlari algida
 > guncel kalir.
+> Revizyon: 2026-07-06 - Unreal Target Point benzeri patrol route authoring
+> isi checklist olarak eklendi.
+> Revizyon: 2026-07-06 - NavMesh agent radius / clearance benzeri AI path
+> guvenlik mesafesi isi checklist olarak eklendi.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -885,6 +889,97 @@ Tamamlanan Playground `AI_Test` demo notu (2026-07-06):
 - Not: George animasyon setinde punch montage yok; bu dilim saldiri kararini ve
   intent mesajini gosterir. Gercek punch animasyonu icin skeletal sidecar'a
   montage/clip tanimi eklenmeli.
+
+Planlanan Target Point tabanli patrol route authoring checklist'i:
+
+- [ ] Unreal `Target Point` karsiligi genel amacli `TargetPoint` sahne aktoru
+      tanimla; `Add Actor` menusuyle sahneye eklenebilsin.
+- [ ] Target Point editor/render temsili ekle: edit modda ikon/gizmo gorunsun,
+      Play/runtime'da varsayilan olarak gizli kalsin.
+- [ ] Target Point Details panel alanlari:
+      - [ ] `name`
+      - [ ] `nextTargetPoint`
+      - [ ] `waitTime`
+      - [ ] `acceptanceRadius`
+      - [ ] `speedOverride`
+      - [ ] `patrolTag` veya `routeId`.
+- [ ] `nextTargetPoint` icin actor reference picker ekle; ayni level icindeki
+      Target Point aktorlerini listeleyip secime izin versin.
+- [ ] Save/load validation: yeni Target Point layout alanlari
+      `tools/saveValidator.ts` allowlist'ine eklensin ve round-trip testlensin.
+- [ ] Runtime query/lookup: Target Point entity'lerini id/tag/route bilgisiyle
+      AI task'larinin okuyabilecegi generic indeks haline getir.
+- [ ] Behavior Tree task/service seti:
+      - [ ] `forge.setPatrolTarget`
+      - [ ] `forge.moveToPatrolTarget`
+      - [ ] `forge.advancePatrolTarget`
+      - [ ] hedef yoksa `stop`, `loop`, `nearest`, `failure` modlari.
+- [ ] AIController veya Blackboard authoring alanlari:
+      - [ ] `patrolStartTarget`
+      - [ ] `patrolRouteTag`
+      - [ ] `currentPatrolTarget`
+      - [ ] `lastPatrolTarget`.
+- [ ] Debug/viewport overlay: Target Point noktalarini, `next` baglantilarini,
+      aktif AI hedefini ve rotayi `Show > AI Navigation` icinde ciz.
+- [ ] AI_Test demo refactoru: behavior JSON'daki sabit `moveToPosition`
+      koordinatlarini Target Point route okuyan task'lara tasiyarak
+      `TP_AI_Patrol_A -> B -> C -> A` seklinde Playground rotasi kur.
+- [ ] Ilerleme yolu: ilk surum tek `nextTargetPoint`; sonraki surumde
+      `nextTargets[]` + agirlik/branch ile patrol graph destekle.
+- [ ] Testler:
+      - [ ] Target Point save/load round-trip.
+      - [ ] `nextTargetPoint` referansi kirik oldugunda guvenli failure.
+      - [ ] patrol task'i hedefe varinca siradaki Target Point'e gecer.
+      - [ ] loop rota deterministik calisir.
+      - [ ] debug overlay route segmentlerini uretir.
+- [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
+      `npm.cmd run build:verify`, Playwright `?editor` Add Actor + Details smoke
+      ve runtime Playground patrol smoke.
+
+Planlanan AI Navigation clearance / agent radius checklist'i:
+
+- [ ] Unreal/Recast `Agent Radius` karsiligi icin Forge navigation sozlesmesini
+      netlestir: path noktasi capsule merkezi icindir; engeller agent radius +
+      ek guvenlik payi kadar erozyona ugratilmis kabul edilir.
+- [ ] `NavAgent` modeline optional `clearancePadding` ekle; effective blocker
+      sisirme mesafesi `agent.radius + clearancePadding + gridSafetyMargin`
+      olarak hesaplansin.
+- [ ] `gridSafetyMargin` icin cell size kaynakli hata payini tanimla
+      (baslangic onerisi: `cellSize * 0.5`) ve testlerle kilitle.
+- [ ] AIController `navAgent` props/Details alanlarina `clearancePadding`
+      ekle; varsayilan degeri dar koridorlari tamamen kapatmayacak sekilde
+      dusuk tut (onerilen ilk deger: `0.1` veya `0.15`).
+- [ ] `findGridPath` icinde blocker passability testleri effective radius ile
+      calissin; authored nav bounds da ayni effective radius ile iceriden
+      daraltilsin.
+- [ ] Ara waypoint varis toleransini final hedef toleransindan ayir:
+      - [ ] `acceptanceRadius` sadece final goal icin kullanilsin.
+      - [ ] ara waypoint gecisi `intermediateWaypointAcceptance` ile sinirli
+            kalsin (onerilen ilk deger: `min(cellSize * 0.35, 0.2)`).
+- [ ] Path compression guvenli hale gelsin:
+      - [ ] iki waypoint arasindaki duz segment effective radius ile sisirilmis
+            blocker'lari kesiyorsa ara grid noktalarini koru.
+      - [ ] segment-safe compression testi ekle.
+- [ ] Debug/viewport overlay:
+      - [ ] raw static blocker AABB'leri ayri renkte goster.
+      - [ ] inflated/eroded forbidden alanlari ayri renkte goster.
+      - [ ] path segmenti clearance ihlali yapiyorsa kirmizi/turuncu ciz.
+      - [ ] secili AI icin agent radius + clearance halkasi ciz.
+- [ ] Path cost iyilestirmesi:
+      - [ ] nearest-obstacle distance veya clearance score hesapla.
+      - [ ] A* maliyetine duvara yakin hucreler icin ek cost ekle.
+      - [ ] AI mecbur kalmadikca koridorun ortasina yakin rota secsin.
+- [ ] Testler:
+      - [ ] dar kose path'i capsule radius + clearance kadar uzak waypoint
+            uretir.
+      - [ ] clearance cok buyukse dar gecit failure verir.
+      - [ ] final acceptance buyuk olsa bile ara waypoint erken atlanip kose
+            kesilmez.
+      - [ ] path compression duvar kosesi uzerinden shortcut uretmez.
+      - [ ] debug overlay inflated blocker segmentlerini uretir.
+- [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
+      `npm.cmd run build:verify`, Playwright `?editor` AI Navigation overlay
+      smoke ve runtime Playground kose-donus smoke.
 
 ### Faz 6 - Smart Objects
 
