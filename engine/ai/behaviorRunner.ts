@@ -224,7 +224,7 @@ export class AiBehaviorRunner {
   ): AiBehaviorStatus {
     if (children.length === 0) return this.record(path, mode === "sequence" ? "success" : "failure");
     const memory = this.memoryFor(path);
-    let index = clampIndex(memory.childIndex, children.length);
+    let index = mode === "selector" ? 0 : clampIndex(memory.childIndex, children.length);
     while (index < children.length) {
       const child = children[index];
       if (!child) break;

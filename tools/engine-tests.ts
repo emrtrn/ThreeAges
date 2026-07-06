@@ -18625,6 +18625,62 @@ check("AiBehaviorRunner executes selector/sequence/decorator/wait task and messa
   assert.equal(debug.failedDecorator, null);
 });
 
+check("AiBehaviorRunner selector rechecks higher priority branches while a lower branch is running", () => {
+  const bb = new Blackboard([
+    { key: "hasLineOfSight", kind: "boolean", default: false },
+    { key: "mode", kind: "string", default: "idle" },
+  ]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "selector",
+      children: [
+        {
+          kind: "task",
+          task: "test.chase",
+          decorators: [{ kind: "blackboard", key: "hasLineOfSight", op: "equals", value: true }],
+        },
+        {
+          kind: "task",
+          task: "test.patrol",
+        },
+      ],
+    },
+  });
+  const tasks: string[] = [];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: {
+      get: (taskId) => {
+        if (taskId === "test.patrol") {
+          return (context) => {
+            tasks.push("patrol");
+            context.blackboard.set("mode", "patrol");
+            return "running";
+          };
+        }
+        if (taskId === "test.chase") {
+          return (context) => {
+            tasks.push("chase");
+            context.blackboard.set("mode", "chase");
+            return "running";
+          };
+        }
+        return undefined;
+      },
+    },
+  });
+
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
+  assert.equal(bb.getString("mode"), "patrol");
+  bb.set("hasLineOfSight", true);
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 }), "running");
+  assert.equal(bb.getString("mode"), "chase");
+  assert.deepEqual(tasks, ["patrol", "chase"]);
+  assert.equal(controller.goal, "test.chase");
+});
+
 check("AiBehaviorRunner ticks services on interval and resolves subtree assets", () => {
   const bb = new Blackboard([{ key: "mode", kind: "string", default: "idle" }]);
   const controller = new AIController("ai:worker", "worker", bb);

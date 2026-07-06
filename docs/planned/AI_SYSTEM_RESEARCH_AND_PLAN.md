@@ -51,8 +51,11 @@
 > service ve `moveTo` speed parametresi eklendi.
 > Revizyon: 2026-07-06 - AI controlled CharacterMovement actor'lar player spawn/
 > possession adayindan ayrildi; AI character locomotion animasyonu eklendi.
+> Revizyon: 2026-07-06 - Behavior Tree selector'lari reactive priority
+> davranisina gecirildi; patrol sirasinda gorus/chase dallari her tick yeniden
+> degerlendirilir.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 649 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 650 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -89,7 +92,9 @@
 > engellemez ve AI character ref'leri hareket raporundan idle/walk/run animasyon
 > secimini runtime'da yapar. Runtime AI sight source filtresi statik prop'lari
 > hedef listesinden cikarir; `moveTo` task'lari authored `acceptanceRadius`
-> ile hedefe varis toleransi tasiyabilir.
+> ile hedefe varis toleransi tasiyabilir. Behavior Tree selector'lari her tick
+> oncelikli dallari bastan yokladigi icin devriye gibi running dalda kalan ajan
+> guncel perception blackboard'una gore chase/attack dallarina kesebilir.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
