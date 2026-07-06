@@ -1,20 +1,25 @@
 import type { Entity, EntityId } from "../scene/entity";
 import type { Vec3 } from "../scene/layout";
 import {
+  readSmartObjectComponent,
   readScriptActorComponent,
   readScriptInterfacesComponent,
   readTransformComponent,
+  type SmartObjectComponent,
+  type SmartObjectSlot,
 } from "../scene/components";
 import type { NavAabb, NavAgent } from "../navigation/gridNavigation";
 import { findGridPath } from "../navigation/gridNavigation";
 import type { AIController } from "./aiController";
 import type { AiQueryAsset, AiQueryContextDef, AiQueryTestDef } from "./queryAsset";
+import type { SmartObjectReservationQuery } from "./smartObjects";
 
 export interface AiQueryCandidate {
   readonly id: string;
   readonly kind: "position" | "entity";
   readonly position: Vec3;
   readonly entityId?: EntityId;
+  readonly smartObjectSlotId?: string;
   readonly score: number;
   readonly failedTests: readonly string[];
   readonly testResults?: readonly AiQueryTestResult[];
@@ -36,6 +41,7 @@ export interface AiQueryTestResult {
 export interface AiQueryCandidateDebugSnapshot {
   readonly id: string;
   readonly entityId?: EntityId;
+  readonly smartObjectSlotId?: string;
   readonly position: Vec3;
   readonly score: number;
   readonly failedTests: readonly string[];
@@ -57,6 +63,7 @@ export interface AiQueryRunContext {
   readonly blockers?: readonly NavAabb[];
   readonly navBounds?: readonly NavAabb[];
   readonly navAgent?: NavAgent;
+  readonly smartObjects?: SmartObjectReservationQuery;
 }
 
 const DEFAULT_NAV_AGENT: NavAgent = { radius: 0.35, height: 1.8 };
@@ -170,6 +177,32 @@ function generateCandidates(asset: AiQueryAsset, context: AiQueryRunContext): Ai
           addEntityCandidate(candidates, seen, entity);
         }
         break;
+      case "smartObjectsByTag":
+        for (const entity of context.entities) {
+          const transform = readTransformComponent(entity);
+          const smartObject = readSmartObjectComponent(entity);
+          if (!transform || !smartObject || smartObject.enabled === false) continue;
+          if (!smartObjectMatchesTag(smartObject, generator.tag)) continue;
+          const querier = contextPoint({ kind: "querier" }, context);
+          const slots = smartObject.slots.length > 0 ? smartObject.slots : [{ id: "" }];
+          for (const slot of slots) {
+            if (!smartObjectSlotMatchesTag(smartObject, slot, generator.tag)) continue;
+            const position = addVec3(transform.position, slot.position ?? smartObject.interactionPosition ?? [0, 0, 0]);
+            if (generator.radius !== undefined && querier && planarDistance(position, querier) > generator.radius) {
+              continue;
+            }
+            addCandidate(candidates, seen, {
+              id: `smart-object:${entity.id}:${slot.id}`,
+              kind: "entity",
+              entityId: entity.id,
+              ...(slot.id ? { smartObjectSlotId: slot.id } : {}),
+              position,
+              score: 0,
+              failedTests: [],
+            });
+          }
+        }
+        break;
     }
   }
   return candidates;
@@ -193,7 +226,7 @@ function addCandidate(
   seen: Set<string>,
   candidate: AiQueryCandidate,
 ): void {
-  const key = `${candidate.kind}:${candidate.entityId ?? candidate.position.join(",")}`;
+  const key = candidate.id;
   if (seen.has(key)) return;
   seen.add(key);
   candidates.push(candidate);
@@ -208,13 +241,25 @@ function evaluateCandidate(
   const failedTests: string[] = [];
   const testResults: AiQueryTestResult[] = [];
   for (const test of tests) {
+    if (test.kind === "reservationFree") {
+      const result = evaluateTest(test, candidate, [], context);
+      if (!result.pass) failedTests.push(test.kind);
+      testResults.push({
+        kind: test.kind,
+        pass: result.pass,
+        score: round(result.score * (test.weight ?? 1)),
+        ...(result.reason ? { reason: result.reason } : {}),
+      });
+      score += result.score * (test.weight ?? 1);
+      continue;
+    }
     const references = contextPoints(test.context ?? { kind: "querier" }, context);
     if (references.length === 0) {
       failedTests.push(`${test.kind}:context`);
       testResults.push({ kind: test.kind, pass: false, score: 0, reason: "context" });
       continue;
     }
-    const result = evaluateTest(test, candidate.position, references, context);
+    const result = evaluateTest(test, candidate, references, context);
     if (!result.pass) failedTests.push(test.kind);
     testResults.push({
       kind: test.kind,
@@ -229,10 +274,11 @@ function evaluateCandidate(
 
 function evaluateTest(
   test: AiQueryTestDef,
-  position: Vec3,
+  candidate: AiQueryCandidate,
   references: readonly Vec3[],
   context: AiQueryRunContext,
 ): { pass: boolean; score: number; reason?: string } {
+  const position = candidate.position;
   switch (test.kind) {
     case "distance": {
       const distance = nearestPlanarDistance(position, references);
@@ -276,6 +322,12 @@ function evaluateTest(
       if (test.min !== undefined && dot < test.min) return { pass: false, score: 0, reason: "below-min" };
       return { pass: true, score: test.score === "none" ? 0 : (dot + 1) / 2 };
     }
+    case "reservationFree":
+      if (!candidate.entityId || !context.smartObjects) return { pass: true, score: scoreForPass(test.score) };
+      if (context.smartObjects.isReserved(candidate.entityId, candidate.smartObjectSlotId ?? null, context.controller.pawnEntityId)) {
+        return { pass: false, score: 0, reason: "reserved" };
+      }
+      return { pass: true, score: scoreForPass(test.score) };
   }
 }
 
@@ -283,6 +335,7 @@ function candidateDebugSnapshot(candidate: AiQueryCandidate): AiQueryCandidateDe
   return {
     id: candidate.id,
     ...(candidate.entityId ? { entityId: candidate.entityId } : {}),
+    ...(candidate.smartObjectSlotId ? { smartObjectSlotId: candidate.smartObjectSlotId } : {}),
     position: [candidate.position[0], candidate.position[1], candidate.position[2]],
     score: candidate.score,
     failedTests: [...candidate.failedTests],
@@ -349,6 +402,22 @@ function entityPositionsByInterface(interfaceName: string | undefined, entities:
     .filter((entity) => readScriptInterfacesComponent(entity)?.interfaces.includes(interfaceName))
     .map((entity) => entityPosition(entity.id, entities))
     .filter((position): position is Vec3 => position !== null);
+}
+
+function smartObjectMatchesTag(smartObject: SmartObjectComponent, tag: string): boolean {
+  return smartObject.tags.includes(tag) || smartObject.slots.some((slot) => slot.tags?.includes(tag));
+}
+
+function smartObjectSlotMatchesTag(
+  smartObject: SmartObjectComponent,
+  slot: Pick<SmartObjectSlot, "id" | "tags" | "position">,
+  tag: string,
+): boolean {
+  return smartObject.tags.includes(tag) || slot.tags?.includes(tag) === true;
+}
+
+function addVec3(a: Vec3, b: Vec3): Vec3 {
+  return [round(a[0] + b[0]), round(a[1] + b[1]), round(a[2] + b[2])];
 }
 
 function distanceToQuerier(candidate: AiQueryCandidate, context: AiQueryRunContext): number {

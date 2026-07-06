@@ -24,6 +24,7 @@ export const SCRIPT_ACTOR_COMPONENT = "ScriptActor";
 export const SCRIPT_REFERENCES_COMPONENT = "ScriptReferences";
 export const SCRIPT_DISPATCHERS_COMPONENT = "ScriptDispatchers";
 export const AI_CONTROLLER_COMPONENT = "AIController";
+export const SMART_OBJECT_COMPONENT = "SmartObject";
 
 export type SceneLightType = "directional" | "point" | "spot";
 export type ColliderShape =
@@ -264,6 +265,26 @@ export interface InteractionComponent {
   enabled?: boolean;
   requires?: string;
   cooldown?: number;
+}
+
+export interface SmartObjectSlot {
+  id: string;
+  tags?: string[];
+  position?: Vec3;
+}
+
+/**
+ * Marks a level actor as an AI-usable smart object. This is authored data only:
+ * reservations live in the AI runtime store and are not serialized back to the
+ * scene/actor asset. `InteractionComponent` remains the player-triggered action
+ * surface; SmartObject describes claimable AI slots around that object.
+ */
+export interface SmartObjectComponent {
+  tags: string[];
+  slots: SmartObjectSlot[];
+  interactionPosition?: Vec3;
+  cooldown?: number;
+  enabled?: boolean;
 }
 
 export type CharacterMovementMode = "walking" | "falling" | "flying" | "swimming" | "custom";
@@ -773,6 +794,47 @@ export function readInteractionComponent(entity: Entity): InteractionComponent |
   if (typeof data.enabled === "boolean") component.enabled = data.enabled;
   if (typeof data.requires === "string") component.requires = data.requires;
   if (typeof data.cooldown === "number") component.cooldown = data.cooldown;
+  return component;
+}
+
+function readStringArray(value: SceneJsonValue | undefined): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((entry): entry is string => typeof entry === "string" && entry.length > 0);
+}
+
+function readSmartObjectSlots(value: SceneJsonValue | undefined): SmartObjectSlot[] {
+  if (!Array.isArray(value)) return [];
+  const slots: SmartObjectSlot[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+    const data = entry as Record<string, SceneJsonValue>;
+    if (typeof data.id !== "string" || data.id.length === 0 || seen.has(data.id)) continue;
+    seen.add(data.id);
+    const slot: SmartObjectSlot = { id: data.id };
+    const tags = readStringArray(data.tags);
+    if (tags.length > 0) slot.tags = tags;
+    const position = readVec3(data.position);
+    if (position) slot.position = position;
+    slots.push(slot);
+  }
+  return slots;
+}
+
+/** Reads authored AI smart-object data from an entity. */
+export function readSmartObjectComponent(entity: Entity): SmartObjectComponent | undefined {
+  const data = entity.components[SMART_OBJECT_COMPONENT];
+  if (!data) return undefined;
+  const tags = readStringArray(data.tags);
+  const slots = readSmartObjectSlots(data.slots);
+  const interactionPosition = readVec3(data.interactionPosition);
+  if (tags.length === 0 && slots.length === 0 && !interactionPosition) return undefined;
+  const component: SmartObjectComponent = { tags, slots };
+  if (interactionPosition) component.interactionPosition = interactionPosition;
+  if (typeof data.cooldown === "number" && Number.isFinite(data.cooldown) && data.cooldown >= 0) {
+    component.cooldown = data.cooldown;
+  }
+  if (typeof data.enabled === "boolean") component.enabled = data.enabled;
   return component;
 }
 

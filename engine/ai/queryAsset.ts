@@ -12,8 +12,9 @@ export type AiQueryGeneratorKind =
   | "gridAroundContext"
   | "actorsByTag"
   | "actorsByInterface"
-  | "actorsByClassRef";
-export type AiQueryTestKind = "distance" | "lineOfSight" | "navReachable" | "dot";
+  | "actorsByClassRef"
+  | "smartObjectsByTag";
+export type AiQueryTestKind = "distance" | "lineOfSight" | "navReachable" | "dot" | "reservationFree";
 export type AiQueryScoreMode = "none" | "linear" | "inverse";
 
 export interface AiQueryContextDef {
@@ -56,12 +57,19 @@ export interface AiQueryActorsByClassRefGeneratorDef extends AiQueryBaseGenerato
   classRef: string;
 }
 
+export interface AiQuerySmartObjectsByTagGeneratorDef extends AiQueryBaseGeneratorDef {
+  kind: "smartObjectsByTag";
+  tag: string;
+  radius?: number;
+}
+
 export type AiQueryGeneratorDef =
   | AiQueryPointsAroundQuerierGeneratorDef
   | AiQueryGridAroundContextGeneratorDef
   | AiQueryActorsByTagGeneratorDef
   | AiQueryActorsByInterfaceGeneratorDef
-  | AiQueryActorsByClassRefGeneratorDef;
+  | AiQueryActorsByClassRefGeneratorDef
+  | AiQuerySmartObjectsByTagGeneratorDef;
 
 export interface AiQueryBaseTestDef {
   kind: AiQueryTestKind;
@@ -93,11 +101,16 @@ export interface AiQueryDotTestDef extends AiQueryBaseTestDef {
   min?: number;
 }
 
+export interface AiQueryReservationFreeTestDef extends AiQueryBaseTestDef {
+  kind: "reservationFree";
+}
+
 export type AiQueryTestDef =
   | AiQueryDistanceTestDef
   | AiQueryLineOfSightTestDef
   | AiQueryNavReachableTestDef
-  | AiQueryDotTestDef;
+  | AiQueryDotTestDef
+  | AiQueryReservationFreeTestDef;
 
 export interface AiQueryAsset {
   schema: 1;
@@ -216,6 +229,14 @@ function normalizeGenerator(value: unknown, index: number): AiQueryGeneratorDef 
         kind: "actorsByClassRef",
         classRef: requireNonEmptyString(input.classRef, `query.generators[${index}].classRef`),
       };
+    case "smartObjectsByTag": {
+      const radius = normalizeNonNegativeNumber(input.radius, `query.generators[${index}].radius`);
+      return {
+        kind: "smartObjectsByTag",
+        tag: requireNonEmptyString(input.tag, `query.generators[${index}].tag`),
+        ...(radius !== undefined ? { radius } : {}),
+      };
+    }
     default:
       throw new Error(`query.generators[${index}].kind is invalid`);
   }
@@ -264,6 +285,8 @@ function normalizeTest(value: unknown, index: number): AiQueryTestDef {
       if (min !== undefined) test.min = min;
       return test;
     }
+    case "reservationFree":
+      return { ...base, kind: "reservationFree" };
     default:
       throw new Error(`query.tests[${index}].kind is invalid`);
   }

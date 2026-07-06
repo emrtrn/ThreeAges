@@ -101,6 +101,7 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   Interaction: "☞",
   Behavior: "⚙",
   CharacterMovement: "CM",
+  SmartObject: "SO",
   SpringArm: "⌐",
   Camera: "🎥",
   AIController: "🧠",
@@ -2284,6 +2285,15 @@ function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJs
       blackboard: "",
       perception: { sightRadius: 18, fieldOfViewDeg: 110, hearingRadius: 12 },
       navAgent: { radius: 0.35, height: 1.8, maxSpeed: 3.2 },
+    };
+  }
+  if (kind === "SmartObject") {
+    return {
+      tags: ["usable"],
+      slots: [{ id: "slot-1", tags: ["usable"], position: [0, 0, 0] }],
+      interactionPosition: [0, 0, 0],
+      cooldown: 0,
+      enabled: true,
     };
   }
   return {};

@@ -56,6 +56,7 @@ import {
   readScriptDispatchersComponent,
   readScriptInterfacesComponent,
   readScriptReferencesComponent,
+  readSmartObjectComponent,
   readSpringArmComponent,
   readTransformComponent,
   INTERACTION_COMPONENT,
@@ -67,6 +68,7 @@ import {
   SCRIPT_INTERFACES_COMPONENT,
   SCRIPT_REFERENCES_COMPONENT,
   AI_CONTROLLER_COMPONENT,
+  SMART_OBJECT_COMPONENT,
 } from "../engine/scene/components";
 import {
   Blackboard,
@@ -81,6 +83,7 @@ import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 import { runAiQuery } from "../engine/ai/queryRunner";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
+import { SmartObjectReservationStore } from "../engine/ai/smartObjects";
 import {
   AiBehaviorRunner,
   createDefaultAiServiceRegistry,
@@ -18228,6 +18231,7 @@ check("AI query asset normalizer canonicalizes generators, contexts, and tests",
       { kind: "actorsByTag", tag: "cover" },
       { kind: "actorsByInterface", interface: "Usable" },
       { kind: "actorsByClassRef", classRef: "assets/Actors/Cover.actor.json" },
+      { kind: "smartObjectsByTag", tag: "workbench", radius: 8 },
     ],
     tests: [
       { kind: "distance", context: { kind: "querier" }, min: 1, max: 8, score: "inverse", weight: 2 },
@@ -18237,15 +18241,18 @@ check("AI query asset normalizer canonicalizes generators, contexts, and tests",
       { kind: "lineOfSight", context: { kind: "allActorsWithInterface", interface: "NoiseSource" }, require: false },
       { kind: "navReachable" },
       { kind: "dot", min: 0.1, score: "linear" },
+      { kind: "reservationFree", score: "linear" },
     ],
   });
   assert.equal(asset.type, "query");
-  assert.equal(asset.generators.length, 4);
+  assert.equal(asset.generators.length, 5);
   assert.equal(asset.generators[2]?.kind, "actorsByInterface");
+  assert.equal(asset.generators[4]?.kind, "smartObjectsByTag");
   assert.equal(asset.tests?.[1]?.kind, "distance");
   assert.equal(asset.tests?.[1]?.context?.kind, "targetEntity");
   assert.equal(asset.tests?.[3]?.context?.kind, "allActorsWithTag");
   assert.equal(asset.tests?.[4]?.context?.kind, "allActorsWithInterface");
+  assert.equal(asset.tests?.[7]?.kind, "reservationFree");
   assert.equal(asset.maxCandidates, 12);
   assert.throws(
     () => normalizeAiQueryAsset({ schema: 1, type: "query", generators: [] }),
@@ -18320,6 +18327,112 @@ check("AI query runner resolves all-actor tag and interface contexts", () => {
   assert.ok(result.candidates.find((candidate) => candidate.entityId === "too-close-cover")?.failedTests.includes("distance"));
   assert.equal(result.winner?.testResults?.[1]?.kind, "lineOfSight");
   assert.equal(result.winner?.testResults?.[1]?.pass, true);
+});
+
+check("readSmartObjectComponent parses authored tags, slots, cooldown, and enabled state", () => {
+  const entity = {
+    id: "bench",
+    components: {
+      [SMART_OBJECT_COMPONENT]: {
+        tags: ["workbench", ""],
+        slots: [
+          { id: "slot-a", tags: ["craft"], position: [1, 0, 0] },
+          { id: "slot-a", tags: ["duplicate"], position: [2, 0, 0] },
+          { id: "", tags: ["bad"] },
+        ],
+        interactionPosition: [0, 0, 1],
+        cooldown: 2,
+        enabled: false,
+      },
+    },
+  };
+  const smartObject = readSmartObjectComponent(entity);
+  assert.deepEqual(smartObject?.tags, ["workbench"]);
+  assert.equal(smartObject?.slots.length, 1);
+  assert.equal(smartObject?.slots[0]?.id, "slot-a");
+  assert.deepEqual(smartObject?.slots[0]?.position, [1, 0, 0]);
+  assert.deepEqual(smartObject?.interactionPosition, [0, 0, 1]);
+  assert.equal(smartObject?.cooldown, 2);
+  assert.equal(smartObject?.enabled, false);
+});
+
+check("SmartObjectReservationStore claims, blocks, uses, releases, and expires slots", () => {
+  const store = new SmartObjectReservationStore();
+  store.setEntities([
+    {
+      id: "bench",
+      components: {
+        [SMART_OBJECT_COMPONENT]: {
+          tags: ["workbench"],
+          slots: [{ id: "slot-a", tags: ["workbench"] }],
+        },
+      },
+    },
+  ]);
+  assert.equal(store.claim({ entityId: "bench", slotId: "slot-a", reservedBy: "ai-a", ttlSeconds: 1, nowSeconds: 10 }), true);
+  assert.equal(store.isReserved("bench", "slot-a", "ai-b"), true);
+  assert.equal(store.isReserved("bench", "slot-a", "ai-a"), false);
+  assert.equal(store.claim({ entityId: "bench", slotId: "slot-a", reservedBy: "ai-b" }), false);
+  assert.equal(store.use({ entityId: "bench", slotId: "slot-a", reservedBy: "ai-a", ttlSeconds: 1, nowSeconds: 10.5 }), true);
+  assert.equal(store.reservation("bench", "slot-a")?.state, "inUse");
+  assert.equal(store.release({ entityId: "bench", slotId: "slot-a", reservedBy: "ai-b" }), false);
+  assert.equal(store.release({ entityId: "bench", slotId: "slot-a", reservedBy: "ai-a" }), true);
+  assert.equal(store.claim({ entityId: "bench", slotId: "slot-a", reservedBy: "ai-b", ttlSeconds: 0.5, nowSeconds: 20 }), true);
+  assert.equal(store.expire(20.6), 1);
+  assert.equal(store.reservation("bench", "slot-a"), null);
+});
+
+check("AI query runner gathers smart objects by tag and filters reserved slots", () => {
+  const controller = new AIController("ai:worker", "worker", new Blackboard());
+  const reservations = new SmartObjectReservationStore();
+  const entities = [
+    { id: "worker", components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+    {
+      id: "near-bench",
+      components: {
+        Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [SMART_OBJECT_COMPONENT]: {
+          tags: ["workbench"],
+          slots: [{ id: "slot-a", tags: ["workbench"], position: [0, 0, 1] }],
+        },
+      },
+    },
+    {
+      id: "open-bench",
+      components: {
+        Transform: { position: [3, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [SMART_OBJECT_COMPONENT]: {
+          tags: ["workbench"],
+          slots: [{ id: "slot-a", tags: ["workbench"], position: [0, 0, 0] }],
+        },
+      },
+    },
+    {
+      id: "far-bench",
+      components: {
+        Transform: { position: [12, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [SMART_OBJECT_COMPONENT]: { tags: ["workbench"], slots: [{ id: "slot-a", tags: ["workbench"] }] },
+      },
+    },
+  ];
+  reservations.setEntities(entities);
+  assert.equal(reservations.claim({ entityId: "near-bench", slotId: "slot-a", reservedBy: "other-ai" }), true);
+  const asset = normalizeAiQueryAsset({
+    schema: 1,
+    type: "query",
+    generators: [{ kind: "smartObjectsByTag", tag: "workbench", radius: 5 }],
+    tests: [
+      { kind: "reservationFree", score: "linear" },
+      { kind: "distance", max: 6, score: "inverse" },
+    ],
+  });
+  const result = runAiQuery(asset, { controller, entities, smartObjects: reservations });
+  assert.equal(result.status, "success");
+  assert.equal(result.candidates.length, 2);
+  assert.equal(result.winner?.entityId, "open-bench");
+  assert.equal(result.winner?.smartObjectSlotId, "slot-a");
+  assert.ok(result.candidates.find((candidate) => candidate.entityId === "near-bench")?.failedTests.includes("reservationFree"));
+  assert.equal(result.candidates.some((candidate) => candidate.entityId === "far-bench"), false);
 });
 
 check("AI query runner gathers actors by interface and classRef and supports target context", () => {

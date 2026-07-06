@@ -370,13 +370,17 @@
     {
       "assetId": "sm-chair-ktx2",
       "placements": []
+    },
+    {
+      "assetId": "test",
+      "placements": []
     }
   ],
   "characters": [
     {
       "assetId": "george-ktx2",
       "position": [
-        -12.7,
+        -13.47,
         0.01,
         -9.21
       ],

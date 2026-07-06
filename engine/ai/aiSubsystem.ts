@@ -31,6 +31,7 @@ import { AIController, type AIControllerDebugSnapshot, type AIControllerOptions 
 import type { AiBlackboardAsset, AiBehaviorTreeAsset } from "./behaviorAsset";
 import type { AiQueryAsset } from "./queryAsset";
 import { runAiQuery } from "./queryRunner";
+import { SmartObjectReservationStore } from "./smartObjects";
 import {
   AiBehaviorRunner,
   createDefaultAiServiceRegistry,
@@ -93,6 +94,7 @@ export class AISubsystem implements Subsystem {
   private pendingNoises: NoiseStimulus[] = [];
   private pendingScriptStimuli: ScriptStimulus[] = [];
   private sightGrace = new Map<EntityId, SightGraceState>();
+  private smartObjects = new SmartObjectReservationStore();
 
   constructor(options: AISubsystemOptions = {}) {
     this.taskRegistry = options.taskRegistry ?? createDefaultAiTaskRegistry();
@@ -131,6 +133,7 @@ export class AISubsystem implements Subsystem {
     this.pendingNoises = [];
     this.pendingScriptStimuli = [];
     this.sightGrace.clear();
+    this.smartObjects.setEntities(entities);
     for (const entity of entities) {
       const component = readAIControllerComponent(entity);
       if (!component) continue;
@@ -158,6 +161,7 @@ export class AISubsystem implements Subsystem {
       this.pendingScriptStimuli = [];
       return;
     }
+    this.smartObjects.expire(engine.elapsedSeconds);
     this.updatePerception(engine.deltaSeconds);
     for (const runner of this.runners.values()) runner.tick(engine);
     this.pendingNoises = [];
@@ -209,6 +213,7 @@ export class AISubsystem implements Subsystem {
     this.pendingNoises = [];
     this.pendingScriptStimuli = [];
     this.sightGrace.clear();
+    this.smartObjects.clear();
   }
 
   dispose(): void {
@@ -392,6 +397,7 @@ export class AISubsystem implements Subsystem {
           controller,
           entities: this.entities,
           blockers: this.blockers?.() ?? [],
+          smartObjects: this.smartObjects,
         });
         controller.setLastQueryResult(query, result);
         return result;

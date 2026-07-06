@@ -43,8 +43,10 @@
 > uygulandi.
 > Revizyon: 2026-07-06 - Faz 5 query task interval/cache performans dilimi
 > uygulandi.
+> Revizyon: 2026-07-06 - Faz 5/6 Smart Object component, runtime reservation
+> store ve query generator/filter ilk dilimi uygulandi.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 638 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 644 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -70,7 +72,9 @@
 > context'leri artik tag/interface ile bulunan tum aktor referanslarini
 > distance/LOS/nav/dot testlerinde kullanabiliyor. `forge.runQueryToBlackboard`
 > task'i opsiyonel `interval` / `intervalSeconds` ile son sonucu cache'leyip
-> pahali query tekrarlarini sinirlayabiliyor.
+> pahali query tekrarlarini sinirlayabiliyor. Smart Object authored component
+> reader'i, runtime-only reservation store'u, `smartObjectsByTag` query
+> generator'i ve `reservationFree` query testi ilk dilim olarak eklendi.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -711,25 +715,25 @@ gibi kararlar data-driven sorgu ile cozulsun.
 
 - [x] `*.eqs.json` veya `*.query.json` asset schema tanimla (+ manifest
       `AssetType` ve save endpoint, Faz 2 pattern'i).
-- [ ] Generatorlar:
+- [x] Generatorlar:
       - [x] points around querier
       - [x] grid around context
       - [x] actors by tag
       - [x] actors by interface/classRef
-      - [ ] smart objects by tag.
-- [ ] Contextler:
+      - [x] smart objects by tag.
+- [x] Contextler:
       - [x] querier
       - [x] target entity
       - [x] blackboard entity/position
       - [x] all actors of tag/interface.
-- [ ] Testler:
+- [x] Testler:
       - [x] distance min/max/score
       - [x] line of sight
       - [x] nav reachable
-      - [ ] occupancy/reservation free
+      - [x] occupancy/reservation free
       - [x] dot/FOV.
 - [x] Behavior Tree task: `forge.runQueryToBlackboard`.
-- [ ] Query debug:
+- [x] Query debug:
       - [x] generated candidates
       - [x] per-test score
       - [x] winner item
@@ -800,32 +804,48 @@ Tamamlanan Faz 5 query performans notu (2026-07-06):
 - Test: cached query sonucu aralik icinde tekrar kullanilir, aralik dolunca query
   tekrar calisir ve Blackboard yeni kazanana guncellenir.
 
+Tamamlanan Faz 5/6 Smart Object query/reservation ilk dilim notu (2026-07-06):
+
+- `SmartObjectComponent` authored data olarak eklendi; tags, slots,
+  interaction position, cooldown ve enabled alanlari okunuyor. `reservedBy`
+  layout/actor asset'e yazilmiyor; runtime state olarak tutuluyor.
+- `SmartObjectReservationStore` runtime-only query/claim/use/release/expire API
+  sagliyor ve `AISubsystem` query calistirirken bu store'u runner'a bagliyor.
+- Query semasi `smartObjectsByTag` generator'i ve `reservationFree` testini
+  destekliyor; slot adaylari query debug snapshot'inda slot id tasiyabiliyor.
+- Actor Script Editor add-component listesine `SmartObject` eklendi ve raw props
+  ile baslanabilir varsayilan component data'si seed ediliyor.
+- Test: SmartObject component reader, claim/use/release/expire davranisi ve
+  rezerve edilmis slotlarin query'de elenmesi kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`644 checks passed`), `npm.cmd run build:verify` yesil.
+
 ### Faz 6 - Smart Objects
 
 Hedef: Level'daki kullanilabilir aktiviteleri AI ve oyuncu icin ortak, rezerve
 edilebilir data haline getirmek.
 
-- [ ] `SmartObjectComponent` ekle (mevcut `InteractionComponent` ile iliskisini
+- [x] `SmartObjectComponent` ekle (mevcut `InteractionComponent` ile iliskisini
       netlestir: interaction oyuncu-tetiklemeli tek atim, smart object
       rezerve edilebilir slot):
-      - [ ] tags
-      - [ ] slots
-      - [ ] interaction position
-      - [ ] cooldown
-      - [ ] reservedBy.
-- [ ] Runtime reservation API:
-      - [ ] query
-      - [ ] claim
-      - [ ] use
-      - [ ] release
-      - [ ] expire.
-- [ ] EQS generator: smart objects by tag/search radius.
+      - [x] tags
+      - [x] slots
+      - [x] interaction position
+      - [x] cooldown
+      - [x] reservedBy (runtime-only reservation store; asset'e yazilmaz).
+- [x] Runtime reservation API:
+      - [x] query
+      - [x] claim
+      - [x] use
+      - [x] release
+      - [x] expire.
+- [x] EQS generator: smart objects by tag/search radius.
 - [ ] Behavior Tree task: `forge.claimSmartObject`, `forge.useSmartObject`.
 - [ ] Message bridge: use baslayinca actor script message emit et.
 - [ ] Editor marker/Details UI: slot gizmo, tag editor, reservation debug.
-- [ ] Test: iki ajan ayni slotu ayni anda alamaz.
-- [ ] Test: claim timeout release eder.
-- [ ] Validation: TypeScript, engine tests, build verify.
+- [x] Test: iki ajan ayni slotu ayni anda alamaz.
+- [x] Test: claim timeout release eder.
+- [x] Validation: TypeScript, engine tests, build verify.
 
 ### Faz 7 - AI asset authoring ve Content Browser entegrasyonu
 

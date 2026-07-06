@@ -22,7 +22,7 @@
       "id": "springArm",
       "component": "SpringArm",
       "props": {
-        "targetArmLength": 3,
+        "targetArmLength": 2,
         "enableCameraLag": true,
         "cameraLagSpeed": 10,
         "socketOffset": [
