@@ -83,6 +83,7 @@ import { collisionWireboxes } from "@engine/render-three/collisionView";
 import {
   createAiNavigationView,
   disposeAiNavigationView,
+  type AiPerceptionView,
 } from "@engine/render-three/aiNavigationView";
 import {
   collectMaterialStats,
@@ -6199,13 +6200,34 @@ export class SceneApp {
     if (!this.showAiNavigation || !this.layout) return;
     const blockers = this.editorNavBlockers();
     const bounds = this.aiNavigationBounds();
-    if (blockers.length === 0 && bounds.length === 0) return;
+    const perception = this.aiPerceptionView();
+    if (blockers.length === 0 && bounds.length === 0 && perception.length === 0) return;
     this.aiNavigationView = createAiNavigationView({
       blockers,
       bounds,
       cellSize: AI_NAV_DEBUG_CELL_SIZE,
+      perception,
     });
     this.scene.add(this.aiNavigationView);
+  }
+
+  private aiPerceptionView(): AiPerceptionView[] {
+    return this.aiSubsystem.getDebugSnapshot().controllers
+      .filter((controller) => controller.position && controller.forward && controller.perceptionConfig)
+      .map((controller) => ({
+        entityId: controller.pawnEntityId,
+        position: controller.position!,
+        forward: controller.forward!,
+        ...(controller.perceptionConfig!.sightRadius !== undefined
+          ? { sightRadius: controller.perceptionConfig!.sightRadius }
+          : {}),
+        ...(controller.perceptionConfig!.fieldOfViewDeg !== undefined
+          ? { fieldOfViewDeg: controller.perceptionConfig!.fieldOfViewDeg }
+          : {}),
+        ...(controller.perceptionConfig!.hearingRadius !== undefined
+          ? { hearingRadius: controller.perceptionConfig!.hearingRadius }
+          : {}),
+      }));
   }
 
   private aiNavigationBounds(): NavAabb[] {

@@ -20,6 +20,7 @@ import type { AiBehaviorRunnerDebugSnapshot } from "./behaviorRunner";
 import type { AIPerceptionConfig } from "../scene/components";
 import type { EntityId } from "../scene/entity";
 import type { PerceivedStimulus } from "../perception/perception";
+import type { Vec3 } from "../scene/layout";
 
 /** Stable controller id, derived from the possessed pawn's entity id. */
 export type AIControllerId = string;
@@ -43,6 +44,12 @@ export interface AIControllerDebugSnapshot {
   readonly behaviorTreeAsset: string | null;
   readonly behavior: AiBehaviorRunnerDebugSnapshot | null;
   readonly perception?: readonly PerceivedStimulus[];
+  /** Authored perception settings, echoed into debug for visualizers only. */
+  readonly perceptionConfig?: AIPerceptionConfig;
+  /** World-space pawn position, when the host can resolve it. */
+  readonly position?: Vec3;
+  /** World-space pawn forward vector, when the host can resolve it. */
+  readonly forward?: Vec3;
   readonly blackboard: BlackboardDebugSnapshot;
 }
 
@@ -104,6 +111,7 @@ export class AIController {
       behaviorTreeAsset: this.behaviorTreeAsset,
       behavior,
       perception: this.perceived,
+      ...(this.perceptionConfig ? { perceptionConfig: this.perceptionConfig } : {}),
       blackboard: this.blackboard.getDebugSnapshot(),
     };
   }

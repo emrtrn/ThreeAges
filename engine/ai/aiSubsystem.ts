@@ -214,9 +214,23 @@ export class AISubsystem implements Subsystem {
     return {
       enabled: this.enabled,
       controllerCount: this.controllers.size,
-      controllers: [...this.controllers.entries()].map(([pawnEntityId, controller]) =>
-        controller.getDebugSnapshot(this.runners.get(pawnEntityId)?.getDebugSnapshot() ?? null),
-      ),
+      controllers: [...this.controllers.entries()].map(([pawnEntityId, controller]) => {
+        const snapshot = controller.getDebugSnapshot(
+          this.runners.get(pawnEntityId)?.getDebugSnapshot() ?? null,
+        );
+        const entity = this.entities.find((candidate) => candidate.id === pawnEntityId);
+        const transform = entity ? readTransformComponent(entity) : undefined;
+        if (!transform) return snapshot;
+        return {
+          ...snapshot,
+          position: [
+            transform.position[0],
+            transform.position[1],
+            transform.position[2],
+          ],
+          forward: forwardVectorFromRotation(transform.rotation),
+        };
+      }),
     };
   }
 

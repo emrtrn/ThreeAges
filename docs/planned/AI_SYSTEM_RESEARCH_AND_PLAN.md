@@ -31,8 +31,10 @@
 > uygulandi (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-06 - Faz 4 debug last known positions dilimi uygulandi
 > (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 4 sight cone + hearing radius debug overlay
+> dilimi uygulandi ve Faz 4 gate kapatildi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 628 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 630 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -46,9 +48,10 @@
 > `Damage.*`, `alert`, `ui-action` ve `game-event` mesajlari gameplay stimulus
 > olarak AI perception'a dusuyor. Dominant stimulus siralamasi artik merkezi
 > sense priority helper'i uzerinden yapiliyor. Debug overlay son bilinen /
-> duyulan stimulus pozisyonlarini blackboard'dan gosterebiliyor. Faz 2 editor
-> form, gelismis decorator isleri ve Faz 4 sight/hearing debug overlay isleri
-> planli.
+> duyulan stimulus pozisyonlarini blackboard'dan gosterebiliyor; runtime
+> `?debug` ve editor `Show > AI Navigation` artik AI perception sight cone ve
+> hearing radius wireframe'lerini de cizebiliyor. Faz 2 editor form ve gelismis
+> decorator isleri planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -536,17 +539,17 @@ Tamamlanan Faz 3 AI Navigation Volume notu (2026-07-06):
 Hedef: NPC kararlarini game-state polling yerine stimulus ve algi eventleriyle
 beslemek.
 
-- [ ] `engine/perception` contract ekle:
+- [x] `engine/perception` contract ekle:
       - [x] `PerceptionListener`
       - [x] `StimulusSource`
       - [x] `PerceivedStimulus`
       - [x] dominant/priority sense.
-- [ ] Sight:
+- [x] Sight:
       - [x] radius
       - [x] field of view
       - [x] line-of-sight ray/AABB test
       - [x] target lost grace period.
-- [ ] Hearing:
+- [x] Hearing:
       - [x] `emitNoise(position, loudness, sourceEntityId)`
       - [x] radius attenuation
       - [x] last heard position blackboard update.
@@ -557,14 +560,14 @@ beslemek.
             (`clear()`) aboneligi dusurur, yeniden abone olmayi unutma.
 - [x] AIController component props icinde perception config expose et.
 - [x] Behavior Tree serviceleri perception result'larini Blackboard'a yazsin.
-- [ ] Debug:
-      - [ ] sight cone
-      - [ ] hearing radius
+- [x] Debug:
+      - [x] sight cone
+      - [x] hearing radius
       - [x] current sensed targets
       - [x] last known positions.
 - [x] Test: target FOV disindayken gorulmez, FOV icinde ve obstruction yokken gorulur.
 - [x] Test: noise event blackboard'a last heard position yazar.
-- [ ] Validation: TypeScript, engine tests, build verify, Playwright editor debug smoke.
+- [x] Validation: TypeScript, engine tests, build verify, Playwright editor debug smoke.
 
 Tamamlanan Faz 4 Perception contract/sight-hearing notu (2026-07-06):
 
@@ -664,6 +667,23 @@ Tamamlanan Faz 4 debug last known positions notu (2026-07-06):
   `lastStimulusPosition` gorunur; `patrolPosition` gizli kalir.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`628 checks passed`), `npm.cmd run build:verify` yesil.
+
+Tamamlanan Faz 4 sight/hearing debug overlay notu (2026-07-06):
+
+- `AIControllerDebugSnapshot` artik authored perception config'i, pawn
+  pozisyonu ve forward vektorunu debug-only olarak tasir; runtime state yine
+  layout'a yazilmaz.
+- `engine/render-three/aiNavigationView.ts` icindeki ortak debug helper'i
+  perception girdilerinden sight cone ve hearing radius wireframe'lerini
+  uretir. Runtime `?debug` ve editor `Show > AI Navigation` ayni helper'i
+  kullandigi icin navigation/path overlay ile perception overlay ayrismadan
+  birlikte gorunur.
+- Test: `AISubsystem` debug snapshot pose/config akisi ve
+  `createAiNavigationView()` sight cone + hearing radius child uretimi kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`630 checks passed`), `npm.cmd run build:verify` yesil. Hedefli Playwright
+  smoke `tests/smoke/ai-navigation-volume.spec.ts` ile editor Show overlay
+  yuzeyi ve save/reload akisi browser'da dogrulandi.
 
 ### Faz 5 - EQS benzeri query sistemi
 

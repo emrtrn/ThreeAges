@@ -17,10 +17,20 @@ export interface AiNavigationFollowerView {
   readonly secondsWithoutProgress?: number;
 }
 
+export interface AiPerceptionView {
+  readonly entityId: string;
+  readonly position: Vec3;
+  readonly forward: Vec3;
+  readonly sightRadius?: number;
+  readonly fieldOfViewDeg?: number;
+  readonly hearingRadius?: number;
+}
+
 export interface AiNavigationViewInput {
   readonly blockers?: readonly NavAabb[];
   readonly bounds?: readonly NavAabb[];
   readonly followers?: readonly AiNavigationFollowerView[];
+  readonly perception?: readonly AiPerceptionView[];
   readonly cellSize?: number;
   readonly y?: number;
 }
@@ -34,12 +44,20 @@ const PATH_COLOR = 0x3fd47f;
 const PATH_STALLED_COLOR = 0xffc857;
 const PATH_FAILED_COLOR = 0xff4d6d;
 const WAYPOINT_COLOR = 0xfff06a;
+const SIGHT_COLOR = 0x8ee66b;
+const HEARING_COLOR = 0x9f7aff;
+const DEFAULT_SIGHT_FOV_DEG = 90;
 
 export function createAiNavigationView(input: AiNavigationViewInput): Group {
   const group = new Group();
   group.name = "ai-navigation-debug-view";
   const y = input.y ?? 0.04;
-  const bounds = computeBounds(input.blockers ?? [], input.bounds ?? [], input.followers ?? []);
+  const bounds = computeBounds(
+    input.blockers ?? [],
+    input.bounds ?? [],
+    input.followers ?? [],
+    input.perception ?? [],
+  );
   if (!bounds) return group;
 
   const grid = gridSegments(bounds, input.cellSize ?? DEFAULT_CELL_SIZE, y);
@@ -68,6 +86,37 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
           crossSegments(waypoint, y + 0.12, follower.status === "failure" ? 0.35 : 0.22),
           follower.status === "failure" ? PATH_FAILED_COLOR : WAYPOINT_COLOR,
           1,
+        ),
+      );
+    }
+  }
+
+  for (const perception of input.perception ?? []) {
+    const hearingRadius = positiveFinite(perception.hearingRadius);
+    if (hearingRadius !== null) {
+      group.add(
+        lineSegments(
+          "ai-perception-hearing-radius",
+          circleSegments(perception.position, hearingRadius, y + 0.16),
+          HEARING_COLOR,
+          0.45,
+        ),
+      );
+    }
+    const sightRadius = positiveFinite(perception.sightRadius);
+    if (sightRadius !== null) {
+      group.add(
+        lineSegments(
+          "ai-perception-sight-cone",
+          coneSegments(
+            perception.position,
+            perception.forward,
+            sightRadius,
+            perception.fieldOfViewDeg ?? DEFAULT_SIGHT_FOV_DEG,
+            y + 0.18,
+          ),
+          SIGHT_COLOR,
+          0.65,
         ),
       );
     }
@@ -106,6 +155,7 @@ function computeBounds(
   blockers: readonly NavAabb[],
   bounds: readonly NavAabb[],
   followers: readonly AiNavigationFollowerView[],
+  perceptions: readonly AiPerceptionView[],
 ): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
   let minX = Infinity;
   let maxX = -Infinity;
@@ -128,6 +178,17 @@ function computeBounds(
   for (const follower of followers) {
     for (const point of follower.path) include(point);
     if (follower.goal) include(follower.goal);
+  }
+  for (const perception of perceptions) {
+    include(perception.position);
+    const radius = Math.max(
+      positiveFinite(perception.sightRadius) ?? 0,
+      positiveFinite(perception.hearingRadius) ?? 0,
+    );
+    if (radius > 0) {
+      include([perception.position[0] - radius, perception.position[1], perception.position[2] - radius]);
+      include([perception.position[0] + radius, perception.position[1], perception.position[2] + radius]);
+    }
   }
   if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minZ) || !Number.isFinite(maxZ)) {
     return null;
@@ -204,6 +265,45 @@ function crossSegments(point: Vec3, y: number, size: number): Vec3[] {
     [x, y, z - size],
     [x, y, z + size],
   ];
+}
+
+function circleSegments(center: Vec3, radius: number, y: number, steps = 48): Vec3[] {
+  const out: Vec3[] = [];
+  for (let i = 0; i < steps; i += 1) {
+    const a = (i / steps) * Math.PI * 2;
+    const b = ((i + 1) / steps) * Math.PI * 2;
+    out.push(
+      [center[0] + Math.cos(a) * radius, y, center[2] + Math.sin(a) * radius],
+      [center[0] + Math.cos(b) * radius, y, center[2] + Math.sin(b) * radius],
+    );
+  }
+  return out;
+}
+
+function coneSegments(center: Vec3, forward: Vec3, radius: number, fovDeg: number, y: number): Vec3[] {
+  const clampedFov = Math.max(1, Math.min(360, fovDeg));
+  const steps = Math.max(6, Math.ceil(clampedFov / 8));
+  const yaw = Math.atan2(forward[2], forward[0]);
+  const half = (clampedFov * Math.PI) / 360;
+  const start = yaw - half;
+  const end = yaw + half;
+  const out: Vec3[] = [];
+  const left = [center[0] + Math.cos(start) * radius, y, center[2] + Math.sin(start) * radius] satisfies Vec3;
+  const right = [center[0] + Math.cos(end) * radius, y, center[2] + Math.sin(end) * radius] satisfies Vec3;
+  out.push([center[0], y, center[2]], left, [center[0], y, center[2]], right);
+  for (let i = 0; i < steps; i += 1) {
+    const a = start + ((end - start) * i) / steps;
+    const b = start + ((end - start) * (i + 1)) / steps;
+    out.push(
+      [center[0] + Math.cos(a) * radius, y, center[2] + Math.sin(a) * radius],
+      [center[0] + Math.cos(b) * radius, y, center[2] + Math.sin(b) * radius],
+    );
+  }
+  return out;
+}
+
+function positiveFinite(value: number | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function snapDown(value: number, step: number): number {

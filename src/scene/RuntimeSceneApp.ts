@@ -59,6 +59,7 @@ import {
 import {
   createAiNavigationView,
   disposeAiNavigationView,
+  type AiPerceptionView,
 } from "@engine/render-three/aiNavigationView";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
@@ -1094,18 +1095,40 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private updateAiNavigationDebugView(): void {
     this.removeAiNavigationDebugView();
     const snapshot = this.getAiNavigationDebugSnapshot();
+    const perception = this.aiPerceptionView();
     if (
       snapshot.followers.length === 0 &&
       snapshot.blockers.length === 0 &&
-      snapshot.bounds.length === 0
+      snapshot.bounds.length === 0 &&
+      perception.length === 0
     ) return;
     this.aiNavigationView = createAiNavigationView({
       blockers: snapshot.blockers,
       bounds: snapshot.bounds,
       cellSize: snapshot.cellSize,
       followers: snapshot.followers,
+      perception,
     });
     this.scene.add(this.aiNavigationView);
+  }
+
+  private aiPerceptionView(): AiPerceptionView[] {
+    return this.aiSubsystem.getDebugSnapshot().controllers
+      .filter((controller) => controller.position && controller.forward && controller.perceptionConfig)
+      .map((controller) => ({
+        entityId: controller.pawnEntityId,
+        position: controller.position!,
+        forward: controller.forward!,
+        ...(controller.perceptionConfig!.sightRadius !== undefined
+          ? { sightRadius: controller.perceptionConfig!.sightRadius }
+          : {}),
+        ...(controller.perceptionConfig!.fieldOfViewDeg !== undefined
+          ? { fieldOfViewDeg: controller.perceptionConfig!.fieldOfViewDeg }
+          : {}),
+        ...(controller.perceptionConfig!.hearingRadius !== undefined
+          ? { hearingRadius: controller.perceptionConfig!.hearingRadius }
+          : {}),
+      }));
   }
 
   private removeAiNavigationDebugView(): void {

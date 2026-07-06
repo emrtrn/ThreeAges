@@ -189,6 +189,10 @@ import {
   normalizeUserSettings,
 } from "../engine/persistence/userSettingsStore";
 import { LoadProgressTracker, formatLoadDetail } from "../engine/loading/loadProgress";
+import {
+  createAiNavigationView,
+  disposeAiNavigationView,
+} from "../engine/render-three/aiNavigationView";
 import { SubsystemProfiler } from "../engine/core/subsystemProfiler";
 import {
   DEFAULT_PERF_BUDGET,
@@ -18596,6 +18600,29 @@ check("AISubsystem derives perception listeners from AIController props and cons
   assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0, "noise is transient");
 });
 
+check("AISubsystem debug snapshot exposes perception pose and authored ranges", () => {
+  const ai = new AISubsystem();
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [1, 2, 3], rotation: [0, 90, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: {
+          perception: { sightRadius: 8, fieldOfViewDeg: 120, hearingRadius: 4 },
+        },
+      },
+    },
+  ]);
+  const controller = ai.getDebugSnapshot().controllers[0];
+  assert.deepEqual(controller?.position, [1, 2, 3]);
+  assert.deepEqual(controller?.forward, [1, 0, 0]);
+  assert.deepEqual(controller?.perceptionConfig, {
+    sightRadius: 8,
+    fieldOfViewDeg: 120,
+    hearingRadius: 4,
+  });
+});
+
 check("AISubsystem perception service writes a noise event to last heard blackboard position", () => {
   const ai = new AISubsystem();
   ai.setAssetLibrary({
@@ -19004,6 +19031,24 @@ check("formatAiDebug includes last known perception blackboard positions", () =>
     "  known enemy-1: lastKnownTargetPosition:(0.0,0.0,4.0) lastHeardPosition:(2.0,0.0,-1.0) lastStimulusPosition:(5.0,1.0,0.0)",
     "  enemy-1 goal:\u2014 bb:4",
   ]);
+});
+
+check("createAiNavigationView draws AI perception sight cone and hearing radius", () => {
+  const view = createAiNavigationView({
+    perception: [
+      {
+        entityId: "enemy",
+        position: [0, 0, 0],
+        forward: [0, 0, 1],
+        sightRadius: 6,
+        fieldOfViewDeg: 90,
+        hearingRadius: 3,
+      },
+    ],
+  });
+  assert.ok(view.getObjectByName("ai-perception-sight-cone"));
+  assert.ok(view.getObjectByName("ai-perception-hearing-radius"));
+  disposeAiNavigationView(view);
 });
 
 check("formatAiNavDebug renders follower status, waypoints, replans and stalls", () => {
