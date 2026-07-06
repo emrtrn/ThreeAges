@@ -27,8 +27,12 @@
 > (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-06 - Faz 4 script message -> gameplay stimulus bridge
 > dilimi uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 4 dominant/priority sense helper dilimi
+> uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 4 debug last known positions dilimi uygulandi
+> (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 626 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 628 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -40,8 +44,11 @@
 > Tree servisinden Blackboard'a yazilabiliyor. Sight target-lost grace ile kisa
 > LOS kopmalarinda son hedef bilgisi korunabiliyor. Script message bridge ile
 > `Damage.*`, `alert`, `ui-action` ve `game-event` mesajlari gameplay stimulus
-> olarak AI perception'a dusuyor. Faz 2 editor form, gelismis decorator isleri
-> ve Faz 4 debug overlay isleri planli.
+> olarak AI perception'a dusuyor. Dominant stimulus siralamasi artik merkezi
+> sense priority helper'i uzerinden yapiliyor. Debug overlay son bilinen /
+> duyulan stimulus pozisyonlarini blackboard'dan gosterebiliyor. Faz 2 editor
+> form, gelismis decorator isleri ve Faz 4 sight/hearing debug overlay isleri
+> planli.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -533,7 +540,7 @@ beslemek.
       - [x] `PerceptionListener`
       - [x] `StimulusSource`
       - [x] `PerceivedStimulus`
-      - [ ] dominant/priority sense.
+      - [x] dominant/priority sense.
 - [ ] Sight:
       - [x] radius
       - [x] field of view
@@ -554,7 +561,7 @@ beslemek.
       - [ ] sight cone
       - [ ] hearing radius
       - [x] current sensed targets
-      - [ ] last known positions.
+      - [x] last known positions.
 - [x] Test: target FOV disindayken gorulmez, FOV icinde ve obstruction yokken gorulur.
 - [x] Test: noise event blackboard'a last heard position yazar.
 - [ ] Validation: TypeScript, engine tests, build verify, Playwright editor debug smoke.
@@ -630,6 +637,33 @@ Tamamlanan Faz 4 script message gameplay stimulus notu (2026-07-06):
   debug snapshot'tan temizlenir.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`626 checks passed`), `npm.cmd run build:verify` yesil.
+
+Tamamlanan Faz 4 dominant/priority sense notu (2026-07-06):
+
+- `engine/perception/perception.ts` icinde merkezi
+  `PERCEPTION_SENSE_PRIORITY`, `comparePerceivedStimuli()` ve
+  `dominantPerceivedStimulus()` helper'lari eklendi.
+- Varsayilan oncelik sirasinda `damage` > `sight` > `alert` > `hearing` >
+  `gameplay`; ayni sense icinde strength ve distance siralamasi korunur.
+- `evaluatePerception()` ve `AISubsystem` birlesik perception listeleri ayni
+  comparator'u kullanir; debug overlay'in ilk stimulus satiri da bu merkezi
+  siralamayi takip eder.
+- Test: zayif `damage` stimulus'unun guclu `hearing` stimulus'una dominant
+  gelmesi ve ayni sense icinde strength secimi kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`627 checks passed`), `npm.cmd run build:verify` yesil.
+
+Tamamlanan Faz 4 debug last known positions notu (2026-07-06):
+
+- `formatAiDebug()` blackboard snapshot'indeki `lastKnown*`, `lastHeard*` ve
+  `lastStimulus*` vec3 key'lerini kompakt `known <pawn>` satiri olarak gosterir.
+- Genel vec3 blackboard key'leri debug overlay'e basilmiyor; sadece perception
+  hafizasi gibi adlandirilmis pozisyonlar seciliyor ve ilk 3 girdiyle
+  sinirlandiriliyor.
+- Test: `lastKnownTargetPosition`, `lastHeardPosition`,
+  `lastStimulusPosition` gorunur; `patrolPosition` gizli kalir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`628 checks passed`), `npm.cmd run build:verify` yesil.
 
 ### Faz 5 - EQS benzeri query sistemi
 

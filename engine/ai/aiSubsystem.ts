@@ -18,6 +18,7 @@ import type { Entity, EntityId } from "../scene/entity";
 import { readAIControllerComponent, readTransformComponent } from "../scene/components";
 import { forwardVectorFromRotation } from "../scene/transform";
 import {
+  comparePerceivedStimuli,
   evaluatePerception,
   type GameplayPerceptionSense,
   type NoiseStimulus,
@@ -257,7 +258,7 @@ export class AISubsystem implements Subsystem {
         blockers,
       });
       perceived.push(...this.scriptStimuliFor(pawnEntityId, transform.position, config.hearingRadius));
-      perceived.sort((a, b) => b.strength - a.strength || a.distance - b.distance);
+      perceived.sort(comparePerceivedStimuli);
       controller.setPerception(
         this.applySightGrace(pawnEntityId, perceived, config.targetLostGraceSeconds, deltaSeconds),
       );
@@ -351,7 +352,7 @@ export class AISubsystem implements Subsystem {
       lineOfSight: false,
       strength: memory.stimulus.strength * (remaining / Math.max(memory.totalSeconds, 1e-6)),
     };
-    return [remembered, ...perceived].sort((a, b) => b.strength - a.strength || a.distance - b.distance);
+    return [remembered, ...perceived].sort(comparePerceivedStimuli);
   }
 
   private runnerOptions(): AiBehaviorRunnerOptions {

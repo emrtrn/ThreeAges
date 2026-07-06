@@ -38,6 +38,14 @@ export interface NoiseStimulus {
 export type GameplayPerceptionSense = "damage" | "alert" | "gameplay";
 export type PerceptionSense = "sight" | "hearing" | GameplayPerceptionSense;
 
+export const PERCEPTION_SENSE_PRIORITY: Readonly<Record<PerceptionSense, number>> = {
+  damage: 100,
+  sight: 80,
+  alert: 70,
+  hearing: 50,
+  gameplay: 30,
+};
+
 export interface PerceivedStimulus {
   readonly sense: PerceptionSense;
   readonly sourceEntityId: EntityId;
@@ -61,7 +69,28 @@ export function evaluatePerception(input: PerceptionEvaluationInput): PerceivedS
   const out: PerceivedStimulus[] = [];
   out.push(...evaluateSight(input.listener, input.sources, input.blockers ?? []));
   out.push(...evaluateHearing(input.listener, input.noises ?? []));
-  return out.sort((a, b) => b.strength - a.strength || a.distance - b.distance);
+  return out.sort(comparePerceivedStimuli);
+}
+
+export function dominantPerceivedStimulus(
+  stimuli: readonly PerceivedStimulus[],
+): PerceivedStimulus | null {
+  let dominant: PerceivedStimulus | null = null;
+  for (const stimulus of stimuli) {
+    if (!dominant || comparePerceivedStimuli(stimulus, dominant) < 0) {
+      dominant = stimulus;
+    }
+  }
+  return dominant;
+}
+
+export function comparePerceivedStimuli(a: PerceivedStimulus, b: PerceivedStimulus): number {
+  return (
+    PERCEPTION_SENSE_PRIORITY[b.sense] - PERCEPTION_SENSE_PRIORITY[a.sense] ||
+    b.strength - a.strength ||
+    a.distance - b.distance ||
+    a.sourceEntityId.localeCompare(b.sourceEntityId)
+  );
 }
 
 export function evaluateSight(

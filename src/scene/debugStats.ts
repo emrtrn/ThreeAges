@@ -224,11 +224,48 @@ export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
         `  sense ${controller.pawnEntityId}: ${sensed.sense}:${sensed.sourceEntityId} d:${sensed.distance.toFixed(1)}`,
       );
     }
+    const knownPositions = formatAiKnownPositions(controller.blackboard.entries);
+    if (knownPositions.length > 0) {
+      lines.push(`  known ${controller.pawnEntityId}: ${knownPositions.join(" ")}`);
+    }
     lines.push(
       `  ${controller.pawnEntityId} goal:${controller.goal ?? "—"} bb:${controller.blackboard.keyCount}`,
     );
   }
   return lines;
+}
+
+function formatAiKnownPositions(
+  entries: readonly { readonly key: string; readonly kind: string; readonly value: unknown }[],
+): string[] {
+  const positions: string[] = [];
+  for (const entry of entries) {
+    if (entry.kind !== "vec3" || !isVec3Value(entry.value)) continue;
+    const key = entry.key.toLowerCase();
+    if (
+      !key.includes("lastknown") &&
+      !key.includes("lastheard") &&
+      !key.includes("laststimulus") &&
+      !(key.includes("known") && key.includes("position"))
+    ) {
+      continue;
+    }
+    positions.push(`${entry.key}:${formatVec3Compact(entry.value)}`);
+    if (positions.length >= 3) break;
+  }
+  return positions;
+}
+
+function isVec3Value(value: unknown): value is readonly [number, number, number] {
+  return (
+    Array.isArray(value) &&
+    value.length === 3 &&
+    value.every((entry) => typeof entry === "number" && Number.isFinite(entry))
+  );
+}
+
+function formatVec3Compact(value: readonly [number, number, number]): string {
+  return `(${value[0].toFixed(1)},${value[1].toFixed(1)},${value[2].toFixed(1)})`;
 }
 
 /** The AI navigation block, or "" without a snapshot or with no live followers. */

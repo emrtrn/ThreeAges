@@ -92,6 +92,7 @@ import {
   updateStuckState,
 } from "../engine/navigation/localAvoidance";
 import {
+  dominantPerceivedStimulus,
   evaluateHearing,
   evaluateSight,
   insideHorizontalFov,
@@ -18481,6 +18482,46 @@ check("AI perception hearing applies loudness-scaled radius", () => {
   assert.ok((heard[0]?.strength ?? 0) > (heard[1]?.strength ?? 0));
 });
 
+check("AI perception dominant stimulus uses sense priority before strength", () => {
+  const dominant = dominantPerceivedStimulus([
+    {
+      sense: "hearing",
+      sourceEntityId: "loud-noise",
+      position: [1, 0, 0],
+      distance: 1,
+      strength: 0.95,
+    },
+    {
+      sense: "damage",
+      sourceEntityId: "attacker",
+      position: [6, 0, 0],
+      distance: 6,
+      strength: 0.2,
+      eventType: "Damage.Apply",
+    },
+  ]);
+  assert.equal(dominant?.sense, "damage");
+  assert.equal(dominant?.sourceEntityId, "attacker");
+
+  const sameSense = dominantPerceivedStimulus([
+    {
+      sense: "hearing",
+      sourceEntityId: "near-quiet",
+      position: [1, 0, 0],
+      distance: 1,
+      strength: 0.4,
+    },
+    {
+      sense: "hearing",
+      sourceEntityId: "far-loud",
+      position: [4, 0, 0],
+      distance: 4,
+      strength: 0.8,
+    },
+  ]);
+  assert.equal(sameSense?.sourceEntityId, "far-loud");
+});
+
 check("AISubsystem derives one controller per AIController entity, ticks safely, and gates", () => {
   const ai = new AISubsystem();
   ai.setEntities([
@@ -18931,6 +18972,37 @@ check("formatAiDebug includes the strongest perceived stimulus when present", ()
     "controllers: 1",
     "  sense enemy-1: sight:player d:4.0",
     "  enemy-1 goal:\u2014 bb:1",
+  ]);
+});
+
+check("formatAiDebug includes last known perception blackboard positions", () => {
+  const lines = formatAiDebug({
+    enabled: true,
+    controllerCount: 1,
+    controllers: [
+      {
+        controllerId: "ai:enemy-1",
+        pawnEntityId: "enemy-1",
+        goal: null,
+        behaviorTreeAsset: null,
+        behavior: null,
+        blackboard: {
+          keyCount: 4,
+          entries: [
+            { key: "patrolPosition", kind: "vec3", value: [9, 0, 9] },
+            { key: "lastKnownTargetPosition", kind: "vec3", value: [0, 0, 4] },
+            { key: "lastHeardPosition", kind: "vec3", value: [2, 0, -1] },
+            { key: "lastStimulusPosition", kind: "vec3", value: [5, 1, 0] },
+          ],
+        },
+      },
+    ],
+  });
+  assert.deepEqual(lines, [
+    "ai",
+    "controllers: 1",
+    "  known enemy-1: lastKnownTargetPosition:(0.0,0.0,4.0) lastHeardPosition:(2.0,0.0,-1.0) lastStimulusPosition:(5.0,1.0,0.0)",
+    "  enemy-1 goal:\u2014 bb:4",
   ]);
 });
 
