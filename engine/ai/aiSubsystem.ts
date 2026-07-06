@@ -66,6 +66,7 @@ export interface AISubsystemOptions {
   readonly emitMessage?: (input: AiMessageEmitInput) => void;
   readonly moveTo?: (request: AiMoveRequest) => "success" | "failure" | "running";
   readonly blockers?: () => readonly PerceptionAabb[];
+  readonly perceptionSourceFilter?: (entity: Entity) => boolean;
 }
 
 export interface AiScriptStimulusInput {
@@ -90,6 +91,7 @@ export class AISubsystem implements Subsystem {
   private emitMessage: ((input: AiMessageEmitInput) => void) | undefined;
   private moveTo: ((request: AiMoveRequest) => "success" | "failure" | "running") | undefined;
   private blockers: (() => readonly PerceptionAabb[]) | undefined;
+  private perceptionSourceFilter: ((entity: Entity) => boolean) | undefined;
   private entities: readonly Entity[] = [];
   private pendingNoises: NoiseStimulus[] = [];
   private pendingScriptStimuli: ScriptStimulus[] = [];
@@ -102,6 +104,7 @@ export class AISubsystem implements Subsystem {
     this.emitMessage = options.emitMessage;
     this.moveTo = options.moveTo;
     this.blockers = options.blockers;
+    this.perceptionSourceFilter = options.perceptionSourceFilter;
   }
 
   configure(options: AISubsystemOptions): void {
@@ -110,6 +113,7 @@ export class AISubsystem implements Subsystem {
     if (options.emitMessage) this.emitMessage = options.emitMessage;
     if (options.moveTo) this.moveTo = options.moveTo;
     if (options.blockers) this.blockers = options.blockers;
+    if (options.perceptionSourceFilter) this.perceptionSourceFilter = options.perceptionSourceFilter;
   }
 
   setAssetLibrary(library: AiAssetLibrary): void {
@@ -259,7 +263,7 @@ export class AISubsystem implements Subsystem {
   }
 
   private updatePerception(deltaSeconds: number): void {
-    const sources = perceptionSources(this.entities);
+    const sources = perceptionSources(this.entities, this.perceptionSourceFilter);
     const blockers = this.blockers?.() ?? [];
     for (const [pawnEntityId, controller] of this.controllers) {
       const entity = this.entities.find((candidate) => candidate.id === pawnEntityId);
@@ -425,9 +429,13 @@ interface ScriptStimulus {
   readonly eventType: string;
 }
 
-function perceptionSources(entities: readonly Entity[]): StimulusSource[] {
+function perceptionSources(
+  entities: readonly Entity[],
+  filter?: (entity: Entity) => boolean,
+): StimulusSource[] {
   const sources: StimulusSource[] = [];
   for (const entity of entities) {
+    if (filter && !filter(entity)) continue;
     const transform = readTransformComponent(entity);
     if (!transform) continue;
     sources.push({ entityId: entity.id, position: transform.position });

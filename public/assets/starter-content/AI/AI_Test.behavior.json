@@ -23,7 +23,7 @@
           "distanceKey": "targetDistance",
           "inRangeKey": "inAttackRange",
           "targetPositionKey": "liveTargetPosition",
-          "range": 1.8
+          "range": 2.4
         }
       }
     ],
@@ -101,7 +101,8 @@
             "task": "forge.moveToBlackboard",
             "params": {
               "key": "liveTargetPosition",
-              "speed": 5.5
+              "speed": 5.5,
+              "acceptanceRadius": 1.2
             }
           }
         ]
@@ -138,7 +139,8 @@
             "task": "forge.moveToBlackboard",
             "params": {
               "key": "lastKnownTargetPosition",
-              "speed": 4.2
+              "speed": 4.2,
+              "acceptanceRadius": 1
             }
           },
           {
@@ -180,7 +182,8 @@
                 0,
                 10
               ],
-              "speed": 2.2
+              "speed": 2.2,
+              "acceptanceRadius": 0.9
             }
           },
           {
@@ -198,7 +201,8 @@
                 0,
                 8
               ],
-              "speed": 2.2
+              "speed": 2.2,
+              "acceptanceRadius": 0.9
             }
           },
           {
@@ -216,7 +220,8 @@
                 0,
                 -8
               ],
-              "speed": 2.2
+              "speed": 2.2,
+              "acceptanceRadius": 0.9
             }
           },
           {

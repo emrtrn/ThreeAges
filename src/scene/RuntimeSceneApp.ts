@@ -318,6 +318,7 @@ import {
 import {
   readAudioComponent,
   readAIControllerComponent,
+  readBehaviorComponent,
   readCharacterMovementComponent,
   readLightComponent,
   readMeshRendererComponent,
@@ -394,6 +395,7 @@ export interface PerfMemorySnapshot {
 interface RuntimeAiPathFollowing {
   goal: Vec3;
   speed?: number;
+  acceptanceRadius?: number;
   state: PathFollowingState;
   /** Progress window feeding stuck detection (replan / give up). */
   stuck: StuckState;
@@ -416,6 +418,7 @@ export interface AiNavFollowerDebug {
   readonly path: readonly Vec3[];
   readonly goal: Vec3;
   readonly speed?: number;
+  readonly acceptanceRadius?: number;
   readonly replans: number;
   readonly secondsWithoutProgress: number;
 }
@@ -502,6 +505,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly aiSubsystem = new AISubsystem({
     taskRegistry: createGameAiTaskRegistry(),
     blockers: () => this.physicsSubsystem.staticBlockerAabbs(),
+    perceptionSourceFilter: (entity) => this.isAiPerceptionSource(entity),
   });
   private readonly aiPathFollowing = new Map<string, RuntimeAiPathFollowing>();
   private readonly aiCharacterAnimators = new Map<string, RuntimeAiCharacterAnimator>();
@@ -1109,6 +1113,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         path: follow.state.path,
         goal: follow.goal,
         ...(follow.speed !== undefined ? { speed: follow.speed } : {}),
+        ...(follow.acceptanceRadius !== undefined ? { acceptanceRadius: follow.acceptanceRadius } : {}),
         replans: follow.replans,
         secondsWithoutProgress: follow.stuck.secondsWithoutProgress,
       })),
@@ -1192,7 +1197,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const entityId = request.controller.pawnEntityId;
     const transform = this.characterMovementSubsystem.transformOf(entityId);
     if (!transform) return "failure";
-    if (planarDistance(transform.position, request.position) <= AI_MOVE_ACCEPTANCE_RADIUS) {
+    const acceptanceRadius = request.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS;
+    if (planarDistance(transform.position, request.position) <= acceptanceRadius) {
       this.aiPathFollowing.delete(entityId);
       return "success";
     }
@@ -1203,6 +1209,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.aiPathFollowing.set(entityId, {
           goal: [...request.position],
           ...(request.speed !== undefined ? { speed: request.speed } : {}),
+          ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
           state: { path: [], waypointIndex: 0, status: "failure" },
           stuck: freshStuckState(transform.position),
           replans: 0,
@@ -1212,6 +1219,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.aiPathFollowing.set(entityId, {
         goal: [...request.position],
         ...(request.speed !== undefined ? { speed: request.speed } : {}),
+        ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
         state: { path: path.points, waypointIndex: 1, status: "following" },
         stuck: freshStuckState(transform.position),
         replans: 0,
@@ -1223,6 +1231,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         delete existing.speed;
       } else {
         existing.speed = request.speed;
+      }
+    }
+    if (existing.acceptanceRadius !== request.acceptanceRadius) {
+      if (request.acceptanceRadius === undefined) {
+        delete existing.acceptanceRadius;
+      } else {
+        existing.acceptanceRadius = request.acceptanceRadius;
       }
     }
     // A memoized failure (unreachable goal or exhausted stuck recovery) keeps
@@ -1277,7 +1292,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!follow || follow.state.status !== "following") return null;
     let state = follow.state;
     let target = state.path[state.waypointIndex];
-    while (target && planarDistance(transform.position, target) <= AI_MOVE_ACCEPTANCE_RADIUS) {
+    const acceptanceRadius = follow.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS;
+    while (target && planarDistance(transform.position, target) <= acceptanceRadius) {
       const nextIndex = state.waypointIndex + 1;
       if (nextIndex >= state.path.length) {
         this.aiPathFollowing.delete(entityId);
@@ -1343,6 +1359,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       });
     });
     return neighbors;
+  }
+
+  private isAiPerceptionSource(entity: Entity): boolean {
+    if (readCharacterMovementComponent(entity)) return true;
+    if (readAIControllerComponent(entity)) return true;
+    return readBehaviorComponent(entity)?.scriptId === "input-move";
   }
 
   /**

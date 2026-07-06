@@ -20421,7 +20421,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 2052
+        "bytes": 2054
       },
       "license": "Unknown"
     },
@@ -20473,7 +20473,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 5579
+        "bytes": 5772
       },
       "license": "Unknown"
     }

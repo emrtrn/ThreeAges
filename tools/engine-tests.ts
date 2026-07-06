@@ -18785,23 +18785,28 @@ check("AiBehaviorRunner move tasks forward authored speed to runtime movement", 
     root: {
       kind: "task",
       task: "forge.moveToPosition",
-      params: { position: [1, 0, 2], speed: 5.5 },
+      params: { position: [1, 0, 2], speed: 5.5, acceptanceRadius: 0.75 },
     },
   });
-  const requests: Array<{ position: [number, number, number]; speed?: number }> = [];
+  const requests: Array<{
+    position: [number, number, number];
+    speed?: number;
+    acceptanceRadius?: number;
+  }> = [];
   const runner = new AiBehaviorRunner(controller, asset, {
     taskRegistry: createDefaultAiTaskRegistry(),
     moveTo: (request) => {
       requests.push({
         position: [request.position[0], request.position[1], request.position[2]],
         ...(request.speed !== undefined ? { speed: request.speed } : {}),
+        ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
       });
       return "running";
     },
   });
 
   assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
-  assert.deepEqual(requests, [{ position: [1, 0, 2], speed: 5.5 }]);
+  assert.deepEqual(requests, [{ position: [1, 0, 2], speed: 5.5, acceptanceRadius: 0.75 }]);
 });
 
 check("AiBehaviorRunner built-in startConversation emits the conversation trigger message", () => {
@@ -19302,6 +19307,36 @@ check("AISubsystem derives perception listeners from AIController props and cons
   assert.equal(perceived[0]?.sourceEntityId, "target");
   ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.048, frame: 3 });
   assert.equal(ai.getDebugSnapshot().controllers[0]?.perception?.length, 0, "noise is transient");
+});
+
+check("AISubsystem perception source filter can exclude static props from sight targets", () => {
+  const ai = new AISubsystem({ perceptionSourceFilter: (entity) => entity.id !== "prop" });
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: {
+          perception: { sightRadius: 6, fieldOfViewDeg: 360 },
+        },
+      },
+    },
+    {
+      id: "prop",
+      components: {
+        Transform: { position: [0, 0, 1], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      },
+    },
+    {
+      id: "player",
+      components: {
+        Transform: { position: [0, 0, 3], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      },
+    },
+  ]);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  const perceived = ai.getDebugSnapshot().controllers[0]?.perception ?? [];
+  assert.deepEqual(perceived.map((stimulus) => stimulus.sourceEntityId), ["player"]);
 });
 
 check("AISubsystem debug snapshot exposes perception pose and authored ranges", () => {

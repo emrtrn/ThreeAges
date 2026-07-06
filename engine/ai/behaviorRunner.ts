@@ -44,6 +44,7 @@ export interface AiMoveRequest {
   readonly controller: AIController;
   readonly position: Vec3;
   readonly speed?: number;
+  readonly acceptanceRadius?: number;
 }
 
 export interface AiQueryRequest {
@@ -409,10 +410,14 @@ function moveToPositionTask(context: AiTaskContext): AiBehaviorStatus {
   const position = vec3Param(context.params.position);
   if (!position) return "failure";
   const speed = optionalNonNegativeNumberParam(context.params.speed);
+  const acceptanceRadius = optionalNonNegativeNumberParam(
+    context.params.acceptanceRadius ?? context.params.acceptance,
+  );
   return context.moveTo({
     controller: context.controller,
     position,
     ...(speed !== null ? { speed } : {}),
+    ...(acceptanceRadius !== null ? { acceptanceRadius } : {}),
   });
 }
 
@@ -424,10 +429,14 @@ function moveToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
   const position = Array.isArray(value) ? vec3Param(value) : null;
   if (!position) return "failure";
   const speed = optionalNonNegativeNumberParam(context.params.speed);
+  const acceptanceRadius = optionalNonNegativeNumberParam(
+    context.params.acceptanceRadius ?? context.params.acceptance,
+  );
   return context.moveTo({
     controller: context.controller,
     position,
     ...(speed !== null ? { speed } : {}),
+    ...(acceptanceRadius !== null ? { acceptanceRadius } : {}),
   });
 }
 

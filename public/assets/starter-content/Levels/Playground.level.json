@@ -85,7 +85,18 @@
     },
     {
       "assetId": "shape-cube",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -12,
+            0,
+            5
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 4
+        }
+      ]
     },
     {
       "assetId": "shape-cylender",
@@ -135,7 +146,7 @@
           "materialSlot": "white-material",
           "rotationYDeg": 0,
           "scale": [
-            2,
+            3.4,
             1,
             2
           ]
@@ -274,98 +285,23 @@
     },
     {
       "assetId": "sm-leftarm",
-      "placements": [
-        {
-          "position": [
-            -9,
-            0,
-            5.19
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            180,
-            0
-          ],
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-bump",
-      "placements": [
-        {
-          "position": [
-            -11.6,
-            0,
-            5.19
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            180,
-            0
-          ],
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-linearstair",
-      "placements": [
-        {
-          "position": [
-            -6,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            180,
-            0
-          ],
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-ramp",
-      "placements": [
-        {
-          "position": [
-            -9,
-            0,
-            7.89
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            180,
-            0
-          ],
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-rightarm",
-      "placements": [
-        {
-          "position": [
-            -9,
-            0,
-            2.7
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            180,
-            0
-          ],
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-chair-ktx2",
@@ -443,9 +379,9 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        0,
+        -12,
         6.14,
-        0
+        7
       ],
       "name": "Sun",
       "rotation": [

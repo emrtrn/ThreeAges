@@ -52,7 +52,7 @@
 > Revizyon: 2026-07-06 - AI controlled CharacterMovement actor'lar player spawn/
 > possession adayindan ayrildi; AI character locomotion animasyonu eklendi.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 648 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 649 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -87,7 +87,9 @@
 > goruste kovalamaca ve yakin mesafede punch intent mesaji demosu calistirir.
 > AI controlled CharacterMovement actor'lar artik default player pawn spawn'ini
 > engellemez ve AI character ref'leri hareket raporundan idle/walk/run animasyon
-> secimini runtime'da yapar.
+> secimini runtime'da yapar. Runtime AI sight source filtresi statik prop'lari
+> hedef listesinden cikarir; `moveTo` task'lari authored `acceptanceRadius`
+> ile hedefe varis toleransi tasiyabilir.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -853,6 +855,11 @@ Tamamlanan Playground `AI_Test` demo notu (2026-07-06):
 - `forge.moveToPosition` ve `forge.moveToBlackboard` task'lari opsiyonel
   `speed` parametresini runtime path-following intent'ine tasir; demo patrol ve
   chase hizlarini authored data ile ayirir.
+- Ayni task'lar opsiyonel `acceptanceRadius` / `acceptance` parametresiyle
+  varis toleransini path-following'e tasir; AI_Test patrol noktalarinda
+  hedefe cok yakin kalip sonsuz yurumeye devam etmez.
+- Runtime AI perception, sight kaynaklarini karakter/pawn/input-move entity'leri
+  ile sinirlayabilir; Playground AI_Test statik prop'lari oyuncu hedefi sanmaz.
 - AI controlled Actor Script character'lar TPS GameMode player seciminden
   filtrelenir; default player pawn Player Start'ta spawn/possess edilmeye devam
   eder.

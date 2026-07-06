@@ -17,8 +17,8 @@
         "behaviorTree": "assets/starter-content/AI/AI_Test.behavior.json",
         "blackboard": "assets/starter-content/AI/AI_Test.blackboard.json",
         "perception": {
-          "sightRadius": 18,
-          "fieldOfViewDeg": 110,
+          "sightRadius": 24,
+          "fieldOfViewDeg": 360,
           "hearingRadius": 12
         },
         "navAgent": {
@@ -44,8 +44,8 @@
         "shape": "capsule",
         "isStatic": false,
         "isSensor": false,
-        "capsuleRadius": 1.5,
-        "capsuleHalfHeight": 3
+        "capsuleRadius": 0.3,
+        "capsuleHalfHeight": 0.9
       },
       "parent": "root"
     },
