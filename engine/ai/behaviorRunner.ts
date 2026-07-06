@@ -18,6 +18,8 @@ import type {
   AiBehaviorTreeAsset,
   AiJsonValue,
 } from "./behaviorAsset";
+import { aiQueryParams } from "./queryAsset";
+import type { AiQueryResult } from "./queryRunner";
 
 export type AiTaskHandler = (context: AiTaskContext) => AiBehaviorStatus;
 export type AiServiceHandler = (context: AiServiceContext) => void;
@@ -42,12 +44,18 @@ export interface AiMoveRequest {
   readonly position: Vec3;
 }
 
+export interface AiQueryRequest {
+  readonly controller: AIController;
+  readonly query: string;
+}
+
 export interface AiBehaviorRunnerOptions {
   readonly taskRegistry?: AiTaskRegistry;
   readonly serviceRegistry?: AiServiceRegistry;
   readonly resolveSubtree?: (assetPath: string) => AiBehaviorTreeAsset | undefined;
   readonly emitMessage?: (input: AiMessageEmitInput) => void;
   readonly moveTo?: (request: AiMoveRequest) => AiBehaviorStatus;
+  readonly runQuery?: (request: AiQueryRequest) => AiQueryResult;
 }
 
 export interface AiTaskContext {
@@ -58,6 +66,7 @@ export interface AiTaskContext {
   readonly memory: Map<string, unknown>;
   readonly emitMessage?: (input: AiMessageEmitInput) => void;
   readonly moveTo?: (request: AiMoveRequest) => AiBehaviorStatus;
+  readonly runQuery?: (request: AiQueryRequest) => AiQueryResult;
 }
 
 export interface AiServiceContext extends AiTaskContext {
@@ -95,6 +104,7 @@ export function createDefaultAiTaskRegistry(): AiTaskRegistry {
     ["forge.moveToPosition", moveToPositionTask],
     ["forge.moveToBlackboard", moveToBlackboardTask],
     ["forge.startConversation", startConversationTask],
+    ["forge.runQueryToBlackboard", runQueryToBlackboardTask],
   ]);
   return { get: (taskId) => tasks.get(taskId) };
 }
@@ -233,6 +243,7 @@ export class AiBehaviorRunner {
       memory: this.memoryFor(path).taskMemory,
       ...(this.options.emitMessage ? { emitMessage: this.options.emitMessage } : {}),
       ...(this.options.moveTo ? { moveTo: this.options.moveTo } : {}),
+      ...(this.options.runQuery ? { runQuery: this.options.runQuery } : {}),
     });
     if (status !== "running") this.memoryFor(path).taskMemory.clear();
     return this.record(path, status);
@@ -309,6 +320,7 @@ export class AiBehaviorRunner {
         service,
         ...(this.options.emitMessage ? { emitMessage: this.options.emitMessage } : {}),
         ...(this.options.moveTo ? { moveTo: this.options.moveTo } : {}),
+        ...(this.options.runQuery ? { runQuery: this.options.runQuery } : {}),
       });
     }
   }
@@ -391,6 +403,17 @@ function startConversationTask(context: AiTaskContext): AiBehaviorStatus {
     payload: { conversationId },
   });
   return "success";
+}
+
+function runQueryToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
+  if (!context.runQuery) return "failure";
+  const params = aiQueryParams(context.params);
+  if (!params.query || !params.resultKey) return "failure";
+  const result = context.runQuery({ controller: context.controller, query: params.query });
+  const winner = result.winner;
+  if (!winner) return "failure";
+  const value = winner.entityId ?? winner.position;
+  return context.blackboard.set(params.resultKey, value) ? "success" : "failure";
 }
 
 function updatePerceptionBlackboardService(context: AiServiceContext): void {

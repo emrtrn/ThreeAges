@@ -224,6 +224,9 @@ export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
         `  sense ${controller.pawnEntityId}: ${sensed.sense}:${sensed.sourceEntityId} d:${sensed.distance.toFixed(1)}`,
       );
     }
+    if (controller.query) {
+      lines.push(`  query ${controller.pawnEntityId}: ${formatAiQueryDebug(controller.query)}`);
+    }
     const knownPositions = formatAiKnownPositions(controller.blackboard.entries);
     if (knownPositions.length > 0) {
       lines.push(`  known ${controller.pawnEntityId}: ${knownPositions.join(" ")}`);
@@ -233,6 +236,19 @@ export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
     );
   }
   return lines;
+}
+
+function formatAiQueryDebug(
+  query: NonNullable<AiDebugSnapshot["controllers"][number]["query"]>,
+): string {
+  const name = query.query.split("/").at(-1) ?? query.query;
+  if (query.status === "failure") {
+    return `${name} fail c:${query.candidateCount}${query.failureReason ? ` ${query.failureReason}` : ""}`;
+  }
+  const winner = query.winner;
+  const winnerId = winner?.entityId ?? winner?.id ?? "none";
+  const score = winner ? ` score:${winner.score.toFixed(2)}` : "";
+  return `${name} win:${winnerId}${score} c:${query.candidateCount}`;
 }
 
 function formatAiKnownPositions(

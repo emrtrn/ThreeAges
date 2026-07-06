@@ -29,6 +29,8 @@ import {
 import { Blackboard } from "./blackboard";
 import { AIController, type AIControllerDebugSnapshot, type AIControllerOptions } from "./aiController";
 import type { AiBlackboardAsset, AiBehaviorTreeAsset } from "./behaviorAsset";
+import type { AiQueryAsset } from "./queryAsset";
+import { runAiQuery } from "./queryRunner";
 import {
   AiBehaviorRunner,
   createDefaultAiServiceRegistry,
@@ -54,6 +56,7 @@ export interface AiDebugSnapshot {
 export interface AiAssetLibrary {
   readonly blackboards?: ReadonlyMap<string, AiBlackboardAsset>;
   readonly behaviors?: ReadonlyMap<string, AiBehaviorTreeAsset>;
+  readonly queries?: ReadonlyMap<string, AiQueryAsset>;
 }
 
 export interface AISubsystemOptions {
@@ -79,6 +82,7 @@ export class AISubsystem implements Subsystem {
   private runners = new Map<EntityId, AiBehaviorRunner>();
   private blackboardAssets: ReadonlyMap<string, AiBlackboardAsset> = new Map();
   private behaviorAssets: ReadonlyMap<string, AiBehaviorTreeAsset> = new Map();
+  private queryAssets: ReadonlyMap<string, AiQueryAsset> = new Map();
   private enabled = true;
   private taskRegistry: AiTaskRegistry;
   private serviceRegistry: AiServiceRegistry | undefined;
@@ -109,6 +113,7 @@ export class AISubsystem implements Subsystem {
   setAssetLibrary(library: AiAssetLibrary): void {
     this.blackboardAssets = library.blackboards ?? new Map();
     this.behaviorAssets = library.behaviors ?? new Map();
+    this.queryAssets = library.queries ?? new Map();
     this.rebuildRunners();
   }
 
@@ -376,6 +381,21 @@ export class AISubsystem implements Subsystem {
       resolveSubtree: (assetPath) => this.behaviorAssets.get(assetPath),
       ...(this.emitMessage ? { emitMessage: this.emitMessage } : {}),
       ...(this.moveTo ? { moveTo: this.moveTo } : {}),
+      runQuery: ({ controller, query }) => {
+        const asset = this.queryAssets.get(query);
+        if (!asset) {
+          const result = { status: "failure" as const, candidates: [], winner: null };
+          controller.setLastQueryResult(query, result);
+          return result;
+        }
+        const result = runAiQuery(asset, {
+          controller,
+          entities: this.entities,
+          blockers: this.blockers?.() ?? [],
+        });
+        controller.setLastQueryResult(query, result);
+        return result;
+      },
     };
   }
 }

@@ -26,11 +26,20 @@ export interface AiPerceptionView {
   readonly hearingRadius?: number;
 }
 
+export interface AiQueryCandidateView {
+  readonly entityId?: string;
+  readonly position: Vec3;
+  readonly score: number;
+  readonly failedTests?: readonly string[];
+  readonly winner?: boolean;
+}
+
 export interface AiNavigationViewInput {
   readonly blockers?: readonly NavAabb[];
   readonly bounds?: readonly NavAabb[];
   readonly followers?: readonly AiNavigationFollowerView[];
   readonly perception?: readonly AiPerceptionView[];
+  readonly queries?: readonly AiQueryCandidateView[];
   readonly cellSize?: number;
   readonly y?: number;
 }
@@ -46,6 +55,9 @@ const PATH_FAILED_COLOR = 0xff4d6d;
 const WAYPOINT_COLOR = 0xfff06a;
 const SIGHT_COLOR = 0x8ee66b;
 const HEARING_COLOR = 0x9f7aff;
+const QUERY_CANDIDATE_COLOR = 0x75d7ff;
+const QUERY_FAILED_COLOR = 0x7d8794;
+const QUERY_WINNER_COLOR = 0x00f5a0;
 const DEFAULT_SIGHT_FOV_DEG = 90;
 
 export function createAiNavigationView(input: AiNavigationViewInput): Group {
@@ -57,6 +69,7 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
     input.bounds ?? [],
     input.followers ?? [],
     input.perception ?? [],
+    input.queries ?? [],
   );
   if (!bounds) return group;
 
@@ -122,6 +135,21 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
     }
   }
 
+  for (const candidate of input.queries ?? []) {
+    const failed = (candidate.failedTests?.length ?? 0) > 0;
+    const winner = candidate.winner === true;
+    const color = winner ? QUERY_WINNER_COLOR : failed ? QUERY_FAILED_COLOR : QUERY_CANDIDATE_COLOR;
+    const size = winner ? 0.32 : 0.18;
+    group.add(
+      lineSegments(
+        winner ? "ai-query-winner" : failed ? "ai-query-failed-candidate" : "ai-query-candidate",
+        queryCandidateSegments(candidate.position, y + (winner ? 0.28 : 0.24), size, winner),
+        color,
+        winner ? 1 : 0.7,
+      ),
+    );
+  }
+
   return group;
 }
 
@@ -156,6 +184,7 @@ function computeBounds(
   bounds: readonly NavAabb[],
   followers: readonly AiNavigationFollowerView[],
   perceptions: readonly AiPerceptionView[],
+  queries: readonly AiQueryCandidateView[],
 ): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
   let minX = Infinity;
   let maxX = -Infinity;
@@ -190,6 +219,7 @@ function computeBounds(
       include([perception.position[0] + radius, perception.position[1], perception.position[2] + radius]);
     }
   }
+  for (const candidate of queries) include(candidate.position);
   if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minZ) || !Number.isFinite(maxZ)) {
     return null;
   }
@@ -265,6 +295,14 @@ function crossSegments(point: Vec3, y: number, size: number): Vec3[] {
     [x, y, z - size],
     [x, y, z + size],
   ];
+}
+
+function queryCandidateSegments(point: Vec3, y: number, size: number, winner: boolean): Vec3[] {
+  const out = crossSegments(point, y, size);
+  if (winner) {
+    out.push(...circleSegments(point, size * 1.35, y, 24));
+  }
+  return out;
 }
 
 function circleSegments(center: Vec3, radius: number, y: number, steps = 48): Vec3[] {

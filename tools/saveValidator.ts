@@ -56,6 +56,7 @@ import {
   normalizeAiBehaviorTreeAsset,
   normalizeAiBlackboardAsset,
 } from "../engine/ai/behaviorAsset";
+import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -2914,6 +2915,26 @@ export function validateSaveAiBehaviorPayload(value: unknown): {
   };
 }
 
+export function validateSaveAiQueryPayload(value: unknown): {
+  path: string;
+  query: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("query payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".query.json")) {
+    throw new Error("query payload path must end with .query.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("query payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    query: normalizeAiQueryAsset(input.query) as unknown as Record<string, unknown>,
+  };
+}
+
 /** Content Browser "new content" kinds the `/__content-new` endpoint accepts. */
 export const CONTENT_NEW_KINDS = [
   "folder",
@@ -2928,6 +2949,7 @@ export const CONTENT_NEW_KINDS = [
   "ui",
   "blackboard",
   "behaviorTree",
+  "aiQuery",
 ] as const;
 export type ContentNewKind = (typeof CONTENT_NEW_KINDS)[number];
 
@@ -3045,6 +3067,13 @@ function contentStubJson(payload: ContentNewPayload): string {
       type: "behaviorTree",
       root: { kind: "selector", children: [] },
     };
+  } else if (kind === "aiQuery") {
+    body = {
+      schema: 1,
+      type: "query",
+      generators: [{ kind: "pointsAroundQuerier", radius: 5, points: 8 }],
+      tests: [{ kind: "distance", max: 5, score: "inverse" }],
+    };
   } else if (kind === "material") {
     body = { ...defaultForgeMaterialDef(name, payload.materialPreset ?? "standard") };
   } else {
@@ -3078,7 +3107,9 @@ export function resolveContentNewFile(payload: ContentNewPayload): ContentNewFil
               ? "dialogue"
               : payload.kind === "behaviorTree"
                 ? "behavior"
-              : payload.kind;
+                : payload.kind === "aiQuery"
+                  ? "query"
+                  : payload.kind;
   return {
     path: join(`${payload.name}.${ext}.json`),
     content: contentStubJson(payload),
@@ -3231,6 +3262,7 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   conversation: "dialogue",
   blackboard: "AI",
   behaviorTree: "AI",
+  aiQuery: "AI",
   animation: "animation",
   effect: "effect",
   prefab: "prefab",

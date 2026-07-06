@@ -17,6 +17,8 @@
 import { Blackboard } from "./blackboard";
 import type { BlackboardDebugSnapshot } from "./blackboard";
 import type { AiBehaviorRunnerDebugSnapshot } from "./behaviorRunner";
+import type { AiQueryDebugSnapshot, AiQueryResult } from "./queryRunner";
+import { aiQueryDebugSnapshot } from "./queryRunner";
 import type { AIPerceptionConfig } from "../scene/components";
 import type { EntityId } from "../scene/entity";
 import type { PerceivedStimulus } from "../perception/perception";
@@ -44,6 +46,7 @@ export interface AIControllerDebugSnapshot {
   readonly behaviorTreeAsset: string | null;
   readonly behavior: AiBehaviorRunnerDebugSnapshot | null;
   readonly perception?: readonly PerceivedStimulus[];
+  readonly query?: AiQueryDebugSnapshot;
   /** Authored perception settings, echoed into debug for visualizers only. */
   readonly perceptionConfig?: AIPerceptionConfig;
   /** World-space pawn position, when the host can resolve it. */
@@ -64,6 +67,7 @@ export class AIController {
 
   private currentGoal: string | null = null;
   private perceived: PerceivedStimulus[] = [];
+  private lastQuery: AiQueryDebugSnapshot | null = null;
 
   constructor(
     id: AIControllerId,
@@ -103,6 +107,14 @@ export class AIController {
     }));
   }
 
+  setLastQueryResult(query: string, result: AiQueryResult): void {
+    this.lastQuery = aiQueryDebugSnapshot(query, result);
+  }
+
+  clearLastQueryResult(): void {
+    this.lastQuery = null;
+  }
+
   getDebugSnapshot(behavior: AiBehaviorRunnerDebugSnapshot | null = null): AIControllerDebugSnapshot {
     return {
       controllerId: this.id,
@@ -111,6 +123,7 @@ export class AIController {
       behaviorTreeAsset: this.behaviorTreeAsset,
       behavior,
       perception: this.perceived,
+      ...(this.lastQuery ? { query: this.lastQuery } : {}),
       ...(this.perceptionConfig ? { perceptionConfig: this.perceptionConfig } : {}),
       blackboard: this.blackboard.getDebugSnapshot(),
     };

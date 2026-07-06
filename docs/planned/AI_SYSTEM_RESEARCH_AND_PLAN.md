@@ -33,8 +33,16 @@
 > (bkz. asagidaki checkbox'lar).
 > Revizyon: 2026-07-06 - Faz 4 sight cone + hearing radius debug overlay
 > dilimi uygulandi ve Faz 4 gate kapatildi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 5 query asset schema/save/runtime runner ilk
+> dilimi uygulandi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-06 - Faz 5 query debug snapshot ve
+> actorsByInterface/classRef + target context dilimi uygulandi.
+> Revizyon: 2026-07-06 - Faz 5 query viewport candidate overlay dilimi
+> uygulandi.
+> Revizyon: 2026-07-06 - Faz 5 all-actors tag/interface query context dilimi
+> uygulandi.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
-> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 630 check,
+> tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 638 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
 > provider on kosulu ve ilk grid navigation/path-following dilimi tamamlandi.
 > Basit local avoidance + stuck recovery, runtime `?debug` AI navigation draw
@@ -50,8 +58,15 @@
 > sense priority helper'i uzerinden yapiliyor. Debug overlay son bilinen /
 > duyulan stimulus pozisyonlarini blackboard'dan gosterebiliyor; runtime
 > `?debug` ve editor `Show > AI Navigation` artik AI perception sight cone ve
-> hearing radius wireframe'lerini de cizebiliyor. Faz 2 editor form ve gelismis
-> decorator isleri planli.
+> hearing radius wireframe'lerini de cizebiliyor. Faz 5 query asset schema,
+> dev save endpoint, content-new stub, runtime query runner ve
+> `forge.runQueryToBlackboard` task ilk dilimi tamamlandi. Faz 2 editor form ve
+> gelismis decorator isleri planli. Query debug snapshot'i ve overlay satiri,
+> actor interface/classRef generator'lari ve target entity context'i eklendi.
+> Runtime `?debug` ve editor `Show > AI Navigation`, son query adaylarini ve
+> kazanan item'i viewport wireframe overlay olarak cizebiliyor. Query
+> context'leri artik tag/interface ile bulunan tum aktor referanslarini
+> distance/LOS/nav/dot testlerinde kullanabiliyor.
 > Amac: Unreal Engine AI dokumanlarindaki temel sistemi inceleyip Forge icin
 > uygulanabilir, data-driven ve editor/runtime sinirlarina uygun bir AI mimarisi
 > tanimlamak.
@@ -690,34 +705,85 @@ Tamamlanan Faz 4 sight/hearing debug overlay notu (2026-07-06):
 Hedef: "nereye gitmeli?", "en iyi cover neresi?", "hangi pickup yakin ve guvenli?"
 gibi kararlar data-driven sorgu ile cozulsun.
 
-- [ ] `*.eqs.json` veya `*.query.json` asset schema tanimla (+ manifest
+- [x] `*.eqs.json` veya `*.query.json` asset schema tanimla (+ manifest
       `AssetType` ve save endpoint, Faz 2 pattern'i).
 - [ ] Generatorlar:
-      - [ ] points around querier
-      - [ ] grid around context
-      - [ ] actors by tag/interface/classRef
+      - [x] points around querier
+      - [x] grid around context
+      - [x] actors by tag
+      - [x] actors by interface/classRef
       - [ ] smart objects by tag.
 - [ ] Contextler:
-      - [ ] querier
-      - [ ] target entity
-      - [ ] blackboard entity/position
-      - [ ] all actors of tag/interface.
+      - [x] querier
+      - [x] target entity
+      - [x] blackboard entity/position
+      - [x] all actors of tag/interface.
 - [ ] Testler:
-      - [ ] distance min/max/score
-      - [ ] line of sight
-      - [ ] nav reachable
+      - [x] distance min/max/score
+      - [x] line of sight
+      - [x] nav reachable
       - [ ] occupancy/reservation free
-      - [ ] dot/FOV.
-- [ ] Behavior Tree task: `forge.runQueryToBlackboard`.
+      - [x] dot/FOV.
+- [x] Behavior Tree task: `forge.runQueryToBlackboard`.
 - [ ] Query debug:
-      - [ ] generated candidates
-      - [ ] per-test score
-      - [ ] winner item
-      - [ ] failure reason.
-- [ ] Editor ilk surum: query asset formu + viewport candidate overlay.
+      - [x] generated candidates
+      - [x] per-test score
+      - [x] winner item
+      - [x] failure reason.
+- [ ] Editor ilk surum: query asset formu.
+- [x] Runtime/editor `AI Navigation` viewport candidate overlay.
 - [ ] Performance: query tick interval, candidate cap, debug-only expensive details.
-- [ ] Test: best patrol point / best cover point deterministic sample.
-- [ ] Validation: full local gate ve Playwright overlay smoke.
+- [x] Test: best patrol point / best cover point deterministic sample.
+- [x] Validation: full local gate ve Playwright AI Navigation smoke.
+
+Tamamlanan Faz 5 query schema/runtime ilk dilim notu (2026-07-06):
+
+- `engine/ai/queryAsset.ts` ve `engine/ai/queryRunner.ts` eklendi; query asset
+  normalizer'i generator/context/test semasini canonical hale getiriyor.
+- Manifest `aiQuery` tipi ve `.query.json` compound extension tanindi; Content
+  Browser `aiQuery` stub'u ve `/__save-query` dev endpoint'i Faz 2 save pattern'i
+  ile eklendi.
+- Runtime runner ilk dilimde `pointsAroundQuerier`, `gridAroundContext`,
+  `actorsByTag`, `distance`, `lineOfSight`, `navReachable` ve `dot` testlerini
+  destekliyor.
+- `AISubsystem` query asset library'sini Behavior Tree runner'a bagliyor;
+  `forge.runQueryToBlackboard` task'i kazanan entity/pozisyonu Blackboard'a
+  yazabiliyor.
+- Test: query schema/save/manifest/content-new, scoring/filtering, nav reachable
+  ve Behavior Tree task bridge kapsandi.
+
+Tamamlanan Faz 5 query debug/generator genisletme notu (2026-07-06):
+
+- Query runner adaylara per-test sonucunu (`pass`, skor, neden) ekliyor ve
+  `AIController` son query sonucunu debug-only snapshot olarak sakliyor.
+- `formatAiDebug()` son query icin kazanan, skor, aday sayisi veya failure
+  reason satiri basiyor; runtime state layout'a yazilmiyor.
+- Generator kapsami `actorsByInterface` ve `actorsByClassRef` ile genisledi;
+  `targetEntity` context varsayilan `target` Blackboard entity key'ini veya
+  opsiyonel authored key'i okuyabiliyor.
+- Test: AISubsystem query debug snapshot, overlay formatter, interface/classRef
+  generator ve target context kapsandi.
+
+Tamamlanan Faz 5 query viewport overlay notu (2026-07-06):
+
+- `createAiNavigationView()` query adaylarini AI Navigation overlay'e ekliyor:
+  normal aday, failed-test aday ve winner marker'i ayri renk/adlarla ciziliyor.
+- Runtime `?debug` ve editor `Show > AI Navigation`, `AISubsystem`
+  debug snapshot'indaki son query adaylarini ayni render-three helper'ina
+  bagliyor.
+- Test: `createAiNavigationView` query candidate/failed/winner marker'lari
+  kapsandi; full local gate ve Playwright AI Navigation smoke gecti.
+
+Tamamlanan Faz 5 all-actors context notu (2026-07-06):
+
+- Query context semasi `allActorsWithTag` ve `allActorsWithInterface`
+  destekliyor; tag/interface alanlari save normalizer tarafindan zorunlu
+  dogrulaniyor.
+- `gridAroundContext`, distance, line-of-sight, nav-reachable ve dot testleri
+  coklu context referanslariyla calisiyor. Distance en yakin referansi, LOS/nav
+  herhangi basarili referansi, dot ise en iyi aciyi kullanir.
+- Test: tag/interface context normalizer hatalari ve deterministik best-cover
+  secimi kapsandi.
 
 ### Faz 6 - Smart Objects
 

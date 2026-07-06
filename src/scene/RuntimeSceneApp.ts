@@ -60,6 +60,7 @@ import {
   createAiNavigationView,
   disposeAiNavigationView,
   type AiPerceptionView,
+  type AiQueryCandidateView,
 } from "@engine/render-three/aiNavigationView";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
@@ -1096,11 +1097,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.removeAiNavigationDebugView();
     const snapshot = this.getAiNavigationDebugSnapshot();
     const perception = this.aiPerceptionView();
+    const queries = this.aiQueryView();
     if (
       snapshot.followers.length === 0 &&
       snapshot.blockers.length === 0 &&
       snapshot.bounds.length === 0 &&
-      perception.length === 0
+      perception.length === 0 &&
+      queries.length === 0
     ) return;
     this.aiNavigationView = createAiNavigationView({
       blockers: snapshot.blockers,
@@ -1108,6 +1111,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       cellSize: snapshot.cellSize,
       followers: snapshot.followers,
       perception,
+      queries,
     });
     this.scene.add(this.aiNavigationView);
   }
@@ -1129,6 +1133,30 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           ? { hearingRadius: controller.perceptionConfig!.hearingRadius }
           : {}),
       }));
+  }
+
+  private aiQueryView(): AiQueryCandidateView[] {
+    const out: AiQueryCandidateView[] = [];
+    for (const controller of this.aiSubsystem.getDebugSnapshot().controllers) {
+      const query = controller.query;
+      if (!query) continue;
+      const winnerId = query.winner?.id ?? null;
+      const candidates = query.candidates.length > 0
+        ? query.candidates
+        : query.winner
+          ? [query.winner]
+          : [];
+      for (const candidate of candidates) {
+        out.push({
+          ...(candidate.entityId ? { entityId: candidate.entityId } : {}),
+          position: candidate.position,
+          score: candidate.score,
+          failedTests: candidate.failedTests,
+          winner: candidate.id === winnerId,
+        });
+      }
+    }
+    return out;
   }
 
   private removeAiNavigationDebugView(): void {

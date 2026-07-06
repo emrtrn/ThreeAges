@@ -77,6 +77,8 @@ import {
   normalizeAiBehaviorTreeAsset,
   normalizeAiBlackboardAsset,
 } from "../engine/ai/behaviorAsset";
+import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
+import { runAiQuery } from "../engine/ai/queryRunner";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
 import {
@@ -453,6 +455,7 @@ import {
   validateSaveDialogueLinePayload,
   validateSaveAiBlackboardPayload,
   validateSaveAiBehaviorPayload,
+  validateSaveAiQueryPayload,
   validateEffectAsset,
   validateSaveEffectPayload,
 } from "./saveValidator";
@@ -841,6 +844,7 @@ check("asset manifest classifies Sound Cue assets separately from prefab JSON", 
   assert.equal(inferAssetTypeFromPath("assets/Sounds/Warning.sound.json"), "prefab");
   assert.equal(inferAssetTypeFromPath("assets/AI/Enemy.blackboard.json"), "blackboard");
   assert.equal(inferAssetTypeFromPath("assets/AI/Enemy.behavior.json"), "behaviorTree");
+  assert.equal(inferAssetTypeFromPath("assets/AI/BestCover.query.json"), "aiQuery");
 });
 check("asset manifest helpers tolerate the legacy file/loadGroup/bytes shape", () => {
   const legacy = {
@@ -14499,7 +14503,7 @@ check("content-new dialogue kinds create typed stubs with the right extension", 
   assert.deepEqual(validateDialogueLineAsset(lineDef), lineDef);
 });
 
-check("content-new AI kinds create behavior tree and blackboard stubs", () => {
+check("content-new AI kinds create behavior tree, blackboard, and query stubs", () => {
   const blackboard = resolveContentNewFile({ kind: "blackboard", dir: "assets/AI", name: "Enemy" });
   assert.equal(blackboard.path, "assets/AI/Enemy.blackboard.json");
   const blackboardDef = JSON.parse(blackboard.content ?? "");
@@ -14514,6 +14518,12 @@ check("content-new AI kinds create behavior tree and blackboard stubs", () => {
   const behaviorDef = normalizeAiBehaviorTreeAsset(JSON.parse(behavior.content ?? ""));
   assert.equal(behaviorDef.type, "behaviorTree");
   assert.equal(behaviorDef.root.kind, "selector");
+
+  const query = resolveContentNewFile({ kind: "aiQuery", dir: "assets/AI", name: "BestCover" });
+  assert.equal(query.path, "assets/AI/BestCover.query.json");
+  const queryDef = normalizeAiQueryAsset(JSON.parse(query.content ?? ""));
+  assert.equal(queryDef.type, "query");
+  assert.equal(queryDef.generators[0]?.kind, "pointsAroundQuerier");
 });
 
 check("validateDialogueVoiceAsset keeps allowed fields and rejects bad ones", () => {
@@ -18177,6 +18187,232 @@ check("AI behavior tree asset normalizer canonicalizes supported node shapes", (
   );
 });
 
+check("AI query asset normalizer canonicalizes generators, contexts, and tests", () => {
+  const asset = normalizeAiQueryAsset({
+    schema: 1,
+    type: "query",
+    maxCandidates: 12,
+    generators: [
+      { kind: "pointsAroundQuerier", radius: 6, points: 8, rings: 2 },
+      { kind: "actorsByTag", tag: "cover" },
+      { kind: "actorsByInterface", interface: "Usable" },
+      { kind: "actorsByClassRef", classRef: "assets/Actors/Cover.actor.json" },
+    ],
+    tests: [
+      { kind: "distance", context: { kind: "querier" }, min: 1, max: 8, score: "inverse", weight: 2 },
+      { kind: "distance", context: { kind: "targetEntity" }, max: 12 },
+      { kind: "lineOfSight", context: { kind: "blackboardPosition", key: "threatPos" }, require: false },
+      { kind: "distance", context: { kind: "allActorsWithTag", tag: "danger" }, max: 20 },
+      { kind: "lineOfSight", context: { kind: "allActorsWithInterface", interface: "NoiseSource" }, require: false },
+      { kind: "navReachable" },
+      { kind: "dot", min: 0.1, score: "linear" },
+    ],
+  });
+  assert.equal(asset.type, "query");
+  assert.equal(asset.generators.length, 4);
+  assert.equal(asset.generators[2]?.kind, "actorsByInterface");
+  assert.equal(asset.tests?.[1]?.kind, "distance");
+  assert.equal(asset.tests?.[1]?.context?.kind, "targetEntity");
+  assert.equal(asset.tests?.[3]?.context?.kind, "allActorsWithTag");
+  assert.equal(asset.tests?.[4]?.context?.kind, "allActorsWithInterface");
+  assert.equal(asset.maxCandidates, 12);
+  assert.throws(
+    () => normalizeAiQueryAsset({ schema: 1, type: "query", generators: [] }),
+    /non-empty array/,
+  );
+  assert.throws(
+    () => normalizeAiQueryAsset({ schema: 1, type: "query", generators: [{ kind: "actorsByTag" }] }),
+    /tag/,
+  );
+  assert.throws(
+    () => normalizeAiQueryAsset({
+      schema: 1,
+      type: "query",
+      generators: [{ kind: "actorsByTag", tag: "cover" }],
+      tests: [{ kind: "distance", context: { kind: "allActorsWithInterface" } }],
+    }),
+    /interface/,
+  );
+});
+
+check("AI query runner resolves all-actor tag and interface contexts", () => {
+  const controller = new AIController("ai:enemy", "enemy", new Blackboard());
+  const asset = normalizeAiQueryAsset({
+    schema: 1,
+    type: "query",
+    generators: [{ kind: "actorsByTag", tag: "cover" }],
+    tests: [
+      { kind: "distance", context: { kind: "allActorsWithTag", tag: "threat" }, min: 2, max: 6, score: "inverse" },
+      { kind: "lineOfSight", context: { kind: "allActorsWithInterface", interface: "Observer" }, score: "linear" },
+    ],
+  });
+  const result = runAiQuery(asset, {
+    controller,
+    entities: [
+      { id: "enemy", components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+      {
+        id: "threat-a",
+        tags: ["threat"],
+        components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+      {
+        id: "threat-b",
+        tags: ["threat"],
+        components: { Transform: { position: [10, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+      {
+        id: "observer",
+        components: {
+          Transform: { position: [0, 0, -4], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          ScriptInterfaces: { interfaces: ["Observer"] },
+        },
+      },
+      {
+        id: "best-cover",
+        tags: ["cover"],
+        components: { Transform: { position: [4, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+      {
+        id: "too-close-cover",
+        tags: ["cover"],
+        components: { Transform: { position: [1, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+      {
+        id: "far-cover",
+        tags: ["cover"],
+        components: { Transform: { position: [17, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+    ],
+  });
+  assert.equal(result.status, "success");
+  assert.equal(result.winner?.entityId, "best-cover");
+  assert.ok(result.candidates.find((candidate) => candidate.entityId === "too-close-cover")?.failedTests.includes("distance"));
+  assert.equal(result.winner?.testResults?.[1]?.kind, "lineOfSight");
+  assert.equal(result.winner?.testResults?.[1]?.pass, true);
+});
+
+check("AI query runner gathers actors by interface and classRef and supports target context", () => {
+  const controller = new AIController(
+    "ai:enemy",
+    "enemy",
+    new Blackboard([{ key: "target", kind: "entity", default: "player" }]),
+  );
+  const asset = normalizeAiQueryAsset({
+    schema: 1,
+    type: "query",
+    generators: [
+      { kind: "actorsByInterface", interface: "Cover" },
+      { kind: "actorsByClassRef", classRef: "assets/Actors/Cover.actor.json" },
+    ],
+    tests: [{ kind: "distance", context: { kind: "targetEntity" }, max: 5, score: "inverse" }],
+  });
+  const result = runAiQuery(asset, {
+    controller,
+    entities: [
+      { id: "enemy", components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+      { id: "player", components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+      {
+        id: "interface-cover",
+        components: {
+          Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          ScriptInterfaces: { interfaces: ["Cover"] },
+        },
+      },
+      {
+        id: "class-cover",
+        components: {
+          Transform: { position: [3, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          ScriptActor: { classRef: "assets/Actors/Cover.actor.json" },
+        },
+      },
+      {
+        id: "far-class-cover",
+        components: {
+          Transform: { position: [9, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          ScriptActor: { classRef: "assets/Actors/Cover.actor.json" },
+        },
+      },
+    ],
+  });
+  assert.equal(result.status, "success");
+  assert.equal(result.candidates.length, 3);
+  assert.equal(result.winner?.entityId, "interface-cover");
+  assert.ok(result.candidates.find((candidate) => candidate.entityId === "far-class-cover")?.failedTests.includes("distance"));
+});
+
+check("AI query runner filters candidates and picks the best scored actor", () => {
+  const controller = new AIController(
+    "ai:enemy",
+    "enemy",
+    new Blackboard([{ key: "threatPos", kind: "vec3", default: [0, 0, 0] }]),
+  );
+  const asset = normalizeAiQueryAsset({
+    schema: 1,
+    type: "query",
+    generators: [{ kind: "actorsByTag", tag: "cover" }],
+    tests: [
+      { kind: "distance", min: 1, max: 10, score: "inverse" },
+      { kind: "lineOfSight", context: { kind: "blackboardPosition", key: "threatPos" }, require: false, score: "linear" },
+    ],
+  });
+  const result = runAiQuery(asset, {
+    controller,
+    entities: [
+      { id: "enemy", components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+      {
+        id: "near-cover",
+        tags: ["cover"],
+        components: { Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+      {
+        id: "far-cover",
+        tags: ["cover"],
+        components: { Transform: { position: [8, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+      {
+        id: "too-far-cover",
+        tags: ["cover"],
+        components: { Transform: { position: [14, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+    ],
+  });
+  assert.equal(result.status, "success");
+  assert.equal(result.winner?.entityId, "near-cover");
+  assert.equal(result.winner?.testResults?.[0]?.kind, "distance");
+  assert.equal(result.winner?.testResults?.[0]?.pass, true);
+  assert.ok(result.candidates.find((candidate) => candidate.entityId === "too-far-cover")?.failedTests.includes("distance"));
+});
+
+check("AI query runner supports generated points and nav reachable filtering", () => {
+  const controller = new AIController("ai:enemy", "enemy", new Blackboard());
+  const asset = normalizeAiQueryAsset({
+    schema: 1,
+    type: "query",
+    generators: [{ kind: "actorsByTag", tag: "cover" }],
+    tests: [{ kind: "navReachable", score: "linear" }],
+  });
+  const result = runAiQuery(asset, {
+    controller,
+    entities: [
+      { id: "enemy", components: { Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } } },
+      {
+        id: "clear-cover",
+        tags: ["cover"],
+        components: { Transform: { position: [0, 0, 2], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+      {
+        id: "blocked-cover",
+        tags: ["cover"],
+        components: { Transform: { position: [3, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+      },
+    ],
+    navBounds: [{ min: [-1, -1, -1], max: [1, 2, 3] }],
+  });
+  assert.equal(result.status, "success");
+  assert.equal(result.winner?.entityId, "clear-cover");
+  assert.ok(result.candidates.find((candidate) => candidate.entityId === "blocked-cover")?.failedTests.includes("navReachable"));
+});
+
 check("AiBehaviorRunner executes selector/sequence/decorator/wait task and messages", () => {
   const bb = new Blackboard([
     { key: "hasLineOfSight", kind: "boolean", default: false },
@@ -18360,6 +18596,101 @@ check("AiBehaviorRunner built-in startConversation emits the conversation trigge
   });
 });
 
+check("AiBehaviorRunner runQueryToBlackboard stores the winning query entity", () => {
+  const bb = new Blackboard([{ key: "bestCover", kind: "entity", default: null }]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "task",
+      task: "forge.runQueryToBlackboard",
+      params: { query: "assets/AI/BestCover.query.json", resultKey: "bestCover" },
+    },
+  });
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    runQuery: () => ({
+      status: "success",
+      candidates: [],
+      winner: {
+        id: "entity:cover-a",
+        kind: "entity",
+        entityId: "cover-a",
+        position: [3, 0, 1],
+        score: 1,
+        failedTests: [],
+      },
+    }),
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "success");
+  assert.equal(bb.getEntity("bestCover"), "cover-a");
+});
+
+check("AISubsystem records last query result in controller debug snapshots", () => {
+  const ai = new AISubsystem();
+  ai.setAssetLibrary({
+    blackboards: new Map([
+      [
+        "assets/AI/Query.blackboard.json",
+        normalizeAiBlackboardAsset({
+          schema: 1,
+          type: "blackboard",
+          keys: [{ key: "bestCover", kind: "entity", default: null }],
+        }),
+      ],
+    ]),
+    behaviors: new Map([
+      [
+        "assets/AI/Query.behavior.json",
+        normalizeAiBehaviorTreeAsset({
+          schema: 1,
+          type: "behaviorTree",
+          blackboard: "assets/AI/Query.blackboard.json",
+          root: {
+            kind: "task",
+            task: "forge.runQueryToBlackboard",
+            params: { query: "assets/AI/BestCover.query.json", resultKey: "bestCover" },
+          },
+        }),
+      ],
+    ]),
+    queries: new Map([
+      [
+        "assets/AI/BestCover.query.json",
+        normalizeAiQueryAsset({
+          schema: 1,
+          type: "query",
+          generators: [{ kind: "actorsByTag", tag: "cover" }],
+          tests: [{ kind: "distance", max: 5, score: "inverse" }],
+        }),
+      ],
+    ]),
+  });
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: { behaviorTree: "assets/AI/Query.behavior.json" },
+      },
+    },
+    {
+      id: "cover-a",
+      tags: ["cover"],
+      components: { Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] } },
+    },
+  ]);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  const controller = ai.getControllerForPawn("enemy");
+  assert.equal(controller?.blackboard.getEntity("bestCover"), "cover-a");
+  const query = ai.getDebugSnapshot().controllers[0]?.query;
+  assert.equal(query?.status, "success");
+  assert.equal(query?.winner?.entityId, "cover-a");
+  assert.equal(query?.candidateCount, 1);
+  assert.equal(query?.candidates[0]?.tests[0]?.kind, "distance");
+});
+
 check("AI save payloads enforce compound extensions, traversal guard, and normalizers", () => {
   const blackboard = { schema: 1, type: "blackboard", keys: [{ key: "target", kind: "entity" }] };
   const behavior = {
@@ -18381,6 +18712,13 @@ check("AI save payloads enforce compound extensions, traversal guard, and normal
     }).behavior.type,
     "behaviorTree",
   );
+  assert.equal(
+    validateSaveAiQueryPayload({
+      path: "assets/AI/BestCover.query.json",
+      query: { schema: 1, type: "query", generators: [{ kind: "actorsByTag", tag: "cover" }] },
+    }).query.type,
+    "query",
+  );
   assert.throws(
     () => validateSaveAiBlackboardPayload({ path: "assets/AI/Enemy.json", blackboard }),
     /\.blackboard\.json/,
@@ -18388,6 +18726,10 @@ check("AI save payloads enforce compound extensions, traversal guard, and normal
   assert.throws(
     () => validateSaveAiBehaviorPayload({ path: "../Enemy.behavior.json", behavior }),
     /must not contain \.\./,
+  );
+  assert.throws(
+    () => validateSaveAiQueryPayload({ path: "assets/AI/BestCover.json", query: {} }),
+    /\.query\.json/,
   );
 });
 
@@ -19002,6 +19344,73 @@ check("formatAiDebug includes the strongest perceived stimulus when present", ()
   ]);
 });
 
+check("formatAiDebug includes last query winner and failure reason", () => {
+  const success = formatAiDebug({
+    enabled: true,
+    controllerCount: 1,
+    controllers: [
+      {
+        controllerId: "ai:enemy-1",
+        pawnEntityId: "enemy-1",
+        goal: null,
+        behaviorTreeAsset: null,
+        behavior: null,
+        query: {
+          query: "assets/AI/BestCover.query.json",
+          status: "success",
+          candidateCount: 3,
+          winner: {
+            id: "entity:cover-a",
+            entityId: "cover-a",
+            position: [2, 0, 0],
+            score: 0.875,
+            failedTests: [],
+            tests: [{ kind: "distance", pass: true, score: 0.875 }],
+          },
+          candidates: [],
+          failureReason: null,
+        },
+        blackboard: { keyCount: 1, entries: [] },
+      },
+    ],
+  });
+  assert.deepEqual(success, [
+    "ai",
+    "controllers: 1",
+    "  query enemy-1: BestCover.query.json win:cover-a score:0.88 c:3",
+    "  enemy-1 goal:\u2014 bb:1",
+  ]);
+
+  const failure = formatAiDebug({
+    enabled: true,
+    controllerCount: 1,
+    controllers: [
+      {
+        controllerId: "ai:enemy-1",
+        pawnEntityId: "enemy-1",
+        goal: null,
+        behaviorTreeAsset: null,
+        behavior: null,
+        query: {
+          query: "assets/AI/BestCover.query.json",
+          status: "failure",
+          candidateCount: 2,
+          winner: null,
+          candidates: [],
+          failureReason: "navReachable:2",
+        },
+        blackboard: { keyCount: 1, entries: [] },
+      },
+    ],
+  });
+  assert.deepEqual(failure, [
+    "ai",
+    "controllers: 1",
+    "  query enemy-1: BestCover.query.json fail c:2 navReachable:2",
+    "  enemy-1 goal:\u2014 bb:1",
+  ]);
+});
+
 check("formatAiDebug includes last known perception blackboard positions", () => {
   const lines = formatAiDebug({
     enabled: true,
@@ -19048,6 +19457,20 @@ check("createAiNavigationView draws AI perception sight cone and hearing radius"
   });
   assert.ok(view.getObjectByName("ai-perception-sight-cone"));
   assert.ok(view.getObjectByName("ai-perception-hearing-radius"));
+  disposeAiNavigationView(view);
+});
+
+check("createAiNavigationView draws AI query candidates and winner markers", () => {
+  const view = createAiNavigationView({
+    queries: [
+      { position: [0, 0, 0], score: 0.25 },
+      { position: [1, 0, 0], score: 0, failedTests: ["navReachable"] },
+      { position: [2, 0, 0], score: 1, entityId: "cover-a", winner: true },
+    ],
+  });
+  assert.ok(view.getObjectByName("ai-query-candidate"));
+  assert.ok(view.getObjectByName("ai-query-failed-candidate"));
+  assert.ok(view.getObjectByName("ai-query-winner"));
   disposeAiNavigationView(view);
 });
 
