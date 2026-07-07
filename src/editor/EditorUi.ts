@@ -140,6 +140,9 @@ const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> 
   { kind: "dialogueVoice", label: "Dialogue Voice" },
   { kind: "dialogueLine", label: "Dialogue Line" },
   { kind: "ui", label: "UI" },
+  { kind: "blackboard", label: "AI Blackboard" },
+  { kind: "behaviorTree", label: "AI Behavior Tree" },
+  { kind: "aiQuery", label: "AI Query (EQS)" },
 ];
 
 const MATERIAL_PRESET_LABELS: Record<ForgeMaterialPreset, string> = {
@@ -2229,7 +2232,12 @@ export class EditorUi {
       if (!picked) return;
       particlePreset = picked;
     }
-    const label = kind === "folder" ? "folder" : kind === "script" ? "Actor Script" : `${kind} asset`;
+    const label =
+      kind === "folder"
+        ? "folder"
+        : kind === "script"
+          ? "Actor Script"
+          : (CONTENT_NEW_ITEMS.find((item) => item.kind === kind)?.label ?? `${kind} asset`);
     const name = window.prompt(`New ${label} name`, "");
     if (name === null || !name.trim()) return;
     try {

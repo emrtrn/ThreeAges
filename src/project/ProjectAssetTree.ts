@@ -70,7 +70,10 @@ export type ContentNewKind =
   | "soundCue"
   | "dialogueVoice"
   | "dialogueLine"
-  | "ui";
+  | "ui"
+  | "blackboard"
+  | "behaviorTree"
+  | "aiQuery";
 
 /** Parent class picked for a `kind: "script"` Actor Script (Unreal-style). */
 export type ScriptParentClass =
