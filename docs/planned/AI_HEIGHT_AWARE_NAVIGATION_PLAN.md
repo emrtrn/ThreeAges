@@ -1,10 +1,13 @@
 # AI Yükseklik-Farkında Navigasyon (Merdiven/Rampa ile Y Ekseni) Planı
 
 > Tarih: 2026-07-07
-> Durum: Asama 1-4 engine/runtime cila uygulandi. Kok neden incelemesi bitti:
-> cekirdek height-aware pathing saglam; endpoint projeksiyonu (B) eklendi. Kalan
-> tek sert basarisizlik nav volume yuksekligi (A) — sessiz, uyari adayligi acik.
-> Gercek sahne uzeri browser smoke halen acik.
+> Durum: KESIN KOK NEDEN bulundu ve COZULDU. Gercek Playground sahnesinde
+> yukseltilmis (rampa uzeri) Target Point'e ulasilamamasinin sebebi: agent
+> yaricapi authored `navAgent` yerine olceksiz collider'dan (r=1.0) turetiliyordu
+> ve dar rampayi grid'den asindiriyordu. Fix: `resolveNavAgentProfile` authored
+> navAgent'a oncelik verir; runtime'da path artik `success` (r=0.350). Ayrica
+> endpoint projeksiyonu eklendi. Kalan: nav volume yuksekligi uyarisi (A) ve
+> otomatik browser smoke.
 > Kapsam: AI patrol/moveTo yol bulmasının Y ekseninde (merdiven/rampa ile
 > ulaşılan yükseltilmiş target point'ler) çalışması.
 
@@ -150,12 +153,31 @@ için mimariye oturuyor. (Recast tarzı tam navmesh veya jump-link'ler aşırı 
      hucrelerini bloklamiyor; alt zemin -> merdiven -> ust platform patrol'u
      A*'da basariyla cikiyor; follower gercekci dikey adim-yumusatma gecikmesiyle
      bile variyor (kalici kilit yok). "Hedef 1'de yurume animasyonunda kalma"
-     bir follower deadlock'u DEGIL; asil sert basarisizlik iki yerde:
-     (A) **Nav volume yuksekligi** — `aiNavFloorSampler` yalnizca top'u
-     `[volume.minY, volume.maxY]` araligindaki yuzeyleri kabul eder; volume
-     tepesi ust platformu kapsamiyorsa o hucreler `null` ornekler ve platformdaki
-     hedef sessizce ulasilamaz olur (halen sessiz; uyari yok — belgele/uyar
-     adayligi acik). (B) **Endpoint projeksiyonu eksikligi** — yukarida cozuldu.
+     bir follower deadlock'u DEGIL.
+   - **KESIN KOK NEDEN (2026-07-07, gercek Playground sahnesi runtime'inda `?debug`
+     ve gecici diag ile dogrulandi):** `aiNavAgentForEntity`, AIController'da acikca
+     authored `navAgent {radius:0.35, height:1.8}` olmasina ragmen bunlari yok
+     sayip agent yaricapini/yuksekligini `physicsSubsystem.colliderHalfExtents`'ten
+     turetiyordu. AI actor'unun kapsul collider'i `capsuleRadius:1, capsuleHalfHeight:3`
+     olarak yazilmis ve actor placement scale'i (0.3) collider size'a bakilmadigindan
+     agent **r=1.0, h=6.0** okunuyordu → clearance 1.25m. 2m genisligindeki rampa
+     her iki taraftan asindirilinca ortada yurunebilir hucre kalmiyor → zemin ile
+     rampa tepesi kopuk → A* `failure` → AI "ulasilamaz" goruyor. Duz acik zemindeki
+     target (Y=0) genis oldugundan r=1 ile de calisiyor; bu yuzden semptom yalniz
+     rampadaki/Y+ target'ta ortaya cikiyordu. (Runtime log: `agent r=1.000 h=6.00
+     ... goalCell 1@0.82 ... status=failure` → fix sonrasi `r=0.350 ... status=success`.)
+   - **Cozum:** nav-agent boyut cozumleme saf `resolveNavAgentProfile`'a cikarildi
+     (`engine/navigation/navAgentProfile.ts`); oncelik Unreal Nav Agent semantigine
+     uygun: authored `navAgent` radius/height > collider half-extents > movement
+     kapsulu > sabit varsayilan. Actor'un olceksiz/asiri buyuk collider'i artik
+     yalniz son care. Engine unit testleri + endpoint projeksiyonu (yukarida) eklendi.
+   - **Yan bulgu (kapsam disi, latent):** actor-script collider'ina placement scale
+     bakilmiyor; bu AI disinda fizik overlap/separation icin de collider'i ~3x buyuk
+     birakir. Ileride scene-build'de actor collider scale bake edilmeli.
+   - **Kalan acik:** (A) nav volume yuksekligi hala sessiz — volume maxY icindeki
+     geometriyi kapsamazsa ust yuzeyler `null` ornekler; editorde/runtime'da uyari
+     adayligi acik. Ve merdivenle erisilen yukseltilmis target'a controller ulasan
+     otomatik browser smoke'u.
 
 ## Testler
 - **Engine unit:** merdiven heightfield alçak→yüksek bağlanır; çok yüksek basamak

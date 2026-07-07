@@ -298,94 +298,7 @@
     },
     {
       "assetId": "wall-400x400",
-      "placements": [
-        {
-          "position": [
-            -15,
-            0,
-            6
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -11,
-            0,
-            6
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -15,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -15,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -11,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -6.25,
-            0,
-            -2
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            0.7,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -14,
-            0,
-            -2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -18,
-            0,
-            -2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     }
   ],
   "characters": [],
@@ -557,20 +470,15 @@
   ],
   "actors": [
     {
-      "classRef": "assets/starter-content/Script/AI_Test.actor.json",
+      "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        -13.07,
+        -12.87,
         0,
-        13.59
+        13.41
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,
-      "rotation": [
-        0,
-        75,
-        0
-      ],
-      "scale": 0.3
+      "scale": 0.4
     }
   ]
 }
