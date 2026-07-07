@@ -72,6 +72,8 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
+import { findGroundAt } from "@/game/collision";
+import { slopeCosFromDegrees } from "@/game/slopeSurface";
 import {
   DialogueSubsystem,
   type DialogueAudioPlayback,
@@ -564,6 +566,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly navGridCache = new NavGridCache();
   /** Last static-blocker array identity seen; a new reference bumps the revision. */
   private navBlockerRevisionRef: readonly NavAabb[] | null = null;
+  private navSurfaceRevisionRef: ReturnType<PhysicsSubsystem["staticSurfaceTriangles"]> | null = null;
   private navBlockerRevision = 0;
   private readonly aiCharacterAnimators = new Map<string, RuntimeAiCharacterAnimator>();
   private aiNavigationView: Group | null = null;
@@ -1364,15 +1367,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       // start/goal, so it is single-query only and can't be baked/reused.
       return findGridPath({ start, goal: [...goal], agent, blockers, cellSize: AI_NAV_CELL_SIZE });
     }
+    const surfaces = this.physicsSubsystem.staticSurfaceTriangles();
     // Bounded case: bake once per agent profile and reuse across queries. The
     // grid rebuilds automatically when a static blocker moves or a nav volume is
     // edited (both fold into the revision token), so there is no manual build.
-    const grid = this.navGridCache.getOrBuild(this.aiNavRevisionToken(blockers, bounds), {
+    const grid = this.navGridCache.getOrBuild(this.aiNavRevisionToken(blockers, surfaces, bounds), {
       agent,
       blockers,
       bounds,
       footY: bucketNavFootY(start[1]),
       cellSize: AI_NAV_CELL_SIZE,
+      sampleFloorY: this.aiNavFloorSampler(blockers, surfaces, bounds, agent),
     });
     if (!grid) return { status: "failure" as const, points: [], visited: 0 };
     return searchNavGrid(grid, start, goal);
@@ -1384,9 +1389,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * move/collision-toggle) and folds in an authored-bounds signature, so any
    * change to obstacles or nav volumes invalidates every cached grid.
    */
-  private aiNavRevisionToken(blockers: readonly NavAabb[], bounds: readonly NavAabb[]): string {
+  private aiNavRevisionToken(
+    blockers: readonly NavAabb[],
+    surfaces: ReturnType<PhysicsSubsystem["staticSurfaceTriangles"]>,
+    bounds: readonly NavAabb[],
+  ): string {
     if (blockers !== this.navBlockerRevisionRef) {
       this.navBlockerRevisionRef = blockers;
+      this.navBlockerRevision += 1;
+    }
+    if (surfaces !== this.navSurfaceRevisionRef) {
+      this.navSurfaceRevisionRef = surfaces;
       this.navBlockerRevision += 1;
     }
     return `${this.navBlockerRevision}|${navBoundsSignature(bounds)}`;
@@ -1416,7 +1429,37 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       radius: half ? Math.max(half[0], half[2]) : Math.max(movement?.capsuleRadius ?? 0.35, 0.01),
       height: half ? half[1] * 2 : Math.max((movement?.capsuleHalfHeight ?? 0.9) * 2, 0.01),
       stepHeight: movement?.maxStepHeight ?? 0.45,
+      maxStepDown: movement?.maxStepDown ?? 0.5,
+      maxSlopeAngleDeg: movement?.maxSlopeAngleDeg ?? 50,
       ...(typeof clearancePadding === "number" ? { clearancePadding } : {}),
+    };
+  }
+
+  private aiNavFloorSampler(
+    blockers: readonly NavAabb[],
+    surfaces: ReturnType<PhysicsSubsystem["staticSurfaceTriangles"]>,
+    bounds: readonly NavAabb[],
+    agent: NavAgent,
+  ): (x: number, z: number) => number | null {
+    const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
+    const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? 50);
+    return (x, z) => {
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const bound of bounds) {
+        if (x < bound.min[0] || x > bound.max[0] || z < bound.min[2] || z > bound.max[2]) continue;
+        minY = Math.min(minY, bound.min[1]);
+        maxY = Math.max(maxY, bound.max[1]);
+      }
+      if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY < minY) return null;
+      const hit = findGroundAt([x, maxY, z], blockers, {
+        footprintHalf,
+        maxStepUp: 0,
+        maxStepDown: maxY - minY,
+        surfaces,
+        maxSlopeCos,
+      });
+      return hit ? hit.floorY : null;
     };
   }
 

@@ -29,6 +29,8 @@ export interface NavAgent {
   readonly radius: number;
   readonly height: number;
   readonly stepHeight?: number;
+  readonly maxStepDown?: number;
+  readonly maxSlopeAngleDeg?: number;
   /**
    * Extra clearance beyond the capsule radius (Unreal `Nav Agent` slack). Added
    * to the effective blocker erosion so the agent keeps a safety gap from walls.
@@ -143,8 +145,14 @@ export interface NavGrid {
   readonly footY: number;
   /** Effective erosion (agent radius + clearance padding + grid safety margin). */
   readonly clearanceRadius: number;
+  /** Maximum floor-height delta allowed when stepping to a higher neighbor. */
+  readonly stepHeight: number;
+  /** Maximum floor-height delta allowed when stepping down to a lower neighbor. */
+  readonly maxStepDown: number;
   /** `cols*rows` row-major passability bitset (1 = walkable). */
   readonly passable: Uint8Array;
+  /** `cols*rows` row-major floor height sampled at each walkable cell. */
+  readonly floorY: Float32Array;
   /** `cols*rows` row-major soft clearance cost added when stepping onto a cell. */
   readonly penalty: Float32Array;
   /** Vertically-filtered blockers, retained for final-path segment shortcutting. */
@@ -160,6 +168,12 @@ export interface NavGridBuildRequest {
   readonly bounds?: readonly NavAabb[];
   /** Y-plane to bake for (vertical blocker filter + output waypoint height). */
   readonly footY: number;
+  /**
+   * Optional heightfield hook. When provided, each X/Z cell is baked at its own
+   * floor height; `null` marks the cell as not walkable. Without this hook the
+   * grid remains a flat `footY` plane for backwards compatibility.
+   */
+  readonly sampleFloorY?: (x: number, z: number) => number | null;
   readonly cellSize?: number;
   readonly safetyMargin?: number;
   readonly boundsPadding?: number;
@@ -188,10 +202,12 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
   const clearanceRadius = radius + clearance + safetyMargin;
   const height = Math.max(0, finiteOr(request.agent.height, 0));
   const stepHeight = Math.max(0, finiteOr(request.agent.stepHeight, 0));
+  const maxStepDown = Math.max(0, finiteOr(request.agent.maxStepDown, stepHeight));
   const footY = finiteOr(request.footY, 0);
-  const blockers = request.blockers.filter((blocker) =>
+  const flatBlockers = request.blockers.filter((blocker) =>
     blocksAgentVertically(blocker, footY, height, stepHeight),
   );
+  const blockers = request.sampleFloorY ? request.blockers : flatBlockers;
   const authoredBounds = request.bounds && request.bounds.length > 0 ? request.bounds : undefined;
   const extent = authoredBounds
     ? navBoundsFromAuthored(authoredBounds, clearanceRadius)
@@ -206,20 +222,27 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
   const originX = extent.minX;
   const originZ = extent.minZ;
   const passable = new Uint8Array(cols * rows);
+  const floorY = new Float32Array(cols * rows);
   const penalty = new Float32Array(cols * rows);
   const clearanceCostRadius = cellSize * CLEARANCE_COST_CELL_RADIUS;
-  const hasBlockers = blockers.length > 0;
   for (let z = 0; z < rows; z += 1) {
     for (let x = 0; x < cols; x += 1) {
       const point: Vec3 = [originX + x * cellSize, footY, originZ + z * cellSize];
       const idx = z * cols + x;
+      const sampledFloorY = request.sampleFloorY ? request.sampleFloorY(point[0], point[2]) : footY;
+      floorY[idx] = sampledFloorY ?? footY;
+      if (sampledFloorY === null || !Number.isFinite(sampledFloorY)) continue;
+      point[1] = sampledFloorY;
+      const cellBlockers = request.sampleFloorY
+        ? blockers.filter((blocker) => blocksAgentVertically(blocker, sampledFloorY, height, stepHeight))
+        : flatBlockers;
       const walkable =
-        !pointBlocked(point, blockers, clearanceRadius) &&
+        !pointBlocked(point, cellBlockers, clearanceRadius) &&
         (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
       if (!walkable) continue;
       passable[idx] = 1;
-      if (hasBlockers) {
-        const distance = nearestInflatedBlockerDistance(point, blockers, clearanceRadius);
+      if (cellBlockers.length > 0) {
+        const distance = nearestInflatedBlockerDistance(point, cellBlockers, clearanceRadius);
         const pressure = distance >= clearanceCostRadius ? 0 : 1 - distance / clearanceCostRadius;
         penalty[idx] = pressure * pressure * CLEARANCE_COST_WEIGHT;
       }
@@ -233,7 +256,10 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
     originZ,
     footY,
     clearanceRadius,
+    stepHeight,
+    maxStepDown,
     passable,
+    floorY,
     penalty,
     blockers,
     ...(authoredBounds ? { bounds: authoredBounds } : {}),
@@ -261,7 +287,7 @@ export function searchNavGrid(grid: NavGrid, start: Vec3, goal: Vec3): PathResul
   });
   const toPoint = (coord: GridCoord): Vec3 => [
     originX + coord.x * cellSize,
-    grid.footY,
+    grid.floorY[coord.z * cols + coord.x] ?? grid.footY,
     originZ + coord.z * cellSize,
   ];
   const passable = (coord: GridCoord): boolean =>
@@ -298,7 +324,7 @@ export function searchNavGrid(grid: NavGrid, start: Vec3, goal: Vec3): PathResul
         visited,
       };
     }
-    for (const next of neighbors(current, passable)) {
+    for (const next of neighbors(current, passable, (from, to) => canTraverseHeight(grid, from, to))) {
       const step = next.x !== current.x && next.z !== current.z ? Math.SQRT2 : 1;
       const nextG = current.g + step + grid.penalty[next.z * cols + next.x]!;
       const key = coordKey(next);
@@ -368,7 +394,10 @@ function navGridAgentKey(request: NavGridBuildRequest): string {
     finiteOr(agent.clearancePadding, 0),
     finiteOr(agent.height, 0),
     finiteOr(agent.stepHeight, 0),
+    finiteOr(agent.maxStepDown, finiteOr(agent.stepHeight, 0)),
+    finiteOr(agent.maxSlopeAngleDeg, 0),
     finiteOr(request.footY, 0),
+    request.sampleFloorY ? "heightfield" : "flat",
     cellSize,
     safetyMargin,
   ].join(":");
@@ -460,6 +489,7 @@ function distanceToAabb2d(point: Vec3, blocker: NavAabb, radius: number): number
 function neighbors(
   coord: GridCoord,
   passable: (coord: GridCoord) => boolean,
+  canTraverse: (from: GridCoord, to: GridCoord) => boolean,
 ): GridCoord[] {
   const out: GridCoord[] = [];
   for (let dz = -1; dz <= 1; dz += 1) {
@@ -467,8 +497,16 @@ function neighbors(
       if (dx === 0 && dz === 0) continue;
       const next = { x: coord.x + dx, z: coord.z + dz };
       if (!passable(next)) continue;
+      if (!canTraverse(coord, next)) continue;
       if (dx !== 0 && dz !== 0) {
-        if (!passable({ x: coord.x + dx, z: coord.z }) || !passable({ x: coord.x, z: coord.z + dz })) {
+        const sideX = { x: coord.x + dx, z: coord.z };
+        const sideZ = { x: coord.x, z: coord.z + dz };
+        if (
+          !passable(sideX) ||
+          !passable(sideZ) ||
+          !canTraverse(coord, sideX) ||
+          !canTraverse(coord, sideZ)
+        ) {
           continue;
         }
       }
@@ -476,6 +514,13 @@ function neighbors(
     }
   }
   return out;
+}
+
+function canTraverseHeight(grid: NavGrid, from: GridCoord, to: GridCoord): boolean {
+  const fromY = grid.floorY[from.z * grid.cols + from.x] ?? grid.footY;
+  const toY = grid.floorY[to.z * grid.cols + to.x] ?? grid.footY;
+  const delta = toY - fromY;
+  return delta <= grid.stepHeight + 1e-6 && -delta <= grid.maxStepDown + 1e-6;
 }
 
 function reconstructCells(cameFrom: ReadonlyMap<string, string>, current: GridCoord): string[] {
@@ -517,8 +562,11 @@ function compressPathPoints(points: readonly Vec3[], segmentSafe: (a: Vec3, b: V
     const next = points[i + 1]!;
     const dir = pointDirection(current, next);
     const changedDirection = dir.x !== prevDir.x || dir.z !== prevDir.z;
+    const changedHeight =
+      Math.abs(current[1] - points[i - 1]![1]) > 1e-6 ||
+      Math.abs(next[1] - current[1]) > 1e-6;
     const shortcutSafe = segmentSafe(out[out.length - 1]!, next);
-    if (changedDirection || !shortcutSafe) out.push(cloneVec3(current));
+    if (changedDirection || changedHeight || !shortcutSafe) out.push(cloneVec3(current));
     prevDir = dir;
   }
   out.push(cloneVec3(points[points.length - 1]!));

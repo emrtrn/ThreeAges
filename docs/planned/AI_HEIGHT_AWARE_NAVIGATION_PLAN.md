@@ -1,7 +1,7 @@
 # AI Yükseklik-Farkında Navigasyon (Merdiven/Rampa ile Y Ekseni) Planı
 
 > Tarih: 2026-07-07
-> Durum: Planlandı (henüz uygulanmadı). Kök neden koda karşı doğrulandı.
+> Durum: Asama 1-2 uygulandi ve `build:verify` gecti. Asama 3-4 acik.
 > Kapsam: AI patrol/moveTo yol bulmasının Y ekseninde (merdiven/rampa ile
 > ulaşılan yükseltilmiş target point'ler) çalışması.
 
@@ -110,8 +110,13 @@ için mimariye oturuyor. (Recast tarzı tam navmesh veya jump-link'ler aşırı 
 1. **Engine:** per-cell `floorY` + `sampleFloorY` kancası + step/slope bağlantısı.
    Sentetik merdiven heightfield'ı ile unit test. (Kanca yokken düz davranış aynen
    korunur — mevcut parite testleri bozulmaz.)
+   - Durum: Tamamlandi. `NavGrid.floorY`, opsiyonel `sampleFloorY`, yukseklik
+     farki komsu kapisi ve sentetik heightfield testleri eklendi.
 2. **Runtime:** `sampleFloorY`'yi game collision yüzeylerinden bağla; merdivenle
    yükseltilmiş hedef noktaya patrol'ü doğrula.
+   - Durum: Kismen tamamlandi. Runtime bake artik `findGroundAt` +
+     `staticSurfaceTriangles()` uzerinden heightfield ornekliyor; sahne ustu
+     patrol smoke testi sonraki cila asamasinda kaldi.
 3. **Editör overlay:** dolguyu gerçek yüksekliklerde çiz (görsel teyit). Opsiyonel.
 4. **Cila:** üst-kat duvarları için yükseklik-farkında engel occupancy; smoke
    testi (yükseltilmiş target point'e ulaşan controller, "failure" yok).

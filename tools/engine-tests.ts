@@ -6614,6 +6614,40 @@ check("nav grid step height filters a ground slab so walkable cells remain", () 
   assert.ok(countPassable(withStep) > 0, "step height filters the ground slab, leaving walkable cells");
 });
 
+check("nav grid heightfield connects stair-like floor samples and preserves waypoint heights", () => {
+  const grid = buildNavGrid({
+    agent: { radius: 0, height: 1.8, stepHeight: 0.55, maxStepDown: 0.55 },
+    blockers: [],
+    bounds: [{ min: [0, -1, 0], max: [3, 3, 0] }],
+    footY: 0,
+    cellSize: 1,
+    safetyMargin: 0,
+    sampleFloorY: (x, z) => (Math.abs(z) < 1e-6 ? x * 0.5 : null),
+  });
+  assert.ok(grid, "heightfield grid should build");
+  const path = searchNavGrid(grid!, [0, 0, 0], [3, 1.5, 0]);
+  assert.equal(path.status, "success");
+  assert.ok(
+    path.points.some((point) => point[1] === 0.5) && path.points.some((point) => point[1] === 1),
+    `expected stair waypoint heights to survive compression: ${JSON.stringify(path.points)}`,
+  );
+});
+
+check("nav grid heightfield rejects neighbor steps above the agent step height", () => {
+  const grid = buildNavGrid({
+    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
+    blockers: [],
+    bounds: [{ min: [0, -1, 0], max: [2, 3, 0] }],
+    footY: 0,
+    cellSize: 1,
+    safetyMargin: 0,
+    sampleFloorY: (x, z) => (Math.abs(z) < 1e-6 ? (x < 1 ? 0 : 1) : null),
+  });
+  assert.ok(grid, "heightfield grid should build");
+  const path = searchNavGrid(grid!, [0, 0, 0], [2, 1, 0]);
+  assert.equal(path.status, "failure");
+});
+
 check("NavGridCache reuses a baked grid until the token changes", () => {
   const cache = new NavGridCache();
   const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];

@@ -271,9 +271,9 @@
       "placements": [
         {
           "position": [
-            -9.59,
+            -9.54,
             0,
-            9.43
+            9.49
           ],
           "rotationYDeg": 0,
           "rotation": [
@@ -502,8 +502,8 @@
       "id": "ai-navigation-volume-1",
       "position": [
         -12.32,
-        6.78,
-        1.63
+        4.94,
+        1.11
       ],
       "name": "AI Navigation Volume",
       "scale": [
