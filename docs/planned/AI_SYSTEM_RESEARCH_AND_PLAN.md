@@ -106,6 +106,11 @@
 > (pawn->hedef mesafe compare), `cooldown` (agent/node runtime memory ile hiz
 > siniri) ve `hasPerceptionStimulus` (sense/minStrength/LOS filtreli) decorator'lar
 > engine normalizer + runner + testleriyle eklendi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-07 - Faz 2 built-in service seti kapandi: `forge.refreshQueryBlackboard`
+> service'i eklendi (dal aktifken query winner'ini blackboard'a tazeler, sonuc
+> yoksa null'lar); `update target distance` / `update line of sight` mevcut
+> `updateTargetDistanceBlackboard` / `updatePerceptionBlackboard` service'leriyle
+> reconcile edildi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -470,10 +475,11 @@ Service/Task modeli.
       - [x] distance compare
       - [x] cooldown
       - [x] has perception stimulus
-- [ ] Built-in serviceler:
-      - [ ] update target distance
-      - [ ] update line of sight
-      - [ ] refresh query result
+- [x] Built-in serviceler:
+      - [x] update target distance (`forge.updateTargetDistanceBlackboard`)
+      - [x] update line of sight (`forge.updatePerceptionBlackboard`
+            `hasLineOfSightKey` yazar; perception service'ine katlanmis)
+      - [x] refresh query result (`forge.refreshQueryBlackboard`)
 - [ ] Editor ilk surum: JSON asset create/edit formu, node tree text outline,
       task/decorator/service parametre editoru.
 - [x] Debug: active node path, last status, task duration, failed decorator.
@@ -533,6 +539,24 @@ Tamamlanan Faz 2 built-in decorator seti notu (2026-07-07):
   penceresi, cooldown sonrasi tekrar attack) kapsandi.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`678 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS.
+
+Tamamlanan Faz 2 built-in service seti notu (2026-07-07):
+
+- `forge.refreshQueryBlackboard` service'i (`engine/ai/behaviorRunner.ts`
+  default service registry) eklendi. `forge.runQueryToBlackboard` task'inin
+  aksine tree akisini success/failure ile yonetmez; kendi service interval'inde
+  calisip query winner'ini (`resultKey`, opsiyonel `slotResultKey`) blackboard'a
+  yazar, kazanan yoksa key'leri null'lar. Boylece bir ajan kovalarken "en iyi
+  cover" gibi degerler dal aktif kaldigi surece taze kalir.
+- `update target distance` ve `update line of sight` maddeleri mevcut
+  `forge.updateTargetDistanceBlackboard` ve `forge.updatePerceptionBlackboard`
+  (`hasLineOfSightKey`) service'leriyle reconcile edildi; ayri LOS service'i
+  gerekmedi.
+- Test: service ilk tick'te winner yazar, interval icinde skip eder, interval
+  dolunca winner kaybolursa key'i null'lar.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`679 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
   PASS), `npm.cmd run check:assets` PASS.
 
 ### Faz 3 - Navigation ve path following

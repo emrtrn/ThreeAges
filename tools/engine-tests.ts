@@ -19748,6 +19748,49 @@ check("AiBehaviorRunner Smart Object tasks claim, use, and emit a targeted messa
   });
 });
 
+check("AiBehaviorRunner refreshQueryBlackboard service keeps the winner fresh and clears on none", () => {
+  const bb = new Blackboard([{ key: "bestCover", kind: "entity", default: null }]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "sequence",
+      services: [
+        {
+          service: "forge.refreshQueryBlackboard",
+          interval: 0.5,
+          params: { query: "assets/AI/BestCover.query.json", resultKey: "bestCover" },
+        },
+      ],
+      children: [{ kind: "task", task: "test.hold" }],
+    },
+  });
+  let winnerEntity: string | null = "cover-a";
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: { get: () => () => "running" },
+    serviceRegistry: createDefaultAiServiceRegistry(),
+    runQuery: () => ({
+      status: winnerEntity ? "success" : "failure",
+      candidates: [],
+      winner: winnerEntity
+        ? { id: `entity:${winnerEntity}`, kind: "entity", entityId: winnerEntity, position: [1, 0, 0], score: 1, failedTests: [] }
+        : null,
+    }),
+  });
+
+  // First tick runs the service immediately and writes the winner.
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
+  assert.equal(bb.getEntity("bestCover"), "cover-a");
+
+  // Winner disappears; once the interval elapses the key is cleared to null.
+  winnerEntity = null;
+  runner.tick({ deltaSeconds: 0.2, elapsedSeconds: 0.216, frame: 2 }); // within interval, service skipped
+  assert.equal(bb.getEntity("bestCover"), "cover-a");
+  runner.tick({ deltaSeconds: 0.5, elapsedSeconds: 0.716, frame: 3 }); // interval elapsed, service runs
+  assert.equal(bb.getEntity("bestCover"), null);
+});
+
 check("AiBehaviorRunner runQueryToBlackboard throttles repeated query runs", () => {
   const bb = new Blackboard([{ key: "bestCover", kind: "entity", default: null }]);
   const controller = new AIController("ai:enemy", "enemy", bb);

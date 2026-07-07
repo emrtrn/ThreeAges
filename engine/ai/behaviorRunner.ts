@@ -149,6 +149,7 @@ export function createDefaultAiServiceRegistry(): AiServiceRegistry {
   const services = new Map<string, AiServiceHandler>([
     ["forge.updatePerceptionBlackboard", updatePerceptionBlackboardService],
     ["forge.updateTargetDistanceBlackboard", updateTargetDistanceBlackboardService],
+    ["forge.refreshQueryBlackboard", refreshQueryBlackboardService],
   ]);
   return { get: (serviceId) => services.get(serviceId) };
 }
@@ -784,6 +785,29 @@ function updateTargetDistanceBlackboardService(context: AiServiceContext): void 
   if (distanceKey) context.blackboard.set(distanceKey, distance);
   if (inRangeKey) context.blackboard.set(inRangeKey, distance <= range);
   if (targetPositionKey) context.blackboard.set(targetPositionKey, targetPosition);
+}
+
+/**
+ * Keeps a query result fresh in the Blackboard while its branch is active. Unlike
+ * `forge.runQueryToBlackboard` (a task that gates tree flow via success/failure),
+ * this runs on its service interval and only writes the winner (or clears the keys
+ * to null when there is no winner), leaving control flow to the surrounding tree.
+ */
+function refreshQueryBlackboardService(context: AiServiceContext): void {
+  if (!context.runQuery) return;
+  const params = aiQueryParams(context.params);
+  if (!params.query || !params.resultKey) return;
+  const result = context.runQuery({ controller: context.controller, query: params.query });
+  const winner = result.winner;
+  if (!winner) {
+    context.blackboard.set(params.resultKey, null);
+    if (params.slotResultKey) context.blackboard.set(params.slotResultKey, null);
+    return;
+  }
+  context.blackboard.set(params.resultKey, winner.entityId ?? winner.position);
+  if (params.slotResultKey) {
+    context.blackboard.set(params.slotResultKey, winner.smartObjectSlotId ?? null);
+  }
 }
 
 function numberParam(value: AiJsonValue | undefined, fallback: number): number {
