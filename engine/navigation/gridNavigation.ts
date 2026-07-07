@@ -130,6 +130,13 @@ const DEFAULT_BOUNDS_PADDING = 2;
 const MAX_GRID_CELLS = 20000;
 const CLEARANCE_COST_CELL_RADIUS = 3;
 const CLEARANCE_COST_WEIGHT = 4;
+/**
+ * Max cells an endpoint may be projected onto the nearest walkable cell (see
+ * {@link projectEndpoint}). At the default 0.5 cell size this is a ~1m query
+ * extent — enough to rescue platform-edge rounding without teleporting a goal
+ * across a wall into an unrelated region.
+ */
+const PROJECTION_MAX_CELL_RADIUS = 2;
 
 /**
  * A baked ("built") navigation grid: the query-independent half of a path
@@ -307,13 +314,23 @@ export function searchNavGrid(grid: NavGrid, start: Vec3, goal: Vec3): PathResul
     coord.z < rows &&
     grid.passable[coord.z * cols + coord.x] === 1;
 
-  const startCoord = toCoord(start);
-  const goalCoord = toCoord(goal);
-  if (!passable(startCoord) || !passable(goalCoord)) {
+  // Project each endpoint onto the nearest walkable cell (Unreal
+  // `ProjectPointToNavigation`). A start/goal that rounds onto a blocked or
+  // off-mesh cell — e.g. a Target Point sitting near a platform edge, or a
+  // heightfield hole where the authored point's exact X/Z has no floor — would
+  // otherwise fail the whole query. Projection is height-aware (3D nearest) so a
+  // goal on an upper platform snaps to that platform, not the floor beneath it.
+  // When the rounded cell is already walkable this is a no-op (raw endpoint kept
+  // verbatim), so flat-plane behavior is unchanged.
+  const startFix = projectEndpoint(start, toCoord, toPoint, passable);
+  const goalFix = projectEndpoint(goal, toCoord, toPoint, passable);
+  if (!startFix || !goalFix) {
     return { status: "failure", points: [], visited: 0 };
   }
+  const startCoord = startFix.coord;
+  const goalCoord = goalFix.coord;
   if (sameCoord(startCoord, goalCoord)) {
-    return { status: "success", points: [cloneVec3(start), cloneVec3(goal)], visited: 1 };
+    return { status: "success", points: [cloneVec3(startFix.point), cloneVec3(goalFix.point)], visited: 1 };
   }
 
   const open: SearchNode[] = [{ ...startCoord, g: 0, f: heuristic(startCoord, goalCoord) }];
@@ -328,7 +345,7 @@ export function searchNavGrid(grid: NavGrid, start: Vec3, goal: Vec3): PathResul
       const cells = reconstructCells(cameFrom, current).map(coordFromKey);
       return {
         status: "success",
-        points: pathPoints(start, goal, cells, toPoint, (a, b) =>
+        points: pathPoints(startFix.point, goalFix.point, cells, toPoint, (a, b) =>
           segmentSafe(a, b, grid.blockers, grid.clearanceRadius, grid.height, grid.stepHeight, authoredBounds),
         ),
         visited,
@@ -524,6 +541,41 @@ function neighbors(
     }
   }
   return out;
+}
+
+/**
+ * Snaps an endpoint to the nearest walkable cell within
+ * {@link PROJECTION_MAX_CELL_RADIUS} (the query-extent analogue of Unreal's
+ * `ProjectPointToNavigation`). Returns the raw endpoint untouched when its
+ * rounded cell is already walkable — so paths whose endpoints sit cleanly on the
+ * grid are byte-for-byte unchanged. Candidates are ranked by 3D distance so the
+ * projection is height-aware: a goal on an upper platform snaps to the platform
+ * cell, not the (X/Z-closer) floor cell directly below it. Returns `null` when no
+ * walkable cell exists within the window, so a genuinely unreachable endpoint
+ * still fails the query.
+ */
+function projectEndpoint(
+  point: Vec3,
+  toCoord: (point: Vec3) => GridCoord,
+  toPoint: (coord: GridCoord) => Vec3,
+  passable: (coord: GridCoord) => boolean,
+): { readonly coord: GridCoord; readonly point: Vec3 } | null {
+  const base = toCoord(point);
+  if (passable(base)) return { coord: base, point: cloneVec3(point) };
+  let best: { coord: GridCoord; d2: number } | null = null;
+  for (let dz = -PROJECTION_MAX_CELL_RADIUS; dz <= PROJECTION_MAX_CELL_RADIUS; dz += 1) {
+    for (let dx = -PROJECTION_MAX_CELL_RADIUS; dx <= PROJECTION_MAX_CELL_RADIUS; dx += 1) {
+      const coord = { x: base.x + dx, z: base.z + dz };
+      if (!passable(coord)) continue;
+      const candidate = toPoint(coord);
+      const ex = candidate[0] - point[0];
+      const ey = candidate[1] - point[1];
+      const ez = candidate[2] - point[2];
+      const d2 = ex * ex + ey * ey + ez * ez;
+      if (!best || d2 < best.d2) best = { coord, d2 };
+    }
+  }
+  return best ? { coord: best.coord, point: toPoint(best.coord) } : null;
 }
 
 function canTraverseHeight(grid: NavGrid, from: GridCoord, to: GridCoord): boolean {

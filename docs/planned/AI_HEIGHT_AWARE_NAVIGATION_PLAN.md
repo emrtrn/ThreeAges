@@ -1,8 +1,10 @@
 # AI Yükseklik-Farkında Navigasyon (Merdiven/Rampa ile Y Ekseni) Planı
 
 > Tarih: 2026-07-07
-> Durum: Asama 1-4 engine/runtime cila uygulandi.
-> Gercek sahne uzeri browser smoke ve kalan semptom incelemesi acik.
+> Durum: Asama 1-4 engine/runtime cila uygulandi. Kok neden incelemesi bitti:
+> cekirdek height-aware pathing saglam; endpoint projeksiyonu (B) eklendi. Kalan
+> tek sert basarisizlik nav volume yuksekligi (A) — sessiz, uyari adayligi acik.
+> Gercek sahne uzeri browser smoke halen acik.
 > Kapsam: AI patrol/moveTo yol bulmasının Y ekseninde (merdiven/rampa ile
 > ulaşılan yükseltilmiş target point'ler) çalışması.
 
@@ -133,9 +135,27 @@ için mimariye oturuyor. (Recast tarzı tam navmesh veya jump-link'ler aşırı 
      segmentin Y araligini ve ajan kapsul yuksekligini de kontrol eder. Alt
      kattaki blocker ust-kat segmentini, ust kattaki blocker alt-kat segmentini
      gereksiz bloklamaz. Engine regresyon testi eklendi.
-   - Acik: gercek sahne uzerinde yukseltilmis target point'e ulasan controller
-     smoke'u ve mevcut "hedef 1'de yurume animasyonunda kalma" semptomunun ayri
-     kok neden incelemesi.
+   - Durum: Tamamlandi. 2026-07-07 endpoint projeksiyonu eklendi:
+     `searchNavGrid` artik start/goal'u en yakin yurunebilir hucreye projekte
+     ediyor (Unreal `ProjectPointToNavigation` karsiligi, `projectEndpoint`).
+     Projeksiyon yukseklik-farkinda (3B en yakin) — platform kenarina konan bir
+     target point'in mesh-disi/blocklu hucreye yuvarlanip tum sorguyu
+     bozmasi engelleniyor; ust platformdaki hedef alttaki zemine degil platform
+     hucresine snap oluyor. Rounded hucre zaten passable ise ham endpoint
+     aynen korunur (duz-zemin davranisi degismez). Engine unit testleri eklendi.
+   - Kok neden incelemesi (2026-07-07, gercek `SM_LinearStair` geometrisi +
+     izole reproduksiyon ile): cekirdek height-aware pathing SAGLAM — merdiven
+     riser'lari `staticBlockerAabbs`'e giriyor ama basamak yuksekligi (0.2m)
+     stepHeight altinda oldugu ve zemin basamakla yukseldigi icin heightfield
+     hucrelerini bloklamiyor; alt zemin -> merdiven -> ust platform patrol'u
+     A*'da basariyla cikiyor; follower gercekci dikey adim-yumusatma gecikmesiyle
+     bile variyor (kalici kilit yok). "Hedef 1'de yurume animasyonunda kalma"
+     bir follower deadlock'u DEGIL; asil sert basarisizlik iki yerde:
+     (A) **Nav volume yuksekligi** — `aiNavFloorSampler` yalnizca top'u
+     `[volume.minY, volume.maxY]` araligindaki yuzeyleri kabul eder; volume
+     tepesi ust platformu kapsamiyorsa o hucreler `null` ornekler ve platformdaki
+     hedef sessizce ulasilamaz olur (halen sessiz; uyari yok — belgele/uyar
+     adayligi acik). (B) **Endpoint projeksiyonu eksikligi** — yukarida cozuldu.
 
 ## Testler
 - **Engine unit:** merdiven heightfield alçak→yüksek bağlanır; çok yüksek basamak

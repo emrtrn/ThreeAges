@@ -6666,6 +6666,65 @@ check("nav grid heightfield rejects neighbor steps above the agent step height",
   assert.equal(path.status, "failure");
 });
 
+// Height-aware two-level layout with a one-cell hole at x=3: lower floor (y=0)
+// for x<=2, an unwalkable hole at x=3, an upper platform (y=2) for x>=4.
+function twoLevelHeightfieldGrid() {
+  return buildNavGrid({
+    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
+    blockers: [],
+    bounds: [{ min: [0, -1, 0], max: [6, 4, 0] }],
+    footY: 0,
+    cellSize: 1,
+    safetyMargin: 0,
+    sampleFloorY: (x, z) => {
+      if (Math.abs(z) > 1e-6) return null;
+      if (x <= 2.5) return 0;
+      if (x >= 3.5) return 2;
+      return null; // hole at x=3
+    },
+  });
+}
+
+check("searchNavGrid projects a goal on a hole cell to the height-nearest walkable cell (upper)", () => {
+  const grid = twoLevelHeightfieldGrid();
+  assert.ok(grid, "grid should build");
+  // Goal rounds onto the x=3 hole but sits at the upper platform height, so it
+  // must project up to x=4 (y=2), not down to x=2 (y=0), and stay reachable from
+  // an upper-platform start.
+  const path = searchNavGrid(grid!, [5, 2, 0], [3, 2, 0]);
+  assert.equal(path.status, "success");
+  const end = path.points[path.points.length - 1]!;
+  assert.ok(Math.abs(end[1] - 2) < 1e-6, `goal projected to upper platform height: ${JSON.stringify(end)}`);
+});
+
+check("searchNavGrid projects a hole-cell goal down to the lower floor when its height is low", () => {
+  const grid = twoLevelHeightfieldGrid();
+  assert.ok(grid, "grid should build");
+  // Same hole cell, but a low goal height: it must project down to x=2 (y=0),
+  // reachable from a lower-floor start — the projection is height-aware.
+  const path = searchNavGrid(grid!, [0, 0, 0], [3, 0, 0]);
+  assert.equal(path.status, "success");
+  const end = path.points[path.points.length - 1]!;
+  assert.ok(Math.abs(end[1]) < 1e-6, `goal projected to lower floor height: ${JSON.stringify(end)}`);
+});
+
+check("searchNavGrid still fails when no walkable cell lies within the projection radius", () => {
+  const grid = buildNavGrid({
+    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
+    blockers: [],
+    bounds: [{ min: [0, -1, 0], max: [8, 3, 0] }],
+    footY: 0,
+    cellSize: 1,
+    safetyMargin: 0,
+    // Only x<=1 is walkable; the rest of the volume is a void.
+    sampleFloorY: (x, z) => (Math.abs(z) < 1e-6 && x <= 1.5 ? 0 : null),
+  });
+  assert.ok(grid, "grid should build");
+  // Goal at x=7 has no walkable cell within 2 cells -> projection can't rescue it.
+  const path = searchNavGrid(grid!, [0, 0, 0], [7, 0, 0]);
+  assert.equal(path.status, "failure");
+});
+
 check("NavGridCache reuses a baked grid until the token changes", () => {
   const cache = new NavGridCache();
   const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
