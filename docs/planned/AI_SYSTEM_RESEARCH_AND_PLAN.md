@@ -72,6 +72,9 @@
 > task'lari (`forge.setPatrolTarget` / `moveToPatrolTarget` /
 > `advancePatrolTarget`, stop/loop/nearest/failure modlari) uygulandi
 > (bkz. asagidaki checklist).
+> Revizyon: 2026-07-07 - Target Point `Show > AI Navigation` route overlay
+> (nokta marker + `next` link oku + aktif AI hedef highlight) uygulandi
+> (bkz. asagidaki checklist).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -927,7 +930,7 @@ Planlanan Target Point tabanli patrol route authoring checklist'i:
       - [ ] `patrolRouteTag`
       - [ ] `currentPatrolTarget`
       - [ ] `lastPatrolTarget`.
-- [ ] Debug/viewport overlay: Target Point noktalarini, `next` baglantilarini,
+- [x] Debug/viewport overlay: Target Point noktalarini, `next` baglantilarini,
       aktif AI hedefini ve rotayi `Show > AI Navigation` icinde ciz.
 - [ ] AI_Test demo refactoru: behavior JSON'daki sabit `moveToPosition`
       koordinatlarini Target Point route okuyan task'lara tasiyarak
@@ -939,7 +942,7 @@ Planlanan Target Point tabanli patrol route authoring checklist'i:
       - [x] `nextTargetPoint` referansi kirik oldugunda guvenli failure.
       - [x] patrol task'i hedefe varinca siradaki Target Point'e gecer.
       - [x] loop rota deterministik calisir.
-      - [ ] debug overlay route segmentlerini uretir.
+      - [x] debug overlay route segmentlerini uretir.
 - [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` Add Actor + Details smoke
       ve runtime Playground patrol smoke.
@@ -1000,6 +1003,23 @@ Tamamlanan Target Point runtime index + patrol task dilim notu (2026-07-07):
   Blackboard patrol authoring alanlari, `Show > AI Navigation` route overlay,
   AI_Test demo'nun sabit koordinatlardan Target Point rotasina tasinmasi ve
   Playwright patrol smoke.
+
+Tamamlanan Target Point route overlay dilim notu (2026-07-07):
+
+- `createAiNavigationView` yeni `routes` girisi aliyor
+  (`AiTargetPointRouteView`): her Target Point icin cross marker, `next`
+  noktasina yonlu link (ok basli) ve aktif AI hedefi icin highlight halkasi
+  cizer. Rota pozisyonlari view bounds hesabina dahil edilir.
+- Editor `Show > AI Navigation` ve runtime `?debug` ayni render helper'ina
+  `layout.targetPoints`'ten uretilen route view'i besliyor. Aktif hedef,
+  herhangi bir canli AI controller'in blackboard'unda string olarak tuttugu
+  Target Point id'lerinden cikariliyor (patrol key adindan bagimsiz).
+- Test: `createAiNavigationView` route marker (`ai-route-point`), link
+  (`ai-route-link`) ve aktif highlight (`ai-route-active`) child'larini uretir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`663 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS). Kalan: AIController/Blackboard patrol authoring alanlari, AI_Test
+  demo'nun Target Point rotasina tasinmasi ve Playwright patrol smoke.
 
 Planlanan AI Navigation clearance / agent radius checklist'i:
 

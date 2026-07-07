@@ -32,7 +32,7 @@ import {
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
-import { targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
+import { createTargetPointIndex, targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
 import type { AiMoveRequest } from "@engine/ai/behaviorRunner";
 import {
   normalizeAiBehaviorTreeAsset,
@@ -62,6 +62,7 @@ import {
   disposeAiNavigationView,
   type AiPerceptionView,
   type AiQueryCandidateView,
+  type AiTargetPointRouteView,
 } from "@engine/render-three/aiNavigationView";
 import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
@@ -1129,12 +1130,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const snapshot = this.getAiNavigationDebugSnapshot();
     const perception = this.aiPerceptionView();
     const queries = this.aiQueryView();
+    const routes = this.aiTargetPointRouteView();
     if (
       snapshot.followers.length === 0 &&
       snapshot.blockers.length === 0 &&
       snapshot.bounds.length === 0 &&
       perception.length === 0 &&
-      queries.length === 0
+      queries.length === 0 &&
+      routes.length === 0
     ) return;
     this.aiNavigationView = createAiNavigationView({
       blockers: snapshot.blockers,
@@ -1143,8 +1146,31 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       followers: snapshot.followers,
       perception,
       queries,
+      routes,
     });
     this.scene.add(this.aiNavigationView);
+  }
+
+  /** Target Point patrol route overlay: markers, `next` links, active AI highlight. */
+  private aiTargetPointRouteView(): AiTargetPointRouteView[] {
+    const points = this.layout?.targetPoints ?? [];
+    if (points.length === 0) return [];
+    const index = createTargetPointIndex(targetPointEntriesFromLayout(points));
+    const activeIds = new Set<string>();
+    for (const controller of this.aiSubsystem.getDebugSnapshot().controllers) {
+      for (const entry of controller.blackboard.entries) {
+        if (typeof entry.value === "string" && entry.value.length > 0) activeIds.add(entry.value);
+      }
+    }
+    return index.all().map((entry) => {
+      const next = index.next(entry.id);
+      return {
+        id: entry.id,
+        position: entry.position,
+        next: next ? next.position : null,
+        ...(activeIds.has(entry.id) ? { active: true } : {}),
+      };
+    });
   }
 
   private aiPerceptionView(): AiPerceptionView[] {

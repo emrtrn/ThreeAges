@@ -20337,6 +20337,19 @@ check("createAiNavigationView draws AI query candidates and winner markers", () 
   disposeAiNavigationView(view);
 });
 
+check("createAiNavigationView draws Target Point route markers, links and active highlight", () => {
+  const view = createAiNavigationView({
+    routes: [
+      { id: "a", position: [0, 0, 0], next: [5, 0, 0], active: true },
+      { id: "b", position: [5, 0, 0], next: null },
+    ],
+  });
+  assert.ok(view.getObjectByName("ai-route-point"), "route point markers drawn");
+  assert.ok(view.getObjectByName("ai-route-link"), "route link segment drawn");
+  assert.ok(view.getObjectByName("ai-route-active"), "active route highlight drawn");
+  disposeAiNavigationView(view);
+});
+
 check("formatAiNavDebug renders follower status, waypoints, replans and stalls", () => {
   const lines = formatAiNavDebug({
     followers: [

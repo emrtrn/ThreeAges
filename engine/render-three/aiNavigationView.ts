@@ -34,12 +34,22 @@ export interface AiQueryCandidateView {
   readonly winner?: boolean;
 }
 
+export interface AiTargetPointRouteView {
+  readonly id: string;
+  readonly position: Vec3;
+  /** Resolved position of `nextTargetPoint`, drawn as a directed route link (null at route end). */
+  readonly next?: Vec3 | null;
+  /** True when a live AI is currently patrolling toward this point. */
+  readonly active?: boolean;
+}
+
 export interface AiNavigationViewInput {
   readonly blockers?: readonly NavAabb[];
   readonly bounds?: readonly NavAabb[];
   readonly followers?: readonly AiNavigationFollowerView[];
   readonly perception?: readonly AiPerceptionView[];
   readonly queries?: readonly AiQueryCandidateView[];
+  readonly routes?: readonly AiTargetPointRouteView[];
   readonly cellSize?: number;
   readonly y?: number;
 }
@@ -58,6 +68,9 @@ const HEARING_COLOR = 0x9f7aff;
 const QUERY_CANDIDATE_COLOR = 0x75d7ff;
 const QUERY_FAILED_COLOR = 0x7d8794;
 const QUERY_WINNER_COLOR = 0x00f5a0;
+const ROUTE_POINT_COLOR = 0xf5c542;
+const ROUTE_LINK_COLOR = 0xf5a742;
+const ROUTE_ACTIVE_COLOR = 0x00f5a0;
 const DEFAULT_SIGHT_FOV_DEG = 90;
 
 export function createAiNavigationView(input: AiNavigationViewInput): Group {
@@ -70,6 +83,7 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
     input.followers ?? [],
     input.perception ?? [],
     input.queries ?? [],
+    input.routes ?? [],
   );
   if (!bounds) return group;
 
@@ -135,6 +149,22 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
     }
   }
 
+  for (const route of input.routes ?? []) {
+    if (route.next) {
+      group.add(
+        lineSegments("ai-route-link", routeLinkSegments(route.position, route.next, y + 0.2), ROUTE_LINK_COLOR, 0.7),
+      );
+    }
+    group.add(
+      lineSegments("ai-route-point", crossSegments(route.position, y + 0.22, 0.3), ROUTE_POINT_COLOR, 0.9),
+    );
+    if (route.active) {
+      group.add(
+        lineSegments("ai-route-active", circleSegments(route.position, 0.45, y + 0.24, 24), ROUTE_ACTIVE_COLOR, 1),
+      );
+    }
+  }
+
   for (const candidate of input.queries ?? []) {
     const failed = (candidate.failedTests?.length ?? 0) > 0;
     const winner = candidate.winner === true;
@@ -185,6 +215,7 @@ function computeBounds(
   followers: readonly AiNavigationFollowerView[],
   perceptions: readonly AiPerceptionView[],
   queries: readonly AiQueryCandidateView[],
+  routes: readonly AiTargetPointRouteView[],
 ): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
   let minX = Infinity;
   let maxX = -Infinity;
@@ -220,6 +251,10 @@ function computeBounds(
     }
   }
   for (const candidate of queries) include(candidate.position);
+  for (const route of routes) {
+    include(route.position);
+    if (route.next) include(route.next);
+  }
   if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minZ) || !Number.isFinite(maxZ)) {
     return null;
   }
@@ -282,6 +317,33 @@ function pathSegments(path: readonly Vec3[], y: number): Vec3[] {
     const a = path[i]!;
     const b = path[i + 1]!;
     out.push([a[0], y, a[2]], [b[0], y, b[2]]);
+  }
+  return out;
+}
+
+function routeLinkSegments(from: Vec3, to: Vec3, y: number): Vec3[] {
+  const a: Vec3 = [from[0], y, from[2]];
+  const b: Vec3 = [to[0], y, to[2]];
+  const out: Vec3[] = [a, b];
+  const dx = b[0] - a[0];
+  const dz = b[2] - a[2];
+  const len = Math.hypot(dx, dz);
+  if (len > 1e-3) {
+    const ux = dx / len;
+    const uz = dz / len;
+    // Arrowhead pointing at the `next` point so route direction is readable.
+    const tipX = b[0] - ux * 0.4;
+    const tipZ = b[2] - uz * 0.4;
+    const back = 0.28;
+    const side = 0.16;
+    const px = -uz;
+    const pz = ux;
+    out.push(
+      [b[0] - ux * 0.4, y, b[2] - uz * 0.4],
+      [tipX - ux * back + px * side, y, tipZ - uz * back + pz * side],
+      [b[0] - ux * 0.4, y, b[2] - uz * 0.4],
+      [tipX - ux * back - px * side, y, tipZ - uz * back - pz * side],
+    );
   }
   return out;
 }

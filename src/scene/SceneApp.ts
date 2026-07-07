@@ -47,7 +47,7 @@ import {
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
-import { targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
+import { createTargetPointIndex, targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
 import {
   normalizeAiBehaviorTreeAsset,
   normalizeAiBlackboardAsset,
@@ -86,6 +86,7 @@ import {
   disposeAiNavigationView,
   type AiPerceptionView,
   type AiQueryCandidateView,
+  type AiTargetPointRouteView,
 } from "@engine/render-three/aiNavigationView";
 import {
   collectMaterialStats,
@@ -6508,15 +6509,57 @@ export class SceneApp {
     const bounds = this.aiNavigationBounds();
     const perception = this.aiPerceptionView();
     const queries = this.aiQueryView();
-    if (blockers.length === 0 && bounds.length === 0 && perception.length === 0 && queries.length === 0) return;
+    const routes = this.aiTargetPointRouteView();
+    if (
+      blockers.length === 0 &&
+      bounds.length === 0 &&
+      perception.length === 0 &&
+      queries.length === 0 &&
+      routes.length === 0
+    ) {
+      return;
+    }
     this.aiNavigationView = createAiNavigationView({
       blockers,
       bounds,
       cellSize: AI_NAV_DEBUG_CELL_SIZE,
       perception,
       queries,
+      routes,
     });
     this.scene.add(this.aiNavigationView);
+  }
+
+  /**
+   * Builds the Target Point patrol route overlay: one marker per point, a
+   * directed link to its `nextTargetPoint`, and an active highlight for any point
+   * a live AI (editor Play) is currently patrolling toward.
+   */
+  private aiTargetPointRouteView(): AiTargetPointRouteView[] {
+    const points = this.layout?.targetPoints ?? [];
+    if (points.length === 0) return [];
+    const index = createTargetPointIndex(targetPointEntriesFromLayout(points));
+    const activeIds = this.aiActivePatrolTargetIds();
+    return index.all().map((entry) => {
+      const next = index.next(entry.id);
+      return {
+        id: entry.id,
+        position: entry.position,
+        next: next ? next.position : null,
+        ...(activeIds.has(entry.id) ? { active: true } : {}),
+      };
+    });
+  }
+
+  /** Target Point ids referenced as string blackboard values by any live AI. */
+  private aiActivePatrolTargetIds(): Set<string> {
+    const ids = new Set<string>();
+    for (const controller of this.aiSubsystem.getDebugSnapshot().controllers) {
+      for (const entry of controller.blackboard.entries) {
+        if (typeof entry.value === "string" && entry.value.length > 0) ids.add(entry.value);
+      }
+    }
+    return ids;
   }
 
   private aiPerceptionView(): AiPerceptionView[] {
