@@ -1,0 +1,585 @@
+{
+  "schema": 1,
+  "name": "__playwright-smoke-patrol",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "shape:plane",
+      "placements": []
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": []
+    },
+    {
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            -16.33,
+            0,
+            -5.39
+          ],
+          "name": "Player Start",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "starter-sm-wall",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-crate",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-platform",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-ramp",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-pillar",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-sphere",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-cube",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-cylinder",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-plane",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-cone",
+      "placements": []
+    },
+    {
+      "assetId": "base-basic-pbr",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pano",
+      "placements": []
+    },
+    {
+      "assetId": "sm-chair",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cone",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cube",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cylender",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cylinder",
+      "placements": []
+    },
+    {
+      "assetId": "shape-narrowcapsule",
+      "placements": []
+    },
+    {
+      "assetId": "shape-pipe-180",
+      "placements": []
+    },
+    {
+      "assetId": "shape-pipe-90",
+      "placements": []
+    },
+    {
+      "assetId": "shape-pipe",
+      "placements": []
+    },
+    {
+      "assetId": "shape-quadpyramid",
+      "placements": []
+    },
+    {
+      "assetId": "shape-sphere",
+      "placements": []
+    },
+    {
+      "assetId": "shape-plane",
+      "placements": []
+    },
+    {
+      "assetId": "floor-400x400",
+      "placements": [
+        {
+          "position": [
+            -17.57,
+            0,
+            -12.01
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            3.4,
+            1,
+            2
+          ]
+        },
+        {
+          "position": [
+            -20,
+            0,
+            -4
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            4,
+            1,
+            5
+          ]
+        },
+        {
+          "position": [
+            -15.62,
+            3.2,
+            -10.66
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            1.1,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "wall-door-400x300",
+      "placements": []
+    },
+    {
+      "assetId": "wall-400x300",
+      "placements": [
+        {
+          "position": [
+            -15.42,
+            0,
+            -10.56
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -11.32,
+            0,
+            -10.66
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "wall-window-400x300",
+      "placements": [
+        {
+          "position": [
+            -15.52,
+            0,
+            -10.66
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "sm-coin",
+      "placements": []
+    },
+    {
+      "assetId": "coin",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pickup-health",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pickup-coin",
+      "placements": []
+    },
+    {
+      "assetId": "sm-picku-health",
+      "placements": []
+    },
+    {
+      "assetId": "sm-trigger-pad",
+      "placements": []
+    },
+    {
+      "assetId": "axe",
+      "placements": []
+    },
+    {
+      "assetId": "archery-firstage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "archery-firstage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "archery-firstage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "ar-1",
+      "placements": []
+    },
+    {
+      "assetId": "marker:ambientSound",
+      "placements": []
+    },
+    {
+      "assetId": "sm-leftarm",
+      "placements": []
+    },
+    {
+      "assetId": "sm-bump",
+      "placements": []
+    },
+    {
+      "assetId": "sm-linearstair",
+      "placements": []
+    },
+    {
+      "assetId": "sm-ramp",
+      "placements": []
+    },
+    {
+      "assetId": "sm-rightarm",
+      "placements": []
+    },
+    {
+      "assetId": "sm-chair-ktx2",
+      "placements": []
+    },
+    {
+      "assetId": "test",
+      "placements": []
+    },
+    {
+      "assetId": "wall-400x400",
+      "placements": [
+        {
+          "position": [
+            -34,
+            0,
+            6
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -30,
+            0,
+            6
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -34,
+            0,
+            2
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -34,
+            0,
+            2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -30,
+            0,
+            2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -10,
+            0,
+            -2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -14,
+            0,
+            -2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -18,
+            0,
+            -2
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    }
+  ],
+  "characters": [],
+  "worldSettings": {
+    "staticObjectsCastShadow": true,
+    "backgroundColor": "#ffffff",
+    "killZ": -10,
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
+    "hudWidget": "hud",
+    "pauseMenuWidget": "menu",
+    "locale": "en"
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 1,
+    "mie": 0.002,
+    "mieDirectionalG": 0.8,
+    "exposure": 1,
+    "skyLightCapture": {
+      "intensity": 0.6
+    }
+  },
+  "cloudLayer": {
+    "color": "#ffffff",
+    "coverage": 0.4,
+    "density": 0.4,
+    "softness": 0.4,
+    "scale": 4,
+    "speed": 0.2
+  },
+  "postProcess": {
+    "toneMapping": "aces",
+    "antialias": "smaa",
+    "exposure": 1,
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    },
+    "vignette": {
+      "intensity": 1,
+      "offset": 1
+    },
+    "chromaticAberration": {
+      "amount": 0.05
+    },
+    "grain": {
+      "intensity": 0.5
+    },
+    "dof": {
+      "focusDistance": 10,
+      "aperture": 1,
+      "maxBlur": 1
+    },
+    "ao": {
+      "radius": 1,
+      "intensity": 1
+    },
+    "saturation": 1,
+    "contrast": 1,
+    "temperature": 0,
+    "tint": 0
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        -12,
+        6.14,
+        7
+      ],
+      "name": "Sun",
+      "rotation": [
+        -30,
+        0,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 5,
+      "castShadow": true
+    }
+  ],
+  "reflectionPlanes": [],
+  "reflectiveSurfaces": [
+    {
+      "id": "reflective-surface-1",
+      "position": [
+        -13.57,
+        0.01,
+        -8.01
+      ],
+      "name": "Reflective Surface",
+      "rotation": [
+        -90,
+        0,
+        0
+      ],
+      "scale": [
+        8,
+        8,
+        1.5
+      ],
+      "material": "m-wood-floor-material",
+      "reflectionStrength": 0.2,
+      "fresnelPower": 1,
+      "fresnelBias": 0.1,
+      "distortion": 0.2,
+      "resolution": 512
+    }
+  ],
+  "reflectionCaptures": [],
+  "blockingVolumes": [],
+  "aiNavigationVolumes": [
+    {
+      "id": "ai-navigation-volume-1",
+      "position": [
+        -12.61,
+        1.81,
+        1
+      ],
+      "name": "AI Navigation Volume",
+      "scale": [
+        1.8,
+        1,
+        3
+      ],
+      "size": [
+        10,
+        4,
+        10
+      ],
+      "color": "#0011ff"
+    }
+  ],
+  "targetPoints": [
+    {
+      "id": "target-point-1",
+      "position": [
+        -6,
+        0,
+        14
+      ],
+      "name": "Target Point",
+      "scale": 1,
+      "nextTargetPoint": "target-point-2",
+      "startPoint": true,
+      "waitTime": 0.5,
+      "acceptanceRadius": 1
+    },
+    {
+      "id": "target-point-2",
+      "position": [
+        -6,
+        0,
+        5
+      ],
+      "name": "Target Point 2",
+      "scale": 1,
+      "nextTargetPoint": "target-point-3",
+      "waitTime": 0.5,
+      "acceptanceRadius": 1
+    },
+    {
+      "id": "target-point-3",
+      "position": [
+        -9,
+        0,
+        10
+      ],
+      "name": "Target Point 3",
+      "scale": 1,
+      "nextTargetPoint": "target-point-1",
+      "waitTime": 0.5,
+      "acceptanceRadius": 1
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Script/AI_Test.actor.json",
+      "position": [
+        -13.07,
+        0,
+        13.59
+      ],
+      "scaleLocked": true,
+      "rotationYDeg": 0,
+      "rotation": [
+        0,
+        75,
+        0
+      ],
+      "scale": 0.3
+    }
+  ]
+}

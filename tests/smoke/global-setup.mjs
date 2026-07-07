@@ -8,9 +8,11 @@ const ASSET_MANIFEST_PATH = resolve("public/assets/manifest.json");
 const MENU_PATH = resolve("public/assets/starter-content/UI/SaveLoadMenu.ui.json");
 const SMOKE_SCENE = "layouts/__playwright-smoke.level.json";
 const SMOKE_TARGET_SCENE = "layouts/__playwright-smoke-target.level.json";
+const SMOKE_PATROL_SCENE = "layouts/__playwright-smoke-patrol.level.json";
 const SMOKE_MENU = "assets/__playwright-smoke-menu.ui.json";
 const SMOKE_SCENE_PATH = resolve("public", SMOKE_SCENE);
 const SMOKE_TARGET_SCENE_PATH = resolve("public", SMOKE_TARGET_SCENE);
+const SMOKE_PATROL_SCENE_PATH = resolve("public", SMOKE_PATROL_SCENE);
 const SMOKE_MENU_PATH = resolve("public", SMOKE_MENU);
 
 async function readJson(path) {
@@ -33,6 +35,17 @@ function prepareSmokeSourceScene(scene) {
   copy.name = "__playwright-smoke";
   copy.characters = [];
   copy.actors = [];
+  // Editor authoring smokes assume a clean base scene: they add one actor and
+  // assert on it by count or by name filter. Drop every authored placeable the
+  // source level (Playground) ships — Target Points, volumes and reflective
+  // surfaces — so an inherited "AI Navigation Volume"/"Target Point" row can't
+  // collide with the one the test adds, and the play step loads a light scene.
+  copy.targetPoints = [];
+  copy.aiNavigationVolumes = [];
+  copy.blockingVolumes = [];
+  copy.reflectiveSurfaces = [];
+  copy.reflectionPlanes = [];
+  copy.reflectionCaptures = [];
   copy.worldSettings = {
     ...(copy.worldSettings ?? {}),
     gameMode: "assets/starter-content/Gameplay/Script_GameMode.actor.json",
@@ -115,6 +128,25 @@ function prepareSmokeTargetScene(scene) {
   return copy;
 }
 
+/**
+ * Runtime AI patrol smoke scene: unlike the other smoke scenes it deliberately
+ * keeps the source `actors` (the `AI_Test` controller) and `targetPoints` so the
+ * runtime spawns a real patrolling agent. This is the destination the pause-menu
+ * `smoke-patrol` travel button reaches, letting the patrol spec observe the AI
+ * controller + nav follower come alive on the authored Target Point route.
+ */
+function prepareSmokePatrolScene(scene) {
+  const copy = structuredClone(scene);
+  copy.name = "__playwright-smoke-patrol";
+  copy.worldSettings = {
+    ...(copy.worldSettings ?? {}),
+    hudWidget: "hud",
+    pauseMenuWidget: "menu",
+    locale: "en",
+  };
+  return copy;
+}
+
 function prepareSmokeMenu(menu) {
   const copy = structuredClone(menu);
   copy.name = "Playwright Smoke Menu";
@@ -131,6 +163,17 @@ function prepareSmokeMenu(menu) {
       onClick: {
         type: "message",
         message: `travel:${SMOKE_TARGET_SCENE}#arrival`,
+      },
+    },
+  });
+  footer.children.unshift({
+    id: "smoke-patrol",
+    widget: "Button",
+    props: {
+      text: "Patrol",
+      onClick: {
+        type: "message",
+        message: `travel:${SMOKE_PATROL_SCENE}`,
       },
     },
   });
@@ -159,7 +202,7 @@ export default async function globalSetup() {
     `${JSON.stringify({
       manifestRaw,
       assetManifestRaw,
-      smokeScenes: [SMOKE_SCENE, SMOKE_TARGET_SCENE],
+      smokeScenes: [SMOKE_SCENE, SMOKE_TARGET_SCENE, SMOKE_PATROL_SCENE],
       smokeFiles: [SMOKE_MENU],
     }, null, 2)}\n`,
     "utf8",
@@ -173,6 +216,11 @@ export default async function globalSetup() {
   await writeFile(
     SMOKE_TARGET_SCENE_PATH,
     `${JSON.stringify(prepareSmokeTargetScene(sourceScene), null, 2)}\n`,
+    "utf8",
+  );
+  await writeFile(
+    SMOKE_PATROL_SCENE_PATH,
+    `${JSON.stringify(prepareSmokePatrolScene(sourceScene), null, 2)}\n`,
     "utf8",
   );
   await writeFile(SMOKE_MENU_PATH, `${JSON.stringify(smokeMenu, null, 2)}\n`, "utf8");

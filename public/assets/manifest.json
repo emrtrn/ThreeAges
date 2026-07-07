@@ -2496,7 +2496,7 @@
       "name": "Save / Load Menu",
       "assetType": "ui",
       "category": "UI",
-      "path": "assets/starter-content/UI/SaveLoadMenu.ui.json",
+      "path": "assets/__playwright-smoke-menu.ui.json",
       "tags": [
         "starter",
         "ui",
@@ -2515,7 +2515,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 9419
+        "bytes": 3954
       },
       "license": "Unknown"
     },

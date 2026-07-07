@@ -44,6 +44,10 @@ test("editor Target Point smoke: add, inspect, edit, save, reload", async ({ pag
   await expect(page.locator('[data-target-point-number="waitTime"]')).toHaveValue("1.5");
   await expect(page.locator('[data-target-point-number="acceptanceRadius"]')).toHaveValue("0.75");
 
+  await expect(page.locator("[data-target-point-start]")).not.toBeChecked();
+  await page.locator("[data-target-point-start]").check();
+  await expect(page.locator("[data-target-point-start]")).toBeChecked();
+
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
 
@@ -57,6 +61,7 @@ test("editor Target Point smoke: add, inspect, edit, save, reload", async ({ pag
   await expect(page.locator('[data-target-point-field="patrolTag"]')).toHaveValue("outer");
   await expect(page.locator('[data-target-point-number="waitTime"]')).toHaveValue("1.5");
   await expect(page.locator('[data-target-point-number="acceptanceRadius"]')).toHaveValue("0.75");
+  await expect(page.locator("[data-target-point-start]")).toBeChecked();
 
   expect(pageErrors).toEqual([]);
 });
