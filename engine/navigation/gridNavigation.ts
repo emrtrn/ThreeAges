@@ -5,6 +5,18 @@
  * implementation plans over X/Z using static blocker AABBs inflated by the
  * agent radius. It is intentionally small so higher-level AI can start using
  * path-following before a full navmesh/Recast adapter exists.
+ *
+ * Navigation contract (Unreal/Recast `Agent Radius` analogue): a path point is
+ * the agent capsule *center* at foot height, never a surface point. Obstacles
+ * are eroded by an effective clearance so the capsule body stays clear:
+ *
+ *   effectiveRadius = agent.radius + agent.clearancePadding + safetyMargin
+ *
+ * `clearancePadding` is optional per-agent slack beyond the capsule radius (kept
+ * small so narrow corridors stay traversable). `safetyMargin` absorbs the grid
+ * discretization error and defaults to `cellSize * 0.5` — half a cell, the worst
+ * case rounding of a continuous position onto a cell center. Authored navigation
+ * bounds are eroded inward by the same effective radius.
  */
 import type { Vec3 } from "../scene/layout";
 
@@ -17,6 +29,12 @@ export interface NavAgent {
   readonly radius: number;
   readonly height: number;
   readonly stepHeight?: number;
+  /**
+   * Extra clearance beyond the capsule radius (Unreal `Nav Agent` slack). Added
+   * to the effective blocker erosion so the agent keeps a safety gap from walls.
+   * Keep it small — large values close off narrow corridors. Defaults to 0.
+   */
+  readonly clearancePadding?: number;
 }
 
 export interface PathRequest {
@@ -28,6 +46,11 @@ export interface PathRequest {
   readonly bounds?: readonly NavAabb[];
   readonly cellSize?: number;
   readonly boundsPadding?: number;
+  /**
+   * Grid discretization safety margin added to the effective blocker erosion.
+   * Defaults to `cellSize * 0.5`. Pass `0` to disable (e.g. exact-grid tests).
+   */
+  readonly safetyMargin?: number;
 }
 
 export interface PathResult {
@@ -59,6 +82,11 @@ const MAX_GRID_CELLS = 20000;
 export function findGridPath(request: PathRequest): PathResult {
   const cellSize = sanePositive(request.cellSize, DEFAULT_CELL_SIZE);
   const radius = Math.max(0, finiteOr(request.agent.radius, 0));
+  const clearance = Math.max(0, finiteOr(request.agent.clearancePadding, 0));
+  const safetyMargin = nonNegativeOr(request.safetyMargin, cellSize * 0.5);
+  // Effective erosion applied to blockers and authored bounds: the capsule body
+  // plus per-agent slack plus grid rounding slack (see module contract).
+  const clearanceRadius = radius + clearance + safetyMargin;
   const height = Math.max(0, finiteOr(request.agent.height, 0));
   const stepHeight = Math.max(0, finiteOr(request.agent.stepHeight, 0));
   const blockers = request.blockers.filter((blocker) =>
@@ -72,8 +100,8 @@ export function findGridPath(request: PathRequest): PathResult {
     return { status: "failure", points: [], visited: 0 };
   }
   const bounds = authoredBounds
-    ? navBoundsFromAuthored(authoredBounds, radius)
-    : navBounds(request.start, request.goal, blockers, radius, request.boundsPadding);
+    ? navBoundsFromAuthored(authoredBounds, clearanceRadius)
+    : navBounds(request.start, request.goal, blockers, clearanceRadius, request.boundsPadding);
   const cols = Math.max(1, Math.ceil((bounds.maxX - bounds.minX) / cellSize) + 1);
   const rows = Math.max(1, Math.ceil((bounds.maxZ - bounds.minZ) / cellSize) + 1);
   if (cols * rows > MAX_GRID_CELLS) return { status: "failure", points: [], visited: 0 };
@@ -90,7 +118,7 @@ export function findGridPath(request: PathRequest): PathResult {
   const passable = (coord: GridCoord): boolean => {
     if (coord.x < 0 || coord.z < 0 || coord.x >= cols || coord.z >= rows) return false;
     const point = toPoint(coord);
-    return !pointBlocked(point, blockers, radius) && (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
+    return !pointBlocked(point, blockers, clearanceRadius) && (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
   };
 
   const start = toCoord(request.start);
@@ -293,6 +321,10 @@ function finiteOr(value: number | undefined, fallback: number): number {
 
 function sanePositive(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function nonNegativeOr(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
 function clamp(value: number, min: number, max: number): number {

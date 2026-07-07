@@ -6417,6 +6417,62 @@ check("grid navigation honors authored navigation bounds", () => {
   assert.deepEqual(outside.points, []);
 });
 
+check("grid navigation safety margin erodes blockers by half a cell", () => {
+  // A 2.0-wide lane between two walls; the only crossing is through the gap.
+  const wallL: Aabb3 = { min: [-3, 0, -0.5], max: [-1, 2, 0.5] };
+  const wallR: Aabb3 = { min: [1, 0, -0.5], max: [3, 2, 0.5] };
+  const bounds: Aabb3[] = [{ min: [-3, -1, -6], max: [3, 3, 6] }];
+  const open = findGridPath({
+    start: [0, 0, -4],
+    goal: [0, 0, 4],
+    agent: { radius: 0.25, height: 1.8 },
+    blockers: [wallL, wallR],
+    bounds,
+    cellSize: 0.5,
+    safetyMargin: 0,
+  });
+  assert.equal(open.status, "success"); // tiny erosion leaves the gap open
+
+  const shut = findGridPath({
+    start: [0, 0, -4],
+    goal: [0, 0, 4],
+    agent: { radius: 0.25, height: 1.8 },
+    blockers: [wallL, wallR],
+    bounds,
+    cellSize: 0.5,
+    safetyMargin: 1.5,
+  });
+  assert.equal(shut.status, "failure"); // a large safety margin erodes the lane shut
+});
+
+check("grid navigation clearance padding erodes obstacles by extra slack", () => {
+  // Same lane; isolate clearancePadding by disabling the grid safety margin.
+  const wallL: Aabb3 = { min: [-3, 0, -0.5], max: [-1, 2, 0.5] };
+  const wallR: Aabb3 = { min: [1, 0, -0.5], max: [3, 2, 0.5] };
+  const bounds: Aabb3[] = [{ min: [-3, -1, -6], max: [3, 3, 6] }];
+  const open = findGridPath({
+    start: [0, 0, -4],
+    goal: [0, 0, 4],
+    agent: { radius: 0.25, height: 1.8, clearancePadding: 0 },
+    blockers: [wallL, wallR],
+    bounds,
+    cellSize: 0.5,
+    safetyMargin: 0,
+  });
+  assert.equal(open.status, "success");
+
+  const padded = findGridPath({
+    start: [0, 0, -4],
+    goal: [0, 0, 4],
+    agent: { radius: 0.25, height: 1.8, clearancePadding: 1.5 },
+    blockers: [wallL, wallR],
+    bounds,
+    cellSize: 0.5,
+    safetyMargin: 0,
+  });
+  assert.equal(padded.status, "failure"); // padding keeps the agent clear of both walls
+});
+
 check("separation steering pushes away from overlapping neighbors and clamps", () => {
   // Neighbor directly ahead (+X) within range: push is straight back (-X).
   const push = separationSteering([0, 0, 0], 0.35, [

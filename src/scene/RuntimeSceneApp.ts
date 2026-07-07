@@ -1303,13 +1303,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private aiNavAgentForEntity(entityId: string): NavAgent {
     const half = this.physicsSubsystem.colliderHalfExtents(entityId);
-    const movement = this.actorEntityById.get(entityId)
-      ? readCharacterMovementComponent(this.actorEntityById.get(entityId)!)
+    const entity = this.actorEntityById.get(entityId);
+    const movement = entity ? readCharacterMovementComponent(entity) : undefined;
+    const clearancePadding = entity
+      ? readAIControllerComponent(entity)?.navAgent?.clearancePadding
       : undefined;
     return {
       radius: half ? Math.max(half[0], half[2]) : Math.max(movement?.capsuleRadius ?? 0.35, 0.01),
       height: half ? half[1] * 2 : Math.max((movement?.capsuleHalfHeight ?? 0.9) * 2, 0.01),
       stepHeight: movement?.maxStepHeight ?? 0.45,
+      ...(typeof clearancePadding === "number" ? { clearancePadding } : {}),
     };
   }
 

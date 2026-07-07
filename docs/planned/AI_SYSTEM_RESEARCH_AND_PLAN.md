@@ -75,6 +75,10 @@
 > Revizyon: 2026-07-07 - Target Point `Show > AI Navigation` route overlay
 > (nokta marker + `next` link oku + aktif AI hedef highlight) uygulandi
 > (bkz. asagidaki checklist).
+> Revizyon: 2026-07-07 - AI Navigation clearance / effective radius ilk dilimi
+> uygulandi: `NavAgent.clearancePadding` + `PathRequest.safetyMargin`
+> (`cellSize * 0.5` default), effective-radius blocker/bounds erozyonu ve
+> AIController navAgent clearance wiring (bkz. asagidaki checklist).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1051,18 +1055,23 @@ Tamamlanan Target Point start-flag authoring dilim notu (2026-07-07):
 
 Planlanan AI Navigation clearance / agent radius checklist'i:
 
-- [ ] Unreal/Recast `Agent Radius` karsiligi icin Forge navigation sozlesmesini
+- [x] Unreal/Recast `Agent Radius` karsiligi icin Forge navigation sozlesmesini
       netlestir: path noktasi capsule merkezi icindir; engeller agent radius +
       ek guvenlik payi kadar erozyona ugratilmis kabul edilir.
-- [ ] `NavAgent` modeline optional `clearancePadding` ekle; effective blocker
+      (`engine/navigation/gridNavigation.ts` modul doc'una yazildi.)
+- [x] `NavAgent` modeline optional `clearancePadding` ekle; effective blocker
       sisirme mesafesi `agent.radius + clearancePadding + gridSafetyMargin`
       olarak hesaplansin.
-- [ ] `gridSafetyMargin` icin cell size kaynakli hata payini tanimla
-      (baslangic onerisi: `cellSize * 0.5`) ve testlerle kilitle.
-- [ ] AIController `navAgent` props/Details alanlarina `clearancePadding`
+- [x] `gridSafetyMargin` icin cell size kaynakli hata payini tanimla
+      (baslangic onerisi: `cellSize * 0.5`) ve testlerle kilitle. (Opsiyonel
+      `PathRequest.safetyMargin` override; default `cellSize * 0.5`.)
+- [x] AIController `navAgent` props/Details alanlarina `clearancePadding`
       ekle; varsayilan degeri dar koridorlari tamamen kapatmayacak sekilde
-      dusuk tut (onerilen ilk deger: `0.1` veya `0.15`).
-- [ ] `findGridPath` icinde blocker passability testleri effective radius ile
+      dusuk tut (onerilen ilk deger: `0.1` veya `0.15`). (`AINavAgentConfig`
+      alani + reader; default component props seed'inde `clearancePadding: 0.1`.
+      navAgent tuning diger alanlar gibi opak props olarak edit ediliyor; ayri
+      dedicated Details widget'i henuz yok.)
+- [x] `findGridPath` icinde blocker passability testleri effective radius ile
       calissin; authored nav bounds da ayni effective radius ile iceriden
       daraltilsin.
 - [ ] Ara waypoint varis toleransini final hedef toleransindan ayir:
@@ -1093,6 +1102,29 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
 - [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` AI Navigation overlay
       smoke ve runtime Playground kose-donus smoke.
+
+Tamamlanan AI Navigation clearance / effective radius ilk dilim notu (2026-07-07):
+
+- `engine/navigation/gridNavigation.ts` navigation sozlesmesi netlestirildi:
+  path noktasi capsule merkezidir, engeller `effectiveRadius = agent.radius +
+  agent.clearancePadding + safetyMargin` kadar erozyona ugrar. `NavAgent`'a
+  optional `clearancePadding` (default 0) ve `PathRequest`'e optional
+  `safetyMargin` (default `cellSize * 0.5`, `0` ile kapatilabilir) eklendi.
+- `findGridPath` blocker passability testleri ve authored nav bounds erozyonu
+  artik effective radius kullaniyor; mevcut path-around/goal-blocked/authored-
+  bounds ve query `navReachable` testleri yeni default margin ile yesil kaldi.
+- `AINavAgentConfig.clearancePadding` alani + `readNavAgentConfig` okumasi
+  eklendi; `RuntimeSceneApp.aiNavAgentForEntity` AIController navAgent'tan
+  clearance'i path request'e tasiyor. Editor default component props seed'i
+  `clearancePadding: 0.1` ile geliyor (opak props). Runtime AI state layout'a
+  yazilmaz.
+- Test: safetyMargin ve clearancePadding'in bir seridi lane'i kapatmasi (open
+  vs shut) deterministik olarak kilitlendi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`669 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS. Kalan: final vs ara waypoint acceptance
+  ayrimi, segment-safe path compression, clearance-aware path cost / koridor
+  ortalama, ve debug overlay'de raw vs eroded blocker + agent clearance halkasi.
 
 ### Faz 6 - Smart Objects
 

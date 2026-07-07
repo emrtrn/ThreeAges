@@ -387,6 +387,11 @@ export interface AINavAgentConfig {
   radius?: number;
   height?: number;
   maxSpeed?: number;
+  /**
+   * Extra pathfinding clearance beyond the capsule radius (Unreal `Nav Agent`
+   * slack). Kept small so narrow corridors stay traversable. Defaults to 0.
+   */
+  clearancePadding?: number;
 }
 
 /**
@@ -952,6 +957,9 @@ function readNavAgentConfig(value: SceneJsonValue | undefined): AINavAgentConfig
   if (typeof data.radius === "number" && Number.isFinite(data.radius)) config.radius = data.radius;
   if (typeof data.height === "number" && Number.isFinite(data.height)) config.height = data.height;
   if (typeof data.maxSpeed === "number" && Number.isFinite(data.maxSpeed)) config.maxSpeed = data.maxSpeed;
+  if (typeof data.clearancePadding === "number" && Number.isFinite(data.clearancePadding)) {
+    config.clearancePadding = data.clearancePadding;
+  }
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
