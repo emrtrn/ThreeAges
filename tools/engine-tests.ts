@@ -20570,6 +20570,22 @@ check("createAiNavigationView draws inflated blockers and agent clearance rings"
   disposeAiNavigationView(view);
 });
 
+check("createAiNavigationView highlights path segments that violate inflated clearance", () => {
+  const view = createAiNavigationView({
+    inflatedBlockers: [{ min: [0.25, 0, -0.25], max: [0.75, 2, 0.25] }],
+    followers: [
+      {
+        status: "following",
+        waypointIndex: 1,
+        path: [[-1, 0, 0], [1, 0, 0]],
+      },
+    ],
+  });
+  assert.ok(view.getObjectByName("ai-nav-path"), "base path remains visible");
+  assert.ok(view.getObjectByName("ai-nav-path-clearance-violation"), "violating path segment is highlighted");
+  disposeAiNavigationView(view);
+});
+
 check("createAiNavigationView draws AI query candidates and winner markers", () => {
   const view = createAiNavigationView({
     queries: [

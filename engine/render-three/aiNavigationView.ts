@@ -72,6 +72,7 @@ const BOUNDS_COLOR = 0x52a3ff;
 const PATH_COLOR = 0x3fd47f;
 const PATH_STALLED_COLOR = 0xffc857;
 const PATH_FAILED_COLOR = 0xff4d6d;
+const PATH_CLEARANCE_VIOLATION_COLOR = 0xff8a00;
 const WAYPOINT_COLOR = 0xfff06a;
 const AGENT_CLEARANCE_COLOR = 0xffe08a;
 const SIGHT_COLOR = 0x8ee66b;
@@ -136,6 +137,10 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
           : PATH_COLOR;
     const path = pathSegments(follower.path, y + 0.08);
     if (path.length > 0) group.add(lineSegments("ai-nav-path", path, color, 0.95));
+    const violations = pathClearanceViolationSegments(follower.path, input.inflatedBlockers ?? [], y + 0.095);
+    if (violations.length > 0) {
+      group.add(lineSegments("ai-nav-path-clearance-violation", violations, PATH_CLEARANCE_VIOLATION_COLOR, 1));
+    }
     const waypoint = follower.path[follower.waypointIndex] ?? follower.goal ?? null;
     if (waypoint) {
       group.add(
@@ -365,6 +370,50 @@ function pathSegments(path: readonly Vec3[], y: number): Vec3[] {
     out.push([a[0], y, a[2]], [b[0], y, b[2]]);
   }
   return out;
+}
+
+function pathClearanceViolationSegments(
+  path: readonly Vec3[],
+  inflatedBlockers: readonly NavAabb[],
+  y: number,
+): Vec3[] {
+  if (inflatedBlockers.length === 0) return [];
+  const out: Vec3[] = [];
+  for (let i = 0; i + 1 < path.length; i += 1) {
+    const a = path[i]!;
+    const b = path[i + 1]!;
+    if (!inflatedBlockers.some((blocker) => segmentIntersectsAabb2d(a, b, blocker))) continue;
+    out.push([a[0], y, a[2]], [b[0], y, b[2]]);
+  }
+  return out;
+}
+
+function segmentIntersectsAabb2d(a: Vec3, b: Vec3, blocker: NavAabb): boolean {
+  let tMin = 0;
+  let tMax = 1;
+  const xHit = clipSegmentAxis(a[0], b[0], blocker.min[0], blocker.max[0], tMin, tMax);
+  if (!xHit) return false;
+  tMin = xHit[0];
+  tMax = xHit[1];
+  return Boolean(clipSegmentAxis(a[2], b[2], blocker.min[2], blocker.max[2], tMin, tMax));
+}
+
+function clipSegmentAxis(
+  from: number,
+  to: number,
+  min: number,
+  max: number,
+  tMin: number,
+  tMax: number,
+): [number, number] | null {
+  const delta = to - from;
+  if (Math.abs(delta) < 1e-9) return from >= min && from <= max ? [tMin, tMax] : null;
+  let enter = (min - from) / delta;
+  let exit = (max - from) / delta;
+  if (enter > exit) [enter, exit] = [exit, enter];
+  const clippedMin = Math.max(tMin, enter);
+  const clippedMax = Math.min(tMax, exit);
+  return clippedMin <= clippedMax ? [clippedMin, clippedMax] : null;
 }
 
 function routeLinkSegments(from: Vec3, to: Vec3, y: number): Vec3[] {

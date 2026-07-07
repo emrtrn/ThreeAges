@@ -88,6 +88,9 @@
 > Revizyon: 2026-07-07 - AI Navigation debug overlay clearance ilk dilimi
 > uygulandi: raw blocker footprint, inflated forbidden footprint ve canli AI
 > clearance halkasi ayni shared overlay helper'inda ayri ciziliyor.
+> Revizyon: 2026-07-07 - AI Navigation debug overlay path clearance violation
+> dilimi uygulandi: inflated forbidden alanini kesen path segmentleri turuncu
+> overlay olarak ayrica ciziliyor.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1094,7 +1097,7 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
 - [ ] Debug/viewport overlay:
       - [x] raw static blocker AABB'leri ayri renkte goster.
       - [x] inflated/eroded forbidden alanlari ayri renkte goster.
-      - [ ] path segmenti clearance ihlali yapiyorsa kirmizi/turuncu ciz.
+      - [x] path segmenti clearance ihlali yapiyorsa kirmizi/turuncu ciz.
       - [ ] secili AI icin agent radius + clearance halkasi ciz.
 - [ ] Path cost iyilestirmesi:
       - [ ] nearest-obstacle distance veya clearance score hesapla.
@@ -1108,6 +1111,7 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
             kesilmez.
       - [x] path compression duvar kosesi uzerinden shortcut uretmez.
       - [x] debug overlay inflated blocker segmentlerini uretir.
+      - [x] debug overlay clearance ihlali yapan path segmentini vurgular.
 - [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` AI Navigation overlay
       smoke ve runtime Playground kose-donus smoke.
@@ -1193,6 +1197,21 @@ Tamamlanan AI Navigation debug overlay clearance ilk dilim notu (2026-07-07):
   PASS). Kalan: secili AI'ya ozel clearance halkasi, clearance ihlali yapan
   path segmenti renklendirmesi, clearance-aware path cost / koridor ortalama ve
   Playwright runtime/editor smoke.
+
+Tamamlanan AI Navigation debug overlay path clearance violation dilim notu (2026-07-07):
+
+- `createAiNavigationView` path segmentlerini `inflatedBlockers` ile 2D segment
+  vs AABB testi uzerinden karsilastirir; ihlal eden segmentler mevcut path
+  cizgisinin ustune `ai-nav-path-clearance-violation` turuncu overlay olarak
+  bindirilir.
+- Normal path rengi/status cizimi korunur; bu dilim sadece debug gorseli
+  ekler, pathfinding ya da runtime hareket davranisini degistirmez.
+- Test: inflated forbidden alanindan gecen follower path'i base path'i
+  korurken violation overlay object'i uretir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`673 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS). Kalan: secili AI'ya ozel clearance halkasi, clearance-aware path cost /
+  koridor ortalama ve Playwright runtime/editor smoke.
 
 ### Faz 6 - Smart Objects
 
