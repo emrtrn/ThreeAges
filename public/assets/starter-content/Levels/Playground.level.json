@@ -439,20 +439,22 @@
       "nextTargetPoint": "target-point-2",
       "startPoint": true,
       "waitTime": 0.5,
-      "acceptanceRadius": 1
+      "acceptanceRadius": 1,
+      "color": "#ff0000"
     },
     {
       "id": "target-point-2",
       "position": [
         -8.47,
-        0.85,
+        0.83,
         3.54
       ],
       "name": "Target Point 2",
       "scale": 1,
       "nextTargetPoint": "target-point-3",
-      "waitTime": 1,
-      "acceptanceRadius": 1
+      "waitTime": 3,
+      "acceptanceRadius": 1,
+      "color": "#ff0000"
     },
     {
       "id": "target-point-3",
@@ -464,8 +466,9 @@
       "name": "Target Point 3",
       "scale": 1,
       "nextTargetPoint": "target-point-4",
-      "waitTime": 0.5,
-      "acceptanceRadius": 1
+      "waitTime": 3,
+      "acceptanceRadius": 1,
+      "color": "#ff0000"
     },
     {
       "id": "target-point-4",
@@ -476,7 +479,9 @@
       ],
       "name": "Target Point 4",
       "scale": 1,
-      "nextTargetPoint": "target-point-5"
+      "nextTargetPoint": "target-point-5",
+      "waitTime": 0,
+      "color": "#ff0000"
     },
     {
       "id": "target-point-5",
@@ -488,7 +493,8 @@
       "name": "Target Point 5",
       "scale": 1,
       "nextTargetPoint": "target-point-1",
-      "waitTime": 0
+      "waitTime": 0,
+      "color": "#ff0000"
     }
   ],
   "actors": [
@@ -501,6 +507,11 @@
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,
+      "rotation": [
+        0,
+        90,
+        0
+      ],
       "scale": 0.4
     }
   ]

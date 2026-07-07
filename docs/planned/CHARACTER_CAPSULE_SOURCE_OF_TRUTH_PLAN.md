@@ -256,9 +256,9 @@ Legacy alanlar:
 - [x] `CharacterMovementSubsystem.footprintHalf(...)` collider-derived radius
       kullansin.
 - [x] `AISubsystem.sightTracePoint(...)` collider-derived half-height kullansin.
-- [ ] Nav profile input zinciri explicit `AIController.navAgent` kararini
+- [x] Nav profile input zinciri explicit `AIController.navAgent` kararini
       bozmadan collider fallback'i tek kaynaga baglasin.
-- [ ] Wall resolve icin mevcut `physics.colliderHalfExtents(id)` kullanimi
+- [x] Wall resolve icin mevcut `physics.colliderHalfExtents(id)` kullanimi
       korunup testle sabitlensin.
 
 ### Faz 3 - Actor Script authoring ve invariant
@@ -268,18 +268,18 @@ Legacy alanlar:
 - [x] Character seed Collider'i `DEFAULT_CAPSULE_*` ile kalmaya devam etsin.
 - [x] ActorScriptEditor CharacterMovement Details panelinden capsule alanlari
       kaldirilsin.
-- [ ] Character ana capsule Collider silme/shape degistirme/static/sensor
+- [x] Character ana capsule Collider silme/shape degistirme/static/sensor
       bozulmalarina karsi editor invariant eklensin.
-- [ ] Character compile warnings "eksik required capsule" durumunu sadece uyari
+- [x] Character compile warnings "eksik required capsule" durumunu sadece uyari
       degil, onarilabilir invariant olarak ele alsin.
 
 ### Faz 4 - Save normalization ve starter content migration
 
-- [ ] `/__save-actor` akisi `normalizeActorScriptDef(...)` uzerinden yeni
+- [x] `/__save-actor` akisi `normalizeActorScriptDef(...)` uzerinden yeni
       contract'a uygun cikti uretsin.
-- [ ] Character capsule Collider varsa CharacterMovement legacy capsule alanlari
+- [x] Character capsule Collider varsa CharacterMovement legacy capsule alanlari
       save payload'undan temizlensin.
-- [ ] Character capsule Collider eksik ama legacy movement capsule varsa
+- [x] Character capsule Collider eksik ama legacy movement capsule varsa
       migration Collider olustursun.
 - [ ] `AI_Character.actor.json`, `AI_Test.actor.json` ve starter Player
       scriptleri yeni formata tasinsin.

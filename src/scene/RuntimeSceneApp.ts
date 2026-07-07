@@ -43,6 +43,7 @@ import {
 } from "@engine/ai/behaviorAsset";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
+import { resolveCharacterCapsule } from "@engine/scene/capsule";
 import {
   findGridPath,
   searchNavGrid,
@@ -1423,10 +1424,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const entity = this.actorEntityById.get(entityId);
     const movement = entity ? readCharacterMovementComponent(entity) : undefined;
     const navAgent = entity ? readAIControllerComponent(entity)?.navAgent : undefined;
+    const characterCapsule = entity && movement ? resolveCharacterCapsule(entity) : undefined;
     return resolveNavAgentProfile({
       ...(navAgent ? { navAgent } : {}),
       ...(movement ? { movement } : {}),
-      colliderHalfExtents: this.physicsSubsystem.colliderHalfExtents(entityId),
+      colliderHalfExtents:
+        characterCapsule?.halfExtents ?? this.physicsSubsystem.colliderHalfExtents(entityId),
     });
   }
 

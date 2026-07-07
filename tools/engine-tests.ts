@@ -11282,6 +11282,53 @@ check("CharacterMovement subsystem derives ground footprint from the Collider ca
   assert.equal(transform.position[1], 0);
 });
 
+check("CharacterMovement subsystem keeps planar wall resolve on physics collider half-extents", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  actions.handleDown("KeyW");
+  actions.advance();
+  const physics = {
+    staticBlockerAabbs: () => [{ min: [-1, 0, -2.1], max: [1, 3, -1.9] }] as Aabb3[],
+    staticSurfaceTriangles: () => [],
+    colliderHalfExtents: () => [1, 3, 1] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:wide-physics-capsule",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: {
+        shape: "capsule",
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        isStatic: false,
+        isSensor: false,
+      },
+      CharacterMovement: {
+        maxWalkSpeed: 4,
+        sprintMultiplier: 1,
+        jumpSpeed: 5,
+        gravityScale: 1,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        orientRotationToMovement: true,
+      },
+    },
+  };
+  let transform: TransformComponent | null = null;
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      transform = next;
+    },
+    physics,
+    { isPlayerControlled: () => true },
+  );
+  movement.setEntities([entity]);
+  movement.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+
+  assert.ok(transform);
+  assert.ok(Math.abs(transform.position[2] - -0.9) < 1e-9, `z stopped at ${transform.position[2]}`);
+});
+
 check("CharacterMovement subsystem can orient a character to controller yaw", () => {
   const actions = new ActionMap({});
   actions.advance();
@@ -15485,6 +15532,74 @@ check("normalizeActorScriptDef coerces malformed/legacy data to a valid class", 
   const characterMovement = character.components.find((node) => node.component === "CharacterMovement");
   assert.equal(characterMovement?.props.capsuleRadius, undefined);
   assert.equal(characterMovement?.props.capsuleHalfHeight, undefined);
+});
+
+check("normalizeActorScriptDef repairs the required Character capsule and strips movement capsule props", () => {
+  const migrated = normalizeActorScriptDef({
+    name: "LegacyAI",
+    parentClass: "character",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      {
+        id: "move",
+        parent: "root",
+        component: "CharacterMovement",
+        props: {
+          capsuleRadius: 1,
+          capsuleHalfHeight: 3,
+          maxWalkSpeed: 2,
+        },
+      },
+    ],
+  });
+  const addedCapsule = migrated.components.find(
+    (node) => node.component === "Collider" && node.props.shape === "capsule",
+  );
+  assert.equal(addedCapsule?.parent, "root");
+  assert.equal(addedCapsule?.props.capsuleRadius, 1);
+  assert.equal(addedCapsule?.props.capsuleHalfHeight, 3);
+  assert.equal(addedCapsule?.props.isStatic, false);
+  assert.equal(addedCapsule?.props.isSensor, false);
+  const movement = migrated.components.find((node) => node.component === "CharacterMovement");
+  assert.equal(movement?.props.capsuleRadius, undefined);
+  assert.equal(movement?.props.capsuleHalfHeight, undefined);
+
+  const repaired = validateSaveActorPayload({
+    path: "assets/blueprints/BrokenCharacter.actor.json",
+    actor: {
+      name: "BrokenCharacter",
+      parentClass: "character",
+      components: [
+        { id: "root", component: "Transform", props: {} },
+        {
+          id: "capsule",
+          parent: "root",
+          component: "Collider",
+          props: {
+            shape: "box",
+            size: [4, 8, 4],
+            isStatic: true,
+            isSensor: true,
+          },
+        },
+        {
+          id: "move",
+          parent: "root",
+          component: "CharacterMovement",
+          props: { capsuleRadius: 0.3, capsuleHalfHeight: 0.9 },
+        },
+      ],
+    },
+  });
+  const repairedCapsule = (repaired.actor.components as Array<{ id: string; component: string; props: Record<string, unknown> }>).find(
+    (node) => node.id === "capsule",
+  );
+  assert.equal(repairedCapsule?.props.shape, "capsule");
+  assert.equal(repairedCapsule?.props.capsuleRadius, 2);
+  assert.equal(repairedCapsule?.props.capsuleHalfHeight, 4);
+  assert.equal(repairedCapsule?.props.isStatic, false);
+  assert.equal(repairedCapsule?.props.isSensor, false);
+  assert.equal(repairedCapsule?.props.size, undefined);
 });
 
 check("actor save payload requires a .actor.json path and normalizes the body", () => {

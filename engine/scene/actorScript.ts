@@ -17,7 +17,11 @@
 import type { SceneJsonValue } from "./entity";
 import type { MetadataFieldDef, MetadataFieldType } from "./metadataSchema";
 import type { MetadataValue } from "./layout";
-import { DEFAULT_CAPSULE_HALF_HEIGHT, DEFAULT_CAPSULE_RADIUS } from "./capsule";
+import {
+  DEFAULT_CAPSULE_HALF_HEIGHT,
+  DEFAULT_CAPSULE_RADIUS,
+  resolveCapsuleDimensions,
+} from "./capsule";
 
 /** Parent class a user picks when creating an Actor Script (Unreal "Pick Parent Class"). */
 export const PARENT_CLASSES = [
@@ -424,6 +428,100 @@ function normalizeMessageBinding(value: unknown): MessageBinding | null {
   return binding;
 }
 
+function normalizeCharacterComponentContract(
+  components: ComponentTemplateNode[],
+): ComponentTemplateNode[] {
+  const root = components.find((node) => node.parent === undefined);
+  const rootId = root?.id ?? "root";
+  const movement = components.find((node) => node.component === "CharacterMovement");
+  const scrubMovementCapsuleProps = (): void => {
+    for (const node of components) {
+      if (node.component !== "CharacterMovement") continue;
+      delete node.props.capsuleRadius;
+      delete node.props.capsuleHalfHeight;
+    }
+  };
+
+  const primaryCapsule =
+    components.find((node) => node.id === "capsule") ??
+    components.find(
+      (node) =>
+        node.component === "Collider" &&
+        node.props.shape === "capsule" &&
+        node.props.isSensor !== true,
+    );
+  if (primaryCapsule) {
+    primaryCapsule.component = "Collider";
+    normalizePrimaryCharacterCapsule(primaryCapsule, movement);
+    scrubMovementCapsuleProps();
+    return components;
+  }
+
+  const capsule = defaultCharacterComponents().find((node) => node.id === "capsule");
+  if (!capsule) return components;
+  const node: ComponentTemplateNode = {
+    ...capsule,
+    id: uniqueComponentId(components, "capsule"),
+    parent: rootId,
+    props: { ...capsule.props },
+  };
+  delete node.props.capsuleRadius;
+  delete node.props.capsuleHalfHeight;
+  normalizePrimaryCharacterCapsule(node, movement);
+  components.splice(root ? components.indexOf(root) + 1 : 0, 0, node);
+  scrubMovementCapsuleProps();
+  return components;
+}
+
+function normalizePrimaryCharacterCapsule(
+  node: ComponentTemplateNode,
+  movement: ComponentTemplateNode | undefined,
+): void {
+  const size = readVec3Value(node.props.size);
+  const radius =
+    readPositiveNumber(node.props.capsuleRadius) ??
+    (size ? Math.max(size[0], size[2]) / 2 : undefined) ??
+    readPositiveNumber(movement?.props.capsuleRadius) ??
+    DEFAULT_CAPSULE_RADIUS;
+  const halfHeight =
+    readPositiveNumber(node.props.capsuleHalfHeight) ??
+    (size ? size[1] / 2 : undefined) ??
+    readPositiveNumber(movement?.props.capsuleHalfHeight) ??
+    DEFAULT_CAPSULE_HALF_HEIGHT;
+  const capsule = resolveCapsuleDimensions(radius, halfHeight);
+  node.props = {
+    ...node.props,
+    shape: "capsule",
+    capsuleRadius: capsule.radius,
+    capsuleHalfHeight: capsule.halfHeight,
+    isStatic: false,
+    isSensor: false,
+    simulatePhysics: false,
+  };
+  delete node.props.size;
+  delete node.props.center;
+}
+
+function uniqueComponentId(components: readonly ComponentTemplateNode[], preferred: string): string {
+  const used = new Set(components.map((node) => node.id));
+  if (!used.has(preferred)) return preferred;
+  for (let index = 2; ; index += 1) {
+    const candidate = `${preferred}-${index}`;
+    if (!used.has(candidate)) return candidate;
+  }
+}
+
+function readVec3Value(value: SceneJsonValue | undefined): [number, number, number] | undefined {
+  if (!Array.isArray(value) || value.length !== 3) return undefined;
+  const [x, y, z] = value;
+  if (typeof x !== "number" || typeof y !== "number" || typeof z !== "number") return undefined;
+  return [x, y, z];
+}
+
+function readPositiveNumber(value: SceneJsonValue | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
 /**
  * Defensively coerces arbitrary JSON into a valid {@link ActorScriptDef}.
  *
@@ -448,6 +546,9 @@ export function normalizeActorScriptDef(value: unknown, fallbackName = "Untitled
   // Always keep a root Transform so the component tree has an anchor.
   if (!components.some((node) => node.parent === undefined)) {
     components.unshift({ id: "root", component: "Transform", props: {} });
+  }
+  if (parentClass === "character") {
+    normalizeCharacterComponentContract(components);
   }
 
   const eventBindings = Array.isArray(input.eventBindings)

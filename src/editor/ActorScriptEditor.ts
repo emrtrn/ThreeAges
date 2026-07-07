@@ -675,6 +675,7 @@ export class ActorScriptEditor {
     const parent = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-class-parent]");
     parent?.addEventListener("change", () => {
       this.def.parentClass = parent.value as ParentClass;
+      this.normalizeDefForEditor();
       this.markDirty();
       this.refreshLists();
       // Show/hide the Game Mode "Default Pawn Class" picker for the new parent.
@@ -1117,6 +1118,7 @@ export class ActorScriptEditor {
     const kind = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-node-kind]");
     kind?.addEventListener("change", () => {
       node.component = kind.value as ActorComponentKind;
+      this.normalizeDefForEditor();
       this.markDirty();
       this.refreshLists();
       this.renderDetails();
@@ -1190,6 +1192,11 @@ export class ActorScriptEditor {
         props.classList.add("is-invalid");
       }
     });
+    props?.addEventListener("change", () => {
+      this.normalizeDefForEditor();
+      this.renderDetails();
+      this.syncViewport();
+    });
   }
 
   /**
@@ -1243,6 +1250,7 @@ export class ActorScriptEditor {
         delete node.props.capsuleHalfHeight;
       }
       this.markDirty();
+      this.normalizeDefForEditor();
       this.renderDetails();
       this.syncViewport();
     });
@@ -1277,7 +1285,9 @@ export class ActorScriptEditor {
       const input = this.detailsHost.querySelector<HTMLInputElement>(selector);
       input?.addEventListener("change", () => {
         node.props[key] = input.checked;
+        this.normalizeDefForEditor();
         this.markDirty();
+        this.renderDetails();
         this.syncViewport();
       });
     };
@@ -1710,6 +1720,7 @@ export class ActorScriptEditor {
     if (this.selection.kind === "component" && this.selection.id === id) {
       this.selection = { kind: "class" };
     }
+    this.normalizeDefForEditor();
     this.markDirty();
     this.render();
   }
@@ -1946,6 +1957,17 @@ export class ActorScriptEditor {
 
   private markDirty(): void {
     this.dirty = true;
+  }
+
+  private normalizeDefForEditor(): void {
+    const selection = this.selection;
+    this.def = normalizeActorScriptDef(this.def, this.def.name);
+    if (
+      selection.kind === "component" &&
+      !this.def.components.some((node) => node.id === selection.id)
+    ) {
+      this.selection = { kind: "class" };
+    }
   }
 
   private setStatus(message: string, tone: StatusTone = "info"): void {
