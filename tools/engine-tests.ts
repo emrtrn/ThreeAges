@@ -6473,6 +6473,37 @@ check("grid navigation clearance padding erodes obstacles by extra slack", () =>
   assert.equal(padded.status, "failure"); // padding keeps the agent clear of both walls
 });
 
+check("grid navigation keeps narrow-corner waypoints outside capsule clearance", () => {
+  const wall: Aabb3 = { min: [-0.25, 0, -0.25], max: [0.75, 2, 0.75] };
+  const clearance = 0.5;
+  const inflatedWall: Aabb3 = {
+    min: [wall.min[0] - clearance, wall.min[1], wall.min[2] - clearance],
+    max: [wall.max[0] + clearance, wall.max[1], wall.max[2] + clearance],
+  };
+  const path = findGridPath({
+    start: [-1.5, 0, 0],
+    goal: [0.5, 0, 1.75],
+    agent: { radius: 0.25, height: 1.8, clearancePadding: 0.25 },
+    blockers: [wall],
+    bounds: [{ min: [-3, -1, -2], max: [3, 3, 4] }],
+    cellSize: 0.5,
+    safetyMargin: 0,
+  });
+  assert.equal(path.status, "success");
+  for (const point of path.points) {
+    const insideInflatedX = point[0] >= inflatedWall.min[0] && point[0] <= inflatedWall.max[0];
+    const insideInflatedZ = point[2] >= inflatedWall.min[2] && point[2] <= inflatedWall.max[2];
+    assert.equal(insideInflatedX && insideInflatedZ, false, `waypoint inside capsule clearance: ${point}`);
+  }
+  for (let i = 0; i < path.points.length - 1; i += 1) {
+    assert.equal(
+      segmentHitsTestAabb2d(path.points[i]!, path.points[i + 1]!, inflatedWall),
+      false,
+      `segment ${i} crosses capsule clearance: ${JSON.stringify(path.points)}`,
+    );
+  }
+});
+
 check("grid navigation adds clearance cost so corridor routes prefer the middle", () => {
   const wallL: Aabb3 = { min: [-4, 0, -5], max: [-2, 2, 5] };
   const wallR: Aabb3 = { min: [2, 0, -5], max: [4, 2, 5] };

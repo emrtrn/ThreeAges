@@ -19,6 +19,15 @@ async function readJson(path) {
   return JSON.parse(await readFile(path, "utf8"));
 }
 
+async function readOptionalText(path) {
+  try {
+    return await readFile(path, "utf8");
+  } catch (error) {
+    if (error && error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 function ensureInstanceGroup(scene, assetId) {
   if (!Array.isArray(scene.instances)) scene.instances = [];
   let group = scene.instances.find((entry) => entry?.assetId === assetId);
@@ -202,6 +211,12 @@ export default async function globalSetup() {
     `${JSON.stringify({
       manifestRaw,
       assetManifestRaw,
+      smokeFileBackups: [
+        { path: SMOKE_SCENE, raw: await readOptionalText(SMOKE_SCENE_PATH) },
+        { path: SMOKE_TARGET_SCENE, raw: await readOptionalText(SMOKE_TARGET_SCENE_PATH) },
+        { path: SMOKE_PATROL_SCENE, raw: await readOptionalText(SMOKE_PATROL_SCENE_PATH) },
+        { path: SMOKE_MENU, raw: await readOptionalText(SMOKE_MENU_PATH) },
+      ],
       smokeScenes: [SMOKE_SCENE, SMOKE_TARGET_SCENE, SMOKE_PATROL_SCENE],
       smokeFiles: [SMOKE_MENU],
     }, null, 2)}\n`,

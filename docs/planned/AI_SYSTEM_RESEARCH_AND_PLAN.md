@@ -97,6 +97,11 @@
 > Revizyon: 2026-07-07 - AI Navigation path cost iyilestirmesi uygulandi:
 > inflated blocker'a yakin grid hucreleri ek maliyet aliyor, rota mumkunse
 > koridor ortasina yaklasiyor.
+> Revizyon: 2026-07-07 - AI Navigation clearance test hardening uygulandi:
+> dar kose, dar gecit failure ve ara waypoint acceptance test maddeleri
+> engine regression kapsaminda kapatildi.
+> Revizyon: 2026-07-07 - AI Navigation clearance Playwright smoke uygulandi:
+> editor Show overlay ve runtime debug path-following waypoint smoke eklendi.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1109,18 +1114,18 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
       - [x] nearest-obstacle distance veya clearance score hesapla.
       - [x] A* maliyetine duvara yakin hucreler icin ek cost ekle.
       - [x] AI mecbur kalmadikca koridorun ortasina yakin rota secsin.
-- [ ] Testler:
-      - [ ] dar kose path'i capsule radius + clearance kadar uzak waypoint
+- [x] Testler:
+      - [x] dar kose path'i capsule radius + clearance kadar uzak waypoint
             uretir.
-      - [ ] clearance cok buyukse dar gecit failure verir.
-      - [ ] final acceptance buyuk olsa bile ara waypoint erken atlanip kose
+      - [x] clearance cok buyukse dar gecit failure verir.
+      - [x] final acceptance buyuk olsa bile ara waypoint erken atlanip kose
             kesilmez.
       - [x] path compression duvar kosesi uzerinden shortcut uretmez.
       - [x] debug overlay inflated blocker segmentlerini uretir.
       - [x] debug overlay clearance ihlali yapan path segmentini vurgular.
       - [x] debug overlay secili AI agent radius + clearance halkasini uretir.
       - [x] path cost genis koridorda duvar dibi yerine orta hatta yaklasir.
-- [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
+- [x] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` AI Navigation overlay
       smoke ve runtime Playground kose-donus smoke.
 
@@ -1252,6 +1257,34 @@ Tamamlanan AI Navigation path cost iyilestirme dilim notu (2026-07-07):
   (`675 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
   PASS), `npm.cmd run check:assets` PASS. Kalan: Playwright runtime/editor
   smoke.
+
+Tamamlanan AI Navigation clearance test hardening notu (2026-07-07):
+
+- Dar kose regression'i, capsule radius + clearance ile sisirilmis blocker
+  alanina waypoint ya da segment girmedigini dogrular.
+- Dar gecit failure maddesi mevcut `clearance padding erodes obstacles by extra
+  slack` testiyle; buyuk clearance padding'in gecidi kapattigi kapsandi.
+- Buyuk final acceptance maddesi mevcut `advanceWaypoint keeps intermediate
+  waypoints tight and honors the final acceptance` testiyle; ara waypoint'in
+  final acceptance tarafindan erken atlanmadigi kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`676 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS.
+
+Tamamlanan AI Navigation clearance Playwright smoke notu (2026-07-07):
+
+- `tests/smoke/ai-navigation-clearance.spec.ts`, editor `Show > AI Navigation`
+  toggle/canvas/browser-error smoke ve runtime patrol sahnesinde debug `ai nav`
+  + `following wp:n/m` smoke kapsar.
+- Playwright global setup/teardown, takipli smoke fixture dosyalarini silmeden
+  onceki icerigi geri yukleyecek sekilde sertlestirildi.
+- Dogrulama: hedefli `npx.cmd playwright test
+  tests/smoke/ai-navigation-clearance.spec.ts` yesil (`2 passed`);
+  `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`676 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS. Full `npm.cmd run smoke:browser`
+  denemesi arac zaman asimina takildi; hedefli clearance smoke ve local gate
+  yesil.
 
 ### Faz 6 - Smart Objects
 

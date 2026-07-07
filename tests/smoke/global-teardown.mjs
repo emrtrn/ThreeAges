@@ -1,5 +1,5 @@
-import { readFile, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 
 const STATE_DIR = resolve(".playwright-smoke");
 const STATE_FILE = resolve(STATE_DIR, "state.json");
@@ -20,9 +20,24 @@ export default async function globalTeardown() {
   if (typeof state.assetManifestRaw === "string") {
     await writeFile(ASSET_MANIFEST_PATH, state.assetManifestRaw, "utf8");
   }
+  const restoredSmokeFiles = new Set();
+  if (Array.isArray(state.smokeFileBackups)) {
+    for (const backup of state.smokeFileBackups) {
+      if (!backup || typeof backup.path !== "string") continue;
+      const target = resolve("public", backup.path);
+      restoredSmokeFiles.add(backup.path);
+      if (typeof backup.raw === "string") {
+        await mkdir(dirname(target), { recursive: true });
+        await writeFile(target, backup.raw, "utf8");
+      } else {
+        await rm(target, { force: true });
+      }
+    }
+  }
   if (Array.isArray(state.smokeScenes)) {
     for (const smokeScene of state.smokeScenes) {
       if (typeof smokeScene === "string") {
+        if (restoredSmokeFiles.has(smokeScene)) continue;
         await rm(resolve("public", smokeScene), { force: true });
       }
     }
@@ -30,6 +45,7 @@ export default async function globalTeardown() {
   if (Array.isArray(state.smokeFiles)) {
     for (const smokeFile of state.smokeFiles) {
       if (typeof smokeFile === "string") {
+        if (restoredSmokeFiles.has(smokeFile)) continue;
         await rm(resolve("public", smokeFile), { force: true });
       }
     }
