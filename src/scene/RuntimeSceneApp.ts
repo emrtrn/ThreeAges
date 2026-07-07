@@ -45,6 +45,8 @@ import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
 import {
   findGridPath,
+  searchNavGrid,
+  NavGridCache,
   advanceWaypoint,
   type NavAgent,
   type NavAabb,
@@ -450,6 +452,28 @@ const AI_INTERMEDIATE_WAYPOINT_ACCEPTANCE = Math.min(AI_NAV_CELL_SIZE * 0.35, 0.
 const AI_SEPARATION_WEIGHT = 0.75;
 /** Stuck recoveries (replans) per goal before the move fails outright. */
 const AI_MAX_STUCK_REPLANS = 2;
+/**
+ * Granularity the agent foot height is snapped to when keying a baked nav grid.
+ * Baking is per foot-plane (it decides which blockers are vertical obstacles), so
+ * without bucketing an agent's per-frame Y jitter would rebuild the grid every
+ * tick. Half a cell is coarse enough to keep the cache stable on flat ground yet
+ * fine enough to separate distinct floors.
+ */
+const AI_NAV_FOOT_Y_BUCKET = AI_NAV_CELL_SIZE;
+
+function bucketNavFootY(footY: number): number {
+  if (!Number.isFinite(footY)) return 0;
+  return Math.round(footY / AI_NAV_FOOT_Y_BUCKET) * AI_NAV_FOOT_Y_BUCKET;
+}
+
+/** Cheap order-sensitive signature of authored nav bounds for cache invalidation. */
+function navBoundsSignature(bounds: readonly NavAabb[]): string {
+  let signature = "";
+  for (const bound of bounds) {
+    signature += `${bound.min[0]},${bound.min[1]},${bound.min[2]},${bound.max[0]},${bound.max[1]},${bound.max[2]};`;
+  }
+  return signature;
+}
 
 function inflateNavAabb2d(blocker: NavAabb, radius: number): NavAabb {
   const r = Math.max(0, radius);
@@ -530,6 +554,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     perceptionSourceFilter: (entity) => this.isAiPerceptionSource(entity),
   });
   private readonly aiPathFollowing = new Map<string, RuntimeAiPathFollowing>();
+  /**
+   * Bakes one nav grid per agent profile and reuses it across path queries while
+   * static blockers + nav bounds are unchanged (the Unreal navmesh-bake analogue).
+   * Keyed by {@link aiNavRevisionToken}; rebuilds automatically when that token
+   * changes. Only used when an AI Navigation Volume supplies query-independent
+   * bounds — otherwise the grid extent depends on start/goal and can't be baked.
+   */
+  private readonly navGridCache = new NavGridCache();
+  /** Last static-blocker array identity seen; a new reference bumps the revision. */
+  private navBlockerRevisionRef: readonly NavAabb[] | null = null;
+  private navBlockerRevision = 0;
   private readonly aiCharacterAnimators = new Map<string, RuntimeAiCharacterAnimator>();
   private aiNavigationView: Group | null = null;
   /** Manifest sound asset id -> fetchable file URL, filled after the manifest loads. */
@@ -1322,14 +1357,39 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private buildAiPath(entityId: string, start: Vec3, goal: Vec3) {
     const bounds = this.aiNavigationBounds();
-    return findGridPath({
-      start,
-      goal: [...goal],
-      agent: this.aiNavAgentForEntity(entityId),
-      blockers: this.physicsSubsystem.staticBlockerAabbs(),
-      ...(bounds.length > 0 ? { bounds } : {}),
+    const agent = this.aiNavAgentForEntity(entityId);
+    const blockers = this.physicsSubsystem.staticBlockerAabbs();
+    if (bounds.length === 0) {
+      // No authored AI Navigation Volume: the grid extent is derived from
+      // start/goal, so it is single-query only and can't be baked/reused.
+      return findGridPath({ start, goal: [...goal], agent, blockers, cellSize: AI_NAV_CELL_SIZE });
+    }
+    // Bounded case: bake once per agent profile and reuse across queries. The
+    // grid rebuilds automatically when a static blocker moves or a nav volume is
+    // edited (both fold into the revision token), so there is no manual build.
+    const grid = this.navGridCache.getOrBuild(this.aiNavRevisionToken(blockers, bounds), {
+      agent,
+      blockers,
+      bounds,
+      footY: bucketNavFootY(start[1]),
       cellSize: AI_NAV_CELL_SIZE,
     });
+    if (!grid) return { status: "failure" as const, points: [], visited: 0 };
+    return searchNavGrid(grid, start, goal);
+  }
+
+  /**
+   * Revision token for the baked nav grid cache: bumps a counter whenever the
+   * physics static-blocker array is rebuilt (identity changes on spawn/destroy/
+   * move/collision-toggle) and folds in an authored-bounds signature, so any
+   * change to obstacles or nav volumes invalidates every cached grid.
+   */
+  private aiNavRevisionToken(blockers: readonly NavAabb[], bounds: readonly NavAabb[]): string {
+    if (blockers !== this.navBlockerRevisionRef) {
+      this.navBlockerRevisionRef = blockers;
+      this.navBlockerRevision += 1;
+    }
+    return `${this.navBlockerRevision}|${navBoundsSignature(bounds)}`;
   }
 
   private aiNavigationBounds(): NavAabb[] {
@@ -1949,6 +2009,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.movingPlatformSubsystem.clear();
     this.characterMovementSubsystem.clear();
     this.aiPathFollowing.clear();
+    this.navGridCache.clear();
+    this.navBlockerRevisionRef = null;
     this.aiCharacterAnimators.clear();
     this.aiSubsystem.setEntities([]);
     this.behaviorSubsystem.setEntities([]);

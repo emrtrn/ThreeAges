@@ -95,7 +95,15 @@ import {
   createDefaultAiServiceRegistry,
   createDefaultAiTaskRegistry,
 } from "../engine/ai/behaviorRunner";
-import { findGridPath, advanceWaypoint } from "../engine/navigation/gridNavigation";
+import {
+  findGridPath,
+  advanceWaypoint,
+  buildNavGrid,
+  searchNavGrid,
+  NavGridCache,
+  type NavAabb,
+  type NavGridBuildRequest,
+} from "../engine/navigation/gridNavigation";
 import {
   freshStuckState,
   isStuck,
@@ -6546,6 +6554,96 @@ check("grid navigation compression keeps grid points when a shortcut would cross
       `segment ${i} crosses blocker: ${JSON.stringify(path.points)}`,
     );
   }
+});
+
+check("nav grid baked once matches dynamic findGridPath across many queries", () => {
+  // Bake a single grid over authored bounds + a wall, then reuse it for many
+  // start/goal pairs. Each baked search must equal a fresh dynamic path — this is
+  // the load-bearing guarantee for the cache path (bake once, query many).
+  const wall: NavAabb = { min: [-0.25, 0, -1], max: [0.25, 2, 1] };
+  const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
+  const agent = { radius: 0.25, height: 1.8, stepHeight: 0.45 };
+  const grid = buildNavGrid({ agent, blockers: [wall], bounds, footY: 0, cellSize: 0.5 });
+  assert.ok(grid, "grid should build over authored bounds");
+  const queries: Array<{ start: [number, number, number]; goal: [number, number, number] }> = [
+    { start: [-2, 0, 0], goal: [2, 0, 0] },
+    { start: [-2, 0, -2], goal: [2, 0, 2] },
+    { start: [0, 0, -2.5], goal: [0, 0, 2.5] },
+    { start: [-2.5, 0, 2], goal: [2.5, 0, -2] },
+    { start: [1, 0, 0], goal: [1, 0, 0] }, // same cell
+    { start: [-2, 0, 0], goal: [5, 0, 0] }, // goal outside bounds -> failure
+  ];
+  for (const { start, goal } of queries) {
+    const baked = searchNavGrid(grid!, start, goal);
+    const dynamic = findGridPath({ start, goal, agent, blockers: [wall], bounds, cellSize: 0.5 });
+    assert.deepEqual(baked, dynamic, `baked != dynamic for ${JSON.stringify({ start, goal })}`);
+  }
+});
+
+check("NavGridCache reuses a baked grid until the token changes", () => {
+  const cache = new NavGridCache();
+  const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
+  const req: NavGridBuildRequest = {
+    agent: { radius: 0.25, height: 1.8, stepHeight: 0.45 },
+    blockers: [],
+    bounds,
+    footY: 0,
+    cellSize: 0.5,
+  };
+  const a = cache.getOrBuild("rev-1", req);
+  const b = cache.getOrBuild("rev-1", req);
+  assert.ok(a && b);
+  assert.equal(a, b, "same token + agent returns the identical cached grid");
+  assert.equal(cache.size, 1);
+  const c = cache.getOrBuild("rev-2", req);
+  assert.notEqual(c, a, "a new token rebuilds the grid");
+  assert.equal(cache.size, 1, "same agent profile keeps a single cache slot");
+});
+
+check("NavGridCache keys separate grids per agent profile", () => {
+  const cache = new NavGridCache();
+  const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
+  const small = cache.getOrBuild("rev", { agent: { radius: 0.2, height: 1.8 }, blockers: [], bounds, footY: 0, cellSize: 0.5 });
+  const large = cache.getOrBuild("rev", { agent: { radius: 0.6, height: 1.8 }, blockers: [], bounds, footY: 0, cellSize: 0.5 });
+  assert.ok(small && large);
+  assert.notEqual(small, large, "different agent radius => different grid");
+  assert.equal(cache.size, 2);
+  const smallAgain = cache.getOrBuild("rev", { agent: { radius: 0.2, height: 1.8 }, blockers: [], bounds, footY: 0, cellSize: 0.5 });
+  assert.equal(smallAgain, small, "same profile + token reuses the grid");
+});
+
+check("nav grid rebuild after a blocker moves reroutes the path (auto-rebuild)", () => {
+  const cache = new NavGridCache();
+  const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
+  const agent = { radius: 0.25, height: 1.8, stepHeight: 0.45 };
+  const start: [number, number, number] = [-2.5, 0, 0];
+  const goal: [number, number, number] = [2.5, 0, 0];
+
+  // A wall blocking the direct lane forces the route to detour in +Z.
+  const before = cache.getOrBuild("rev-1", {
+    agent,
+    blockers: [{ min: [-0.25, 0, -3], max: [0.25, 2, 0.5] }],
+    bounds,
+    footY: 0,
+    cellSize: 0.5,
+  });
+  assert.ok(before);
+  const beforePath = searchNavGrid(before!, start, goal);
+  assert.equal(beforePath.status, "success");
+  assert.ok(beforePath.points.some((point) => point[2] > 0.5), "detours around the wall");
+
+  // Same agent profile, new revision token, wall gone: the cache must rebuild
+  // (not serve the stale grid) and the route straightens out.
+  const after = cache.getOrBuild("rev-2", { agent, blockers: [], bounds, footY: 0, cellSize: 0.5 });
+  assert.ok(after);
+  assert.notEqual(after, before, "a moved blocker (new token) rebuilds the grid");
+  assert.equal(cache.size, 1, "rebuild replaces the slot, not adds one");
+  const afterPath = searchNavGrid(after!, start, goal);
+  assert.equal(afterPath.status, "success");
+  assert.ok(
+    afterPath.points.every((point) => Math.abs(point[2]) < 0.5),
+    `straight line once clear: ${JSON.stringify(afterPath.points)}`,
+  );
 });
 
 check("advanceWaypoint keeps intermediate waypoints tight and honors the final acceptance", () => {

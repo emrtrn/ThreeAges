@@ -6,6 +6,23 @@
 >
 > **Kapsam ilkesi:** Bu çalışma bir genel amaçlı "squad AI" motoru üretmek için değil, mevcut Forge AI katmanlarının birlikte çalıştığını gösteren küçük, okunabilir ve otomasyona uygun bir vertical slice üretmek içindir.
 
+> **Kod tabanına karşı doğrulama (2026-07-07):** Bu checklist'in dayandığı
+> altyapı gerçekten mevcut. `engine/ai` (blackboard, behaviorRunner, queryRunner,
+> smartObjects, targetPoints), `engine/navigation` (grid + clearance + local
+> avoidance) ve `engine/perception` doğrulandı. Plandaki `forge.setPatrolTarget`,
+> `forge.moveToPatrolTarget`, `forge.advancePatrolTarget`,
+> `forge.runQueryToBlackboard`, `forge.claimSmartObject`, `forge.useSmartObject`
+> task'ları `engine/ai/behaviorRunner.ts` default registry'sinde hazır.
+> `AI_SYSTEM_RESEARCH_AND_PLAN.md` Faz 0–6 büyük ölçüde tamamlanmış ve Playground
+> içinde çalışan bir `AI_Test` (patrol → chase → punch) demosu var. Yani bu iş
+> **yeni motor yazmak değil, mevcut motoru bir sahnede kanıtlamaktır.**
+
+> **Gerçekçi eforü küçümseme:** 7 milestone, ~6 oda, 4 ajan rolü, runtime test
+> HUD/assertion katmanı ve Playwright kapsamı toplamı efektif olarak küçük bir
+> oyundur; tek oturumluk bir iş değildir. "Checklist" formatı, işi çok sayıda
+> küçük teslimata bölmek içindir — her milestone ayrı bir iş paketi olarak ele
+> alınmalı, tümü bir arada yapılmamalıdır (bkz. §12–§13).
+
 ---
 
 ## 1. Başarı Tanımı
@@ -92,6 +109,30 @@ tests/smoke/
   ai-test-range.spec.ts
 ```
 
+### Entegrasyon gerçeği — `src/game/ai/testRange/` gerçekten neye ihtiyaç duyar?
+
+> **Önce bu soruyu cevapla:** Bu test sahnesi büyük olasılıkla **yeni engine/game
+> task'ına ihtiyaç duymaz.** Devriye, chase, investigate, query, smart object
+> claim/use, perception→blackboard akışlarının tümü `engine/ai/behaviorRunner.ts`
+> default registry'sinde built-in `forge.*` task/decorator/service olarak zaten
+> var. Bu durumda testRange işi ağırlıklı olarak **asset authoring (level +
+> blackboard/behavior/query/actor JSON) + birkaç mesaj handler'ı**dır, yeni
+> TypeScript task değil.
+
+- [ ] Milestone'lar başlamadan karar ver: hangi davranış gerçekten built-in
+      `forge.*` ile çözülemiyor? Yalnızca o dar boşluk için testRange task'ı yaz.
+- [ ] **Eğer** yeni project-task gerekiyorsa, bağlama noktası bellidir:
+      `createGameAiTaskRegistry()` (`src/game/ai/tasks.ts`) bugün yalnızca
+      `createDefaultAiTaskRegistry()` döndürüyor ve bu registry hem editor Play
+      (`SceneApp.ts`) hem runtime (`RuntimeSceneApp.ts`) tarafından
+      `AISubsystem`'e veriliyor. testRange task'ları, default registry'yi saran
+      (önce testRange map'ine, yoksa default'a düşen `get(taskId)`) bir composite
+      registry ile eklenir. `AiTaskRegistry` arayüzü tek metotludur:
+      `get(taskId): AiTaskHandler | undefined`.
+- [ ] `team.alert` / `team.clear` gibi koordinasyon mesajları **task değil**;
+      ScriptMessageBus abonelikleridir (bkz. Milestone 6 notu) — registry'ye
+      değil, ajanların subscribe/dispatch katmanına aittir.
+
 ### Basit görsel sözleşme
 
 - [ ] Kırmızı kapsül: `Guard` / düşman.
@@ -155,6 +196,13 @@ kapısını çalıştır; sonuçları dosya bazında raporla.
 
 Mevcut `AI_Test` davranışını test odası içinde açık, tekrar edilebilir ve ölçülebilir hale getirmek.
 
+> **Sıfırdan kurma; kopyala/uyarla.** Playground'da patrol → chase → punch yapan
+> çalışan bir `AI_Test` actor/behavior/blackboard seti (`public/assets/
+> starter-content/AI/AI_Test.behavior.json` ve eşlik eden asset'ler) zaten var.
+> Guard'ı bu setten türet: kopyala, `TestRange_Guard.*` olarak yeniden adlandır,
+> investigate dalını ekle. Bu, milestone'un yükünü yarıya indirir ve halihazırda
+> geçen bir referans davranışı temel alır.
+
 ### Guard davranış ağacı
 
 ```text
@@ -171,7 +219,8 @@ Selector (reactive priority)
 
 ### Checklist
 
-- [ ] Kırmızı `Guard` kapsül actor/class'ı oluştur veya mevcut AI actor'ü test sahnesine bağla.
+- [ ] **Başlangıç noktası:** mevcut Playground `AI_Test` actor/behavior/blackboard
+      setini kopyala ve `TestRange_Guard.*` olarak uyarla (sıfırdan kurma).
 - [ ] Guard için blackboard asset'i oluştur:
   - [ ] `target`
   - [ ] `hasLineOfSight`
@@ -399,6 +448,19 @@ export interface TeamAlertPayload {
 }
 ```
 
+> **Önemli — `team.alert` / `team.clear` otomatik perception stimulus'u DEĞİL.**
+> Faz 4 script-message → perception köprüsü yalnızca `Damage.*`, `alert`,
+> `ui-action`, `game-event` mesajlarını gameplay stimulus'una çevirir. `team.*`
+> yeni tiplerdir; hiçbir perception dalını kendiliğinden tetiklemez. Bunları
+> ScriptMessageBus üzerinden **açıkça** yayınlayıp, alan ajanlarda açıkça
+> subscribe edip blackboard'a yazan bir handler katmanı gerekir. Yani "mesajı
+> alan Guard A yönelir" adımı, göründüğünden daha fazla iş içerir: elle yazılan
+> bir subscribe → blackboard-write → behavior-tree-dal-tetikleme zinciri. Bu
+> katman `src/game/ai/testRange/testRangeMessages.ts` altında kalır. Alternatif:
+> koordinasyonu mevcut `alert`/`game-event` stimulus tipleri üzerine bindirip
+> perception köprüsünü yeniden kullanmak — daha az kod, ama semantik olarak daha
+> az temiz. İş paketinde bu iki yoldan biri açıkça seçilmeli.
+
 ### Checklist
 
 - [ ] Scout için perception odaklı behavior tree oluştur.
@@ -425,6 +487,14 @@ export interface TeamAlertPayload {
 
 - [ ] Her oda için `Not started`, `Running`, `Passed`, `Failed` durumu göster.
 - [ ] Başarı koşulları yalnızca görsel algıya bırakılmaz; mümkün olduğunda runtime assertion ile kayıt altına alınır.
+- [ ] **Assertion kaynağını debug snapshot deseninden besle.** Test durumları,
+      görsel DOM yerine mevcut `getAiDebugSnapshot()` (host getter) + saf,
+      DOM'suz `formatAiDebug()` (`src/scene/debugStats.ts` deseni; bkz.
+      `AI_SYSTEM_RESEARCH_AND_PLAN.md`) üzerinden okunmalı. Böylece
+      `testRangeAssertions.ts` engine testinde ve Playwright'ta aynı veriyi
+      doğrular; blackboard/state/reservation değerleri tek kaynaktan gelir. Yeni
+      test alanları gerekiyorsa snapshot tipini genişlet, ayrı bir gözlem yolu
+      açma.
 - [ ] Örnek assertion'lar:
   - [ ] Guard chase'e geçti.
   - [ ] Guard last-known position'a ulaştı.

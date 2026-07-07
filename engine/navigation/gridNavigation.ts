@@ -122,7 +122,63 @@ const MAX_GRID_CELLS = 20000;
 const CLEARANCE_COST_CELL_RADIUS = 3;
 const CLEARANCE_COST_WEIGHT = 4;
 
-export function findGridPath(request: PathRequest): PathResult {
+/**
+ * A baked ("built") navigation grid: the query-independent half of a path
+ * request precomputed once. {@link findGridPath} rebuilds this on every call;
+ * {@link buildNavGrid} + {@link searchNavGrid} let a caller bake it once (per
+ * agent profile) and reuse it for many `start`/`goal` queries — the Unreal
+ * navmesh-bake analogue. A grid is only query-independent when authored bounds
+ * are supplied (the AI Navigation Volume); the unbounded case derives its extent
+ * from `start`/`goal`, so it can only be built inline by {@link findGridPath}.
+ */
+export interface NavGrid {
+  readonly cellSize: number;
+  readonly cols: number;
+  readonly rows: number;
+  /** World X of grid cell (0,0), i.e. the eroded extent's minX. */
+  readonly originX: number;
+  /** World Z of grid cell (0,0), i.e. the eroded extent's minZ. */
+  readonly originZ: number;
+  /** Y-plane the grid was baked for (vertical blocker filtering + output height). */
+  readonly footY: number;
+  /** Effective erosion (agent radius + clearance padding + grid safety margin). */
+  readonly clearanceRadius: number;
+  /** `cols*rows` row-major passability bitset (1 = walkable). */
+  readonly passable: Uint8Array;
+  /** `cols*rows` row-major soft clearance cost added when stepping onto a cell. */
+  readonly penalty: Float32Array;
+  /** Vertically-filtered blockers, retained for final-path segment shortcutting. */
+  readonly blockers: readonly NavAabb[];
+  /** Authored navigation bounds, retained for membership + segment checks. */
+  readonly bounds?: readonly NavAabb[];
+}
+
+export interface NavGridBuildRequest {
+  readonly agent: NavAgent;
+  readonly blockers: readonly NavAabb[];
+  /** Authored navigation bounds; required for a query-independent (cacheable) grid. */
+  readonly bounds?: readonly NavAabb[];
+  /** Y-plane to bake for (vertical blocker filter + output waypoint height). */
+  readonly footY: number;
+  readonly cellSize?: number;
+  readonly safetyMargin?: number;
+  readonly boundsPadding?: number;
+  /**
+   * Unbounded fallback: without authored bounds the extent is derived from these
+   * endpoints (used by {@link findGridPath}); such a grid is single-query only.
+   */
+  readonly extentSeed?: { readonly start: Vec3; readonly goal: Vec3 };
+}
+
+/**
+ * Bakes a {@link NavGrid} from blockers + authored bounds for one agent profile.
+ * Returns `null` when there is no extent to bake (no authored bounds and no
+ * `extentSeed`) or the grid would exceed {@link MAX_GRID_CELLS}. The passability
+ * and penalty tables are computed for every cell up front so {@link searchNavGrid}
+ * is a pure table read — this is the work {@link findGridPath} otherwise repeats
+ * per query.
+ */
+export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
   const cellSize = sanePositive(request.cellSize, DEFAULT_CELL_SIZE);
   const radius = Math.max(0, finiteOr(request.agent.radius, 0));
   const clearance = Math.max(0, finiteOr(request.agent.clearancePadding, 0));
@@ -132,89 +188,190 @@ export function findGridPath(request: PathRequest): PathResult {
   const clearanceRadius = radius + clearance + safetyMargin;
   const height = Math.max(0, finiteOr(request.agent.height, 0));
   const stepHeight = Math.max(0, finiteOr(request.agent.stepHeight, 0));
+  const footY = finiteOr(request.footY, 0);
   const blockers = request.blockers.filter((blocker) =>
-    blocksAgentVertically(blocker, request.start[1], height, stepHeight),
+    blocksAgentVertically(blocker, footY, height, stepHeight),
   );
   const authoredBounds = request.bounds && request.bounds.length > 0 ? request.bounds : undefined;
-  if (authoredBounds && !pointInsideAnyAabb2d(request.start, authoredBounds)) {
-    return { status: "failure", points: [], visited: 0 };
-  }
-  if (authoredBounds && !pointInsideAnyAabb2d(request.goal, authoredBounds)) {
-    return { status: "failure", points: [], visited: 0 };
-  }
-  const bounds = authoredBounds
+  const extent = authoredBounds
     ? navBoundsFromAuthored(authoredBounds, clearanceRadius)
-    : navBounds(request.start, request.goal, blockers, clearanceRadius, request.boundsPadding);
-  const cols = Math.max(1, Math.ceil((bounds.maxX - bounds.minX) / cellSize) + 1);
-  const rows = Math.max(1, Math.ceil((bounds.maxZ - bounds.minZ) / cellSize) + 1);
-  if (cols * rows > MAX_GRID_CELLS) return { status: "failure", points: [], visited: 0 };
+    : request.extentSeed
+      ? navBounds(request.extentSeed.start, request.extentSeed.goal, blockers, clearanceRadius, request.boundsPadding)
+      : null;
+  if (!extent) return null;
+  const cols = Math.max(1, Math.ceil((extent.maxX - extent.minX) / cellSize) + 1);
+  const rows = Math.max(1, Math.ceil((extent.maxZ - extent.minZ) / cellSize) + 1);
+  if (cols * rows > MAX_GRID_CELLS) return null;
 
+  const originX = extent.minX;
+  const originZ = extent.minZ;
+  const passable = new Uint8Array(cols * rows);
+  const penalty = new Float32Array(cols * rows);
+  const clearanceCostRadius = cellSize * CLEARANCE_COST_CELL_RADIUS;
+  const hasBlockers = blockers.length > 0;
+  for (let z = 0; z < rows; z += 1) {
+    for (let x = 0; x < cols; x += 1) {
+      const point: Vec3 = [originX + x * cellSize, footY, originZ + z * cellSize];
+      const idx = z * cols + x;
+      const walkable =
+        !pointBlocked(point, blockers, clearanceRadius) &&
+        (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
+      if (!walkable) continue;
+      passable[idx] = 1;
+      if (hasBlockers) {
+        const distance = nearestInflatedBlockerDistance(point, blockers, clearanceRadius);
+        const pressure = distance >= clearanceCostRadius ? 0 : 1 - distance / clearanceCostRadius;
+        penalty[idx] = pressure * pressure * CLEARANCE_COST_WEIGHT;
+      }
+    }
+  }
+  return {
+    cellSize,
+    cols,
+    rows,
+    originX,
+    originZ,
+    footY,
+    clearanceRadius,
+    passable,
+    penalty,
+    blockers,
+    ...(authoredBounds ? { bounds: authoredBounds } : {}),
+  };
+}
+
+/**
+ * A* over a prebuilt {@link NavGrid} for one `start`/`goal`. Produces the exact
+ * same {@link PathResult} as {@link findGridPath} would for the inputs the grid
+ * was baked from (start/goal endpoints are preserved verbatim; interior waypoints
+ * sit on the grid at `grid.footY`).
+ */
+export function searchNavGrid(grid: NavGrid, start: Vec3, goal: Vec3): PathResult {
+  const authoredBounds = grid.bounds;
+  if (authoredBounds && !pointInsideAnyAabb2d(start, authoredBounds)) {
+    return { status: "failure", points: [], visited: 0 };
+  }
+  if (authoredBounds && !pointInsideAnyAabb2d(goal, authoredBounds)) {
+    return { status: "failure", points: [], visited: 0 };
+  }
+  const { cols, rows, cellSize, originX, originZ } = grid;
   const toCoord = (point: Vec3): GridCoord => ({
-    x: clamp(Math.round((point[0] - bounds.minX) / cellSize), 0, cols - 1),
-    z: clamp(Math.round((point[2] - bounds.minZ) / cellSize), 0, rows - 1),
+    x: clamp(Math.round((point[0] - originX) / cellSize), 0, cols - 1),
+    z: clamp(Math.round((point[2] - originZ) / cellSize), 0, rows - 1),
   });
   const toPoint = (coord: GridCoord): Vec3 => [
-    bounds.minX + coord.x * cellSize,
-    request.start[1],
-    bounds.minZ + coord.z * cellSize,
+    originX + coord.x * cellSize,
+    grid.footY,
+    originZ + coord.z * cellSize,
   ];
-  const passable = (coord: GridCoord): boolean => {
-    if (coord.x < 0 || coord.z < 0 || coord.x >= cols || coord.z >= rows) return false;
-    const point = toPoint(coord);
-    return !pointBlocked(point, blockers, clearanceRadius) && (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
-  };
-  const clearanceCostRadius = cellSize * CLEARANCE_COST_CELL_RADIUS;
-  const clearancePenaltyCache = new Map<string, number>();
-  const clearancePenalty = (coord: GridCoord): number => {
-    if (blockers.length === 0) return 0;
-    const key = coordKey(coord);
-    const cached = clearancePenaltyCache.get(key);
-    if (cached !== undefined) return cached;
-    const point = toPoint(coord);
-    const distance = nearestInflatedBlockerDistance(point, blockers, clearanceRadius);
-    const pressure = distance >= clearanceCostRadius ? 0 : 1 - distance / clearanceCostRadius;
-    const penalty = pressure * pressure * CLEARANCE_COST_WEIGHT;
-    clearancePenaltyCache.set(key, penalty);
-    return penalty;
-  };
+  const passable = (coord: GridCoord): boolean =>
+    coord.x >= 0 &&
+    coord.z >= 0 &&
+    coord.x < cols &&
+    coord.z < rows &&
+    grid.passable[coord.z * cols + coord.x] === 1;
 
-  const start = toCoord(request.start);
-  const goal = toCoord(request.goal);
-  if (!passable(start) || !passable(goal)) return { status: "failure", points: [], visited: 0 };
-  if (sameCoord(start, goal)) {
-    return { status: "success", points: [cloneVec3(request.start), cloneVec3(request.goal)], visited: 1 };
+  const startCoord = toCoord(start);
+  const goalCoord = toCoord(goal);
+  if (!passable(startCoord) || !passable(goalCoord)) {
+    return { status: "failure", points: [], visited: 0 };
+  }
+  if (sameCoord(startCoord, goalCoord)) {
+    return { status: "success", points: [cloneVec3(start), cloneVec3(goal)], visited: 1 };
   }
 
-  const open: SearchNode[] = [{ ...start, g: 0, f: heuristic(start, goal) }];
-  const bestG = new Map<string, number>([[coordKey(start), 0]]);
+  const open: SearchNode[] = [{ ...startCoord, g: 0, f: heuristic(startCoord, goalCoord) }];
+  const bestG = new Map<string, number>([[coordKey(startCoord), 0]]);
   const cameFrom = new Map<string, string>();
   let visited = 0;
 
   while (open.length > 0) {
     const current = popLowest(open);
     visited += 1;
-    if (sameCoord(current, goal)) {
+    if (sameCoord(current, goalCoord)) {
       const cells = reconstructCells(cameFrom, current).map(coordFromKey);
       return {
         status: "success",
-        points: pathPoints(request.start, request.goal, cells, toPoint, (a, b) =>
-          segmentSafe(a, b, blockers, clearanceRadius, authoredBounds),
+        points: pathPoints(start, goal, cells, toPoint, (a, b) =>
+          segmentSafe(a, b, grid.blockers, grid.clearanceRadius, authoredBounds),
         ),
         visited,
       };
     }
     for (const next of neighbors(current, passable)) {
       const step = next.x !== current.x && next.z !== current.z ? Math.SQRT2 : 1;
-      const nextG = current.g + step + clearancePenalty(next);
+      const nextG = current.g + step + grid.penalty[next.z * cols + next.x]!;
       const key = coordKey(next);
       if (nextG >= (bestG.get(key) ?? Infinity)) continue;
       bestG.set(key, nextG);
       cameFrom.set(key, coordKey(current));
-      open.push({ ...next, g: nextG, f: nextG + heuristic(next, goal) });
+      open.push({ ...next, g: nextG, f: nextG + heuristic(next, goalCoord) });
     }
   }
 
   return { status: "failure", points: [], visited };
+}
+
+export function findGridPath(request: PathRequest): PathResult {
+  const cellSize = sanePositive(request.cellSize, DEFAULT_CELL_SIZE);
+  const authoredBounds = request.bounds && request.bounds.length > 0 ? request.bounds : undefined;
+  const grid = buildNavGrid({
+    agent: request.agent,
+    blockers: request.blockers,
+    ...(authoredBounds ? { bounds: authoredBounds } : {}),
+    footY: request.start[1],
+    cellSize,
+    ...(request.safetyMargin !== undefined ? { safetyMargin: request.safetyMargin } : {}),
+    ...(request.boundsPadding !== undefined ? { boundsPadding: request.boundsPadding } : {}),
+    ...(authoredBounds ? {} : { extentSeed: { start: request.start, goal: request.goal } }),
+  });
+  if (!grid) return { status: "failure", points: [], visited: 0 };
+  return searchNavGrid(grid, request.start, request.goal);
+}
+
+/**
+ * Caches one baked {@link NavGrid} per distinct agent profile, keyed off a
+ * caller-supplied `token` that encodes the blocker + bounds revision. When the
+ * token changes (a static obstacle moved / a nav volume was edited) every cached
+ * grid is treated as stale and rebuilt lazily on next access — this is the
+ * automatic-rebuild behavior (no manual "Build Navigation" step). Agent profile
+ * (radius/clearance/height/step + footY + cellSize + safetyMargin) is part of the
+ * cache key so differently-sized agents keep their own grids.
+ */
+export class NavGridCache {
+  private entries = new Map<string, { token: string; grid: NavGrid | null }>();
+
+  getOrBuild(token: string, request: NavGridBuildRequest): NavGrid | null {
+    const key = navGridAgentKey(request);
+    const cached = this.entries.get(key);
+    if (cached && cached.token === token) return cached.grid;
+    const grid = buildNavGrid(request);
+    this.entries.set(key, { token, grid });
+    return grid;
+  }
+
+  clear(): void {
+    this.entries.clear();
+  }
+
+  get size(): number {
+    return this.entries.size;
+  }
+}
+
+function navGridAgentKey(request: NavGridBuildRequest): string {
+  const cellSize = sanePositive(request.cellSize, DEFAULT_CELL_SIZE);
+  const safetyMargin = nonNegativeOr(request.safetyMargin, cellSize * 0.5);
+  const agent = request.agent;
+  return [
+    finiteOr(agent.radius, 0),
+    finiteOr(agent.clearancePadding, 0),
+    finiteOr(agent.height, 0),
+    finiteOr(agent.stepHeight, 0),
+    finiteOr(request.footY, 0),
+    cellSize,
+    safetyMargin,
+  ].join(":");
 }
 
 function navBounds(
