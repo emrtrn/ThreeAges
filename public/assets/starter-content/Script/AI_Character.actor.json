@@ -25,8 +25,8 @@
         "shape": "capsule",
         "isStatic": false,
         "isSensor": false,
-        "capsuleRadius": 0.4,
-        "capsuleHalfHeight": 1,
+        "capsuleRadius": 1,
+        "capsuleHalfHeight": 3,
         "simulatePhysics": false
       },
       "parent": "root"
