@@ -65,6 +65,47 @@ export interface PathFollowingState {
   readonly status: "idle" | "following" | "success" | "failure";
 }
 
+export interface WaypointAcceptance {
+  /** Acceptance radius for the final goal waypoint (authored, may be generous). */
+  readonly final: number;
+  /** Acceptance radius for intermediate waypoints (kept tight so corners aren't cut). */
+  readonly intermediate: number;
+}
+
+export interface WaypointAdvance {
+  /** Index of the waypoint the agent should now steer toward. */
+  readonly waypointIndex: number;
+  /** True once the final waypoint is within its acceptance radius (path complete). */
+  readonly arrived: boolean;
+}
+
+/**
+ * Advances a path-follower's waypoint cursor past every waypoint already within
+ * acceptance. Intermediate waypoints use a tight radius so a generous final
+ * `acceptance` cannot make the agent skip a corner early and cut through an
+ * inflated blocker; only the final goal honors the authored acceptance.
+ */
+export function advanceWaypoint(
+  path: readonly Vec3[],
+  waypointIndex: number,
+  position: Vec3,
+  acceptance: WaypointAcceptance,
+): WaypointAdvance {
+  let index = Math.max(0, waypointIndex);
+  while (index < path.length) {
+    const isFinal = index >= path.length - 1;
+    const radius = isFinal ? acceptance.final : acceptance.intermediate;
+    if (planarDistanceXZ(position, path[index]!) > radius) break;
+    if (isFinal) return { waypointIndex: index, arrived: true };
+    index += 1;
+  }
+  return { waypointIndex: index, arrived: false };
+}
+
+function planarDistanceXZ(a: Vec3, b: Vec3): number {
+  return Math.hypot(a[0] - b[0], a[2] - b[2]);
+}
+
 interface GridCoord {
   readonly x: number;
   readonly z: number;
@@ -140,7 +181,9 @@ export function findGridPath(request: PathRequest): PathResult {
       const cells = reconstructCells(cameFrom, current).map(coordFromKey);
       return {
         status: "success",
-        points: pathPoints(request.start, request.goal, cells, toPoint),
+        points: pathPoints(request.start, request.goal, cells, toPoint, (a, b) =>
+          segmentSafe(a, b, blockers, clearanceRadius, authoredBounds),
+        ),
         visited,
       };
     }
@@ -260,28 +303,90 @@ function pathPoints(
   goal: Vec3,
   cells: readonly GridCoord[],
   toPoint: (coord: GridCoord) => Vec3,
+  segmentSafe: (a: Vec3, b: Vec3) => boolean,
 ): Vec3[] {
-  const compressed = compressCells(cells);
-  const out: Vec3[] = [cloneVec3(start)];
-  for (let i = 1; i < compressed.length - 1; i += 1) out.push(toPoint(compressed[i]!));
-  out.push(cloneVec3(goal));
+  const raw: Vec3[] = [cloneVec3(start)];
+  for (const cell of cells) pushDistinctPoint(raw, toPoint(cell));
+  pushDistinctPoint(raw, cloneVec3(goal));
+  return compressPathPoints(raw, segmentSafe);
+}
+
+function pushDistinctPoint(points: Vec3[], point: Vec3): void {
+  const prev = points[points.length - 1];
+  if (prev && planarDistanceXZ(prev, point) < 1e-9 && Math.abs(prev[1] - point[1]) < 1e-9) return;
+  points.push(point);
+}
+
+function compressPathPoints(points: readonly Vec3[], segmentSafe: (a: Vec3, b: Vec3) => boolean): Vec3[] {
+  if (points.length <= 2) return points.map(cloneVec3);
+  const out: Vec3[] = [cloneVec3(points[0]!)];
+  let prevDir = pointDirection(points[0]!, points[1]!);
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const current = points[i]!;
+    const next = points[i + 1]!;
+    const dir = pointDirection(current, next);
+    const changedDirection = dir.x !== prevDir.x || dir.z !== prevDir.z;
+    const shortcutSafe = segmentSafe(out[out.length - 1]!, next);
+    if (changedDirection || !shortcutSafe) out.push(cloneVec3(current));
+    prevDir = dir;
+  }
+  out.push(cloneVec3(points[points.length - 1]!));
   return out;
 }
 
-function compressCells(cells: readonly GridCoord[]): GridCoord[] {
-  if (cells.length <= 2) return [...cells];
-  const out: GridCoord[] = [cells[0]!];
-  let prevDx = Math.sign(cells[1]!.x - cells[0]!.x);
-  let prevDz = Math.sign(cells[1]!.z - cells[0]!.z);
-  for (let i = 1; i < cells.length - 1; i += 1) {
-    const dx = Math.sign(cells[i + 1]!.x - cells[i]!.x);
-    const dz = Math.sign(cells[i + 1]!.z - cells[i]!.z);
-    if (dx !== prevDx || dz !== prevDz) out.push(cells[i]!);
-    prevDx = dx;
-    prevDz = dz;
-  }
-  out.push(cells[cells.length - 1]!);
-  return out;
+function pointDirection(a: Vec3, b: Vec3): GridCoord {
+  return {
+    x: Math.sign(b[0] - a[0]),
+    z: Math.sign(b[2] - a[2]),
+  };
+}
+
+function segmentSafe(
+  a: Vec3,
+  b: Vec3,
+  blockers: readonly NavAabb[],
+  radius: number,
+  bounds: readonly NavAabb[] | undefined,
+): boolean {
+  if (blockers.some((blocker) => segmentIntersectsAabb2d(a, b, blocker, radius))) return false;
+  return !bounds || segmentInsideAnyErodedAabb2d(a, b, bounds, radius);
+}
+
+function segmentInsideAnyErodedAabb2d(a: Vec3, b: Vec3, bounds: readonly NavAabb[], radius: number): boolean {
+  return bounds.some((bound) => pointInsideErodedAabb2d(a, bound, radius) && pointInsideErodedAabb2d(b, bound, radius));
+}
+
+function pointInsideErodedAabb2d(point: Vec3, bound: NavAabb, radius: number): boolean {
+  return point[0] >= bound.min[0] + radius &&
+    point[0] <= bound.max[0] - radius &&
+    point[2] >= bound.min[2] + radius &&
+    point[2] <= bound.max[2] - radius;
+}
+
+function segmentIntersectsAabb2d(a: Vec3, b: Vec3, blocker: NavAabb, radius: number): boolean {
+  let tMin = 0;
+  let tMax = 1;
+  const minX = blocker.min[0] - radius;
+  const maxX = blocker.max[0] + radius;
+  const minZ = blocker.min[2] - radius;
+  const maxZ = blocker.max[2] + radius;
+  const xHit = clipSegmentAxis(a[0], b[0], minX, maxX, tMin, tMax);
+  if (!xHit) return false;
+  tMin = xHit[0];
+  tMax = xHit[1];
+  const zHit = clipSegmentAxis(a[2], b[2], minZ, maxZ, tMin, tMax);
+  return Boolean(zHit);
+}
+
+function clipSegmentAxis(from: number, to: number, min: number, max: number, tMin: number, tMax: number): [number, number] | null {
+  const delta = to - from;
+  if (Math.abs(delta) < 1e-9) return from >= min && from <= max ? [tMin, tMax] : null;
+  let enter = (min - from) / delta;
+  let exit = (max - from) / delta;
+  if (enter > exit) [enter, exit] = [exit, enter];
+  const clippedMin = Math.max(tMin, enter);
+  const clippedMax = Math.min(tMax, exit);
+  return clippedMin <= clippedMax ? [clippedMin, clippedMax] : null;
 }
 
 function popLowest(open: SearchNode[]): SearchNode {

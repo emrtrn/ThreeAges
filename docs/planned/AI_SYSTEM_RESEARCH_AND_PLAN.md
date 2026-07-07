@@ -79,6 +79,12 @@
 > uygulandi: `NavAgent.clearancePadding` + `PathRequest.safetyMargin`
 > (`cellSize * 0.5` default), effective-radius blocker/bounds erozyonu ve
 > AIController navAgent clearance wiring (bkz. asagidaki checklist).
+> Revizyon: 2026-07-07 - AI Navigation ara vs final waypoint acceptance ayrimi
+> uygulandi: saf `advanceWaypoint` helper'i + `AI_INTERMEDIATE_WAYPOINT_ACCEPTANCE`
+> (`min(cellSize * 0.35, 0.2)`); cömert final acceptance kose kestiremiyor.
+> Revizyon: 2026-07-07 - AI Navigation segment-safe path compression dilimi
+> uygulandi: waypoint shortcut segmentleri effective-radius blocker/bounds
+> kontrolunden geciyor; guvensiz kisayollarda grid noktasi korunuyor.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1074,14 +1080,14 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
 - [x] `findGridPath` icinde blocker passability testleri effective radius ile
       calissin; authored nav bounds da ayni effective radius ile iceriden
       daraltilsin.
-- [ ] Ara waypoint varis toleransini final hedef toleransindan ayir:
-      - [ ] `acceptanceRadius` sadece final goal icin kullanilsin.
-      - [ ] ara waypoint gecisi `intermediateWaypointAcceptance` ile sinirli
+- [x] Ara waypoint varis toleransini final hedef toleransindan ayir:
+      - [x] `acceptanceRadius` sadece final goal icin kullanilsin.
+      - [x] ara waypoint gecisi `intermediateWaypointAcceptance` ile sinirli
             kalsin (onerilen ilk deger: `min(cellSize * 0.35, 0.2)`).
-- [ ] Path compression guvenli hale gelsin:
-      - [ ] iki waypoint arasindaki duz segment effective radius ile sisirilmis
+- [x] Path compression guvenli hale gelsin:
+      - [x] iki waypoint arasindaki duz segment effective radius ile sisirilmis
             blocker'lari kesiyorsa ara grid noktalarini koru.
-      - [ ] segment-safe compression testi ekle.
+      - [x] segment-safe compression testi ekle.
 - [ ] Debug/viewport overlay:
       - [ ] raw static blocker AABB'leri ayri renkte goster.
       - [ ] inflated/eroded forbidden alanlari ayri renkte goster.
@@ -1097,7 +1103,7 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
       - [ ] clearance cok buyukse dar gecit failure verir.
       - [ ] final acceptance buyuk olsa bile ara waypoint erken atlanip kose
             kesilmez.
-      - [ ] path compression duvar kosesi uzerinden shortcut uretmez.
+      - [x] path compression duvar kosesi uzerinden shortcut uretmez.
       - [ ] debug overlay inflated blocker segmentlerini uretir.
 - [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` AI Navigation overlay
@@ -1125,6 +1131,44 @@ Tamamlanan AI Navigation clearance / effective radius ilk dilim notu (2026-07-07
   PASS), `npm.cmd run check:assets` PASS. Kalan: final vs ara waypoint acceptance
   ayrimi, segment-safe path compression, clearance-aware path cost / koridor
   ortalama, ve debug overlay'de raw vs eroded blocker + agent clearance halkasi.
+
+Tamamlanan waypoint acceptance ayrimi dilim notu (2026-07-07):
+
+- `engine/navigation/gridNavigation.ts` icine saf, DOM'suz `advanceWaypoint`
+  (+ `WaypointAcceptance` / `WaypointAdvance`) helper'i eklendi. Path-follower
+  cursor'unu, her waypoint icin ayri kabul yariçapiyla ilerletir: ara
+  waypoint'ler `intermediate` (dar), sadece final hedef authored `final`
+  (`acceptanceRadius`) yariçapini kullanir. Boylece cömert bir final acceptance,
+  ajanin bir kose waypoint'ini erken atlayip sisirilmis blocker'i kesmesine yol
+  acmaz.
+- `RuntimeSceneApp.aiMoveIntentForEntity` waypoint ilerletme dongusu bu helper'a
+  tasindi; `AI_INTERMEDIATE_WAYPOINT_ACCEPTANCE = min(cellSize * 0.35, 0.2)`
+  sabiti eklendi. Final goal acceptance davranisi (authored `acceptanceRadius`)
+  degismedi.
+- Test: `advanceWaypoint` cömert final radius'a ragmen ara kose waypoint'ini
+  korur, kose'ye varinca hedefe ilerler ama final acceptance dolana kadar
+  "arrived" olmaz, final hedef cömert yariçapi onurlandirir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`670 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS). Kalan: segment-safe path compression, clearance-aware path cost /
+  koridor ortalama, ve debug overlay'de raw vs eroded blocker + clearance
+  halkasi.
+
+Tamamlanan segment-safe path compression dilim notu (2026-07-07):
+
+- `findGridPath` artik raw grid hucre merkezlerini compression girdisine dahil
+  ediyor; gercek `start`/`goal` grid merkezinde olmadiginda ilk/son segmentin
+  planlanan koridoru kisaltip blocker kosesinden gecmesi engelleniyor.
+- Compression sadece anchor -> aday waypoint segmenti effective-radius ile
+  sisirilmis blocker'lara carpmiyor ve authored bounds icinde kaliyorsa ara
+  noktayi atliyor. Segment guvensizse ilgili grid noktasi korunuyor.
+- Test: ince blocker kosesinde eski compression'in uretebilecegi shortcut
+  senaryosu `findGridPath` ustunden kilitlendi; uretilen tum segmentlerin
+  blocker'a carpmadigi dogrulaniyor.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`671 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS). Kalan: clearance-aware path cost / koridor ortalama, debug overlay'de
+  raw vs eroded blocker + clearance halkasi ve Playwright runtime/editor smoke.
 
 ### Faz 6 - Smart Objects
 

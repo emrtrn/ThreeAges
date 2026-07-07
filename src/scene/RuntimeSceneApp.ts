@@ -45,6 +45,7 @@ import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
 import {
   findGridPath,
+  advanceWaypoint,
   type NavAgent,
   type NavAabb,
   type PathFollowingState,
@@ -435,6 +436,12 @@ export interface AiNavigationDebugSnapshot {
 
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
+/**
+ * Acceptance radius for intermediate path waypoints. Kept tight (independent of
+ * the authored final-goal acceptance) so a generous goal tolerance can't make
+ * the agent skip a corner waypoint early and cut through an inflated blocker.
+ */
+const AI_INTERMEDIATE_WAYPOINT_ACCEPTANCE = Math.min(AI_NAV_CELL_SIZE * 0.35, 0.2);
 /** How strongly agent-separation steering blends into the desired path direction. */
 const AI_SEPARATION_WEIGHT = 0.75;
 /** Stuck recoveries (replans) per goal before the move fails outright. */
@@ -1324,18 +1331,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const follow = this.aiPathFollowing.get(entityId);
     if (!follow || follow.state.status !== "following") return null;
     let state = follow.state;
-    let target = state.path[state.waypointIndex];
-    const acceptanceRadius = follow.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS;
-    while (target && planarDistance(transform.position, target) <= acceptanceRadius) {
-      const nextIndex = state.waypointIndex + 1;
-      if (nextIndex >= state.path.length) {
-        this.aiPathFollowing.delete(entityId);
-        return { direction: [0, 0], speed: 0 };
-      }
-      state = { ...state, waypointIndex: nextIndex };
-      follow.state = state;
-      target = state.path[state.waypointIndex];
+    const advance = advanceWaypoint(state.path, state.waypointIndex, transform.position, {
+      final: follow.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS,
+      intermediate: AI_INTERMEDIATE_WAYPOINT_ACCEPTANCE,
+    });
+    if (advance.arrived) {
+      this.aiPathFollowing.delete(entityId);
+      return { direction: [0, 0], speed: 0 };
     }
+    if (advance.waypointIndex !== state.waypointIndex) {
+      state = { ...state, waypointIndex: advance.waypointIndex };
+      follow.state = state;
+    }
+    let target = state.path[state.waypointIndex];
     if (!target) {
       this.aiPathFollowing.delete(entityId);
       return null;

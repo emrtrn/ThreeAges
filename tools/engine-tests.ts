@@ -95,7 +95,7 @@ import {
   createDefaultAiServiceRegistry,
   createDefaultAiTaskRegistry,
 } from "../engine/ai/behaviorRunner";
-import { findGridPath } from "../engine/navigation/gridNavigation";
+import { findGridPath, advanceWaypoint } from "../engine/navigation/gridNavigation";
 import {
   freshStuckState,
   isStuck,
@@ -6472,6 +6472,82 @@ check("grid navigation clearance padding erodes obstacles by extra slack", () =>
   });
   assert.equal(padded.status, "failure"); // padding keeps the agent clear of both walls
 });
+
+check("grid navigation compression keeps grid points when a shortcut would cross a blocker", () => {
+  const wall: Aabb3 = { min: [-0.25, 0, 0], max: [0.1, 2, 0.35] };
+  const path = findGridPath({
+    start: [-0.45, 0, 0.3],
+    goal: [2.3, 0, 1.55],
+    agent: { radius: 0, height: 1.8 },
+    blockers: [wall],
+    bounds: [{ min: [-2, -1, -2], max: [4, 3, 4] }],
+    cellSize: 0.5,
+    safetyMargin: 0,
+  });
+  assert.equal(path.status, "success");
+  assert.ok(
+    path.points.some((point) => point[0] === -0.5 && point[2] === 0.5),
+    `expected start-cell waypoint to guard the corner: ${JSON.stringify(path.points)}`,
+  );
+  for (let i = 0; i < path.points.length - 1; i += 1) {
+    assert.equal(
+      segmentHitsTestAabb2d(path.points[i]!, path.points[i + 1]!, wall),
+      false,
+      `segment ${i} crosses blocker: ${JSON.stringify(path.points)}`,
+    );
+  }
+});
+
+check("advanceWaypoint keeps intermediate waypoints tight and honors the final acceptance", () => {
+  const acceptance = { final: 1.5, intermediate: 0.175 };
+  // Corner route: index 1 is a corner, index 2 the goal. A generous final
+  // acceptance must NOT let the agent skip the corner while still far from it.
+  const held = advanceWaypoint([[0, 0, 0], [0, 0, 2], [2, 0, 2]], 1, [0, 0, 1.2], acceptance);
+  assert.equal(held.waypointIndex, 1);
+  assert.equal(held.arrived, false);
+
+  // Reaching the corner advances to the goal but does not "arrive" yet.
+  const stepped = advanceWaypoint([[0, 0, 0], [0, 0, 2], [2, 0, 2]], 1, [0, 0, 2], acceptance);
+  assert.equal(stepped.waypointIndex, 2);
+  assert.equal(stepped.arrived, false);
+
+  // The final goal honors the generous acceptance radius (1.0 <= 1.5).
+  const arrived = advanceWaypoint([[0, 0, 0], [0, 0, 2], [2, 0, 2]], 2, [1, 0, 2], acceptance);
+  assert.equal(arrived.waypointIndex, 2);
+  assert.equal(arrived.arrived, true);
+});
+
+function segmentHitsTestAabb2d(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+  box: Aabb3,
+): boolean {
+  let tMin = 0;
+  let tMax = 1;
+  const x = clipTestSegmentAxis(a[0], b[0], box.min[0], box.max[0], tMin, tMax);
+  if (!x) return false;
+  tMin = x[0];
+  tMax = x[1];
+  return Boolean(clipTestSegmentAxis(a[2], b[2], box.min[2], box.max[2], tMin, tMax));
+}
+
+function clipTestSegmentAxis(
+  from: number,
+  to: number,
+  min: number,
+  max: number,
+  tMin: number,
+  tMax: number,
+): [number, number] | null {
+  const delta = to - from;
+  if (Math.abs(delta) < 1e-9) return from >= min && from <= max ? [tMin, tMax] : null;
+  let enter = (min - from) / delta;
+  let exit = (max - from) / delta;
+  if (enter > exit) [enter, exit] = [exit, enter];
+  const clippedMin = Math.max(tMin, enter);
+  const clippedMax = Math.min(tMax, exit);
+  return clippedMin <= clippedMax ? [clippedMin, clippedMax] : null;
+}
 
 check("separation steering pushes away from overlapping neighbors and clamps", () => {
   // Neighbor directly ahead (+X) within range: push is straight back (-X).
