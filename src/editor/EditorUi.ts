@@ -562,6 +562,16 @@ export class EditorUi {
   }
 
   private bindActions(): void {
+    // The Add Actor button and its category labels are hover-only triggers: they
+    // reveal the flyout on hover and must not react to clicks. Suppressing the
+    // mousedown default keeps them from taking focus (no focus ring, and — paired
+    // with the CSS dropping :focus-within — no click ever pins the menu open).
+    this.root
+      .querySelectorAll<HTMLButtonElement>("[data-add-actor-button], .add-actor-category-label")
+      .forEach((button) => {
+        button.addEventListener("mousedown", (event) => event.preventDefault());
+      });
+
     this.root.querySelector('[data-action="undo"]')?.addEventListener("click", () => {
       this.app.undo();
     });

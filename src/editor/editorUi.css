@@ -97,8 +97,9 @@ body.editor-mode #debug-stats {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
 }
 
-.add-actor-menu:hover .add-actor-popover,
-.add-actor-menu:focus-within .add-actor-popover {
+/* Hover-only reveal: the "+ Add Actor" button never pins the menu on click, so
+   moving off the menu always closes it (no focus-within latch). */
+.add-actor-menu:hover .add-actor-popover {
   display: grid;
   gap: 4px;
 }
@@ -135,8 +136,7 @@ body.editor-mode #debug-stats {
   font-weight: 700;
 }
 
-.add-actor-category:hover > .add-actor-category-label,
-.add-actor-category:focus-within > .add-actor-category-label {
+.add-actor-category:hover > .add-actor-category-label {
   background: rgba(255, 255, 255, 0.08);
 }
 
@@ -155,8 +155,10 @@ body.editor-mode #debug-stats {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
 }
 
-.add-actor-category:hover > .add-actor-submenu,
-.add-actor-category:focus-within > .add-actor-submenu {
+/* Only the hovered category shows its flyout: moving to another category closes
+   the previous submenu and opens the new one (no focus-within keeps a stale one
+   open, which used to show two submenus at once). */
+.add-actor-category:hover > .add-actor-submenu {
   display: grid;
   gap: 4px;
 }
