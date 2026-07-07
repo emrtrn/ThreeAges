@@ -305,7 +305,7 @@
       "placements": [
         {
           "position": [
-            -34,
+            -15,
             0,
             6
           ],
@@ -314,7 +314,7 @@
         },
         {
           "position": [
-            -30,
+            -11,
             0,
             6
           ],
@@ -328,7 +328,7 @@
         },
         {
           "position": [
-            -34,
+            -15,
             0,
             2
           ],
@@ -342,7 +342,7 @@
         },
         {
           "position": [
-            -34,
+            -15,
             0,
             2
           ],
@@ -351,7 +351,7 @@
         },
         {
           "position": [
-            -30,
+            -11,
             0,
             2
           ],
@@ -540,9 +540,9 @@
     {
       "id": "target-point-2",
       "position": [
-        -6,
+        -10,
         0,
-        5
+        4
       ],
       "name": "Target Point 2",
       "scale": 1,
@@ -553,15 +553,37 @@
     {
       "id": "target-point-3",
       "position": [
-        -9,
+        -5,
         0,
-        10
+        0
       ],
       "name": "Target Point 3",
       "scale": 1,
-      "nextTargetPoint": "target-point-1",
+      "nextTargetPoint": "target-point-4",
       "waitTime": 0.5,
       "acceptanceRadius": 1
+    },
+    {
+      "id": "target-point-4",
+      "position": [
+        -17,
+        0,
+        0
+      ],
+      "name": "Target Point 4",
+      "scale": 1,
+      "nextTargetPoint": "target-point-5"
+    },
+    {
+      "id": "target-point-5",
+      "position": [
+        -15,
+        0,
+        10
+      ],
+      "name": "Target Point 5",
+      "scale": 1,
+      "nextTargetPoint": "target-point-1"
     }
   ],
   "actors": [

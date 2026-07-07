@@ -85,6 +85,9 @@
 > Revizyon: 2026-07-07 - AI Navigation segment-safe path compression dilimi
 > uygulandi: waypoint shortcut segmentleri effective-radius blocker/bounds
 > kontrolunden geciyor; guvensiz kisayollarda grid noktasi korunuyor.
+> Revizyon: 2026-07-07 - AI Navigation debug overlay clearance ilk dilimi
+> uygulandi: raw blocker footprint, inflated forbidden footprint ve canli AI
+> clearance halkasi ayni shared overlay helper'inda ayri ciziliyor.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1089,8 +1092,8 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
             blocker'lari kesiyorsa ara grid noktalarini koru.
       - [x] segment-safe compression testi ekle.
 - [ ] Debug/viewport overlay:
-      - [ ] raw static blocker AABB'leri ayri renkte goster.
-      - [ ] inflated/eroded forbidden alanlari ayri renkte goster.
+      - [x] raw static blocker AABB'leri ayri renkte goster.
+      - [x] inflated/eroded forbidden alanlari ayri renkte goster.
       - [ ] path segmenti clearance ihlali yapiyorsa kirmizi/turuncu ciz.
       - [ ] secili AI icin agent radius + clearance halkasi ciz.
 - [ ] Path cost iyilestirmesi:
@@ -1104,7 +1107,7 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
       - [ ] final acceptance buyuk olsa bile ara waypoint erken atlanip kose
             kesilmez.
       - [x] path compression duvar kosesi uzerinden shortcut uretmez.
-      - [ ] debug overlay inflated blocker segmentlerini uretir.
+      - [x] debug overlay inflated blocker segmentlerini uretir.
 - [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` AI Navigation overlay
       smoke ve runtime Playground kose-donus smoke.
@@ -1169,6 +1172,27 @@ Tamamlanan segment-safe path compression dilim notu (2026-07-07):
   (`671 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
   PASS). Kalan: clearance-aware path cost / koridor ortalama, debug overlay'de
   raw vs eroded blocker + clearance halkasi ve Playwright runtime/editor smoke.
+
+Tamamlanan AI Navigation debug overlay clearance ilk dilim notu (2026-07-07):
+
+- Shared `createAiNavigationView` render helper'i `inflatedBlockers` ve
+  `agentClearances` girdilerini aliyor; raw blocker footprint, inflated
+  forbidden footprint ve AI clearance halkasi ayri object/color olarak uretilir.
+- Runtime `?debug` snapshot'i path-following yapan ajanlar icin gercek effective
+  clearance'i (`agent.radius + clearancePadding + cellSize * 0.5`) hesaplar;
+  blocker footprint'leri aktif ajanlar arasindaki en buyuk clearance ile
+  sisirilmis debug alanina cevrilir.
+- Editor `Show > AI Navigation`, edit modda varsayilan Forge ajan clearance'i
+  ile inflated blocker alanlarini gosterir; Play modda canli AI debug
+  pozisyonlari icin clearance halkalari cizer. Secili AI'ya ozel tek halka ve
+  path-segment violation renklendirmesi sonraki debug dilimine kaldi.
+- Test: `createAiNavigationView` raw blocker, inflated blocker ve agent
+  clearance ring object'lerini uretir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`672 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS). Kalan: secili AI'ya ozel clearance halkasi, clearance ihlali yapan
+  path segmenti renklendirmesi, clearance-aware path cost / koridor ortalama ve
+  Playwright runtime/editor smoke.
 
 ### Faz 6 - Smart Objects
 

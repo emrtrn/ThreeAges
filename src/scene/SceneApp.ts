@@ -84,6 +84,7 @@ import { collisionWireboxes } from "@engine/render-three/collisionView";
 import {
   createAiNavigationView,
   disposeAiNavigationView,
+  type AiNavAgentClearanceView,
   type AiPerceptionView,
   type AiQueryCandidateView,
   type AiTargetPointRouteView,
@@ -471,6 +472,19 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
 };
 
 const AI_NAV_DEBUG_CELL_SIZE = 0.5;
+const AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS = 0.35;
+const AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING = 0.1;
+const AI_NAV_DEBUG_GRID_SAFETY_MARGIN = AI_NAV_DEBUG_CELL_SIZE * 0.5;
+const AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS =
+  AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS + AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING + AI_NAV_DEBUG_GRID_SAFETY_MARGIN;
+
+function inflateNavAabb2d(blocker: NavAabb, radius: number): NavAabb {
+  const r = Math.max(0, radius);
+  return {
+    min: [blocker.min[0] - r, blocker.min[1], blocker.min[2] - r],
+    max: [blocker.max[0] + r, blocker.max[1], blocker.max[2] + r],
+  };
+}
 
 interface EditorOptions {
   enabled: boolean;
@@ -6551,26 +6565,32 @@ export class SceneApp {
     this.removeAiNavigationView();
     if (!this.showAiNavigation || !this.layout) return;
     const blockers = this.editorNavBlockers();
+    const inflatedBlockers = blockers.map((blocker) => inflateNavAabb2d(blocker, AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS));
     const bounds = this.aiNavigationBounds();
     const perception = this.aiPerceptionView();
     const queries = this.aiQueryView();
     const routes = this.aiTargetPointRouteView();
+    const agentClearances = this.aiAgentClearanceView();
     if (
       blockers.length === 0 &&
+      inflatedBlockers.length === 0 &&
       bounds.length === 0 &&
       perception.length === 0 &&
       queries.length === 0 &&
-      routes.length === 0
+      routes.length === 0 &&
+      agentClearances.length === 0
     ) {
       return;
     }
     this.aiNavigationView = createAiNavigationView({
       blockers,
+      inflatedBlockers,
       bounds,
       cellSize: AI_NAV_DEBUG_CELL_SIZE,
       perception,
       queries,
       routes,
+      agentClearances,
     });
     this.scene.add(this.aiNavigationView);
   }
@@ -6648,6 +6668,16 @@ export class SceneApp {
       }
     }
     return out;
+  }
+
+  private aiAgentClearanceView(): AiNavAgentClearanceView[] {
+    return this.aiSubsystem.getDebugSnapshot().controllers
+      .filter((controller) => controller.position)
+      .map((controller) => ({
+        entityId: controller.pawnEntityId,
+        position: controller.position!,
+        radius: AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS,
+      }));
   }
 
   private aiNavigationBounds(): NavAabb[] {

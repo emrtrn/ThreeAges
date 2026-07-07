@@ -20558,6 +20558,18 @@ check("createAiNavigationView draws AI perception sight cone and hearing radius"
   disposeAiNavigationView(view);
 });
 
+check("createAiNavigationView draws inflated blockers and agent clearance rings", () => {
+  const view = createAiNavigationView({
+    blockers: [{ min: [0, 0, 0], max: [1, 2, 1] }],
+    inflatedBlockers: [{ min: [-0.5, 0, -0.5], max: [1.5, 2, 1.5] }],
+    agentClearances: [{ entityId: "enemy", position: [3, 0, 0], radius: 0.7 }],
+  });
+  assert.ok(view.getObjectByName("ai-nav-blockers"), "raw blocker footprint drawn");
+  assert.ok(view.getObjectByName("ai-nav-inflated-blockers"), "inflated forbidden footprint drawn");
+  assert.ok(view.getObjectByName("ai-nav-agent-clearance"), "agent clearance ring drawn");
+  disposeAiNavigationView(view);
+});
+
 check("createAiNavigationView draws AI query candidates and winner markers", () => {
   const view = createAiNavigationView({
     queries: [

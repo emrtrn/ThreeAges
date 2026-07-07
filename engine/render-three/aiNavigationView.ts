@@ -43,13 +43,22 @@ export interface AiTargetPointRouteView {
   readonly active?: boolean;
 }
 
+export interface AiNavAgentClearanceView {
+  readonly entityId: string;
+  readonly position: Vec3;
+  /** Effective planar clearance radius used for pathing (agent + padding + grid safety). */
+  readonly radius: number;
+}
+
 export interface AiNavigationViewInput {
   readonly blockers?: readonly NavAabb[];
+  readonly inflatedBlockers?: readonly NavAabb[];
   readonly bounds?: readonly NavAabb[];
   readonly followers?: readonly AiNavigationFollowerView[];
   readonly perception?: readonly AiPerceptionView[];
   readonly queries?: readonly AiQueryCandidateView[];
   readonly routes?: readonly AiTargetPointRouteView[];
+  readonly agentClearances?: readonly AiNavAgentClearanceView[];
   readonly cellSize?: number;
   readonly y?: number;
 }
@@ -58,11 +67,13 @@ const DEFAULT_CELL_SIZE = 0.5;
 const MAX_GRID_LINES_PER_AXIS = 80;
 const GRID_COLOR = 0x4386ff;
 const BLOCKER_COLOR = 0xff6b4a;
+const INFLATED_BLOCKER_COLOR = 0xffa142;
 const BOUNDS_COLOR = 0x52a3ff;
 const PATH_COLOR = 0x3fd47f;
 const PATH_STALLED_COLOR = 0xffc857;
 const PATH_FAILED_COLOR = 0xff4d6d;
 const WAYPOINT_COLOR = 0xfff06a;
+const AGENT_CLEARANCE_COLOR = 0xffe08a;
 const SIGHT_COLOR = 0x8ee66b;
 const HEARING_COLOR = 0x9f7aff;
 const QUERY_CANDIDATE_COLOR = 0x75d7ff;
@@ -79,11 +90,13 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
   const y = input.y ?? 0.04;
   const bounds = computeBounds(
     input.blockers ?? [],
+    input.inflatedBlockers ?? [],
     input.bounds ?? [],
     input.followers ?? [],
     input.perception ?? [],
     input.queries ?? [],
     input.routes ?? [],
+    input.agentClearances ?? [],
   );
   if (!bounds) return group;
 
@@ -95,6 +108,24 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
 
   const blockers = blockerFootprintSegments(input.blockers ?? [], y + 0.015);
   if (blockers.length > 0) group.add(lineSegments("ai-nav-blockers", blockers, BLOCKER_COLOR, 0.8));
+
+  const inflatedBlockers = blockerFootprintSegments(input.inflatedBlockers ?? [], y + 0.025);
+  if (inflatedBlockers.length > 0) {
+    group.add(lineSegments("ai-nav-inflated-blockers", inflatedBlockers, INFLATED_BLOCKER_COLOR, 0.55));
+  }
+
+  for (const clearance of input.agentClearances ?? []) {
+    const radius = positiveFinite(clearance.radius);
+    if (radius === null) continue;
+    group.add(
+      lineSegments(
+        "ai-nav-agent-clearance",
+        circleSegments(clearance.position, radius, y + 0.1, 40),
+        AGENT_CLEARANCE_COLOR,
+        0.85,
+      ),
+    );
+  }
 
   for (const follower of input.followers ?? []) {
     const color =
@@ -211,11 +242,13 @@ function lineSegments(name: string, points: readonly Vec3[], color: number, opac
 
 function computeBounds(
   blockers: readonly NavAabb[],
+  inflatedBlockers: readonly NavAabb[],
   bounds: readonly NavAabb[],
   followers: readonly AiNavigationFollowerView[],
   perceptions: readonly AiPerceptionView[],
   queries: readonly AiQueryCandidateView[],
   routes: readonly AiTargetPointRouteView[],
+  agentClearances: readonly AiNavAgentClearanceView[],
 ): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
   let minX = Infinity;
   let maxX = -Infinity;
@@ -228,6 +261,10 @@ function computeBounds(
     maxZ = Math.max(maxZ, point[2]);
   };
   for (const blocker of blockers) {
+    include(blocker.min);
+    include(blocker.max);
+  }
+  for (const blocker of inflatedBlockers) {
     include(blocker.min);
     include(blocker.max);
   }
@@ -254,6 +291,15 @@ function computeBounds(
   for (const route of routes) {
     include(route.position);
     if (route.next) include(route.next);
+  }
+  for (const clearance of agentClearances) {
+    const radius = positiveFinite(clearance.radius);
+    if (radius === null) {
+      include(clearance.position);
+      continue;
+    }
+    include([clearance.position[0] - radius, clearance.position[1], clearance.position[2] - radius]);
+    include([clearance.position[0] + radius, clearance.position[1], clearance.position[2] + radius]);
   }
   if (!Number.isFinite(minX) || !Number.isFinite(maxX) || !Number.isFinite(minZ) || !Number.isFinite(maxZ)) {
     return null;

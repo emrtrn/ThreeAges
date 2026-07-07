@@ -61,6 +61,7 @@ import {
 import {
   createAiNavigationView,
   disposeAiNavigationView,
+  type AiNavAgentClearanceView,
   type AiPerceptionView,
   type AiQueryCandidateView,
   type AiTargetPointRouteView,
@@ -429,6 +430,8 @@ export interface AiNavFollowerDebug {
 
 export interface AiNavigationDebugSnapshot {
   readonly blockers: readonly NavAabb[];
+  readonly inflatedBlockers: readonly NavAabb[];
+  readonly agentClearances: readonly AiNavAgentClearanceView[];
   readonly bounds: readonly NavAabb[];
   readonly cellSize: number;
   readonly followers: readonly AiNavFollowerDebug[];
@@ -436,6 +439,7 @@ export interface AiNavigationDebugSnapshot {
 
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
+const AI_NAV_GRID_SAFETY_MARGIN = AI_NAV_CELL_SIZE * 0.5;
 /**
  * Acceptance radius for intermediate path waypoints. Kept tight (independent of
  * the authored final-goal acceptance) so a generous goal tolerance can't make
@@ -446,6 +450,14 @@ const AI_INTERMEDIATE_WAYPOINT_ACCEPTANCE = Math.min(AI_NAV_CELL_SIZE * 0.35, 0.
 const AI_SEPARATION_WEIGHT = 0.75;
 /** Stuck recoveries (replans) per goal before the move fails outright. */
 const AI_MAX_STUCK_REPLANS = 2;
+
+function inflateNavAabb2d(blocker: NavAabb, radius: number): NavAabb {
+  const r = Math.max(0, radius);
+  return {
+    min: [blocker.min[0] - r, blocker.min[1], blocker.min[2] - r],
+    max: [blocker.max[0] + r, blocker.max[1], blocker.max[2] + r],
+  };
+}
 
 export interface RuntimeStatsApp {
   onFrame: ((deltaMs: number) => void) | null;
@@ -1113,8 +1125,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /** Snapshots AI path following (waypoints, stuck recovery) for `?debug`. */
   getAiNavigationDebugSnapshot(): AiNavigationDebugSnapshot {
+    const blockers = this.physicsSubsystem.staticBlockerAabbs();
+    const agentClearances = this.aiAgentClearanceView();
+    const maxClearance = Math.max(0, ...agentClearances.map((clearance) => clearance.radius));
     return {
-      blockers: this.physicsSubsystem.staticBlockerAabbs(),
+      blockers,
+      inflatedBlockers: maxClearance > 0 ? blockers.map((blocker) => inflateNavAabb2d(blocker, maxClearance)) : [],
+      agentClearances,
       bounds: this.aiNavigationBounds(),
       cellSize: AI_NAV_CELL_SIZE,
       followers: [...this.aiPathFollowing.entries()].map(([entityId, follow]) => ({
@@ -1141,6 +1158,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (
       snapshot.followers.length === 0 &&
       snapshot.blockers.length === 0 &&
+      snapshot.inflatedBlockers.length === 0 &&
+      snapshot.agentClearances.length === 0 &&
       snapshot.bounds.length === 0 &&
       perception.length === 0 &&
       queries.length === 0 &&
@@ -1148,6 +1167,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     ) return;
     this.aiNavigationView = createAiNavigationView({
       blockers: snapshot.blockers,
+      inflatedBlockers: snapshot.inflatedBlockers,
+      agentClearances: snapshot.agentClearances,
       bounds: snapshot.bounds,
       cellSize: snapshot.cellSize,
       followers: snapshot.followers,
@@ -1219,6 +1240,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           winner: candidate.id === winnerId,
         });
       }
+    }
+    return out;
+  }
+
+  private aiAgentClearanceView(): AiNavAgentClearanceView[] {
+    const out: AiNavAgentClearanceView[] = [];
+    for (const entityId of this.aiPathFollowing.keys()) {
+      const transform = this.characterMovementSubsystem.transformOf(entityId);
+      if (!transform) continue;
+      out.push({
+        entityId,
+        position: transform.position,
+        radius: this.aiEffectiveClearanceRadiusForEntity(entityId),
+      });
     }
     return out;
   }
@@ -1321,6 +1356,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       stepHeight: movement?.maxStepHeight ?? 0.45,
       ...(typeof clearancePadding === "number" ? { clearancePadding } : {}),
     };
+  }
+
+  private aiEffectiveClearanceRadiusForEntity(entityId: string): number {
+    const agent = this.aiNavAgentForEntity(entityId);
+    return Math.max(0, agent.radius) + Math.max(0, agent.clearancePadding ?? 0) + AI_NAV_GRID_SAFETY_MARGIN;
   }
 
   private aiMoveIntentForEntity(
