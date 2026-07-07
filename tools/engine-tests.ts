@@ -16325,36 +16325,32 @@ check("resolveAiNavigationVolume fills defaults and overrides per field", () => 
     name: "Patrol Area",
     hidden: true,
     size: [8, 3, 6],
-    color: "#123456",
   });
   assert.equal(resolved.name, "Patrol Area");
   assert.equal(resolved.hidden, true);
   assert.deepEqual(resolved.size, [8, 3, 6]);
-  assert.equal(resolved.color, "#123456");
 });
 
-check("createAiNavigationVolumeObject: translucent fill is not pickable, only the edges are", () => {
-  // Same Unreal-style volume picking as the blocking volume: clicking the blue
-  // translucent face must NOT select the volume (it spans the scene and would
-  // steal every click); only the wireframe edges are clickable.
+check("createAiNavigationVolumeObject: wireframe edges only, no fill surface", () => {
+  // Unreal-style volume: the volume is drawn as wireframe edges only, with no
+  // translucent fill mesh. Clicking through the (empty) face must NOT select the
+  // volume; only the wireframe edges are pickable.
   const volume = createAiNavigationVolumeObject({
     name: "Nav",
     hidden: false,
     locked: false,
     scaleLocked: false,
     size: [2, 2, 2],
-    color: "#3aa0ff",
     position: [0, 0, 0],
     rotation: [0, 0, 0],
     scale: [1, 1, 1],
   });
+  // No fill mesh exists — the only geometry is the wireframe LineSegments.
+  assert.equal(volume.children.some((child) => child.name === "ai-navigation-volume-fill"), false);
+  assert.equal(volume.children.some((child) => child.name === "ai-navigation-volume-wire"), true);
   const faceRay = new Raycaster(new Vector3(0, 0, 5), new Vector3(0, 0, -1));
   faceRay.params.Line.threshold = 0.01;
   assert.equal(faceRay.intersectObject(volume, true).length, 0);
-  const fill = volume.children.find((child) => child.name === "ai-navigation-volume-fill")!;
-  const fillHits: unknown[] = [];
-  fill.raycast(faceRay, fillHits as never);
-  assert.equal(fillHits.length, 0);
   const edgeRay = new Raycaster(new Vector3(1, 0, 5), new Vector3(0, 0, -1));
   edgeRay.params.Line.threshold = 0.1;
   assert.ok(edgeRay.intersectObject(volume, true).length > 0);
@@ -16400,7 +16396,6 @@ check("validateAiNavigationVolume allowlists fields and round-trips through vali
     rotation: [0, 90, 0],
     scale: 1,
     size: [8, 4, 6],
-    color: "#123456",
   });
   assert.throws(() => validateAiNavigationVolume({ position: [0, 0, 0] }));
   assert.deepEqual(

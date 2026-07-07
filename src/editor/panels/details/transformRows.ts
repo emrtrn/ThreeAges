@@ -50,7 +50,8 @@ export function scaleRow(
         <span>Scale</span>
         <button type="button" class="scale-lock${locked ? " on" : ""}"
           data-scale-lock title="${locked ? "Unlock scale ratio" : "Lock scale ratio"}"
-          aria-pressed="${locked}">${locked ? "ğŸ”’" : "ğŸ”“"}</button>
+          aria-label="${locked ? "Unlock scale ratio" : "Lock scale ratio"}"
+          aria-pressed="${locked}">${locked ? "&#128274;" : "&#128275;"}</button>
       </span>
       <div class="vector-fields">${fields}</div>
     </div>
@@ -81,7 +82,7 @@ export function pivotRow(
       <button type="button" class="pivot-drag-toggle${dragActive ? " on" : ""}"
         data-pivot-drag aria-pressed="${dragActive}" ${off}
         title="Drag the gizmo in the viewport to set the pivot">${
-          dragActive ? "â— Dragging pivot" : "Drag in viewport"
+          dragActive ? "&#9679; Dragging pivot" : "Drag in viewport"
         }</button>
     </div>
     <div class="detail-actions-row">

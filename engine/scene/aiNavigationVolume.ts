@@ -5,16 +5,17 @@ export interface ResolvedAiNavigationVolume {
   name: string;
   hidden: boolean;
   size: Vec3;
-  color: string;
 }
 
 export const AI_NAVIGATION_VOLUME_DEFAULT_SIZE: Vec3 = [10, 4, 10];
+
+/** Fixed wireframe tint for the AI Navigation Volume (not user-editable). */
+export const AI_NAVIGATION_VOLUME_WIRE_COLOR = "#3f86ff";
 
 export const AI_NAVIGATION_VOLUME_DEFAULTS: ResolvedAiNavigationVolume = {
   name: "AI Navigation Volume",
   hidden: false,
   size: [...AI_NAVIGATION_VOLUME_DEFAULT_SIZE],
-  color: "#3f86ff",
 };
 
 export function resolveAiNavigationVolume(
@@ -26,7 +27,6 @@ export function resolveAiNavigationVolume(
     name: volume.name ?? defaults.name,
     hidden: volume.hidden ?? defaults.hidden,
     size: volume.size ? saneSize(volume.size) : [...defaults.size],
-    color: volume.color ?? defaults.color,
   };
 }
 

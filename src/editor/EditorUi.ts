@@ -486,6 +486,7 @@ export class EditorUi {
 
     this.buildToolbar();
     this.bindActions();
+    this.bindNumericInputSelection();
     this.renderDetails(null);
     this.renderWorldSettings(this.app.getWorldSettings());
 
@@ -529,6 +530,20 @@ export class EditorUi {
       this.updateSpaceButton(this.app.toggleTransformSpace());
     });
     tools.append(spaceButton);
+  }
+
+  private bindNumericInputSelection(): void {
+    const selectValue = (target: EventTarget | null): void => {
+      if (!(target instanceof HTMLInputElement)) return;
+      if (target.type !== "number" || target.disabled || target.readOnly) return;
+      window.setTimeout(() => target.select(), 0);
+    };
+
+    document.addEventListener("focusin", (event) => selectValue(event.target));
+    document.addEventListener("pointerup", (event) => {
+      if (event.button !== 0) return;
+      selectValue(event.target);
+    });
   }
 
   private setActiveTool(tool: EditorTool): void {

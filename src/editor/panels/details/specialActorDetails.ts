@@ -53,7 +53,6 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   }) => void;
   setSelectedAiNavigationVolume: (patch: {
     size?: Vec3;
-    color?: string;
   }) => void;
   setSelectedTargetPoint: (patch: {
     nextTargetPoint?: string | undefined;
@@ -475,10 +474,6 @@ export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOpti
       <div class="detail-section">
         <div class="detail-section-title">Navigation Bounds</div>
         ${navigationVolumeDimensionRows(volume, lockedAttr)}
-        <label class="detail-row">
-          <span>Color</span>
-          <input data-ai-nav-color type="color" value="${escapeHtml(volume.color)}" ${lockedAttr} />
-        </label>
         <div class="detail-hint">AI pathfinding is allowed inside this volume; the transform scale multiplies its size.</div>
       </div>
       ${actorLockSection(selection)}
@@ -492,14 +487,6 @@ export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOpti
       options.setSelectedAiNavigationVolume({ size: readNavigationVolumeSize(body, volume) });
     });
   });
-
-  body
-    .querySelector<HTMLInputElement>("[data-ai-nav-color]")
-    ?.addEventListener("change", (event) => {
-      options.setSelectedAiNavigationVolume({
-        color: (event.currentTarget as HTMLInputElement).value,
-      });
-    });
 }
 
 export function renderTargetPointDetails(options: SpecialActorDetailsOptions): void {

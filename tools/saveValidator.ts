@@ -1034,8 +1034,8 @@ export function validateBlockingVolume(value: unknown): Record<string, unknown> 
 
 /**
  * Allowlist validator for one placed AI Navigation Volume. This mirrors the
- * transform/flag fields of Blocking Volume, but keeps only box-volume navigation
- * bounds fields (`size` + editor `color`).
+ * transform/flag fields of Blocking Volume, but keeps only the box-volume
+ * navigation bounds field (`size`).
  */
 export function validateAiNavigationVolume(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") throw new Error("AI navigation volume must be an object");
@@ -1072,9 +1072,6 @@ export function validateAiNavigationVolume(value: unknown): Record<string, unkno
     volume.size = input.size.map((axis) =>
       validateScaleValue(axis, "AI navigation volume size component"),
     );
-  }
-  if (typeof input.color === "string" && /^#[0-9a-fA-F]{6}$/.test(input.color)) {
-    volume.color = input.color;
   }
   return volume;
 }

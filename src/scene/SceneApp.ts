@@ -3847,7 +3847,7 @@ export class SceneApp {
 
   setAiNavigationVolume(
     index: number,
-    patch: { size?: Vec3; color?: string },
+    patch: { size?: Vec3 },
     label = "Edit AI Navigation Volume",
   ): void {
     const actor = this.layout?.aiNavigationVolumes?.[index];
@@ -3855,8 +3855,7 @@ export class SceneApp {
     const previous = cloneAiNavigationVolume(actor);
     const next = cloneAiNavigationVolume(actor);
     if (patch.size) next.size = [...patch.size];
-    if (patch.color !== undefined) next.color = patch.color;
-    const needsRebuild = patch.size !== undefined || patch.color !== undefined;
+    const needsRebuild = patch.size !== undefined;
     const apply = (value: LayoutAiNavigationVolume): void => {
       if (!this.layout?.aiNavigationVolumes?.[index]) return;
       this.layout.aiNavigationVolumes[index] = cloneAiNavigationVolume(value);
@@ -3878,7 +3877,7 @@ export class SceneApp {
     });
   }
 
-  setSelectedAiNavigationVolume(patch: { size?: Vec3; color?: string }): void {
+  setSelectedAiNavigationVolume(patch: { size?: Vec3 }): void {
     if (this.selection?.kind !== "aiNavigationVolume") return;
     this.setAiNavigationVolume(this.selection.index, patch);
   }

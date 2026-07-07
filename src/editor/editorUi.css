@@ -199,6 +199,17 @@ body.editor-mode #debug-stats {
   cursor: pointer;
 }
 
+.editor-mode input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.editor-mode input[type="number"]::-webkit-inner-spin-button,
+.editor-mode input[type="number"]::-webkit-outer-spin-button {
+  margin: 0;
+  -webkit-appearance: none;
+}
+
 .editor-snaps {
   justify-content: flex-start;
   min-width: 0;
@@ -566,6 +577,12 @@ body.editor-mode #debug-stats {
   gap: 6px;
   color: #c8d0d4;
   font-size: 12px;
+}
+
+.detail-vector-scale .detail-vector-label {
+  width: 100%;
+  justify-content: space-between;
+  gap: 4px;
 }
 
 .vector-fields {

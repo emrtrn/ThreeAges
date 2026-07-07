@@ -473,7 +473,23 @@
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "aiNavigationVolumes": [],
+  "aiNavigationVolumes": [
+    {
+      "id": "ai-navigation-volume-1",
+      "position": [
+        -12.61,
+        2,
+        1.09
+      ],
+      "name": "AI Navigation Volume",
+      "scale": 1,
+      "size": [
+        20,
+        4,
+        30
+      ]
+    }
+  ],
   "targetPoints": [
     {
       "id": "target-point-1",

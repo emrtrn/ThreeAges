@@ -744,8 +744,6 @@ export interface LayoutAiNavigationVolume {
   scale?: number | Vec3;
   /** Box dimensions in world units. */
   size?: Vec3;
-  /** Editor tint (hex `#rrggbb`). */
-  color?: string;
 }
 
 /**

@@ -341,7 +341,6 @@ export function cloneAiNavigationVolume(
   if (volume.rotation !== undefined) clone.rotation = [...volume.rotation];
   if (volume.scale !== undefined) clone.scale = cloneScale(volume.scale);
   if (volume.size !== undefined) clone.size = [...volume.size];
-  if (volume.color !== undefined) clone.color = volume.color;
   return clone;
 }
 

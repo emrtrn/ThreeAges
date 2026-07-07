@@ -6,15 +6,18 @@ import {
   LineBasicMaterial,
   LineSegments,
   Mesh,
-  MeshStandardMaterial,
 } from "three";
 
 import type { Vec3 } from "@engine/scene/layout";
-import type { ResolvedAiNavigationVolume } from "@engine/scene/aiNavigationVolume";
+import {
+  AI_NAVIGATION_VOLUME_WIRE_COLOR,
+  type ResolvedAiNavigationVolume,
+} from "@engine/scene/aiNavigationVolume";
 
 export {
   AI_NAVIGATION_VOLUME_DEFAULTS,
   AI_NAVIGATION_VOLUME_DEFAULT_SIZE,
+  AI_NAVIGATION_VOLUME_WIRE_COLOR,
   aiNavigationVolumeAabb,
   readVolumeScale,
   resolveAiNavigationVolume,
@@ -37,30 +40,12 @@ export function createAiNavigationVolumeObject(
   const group = new Group();
   group.name = item.name;
   const geometry = new BoxGeometry(item.size[0], item.size[1], item.size[2]);
-  const fill = new Mesh(
-    geometry,
-    new MeshStandardMaterial({
-      color: new Color(item.color),
-      transparent: true,
-      opacity: 0.16,
-      roughness: 0.9,
-      metalness: 0,
-      depthWrite: false,
-    }),
-  );
-  fill.name = "ai-navigation-volume-fill";
-  fill.castShadow = false;
-  fill.receiveShadow = false;
-  // Unreal-style volume picking: the translucent fill is a visual only and must
-  // not be clickable — otherwise the volume's face covers the whole scene and
-  // steals every click, so objects inside/behind it can't be selected. Only the
-  // wireframe edges are pickable (below), exactly like Unreal's brush volumes.
-  fill.raycast = () => {};
-  group.add(fill);
-
+  // Unreal-style volume: wireframe edges only, no translucent fill surface. The
+  // edges are the only geometry (and the only pickable surface), so objects
+  // inside/behind the volume stay selectable, exactly like Unreal brush volumes.
   const wireframe = new LineSegments(
     new EdgesGeometry(geometry),
-    new LineBasicMaterial({ color: new Color(item.color) }),
+    new LineBasicMaterial({ color: new Color(AI_NAVIGATION_VOLUME_WIRE_COLOR) }),
   );
   wireframe.name = "ai-navigation-volume-wire";
   group.add(wireframe);

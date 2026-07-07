@@ -156,7 +156,6 @@ export interface EditableAiNavigationVolume {
   name: string;
   hidden: boolean;
   size: Vec3;
-  color: string;
 }
 
 /** Resolved Target Point fields for AI patrol authoring details. */
