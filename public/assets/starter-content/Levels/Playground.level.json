@@ -501,9 +501,9 @@
     {
       "id": "ai-navigation-volume-1",
       "position": [
-        -12.61,
+        -12.32,
         6.78,
-        1
+        1.63
       ],
       "name": "AI Navigation Volume",
       "scale": [
@@ -512,9 +512,9 @@
         3
       ],
       "size": [
-        20,
-        20,
-        20
+        12,
+        11,
+        10
       ],
       "color": "#1eff00"
     }
