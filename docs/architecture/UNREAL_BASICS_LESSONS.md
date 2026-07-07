@@ -170,6 +170,14 @@ tutkalı shell'lerde ince kalır.
   daha sert arcade davranisi icin Z yukseltilebilir, 0 ise hedefe donusu
   durdurur.
 
+- *2026-07-07* - **Character capsule source of truth karari.** Forge
+  `parentClass:"character"` icin fiziksel govde olcusunu `CharacterMovement`
+  icinde ikinci kez tutmaz. Tek kaynak required non-sensor capsule `Collider`
+  olur; ground footprint, AI sight height ve nav fallback bu collider kapsulunden
+  turetilir. Legacy `CharacterMovement.capsuleRadius/capsuleHalfHeight` sadece
+  eski dosya toleransi icin okunur; actor save/normalize akisi bu alanlari yeni
+  kayitlardan temizler.
+
 ## Mevcut runtime taban çizgisi (kanıt)
 
 - Davranışlar saf game kodu: `src/game/behaviors.ts` — `spin`, `input-move`
