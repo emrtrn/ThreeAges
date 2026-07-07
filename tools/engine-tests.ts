@@ -20956,7 +20956,7 @@ check("createAiNavigationView fills baked walkable cells and disposes the mesh",
     bounds: [{ min: [-1, 0, -1], max: [1, 2, 1] }],
     passableCells: [
       [-0.5, 0, -0.5],
-      [0, 0, 0],
+      [0, 1, 0],
       [0.5, 0, 0.5],
     ],
     cellSize: 0.5,
@@ -20964,8 +20964,9 @@ check("createAiNavigationView fills baked walkable cells and disposes the mesh",
   const fill = view.getObjectByName("ai-nav-passable");
   assert.ok(fill, "walkable-cell fill mesh drawn");
   // 3 cells * 2 triangles * 3 verts * 3 components = 54 position floats.
-  const position = (fill as { geometry: { getAttribute(name: string): { count: number } } }).geometry.getAttribute("position");
+  const position = (fill as { geometry: { getAttribute(name: string): { count: number; getY(index: number): number } } }).geometry.getAttribute("position");
   assert.equal(position.count, 18, "two triangles per passable cell");
+  assert.ok(position.getY(6) > position.getY(0), "passable fill preserves per-cell floor height");
   disposeAiNavigationView(view);
 
   const empty = createAiNavigationView({ bounds: [{ min: [-1, 0, -1], max: [1, 2, 1] }], passableCells: [] });

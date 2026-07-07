@@ -279,12 +279,13 @@ export function disposeAiNavigationView(group: Group | null): void {
  * single draw call). Sized just under the cell so the blue grid lines stay
  * visible through the gaps. Returns null when there is nothing to fill.
  */
-function passableCellMesh(cells: readonly Vec3[], cellSize: number, y: number): Mesh | null {
+function passableCellMesh(cells: readonly Vec3[], cellSize: number, yOffset: number): Mesh | null {
   if (cells.length === 0) return null;
   const half = (Number.isFinite(cellSize) && cellSize > 0 ? cellSize : DEFAULT_CELL_SIZE) * 0.42;
   const positions: number[] = [];
   for (const cell of cells) {
     const x = cell[0];
+    const y = cell[1] + yOffset;
     const z = cell[2];
     positions.push(
       x - half, y, z - half,

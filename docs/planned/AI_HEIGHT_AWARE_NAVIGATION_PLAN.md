@@ -1,7 +1,8 @@
 # AI Yükseklik-Farkında Navigasyon (Merdiven/Rampa ile Y Ekseni) Planı
 
 > Tarih: 2026-07-07
-> Durum: Asama 1-2 uygulandi ve `build:verify` gecti. Asama 3-4 acik.
+> Durum: Asama 1-3 uygulandi; `build:verify` ve AI Navigation smoke gecti.
+> Asama 4 acik.
 > Kapsam: AI patrol/moveTo yol bulmasının Y ekseninde (merdiven/rampa ile
 > ulaşılan yükseltilmiş target point'ler) çalışması.
 
@@ -118,6 +119,8 @@ için mimariye oturuyor. (Recast tarzı tam navmesh veya jump-link'ler aşırı 
      `staticSurfaceTriangles()` uzerinden heightfield ornekliyor; sahne ustu
      patrol smoke testi sonraki cila asamasinda kaldi.
 3. **Editör overlay:** dolguyu gerçek yüksekliklerde çiz (görsel teyit). Opsiyonel.
+   - Durum: Tamamlandi. Walkable-cell fill artik `NavGrid.floorY` ile ciziliyor;
+     editor preview bake `sampleFloorY` kancasi kullaniyor.
 4. **Cila:** üst-kat duvarları için yükseklik-farkında engel occupancy; smoke
    testi (yükseltilmiş target point'e ulaşan controller, "failure" yok).
 

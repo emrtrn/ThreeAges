@@ -18,7 +18,7 @@ test("editor AI Navigation Volume smoke: add, inspect, show, save, reload", asyn
   await page.getByRole("button", { name: "AI Navigation Volume" }).click();
 
   await expect(page.getByTestId("outliner-row")).toHaveCount(rowCountBefore + 1);
-  await expect(page.getByTestId("outliner-row").filter({ hasText: "AI Navigation Volume" })).toBeVisible();
+  await expect(page.getByTestId("outliner-row").filter({ hasText: "AI Navigation Volume" }).last()).toBeVisible();
   await expect(page.locator('[data-inspector-pane="details"] .detail-heading')).toContainText(
     "volume / AI navigation volume",
   );
@@ -40,10 +40,11 @@ test("editor AI Navigation Volume smoke: add, inspect, show, save, reload", asyn
 
   await page.goto(`/?editor&aiNavVolumeSmokeReload=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByTestId("outliner-row").filter({ hasText: "AI Navigation Volume" })).toBeVisible({
+  const savedVolumeRow = page.getByTestId("outliner-row").filter({ hasText: "AI Navigation Volume" }).last();
+  await expect(savedVolumeRow).toBeVisible({
     timeout: 30_000,
   });
-  await page.getByTestId("outliner-row").filter({ hasText: "AI Navigation Volume" }).click();
+  await savedVolumeRow.click();
   await expect(page.locator('[data-ai-nav-size="0"]')).toHaveValue("12");
 
   expect(pageErrors).toEqual([]);

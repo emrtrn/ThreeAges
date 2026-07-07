@@ -59,7 +59,9 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
+import { findGroundAt } from "@/game/collision";
 import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
+import { slopeCosFromDegrees } from "@/game/slopeSurface";
 import type { PlayCameraPose } from "@/play/cameraHandoff";
 import {
   assetPath,
@@ -94,7 +96,7 @@ import {
   convertUnlitModelMaterialsToLit,
   isRenderableMesh,
 } from "@engine/render-three/materials";
-import { buildNavGrid, type NavAabb } from "@engine/navigation/gridNavigation";
+import { buildNavGrid, type NavAabb, type NavAgent } from "@engine/navigation/gridNavigation";
 import {
   attachActorLight,
   entityLightItem,
@@ -480,6 +482,8 @@ const AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS =
 /** Standing height + step height of the default agent the walkable-area preview bakes for. */
 const AI_NAV_DEBUG_AGENT_HEIGHT = 1.8;
 const AI_NAV_DEBUG_AGENT_STEP_HEIGHT = 0.45;
+const AI_NAV_DEBUG_AGENT_STEP_DOWN = 0.5;
+const AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG = 50;
 
 function inflateNavAabb2d(blocker: NavAabb, radius: number): NavAabb {
   const r = Math.max(0, radius);
@@ -6615,20 +6619,24 @@ export class SceneApp {
     let floorY = Infinity;
     for (const bound of bounds) floorY = Math.min(floorY, bound.min[1]);
     if (!Number.isFinite(floorY)) return [];
+    const agent: NavAgent = {
+      radius: AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS,
+      // Realistic standing agent, not the full volume height — a beam above head
+      // height must not paint the floor under it as blocked.
+      height: AI_NAV_DEBUG_AGENT_HEIGHT,
+      // Without a step height the ground slab itself (top ~= floor) reads as a
+      // vertical obstacle and blocks every cell, so nothing renders green.
+      stepHeight: AI_NAV_DEBUG_AGENT_STEP_HEIGHT,
+      maxStepDown: AI_NAV_DEBUG_AGENT_STEP_DOWN,
+      maxSlopeAngleDeg: AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG,
+      clearancePadding: AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING,
+    };
     const grid = buildNavGrid({
-      agent: {
-        radius: AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS,
-        // Realistic standing agent, not the full volume height — a beam above head
-        // height must not paint the floor under it as blocked.
-        height: AI_NAV_DEBUG_AGENT_HEIGHT,
-        // Without a step height the ground slab itself (top ~= floor) reads as a
-        // vertical obstacle and blocks every cell, so nothing renders green.
-        stepHeight: AI_NAV_DEBUG_AGENT_STEP_HEIGHT,
-        clearancePadding: AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING,
-      },
+      agent,
       blockers,
       bounds,
       footY: floorY,
+      sampleFloorY: this.aiNavDebugFloorSampler(blockers, bounds, agent),
       cellSize: AI_NAV_DEBUG_CELL_SIZE,
       safetyMargin: AI_NAV_DEBUG_GRID_SAFETY_MARGIN,
     });
@@ -6636,11 +6644,40 @@ export class SceneApp {
     const cells: Vec3[] = [];
     for (let z = 0; z < grid.rows; z += 1) {
       for (let x = 0; x < grid.cols; x += 1) {
-        if (grid.passable[z * grid.cols + x] !== 1) continue;
-        cells.push([grid.originX + x * grid.cellSize, floorY, grid.originZ + z * grid.cellSize]);
+        const idx = z * grid.cols + x;
+        if (grid.passable[idx] !== 1) continue;
+        cells.push([grid.originX + x * grid.cellSize, grid.floorY[idx] ?? floorY, grid.originZ + z * grid.cellSize]);
       }
     }
     return cells;
+  }
+
+  private aiNavDebugFloorSampler(
+    blockers: readonly NavAabb[],
+    bounds: readonly NavAabb[],
+    agent: NavAgent,
+  ): (x: number, z: number) => number | null {
+    const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
+    const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG);
+    const surfaces = this.physicsSubsystem.staticSurfaceTriangles();
+    return (x, z) => {
+      let minY = Infinity;
+      let maxY = -Infinity;
+      for (const bound of bounds) {
+        if (x < bound.min[0] || x > bound.max[0] || z < bound.min[2] || z > bound.max[2]) continue;
+        minY = Math.min(minY, bound.min[1]);
+        maxY = Math.max(maxY, bound.max[1]);
+      }
+      if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY < minY) return null;
+      const hit = findGroundAt([x, maxY, z], blockers, {
+        footprintHalf,
+        maxStepUp: 0,
+        maxStepDown: maxY - minY,
+        surfaces,
+        maxSlopeCos,
+      });
+      return hit ? hit.floorY : null;
+    };
   }
 
   /**
