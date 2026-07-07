@@ -1310,12 +1310,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const transform = this.characterMovementSubsystem.transformOf(entityId);
     if (!transform) return "failure";
     const acceptanceRadius = request.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS;
-    if (planarDistance(transform.position, request.position) <= acceptanceRadius) {
+    if (distance3d(transform.position, request.position) <= acceptanceRadius) {
       this.aiPathFollowing.delete(entityId);
       return "success";
     }
     const existing = this.aiPathFollowing.get(entityId);
-    if (!existing || !samePlanarPoint(existing.goal, request.position)) {
+    if (!existing || !samePoint3d(existing.goal, request.position)) {
       const path = this.buildAiPath(entityId, transform.position, request.position);
       if (path.status === "failure" || path.points.length < 2) {
         this.aiPathFollowing.set(entityId, {
@@ -4306,12 +4306,12 @@ function cloneTransform(transform: TransformComponent): TransformComponent {
   };
 }
 
-function planarDistance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
-  return Math.hypot(b[0] - a[0], b[2] - a[2]);
+function distance3d(a: readonly [number, number, number], b: readonly [number, number, number]): number {
+  return Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
 }
 
-function samePlanarPoint(a: readonly [number, number, number], b: readonly [number, number, number]): boolean {
-  return planarDistance(a, b) <= 1e-6;
+function samePoint3d(a: readonly [number, number, number], b: readonly [number, number, number]): boolean {
+  return distance3d(a, b) <= 1e-6;
 }
 
 function createRuntimeUserSettingsStore(): UserSettingsStore | null {

@@ -83,9 +83,12 @@ export interface WaypointAdvance {
 
 /**
  * Advances a path-follower's waypoint cursor past every waypoint already within
- * acceptance. Intermediate waypoints use a tight radius so a generous final
- * `acceptance` cannot make the agent skip a corner early and cut through an
- * inflated blocker; only the final goal honors the authored acceptance.
+ * acceptance in 3D space. Intermediate waypoints use a tight radius so a
+ * generous final `acceptance` cannot make the agent skip a corner early and cut
+ * through an inflated blocker; only the final goal honors the authored
+ * acceptance. The vertical component matters for heightfield paths: reaching a
+ * ramp/platform waypoint's X/Z is not enough if the agent has not actually
+ * climbed to that floor yet.
  */
 export function advanceWaypoint(
   path: readonly Vec3[],
@@ -97,11 +100,15 @@ export function advanceWaypoint(
   while (index < path.length) {
     const isFinal = index >= path.length - 1;
     const radius = isFinal ? acceptance.final : acceptance.intermediate;
-    if (planarDistanceXZ(position, path[index]!) > radius) break;
+    if (distance3d(position, path[index]!) > radius) break;
     if (isFinal) return { waypointIndex: index, arrived: true };
     index += 1;
   }
   return { waypointIndex: index, arrived: false };
+}
+
+function distance3d(a: Vec3, b: Vec3): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
 
 function planarDistanceXZ(a: Vec3, b: Vec3): number {
@@ -145,6 +152,8 @@ export interface NavGrid {
   readonly footY: number;
   /** Effective erosion (agent radius + clearance padding + grid safety margin). */
   readonly clearanceRadius: number;
+  /** Agent capsule height used for vertical blocker tests. */
+  readonly height: number;
   /** Maximum floor-height delta allowed when stepping to a higher neighbor. */
   readonly stepHeight: number;
   /** Maximum floor-height delta allowed when stepping down to a lower neighbor. */
@@ -256,6 +265,7 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
     originZ,
     footY,
     clearanceRadius,
+    height,
     stepHeight,
     maxStepDown,
     passable,
@@ -319,7 +329,7 @@ export function searchNavGrid(grid: NavGrid, start: Vec3, goal: Vec3): PathResul
       return {
         status: "success",
         points: pathPoints(start, goal, cells, toPoint, (a, b) =>
-          segmentSafe(a, b, grid.blockers, grid.clearanceRadius, authoredBounds),
+          segmentSafe(a, b, grid.blockers, grid.clearanceRadius, grid.height, grid.stepHeight, authoredBounds),
         ),
         visited,
       };
@@ -585,9 +595,13 @@ function segmentSafe(
   b: Vec3,
   blockers: readonly NavAabb[],
   radius: number,
+  agentHeight: number,
+  stepHeight: number,
   bounds: readonly NavAabb[] | undefined,
 ): boolean {
-  if (blockers.some((blocker) => segmentIntersectsAabb2d(a, b, blocker, radius))) return false;
+  if (blockers.some((blocker) => segmentIntersectsBlockingAabb(a, b, blocker, radius, agentHeight, stepHeight))) {
+    return false;
+  }
   return !bounds || segmentInsideAnyErodedAabb2d(a, b, bounds, radius);
 }
 
@@ -602,7 +616,26 @@ function pointInsideErodedAabb2d(point: Vec3, bound: NavAabb, radius: number): b
     point[2] <= bound.max[2] - radius;
 }
 
-function segmentIntersectsAabb2d(a: Vec3, b: Vec3, blocker: NavAabb, radius: number): boolean {
+function segmentIntersectsBlockingAabb(
+  a: Vec3,
+  b: Vec3,
+  blocker: NavAabb,
+  radius: number,
+  agentHeight: number,
+  stepHeight: number,
+): boolean {
+  const clipped = clipSegmentAabb2d(a, b, blocker, radius);
+  if (!clipped) return false;
+  const [tMin, tMax] = clipped;
+  const y0 = a[1] + (b[1] - a[1]) * tMin;
+  const y1 = a[1] + (b[1] - a[1]) * tMax;
+  const minFootY = Math.min(y0, y1);
+  const maxFootY = Math.max(y0, y1);
+  return maxFootY > blocker.min[1] - Math.max(agentHeight, 0.001) &&
+    minFootY < blocker.max[1] - stepHeight;
+}
+
+function clipSegmentAabb2d(a: Vec3, b: Vec3, blocker: NavAabb, radius: number): [number, number] | null {
   let tMin = 0;
   let tMax = 1;
   const minX = blocker.min[0] - radius;
@@ -610,11 +643,11 @@ function segmentIntersectsAabb2d(a: Vec3, b: Vec3, blocker: NavAabb, radius: num
   const minZ = blocker.min[2] - radius;
   const maxZ = blocker.max[2] + radius;
   const xHit = clipSegmentAxis(a[0], b[0], minX, maxX, tMin, tMax);
-  if (!xHit) return false;
+  if (!xHit) return null;
   tMin = xHit[0];
   tMax = xHit[1];
   const zHit = clipSegmentAxis(a[2], b[2], minZ, maxZ, tMin, tMax);
-  return Boolean(zHit);
+  return zHit;
 }
 
 function clipSegmentAxis(from: number, to: number, min: number, max: number, tMin: number, tMax: number): [number, number] | null {

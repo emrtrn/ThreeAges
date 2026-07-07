@@ -1,8 +1,8 @@
 # AI Yükseklik-Farkında Navigasyon (Merdiven/Rampa ile Y Ekseni) Planı
 
 > Tarih: 2026-07-07
-> Durum: Asama 1-3 uygulandi; `build:verify` ve AI Navigation smoke gecti.
-> Asama 4 acik.
+> Durum: Asama 1-4 engine/runtime cila uygulandi.
+> Gercek sahne uzeri browser smoke ve kalan semptom incelemesi acik.
 > Kapsam: AI patrol/moveTo yol bulmasının Y ekseninde (merdiven/rampa ile
 > ulaşılan yükseltilmiş target point'ler) çalışması.
 
@@ -123,11 +123,26 @@ için mimariye oturuyor. (Recast tarzı tam navmesh veya jump-link'ler aşırı 
      editor preview bake `sampleFloorY` kancasi kullaniyor.
 4. **Cila:** üst-kat duvarları için yükseklik-farkında engel occupancy; smoke
    testi (yükseltilmiş target point'e ulaşan controller, "failure" yok).
+   - Durum: Kismen tamamlandi. 2026-07-07 runtime follower kabul kapisi
+     yukseklik-farkinda yapildi: `advanceWaypoint`, `requestAiMove` erken success
+     ve mevcut hedef karsilastirmasi artik yalniz X/Z degil 3B mesafe kullanir.
+     Bu, AI'in target point X/Z'sine vardim sanip rampadaki/ust kattaki hedefi
+     erken tamamlamasini engeller.
+   - Durum: Tamamlandi. 2026-07-07 nav grid shortcut/segment guvenligi
+     height-aware yapildi: path compression artik blocker X/Z kesismesinde
+     segmentin Y araligini ve ajan kapsul yuksekligini de kontrol eder. Alt
+     kattaki blocker ust-kat segmentini, ust kattaki blocker alt-kat segmentini
+     gereksiz bloklamaz. Engine regresyon testi eklendi.
+   - Acik: gercek sahne uzerinde yukseltilmis target point'e ulasan controller
+     smoke'u ve mevcut "hedef 1'de yurume animasyonunda kalma" semptomunun ayri
+     kok neden incelemesi.
 
 ## Testler
 - **Engine unit:** merdiven heightfield alçak→yüksek bağlanır; çok yüksek basamak
   bağlanmaz; rampa bağlanır; platformdaki hedef erişilebilir; düz sahnede eski
-  parite bozulmaz.
+  parite bozulmaz; heightfield waypoint/goal kabulü X/Z yakinligi tek basina
+  yeterli saymaz; heightfield segment shortcut alt/ust kat blocker ayrimini
+  korur.
 - **Smoke:** patrol sahnesine merdivenle erişilen yükseltilmiş target point →
   controller ulaşır ("failure" yok).
 

@@ -268,49 +268,25 @@
     },
     {
       "assetId": "sm-linearstair",
+      "placements": []
+    },
+    {
+      "assetId": "sm-ramp",
       "placements": [
         {
           "position": [
-            -9.54,
-            0,
-            9.49
+            -7.24,
+            -2.18,
+            6.62
           ],
           "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
           "scale": 1
         }
       ]
     },
     {
-      "assetId": "sm-ramp",
-      "placements": []
-    },
-    {
       "assetId": "sm-rightarm",
-      "placements": [
-        {
-          "position": [
-            -10.25,
-            0,
-            6.5
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": [
-            0.5,
-            1,
-            1
-          ]
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-chair-ktx2",
@@ -497,28 +473,7 @@
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "aiNavigationVolumes": [
-    {
-      "id": "ai-navigation-volume-1",
-      "position": [
-        -12.32,
-        4.94,
-        1.11
-      ],
-      "name": "AI Navigation Volume",
-      "scale": [
-        1.8,
-        1,
-        3
-      ],
-      "size": [
-        12,
-        11,
-        10
-      ],
-      "color": "#1eff00"
-    }
-  ],
+  "aiNavigationVolumes": [],
   "targetPoints": [
     {
       "id": "target-point-1",
@@ -537,9 +492,9 @@
     {
       "id": "target-point-2",
       "position": [
-        -9,
-        2.25,
-        4
+        -6.44,
+        0.5,
+        5.44
       ],
       "name": "Target Point 2",
       "scale": 1,

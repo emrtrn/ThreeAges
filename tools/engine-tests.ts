@@ -6633,6 +6633,24 @@ check("nav grid heightfield connects stair-like floor samples and preserves wayp
   );
 });
 
+check("nav grid heightfield segment shortcut ignores blockers below the segment floor", () => {
+  const lowerWall: NavAabb = { min: [1.5, 0, -0.25], max: [2.5, 0.4, 0.25] };
+  const grid = buildNavGrid({
+    agent: { radius: 0, height: 1.8, stepHeight: 0.45 },
+    blockers: [lowerWall],
+    bounds: [{ min: [0, -1, 0], max: [4, 3, 0] }],
+    footY: 2,
+    cellSize: 1,
+    safetyMargin: 0,
+    sampleFloorY: (_x, z) => (Math.abs(z) < 1e-6 ? 2 : null),
+  });
+  assert.ok(grid, "heightfield grid should build");
+
+  const path = searchNavGrid(grid!, [0, 2, 0], [4, 2, 0]);
+  assert.equal(path.status, "success");
+  assert.deepEqual(path.points, [[0, 2, 0], [4, 2, 0]]);
+});
+
 check("nav grid heightfield rejects neighbor steps above the agent step height", () => {
   const grid = buildNavGrid({
     agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
@@ -6731,6 +6749,27 @@ check("advanceWaypoint keeps intermediate waypoints tight and honors the final a
   const arrived = advanceWaypoint([[0, 0, 0], [0, 0, 2], [2, 0, 2]], 2, [1, 0, 2], acceptance);
   assert.equal(arrived.waypointIndex, 2);
   assert.equal(arrived.arrived, true);
+});
+
+check("advanceWaypoint does not accept heightfield waypoints on X/Z proximity alone", () => {
+  const acceptance = { final: 0.25, intermediate: 0.175 };
+
+  const stillBelowIntermediate = advanceWaypoint(
+    [[0, 0, 0], [1, 1, 0], [2, 1, 0]],
+    1,
+    [1, 0.2, 0],
+    acceptance,
+  );
+  assert.equal(stillBelowIntermediate.waypointIndex, 1);
+  assert.equal(stillBelowIntermediate.arrived, false);
+
+  const stillBelowFinal = advanceWaypoint([[0, 0, 0], [1, 1, 0]], 1, [1, 0.6, 0], acceptance);
+  assert.equal(stillBelowFinal.waypointIndex, 1);
+  assert.equal(stillBelowFinal.arrived, false);
+
+  const reachedFinalHeight = advanceWaypoint([[0, 0, 0], [1, 1, 0]], 1, [1, 0.9, 0], acceptance);
+  assert.equal(reachedFinalHeight.waypointIndex, 1);
+  assert.equal(reachedFinalHeight.arrived, true);
 });
 
 function segmentHitsTestAabb2d(
