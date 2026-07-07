@@ -24,7 +24,18 @@
     },
     {
       "assetId": "shape-cube",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            4.59,
+            0,
+            8.23
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
+        }
+      ]
     },
     {
       "assetId": "sm-pickup-coin",
@@ -94,6 +105,23 @@
       "color": "#ffffff",
       "intensity": 2,
       "castShadow": true
+    }
+  ],
+  "aiNavigationVolumes": [
+    {
+      "id": "ai-navigation-volume-1",
+      "position": [
+        7.02,
+        1.67,
+        6.45
+      ],
+      "name": "AI Navigation Volume",
+      "scale": 1,
+      "size": [
+        10,
+        4,
+        10
+      ]
     }
   ]
 }

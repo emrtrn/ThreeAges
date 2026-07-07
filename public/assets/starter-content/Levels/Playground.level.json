@@ -268,7 +268,22 @@
     },
     {
       "assetId": "sm-linearstair",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -9.59,
+            0,
+            9.43
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": 1
+        }
+      ]
     },
     {
       "assetId": "sm-ramp",
@@ -276,7 +291,26 @@
     },
     {
       "assetId": "sm-rightarm",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -10.25,
+            0,
+            6.5
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            0.5,
+            1,
+            1
+          ]
+        }
+      ]
     },
     {
       "assetId": "sm-chair-ktx2",
@@ -503,8 +537,8 @@
     {
       "id": "target-point-2",
       "position": [
-        -10,
-        0,
+        -9,
+        2.25,
         4
       ],
       "name": "Target Point 2",

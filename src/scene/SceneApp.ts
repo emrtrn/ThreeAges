@@ -94,7 +94,7 @@ import {
   convertUnlitModelMaterialsToLit,
   isRenderableMesh,
 } from "@engine/render-three/materials";
-import type { NavAabb } from "@engine/navigation/gridNavigation";
+import { buildNavGrid, type NavAabb } from "@engine/navigation/gridNavigation";
 import {
   attachActorLight,
   entityLightItem,
@@ -6574,6 +6574,7 @@ export class SceneApp {
     const queries = this.aiQueryView();
     const routes = this.aiTargetPointRouteView();
     const agentClearances = this.aiAgentClearanceView();
+    const passableCells = this.aiNavPassableCells(blockers, bounds);
     if (
       blockers.length === 0 &&
       inflatedBlockers.length === 0 &&
@@ -6588,6 +6589,7 @@ export class SceneApp {
     this.aiNavigationView = createAiNavigationView({
       blockers,
       inflatedBlockers,
+      passableCells,
       bounds,
       cellSize: AI_NAV_DEBUG_CELL_SIZE,
       perception,
@@ -6596,6 +6598,45 @@ export class SceneApp {
       agentClearances,
     });
     this.scene.add(this.aiNavigationView);
+  }
+
+  /**
+   * Walkable cell centers of the baked nav grid for the default debug agent —
+   * drawn as the green walkable-area fill. Only meaningful inside authored AI
+   * Navigation Volumes (they give the grid a fixed extent); returns [] otherwise.
+   * Baked at the volume floor so floor-level obstacles erode the area while an
+   * agent still reads as able to stand under high overhangs (vertical filtering).
+   */
+  private aiNavPassableCells(blockers: readonly NavAabb[], bounds: readonly NavAabb[]): Vec3[] {
+    if (bounds.length === 0) return [];
+    let floorY = Infinity;
+    let ceilY = -Infinity;
+    for (const bound of bounds) {
+      floorY = Math.min(floorY, bound.min[1]);
+      ceilY = Math.max(ceilY, bound.max[1]);
+    }
+    if (!Number.isFinite(floorY) || !Number.isFinite(ceilY)) return [];
+    const grid = buildNavGrid({
+      agent: {
+        radius: AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS,
+        height: Math.max(0.1, ceilY - floorY),
+        clearancePadding: AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING,
+      },
+      blockers,
+      bounds,
+      footY: floorY,
+      cellSize: AI_NAV_DEBUG_CELL_SIZE,
+      safetyMargin: AI_NAV_DEBUG_GRID_SAFETY_MARGIN,
+    });
+    if (!grid) return [];
+    const cells: Vec3[] = [];
+    for (let z = 0; z < grid.rows; z += 1) {
+      for (let x = 0; x < grid.cols; x += 1) {
+        if (grid.passable[z * grid.cols + x] !== 1) continue;
+        cells.push([grid.originX + x * grid.cellSize, floorY, grid.originZ + z * grid.cellSize]);
+      }
+    }
+    return cells;
   }
 
   /**

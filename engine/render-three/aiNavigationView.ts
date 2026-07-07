@@ -1,9 +1,12 @@
 import {
   BufferGeometry,
+  DoubleSide,
   Float32BufferAttribute,
   Group,
   LineBasicMaterial,
   LineSegments,
+  Mesh,
+  MeshBasicMaterial,
 } from "three";
 
 import type { NavAabb } from "../navigation/gridNavigation";
@@ -57,6 +60,13 @@ export interface AiNavAgentClearanceView {
 export interface AiNavigationViewInput {
   readonly blockers?: readonly NavAabb[];
   readonly inflatedBlockers?: readonly NavAabb[];
+  /**
+   * Centers of the baked nav grid's walkable cells, drawn as a translucent green
+   * fill (the Unreal navmesh-render analogue). Reflects actual erosion + vertical
+   * blocker filtering, so it shows where an agent can truly stand — not just the
+   * raw blocker footprints.
+   */
+  readonly passableCells?: readonly Vec3[];
   readonly bounds?: readonly NavAabb[];
   readonly followers?: readonly AiNavigationFollowerView[];
   readonly perception?: readonly AiPerceptionView[];
@@ -70,6 +80,7 @@ export interface AiNavigationViewInput {
 const DEFAULT_CELL_SIZE = 0.5;
 const MAX_GRID_LINES_PER_AXIS = 80;
 const GRID_COLOR = 0x4386ff;
+const PASSABLE_COLOR = 0x35c46b;
 const BLOCKER_COLOR = 0xff6b4a;
 const INFLATED_BLOCKER_COLOR = 0xffa142;
 const BOUNDS_COLOR = 0x52a3ff;
@@ -104,10 +115,17 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
     input.queries ?? [],
     input.routes ?? [],
     input.agentClearances ?? [],
+    input.passableCells ?? [],
   );
   if (!bounds) return group;
 
-  const grid = gridSegments(bounds, input.cellSize ?? DEFAULT_CELL_SIZE, y);
+  const cellSize = input.cellSize ?? DEFAULT_CELL_SIZE;
+  // Walkable-cell fill sits below every line layer (renderOrder 20) so grid,
+  // footprints and paths read on top of it.
+  const passableFill = passableCellMesh(input.passableCells ?? [], cellSize, y + 0.008);
+  if (passableFill) group.add(passableFill);
+
+  const grid = gridSegments(bounds, cellSize, y);
   if (grid.length > 0) group.add(lineSegments("ai-nav-grid", grid, GRID_COLOR, 0.18));
 
   const navBounds = blockerFootprintSegments(input.bounds ?? [], y + 0.01);
@@ -249,11 +267,48 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
 export function disposeAiNavigationView(group: Group | null): void {
   if (!group) return;
   group.traverse((object) => {
-    if (!(object instanceof LineSegments)) return;
+    if (!(object instanceof LineSegments) && !(object instanceof Mesh)) return;
     object.geometry.dispose();
     const materials = Array.isArray(object.material) ? object.material : [object.material];
     for (const material of materials) material.dispose();
   });
+}
+
+/**
+ * Two triangles per walkable cell, merged into one translucent green mesh (a
+ * single draw call). Sized just under the cell so the blue grid lines stay
+ * visible through the gaps. Returns null when there is nothing to fill.
+ */
+function passableCellMesh(cells: readonly Vec3[], cellSize: number, y: number): Mesh | null {
+  if (cells.length === 0) return null;
+  const half = (Number.isFinite(cellSize) && cellSize > 0 ? cellSize : DEFAULT_CELL_SIZE) * 0.42;
+  const positions: number[] = [];
+  for (const cell of cells) {
+    const x = cell[0];
+    const z = cell[2];
+    positions.push(
+      x - half, y, z - half,
+      x + half, y, z - half,
+      x + half, y, z + half,
+      x - half, y, z - half,
+      x + half, y, z + half,
+      x - half, y, z + half,
+    );
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  const material = new MeshBasicMaterial({
+    color: PASSABLE_COLOR,
+    transparent: true,
+    opacity: 0.14,
+    side: DoubleSide,
+    depthTest: false,
+    depthWrite: false,
+  });
+  const mesh = new Mesh(geometry, material);
+  mesh.name = "ai-nav-passable";
+  mesh.renderOrder = 19;
+  return mesh;
 }
 
 function lineSegments(name: string, points: readonly Vec3[], color: number, opacity: number): LineSegments {
@@ -281,6 +336,7 @@ function computeBounds(
   queries: readonly AiQueryCandidateView[],
   routes: readonly AiTargetPointRouteView[],
   agentClearances: readonly AiNavAgentClearanceView[],
+  passableCells: readonly Vec3[],
 ): { minX: number; maxX: number; minZ: number; maxZ: number } | null {
   let minX = Infinity;
   let maxX = -Infinity;
@@ -320,6 +376,7 @@ function computeBounds(
     }
   }
   for (const candidate of queries) include(candidate.position);
+  for (const cell of passableCells) include(cell);
   for (const route of routes) {
     include(route.position);
     if (route.next) include(route.next);

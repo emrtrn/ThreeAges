@@ -20883,6 +20883,28 @@ check("createAiNavigationView draws inflated blockers and agent clearance rings"
   disposeAiNavigationView(view);
 });
 
+check("createAiNavigationView fills baked walkable cells and disposes the mesh", () => {
+  const view = createAiNavigationView({
+    bounds: [{ min: [-1, 0, -1], max: [1, 2, 1] }],
+    passableCells: [
+      [-0.5, 0, -0.5],
+      [0, 0, 0],
+      [0.5, 0, 0.5],
+    ],
+    cellSize: 0.5,
+  });
+  const fill = view.getObjectByName("ai-nav-passable");
+  assert.ok(fill, "walkable-cell fill mesh drawn");
+  // 3 cells * 2 triangles * 3 verts * 3 components = 54 position floats.
+  const position = (fill as { geometry: { getAttribute(name: string): { count: number } } }).geometry.getAttribute("position");
+  assert.equal(position.count, 18, "two triangles per passable cell");
+  disposeAiNavigationView(view);
+
+  const empty = createAiNavigationView({ bounds: [{ min: [-1, 0, -1], max: [1, 2, 1] }], passableCells: [] });
+  assert.equal(empty.getObjectByName("ai-nav-passable"), undefined, "no fill mesh when there are no walkable cells");
+  disposeAiNavigationView(empty);
+});
+
 check("createAiNavigationView draws selected AI agent radius and clearance rings", () => {
   const view = createAiNavigationView({
     agentClearances: [
