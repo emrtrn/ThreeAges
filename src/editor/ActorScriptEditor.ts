@@ -758,6 +758,7 @@ export class ActorScriptEditor {
       node.component === "CharacterMovement" ? characterMovementFields(node) : "";
     const cameraField = node.component === "Camera" ? cameraFields(node) : "";
     const springArmField = node.component === "SpringArm" ? springArmFields(node) : "";
+    const aiControllerField = node.component === "AIController" ? this.aiControllerFields(node) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -790,6 +791,7 @@ export class ActorScriptEditor {
       ${characterMovementField}
       ${springArmField}
       ${cameraField}
+      ${aiControllerField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${transformRows}
       <details class="as-advanced">
@@ -826,6 +828,62 @@ export class ActorScriptEditor {
 
   private assetTypeById(assetId: string): string | undefined {
     return (this.options.assets ?? []).find((asset) => asset.id === assetId)?.assetType;
+  }
+
+  /** AI assets ({path,name}) of a given manifest type, name-sorted, for the AI pickers. */
+  private aiAssetsByType(assetType: "behaviorTree" | "blackboard"): Array<{ path: string; name: string }> {
+    return (this.options.assets ?? [])
+      .filter((asset) => asset.assetType === assetType)
+      .map((asset) => ({ path: asset.path, name: asset.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Behavior Tree + Blackboard asset pickers for an AIController component. The
+   * runtime reader keys off asset *paths* (`props.behaviorTree` /
+   * `props.blackboard`), so these dropdowns store the path; an unknown/hand-typed
+   * path is preserved as an option so the picker never silently drops it.
+   */
+  private aiControllerFields(node: ComponentTemplateNode): string {
+    const behaviorTree = this.assetPathPickerField(
+      "data-as-ai-behavior",
+      "Behavior Tree",
+      typeof node.props.behaviorTree === "string" ? node.props.behaviorTree : "",
+      this.aiAssetsByType("behaviorTree"),
+    );
+    const blackboard = this.assetPathPickerField(
+      "data-as-ai-blackboard",
+      "Blackboard",
+      typeof node.props.blackboard === "string" ? node.props.blackboard : "",
+      this.aiAssetsByType("blackboard"),
+    );
+    return `${behaviorTree}${blackboard}`;
+  }
+
+  /** A `<select>` of asset paths (value = path, label = name) with a none/unknown fallback. */
+  private assetPathPickerField(
+    attr: string,
+    label: string,
+    current: string,
+    assets: ReadonlyArray<{ path: string; name: string }>,
+  ): string {
+    const known = assets.some((asset) => asset.path === current);
+    const options = [
+      `<option value="" ${current ? "" : "selected"}>— none —</option>`,
+      ...assets.map(
+        (asset) =>
+          `<option value="${escapeHtml(asset.path)}" ${asset.path === current ? "selected" : ""}>${escapeHtml(asset.name)}</option>`,
+      ),
+      ...(current && !known
+        ? [`<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (unknown)</option>`]
+        : []),
+    ].join("");
+    return `
+      <label class="as-field">
+        <span>${escapeHtml(label)}</span>
+        <select ${attr}>${options}</select>
+      </label>
+    `;
   }
 
   /**
@@ -1090,6 +1148,7 @@ export class ActorScriptEditor {
     this.bindCharacterMovementDetails(node);
     this.bindSpringArmDetails(node);
     this.bindCameraDetails(node);
+    this.bindAIControllerDetails(node);
     this.bindNumberProps(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
@@ -1130,6 +1189,29 @@ export class ActorScriptEditor {
         if (error) error.textContent = parsed.error;
         props.classList.add("is-invalid");
       }
+    });
+  }
+
+  /**
+   * Wires the AIController Behavior Tree + Blackboard pickers (no-op for other
+   * components). Each select writes its chosen asset path into the node props (or
+   * deletes the key when cleared) and re-renders so the raw-props view stays in
+   * sync. Perception / nav-agent tuning still lives in the Advanced raw props.
+   */
+  private bindAIControllerDetails(node: ComponentTemplateNode): void {
+    const behavior = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-ai-behavior]");
+    behavior?.addEventListener("change", () => {
+      if (behavior.value) node.props.behaviorTree = behavior.value;
+      else delete node.props.behaviorTree;
+      this.markDirty();
+      this.render();
+    });
+    const blackboard = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-ai-blackboard]");
+    blackboard?.addEventListener("change", () => {
+      if (blackboard.value) node.props.blackboard = blackboard.value;
+      else delete node.props.blackboard;
+      this.markDirty();
+      this.render();
     });
   }
 

@@ -111,6 +111,14 @@
 > yoksa null'lar); `update target distance` / `update line of sight` mevcut
 > `updateTargetDistanceBlackboard` / `updatePerceptionBlackboard` service'leriyle
 > reconcile edildi (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-07 - Faz 7 ilk dilimi: Content Browser create menu'ye AI
+> asset turleri eklendi (`AI Blackboard` / `AI Behavior Tree` / `AI Query (EQS)`);
+> client `ContentNewKind` union'i genisletildi ve mevcut Faz 2 stub backend'ine
+> baglandi. Yan etkisiz Playwright smoke ile menu girisleri dogrulandi.
+> Revizyon: 2026-07-07 - Faz 7: Actor Script Editor AIController component'ine
+> Behavior Tree + Blackboard asset path picker'lari eklendi (mesh picker kalibi;
+> deger = asset path, bilinmeyen/elle girilmis path korunur). Perception/nav
+> agent tuning halen Advanced raw props'ta.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1373,17 +1381,17 @@ edilebilir data haline getirmek.
 Hedef: AI sistemi kodla calismakla kalmasin, editor icinde uretilip
 baglanabilsin.
 
-- [ ] Content Browser create menu (Faz 2'de eklenen manifest `AssetType`
+- [~] Content Browser create menu (Faz 2'de eklenen manifest `AssetType`
       degerleri uzerine kurulur):
-      - [ ] Blackboard
-      - [ ] Behavior Tree
-      - [ ] EQS Query
+      - [x] Blackboard (`AI Blackboard`)
+      - [x] Behavior Tree (`AI Behavior Tree`)
+      - [x] EQS Query (`AI Query (EQS)`)
       - [ ] ileride State Tree.
-- [ ] Actor Script Editor:
-      - [ ] AIController component add/remove.
-      - [ ] behavior tree picker.
-      - [ ] blackboard picker.
-      - [ ] perception/nav agent settings.
+- [~] Actor Script Editor:
+      - [x] AIController component add/remove (Faz 1 generic add-component listesi).
+      - [x] behavior tree picker (Details `Behavior Tree` select).
+      - [x] blackboard picker (Details `Blackboard` select).
+      - [ ] perception/nav agent settings (halen Advanced raw props).
 - [ ] Behavior Tree Editor v1:
       - [ ] tree outline
       - [ ] add/remove/reorder node
@@ -1401,6 +1409,47 @@ baglanabilsin.
       degisiklikleri icin Codex Security diff scan calistirmayi planla (Codex
       oturumlari icin handoff notu).
 - [ ] Validation: full local gate + Playwright `?editor` smoke.
+
+Tamamlanan Faz 7 Content Browser AI create menu dilim notu (2026-07-07):
+
+- `src/project/ProjectAssetTree.ts` client `ContentNewKind` union'i
+  `blackboard` / `behaviorTree` / `aiQuery` ile genisletildi; `createProjectContent`
+  bunlari mevcut `/__content-new` endpoint'ine gecirir (server tarafi Faz 2'de
+  zaten stub + `AI/` klasor + manifest register + validator ile hazirdi ve
+  `resolveContentNewFile` icin test kapsamindaydi).
+- `src/editor/EditorUi.ts` `CONTENT_NEW_ITEMS` listesine `AI Blackboard`,
+  `AI Behavior Tree`, `AI Query (EQS)` girisleri eklendi; `createContent` prompt
+  etiketi menu label'indan turetiliyor (Script'in "Actor Script" ozel durumu
+  korunuyor).
+- Test: `tests/smoke/content-new-ai.spec.ts` yan etkisiz smoke — content drawer
+  acilir, create context menu tetiklenir ve uc AI girisi dogrulanir; dosya
+  yaratilmaz, temizlik gerekmez.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run build:verify` yesil (verify:dist
+  --strict PASS, editor stringleri game bundle'a sizmaz), hedefli
+  `npx.cmd playwright test tests/smoke/content-new-ai.spec.ts` yesil (`1 passed`).
+  Kalan Faz 7: Actor Script Editor AIController picker'lari, Behavior Tree Editor
+  v1, runtime debug inspector.
+
+Tamamlanan Faz 7 Actor Script Editor AIController picker dilim notu (2026-07-07):
+
+- `src/editor/ActorScriptEditor.ts` AIController component'i icin iki asset picker
+  eklendi: `Behavior Tree` (`props.behaviorTree`) ve `Blackboard`
+  (`props.blackboard`). Mevcut MeshRenderer mesh picker kalibi birebir izlendi:
+  `aiControllerFields` render + `assetPathPickerField` (deger = asset **path**,
+  cunku `readAIControllerComponent` path okur) + `bindAIControllerDetails` wiring;
+  bilinmeyen/elle girilmis path `(unknown)` secenegi olarak korunur, secim
+  temizlenince key silinir. Perception/nav agent tuning halen Advanced raw props.
+- Picker adaylari `options.assets` manifest listesinden `assetType`
+  (`behaviorTree` / `blackboard`) ile filtrelenir; AIController component ekle/
+  cikar zaten Faz 1 generic add-component listesinden geliyordu.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run build:verify` yesil
+  (verify:dist --strict PASS — editor picker kodu game bundle'a sizmaz).
+  Not: Actor editor'u acan uctan uca Playwright smoke bu ortamda cold-vite
+  editor derlemesi + tekrarli kosu yavasligi nedeniyle kararsiz oldugundan
+  (`smoke:browser` da gecmiste zaman asimina ugramisti) eklenmedi; degisiklik
+  test edilmis mesh picker kalibinin birebir aynasi ve runtime reader ayni prop
+  key'lerini kullaniyor. Yan etkisiz `content-new-ai` smoke editor boot + content
+  browser akisini ayrica dogruluyor.
 
 ### Faz 8 - StateTree secenegi
 
