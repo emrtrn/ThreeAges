@@ -5923,14 +5923,17 @@ export class SceneApp {
 
   private select(selection: Selection | null): void {
     this.editorSceneController.select(selection);
+    this.updateAiNavigationView();
   }
 
   private selectMany(selections: Selection[], active: Selection | null): void {
     this.editorSceneController.selectMany(selections, active);
+    this.updateAiNavigationView();
   }
 
   private toggleSelection(selection: Selection): void {
     this.editorSceneController.toggleSelection(selection);
+    this.updateAiNavigationView();
   }
 
   private captureLinkedMoveStarts(active: Selection): LinkedMoveStart[] | undefined {
@@ -6671,13 +6674,22 @@ export class SceneApp {
   }
 
   private aiAgentClearanceView(): AiNavAgentClearanceView[] {
+    const selectedAiEntityId = this.selectedAiEntityId();
     return this.aiSubsystem.getDebugSnapshot().controllers
       .filter((controller) => controller.position)
       .map((controller) => ({
         entityId: controller.pawnEntityId,
         position: controller.position!,
+        agentRadius: AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS,
         radius: AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS,
+        ...(selectedAiEntityId === controller.pawnEntityId ? { selected: true } : {}),
       }));
+  }
+
+  private selectedAiEntityId(): string | null {
+    const selection = this.selection;
+    if (!selection || (selection.kind !== "actor" && selection.kind !== "character")) return null;
+    return selectionId(selection);
   }
 
   private aiNavigationBounds(): NavAabb[] {

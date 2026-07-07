@@ -91,6 +91,9 @@
 > Revizyon: 2026-07-07 - AI Navigation debug overlay path clearance violation
 > dilimi uygulandi: inflated forbidden alanini kesen path segmentleri turuncu
 > overlay olarak ayrica ciziliyor.
+> Revizyon: 2026-07-07 - AI Navigation debug overlay selected-agent radius/
+> clearance dilimi uygulandi: secili AI icin agent capsule radius ve effective
+> clearance halkalari ayri overlay objeleri olarak ciziliyor.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1094,11 +1097,11 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
       - [x] iki waypoint arasindaki duz segment effective radius ile sisirilmis
             blocker'lari kesiyorsa ara grid noktalarini koru.
       - [x] segment-safe compression testi ekle.
-- [ ] Debug/viewport overlay:
+- [x] Debug/viewport overlay:
       - [x] raw static blocker AABB'leri ayri renkte goster.
       - [x] inflated/eroded forbidden alanlari ayri renkte goster.
       - [x] path segmenti clearance ihlali yapiyorsa kirmizi/turuncu ciz.
-      - [ ] secili AI icin agent radius + clearance halkasi ciz.
+      - [x] secili AI icin agent radius + clearance halkasi ciz.
 - [ ] Path cost iyilestirmesi:
       - [ ] nearest-obstacle distance veya clearance score hesapla.
       - [ ] A* maliyetine duvara yakin hucreler icin ek cost ekle.
@@ -1112,6 +1115,7 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
       - [x] path compression duvar kosesi uzerinden shortcut uretmez.
       - [x] debug overlay inflated blocker segmentlerini uretir.
       - [x] debug overlay clearance ihlali yapan path segmentini vurgular.
+      - [x] debug overlay secili AI agent radius + clearance halkasini uretir.
 - [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` AI Navigation overlay
       smoke ve runtime Playground kose-donus smoke.
@@ -1211,6 +1215,24 @@ Tamamlanan AI Navigation debug overlay path clearance violation dilim notu (2026
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`673 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
   PASS). Kalan: secili AI'ya ozel clearance halkasi, clearance-aware path cost /
+  koridor ortalama ve Playwright runtime/editor smoke.
+
+Tamamlanan AI Navigation debug overlay selected-agent radius/clearance dilim notu (2026-07-07):
+
+- `AiNavAgentClearanceView` artik `agentRadius` ve `selected` girdilerini tasir;
+  selected AI icin normal clearance halkasina ek olarak
+  `ai-nav-selected-agent-radius` ve `ai-nav-selected-agent-clearance` object'leri
+  uretilir.
+- Editor `Show > AI Navigation`, aktif actor/character selection id'sini AI
+  controller pawn entity id'siyle eslestirir ve selection degisince overlay'i
+  yeniler.
+- Runtime debug snapshot'i path-following ajanlar icin gercek agent radius ve
+  effective clearance'i beslemeye devam eder; runtime selection olmadigi icin
+  selected highlight editor Play/Show yuzeyine aittir.
+- Test: selected AI radius + clearance ring object'leri kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`674 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS. Kalan: clearance-aware path cost /
   koridor ortalama ve Playwright runtime/editor smoke.
 
 ### Faz 6 - Smart Objects

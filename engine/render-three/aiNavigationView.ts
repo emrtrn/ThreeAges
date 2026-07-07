@@ -46,8 +46,12 @@ export interface AiTargetPointRouteView {
 export interface AiNavAgentClearanceView {
   readonly entityId: string;
   readonly position: Vec3;
+  /** Physical agent/capsule radius before clearance padding and grid safety. */
+  readonly agentRadius?: number;
   /** Effective planar clearance radius used for pathing (agent + padding + grid safety). */
   readonly radius: number;
+  /** Selected AI receives an additional explicit radius + clearance highlight. */
+  readonly selected?: boolean;
 }
 
 export interface AiNavigationViewInput {
@@ -75,6 +79,8 @@ const PATH_FAILED_COLOR = 0xff4d6d;
 const PATH_CLEARANCE_VIOLATION_COLOR = 0xff8a00;
 const WAYPOINT_COLOR = 0xfff06a;
 const AGENT_CLEARANCE_COLOR = 0xffe08a;
+const SELECTED_AGENT_RADIUS_COLOR = 0x75d7ff;
+const SELECTED_AGENT_CLEARANCE_COLOR = 0xffffff;
 const SIGHT_COLOR = 0x8ee66b;
 const HEARING_COLOR = 0x9f7aff;
 const QUERY_CANDIDATE_COLOR = 0x75d7ff;
@@ -126,6 +132,27 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
         0.85,
       ),
     );
+    if (clearance.selected === true) {
+      const agentRadius = positiveFinite(clearance.agentRadius);
+      if (agentRadius !== null) {
+        group.add(
+          lineSegments(
+            "ai-nav-selected-agent-radius",
+            circleSegments(clearance.position, agentRadius, y + 0.125, 40),
+            SELECTED_AGENT_RADIUS_COLOR,
+            1,
+          ),
+        );
+      }
+      group.add(
+        lineSegments(
+          "ai-nav-selected-agent-clearance",
+          circleSegments(clearance.position, radius, y + 0.14, 48),
+          SELECTED_AGENT_CLEARANCE_COLOR,
+          1,
+        ),
+      );
+    }
   }
 
   for (const follower of input.followers ?? []) {

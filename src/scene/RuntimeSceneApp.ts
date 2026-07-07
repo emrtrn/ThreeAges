@@ -1249,10 +1249,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     for (const entityId of this.aiPathFollowing.keys()) {
       const transform = this.characterMovementSubsystem.transformOf(entityId);
       if (!transform) continue;
+      const agent = this.aiNavAgentForEntity(entityId);
       out.push({
         entityId,
         position: transform.position,
-        radius: this.aiEffectiveClearanceRadiusForEntity(entityId),
+        agentRadius: Math.max(0, agent.radius),
+        radius: this.aiEffectiveClearanceRadius(agent),
       });
     }
     return out;
@@ -1358,8 +1360,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     };
   }
 
-  private aiEffectiveClearanceRadiusForEntity(entityId: string): number {
-    const agent = this.aiNavAgentForEntity(entityId);
+  private aiEffectiveClearanceRadius(agent: NavAgent): number {
     return Math.max(0, agent.radius) + Math.max(0, agent.clearancePadding ?? 0) + AI_NAV_GRID_SAFETY_MARGIN;
   }
 

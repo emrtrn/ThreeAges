@@ -20570,6 +20570,23 @@ check("createAiNavigationView draws inflated blockers and agent clearance rings"
   disposeAiNavigationView(view);
 });
 
+check("createAiNavigationView draws selected AI agent radius and clearance rings", () => {
+  const view = createAiNavigationView({
+    agentClearances: [
+      {
+        entityId: "enemy",
+        position: [0, 0, 0],
+        agentRadius: 0.35,
+        radius: 0.7,
+        selected: true,
+      },
+    ],
+  });
+  assert.ok(view.getObjectByName("ai-nav-selected-agent-radius"), "selected agent radius ring drawn");
+  assert.ok(view.getObjectByName("ai-nav-selected-agent-clearance"), "selected clearance ring drawn");
+  disposeAiNavigationView(view);
+});
+
 check("createAiNavigationView highlights path segments that violate inflated clearance", () => {
   const view = createAiNavigationView({
     inflatedBlockers: [{ min: [0.25, 0, -0.25], max: [0.75, 2, 0.25] }],
