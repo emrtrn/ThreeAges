@@ -477,6 +477,9 @@ const AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING = 0.1;
 const AI_NAV_DEBUG_GRID_SAFETY_MARGIN = AI_NAV_DEBUG_CELL_SIZE * 0.5;
 const AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS =
   AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS + AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING + AI_NAV_DEBUG_GRID_SAFETY_MARGIN;
+/** Standing height + step height of the default agent the walkable-area preview bakes for. */
+const AI_NAV_DEBUG_AGENT_HEIGHT = 1.8;
+const AI_NAV_DEBUG_AGENT_STEP_HEIGHT = 0.45;
 
 function inflateNavAabb2d(blocker: NavAabb, radius: number): NavAabb {
   const r = Math.max(0, radius);
@@ -6610,16 +6613,17 @@ export class SceneApp {
   private aiNavPassableCells(blockers: readonly NavAabb[], bounds: readonly NavAabb[]): Vec3[] {
     if (bounds.length === 0) return [];
     let floorY = Infinity;
-    let ceilY = -Infinity;
-    for (const bound of bounds) {
-      floorY = Math.min(floorY, bound.min[1]);
-      ceilY = Math.max(ceilY, bound.max[1]);
-    }
-    if (!Number.isFinite(floorY) || !Number.isFinite(ceilY)) return [];
+    for (const bound of bounds) floorY = Math.min(floorY, bound.min[1]);
+    if (!Number.isFinite(floorY)) return [];
     const grid = buildNavGrid({
       agent: {
         radius: AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS,
-        height: Math.max(0.1, ceilY - floorY),
+        // Realistic standing agent, not the full volume height — a beam above head
+        // height must not paint the floor under it as blocked.
+        height: AI_NAV_DEBUG_AGENT_HEIGHT,
+        // Without a step height the ground slab itself (top ~= floor) reads as a
+        // vertical obstacle and blocks every cell, so nothing renders green.
+        stepHeight: AI_NAV_DEBUG_AGENT_STEP_HEIGHT,
         clearancePadding: AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING,
       },
       blockers,

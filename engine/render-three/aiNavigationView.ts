@@ -300,7 +300,7 @@ function passableCellMesh(cells: readonly Vec3[], cellSize: number, y: number): 
   const material = new MeshBasicMaterial({
     color: PASSABLE_COLOR,
     transparent: true,
-    opacity: 0.14,
+    opacity: 0.22,
     side: DoubleSide,
     depthTest: false,
     depthWrite: false,

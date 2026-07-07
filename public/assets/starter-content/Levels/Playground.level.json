@@ -502,7 +502,7 @@
       "id": "ai-navigation-volume-1",
       "position": [
         -12.61,
-        1.81,
+        6.78,
         1
       ],
       "name": "AI Navigation Volume",
@@ -512,11 +512,11 @@
         3
       ],
       "size": [
-        11,
-        4,
-        10
+        20,
+        20,
+        20
       ],
-      "color": "#0011ff"
+      "color": "#1eff00"
     }
   ],
   "targetPoints": [

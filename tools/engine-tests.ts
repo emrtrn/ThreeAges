@@ -6580,6 +6580,40 @@ check("nav grid baked once matches dynamic findGridPath across many queries", ()
   }
 });
 
+check("nav grid step height filters a ground slab so walkable cells remain", () => {
+  // Reproduces the editor walkable-area preview: a floor collider spans the whole
+  // volume. Without a step height it reads as a vertical obstacle and blocks every
+  // cell; a realistic step height must filter it so cells stay walkable.
+  // Floor top sits just above the bake plane (volume sank slightly into ground):
+  // within a realistic step height, but a vertical obstacle without one.
+  const floor: NavAabb = { min: [-3, -0.5, -3], max: [3, 0.2, 3] };
+  const bounds: NavAabb[] = [{ min: [-3, 0, -3], max: [3, 4, 3] }];
+  const countPassable = (grid: ReturnType<typeof buildNavGrid>): number => {
+    if (!grid) return 0;
+    let count = 0;
+    for (let i = 0; i < grid.passable.length; i += 1) count += grid.passable[i]!;
+    return count;
+  };
+
+  const withoutStep = buildNavGrid({
+    agent: { radius: 0.35, height: 1.8, clearancePadding: 0.1 },
+    blockers: [floor],
+    bounds,
+    footY: 0,
+    cellSize: 0.5,
+  });
+  assert.equal(countPassable(withoutStep), 0, "no step height => ground slab blocks every cell");
+
+  const withStep = buildNavGrid({
+    agent: { radius: 0.35, height: 1.8, stepHeight: 0.45, clearancePadding: 0.1 },
+    blockers: [floor],
+    bounds,
+    footY: 0,
+    cellSize: 0.5,
+  });
+  assert.ok(countPassable(withStep) > 0, "step height filters the ground slab, leaving walkable cells");
+});
+
 check("NavGridCache reuses a baked grid until the token changes", () => {
   const cache = new NavGridCache();
   const bounds: NavAabb[] = [{ min: [-3, -1, -3], max: [3, 3, 3] }];
