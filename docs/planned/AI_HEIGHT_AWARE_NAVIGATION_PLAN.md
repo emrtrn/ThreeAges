@@ -1,13 +1,17 @@
 # AI Yükseklik-Farkında Navigasyon (Merdiven/Rampa ile Y Ekseni) Planı
 
 > Tarih: 2026-07-07
-> Durum: KESIN KOK NEDEN bulundu ve COZULDU. Gercek Playground sahnesinde
-> yukseltilmis (rampa uzeri) Target Point'e ulasilamamasinin sebebi: agent
-> yaricapi authored `navAgent` yerine olceksiz collider'dan (r=1.0) turetiliyordu
-> ve dar rampayi grid'den asindiriyordu. Fix: `resolveNavAgentProfile` authored
-> navAgent'a oncelik verir; runtime'da path artik `success` (r=0.350). Ayrica
-> endpoint projeksiyonu eklendi. Kalan: nav volume yuksekligi uyarisi (A) ve
-> otomatik browser smoke.
+> Durum: COZULDU / KAPANDI. Yukseltilmis (rampa uzeri) Target Point'e
+> ulasilamamasinin iki katmani da giderildi.
+> (1) Yol bulma: agent yaricapi authored `navAgent` yerine olceksiz collider'dan
+> (r=1.0) turetiliyordu ve dar rampayi grid'den asindiriyordu →
+> `resolveNavAgentProfile` authored navAgent'a oncelik verir (runtime path artik
+> `success`, r=0.350). Ek olarak endpoint projeksiyonu eklendi.
+> (2) Hareket: karakterin CharacterMovement kapsulu de genis (capsuleRadius 1)
+> oldugundan dar rampaya sigmiyordu; kullanici rampayi genisletince tirmanma
+> sorunsuz calisti (2026-07-07, kullanici onayi).
+> Kalan opsiyonel: nav volume yuksekligi sessiz basarisizlik uyarisi (A),
+> otomatik browser smoke ve actor collider scale bake (latent).
 > Kapsam: AI patrol/moveTo yol bulmasının Y ekseninde (merdiven/rampa ile
 > ulaşılan yükseltilmiş target point'ler) çalışması.
 
