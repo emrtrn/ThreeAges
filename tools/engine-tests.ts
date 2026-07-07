@@ -6473,6 +6473,25 @@ check("grid navigation clearance padding erodes obstacles by extra slack", () =>
   assert.equal(padded.status, "failure"); // padding keeps the agent clear of both walls
 });
 
+check("grid navigation adds clearance cost so corridor routes prefer the middle", () => {
+  const wallL: Aabb3 = { min: [-4, 0, -5], max: [-2, 2, 5] };
+  const wallR: Aabb3 = { min: [2, 0, -5], max: [4, 2, 5] };
+  const path = findGridPath({
+    start: [-1.5, 0, -4],
+    goal: [-1.5, 0, 4],
+    agent: { radius: 0, height: 1.8 },
+    blockers: [wallL, wallR],
+    bounds: [{ min: [-4, -1, -6], max: [4, 3, 6] }],
+    cellSize: 0.5,
+    safetyMargin: 0,
+  });
+  assert.equal(path.status, "success");
+  assert.ok(
+    path.points.some((point) => Math.abs(point[0]) <= 0.5 && Math.abs(point[2]) <= 3),
+    `expected route to move toward corridor center: ${JSON.stringify(path.points)}`,
+  );
+});
+
 check("grid navigation compression keeps grid points when a shortcut would cross a blocker", () => {
   const wall: Aabb3 = { min: [-0.25, 0, 0], max: [0.1, 2, 0.35] };
   const path = findGridPath({

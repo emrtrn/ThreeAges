@@ -119,6 +119,8 @@ interface SearchNode extends GridCoord {
 const DEFAULT_CELL_SIZE = 0.5;
 const DEFAULT_BOUNDS_PADDING = 2;
 const MAX_GRID_CELLS = 20000;
+const CLEARANCE_COST_CELL_RADIUS = 3;
+const CLEARANCE_COST_WEIGHT = 4;
 
 export function findGridPath(request: PathRequest): PathResult {
   const cellSize = sanePositive(request.cellSize, DEFAULT_CELL_SIZE);
@@ -161,6 +163,20 @@ export function findGridPath(request: PathRequest): PathResult {
     const point = toPoint(coord);
     return !pointBlocked(point, blockers, clearanceRadius) && (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
   };
+  const clearanceCostRadius = cellSize * CLEARANCE_COST_CELL_RADIUS;
+  const clearancePenaltyCache = new Map<string, number>();
+  const clearancePenalty = (coord: GridCoord): number => {
+    if (blockers.length === 0) return 0;
+    const key = coordKey(coord);
+    const cached = clearancePenaltyCache.get(key);
+    if (cached !== undefined) return cached;
+    const point = toPoint(coord);
+    const distance = nearestInflatedBlockerDistance(point, blockers, clearanceRadius);
+    const pressure = distance >= clearanceCostRadius ? 0 : 1 - distance / clearanceCostRadius;
+    const penalty = pressure * pressure * CLEARANCE_COST_WEIGHT;
+    clearancePenaltyCache.set(key, penalty);
+    return penalty;
+  };
 
   const start = toCoord(request.start);
   const goal = toCoord(request.goal);
@@ -189,7 +205,7 @@ export function findGridPath(request: PathRequest): PathResult {
     }
     for (const next of neighbors(current, passable)) {
       const step = next.x !== current.x && next.z !== current.z ? Math.SQRT2 : 1;
-      const nextG = current.g + step;
+      const nextG = current.g + step + clearancePenalty(next);
       const key = coordKey(next);
       if (nextG >= (bestG.get(key) ?? Infinity)) continue;
       bestG.set(key, nextG);
@@ -264,6 +280,24 @@ function pointBlocked(point: Vec3, blockers: readonly NavAabb[], radius: number)
       point[2] >= blocker.min[2] - radius &&
       point[2] <= blocker.max[2] + radius,
   );
+}
+
+function nearestInflatedBlockerDistance(point: Vec3, blockers: readonly NavAabb[], radius: number): number {
+  let nearest = Infinity;
+  for (const blocker of blockers) {
+    nearest = Math.min(nearest, distanceToAabb2d(point, blocker, radius));
+  }
+  return nearest;
+}
+
+function distanceToAabb2d(point: Vec3, blocker: NavAabb, radius: number): number {
+  const minX = blocker.min[0] - radius;
+  const maxX = blocker.max[0] + radius;
+  const minZ = blocker.min[2] - radius;
+  const maxZ = blocker.max[2] + radius;
+  const dx = point[0] < minX ? minX - point[0] : point[0] > maxX ? point[0] - maxX : 0;
+  const dz = point[2] < minZ ? minZ - point[2] : point[2] > maxZ ? point[2] - maxZ : 0;
+  return Math.hypot(dx, dz);
 }
 
 function neighbors(

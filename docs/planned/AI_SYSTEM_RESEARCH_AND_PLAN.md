@@ -94,6 +94,9 @@
 > Revizyon: 2026-07-07 - AI Navigation debug overlay selected-agent radius/
 > clearance dilimi uygulandi: secili AI icin agent capsule radius ve effective
 > clearance halkalari ayri overlay objeleri olarak ciziliyor.
+> Revizyon: 2026-07-07 - AI Navigation path cost iyilestirmesi uygulandi:
+> inflated blocker'a yakin grid hucreleri ek maliyet aliyor, rota mumkunse
+> koridor ortasina yaklasiyor.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1102,10 +1105,10 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
       - [x] inflated/eroded forbidden alanlari ayri renkte goster.
       - [x] path segmenti clearance ihlali yapiyorsa kirmizi/turuncu ciz.
       - [x] secili AI icin agent radius + clearance halkasi ciz.
-- [ ] Path cost iyilestirmesi:
-      - [ ] nearest-obstacle distance veya clearance score hesapla.
-      - [ ] A* maliyetine duvara yakin hucreler icin ek cost ekle.
-      - [ ] AI mecbur kalmadikca koridorun ortasina yakin rota secsin.
+- [x] Path cost iyilestirmesi:
+      - [x] nearest-obstacle distance veya clearance score hesapla.
+      - [x] A* maliyetine duvara yakin hucreler icin ek cost ekle.
+      - [x] AI mecbur kalmadikca koridorun ortasina yakin rota secsin.
 - [ ] Testler:
       - [ ] dar kose path'i capsule radius + clearance kadar uzak waypoint
             uretir.
@@ -1116,6 +1119,7 @@ Planlanan AI Navigation clearance / agent radius checklist'i:
       - [x] debug overlay inflated blocker segmentlerini uretir.
       - [x] debug overlay clearance ihlali yapan path segmentini vurgular.
       - [x] debug overlay secili AI agent radius + clearance halkasini uretir.
+      - [x] path cost genis koridorda duvar dibi yerine orta hatta yaklasir.
 - [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` AI Navigation overlay
       smoke ve runtime Playground kose-donus smoke.
@@ -1232,8 +1236,22 @@ Tamamlanan AI Navigation debug overlay selected-agent radius/clearance dilim not
 - Test: selected AI radius + clearance ring object'leri kapsandi.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`674 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
-  PASS), `npm.cmd run check:assets` PASS. Kalan: clearance-aware path cost /
-  koridor ortalama ve Playwright runtime/editor smoke.
+  PASS), `npm.cmd run check:assets` PASS. Kalan: Playwright runtime/editor smoke.
+
+Tamamlanan AI Navigation path cost iyilestirme dilim notu (2026-07-07):
+
+- `findGridPath` passable hucre setini degistirmeden, inflated blocker'a yakin
+  hucreler icin mesafe tabanli ek maliyet hesaplar. Bu, dar gecitleri kapatmaz;
+  yalnizca alternatif rota varsa duvar dibini daha pahali yapar.
+- Clearance pressure, hucrenin inflated AABB'ye en yakin 2D mesafesinden
+  turetilir ve A* `g` maliyetine eklenir; hesaplar coord-key cache ile tekrar
+  kullanilir.
+- Test: genis koridorda start/goal duvar dibinde olsa bile rota orta hatta
+  yaklasir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`675 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS. Kalan: Playwright runtime/editor
+  smoke.
 
 ### Faz 6 - Smart Objects
 
