@@ -553,6 +553,42 @@
       ]
     }
   ],
+  "targetPoints": [
+    {
+      "id": "target-point-1",
+      "position": [
+        -6,
+        0,
+        14
+      ],
+      "name": "Target Point",
+      "scale": 1,
+      "nextTargetPoint": "target-point-2"
+    },
+    {
+      "id": "target-point-2",
+      "position": [
+        -8,
+        0,
+        5
+      ],
+      "name": "Target Point 2",
+      "scale": 1,
+      "nextTargetPoint": "target-point-3"
+    },
+    {
+      "id": "target-point-3",
+      "position": [
+        -16,
+        0,
+        4
+      ],
+      "name": "Target Point 3",
+      "scale": 1,
+      "nextTargetPoint": "target-point-2",
+      "waitTime": 0.5
+    }
+  ],
   "actors": [
     {
       "classRef": "assets/starter-content/Script/AI_Test.actor.json",

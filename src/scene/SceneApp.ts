@@ -47,6 +47,7 @@ import {
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
+import { targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
 import {
   normalizeAiBehaviorTreeAsset,
   normalizeAiBlackboardAsset,
@@ -2305,6 +2306,7 @@ export class SceneApp {
     // "Show > Collision" overlay) use the compound shapes, not the auto box.
     await this.refreshCollisionDefs();
     await this.loadAiAssets();
+    this.aiSubsystem.setTargetPoints(targetPointEntriesFromLayout(this.layout?.targetPoints));
     await startSceneRuntime({
       sceneDocument: this.getSceneDocument(),
       physics: this.physicsSubsystem,

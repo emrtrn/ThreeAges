@@ -32,6 +32,7 @@ import {
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
+import { targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
 import type { AiMoveRequest } from "@engine/ai/behaviorRunner";
 import {
   normalizeAiBehaviorTreeAsset,
@@ -1653,6 +1654,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await this.loadCollisionDefs();
     await this.populateAssetUrls();
     await this.loadAiAssets();
+    this.aiSubsystem.setTargetPoints(targetPointEntriesFromLayout(this.layout.targetPoints));
     const baseDocument = roomLayoutToSceneDocument(this.layout, {
       colliderBox: (assetId, source) => this.colliderBoxFor(assetId, source),
       collisionDefs: this.collisionDefs,

@@ -21,6 +21,7 @@ import type {
 import { aiQueryParams } from "./queryAsset";
 import type { AiQueryResult } from "./queryRunner";
 import type { SmartObjectRuntime } from "./smartObjects";
+import type { TargetPointEntry, TargetPointIndex } from "./targetPoints";
 
 export type AiTaskHandler = (context: AiTaskContext) => AiBehaviorStatus;
 export type AiServiceHandler = (context: AiServiceContext) => void;
@@ -65,6 +66,7 @@ export interface AiBehaviorRunnerOptions {
   readonly runQuery?: (request: AiQueryRequest) => AiQueryResult;
   readonly smartObjects?: SmartObjectRuntime;
   readonly world?: AiWorldQuery;
+  readonly targetPoints?: TargetPointIndex;
 }
 
 export interface AiTaskContext {
@@ -78,6 +80,7 @@ export interface AiTaskContext {
   readonly runQuery?: (request: AiQueryRequest) => AiQueryResult;
   readonly smartObjects?: SmartObjectRuntime;
   readonly world?: AiWorldQuery;
+  readonly targetPoints?: TargetPointIndex;
 }
 
 export interface AiServiceContext extends AiTaskContext {
@@ -123,6 +126,9 @@ export function createDefaultAiTaskRegistry(): AiTaskRegistry {
     ["forge.sendMessage", sendMessageTask],
     ["forge.moveToPosition", moveToPositionTask],
     ["forge.moveToBlackboard", moveToBlackboardTask],
+    ["forge.setPatrolTarget", setPatrolTargetTask],
+    ["forge.moveToPatrolTarget", moveToPatrolTargetTask],
+    ["forge.advancePatrolTarget", advancePatrolTargetTask],
     ["forge.startConversation", startConversationTask],
     ["forge.runQueryToBlackboard", runQueryToBlackboardTask],
     ["forge.claimSmartObject", claimSmartObjectTask],
@@ -270,6 +276,7 @@ export class AiBehaviorRunner {
       ...(this.options.runQuery ? { runQuery: this.options.runQuery } : {}),
       ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
       ...(this.options.world ? { world: this.options.world } : {}),
+      ...(this.options.targetPoints ? { targetPoints: this.options.targetPoints } : {}),
     });
     if (status !== "running" && memory.get(PRESERVE_TASK_MEMORY) !== true) memory.clear();
     return this.record(path, status);
@@ -349,6 +356,7 @@ export class AiBehaviorRunner {
         ...(this.options.runQuery ? { runQuery: this.options.runQuery } : {}),
         ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
         ...(this.options.world ? { world: this.options.world } : {}),
+        ...(this.options.targetPoints ? { targetPoints: this.options.targetPoints } : {}),
       });
     }
   }
@@ -438,6 +446,114 @@ function moveToBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
     ...(speed !== null ? { speed } : {}),
     ...(acceptanceRadius !== null ? { acceptanceRadius } : {}),
   });
+}
+
+const DEFAULT_PATROL_KEY = "currentPatrolTarget";
+
+/**
+ * Picks the current patrol Target Point and writes its id (and optionally its
+ * position) to the Blackboard. Idempotent by default: a valid current target is
+ * preserved unless `force` is set, so this can sit at the top of a patrol branch
+ * and run every tick. Start selection: explicit `targetId`, else `tag`/`routeId`
+ * with `mode` (`"first"` authored order, or `"nearest"` to the pawn).
+ */
+function setPatrolTargetTask(context: AiTaskContext): AiBehaviorStatus {
+  const index = context.targetPoints;
+  if (!index) return "failure";
+  const key = stringParam(context.params.key) ?? DEFAULT_PATROL_KEY;
+  const positionKey = stringParam(context.params.positionKey);
+  const force = context.params.force === true;
+  if (!force) {
+    const existing = index.get(context.blackboard.getString(key));
+    if (existing) {
+      if (positionKey) context.blackboard.set(positionKey, existing.position);
+      return "success";
+    }
+  }
+  const entry = resolvePatrolStart(context, index);
+  if (!entry) return "failure";
+  const written = context.blackboard.set(key, entry.id);
+  if (positionKey) context.blackboard.set(positionKey, entry.position);
+  return written ? "success" : "failure";
+}
+
+/**
+ * Moves the pawn toward the Blackboard's current patrol Target Point. Falls back
+ * to the point's authored `speedOverride`/`acceptanceRadius` unless overridden by
+ * params. Broken/missing target id is a safe failure (no move request).
+ */
+function moveToPatrolTargetTask(context: AiTaskContext): AiBehaviorStatus {
+  const index = context.targetPoints;
+  if (!index || !context.moveTo) return "failure";
+  const key = stringParam(context.params.key) ?? DEFAULT_PATROL_KEY;
+  const entry = index.get(context.blackboard.getString(key));
+  if (!entry) return "failure";
+  const speedOverride = optionalNonNegativeNumberParam(context.params.speed);
+  const speed = speedOverride !== null ? speedOverride : entry.speedOverride;
+  const acceptanceOverride = optionalNonNegativeNumberParam(
+    context.params.acceptanceRadius ?? context.params.acceptance,
+  );
+  const acceptanceRadius = acceptanceOverride !== null ? acceptanceOverride : entry.acceptanceRadius;
+  return context.moveTo({
+    controller: context.controller,
+    position: entry.position,
+    ...(speed !== null ? { speed } : {}),
+    ...(acceptanceRadius !== null ? { acceptanceRadius } : {}),
+  });
+}
+
+/**
+ * Advances the current patrol target to the point's `nextTargetPoint`. When the
+ * route ends (no next link), the `mode` param decides the fallback:
+ * `"loop"` (default) jumps to the first point of the route/tag, `"nearest"`
+ * picks the closest other point, `"stop"` keeps the current point, and
+ * `"failure"` reports failure. A broken current id is a safe failure. Optional
+ * `lastKey` records the point we advanced away from.
+ */
+function advancePatrolTargetTask(context: AiTaskContext): AiBehaviorStatus {
+  const index = context.targetPoints;
+  if (!index) return "failure";
+  const key = stringParam(context.params.key) ?? DEFAULT_PATROL_KEY;
+  const current = index.get(context.blackboard.getString(key));
+  if (!current) return "failure";
+  const lastKey = stringParam(context.params.lastKey);
+  const commit = (entry: TargetPointEntry): AiBehaviorStatus => {
+    if (lastKey && entry.id !== current.id) context.blackboard.set(lastKey, current.id);
+    return context.blackboard.set(key, entry.id) ? "success" : "failure";
+  };
+
+  const next = index.next(current.id);
+  if (next) return commit(next);
+
+  const mode = stringParam(context.params.mode) ?? "loop";
+  const tag = stringParam(context.params.tag) ?? current.patrolTag;
+  switch (mode) {
+    case "stop":
+      return "success";
+    case "failure":
+      return "failure";
+    case "nearest": {
+      const position = context.world?.entityPosition(context.controller.pawnEntityId) ?? current.position;
+      const nearest = index.nearest(position, tag || undefined, current.id);
+      return nearest ? commit(nearest) : "success";
+    }
+    case "loop":
+    default: {
+      const first = index.first(tag || undefined);
+      return first ? commit(first) : "failure";
+    }
+  }
+}
+
+function resolvePatrolStart(context: AiTaskContext, index: TargetPointIndex): TargetPointEntry | null {
+  const explicit = stringParam(context.params.targetId);
+  if (explicit) return index.get(explicit);
+  const tag = stringParam(context.params.tag ?? context.params.routeId) ?? "";
+  if (stringParam(context.params.mode) === "nearest") {
+    const position = context.world?.entityPosition(context.controller.pawnEntityId);
+    if (position) return index.nearest(position, tag || undefined);
+  }
+  return index.first(tag || undefined);
 }
 
 function startConversationTask(context: AiTaskContext): AiBehaviorStatus {

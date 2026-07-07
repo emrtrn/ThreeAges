@@ -68,6 +68,10 @@
 > (bkz. asagidaki checklist).
 > Revizyon: 2026-07-06 - Target Point `nextTargetPoint` editor picker dilimi
 > uygulandi (bkz. asagidaki checklist).
+> Revizyon: 2026-07-07 - Target Point runtime index + patrol Behavior Tree
+> task'lari (`forge.setPatrolTarget` / `moveToPatrolTarget` /
+> `advancePatrolTarget`, stop/loop/nearest/failure modlari) uygulandi
+> (bkz. asagidaki checklist).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -911,13 +915,13 @@ Planlanan Target Point tabanli patrol route authoring checklist'i:
       Target Point aktorlerini listeleyip secime izin versin.
 - [x] Save/load validation: yeni Target Point layout alanlari
       `tools/saveValidator.ts` allowlist'ine eklensin ve round-trip testlensin.
-- [ ] Runtime query/lookup: Target Point entity'lerini id/tag/route bilgisiyle
+- [x] Runtime query/lookup: Target Point entity'lerini id/tag/route bilgisiyle
       AI task'larinin okuyabilecegi generic indeks haline getir.
-- [ ] Behavior Tree task/service seti:
-      - [ ] `forge.setPatrolTarget`
-      - [ ] `forge.moveToPatrolTarget`
-      - [ ] `forge.advancePatrolTarget`
-      - [ ] hedef yoksa `stop`, `loop`, `nearest`, `failure` modlari.
+- [x] Behavior Tree task/service seti:
+      - [x] `forge.setPatrolTarget`
+      - [x] `forge.moveToPatrolTarget`
+      - [x] `forge.advancePatrolTarget`
+      - [x] hedef yoksa `stop`, `loop`, `nearest`, `failure` modlari.
 - [ ] AIController veya Blackboard authoring alanlari:
       - [ ] `patrolStartTarget`
       - [ ] `patrolRouteTag`
@@ -932,9 +936,9 @@ Planlanan Target Point tabanli patrol route authoring checklist'i:
       `nextTargets[]` + agirlik/branch ile patrol graph destekle.
 - [ ] Testler:
       - [x] Target Point save/load round-trip.
-      - [ ] `nextTargetPoint` referansi kirik oldugunda guvenli failure.
-      - [ ] patrol task'i hedefe varinca siradaki Target Point'e gecer.
-      - [ ] loop rota deterministik calisir.
+      - [x] `nextTargetPoint` referansi kirik oldugunda guvenli failure.
+      - [x] patrol task'i hedefe varinca siradaki Target Point'e gecer.
+      - [x] loop rota deterministik calisir.
       - [ ] debug overlay route segmentlerini uretir.
 - [ ] Validation: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
       `npm.cmd run build:verify`, Playwright `?editor` Add Actor + Details smoke
@@ -964,6 +968,38 @@ Tamamlanan Target Point next picker dilim notu (2026-07-06):
   `target-point-2` secimini save/reload sonrasi dogrular.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run build:verify` ve
   `npx.cmd playwright test target-point.spec.ts` yesil.
+
+Tamamlanan Target Point runtime index + patrol task dilim notu (2026-07-07):
+
+- `engine/ai/targetPoints.ts` eklendi; authored `LayoutTargetPoint` aktorleri
+  `TargetPointEntry` kayitlarina donusturulur (`targetPointEntriesFromLayout`) ve
+  `createTargetPointIndex` generic bir index sunar: `get`, `all`, `byTag`,
+  `next` (single-link `nextTargetPoint`), `first`, planar `nearest`. Saf engine
+  modulu; value importlar relative.
+- `AISubsystem.setTargetPoints()` index'i yerinde swap eder; runner'lara stabil
+  bir `targetPointsProxy` uzerinden gecirildigi icin patrol ilerlemesi kaybolmadan
+  guncellenebilir. Runtime host (`RuntimeSceneApp`) ve editor Play host
+  (`SceneApp`) `startSceneRuntime` oncesi `layout.targetPoints`'i besler; scene
+  teardown/clear index'i bosaltir. AI runtime state layout'a yazilmaz.
+- `AiTaskContext.targetPoints` yuzeyi + uc built-in task eklendi:
+  - `forge.setPatrolTarget`: rota baslangicini secer (`targetId`, ya da
+    `tag`/`routeId` + `first`/`nearest` mode); gecerli mevcut hedefi korur
+    (`force` ile sifirlanir), opsiyonel `positionKey` ile pozisyonu da yazar.
+  - `forge.moveToPatrolTarget`: mevcut hedefi cozer, authored
+    `speedOverride`/`acceptanceRadius` (params override) ile `moveTo` cagirir;
+    kirik/eksik id guvenli failure verir (move request atmaz).
+  - `forge.advancePatrolTarget`: `nextTargetPoint`'i takip eder; rota bitince
+    `mode` = `loop` (default, tag'in ilk noktasi) / `nearest` / `stop` / `failure`;
+    opsiyonel `lastKey` onceki noktayi kaydeder.
+- Test: layout mapping, index get/byTag/next/first/nearest (+ excludeId, dup id),
+  setPatrolTarget seed/preserve, moveToPatrolTarget authored speed/acceptance +
+  broken-ref failure, advancePatrolTarget next->loop determinizmi ve
+  stop/failure/broken-ref modlari kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`662 checks passed`), `npm.cmd run build:verify` yesil. Kalan: AIController/
+  Blackboard patrol authoring alanlari, `Show > AI Navigation` route overlay,
+  AI_Test demo'nun sabit koordinatlardan Target Point rotasina tasinmasi ve
+  Playwright patrol smoke.
 
 Planlanan AI Navigation clearance / agent radius checklist'i:
 

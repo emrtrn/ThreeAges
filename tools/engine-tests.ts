@@ -85,6 +85,11 @@ import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
 import { SmartObjectReservationStore } from "../engine/ai/smartObjects";
 import {
+  createTargetPointIndex,
+  targetPointEntriesFromLayout,
+  type TargetPointEntry,
+} from "../engine/ai/targetPoints";
+import {
   AiBehaviorRunner,
   createDefaultAiServiceRegistry,
   createDefaultAiTaskRegistry,
@@ -19004,6 +19009,194 @@ check("AiBehaviorRunner move tasks forward authored speed to runtime movement", 
 
   assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
   assert.deepEqual(requests, [{ position: [1, 0, 2], speed: 5.5, acceptanceRadius: 0.75 }]);
+});
+
+check("targetPointEntriesFromLayout maps authored points and skips id-less entries", () => {
+  const entries = targetPointEntriesFromLayout([
+    {
+      id: "tp-a",
+      name: "Alpha",
+      position: [1, 0, 2],
+      nextTargetPoint: "tp-b",
+      waitTime: 2,
+      acceptanceRadius: 0.8,
+      speedOverride: 4,
+      patrolTag: "loopA",
+    },
+    { id: "", position: [9, 9, 9] },
+    { id: "tp-b", position: [3, 0, 4] },
+  ]);
+  assert.equal(entries.length, 2);
+  assert.deepEqual(entries[0], {
+    id: "tp-a",
+    name: "Alpha",
+    position: [1, 0, 2],
+    nextTargetPoint: "tp-b",
+    waitTime: 2,
+    acceptanceRadius: 0.8,
+    speedOverride: 4,
+    patrolTag: "loopA",
+  });
+  // Defaults fill in for the sparse point; empty next link normalizes to null.
+  assert.equal(entries[1]?.nextTargetPoint, null);
+  assert.equal(entries[1]?.acceptanceRadius, 0.5);
+  assert.equal(entries[1]?.speedOverride, null);
+});
+
+check("createTargetPointIndex resolves get/byTag/next/first/nearest", () => {
+  const entries: TargetPointEntry[] = [
+    { id: "a", name: "A", position: [0, 0, 0], nextTargetPoint: "b", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+    { id: "b", name: "B", position: [10, 0, 0], nextTargetPoint: "c", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+    { id: "c", name: "C", position: [10, 0, 10], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+    { id: "d", name: "D", position: [1, 0, 1], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "other" },
+    { id: "a", name: "dup", position: [99, 0, 99], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+  ];
+  const index = createTargetPointIndex(entries);
+  assert.equal(index.all().length, 4); // duplicate id ignored
+  assert.equal(index.get("a")?.name, "A");
+  assert.equal(index.get("missing"), null);
+  assert.equal(index.get(null), null);
+  assert.deepEqual(index.byTag("loop").map((e) => e.id), ["a", "b", "c"]);
+  assert.equal(index.next("a")?.id, "b");
+  assert.equal(index.next("c"), null); // route end
+  assert.equal(index.first("loop")?.id, "a");
+  assert.equal(index.first("other")?.id, "d");
+  assert.equal(index.nearest([9, 0, 1], "loop")?.id, "b");
+  assert.equal(index.nearest([9, 0, 1], "loop", "b")?.id, "a"); // excludeId
+});
+
+check("forge.setPatrolTarget seeds first route point and preserves a valid one", () => {
+  const bb = new Blackboard([
+    { key: "currentPatrolTarget", kind: "string", default: null },
+    { key: "patrolPosition", kind: "vec3", default: null },
+  ]);
+  const controller = new AIController("ai:guard", "guard", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "task",
+      task: "forge.setPatrolTarget",
+      params: { tag: "loop", positionKey: "patrolPosition" },
+    },
+  });
+  const targetPoints = createTargetPointIndex([
+    { id: "a", name: "A", position: [0, 0, 0], nextTargetPoint: "b", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+    { id: "b", name: "B", position: [5, 0, 0], nextTargetPoint: "a", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+  ]);
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    targetPoints,
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "success");
+  assert.equal(bb.getString("currentPatrolTarget"), "a");
+  assert.deepEqual(bb.getVec3("patrolPosition"), [0, 0, 0]);
+  // A valid current target is preserved rather than reset to the first point.
+  bb.set("currentPatrolTarget", "b");
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 }), "success");
+  assert.equal(bb.getString("currentPatrolTarget"), "b");
+});
+
+check("forge.moveToPatrolTarget uses authored speed/acceptance and fails safely on broken ref", () => {
+  const bb = new Blackboard([{ key: "currentPatrolTarget", kind: "string", default: null }]);
+  const controller = new AIController("ai:guard", "guard", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.moveToPatrolTarget" },
+  });
+  const targetPoints = createTargetPointIndex([
+    { id: "a", name: "A", position: [7, 0, 3], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.9, speedOverride: 3.5, patrolTag: "loop" },
+  ]);
+  const requests: Array<{ position: [number, number, number]; speed?: number; acceptanceRadius?: number }> = [];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    targetPoints,
+    moveTo: (request) => {
+      requests.push({
+        position: [request.position[0], request.position[1], request.position[2]],
+        ...(request.speed !== undefined ? { speed: request.speed } : {}),
+        ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
+      });
+      return "running";
+    },
+  });
+  // Broken / unset current target => safe failure, no move request.
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "failure");
+  assert.equal(requests.length, 0);
+  bb.set("currentPatrolTarget", "a");
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 }), "running");
+  assert.deepEqual(requests, [{ position: [7, 0, 3], speed: 3.5, acceptanceRadius: 0.9 }]);
+});
+
+check("forge.advancePatrolTarget follows next links then loops deterministically", () => {
+  const bb = new Blackboard([
+    { key: "currentPatrolTarget", kind: "string", default: null },
+    { key: "lastPatrolTarget", kind: "string", default: null },
+  ]);
+  const controller = new AIController("ai:guard", "guard", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "task",
+      task: "forge.advancePatrolTarget",
+      params: { mode: "loop", lastKey: "lastPatrolTarget" },
+    },
+  });
+  // A -> B -> C, C has no next link so `loop` mode returns to the first point.
+  const targetPoints = createTargetPointIndex([
+    { id: "a", name: "A", position: [0, 0, 0], nextTargetPoint: "b", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+    { id: "b", name: "B", position: [5, 0, 0], nextTargetPoint: "c", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+    { id: "c", name: "C", position: [5, 0, 5], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+  ]);
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    targetPoints,
+  });
+  const advance = (frame: number): string => {
+    assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016 * frame, frame }), "success");
+    return bb.getString("currentPatrolTarget") ?? "";
+  };
+  bb.set("currentPatrolTarget", "a");
+  assert.equal(advance(1), "b");
+  assert.equal(bb.getString("lastPatrolTarget"), "a");
+  assert.equal(advance(2), "c");
+  assert.equal(advance(3), "a"); // deterministic loop back to first
+  assert.equal(advance(4), "b");
+});
+
+check("forge.advancePatrolTarget honors stop/failure modes and broken refs", () => {
+  const targetPoints = createTargetPointIndex([
+    { id: "solo", name: "Solo", position: [0, 0, 0], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "" },
+  ]);
+  const build = (mode: string) => {
+    const bb = new Blackboard([{ key: "currentPatrolTarget", kind: "string", default: null }]);
+    const controller = new AIController("ai:guard", "guard", bb);
+    const asset = normalizeAiBehaviorTreeAsset({
+      schema: 1,
+      type: "behaviorTree",
+      root: { kind: "task", task: "forge.advancePatrolTarget", params: { mode } },
+    });
+    const runner = new AiBehaviorRunner(controller, asset, {
+      taskRegistry: createDefaultAiTaskRegistry(),
+      targetPoints,
+    });
+    return { bb, runner };
+  };
+  // stop: keep current, report success.
+  const stop = build("stop");
+  stop.bb.set("currentPatrolTarget", "solo");
+  assert.equal(stop.runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "success");
+  assert.equal(stop.bb.getString("currentPatrolTarget"), "solo");
+  // failure: route end with failure mode reports failure.
+  const fail = build("failure");
+  fail.bb.set("currentPatrolTarget", "solo");
+  assert.equal(fail.runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "failure");
+  // broken current id: safe failure.
+  const broken = build("loop");
+  broken.bb.set("currentPatrolTarget", "ghost");
+  assert.equal(broken.runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "failure");
 });
 
 check("AiBehaviorRunner built-in startConversation emits the conversation trigger message", () => {

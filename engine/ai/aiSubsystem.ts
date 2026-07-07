@@ -37,6 +37,7 @@ import type { AiBlackboardAsset, AiBehaviorTreeAsset } from "./behaviorAsset";
 import type { AiQueryAsset } from "./queryAsset";
 import { runAiQuery } from "./queryRunner";
 import { SmartObjectReservationStore } from "./smartObjects";
+import { createTargetPointIndex, type TargetPointEntry, type TargetPointIndex } from "./targetPoints";
 import {
   AiBehaviorRunner,
   createDefaultAiServiceRegistry,
@@ -102,6 +103,20 @@ export class AISubsystem implements Subsystem {
   private pendingScriptStimuli: ScriptStimulus[] = [];
   private sightGrace = new Map<EntityId, SightGraceState>();
   private smartObjects = new SmartObjectReservationStore();
+  private targetPoints: TargetPointIndex = createTargetPointIndex([]);
+  /**
+   * Stable proxy handed to every runner so {@link setTargetPoints} can swap the
+   * authored route index without rebuilding runners (which would drop patrol
+   * progress). Delegates every call to the current {@link targetPoints}.
+   */
+  private readonly targetPointsProxy: TargetPointIndex = {
+    get: (id) => this.targetPoints.get(id),
+    all: () => this.targetPoints.all(),
+    byTag: (tag) => this.targetPoints.byTag(tag),
+    next: (id) => this.targetPoints.next(id),
+    first: (tag) => this.targetPoints.first(tag),
+    nearest: (position, tag, excludeId) => this.targetPoints.nearest(position, tag, excludeId),
+  };
 
   constructor(options: AISubsystemOptions = {}) {
     this.taskRegistry = options.taskRegistry ?? createDefaultAiTaskRegistry();
@@ -126,6 +141,16 @@ export class AISubsystem implements Subsystem {
     this.behaviorAssets = library.behaviors ?? new Map();
     this.queryAssets = library.queries ?? new Map();
     this.rebuildRunners();
+  }
+
+  /**
+   * Registers the authored Target Point route index for patrol tasks. Swaps the
+   * underlying index in place (runners see it through {@link targetPointsProxy}),
+   * so it can be called before or after {@link setEntities} without dropping
+   * runner memory. Pass `[]` on scene teardown.
+   */
+  setTargetPoints(entries: readonly TargetPointEntry[]): void {
+    this.targetPoints = createTargetPointIndex(entries);
   }
 
   /**
@@ -244,6 +269,7 @@ export class AISubsystem implements Subsystem {
     this.pendingScriptStimuli = [];
     this.sightGrace.clear();
     this.smartObjects.clear();
+    this.targetPoints = createTargetPointIndex([]);
   }
 
   dispose(): void {
@@ -419,6 +445,7 @@ export class AISubsystem implements Subsystem {
       ...(this.emitMessage ? { emitMessage: this.emitMessage } : {}),
       ...(this.moveTo ? { moveTo: this.moveTo } : {}),
       smartObjects: this.smartObjects,
+      targetPoints: this.targetPointsProxy,
       world: {
         entityPosition: (entityId) => this.positionForEntity(entityId),
       },
