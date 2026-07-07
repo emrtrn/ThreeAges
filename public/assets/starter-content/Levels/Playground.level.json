@@ -531,7 +531,17 @@
     }
   ],
   "reflectionCaptures": [],
-  "blockingVolumes": [],
+  "blockingVolumes": [
+    {
+      "id": "blocking-volume-1",
+      "position": [
+        0,
+        1,
+        0
+      ],
+      "name": "Blocking Volume"
+    }
+  ],
   "aiNavigationVolumes": [
     {
       "id": "ai-navigation-volume-1",
@@ -550,7 +560,8 @@
         10,
         4,
         10
-      ]
+      ],
+      "color": "#0011ff"
     }
   ],
   "targetPoints": [
@@ -568,7 +579,7 @@
     {
       "id": "target-point-2",
       "position": [
-        -8,
+        -6,
         0,
         5
       ],
@@ -579,13 +590,13 @@
     {
       "id": "target-point-3",
       "position": [
-        -16,
+        -9,
         0,
-        4
+        10
       ],
       "name": "Target Point 3",
       "scale": 1,
-      "nextTargetPoint": "target-point-2",
+      "nextTargetPoint": "target-point-1",
       "waitTime": 0.5
     }
   ],

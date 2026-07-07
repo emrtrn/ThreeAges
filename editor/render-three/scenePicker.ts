@@ -46,6 +46,28 @@ export class ScenePicker {
   private readonly pointerNdc = new Vector2();
   private readonly floorPlane = new Plane(new Vector3(0, 1, 0), 0);
   private readonly floorHit = new Vector3();
+  private readonly worldPoint = new Vector3();
+  /** Viewport height in CSS px (updated per pick) — feeds the screen-space line tolerance. */
+  private viewportHeightPx = 1;
+
+  /**
+   * Clickable band around a wireframe edge, in **screen pixels**. Volume brushes
+   * (blocking / AI-navigation) and other line helpers are picked by their edges,
+   * so a fixed world-space `Line.threshold` reads as a fat tube that grows/shrinks
+   * with zoom — it selects outside the volume and on faces near an edge. We instead
+   * accept a line hit only when the edge is within this many pixels of the cursor
+   * (see {@link isScreenFarLineHit}), so picking a volume means clicking on its line.
+   */
+  private static readonly LINE_PICK_PIXELS = 6;
+  /**
+   * Slack multiplier for the broad-phase `Line.threshold` used during the raycast.
+   * The threshold is a world-space tube, so it is set generously (relative to the
+   * farthest pickable's depth) to make sure every edge that is within
+   * {@link LINE_PICK_PIXELS} on screen becomes a candidate; the exact per-hit pixel
+   * test then rejects the rest. Overshooting only adds cheap candidates — it can
+   * never cause a false selection — so a comfortable safety factor is intentional.
+   */
+  private static readonly LINE_THRESHOLD_SAFETY = 4;
 
   constructor(options: ScenePickerOptions) {
     this.camera = options.camera;
@@ -72,8 +94,17 @@ export class ScenePicker {
     this.setPointerNdc(clientX, clientY);
     this.raycaster.setFromCamera(this.pointerNdc, this.camera);
 
-    const hits = this.visibleHits(this.raycaster.intersectObjects(this.getPickables(), true));
+    const pickables = this.getPickables();
+    // Broad-phase line tube: generous enough that any edge within the screen-space
+    // pixel band is a candidate; the exact test below trims it back to those pixels.
+    this.raycaster.params.Line.threshold = this.lineThresholdFor(pickables);
+    const hits = this.visibleHits(this.raycaster.intersectObjects(pickables, true));
     for (const hit of hits) {
+      // Wireframe helpers (volume brushes, etc.) are edge-picked: skip a line hit
+      // whose edge is more than LINE_PICK_PIXELS from the cursor, so clicking the
+      // translucent face or just outside the volume never selects it.
+      if (this.isScreenFarLineHit(hit)) continue;
+
       const mesh = findParentInstancedMesh(hit.object);
       if (mesh) {
         const assetId = String(mesh.userData.assetId ?? "");
@@ -181,6 +212,9 @@ export class ScenePicker {
    *  geometry, and returns the first surface's y (or null when nothing solid). */
   raycastSurfaceBelow(origin: Vector3, exclude: Selection): number | null {
     const ray = new Raycaster(origin, new Vector3(0, -1, 0), 0, 1000);
+    // Only solid meshes count as a surface — wireframe volume brushes must not act
+    // as a phantom floor, so disable line hits for this drop-down cast.
+    ray.params.Line.threshold = 0;
     const hits = this.visibleHits(ray.intersectObjects(this.getPickables(), true));
     for (const hit of hits) {
       if (this.isSelfHit(hit, exclude)) continue;
@@ -251,8 +285,50 @@ export class ScenePicker {
     return hits.filter((hit) => isVisibleInHierarchy(hit.object));
   }
 
+  /** World-space size of one viewport pixel at `distance` from the camera (perspective). */
+  private worldUnitsPerPixel(distance: number): number {
+    const fovRadians = (this.camera.fov * Math.PI) / 180;
+    const viewHeight = 2 * Math.tan(fovRadians / 2) * Math.max(distance, 0.01);
+    return viewHeight / Math.max(this.viewportHeightPx, 1);
+  }
+
+  /**
+   * Broad-phase world-space `Line.threshold` for the pick: the on-screen pixel band
+   * converted to world units at the farthest pickable's depth (times a safety
+   * factor). Sized so every edge within the pixel band is a raycast candidate; the
+   * per-hit test in {@link isScreenFarLineHit} enforces the true pixel tolerance.
+   */
+  private lineThresholdFor(pickables: Object3D[]): number {
+    const cameraPosition = this.camera.position;
+    let maxDistance = 0.01;
+    for (const object of pickables) {
+      object.getWorldPosition(this.worldPoint);
+      maxDistance = Math.max(maxDistance, cameraPosition.distanceTo(this.worldPoint));
+    }
+    return (
+      this.worldUnitsPerPixel(maxDistance) *
+      ScenePicker.LINE_PICK_PIXELS *
+      ScenePicker.LINE_THRESHOLD_SAFETY
+    );
+  }
+
+  /**
+   * True when a hit is on a line/wireframe whose edge sits farther than
+   * {@link LINE_PICK_PIXELS} from the cursor in screen space. `hit.point` is the
+   * point on the edge; its perpendicular distance to the pick ray, compared against
+   * the world size of the pixel band at that depth, gives a zoom-independent test.
+   * Non-line hits (solid meshes) always pass.
+   */
+  private isScreenFarLineHit(hit: Intersection): boolean {
+    const object = hit.object as Partial<{ isLine: boolean }>;
+    if (!object.isLine) return false;
+    const tolerance = this.worldUnitsPerPixel(hit.distance) * ScenePicker.LINE_PICK_PIXELS;
+    return this.raycaster.ray.distanceToPoint(hit.point) > tolerance;
+  }
+
   private setPointerNdc(clientX: number, clientY: number): void {
     const rect = this.canvas.getBoundingClientRect();
+    this.viewportHeightPx = rect.height;
     this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointerNdc.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
   }

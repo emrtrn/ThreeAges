@@ -18,6 +18,7 @@ import {
   Object3D,
   PerspectiveCamera,
   PointLight,
+  Raycaster,
   RepeatWrapping,
   SRGBColorSpace,
   Scene,
@@ -583,6 +584,7 @@ import {
 import {
   aiNavigationVolumeAabb,
   AI_NAVIGATION_VOLUME_DEFAULTS,
+  createAiNavigationVolumeObject,
   resolveAiNavigationVolume,
   uniqueAiNavigationVolumeId,
   uniqueAiNavigationVolumeName,
@@ -15830,6 +15832,39 @@ check("createBlockingVolumeObject builds an oriented brush; runtime variant is a
   assert.equal(runtime.children.length, 1);
 });
 
+check("createBlockingVolumeObject: translucent fill is not pickable, only the edges are", () => {
+  // Unreal-style volume picking — clicking the translucent face must NOT select
+  // the brush (it would occlude and steal clicks from everything inside/behind
+  // it); only the wireframe edges are clickable.
+  const brush = createBlockingVolumeObject({
+    name: "Volume",
+    hidden: false,
+    brushShape: "box",
+    size: [2, 2, 2],
+    brushSides: 24,
+    renderInGame: false,
+    color: "#ff8c1a",
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  // A ray through the centre of a face hits the fill geometrically but misses the
+  // thin edges (threshold kept tiny so it can't graze them): with the fill
+  // non-pickable the brush yields no intersection at all.
+  const faceRay = new Raycaster(new Vector3(0, 0, 5), new Vector3(0, 0, -1));
+  faceRay.params.Line.threshold = 0.01;
+  assert.equal(faceRay.intersectObject(brush, true).length, 0);
+  // Sanity: the fill mesh exists (visual) but its raycast never records a hit.
+  const fill = brush.children.find((child) => child.name === "blocking-volume-fill")!;
+  const fillHits: unknown[] = [];
+  fill.raycast(faceRay, fillHits as never);
+  assert.equal(fillHits.length, 0);
+  // The wireframe edges stay pickable: a ray aimed down the x=1,z=1 vertical edge hits.
+  const edgeRay = new Raycaster(new Vector3(1, 0, 5), new Vector3(0, 0, -1));
+  edgeRay.params.Line.threshold = 0.1;
+  assert.ok(edgeRay.intersectObject(brush, true).length > 0);
+});
+
 check("validateBlockingVolume allowlists fields and round-trips through validateLayout", () => {
   const volume = validateBlockingVolume({
     id: "bv1",
@@ -15909,6 +15944,33 @@ check("resolveAiNavigationVolume fills defaults and overrides per field", () => 
   assert.equal(resolved.hidden, true);
   assert.deepEqual(resolved.size, [8, 3, 6]);
   assert.equal(resolved.color, "#123456");
+});
+
+check("createAiNavigationVolumeObject: translucent fill is not pickable, only the edges are", () => {
+  // Same Unreal-style volume picking as the blocking volume: clicking the blue
+  // translucent face must NOT select the volume (it spans the scene and would
+  // steal every click); only the wireframe edges are clickable.
+  const volume = createAiNavigationVolumeObject({
+    name: "Nav",
+    hidden: false,
+    locked: false,
+    scaleLocked: false,
+    size: [2, 2, 2],
+    color: "#3aa0ff",
+    position: [0, 0, 0],
+    rotation: [0, 0, 0],
+    scale: [1, 1, 1],
+  });
+  const faceRay = new Raycaster(new Vector3(0, 0, 5), new Vector3(0, 0, -1));
+  faceRay.params.Line.threshold = 0.01;
+  assert.equal(faceRay.intersectObject(volume, true).length, 0);
+  const fill = volume.children.find((child) => child.name === "ai-navigation-volume-fill")!;
+  const fillHits: unknown[] = [];
+  fill.raycast(faceRay, fillHits as never);
+  assert.equal(fillHits.length, 0);
+  const edgeRay = new Raycaster(new Vector3(1, 0, 5), new Vector3(0, 0, -1));
+  edgeRay.params.Line.threshold = 0.1;
+  assert.ok(edgeRay.intersectObject(volume, true).length > 0);
 });
 
 check("uniqueAiNavigationVolumeId/Name avoid collisions", () => {

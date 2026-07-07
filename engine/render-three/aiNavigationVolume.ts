@@ -51,6 +51,11 @@ export function createAiNavigationVolumeObject(
   fill.name = "ai-navigation-volume-fill";
   fill.castShadow = false;
   fill.receiveShadow = false;
+  // Unreal-style volume picking: the translucent fill is a visual only and must
+  // not be clickable — otherwise the volume's face covers the whole scene and
+  // steals every click, so objects inside/behind it can't be selected. Only the
+  // wireframe edges are pickable (below), exactly like Unreal's brush volumes.
+  fill.raycast = () => {};
   group.add(fill);
 
   const wireframe = new LineSegments(
@@ -58,7 +63,6 @@ export function createAiNavigationVolumeObject(
     new LineBasicMaterial({ color: new Color(item.color) }),
   );
   wireframe.name = "ai-navigation-volume-wire";
-  wireframe.raycast = () => {};
   group.add(wireframe);
 
   applyAiNavigationVolumeTransform(group, item);

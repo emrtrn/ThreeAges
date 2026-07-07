@@ -111,6 +111,11 @@ export function createBlockingVolumeObject(item: BlockingVolumeRenderItem): Bloc
   fill.name = "blocking-volume-fill";
   fill.castShadow = false;
   fill.receiveShadow = false;
+  // Unreal-style volume picking: the translucent fill is a visual only and must
+  // not be clickable — otherwise the brush face covers the scene and steals every
+  // click, so objects inside/behind it can't be selected. Only the wireframe
+  // edges are pickable (below), exactly like Unreal's brush volumes.
+  fill.raycast = () => {};
   group.add(fill);
 
   const wireframe = new LineSegments(
@@ -118,7 +123,6 @@ export function createBlockingVolumeObject(item: BlockingVolumeRenderItem): Bloc
     new LineBasicMaterial({ color: new Color(item.color) }),
   );
   wireframe.name = "blocking-volume-wire";
-  wireframe.raycast = () => {};
   group.add(wireframe);
 
   applyBlockingVolumeTransform(group, item);
