@@ -3,6 +3,7 @@ import type { LayoutTargetPoint } from "./layout";
 export interface ResolvedTargetPoint {
   name: string;
   hidden: boolean;
+  startPoint: boolean;
   waitTime: number;
   acceptanceRadius: number;
   speedOverride: number | null;
@@ -15,6 +16,7 @@ export const TARGET_POINT_DEFAULT_COLOR = "#f5c542";
 export const TARGET_POINT_DEFAULTS: ResolvedTargetPoint = {
   name: "Target Point",
   hidden: false,
+  startPoint: false,
   waitTime: 0,
   acceptanceRadius: 0.5,
   speedOverride: null,
@@ -30,6 +32,7 @@ export function resolveTargetPoint(
   return {
     name: point.name ?? defaults.name,
     hidden: point.hidden ?? defaults.hidden,
+    startPoint: point.startPoint ?? defaults.startPoint,
     waitTime: finiteNonNegative(point.waitTime, defaults.waitTime),
     acceptanceRadius: finitePositive(point.acceptanceRadius, defaults.acceptanceRadius),
     speedOverride:

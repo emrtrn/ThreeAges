@@ -925,16 +925,20 @@ Planlanan Target Point tabanli patrol route authoring checklist'i:
       - [x] `forge.moveToPatrolTarget`
       - [x] `forge.advancePatrolTarget`
       - [x] hedef yoksa `stop`, `loop`, `nearest`, `failure` modlari.
-- [ ] AIController veya Blackboard authoring alanlari:
-      - [ ] `patrolStartTarget`
-      - [ ] `patrolRouteTag`
-      - [ ] `currentPatrolTarget`
-      - [ ] `lastPatrolTarget`.
+- [x] Route baslangic authoring: Target Point aktorunde `startPoint` bayragi
+      (Details "Start Point" checkbox). Isaretli nokta rotanin baslangicidir;
+      isaretlenmezse runtime authored ilk noktaya duser. `setPatrolTarget`
+      baslangici `targetId` > `mode: nearest` > start-flagli nokta > ilk nokta
+      sirasiyla cozer. (Blackboard `currentPatrolTarget` / opsiyonel `lastKey`
+      runtime ilerlemesini zaten tasiyor; ayri `patrolStartTarget` /
+      `patrolRouteTag` alanlarina gerek kalmadi.)
 - [x] Debug/viewport overlay: Target Point noktalarini, `next` baglantilarini,
       aktif AI hedefini ve rotayi `Show > AI Navigation` icinde ciz.
-- [ ] AI_Test demo refactoru: behavior JSON'daki sabit `moveToPosition`
-      koordinatlarini Target Point route okuyan task'lara tasiyarak
-      `TP_AI_Patrol_A -> B -> C -> A` seklinde Playground rotasi kur.
+- [x] AI_Test demo refactoru: behavior JSON'daki sabit `moveToPosition`
+      koordinatlari `setPatrolTarget` / `moveToPatrolTarget` /
+      `advancePatrolTarget` (`mode: loop`) task'lariyla degistirildi; Playground
+      `target-point-1 -> 2 -> 3 -> 1` rotasini okuyor ve `target-point-1`
+      `startPoint` olarak isaretli.
 - [ ] Ilerleme yolu: ilk surum tek `nextTargetPoint`; sonraki surumde
       `nextTargets[]` + agirlik/branch ile patrol graph destekle.
 - [ ] Testler:
@@ -1020,6 +1024,30 @@ Tamamlanan Target Point route overlay dilim notu (2026-07-07):
   (`663 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
   PASS). Kalan: AIController/Blackboard patrol authoring alanlari, AI_Test
   demo'nun Target Point rotasina tasinmasi ve Playwright patrol smoke.
+
+Tamamlanan Target Point start-flag authoring dilim notu (2026-07-07):
+
+- `LayoutTargetPoint.startPoint?: boolean` alani eklendi; `resolveTargetPoint` /
+  `TARGET_POINT_DEFAULTS` (default false), `cloneTargetPoint` ve
+  `tools/saveValidator.ts` allowlist'i (`startPoint === true` iken korunur, aksi
+  halde dusurulur) round-trip eder.
+- Details paneli "Start Point" checkbox'i eklendi. Isaretlemek undoable; ayni
+  `patrolTag` grubundaki diger start bayraklarini temizler (rota basina tek
+  baslangic). `setTargetPointStart` tum noktalari yerinde mutasyonla tek komutta
+  gunceller, dizi kimligini korur.
+- Runtime `TargetPointEntry.startPoint` + `TargetPointIndex.start(tag?)`
+  (authored sirada ilk bayrakli nokta) eklendi. `resolvePatrolStart` artik
+  `targetId` > `mode: nearest` > `start()` > `first()` sirasiyla cozer, boylece
+  AI_Test `setPatrolTarget` sabit id olmadan isaretli baslangictan basliyor.
+- AI_Test behavior JSON sabit `targetId`'yi biraktigi icin start bayragina
+  dayaniyor; Playground `target-point-1` `startPoint: true`.
+- Test: `index.start` tag-scoped/none-flagged, `setPatrolTarget` start-flag
+  tercihi, `startPoint` layout mapping ve save allowlist round-trip/false-drop
+  kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`667 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS). Kalan: Playwright `?editor` Start Point toggle smoke ve runtime patrol
+  smoke.
 
 Planlanan AI Navigation clearance / agent radius checklist'i:
 

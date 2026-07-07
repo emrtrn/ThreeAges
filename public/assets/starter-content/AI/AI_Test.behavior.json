@@ -173,61 +173,37 @@
             }
           },
           {
-            "id": "patrol-a",
+            "id": "pick-patrol-target",
             "kind": "task",
-            "task": "forge.moveToPosition",
+            "task": "forge.setPatrolTarget",
             "params": {
-              "position": [
-                -16,
-                0,
-                10
-              ],
+              "key": "currentPatrolTarget",
+              "positionKey": "patrolTargetPosition"
+            }
+          },
+          {
+            "id": "move-to-patrol-target",
+            "kind": "task",
+            "task": "forge.moveToPatrolTarget",
+            "params": {
+              "key": "currentPatrolTarget",
               "speed": 2.2,
               "acceptanceRadius": 0.9
             }
           },
           {
-            "id": "wait-a",
+            "id": "wait-at-patrol-target",
             "kind": "wait",
             "seconds": 0.35
           },
           {
-            "id": "patrol-b",
+            "id": "advance-patrol-target",
             "kind": "task",
-            "task": "forge.moveToPosition",
+            "task": "forge.advancePatrolTarget",
             "params": {
-              "position": [
-                -8,
-                0,
-                8
-              ],
-              "speed": 2.2,
-              "acceptanceRadius": 0.9
+              "key": "currentPatrolTarget",
+              "mode": "loop"
             }
-          },
-          {
-            "id": "wait-b",
-            "kind": "wait",
-            "seconds": 0.35
-          },
-          {
-            "id": "patrol-c",
-            "kind": "task",
-            "task": "forge.moveToPosition",
-            "params": {
-              "position": [
-                -9,
-                0,
-                -8
-              ],
-              "speed": 2.2,
-              "acceptanceRadius": 0.9
-            }
-          },
-          {
-            "id": "wait-c",
-            "kind": "wait",
-            "seconds": 0.35
           }
         ]
       }

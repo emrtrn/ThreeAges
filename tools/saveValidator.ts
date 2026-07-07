@@ -1116,6 +1116,7 @@ export function validateTargetPoint(value: unknown): Record<string, unknown> {
   if (typeof input.nextTargetPoint === "string" && input.nextTargetPoint.length > 0) {
     point.nextTargetPoint = input.nextTargetPoint;
   }
+  if (input.startPoint === true) point.startPoint = true;
   if (input.waitTime !== undefined) {
     if (typeof input.waitTime !== "number" || !Number.isFinite(input.waitTime) || input.waitTime < 0) {
       throw new Error("invalid target point waitTime");

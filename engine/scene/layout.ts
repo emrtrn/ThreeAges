@@ -769,6 +769,12 @@ export interface LayoutTargetPoint {
   scale?: number | Vec3;
   /** Next Target Point id in a simple single-link patrol route. */
   nextTargetPoint?: string;
+  /**
+   * Marks this point as the patrol route's start. When a route (or `patrolTag`
+   * group) has one flagged start, patrol tasks begin there; when none is flagged
+   * the runtime falls back to the first authored point.
+   */
+  startPoint?: boolean;
   waitTime?: number;
   acceptanceRadius?: number;
   speedOverride?: number;

@@ -115,6 +115,7 @@ export class AISubsystem implements Subsystem {
     byTag: (tag) => this.targetPoints.byTag(tag),
     next: (id) => this.targetPoints.next(id),
     first: (tag) => this.targetPoints.first(tag),
+    start: (tag) => this.targetPoints.start(tag),
     nearest: (position, tag, excludeId) => this.targetPoints.nearest(position, tag, excludeId),
   };
 

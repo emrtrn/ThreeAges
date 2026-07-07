@@ -305,7 +305,7 @@
       "placements": [
         {
           "position": [
-            -18,
+            -34,
             0,
             6
           ],
@@ -314,16 +314,7 @@
         },
         {
           "position": [
-            -14,
-            0,
-            6
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -10,
+            -30,
             0,
             6
           ],
@@ -337,21 +328,7 @@
         },
         {
           "position": [
-            -10,
-            0,
-            10
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -18,
+            -34,
             0,
             2
           ],
@@ -365,7 +342,7 @@
         },
         {
           "position": [
-            -18,
+            -34,
             0,
             2
           ],
@@ -374,16 +351,7 @@
         },
         {
           "position": [
-            -14,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -10,
+            -30,
             0,
             2
           ],
@@ -531,17 +499,7 @@
     }
   ],
   "reflectionCaptures": [],
-  "blockingVolumes": [
-    {
-      "id": "blocking-volume-1",
-      "position": [
-        0,
-        1,
-        0
-      ],
-      "name": "Blocking Volume"
-    }
-  ],
+  "blockingVolumes": [],
   "aiNavigationVolumes": [
     {
       "id": "ai-navigation-volume-1",
@@ -574,7 +532,10 @@
       ],
       "name": "Target Point",
       "scale": 1,
-      "nextTargetPoint": "target-point-2"
+      "nextTargetPoint": "target-point-2",
+      "startPoint": true,
+      "waitTime": 0.5,
+      "acceptanceRadius": 1
     },
     {
       "id": "target-point-2",
@@ -585,7 +546,9 @@
       ],
       "name": "Target Point 2",
       "scale": 1,
-      "nextTargetPoint": "target-point-3"
+      "nextTargetPoint": "target-point-3",
+      "waitTime": 0.5,
+      "acceptanceRadius": 1
     },
     {
       "id": "target-point-3",
@@ -597,7 +560,8 @@
       "name": "Target Point 3",
       "scale": 1,
       "nextTargetPoint": "target-point-1",
-      "waitTime": 0.5
+      "waitTime": 0.5,
+      "acceptanceRadius": 1
     }
   ],
   "actors": [

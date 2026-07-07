@@ -4046,6 +4046,7 @@ export class SceneApp {
 
   setSelectedTargetPoint(patch: {
     nextTargetPoint?: string | undefined;
+    startPoint?: boolean;
     waitTime?: number;
     acceptanceRadius?: number;
     speedOverride?: number | null;
@@ -4053,7 +4054,51 @@ export class SceneApp {
     color?: string;
   }): void {
     if (this.selection?.kind !== "targetPoint") return;
+    if (patch.startPoint !== undefined) {
+      this.setTargetPointStart(this.selection.index, patch.startPoint);
+      return;
+    }
     this.setTargetPoint(this.selection.index, patch);
+  }
+
+  /**
+   * Toggles the patrol-route start flag on a Target Point. Enabling it clears the
+   * flag on every other point sharing the same `patrolTag` so a route has a single
+   * start; the whole change is one undoable command that mutates points in place.
+   */
+  private setTargetPointStart(index: number, value: boolean): void {
+    const points = this.layout?.targetPoints;
+    const target = points?.[index];
+    if (!points || !target) return;
+    const tag = resolveTargetPoint(target).patrolTag;
+    const before = points.map((point) => cloneTargetPoint(point));
+    const after = points.map((point, i) => {
+      const clone = cloneTargetPoint(point);
+      if (i === index) {
+        if (value) clone.startPoint = true;
+        else delete clone.startPoint;
+      } else if (value && resolveTargetPoint(point).patrolTag === tag) {
+        delete clone.startPoint;
+      }
+      return clone;
+    });
+    const apply = (snapshot: LayoutTargetPoint[]): void => {
+      const arr = this.layout?.targetPoints;
+      if (!arr) return;
+      const count = Math.min(arr.length, snapshot.length);
+      for (let i = 0; i < count; i += 1) {
+        const entry = snapshot[i];
+        if (entry) arr[i] = cloneTargetPoint(entry);
+      }
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: "Edit Target Point Start",
+      redo: () => apply(after),
+      undo: () => apply(before),
+    });
   }
 
   getTargetPointReferences(): TargetPointReference[] {

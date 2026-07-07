@@ -57,6 +57,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   }) => void;
   setSelectedTargetPoint: (patch: {
     nextTargetPoint?: string | undefined;
+    startPoint?: boolean;
     waitTime?: number;
     acceptanceRadius?: number;
     speedOverride?: number | null;
@@ -522,6 +523,11 @@ export function renderTargetPointDetails(options: SpecialActorDetailsOptions): v
       ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
       <div class="detail-section">
         <div class="detail-section-title">Patrol</div>
+        <label class="detail-toggle">
+          <input data-target-point-start type="checkbox"
+            ${point.startPoint ? "checked" : ""} ${lockedAttr} />
+          <span>Start Point</span>
+        </label>
         <label class="detail-row">
           <span>Next Target</span>
           ${targetPointSelect(point, options.targetPoints, lockedAttr)}
@@ -556,6 +562,14 @@ export function renderTargetPointDetails(options: SpecialActorDetailsOptions): v
 
   bindTransformInputs(options, true);
   bindNameAndLock(options);
+
+  body
+    .querySelector<HTMLInputElement>("[data-target-point-start]")
+    ?.addEventListener("change", (event) => {
+      options.setSelectedTargetPoint({
+        startPoint: (event.currentTarget as HTMLInputElement).checked,
+      });
+    });
 
   body
     .querySelector<HTMLSelectElement>("[data-target-point-next]")

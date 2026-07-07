@@ -360,6 +360,7 @@ export function cloneTargetPoint(point: LayoutTargetPoint): LayoutTargetPoint {
   if (point.rotation !== undefined) clone.rotation = [...point.rotation];
   if (point.scale !== undefined) clone.scale = cloneScale(point.scale);
   if (point.nextTargetPoint !== undefined) clone.nextTargetPoint = point.nextTargetPoint;
+  if (point.startPoint !== undefined) clone.startPoint = point.startPoint;
   if (point.waitTime !== undefined) clone.waitTime = point.waitTime;
   if (point.acceptanceRadius !== undefined) clone.acceptanceRadius = point.acceptanceRadius;
   if (point.speedOverride !== undefined) clone.speedOverride = point.speedOverride;

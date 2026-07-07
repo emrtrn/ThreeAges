@@ -16083,6 +16083,7 @@ check("validateTargetPoint allowlists authored patrol fields and round-trips lay
     rotation: [0, 90, 0],
     scale: 1.25,
     nextTargetPoint: "target-point-2",
+    startPoint: true,
     waitTime: 1.5,
     acceptanceRadius: 0.75,
     speedOverride: 2.25,
@@ -16098,12 +16099,15 @@ check("validateTargetPoint allowlists authored patrol fields and round-trips lay
     rotation: [0, 90, 0],
     scale: 1.25,
     nextTargetPoint: "target-point-2",
+    startPoint: true,
     waitTime: 1.5,
     acceptanceRadius: 0.75,
     speedOverride: 2.25,
     patrolTag: "outer",
     color: "#abcdef",
   });
+  // startPoint only survives when explicitly true (falsy values are dropped).
+  assert.equal(validateTargetPoint({ id: "x", position: [0, 0, 0], startPoint: false }).startPoint, undefined);
   assert.throws(() => validateTargetPoint({ id: "bad", position: [0, 0] }));
   assert.throws(() =>
     validateTargetPoint({ id: "bad", position: [0, 0, 0], acceptanceRadius: 0 }),
@@ -19080,6 +19084,7 @@ check("targetPointEntriesFromLayout maps authored points and skips id-less entri
       name: "Alpha",
       position: [1, 0, 2],
       nextTargetPoint: "tp-b",
+      startPoint: true,
       waitTime: 2,
       acceptanceRadius: 0.8,
       speedOverride: 4,
@@ -19094,11 +19099,14 @@ check("targetPointEntriesFromLayout maps authored points and skips id-less entri
     name: "Alpha",
     position: [1, 0, 2],
     nextTargetPoint: "tp-b",
+    startPoint: true,
     waitTime: 2,
     acceptanceRadius: 0.8,
     speedOverride: 4,
     patrolTag: "loopA",
   });
+  // A point without the flag maps to startPoint: false.
+  assert.equal(entries[1]?.startPoint, false);
   // Defaults fill in for the sparse point; empty next link normalizes to null.
   assert.equal(entries[1]?.nextTargetPoint, null);
   assert.equal(entries[1]?.acceptanceRadius, 0.5);
@@ -19125,6 +19133,39 @@ check("createTargetPointIndex resolves get/byTag/next/first/nearest", () => {
   assert.equal(index.first("other")?.id, "d");
   assert.equal(index.nearest([9, 0, 1], "loop")?.id, "b");
   assert.equal(index.nearest([9, 0, 1], "loop", "b")?.id, "a"); // excludeId
+  assert.equal(index.start(), null); // none flagged
+  assert.equal(index.start("loop"), null);
+});
+
+check("createTargetPointIndex.start returns the flagged start scoped by tag", () => {
+  const index = createTargetPointIndex([
+    { id: "a", name: "A", position: [0, 0, 0], nextTargetPoint: "b", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop" },
+    { id: "b", name: "B", position: [5, 0, 0], nextTargetPoint: "a", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "loop", startPoint: true },
+    { id: "d", name: "D", position: [1, 0, 1], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "other" },
+  ]);
+  assert.equal(index.start()?.id, "b"); // first flagged in authored order
+  assert.equal(index.start("loop")?.id, "b");
+  assert.equal(index.start("other"), null); // no flagged point in this tag
+});
+
+check("forge.setPatrolTarget prefers the authored start-flagged point over the first", () => {
+  const bb = new Blackboard([{ key: "currentPatrolTarget", kind: "string", default: null }]);
+  const controller = new AIController("ai:guard", "guard", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.setPatrolTarget" },
+  });
+  const targetPoints = createTargetPointIndex([
+    { id: "a", name: "A", position: [0, 0, 0], nextTargetPoint: "b", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "" },
+    { id: "b", name: "B", position: [5, 0, 0], nextTargetPoint: "a", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "", startPoint: true },
+  ]);
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    targetPoints,
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "success");
+  assert.equal(bb.getString("currentPatrolTarget"), "b"); // flagged start, not first authored "a"
 });
 
 check("forge.setPatrolTarget seeds first route point and preserves a valid one", () => {

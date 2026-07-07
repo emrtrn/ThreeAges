@@ -164,6 +164,7 @@ export interface EditableTargetPoint {
   id: string;
   name: string;
   hidden: boolean;
+  startPoint: boolean;
   nextTargetPoint: string;
   waitTime: number;
   acceptanceRadius: number;

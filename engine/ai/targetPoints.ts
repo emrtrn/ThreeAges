@@ -19,6 +19,8 @@ export interface TargetPointEntry {
   readonly position: Vec3;
   /** Next point id in a single-link patrol route, or null when the route ends. */
   readonly nextTargetPoint: string | null;
+  /** Authored patrol-route start flag (absent/false unless the point starts a route). */
+  readonly startPoint?: boolean;
   readonly waitTime: number;
   readonly acceptanceRadius: number;
   readonly speedOverride: number | null;
@@ -34,6 +36,11 @@ export interface TargetPointIndex {
   next(id: string | null | undefined): TargetPointEntry | null;
   /** First point (optionally within `tag`) in authored order. */
   first(tag?: string): TargetPointEntry | null;
+  /**
+   * The authored start point (optionally within `tag`): the first entry flagged
+   * `startPoint`, or null when none is flagged. Callers fall back to {@link first}.
+   */
+  start(tag?: string): TargetPointEntry | null;
   /** Closest point (planar) to `position` (optionally within `tag`), excluding `excludeId`. */
   nearest(position: Vec3, tag?: string, excludeId?: string): TargetPointEntry | null;
 }
@@ -60,6 +67,10 @@ export function createTargetPointIndex(entries: readonly TargetPointEntry[]): Ta
     first: (tag) => {
       const pool = tag ? byTag(tag) : ordered;
       return pool[0] ?? null;
+    },
+    start: (tag) => {
+      const pool = tag ? byTag(tag) : ordered;
+      return pool.find((entry) => entry.startPoint) ?? null;
     },
     nearest: (position, tag, excludeId) => {
       const pool = tag ? byTag(tag) : ordered;
@@ -96,6 +107,7 @@ export function targetPointEntriesFromLayout(
       name: resolved.name,
       position: [point.position[0], point.position[1], point.position[2]],
       nextTargetPoint: nextId,
+      startPoint: resolved.startPoint,
       waitTime: resolved.waitTime,
       acceptanceRadius: resolved.acceptanceRadius,
       speedOverride: resolved.speedOverride,

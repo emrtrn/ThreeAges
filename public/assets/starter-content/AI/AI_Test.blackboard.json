@@ -36,6 +36,16 @@
       "key": "combatState",
       "kind": "string",
       "default": "patrol"
+    },
+    {
+      "key": "currentPatrolTarget",
+      "kind": "string",
+      "default": null
+    },
+    {
+      "key": "patrolTargetPosition",
+      "kind": "vec3",
+      "default": null
     }
   ]
 }

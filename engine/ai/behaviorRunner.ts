@@ -454,8 +454,9 @@ const DEFAULT_PATROL_KEY = "currentPatrolTarget";
  * Picks the current patrol Target Point and writes its id (and optionally its
  * position) to the Blackboard. Idempotent by default: a valid current target is
  * preserved unless `force` is set, so this can sit at the top of a patrol branch
- * and run every tick. Start selection: explicit `targetId`, else `tag`/`routeId`
- * with `mode` (`"first"` authored order, or `"nearest"` to the pawn).
+ * and run every tick. Start selection: explicit `targetId`, else `mode: "nearest"`
+ * to the pawn, else the route's authored start-flagged point, else the first
+ * point in authored order (all optionally scoped by `tag`/`routeId`).
  */
 function setPatrolTargetTask(context: AiTaskContext): AiBehaviorStatus {
   const index = context.targetPoints;
@@ -553,7 +554,8 @@ function resolvePatrolStart(context: AiTaskContext, index: TargetPointIndex): Ta
     const position = context.world?.entityPosition(context.controller.pawnEntityId);
     if (position) return index.nearest(position, tag || undefined);
   }
-  return index.first(tag || undefined);
+  // Prefer an authored start-flagged point; fall back to the first authored one.
+  return index.start(tag || undefined) ?? index.first(tag || undefined);
 }
 
 function startConversationTask(context: AiTaskContext): AiBehaviorStatus {
