@@ -6707,11 +6707,12 @@ export class SceneApp {
 
   private editorNavBlockers(): NavAabb[] {
     if (!this.layout) return [];
-    const physicsBlockers = this.physicsSubsystem.staticBlockerAabbs().map((blocker) => ({
-      min: [blocker.min[0], blocker.min[1], blocker.min[2]] satisfies [number, number, number],
-      max: [blocker.max[0], blocker.max[1], blocker.max[2]] satisfies [number, number, number],
-    }));
-    if (physicsBlockers.length > 0) return physicsBlockers;
+    // Derive blockers straight from the live layout (same source as the green
+    // "Show > Collision" overlay), NOT from `physicsSubsystem.staticBlockerAabbs()`.
+    // Physics bodies are only populated once at scene load and edit-mode transform
+    // edits don't push into them, so the cached AABBs go stale the moment you drag
+    // a static mesh — which left the red blocker footprints frozen. The layout is
+    // mutated in place on every edit, so this path tracks drags/cascades live.
     return collisionWireboxes(
       this.layout,
       this.localBounds,
