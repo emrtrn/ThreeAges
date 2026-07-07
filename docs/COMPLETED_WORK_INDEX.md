@@ -5,19 +5,22 @@ been archived outside the project.
 
 Archive:
 
-- `C:\Users\emret\Documents\Forge-Archive\forge-docs-completed-2026-07-07.zip`
+- `C:\Users\emret\Documents\Forge-Archive`
 
 Maintenance rule:
 
-- When a work document is completed, add its document name here, archive the
-  document outside the repository, and keep only active, planned, or ongoing
+- When a work document is completed, add its document name here, move the
+  document into the archive folder, and keep only active, planned, or ongoing
   documents in the repo.
+- Do not zip, rar, or otherwise compress completed work documents during
+  archive maintenance.
 
 Archived completed documents:
 
 - `ACTOR_RUNTIME_API_CHECKLIST.md`
 - `ACTOR_SCRIPT_SYSTEM_CHECKLIST.md`
 - `AI_HEIGHT_AWARE_NAVIGATION_PLAN.md`
+- `CHARACTER_CAPSULE_SOURCE_OF_TRUTH_PLAN.md`
 - `DIALOGUE_AND_VOICE_RESEARCH_AND_PLAN.md`
 - `EDITOR_UI_SLICING_PLAN.md`
 - `EXPONENTIAL_HEIGHT_FOG_CHECKLIST.md`
