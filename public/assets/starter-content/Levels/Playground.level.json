@@ -268,7 +268,26 @@
     },
     {
       "assetId": "sm-linearstair",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -6.86,
+            0,
+            -0.69
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1.9
+          ]
+        }
+      ]
     },
     {
       "assetId": "sm-ramp",
@@ -439,8 +458,8 @@
       "id": "target-point-3",
       "position": [
         -5,
-        0,
-        0
+        1.88,
+        -2.79
       ],
       "name": "Target Point 3",
       "scale": 1,
@@ -451,9 +470,9 @@
     {
       "id": "target-point-4",
       "position": [
-        -13.25,
+        -13.95,
         0,
-        -4.5
+        -3.89
       ],
       "name": "Target Point 4",
       "scale": 1,

@@ -1,5 +1,6 @@
 import { readCharacterMovementComponent, readTransformComponent } from "@engine/scene/components";
 import type { CharacterMovementComponent, TransformComponent } from "@engine/scene/components";
+import { resolveCharacterCapsule, type CharacterCapsuleResolution } from "@engine/scene/capsule";
 import type { EngineUpdateContext, Subsystem } from "@engine/core/Subsystem";
 import type { Entity, EntityId } from "@engine/scene/entity";
 import type { ActionMap } from "@engine/input/actionMap";
@@ -39,6 +40,7 @@ interface CharacterMovementRuntime {
   id: EntityId;
   transform: TransformComponent;
   movement: CharacterMovementComponent;
+  capsule: CharacterCapsuleResolution;
 }
 
 interface CharacterVertical {
@@ -154,6 +156,7 @@ export class CharacterMovementSubsystem implements Subsystem {
         id: entity.id,
         transform: cloneTransform(transform),
         movement,
+        capsule: resolveCharacterCapsule(entity),
       });
     }
   }
@@ -546,7 +549,7 @@ export class CharacterMovementSubsystem implements Subsystem {
   }
 
   private footprintHalf(runtime: CharacterMovementRuntime): [number, number] {
-    const radius = Math.max(runtime.movement.capsuleRadius, 0.001);
+    const radius = Math.max(runtime.capsule.radius, 0.001);
     return [radius, radius];
   }
 

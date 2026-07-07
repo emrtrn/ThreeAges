@@ -109,7 +109,7 @@ tutkalı shell'lerde ince kalır.
   `maskTexture` driver'lariyla uygulanir. `maskTexture` lineer/skaler maske bekler;
   Material Editor normal/base-color dokularini bu slota baglama durumunda uyarir ve
   preview shader compile hatasinda onceki materyali korur. Takip dokumani:
-  `docs/completed/MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md`.
+  archived completed doc MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md).
 
 - *2026-06-23* - **Sound Cue Lite arastirma/plani.** Forge, Unreal Sound Cue
   editorunu birebir kopyalamak yerine Web Audio tabanli dar bir `soundCue`
@@ -117,7 +117,7 @@ tutkalı shell'lerde ince kalır.
   grafi Source/Output/Mixer/Random/Modulator/Loop/Delay ile baslar, spatial,
   bus/submix, modulation, occlusion ve MetaSound-benzeri procedural graph daha
   sonraki fazlara ertelenir. Takip dokumani:
-  `docs/completed/SOUND_CUE_EDITOR_RESEARCH_AND_PLAN.md`.
+  archived completed doc SOUND_CUE_EDITOR_RESEARCH_AND_PLAN.md (see docs/COMPLETED_WORK_INDEX.md).
 
 - *2026-06-23* - **Dialogue/Voice kapsam karari.** Unreal'daki Dialogue Voice
   ve Dialogue Wave modeli, Sound Cue Lite'in alt ozelligi degil; speaker/listener
@@ -125,7 +125,7 @@ tutkalı shell'lerde ince kalır.
   nedeniyle ayri bir Dialogue/Voice feature alani olmali. Sound Cue Lite ile
   yalnizca playback katmaninda kesisir; live voice chat / microphone capture ise
   daha ayri bir multiplayer/media kapsamidir. Takip dokumani:
-  `docs/completed/DIALOGUE_AND_VOICE_RESEARCH_AND_PLAN.md`.
+  archived completed doc DIALOGUE_AND_VOICE_RESEARCH_AND_PLAN.md (see docs/COMPLETED_WORK_INDEX.md).
 
 - *2026-06-23* - **User Interface / UMG-Slate kapsam karari.** Forge, Unreal'in
   UI ayrimlarini alacak ama araclari birebir kopyalamayacak: oyun HUD/menu
@@ -134,21 +134,21 @@ tutkalı shell'lerde ince kalır.
   store, input tarafi Common UI benzeri screen stack/focus/back routing olacak.
   World-space UI, screen UI oturduktan sonra `WidgetComponentLite` fazina
   birakilmali. Takip dokumani:
-  `docs/completed/USER_INTERFACE_UMG_SLATE_RESEARCH_AND_PLAN.md`.
+  archived completed doc USER_INTERFACE_UMG_SLATE_RESEARCH_AND_PLAN.md (see docs/COMPLETED_WORK_INDEX.md).
 
 - *2026-06-20* — **Script Communication System kararı.** Forge, Unreal Blueprint
   Communication modelini görsel node VM olarak kopyalamayacak. Actor Script verisi
   iletişim sözleşmesini taşır; behavior mantığı `src/game/` TypeScript kodunda
   yaşar; aktörler arası haberleşme direct reference, interface/capability,
   dispatcher/message binding ve BehaviorContext API'i üzerinden kurulacaktır.
-  Takip dokümanı: `docs/completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
+  Takip dokümanı: archived completed doc SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md).
 
 - *2026-06-21* — **Player Character / Character Movement karari.** `Player.Actor`
   icin skeletal mesh tek basina yeterli degil. Forge, Unreal'in Character
   ayrimini alacak: possess edilebilen Pawn + skeletal mesh + capsule collider +
   birinci sinif `CharacterMovement` component'i + GameMode/PlayerController
   possession akisi. Takip dokumani:
-  `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`.
+  archived completed doc PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md).
 
 - *2026-06-21* — **CharacterMovement dikey kesiti.** Actor Script schema'sina
   `CharacterMovement` component'i eklendi; `parentClass:"character"` yeni
@@ -582,7 +582,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   yani FOV offset birikmez. **Test:** yeni engine testi FOV/shake blendini kapsar;
   Actor Script sprint locomotion testi artik takip pozunun ustundeki kucuk shake'i
   toleransla dogrular. **Gate:** `npx.cmd tsc --noEmit` temiz; engine **274**
-  check. **Durum:** `docs/completed/PLAYER_CONTROLLER_CHECKLIST.md` Faz 7-9 tum maddeler
+  check. **Durum:** archived completed doc PLAYER_CONTROLLER_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) Faz 7-9 tum maddeler
   `[x]`; bir sonraki kamera isi yeni checklist/faz olarak acilmali.
 
 - *2026-06-22* - **Player Controller Faz 9 - PlayerCameraManager view target/blend
@@ -600,7 +600,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   sonraki kayitta kapatildi.
 
 - *2026-06-22* - **Player Controller Faz 9 - Stateful runtime PlayerController
-  (tamam).** `docs/completed/PLAYER_CONTROLLER_CHECKLIST.md` Faz 9'un ilk maddesi kapandi.
+  (tamam).** archived completed doc PLAYER_CONTROLLER_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) Faz 9'un ilk maddesi kapandi.
   Yeni `src/game/playerController.ts` DOM'suz runtime controller katmani oldu:
   `PlayerControllerDefinition` + `GameModeContext` uzerinden input mode,
   pointer-look mode, cursor policy, possess/unpossess state ve controller-owned
@@ -617,7 +617,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   kapatildi.
 
 - *2026-06-22* — **Player Character Faz 6 — Runtime debug paneli (tamam → tüm
-  checklist kapandı).** `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md`'in son
+  checklist kapandı).** archived completed doc PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md)'in son
   açık maddesi kapandı; Faz 0–6 hepsi `[x]`. `?debug` overlay'ine "game mode"
   bloğu eklendi: active GameMode, possessed pawn, movement mode, grounded,
   velocity (y + planar). **Veri:** yeni `RuntimeSceneApp.getGameModeDebugSnapshot`
@@ -636,7 +636,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   etmiyor; grounded zaten walking/airborne ayrımını veriyor).
 
 - *2026-06-22* — **Player Character Faz 5 — Camera & animation (tamam).**
-  `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md` Faz 5'in 4 maddesi kapandı.
+  archived completed doc PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) Faz 5'in 4 maddesi kapandı.
   **Bulgu:** locomotion animation bridge + TPS takip kamerası zaten generic
   `RuntimeCharacterRef` üzerinden çalışıyordu; `addActorCharacterRef` Actor Script
   character instance'larını (`actor:<i>`) bu ref akışına kendi gltf'i + object'i +
@@ -664,7 +664,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
   movement mode, grounded, velocity) — Faz 5/6'daki tek açık madde.
 
 - *2026-06-22* — **Player Character Faz 4 — Project GameMode asset entegrasyonu (tamam).**
-  `docs/completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md` Faz 4'ün 4 maddesi kapandı.
+  archived completed doc PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) Faz 4'ün 4 maddesi kapandı.
   Artık `worldSettings.gameMode` built-in id (`forge.*`) **veya** bir
   `parentClass: "gameMode"` Actor Script'in classRef'i (`*.actor.json`) olabilir.
   **Catalog:** `isGameModeClassRef` + `normalizeGameModeId` classRef'i geçirir
@@ -711,7 +711,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 - *2026-06-20* — **Script Communication System checklist'i açıldı.** Actor
   Script'lerin büyük projelerde hardcoded `RuntimeSceneApp` aksiyonları yerine
   message/interface/dispatcher sözleşmesiyle haberleşmesi için ayrı takip
-  dokümanı oluşturuldu: `docs/completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md`.
+  dokümanı oluşturuldu: archived completed doc SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md).
   **Karar:** lamba testindeki özel `toggle-actor-light` akışı küçük test için
   kabul edilebilir; kalıcı model, AI tarafından yazılan `src/game/` behavior
   kodunun `BehaviorContext` içindeki `messages/world/state` API'lerini kullanması
@@ -739,7 +739,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 
 - *2026-06-20* — **Actor Script Faz 6 + Faz 8 — Browse/Play toolbar + AI behavior stub (tamam).**
   Checklist'in deferred-olmayan kalan maddeleri kapatıldı
-  (`docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 6 + Faz 8). **Toolbar Browse:**
+  (archived completed doc ACTOR_SCRIPT_SYSTEM_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) Faz 6 + Faz 8). **Toolbar Browse:**
   `onBrowse` artık `EditorUi.revealContentAsset` — drawer'ı açar, asset'in
   klasörüne gider (ataları açar, tip/arama filtresini temizler), kartı seçer ve
   `flashContentCard` ile kısa süre vurgular (`is-revealed` CSS animasyonu); tek
@@ -763,7 +763,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 - *2026-06-20* — **Actor Script Faz 10.7 — Mesh seçici + viewport transform gizmo'ları (tamam).**
   Kullanıcı geri bildirimi ("Content'teki modeli MeshRenderer'a nasıl alacağım?
   viewport'ta transform aracı yok") üzerine iki UX boşluğu kapatıldı (checklist:
-  `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 4 + Slice 10.7). **Mesh seçici:**
+  archived completed doc ACTOR_SCRIPT_SYSTEM_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) Faz 4 + Slice 10.7). **Mesh seçici:**
   MeshRenderer Details formuna model varlıklarını isimleriyle listeleyen **Mesh**
   açılır listesi (`modelAssets()` → `isModelAssetType` süzme); seçim `props.assetId`'ye
   yazılır, viewport gerçek mesh'i gösterir; elle yazılmış/bilinmeyen id `... (unknown)`
@@ -786,7 +786,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 - *2026-06-19* — **Actor Script Faz 10 — editör 3D viewport (tamam).**
   `ActorScriptEditor`'ın placeholder kartı, sınıfın component-ağacını canlı render
   eden gerçek bir 3D viewport ile değiştirildi (checklist:
-  `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 10). **Mimari:** saf, three.js'siz,
+  archived completed doc ACTOR_SCRIPT_SYSTEM_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) Faz 10). **Mimari:** saf, three.js'siz,
   test edilebilir `engine/scene/actorPreview.ts` (`actorPreviewNodes(def)` → tüm
   ağacı koruyan flat preview-node listesi; runtime `actorInstanceToEntity`'nin
   flat-collapse'inin aksine **çoklu node + parent-child** korunur). Render tarafı
@@ -813,7 +813,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 
 - *2026-06-19* — **Actor Script Faz 7 Slice 3 — editör-içi yerleştirme (tamam).**
   Placed Actor Script class instance'ları artık editörde birinci-sınıf nesne
-  (checklist: `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7 Slice 3). **Kullanıcı
+  (checklist: archived completed doc ACTOR_SCRIPT_SYSTEM_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) Faz 7 Slice 3). **Kullanıcı
   kararları:** kapsam = **tam** (sürükle-bırak + seç + gizmo + sil + undo/redo);
   edit-mode görsel = **gerçek mesh (WYSIWYG)**; per-instance override = **ertele**.
   **Kimlik/seçim:** `editor/core/selection.ts`'e `actor` union üyesi (index-bazlı,
@@ -840,7 +840,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 
 - *2026-06-19* — **Actor Script Faz 7 — Instance/Spawn katmanı (runtime yarısı).**
   Placed Actor Script class → runtime spawn dikey kesiti kuruldu (checklist:
-  `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md` Faz 7). **Veri modeli:**
+  archived completed doc ACTOR_SCRIPT_SYSTEM_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) Faz 7). **Veri modeli:**
   `LayoutActorInstance { classRef, transform, hierarchy/flags }` +
   `RoomLayout.actors?` (`engine/scene/layout.ts`); `overrides` ertelendi (Sınıf ≠
   Instance korunur). **Saf spawn çekirdeği:** yeni `engine/scene/actorInstance.ts`
@@ -866,7 +866,7 @@ alınan karar (sonraki oturum yeniden tartışmasın).
 
 - *2026-06-19* — **Actor Script (Blueprint) sistemi — authoring dikey kesiti.**
   Unreal Actor Blueprint'in Forge'a uygun, **veri-odaklı** versiyonu kuruldu
-  (rapor + checklist: `docs/completed/ACTOR_SCRIPT_SYSTEM_CHECKLIST.md`). **Karar:** görsel
+  (rapor + checklist: archived completed doc ACTOR_SCRIPT_SYSTEM_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md)). **Karar:** görsel
   node grafiği **yok** — event = `scriptId + params`, mantık TS'te (`src/game/`),
   AI yazar; editör sadece parametreleri yüzeye çıkarır. **Veri modeli:**
   `engine/scene/actorScript.ts` (`ParentClass`, `ComponentTemplateNode`,
@@ -2499,8 +2499,8 @@ docs/
   ARCHITECTURE.md
   LAUNCH_WORKFLOW.md
   UNREAL_BASICS_LESSONS.md
-  completed/SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md
-  completed/PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md
+  archived completed doc SCRIPT_COMMUNICATION_SYSTEM_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md)
+  archived completed doc PLAYER_CHARACTER_REQUIREMENTS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md)
   GAMEPLAY_FRAMEWORK_CHECKLIST.md
   ACTORS_COMPONENTS_CHECKLIST.md
   PACKAGING_CHECKLIST.md

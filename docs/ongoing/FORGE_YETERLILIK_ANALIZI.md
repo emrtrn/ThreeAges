@@ -69,8 +69,8 @@ bilerek disarida biraktigi ve reusable platform hedefinin netligi incelenecek.
   - Kanitlanmis dikey: tek oyunculu 3. sahis 3D web oyunu — Gameplay track
     G1-G6, Platform Foundations P0-P5 (CI, fizik, travel, save-game,
     boot/loading, perf altyapisi) ve Actor Runtime API A1-A6 tamam
-    (`docs/completed/PLATFORM_FOUNDATIONS_CHECKLIST.md`,
-    `docs/completed/ACTOR_RUNTIME_API_CHECKLIST.md`).
+    (archived completed doc PLATFORM_FOUNDATIONS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md),
+    archived completed doc ACTOR_RUNTIME_API_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md)).
   - Cihaz/girdi genisligi kod olarak var: `src/input/` keyboard, pointer,
     gamepad, touch + virtual joystick kaynaklari iceriyor (yalniz plan degil).
   - Dagitim modeli: oyun basina git fork + upstream sync
@@ -398,7 +398,7 @@ akislari incelenecek.
   4. Autosave davranisini dokumante et (hangi eylem neyi ne zaman yazar) ve
      fork rehberine "dev server acikken default layout kirlenir" notunu ekle;
      gerekirse autosave'i opt-in yap.
-  5. (Yol haritasi) VFX editoru (`docs/completed/VFX_Lite_Plan.md`, tamamlandi)
+  5. (Yol haritasi) VFX editoru (archived completed doc VFX_Lite_Plan.md (see docs/COMPLETED_WORK_INDEX.md), tamamlandi)
      bu alt-editor kalibiyla uygulanan ilk ornekti; Content Browser
      placement-rule affordances siradaki adim olarak kalsin.
   - **Guncel aksiyon durumu (2026-07-04):** Aksiyon 1 tamamlandi
@@ -480,7 +480,7 @@ degerlendirilecek.
     SpringArm + 6 script component'i). `BehaviorSubsystem` saf; ScriptWorld
     sorgu yuzeyi (byName/byTag/byClassRef/withInterface/velocityOf/ownerOf),
     ScriptMessageBus, runtime actor spawn/destroy. Actor Runtime API A1-A6
-    tamam (`docs/completed/ACTOR_RUNTIME_API_CHECKLIST.md`; tek acik A5.5
+    tamam (archived completed doc ACTOR_RUNTIME_API_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md); tek acik A5.5
     browser smoke).
   - Input genisligi: `ActionMap` + 5 kaynak — keyboard, gamepad (poll,
     stick+dpad eslemesi headless testli), touch + virtual joystick

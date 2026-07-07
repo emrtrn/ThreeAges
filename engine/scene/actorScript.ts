@@ -238,8 +238,6 @@ function defaultCharacterComponents(): ComponentTemplateNode[] {
         orientRotationToMovement: true,
         orientRotationToControl: false,
         movementMode: "walking",
-        capsuleRadius: 0.3,
-        capsuleHalfHeight: 0.9,
         maxStepHeight: 0.45,
         maxStepDown: 0.5,
         maxSlopeAngleDeg: 45,

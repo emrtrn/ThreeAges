@@ -49,7 +49,7 @@ Tam detay: checklist P1.6 maddesi + Progress Log son girdi. Özet:
   platform step-smooth ease'ini aşabilir. P1 tamamen kapandı; sıradaki **P2**.
 
 Bir sonraki oturumun (veya kişinin) kaldığı yerden devam edebilmesi için bu
-oturumun özeti. Kanonik plan: [`docs/completed/PLATFORM_FOUNDATIONS_CHECKLIST.md`](docs/completed/PLATFORM_FOUNDATIONS_CHECKLIST.md)
+oturumun özeti. Kanonik plan: archived completed doc PLATFORM_FOUNDATIONS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md)
 (Progress Log en güncel durum). Mimari karar kaydı:
 [`docs/architecture/UNREAL_BASICS_LESSONS.md`](docs/architecture/UNREAL_BASICS_LESSONS.md)
 Progress Log (en üstteki 2026-07-02 girdisi).

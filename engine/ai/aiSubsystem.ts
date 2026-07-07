@@ -21,6 +21,7 @@ import {
   readTransformComponent,
   type TransformComponent,
 } from "../scene/components";
+import { resolveCharacterCapsule } from "../scene/capsule";
 import { forwardVectorFromRotation } from "../scene/transform";
 import {
   comparePerceivedStimuli,
@@ -509,7 +510,7 @@ function sightTracePoint(entity: Entity): [number, number, number] | undefined {
   if (!transform) return undefined;
   const movement = readCharacterMovementComponent(entity);
   const height = movement
-    ? Math.max(0.1, movement.capsuleHalfHeight * 1.25)
+    ? Math.max(0.1, resolveCharacterCapsule(entity).halfHeight * 1.25)
     : 0.1;
   return [
     transform.position[0],

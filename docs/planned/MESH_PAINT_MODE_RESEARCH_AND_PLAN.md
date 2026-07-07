@@ -49,7 +49,7 @@ texture blend eder. Materyal bu ağırlık düzenine uygun kurulmak zorundadır.
 
 ## Forge mevcut durum
 
-- `docs/completed/MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md` içinde `vertexColor`
+- archived completed doc MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) içinde `vertexColor`
   driver'ı bilinçli olarak "sonraki kademe" bırakıldı.
 - `engine/assets/material.ts` şu an sadece `constant`, `slope`, `worldHeight`,
   `maskTexture` layer blend driver'larını kabul ediyor.

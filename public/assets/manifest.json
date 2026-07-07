@@ -20403,29 +20403,6 @@
       "license": "Unknown"
     },
     {
-      "id": "ai-test-actor",
-      "name": "AI Test.Actor",
-      "assetType": "prefab",
-      "category": "Script",
-      "path": "assets/starter-content/Script/AI_Test.actor.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 2088
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "ai-test-blackboard",
       "name": "AI Test.Blackboard",
       "assetType": "blackboard",

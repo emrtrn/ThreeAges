@@ -2227,8 +2227,6 @@ function characterMovementFields(node: ComponentTemplateNode): string {
     ${numberField("brakingDeceleration", "Braking Deceleration", 24, 'step="1" min="0"')}
     ${numberField("groundFriction", "Ground Friction", 8, 'step="0.1" min="0"')}
     ${vec3Row("rotationRate", "Rotation Rate°/s", readVec3Prop(props.rotationRate, [0, 0, 500]))}
-    ${numberField("capsuleRadius", "Capsule Radius", 0.3, 'step="0.05" min="0"')}
-    ${numberField("capsuleHalfHeight", "Capsule Half Height", 0.9, 'step="0.05" min="0"')}
     ${numberField("maxStepHeight", "Max Step Height", 0.45, 'step="0.05" min="0"')}
     ${numberField("maxStepDown", "Max Step Down", 0.5, 'step="0.05" min="0"')}
     ${numberField("maxSlopeAngleDeg", "Max Slope Angle°", 45, 'step="1" min="0" max="89"')}
@@ -2337,8 +2335,6 @@ function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJs
       orientRotationToMovement: true,
       orientRotationToControl: false,
       movementMode: "walking",
-      capsuleRadius: 0.3,
-      capsuleHalfHeight: 0.9,
       maxStepHeight: 0.45,
       maxStepDown: 0.5,
       maxSlopeAngleDeg: 45,

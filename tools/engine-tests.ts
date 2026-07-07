@@ -71,6 +71,7 @@ import {
   AI_CONTROLLER_COMPONENT,
   SMART_OBJECT_COMPONENT,
 } from "../engine/scene/components";
+import { resolveCharacterCapsule } from "../engine/scene/capsule";
 import {
   Blackboard,
   normalizeBlackboardKeys,
@@ -6745,6 +6746,53 @@ check("resolveNavAgentProfile falls back to collider extents then defaults when 
   assert.ok(Math.abs(empty.height - 1.8) < 1e-9, `default height: ${empty.height}`);
 });
 
+check("resolveCharacterCapsule prefers the non-sensor Collider capsule over legacy movement size", () => {
+  const entity: Entity = {
+    id: "actor:large-character",
+    components: {
+      Collider: {
+        shape: "capsule",
+        capsuleRadius: 1,
+        capsuleHalfHeight: 3,
+        isStatic: false,
+        isSensor: false,
+      },
+      CharacterMovement: { capsuleRadius: 0.3, capsuleHalfHeight: 0.9 },
+    },
+  };
+  const capsule = resolveCharacterCapsule(entity);
+  assert.equal(capsule.source, "collider");
+  assert.equal(capsule.radius, 1);
+  assert.equal(capsule.halfHeight, 3);
+  assert.deepEqual(capsule.center, [0, 3, 0]);
+  assert.deepEqual(capsule.halfExtents, [1, 3, 1]);
+});
+
+check("resolveCharacterCapsule keeps legacy movement fallback for old character assets", () => {
+  const legacy: Entity = {
+    id: "actor:legacy-character",
+    components: {
+      Collider: {
+        shape: "capsule",
+        capsuleRadius: 2,
+        capsuleHalfHeight: 4,
+        isStatic: false,
+        isSensor: true,
+      },
+      CharacterMovement: { capsuleRadius: 0.5, capsuleHalfHeight: 1.25 },
+    },
+  };
+  const capsule = resolveCharacterCapsule(legacy);
+  assert.equal(capsule.source, "legacyMovement");
+  assert.equal(capsule.radius, 0.5);
+  assert.equal(capsule.halfHeight, 1.25);
+
+  const fallback = resolveCharacterCapsule({ id: "actor:default", components: {} });
+  assert.equal(fallback.source, "default");
+  assert.equal(fallback.radius, 0.3);
+  assert.equal(fallback.halfHeight, 0.9);
+});
+
 check("searchNavGrid still fails when no walkable cell lies within the projection radius", () => {
   const grid = buildNavGrid({
     agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
@@ -11185,6 +11233,55 @@ check("CharacterMovement subsystem blocks planar movement against dynamic charac
   assert.equal(transform.position[2], -0.2);
 });
 
+check("CharacterMovement subsystem derives ground footprint from the Collider capsule", () => {
+  const actions = new ActionMap({});
+  actions.advance();
+  const physics = {
+    staticBlockerAabbs: () => [{ min: [0.6, -0.2, -1], max: [1, 0, 1] }] as Aabb3[],
+    staticSurfaceTriangles: () => [],
+    colliderHalfExtents: () => [1, 3, 1] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:large-footprint",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: {
+        shape: "capsule",
+        capsuleRadius: 1,
+        capsuleHalfHeight: 3,
+        isStatic: false,
+        isSensor: false,
+      },
+      CharacterMovement: {
+        maxWalkSpeed: 0,
+        sprintMultiplier: 1,
+        jumpSpeed: 5,
+        gravityScale: 1,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        orientRotationToMovement: true,
+      },
+    },
+  };
+  let transform: TransformComponent | null = null;
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      transform = next;
+    },
+    physics,
+    {
+      isPlayerControlled: () => false,
+      getMoveIntent: () => ({ direction: [0, 0], speed: 0 }),
+    },
+  );
+  movement.setEntities([entity]);
+  movement.update({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+
+  assert.ok(transform);
+  assert.equal(transform.position[1], 0);
+});
+
 check("CharacterMovement subsystem can orient a character to controller yaw", () => {
   const actions = new ActionMap({});
   actions.advance();
@@ -15385,6 +15482,9 @@ check("normalizeActorScriptDef coerces malformed/legacy data to a valid class", 
   assert.equal(character.components.some((node) => node.component === "Collider"), true);
   assert.equal(character.components.some((node) => node.component === "MeshRenderer"), true);
   assert.equal(character.components.some((node) => node.component === "CharacterMovement"), true);
+  const characterMovement = character.components.find((node) => node.component === "CharacterMovement");
+  assert.equal(characterMovement?.props.capsuleRadius, undefined);
+  assert.equal(characterMovement?.props.capsuleHalfHeight, undefined);
 });
 
 check("actor save payload requires a .actor.json path and normalizes the body", () => {
@@ -20527,6 +20627,44 @@ check("AISubsystem sight traces from character height so floor blockers do not h
   assert.equal(perceived[0]?.sense, "sight");
   assert.equal(perceived[0]?.sourceEntityId, "player");
   assert.deepEqual(perceived[0]?.position, [0, 0, 4]);
+});
+
+check("AISubsystem sight height uses the Collider capsule over legacy movement size", () => {
+  const wall: Aabb3 = { min: [-1, 1, 1.8], max: [1, 3, 2.2] };
+  const ai = new AISubsystem({ blockers: () => [wall] });
+  const largeCapsule = {
+    shape: "capsule",
+    capsuleRadius: 1,
+    capsuleHalfHeight: 3,
+    isStatic: false,
+    isSensor: false,
+  };
+  const smallLegacyMovement = { capsuleRadius: 0.3, capsuleHalfHeight: 0.9 };
+  ai.setEntities([
+    {
+      id: "enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: largeCapsule,
+        CharacterMovement: smallLegacyMovement,
+        [AI_CONTROLLER_COMPONENT]: {
+          perception: { sightRadius: 6, fieldOfViewDeg: 360 },
+        },
+      },
+    },
+    {
+      id: "player",
+      components: {
+        Transform: { position: [0, 0, 4], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: largeCapsule,
+        CharacterMovement: smallLegacyMovement,
+      },
+    },
+  ]);
+  ai.update({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 });
+  const perceived = ai.getDebugSnapshot().controllers[0]?.perception ?? [];
+  assert.equal(perceived[0]?.sense, "sight");
+  assert.equal(perceived[0]?.sourceEntityId, "player");
 });
 
 check("AISubsystem updates perception source positions from live transform syncs", () => {

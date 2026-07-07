@@ -91,7 +91,7 @@ Reading it top-to-bottom:
 scene runs over, the overlay tells you *which* counter (draw calls, tris,
 textures) is the suspect, and you decide whether that is a problem for your
 game. Runtime LOD is deliberately out of scope until measured content pressure
-justifies it (see `docs/completed/PLATFORM_FOUNDATIONS_CHECKLIST.md`, P5).
+justifies it (see archived completed doc PLATFORM_FOUNDATIONS_CHECKLIST.md in docs/COMPLETED_WORK_INDEX.md, P5).
 
 ## Offline asset report (`npm run perf:assets`)
 

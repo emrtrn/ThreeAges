@@ -119,7 +119,7 @@ Checklist:
   konsolda yeni hata olmadigini dogrula.
 - [ ] **P1.6 - Actor Runtime API browser borcu (A5.5):** Actor spawn/destroy veya
   script message akisindan biri browser smoke icinde gozlenebilir hale getir;
-  `docs/completed/ACTOR_RUNTIME_API_CHECKLIST.md` icindeki acik A5.5 notunu
+  archived completed doc ACTOR_RUNTIME_API_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) icindeki acik A5.5 notunu
   kapat.
 - [ ] **P1.7 - Dokuman senkronu:** Baslik 4, bu checklist ve ilgili completed
   checklist'lerde runtime smoke borcu artik acik kalmamali.
@@ -266,7 +266,7 @@ Checklist:
 - [ ] **P5.3 - Kanit ve Aksiyon Kaydi:** Ana dokumanin tablo sonuna kapanis
   satiri ekle.
 - [ ] **P5.4 - Checklist tasima karari:** Bu dokuman tum fazlar `[x]` olunca
-  `docs/completed/` altina tasinabilir.
+  the completed-work archive listed in `docs/COMPLETED_WORK_INDEX.md` altina tasinabilir.
 
 `[x] Yeterli` icin minimum karar kosulu:
 

@@ -1,4 +1,5 @@
 import type { Vec3 } from "./layout";
+import type { Entity, SceneJsonValue } from "./entity";
 
 export const DEFAULT_CAPSULE_RADIUS = 0.3;
 export const DEFAULT_CAPSULE_HALF_HEIGHT = 0.9;
@@ -16,6 +17,13 @@ export interface CapsuleDimensions {
   center: Vec3;
 }
 
+export type CharacterCapsuleSource = "collider" | "legacyMovement" | "default";
+
+export interface CharacterCapsuleResolution extends CapsuleDimensions {
+  halfExtents: Vec3;
+  source: CharacterCapsuleSource;
+}
+
 export function resolveCapsuleDimensions(
   radius = DEFAULT_CAPSULE_RADIUS,
   halfHeight = DEFAULT_CAPSULE_HALF_HEIGHT,
@@ -29,6 +37,64 @@ export function resolveCapsuleDimensions(
     size: [safeRadius * 2, safeHalfHeight * 2, safeRadius * 2],
     center: [0, safeHalfHeight, 0],
   };
+}
+
+export function resolveCharacterCapsule(entity: Entity): CharacterCapsuleResolution {
+  const collider = entity.components.Collider;
+  if (collider?.shape === "capsule" && collider.isSensor !== true) {
+    const dimensions = resolveCapsuleDimensions(
+      readPositiveNumber(collider.capsuleRadius) ?? radiusFromSize(collider.size),
+      readPositiveNumber(collider.capsuleHalfHeight) ?? halfHeightFromSize(collider.size),
+    );
+    return withCharacterCapsuleSource(dimensions, "collider");
+  }
+
+  const movement = entity.components.CharacterMovement;
+  const legacyRadius = readPositiveNumber(movement?.capsuleRadius);
+  const legacyHalfHeight = readPositiveNumber(movement?.capsuleHalfHeight);
+  if (legacyRadius !== undefined || legacyHalfHeight !== undefined) {
+    return withCharacterCapsuleSource(
+      resolveCapsuleDimensions(
+        legacyRadius ?? DEFAULT_CAPSULE_RADIUS,
+        legacyHalfHeight ?? DEFAULT_CAPSULE_HALF_HEIGHT,
+      ),
+      "legacyMovement",
+    );
+  }
+
+  return withCharacterCapsuleSource(resolveCapsuleDimensions(), "default");
+}
+
+function withCharacterCapsuleSource(
+  dimensions: CapsuleDimensions,
+  source: CharacterCapsuleSource,
+): CharacterCapsuleResolution {
+  return {
+    ...dimensions,
+    halfExtents: [dimensions.radius, dimensions.halfHeight, dimensions.radius],
+    source,
+  };
+}
+
+function radiusFromSize(value: SceneJsonValue | undefined): number | undefined {
+  const size = readVec3(value);
+  return size ? Math.max(size[0], size[2]) / 2 : undefined;
+}
+
+function halfHeightFromSize(value: SceneJsonValue | undefined): number | undefined {
+  const size = readVec3(value);
+  return size ? size[1] / 2 : undefined;
+}
+
+function readVec3(value: SceneJsonValue | undefined): Vec3 | undefined {
+  if (!Array.isArray(value) || value.length !== 3) return undefined;
+  const [x, y, z] = value;
+  if (typeof x !== "number" || typeof y !== "number" || typeof z !== "number") return undefined;
+  return [x, y, z];
+}
+
+function readPositiveNumber(value: SceneJsonValue | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
 }
 
 function positiveOrDefault(value: number, fallback: number): number {
