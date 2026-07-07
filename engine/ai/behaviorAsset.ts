@@ -8,6 +8,13 @@ import {
 export type AiBehaviorStatus = "success" | "failure" | "running";
 export type AiBehaviorNodeKind = "selector" | "sequence" | "task" | "wait" | "subtree";
 export type AiDecoratorOp = "equals" | "notEquals" | "isSet" | "isNotSet";
+export type AiNumericCompareOp = "lt" | "lte" | "gt" | "gte";
+
+/**
+ * Mirrors engine/perception `PerceptionSense`. Kept local so the behavior-tree
+ * schema module stays free of perception runtime imports.
+ */
+export type AiPerceptionSenseName = "sight" | "hearing" | "damage" | "alert" | "gameplay";
 
 export type AiJsonValue =
   | string
@@ -30,6 +37,46 @@ export interface AiBlackboardDecoratorDef {
   value?: BlackboardValue;
 }
 
+/**
+ * Passes when the pawn->target distance satisfies `op value`. `key` names a
+ * Blackboard entry holding either an entity id or a vec3 position; a missing
+ * position or missing world query is a safe failure.
+ */
+export interface AiDistanceDecoratorDef {
+  kind: "distance";
+  key: string;
+  op: AiNumericCompareOp;
+  value: number;
+}
+
+/**
+ * Rate-limit gate: passes at most once per `seconds` of runtime time. The last
+ * pass time is stored in per-agent, per-node runtime memory, so authored assets
+ * stay immutable and shared safely across agents.
+ */
+export interface AiCooldownDecoratorDef {
+  kind: "cooldown";
+  seconds: number;
+}
+
+/**
+ * Passes when the controller currently perceives a matching stimulus. All
+ * filters are optional: omit `sense` to accept any sense, `minStrength` to
+ * accept any strength, and `requireLineOfSight` to ignore LOS.
+ */
+export interface AiPerceptionDecoratorDef {
+  kind: "hasPerceptionStimulus";
+  sense?: AiPerceptionSenseName;
+  minStrength?: number;
+  requireLineOfSight?: boolean;
+}
+
+export type AiDecoratorDef =
+  | AiBlackboardDecoratorDef
+  | AiDistanceDecoratorDef
+  | AiCooldownDecoratorDef
+  | AiPerceptionDecoratorDef;
+
 export interface AiBehaviorServiceDef {
   service: string;
   interval?: number;
@@ -39,7 +86,7 @@ export interface AiBehaviorServiceDef {
 export interface AiBehaviorBaseNode {
   id?: string;
   kind: AiBehaviorNodeKind;
-  decorators?: AiBlackboardDecoratorDef[];
+  decorators?: AiDecoratorDef[];
   services?: AiBehaviorServiceDef[];
 }
 
@@ -92,6 +139,16 @@ const AI_DECORATOR_OPS: readonly AiDecoratorOp[] = [
   "isNotSet",
 ];
 
+const AI_NUMERIC_COMPARE_OPS: readonly AiNumericCompareOp[] = ["lt", "lte", "gt", "gte"];
+
+const AI_PERCEPTION_SENSES: readonly AiPerceptionSenseName[] = [
+  "sight",
+  "hearing",
+  "damage",
+  "alert",
+  "gameplay",
+];
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -114,6 +171,14 @@ function isAiBehaviorNodeKind(value: unknown): value is AiBehaviorNodeKind {
 
 function isAiDecoratorOp(value: unknown): value is AiDecoratorOp {
   return typeof value === "string" && AI_DECORATOR_OPS.includes(value as AiDecoratorOp);
+}
+
+function isAiNumericCompareOp(value: unknown): value is AiNumericCompareOp {
+  return typeof value === "string" && AI_NUMERIC_COMPARE_OPS.includes(value as AiNumericCompareOp);
+}
+
+function isAiPerceptionSense(value: unknown): value is AiPerceptionSenseName {
+  return typeof value === "string" && AI_PERCEPTION_SENSES.includes(value as AiPerceptionSenseName);
 }
 
 function normalizeJsonValue(value: unknown, label: string): AiJsonValue {
@@ -200,11 +265,26 @@ export function normalizeAiBlackboardAsset(value: unknown): AiBlackboardAsset {
   return { schema: 1, type: "blackboard", keys };
 }
 
-function normalizeDecorator(value: unknown, index: number): AiBlackboardDecoratorDef {
+function normalizeDecorator(value: unknown, index: number): AiDecoratorDef {
   const input = requireObject(value, `decorators[${index}]`);
-  if (input.kind !== "blackboard") {
-    throw new Error(`decorators[${index}].kind must be "blackboard"`);
+  switch (input.kind) {
+    case "blackboard":
+      return normalizeBlackboardDecorator(input, index);
+    case "distance":
+      return normalizeDistanceDecorator(input, index);
+    case "cooldown":
+      return normalizeCooldownDecorator(input, index);
+    case "hasPerceptionStimulus":
+      return normalizePerceptionDecorator(input, index);
+    default:
+      throw new Error(`decorators[${index}].kind is invalid`);
   }
+}
+
+function normalizeBlackboardDecorator(
+  input: Record<string, unknown>,
+  index: number,
+): AiBlackboardDecoratorDef {
   const key = requireNonEmptyString(input.key, `decorators[${index}].key`);
   const op = isAiDecoratorOp(input.op) ? input.op : "equals";
   const out: AiBlackboardDecoratorDef = { kind: "blackboard", key, op };
@@ -231,7 +311,57 @@ function normalizeDecorator(value: unknown, index: number): AiBlackboardDecorato
   return out;
 }
 
-function normalizeDecorators(value: unknown): AiBlackboardDecoratorDef[] | undefined {
+function normalizeDistanceDecorator(
+  input: Record<string, unknown>,
+  index: number,
+): AiDistanceDecoratorDef {
+  const key = requireNonEmptyString(input.key, `decorators[${index}].key`);
+  if (!isAiNumericCompareOp(input.op)) {
+    throw new Error(`decorators[${index}].op must be one of lt|lte|gt|gte`);
+  }
+  if (typeof input.value !== "number" || !Number.isFinite(input.value)) {
+    throw new Error(`decorators[${index}].value must be a finite number`);
+  }
+  return { kind: "distance", key, op: input.op, value: input.value };
+}
+
+function normalizeCooldownDecorator(
+  input: Record<string, unknown>,
+  index: number,
+): AiCooldownDecoratorDef {
+  if (typeof input.seconds !== "number" || !Number.isFinite(input.seconds) || input.seconds <= 0) {
+    throw new Error(`decorators[${index}].seconds must be a positive number`);
+  }
+  return { kind: "cooldown", seconds: Number(input.seconds.toFixed(3)) };
+}
+
+function normalizePerceptionDecorator(
+  input: Record<string, unknown>,
+  index: number,
+): AiPerceptionDecoratorDef {
+  const out: AiPerceptionDecoratorDef = { kind: "hasPerceptionStimulus" };
+  if (input.sense !== undefined) {
+    if (!isAiPerceptionSense(input.sense)) {
+      throw new Error(`decorators[${index}].sense is invalid`);
+    }
+    out.sense = input.sense;
+  }
+  if (input.minStrength !== undefined) {
+    if (typeof input.minStrength !== "number" || !Number.isFinite(input.minStrength)) {
+      throw new Error(`decorators[${index}].minStrength must be a finite number`);
+    }
+    out.minStrength = input.minStrength;
+  }
+  if (input.requireLineOfSight !== undefined) {
+    if (typeof input.requireLineOfSight !== "boolean") {
+      throw new Error(`decorators[${index}].requireLineOfSight must be a boolean`);
+    }
+    out.requireLineOfSight = input.requireLineOfSight;
+  }
+  return out;
+}
+
+function normalizeDecorators(value: unknown): AiDecoratorDef[] | undefined {
   if (value === undefined || value === null) return undefined;
   if (!Array.isArray(value)) throw new Error("decorators must be an array");
   return value.map((decorator, index) => normalizeDecorator(decorator, index));

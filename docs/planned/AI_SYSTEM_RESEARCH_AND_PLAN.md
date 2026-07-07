@@ -102,6 +102,10 @@
 > engine regression kapsaminda kapatildi.
 > Revizyon: 2026-07-07 - AI Navigation clearance Playwright smoke uygulandi:
 > editor Show overlay ve runtime debug path-following waypoint smoke eklendi.
+> Revizyon: 2026-07-07 - Faz 2 built-in decorator seti tamamlandi: `distance`
+> (pawn->hedef mesafe compare), `cooldown` (agent/node runtime memory ile hiz
+> siniri) ve `hasPerceptionStimulus` (sense/minStrength/LOS filtreli) decorator'lar
+> engine normalizer + runner + testleriyle eklendi (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -461,11 +465,11 @@ Service/Task modeli.
       - [x] `forge.moveToPosition`
       - [x] `forge.moveToBlackboard`
       - [x] (opsiyonel) `forge.startConversation` — DialogueSubsystem koprusu.
-- [ ] Built-in decoratorlar:
+- [x] Built-in decoratorlar:
       - [x] blackboard compare
-      - [ ] distance compare
-      - [ ] cooldown
-      - [ ] has perception stimulus
+      - [x] distance compare
+      - [x] cooldown
+      - [x] has perception stimulus
 - [ ] Built-in serviceler:
       - [ ] update target distance
       - [ ] update line of sight
@@ -503,6 +507,33 @@ Tamamlanan Faz 2 runtime runner notu (2026-07-05):
   dondurur.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`607 checks passed`), `npm.cmd run build:verify`, `npm.cmd run check:assets`.
+
+Tamamlanan Faz 2 built-in decorator seti notu (2026-07-07):
+
+- `engine/ai/behaviorAsset.ts` decorator semasi union'a genisletildi:
+  `AiDecoratorDef = blackboard | distance | cooldown | hasPerceptionStimulus`.
+  Normalizer kind bazli dogrulama yapar; saveValidator ayni normalizer'i
+  yeniden kullandigi icin `.behavior.json` save yolu ek allowlist gerektirmez.
+  - `distance`: `key` (entity veya vec3 blackboard degeri) ile pawn arasi mesafeyi
+    `op` (`lt|lte|gt|gte`) ve `value` esigine gore karsilastirir; world query veya
+    pozisyon yoksa guvenli failure.
+  - `cooldown`: `seconds` boyunca dalin yeniden calismasini engelleyen hiz siniri;
+    son gecis zamani agent-basina/node-basina runtime memory'de (`cooldownReadyAt`)
+    tutulur, authored asset immutable kalir.
+  - `hasPerceptionStimulus`: controller'in anlik perception snapshot'inda
+    opsiyonel `sense` / `minStrength` / `requireLineOfSight` filtrelerine uyan bir
+    stimulus varsa gecer.
+- `engine/ai/behaviorRunner.ts` `decoratorsPass` kind bazli
+  `decoratorPasses` dagitimiyla yeniden yazildi; `failedDecorator` etiketi her
+  decorator turu icin ayri (`distance:target:lte`, `cooldown:1`,
+  `perception:sight`).
+- Test: normalizer distance/cooldown/perception canonicalizasyon + gecersiz
+  op/value/sense throw'lari; runner distance->cooldown->perception gate akisi
+  (perception yoksa idle, hedef uzaksa distance fail, menzilde attack + cooldown
+  penceresi, cooldown sonrasi tekrar attack) kapsandi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`678 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS.
 
 ### Faz 3 - Navigation ve path following
 

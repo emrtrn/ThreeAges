@@ -18629,6 +18629,58 @@ check("AI behavior tree asset normalizer canonicalizes supported node shapes", (
   );
 });
 
+check("AI behavior tree normalizer canonicalizes distance/cooldown/perception decorators", () => {
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "selector",
+      children: [
+        {
+          kind: "task",
+          task: "game.attack",
+          decorators: [
+            { kind: "distance", key: "target", op: "lte", value: 2.5 },
+            { kind: "cooldown", seconds: 1.2345 },
+            { kind: "hasPerceptionStimulus", sense: "sight", minStrength: 0.4, requireLineOfSight: true },
+          ],
+        },
+        { kind: "task", task: "game.patrol" },
+      ],
+    },
+  });
+  const root = asset.root;
+  if (root.kind !== "selector") throw new Error("expected selector root");
+  const attack = root.children[0];
+  const decorators = attack?.decorators ?? [];
+  assert.equal(decorators[0]?.kind, "distance");
+  const distance = decorators[0];
+  if (distance?.kind === "distance") {
+    assert.equal(distance.key, "target");
+    assert.equal(distance.op, "lte");
+    assert.equal(distance.value, 2.5);
+  }
+  const cooldown = decorators[1];
+  if (cooldown?.kind === "cooldown") assert.equal(cooldown.seconds, 1.234); // toFixed(3)
+  const perception = decorators[2];
+  if (perception?.kind === "hasPerceptionStimulus") {
+    assert.equal(perception.sense, "sight");
+    assert.equal(perception.minStrength, 0.4);
+    assert.equal(perception.requireLineOfSight, true);
+  }
+
+  const makeTree = (decorator: unknown) => ({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "x", decorators: [decorator] },
+  });
+  assert.throws(() => normalizeAiBehaviorTreeAsset(makeTree({ kind: "distance", key: "t", op: "near", value: 2 })), /op must be one of/);
+  assert.throws(() => normalizeAiBehaviorTreeAsset(makeTree({ kind: "distance", key: "t", op: "lt" })), /value must be a finite number/);
+  assert.throws(() => normalizeAiBehaviorTreeAsset(makeTree({ kind: "cooldown", seconds: 0 })), /positive number/);
+  assert.throws(() => normalizeAiBehaviorTreeAsset(makeTree({ kind: "hasPerceptionStimulus", sense: "smell" })), /sense is invalid/);
+  assert.throws(() => normalizeAiBehaviorTreeAsset(makeTree({ kind: "telepathy" })), /kind is invalid/);
+});
+
 check("AI query asset normalizer canonicalizes generators, contexts, and tests", () => {
   const asset = normalizeAiQueryAsset({
     schema: 1,
@@ -19017,6 +19069,76 @@ check("AiBehaviorRunner executes selector/sequence/decorator/wait task and messa
   assert.equal(debug.lastStatus, "success");
   assert.equal(debug.lastTask, "forge.sendMessage");
   assert.equal(debug.failedDecorator, null);
+});
+
+check("AiBehaviorRunner distance/cooldown/perception decorators gate their branches", () => {
+  const bb = new Blackboard([{ key: "target", kind: "entity", default: null }]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  bb.set("target", "player");
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "selector",
+      children: [
+        {
+          kind: "task",
+          task: "test.attack",
+          decorators: [
+            { kind: "hasPerceptionStimulus", sense: "sight", requireLineOfSight: true },
+            { kind: "distance", key: "target", op: "lte", value: 2 },
+            { kind: "cooldown", seconds: 1 },
+          ],
+        },
+        { kind: "task", task: "test.idle" },
+      ],
+    },
+  });
+  const log: string[] = [];
+  // Pawn at origin; target position resolved from the world by entity id.
+  let targetPosition: [number, number, number] = [10, 0, 0];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: {
+      get: (taskId) => () => {
+        log.push(taskId);
+        return "success";
+      },
+    },
+    world: {
+      entityPosition: (id) => (id === "enemy" ? [0, 0, 0] : targetPosition),
+    },
+  });
+  const tick = (t: number) => runner.tick({ deltaSeconds: 0.1, elapsedSeconds: t, frame: 1 });
+
+  // No perception yet -> attack decorator fails, falls through to idle.
+  assert.equal(tick(0.1), "success");
+  assert.equal(log.at(-1), "test.idle");
+  assert.equal(runner.getDebugSnapshot().failedDecorator, "perception:sight");
+
+  // Sight stimulus present but target is far -> distance decorator fails.
+  controller.setPerception([
+    { sense: "sight", sourceEntityId: "player", position: targetPosition, distance: 10, strength: 0.9, lineOfSight: true },
+  ]);
+  assert.equal(tick(0.2), "success");
+  assert.equal(log.at(-1), "test.idle");
+  assert.equal(runner.getDebugSnapshot().failedDecorator, "distance:target:lte");
+
+  // Bring target into range -> all decorators pass, attack runs and arms cooldown.
+  targetPosition = [1, 0, 0];
+  controller.setPerception([
+    { sense: "sight", sourceEntityId: "player", position: targetPosition, distance: 1, strength: 0.9, lineOfSight: true },
+  ]);
+  assert.equal(tick(0.3), "success");
+  assert.equal(log.at(-1), "test.attack");
+
+  // Within the 1s cooldown window the branch is blocked even though sight/distance hold.
+  assert.equal(tick(0.9), "success");
+  assert.equal(log.at(-1), "test.idle");
+  assert.equal(runner.getDebugSnapshot().failedDecorator, "cooldown:1");
+
+  // After the cooldown elapses the attack branch fires again.
+  assert.equal(tick(1.5), "success");
+  assert.equal(log.at(-1), "test.attack");
 });
 
 check("AiBehaviorRunner selector rechecks higher priority branches while a lower branch is running", () => {
