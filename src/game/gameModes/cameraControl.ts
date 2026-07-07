@@ -7,27 +7,36 @@
  * horizontal facing; right -> 90deg clockwise of it when viewed from above).
  */
 
-/** Which of the four planar movement actions are held this tick. */
+/**
+ * Which movement actions are held this tick. The four planar directions plus the
+ * optional world-vertical pair (`up`/`down`) that mirrors the editor's E/Q fly
+ * controls. Vertical is optional so existing planar-only callers stay valid.
+ */
 export interface CameraPanInput {
   readonly forward: boolean;
   readonly back: boolean;
   readonly left: boolean;
   readonly right: boolean;
+  readonly up?: boolean;
+  readonly down?: boolean;
 }
 
-/** World-space XZ pan delta for one tick. */
+/** World-space pan delta for one tick (`dy` is the world-vertical component). */
 export interface CameraPanStep {
   readonly dx: number;
+  readonly dy: number;
   readonly dz: number;
 }
 
 /**
- * World-space XZ pan for one tick. `forwardX`/`forwardZ` are the camera's
- * forward direction projected onto the ground plane (need not be normalized);
- * a degenerate (zero-length) forward falls back to world -z. The raw input is
- * normalized before scaling by `speed * dt`, so diagonals are not faster than
- * straight lines. Opposing keys cancel; no input or non-positive speed/dt yields
- * a zero delta.
+ * World-space pan for one tick. `forwardX`/`forwardZ` are the camera's forward
+ * direction projected onto the ground plane (need not be normalized); a
+ * degenerate (zero-length) forward falls back to world -z. Horizontal keys move
+ * along that ground facing; `up`/`down` move along world +y/-y, matching the
+ * editor viewport's E/Q fly controls. The combined 3D input is normalized before
+ * scaling by `speed * dt`, so diagonals (including vertical ones) are not faster
+ * than straight lines. Opposing keys cancel; no input or non-positive speed/dt
+ * yields a zero delta.
  */
 export function cameraPlanarPan(
   forwardX: number,
@@ -38,10 +47,11 @@ export function cameraPlanarPan(
 ): CameraPanStep {
   const forwardAmount = (input.forward ? 1 : 0) - (input.back ? 1 : 0);
   const rightAmount = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-  const magnitude = Math.hypot(forwardAmount, rightAmount);
-  if (magnitude === 0) return { dx: 0, dz: 0 };
+  const verticalAmount = (input.up ? 1 : 0) - (input.down ? 1 : 0);
+  const magnitude = Math.hypot(forwardAmount, rightAmount, verticalAmount);
+  if (magnitude === 0) return { dx: 0, dy: 0, dz: 0 };
   const distance = speed * dt;
-  if (!(distance > 0)) return { dx: 0, dz: 0 };
+  if (!(distance > 0)) return { dx: 0, dy: 0, dz: 0 };
 
   // Normalized horizontal forward; fall back to world -z when the camera looks
   // straight down (zero-length XZ projection).
@@ -55,6 +65,7 @@ export function cameraPlanarPan(
   const scale = distance / magnitude;
   return {
     dx: (fx * forwardAmount + rx * rightAmount) * scale,
+    dy: verticalAmount * scale,
     dz: (fz * forwardAmount + rz * rightAmount) * scale,
   };
 }

@@ -47,6 +47,7 @@ export interface EditorInputBindings {
   onActorClassDrop(classRef: string, clientX: number, clientY: number): void;
   onMaterialDrop(materialId: string, clientX: number, clientY: number): void;
   onLightDrop(type: LayoutLightActor["type"], clientX: number, clientY: number): void;
+  onSpecialActorDrop(payload: string, clientX: number, clientY: number): void;
   onWheel(event: WheelEvent): void;
 
   addPressedKey(code: string): void;
@@ -205,6 +206,11 @@ export function bindEditorInputEvents(
     const actorClassRef = event.dataTransfer?.getData("application/x-forge-actor-class");
     if (actorClassRef) {
       bindings.onActorClassDrop(actorClassRef, event.clientX, event.clientY);
+      return;
+    }
+    const specialActor = event.dataTransfer?.getData("application/x-forge-special-actor");
+    if (specialActor) {
+      bindings.onSpecialActorDrop(specialActor, event.clientX, event.clientY);
       return;
     }
     bindings.onAssetDragLeave();

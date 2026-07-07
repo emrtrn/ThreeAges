@@ -10366,7 +10366,7 @@ check("cameraPlanarPan moves along the camera's horizontal forward", () => {
 check("cameraPlanarPan cancels opposing keys and keeps diagonals at unit speed", () => {
   assert.deepEqual(
     cameraPlanarPan(0, -1, { forward: true, back: true, left: false, right: false }, 4, 0.5),
-    { dx: 0, dz: 0 },
+    { dx: 0, dy: 0, dz: 0 },
   );
   // Looking straight down (zero XZ forward) falls back to world -z.
   const down = cameraPlanarPan(0, 0, { forward: true, back: false, left: false, right: false }, 4, 0.5);
@@ -10374,6 +10374,24 @@ check("cameraPlanarPan cancels opposing keys and keeps diagonals at unit speed",
   // Forward+right diagonal is not faster than a straight move.
   const diag = cameraPlanarPan(0, -1, { forward: true, back: false, left: false, right: true }, 4, 0.5);
   assert.ok(Math.abs(Math.hypot(diag.dx, diag.dz) - 2) < 1e-9);
+});
+
+check("cameraPlanarPan flies straight up/down on world +y/-y", () => {
+  // Up alone: pure +y, no horizontal drift, at speed*dt = 2 units.
+  const up = cameraPlanarPan(0, -1, { forward: false, back: false, left: false, right: false, up: true }, 4, 0.5);
+  assert.ok(Math.abs(up.dx) < 1e-9 && Math.abs(up.dz) < 1e-9);
+  assert.ok(Math.abs(up.dy - 2) < 1e-9);
+  // Down alone: pure -y.
+  const down = cameraPlanarPan(0, -1, { forward: false, back: false, left: false, right: false, down: true }, 4, 0.5);
+  assert.ok(Math.abs(down.dy + 2) < 1e-9);
+  // Opposing vertical keys cancel.
+  assert.deepEqual(
+    cameraPlanarPan(0, -1, { forward: false, back: false, left: false, right: false, up: true, down: true }, 4, 0.5),
+    { dx: 0, dy: 0, dz: 0 },
+  );
+  // Forward+up diagonal stays at unit speed (the whole 3D vector is normalized).
+  const diag = cameraPlanarPan(0, -1, { forward: true, back: false, left: false, right: false, up: true }, 4, 0.5);
+  assert.ok(Math.abs(Math.hypot(diag.dx, diag.dy, diag.dz) - 2) < 1e-9);
 });
 
 check("runtime PlayerController owns possession and input policy", () => {
@@ -10551,6 +10569,28 @@ check("default camera mode never possesses an input-move character", () => {
   session.update(0.5);
   assert.ok(camera.position.z < z0); // WASD moved the camera...
   assert.deepEqual(characters[0].object.position.toArray(), [0, 0, 0]); // ...not the character.
+});
+
+check("default camera mode flies up/down with the editor's E/Q keys", () => {
+  const camera = new PerspectiveCamera();
+  const actions = new ActionMap(MOVE_BINDINGS);
+  const { context } = makeGameModeContext({ camera, actions });
+  const session = defaultCameraGameMode.createSession(context);
+  session.spawnDefaultPawn();
+  session.possess(); // Binds KeyE -> camera-up, KeyQ -> camera-down.
+
+  actions.handleDown("KeyE");
+  actions.advance();
+  const y0 = camera.position.y;
+  session.update(0.5);
+  assert.ok(camera.position.y > y0); // E lifts the camera.
+
+  actions.handleUp("KeyE");
+  actions.handleDown("KeyQ");
+  actions.advance();
+  const y1 = camera.position.y;
+  session.update(0.5);
+  assert.ok(camera.position.y < y1); // Q lowers it.
 });
 
 check("default camera mode ignores movement while input mode is UI", () => {

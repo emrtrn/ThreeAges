@@ -719,25 +719,23 @@ export class EditorUi {
       });
 
     // Blocking Volume (parametric blockout brush) is a placed actor with a transform.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-blocking-volume]")
-      ?.addEventListener("click", () => {
-        this.app.addBlockingVolume();
-      });
+    // Draggable: drop in the viewport to place at the cursor; click still adds one.
+    this.bindSpecialActorButton("[data-add-blocking-volume]", "blockingVolume", "Blocking Volume", () =>
+      this.app.addBlockingVolume(),
+    );
 
     // AI Navigation Volume (NavMesh Bounds Volume-style pathfinding bounds).
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-ai-navigation-volume]")
-      ?.addEventListener("click", () => {
-        this.app.addAiNavigationVolume();
-      });
+    this.bindSpecialActorButton(
+      "[data-add-ai-navigation-volume]",
+      "aiNavigationVolume",
+      "AI Navigation Volume",
+      () => this.app.addAiNavigationVolume(),
+    );
 
     // Target Point (Unreal-style AI patrol route marker).
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-target-point]")
-      ?.addEventListener("click", () => {
-        this.app.addTargetPoint();
-      });
+    this.bindSpecialActorButton("[data-add-target-point]", "targetPoint", "Target Point", () =>
+      this.app.addTargetPoint(),
+    );
 
     // Post Process is a transform-less singleton environment actor.
     this.root
@@ -747,11 +745,15 @@ export class EditorUi {
       });
 
     // World Widget is a placed world-space UI billboard (anchor + Details fields).
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-world-widget]")
-      ?.addEventListener("click", () => {
-        this.app.addWorldWidget(this.firstUiWidgetAssetId());
-      });
+    // The widget asset id is resolved here (the manifest lives in the editor UI)
+    // and rides the drag payload as `worldWidget:<assetId>`.
+    this.bindSpecialActorButton(
+      "[data-add-world-widget]",
+      "worldWidget",
+      "World Widget",
+      () => this.app.addWorldWidget(this.firstUiWidgetAssetId()),
+      () => `worldWidget:${this.firstUiWidgetAssetId()}`,
+    );
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1385,6 +1387,35 @@ export class EditorUi {
       this.emptyDragImage = image;
     }
     return this.emptyDragImage;
+  }
+
+  /**
+   * Wires an Add-Actor button for a "special" (non-asset, non-light) actor:
+   * click still adds one at the default spot, and dragging the button drops it
+   * into the viewport at the cursor via the `x-forge-special-actor` channel. The
+   * drag payload defaults to `kind`; `payload` overrides it (world widget encodes
+   * its resolved asset id). No ghost preview — the actor appears on drop.
+   */
+  private bindSpecialActorButton(
+    selector: string,
+    kind: string,
+    label: string,
+    onClick: () => void,
+    payload: () => string = () => kind,
+  ): void {
+    const button = this.root.querySelector<HTMLButtonElement>(selector);
+    if (!button) return;
+    button.draggable = true;
+    button.addEventListener("dragstart", (event) => {
+      event.dataTransfer?.setData("application/x-forge-special-actor", payload());
+      event.dataTransfer!.effectAllowed = "copy";
+      event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
+      this.setStatus(`Dragging ${label} - drop in the viewport to place.`);
+    });
+    button.addEventListener("dragend", () => {
+      this.app.endAssetDragPreview();
+    });
+    button.addEventListener("click", onClick);
   }
 
   /** Highlight a single Content Browser asset card without re-rendering the

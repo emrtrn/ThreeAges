@@ -2210,6 +2210,42 @@ export class SceneApp {
     });
   }
 
+  /**
+   * Places a "special" (non-asset, non-light) actor at the viewport drop point.
+   * The `payload` is the drag channel string: a bare actor kind, or for a world
+   * widget `worldWidget:<assetId>` (the widget asset is resolved on dragstart in
+   * the editor UI, which has the manifest of `*.ui.json` assets). Each actor
+   * rests on the picked surface using its default half-height so it doesn't sink
+   * into the floor; XZ follow the active move snap, exactly like an asset drop.
+   */
+  addSpecialActorAt(payload: string, clientX: number, clientY: number): void {
+    if (!this.layout) return;
+    const hit = this.picker.clientToSurface(clientX, clientY);
+    if (!hit) return;
+    const x = snapValue(hit.x, this.snapSettings.move, this.snapSettings.moveEnabled);
+    const z = snapValue(hit.z, this.snapSettings.move, this.snapSettings.moveEnabled);
+    const separator = payload.indexOf(":");
+    const kind = separator >= 0 ? payload.slice(0, separator) : payload;
+    const assetId = separator >= 0 ? payload.slice(separator + 1) : "";
+    switch (kind) {
+      case "aiNavigationVolume":
+        // Default size [10, 4, 10] → half-height 2 rests the box on the surface.
+        this.addAiNavigationVolume([x, round(hit.y + 2), z]);
+        break;
+      case "blockingVolume":
+        // Default box brush [2, 2, 2] → half-height 1 rests it on the surface.
+        this.addBlockingVolume([x, round(hit.y + 1), z]);
+        break;
+      case "targetPoint":
+        this.addTargetPoint([x, round(hit.y), z]);
+        break;
+      case "worldWidget":
+        // Float the billboard a little above the surface so it reads clearly.
+        this.addWorldWidget(assetId, [x, round(hit.y + 1), z]);
+        break;
+    }
+  }
+
   async saveLayout(): Promise<void> {
     if (!this.layout) throw new Error("Layout is not loaded yet.");
     if (!this.layoutSaver) {
@@ -3587,13 +3623,13 @@ export class SceneApp {
   }
 
   /** Adds a Blocking Volume actor (default box brush) and selects it. */
-  addBlockingVolume(): void {
+  addBlockingVolume(position: Vec3 = [0, 1, 0]): void {
     if (!this.layout) return;
     const volumes = this.layout.blockingVolumes ?? [];
     const actor: LayoutBlockingVolume = {
       id: uniqueBlockingVolumeId(volumes),
       name: uniqueBlockingVolumeName("Blocking Volume", volumes),
-      position: [0, 1, 0],
+      position: [...position],
     };
     const index = volumes.length;
     this.executeCommand({
@@ -3794,13 +3830,13 @@ export class SceneApp {
   }
 
   /** Adds an AI Navigation Volume actor and selects it. */
-  addAiNavigationVolume(): void {
+  addAiNavigationVolume(position: Vec3 = [0, 2, 0]): void {
     if (!this.layout) return;
     const volumes = this.layout.aiNavigationVolumes ?? [];
     const actor: LayoutAiNavigationVolume = {
       id: uniqueAiNavigationVolumeId(volumes),
       name: uniqueAiNavigationVolumeName("AI Navigation Volume", volumes),
-      position: [0, 2, 0],
+      position: [...position],
       size: [10, 4, 10],
     };
     const index = volumes.length;
@@ -3960,13 +3996,13 @@ export class SceneApp {
   }
 
   /** Adds a Target Point actor and selects it. */
-  addTargetPoint(): void {
+  addTargetPoint(position: Vec3 = [0, 0, 0]): void {
     if (!this.layout) return;
     const points = this.layout.targetPoints ?? [];
     const point: LayoutTargetPoint = {
       id: uniqueTargetPointId(points),
       name: uniqueTargetPointName("Target Point", points),
-      position: [0, 0, 0],
+      position: [...position],
     };
     const index = points.length;
     this.executeCommand({
@@ -4617,12 +4653,12 @@ export class SceneApp {
   }
 
   /** Appends a world widget referencing `assetId` in front of the camera + selects it. */
-  addWorldWidget(assetId: string): void {
+  addWorldWidget(assetId: string, worldPos?: Vec3): void {
     if (!this.layout) return;
     const index = this.layout.worldWidgets?.length ?? 0;
     const widget: WorldUiWidget = {
       widget: assetId,
-      anchor: { worldPos: this.defaultWorldWidgetAnchor() },
+      anchor: { worldPos: worldPos ? [...worldPos] : this.defaultWorldWidgetAnchor() },
     };
     this.executeCommand({
       label: "Add World Widget",
@@ -5677,6 +5713,10 @@ export class SceneApp {
       onLightDrop: (type, clientX, clientY) => {
         this.endAssetDragPreview();
         this.addLightActorAt(type, clientX, clientY);
+      },
+      onSpecialActorDrop: (payload, clientX, clientY) => {
+        this.endAssetDragPreview();
+        this.addSpecialActorAt(payload, clientX, clientY);
       },
       onWheel: (event) => this.cameraController.handleWheel(event),
       addPressedKey: (code) => this.cameraController.addPressedKey(code),

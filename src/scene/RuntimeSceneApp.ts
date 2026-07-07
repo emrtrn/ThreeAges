@@ -4067,7 +4067,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   private addLight(actor: LayoutLightActor): void {
     const index = this.lightObjects.length;
-    const record = buildSceneLightObject(actor, index);
+    // Runtime lights illuminate but show no editor gizmo (icon billboard +
+    // reach wireframe) — those are authoring-only helpers.
+    const record = buildSceneLightObject(actor, index, { gizmo: false });
     tagSceneLightRecordIndex(record, index);
     this.scene.add(record.root);
     if (record.target) this.scene.add(record.target);

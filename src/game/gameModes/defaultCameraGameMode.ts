@@ -7,10 +7,11 @@
  * rule belongs only to the explicitly selected TPS mode. Physics, audio and
  * behavior subsystems keep running; this session only owns the camera.
  *
- * Controls match the editor viewport's feel: WASD pans along the camera's facing
- * and a held right-mouse drag turns the view (yaw/pitch). The camera keeps
- * whatever pose it boots with — the scene's default framing, or the editor
- * camera pose handed off through the Play button — instead of being reframed.
+ * Controls match the editor viewport's feel: WASD pans along the camera's facing,
+ * E/Q fly the camera straight up/down along world +y/-y, and a held right-mouse
+ * drag turns the view (yaw/pitch). The camera keeps whatever pose it boots with —
+ * the scene's default framing, or the editor camera pose handed off through the
+ * Play button — instead of being reframed.
  */
 import { Vector3 } from "three";
 import { RuntimePlayerController } from "@/game/playerController";
@@ -62,6 +63,11 @@ class CameraPawnSession implements GameModeSession {
     this.controller.possess(null);
     // Own the camera so window resizes stop re-framing it from under the player.
     this.context.markCameraControlled();
+    // Mirror the editor viewport's E/Q vertical fly keys. This mode never
+    // possesses a character, so re-binding interact/emote to camera up/down is
+    // inert for gameplay and self-contained to this session's ActionMap.
+    this.context.actions.bind("KeyE", "camera-up");
+    this.context.actions.bind("KeyQ", "camera-down");
     // Seed look angles from whatever pose the camera booted with so the first
     // right-drag continues smoothly instead of snapping.
     this.context.camera.getWorldDirection(this.forward);
@@ -85,7 +91,7 @@ class CameraPawnSession implements GameModeSession {
     }
 
     camera.getWorldDirection(this.forward);
-    const { dx, dz } = cameraPlanarPan(
+    const { dx, dy, dz } = cameraPlanarPan(
       this.forward.x,
       this.forward.z,
       {
@@ -93,11 +99,14 @@ class CameraPawnSession implements GameModeSession {
         back: actions.held("move-back"),
         left: actions.held("move-left"),
         right: actions.held("move-right"),
+        up: actions.held("camera-up"),
+        down: actions.held("camera-down"),
       },
       this.speed,
       deltaSeconds,
     );
     camera.position.x += dx;
+    camera.position.y += dy;
     camera.position.z += dz;
   }
 

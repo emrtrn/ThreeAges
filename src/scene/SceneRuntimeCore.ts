@@ -304,10 +304,12 @@ export function createSceneCharacterMixer(
 export function buildSceneLightObject(
   actor: LayoutLightActor,
   index: number,
+  options: { gizmo?: boolean } = {},
 ): LightObjectRecord {
   return createThreeLightObject(
     entityLightItem(lightEntity(index, actor)),
     DEFAULT_SCENE_LIGHT_COLOR,
+    options,
   );
 }
 
