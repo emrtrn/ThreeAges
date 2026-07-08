@@ -198,6 +198,11 @@
 > tasir; runner bunlari task/evaluator params'ina default olarak merge eder
 > (`params.context` nested context, local params override). Kalan Faz 8:
 > use-case ornekleri.
+> Revizyon: 2026-07-08 - Faz 8 StateTree boss phase use-case asset dilimi
+> uygulandi: starter content'e `Boss_Phase_Demo.blackboard.json` ve
+> `Boss_Phase_Demo.stateTree.json` eklendi; manifest'e AI/stateTree demo asset'i
+> olarak kaydedildi. Patrol/chase/attack/investigate/enraged fazlari StateTree
+> ile modellenir.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1713,7 +1718,7 @@ benzeri sistem.
       degerlendirmesinden gecer; her iki runner ayni `AiTaskRegistry` /
       `AiTaskContext` / `AiServiceRegistry` yuzeyini ve ayni
       `PRESERVE_TASK_MEMORY` task-memory yasam dongusunu paylasir.
-- [ ] GameMode, boss fight, civilian routine, quest actor gibi use-case'leri
+- [x] GameMode, boss fight, civilian routine, quest actor gibi use-case'leri
       Behavior Tree yerine StateTree ile modelle.
 - [x] Editor ilk surum: nested state outline + transition table.
       (`src/editor/StateTreeEditor.ts`: modal editor, hiyerarsik **secilebilir**
@@ -1913,6 +1918,26 @@ Tamamlanan Faz 8 StateTree parameters/context data notu (2026-07-08):
   (`711 checks passed`), hedefli Playwright StateTree editor smoke PASS,
   `npm.cmd run build:verify` yesil (verify:dist --strict PASS),
   `npm.cmd run check:assets` PASS (baseline thumbnail/sidecar warning'leriyle).
+
+Tamamlanan Faz 8 StateTree boss phase use-case asset notu (2026-07-08):
+
+- Starter content'e `public/assets/starter-content/AI/Boss_Phase_Demo.blackboard.json`
+  ve `Boss_Phase_Demo.stateTree.json` eklendi. StateTree; patrol, chase, attack,
+  investigate ve enraged fazlarini top-level state olarak modeller.
+- Asset, Faz 8 `parameters/context data` dilimini gercek ornekte kullanir:
+  ortak target/phase/patrol anahtarlari ve boss arena context'i top-level
+  `parameters`/`context` alanlarinda durur; state task'lari yerel override
+  edebilir.
+- Manifest'e `boss-phase-demo-blackboard` ve `boss-phase-demo-state-tree`
+  kayitlari eklendi (`assetType: blackboard` / `stateTree`, `loadGroup: AI`).
+- Test: `starter Boss Phase StateTree asset classifies and normalizes` engine
+  testi manifest kaydini, path siniflandirmasini, blackboard/stateTree
+  normalizer'larini, `parameters`, `context`, evaluator ve `Enraged` state'ini
+  dogrular.
+- Dogrulama: `npx.cmd tsc --noEmit` yesil, `npm.cmd run test:engine` yesil
+  (`712 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS (baseline thumbnail/sidecar
+  warning'leriyle).
 
 ## Ilk uygulanabilir vertical slice onerisi
 

@@ -19370,6 +19370,29 @@ check("AI state tree normalizer rejects malformed assets", () => {
   );
 });
 
+check("starter Boss Phase StateTree asset classifies and normalizes", () => {
+  const blackboardEntry = assetManifest.assets.find((asset) => asset.id === "boss-phase-demo-blackboard");
+  const stateTreeEntry = assetManifest.assets.find((asset) => asset.id === "boss-phase-demo-state-tree");
+  assert.ok(blackboardEntry, "expected Boss Phase Demo blackboard in the manifest");
+  assert.ok(stateTreeEntry, "expected Boss Phase Demo StateTree in the manifest");
+  assert.equal(assetType(blackboardEntry), "blackboard");
+  assert.equal(assetType(stateTreeEntry), "stateTree");
+  assert.equal(inferAssetTypeFromPath(assetPath(stateTreeEntry)), "stateTree");
+
+  const blackboard = normalizeAiBlackboardAsset(
+    JSON.parse(readFileSync(`public/${assetPath(blackboardEntry)}`, "utf8")),
+  );
+  const stateTree = normalizeAiStateTreeAsset(
+    JSON.parse(readFileSync(`public/${assetPath(stateTreeEntry)}`, "utf8")),
+  );
+  assert.equal(stateTree.blackboard, assetPath(blackboardEntry));
+  assert.equal(stateTree.parameters?.phaseKey, "bossPhase");
+  assert.equal(stateTree.context?.routine, "phase-combat");
+  assert.ok(blackboard.keys.some((key) => key.key === "enraged" && key.kind === "boolean"));
+  assert.ok(stateTree.states.some((state) => state.id === "Enraged"));
+  assert.equal(stateTree.evaluators?.length, 2);
+});
+
 check("AI query asset normalizer canonicalizes generators, contexts, and tests", () => {
   const asset = normalizeAiQueryAsset({
     schema: 1,

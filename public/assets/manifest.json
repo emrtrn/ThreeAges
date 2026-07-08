@@ -20455,6 +20455,61 @@
       "license": "Unknown"
     },
     {
+      "id": "boss-phase-demo-blackboard",
+      "name": "Boss Phase Demo.Blackboard",
+      "assetType": "blackboard",
+      "category": "AI",
+      "path": "assets/starter-content/AI/Boss_Phase_Demo.blackboard.json",
+      "tags": [
+        "demo",
+        "ai",
+        "stateTree"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 965
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "boss-phase-demo-state-tree",
+      "name": "Boss Phase Demo.StateTree",
+      "assetType": "stateTree",
+      "category": "AI",
+      "path": "assets/starter-content/AI/Boss_Phase_Demo.stateTree.json",
+      "tags": [
+        "demo",
+        "ai",
+        "stateTree",
+        "boss"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 6903
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "ai-character-actor",
       "name": "AI Character.Actor",
       "assetType": "prefab",
