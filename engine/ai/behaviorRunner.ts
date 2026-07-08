@@ -131,6 +131,7 @@ export function createDefaultAiTaskRegistry(): AiTaskRegistry {
     ["forge.wait", waitTask],
     ["forge.setBlackboard", setBlackboardTask],
     ["forge.sendMessage", sendMessageTask],
+    ["forge.stopMovement", stopMovementTask],
     ["forge.moveToPosition", moveToPositionTask],
     ["forge.moveToBlackboard", moveToBlackboardTask],
     ["forge.setPatrolTarget", setPatrolTargetTask],
@@ -406,6 +407,17 @@ function setBlackboardTask(context: AiTaskContext): AiBehaviorStatus {
 function sendMessageTask(context: AiTaskContext): AiBehaviorStatus {
   const type = stringParam(context.params.type);
   if (!type || !context.emitMessage) return "failure";
+  const cooldownSeconds = optionalNonNegativeNumberParam(
+    context.params.cooldownSeconds ?? context.params.cooldown,
+  );
+  if (cooldownSeconds !== null) {
+    context.memory.set(PRESERVE_TASK_MEMORY, true);
+    const readyAt = context.memory.get("readyAt") as number | undefined;
+    if (readyAt !== undefined && context.engine.elapsedSeconds + 1e-9 < readyAt) return "success";
+  } else {
+    context.memory.delete(PRESERVE_TASK_MEMORY);
+    context.memory.delete("readyAt");
+  }
   const target = stringParam(context.params.target);
   const payload = plainPayload(context.params.payload);
   context.emitMessage({
@@ -414,7 +426,21 @@ function sendMessageTask(context: AiTaskContext): AiBehaviorStatus {
     ...(target ? { target } : {}),
     ...(payload ? { payload } : {}),
   });
+  if (cooldownSeconds !== null) {
+    context.memory.set("readyAt", context.engine.elapsedSeconds + cooldownSeconds);
+  }
   return "success";
+}
+
+function stopMovementTask(context: AiTaskContext): AiBehaviorStatus {
+  if (!context.moveTo || !context.world) return "failure";
+  const position = context.world.entityPosition(context.controller.pawnEntityId);
+  if (!position) return "failure";
+  return context.moveTo({
+    controller: context.controller,
+    position,
+    acceptanceRadius: 0,
+  });
 }
 
 function moveToPositionTask(context: AiTaskContext): AiBehaviorStatus {
@@ -499,12 +525,16 @@ function moveToPatrolTargetTask(context: AiTaskContext): AiBehaviorStatus {
     context.params.acceptanceRadius ?? context.params.acceptance,
   );
   const acceptanceRadius = acceptanceOverride !== null ? acceptanceOverride : entry.acceptanceRadius;
-  return context.moveTo({
+  const status = context.moveTo({
     controller: context.controller,
     position: entry.position,
     ...(speed !== null ? { speed } : {}),
     ...(acceptanceRadius !== null ? { acceptanceRadius } : {}),
   });
+  if (status === "success" && context.params.advanceOnSuccess === true) {
+    return advancePatrolTarget(context);
+  }
+  return status;
 }
 
 /**
@@ -516,15 +546,22 @@ function moveToPatrolTargetTask(context: AiTaskContext): AiBehaviorStatus {
  * `lastKey` records the point we advanced away from.
  */
 function advancePatrolTargetTask(context: AiTaskContext): AiBehaviorStatus {
+  return advancePatrolTarget(context);
+}
+
+function advancePatrolTarget(context: AiTaskContext): AiBehaviorStatus {
   const index = context.targetPoints;
   if (!index) return "failure";
   const key = stringParam(context.params.key) ?? DEFAULT_PATROL_KEY;
   const current = index.get(context.blackboard.getString(key));
   if (!current) return "failure";
   const lastKey = stringParam(context.params.lastKey);
+  const positionKey = stringParam(context.params.positionKey);
   const commit = (entry: TargetPointEntry): AiBehaviorStatus => {
     if (lastKey && entry.id !== current.id) context.blackboard.set(lastKey, current.id);
-    return context.blackboard.set(key, entry.id) ? "success" : "failure";
+    const wroteId = context.blackboard.set(key, entry.id);
+    if (positionKey) context.blackboard.set(positionKey, entry.position);
+    return wroteId ? "success" : "failure";
   };
 
   const next = index.next(current.id);

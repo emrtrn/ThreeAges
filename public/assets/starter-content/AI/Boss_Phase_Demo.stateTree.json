@@ -62,8 +62,11 @@
           "task": "forge.moveToPatrolTarget",
           "params": {
             "key": "currentPatrolTarget",
+            "positionKey": "patrolTargetPosition",
             "speed": 2.4,
-            "acceptanceRadius": 1.2
+            "acceptanceRadius": 1.2,
+            "advanceOnSuccess": true,
+            "mode": "loop"
           }
         }
       ],
@@ -180,11 +183,16 @@
           }
         },
         {
+          "task": "forge.stopMovement"
+        },
+        {
           "task": "forge.sendMessage",
           "params": {
             "type": "boss.attack.intent",
+            "cooldownSeconds": 0.9,
             "payload": {
-              "attack": "slam",
+              "attack": "punch",
+              "animation": "Punch",
               "phase": "attack"
             }
           }

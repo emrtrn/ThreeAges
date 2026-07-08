@@ -2519,6 +2519,10 @@ export class EditorUi {
   private async openActorScriptEditor(item: BrowserAssetItem): Promise<void> {
     try {
       const { ActorScriptEditor } = await import("@/editor/ActorScriptEditor");
+      // Actor Script Details pickers (AIController StateTree/BehaviorTree/Blackboard,
+      // MeshRenderer assets, etc.) should see manifest edits made outside the
+      // current editor session without requiring a full browser refresh.
+      this.editableAssets = await this.app.reloadEditableAssets();
       // Freshly scan project classes so a Game Mode's Default Pawn Class picker
       // lists the latest character/pawn Actor Scripts (incl. just-created ones).
       await this.refreshProjectActorClasses();

@@ -31,6 +31,7 @@ import {
   type ActorSpawnRequest,
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
+import type { ScriptMessagePayload } from "@engine/behavior/scriptMessages";
 import { AISubsystem, type AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import { createTargetPointIndex, targetPointEntriesFromLayout } from "@engine/ai/targetPoints";
 import type { AiMoveRequest } from "@engine/ai/behaviorRunner";
@@ -420,6 +421,7 @@ interface RuntimeAiCharacterAnimator {
   readonly ref: RuntimeCharacterRef;
   readonly animator: CrossfadeAnimator;
   readonly config: ReturnType<typeof locomotionConfigForSkeleton>;
+  oneShot: { clip: string; remaining: number; blendOutSeconds: number } | null;
 }
 
 /** One AI path follower's live state for the `?debug` overlay. */
@@ -535,6 +537,8 @@ const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
   "ui-action",
   "game-event",
 ] as const;
+
+const AI_ATTACK_ANIMATION_MESSAGE_TYPES = ["ai.attack.intent", "boss.attack.intent"] as const;
 
 /** Compact one-line reason for a failed asset load (for the load-progress detail). */
 function describeLoadError(error: unknown): string {
@@ -776,6 +780,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private gameEventUnsub: (() => void) | null = null;
   /** Unsubscribes script-message -> AI perception stimulus bridge handlers. */
   private aiStimulusUnsubs: Array<() => void> = [];
+  /** Unsubscribes AI attack intent -> one-shot animation bridge handlers. */
+  private aiAttackAnimationUnsubs: Array<() => void> = [];
   /** Modal screens shown when the rules layer resolves a win/loss; null when none. */
   private winScreenDef: UiWidgetDef | null = null;
   private loseScreenDef: UiWidgetDef | null = null;
@@ -1085,6 +1091,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.gameEventUnsub?.();
     this.gameEventUnsub = null;
     this.clearAiScriptStimulusBridge();
+    this.clearAiAttackAnimationBridge();
     this.gameStateStore = null;
     this.dialogueUnsub?.();
     this.dialogueUnsub = null;
@@ -1324,6 +1331,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const acceptanceRadius = request.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS;
     if (distance3d(transform.position, request.position) <= acceptanceRadius) {
       this.aiPathFollowing.delete(entityId);
+      this.reportAiIdleLocomotion(entityId);
       return "success";
     }
     const existing = this.aiPathFollowing.get(entityId);
@@ -1393,6 +1401,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     if (!grid) return { status: "failure" as const, points: [], visited: 0 };
     return searchNavGrid(grid, start, goal);
+  }
+
+  private reportAiIdleLocomotion(entityId: string): void {
+    const previous = this.locomotionReports.get(entityId);
+    this.locomotionReports.set(entityId, {
+      planarSpeed: 0,
+      grounded: previous?.grounded ?? true,
+      velocityY: 0,
+    });
   }
 
   /**
@@ -1865,6 +1882,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       engineApp: this.engineApp,
     });
     this.bindAiScriptStimulusBridge();
+    this.bindAiAttackAnimationBridge();
     // Auto-play audio/particles must never abort scene start: a single bad cue or
     // emitter cannot be allowed to stop the game mode + UI (lines below) from
     // initialising, which would look like "Play won't start".
@@ -2044,6 +2062,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.gameEventUnsub?.();
     this.gameEventUnsub = null;
     this.clearAiScriptStimulusBridge();
+    this.clearAiAttackAnimationBridge();
     this.gameStateStore = null;
     this.gameOutcomeShown = false;
     this.pauseMenuDef = null;
@@ -2195,6 +2214,55 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private clearAiScriptStimulusBridge(): void {
     for (const unsubscribe of this.aiStimulusUnsubs) unsubscribe();
     this.aiStimulusUnsubs = [];
+  }
+
+  private bindAiAttackAnimationBridge(): void {
+    this.clearAiAttackAnimationBridge();
+    this.aiAttackAnimationUnsubs = AI_ATTACK_ANIMATION_MESSAGE_TYPES.map((type) =>
+      this.behaviorSubsystem.subscribeScriptMessage(type, (envelope) => {
+        this.playAiAttackAnimation(envelope.source, envelope.payload);
+      }),
+    );
+  }
+
+  private clearAiAttackAnimationBridge(): void {
+    for (const unsubscribe of this.aiAttackAnimationUnsubs) unsubscribe();
+    this.aiAttackAnimationUnsubs = [];
+  }
+
+  private playAiAttackAnimation(entityId: string, payload: ScriptMessagePayload): void {
+    const runtime = this.aiCharacterAnimators.get(entityId);
+    if (!runtime || runtime.oneShot) return;
+    const clip = this.resolveAiAttackAnimationClip(payload, runtime.animator.clips);
+    if (!clip) return;
+    runtime.animator.play(clip, 0.08);
+    const duration = runtime.animator.getActiveClip()?.duration ?? 0.65;
+    runtime.oneShot = {
+      clip,
+      remaining: Math.max(0.1, duration),
+      blendOutSeconds: 0.14,
+    };
+  }
+
+  private resolveAiAttackAnimationClip(
+    payload: ScriptMessagePayload,
+    clips: ReadonlySet<string>,
+  ): string | null {
+    const candidates: string[] = [];
+    const animation = payload.animation;
+    if (typeof animation === "string") candidates.push(animation);
+    const attack = payload.attack;
+    if (typeof attack === "string") {
+      candidates.push(attack);
+      candidates.push(`${attack.charAt(0).toUpperCase()}${attack.slice(1)}`);
+    }
+    candidates.push("Punch");
+    for (const candidate of candidates) {
+      if (clips.has(candidate)) return candidate;
+      const caseInsensitive = [...clips].find((clip) => clip.toLowerCase() === candidate.toLowerCase());
+      if (caseInsensitive) return caseInsensitive;
+    }
+    return null;
   }
 
   /**
@@ -3133,12 +3201,19 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (initial.kind === "blend") animator.playBlend(initial.weights);
     else if (initial.clip) animator.play(initial.clip, 0);
     this.animationSubsystem.add(animator.mixer);
-    this.aiCharacterAnimators.set(ref.entityId, { ref, animator, config });
+    this.aiCharacterAnimators.set(ref.entityId, { ref, animator, config, oneShot: null });
   }
 
   private updateAiCharacterAnimations(deltaSeconds: number): void {
     for (const [entityId, runtime] of this.aiCharacterAnimators) {
       if (entityId === this.gameModeSession?.playerState.pawnEntityId) continue;
+      let fadeSeconds = deltaSeconds > 0 ? 0.18 : 0;
+      if (runtime.oneShot) {
+        runtime.oneShot.remaining -= Math.max(0, deltaSeconds);
+        if (runtime.oneShot.remaining > 0) continue;
+        fadeSeconds = runtime.oneShot.blendOutSeconds;
+        runtime.oneShot = null;
+      }
       const report = this.locomotionReports.get(entityId);
       const result = resolveLocomotionAnimation(
         report ?? { planarSpeed: 0, grounded: true, velocityY: 0 },
@@ -3147,7 +3222,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         DEFAULT_LOCOMOTION_THRESHOLDS,
       );
       if (result.kind === "blend") runtime.animator.playBlend(result.weights);
-      else if (result.clip) runtime.animator.play(result.clip, deltaSeconds > 0 ? 0.18 : 0);
+      else if (result.clip) runtime.animator.play(result.clip, fadeSeconds);
     }
   }
 

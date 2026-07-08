@@ -16,9 +16,9 @@
       "placements": [
         {
           "position": [
-            -16.33,
+            -18.07,
             0,
-            -5.39
+            -9.43
           ],
           "name": "Player Start",
           "collision": false,
@@ -187,6 +187,15 @@
             0
           ],
           "scale": 1
+        },
+        {
+          "position": [
+            -19.6,
+            0,
+            -6.76
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
         }
       ]
     },
@@ -322,6 +331,10 @@
     {
       "assetId": "wall-400x400",
       "placements": []
+    },
+    {
+      "assetId": "wall-500x500",
+      "placements": []
     }
   ],
   "characters": [],
@@ -329,6 +342,7 @@
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
     "killZ": -10,
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"
@@ -486,9 +500,9 @@
     {
       "id": "target-point-5",
       "position": [
-        -18.5,
+        -13.29,
         0,
-        10
+        9.19
       ],
       "name": "Target Point 5",
       "scale": 1,

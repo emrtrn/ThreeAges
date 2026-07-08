@@ -19783,6 +19783,38 @@ check("AiBehaviorRunner executes selector/sequence/decorator/wait task and messa
   assert.equal(debug.failedDecorator, null);
 });
 
+check("AiBehaviorRunner sendMessage cooldown throttles repeated task ticks", () => {
+  const bb = new Blackboard([]);
+  const controller = new AIController("ai:enemy", "enemy", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "task",
+      task: "forge.sendMessage",
+      params: {
+        type: "enemy.attack",
+        cooldownSeconds: 0.5,
+        payload: { attack: "punch", animation: "Punch" },
+      },
+    },
+  });
+  const messages: Array<{ type: string; source: string; payload?: Record<string, unknown> }> = [];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    emitMessage: (message) => messages.push(message),
+  });
+
+  assert.equal(runner.tick({ deltaSeconds: 0.01, elapsedSeconds: 0, frame: 1 }), "success");
+  assert.equal(runner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 2 }), "success");
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]?.type, "enemy.attack");
+  assert.deepEqual(messages[0]?.payload, { attack: "punch", animation: "Punch" });
+
+  assert.equal(runner.tick({ deltaSeconds: 0.4, elapsedSeconds: 0.5, frame: 3 }), "success");
+  assert.equal(messages.length, 2);
+});
+
 check("AiBehaviorRunner distance/cooldown/perception decorators gate their branches", () => {
   const bb = new Blackboard([{ key: "target", kind: "entity", default: null }]);
   const controller = new AIController("ai:enemy", "enemy", bb);
@@ -20448,6 +20480,61 @@ check("forge.moveToPatrolTarget uses authored speed/acceptance and fails safely 
   bb.set("currentPatrolTarget", "a");
   assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 }), "running");
   assert.deepEqual(requests, [{ position: [7, 0, 3], speed: 3.5, acceptanceRadius: 0.9 }]);
+});
+
+check("forge.moveToPatrolTarget can advance the route after arrival", () => {
+  const bb = new Blackboard([
+    { key: "currentPatrolTarget", kind: "string", default: null },
+    { key: "patrolPosition", kind: "vec3", default: null },
+  ]);
+  const controller = new AIController("ai:guard", "guard", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: {
+      kind: "task",
+      task: "forge.moveToPatrolTarget",
+      params: { advanceOnSuccess: true, positionKey: "patrolPosition" },
+    },
+  });
+  const targetPoints = createTargetPointIndex([
+    { id: "a", name: "A", position: [0, 0, 0], nextTargetPoint: "b", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "" },
+    { id: "b", name: "B", position: [4, 0, 0], nextTargetPoint: "a", waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "" },
+  ]);
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    targetPoints,
+    moveTo: () => "success",
+  });
+  bb.set("currentPatrolTarget", "a");
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "success");
+  assert.equal(bb.getString("currentPatrolTarget"), "b");
+  assert.deepEqual(bb.getVec3("patrolPosition"), [4, 0, 0]);
+});
+
+check("forge.stopMovement requests the pawn's current position", () => {
+  const controller = new AIController("ai:guard", "guard", new Blackboard());
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.stopMovement" },
+  });
+  const requests: Array<{ position: [number, number, number]; acceptanceRadius?: number }> = [];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    world: {
+      entityPosition: (entityId) => (entityId === "guard" ? [2, 0, 5] : null),
+    },
+    moveTo: (request) => {
+      requests.push({
+        position: [request.position[0], request.position[1], request.position[2]],
+        ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
+      });
+      return "success";
+    },
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "success");
+  assert.deepEqual(requests, [{ position: [2, 0, 5], acceptanceRadius: 0 }]);
 });
 
 check("forge.advancePatrolTarget follows next links then loops deterministically", () => {
