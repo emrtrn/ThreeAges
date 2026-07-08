@@ -187,6 +187,12 @@
 > Playwright smoke CRUD akisini (add-child/rename/add-task/add-transition/remove/
 > reorder) dogrulayacak sekilde genisletildi. Kalan Faz 8: rich condition-card
 > authoring (paylasilan helper) + parameters/context data + use-case ornekleri.
+> Revizyon: 2026-07-08 - Faz 8 StateTree condition-card authoring dilimi
+> uygulandi: State Details formu secili state `enter` guard'lari ve transition
+> `conditions` guard'lari icin blackboard/distance/cooldown/perception kartlari
+> tasir. Kart editleri raw JSON tek kaynak-of-truth'a geri serialize edilir ve
+> engine normalizer validation'undan gecer. Kalan Faz 8: parameters/context data
+> + use-case ornekleri.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1709,9 +1715,8 @@ benzeri sistem.
       state outline + transition tablosu + raw-JSON authoring + engine normalizer
       validation + `/__save-state-tree` save. State Details formu id/add-child/
       remove/reorder + task CRUD + transition CRUD (to-dropdown + event) tasir;
-      enter/transition guard `conditions` ve task `params` count-hint + raw kalir.
-      Rich condition-card authoring (BT decorator kartlarinin paylasilan hali)
-      sonraki dilim.)
+      enter/transition guard `conditions` blackboard/distance/cooldown/perception
+      kartlariyla editlenir; task `params` count-hint + raw kalir.)
 - [x] Debug: active state, last transition reason, evaluator values. (Runner
       `getDebugSnapshot()` activePath + lastTransition {from,to,reason} + lastStatus
       uretir; subsystem dilimiyle `?debug` overlay'e `st` satiri (`formatAiDebug`)
@@ -1866,6 +1871,25 @@ Tamamlanan Faz 8 StateTree Editor form CRUD notu (2026-07-08):
 - Dogrulama: `npx.cmd tsc --noEmit` yesil, `npm.cmd run build:verify` yesil
   (verify:dist --strict PASS, 710 engine check), genisletilmis Playwright smoke
   PASS. BT Editor'e dokunulmadi (kendi smoke'u etkilenmez).
+
+Tamamlanan Faz 8 StateTree condition-card authoring notu (2026-07-08):
+
+- `StateTreeEditor` State Details formuna iki condition-card yuzeyi eklendi:
+  secili state `enter` guard'lari ve her transition'in `conditions` guard'lari.
+  Kartlar Behavior Tree decorator semantigiyle ayni condition seklini author eder:
+  `blackboard`, `distance`, `cooldown`, `hasPerceptionStimulus`.
+- Add/remove/convert/edit akislari raw JSON clone'unu mutate edip geri serialize
+  eder; yeni save yuzeyi yok. Normalizer validation paneli her edit sonrasi ayni
+  `normalizeAiStateTreeAsset` sonucunu gosterir.
+- UI: `ste-input-sm`, `ste-card-subtitle`, `ste-cond-card` stilleri eklendi;
+  condition kartlari transition kartlarinin icinde ayri hafif blok olarak kalir.
+- Test: `tests/smoke/state-tree-editor.spec.ts` transition guard key editini,
+  enter cooldown guard eklemeyi, raw JSON yansimasini ve validation'in yesil
+  kalmasini dogrular.
+- Dogrulama: `npx.cmd tsc --noEmit` yesil, hedefli Playwright StateTree editor
+  smoke PASS, `npm.cmd run build:verify` yesil (710 engine check,
+  verify:dist --strict PASS), `npm.cmd run check:assets` PASS (baseline
+  thumbnail/sidecar warning'leriyle).
 
 ## Ilk uygulanabilir vertical slice onerisi
 

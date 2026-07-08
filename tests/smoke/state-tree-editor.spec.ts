@@ -75,6 +75,22 @@ test("state tree editor renders outline, transitions and validation", async ({ p
   // --- State Details form CRUD (raw fill = in-memory, never saved). ---------
   // On load the first state is selected, so the form is populated for Patrol.
   await expect(win.locator('[data-ste-field="id"]')).toHaveValue("Patrol");
+  await expect(win.locator("[data-ste-trans-cond-index]")).toHaveCount(1);
+
+  // Edit the existing transition guard via condition cards; raw JSON mirrors it.
+  const transCondKey = win.locator('[data-ste-trans-cond-f="key"]');
+  await transCondKey.fill("enemyAlert");
+  await transCondKey.blur();
+  expect(await win.locator("[data-ste-raw]").inputValue()).toContain('"enemyAlert"');
+  await expect(win.locator(".ste-ok")).toBeVisible();
+
+  // Add an enter guard; the seeded cooldown condition is valid immediately.
+  await win.locator("[data-ste-add-enter-cond-kind]").selectOption("cooldown");
+  await win.locator("[data-ste-add-enter-cond]").click();
+  await expect(win.locator("[data-ste-enter-cond-index]")).toHaveCount(1);
+  await expect(win.locator('[data-ste-enter-cond-f="seconds"]')).toHaveValue("1");
+  await expect(win.locator(".ste-chip-enter").filter({ hasText: "cooldown 1s" })).toBeVisible();
+  await expect(win.locator(".ste-ok")).toBeVisible();
 
   // Add Child State: appends a child under Patrol and selects it; tree stays valid.
   await win.locator("[data-ste-add-child]").click();

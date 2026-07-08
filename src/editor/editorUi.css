@@ -4013,6 +4013,19 @@ body.editor-mode #debug-stats {
   border-radius: 4px;
 }
 .ste-input:focus { outline: none; border-color: rgba(201, 160, 240, 0.6); }
+.ste-input-sm { flex: 0 0 auto; height: 24px; }
+.ste-card-subtitle {
+  margin: 4px 0 2px;
+  color: #9aa2ac;
+  font-size: 11px;
+  font-weight: 600;
+}
+.ste-cond-card {
+  border: 1px solid rgba(201, 160, 240, 0.16);
+  border-radius: 4px;
+  background: rgba(201, 160, 240, 0.04);
+  padding: 6px 8px;
+}
 .ste-raw {
   flex: 1;
   min-height: 0;

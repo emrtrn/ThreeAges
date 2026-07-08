@@ -16,19 +16,21 @@
  *   - a **transition table** flattening every state's outgoing transitions into
  *     `from → to` rows tagged with their event / guard-condition summary, and
  *   - a **State Details form** for the selected state: id, add-child/remove/
- *     reorder, **tasks** (task name + params-count hint) and **transitions**
- *     (target state dropdown + event + guard-condition count hint).
+ *     reorder, **enter conditions**, **tasks** (task name + params-count hint)
+ *     and **transitions** (target state dropdown + event + guard conditions).
  *
  * Structured edits mutate a clone of the parsed asset and re-serialize it back
- * into the raw pane, so there is no second save surface. Task `params` and
- * enter/transition guard `conditions` remain raw-JSON edits (surfaced as count
- * hints); rich condition-card authoring is a deliberate later slice.
+ * into the raw pane, so there is no second save surface. Task `params` remain
+ * raw-JSON edits (surfaced as count hints); enter/transition guards are authored
+ * with the same condition shape used by Behavior Tree decorators.
  */
 
 import type {
-  AiStateDef,
-  AiStateTransitionDef,
-} from "@engine/ai/stateTreeAsset";
+  AiDecoratorOp,
+  AiNumericCompareOp,
+  AiPerceptionSenseName,
+} from "@engine/ai/behaviorAsset";
+import type { AiStateDef, AiStateTransitionDef } from "@engine/ai/stateTreeAsset";
 import { normalizeAiStateTreeAsset } from "@engine/ai/stateTreeAsset";
 import {
   defaultStateTreeJson,
@@ -43,6 +45,101 @@ export interface StateTreeEditorOptions {
   label: string;
   onStatus?: (message: string, tone?: StatusTone) => void;
   onSaved?: () => void;
+}
+
+type AiConditionKind = "blackboard" | "distance" | "cooldown" | "hasPerceptionStimulus";
+
+const CONDITION_KINDS: readonly AiConditionKind[] = [
+  "blackboard",
+  "distance",
+  "cooldown",
+  "hasPerceptionStimulus",
+];
+
+const CONDITION_KIND_LABELS: Record<AiConditionKind, string> = {
+  blackboard: "blackboard",
+  distance: "distance",
+  cooldown: "cooldown",
+  hasPerceptionStimulus: "perception",
+};
+
+const BLACKBOARD_OPS: readonly AiDecoratorOp[] = ["equals", "notEquals", "isSet", "isNotSet"];
+const DISTANCE_OPS: readonly AiNumericCompareOp[] = ["lt", "lte", "gt", "gte"];
+const PERCEPTION_SENSES: readonly AiPerceptionSenseName[] = [
+  "sight",
+  "hearing",
+  "damage",
+  "alert",
+  "gameplay",
+];
+
+/** A fresh guard condition of `kind`, seeded so the StateTree stays valid. */
+function defaultCondition(kind: AiConditionKind, key: string): Record<string, unknown> {
+  switch (kind) {
+    case "blackboard":
+      return { kind, key, op: "isSet" };
+    case "distance":
+      return { kind, key, op: "lte", value: 2 };
+    case "cooldown":
+      return { kind, seconds: 1 };
+    case "hasPerceptionStimulus":
+      return { kind };
+  }
+}
+
+/** Blackboard condition values are text fields but should round-trip JSON values. */
+function conditionValueText(value: unknown): string {
+  return value === undefined ? "" : JSON.stringify(value);
+}
+
+function parseConditionValueText(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function applyConditionField(condition: Record<string, unknown>, field: string, rawValue: string): void {
+  switch (field) {
+    case "key":
+      condition.key = rawValue.trim();
+      break;
+    case "op":
+      condition.op = rawValue;
+      break;
+    case "value":
+      if (condition.kind === "distance") {
+        const parsed = Number(rawValue);
+        if (Number.isFinite(parsed)) condition.value = parsed;
+      } else if (rawValue.trim().length === 0) {
+        delete condition.value;
+      } else {
+        condition.value = parseConditionValueText(rawValue.trim());
+      }
+      break;
+    case "seconds": {
+      const parsed = Number(rawValue);
+      if (Number.isFinite(parsed)) condition.seconds = parsed;
+      break;
+    }
+    case "sense":
+      if (rawValue.length === 0) delete condition.sense;
+      else condition.sense = rawValue;
+      break;
+    case "minStrength":
+      if (rawValue.trim().length === 0) {
+        delete condition.minStrength;
+      } else {
+        const parsed = Number(rawValue);
+        if (Number.isFinite(parsed)) condition.minStrength = parsed;
+      }
+      break;
+    case "requireLineOfSight":
+      if (rawValue.length === 0) delete condition.requireLineOfSight;
+      else condition.requireLineOfSight = rawValue === "true";
+      break;
+  }
 }
 
 function esc(value: string): string {
@@ -501,15 +598,144 @@ export class StateTreeEditor {
 
   private enterSectionHtml(node: Record<string, unknown>): string {
     const enter = Array.isArray(node.enter) ? node.enter : [];
-    const chips = enter.length
-      ? enter.map((c) => `<span class="ste-chip ste-chip-enter">if ${esc(conditionLabel(c))}</span>`).join("")
-      : `<span class="ste-form-hint">none</span>`;
+    const cards = enter.map((condition, index) => this.conditionCardHtml("enter", condition, index)).join("");
+    const addOptions = CONDITION_KINDS.map(
+      (k) => `<option value="${k}">${CONDITION_KIND_LABELS[k]}</option>`,
+    ).join("");
     return `
       <div class="ste-section-sub">Enter Conditions</div>
-      <div class="ste-node-meta">${chips}</div>
-      <div class="ste-form-hint">${enter.length} condition${
-        enter.length === 1 ? "" : "s"
-      } — edit guard details in the Asset JSON pane.</div>`;
+      <div class="ste-cards" data-ste-enter-cond-list>${
+        cards || `<div class="ste-form-empty">No enter conditions.</div>`
+      }</div>
+      <div class="ste-form-add">
+        <select data-ste-add-enter-cond-kind class="ste-input ste-input-sm">${addOptions}</select>
+        <button type="button" data-ste-add-enter-cond class="ste-btn" title="Add an enter condition">+ Condition</button>
+      </div>`;
+  }
+
+  private transitionConditionsHtml(trans: Record<string, unknown>): string {
+    const conditions = Array.isArray(trans.conditions) ? trans.conditions : [];
+    const cards = conditions
+      .map((condition, index) => this.conditionCardHtml("transition", condition, index))
+      .join("");
+    const addOptions = CONDITION_KINDS.map(
+      (k) => `<option value="${k}">${CONDITION_KIND_LABELS[k]}</option>`,
+    ).join("");
+    return `
+      <div class="ste-card-subtitle">Guard Conditions</div>
+      <div class="ste-cards" data-ste-trans-cond-list>${
+        cards || `<div class="ste-form-empty">No guard conditions.</div>`
+      }</div>
+      <div class="ste-form-add">
+        <select data-ste-add-trans-cond-kind class="ste-input ste-input-sm">${addOptions}</select>
+        <button type="button" data-ste-add-trans-cond class="ste-btn" title="Add a guard condition">+ Condition</button>
+      </div>`;
+  }
+
+  private conditionCardHtml(scope: "enter" | "transition", raw: unknown, index: number): string {
+    const condition = isObj(raw) ? raw : {};
+    const kind = (typeof condition.kind === "string" ? condition.kind : "blackboard") as AiConditionKind;
+    const kindOptions = CONDITION_KINDS.map(
+      (k) => `<option value="${k}"${k === kind ? " selected" : ""}>${CONDITION_KIND_LABELS[k]}</option>`,
+    ).join("");
+    const indexAttr = scope === "enter" ? "data-ste-enter-cond-index" : "data-ste-trans-cond-index";
+    const kindAttr = scope === "enter" ? "data-ste-enter-cond-kind" : "data-ste-trans-cond-kind";
+    const removeAttr = scope === "enter" ? "data-ste-enter-cond-remove" : "data-ste-trans-cond-remove";
+    const fieldAttr = scope === "enter" ? "data-ste-enter-cond-f" : "data-ste-trans-cond-f";
+    return `
+      <div class="ste-cond-card" ${indexAttr}="${index}">
+        <div class="ste-card-head">
+          <select ${kindAttr} class="ste-input ste-input-sm">${kindOptions}</select>
+          <button type="button" ${removeAttr} class="ste-btn ste-btn-sm" title="Remove condition">x</button>
+        </div>
+        <div class="ste-card-fields">${this.conditionFieldsHtml(kind, condition, fieldAttr)}</div>
+      </div>`;
+  }
+
+  private conditionFieldsHtml(
+    kind: AiConditionKind,
+    condition: Record<string, unknown>,
+    fieldAttr: string,
+  ): string {
+    const rows: string[] = [];
+    if (kind === "blackboard" || kind === "distance") {
+      rows.push(
+        this.formRow(
+          "Key",
+          `<input type="text" ${fieldAttr}="key" class="ste-input" placeholder="target" value="${esc(
+            typeof condition.key === "string" ? condition.key : "",
+          )}">`,
+        ),
+      );
+      const ops = kind === "blackboard" ? BLACKBOARD_OPS : DISTANCE_OPS;
+      const current = typeof condition.op === "string" ? condition.op : ops[0];
+      const opOptions = ops
+        .map((op) => `<option value="${op}"${op === current ? " selected" : ""}>${op}</option>`)
+        .join("");
+      rows.push(this.formRow("Op", `<select ${fieldAttr}="op" class="ste-input">${opOptions}</select>`));
+    }
+    if (kind === "distance") {
+      rows.push(
+        this.formRow(
+          "Value",
+          `<input type="number" step="0.1" ${fieldAttr}="value" class="ste-input" value="${esc(
+            typeof condition.value === "number" ? String(condition.value) : "0",
+          )}">`,
+        ),
+      );
+    } else if (kind === "blackboard" && (condition.op === "equals" || condition.op === "notEquals")) {
+      rows.push(
+        this.formRow(
+          "Value",
+          `<input type="text" ${fieldAttr}="value" class="ste-input" placeholder="true / 42 / &quot;text&quot;" value="${esc(
+            conditionValueText(condition.value),
+          )}">`,
+        ),
+      );
+    }
+    if (kind === "cooldown") {
+      rows.push(
+        this.formRow(
+          "Seconds",
+          `<input type="number" step="0.1" min="0" ${fieldAttr}="seconds" class="ste-input" value="${esc(
+            typeof condition.seconds === "number" ? String(condition.seconds) : "1",
+          )}">`,
+        ),
+      );
+    }
+    if (kind === "hasPerceptionStimulus") {
+      const sense = typeof condition.sense === "string" ? condition.sense : "";
+      const senseOptions = [`<option value=""${sense === "" ? " selected" : ""}>any</option>`]
+        .concat(PERCEPTION_SENSES.map((s) => `<option value="${s}"${s === sense ? " selected" : ""}>${s}</option>`))
+        .join("");
+      rows.push(this.formRow("Sense", `<select ${fieldAttr}="sense" class="ste-input">${senseOptions}</select>`));
+      rows.push(
+        this.formRow(
+          "Min strength",
+          `<input type="number" step="0.1" ${fieldAttr}="minStrength" class="ste-input" placeholder="any" value="${esc(
+            typeof condition.minStrength === "number" ? String(condition.minStrength) : "",
+          )}">`,
+        ),
+      );
+      const los = condition.requireLineOfSight;
+      const losValue = typeof los === "boolean" ? String(los) : "";
+      const losOptions = [
+        `<option value=""${losValue === "" ? " selected" : ""}>ignore</option>`,
+        `<option value="true"${losValue === "true" ? " selected" : ""}>require</option>`,
+        `<option value="false"${losValue === "false" ? " selected" : ""}>forbid</option>`,
+      ].join("");
+      rows.push(
+        this.formRow(
+          "Line of sight",
+          `<select ${fieldAttr}="requireLineOfSight" class="ste-input">${losOptions}</select>`,
+        ),
+      );
+    }
+    return rows.join("");
+  }
+
+  private formRow(label: string, control: string): string {
+    return `<label class="ste-form-row"><span class="ste-form-label">${esc(label)}</span>${control}</label>`;
   }
 
   private tasksSectionHtml(node: Record<string, unknown>): string {
@@ -567,16 +793,10 @@ export class StateTreeEditor {
   private transitionCardHtml(raw: unknown, index: number, stateIds: readonly string[]): string {
     const trans = isObj(raw) ? raw : {};
     const to = typeof trans.to === "string" ? trans.to : "";
-    const condCount = Array.isArray(trans.conditions) ? trans.conditions.length : 0;
     // Preserve an unknown/hand-typed target as an option so it never silently drops.
     const options = [...new Set([...(to ? [to] : []), ...stateIds])]
       .map((id) => `<option value="${esc(id)}"${id === to ? " selected" : ""}>${esc(id)}</option>`)
       .join("");
-    const hint = condCount > 0
-      ? `<div class="ste-form-hint">${condCount} guard condition${
-          condCount === 1 ? "" : "s"
-        } — edit in the Asset JSON pane.</div>`
-      : "";
     return `
       <div class="ste-card" data-ste-trans-index="${index}">
         <div class="ste-card-head">
@@ -594,7 +814,7 @@ export class StateTreeEditor {
               typeof trans.event === "string" ? trans.event : "",
             )}">
           </label>
-          ${hint}
+          ${this.transitionConditionsHtml(trans)}
         </div>
       </div>`;
   }
@@ -615,6 +835,29 @@ export class StateTreeEditor {
     this.formHost
       .querySelector<HTMLButtonElement>("[data-ste-down]")
       ?.addEventListener("click", () => this.moveSelected(1));
+
+    const addEnterKind = this.formHost.querySelector<HTMLSelectElement>("[data-ste-add-enter-cond-kind]");
+    this.formHost
+      .querySelector<HTMLButtonElement>("[data-ste-add-enter-cond]")
+      ?.addEventListener("click", () =>
+        this.addEnterCondition((addEnterKind?.value as AiConditionKind) ?? "blackboard"),
+      );
+    this.formHost.querySelectorAll<HTMLElement>("[data-ste-enter-cond-index]").forEach((card) => {
+      const index = Number(card.dataset.steEnterCondIndex);
+      card
+        .querySelector<HTMLSelectElement>("[data-ste-enter-cond-kind]")
+        ?.addEventListener("change", (event) =>
+          this.setEnterConditionKind(index, (event.target as HTMLSelectElement).value as AiConditionKind),
+        );
+      card
+        .querySelector<HTMLButtonElement>("[data-ste-enter-cond-remove]")
+        ?.addEventListener("click", () => this.removeEnterCondition(index));
+      card.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-ste-enter-cond-f]").forEach((ctrl) => {
+        ctrl.addEventListener("change", () =>
+          this.setEnterConditionField(index, ctrl.dataset.steEnterCondF ?? "", ctrl.value),
+        );
+      });
+    });
 
     this.formHost
       .querySelector<HTMLButtonElement>("[data-ste-add-task]")
@@ -643,6 +886,32 @@ export class StateTreeEditor {
         ctrl.addEventListener("change", () =>
           this.setTransitionField(index, ctrl.dataset.steTransF ?? "", ctrl.value),
         );
+      });
+      const addCondKind = card.querySelector<HTMLSelectElement>("[data-ste-add-trans-cond-kind]");
+      card
+        .querySelector<HTMLButtonElement>("[data-ste-add-trans-cond]")
+        ?.addEventListener("click", () =>
+          this.addTransitionCondition(index, (addCondKind?.value as AiConditionKind) ?? "blackboard"),
+        );
+      card.querySelectorAll<HTMLElement>("[data-ste-trans-cond-index]").forEach((condCard) => {
+        const condIndex = Number(condCard.dataset.steTransCondIndex);
+        condCard
+          .querySelector<HTMLSelectElement>("[data-ste-trans-cond-kind]")
+          ?.addEventListener("change", (event) =>
+            this.setTransitionConditionKind(
+              index,
+              condIndex,
+              (event.target as HTMLSelectElement).value as AiConditionKind,
+            ),
+          );
+        condCard
+          .querySelector<HTMLButtonElement>("[data-ste-trans-cond-remove]")
+          ?.addEventListener("click", () => this.removeTransitionCondition(index, condIndex));
+        condCard.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-ste-trans-cond-f]").forEach((ctrl) => {
+          ctrl.addEventListener("change", () =>
+            this.setTransitionConditionField(index, condIndex, ctrl.dataset.steTransCondF ?? "", ctrl.value),
+          );
+        });
       });
     });
   }
@@ -741,6 +1010,48 @@ export class StateTreeEditor {
     });
   }
 
+  /** Runs `fn` on the selected state's enter conditions, dropping it when empty. */
+  private mutateEnterConditions(fn: (list: unknown[]) => void): void {
+    if (this.selectedPath === null) return;
+    const path = this.selectedPath;
+    this.mutateTree((asset) => {
+      const node = resolveState(asset, path);
+      if (!node) return undefined;
+      const list = Array.isArray(node.enter) ? (node.enter as unknown[]) : [];
+      fn(list);
+      if (list.length > 0) node.enter = list;
+      else delete node.enter;
+      return path;
+    });
+  }
+
+  private addEnterCondition(kind: AiConditionKind): void {
+    if (!CONDITION_KINDS.includes(kind)) return;
+    this.mutateEnterConditions((list) => list.push(defaultCondition(kind, "target")));
+  }
+
+  private removeEnterCondition(index: number): void {
+    this.mutateEnterConditions((list) => {
+      if (index >= 0 && index < list.length) list.splice(index, 1);
+    });
+  }
+
+  private setEnterConditionKind(index: number, kind: AiConditionKind): void {
+    if (!CONDITION_KINDS.includes(kind)) return;
+    this.mutateEnterConditions((list) => {
+      const prev = isObj(list[index]) ? (list[index] as Record<string, unknown>) : {};
+      const key = typeof prev.key === "string" && prev.key.length > 0 ? prev.key : "target";
+      list[index] = defaultCondition(kind, key);
+    });
+  }
+
+  private setEnterConditionField(index: number, field: string, rawValue: string): void {
+    this.mutateEnterConditions((list) => {
+      const condition = list[index];
+      if (isObj(condition)) applyConditionField(condition, field, rawValue);
+    });
+  }
+
   /** Runs `fn` on the selected state's array named `key`, dropping it when empty. */
   private mutateStateList(key: "tasks" | "transitions", fn: (list: unknown[]) => void): void {
     if (this.selectedPath === null) return;
@@ -753,6 +1064,54 @@ export class StateTreeEditor {
       if (list.length > 0) node[key] = list;
       else delete node[key];
       return path;
+    });
+  }
+
+  /** Runs `fn` on a transition's guard conditions, dropping it when empty. */
+  private mutateTransitionConditions(transitionIndex: number, fn: (list: unknown[]) => void): void {
+    this.mutateStateList("transitions", (transitions) => {
+      const trans = transitions[transitionIndex];
+      if (!isObj(trans)) return;
+      const list = Array.isArray(trans.conditions) ? (trans.conditions as unknown[]) : [];
+      fn(list);
+      if (list.length > 0) trans.conditions = list;
+      else delete trans.conditions;
+    });
+  }
+
+  private addTransitionCondition(transitionIndex: number, kind: AiConditionKind): void {
+    if (!CONDITION_KINDS.includes(kind)) return;
+    this.mutateTransitionConditions(transitionIndex, (list) => list.push(defaultCondition(kind, "target")));
+  }
+
+  private removeTransitionCondition(transitionIndex: number, conditionIndex: number): void {
+    this.mutateTransitionConditions(transitionIndex, (list) => {
+      if (conditionIndex >= 0 && conditionIndex < list.length) list.splice(conditionIndex, 1);
+    });
+  }
+
+  private setTransitionConditionKind(
+    transitionIndex: number,
+    conditionIndex: number,
+    kind: AiConditionKind,
+  ): void {
+    if (!CONDITION_KINDS.includes(kind)) return;
+    this.mutateTransitionConditions(transitionIndex, (list) => {
+      const prev = isObj(list[conditionIndex]) ? (list[conditionIndex] as Record<string, unknown>) : {};
+      const key = typeof prev.key === "string" && prev.key.length > 0 ? prev.key : "target";
+      list[conditionIndex] = defaultCondition(kind, key);
+    });
+  }
+
+  private setTransitionConditionField(
+    transitionIndex: number,
+    conditionIndex: number,
+    field: string,
+    rawValue: string,
+  ): void {
+    this.mutateTransitionConditions(transitionIndex, (list) => {
+      const condition = list[conditionIndex];
+      if (isObj(condition)) applyConditionField(condition, field, rawValue);
     });
   }
 
