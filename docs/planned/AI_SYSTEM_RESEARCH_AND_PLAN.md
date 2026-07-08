@@ -136,6 +136,11 @@
 > distance/cooldown/hasPerceptionStimulus) ve service (name/interval) editorleri
 > eklendi; add/remove/convert mutasyonlari `mutateTree` raw-JSON kaynak-of-truth'u
 > uzerinden gecer, yeni save yuzeyi yok. Kalan Faz 7: runtime debug inspector.
+> Revizyon: 2026-07-08 - Faz 7 runtime debug inspector dilimi: `?debug` overlay'e
+> saf `formatAiInspector` eklendi; odakli controller'in tam blackboard degerleri,
+> active behavior path ve perception stimuli listesi gosterilir (path/query
+> overlay draw'lari zaten Faz 3/4/5'ten mevcut). Interaktif per-actor secim +
+> ayri DOM panel sonraki is olarak birakildi.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1422,11 +1427,16 @@ baglanabilsin.
             convert per node). Only task/service `params` + blackboard vec3 values
             remain raw-JSON edits.
       - [x] validation errors (engine `normalizeAiBehaviorTreeAsset`).
-- [ ] Runtime debug inspector:
-      - [ ] selected AI actor blackboard values
-      - [ ] active behavior path
-      - [ ] perception stimuli
-      - [ ] path/query overlay toggles.
+- [~] Runtime debug inspector (`?debug` overlay `formatAiInspector`, focused
+      controller):
+      - [x] selected AI actor blackboard values (full key/kind/value list)
+      - [x] active behavior path (status/elapsed/failed decorator + `a > b > c`)
+      - [x] perception stimuli (sense/source/distance/strength/LOS list)
+      - [x] path/query overlay toggles (already via runtime `?debug` +
+            editor `Show > AI Navigation` nav/perception/query draws).
+      - [ ] interactive per-actor selection / dedicated DOM panel (later; the
+            focus rule is currently deterministic — first controller sensing a
+            target, else the first controller).
 - [ ] Save validation: tum yeni sidecar formatlari `tools/saveValidator.ts`
       icinde engine normalizer'lari yeniden kullanarak dogrulanmali; olasi yeni
       layout alanlari icin `applyTransformFields` allowlist gotcha'si gecerli.
@@ -1596,6 +1606,36 @@ Tamamlanan Faz 7 Behavior Tree Editor decorator/service form authoring dilim not
   (`704 checks passed`), `npm.cmd run build:verify` (verify:dist --strict PASS —
   editor form kodu game bundle'a sizmaz), `npm.cmd run check:assets` PASS.
   Kalan Faz 7: runtime debug inspector.
+
+Tamamlanan Faz 7 runtime debug inspector dilim notu (2026-07-08):
+
+- `src/scene/debugStats.ts` icine saf `formatAiInspector(snapshot, topBlackboard,
+  topStimuli)` formatter'i eklendi ve runtime `?debug` overlay zincirine
+  `aiInspectorText` ile baglandi (`formatAiDebug` DOM'suz deseninin zengin
+  kardesi). `formatAiDebug` her controller icin tek satirlik ozet verirken,
+  inspector **tek odakli controller**'i tam detaya acar:
+  - active behavior path: `lastStatus` + `elapsedSeconds` + `failedDecorator` +
+    `a > b > c` yol zinciri.
+  - blackboard: her key `key [kind] = value` (bool/number/string/vec3/entity/null
+    tip-bazli compact render), `topBlackboard` (default 8) ile capped + "+N more".
+  - perception: anlik stimuli listesi (`sense:source d:.. s:.. los/noLos`),
+    `topStimuli` (default 4) ile capped.
+  - query: mevcut `formatAiQueryDebug` ile son query sonucu.
+- Odak kurali deterministik: stimulus algilayan ilk controller, yoksa ilk
+  controller — kalabalik sahnede overlay bounded kalir. Subsystem gated off ise
+  (editor edit mode canli deger tasimaz) ve controller yoksa `[]` doner, boylece
+  `?editor&debug` overlay'i kirletmez; canli veri runtime `/?debug`'ta gorunur.
+- Path/query overlay toggle'lari bu dilimde ayrica eklenmedi: runtime `?debug` ve
+  editor `Show > AI Navigation` zaten nav grid, path polyline, perception sight
+  cone/hearing radius ve query candidate/winner wireframe'lerini ciziyor
+  (Faz 3/4/5 dilimleri). Interaktif per-actor secim + ayri DOM panel sonraki is.
+- Test: `formatAiInspector expands the focused controller with values, path and
+  stimuli` engine testi — iki controller'dan stimulus algilayani odaklar, tam
+  path/bb/sense render'ini ve gated-off `[]` davranisini dogrular.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`705 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS — debug inspector runtime overlay kodu, editor'a bagimli degil),
+  `npm.cmd run check:assets` PASS.
 
 ### Faz 8 - StateTree secenegi
 

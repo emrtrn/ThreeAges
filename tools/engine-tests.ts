@@ -336,6 +336,7 @@ import { resolveGameMode } from "../src/game/gameModes/registry";
 import { createProjectGameMode } from "../src/game/gameModes/projectGameMode";
 import {
   formatAiDebug,
+  formatAiInspector,
   formatAiNavDebug,
   formatGameModeDebug,
   formatMemory,
@@ -21395,6 +21396,72 @@ check("formatAiDebug includes last known perception blackboard positions", () =>
     "  known enemy-1: lastKnownTargetPosition:(0.0,0.0,4.0) lastHeardPosition:(2.0,0.0,-1.0) lastStimulusPosition:(5.0,1.0,0.0)",
     "  enemy-1 goal:\u2014 bb:4",
   ]);
+});
+
+check("formatAiInspector expands the focused controller with values, path and stimuli", () => {
+  const lines = formatAiInspector({
+    enabled: true,
+    controllerCount: 2,
+    controllers: [
+      // First controller perceives nothing; the focus rule skips it.
+      {
+        controllerId: "ai:idle-1",
+        pawnEntityId: "idle-1",
+        goal: null,
+        behaviorTreeAsset: null,
+        behavior: null,
+        blackboard: { keyCount: 0, entries: [] },
+      },
+      {
+        controllerId: "ai:enemy-1",
+        pawnEntityId: "enemy-1",
+        goal: "chase",
+        behaviorTreeAsset: "assets/AI/Enemy.behavior.json",
+        behavior: {
+          activePath: ["selector", "sequence", "task:game.attack"],
+          lastStatus: "running",
+          failedDecorator: null,
+          elapsedSeconds: 1.5,
+        },
+        perception: [
+          {
+            sense: "sight",
+            sourceEntityId: "player",
+            position: [1, 0, 2],
+            distance: 4.2,
+            strength: 0.8,
+            lineOfSight: true,
+          },
+        ],
+        blackboard: {
+          keyCount: 3,
+          entries: [
+            { key: "hasLineOfSight", kind: "boolean", value: true },
+            { key: "target", kind: "entity", value: "player" },
+            { key: "lastKnownTargetPosition", kind: "vec3", value: [1, 0, 2] },
+          ],
+        },
+      },
+    ],
+  });
+  assert.deepEqual(lines, [
+    "ai inspect enemy-1",
+    "  bt: Enemy.behavior.json goal:chase",
+    "    running 1.50s",
+    "    path: selector > sequence > task:game.attack",
+    "  bb (3):",
+    "    hasLineOfSight [boolean] = true",
+    "    target [entity] = player",
+    "    lastKnownTargetPosition [vec3] = (1.0,0.0,2.0)",
+    "  sense (1):",
+    "    sight:player d:4.2 s:0.80 los",
+  ]);
+
+  // Gated off (editor edit mode) yields no inspector block.
+  assert.deepEqual(
+    formatAiInspector({ enabled: false, controllerCount: 1, controllers: [] }),
+    [],
+  );
 });
 
 check("createAiNavigationView draws AI perception sight cone and hearing radius", () => {

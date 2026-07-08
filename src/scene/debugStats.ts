@@ -47,6 +47,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       vfxDebugText(app) +
       gameModeDebugText(app) +
       aiDebugText(app) +
+      aiInspectorText(app) +
       aiNavDebugText(app) +
       uiDebugText(app) +
       scriptMessageDebugText(app);
@@ -198,6 +199,13 @@ function aiDebugText(app: RuntimeStatsApp): string {
   return `\n${formatAiDebug(app.getAiDebugSnapshot()).join("\n")}`;
 }
 
+/** The focused AI inspector block, or "" when no live controller is worth expanding. */
+function aiInspectorText(app: RuntimeStatsApp): string {
+  if (!app.getAiDebugSnapshot) return "";
+  const lines = formatAiInspector(app.getAiDebugSnapshot());
+  return lines.length > 0 ? `\n${lines.join("\n")}` : "";
+}
+
 /**
  * Formats an {@link AiDebugSnapshot} into overlay lines (pure, DOM-free for unit
  * tests): the active-controller count (tagged `(off)` while the subsystem is
@@ -236,6 +244,79 @@ export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
     );
   }
   return lines;
+}
+
+type AiControllerDebug = AiDebugSnapshot["controllers"][number];
+
+/**
+ * Expands a **single focused controller** into a detailed inspector block (pure,
+ * DOM-free for unit tests) for the runtime `?debug` overlay — the richer sibling
+ * of {@link formatAiDebug}'s one-line-per-controller summary:
+ *   - active behavior path (full `a > b > c`, plus status/elapsed/failed decorator)
+ *   - every blackboard key with its live value (capped at `topBlackboard`)
+ *   - the currently perceived stimuli (capped at `topStimuli`)
+ *   - the last environment query result, when present.
+ *
+ * Returns `[]` while the subsystem is gated off (editor edit mode has no live
+ * values) or when there are no controllers. The focused controller is the first
+ * one currently perceiving a stimulus, falling back to the first controller, so
+ * the overlay stays bounded even in a crowd.
+ */
+export function formatAiInspector(
+  snapshot: AiDebugSnapshot,
+  topBlackboard = 8,
+  topStimuli = 4,
+): string[] {
+  if (!snapshot.enabled || snapshot.controllers.length === 0) return [];
+  const focus =
+    snapshot.controllers.find((controller) => (controller.perception?.length ?? 0) > 0) ??
+    snapshot.controllers[0];
+  if (!focus) return [];
+
+  const lines = [`ai inspect ${focus.pawnEntityId}`];
+
+  const asset = focus.behaviorTreeAsset?.split("/").at(-1);
+  lines.push(`  bt: ${asset ?? "—"} goal:${focus.goal ?? "—"}`);
+  const behavior = focus.behavior;
+  if (behavior) {
+    const status = behavior.lastStatus ?? "idle";
+    lines.push(`    ${status} ${behavior.elapsedSeconds.toFixed(2)}s`);
+    if (behavior.activePath.length > 0) {
+      lines.push(`    path: ${behavior.activePath.join(" > ")}`);
+    }
+    if (behavior.failedDecorator) lines.push(`    fail: ${behavior.failedDecorator}`);
+  }
+
+  const entries = focus.blackboard.entries;
+  lines.push(`  bb (${focus.blackboard.keyCount}):`);
+  for (const entry of entries.slice(0, Math.max(0, topBlackboard))) {
+    lines.push(`    ${entry.key} [${entry.kind}] = ${formatBlackboardValue(entry.value)}`);
+  }
+  if (entries.length > topBlackboard) lines.push(`    … +${entries.length - topBlackboard} more`);
+
+  const stimuli = focus.perception ?? [];
+  if (stimuli.length > 0) {
+    lines.push(`  sense (${stimuli.length}):`);
+    for (const stimulus of stimuli.slice(0, Math.max(0, topStimuli))) {
+      const los = stimulus.lineOfSight === undefined ? "" : stimulus.lineOfSight ? " los" : " noLos";
+      lines.push(
+        `    ${stimulus.sense}:${stimulus.sourceEntityId} d:${stimulus.distance.toFixed(1)} s:${stimulus.strength.toFixed(2)}${los}`,
+      );
+    }
+  }
+
+  if (focus.query) lines.push(`  query: ${formatAiQueryDebug(focus.query)}`);
+  return lines;
+}
+
+/** Compact, overlay-friendly rendering of a blackboard value by runtime type. */
+function formatBlackboardValue(value: AiControllerDebug["blackboard"]["entries"][number]["value"]): string {
+  if (value === null) return "—";
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  if (typeof value === "string") return value;
+  if (isVec3Value(value)) return formatVec3Compact(value);
+  return String(value);
 }
 
 function formatAiQueryDebug(
