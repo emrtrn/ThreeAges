@@ -1,0 +1,87 @@
+import { expect, test } from "@playwright/test";
+
+// Verifies the StateTree editor opens, derives its nested-state outline +
+// transition table + validation from the engine normalizer, and reacts to raw
+// JSON edits. It drives the editor component directly (dynamic import) and only
+// ever fills the raw pane in-memory — it never saves, so no asset files are
+// written and no cleanup is needed. There is no starter `*.stateTree.json`, so
+// the missing path resolves to the editor's default template on open.
+test("state tree editor renders outline, transitions and validation", async ({ page }) => {
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  page.on("console", (message) => {
+    if (message.type() === "error") pageErrors.push(message.text());
+  });
+
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+
+  await page.evaluate(async () => {
+    const mod = await import("/src/editor/StateTreeEditor.ts");
+    await mod.StateTreeEditor.open({
+      path: "assets/AI/SmokeGuard.stateTree.json",
+      label: "SmokeGuard",
+    });
+  });
+
+  const win = page.locator(".ste-window");
+  await expect(win).toBeVisible();
+  await expect(win.locator("[data-ste-title]")).toHaveText("SmokeGuard");
+
+  // Fill the raw pane with a deterministic hierarchical tree with guarded and
+  // event transitions so the outline + transition table have a stable shape.
+  // (No starter `*.stateTree.json` exists, so the opened path has no real file.)
+  await win.locator("[data-ste-raw]").fill(
+    JSON.stringify(
+      {
+        schema: 1,
+        type: "stateTree",
+        states: [
+          {
+            id: "Patrol",
+            tasks: [{ task: "forge.wait" }],
+            transitions: [
+              { to: "Alert", conditions: [{ kind: "blackboard", key: "alarm", op: "equals", value: true }] },
+            ],
+          },
+          {
+            id: "Alert",
+            states: [{ id: "Look" }, { id: "Chase", transitions: [{ to: "Patrol", event: "lost" }] }],
+          },
+        ],
+      },
+      null,
+      2,
+    ),
+  );
+  await expect(win.locator(".ste-ok")).toBeVisible();
+
+  // Outline: root states plus nested children (Patrol, Alert, Look, Chase).
+  await expect(win.locator(".ste-node-id")).toHaveCount(4);
+  await expect(win.locator(".ste-node-id").first()).toHaveText("Patrol");
+  await expect(win.locator(".ste-node-id").filter({ hasText: "Chase" })).toBeVisible();
+  // Patrol carries a task badge and an enter/guard-less state has none.
+  await expect(win.locator(".ste-badge-task").first()).toContainText("1 task");
+
+  // Transition table: a guarded Patrol→Alert row and an event Chase→Patrol row.
+  const table = win.locator(".ste-trans-table");
+  await expect(table).toBeVisible();
+  await expect(table.locator("tr")).toHaveCount(2);
+  await expect(table.locator(".ste-td-from").first()).toHaveText("Patrol");
+  await expect(table.locator(".ste-td-to").first()).toHaveText("Alert");
+  await expect(table.locator(".ste-cond").first()).toContainText("alarm equals");
+  await expect(table.locator(".ste-chip-event")).toContainText("event lost");
+
+  // An invalid tree (unknown transition target) flips validation to an error and
+  // the outline still renders the lenient shape without crashing.
+  await win.locator("[data-ste-raw]").fill(
+    JSON.stringify({ schema: 1, type: "stateTree", states: [{ id: "A", transitions: [{ to: "Missing" }] }] }),
+  );
+  await expect(win.locator(".ste-issue")).toBeVisible();
+  await expect(win.locator(".ste-node-id").first()).toHaveText("A");
+
+  await page.keyboard.press("Escape");
+  await expect(win).toHaveCount(0);
+
+  expect(pageErrors).toEqual([]);
+});

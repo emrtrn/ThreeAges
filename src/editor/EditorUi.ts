@@ -1232,6 +1232,7 @@ export class EditorUi {
         openParticleEffectEditor: (item) => this.openParticleEffectEditor(item),
         openDialogueEditor: (item) => this.openDialogueEditor(item),
         openBehaviorTreeEditor: (item) => this.openBehaviorTreeEditor(item),
+        openStateTreeEditor: (item) => this.openStateTreeEditor(item),
         openLevel: (item) => this.openLevel(item),
         openUiWidgetEditor: (item) => this.openUiWidgetEditor(item),
         renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
@@ -1286,6 +1287,7 @@ export class EditorUi {
       openParticleEffectEditor: (item) => this.openParticleEffectEditor(item),
       openDialogueEditor: (item) => this.openDialogueEditor(item),
       openBehaviorTreeEditor: (item) => this.openBehaviorTreeEditor(item),
+      openStateTreeEditor: (item) => this.openStateTreeEditor(item),
       openLevel: (item) => this.openLevel(item),
       openUiWidgetEditor: (item) => this.openUiWidgetEditor(item),
       renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
@@ -1538,6 +1540,7 @@ export class EditorUi {
       return () => void this.openDialogueEditor(item);
     }
     if (item.type === "behaviorTree") return () => void this.openBehaviorTreeEditor(item);
+    if (item.type === "stateTree") return () => void this.openStateTreeEditor(item);
     if (item.type !== "file" && isModelAssetType(item.type)) {
       return () => void this.openMeshEditor(item);
     }
@@ -2131,6 +2134,24 @@ export class EditorUi {
     } catch (error) {
       this.setStatus(
         `Could not open Behavior Tree editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
+  /** Opens the StateTree editor for a `*.stateTree.json` AI asset. */
+  private async openStateTreeEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { StateTreeEditor } = await import("@/editor/StateTreeEditor");
+      await StateTreeEditor.open({
+        path: item.path,
+        label: item.label.replace(/\.stateTree\.json$/i, ""),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+        onSaved: () => this.renderContentAssets(),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open StateTree editor: ${error instanceof Error ? error.message : String(error)}`,
         "error",
       );
     }

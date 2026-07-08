@@ -166,6 +166,17 @@
 > Script Editor AIController formuna State Tree asset picker eklendi. Runtime/
 > editor host loader'lari `.stateTree.json` asset'lerini yukler. Kalan Faz 8:
 > nested state outline editor + parameters/context data + Playwright smoke.
+> Revizyon: 2026-07-08 - Faz 8 StateTree Editor v1 dilimi uygulandi:
+> `src/editor/StateTreeEditor.ts` (Content Browser'dan `.stateTree.json` acar) +
+> `src/editor/stateTreeStore.ts` (load/`/__save-state-tree` save). Modal editor
+> hiyerarsik state outline (task/transition/child rozetleri + enter-condition
+> chip'leri), transition tablosu (`from → to` + event/guard ozeti), raw-JSON
+> authoring ve engine normalizer (`normalizeAiStateTreeAsset`) validation'i
+> paylasir; raw JSON tek kaynak-of-truth, ayri save yuzeyi yok. State/transition
+> form CRUD sonraki dilim (BT Editor dilimlemesiyle ayni). Playwright smoke
+> (`tests/smoke/state-tree-editor.spec.ts`) outline/transition/validation'i
+> dogrular. Kalan Faz 8: state/transition form CRUD + parameters/context data +
+> GameMode/boss/civilian use-case ornekleri.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1683,7 +1694,11 @@ benzeri sistem.
       `PRESERVE_TASK_MEMORY` task-memory yasam dongusunu paylasir.
 - [ ] GameMode, boss fight, civilian routine, quest actor gibi use-case'leri
       Behavior Tree yerine StateTree ile modelle.
-- [ ] Editor ilk surum: nested state outline + transition table.
+- [x] Editor ilk surum: nested state outline + transition table.
+      (`src/editor/StateTreeEditor.ts` v1: modal editor, hiyerarsik state outline +
+      transition tablosu + raw-JSON authoring + engine normalizer validation +
+      `/__save-state-tree` save. State/transition form CRUD sonraki dilim — BT
+      Editor'in dilimleme kalibiyla ayni.)
 - [x] Debug: active state, last transition reason, evaluator values. (Runner
       `getDebugSnapshot()` activePath + lastTransition {from,to,reason} + lastStatus
       uretir; subsystem dilimiyle `?debug` overlay'e `st` satiri (`formatAiDebug`)
@@ -1786,6 +1801,32 @@ Tamamlanan Faz 8 subsystem/AIController wiring notu (2026-07-08):
   (`710 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
   PASS), `npm.cmd run check:assets` PASS. Playwright debug smoke kalan Faz 8
   isinde.
+
+Tamamlanan Faz 8 StateTree Editor v1 notu (2026-07-08):
+
+- `src/editor/stateTreeStore.ts` eklendi (behaviorTreeStore kalibi): `.stateTree.json`
+  raw text loader (dosya yoksa/bozuksa duzenlenebilir kalir) + `/__save-state-tree`
+  saver. Server payload'i `normalizeAiStateTreeAsset` ile yeniden dogrular.
+- `src/editor/StateTreeEditor.ts` eklendi (BT Editor v1 ilk diliminin paraleli):
+  modal overlay, sol tarafta **hiyerarsik state outline** (state id + task/
+  transition/child rozetleri + enter-condition chip'leri), **transition tablosu**
+  (tum state'lerin cikan gecisleri `from → to` + event chip / guard ozeti / `always`)
+  ve validation paneli; sag tarafta raw-JSON textarea. Raw JSON tek kaynak-of-truth:
+  her edit `normalizeAiStateTreeAsset`'ten gecer, outline/table/validation ondan
+  turer. State/transition form CRUD bilincli olarak sonraki dilim (BT Editor ayni
+  sekilde v1'de sadece outline+raw, node-form CRUD sonraki dilimdi).
+- `ste-*` CSS blogu (`src/editor/editorUi.css`) eklendi; her editorun kendi
+  prefix'li blogu oldugu konvansiyonu izlendi (mor "State Tree" temasi).
+- Wiring: Content Browser `stateTree` item'i cift-tiklamada editoru acar
+  (`contentPanel.ts` `openStateTreeEditor` opsiyonu + dblclick, `EditorUi`
+  `assetEditorOpener` route'u + iki options binding'i + `openStateTreeEditor`
+  dinamik-import metodu). Editor dinamik import arkasinda, game bundle'a girmez.
+- Test: `tests/smoke/state-tree-editor.spec.ts` — editor acilir, hiyerarsik
+  outline (Patrol/Alert/Look/Chase) + task rozeti, transition tablosu (guard'li
+  Patrol→Alert + event Chase→Patrol), gecerli/gecersiz JSON validation gecisi ve
+  browser error olmamasi dogrulanir (salt-okunur, kayit yok).
+- Dogrulama: `npx.cmd tsc --noEmit` yesil, `npm.cmd run build:verify` yesil
+  (verify:dist --strict PASS, 710 engine check), hedefli Playwright smoke PASS.
 
 ## Ilk uygulanabilir vertical slice onerisi
 

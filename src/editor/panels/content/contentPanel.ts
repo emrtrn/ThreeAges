@@ -66,6 +66,7 @@ export interface ContentPanelOptions {
   openParticleEffectEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openDialogueEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openBehaviorTreeEditor: (item: BrowserAssetItem) => void | Promise<void>;
+  openStateTreeEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openLevel: (item: BrowserAssetItem) => void | Promise<void>;
   openUiWidgetEditor: (item: BrowserAssetItem) => void | Promise<void>;
   renderAssetThumbnail: (item: BrowserAssetItem, thumb: HTMLElement) => void | Promise<void>;
@@ -323,6 +324,12 @@ function bindAssetOpeners(
     card.addEventListener("dblclick", (event) => {
       event.preventDefault();
       void options.openBehaviorTreeEditor(item);
+    });
+  }
+  if (item.type === "stateTree") {
+    card.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      void options.openStateTreeEditor(item);
     });
   }
   if (isLevelItem(item) && !activeLevel) {
