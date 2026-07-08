@@ -95,6 +95,36 @@ test("behavior tree editor renders outline and validation for a real asset", asy
   await expect(win.locator(".bte-node")).toHaveCount(beforeNodes);
   await expect(win.locator(".bte-ok")).toBeVisible();
 
+  // --- Decorator + service form authoring on the (selected) root node.
+  // Add a distance decorator; the seeded default (key target / lte / 2) is valid
+  // and surfaces as a decorator chip on the root row.
+  await win.locator("[data-bte-add-dec-kind]").selectOption("distance");
+  await win.locator("[data-bte-add-dec]").click();
+  await expect(win.locator("[data-bte-dec-index]")).toHaveCount(1);
+  await expect(win.locator(".bte-chip-dec").first()).toContainText("dist");
+  await expect(win.locator(".bte-ok")).toBeVisible();
+
+  // Edit the decorator key via the form; the raw JSON reflects the new value.
+  const decKey = win.locator('[data-bte-dec-f="key"]');
+  await decKey.fill("enemy");
+  await decKey.blur();
+  expect(await win.locator("[data-bte-raw]").inputValue()).toContain('"enemy"');
+  await expect(win.locator(".bte-ok")).toBeVisible();
+
+  // Add a service; the seeded default service name is valid and shows as a chip.
+  await win.locator("[data-bte-add-svc]").click();
+  await expect(win.locator("[data-bte-svc-index]")).toHaveCount(1);
+  await expect(win.locator(".bte-chip-svc").first()).toContainText(
+    "forge.updatePerceptionBlackboard",
+  );
+  await expect(win.locator(".bte-ok")).toBeVisible();
+
+  // Remove the decorator; the card and its chip disappear, tree stays valid.
+  await win.locator("[data-bte-dec-remove]").click();
+  await expect(win.locator("[data-bte-dec-index]")).toHaveCount(0);
+  await expect(win.locator(".bte-chip-dec")).toHaveCount(0);
+  await expect(win.locator(".bte-ok")).toBeVisible();
+
   // Editing the raw JSON to something invalid flips validation to an error and
   // the outline still reflects the (now un-normalizable) shape without crashing.
   await win.locator("[data-bte-raw]").fill('{ "schema": 1, "type": "behaviorTree" }');

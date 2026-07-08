@@ -131,6 +131,11 @@
 > kaynak-of-truth olarak kaldi (yapisal duzenlemeler clone'u mutate edip raw'a
 > geri serialize eder), yeni save yuzeyi yok. BT Editor v1 kapandi; kalan Faz 7:
 > runtime debug inspector + decorator/service form authoring (sonraki dilim).
+> Revizyon: 2026-07-08 - Faz 7 Behavior Tree Editor decorator/service form
+> authoring dilimi: Node Details formuna kart tabanli decorator (blackboard/
+> distance/cooldown/hasPerceptionStimulus) ve service (name/interval) editorleri
+> eklendi; add/remove/convert mutasyonlari `mutateTree` raw-JSON kaynak-of-truth'u
+> uzerinden gecer, yeni save yuzeyi yok. Kalan Faz 7: runtime debug inspector.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1411,9 +1416,11 @@ baglanabilsin.
       - [x] add/remove/reorder node (Add Child kind picker / Remove / Move up /
             Move down toolbar on the selected node).
       - [x] node details panel (kind/id + kind-specific task/seconds/behavior
-            fields; raw-JSON pane retained for decorators/services/params; engine
-            normalizer re-validated live + on save). Decorator/service *form*
-            authoring is a later slice — still edited in the JSON pane.
+            fields; engine normalizer re-validated live + on save).
+      - [x] decorator/service *form* authoring (blackboard/distance/cooldown/
+            hasPerceptionStimulus decorators + service name/interval, add/remove/
+            convert per node). Only task/service `params` + blackboard vec3 values
+            remain raw-JSON edits.
       - [x] validation errors (engine `normalizeAiBehaviorTreeAsset`).
 - [ ] Runtime debug inspector:
       - [ ] selected AI actor blackboard values
@@ -1558,6 +1565,37 @@ Tamamlanan Faz 7 Behavior Tree Editor node-form CRUD/node details dilim notu (20
   test:engine + verify:dist --strict) hepsi yesil — editor node-form kodu game
   bundle'a sizmaz. Kalan Faz 7: runtime debug inspector + decorator/service form
   authoring.
+
+Tamamlanan Faz 7 Behavior Tree Editor decorator/service form authoring dilim notu (2026-07-08):
+
+- `src/editor/BehaviorTreeEditor.ts` Node Details formu decorator ve service
+  bolumleriyle genisletildi; bu iki liste artik raw-JSON yerine kart tabanli
+  formdan editleniyor.
+  - **Decorators:** kind picker ile `blackboard` / `distance` / `cooldown` /
+    `hasPerceptionStimulus` eklenir; her kart kind-ozel alanlar gosterir
+    (blackboard: key/op + equals/notEquals icin value; distance: key/op/value;
+    cooldown: seconds; perception: sense/minStrength/requireLineOfSight). Kind
+    donusumu `key`'i korur, yeni default seed'i (target/lte/2 vb.) tree'yi ekleme
+    aninda gecerli tutar. Blackboard value alani JSON-ish parse eder
+    (`true`/`42`/`"text"`/vec3), parse basarisizsa duz string'e duser.
+  - **Services:** `+ Service` bir default (`forge.updatePerceptionBlackboard`)
+    ekler; kart service adi + opsiyonel interval alani tasir. `params` haritalari
+    form kapsami disinda (count hint + Asset JSON pane'de editlenir).
+- Mimari degismedi: tum decorator/service mutasyonlari `mutateDecorators` /
+  `mutateServices` -> `mutateTree` uzerinden raw JSON'u parse/clone/mutate/
+  serialize eder; liste bosalinca `decorators`/`services` key'i node'dan silinir.
+  Tek kaynak-of-truth raw JSON, tek validasyon `normalizeAiBehaviorTreeAsset`,
+  tek save yolu `/__save-behavior` — yeni save yuzeyi yok.
+- CSS: `.bte-section-sub`, `.bte-cards`, `.bte-card*`, `.bte-btn-sm` eklendi.
+- Test: `tests/smoke/behavior-tree-editor.spec.ts` genisletildi (hala read-only):
+  root'a distance decorator ekle -> chip + `✓ Valid` dogrula -> key form edit'i
+  raw'a yansir -> service ekle -> chip dogrula -> decorator remove -> chip/card
+  kaybolur, her adimda gecerli kalir, browser error yok. Hedefli
+  `npx.cmd playwright test behavior-tree-editor.spec.ts` yesil (`1 passed`).
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (`704 checks passed`), `npm.cmd run build:verify` (verify:dist --strict PASS —
+  editor form kodu game bundle'a sizmaz), `npm.cmd run check:assets` PASS.
+  Kalan Faz 7: runtime debug inspector.
 
 ### Faz 8 - StateTree secenegi
 

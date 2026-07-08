@@ -13,19 +13,27 @@
  *   - The outline renders the composite/task/wait/subtree tree plus each node's
  *     decorators and services, and each node is selectable.
  *   - The node form edits the selected node's primary fields (kind / id /
- *     task / seconds / behavior) and offers add-child / remove / reorder. Each
- *     action mutates a clone of the parsed tree and re-serializes it back into
- *     the raw pane, so there is no second save surface — the tested normalizer
- *     and the guarded `/__save-behavior` endpoint are reused verbatim.
+ *     task / seconds / behavior), its **decorators** (blackboard / distance /
+ *     cooldown / hasPerceptionStimulus) and its **services** (name / interval),
+ *     and offers add-child / remove / reorder. Each action mutates a clone of the
+ *     parsed tree and re-serializes it back into the raw pane, so there is no
+ *     second save surface — the tested normalizer and the guarded
+ *     `/__save-behavior` endpoint are reused verbatim.
  *   - Save posts the parsed object through `/__save-behavior`, which re-validates
  *     server-side; an invalid tree blocks the save with the normalizer error.
  *
- * Decorator/service authoring and task/service `params` remain raw-JSON edits
- * (surfaced as read-only chips + a count hint); a dedicated form is a later
- * slice.
+ * Only task/service `params` (opaque JSON maps) and blackboard decorator vec3
+ * values remain raw-JSON edits (params are surfaced as a count hint); everything
+ * else is form-authored.
  */
 
-import type { AiBehaviorNode, AiBehaviorNodeKind } from "@engine/ai/behaviorAsset";
+import type {
+  AiBehaviorNode,
+  AiBehaviorNodeKind,
+  AiDecoratorOp,
+  AiNumericCompareOp,
+  AiPerceptionSenseName,
+} from "@engine/ai/behaviorAsset";
 import { normalizeAiBehaviorTreeAsset } from "@engine/ai/behaviorAsset";
 import {
   defaultBehaviorTreeJson,
@@ -57,6 +65,60 @@ const NODE_COLORS: Record<string, string> = {
   wait: "#8a9ad4",
   subtree: "#c47dd4",
 };
+
+type AiDecoratorKind = "blackboard" | "distance" | "cooldown" | "hasPerceptionStimulus";
+
+const DECORATOR_KINDS: readonly AiDecoratorKind[] = [
+  "blackboard",
+  "distance",
+  "cooldown",
+  "hasPerceptionStimulus",
+];
+
+const DECORATOR_KIND_LABELS: Record<AiDecoratorKind, string> = {
+  blackboard: "blackboard",
+  distance: "distance",
+  cooldown: "cooldown",
+  hasPerceptionStimulus: "perception",
+};
+
+const BLACKBOARD_OPS: readonly AiDecoratorOp[] = ["equals", "notEquals", "isSet", "isNotSet"];
+const DISTANCE_OPS: readonly AiNumericCompareOp[] = ["lt", "lte", "gt", "gte"];
+const PERCEPTION_SENSES: readonly AiPerceptionSenseName[] = [
+  "sight",
+  "hearing",
+  "damage",
+  "alert",
+  "gameplay",
+];
+
+/** A fresh decorator of `kind`, seeded so the tree stays valid on add/convert. */
+function defaultDecorator(kind: AiDecoratorKind, key: string): Record<string, unknown> {
+  switch (kind) {
+    case "blackboard":
+      return { kind, key, op: "isSet" };
+    case "distance":
+      return { kind, key, op: "lte", value: 2 };
+    case "cooldown":
+      return { kind, seconds: 1 };
+    case "hasPerceptionStimulus":
+      return { kind };
+  }
+}
+
+/** Blackboard decorator value shows as JSON so scalars/vec3 round-trip in one field. */
+function decoratorValueText(value: unknown): string {
+  return value === undefined ? "" : JSON.stringify(value);
+}
+
+/** Parses a blackboard decorator value field: JSON when possible, else the raw string. */
+function parseBlackboardValueText(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
 
 function esc(value: string): string {
   return value
@@ -499,16 +561,6 @@ export class BehaviorTreeEditor {
       );
     }
 
-    const decCount = Array.isArray(node.decorators) ? node.decorators.length : 0;
-    const svcCount = Array.isArray(node.services) ? node.services.length : 0;
-    if (decCount > 0 || svcCount > 0) {
-      rows.push(
-        `<div class="bte-form-hint">${decCount} decorator${decCount === 1 ? "" : "s"}, ${svcCount} service${
-          svcCount === 1 ? "" : "s"
-        } — edit these in the Asset JSON pane.</div>`,
-      );
-    }
-
     const addKindOptions = NODE_KINDS.map((k) => `<option value="${k}">${k}</option>`).join("");
     this.formHost.innerHTML = `
       <div class="bte-form-toolbar">
@@ -520,7 +572,9 @@ export class BehaviorTreeEditor {
         <button type="button" data-bte-up class="bte-btn"${canUp ? "" : " disabled"} title="Move up among siblings">↑</button>
         <button type="button" data-bte-down class="bte-btn"${canDown ? "" : " disabled"} title="Move down among siblings">↓</button>
       </div>
-      <div class="bte-form-fields">${rows.join("")}</div>`;
+      <div class="bte-form-fields">${rows.join("")}</div>
+      ${this.decoratorsSectionHtml(node)}
+      ${this.servicesSectionHtml(node)}`;
 
     this.bindNodeForm();
   }
@@ -560,6 +614,340 @@ export class BehaviorTreeEditor {
     this.formHost
       .querySelector<HTMLButtonElement>("[data-bte-down]")
       ?.addEventListener("click", () => this.moveSelected(1));
+
+    this.bindDecoratorSection();
+    this.bindServiceSection();
+  }
+
+  // --- Decorator authoring -------------------------------------------------
+
+  private decoratorsSectionHtml(node: Record<string, unknown>): string {
+    const decorators = Array.isArray(node.decorators) ? node.decorators : [];
+    const cards = decorators.map((decorator, index) => this.decoratorCardHtml(decorator, index)).join("");
+    const addOptions = DECORATOR_KINDS.map(
+      (k) => `<option value="${k}">${DECORATOR_KIND_LABELS[k]}</option>`,
+    ).join("");
+    return `
+      <div class="bte-section-sub">Decorators</div>
+      <div class="bte-cards" data-bte-dec-list>${
+        cards || `<div class="bte-form-empty">No decorators.</div>`
+      }</div>
+      <div class="bte-form-add">
+        <select data-bte-add-dec-kind class="bte-input bte-input-sm">${addOptions}</select>
+        <button type="button" data-bte-add-dec class="bte-btn" title="Add a decorator">+ Decorator</button>
+      </div>`;
+  }
+
+  private decoratorCardHtml(raw: unknown, index: number): string {
+    const dec = isObj(raw) ? raw : {};
+    const kind = (typeof dec.kind === "string" ? dec.kind : "blackboard") as AiDecoratorKind;
+    const kindOptions = DECORATOR_KINDS.map(
+      (k) => `<option value="${k}"${k === kind ? " selected" : ""}>${DECORATOR_KIND_LABELS[k]}</option>`,
+    ).join("");
+    return `
+      <div class="bte-card" data-bte-dec-index="${index}">
+        <div class="bte-card-head">
+          <select data-bte-dec-kind class="bte-input bte-input-sm">${kindOptions}</select>
+          <button type="button" data-bte-dec-remove class="bte-btn bte-btn-sm" title="Remove decorator">✕</button>
+        </div>
+        <div class="bte-card-fields">${this.decoratorFieldsHtml(kind, dec)}</div>
+      </div>`;
+  }
+
+  private decoratorFieldsHtml(kind: AiDecoratorKind, dec: Record<string, unknown>): string {
+    const rows: string[] = [];
+    if (kind === "blackboard" || kind === "distance") {
+      rows.push(
+        this.fieldRow(
+          "Key",
+          `<input type="text" data-bte-dec-f="key" class="bte-input" placeholder="target" value="${esc(
+            typeof dec.key === "string" ? dec.key : "",
+          )}">`,
+        ),
+      );
+      const ops = kind === "blackboard" ? BLACKBOARD_OPS : DISTANCE_OPS;
+      const current = typeof dec.op === "string" ? dec.op : ops[0];
+      const opOptions = ops
+        .map((op) => `<option value="${op}"${op === current ? " selected" : ""}>${op}</option>`)
+        .join("");
+      rows.push(this.fieldRow("Op", `<select data-bte-dec-f="op" class="bte-input">${opOptions}</select>`));
+    }
+    if (kind === "distance") {
+      rows.push(
+        this.fieldRow(
+          "Value",
+          `<input type="number" step="0.1" data-bte-dec-f="value" class="bte-input" value="${esc(
+            typeof dec.value === "number" ? String(dec.value) : "0",
+          )}">`,
+        ),
+      );
+    } else if (kind === "blackboard" && (dec.op === "equals" || dec.op === "notEquals")) {
+      rows.push(
+        this.fieldRow(
+          "Value",
+          `<input type="text" data-bte-dec-f="value" class="bte-input" placeholder="true / 42 / &quot;text&quot;" value="${esc(
+            decoratorValueText(dec.value),
+          )}">`,
+        ),
+      );
+    }
+    if (kind === "cooldown") {
+      rows.push(
+        this.fieldRow(
+          "Seconds",
+          `<input type="number" step="0.1" min="0" data-bte-dec-f="seconds" class="bte-input" value="${esc(
+            typeof dec.seconds === "number" ? String(dec.seconds) : "1",
+          )}">`,
+        ),
+      );
+    }
+    if (kind === "hasPerceptionStimulus") {
+      const sense = typeof dec.sense === "string" ? dec.sense : "";
+      const senseOptions = [`<option value=""${sense === "" ? " selected" : ""}>any</option>`]
+        .concat(
+          PERCEPTION_SENSES.map(
+            (s) => `<option value="${s}"${s === sense ? " selected" : ""}>${s}</option>`,
+          ),
+        )
+        .join("");
+      rows.push(this.fieldRow("Sense", `<select data-bte-dec-f="sense" class="bte-input">${senseOptions}</select>`));
+      rows.push(
+        this.fieldRow(
+          "Min strength",
+          `<input type="number" step="0.1" data-bte-dec-f="minStrength" class="bte-input" placeholder="any" value="${esc(
+            typeof dec.minStrength === "number" ? String(dec.minStrength) : "",
+          )}">`,
+        ),
+      );
+      const los = dec.requireLineOfSight;
+      const losValue = typeof los === "boolean" ? String(los) : "";
+      const losOptions = [
+        `<option value=""${losValue === "" ? " selected" : ""}>ignore</option>`,
+        `<option value="true"${losValue === "true" ? " selected" : ""}>require</option>`,
+        `<option value="false"${losValue === "false" ? " selected" : ""}>forbid</option>`,
+      ].join("");
+      rows.push(
+        this.fieldRow("Line of sight", `<select data-bte-dec-f="requireLineOfSight" class="bte-input">${losOptions}</select>`),
+      );
+    }
+    return rows.join("");
+  }
+
+  private bindDecoratorSection(): void {
+    const addKind = this.formHost.querySelector<HTMLSelectElement>("[data-bte-add-dec-kind]");
+    this.formHost
+      .querySelector<HTMLButtonElement>("[data-bte-add-dec]")
+      ?.addEventListener("click", () =>
+        this.addDecorator((addKind?.value as AiDecoratorKind) ?? "blackboard"),
+      );
+
+    this.formHost.querySelectorAll<HTMLElement>("[data-bte-dec-index]").forEach((card) => {
+      const index = Number(card.dataset.bteDecIndex);
+      card
+        .querySelector<HTMLSelectElement>("[data-bte-dec-kind]")
+        ?.addEventListener("change", (event) =>
+          this.setDecoratorKind(index, (event.target as HTMLSelectElement).value as AiDecoratorKind),
+        );
+      card
+        .querySelector<HTMLButtonElement>("[data-bte-dec-remove]")
+        ?.addEventListener("click", () => this.removeDecorator(index));
+      card.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-bte-dec-f]").forEach((ctrl) => {
+        ctrl.addEventListener("change", () =>
+          this.setDecoratorField(index, ctrl.dataset.bteDecF ?? "", ctrl.value),
+        );
+      });
+    });
+  }
+
+  /** Runs `fn` on the selected node's decorator array, dropping it when it empties. */
+  private mutateDecorators(fn: (list: unknown[]) => void): void {
+    if (this.selectedPath === null) return;
+    const path = this.selectedPath;
+    this.mutateTree((asset) => {
+      const node = resolveNode(asset.root, path);
+      if (!node) return undefined;
+      const list = Array.isArray(node.decorators) ? (node.decorators as unknown[]) : [];
+      fn(list);
+      if (list.length > 0) node.decorators = list;
+      else delete node.decorators;
+      return path;
+    });
+  }
+
+  private addDecorator(kind: AiDecoratorKind): void {
+    if (!DECORATOR_KINDS.includes(kind)) return;
+    this.mutateDecorators((list) => list.push(defaultDecorator(kind, "target")));
+  }
+
+  private removeDecorator(index: number): void {
+    this.mutateDecorators((list) => {
+      if (index >= 0 && index < list.length) list.splice(index, 1);
+    });
+  }
+
+  private setDecoratorKind(index: number, kind: AiDecoratorKind): void {
+    if (!DECORATOR_KINDS.includes(kind)) return;
+    this.mutateDecorators((list) => {
+      const prev = isObj(list[index]) ? (list[index] as Record<string, unknown>) : {};
+      const key = typeof prev.key === "string" && prev.key.length > 0 ? prev.key : "target";
+      list[index] = defaultDecorator(kind, key);
+    });
+  }
+
+  private setDecoratorField(index: number, field: string, rawValue: string): void {
+    this.mutateDecorators((list) => {
+      const dec = list[index];
+      if (!isObj(dec)) return;
+      switch (field) {
+        case "key":
+          dec.key = rawValue.trim();
+          break;
+        case "op":
+          dec.op = rawValue;
+          break;
+        case "value":
+          if (dec.kind === "distance") {
+            const parsed = Number(rawValue);
+            if (Number.isFinite(parsed)) dec.value = parsed;
+          } else if (rawValue.trim().length === 0) {
+            delete dec.value;
+          } else {
+            dec.value = parseBlackboardValueText(rawValue.trim());
+          }
+          break;
+        case "seconds": {
+          const parsed = Number(rawValue);
+          if (Number.isFinite(parsed)) dec.seconds = parsed;
+          break;
+        }
+        case "sense":
+          if (rawValue.length === 0) delete dec.sense;
+          else dec.sense = rawValue;
+          break;
+        case "minStrength":
+          if (rawValue.trim().length === 0) {
+            delete dec.minStrength;
+          } else {
+            const parsed = Number(rawValue);
+            if (Number.isFinite(parsed)) dec.minStrength = parsed;
+          }
+          break;
+        case "requireLineOfSight":
+          if (rawValue.length === 0) delete dec.requireLineOfSight;
+          else dec.requireLineOfSight = rawValue === "true";
+          break;
+      }
+    });
+  }
+
+  // --- Service authoring ---------------------------------------------------
+
+  private servicesSectionHtml(node: Record<string, unknown>): string {
+    const services = Array.isArray(node.services) ? node.services : [];
+    const cards = services.map((service, index) => this.serviceCardHtml(service, index)).join("");
+    return `
+      <div class="bte-section-sub">Services</div>
+      <div class="bte-cards" data-bte-svc-list>${
+        cards || `<div class="bte-form-empty">No services.</div>`
+      }</div>
+      <div class="bte-form-add">
+        <button type="button" data-bte-add-svc class="bte-btn" title="Add a service">+ Service</button>
+      </div>`;
+  }
+
+  private serviceCardHtml(raw: unknown, index: number): string {
+    const svc = isObj(raw) ? raw : {};
+    const paramCount =
+      isObj(svc.params) && svc.params !== null ? Object.keys(svc.params).length : 0;
+    const rows: string[] = [
+      this.fieldRow(
+        "Service",
+        `<input type="text" data-bte-svc-f="service" class="bte-input" placeholder="forge.updatePerceptionBlackboard" value="${esc(
+          typeof svc.service === "string" ? svc.service : "",
+        )}">`,
+      ),
+      this.fieldRow(
+        "Interval",
+        `<input type="number" step="0.1" min="0" data-bte-svc-f="interval" class="bte-input" placeholder="default" value="${esc(
+          typeof svc.interval === "number" ? String(svc.interval) : "",
+        )}">`,
+      ),
+    ];
+    if (paramCount > 0) {
+      rows.push(
+        `<div class="bte-form-hint">${paramCount} param${
+          paramCount === 1 ? "" : "s"
+        } — edit in the Asset JSON pane.</div>`,
+      );
+    }
+    return `
+      <div class="bte-card" data-bte-svc-index="${index}">
+        <div class="bte-card-head">
+          <span class="bte-card-title">service</span>
+          <button type="button" data-bte-svc-remove class="bte-btn bte-btn-sm" title="Remove service">✕</button>
+        </div>
+        <div class="bte-card-fields">${rows.join("")}</div>
+      </div>`;
+  }
+
+  private bindServiceSection(): void {
+    this.formHost
+      .querySelector<HTMLButtonElement>("[data-bte-add-svc]")
+      ?.addEventListener("click", () => this.addService());
+
+    this.formHost.querySelectorAll<HTMLElement>("[data-bte-svc-index]").forEach((card) => {
+      const index = Number(card.dataset.bteSvcIndex);
+      card
+        .querySelector<HTMLButtonElement>("[data-bte-svc-remove]")
+        ?.addEventListener("click", () => this.removeService(index));
+      card.querySelectorAll<HTMLInputElement>("[data-bte-svc-f]").forEach((ctrl) => {
+        ctrl.addEventListener("change", () =>
+          this.setServiceField(index, ctrl.dataset.bteSvcF ?? "", ctrl.value),
+        );
+      });
+    });
+  }
+
+  /** Runs `fn` on the selected node's service array, dropping it when it empties. */
+  private mutateServices(fn: (list: unknown[]) => void): void {
+    if (this.selectedPath === null) return;
+    const path = this.selectedPath;
+    this.mutateTree((asset) => {
+      const node = resolveNode(asset.root, path);
+      if (!node) return undefined;
+      const list = Array.isArray(node.services) ? (node.services as unknown[]) : [];
+      fn(list);
+      if (list.length > 0) node.services = list;
+      else delete node.services;
+      return path;
+    });
+  }
+
+  private addService(): void {
+    this.mutateServices((list) => list.push({ service: "forge.updatePerceptionBlackboard" }));
+  }
+
+  private removeService(index: number): void {
+    this.mutateServices((list) => {
+      if (index >= 0 && index < list.length) list.splice(index, 1);
+    });
+  }
+
+  private setServiceField(index: number, field: string, rawValue: string): void {
+    this.mutateServices((list) => {
+      const svc = list[index];
+      if (!isObj(svc)) return;
+      if (field === "service") {
+        svc.service = rawValue.trim();
+      } else if (field === "interval") {
+        if (rawValue.trim().length === 0) {
+          delete svc.interval;
+        } else {
+          const parsed = Number(rawValue);
+          if (Number.isFinite(parsed)) svc.interval = parsed;
+        }
+      }
+    });
   }
 
   /**

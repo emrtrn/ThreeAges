@@ -3700,6 +3700,37 @@ body.editor-mode #debug-stats {
 }
 .bte-btn:hover:not(:disabled) { background: #313640; }
 .bte-btn:disabled { opacity: 0.4; cursor: default; }
+.bte-btn-sm { height: 22px; padding: 0 7px; font-size: 11px; }
+
+.bte-section-sub {
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9aa2ac;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.bte-cards { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.bte-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 6px 8px;
+}
+.bte-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.bte-card-title {
+  font-size: 11px;
+  color: #9aa2ac;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.bte-card-fields { display: flex; flex-direction: column; gap: 5px; }
 
 .bte-form-fields { display: flex; flex-direction: column; gap: 5px; }
 .bte-form-row { display: flex; align-items: center; gap: 8px; }
