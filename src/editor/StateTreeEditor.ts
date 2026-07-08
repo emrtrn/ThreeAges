@@ -1,22 +1,28 @@
 /**
- * StateTree editor (v1) — Forge's authoring shell for `*.stateTree.json` assets,
- * opened from the Content Browser (double-click / "Open").
+ * StateTree editor (v1 + form CRUD) — Forge's authoring shell for
+ * `*.stateTree.json` assets, opened from the Content Browser (double-click /
+ * "Open").
  *
- * Mirrors the first slice of the Behavior Tree editor: the raw JSON stays the
- * single source of truth (it is the save payload and what every view derives
- * from), and each edit is parsed + run through the engine normalizer
- * (`normalizeAiStateTreeAsset`) — the same validator the dev `/__save-state-tree`
- * endpoint uses — so the outline, transition table and validation panel always
- * reflect what would be saved.
+ * Mirrors the Behavior Tree editor: the raw JSON stays the single source of truth
+ * (it is the save payload and what every view derives from), and each edit —
+ * typed JSON *or* a structured form action — is parsed + run through the engine
+ * normalizer (`normalizeAiStateTreeAsset`), the same validator the dev
+ * `/__save-state-tree` endpoint uses, so the outline, transition table, node form
+ * and validation panel always reflect what would be saved.
  *
- * The read-only structural views are:
- *   - a **nested state outline** (hierarchical states, with each state's enter
- *     conditions, task count, transition count and child count), and
+ * Views + authoring:
+ *   - a **nested state outline** (hierarchical, selectable states with each
+ *     state's enter conditions, task/transition/child badges), and
  *   - a **transition table** flattening every state's outgoing transitions into
- *     `from → to` rows tagged with their event / guard-condition summary.
+ *     `from → to` rows tagged with their event / guard-condition summary, and
+ *   - a **State Details form** for the selected state: id, add-child/remove/
+ *     reorder, **tasks** (task name + params-count hint) and **transitions**
+ *     (target state dropdown + event + guard-condition count hint).
  *
- * State/transition form CRUD is a deliberate later slice; v1 authors through the
- * raw-JSON pane and reuses the tested normalizer + guarded save endpoint verbatim.
+ * Structured edits mutate a clone of the parsed asset and re-serialize it back
+ * into the raw pane, so there is no second save surface. Task `params` and
+ * enter/transition guard `conditions` remain raw-JSON edits (surfaced as count
+ * hints); rich condition-card authoring is a deliberate later slice.
  */
 
 import type {
@@ -80,15 +86,89 @@ function conditionsSummary(conditions: unknown): string {
   return conditions.map(conditionLabel).join(" & ");
 }
 
+/** Serializes a state path (child indices from the top-level states array). */
+function pathParam(path: readonly number[]): string {
+  return path.join(".");
+}
+
+/** Parses a `data-ste-path` attribute back into a state path. */
+function parsePathParam(value: string | null | undefined): number[] {
+  if (!value) return [];
+  return value.split(".").map((entry) => Number(entry));
+}
+
+function pathEq(a: readonly number[], b: readonly number[]): boolean {
+  return a.length === b.length && a.every((entry, index) => entry === b[index]);
+}
+
+/** Walks the nested `states` arrays to the state at `path`, or null when stale. */
+function resolveState(root: unknown, path: readonly number[]): Record<string, unknown> | null {
+  if (path.length === 0) return null;
+  let list: unknown = isObj(root) ? root.states : null;
+  let node: Record<string, unknown> | null = null;
+  for (const index of path) {
+    if (!Array.isArray(list) || index < 0 || index >= list.length) return null;
+    const candidate = list[index];
+    if (!isObj(candidate)) return null;
+    node = candidate;
+    list = candidate.states;
+  }
+  return node;
+}
+
+interface StateParent {
+  /** The states array containing the target (root uses `asset.states`). */
+  readonly list: unknown[];
+  readonly index: number;
+}
+
+/** Resolves the array + sibling index holding `path`, or null when stale. */
+function resolveStateParent(root: unknown, path: readonly number[]): StateParent | null {
+  if (!isObj(root) || path.length === 0) return null;
+  let list: unknown = root.states;
+  for (let i = 0; i < path.length - 1; i += 1) {
+    const index = path[i] ?? -1;
+    if (!Array.isArray(list) || index < 0 || index >= list.length) return null;
+    const candidate = list[index];
+    if (!isObj(candidate)) return null;
+    list = candidate.states;
+  }
+  const index = path[path.length - 1] ?? -1;
+  if (!Array.isArray(list) || index < 0 || index >= list.length) return null;
+  return { list, index };
+}
+
+/** Collects every state id in the tree (for transition target dropdowns + unique ids). */
+function collectStateIds(states: unknown): string[] {
+  const ids: string[] = [];
+  const walk = (list: unknown): void => {
+    if (!Array.isArray(list)) return;
+    for (const raw of list) {
+      if (!isObj(raw)) continue;
+      if (typeof raw.id === "string" && raw.id.length > 0) ids.push(raw.id);
+      walk(raw.states);
+    }
+  };
+  walk(states);
+  return ids;
+}
+
+/** A fresh unique state id ("State", "State2", …) not colliding with existing ones. */
+function uniqueStateId(existing: readonly string[]): string {
+  const taken = new Set(existing);
+  if (!taken.has("State")) return "State";
+  for (let i = 2; i < 10_000; i += 1) {
+    const candidate = `State${i}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `State${Date.now()}`;
+}
+
 /** Result of parsing + validating the raw JSON pane. */
 interface ParseState {
-  /** Parsed JSON (any shape) when the text is valid JSON, else null. */
   value: unknown;
-  /** The parsed `states` array cast for lenient outline walking, else null. */
   states: unknown[] | null;
-  /** Normalizer error (parse or schema) shown in the validation panel, else "". */
   error: string;
-  /** True when the parsed value passed the engine normalizer. */
   valid: boolean;
 }
 
@@ -113,11 +193,14 @@ export class StateTreeEditor {
   private readonly outlineHost: HTMLElement;
   private readonly tableHost: HTMLElement;
   private readonly validationHost: HTMLElement;
+  private readonly formHost: HTMLElement;
   private readonly rawEl: HTMLTextAreaElement;
   private readonly statusEl: HTMLElement;
   private readonly saveBtn: HTMLButtonElement;
 
   private raw = defaultStateTreeJson();
+  /** Selected state path (child indices from the top-level states array). */
+  private selectedPath: number[] | null = null;
   private disposed = false;
 
   private constructor(private readonly options: StateTreeEditorOptions) {
@@ -138,7 +221,10 @@ export class StateTreeEditor {
   </header>
   <div class="ste-body">
     <aside class="ste-left">
-      <div class="ste-section-title">State Outline</div>
+      <div class="ste-section-title ste-outline-head">
+        <span>State Outline</span>
+        <button type="button" class="ste-btn ste-btn-sm" data-ste-add-root title="Add a top-level state">+ State</button>
+      </div>
       <div class="ste-outline" data-ste-outline></div>
       <div class="ste-section-title">Transitions</div>
       <div class="ste-table" data-ste-table></div>
@@ -146,6 +232,8 @@ export class StateTreeEditor {
       <div class="ste-validation" data-ste-validation></div>
     </aside>
     <div class="ste-right">
+      <div class="ste-section-title">State Details</div>
+      <div class="ste-form" data-ste-form></div>
       <div class="ste-section-title">Asset JSON</div>
       <textarea class="ste-raw" data-ste-raw spellcheck="false"></textarea>
     </div>
@@ -158,6 +246,7 @@ export class StateTreeEditor {
     this.outlineHost = this.req("[data-ste-outline]");
     this.tableHost = this.req("[data-ste-table]");
     this.validationHost = this.req("[data-ste-validation]");
+    this.formHost = this.req("[data-ste-form]");
     this.rawEl = this.req<HTMLTextAreaElement>("[data-ste-raw]");
     this.statusEl = this.req("[data-ste-status]");
     this.saveBtn = this.req<HTMLButtonElement>("[data-ste-save]");
@@ -165,9 +254,19 @@ export class StateTreeEditor {
     this.titleEl.textContent = options.label;
     this.req<HTMLButtonElement>("[data-ste-close]").addEventListener("click", () => this.close());
     this.saveBtn.addEventListener("click", () => void this.save());
+    this.req<HTMLButtonElement>("[data-ste-add-root]").addEventListener("click", () => this.addRootState());
     this.rawEl.addEventListener("input", () => {
       this.raw = this.rawEl.value;
       this.markDirty();
+      this.renderDerived();
+    });
+
+    // Delegated outline selection: clicking a state row selects that state.
+    this.outlineHost.addEventListener("click", (event) => {
+      const target = event.target as HTMLElement | null;
+      const li = target?.closest<HTMLElement>(".ste-node[data-ste-path]");
+      if (!li) return;
+      this.selectedPath = parsePathParam(li.dataset.stePath);
       this.renderDerived();
     });
 
@@ -195,6 +294,8 @@ export class StateTreeEditor {
       this.raw = await loadStateTreeText(this.options.path);
       this.rawEl.value = this.raw;
       this.saveBtn.classList.remove("is-dirty");
+      // Select the first state by default so the form is populated on open.
+      this.selectedPath = [0];
       this.renderDerived();
       this.setStatus("Ready.");
     } catch (error) {
@@ -223,8 +324,14 @@ export class StateTreeEditor {
   private renderDerived(): void {
     if (this.disposed) return;
     const state = this.parse();
+    // Drop a stale selection (e.g. the raw JSON shrank the tree), but keep it
+    // through transient unparseable edits so it returns once the JSON is fixed.
+    if (this.selectedPath && state.value !== null && !resolveState(state.value, this.selectedPath)) {
+      this.selectedPath = null;
+    }
     this.renderOutline(state);
     this.renderTable(state);
+    this.renderNodeForm(state);
     this.renderValidation(state);
   }
 
@@ -236,29 +343,34 @@ export class StateTreeEditor {
       return;
     }
     if (!state.states || state.states.length === 0) {
-      this.outlineHost.innerHTML = `<div class="ste-empty">No <code>states</code> declared.</div>`;
+      this.outlineHost.innerHTML = `<div class="ste-empty">No <code>states</code> — use <strong>+ State</strong>.</div>`;
       return;
     }
     this.outlineHost.innerHTML = `<ul class="ste-tree">${state.states
-      .map((s) => this.stateHtml(s))
+      .map((s, index) => this.stateHtml(s, [index]))
       .join("")}</ul>`;
   }
 
   /** Lenient recursive outline: renders whatever state shape is present. */
-  private stateHtml(raw: unknown): string {
+  private stateHtml(raw: unknown, path: number[]): string {
+    const selected = this.selectedPath !== null && pathEq(path, this.selectedPath);
     if (!isObj(raw)) {
-      return `<li class="ste-node"><div class="ste-node-row"><span class="ste-node-bad">malformed state</span></div></li>`;
+      return `<li class="ste-node" data-ste-path="${pathParam(path)}"><div class="ste-node-row${
+        selected ? " is-selected" : ""
+      }"><span class="ste-node-bad">malformed state</span></div></li>`;
     }
     const state = raw as Partial<AiStateDef> & Record<string, unknown>;
     const id = typeof state.id === "string" ? state.id : "?";
     const meta = this.stateMeta(state);
     const children = Array.isArray(state.states) ? state.states : [];
     const childHtml = children.length
-      ? `<ul class="ste-tree">${children.map((child) => this.stateHtml(child)).join("")}</ul>`
+      ? `<ul class="ste-tree">${children
+          .map((child, index) => this.stateHtml(child, [...path, index]))
+          .join("")}</ul>`
       : "";
     return `
-      <li class="ste-node">
-        <div class="ste-node-row">
+      <li class="ste-node" data-ste-path="${pathParam(path)}">
+        <div class="ste-node-row${selected ? " is-selected" : ""}">
           <span class="ste-node-id">${esc(id)}</span>
           ${meta}
         </div>
@@ -341,6 +453,361 @@ export class StateTreeEditor {
     };
     if (states) walk(states);
     return out;
+  }
+
+  // --- State details form --------------------------------------------------
+
+  private renderNodeForm(state: ParseState): void {
+    if (!isObj(state.value) || !Array.isArray(state.states)) {
+      this.formHost.innerHTML = `<div class="ste-form-empty">Add a valid <code>states</code> array to edit states.</div>`;
+      return;
+    }
+    if (this.selectedPath === null) {
+      this.formHost.innerHTML = `<div class="ste-form-empty">Select a state in the outline to edit it.</div>`;
+      return;
+    }
+    const node = resolveState(state.value, this.selectedPath);
+    if (!node) {
+      this.formHost.innerHTML = `<div class="ste-form-empty">Select a state in the outline to edit it.</div>`;
+      return;
+    }
+
+    const parent = resolveStateParent(state.value, this.selectedPath);
+    const canUp = !!parent && parent.index > 0;
+    const canDown = !!parent && parent.index < parent.list.length - 1;
+    const stateIds = collectStateIds(state.states);
+
+    this.formHost.innerHTML = `
+      <div class="ste-form-toolbar">
+        <button type="button" data-ste-add-child class="ste-btn" title="Add a child state">+ Child State</button>
+        <button type="button" data-ste-remove class="ste-btn" title="Remove this state">Remove</button>
+        <button type="button" data-ste-up class="ste-btn"${canUp ? "" : " disabled"} title="Move up among siblings">↑</button>
+        <button type="button" data-ste-down class="ste-btn"${canDown ? "" : " disabled"} title="Move down among siblings">↓</button>
+      </div>
+      <div class="ste-form-fields">
+        <label class="ste-form-row">
+          <span class="ste-form-label">Id</span>
+          <input type="text" data-ste-field="id" class="ste-input" value="${esc(
+            typeof node.id === "string" ? node.id : "",
+          )}">
+        </label>
+      </div>
+      ${this.enterSectionHtml(node)}
+      ${this.tasksSectionHtml(node)}
+      ${this.transitionsSectionHtml(node, stateIds)}`;
+
+    this.bindNodeForm();
+  }
+
+  private enterSectionHtml(node: Record<string, unknown>): string {
+    const enter = Array.isArray(node.enter) ? node.enter : [];
+    const chips = enter.length
+      ? enter.map((c) => `<span class="ste-chip ste-chip-enter">if ${esc(conditionLabel(c))}</span>`).join("")
+      : `<span class="ste-form-hint">none</span>`;
+    return `
+      <div class="ste-section-sub">Enter Conditions</div>
+      <div class="ste-node-meta">${chips}</div>
+      <div class="ste-form-hint">${enter.length} condition${
+        enter.length === 1 ? "" : "s"
+      } — edit guard details in the Asset JSON pane.</div>`;
+  }
+
+  private tasksSectionHtml(node: Record<string, unknown>): string {
+    const tasks = Array.isArray(node.tasks) ? node.tasks : [];
+    const cards = tasks.map((task, index) => this.taskCardHtml(task, index)).join("");
+    return `
+      <div class="ste-section-sub">Tasks</div>
+      <div class="ste-cards" data-ste-task-list>${cards || `<div class="ste-form-empty">No tasks.</div>`}</div>
+      <div class="ste-form-add">
+        <button type="button" data-ste-add-task class="ste-btn" title="Add a task">+ Task</button>
+      </div>`;
+  }
+
+  private taskCardHtml(raw: unknown, index: number): string {
+    const task = isObj(raw) ? raw : {};
+    const paramCount = isObj(task.params) ? Object.keys(task.params).length : 0;
+    const hint = paramCount > 0
+      ? `<div class="ste-form-hint">${paramCount} param${paramCount === 1 ? "" : "s"} — edit in the Asset JSON pane.</div>`
+      : "";
+    return `
+      <div class="ste-card" data-ste-task-index="${index}">
+        <div class="ste-card-head">
+          <span class="ste-card-title">task</span>
+          <button type="button" data-ste-task-remove class="ste-btn ste-btn-sm" title="Remove task">✕</button>
+        </div>
+        <div class="ste-card-fields">
+          <label class="ste-form-row">
+            <span class="ste-form-label">Task</span>
+            <input type="text" data-ste-task-name class="ste-input" placeholder="forge.wait" value="${esc(
+              typeof task.task === "string" ? task.task : "",
+            )}">
+          </label>
+          ${hint}
+        </div>
+      </div>`;
+  }
+
+  private transitionsSectionHtml(node: Record<string, unknown>, stateIds: readonly string[]): string {
+    const transitions = Array.isArray(node.transitions) ? node.transitions : [];
+    const cards = transitions
+      .map((transition, index) => this.transitionCardHtml(transition, index, stateIds))
+      .join("");
+    return `
+      <div class="ste-section-sub">Transitions</div>
+      <div class="ste-cards" data-ste-trans-list>${
+        cards || `<div class="ste-form-empty">No transitions.</div>`
+      }</div>
+      <div class="ste-form-add">
+        <button type="button" data-ste-add-trans class="ste-btn"${
+          stateIds.length > 0 ? "" : " disabled"
+        } title="Add a transition">+ Transition</button>
+      </div>`;
+  }
+
+  private transitionCardHtml(raw: unknown, index: number, stateIds: readonly string[]): string {
+    const trans = isObj(raw) ? raw : {};
+    const to = typeof trans.to === "string" ? trans.to : "";
+    const condCount = Array.isArray(trans.conditions) ? trans.conditions.length : 0;
+    // Preserve an unknown/hand-typed target as an option so it never silently drops.
+    const options = [...new Set([...(to ? [to] : []), ...stateIds])]
+      .map((id) => `<option value="${esc(id)}"${id === to ? " selected" : ""}>${esc(id)}</option>`)
+      .join("");
+    const hint = condCount > 0
+      ? `<div class="ste-form-hint">${condCount} guard condition${
+          condCount === 1 ? "" : "s"
+        } — edit in the Asset JSON pane.</div>`
+      : "";
+    return `
+      <div class="ste-card" data-ste-trans-index="${index}">
+        <div class="ste-card-head">
+          <span class="ste-card-title">→ transition</span>
+          <button type="button" data-ste-trans-remove class="ste-btn ste-btn-sm" title="Remove transition">✕</button>
+        </div>
+        <div class="ste-card-fields">
+          <label class="ste-form-row">
+            <span class="ste-form-label">To</span>
+            <select data-ste-trans-f="to" class="ste-input">${options}</select>
+          </label>
+          <label class="ste-form-row">
+            <span class="ste-form-label">Event</span>
+            <input type="text" data-ste-trans-f="event" class="ste-input" placeholder="(optional)" value="${esc(
+              typeof trans.event === "string" ? trans.event : "",
+            )}">
+          </label>
+          ${hint}
+        </div>
+      </div>`;
+  }
+
+  private bindNodeForm(): void {
+    const idInput = this.formHost.querySelector<HTMLInputElement>('[data-ste-field="id"]');
+    idInput?.addEventListener("change", () => this.applyId(idInput.value.trim()));
+
+    this.formHost
+      .querySelector<HTMLButtonElement>("[data-ste-add-child]")
+      ?.addEventListener("click", () => this.addChildState());
+    this.formHost
+      .querySelector<HTMLButtonElement>("[data-ste-remove]")
+      ?.addEventListener("click", () => this.removeSelected());
+    this.formHost
+      .querySelector<HTMLButtonElement>("[data-ste-up]")
+      ?.addEventListener("click", () => this.moveSelected(-1));
+    this.formHost
+      .querySelector<HTMLButtonElement>("[data-ste-down]")
+      ?.addEventListener("click", () => this.moveSelected(1));
+
+    this.formHost
+      .querySelector<HTMLButtonElement>("[data-ste-add-task]")
+      ?.addEventListener("click", () => this.addTask());
+    this.formHost.querySelectorAll<HTMLElement>("[data-ste-task-index]").forEach((card) => {
+      const index = Number(card.dataset.steTaskIndex);
+      card
+        .querySelector<HTMLButtonElement>("[data-ste-task-remove]")
+        ?.addEventListener("click", () => this.removeTask(index));
+      card
+        .querySelector<HTMLInputElement>("[data-ste-task-name]")
+        ?.addEventListener("change", (event) =>
+          this.setTaskName(index, (event.target as HTMLInputElement).value.trim()),
+        );
+    });
+
+    this.formHost
+      .querySelector<HTMLButtonElement>("[data-ste-add-trans]")
+      ?.addEventListener("click", () => this.addTransition());
+    this.formHost.querySelectorAll<HTMLElement>("[data-ste-trans-index]").forEach((card) => {
+      const index = Number(card.dataset.steTransIndex);
+      card
+        .querySelector<HTMLButtonElement>("[data-ste-trans-remove]")
+        ?.addEventListener("click", () => this.removeTransition(index));
+      card.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-ste-trans-f]").forEach((ctrl) => {
+        ctrl.addEventListener("change", () =>
+          this.setTransitionField(index, ctrl.dataset.steTransF ?? "", ctrl.value),
+        );
+      });
+    });
+  }
+
+  // --- Structured mutations ------------------------------------------------
+
+  /**
+   * Parses the raw pane, deep-clones it, hands the whole asset to `fn`, then
+   * re-serializes the clone back into the raw pane. `fn` returns the new
+   * selection path (or null); returning `undefined` aborts with no change.
+   */
+  private mutateTree(
+    fn: (asset: Record<string, unknown>) => number[] | null | undefined,
+  ): void {
+    let value: unknown;
+    try {
+      value = JSON.parse(this.raw);
+    } catch {
+      this.setStatus("Fix the JSON before editing states.", "error");
+      return;
+    }
+    if (!isObj(value) || !Array.isArray(value.states)) {
+      this.setStatus("Add a valid states array first.", "warning");
+      return;
+    }
+    const clone = JSON.parse(JSON.stringify(value)) as Record<string, unknown>;
+    const nextSelection = fn(clone);
+    if (nextSelection === undefined) return;
+    this.selectedPath = nextSelection;
+    this.raw = `${JSON.stringify(clone, null, 2)}\n`;
+    this.rawEl.value = this.raw;
+    this.markDirty();
+    this.renderDerived();
+  }
+
+  private applyId(value: string): void {
+    if (this.selectedPath === null || value.length === 0) return;
+    const path = this.selectedPath;
+    this.mutateTree((asset) => {
+      const node = resolveState(asset, path);
+      if (!node) return undefined;
+      node.id = value;
+      return path;
+    });
+  }
+
+  private addRootState(): void {
+    this.mutateTree((asset) => {
+      const list = asset.states as unknown[];
+      list.push({ id: uniqueStateId(collectStateIds(asset.states)) });
+      return [list.length - 1];
+    });
+  }
+
+  private addChildState(): void {
+    if (this.selectedPath === null) return;
+    const path = this.selectedPath;
+    this.mutateTree((asset) => {
+      const node = resolveState(asset, path);
+      if (!node) return undefined;
+      if (!Array.isArray(node.states)) node.states = [];
+      const children = node.states as unknown[];
+      children.push({ id: uniqueStateId(collectStateIds(asset.states)) });
+      return [...path, children.length - 1];
+    });
+  }
+
+  private removeSelected(): void {
+    if (this.selectedPath === null) return;
+    const path = this.selectedPath;
+    this.mutateTree((asset) => {
+      const parent = resolveStateParent(asset, path);
+      if (!parent) return undefined;
+      if (path.length === 1 && (asset.states as unknown[]).length <= 1) {
+        this.setStatus("A state tree needs at least one top-level state.", "warning");
+        return undefined;
+      }
+      parent.list.splice(parent.index, 1);
+      // Select the previous sibling (or the parent) so focus stays nearby.
+      if (parent.index > 0) return [...path.slice(0, -1), parent.index - 1];
+      return path.length > 1 ? path.slice(0, -1) : parent.list.length > 0 ? [0] : null;
+    });
+  }
+
+  private moveSelected(direction: -1 | 1): void {
+    if (this.selectedPath === null) return;
+    const path = this.selectedPath;
+    this.mutateTree((asset) => {
+      const parent = resolveStateParent(asset, path);
+      if (!parent) return undefined;
+      const target = parent.index + direction;
+      if (target < 0 || target >= parent.list.length) return undefined;
+      const [moved] = parent.list.splice(parent.index, 1);
+      parent.list.splice(target, 0, moved);
+      return [...path.slice(0, -1), target];
+    });
+  }
+
+  /** Runs `fn` on the selected state's array named `key`, dropping it when empty. */
+  private mutateStateList(key: "tasks" | "transitions", fn: (list: unknown[]) => void): void {
+    if (this.selectedPath === null) return;
+    const path = this.selectedPath;
+    this.mutateTree((asset) => {
+      const node = resolveState(asset, path);
+      if (!node) return undefined;
+      const list = Array.isArray(node[key]) ? (node[key] as unknown[]) : [];
+      fn(list);
+      if (list.length > 0) node[key] = list;
+      else delete node[key];
+      return path;
+    });
+  }
+
+  private addTask(): void {
+    this.mutateStateList("tasks", (list) => list.push({ task: "forge.wait" }));
+  }
+
+  private removeTask(index: number): void {
+    this.mutateStateList("tasks", (list) => {
+      if (index >= 0 && index < list.length) list.splice(index, 1);
+    });
+  }
+
+  private setTaskName(index: number, name: string): void {
+    this.mutateStateList("tasks", (list) => {
+      const task = list[index];
+      if (isObj(task)) task.task = name;
+    });
+  }
+
+  private addTransition(): void {
+    this.mutateTree((asset) => {
+      if (this.selectedPath === null) return undefined;
+      const node = resolveState(asset, this.selectedPath);
+      if (!node) return undefined;
+      const ids = collectStateIds(asset.states);
+      const to = ids[0];
+      if (!to) {
+        this.setStatus("Add another state before adding a transition.", "warning");
+        return undefined;
+      }
+      const list = Array.isArray(node.transitions) ? (node.transitions as unknown[]) : [];
+      list.push({ to });
+      node.transitions = list;
+      return this.selectedPath;
+    });
+  }
+
+  private removeTransition(index: number): void {
+    this.mutateStateList("transitions", (list) => {
+      if (index >= 0 && index < list.length) list.splice(index, 1);
+    });
+  }
+
+  private setTransitionField(index: number, field: string, rawValue: string): void {
+    this.mutateStateList("transitions", (list) => {
+      const trans = list[index];
+      if (!isObj(trans)) return;
+      if (field === "to") {
+        if (rawValue.length > 0) trans.to = rawValue;
+      } else if (field === "event") {
+        if (rawValue.trim().length === 0) delete trans.event;
+        else trans.event = rawValue.trim();
+      }
+    });
   }
 
   // --- Validation + save ---------------------------------------------------

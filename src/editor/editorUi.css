@@ -3875,6 +3875,7 @@ body.editor-mode #debug-stats {
   margin: 4px 0 2px;
 }
 .ste-empty { color: #8a929c; font-style: italic; padding: 4px 0; }
+.ste-outline-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ste-tree { list-style: none; margin: 0; padding: 0 0 0 12px; }
 .ste-tree .ste-tree { border-left: 1px solid rgba(255, 255, 255, 0.08); margin-left: 4px; }
 .ste-node { padding: 2px 0; }
@@ -3884,6 +3885,13 @@ body.editor-mode #debug-stats {
   gap: 6px;
   padding: 1px 6px;
   border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.ste-node-row:hover { background: rgba(255, 255, 255, 0.05); }
+.ste-node-row.is-selected {
+  background: rgba(201, 160, 240, 0.14);
+  border-color: rgba(201, 160, 240, 0.5);
 }
 .ste-node-id {
   font-size: 12px;
@@ -3935,6 +3943,76 @@ body.editor-mode #debug-stats {
   padding: 10px 12px;
   gap: 6px;
 }
+.ste-form { display: flex; flex-direction: column; gap: 6px; }
+.ste-form-empty { color: #8a929c; font-style: italic; padding: 4px 0; }
+.ste-form-hint { color: #9aa2ac; font-size: 11px; padding: 2px 0; }
+.ste-form-hint strong { color: #c7cdd6; font-weight: 600; }
+.ste-form-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 0 4px; }
+.ste-form-add { display: inline-flex; align-items: center; gap: 4px; }
+.ste-btn {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #262a30;
+  color: #f2f5f7;
+  cursor: pointer;
+  font-size: 12px;
+}
+.ste-btn:hover:not(:disabled) { background: #313640; }
+.ste-btn:disabled { opacity: 0.4; cursor: default; }
+.ste-btn-sm { height: 22px; padding: 0 7px; font-size: 11px; }
+.ste-section-sub {
+  margin-top: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9aa2ac;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.ste-cards { display: flex; flex-direction: column; gap: 6px; margin: 4px 0; }
+.ste-card {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 6px 8px;
+}
+.ste-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.ste-card-title {
+  font-size: 11px;
+  color: #9aa2ac;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ste-card-fields { display: flex; flex-direction: column; gap: 5px; }
+.ste-form-fields { display: flex; flex-direction: column; gap: 5px; }
+.ste-form-row { display: flex; align-items: center; gap: 8px; }
+.ste-form-label {
+  flex: 0 0 60px;
+  font-size: 11px;
+  color: #9aa2ac;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ste-input {
+  flex: 1;
+  min-width: 0;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 0 8px;
+  font-size: 12px;
+  color: #e8ecf0;
+  background: #14171a;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+.ste-input:focus { outline: none; border-color: rgba(201, 160, 240, 0.6); }
 .ste-raw {
   flex: 1;
   min-height: 0;

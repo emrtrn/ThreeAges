@@ -177,6 +177,16 @@
 > (`tests/smoke/state-tree-editor.spec.ts`) outline/transition/validation'i
 > dogrular. Kalan Faz 8: state/transition form CRUD + parameters/context data +
 > GameMode/boss/civilian use-case ornekleri.
+> Revizyon: 2026-07-08 - Faz 8 StateTree Editor form CRUD dilimi uygulandi
+> (BT Editor node-form CRUD dilimimin paraleli): state outline artik secilebilir;
+> State Details formu id duzenleme, add-child / remove / move up-down, task CRUD
+> (task adi + params count-hint) ve transition CRUD (hedef state dropdown'i +
+> event + guard-condition count-hint) tasir. Yapisal edit'ler raw-JSON clone'unu
+> mutate edip geri serialize eder (tek kaynak-of-truth, yeni save yuzeyi yok);
+> enter/transition guard `conditions` ve task `params` bilincli olarak raw kalir.
+> Playwright smoke CRUD akisini (add-child/rename/add-task/add-transition/remove/
+> reorder) dogrulayacak sekilde genisletildi. Kalan Faz 8: rich condition-card
+> authoring (paylasilan helper) + parameters/context data + use-case ornekleri.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1695,10 +1705,13 @@ benzeri sistem.
 - [ ] GameMode, boss fight, civilian routine, quest actor gibi use-case'leri
       Behavior Tree yerine StateTree ile modelle.
 - [x] Editor ilk surum: nested state outline + transition table.
-      (`src/editor/StateTreeEditor.ts` v1: modal editor, hiyerarsik state outline +
-      transition tablosu + raw-JSON authoring + engine normalizer validation +
-      `/__save-state-tree` save. State/transition form CRUD sonraki dilim — BT
-      Editor'in dilimleme kalibiyla ayni.)
+      (`src/editor/StateTreeEditor.ts`: modal editor, hiyerarsik **secilebilir**
+      state outline + transition tablosu + raw-JSON authoring + engine normalizer
+      validation + `/__save-state-tree` save. State Details formu id/add-child/
+      remove/reorder + task CRUD + transition CRUD (to-dropdown + event) tasir;
+      enter/transition guard `conditions` ve task `params` count-hint + raw kalir.
+      Rich condition-card authoring (BT decorator kartlarinin paylasilan hali)
+      sonraki dilim.)
 - [x] Debug: active state, last transition reason, evaluator values. (Runner
       `getDebugSnapshot()` activePath + lastTransition {from,to,reason} + lastStatus
       uretir; subsystem dilimiyle `?debug` overlay'e `st` satiri (`formatAiDebug`)
@@ -1827,6 +1840,32 @@ Tamamlanan Faz 8 StateTree Editor v1 notu (2026-07-08):
   browser error olmamasi dogrulanir (salt-okunur, kayit yok).
 - Dogrulama: `npx.cmd tsc --noEmit` yesil, `npm.cmd run build:verify` yesil
   (verify:dist --strict PASS, 710 engine check), hedefli Playwright smoke PASS.
+
+Tamamlanan Faz 8 StateTree Editor form CRUD notu (2026-07-08):
+
+- `StateTreeEditor` outline'i **secilebilir** hale getirildi (`data-ste-path` =
+  nested `states` indeksleri; delegated click en ic state'i secer) ve saga bir
+  **State Details** formu eklendi (raw pane'in ustunde, BT Editor form+raw
+  duzeni gibi).
+- Form yetenekleri: id duzenleme; toolbar `+ Child State` / `Remove` (son
+  top-level state'i silmeyi engeller) / `↑` / `↓`; **Tasks** karti CRUD (task
+  adi input'u + params count-hint); **Transitions** karti CRUD (hedef state
+  `<select>`'i + event input'u + guard-condition count-hint). Outline basligindaki
+  `+ State` top-level state ekler.
+- Tum yapisal edit'ler `mutateTree` uzerinden gecer: raw JSON parse -> deep clone
+  -> mutate -> `normalizeAiStateTreeAsset`'li re-render + raw'a geri serialize.
+  Raw JSON tek kaynak-of-truth kalir; enter/transition guard `conditions` ve task
+  `params` bilincli olarak count-hint + raw duzenlenir (rich condition-card
+  authoring paylasilan helper ile sonraki dilim).
+- `renderDerived` gecici bozuk-JSON edit'lerinde secimi korur (yalniz gecerli
+  ama stale path'lerde temizler), boylece JSON duzeltilince secim geri gelir.
+- `ste-*` form CSS'i (toolbar/btn/card/input/secilebilir satir) eklendi.
+- Test: `tests/smoke/state-tree-editor.spec.ts` add-child -> rename -> add-task
+  -> add-transition -> remove -> reorder CRUD akisini ve her adimda normalizer
+  validation'ini dogrulayacak sekilde genisletildi.
+- Dogrulama: `npx.cmd tsc --noEmit` yesil, `npm.cmd run build:verify` yesil
+  (verify:dist --strict PASS, 710 engine check), genisletilmis Playwright smoke
+  PASS. BT Editor'e dokunulmadi (kendi smoke'u etkilenmez).
 
 ## Ilk uygulanabilir vertical slice onerisi
 

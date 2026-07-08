@@ -72,6 +72,49 @@ test("state tree editor renders outline, transitions and validation", async ({ p
   await expect(table.locator(".ste-cond").first()).toContainText("alarm equals");
   await expect(table.locator(".ste-chip-event")).toContainText("event lost");
 
+  // --- State Details form CRUD (raw fill = in-memory, never saved). ---------
+  // On load the first state is selected, so the form is populated for Patrol.
+  await expect(win.locator('[data-ste-field="id"]')).toHaveValue("Patrol");
+
+  // Add Child State: appends a child under Patrol and selects it; tree stays valid.
+  await win.locator("[data-ste-add-child]").click();
+  await expect(win.locator(".ste-node-id")).toHaveCount(5);
+  await expect(win.locator(".ste-ok")).toBeVisible();
+  await expect(win.locator('[data-ste-field="id"]')).toHaveValue("State");
+
+  // Rename the new child via the form; the outline reflects it.
+  const idField = win.locator('[data-ste-field="id"]');
+  await idField.fill("Rest");
+  await idField.blur();
+  await expect(win.locator(".ste-node-id").filter({ hasText: "Rest" })).toBeVisible();
+  await expect(win.locator(".ste-ok")).toBeVisible();
+
+  // Add a task to Rest; the seeded default (forge.wait) is valid and shows a badge.
+  await win.locator("[data-ste-add-task]").click();
+  await expect(win.locator("[data-ste-task-index]")).toHaveCount(1);
+  await expect(win.locator("[data-ste-task-name]")).toHaveValue("forge.wait");
+  await expect(win.locator(".ste-ok")).toBeVisible();
+
+  // Add a transition from Rest; the To dropdown seeds a known target, tree valid.
+  await win.locator("[data-ste-add-trans]").click();
+  await expect(win.locator("[data-ste-trans-index]")).toHaveCount(1);
+  await win.locator('[data-ste-trans-f="to"]').selectOption("Patrol");
+  await expect(win.locator(".ste-ok")).toBeVisible();
+  await expect(table.locator("tr")).toHaveCount(3);
+
+  // Remove Rest; the outline drops back to the four original states, still valid.
+  await win.locator("[data-ste-remove]").click();
+  await expect(win.locator(".ste-node-id")).toHaveCount(4);
+  await expect(win.locator(".ste-ok")).toBeVisible();
+
+  // Reorder root states: select Alert and move it above Patrol in the raw JSON.
+  await win.locator(".ste-node-id", { hasText: "Alert" }).click();
+  await expect(win.locator('[data-ste-field="id"]')).toHaveValue("Alert");
+  await win.locator("[data-ste-up]").click();
+  const rawAfterMove = await win.locator("[data-ste-raw]").inputValue();
+  expect(rawAfterMove.indexOf('"Alert"')).toBeLessThan(rawAfterMove.indexOf('"Patrol"'));
+  await expect(win.locator(".ste-ok")).toBeVisible();
+
   // An invalid tree (unknown transition target) flips validation to an error and
   // the outline still renders the lenient shape without crashing.
   await win.locator("[data-ste-raw]").fill(
