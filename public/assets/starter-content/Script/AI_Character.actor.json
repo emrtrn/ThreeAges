@@ -28,7 +28,7 @@
         "capsuleRadius": 1,
         "capsuleHalfHeight": 3,
         "simulatePhysics": false,
-        "hideInGame": false
+        "hideInGame": true
       },
       "parent": "root"
     },

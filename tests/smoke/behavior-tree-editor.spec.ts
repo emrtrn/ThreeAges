@@ -38,6 +38,63 @@ test("behavior tree editor renders outline and validation for a real asset", asy
   // Validation: the real asset passes the engine normalizer.
   await expect(win.locator(".bte-ok")).toBeVisible();
 
+  // On open the root is selected, so the node form is populated.
+  await expect(win.locator('[data-bte-field="kind"]')).toHaveValue("selector");
+
+  // --- Node-form CRUD on a controlled tree (raw fill = in-memory, never saved).
+  // Switch the raw pane to a small deterministic sequence so the structured
+  // add/edit/reorder/remove/kind actions have a stable shape to act on.
+  await win.locator("[data-bte-raw]").fill(
+    JSON.stringify(
+      {
+        schema: 1,
+        type: "behaviorTree",
+        root: {
+          kind: "sequence",
+          children: [
+            { kind: "wait", seconds: 1 },
+            { kind: "task", task: "forge.wait" },
+          ],
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await expect(win.locator(".bte-ok")).toBeVisible();
+
+  const beforeNodes = await win.locator(".bte-node").count();
+
+  // Add Child: appends a task node and selects it; the tree stays valid.
+  await win.locator("[data-bte-add-kind]").selectOption("task");
+  await win.locator("[data-bte-add]").click();
+  await expect(win.locator(".bte-node")).toHaveCount(beforeNodes + 1);
+  await expect(win.locator(".bte-ok")).toBeVisible();
+
+  // The new node is selected; edit its task field via the node form.
+  const taskField = win.locator('[data-bte-field="task"]');
+  await expect(taskField).toHaveValue("forge.setBlackboard");
+  await taskField.fill("forge.sendMessage");
+  await taskField.blur();
+  await expect(win.locator(".bte-node-sub").filter({ hasText: "forge.sendMessage" })).toBeVisible();
+
+  // Reorder: the edited node is last; moving it up puts it before "forge.wait".
+  await win.locator("[data-bte-up]").click();
+  const rawAfterMove = await win.locator("[data-bte-raw]").inputValue();
+  expect(rawAfterMove.indexOf("forge.sendMessage")).toBeLessThan(rawAfterMove.indexOf("forge.wait"));
+
+  // Remove: drops the added node and re-selects the parent.
+  await win.locator("[data-bte-remove]").click();
+  await expect(win.locator(".bte-node")).toHaveCount(beforeNodes);
+
+  // Kind conversion preserves children (count stays) and stays valid.
+  const kindField = win.locator('[data-bte-field="kind"]');
+  await expect(kindField).toHaveValue("sequence");
+  await kindField.selectOption("selector");
+  await expect(win.locator(".bte-node-kind").first()).toHaveText("selector");
+  await expect(win.locator(".bte-node")).toHaveCount(beforeNodes);
+  await expect(win.locator(".bte-ok")).toBeVisible();
+
   // Editing the raw JSON to something invalid flips validation to an error and
   // the outline still reflects the (now un-normalizable) shape without crashing.
   await win.locator("[data-bte-raw]").fill('{ "schema": 1, "type": "behaviorTree" }');

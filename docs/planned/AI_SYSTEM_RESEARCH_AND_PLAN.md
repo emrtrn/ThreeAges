@@ -125,6 +125,12 @@
 > Revizyon: 2026-07-08 - Faz 7 Behavior Tree Editor v1 ilk dilimi: `*.behavior.json`
 > icin modal editor (yapisal outline + engine normalizer validation + raw-JSON
 > authoring + `/__save-behavior` save). Node-form CRUD sonraki dilim.
+> Revizyon: 2026-07-08 - Faz 7 Behavior Tree Editor node-form CRUD dilimi:
+> outline node'lari secilebilir; Node Details formu (kind/id + task/seconds/
+> behavior) ve Add Child / Remove / Move up-down toolbar'i eklendi. Raw JSON tek
+> kaynak-of-truth olarak kaldi (yapisal duzenlemeler clone'u mutate edip raw'a
+> geri serialize eder), yeni save yuzeyi yok. BT Editor v1 kapandi; kalan Faz 7:
+> runtime debug inspector + decorator/service form authoring (sonraki dilim).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1399,11 +1405,15 @@ baglanabilsin.
       - [x] blackboard picker (Details `Blackboard` select).
       - [x] perception/nav agent settings (Details number field'lari; artik raw
             props gerekmez).
-- [~] Behavior Tree Editor v1 (modal, Content Browser double-click / Open):
-      - [x] tree outline (composite/task/wait/subtree + decorator/service chips).
-      - [ ] add/remove/reorder node.
-      - [ ] node details panel (v1 edit surface = raw-JSON pane; engine
-            normalizer re-validated live + on save).
+- [x] Behavior Tree Editor v1 (modal, Content Browser double-click / Open):
+      - [x] tree outline (composite/task/wait/subtree + decorator/service chips),
+            now selectable (click a node row to edit it).
+      - [x] add/remove/reorder node (Add Child kind picker / Remove / Move up /
+            Move down toolbar on the selected node).
+      - [x] node details panel (kind/id + kind-specific task/seconds/behavior
+            fields; raw-JSON pane retained for decorators/services/params; engine
+            normalizer re-validated live + on save). Decorator/service *form*
+            authoring is a later slice — still edited in the JSON pane.
       - [x] validation errors (engine `normalizeAiBehaviorTreeAsset`).
 - [ ] Runtime debug inspector:
       - [ ] selected AI actor blackboard values
@@ -1510,6 +1520,44 @@ Tamamlanan Faz 7 Behavior Tree Editor v1 (outline + validation) dilim notu (2026
   (`704 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
   PASS). Kalan Faz 7: BT Editor node-form CRUD/reorder + node details, runtime
   debug inspector.
+
+Tamamlanan Faz 7 Behavior Tree Editor node-form CRUD/node details dilim notu (2026-07-08):
+
+- `src/editor/BehaviorTreeEditor.ts` outline node'lari artik secilebilir: her
+  `<li class="bte-node">` `data-bte-path` (root'tan cocuk index yolu) tasir,
+  delegated click en icteki node'u secer (`closest` nested cocugu ust node'a
+  tercih eder), secili satir `.is-selected` ile vurgulanir. Acilista root
+  otomatik secili gelir.
+- Sag panel yeniden yapilandirildi (`.bte-raw-wrap` -> `.bte-right`): ustte
+  **Node Details** formu, altta **Asset JSON** raw pane. Form secili node'un
+  `kind` (select, kind donusumu), `id` ve kind-ozel alanlarini (`task` /
+  `seconds` / `behavior`) editler; composite icin cocuk sayisi + decorator/service
+  sayilari ipucu satiri gosterilir (bunlarin *form* authoring'i sonraki dilim,
+  hala JSON pane'de editleniyor).
+- Toolbar: **Add Child** (kind picker `<select>` + buton, sadece selector/sequence
+  aktif), **Remove** (root disinda), **Move up/down** (kardesler arasi, sinirda
+  disabled). Alan degisiklikleri `change` event'inde commit eder (raw textarea
+  fokusunu bozmadan).
+- Mimari: raw JSON tek kaynak-of-truth olarak kalir. `mutateTree(fn)` raw'i parse
+  edip deep-clone eder, `fn` secili node'u/agaci mutate eder ve yeni secim yolunu
+  dondurur, sonra clone `JSON.stringify` ile raw pane'e geri yazilir + `renderDerived`
+  ile outline/form/validation yenilenir. Boylece structured edit'ler de ayni
+  `normalizeAiBehaviorTreeAsset` + `/__save-behavior` yolundan gecer; yeni save
+  yuzeyi yok. Raw JSON elle editlenince stale secim otomatik dusurulur.
+- CSS: `.bte-node-row` hover/`.is-selected`, `.bte-form*`, `.bte-btn`,
+  `.bte-input` stilleri `editorUi.css`'e eklendi; kullanilmayan `.bte-raw-wrap`
+  kaldirildi.
+- Test: `tests/smoke/behavior-tree-editor.spec.ts` genisletildi (hala read-only,
+  save yok) — gercek `AI_Test` acilir, kontrollu bir sequence agacina raw fill
+  yapilir (bellek ici), sonra Add Child -> task edit -> Move up (raw'da sira
+  degisimi dogrulanir) -> Remove -> root kind donusumu (selector) akisi surulur,
+  her adimda `✓ Valid` korunur, browser error yok. Hedefli `npx.cmd playwright
+  test behavior-tree-editor.spec.ts` yesil (`1 passed`).
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+  (`704 checks passed`), `npm.cmd run build:verify` (verify:imports + build +
+  test:engine + verify:dist --strict) hepsi yesil — editor node-form kodu game
+  bundle'a sizmaz. Kalan Faz 7: runtime debug inspector + decorator/service form
+  authoring.
 
 ### Faz 8 - StateTree secenegi
 
