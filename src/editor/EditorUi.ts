@@ -1230,6 +1230,7 @@ export class EditorUi {
         openSoundCueEditor: (item) => this.openSoundCueEditor(item),
         openParticleEffectEditor: (item) => this.openParticleEffectEditor(item),
         openDialogueEditor: (item) => this.openDialogueEditor(item),
+        openBehaviorTreeEditor: (item) => this.openBehaviorTreeEditor(item),
         openLevel: (item) => this.openLevel(item),
         openUiWidgetEditor: (item) => this.openUiWidgetEditor(item),
         renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
@@ -1283,6 +1284,7 @@ export class EditorUi {
       openSoundCueEditor: (item) => this.openSoundCueEditor(item),
       openParticleEffectEditor: (item) => this.openParticleEffectEditor(item),
       openDialogueEditor: (item) => this.openDialogueEditor(item),
+      openBehaviorTreeEditor: (item) => this.openBehaviorTreeEditor(item),
       openLevel: (item) => this.openLevel(item),
       openUiWidgetEditor: (item) => this.openUiWidgetEditor(item),
       renderAssetThumbnail: (item, thumb) => this.renderAssetThumbnail(item, thumb),
@@ -1534,6 +1536,7 @@ export class EditorUi {
     if (item.type === "dialogueVoice" || item.type === "dialogueLine") {
       return () => void this.openDialogueEditor(item);
     }
+    if (item.type === "behaviorTree") return () => void this.openBehaviorTreeEditor(item);
     if (item.type !== "file" && isModelAssetType(item.type)) {
       return () => void this.openMeshEditor(item);
     }
@@ -2109,6 +2112,24 @@ export class EditorUi {
     } catch (error) {
       this.setStatus(
         `Could not open Dialogue editor: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
+  /** Opens the Behavior Tree editor for a `*.behavior.json` AI asset. */
+  private async openBehaviorTreeEditor(item: BrowserAssetItem): Promise<void> {
+    try {
+      const { BehaviorTreeEditor } = await import("@/editor/BehaviorTreeEditor");
+      await BehaviorTreeEditor.open({
+        path: item.path,
+        label: item.label.replace(/\.behavior\.json$/i, ""),
+        onStatus: (message, tone) => this.setStatus(message, tone),
+        onSaved: () => this.renderContentAssets(),
+      });
+    } catch (error) {
+      this.setStatus(
+        `Could not open Behavior Tree editor: ${error instanceof Error ? error.message : String(error)}`,
         "error",
       );
     }

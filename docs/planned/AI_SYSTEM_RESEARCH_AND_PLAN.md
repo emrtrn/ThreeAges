@@ -122,6 +122,9 @@
 > Revizyon: 2026-07-08 - Faz 7 Actor Script Editor AIController perception/
 > nav-agent Details number field'lari eklendi; bu tuning artik raw props yerine
 > dedicated form alanlarindan editleniyor (bkz. asagidaki checklist).
+> Revizyon: 2026-07-08 - Faz 7 Behavior Tree Editor v1 ilk dilimi: `*.behavior.json`
+> icin modal editor (yapisal outline + engine normalizer validation + raw-JSON
+> authoring + `/__save-behavior` save). Node-form CRUD sonraki dilim.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1396,11 +1399,12 @@ baglanabilsin.
       - [x] blackboard picker (Details `Blackboard` select).
       - [x] perception/nav agent settings (Details number field'lari; artik raw
             props gerekmez).
-- [ ] Behavior Tree Editor v1:
-      - [ ] tree outline
-      - [ ] add/remove/reorder node
-      - [ ] node details panel
-      - [ ] validation errors.
+- [~] Behavior Tree Editor v1 (modal, Content Browser double-click / Open):
+      - [x] tree outline (composite/task/wait/subtree + decorator/service chips).
+      - [ ] add/remove/reorder node.
+      - [ ] node details panel (v1 edit surface = raw-JSON pane; engine
+            normalizer re-validated live + on save).
+      - [x] validation errors (engine `normalizeAiBehaviorTreeAsset`).
 - [ ] Runtime debug inspector:
       - [ ] selected AI actor blackboard values
       - [ ] active behavior path
@@ -1477,6 +1481,35 @@ Tamamlanan Faz 7 Actor Script Editor perception/nav-agent Details dilim notu (20
   eklenmedi; degisiklik test edilmis numberField kalibinin aynasi ve runtime
   reader ayni key'leri okur. Kalan Faz 7: Behavior Tree Editor v1, runtime debug
   inspector.
+
+Tamamlanan Faz 7 Behavior Tree Editor v1 (outline + validation) dilim notu (2026-07-08):
+
+- `src/editor/BehaviorTreeEditor.ts` (+ `behaviorTreeStore.ts`, `.bte-*` CSS)
+  eklendi: `*.behavior.json` icin Content Browser double-click / "Open" ile acilan
+  modal editor. Diger asset editorleri gibi `?editor` dinamik importunun arkasinda
+  (game bundle'a sizmaz).
+- Sol panel yapisal outline: composite/task/wait/subtree agaci + her node icin
+  decorator ve service chip'leri; sag panel raw-JSON authoring alani. Her
+  duzenlemede metin parse edilip engine `normalizeAiBehaviorTreeAsset`'ten
+  gecirilir (save endpoint'inin kullandigi ayni validator), boylece outline ve
+  validation panel her zaman kaydedilecek sekli yansitir.
+- Save, parse edilmis objeyi `/__save-behavior`'a gonderir; sunucu yeniden
+  normalize eder, gecersiz agac descriptive hata ile save'i bloklar. Node-form
+  CRUD (add/remove/reorder + per-node property alanlari) sonraki dilim; v1
+  raw-JSON tabanli oldugu icin test edilmis normalizer ve guard'li endpoint
+  yeniden kullanilir, yeni save yuzeyi yok.
+- Wiring: `contentPanel.ts` `openBehaviorTreeEditor` + `behaviorTree` dblclick,
+  `EditorUi.ts` iki options object + `assetEditorOpener` case + dinamik import
+  metodu.
+- Test: `tests/smoke/behavior-tree-editor.spec.ts` (yan etkisiz, read-only) —
+  editor gercek `AI_Test.behavior.json`'i acar, root selector + service chip
+  outline'ini ve `✓ Valid` durumunu dogrular, gecersiz JSON'da validation error'a
+  doner, browser error yok. Hedefli `npx.cmd playwright test
+  behavior-tree-editor.spec.ts` yesil (`1 passed`).
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`704 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS). Kalan Faz 7: BT Editor node-form CRUD/reorder + node details, runtime
+  debug inspector.
 
 ### Faz 8 - StateTree secenegi
 

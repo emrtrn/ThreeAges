@@ -65,6 +65,7 @@ export interface ContentPanelOptions {
   openSoundCueEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openParticleEffectEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openDialogueEditor: (item: BrowserAssetItem) => void | Promise<void>;
+  openBehaviorTreeEditor: (item: BrowserAssetItem) => void | Promise<void>;
   openLevel: (item: BrowserAssetItem) => void | Promise<void>;
   openUiWidgetEditor: (item: BrowserAssetItem) => void | Promise<void>;
   renderAssetThumbnail: (item: BrowserAssetItem, thumb: HTMLElement) => void | Promise<void>;
@@ -316,6 +317,12 @@ function bindAssetOpeners(
     card.addEventListener("dblclick", (event) => {
       event.preventDefault();
       void options.openDialogueEditor(item);
+    });
+  }
+  if (item.type === "behaviorTree") {
+    card.addEventListener("dblclick", (event) => {
+      event.preventDefault();
+      void options.openBehaviorTreeEditor(item);
     });
   }
   if (isLevelItem(item) && !activeLevel) {
