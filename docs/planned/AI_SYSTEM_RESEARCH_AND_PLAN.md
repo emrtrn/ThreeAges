@@ -119,6 +119,9 @@
 > Behavior Tree + Blackboard asset path picker'lari eklendi (mesh picker kalibi;
 > deger = asset path, bilinmeyen/elle girilmis path korunur). Perception/nav
 > agent tuning halen Advanced raw props'ta.
+> Revizyon: 2026-07-08 - Faz 7 Actor Script Editor AIController perception/
+> nav-agent Details number field'lari eklendi; bu tuning artik raw props yerine
+> dedicated form alanlarindan editleniyor (bkz. asagidaki checklist).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1391,7 +1394,8 @@ baglanabilsin.
       - [x] AIController component add/remove (Faz 1 generic add-component listesi).
       - [x] behavior tree picker (Details `Behavior Tree` select).
       - [x] blackboard picker (Details `Blackboard` select).
-      - [ ] perception/nav agent settings (halen Advanced raw props).
+      - [x] perception/nav agent settings (Details number field'lari; artik raw
+            props gerekmez).
 - [ ] Behavior Tree Editor v1:
       - [ ] tree outline
       - [ ] add/remove/reorder node
@@ -1450,6 +1454,29 @@ Tamamlanan Faz 7 Actor Script Editor AIController picker dilim notu (2026-07-07)
   test edilmis mesh picker kalibinin birebir aynasi ve runtime reader ayni prop
   key'lerini kullaniyor. Yan etkisiz `content-new-ai` smoke editor boot + content
   browser akisini ayrica dogruluyor.
+
+Tamamlanan Faz 7 Actor Script Editor perception/nav-agent Details dilim notu (2026-07-08):
+
+- `src/editor/ActorScriptEditor.ts` AIController component'ine iki dedicated
+  Details bolumu eklendi: `Perception` (`sightRadius`, `nearSightRadius`,
+  `fieldOfViewDeg`, `hearingRadius`, `targetLostGraceSeconds`) ve `Nav Agent`
+  (`radius`, `height`, `maxSpeed`, `clearancePadding`). Boylece bu tuning artik
+  Advanced raw props JSON'undan degil, mevcut `numberField` kalibindaki number
+  input'lardan yapiliyor.
+- Alanlar nested `props.perception` / `props.navAgent` object'ine yazar
+  (`data-as-ai-perception-num` / `data-as-ai-nav-num` + yeni `readObjectProp`
+  helper'i object yoksa yerinde seed eder); bu tam olarak
+  `readAIControllerComponent` -> `readPerceptionConfig` / `readNavAgentConfig`
+  key'leridir, dolayisiyla opak component props uzerinden save round-trip eder.
+- Commit on change + `renderDetails()` ile raw-props view senkron kalir; asset
+  path picker'lari (behavior/blackboard) onceki gibi calisir.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`704 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS — editor picker kodu game bundle'a sizmaz). Editor uctan uca Playwright
+  smoke onceki AIController picker dilimindeki cold-vite kararsizligi nedeniyle
+  eklenmedi; degisiklik test edilmis numberField kalibinin aynasi ve runtime
+  reader ayni key'leri okur. Kalan Faz 7: Behavior Tree Editor v1, runtime debug
+  inspector.
 
 ### Faz 8 - StateTree secenegi
 

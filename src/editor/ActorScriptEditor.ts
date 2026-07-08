@@ -840,10 +840,14 @@ export class ActorScriptEditor {
   }
 
   /**
-   * Behavior Tree + Blackboard asset pickers for an AIController component. The
-   * runtime reader keys off asset *paths* (`props.behaviorTree` /
-   * `props.blackboard`), so these dropdowns store the path; an unknown/hand-typed
-   * path is preserved as an option so the picker never silently drops it.
+   * Behavior Tree + Blackboard asset pickers plus the perception / nav-agent
+   * tuning for an AIController component. The runtime reader keys off asset
+   * *paths* (`props.behaviorTree` / `props.blackboard`), so those dropdowns store
+   * the path; an unknown/hand-typed path is preserved as an option so the picker
+   * never silently drops it. Perception (`props.perception`) and nav-agent
+   * (`props.navAgent`) are nested objects consumed by `readAIControllerComponent`
+   * (`readPerceptionConfig` / `readNavAgentConfig`); each numeric field writes
+   * into its nested object so the shape round-trips through save.
    */
   private aiControllerFields(node: ComponentTemplateNode): string {
     const behaviorTree = this.assetPathPickerField(
@@ -858,7 +862,36 @@ export class ActorScriptEditor {
       typeof node.props.blackboard === "string" ? node.props.blackboard : "",
       this.aiAssetsByType("blackboard"),
     );
-    return `${behaviorTree}${blackboard}`;
+    const perception = readObjectProp(node.props.perception);
+    const navAgent = readObjectProp(node.props.navAgent);
+    const perceptionField = (key: string, label: string, fallback: number, attrs: string): string => `
+      <label class="as-field">
+        <span>${label}</span>
+        <input type="number" data-as-ai-perception-num="${key}" value="${readNumberProp(
+          perception[key],
+          fallback,
+        )}" ${attrs} />
+      </label>`;
+    const navField = (key: string, label: string, fallback: number, attrs: string): string => `
+      <label class="as-field">
+        <span>${label}</span>
+        <input type="number" data-as-ai-nav-num="${key}" value="${readNumberProp(
+          navAgent[key],
+          fallback,
+        )}" ${attrs} />
+      </label>`;
+    return `${behaviorTree}${blackboard}
+      <div class="as-section-label">Perception</div>
+      ${perceptionField("sightRadius", "Sight Radius", 18, 'step="0.5" min="0"')}
+      ${perceptionField("nearSightRadius", "Near Sight Radius", 2, 'step="0.5" min="0"')}
+      ${perceptionField("fieldOfViewDeg", "Field of View°", 110, 'step="1" min="0" max="360"')}
+      ${perceptionField("hearingRadius", "Hearing Radius", 12, 'step="0.5" min="0"')}
+      ${perceptionField("targetLostGraceSeconds", "Target Lost Grace (s)", 0, 'step="0.1" min="0"')}
+      <div class="as-section-label">Nav Agent</div>
+      ${navField("radius", "Agent Radius", 0.35, 'step="0.05" min="0"')}
+      ${navField("height", "Agent Height", 1.8, 'step="0.1" min="0"')}
+      ${navField("maxSpeed", "Max Speed", 3.2, 'step="0.1" min="0"')}
+      ${navField("clearancePadding", "Clearance Padding", 0.1, 'step="0.05" min="0"')}`;
   }
 
   /** A `<select>` of asset paths (value = path, label = name) with a none/unknown fallback. */
@@ -1200,10 +1233,12 @@ export class ActorScriptEditor {
   }
 
   /**
-   * Wires the AIController Behavior Tree + Blackboard pickers (no-op for other
-   * components). Each select writes its chosen asset path into the node props (or
-   * deletes the key when cleared) and re-renders so the raw-props view stays in
-   * sync. Perception / nav-agent tuning still lives in the Advanced raw props.
+   * Wires the AIController Behavior Tree + Blackboard pickers and the perception /
+   * nav-agent numeric fields (no-op for other components). Each select writes its
+   * chosen asset path into the node props (or deletes the key when cleared) and
+   * re-renders so the raw-props view stays in sync. The numeric fields write into
+   * their nested `perception` / `navAgent` object (creating it if absent) and sync
+   * the raw-props view on commit.
    */
   private bindAIControllerDetails(node: ComponentTemplateNode): void {
     const behavior = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-ai-behavior]");
@@ -1220,6 +1255,27 @@ export class ActorScriptEditor {
       this.markDirty();
       this.render();
     });
+    const bindNested = (attr: string, objectKey: "perception" | "navAgent"): void => {
+      this.detailsHost.querySelectorAll<HTMLInputElement>(`[${attr}]`).forEach((input) => {
+        const key = input.getAttribute(attr);
+        if (!key) return;
+        const apply = (): void => {
+          const n = Number(input.value);
+          if (!Number.isFinite(n)) return;
+          const obj = readObjectProp(node.props[objectKey]);
+          obj[key] = n;
+          node.props[objectKey] = obj;
+          this.markDirty();
+        };
+        input.addEventListener("input", apply);
+        input.addEventListener("change", () => {
+          apply();
+          this.renderDetails();
+        });
+      });
+    };
+    bindNested("data-as-ai-perception-num", "perception");
+    bindNested("data-as-ai-nav-num", "navAgent");
   }
 
   /**
@@ -2078,6 +2134,17 @@ function readNumberProp(value: SceneJsonValue | undefined, fallback: number): nu
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
+/**
+ * Reads a nested object prop (e.g. an AIController's `perception` / `navAgent`)
+ * as a mutable record, returning a fresh empty object when the prop is missing or
+ * not a plain object so callers can seed it in place.
+ */
+function readObjectProp(value: SceneJsonValue | undefined): Record<string, SceneJsonValue> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, SceneJsonValue>)
+    : {};
+}
+
 /** Drops light props that do not apply to `type`, keeping the saved JSON tidy. */
 function pruneLightProps(props: Record<string, SceneJsonValue>, type: SceneLightType): void {
   if (type === "directional") {
@@ -2383,8 +2450,8 @@ function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJs
   }
   if (kind === "AIController") {
     // Marks the actor as an AI-controlled pawn. `behaviorTree` / `blackboard`
-    // asset paths are wired by the Faz 2 loader; the perception/nav-agent tuning
-    // round-trips as opaque props now (consumed in Faz 3/Faz 4).
+    // asset paths are wired by the Faz 2 loader; perception (Faz 4) and nav-agent
+    // (Faz 3) tuning are edited through dedicated Details number fields.
     return {
       behaviorTree: "",
       blackboard: "",
