@@ -23,6 +23,7 @@
 import type { ActorScriptDef } from "./actorScript";
 import {
   BEHAVIOR_COMPONENT,
+  COLLIDER_COMPONENT,
   EVENT_BINDINGS_COMPONENT,
   MESSAGE_BINDINGS_COMPONENT,
   SCRIPT_ACTOR_COMPONENT,
@@ -33,7 +34,7 @@ import {
   type TransformComponent,
 } from "./components";
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
-import type { LayoutActorInstance } from "./layout";
+import type { LayoutActorInstance, Vec3 } from "./layout";
 import { readRotation, readScale } from "./transform";
 
 /** A placed actor instance paired with its resolved class + layout index. */
@@ -103,6 +104,44 @@ function instanceTransform(instance: LayoutActorInstance): TransformComponent {
   };
 }
 
+function readVec3Prop(value: SceneJsonValue | undefined): Vec3 | null {
+  if (!Array.isArray(value) || value.length !== 3) return null;
+  const [x, y, z] = value;
+  if (typeof x !== "number" || typeof y !== "number" || typeof z !== "number") return null;
+  return [x, y, z];
+}
+
+/**
+ * Bakes the instance's placement scale into a flattened Collider's props so the
+ * runtime collider tracks the scaled actor — the same "scale baked at
+ * scene-build" contract the static-placement adapter (`colliderBoxFromBounds`)
+ * already honors. Without this, a class authored with a radius-1 capsule keeps
+ * that size no matter how the placement is scaled (the bug the Hide-In-Game
+ * wireframe surfaces). Capsule dims scale by axis: radius by the larger
+ * horizontal factor, half-height by the vertical one; box/other shapes scale
+ * `size` (magnitude) and any `center` offset component-wise. Signs are dropped
+ * for extents (a mirrored scale must not invert the collider); the save
+ * validator already rejects zero/negative placement scale.
+ */
+function bakeColliderScale(
+  collider: EntityComponentData,
+  scale: Vec3,
+): EntityComponentData {
+  const sx = Math.abs(scale[0]) || 1;
+  const sy = Math.abs(scale[1]) || 1;
+  const sz = Math.abs(scale[2]) || 1;
+  if (sx === 1 && sy === 1 && sz === 1) return collider;
+  const horizontal = Math.max(sx, sz);
+  const out: EntityComponentData = { ...collider };
+  if (typeof out.capsuleRadius === "number") out.capsuleRadius = out.capsuleRadius * horizontal;
+  if (typeof out.capsuleHalfHeight === "number") out.capsuleHalfHeight = out.capsuleHalfHeight * sy;
+  const size = readVec3Prop(out.size);
+  if (size) out.size = [size[0] * sx, size[1] * sy, size[2] * sz];
+  const center = readVec3Prop(out.center);
+  if (center) out.center = [center[0] * scale[0], center[1] * scale[1], center[2] * scale[2]];
+  return out;
+}
+
 /**
  * Flattens a placed actor instance + its resolved class into one entity.
  *
@@ -119,8 +158,9 @@ export function actorInstanceToEntity(
   index: number,
   options: ActorInstanceToEntityOptions = {},
 ): Entity {
+  const transform = instanceTransform(instance);
   const components: EntityComponentMap = {
-    [TRANSFORM_COMPONENT]: instanceTransform(instance) as unknown as EntityComponentData,
+    [TRANSFORM_COMPONENT]: transform as unknown as EntityComponentData,
   };
 
   for (const node of def.components) {
@@ -128,7 +168,12 @@ export function actorInstanceToEntity(
     if (node.component === TRANSFORM_COMPONENT) continue;
     // First node of each kind wins (flat entity = one component per type).
     if (components[node.component]) continue;
-    components[node.component] = { ...node.props };
+    // Bake placement scale into the collider so a scaled actor gets a scaled
+    // collider (physics/movement/nav read the flattened props, not the transform).
+    components[node.component] =
+      node.component === COLLIDER_COMPONENT
+        ? bakeColliderScale({ ...node.props }, transform.scale)
+        : { ...node.props };
   }
 
   if (!components[BEHAVIOR_COMPONENT]) {

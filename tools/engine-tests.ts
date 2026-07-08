@@ -1489,6 +1489,59 @@ check("entityCharacterItem multiplies the MeshRenderer local scale into the plac
   assert.deepEqual(entityCharacterItem(plainEntity).scale, [1, 2, 3]);
 });
 
+check("actorInstanceToEntity bakes placement scale into the flattened capsule collider", () => {
+  const def = normalizeActorScriptDef({
+    name: "Mech",
+    parentClass: "character",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      {
+        id: "collider",
+        parent: "root",
+        component: "Collider",
+        props: { shape: "capsule", capsuleRadius: 1, capsuleHalfHeight: 3, isStatic: false, isSensor: false },
+      },
+    ],
+  });
+  // Placement scaled to 0.4 -> the collider (and derived capsule) must scale too,
+  // not stay at the authored radius-1 / half-height-3.
+  const scaled = actorInstanceToEntity(def, { classRef: "Mech.actor.json", position: [0, 0, 0], scale: 0.4 }, 0);
+  const collider = readColliderComponent(scaled);
+  assert.ok(collider, "scaled actor should carry a collider");
+  assert.ok(Math.abs((collider!.capsuleRadius ?? 0) - 0.4) < 1e-9, "radius scales by 0.4");
+  assert.ok(Math.abs((collider!.capsuleHalfHeight ?? 0) - 1.2) < 1e-9, "half-height scales by 0.4");
+  assert.deepEqual(collider!.size.map((v) => Math.round(v * 1e6) / 1e6), [0.8, 2.4, 0.8]);
+  const capsule = resolveCharacterCapsule(scaled);
+  assert.ok(Math.abs(capsule.radius - 0.4) < 1e-9, "resolved capsule radius scales");
+  assert.ok(Math.abs(capsule.halfHeight - 1.2) < 1e-9, "resolved capsule half-height scales");
+
+  // Unscaled placement is untouched (preview/default path stays identical).
+  const unit = actorInstanceToEntity(def, { classRef: "Mech.actor.json", position: [0, 0, 0] }, 0);
+  const unitCollider = readColliderComponent(unit);
+  assert.ok(Math.abs((unitCollider!.capsuleRadius ?? 0) - 1) < 1e-9, "radius unchanged at scale 1");
+  assert.ok(Math.abs((unitCollider!.capsuleHalfHeight ?? 0) - 3) < 1e-9, "half-height unchanged at scale 1");
+});
+
+check("actorInstanceToEntity bakes non-uniform placement scale into a box collider", () => {
+  const def = normalizeActorScriptDef({
+    name: "Crate",
+    parentClass: "actor",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      {
+        id: "collider",
+        parent: "root",
+        component: "Collider",
+        props: { shape: "box", size: [2, 2, 2], center: [0, 1, 0], isStatic: true, isSensor: false },
+      },
+    ],
+  });
+  const scaled = actorInstanceToEntity(def, { classRef: "Crate.actor.json", position: [0, 0, 0], scale: [1, 2, 3] }, 0);
+  const collider = readColliderComponent(scaled);
+  assert.deepEqual(collider!.size, [2, 4, 6]);
+  assert.deepEqual(collider!.center, [0, 2, 0]);
+});
+
 // 7. Render parity: a light entity carries the exact transform, light, name,
 // and hidden inputs the legacy light render path reads, so entity-driven light
 // objects (entityLightItem) match the legacy actor path (actorLightItem).

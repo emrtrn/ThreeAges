@@ -177,6 +177,13 @@ export interface ColliderComponent {
   primitives?: ColliderPrimitive[];
   isStatic: boolean;
   isSensor: boolean;
+  /**
+   * Hides the runtime collider debug wireframe in Game/Play mode. The collider
+   * still collides — this only suppresses the diagnostic overlay the runtime
+   * draws around the actual (scale-baked) physics collider. Absent/false means
+   * the wireframe is visible so scaling can be observed.
+   */
+  hideInGame?: boolean;
   /** Surface friction (Rapier). Absent uses the backend default. */
   friction?: number;
   /** Surface restitution / bounciness (Rapier). Absent uses the backend default. */
@@ -688,6 +695,7 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
     component.capsuleHalfHeight = capsule.halfHeight;
   }
   if (center) component.center = center;
+  if (typeof data.hideInGame === "boolean") component.hideInGame = data.hideInGame;
   const primitives = readColliderPrimitives(data.primitives);
   if (primitives) component.primitives = primitives;
   if (typeof data.friction === "number") component.friction = data.friction;

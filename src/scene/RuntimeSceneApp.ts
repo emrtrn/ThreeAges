@@ -1,4 +1,4 @@
-import { Box3, DirectionalLight, Group, Light as ThreeLight, Matrix4, Mesh, MeshStandardMaterial, Object3D, TextureLoader, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, TextureLoader, Vector3 } from "three";
 import type {
   AmbientLight,
   InstancedMesh,
@@ -331,13 +331,14 @@ import {
   readAIControllerComponent,
   readBehaviorComponent,
   readCharacterMovementComponent,
+  readColliderComponent,
   readLightComponent,
   readMeshRendererComponent,
   readParticleEmitterComponent,
   readScriptActorComponent,
   readTransformComponent,
 } from "@engine/scene/components";
-import type { TransformComponent } from "@engine/scene/components";
+import type { ColliderShape, TransformComponent } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import { VfxSubsystem, type VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
@@ -716,6 +717,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Rendered object per actor entity id (absent for mesh-less logic actors). */
   private readonly actorObjects = new Map<string, Object3D>();
   /**
+   * Collider debug wireframe per actor entity id: a green box traced around the
+   * actual (scale-baked) physics collider, so scaling a placed actor visibly
+   * scales its collider in Play. Suppressed by the Collider component's
+   * `hideInGame` flag; updated each frame from {@link PhysicsSubsystem.colliderDebugBox}.
+   */
+  private readonly colliderDebugWires = new Map<string, LineSegments>();
+  /**
    * Authored MeshRenderer local scale per actor entity id, multiplied into the
    * placement scale on every transform sync so a class's visual scale survives
    * the per-frame override (the sync writes the placement scale, which omits it).
@@ -1052,6 +1060,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.updateUiStore();
       this.updateWorldUi();
       this.updateAudioListener();
+      this.updateColliderDebugWires();
       if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
       if (this.cloudObject) {
         followCameraWithClouds(this.cloudObject, this.camera);
@@ -2101,6 +2110,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.characterRefs = [];
     for (const object of this.actorObjects.values()) this.scene.remove(object);
     this.actorObjects.clear();
+    for (const wire of this.colliderDebugWires.values()) {
+      this.scene.remove(wire);
+      wire.geometry.dispose();
+      (wire.material as LineBasicMaterial).dispose();
+    }
+    this.colliderDebugWires.clear();
     this.actorMeshScales.clear();
     this.actorEntityById.clear();
     this.actorEntities = [];
@@ -3449,7 +3464,67 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.actorObjects.set(entity.id, object);
     const meshScale = readMeshRendererComponent(entity)?.scale;
     if (meshScale) this.actorMeshScales.set(entity.id, meshScale);
+    this.addColliderDebugWire(entity);
     this.addActorCharacterRef(entity, object);
+  }
+
+  /**
+   * Adds a green wireframe around a collider-bearing actor's physics collider
+   * (unless the Collider opts out with `hideInGame`). The wire matches the
+   * authored shape — a capsule outline for capsule colliders, else a box — and is
+   * world-space (not parented to the scaled actor object). Its geometry is rebuilt
+   * from {@link PhysicsSubsystem.colliderDebugBox} whenever the collider's baked
+   * extents change and repositioned every frame, so it traces the actual
+   * scale-baked collider and makes collider scaling observable in Play.
+   */
+  private addColliderDebugWire(entity: Entity): void {
+    const collider = readColliderComponent(entity);
+    if (!collider || collider.hideInGame === true) return;
+    const wire = new LineSegments(
+      new BufferGeometry(),
+      new LineBasicMaterial({ color: 0x49e6a2, depthTest: false, transparent: true }),
+    );
+    wire.userData.colliderShape = collider.shape;
+    wire.renderOrder = 999;
+    wire.frustumCulled = false;
+    this.scene.add(wire);
+    this.colliderDebugWires.set(entity.id, wire);
+    this.updateColliderDebugWire(entity.id, wire);
+  }
+
+  /** Refreshes every collider debug wire from the current physics collider box. */
+  private updateColliderDebugWires(): void {
+    for (const [entityId, wire] of this.colliderDebugWires) {
+      this.updateColliderDebugWire(entityId, wire);
+    }
+  }
+
+  private updateColliderDebugWire(entityId: string, wire: LineSegments): void {
+    const object = this.actorObjects.get(entityId);
+    const box = this.physicsSubsystem.colliderDebugBox(entityId);
+    if (!object || !box) {
+      wire.visible = false;
+      return;
+    }
+    wire.visible = true;
+    // The baked collider size is static during Play, so rebuild the exact-size
+    // outline only when it actually changes (never, in practice, after the first
+    // resolve) instead of scaling a unit mesh — a non-uniform scale would distort
+    // a capsule's hemispheres.
+    const built = wire.userData.builtHalfExtents as [number, number, number] | undefined;
+    if (!built || built[0] !== box.halfExtents[0] || built[1] !== box.halfExtents[1] || built[2] !== box.halfExtents[2]) {
+      wire.geometry.dispose();
+      wire.geometry = colliderWireGeometry(
+        wire.userData.colliderShape as ColliderShape,
+        box.halfExtents,
+      );
+      wire.userData.builtHalfExtents = [...box.halfExtents];
+    }
+    wire.position.set(
+      object.position.x + box.center[0],
+      object.position.y + box.center[1],
+      object.position.z + box.center[2],
+    );
   }
 
   private addActorCharacterRef(entity: Entity, object: Object3D): void {
@@ -4275,6 +4350,84 @@ function disposeSceneMeshResources(root: Object3D): void {
       material?.dispose();
     }
   });
+}
+
+/**
+ * Line-segment wireframe for a collider's debug overlay, sized to its baked
+ * world half-extents. A capsule gets a true capsule outline (rings + side
+ * profiles, feet-to-head) matching the Actor Script editor preview; every other
+ * shape gets its axis-aligned box edges.
+ */
+function colliderWireGeometry(
+  shape: ColliderShape,
+  halfExtents: readonly [number, number, number],
+): BufferGeometry {
+  if (shape === "capsule") return capsuleWireGeometry(halfExtents);
+  return new EdgesGeometry(
+    new BoxGeometry(
+      Math.max(halfExtents[0] * 2, 1e-4),
+      Math.max(halfExtents[1] * 2, 1e-4),
+      Math.max(halfExtents[2] * 2, 1e-4),
+    ),
+  );
+}
+
+function capsuleWireGeometry(halfExtents: readonly [number, number, number]): BufferGeometry {
+  const radius = Math.max(halfExtents[0], halfExtents[2], 1e-4);
+  const halfHeight = Math.max(halfExtents[1], radius);
+  const cylinderHalfHeight = Math.max(0, halfHeight - radius);
+  const positions: number[] = [];
+  pushCapsuleProfile(positions, "x", radius, cylinderHalfHeight);
+  pushCapsuleProfile(positions, "z", radius, cylinderHalfHeight);
+  pushCapsuleRing(positions, cylinderHalfHeight, radius);
+  pushCapsuleRing(positions, -cylinderHalfHeight, radius);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  return geometry;
+}
+
+function pushCapsuleProfile(
+  positions: number[],
+  plane: "x" | "z",
+  radius: number,
+  cylinderHalfHeight: number,
+): void {
+  const arcSteps = 16;
+  const sideSteps = 4;
+  const points: Vector3[] = [];
+  const point = (across: number, y: number): Vector3 =>
+    plane === "x" ? new Vector3(across, y, 0) : new Vector3(0, y, across);
+  for (let i = 0; i <= arcSteps; i += 1) {
+    const t = (i / arcSteps) * Math.PI;
+    points.push(point(radius * Math.cos(t), cylinderHalfHeight + radius * Math.sin(t)));
+  }
+  for (let i = 1; i < sideSteps; i += 1) {
+    points.push(point(-radius, cylinderHalfHeight - (i / sideSteps) * (2 * cylinderHalfHeight)));
+  }
+  for (let i = 0; i <= arcSteps; i += 1) {
+    const t = Math.PI + (i / arcSteps) * Math.PI;
+    points.push(point(radius * Math.cos(t), -cylinderHalfHeight + radius * Math.sin(t)));
+  }
+  for (let i = 1; i < sideSteps; i += 1) {
+    points.push(point(radius, -cylinderHalfHeight + (i / sideSteps) * (2 * cylinderHalfHeight)));
+  }
+  for (let i = 0; i < points.length; i += 1) {
+    const a = points[i]!;
+    const b = points[(i + 1) % points.length]!;
+    positions.push(a.x, a.y, a.z, b.x, b.y, b.z);
+  }
+}
+
+function pushCapsuleRing(positions: number[], y: number, radius: number): void {
+  const segments = 48;
+  for (let i = 0; i < segments; i += 1) {
+    const a0 = (i / segments) * Math.PI * 2;
+    const a1 = ((i + 1) / segments) * Math.PI * 2;
+    positions.push(
+      Math.cos(a0) * radius, y, Math.sin(a0) * radius,
+      Math.cos(a1) * radius, y, Math.sin(a1) * radius,
+    );
+  }
 }
 
 function parseCharacterEntityIndex(entityId: string): number | null {

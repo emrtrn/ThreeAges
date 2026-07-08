@@ -306,6 +306,29 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * `size` already has placement scale baked at scene-build, so this is just
    * `size / 2`.
    */
+  /**
+   * The entity collider's body-local center offset plus half-extents (the same
+   * scale-baked `size`/`center` the physics body was built from), or null if it
+   * has none. Backs the runtime's collider debug wireframe so the overlay traces
+   * exactly what physics collides with, revealing whether placement scale was
+   * baked into the collider.
+   */
+  colliderDebugBox(
+    entityId: EntityId,
+  ): { center: [number, number, number]; halfExtents: [number, number, number] } | null {
+    const body = this.bodies.find((candidate) => candidate.id === entityId);
+    if (!body) return null;
+    const center = body.collider.center ?? [0, 0, 0];
+    return {
+      center: [center[0] ?? 0, center[1] ?? 0, center[2] ?? 0],
+      halfExtents: [
+        (body.collider.size[0] ?? 0) / 2,
+        (body.collider.size[1] ?? 0) / 2,
+        (body.collider.size[2] ?? 0) / 2,
+      ],
+    };
+  }
+
   colliderHalfExtents(entityId: EntityId): readonly [number, number, number] | null {
     const body = this.bodies.find((candidate) => candidate.id === entityId);
     if (!body) return null;

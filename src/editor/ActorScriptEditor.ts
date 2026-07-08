@@ -1294,6 +1294,7 @@ export class ActorScriptEditor {
     bindFlag("[data-as-collider-static]", "isStatic");
     bindFlag("[data-as-collider-sensor]", "isSensor");
     bindFlag("[data-as-collider-simulate]", "simulatePhysics");
+    bindFlag("[data-as-collider-hide-in-game]", "hideInGame");
   }
 
   /**
@@ -2160,6 +2161,10 @@ function colliderFields(node: ComponentTemplateNode): string {
     <label class="as-field as-check">
       <input type="checkbox" data-as-collider-simulate ${props.simulatePhysics === true ? "checked" : ""} />
       <span>Simulate Physics</span>
+    </label>
+    <label class="as-field as-check">
+      <input type="checkbox" data-as-collider-hide-in-game ${props.hideInGame === true ? "checked" : ""} />
+      <span>Hide In Game</span>
     </label>
   `;
 }
