@@ -11,6 +11,7 @@ export type AssetType =
   | "blackboard"
   | "behaviorTree"
   | "aiQuery"
+  | "stateTree"
   | "animation"
   | "effect"
   | "prefab"
@@ -133,6 +134,7 @@ const CONVERSATION_EXTENSIONS = new Set(["conversation.json"]);
 const BLACKBOARD_EXTENSIONS = new Set(["blackboard.json"]);
 const BEHAVIOR_TREE_EXTENSIONS = new Set(["behavior.json"]);
 const AI_QUERY_EXTENSIONS = new Set(["query.json"]);
+const STATE_TREE_EXTENSIONS = new Set(["statetree.json"]);
 const MATERIAL_EXTENSIONS = new Set(["material.json", "mat.json"]);
 const LEVEL_EXTENSIONS = new Set(["level.json", "layout.json"]);
 const UI_EXTENSIONS = new Set(["ui.json", "theme.json", "loc.json"]);
@@ -169,6 +171,7 @@ export const ASSET_TYPES: readonly AssetType[] = [
   "blackboard",
   "behaviorTree",
   "aiQuery",
+  "stateTree",
   "animation",
   "effect",
   "prefab",
@@ -204,6 +207,7 @@ export function inferAssetTypeFromPath(path: string): AssetType | null {
   if (BLACKBOARD_EXTENSIONS.has(compoundExtensionOf(lower))) return "blackboard";
   if (BEHAVIOR_TREE_EXTENSIONS.has(compoundExtensionOf(lower))) return "behaviorTree";
   if (AI_QUERY_EXTENSIONS.has(compoundExtensionOf(lower))) return "aiQuery";
+  if (STATE_TREE_EXTENSIONS.has(compoundExtensionOf(lower))) return "stateTree";
   if (MATERIAL_EXTENSIONS.has(compoundExtensionOf(lower))) return "material";
   if (LEVEL_EXTENSIONS.has(compoundExtensionOf(lower))) return "level";
   if (UI_EXTENSIONS.has(compoundExtensionOf(lower))) return "ui";
@@ -398,7 +402,7 @@ export function validateAssetManifest(
         code: "asset-type",
         assetId,
         message:
-          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, dialogueVoice, dialogueLine, conversation, blackboard, behaviorTree, aiQuery, animation, effect, prefab, ui, or level.",
+          "`assetType` must be one of staticMesh, skeletalMesh, texture, material, sound, soundCue, dialogueVoice, dialogueLine, conversation, blackboard, behaviorTree, aiQuery, stateTree, animation, effect, prefab, ui, or level.",
       });
     }
 

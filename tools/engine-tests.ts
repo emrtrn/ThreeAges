@@ -82,6 +82,7 @@ import {
   normalizeAiBlackboardAsset,
 } from "../engine/ai/behaviorAsset";
 import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
+import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
 import { runAiQuery } from "../engine/ai/queryRunner";
 import { AIController } from "../engine/ai/aiController";
 import { AISubsystem } from "../engine/ai/aiSubsystem";
@@ -477,6 +478,7 @@ import {
   validateSaveAiBlackboardPayload,
   validateSaveAiBehaviorPayload,
   validateSaveAiQueryPayload,
+  validateSaveAiStateTreePayload,
   validateEffectAsset,
   validateSaveEffectPayload,
 } from "./saveValidator";
@@ -15353,6 +15355,12 @@ check("content-new AI kinds create behavior tree, blackboard, and query stubs", 
   const queryDef = normalizeAiQueryAsset(JSON.parse(query.content ?? ""));
   assert.equal(queryDef.type, "query");
   assert.equal(queryDef.generators[0]?.kind, "pointsAroundQuerier");
+
+  const stateTree = resolveContentNewFile({ kind: "stateTree", dir: "assets/AI", name: "Enemy" });
+  assert.equal(stateTree.path, "assets/AI/Enemy.stateTree.json");
+  const stateTreeDef = normalizeAiStateTreeAsset(JSON.parse(stateTree.content ?? ""));
+  assert.equal(stateTreeDef.type, "stateTree");
+  assert.equal(stateTreeDef.states[0]?.id, "Idle");
 });
 
 check("validateDialogueVoiceAsset keeps allowed fields and rejects bad ones", () => {
@@ -19286,6 +19294,73 @@ check("AI behavior tree normalizer canonicalizes distance/cooldown/perception de
   assert.throws(() => normalizeAiBehaviorTreeAsset(makeTree({ kind: "telepathy" })), /kind is invalid/);
 });
 
+check("AI state tree asset normalizer canonicalizes hierarchical states", () => {
+  const asset = normalizeAiStateTreeAsset({
+    schema: 1,
+    type: "stateTree",
+    blackboard: "assets/AI/Enemy.blackboard.json",
+    evaluators: [{ service: "forge.updatePerceptionBlackboard", interval: 0.25 }],
+    states: [
+      {
+        id: "Patrol",
+        tasks: [{ task: "game.patrol", params: { loop: true } }],
+        transitions: [
+          {
+            to: "Chase",
+            conditions: [{ kind: "hasPerceptionStimulus", sense: "sight", requireLineOfSight: true }],
+          },
+        ],
+        states: [{ id: "PatrolWait", tasks: [{ task: "forge.wait" }] }],
+      },
+      {
+        id: "Chase",
+        enter: [{ kind: "distance", key: "target", op: "lte", value: 20 }],
+        transitions: [{ to: "Patrol", event: "target-lost" }],
+      },
+    ],
+  });
+  assert.equal(asset.type, "stateTree");
+  assert.equal(asset.blackboard, "assets/AI/Enemy.blackboard.json");
+  assert.equal(asset.evaluators?.[0]?.service, "forge.updatePerceptionBlackboard");
+  assert.equal(asset.states.length, 2);
+  const patrol = asset.states[0];
+  assert.equal(patrol?.id, "Patrol");
+  assert.equal(patrol?.tasks?.[0]?.task, "game.patrol");
+  assert.equal(patrol?.transitions?.[0]?.to, "Chase");
+  assert.equal(patrol?.states?.[0]?.id, "PatrolWait");
+  const chase = asset.states[1];
+  assert.equal(chase?.enter?.[0]?.kind, "distance");
+  assert.equal(chase?.transitions?.[0]?.event, "target-lost");
+});
+
+check("AI state tree normalizer rejects malformed assets", () => {
+  assert.throws(
+    () => normalizeAiStateTreeAsset({ schema: 1, type: "stateTree", states: [] }),
+    /non-empty array/,
+  );
+  assert.throws(
+    () => normalizeAiStateTreeAsset({ schema: 2, type: "stateTree", states: [{ id: "A" }] }),
+    /schema must be 1/,
+  );
+  assert.throws(
+    () => normalizeAiStateTreeAsset({ schema: 1, type: "stateTree", states: [{ id: "A" }, { id: "A" }] }),
+    /is duplicated/,
+  );
+  assert.throws(
+    () =>
+      normalizeAiStateTreeAsset({
+        schema: 1,
+        type: "stateTree",
+        states: [{ id: "A", transitions: [{ to: "Missing" }] }],
+      }),
+    /references unknown state/,
+  );
+  assert.throws(
+    () => normalizeAiStateTreeAsset({ schema: 1, type: "stateTree", states: [{ tasks: [] }] }),
+    /\.id must be a non-empty string/,
+  );
+});
+
 check("AI query asset normalizer canonicalizes generators, contexts, and tests", () => {
   const asset = normalizeAiQueryAsset({
     schema: 1,
@@ -20530,6 +20605,21 @@ check("AI save payloads enforce compound extensions, traversal guard, and normal
       query: { schema: 1, type: "query", generators: [{ kind: "actorsByTag", tag: "cover" }] },
     }).query.type,
     "query",
+  );
+  assert.equal(
+    validateSaveAiStateTreePayload({
+      path: "assets/AI/Enemy.stateTree.json",
+      stateTree: { schema: 1, type: "stateTree", states: [{ id: "Idle" }] },
+    }).stateTree.type,
+    "stateTree",
+  );
+  assert.throws(
+    () =>
+      validateSaveAiStateTreePayload({
+        path: "assets/AI/Enemy.json",
+        stateTree: { schema: 1, type: "stateTree", states: [{ id: "Idle" }] },
+      }),
+    /\.stateTree\.json/,
   );
   assert.throws(
     () => validateSaveAiBlackboardPayload({ path: "assets/AI/Enemy.json", blackboard }),

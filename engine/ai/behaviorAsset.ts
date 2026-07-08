@@ -439,6 +439,18 @@ export function normalizeAiBehaviorNode(value: unknown): AiBehaviorNode {
   }
 }
 
+/**
+ * Shared condition/service/param normalizers, re-exported so the StateTree
+ * schema (`engine/ai/stateTreeAsset.ts`) authors enter/transition conditions and
+ * evaluators from the exact same registry as Behavior Trees — a single source of
+ * truth for decorator/service shape across both AI asset kinds.
+ */
+export {
+  normalizeDecorators as normalizeAiDecorators,
+  normalizeServices as normalizeAiServices,
+  normalizeParams as normalizeAiParams,
+};
+
 export function normalizeAiBehaviorTreeAsset(value: unknown): AiBehaviorTreeAsset {
   const input = requireObject(value, "behaviorTree");
   if (input.schema !== 1) throw new Error("behaviorTree.schema must be 1");

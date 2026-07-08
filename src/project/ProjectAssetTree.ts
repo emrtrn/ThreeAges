@@ -73,7 +73,8 @@ export type ContentNewKind =
   | "ui"
   | "blackboard"
   | "behaviorTree"
-  | "aiQuery";
+  | "aiQuery"
+  | "stateTree";
 
 /** Parent class picked for a `kind: "script"` Actor Script (Unreal-style). */
 export type ScriptParentClass =

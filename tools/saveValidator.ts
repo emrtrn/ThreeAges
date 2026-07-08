@@ -57,6 +57,7 @@ import {
   normalizeAiBlackboardAsset,
 } from "../engine/ai/behaviorAsset";
 import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
+import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -3013,6 +3014,26 @@ export function validateSaveAiQueryPayload(value: unknown): {
   };
 }
 
+export function validateSaveAiStateTreePayload(value: unknown): {
+  path: string;
+  stateTree: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("stateTree payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".stateTree.json")) {
+    throw new Error("stateTree payload path must end with .stateTree.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("stateTree payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    stateTree: normalizeAiStateTreeAsset(input.stateTree) as unknown as Record<string, unknown>,
+  };
+}
+
 /** Content Browser "new content" kinds the `/__content-new` endpoint accepts. */
 export const CONTENT_NEW_KINDS = [
   "folder",
@@ -3028,6 +3049,7 @@ export const CONTENT_NEW_KINDS = [
   "blackboard",
   "behaviorTree",
   "aiQuery",
+  "stateTree",
 ] as const;
 export type ContentNewKind = (typeof CONTENT_NEW_KINDS)[number];
 
@@ -3152,6 +3174,9 @@ function contentStubJson(payload: ContentNewPayload): string {
       generators: [{ kind: "pointsAroundQuerier", radius: 5, points: 8 }],
       tests: [{ kind: "distance", max: 5, score: "inverse" }],
     };
+  } else if (kind === "stateTree") {
+    // Minimal valid StateTree: a single Idle root state (no tasks/transitions).
+    body = { schema: 1, type: "stateTree", states: [{ id: "Idle" }] };
   } else if (kind === "material") {
     body = { ...defaultForgeMaterialDef(name, payload.materialPreset ?? "standard") };
   } else {
@@ -3341,6 +3366,7 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   blackboard: "AI",
   behaviorTree: "AI",
   aiQuery: "AI",
+  stateTree: "AI",
   animation: "animation",
   effect: "effect",
   prefab: "prefab",

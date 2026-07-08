@@ -141,6 +141,13 @@
 > active behavior path ve perception stimuli listesi gosterilir (path/query
 > overlay draw'lari zaten Faz 3/4/5'ten mevcut). Interaktif per-actor secim +
 > ayri DOM panel sonraki is olarak birakildi.
+> Revizyon: 2026-07-08 - Faz 8 StateTree asset schema/save/manifest altyapi
+> ilk dilimi uygulandi: `engine/ai/stateTreeAsset.ts` normalizer'i (hiyerarsik
+> states, guard'li transitions, tasks, evaluators) Behavior Tree'nin decorator/
+> service/param registry'sini yeniden kullanir; `.stateTree.json` manifest
+> siniflandirmasi, `/__save-state-tree` dev endpoint'i, `stateTree` content-new
+> stub'i ve Content Browser create menu girisi eklendi. Runtime runner + editor
+> outline sonraki dilim (bkz. asagidaki checkbox'lar).
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1642,20 +1649,51 @@ Tamamlanan Faz 7 runtime debug inspector dilim notu (2026-07-08):
 Hedef: Behavior Tree'nin iyi olmadigi uzun omurlu state akislari icin StateTree
 benzeri sistem.
 
-- [ ] `*.stateTree.json` schema:
-      - [ ] states
-      - [ ] selectors/transitions
-      - [ ] evaluators
-      - [ ] tasks
+- [~] `*.stateTree.json` schema:
+      - [x] states
+      - [x] selectors/transitions
+      - [x] evaluators
+      - [x] tasks
       - [ ] parameters/context data.
 - [ ] Runtime runner: active state path, transition guards, enter/tick/exit.
-- [ ] Behavior Tree ile ortak task/condition registry kullan.
+- [~] Behavior Tree ile ortak task/condition registry kullan. (Asset-schema
+      seviyesinde: enter/transition guard'lari `AiDecoratorDef`, evaluator'lar
+      `AiBehaviorServiceDef` — behaviorAsset normalizer'lari paylasiliyor.
+      Runtime task/condition dispatch paylasimi runner dilimiyle gelecek.)
 - [ ] GameMode, boss fight, civilian routine, quest actor gibi use-case'leri
       Behavior Tree yerine StateTree ile modelle.
 - [ ] Editor ilk surum: nested state outline + transition table.
 - [ ] Debug: active state, last transition reason, evaluator values.
 - [ ] Test: patrol -> alert -> chase -> search -> patrol state akisi.
-- [ ] Validation: full local gate + Playwright debug smoke.
+- [~] Validation: full local gate + Playwright debug smoke. (Asset schema dilimi
+      icin `tsc`, `test:engine` 707 check, `build:verify`, `check:assets` yesil;
+      Playwright smoke runtime/editor dilimiyle gelecek.)
+
+Tamamlanan Faz 8 StateTree asset schema/save/manifest notu (2026-07-08):
+
+- `engine/ai/stateTreeAsset.ts` eklendi; `AiStateTreeAsset` = hiyerarsik
+  `states` (nested `states`), `enter` guard'lari, `tasks`, guard'li
+  `transitions` (`to` + opsiyonel `event` + `conditions`) ve global
+  `evaluators`. Normalizer state id'lerini tekil zorunlu tutar ve her
+  transition `to` hedefinin var olan bir state'e cozuldugunu dogrular.
+- `engine/ai/behaviorAsset.ts` decorator/service/param normalizer'lari
+  `normalizeAiDecorators` / `normalizeAiServices` / `normalizeAiParams` olarak
+  re-export edildi; StateTree bunlari yeniden kullanir (condition/service
+  sekli icin tek kaynak-of-truth).
+- `engine/assets/manifest.ts`: `stateTree` AssetType + `.stateTree.json`
+  compound extension siniflandirmasi.
+- `/__save-state-tree` localhost-only dev endpoint'i (`vite.config.ts` +
+  `WRITE_ENDPOINTS`) ve `validateSaveAiStateTreePayload` (`tools/saveValidator.ts`,
+  ayni engine normalizer'ini yeniden kullanir, compound-ext + `..` guard'li).
+- Content Browser: `stateTree` content-new kind'i (client `ContentNewKind`
+  union'i + create menu "AI State Tree" girisi); stub minimal gecerli StateTree
+  (`states: [{ id: "Idle" }]`).
+- Test: normalizer hiyerarsik canonicalize + malformed (bos states, sema, tekil
+  id, bilinmeyen transition hedefi, eksik id) reddi; content-new stub round-trip;
+  save payload compound-ext dogrulamasi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`707 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS.
 
 ## Ilk uygulanabilir vertical slice onerisi
 

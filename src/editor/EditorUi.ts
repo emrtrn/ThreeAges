@@ -143,6 +143,7 @@ const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> 
   { kind: "blackboard", label: "AI Blackboard" },
   { kind: "behaviorTree", label: "AI Behavior Tree" },
   { kind: "aiQuery", label: "AI Query (EQS)" },
+  { kind: "stateTree", label: "AI State Tree" },
 ];
 
 const MATERIAL_PRESET_LABELS: Record<ForgeMaterialPreset, string> = {
