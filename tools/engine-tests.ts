@@ -19300,6 +19300,8 @@ check("AI state tree asset normalizer canonicalizes hierarchical states", () => 
     schema: 1,
     type: "stateTree",
     blackboard: "assets/AI/Enemy.blackboard.json",
+    parameters: { routeTag: "outer", speed: 2, shared: true },
+    context: { role: "guard", home: [1, 0, 2] },
     evaluators: [{ service: "forge.updatePerceptionBlackboard", interval: 0.25 }],
     states: [
       {
@@ -19322,6 +19324,8 @@ check("AI state tree asset normalizer canonicalizes hierarchical states", () => 
   });
   assert.equal(asset.type, "stateTree");
   assert.equal(asset.blackboard, "assets/AI/Enemy.blackboard.json");
+  assert.deepEqual(asset.parameters, { routeTag: "outer", speed: 2, shared: true });
+  assert.deepEqual(asset.context, { role: "guard", home: [1, 0, 2] });
   assert.equal(asset.evaluators?.[0]?.service, "forge.updatePerceptionBlackboard");
   assert.equal(asset.states.length, 2);
   const patrol = asset.states[0];
@@ -19359,6 +19363,10 @@ check("AI state tree normalizer rejects malformed assets", () => {
   assert.throws(
     () => normalizeAiStateTreeAsset({ schema: 1, type: "stateTree", states: [{ tasks: [] }] }),
     /\.id must be a non-empty string/,
+  );
+  assert.throws(
+    () => normalizeAiStateTreeAsset({ schema: 1, type: "stateTree", context: { fn: () => null }, states: [{ id: "A" }] }),
+    /stateTree\.context\.fn must be JSON-serializable/,
   );
 });
 
@@ -19970,6 +19978,58 @@ check("AiStateTreeRunner selects nested child states, runs evaluators, and share
   idleRunner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
   assert.deepEqual(idleRunner.getDebugSnapshot().activePath, ["Idle"]);
   assert.deepEqual(idleLog, ["test.idle"]);
+});
+
+check("AiStateTreeRunner merges StateTree parameters and context into tasks and evaluators", () => {
+  const controller = new AIController("ai:boss", "boss", new Blackboard([
+    { key: "phase", kind: "string", default: "" },
+    { key: "role", kind: "string", default: "" },
+  ]));
+  const asset = normalizeAiStateTreeAsset({
+    schema: 1,
+    type: "stateTree",
+    parameters: { phase: "intro", speed: 2 },
+    context: { role: "boss", arena: "forge" },
+    evaluators: [{ service: "test.eval", interval: 0.05, params: { phase: "service" } }],
+    states: [
+      {
+        id: "Intro",
+        tasks: [{ task: "test.record", params: { speed: 6 } }],
+      },
+    ],
+  });
+  const seen: Record<string, unknown>[] = [];
+  const runner = new AiStateTreeRunner(controller, asset, {
+    taskRegistry: {
+      get: (taskId) =>
+        taskId === "test.record"
+          ? (context) => {
+              seen.push(context.params);
+              context.blackboard.set("phase", String(context.params.phase ?? ""));
+              const authoredContext = context.params.context;
+              if (authoredContext && typeof authoredContext === "object" && !Array.isArray(authoredContext)) {
+                context.blackboard.set("role", String((authoredContext as Record<string, unknown>).role ?? ""));
+              }
+              return "success";
+            }
+          : undefined,
+    },
+    serviceRegistry: {
+      get: (serviceId) =>
+        serviceId === "test.eval"
+          ? (context) => {
+              seen.push(context.params);
+            }
+          : undefined,
+    },
+  });
+
+  runner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+  assert.equal(seen.length, 2);
+  assert.deepEqual(seen[0], { phase: "service", speed: 2, context: { role: "boss", arena: "forge" } });
+  assert.deepEqual(seen[1], { phase: "intro", speed: 6, context: { role: "boss", arena: "forge" } });
+  assert.equal(controller.blackboard.getString("phase"), "intro");
+  assert.equal(controller.blackboard.getString("role"), "boss");
 });
 
 check("AiBehaviorRunner selector rechecks higher priority branches while a lower branch is running", () => {

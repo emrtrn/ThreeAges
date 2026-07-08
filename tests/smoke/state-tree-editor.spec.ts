@@ -36,6 +36,8 @@ test("state tree editor renders outline, transitions and validation", async ({ p
       {
         schema: 1,
         type: "stateTree",
+        parameters: { routeTag: "outer", speed: 2 },
+        context: { role: "guard" },
         states: [
           {
             id: "Patrol",

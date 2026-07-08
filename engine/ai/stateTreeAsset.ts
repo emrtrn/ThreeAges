@@ -50,6 +50,17 @@ export interface AiStateTreeAsset {
   schema: 1;
   type: "stateTree";
   blackboard?: string;
+  /**
+   * Tree-wide default params merged into every StateTree task/evaluator call.
+   * Local task/evaluator params override these keys.
+   */
+  parameters?: Record<string, AiJsonValue>;
+  /**
+   * Read-only authored context data exposed to tasks/evaluators as
+   * `params.context`. Useful for long-lived routines that share role/phase IDs
+   * or authored references without duplicating them on every state task.
+   */
+  context?: Record<string, AiJsonValue>;
   states: AiStateDef[];
   evaluators?: AiBehaviorServiceDef[];
 }
@@ -169,11 +180,15 @@ export function normalizeAiStateTreeAsset(value: unknown): AiStateTreeAsset {
     }
   }
   const blackboard = normalizeOptionalId(input.blackboard, "stateTree.blackboard");
+  const parameters = normalizeAiParams(input.parameters, "stateTree.parameters");
+  const context = normalizeAiParams(input.context, "stateTree.context");
   const evaluators = normalizeAiServices(input.evaluators);
   return {
     schema: 1,
     type: "stateTree",
     ...(blackboard ? { blackboard } : {}),
+    ...(parameters && Object.keys(parameters).length > 0 ? { parameters } : {}),
+    ...(context && Object.keys(context).length > 0 ? { context } : {}),
     states,
     ...(evaluators && evaluators.length > 0 ? { evaluators } : {}),
   };

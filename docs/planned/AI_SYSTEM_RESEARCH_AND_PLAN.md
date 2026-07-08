@@ -193,6 +193,11 @@
 > tasir. Kart editleri raw JSON tek kaynak-of-truth'a geri serialize edilir ve
 > engine normalizer validation'undan gecer. Kalan Faz 8: parameters/context data
 > + use-case ornekleri.
+> Revizyon: 2026-07-08 - Faz 8 StateTree parameters/context data dilimi
+> uygulandi: `*.stateTree.json` top-level `parameters` ve `context` JSON map'leri
+> tasir; runner bunlari task/evaluator params'ina default olarak merge eder
+> (`params.context` nested context, local params override). Kalan Faz 8:
+> use-case ornekleri.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1699,7 +1704,7 @@ benzeri sistem.
       - [x] selectors/transitions
       - [x] evaluators
       - [x] tasks
-      - [ ] parameters/context data.
+      - [x] parameters/context data.
 - [x] Runtime runner: active state path, transition guards, enter/tick/exit.
       (`engine/ai/stateTreeRunner.ts`: hiyerarsik selection, enter/exit memory
       temizligi, leaf-first transition oncelikligi, `postEvent` event kuyrugu.)
@@ -1890,6 +1895,24 @@ Tamamlanan Faz 8 StateTree condition-card authoring notu (2026-07-08):
   smoke PASS, `npm.cmd run build:verify` yesil (710 engine check,
   verify:dist --strict PASS), `npm.cmd run check:assets` PASS (baseline
   thumbnail/sidecar warning'leriyle).
+
+Tamamlanan Faz 8 StateTree parameters/context data notu (2026-07-08):
+
+- `AiStateTreeAsset` top-level `parameters` ve `context` alanlarini tasir.
+  Ikisi de `normalizeAiParams` ile JSON-serializable map olarak normalize edilir;
+  save endpoint zaten `normalizeAiStateTreeAsset` kullandigi icin ayri endpoint
+  allowlist gerekmedi.
+- `AiStateTreeRunner`, her task ve evaluator cagrisi icin params'i su sirayla
+  cozer: tree `parameters`, varsa nested `params.context`, sonra local task/
+  evaluator `params` override'lari. Boylece ortak route/speed/phase gibi
+  parametreler tek yerde author edilebilir; state/task override'u korunur.
+- Test: normalizer top-level parameters/context round-trip ve bozuk context
+  reddini kapsar; runner testi task/evaluator merge sirasini ve nested context'i
+  dogrular. Editor smoke raw JSON fixture'i yeni alanlarla valid kalir.
+- Dogrulama: `npx.cmd tsc --noEmit` yesil, `npm.cmd run test:engine` yesil
+  (`711 checks passed`), hedefli Playwright StateTree editor smoke PASS,
+  `npm.cmd run build:verify` yesil (verify:dist --strict PASS),
+  `npm.cmd run check:assets` PASS (baseline thumbnail/sidecar warning'leriyle).
 
 ## Ilk uygulanabilir vertical slice onerisi
 

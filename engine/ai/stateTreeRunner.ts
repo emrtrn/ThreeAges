@@ -318,7 +318,7 @@ export class AiStateTreeRunner {
       controller: this.controller,
       blackboard: this.controller.blackboard,
       engine,
-      params: task.params ?? EMPTY_PARAMS,
+      params: this.resolveParams(task.params),
       memory,
       ...(this.options.emitMessage ? { emitMessage: this.options.emitMessage } : {}),
       ...(this.options.moveTo ? { moveTo: this.options.moveTo } : {}),
@@ -349,7 +349,7 @@ export class AiStateTreeRunner {
         controller: this.controller,
         blackboard: this.controller.blackboard,
         engine,
-        params: evaluator.params ?? EMPTY_PARAMS,
+        params: this.resolveParams(evaluator.params),
         memory: this.evaluatorMemoryFor(index),
         service: evaluator,
         ...(this.options.emitMessage ? { emitMessage: this.options.emitMessage } : {}),
@@ -360,6 +360,17 @@ export class AiStateTreeRunner {
         ...(this.options.targetPoints ? { targetPoints: this.options.targetPoints } : {}),
       });
     }
+  }
+
+  private resolveParams(localParams?: Record<string, AiJsonValue>): Record<string, AiJsonValue> {
+    const shared = this.asset.parameters;
+    const context = this.asset.context;
+    if (!shared && !context) return localParams ?? EMPTY_PARAMS;
+    const merged: Record<string, AiJsonValue> = {};
+    if (shared) Object.assign(merged, shared);
+    if (context) merged.context = context;
+    if (localParams) Object.assign(merged, localParams);
+    return merged;
   }
 
   private cooldownMemory(
