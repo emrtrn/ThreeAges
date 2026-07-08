@@ -16,14 +16,9 @@ import type {
   AiBehaviorServiceDef,
   AiBehaviorStatus,
   AiBehaviorTreeAsset,
-  AiBlackboardDecoratorDef,
-  AiCooldownDecoratorDef,
-  AiDecoratorDef,
-  AiDistanceDecoratorDef,
   AiJsonValue,
-  AiNumericCompareOp,
-  AiPerceptionDecoratorDef,
 } from "./behaviorAsset";
+import { aiDecoratorsPass, distanceBetween, vec3Param, type AiWorldQuery } from "./aiConditions";
 import { aiQueryParams } from "./queryAsset";
 import type { AiQueryResult } from "./queryRunner";
 import type { SmartObjectRuntime } from "./smartObjects";
@@ -59,9 +54,7 @@ export interface AiQueryRequest {
   readonly query: string;
 }
 
-export interface AiWorldQuery {
-  readonly entityPosition: (entityId: EntityId) => Vec3 | null;
-}
+export type { AiWorldQuery } from "./aiConditions";
 
 export interface AiBehaviorRunnerOptions {
   readonly taskRegistry?: AiTaskRegistry;
@@ -117,7 +110,13 @@ interface TickState {
 }
 
 const EMPTY_PARAMS: Record<string, AiJsonValue> = {};
-const PRESERVE_TASK_MEMORY = "__forgePreserveTaskMemory";
+/**
+ * Task-memory sentinel: when a task sets `memory[PRESERVE_TASK_MEMORY] = true`,
+ * its per-node memory survives a non-running result instead of being cleared.
+ * Exported so the StateTree runner (`stateTreeRunner.ts`) applies the identical
+ * task-memory lifecycle when it invokes the shared task registry.
+ */
+export const PRESERVE_TASK_MEMORY = "__forgePreserveTaskMemory";
 
 interface CachedQueryTaskResult {
   readonly signature: string;
@@ -321,80 +320,17 @@ export class AiBehaviorRunner {
   ): boolean {
     const decorators = node.decorators;
     if (!decorators || decorators.length === 0) return true;
-    for (let index = 0; index < decorators.length; index += 1) {
-      const decorator = decorators[index];
-      if (!decorator) continue;
-      if (!this.decoratorPasses(decorator, index, path, engine)) {
-        state.failedDecorator = decoratorLabel(decorator);
-        return false;
-      }
+    const result = aiDecoratorsPass(decorators, {
+      controller: this.controller,
+      ...(this.options.world ? { world: this.options.world } : {}),
+      elapsedSeconds: engine.elapsedSeconds,
+      cooldownReadyAt: this.memoryFor(path).cooldownReadyAt,
+    });
+    if (!result.pass) {
+      state.failedDecorator = result.failed;
+      return false;
     }
     return true;
-  }
-
-  private decoratorPasses(
-    decorator: AiDecoratorDef,
-    index: number,
-    path: string,
-    engine: EngineUpdateContext,
-  ): boolean {
-    switch (decorator.kind) {
-      case "blackboard":
-        return this.blackboardDecoratorPasses(decorator);
-      case "distance":
-        return this.distanceDecoratorPasses(decorator);
-      case "cooldown":
-        return this.cooldownDecoratorPasses(decorator, index, path, engine);
-      case "hasPerceptionStimulus":
-        return this.perceptionDecoratorPasses(decorator);
-    }
-  }
-
-  private blackboardDecoratorPasses(decorator: AiBlackboardDecoratorDef): boolean {
-    const actual = this.controller.blackboard.get(decorator.key);
-    switch (decorator.op) {
-      case "equals":
-        return blackboardValuesEqual(actual, decorator.value);
-      case "notEquals":
-        return !blackboardValuesEqual(actual, decorator.value);
-      case "isSet":
-        return actual !== undefined && actual !== null;
-      case "isNotSet":
-        return actual === undefined || actual === null;
-    }
-  }
-
-  private distanceDecoratorPasses(decorator: AiDistanceDecoratorDef): boolean {
-    const world = this.options.world;
-    if (!world) return false;
-    const pawnPosition = world.entityPosition(this.controller.pawnEntityId);
-    if (!pawnPosition) return false;
-    const target = resolveDecoratorPosition(this.controller.blackboard, decorator.key, world);
-    if (!target) return false;
-    return compareNumbers(distanceBetween(pawnPosition, target), decorator.op, decorator.value);
-  }
-
-  private cooldownDecoratorPasses(
-    decorator: AiCooldownDecoratorDef,
-    index: number,
-    path: string,
-    engine: EngineUpdateContext,
-  ): boolean {
-    const memory = this.memoryFor(path);
-    const readyAt = memory.cooldownReadyAt.get(index);
-    if (readyAt !== undefined && engine.elapsedSeconds + 1e-9 < readyAt) return false;
-    memory.cooldownReadyAt.set(index, engine.elapsedSeconds + decorator.seconds);
-    return true;
-  }
-
-  private perceptionDecoratorPasses(decorator: AiPerceptionDecoratorDef): boolean {
-    for (const stimulus of this.controller.getPerception()) {
-      if (decorator.sense !== undefined && stimulus.sense !== decorator.sense) continue;
-      if (decorator.minStrength !== undefined && stimulus.strength < decorator.minStrength) continue;
-      if (decorator.requireLineOfSight === true && stimulus.lineOfSight !== true) continue;
-      return true;
-    }
-    return false;
   }
 
   private tickServices(node: AiBehaviorNode, path: string, engine: EngineUpdateContext): void {
@@ -818,51 +754,6 @@ function optionalNonNegativeNumberParam(value: AiJsonValue | undefined): number 
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-function distanceBetween(left: Vec3, right: Vec3): number {
-  const dx = left[0] - right[0];
-  const dy = left[1] - right[1];
-  const dz = left[2] - right[2];
-  return Math.sqrt(dx * dx + dy * dy + dz * dz);
-}
-
-function compareNumbers(actual: number, op: AiNumericCompareOp, expected: number): boolean {
-  switch (op) {
-    case "lt":
-      return actual < expected;
-    case "lte":
-      return actual <= expected;
-    case "gt":
-      return actual > expected;
-    case "gte":
-      return actual >= expected;
-  }
-}
-
-function resolveDecoratorPosition(
-  blackboard: Blackboard,
-  key: string,
-  world: AiWorldQuery,
-): Vec3 | null {
-  const value = blackboard.get(key);
-  const direct = Array.isArray(value) ? vec3Param(value) : null;
-  if (direct) return direct;
-  const entity = blackboard.getEntity(key);
-  return entity ? world.entityPosition(entity) : null;
-}
-
-function decoratorLabel(decorator: AiDecoratorDef): string {
-  switch (decorator.kind) {
-    case "blackboard":
-      return `blackboard:${decorator.key}:${decorator.op}`;
-    case "distance":
-      return `distance:${decorator.key}:${decorator.op}`;
-    case "cooldown":
-      return `cooldown:${decorator.seconds}`;
-    case "hasPerceptionStimulus":
-      return `perception:${decorator.sense ?? "any"}`;
-  }
-}
-
 function strongestStimulus(
   stimuli: readonly PerceivedStimulus[],
   sense: PerceptionSense,
@@ -916,17 +807,6 @@ function stringParam(value: AiJsonValue | undefined): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-function vec3Param(value: AiJsonValue | undefined | BlackboardValue): Vec3 | null {
-  if (
-    Array.isArray(value) &&
-    value.length === 3 &&
-    value.every((entry) => typeof entry === "number" && Number.isFinite(entry))
-  ) {
-    return [value[0] as number, value[1] as number, value[2] as number];
-  }
-  return null;
-}
-
 function plainPayload(value: AiJsonValue | undefined): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return { ...value };
@@ -937,21 +817,6 @@ function toBlackboardValue(value: AiJsonValue | undefined): BlackboardValue {
   if (Array.isArray(value)) return vec3Param(value) ?? null;
   if (typeof value === "object" && value !== null) return null;
   return value;
-}
-
-function blackboardValuesEqual(left: BlackboardValue | undefined, right: BlackboardValue | undefined): boolean {
-  if (Array.isArray(left) || Array.isArray(right)) {
-    return (
-      Array.isArray(left) &&
-      Array.isArray(right) &&
-      left.length === 3 &&
-      right.length === 3 &&
-      left[0] === right[0] &&
-      left[1] === right[1] &&
-      left[2] === right[2]
-    );
-  }
-  return left === right;
 }
 
 function clampIndex(index: number, length: number): number {

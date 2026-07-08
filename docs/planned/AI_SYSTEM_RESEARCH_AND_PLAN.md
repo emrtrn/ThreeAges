@@ -148,6 +148,14 @@
 > siniflandirmasi, `/__save-state-tree` dev endpoint'i, `stateTree` content-new
 > stub'i ve Content Browser create menu girisi eklendi. Runtime runner + editor
 > outline sonraki dilim (bkz. asagidaki checkbox'lar).
+> Revizyon: 2026-07-08 - Faz 8 StateTree runtime runner dilimi uygulandi:
+> `engine/ai/stateTreeRunner.ts` (hiyerarsik state selection, enter/tick/exit,
+> guard'li + event'li transitions, global evaluators, per-agent runtime memory).
+> Paylasilan condition semantigi `engine/ai/aiConditions.ts`'e cikarildi; hem
+> Behavior Tree hem StateTree ayni decorator degerlendirmesini ve ayni
+> `AiTaskRegistry`/`AiTaskContext` task registry'sini kullanir. patrol -> alert
+> -> chase -> search -> patrol engine testi eklendi. Subsystem/AIController
+> wiring + editor outline sonraki dilim.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1655,19 +1663,25 @@ benzeri sistem.
       - [x] evaluators
       - [x] tasks
       - [ ] parameters/context data.
-- [ ] Runtime runner: active state path, transition guards, enter/tick/exit.
-- [~] Behavior Tree ile ortak task/condition registry kullan. (Asset-schema
-      seviyesinde: enter/transition guard'lari `AiDecoratorDef`, evaluator'lar
-      `AiBehaviorServiceDef` — behaviorAsset normalizer'lari paylasiliyor.
-      Runtime task/condition dispatch paylasimi runner dilimiyle gelecek.)
+- [x] Runtime runner: active state path, transition guards, enter/tick/exit.
+      (`engine/ai/stateTreeRunner.ts`: hiyerarsik selection, enter/exit memory
+      temizligi, leaf-first transition oncelikligi, `postEvent` event kuyrugu.)
+- [x] Behavior Tree ile ortak task/condition registry kullan. Enter/transition
+      guard'lari ve BT decorator'lari ayni `engine/ai/aiConditions.ts`
+      degerlendirmesinden gecer; her iki runner ayni `AiTaskRegistry` /
+      `AiTaskContext` / `AiServiceRegistry` yuzeyini ve ayni
+      `PRESERVE_TASK_MEMORY` task-memory yasam dongusunu paylasir.
 - [ ] GameMode, boss fight, civilian routine, quest actor gibi use-case'leri
       Behavior Tree yerine StateTree ile modelle.
 - [ ] Editor ilk surum: nested state outline + transition table.
-- [ ] Debug: active state, last transition reason, evaluator values.
-- [ ] Test: patrol -> alert -> chase -> search -> patrol state akisi.
-- [~] Validation: full local gate + Playwright debug smoke. (Asset schema dilimi
-      icin `tsc`, `test:engine` 707 check, `build:verify`, `check:assets` yesil;
-      Playwright smoke runtime/editor dilimiyle gelecek.)
+- [~] Debug: active state, last transition reason, evaluator values. (Runner
+      `getDebugSnapshot()` activePath + lastTransition {from,to,reason} + lastStatus
+      uretir; `?debug` overlay / editor inspector wiring subsystem dilimiyle gelecek.)
+- [x] Test: patrol -> alert -> chase -> search -> patrol state akisi. (Engine
+      unit test; ayrica nested child selection + evaluator + paylasilan registry.)
+- [~] Validation: full local gate + Playwright debug smoke. (`tsc`, `test:engine`
+      709 check, `build:verify`, `check:assets` yesil; Playwright smoke
+      runtime/editor dilimiyle gelecek.)
 
 Tamamlanan Faz 8 StateTree asset schema/save/manifest notu (2026-07-08):
 
@@ -1693,6 +1707,37 @@ Tamamlanan Faz 8 StateTree asset schema/save/manifest notu (2026-07-08):
   save payload compound-ext dogrulamasi.
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`707 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS.
+
+Tamamlanan Faz 8 StateTree runtime runner notu (2026-07-08):
+
+- `engine/ai/stateTreeRunner.ts` eklendi (`AiStateTreeRunner`). Model: sibling
+  state'ler `enter` guard'lariyla secilir (ilk gecen), aktif state ve aktif
+  cocuklari her tick `tasks`'larini kok->yaprak calistirir, `transitions`
+  guard'li (opsiyonel `event`) ve leaf-first oncelikli degerlendirilir. Aktif
+  zincir degisince state memory'si (task memory + enter/transition cooldown)
+  cikan state'lerde temizlenir. Global `evaluators` aktif state'ten bagimsiz,
+  kendi interval'inde tik atar. `postEvent(name)` bir sonraki tick'te event'li
+  transition'lari tetikler. Runtime memory controller basina/state basina ayri;
+  authored asset immutable kalir.
+- Paylasilan condition semantigi `engine/ai/aiConditions.ts`'e cikarildi
+  (`aiDecoratorsPass` + blackboard/distance/cooldown/hasPerceptionStimulus).
+  `behaviorRunner.ts` kendi private decorator metodlarini birakip bu tek
+  kaynagi kullanacak sekilde refactor edildi (davranis ayni; tum mevcut BT
+  testleri yesil). `PRESERVE_TASK_MEMORY` behaviorRunner'dan export edilip
+  StateTree'de ayni task-memory yasam dongusu icin kullanildi.
+- StateTree runner task/evaluator'lari `src/game/ai/tasks.ts`'in besledigi ayni
+  `AiTaskRegistry` / `createDefaultAiServiceRegistry` uzerinden calisir; boylece
+  `forge.moveToPosition`, `forge.sendMessage`, perception service'leri vb.
+  BT ile birebir ayni implementasyondan gecer.
+- `getDebugSnapshot()`: activePath (kok->yaprak id zinciri), lastStatus,
+  lastTransition ({from, to, reason: "initial" | "conditions" | "event:<name>"}),
+  elapsedSeconds.
+- Test: `patrol -> alert -> chase -> search -> patrol` blackboard/event
+  transition akisi; nested `Combat > Melee|Ranged` enter-condition secimi +
+  evaluator blackboard yazimi + paylasilan task registry cagrisi.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`709 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
   PASS), `npm.cmd run check:assets` PASS.
 
 ## Ilk uygulanabilir vertical slice onerisi

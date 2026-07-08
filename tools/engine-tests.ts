@@ -97,6 +97,7 @@ import {
   createDefaultAiServiceRegistry,
   createDefaultAiTaskRegistry,
 } from "../engine/ai/behaviorRunner";
+import { AiStateTreeRunner } from "../engine/ai/stateTreeRunner";
 import {
   findGridPath,
   advanceWaypoint,
@@ -19819,6 +19820,156 @@ check("AiBehaviorRunner distance/cooldown/perception decorators gate their branc
   // After the cooldown elapses the attack branch fires again.
   assert.equal(tick(1.5), "success");
   assert.equal(log.at(-1), "test.attack");
+});
+
+check("AiStateTreeRunner drives a patrol -> alert -> chase -> search -> patrol flow", () => {
+  const bb = new Blackboard([
+    { key: "heardNoise", kind: "boolean", default: false },
+    { key: "seesTarget", kind: "boolean", default: false },
+  ]);
+  const controller = new AIController("ai:guard", "guard", bb);
+  const asset = normalizeAiStateTreeAsset({
+    schema: 1,
+    type: "stateTree",
+    states: [
+      {
+        id: "Patrol",
+        tasks: [{ task: "test.patrol" }],
+        transitions: [{ to: "Alert", conditions: [{ kind: "blackboard", key: "heardNoise", op: "equals", value: true }] }],
+      },
+      {
+        id: "Alert",
+        tasks: [{ task: "test.alert" }],
+        transitions: [
+          { to: "Chase", conditions: [{ kind: "blackboard", key: "seesTarget", op: "equals", value: true }] },
+          { to: "Search", event: "alert-timeout" },
+        ],
+      },
+      {
+        id: "Chase",
+        tasks: [{ task: "test.chase" }],
+        transitions: [{ to: "Search", conditions: [{ kind: "blackboard", key: "seesTarget", op: "equals", value: false }] }],
+      },
+      {
+        id: "Search",
+        tasks: [{ task: "test.search" }],
+        transitions: [{ to: "Patrol", event: "search-done" }],
+      },
+    ],
+  });
+  const log: string[] = [];
+  const runner = new AiStateTreeRunner(controller, asset, {
+    taskRegistry: {
+      get: (taskId) => (context) => {
+        log.push(taskId);
+        return context.params.hold === true ? "running" : "success";
+      },
+    },
+  });
+  const tick = (t: number) => runner.tick({ deltaSeconds: 0.1, elapsedSeconds: t, frame: 1 });
+
+  tick(0.1);
+  assert.deepEqual(runner.getDebugSnapshot().activePath, ["Patrol"]);
+  assert.equal(controller.goal, "Patrol");
+  assert.equal(log.at(-1), "test.patrol");
+  assert.deepEqual(runner.getDebugSnapshot().lastTransition, { from: null, to: "Patrol", reason: "initial" });
+
+  bb.set("heardNoise", true);
+  tick(0.2);
+  assert.deepEqual(runner.getDebugSnapshot().activePath, ["Alert"]);
+  assert.equal(log.at(-1), "test.alert");
+  assert.deepEqual(runner.getDebugSnapshot().lastTransition, { from: "Patrol", to: "Alert", reason: "conditions" });
+
+  bb.set("seesTarget", true);
+  tick(0.3);
+  assert.deepEqual(runner.getDebugSnapshot().activePath, ["Chase"]);
+  assert.equal(log.at(-1), "test.chase");
+
+  bb.set("seesTarget", false);
+  tick(0.4);
+  assert.deepEqual(runner.getDebugSnapshot().activePath, ["Search"]);
+  assert.equal(log.at(-1), "test.search");
+
+  // Search only leaves on the search-done event, not on conditions.
+  tick(0.5);
+  assert.deepEqual(runner.getDebugSnapshot().activePath, ["Search"]);
+  runner.postEvent("search-done");
+  tick(0.6);
+  assert.deepEqual(runner.getDebugSnapshot().activePath, ["Patrol"]);
+  assert.equal(runner.getDebugSnapshot().lastTransition?.reason, "event:search-done");
+});
+
+check("AiStateTreeRunner selects nested child states, runs evaluators, and shares the task registry", () => {
+  const buildAsset = () =>
+    normalizeAiStateTreeAsset({
+      schema: 1,
+      type: "stateTree",
+      evaluators: [{ service: "test.eval", interval: 0.05 }],
+      states: [
+        {
+          id: "Combat",
+          enter: [{ kind: "blackboard", key: "inCombat", op: "equals", value: true }],
+          tasks: [{ task: "test.face" }],
+          states: [
+            { id: "Melee", enter: [{ kind: "blackboard", key: "range", op: "equals", value: "near" }], tasks: [{ task: "test.melee" }] },
+            { id: "Ranged", tasks: [{ task: "test.shoot" }] },
+          ],
+        },
+        { id: "Idle", tasks: [{ task: "test.idle" }] },
+      ],
+    });
+  const makeRunner = (bb: Blackboard, log: string[]) => {
+    const controller = new AIController("ai:npc", "npc", bb);
+    return new AiStateTreeRunner(controller, buildAsset(), {
+      taskRegistry: { get: (taskId) => () => (log.push(taskId), "success") },
+      serviceRegistry: {
+        get: (serviceId) =>
+          serviceId === "test.eval"
+            ? (context) => context.blackboard.set("evaluated", true)
+            : undefined,
+      },
+    });
+  };
+
+  // inCombat + near -> Combat > Melee; both active states run their tasks root-first.
+  const meleeBb = new Blackboard([
+    { key: "inCombat", kind: "boolean", default: false },
+    { key: "range", kind: "string", default: "far" },
+    { key: "evaluated", kind: "boolean", default: false },
+  ]);
+  meleeBb.set("inCombat", true);
+  meleeBb.set("range", "near");
+  const meleeLog: string[] = [];
+  const meleeRunner = makeRunner(meleeBb, meleeLog);
+  meleeRunner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+  assert.deepEqual(meleeRunner.getDebugSnapshot().activePath, ["Combat", "Melee"]);
+  assert.deepEqual(meleeLog, ["test.face", "test.melee"]);
+  assert.equal(meleeBb.getBoolean("evaluated"), true); // evaluator ran
+
+  // inCombat but not near -> descends into the fallback Ranged child.
+  const rangedBb = new Blackboard([
+    { key: "inCombat", kind: "boolean", default: false },
+    { key: "range", kind: "string", default: "far" },
+    { key: "evaluated", kind: "boolean", default: false },
+  ]);
+  rangedBb.set("inCombat", true);
+  const rangedLog: string[] = [];
+  const rangedRunner = makeRunner(rangedBb, rangedLog);
+  rangedRunner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+  assert.deepEqual(rangedRunner.getDebugSnapshot().activePath, ["Combat", "Ranged"]);
+  assert.deepEqual(rangedLog, ["test.face", "test.shoot"]);
+
+  // Combat.enter fails -> the Idle sibling is selected instead.
+  const idleBb = new Blackboard([
+    { key: "inCombat", kind: "boolean", default: false },
+    { key: "range", kind: "string", default: "far" },
+    { key: "evaluated", kind: "boolean", default: false },
+  ]);
+  const idleLog: string[] = [];
+  const idleRunner = makeRunner(idleBb, idleLog);
+  idleRunner.tick({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+  assert.deepEqual(idleRunner.getDebugSnapshot().activePath, ["Idle"]);
+  assert.deepEqual(idleLog, ["test.idle"]);
 });
 
 check("AiBehaviorRunner selector rechecks higher priority branches while a lower branch is running", () => {
