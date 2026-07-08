@@ -20979,6 +20979,85 @@ check("AISubsystem derives one controller per AIController entity, ticks safely,
   assert.equal(ai.controllerCount(), 0);
 });
 
+check("AISubsystem runs a StateTree when the AIController references a stateTree asset", () => {
+  const ai = new AISubsystem();
+  ai.setAssetLibrary({
+    blackboards: new Map([
+      [
+        "assets/AI/Guard.blackboard.json",
+        normalizeAiBlackboardAsset({
+          schema: 1,
+          type: "blackboard",
+          keys: [
+            { key: "mode", kind: "string", default: null },
+            { key: "alarm", kind: "boolean", default: false },
+          ],
+        }),
+      ],
+    ]),
+    stateTrees: new Map([
+      [
+        "assets/AI/Guard.stateTree.json",
+        normalizeAiStateTreeAsset({
+          schema: 1,
+          type: "stateTree",
+          blackboard: "assets/AI/Guard.blackboard.json",
+          states: [
+            {
+              id: "Idle",
+              tasks: [{ task: "forge.setBlackboard", params: { key: "mode", value: "idle" } }],
+              transitions: [
+                { to: "Alert", conditions: [{ kind: "blackboard", key: "alarm", op: "equals", value: true }] },
+              ],
+            },
+            {
+              id: "Alert",
+              tasks: [{ task: "forge.setBlackboard", params: { key: "mode", value: "alert" } }],
+            },
+          ],
+        }),
+      ],
+    ]),
+  });
+  ai.setEntities([
+    {
+      id: "guard",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        // Both authored: the StateTree must win over the Behavior Tree.
+        [AI_CONTROLLER_COMPONENT]: {
+          stateTree: "assets/AI/Guard.stateTree.json",
+          behaviorTree: "assets/AI/Missing.behavior.json",
+        },
+      },
+    },
+  ]);
+  const controller = ai.getControllerForPawn("guard");
+  assert.ok(controller);
+  // Blackboard resolved from the StateTree asset's blackboard reference.
+  assert.equal(controller?.blackboard.keyCount(), 2);
+  assert.equal(controller?.stateTreeAsset, "assets/AI/Guard.stateTree.json");
+
+  ai.update({ deltaSeconds: 0.1, elapsedSeconds: 0.1, frame: 1 });
+  assert.equal(controller?.goal, "Idle");
+  assert.equal(controller?.blackboard.getString("mode"), "idle");
+
+  const idleSnap = ai.getDebugSnapshot().controllers[0];
+  assert.ok(idleSnap?.stateTree, "StateTree runner debug should be present");
+  assert.equal(idleSnap?.behavior, null);
+  assert.equal(idleSnap?.stateTreeAsset, "assets/AI/Guard.stateTree.json");
+  assert.deepEqual(idleSnap?.stateTree?.activePath, ["Idle"]);
+
+  // Guard condition flips the active state, driven through the shared task registry.
+  controller?.blackboard.set("alarm", true);
+  ai.update({ deltaSeconds: 0.1, elapsedSeconds: 0.2, frame: 2 });
+  assert.equal(controller?.goal, "Alert");
+  assert.equal(controller?.blackboard.getString("mode"), "alert");
+  const alertSnap = ai.getDebugSnapshot().controllers[0];
+  assert.deepEqual(alertSnap?.stateTree?.activePath, ["Alert"]);
+  assert.equal(alertSnap?.stateTree?.lastTransition?.to, "Alert");
+});
+
 check("AISubsystem derives perception listeners from AIController props and consumes noise events", () => {
   const wall = { min: [-1, -1, 2], max: [1, 2, 2.2] };
   const ai = new AISubsystem({ blockers: () => [wall] });

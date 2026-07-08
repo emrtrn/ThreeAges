@@ -832,7 +832,9 @@ export class ActorScriptEditor {
   }
 
   /** AI assets ({path,name}) of a given manifest type, name-sorted, for the AI pickers. */
-  private aiAssetsByType(assetType: "behaviorTree" | "blackboard"): Array<{ path: string; name: string }> {
+  private aiAssetsByType(
+    assetType: "behaviorTree" | "blackboard" | "stateTree",
+  ): Array<{ path: string; name: string }> {
     return (this.options.assets ?? [])
       .filter((asset) => asset.assetType === assetType)
       .map((asset) => ({ path: asset.path, name: asset.name }))
@@ -840,10 +842,11 @@ export class ActorScriptEditor {
   }
 
   /**
-   * Behavior Tree + Blackboard asset pickers plus the perception / nav-agent
-   * tuning for an AIController component. The runtime reader keys off asset
-   * *paths* (`props.behaviorTree` / `props.blackboard`), so those dropdowns store
-   * the path; an unknown/hand-typed path is preserved as an option so the picker
+   * Behavior Tree + State Tree + Blackboard asset pickers plus the perception /
+   * nav-agent tuning for an AIController component. The runtime reader keys off
+   * asset *paths* (`props.behaviorTree` / `props.stateTree` / `props.blackboard`),
+   * so those dropdowns store the path (a StateTree wins over a Behavior Tree at
+   * runtime when both are set); an unknown/hand-typed path is preserved as an option so the picker
    * never silently drops it. Perception (`props.perception`) and nav-agent
    * (`props.navAgent`) are nested objects consumed by `readAIControllerComponent`
    * (`readPerceptionConfig` / `readNavAgentConfig`); each numeric field writes
@@ -855,6 +858,12 @@ export class ActorScriptEditor {
       "Behavior Tree",
       typeof node.props.behaviorTree === "string" ? node.props.behaviorTree : "",
       this.aiAssetsByType("behaviorTree"),
+    );
+    const stateTree = this.assetPathPickerField(
+      "data-as-ai-statetree",
+      "State Tree",
+      typeof node.props.stateTree === "string" ? node.props.stateTree : "",
+      this.aiAssetsByType("stateTree"),
     );
     const blackboard = this.assetPathPickerField(
       "data-as-ai-blackboard",
@@ -880,7 +889,7 @@ export class ActorScriptEditor {
           fallback,
         )}" ${attrs} />
       </label>`;
-    return `${behaviorTree}${blackboard}
+    return `${behaviorTree}${stateTree}${blackboard}
       <div class="as-section-label">Perception</div>
       ${perceptionField("sightRadius", "Sight Radius", 18, 'step="0.5" min="0"')}
       ${perceptionField("nearSightRadius", "Near Sight Radius", 2, 'step="0.5" min="0"')}
@@ -1245,6 +1254,13 @@ export class ActorScriptEditor {
     behavior?.addEventListener("change", () => {
       if (behavior.value) node.props.behaviorTree = behavior.value;
       else delete node.props.behaviorTree;
+      this.markDirty();
+      this.render();
+    });
+    const stateTree = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-ai-statetree]");
+    stateTree?.addEventListener("change", () => {
+      if (stateTree.value) node.props.stateTree = stateTree.value;
+      else delete node.props.stateTree;
       this.markDirty();
       this.render();
     });

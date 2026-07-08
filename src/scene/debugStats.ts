@@ -226,6 +226,13 @@ export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
       const failed = behavior?.failedDecorator ? ` fail:${behavior.failedDecorator}` : "";
       lines.push(`  bt ${controller.pawnEntityId}: ${behaviorStatus}${elapsed}${path ? ` ${path}` : ""}${failed}`);
     }
+    const stateTree = controller.stateTree;
+    if (stateTree?.lastStatus || stateTree?.activePath.length) {
+      const state = stateTree.activePath.at(-1);
+      const elapsed = ` ${stateTree.elapsedSeconds.toFixed(2)}s`;
+      const status = stateTree.lastStatus ?? "idle";
+      lines.push(`  st ${controller.pawnEntityId}: ${status}${elapsed}${state ? ` ${state}` : ""}`);
+    }
     const sensed = controller.perception?.[0];
     if (sensed) {
       lines.push(
@@ -275,16 +282,31 @@ export function formatAiInspector(
 
   const lines = [`ai inspect ${focus.pawnEntityId}`];
 
-  const asset = focus.behaviorTreeAsset?.split("/").at(-1);
-  lines.push(`  bt: ${asset ?? "—"} goal:${focus.goal ?? "—"}`);
-  const behavior = focus.behavior;
-  if (behavior) {
-    const status = behavior.lastStatus ?? "idle";
-    lines.push(`    ${status} ${behavior.elapsedSeconds.toFixed(2)}s`);
-    if (behavior.activePath.length > 0) {
-      lines.push(`    path: ${behavior.activePath.join(" > ")}`);
+  const stateTree = focus.stateTree;
+  if (stateTree) {
+    const asset = focus.stateTreeAsset?.split("/").at(-1);
+    lines.push(`  st: ${asset ?? "—"} goal:${focus.goal ?? "—"}`);
+    const status = stateTree.lastStatus ?? "idle";
+    lines.push(`    ${status} ${stateTree.elapsedSeconds.toFixed(2)}s`);
+    if (stateTree.activePath.length > 0) {
+      lines.push(`    state: ${stateTree.activePath.join(" > ")}`);
     }
-    if (behavior.failedDecorator) lines.push(`    fail: ${behavior.failedDecorator}`);
+    const transition = stateTree.lastTransition;
+    if (transition) {
+      lines.push(`    from: ${transition.from ?? "—"} → ${transition.to} (${transition.reason})`);
+    }
+  } else {
+    const asset = focus.behaviorTreeAsset?.split("/").at(-1);
+    lines.push(`  bt: ${asset ?? "—"} goal:${focus.goal ?? "—"}`);
+    const behavior = focus.behavior;
+    if (behavior) {
+      const status = behavior.lastStatus ?? "idle";
+      lines.push(`    ${status} ${behavior.elapsedSeconds.toFixed(2)}s`);
+      if (behavior.activePath.length > 0) {
+        lines.push(`    path: ${behavior.activePath.join(" > ")}`);
+      }
+      if (behavior.failedDecorator) lines.push(`    fail: ${behavior.failedDecorator}`);
+    }
   }
 
   const entries = focus.blackboard.entries;

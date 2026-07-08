@@ -412,6 +412,11 @@ export interface AINavAgentConfig {
 export interface AIControllerComponent {
   /** Authored `*.behavior.json` asset path (resolved by the Faz 2 loader). */
   behaviorTree?: string;
+  /**
+   * Authored `*.stateTree.json` asset path. When set (and resolvable), the
+   * AISubsystem runs a StateTree instead of a Behavior Tree for this pawn.
+   */
+  stateTree?: string;
   /** Authored `*.blackboard.json` asset path (resolved by the Faz 2 loader). */
   blackboard?: string;
   perception?: AIPerceptionConfig;
@@ -982,6 +987,9 @@ export function readAIControllerComponent(entity: Entity): AIControllerComponent
   const component: AIControllerComponent = {};
   if (typeof data.behaviorTree === "string" && data.behaviorTree.length > 0) {
     component.behaviorTree = data.behaviorTree;
+  }
+  if (typeof data.stateTree === "string" && data.stateTree.length > 0) {
+    component.stateTree = data.stateTree;
   }
   if (typeof data.blackboard === "string" && data.blackboard.length > 0) {
     component.blackboard = data.blackboard;

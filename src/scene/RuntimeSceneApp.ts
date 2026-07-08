@@ -41,6 +41,7 @@ import {
   type AiBehaviorTreeAsset,
   type AiBlackboardAsset,
 } from "@engine/ai/behaviorAsset";
+import { normalizeAiStateTreeAsset, type AiStateTreeAsset } from "@engine/ai/stateTreeAsset";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
 import { resolveCharacterCapsule } from "@engine/scene/capsule";
@@ -1889,10 +1890,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const manifest = await this.assetLoader.loadManifest();
     const blackboards = new Map<string, AiBlackboardAsset>();
     const behaviors = new Map<string, AiBehaviorTreeAsset>();
+    const stateTrees = new Map<string, AiStateTreeAsset>();
     await Promise.all(
       manifest.assets.map(async (asset) => {
         const type = assetType(asset);
-        if (type !== "blackboard" && type !== "behaviorTree") return;
+        if (type !== "blackboard" && type !== "behaviorTree" && type !== "stateTree") return;
         const path = assetPath(asset);
         try {
           const response = await fetch(projectFileUrl(path), { cache: "no-cache" });
@@ -1902,6 +1904,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
             const blackboard = normalizeAiBlackboardAsset(json);
             blackboards.set(asset.id, blackboard);
             blackboards.set(path, blackboard);
+          } else if (type === "stateTree") {
+            const stateTree = normalizeAiStateTreeAsset(json);
+            stateTrees.set(asset.id, stateTree);
+            stateTrees.set(path, stateTree);
           } else {
             const behavior = normalizeAiBehaviorTreeAsset(json);
             behaviors.set(asset.id, behavior);
@@ -1912,7 +1918,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         }
       }),
     );
-    this.aiSubsystem.setAssetLibrary({ blackboards, behaviors });
+    this.aiSubsystem.setAssetLibrary({ blackboards, behaviors, stateTrees });
   }
 
   /**

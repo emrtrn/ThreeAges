@@ -17,6 +17,7 @@
 import { Blackboard } from "./blackboard";
 import type { BlackboardDebugSnapshot } from "./blackboard";
 import type { AiBehaviorRunnerDebugSnapshot } from "./behaviorRunner";
+import type { AiStateTreeRunnerDebugSnapshot } from "./stateTreeRunner";
 import type { AiQueryDebugSnapshot, AiQueryResult } from "./queryRunner";
 import { aiQueryDebugSnapshot } from "./queryRunner";
 import type { AIPerceptionConfig } from "../scene/components";
@@ -30,6 +31,8 @@ export type AIControllerId = string;
 export interface AIControllerOptions {
   /** Authored `*.behavior.json` asset path this controller runs (resolved in Faz 2). */
   readonly behaviorTreeAsset?: string;
+  /** Authored `*.stateTree.json` asset path this controller runs instead of a Behavior Tree. */
+  readonly stateTreeAsset?: string;
   /** Authored `*.blackboard.json` asset path backing the memory (resolved in Faz 2). */
   readonly blackboardAsset?: string;
   /** Authored perception tuning copied from the AIController component. */
@@ -44,7 +47,11 @@ export interface AIControllerDebugSnapshot {
   readonly goal: string | null;
   /** Referenced behavior tree asset path, or null when none is authored. */
   readonly behaviorTreeAsset: string | null;
+  /** Referenced state tree asset path, or null when none is authored. */
+  readonly stateTreeAsset: string | null;
   readonly behavior: AiBehaviorRunnerDebugSnapshot | null;
+  /** Active StateTree runner debug view, or null when this controller runs a Behavior Tree. */
+  readonly stateTree: AiStateTreeRunnerDebugSnapshot | null;
   readonly perception?: readonly PerceivedStimulus[];
   readonly query?: AiQueryDebugSnapshot;
   /** Authored perception settings, echoed into debug for visualizers only. */
@@ -62,6 +69,7 @@ export class AIController {
   readonly pawnEntityId: EntityId;
   readonly blackboard: Blackboard;
   readonly behaviorTreeAsset: string | null;
+  readonly stateTreeAsset: string | null;
   readonly blackboardAsset: string | null;
   readonly perceptionConfig: AIPerceptionConfig | null;
 
@@ -79,6 +87,7 @@ export class AIController {
     this.pawnEntityId = pawnEntityId;
     this.blackboard = blackboard;
     this.behaviorTreeAsset = options.behaviorTreeAsset ?? null;
+    this.stateTreeAsset = options.stateTreeAsset ?? null;
     this.blackboardAsset = options.blackboardAsset ?? null;
     this.perceptionConfig = options.perception ?? null;
   }
@@ -115,13 +124,20 @@ export class AIController {
     this.lastQuery = null;
   }
 
-  getDebugSnapshot(behavior: AiBehaviorRunnerDebugSnapshot | null = null): AIControllerDebugSnapshot {
+  getDebugSnapshot(
+    runner: {
+      readonly behavior?: AiBehaviorRunnerDebugSnapshot | null;
+      readonly stateTree?: AiStateTreeRunnerDebugSnapshot | null;
+    } | null = null,
+  ): AIControllerDebugSnapshot {
     return {
       controllerId: this.id,
       pawnEntityId: this.pawnEntityId,
       goal: this.currentGoal,
       behaviorTreeAsset: this.behaviorTreeAsset,
-      behavior,
+      stateTreeAsset: this.stateTreeAsset,
+      behavior: runner?.behavior ?? null,
+      stateTree: runner?.stateTree ?? null,
       perception: this.perceived,
       ...(this.lastQuery ? { query: this.lastQuery } : {}),
       ...(this.perceptionConfig ? { perceptionConfig: this.perceptionConfig } : {}),

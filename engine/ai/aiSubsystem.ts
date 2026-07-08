@@ -35,6 +35,8 @@ import {
 import { Blackboard } from "./blackboard";
 import { AIController, type AIControllerDebugSnapshot, type AIControllerOptions } from "./aiController";
 import type { AiBlackboardAsset, AiBehaviorTreeAsset } from "./behaviorAsset";
+import type { AiStateTreeAsset } from "./stateTreeAsset";
+import { AiStateTreeRunner } from "./stateTreeRunner";
 import type { AiQueryAsset } from "./queryAsset";
 import { runAiQuery } from "./queryRunner";
 import { SmartObjectReservationStore } from "./smartObjects";
@@ -64,8 +66,18 @@ export interface AiDebugSnapshot {
 export interface AiAssetLibrary {
   readonly blackboards?: ReadonlyMap<string, AiBlackboardAsset>;
   readonly behaviors?: ReadonlyMap<string, AiBehaviorTreeAsset>;
+  readonly stateTrees?: ReadonlyMap<string, AiStateTreeAsset>;
   readonly queries?: ReadonlyMap<string, AiQueryAsset>;
 }
+
+/**
+ * One live decision runner per controller. A controller runs *either* a Behavior
+ * Tree or a StateTree (StateTree wins when both are authored); both share the
+ * same task/service registry and options, and both expose `tick(engine)`.
+ */
+type AiRunnerEntry =
+  | { readonly kind: "behavior"; readonly runner: AiBehaviorRunner }
+  | { readonly kind: "stateTree"; readonly runner: AiStateTreeRunner };
 
 export interface AISubsystemOptions {
   readonly taskRegistry?: AiTaskRegistry;
@@ -88,9 +100,10 @@ export class AISubsystem implements Subsystem {
 
   /** One controller per possessed NPC pawn, keyed by the pawn's entity id. */
   private controllers = new Map<EntityId, AIController>();
-  private runners = new Map<EntityId, AiBehaviorRunner>();
+  private runners = new Map<EntityId, AiRunnerEntry>();
   private blackboardAssets: ReadonlyMap<string, AiBlackboardAsset> = new Map();
   private behaviorAssets: ReadonlyMap<string, AiBehaviorTreeAsset> = new Map();
+  private stateTreeAssets: ReadonlyMap<string, AiStateTreeAsset> = new Map();
   private queryAssets: ReadonlyMap<string, AiQueryAsset> = new Map();
   private enabled = true;
   private taskRegistry: AiTaskRegistry;
@@ -141,6 +154,7 @@ export class AISubsystem implements Subsystem {
   setAssetLibrary(library: AiAssetLibrary): void {
     this.blackboardAssets = library.blackboards ?? new Map();
     this.behaviorAssets = library.behaviors ?? new Map();
+    this.stateTreeAssets = library.stateTrees ?? new Map();
     this.queryAssets = library.queries ?? new Map();
     this.rebuildRunners();
   }
@@ -176,13 +190,18 @@ export class AISubsystem implements Subsystem {
       const behaviorAsset = component.behaviorTree
         ? this.behaviorAssets.get(component.behaviorTree)
         : undefined;
-      const blackboardRef = component.blackboard ?? behaviorAsset?.blackboard;
+      const stateTreeAsset = component.stateTree
+        ? this.stateTreeAssets.get(component.stateTree)
+        : undefined;
+      const blackboardRef =
+        component.blackboard ?? stateTreeAsset?.blackboard ?? behaviorAsset?.blackboard;
       const blackboardKeys = blackboardRef
         ? this.blackboardAssets.get(blackboardRef)?.keys
         : undefined;
       const blackboard = new Blackboard(blackboardKeys ?? component.blackboardKeys ?? []);
       const options: AIControllerOptions = {
         ...(component.behaviorTree ? { behaviorTreeAsset: component.behaviorTree } : {}),
+        ...(component.stateTree ? { stateTreeAsset: component.stateTree } : {}),
         ...(blackboardRef ? { blackboardAsset: blackboardRef } : {}),
         ...(component.perception ? { perception: component.perception } : {}),
       };
@@ -220,7 +239,7 @@ export class AISubsystem implements Subsystem {
     }
     this.smartObjects.expire(engine.elapsedSeconds);
     this.updatePerception(engine.deltaSeconds);
-    for (const runner of this.runners.values()) runner.tick(engine);
+    for (const entry of this.runners.values()) entry.runner.tick(engine);
     this.pendingNoises = [];
     this.pendingScriptStimuli = [];
   }
@@ -283,9 +302,14 @@ export class AISubsystem implements Subsystem {
       enabled: this.enabled,
       controllerCount: this.controllers.size,
       controllers: [...this.controllers.entries()].map(([pawnEntityId, controller]) => {
-        const snapshot = controller.getDebugSnapshot(
-          this.runners.get(pawnEntityId)?.getDebugSnapshot() ?? null,
-        );
+        const entry = this.runners.get(pawnEntityId);
+        const runnerDebug =
+          entry?.kind === "behavior"
+            ? { behavior: entry.runner.getDebugSnapshot() }
+            : entry?.kind === "stateTree"
+              ? { stateTree: entry.runner.getDebugSnapshot() }
+              : null;
+        const snapshot = controller.getDebugSnapshot(runnerDebug);
         const entity = this.entities.find((candidate) => candidate.id === pawnEntityId);
         const transform = entity ? readTransformComponent(entity) : undefined;
         if (!transform) return snapshot;
@@ -305,14 +329,24 @@ export class AISubsystem implements Subsystem {
   private rebuildRunners(): void {
     this.runners.clear();
     for (const [pawnEntityId, controller] of this.controllers) {
+      // StateTree wins when a controller authors both — it is the richer
+      // long-lived state model, and the runners share the same task registry.
+      const stateTreeRef = controller.stateTreeAsset;
+      const stateTreeAsset = stateTreeRef ? this.stateTreeAssets.get(stateTreeRef) : undefined;
+      if (stateTreeAsset) {
+        this.runners.set(pawnEntityId, {
+          kind: "stateTree",
+          runner: new AiStateTreeRunner(controller, stateTreeAsset, this.runnerOptions()),
+        });
+        continue;
+      }
       const behaviorTreeAsset = controller.behaviorTreeAsset;
-      if (!behaviorTreeAsset) continue;
-      const asset = this.behaviorAssets.get(behaviorTreeAsset);
-      if (!asset) continue;
-      this.runners.set(
-        pawnEntityId,
-        new AiBehaviorRunner(controller, asset, this.runnerOptions()),
-      );
+      const behaviorAsset = behaviorTreeAsset ? this.behaviorAssets.get(behaviorTreeAsset) : undefined;
+      if (!behaviorAsset) continue;
+      this.runners.set(pawnEntityId, {
+        kind: "behavior",
+        runner: new AiBehaviorRunner(controller, behaviorAsset, this.runnerOptions()),
+      });
     }
   }
 

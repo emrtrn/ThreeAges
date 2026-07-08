@@ -156,6 +156,16 @@
 > `AiTaskRegistry`/`AiTaskContext` task registry'sini kullanir. patrol -> alert
 > -> chase -> search -> patrol engine testi eklendi. Subsystem/AIController
 > wiring + editor outline sonraki dilim.
+> Revizyon: 2026-07-08 - Faz 8 StateTree subsystem/AIController wiring dilimi
+> uygulandi: AIController component `stateTree` asset path'i tasir; `AISubsystem`
+> `stateTree` asset library'sini yukler, her controller icin StateTree varsa
+> `AiStateTreeRunner` (yoksa Behavior Tree runner) kurar ve tick eder (StateTree
+> her ikisi de authored ise kazanir), blackboard StateTree asset'inin
+> referansindan cozulur. Debug snapshot StateTree runner'i tasir; `?debug`
+> overlay `st` satiri + `formatAiInspector` state/last-transition blogu, Actor
+> Script Editor AIController formuna State Tree asset picker eklendi. Runtime/
+> editor host loader'lari `.stateTree.json` asset'lerini yukler. Kalan Faz 8:
+> nested state outline editor + parameters/context data + Playwright smoke.
 > Durum: Faz 1 uygulandi; Faz 2'nin asset altyapisi ve runtime runner dilimi
 > tamamlandi. Son tam gate yesil (`tsc`, `test:engine` 653 check,
 > `build:verify`, `check:assets`). Faz 3 CharacterMovement AI move-intent
@@ -1674,9 +1684,10 @@ benzeri sistem.
 - [ ] GameMode, boss fight, civilian routine, quest actor gibi use-case'leri
       Behavior Tree yerine StateTree ile modelle.
 - [ ] Editor ilk surum: nested state outline + transition table.
-- [~] Debug: active state, last transition reason, evaluator values. (Runner
+- [x] Debug: active state, last transition reason, evaluator values. (Runner
       `getDebugSnapshot()` activePath + lastTransition {from,to,reason} + lastStatus
-      uretir; `?debug` overlay / editor inspector wiring subsystem dilimiyle gelecek.)
+      uretir; subsystem dilimiyle `?debug` overlay'e `st` satiri (`formatAiDebug`)
+      ve `formatAiInspector` state/last-transition blogu baglandi.)
 - [x] Test: patrol -> alert -> chase -> search -> patrol state akisi. (Engine
       unit test; ayrica nested child selection + evaluator + paylasilan registry.)
 - [~] Validation: full local gate + Playwright debug smoke. (`tsc`, `test:engine`
@@ -1739,6 +1750,42 @@ Tamamlanan Faz 8 StateTree runtime runner notu (2026-07-08):
 - Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
   (`709 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
   PASS), `npm.cmd run check:assets` PASS.
+
+Tamamlanan Faz 8 subsystem/AIController wiring notu (2026-07-08):
+
+- `AIControllerComponent` (`engine/scene/components.ts`) artik opsiyonel
+  `stateTree` asset path'i tasir; `readAIControllerComponent` bunu okur.
+  Component props opak JSON oldugu icin `.actor.json` save yolu ek allowlist
+  gerektirmez.
+- `AIController` (`engine/ai/aiController.ts`) `stateTreeAsset` option/field'i
+  ve debug snapshot'ta `stateTreeAsset` + `stateTree` (runner debug) alanlarini
+  tasir. `getDebugSnapshot(runner)` artik `{ behavior? , stateTree? }` alir.
+- `AISubsystem` (`engine/ai/aiSubsystem.ts`) `AiAssetLibrary.stateTrees`
+  map'ini yukler; runner store'u `behavior | stateTree` union entry'sine cevrildi.
+  `rebuildRunners` her controller icin StateTree referansi cozulurse
+  `AiStateTreeRunner`, aksi halde `AiBehaviorRunner` kurar (**StateTree her ikisi
+  de authored ise kazanir**). Blackboard `component.blackboard ??
+  stateTree.blackboard ?? behavior.blackboard` sirasiyla cozulur. Her iki runner
+  ayni `runnerOptions()` (task/service registry, moveTo, world, targetPoints,
+  smartObjects, query) yuzeyini paylasir.
+- Runtime (`RuntimeSceneApp`) ve editor Play (`SceneApp`) host loader'lari
+  manifest'teki `stateTree` asset'lerini `normalizeAiStateTreeAsset` ile yukleyip
+  `setAssetLibrary({ ..., stateTrees })` ile besler.
+- Debug: `formatAiDebug` StateTree controller'lari icin `st` satiri (status +
+  elapsed + aktif leaf state) uretir; `formatAiInspector` odakli controller
+  StateTree kullaniyorsa `st:` blogu (asset, aktif state path, last transition
+  `from → to (reason)`) gosterir, aksi halde mevcut `bt:` blogu.
+- Editor: Actor Script Editor AIController formuna State Tree asset picker'i
+  (`data-as-ai-statetree`, mesh/behavior picker kalibi) eklendi; secim
+  `props.stateTree`'ye yazilir, bilinmeyen/elle girilmis path korunur.
+- Test: `AISubsystem runs a StateTree when the AIController references a stateTree
+  asset` — StateTree behaviorTree'yi bastirir, blackboard StateTree asset'inden
+  cozulur, tick guard transition'ini surer (Idle -> Alert), debug snapshot
+  `stateTree` dolu / `behavior` null.
+- Dogrulama: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine` yesil
+  (`710 checks passed`), `npm.cmd run build:verify` yesil (verify:dist --strict
+  PASS), `npm.cmd run check:assets` PASS. Playwright debug smoke kalan Faz 8
+  isinde.
 
 ## Ilk uygulanabilir vertical slice onerisi
 
