@@ -39,25 +39,6 @@
             1,
             1
           ]
-        },
-        {
-          "position": [
-            -13.99,
-            1.99,
-            23.19
-          ],
-          "materialSlot": "m-wood-floor-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -135,
-            0
-          ],
-          "scale": [
-            1.25,
-            1,
-            0.62
-          ]
         }
       ]
     },
@@ -71,6 +52,7 @@
             7
           ],
           "scaleLocked": true,
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": 2
         },
@@ -81,6 +63,7 @@
             -2
           ],
           "scaleLocked": true,
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": 2
         },
@@ -90,6 +73,7 @@
             0,
             1.83
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": [
             2,
@@ -103,6 +87,7 @@
             0,
             16
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": [
             1,
@@ -116,6 +101,7 @@
             0,
             12
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": [
             1,
@@ -129,6 +115,7 @@
             0,
             12
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": [
             1,
@@ -142,6 +129,7 @@
             0,
             12
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": [
             1,
@@ -155,6 +143,7 @@
             0,
             8
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": [
             1,
@@ -856,85 +845,9 @@
         },
         {
           "position": [
-            -11.89,
-            0,
-            21.21
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -135,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -13.75,
-            0,
-            19.37
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -135,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -14.23,
-            0.02,
-            18.87
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -45,
-            0
-          ],
-          "scale": [
-            0.2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -11.95,
-            0.02,
-            21.13
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -45,
-            0
-          ],
-          "scale": [
-            0.2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -17.46,
+            -11.51,
             0.03,
-            26.86
+            21.61
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -943,11 +856,7 @@
             135,
             0
           ],
-          "scale": [
-            0.7,
-            1,
-            1
-          ]
+          "scale": 1
         },
         {
           "position": [
@@ -955,6 +864,7 @@
             0,
             -5.59
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": [
             2.1,
@@ -968,6 +878,7 @@
             0,
             -9.06
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "scale": [
             2.6,
@@ -981,6 +892,7 @@
             0,
             -5.66
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -995,6 +907,7 @@
             0,
             -9.11
           ],
+          "materialSlot": "gray-material",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -1243,27 +1156,7 @@
     },
     {
       "assetId": "sm-linearstair",
-      "placements": [
-        {
-          "position": [
-            -11.89,
-            0,
-            21.07
-          ],
-          "materialSlot": "white-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -135,
-            0
-          ],
-          "scale": [
-            1,
-            1,
-            1.2
-          ]
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-ramp",
@@ -1339,45 +1232,50 @@
     {
       "id": "target-point-1",
       "position": [
-        -1.36,
+        -0.97,
         0.05,
-        8.73
+        7.9
       ],
       "name": "TP1",
       "scale": 1,
       "nextTargetPoint": "target-point-2",
-      "startPoint": true
+      "startPoint": true,
+      "waitTime": 1,
+      "acceptanceRadius": 0.2
     },
     {
       "id": "target-point-2",
       "position": [
-        -9.8,
+        -6.32,
         0.05,
-        17.19
+        13.6
       ],
       "name": "TP2",
       "scale": 1,
-      "nextTargetPoint": "target-point-3"
+      "nextTargetPoint": "target-point-3",
+      "acceptanceRadius": 0.2
     },
     {
       "id": "target-point-3",
       "position": [
-        -17.4,
-        1.98,
-        24.85
+        -11.21,
+        0,
+        18.54
       ],
       "name": "TP3",
       "scale": 1,
-      "nextTargetPoint": "target-point-1"
+      "nextTargetPoint": "target-point-1",
+      "waitTime": 1,
+      "acceptanceRadius": 0.2
     }
   ],
   "actors": [
     {
       "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        -0.44,
+        -0.18,
         0.05,
-        6.14
+        6.31
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,

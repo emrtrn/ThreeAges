@@ -437,14 +437,14 @@
       "id": "ai-navigation-volume-1",
       "position": [
         -2.73,
-        2,
+        2.44,
         -3.1
       ],
       "name": "AI Navigation Volume",
       "scale": 1,
       "size": [
         20,
-        4,
+        5,
         20
       ],
       "agentRadius": 0.1,
@@ -453,42 +453,43 @@
   ],
   "targetPoints": [
     {
-      "id": "target-point-3",
+      "id": "target-point-1",
       "position": [
-        -7.27,
-        3.27,
-        -8.77
+        -10.29,
+        0,
+        -0.67
       ],
-      "name": "TP_5",
+      "name": "1",
       "scale": 1,
-      "nextTargetPoint": "target-point-5",
-      "acceptanceRadius": 0.01
+      "nextTargetPoint": "target-point-2",
+      "startPoint": true,
+      "color": "#ff0000"
     },
     {
-      "id": "target-point-5",
+      "id": "target-point-2",
       "position": [
-        5.02,
+        4.87,
         0,
-        -7.95
+        -0.8
       ],
-      "name": "TP_4",
+      "name": "2",
       "scale": 1,
-      "nextTargetPoint": "target-point-3",
-      "startPoint": true,
-      "acceptanceRadius": 0.01
+      "nextTargetPoint": "target-point-1",
+      "waitTime": 2,
+      "color": "#ff0000"
     }
   ],
   "actors": [
     {
       "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        5.58,
+        -6.7,
         0,
-        -11.97
+        -8.35
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,
-      "scale": 0.5
+      "scale": 0.4
     }
   ]
 }
