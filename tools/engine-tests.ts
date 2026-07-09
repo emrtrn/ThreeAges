@@ -105,6 +105,7 @@ import {
   searchNavGrid,
   NavGridCache,
   type NavAabb,
+  type NavBlocker,
   type NavGridBuildRequest,
 } from "../engine/navigation/gridNavigation";
 import { resolveNavAgentProfile } from "../engine/navigation/navAgentProfile";
@@ -137,7 +138,7 @@ import { BehaviorSubsystem } from "../engine/behavior/behaviorSubsystem";
 import type { BehaviorRegistry } from "../engine/behavior/behaviorSubsystem";
 import { ScriptMessageBus } from "../engine/behavior/scriptMessages";
 import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
-import { rotatedBoxAabb } from "../engine/physics/rotatedBox";
+import { rotatedBoxAabb, rotatedBoxFootprintXZ } from "../engine/physics/rotatedBox";
 import {
   initialElapsed,
   oneWaySeconds,
@@ -6540,6 +6541,76 @@ check("grid navigation clearance padding erodes obstacles by extra slack", () =>
   assert.equal(padded.status, "failure"); // padding keeps the agent clear of both walls
 });
 
+check("grid navigation: a rotated wall's oriented footprint frees the area its AABB bloats over", () => {
+  // A long thin wall rotated 45° — its enclosing AABB is a big square, but the
+  // oriented footprint is only the thin diagonal strip. A pocket cell sits inside
+  // the AABB yet well clear of the strip: walkable under the footprint, falsely
+  // blocked under the bloated AABB.
+  const center: [number, number, number] = [0, 0, 0];
+  const half: [number, number, number] = [1, 1, 0.1];
+  const rotation: [number, number, number] = [0, 45, 0];
+  const box = rotatedBoxAabb([0, 0, 0], center, half, rotation);
+  const footprint = rotatedBoxFootprintXZ([0, 0, 0], center, half, rotation);
+  assert.ok(footprint && footprint.length >= 3);
+  const rotatedWall: NavBlocker = { min: box.min, max: box.max, footprint: footprint! };
+  const plainAabb: NavBlocker = { min: box.min, max: box.max };
+  const bounds: Aabb3[] = [{ min: [-1.5, -1, -1.5], max: [1.5, 3, 1.5] }];
+  const agent = { radius: 0.2, height: 1.8, clearancePadding: 0 };
+  const build = (blocker: NavBlocker) =>
+    buildNavGrid({ agent, blockers: [blocker], bounds, footY: 0, cellSize: 0.25, safetyMargin: 0 })!;
+  const gridFootprint = build(rotatedWall);
+  const gridAabb = build(plainAabb);
+  const passableAt = (grid: typeof gridFootprint, x: number, z: number): boolean => {
+    const cx = Math.round((x - grid.originX) / grid.cellSize);
+    const cz = Math.round((z - grid.originZ) / grid.cellSize);
+    if (cx < 0 || cz < 0 || cx >= grid.cols || cz >= grid.rows) return false;
+    return grid.passable[cz * grid.cols + cx] === 1;
+  };
+  // The 45° wall runs along the z = -x anti-diagonal, so (0.5, 0.5) sits inside
+  // the enclosing AABB but ~0.7 from the strip: walkable only once bloat is gone.
+  assert.equal(passableAt(gridFootprint, 0.5, 0.5), true);
+  assert.equal(passableAt(gridAabb, 0.5, 0.5), false);
+  const passableCount = (grid: typeof gridFootprint): number =>
+    grid.passable.reduce((sum, value) => sum + value, 0);
+  assert.ok(
+    passableCount(gridFootprint) > passableCount(gridAabb),
+    `oriented footprint keeps more area walkable (${passableCount(gridFootprint)} > ${passableCount(gridAabb)})`,
+  );
+});
+
+check("grid navigation: a rotated wall routes a short path where its bloated AABB forces a detour", () => {
+  const center: [number, number, number] = [0, 0, 0];
+  const half: [number, number, number] = [1, 1, 0.1];
+  const rotation: [number, number, number] = [0, 45, 0];
+  const box = rotatedBoxAabb([0, 0, 0], center, half, rotation);
+  const footprint = rotatedBoxFootprintXZ([0, 0, 0], center, half, rotation)!;
+  const rotatedWall: NavBlocker = { min: box.min, max: box.max, footprint };
+  const plainAabb: NavBlocker = { min: box.min, max: box.max };
+  const bounds: Aabb3[] = [{ min: [-1.6, -1, -1.6], max: [1.6, 3, 1.6] }];
+  const agent = { radius: 0.2, height: 1.8, clearancePadding: 0 };
+  // Both endpoints sit in the NE pocket (the wall runs along z = -x); the footprint
+  // lets the agent cut straight across it, the square AABB forces a detour.
+  const start: [number, number, number] = [1.4, 0, 0.3];
+  const goal: [number, number, number] = [0.3, 0, 1.4];
+  const query = (blocker: NavBlocker) =>
+    findGridPath({ start, goal, agent, blockers: [blocker], bounds, cellSize: 0.25, safetyMargin: 0 });
+  const pathLenXZ = (points: readonly (readonly number[])[]): number => {
+    let length = 0;
+    for (let i = 1; i < points.length; i += 1) {
+      length += Math.hypot(points[i]![0] - points[i - 1]![0], points[i]![2] - points[i - 1]![2]);
+    }
+    return length;
+  };
+  const withFootprint = query(rotatedWall);
+  const withAabb = query(plainAabb);
+  assert.equal(withFootprint.status, "success");
+  assert.equal(withAabb.status, "success");
+  assert.ok(
+    pathLenXZ(withFootprint.points) < pathLenXZ(withAabb.points) - 0.3,
+    `footprint path ${pathLenXZ(withFootprint.points).toFixed(2)} shorter than AABB detour ${pathLenXZ(withAabb.points).toFixed(2)}`,
+  );
+});
+
 check("grid navigation keeps narrow-corner waypoints outside capsule clearance", () => {
   const wall: Aabb3 = { min: [-0.25, 0, -0.25], max: [0.75, 2, 0.75] };
   const clearance = 0.5;
@@ -7243,6 +7314,30 @@ check("rotatedBoxAabb: 45° rotation bloats a thin wall's footprint symmetricall
     min: [-expectedHalf, -1.5, -expectedHalf],
     max: [expectedHalf, 1.5, expectedHalf],
   });
+});
+
+check("rotatedBoxFootprintXZ: undefined for an axis-aligned box, area-tight for a rotated one", () => {
+  // An axis-aligned box's ground silhouette is exactly its min.xz..max.xz rect,
+  // so nav keeps the cheaper AABB path — no footprint is emitted.
+  assert.equal(rotatedBoxFootprintXZ([0, 0, 0], [0, 0, 0], [2, 1.5, 0.1], [0, 0, 0]), undefined);
+
+  // A 45°-rotated thin wall: the footprint is the true (rotation-preserving) area,
+  // strictly smaller than the square AABB that encloses it — the bloat OBB avoids.
+  const half: [number, number, number] = [2, 1.5, 0.1];
+  const footprint = rotatedBoxFootprintXZ([0, 0, 0], [0, 0, 0], half, [0, 45, 0]);
+  assert.ok(footprint && footprint.length >= 3);
+  let area2 = 0;
+  for (let i = 0; i < footprint!.length; i += 1) {
+    const p = footprint![i]!;
+    const q = footprint![(i + 1) % footprint!.length]!;
+    area2 += p[0] * q[1] - q[0] * p[1];
+  }
+  const footprintArea = Math.abs(area2) / 2;
+  const trueArea = 2 * half[0] * (2 * half[2]); // 2*2 by 2*0.1 = 0.8
+  assert.ok(Math.abs(footprintArea - trueArea) < 1e-6, `footprint area ${footprintArea} ~= ${trueArea}`);
+  const aabb = rotatedBoxAabb([0, 0, 0], [0, 0, 0], half, [0, 45, 0]);
+  const aabbArea = (aabb.max[0] - aabb.min[0]) * (aabb.max[2] - aabb.min[2]);
+  assert.ok(aabbArea > footprintArea + 1, `enclosing AABB ${aabbArea} bloats past footprint ${footprintArea}`);
 });
 
 check("rotatedBoxAabb: primitive rotation composes on top of body rotation", () => {

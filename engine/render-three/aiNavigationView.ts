@@ -9,7 +9,7 @@ import {
   MeshBasicMaterial,
 } from "three";
 
-import type { NavAabb } from "../navigation/gridNavigation";
+import type { NavAabb, NavBlocker } from "../navigation/gridNavigation";
 import type { Vec3 } from "../scene/layout";
 
 export interface AiNavigationFollowerView {
@@ -58,7 +58,7 @@ export interface AiNavAgentClearanceView {
 }
 
 export interface AiNavigationViewInput {
-  readonly blockers?: readonly NavAabb[];
+  readonly blockers?: readonly NavBlocker[];
   readonly inflatedBlockers?: readonly NavAabb[];
   /**
    * Centers of the baked nav grid's walkable cells, drawn as a translucent green
@@ -426,9 +426,21 @@ function gridSegments(
   return points;
 }
 
-function blockerFootprintSegments(blockers: readonly NavAabb[], y: number): Vec3[] {
+function blockerFootprintSegments(blockers: readonly NavBlocker[], y: number): Vec3[] {
   const out: Vec3[] = [];
   for (const blocker of blockers) {
+    const footprint = blocker.footprint;
+    if (footprint && footprint.length >= 3) {
+      // Rotated obstacle: trace its true oriented ground silhouette so the red
+      // outline matches the tight shape navigation actually erodes against,
+      // instead of the axis-aligned box that encloses (and visually bloats) it.
+      for (let i = 0; i < footprint.length; i += 1) {
+        const a = footprint[i]!;
+        const b = footprint[(i + 1) % footprint.length]!;
+        out.push([a[0], y, a[1]], [b[0], y, b[1]]);
+      }
+      continue;
+    }
     const minX = blocker.min[0];
     const maxX = blocker.max[0];
     const minZ = blocker.min[2];

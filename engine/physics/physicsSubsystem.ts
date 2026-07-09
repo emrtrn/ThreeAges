@@ -7,7 +7,7 @@ import {
   type TransformComponent,
 } from "../scene/components";
 import { interactionGroupsInteract } from "../scene/collision";
-import { rotatePointAboutOrigin, rotatedBoxAabb } from "./rotatedBox";
+import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
 import type { Entity, EntityId } from "../scene/entity";
 import type {
   PhysicsAabb,
@@ -57,6 +57,8 @@ interface PhysicsBody {
 interface Aabb {
   min: [number, number, number];
   max: [number, number, number];
+  /** Oriented XZ ground silhouette for a rotated box collider (see {@link PhysicsAabb}). */
+  footprint?: readonly (readonly [number, number])[];
 }
 
 type RapierModule = typeof import("@dimforge/rapier3d-compat");
@@ -703,12 +705,13 @@ function bodyAabb(body: PhysicsBody): Aabb {
     (body.collider.size[2] ?? 0) / 2,
   ];
   const center = body.collider.center ?? [0, 0, 0];
-  return rotatedBoxAabb(
-    body.transform.position as Vec3,
-    center as Vec3,
-    half,
-    body.transform.rotation as Vec3,
-  );
+  const origin = body.transform.position as Vec3;
+  const rotation = body.transform.rotation as Vec3;
+  const aabb = rotatedBoxAabb(origin, center as Vec3, half, rotation);
+  // The auto/box collider is a box, so its oriented ground silhouette is exact —
+  // give navigation the tight footprint instead of the bloated enclosing AABB.
+  const footprint = rotatedBoxFootprintXZ(origin, center as Vec3, half, rotation);
+  return footprint ? { ...aabb, footprint } : aabb;
 }
 
 /**
@@ -745,7 +748,13 @@ function appendBlockerAabbs(out: Aabb[], body: PhysicsBody): void {
 function primitiveAabb(origin: Vec3, bodyRotation: Vec3, primitive: ColliderPrimitive): Aabb {
   const center = (primitive.center ?? [0, 0, 0]) as Vec3;
   const half: Vec3 = [primitive.size[0] / 2, primitive.size[1] / 2, primitive.size[2] / 2];
-  return rotatedBoxAabb(origin, center, half, bodyRotation, primitive.rotation);
+  const aabb = rotatedBoxAabb(origin, center, half, bodyRotation, primitive.rotation);
+  // Only a box primitive's oriented footprint equals its projected corners; other
+  // authored shapes (sphere/capsule/cylinder/cone) keep the AABB, matching how
+  // this function already models them as boxes for the enclosing AABB.
+  if (primitive.shape !== "box") return aabb;
+  const footprint = rotatedBoxFootprintXZ(origin, center, half, bodyRotation, primitive.rotation);
+  return footprint ? { ...aabb, footprint } : aabb;
 }
 
 /**

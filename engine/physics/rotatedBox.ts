@@ -152,3 +152,78 @@ export function rotatedBoxAabb(
     max: [cx + hx, cy + hy, cz + hz],
   };
 }
+
+/**
+ * Oriented convex XZ footprint (ground silhouette) of the same box
+ * {@link rotatedBoxAabb} encloses: the box's 8 world corners projected onto the
+ * ground plane, hulled. This is the *tight* obstacle shape a rotated wall
+ * actually occupies, which the enclosing AABB bloats over. Returns `undefined`
+ * for an axis-aligned box (no rotation) — there the `min.xz..max.xz` rectangle is
+ * already exact, so callers keep the cheaper AABB-only path.
+ */
+export function rotatedBoxFootprintXZ(
+  origin: Vec3,
+  localCenter: Vec3,
+  half: Vec3,
+  bodyRotation: Vec3,
+  primitiveRotation?: Vec3,
+): [number, number][] | undefined {
+  const hasBodyRotation = !isZeroRotation(bodyRotation);
+  const hasPrimitiveRotation = primitiveRotation !== undefined && !isZeroRotation(primitiveRotation);
+  if (!hasBodyRotation && !hasPrimitiveRotation) return undefined;
+  const bodyMatrix = hasBodyRotation ? rotationMatrixFromEulerDegrees(bodyRotation) : IDENTITY;
+  const boxAxes = hasPrimitiveRotation
+    ? multiplyMat3(bodyMatrix, rotationMatrixFromEulerDegrees(primitiveRotation!))
+    : bodyMatrix;
+  const worldCenter = applyMat3(bodyMatrix, localCenter);
+  const cx = origin[0] + worldCenter[0];
+  const cz = origin[2] + worldCenter[2];
+  const points: [number, number][] = [];
+  for (const sx of [-1, 1]) {
+    for (const sy of [-1, 1]) {
+      for (const sz of [-1, 1]) {
+        const lx = sx * half[0];
+        const ly = sy * half[1];
+        const lz = sz * half[2];
+        const ox = boxAxes[0] * lx + boxAxes[1] * ly + boxAxes[2] * lz;
+        const oz = boxAxes[6] * lx + boxAxes[7] * ly + boxAxes[8] * lz;
+        points.push([cx + ox, cz + oz]);
+      }
+    }
+  }
+  return convexHullXZ(points);
+}
+
+/**
+ * 2D convex hull (Andrew's monotone chain, CCW) of XZ points, or `undefined` when
+ * the points are degenerate (fewer than 3 non-collinear). Small fixed input (box
+ * corners), so the O(n log n) sort cost is negligible. Exported so the editor's
+ * nav-debug blocker path can hull a rotated wirebox's world corners into the same
+ * oriented footprint the physics blocker path bakes.
+ */
+export function convexHullXZ(points: readonly [number, number][]): [number, number][] | undefined {
+  const sorted = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const unique: [number, number][] = [];
+  for (const p of sorted) {
+    const last = unique[unique.length - 1];
+    if (!last || Math.abs(last[0] - p[0]) > 1e-9 || Math.abs(last[1] - p[1]) > 1e-9) unique.push(p);
+  }
+  if (unique.length < 3) return undefined;
+  const cross = (o: [number, number], a: [number, number], b: [number, number]): number =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lower: [number, number][] = [];
+  for (const p of unique) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2]!, lower[lower.length - 1]!, p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: [number, number][] = [];
+  for (let i = unique.length - 1; i >= 0; i -= 1) {
+    const p = unique[i]!;
+    while (upper.length >= 2 && cross(upper[upper.length - 2]!, upper[upper.length - 1]!, p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  const hull = [...lower, ...upper];
+  return hull.length >= 3 ? hull : undefined;
+}

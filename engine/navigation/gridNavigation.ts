@@ -25,6 +25,27 @@ export interface NavAabb {
   readonly max: readonly [number, number, number];
 }
 
+/** World XZ point `[x, z]` (a blocker footprint vertex). */
+export type NavVec2 = readonly [number, number];
+
+/**
+ * A static obstacle for path planning. Its {@link NavAabb} `min`/`max` always
+ * bound it (broadphase, grid extent, and vertical filtering all use the AABB Y
+ * span). When `footprint` is present it is the *oriented* convex XZ shape the box
+ * projects onto the ground — the exact ground silhouette of a rotated wall,
+ * instead of the axis-aligned box that encloses (and bloats) it. Nav queries
+ * erode/collide against the footprint when present and fall back to the
+ * axis-aligned `min.xz..max.xz` rectangle otherwise, so a plain {@link NavAabb}
+ * is a valid `NavBlocker` and every existing axis-aligned caller is unchanged.
+ *
+ * The footprint is a convex polygon (CCW or CW; winding-independent tests); a
+ * yaw-rotated box projects to a 4-vertex oriented rectangle, a fully tilted box
+ * to its ≤6-vertex hull.
+ */
+export interface NavBlocker extends NavAabb {
+  readonly footprint?: readonly NavVec2[];
+}
+
 export interface NavAgent {
   readonly radius: number;
   readonly height: number;
@@ -43,7 +64,7 @@ export interface PathRequest {
   readonly start: Vec3;
   readonly goal: Vec3;
   readonly agent: NavAgent;
-  readonly blockers: readonly NavAabb[];
+  readonly blockers: readonly NavBlocker[];
   /** Optional authored navigation bounds; when present both start and goal must be inside one. */
   readonly bounds?: readonly NavAabb[];
   readonly cellSize?: number;
@@ -172,14 +193,14 @@ export interface NavGrid {
   /** `cols*rows` row-major soft clearance cost added when stepping onto a cell. */
   readonly penalty: Float32Array;
   /** Vertically-filtered blockers, retained for final-path segment shortcutting. */
-  readonly blockers: readonly NavAabb[];
+  readonly blockers: readonly NavBlocker[];
   /** Authored navigation bounds, retained for membership + segment checks. */
   readonly bounds?: readonly NavAabb[];
 }
 
 export interface NavGridBuildRequest {
   readonly agent: NavAgent;
-  readonly blockers: readonly NavAabb[];
+  readonly blockers: readonly NavBlocker[];
   /** Authored navigation bounds; required for a query-independent (cacheable) grid. */
   readonly bounds?: readonly NavAabb[];
   /** Y-plane to bake for (vertical blocker filter + output waypoint height). */
@@ -485,20 +506,38 @@ function blocksAgentVertically(
   return blocker.max[1] > footY + stepHeight && blocker.min[1] < footY + Math.max(height, 0.001);
 }
 
-function pointBlocked(point: Vec3, blockers: readonly NavAabb[], radius: number): boolean {
-  return blockers.some(
-    (blocker) =>
-      point[0] >= blocker.min[0] - radius &&
-      point[0] <= blocker.max[0] + radius &&
-      point[2] >= blocker.min[2] - radius &&
-      point[2] <= blocker.max[2] + radius,
-  );
+function pointBlocked(point: Vec3, blockers: readonly NavBlocker[], radius: number): boolean {
+  return blockers.some((blocker) => {
+    // Broadphase: the AABB (inflated by radius) always bounds the footprint, so a
+    // point outside it can never be within `radius` of the oriented shape.
+    if (
+      point[0] < blocker.min[0] - radius ||
+      point[0] > blocker.max[0] + radius ||
+      point[2] < blocker.min[2] - radius ||
+      point[2] > blocker.max[2] + radius
+    ) {
+      return false;
+    }
+    const footprint = blocker.footprint;
+    if (footprint && footprint.length >= 3) {
+      // Oriented (rotated) obstacle: block when the capsule center is within the
+      // effective radius of the convex ground silhouette (rounded-corner erosion).
+      return distancePointToConvexXZ(point[0], point[2], footprint) <= radius;
+    }
+    // Axis-aligned: the broadphase test above already is the exact answer.
+    return true;
+  });
 }
 
-function nearestInflatedBlockerDistance(point: Vec3, blockers: readonly NavAabb[], radius: number): number {
+function nearestInflatedBlockerDistance(point: Vec3, blockers: readonly NavBlocker[], radius: number): number {
   let nearest = Infinity;
   for (const blocker of blockers) {
-    nearest = Math.min(nearest, distanceToAabb2d(point, blocker, radius));
+    const footprint = blocker.footprint;
+    const distance =
+      footprint && footprint.length >= 3
+        ? Math.max(0, distancePointToConvexXZ(point[0], point[2], footprint) - radius)
+        : distanceToAabb2d(point, blocker, radius);
+    nearest = Math.min(nearest, distance);
   }
   return nearest;
 }
@@ -645,7 +684,7 @@ function pointDirection(a: Vec3, b: Vec3): GridCoord {
 function segmentSafe(
   a: Vec3,
   b: Vec3,
-  blockers: readonly NavAabb[],
+  blockers: readonly NavBlocker[],
   radius: number,
   agentHeight: number,
   stepHeight: number,
@@ -671,12 +710,15 @@ function pointInsideErodedAabb2d(point: Vec3, bound: NavAabb, radius: number): b
 function segmentIntersectsBlockingAabb(
   a: Vec3,
   b: Vec3,
-  blocker: NavAabb,
+  blocker: NavBlocker,
   radius: number,
   agentHeight: number,
   stepHeight: number,
 ): boolean {
-  const clipped = clipSegmentAabb2d(a, b, blocker, radius);
+  const clipped =
+    blocker.footprint && blocker.footprint.length >= 3
+      ? clipSegmentConvexXZ(a, b, blocker.footprint, radius)
+      : clipSegmentAabb2d(a, b, blocker, radius);
   if (!clipped) return false;
   const [tMin, tMax] = clipped;
   const y0 = a[1] + (b[1] - a[1]) * tMin;
@@ -700,6 +742,90 @@ function clipSegmentAabb2d(a: Vec3, b: Vec3, blocker: NavAabb, radius: number): 
   tMax = xHit[1];
   const zHit = clipSegmentAxis(a[2], b[2], minZ, maxZ, tMin, tMax);
   return zHit;
+}
+
+/**
+ * Distance from an XZ point to a convex polygon (0 when inside/on the boundary).
+ * Winding-independent: a point is inside when it stays on one consistent side of
+ * every edge. This is the oriented-blocker analogue of {@link distanceToAabb2d}'s
+ * rounded-corner distance, so eroding by `radius` gives a capsule-correct
+ * Minkowski clearance around a rotated wall.
+ */
+function distancePointToConvexXZ(px: number, pz: number, poly: readonly NavVec2[]): number {
+  const n = poly.length;
+  let minEdgeDistance = Infinity;
+  let anyLeft = false;
+  let anyRight = false;
+  for (let i = 0; i < n; i += 1) {
+    const p = poly[i]!;
+    const q = poly[(i + 1) % n]!;
+    const ex = q[0] - p[0];
+    const ez = q[1] - p[1];
+    const wx = px - p[0];
+    const wz = pz - p[1];
+    const cross = ex * wz - ez * wx;
+    if (cross > 1e-9) anyLeft = true;
+    else if (cross < -1e-9) anyRight = true;
+    const lenSq = ex * ex + ez * ez;
+    const t = lenSq > 0 ? clamp((wx * ex + wz * ez) / lenSq, 0, 1) : 0;
+    const dx = wx - ex * t;
+    const dz = wz - ez * t;
+    minEdgeDistance = Math.min(minEdgeDistance, Math.hypot(dx, dz));
+  }
+  const inside = !(anyLeft && anyRight);
+  return inside ? 0 : minEdgeDistance;
+}
+
+/**
+ * Clips segment `a→b` (XZ) against a convex polygon inflated outward by `radius`,
+ * returning the `[tMin, tMax]` sub-range inside it or `null` if it never enters.
+ * The convex-polygon analogue of {@link clipSegmentAabb2d}: intersect the
+ * segment's parameter range with each edge's outward half-plane pushed out by
+ * `radius`. This covers the inflated polygon's straight sides exactly; the
+ * rounded corner caps are (slightly permissively) not covered, matching the soft
+ * role of this test in path-segment shortcutting.
+ */
+function clipSegmentConvexXZ(a: Vec3, b: Vec3, poly: readonly NavVec2[], radius: number): [number, number] | null {
+  const n = poly.length;
+  if (n < 3) return null;
+  let area2 = 0;
+  for (let i = 0; i < n; i += 1) {
+    const p = poly[i]!;
+    const q = poly[(i + 1) % n]!;
+    area2 += p[0] * q[1] - q[0] * p[1];
+  }
+  const ccw = area2 > 0;
+  let tMin = 0;
+  let tMax = 1;
+  const ax = a[0];
+  const az = a[2];
+  const dx = b[0] - a[0];
+  const dz = b[2] - a[2];
+  for (let i = 0; i < n; i += 1) {
+    const p = poly[i]!;
+    const q = poly[(i + 1) % n]!;
+    const ex = q[0] - p[0];
+    const ez = q[1] - p[1];
+    // Outward edge normal (unit); flip by winding so it points away from the interior.
+    let nx = ccw ? ez : -ez;
+    let nz = ccw ? -ex : ex;
+    const len = Math.hypot(nx, nz);
+    if (len < 1e-12) continue;
+    nx /= len;
+    nz /= len;
+    // Constraint keeps the point inside the inflated edge: dist0 + rate*t <= radius.
+    const dist0 = nx * (ax - p[0]) + nz * (az - p[1]);
+    const rate = nx * dx + nz * dz;
+    if (Math.abs(rate) < 1e-12) {
+      if (dist0 - radius > 1e-9) return null; // parallel and wholly outside this side
+      continue;
+    }
+    const t = (radius - dist0) / rate;
+    if (rate > 0) tMax = Math.min(tMax, t);
+    else tMin = Math.max(tMin, t);
+    if (tMin > tMax) return null;
+  }
+  return tMin <= tMax ? [tMin, tMax] : null;
 }
 
 function clipSegmentAxis(from: number, to: number, min: number, max: number, tMin: number, tMax: number): [number, number] | null {

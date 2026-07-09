@@ -386,6 +386,14 @@ export interface PhysicsContact {
 export interface PhysicsAabb {
   readonly min: readonly [number, number, number];
   readonly max: readonly [number, number, number];
+  /**
+   * Oriented convex XZ ground silhouette of a rotated box collider (the exact
+   * footprint the `min`/`max` AABB otherwise bloats to enclose). Present only
+   * when the collider is rotated off-axis; consumers that only need the AABB
+   * (perception, ground probe) ignore it, while grid navigation erodes/collides
+   * against it so a diagonal wall no longer blocks a fat axis-aligned area.
+   */
+  readonly footprint?: readonly (readonly [number, number])[];
 }
 
 /**

@@ -97,7 +97,8 @@ import {
   convertUnlitModelMaterialsToLit,
   isRenderableMesh,
 } from "@engine/render-three/materials";
-import { buildNavGrid, type NavAabb, type NavAgent } from "@engine/navigation/gridNavigation";
+import { buildNavGrid, type NavAabb, type NavAgent, type NavBlocker } from "@engine/navigation/gridNavigation";
+import { convexHullXZ } from "@engine/physics/rotatedBox";
 import {
   attachActorLight,
   entityLightItem,
@@ -498,6 +499,33 @@ function inflateNavAabb2d(blocker: NavAabb, radius: number): NavAabb {
     min: [blocker.min[0] - r, blocker.min[1], blocker.min[2] - r],
     max: [blocker.max[0] + r, blocker.max[1], blocker.max[2] + r],
   };
+}
+
+/**
+ * Oriented XZ footprint for an editor nav blocker, hulled from a collision
+ * wirebox's *rotated* world corner segments. Returns `undefined` when the hull
+ * fills the box's AABB (an axis-aligned collider) so that common case stays on
+ * the exact, cheaper AABB nav path; a rotated collider yields its tight convex
+ * ground silhouette, matching the physics blocker path.
+ */
+function navFootprintFromSegments(segments: readonly Vec3[], box: Box3): readonly [number, number][] | undefined {
+  if (segments.length < 3) return undefined;
+  const hull = convexHullXZ(segments.map((point) => [point[0], point[2]] as [number, number]));
+  if (!hull || hull.length < 3) return undefined;
+  const aabbArea = (box.max.x - box.min.x) * (box.max.z - box.min.z);
+  if (aabbArea <= 1e-9) return undefined;
+  if (polygonAreaXZ(hull) >= aabbArea - 1e-6 * aabbArea) return undefined;
+  return hull;
+}
+
+function polygonAreaXZ(poly: readonly (readonly [number, number])[]): number {
+  let area2 = 0;
+  for (let i = 0; i < poly.length; i += 1) {
+    const p = poly[i]!;
+    const q = poly[(i + 1) % poly.length]!;
+    area2 += p[0] * q[1] - q[0] * p[1];
+  }
+  return Math.abs(area2) / 2;
 }
 
 interface EditorOptions {
@@ -5841,9 +5869,9 @@ export class SceneApp {
     let linkedTransforms: LinkedMoveStart[] | undefined;
     if (event.altKey && handle.tool === "move") {
       const selection = this.duplicateSelectionForDrag(this.selection);
-      if (selection) linkedTransforms = this.captureLinkedMoveStarts(selection);
+      if (selection) linkedTransforms = this.captureLinkedTransformStarts(selection);
     } else if (handle.tool === "move") {
-      linkedTransforms = this.captureLinkedMoveStarts(this.selection);
+      linkedTransforms = this.captureLinkedTransformStarts(this.selection);
     }
     const selected = this.getSelected();
     if (!selected) return;
@@ -5871,7 +5899,7 @@ export class SceneApp {
       linkedTransforms,
       descendantTransforms:
         handle.tool === "rotate" || handle.tool === "scale"
-          ? this.captureDescendantStarts(this.selection)
+          ? this.captureLinkedTransformStarts(this.selection)
           : undefined,
       movePlane,
       planeStartHit,
@@ -6055,9 +6083,11 @@ export class SceneApp {
     this.updateAiNavigationView();
   }
 
-  private captureLinkedMoveStarts(active: Selection): LinkedMoveStart[] | undefined {
-    // Everything that should move with the active object: the rest of the
-    // selection (groups/multi-select) plus all parentâ†’child descendants.
+  private captureLinkedTransformStarts(active: Selection): LinkedMoveStart[] | undefined {
+    // Everything that should be carried by the active object during a
+    // move/rotate/scale drag: the rest of the selection (groups/multi-select)
+    // plus all parentâ†’child descendants. For a single selection this reduces to
+    // descendants only, matching the old descendant-only rotate/scale capture.
     const targets = new Map<string, Selection>();
     const add = (selection: Selection): void => {
       const id = selectionId(selection);
@@ -6075,20 +6105,6 @@ export class SceneApp {
       return startTransform ? [{ selection: cloneSelection(selection), startTransform }] : [];
     });
     return linked.length > 0 ? linked : undefined;
-  }
-
-  /**
-   * Captures start world transforms of the active object's descendants so a
-   * parent rotate/scale can carry its children (cascade). Descendants only â€”
-   * unlike captureLinkedMoveStarts, multi-selection siblings are not included.
-   */
-  private captureDescendantStarts(active: Selection): LinkedMoveStart[] | undefined {
-    const links = this.descendantsOf(active).flatMap((selection) => {
-      if (this.isSelectionLocked(selection)) return [];
-      const startTransform = this.captureTransform(selection);
-      return startTransform ? [{ selection: cloneSelection(selection), startTransform }] : [];
-    });
-    return links.length > 0 ? links : undefined;
   }
 
   /** During a rotate/scale drag, re-derives linked descendants from the parent. */
@@ -6726,7 +6742,7 @@ export class SceneApp {
    * Baked at the volume floor so floor-level obstacles erode the area while an
    * agent still reads as able to stand under high overhangs (vertical filtering).
    */
-  private aiNavPassableCells(blockers: readonly NavAabb[], bounds: readonly NavAabb[]): Vec3[] {
+  private aiNavPassableCells(blockers: readonly NavBlocker[], bounds: readonly NavAabb[]): Vec3[] {
     if (bounds.length === 0) return [];
     let floorY = Infinity;
     for (const bound of bounds) floorY = Math.min(floorY, bound.min[1]);
@@ -6765,7 +6781,7 @@ export class SceneApp {
   }
 
   private aiNavDebugFloorSampler(
-    blockers: readonly NavAabb[],
+    blockers: readonly NavBlocker[],
     bounds: readonly NavAabb[],
     agent: NavAgent,
   ): (x: number, z: number) => number | null {
@@ -6899,7 +6915,7 @@ export class SceneApp {
     return bounds;
   }
 
-  private editorNavBlockers(): NavAabb[] {
+  private editorNavBlockers(): NavBlocker[] {
     if (!this.layout) return [];
     // Derive blockers straight from the live layout (same source as the green
     // "Show > Collision" overlay), NOT from `physicsSubsystem.staticBlockerAabbs()`.
@@ -6914,10 +6930,19 @@ export class SceneApp {
       this.complexCollisionMeshes,
     )
       .filter((wirebox) => !wirebox.sensor && !wirebox.box.isEmpty())
-      .map((wirebox) => ({
-        min: [wirebox.box.min.x, wirebox.box.min.y, wirebox.box.min.z],
-        max: [wirebox.box.max.x, wirebox.box.max.y, wirebox.box.max.z],
-      }));
+      .map((wirebox) => {
+        const aabb: NavBlocker = {
+          min: [wirebox.box.min.x, wirebox.box.min.y, wirebox.box.min.z],
+          max: [wirebox.box.max.x, wirebox.box.max.y, wirebox.box.max.z],
+        };
+        // The wirebox `segments` are the collider's *rotated* world corners, so
+        // their XZ hull is the true oriented ground footprint — the same tight
+        // shape the physics blocker path bakes. Skip it when the hull already
+        // fills the AABB (an axis-aligned box), keeping that case on the exact,
+        // cheaper AABB path.
+        const footprint = navFootprintFromSegments(wirebox.segments, wirebox.box);
+        return footprint ? { ...aabb, footprint } : aabb;
+      });
   }
 
   private removeCollisionBoxes(): void {
