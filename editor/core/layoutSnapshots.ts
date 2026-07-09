@@ -341,6 +341,8 @@ export function cloneAiNavigationVolume(
   if (volume.rotation !== undefined) clone.rotation = [...volume.rotation];
   if (volume.scale !== undefined) clone.scale = cloneScale(volume.scale);
   if (volume.size !== undefined) clone.size = [...volume.size];
+  if (volume.agentRadius !== undefined) clone.agentRadius = volume.agentRadius;
+  if (volume.clearancePadding !== undefined) clone.clearancePadding = volume.clearancePadding;
   return clone;
 }
 

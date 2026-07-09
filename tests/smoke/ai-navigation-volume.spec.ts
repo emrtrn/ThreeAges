@@ -25,10 +25,18 @@ test("editor AI Navigation Volume smoke: add, inspect, show, save, reload", asyn
   await expect(page.locator('[data-ai-nav-size="0"]')).toHaveValue("10");
   await expect(page.locator('[data-ai-nav-size="1"]')).toHaveValue("4");
   await expect(page.locator('[data-ai-nav-size="2"]')).toHaveValue("10");
+  await expect(page.locator('[data-ai-nav-agent="agentRadius"]')).toHaveValue("0.35");
+  await expect(page.locator('[data-ai-nav-agent="clearancePadding"]')).toHaveValue("0.1");
 
   await page.locator('[data-ai-nav-size="0"]').fill("12");
   await page.locator('[data-ai-nav-size="0"]').dispatchEvent("change");
   await expect(page.locator('[data-ai-nav-size="0"]')).toHaveValue("12");
+  await page.locator('[data-ai-nav-agent="agentRadius"]').fill("0.6");
+  await page.locator('[data-ai-nav-agent="agentRadius"]').dispatchEvent("change");
+  await page.locator('[data-ai-nav-agent="clearancePadding"]').fill("0.25");
+  await page.locator('[data-ai-nav-agent="clearancePadding"]').dispatchEvent("change");
+  await expect(page.locator('[data-ai-nav-agent="agentRadius"]')).toHaveValue("0.6");
+  await expect(page.locator('[data-ai-nav-agent="clearancePadding"]')).toHaveValue("0.25");
 
   await page.getByRole("button", { name: "Show" }).hover();
   const aiNavToggle = page.locator('[data-show-flag="ai-navigation"]');
@@ -46,6 +54,8 @@ test("editor AI Navigation Volume smoke: add, inspect, show, save, reload", asyn
   });
   await savedVolumeRow.click();
   await expect(page.locator('[data-ai-nav-size="0"]')).toHaveValue("12");
+  await expect(page.locator('[data-ai-nav-agent="agentRadius"]')).toHaveValue("0.6");
+  await expect(page.locator('[data-ai-nav-agent="clearancePadding"]')).toHaveValue("0.25");
 
   expect(pageErrors).toEqual([]);
 });

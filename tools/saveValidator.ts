@@ -1074,6 +1074,15 @@ export function validateAiNavigationVolume(value: unknown): Record<string, unkno
       validateScaleValue(axis, "AI navigation volume size component"),
     );
   }
+  const agentRadius = validateOptionalNumber(input.agentRadius, "AI navigation volume agentRadius", 0, 1000);
+  if (agentRadius !== undefined) volume.agentRadius = agentRadius;
+  const clearancePadding = validateOptionalNumber(
+    input.clearancePadding,
+    "AI navigation volume clearancePadding",
+    0,
+    1000,
+  );
+  if (clearancePadding !== undefined) volume.clearancePadding = clearancePadding;
   return volume;
 }
 

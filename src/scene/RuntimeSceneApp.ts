@@ -1385,13 +1385,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Bounded case: bake once per agent profile and reuse across queries. The
     // grid rebuilds automatically when a static blocker moves or a nav volume is
     // edited (both fold into the revision token), so there is no manual build.
+    const navFootY = bucketNavFootY(start[1]);
     const grid = this.navGridCache.getOrBuild(this.aiNavRevisionToken(blockers, surfaces, bounds), {
       agent,
       blockers,
       bounds,
-      footY: bucketNavFootY(start[1]),
+      footY: navFootY,
       cellSize: AI_NAV_CELL_SIZE,
-      sampleFloorY: this.aiNavFloorSampler(blockers, surfaces, bounds, agent),
+      sampleFloorY: this.aiNavFloorSampler(blockers, surfaces, bounds, agent, navFootY),
     });
     if (!grid) return { status: "failure" as const, points: [], visited: 0 };
     return searchNavGrid(grid, start, goal);
@@ -1459,6 +1460,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     surfaces: ReturnType<PhysicsSubsystem["staticSurfaceTriangles"]>,
     bounds: readonly NavAabb[],
     agent: NavAgent,
+    preferredFloorY: number,
   ): (x: number, z: number) => number | null {
     const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
     const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? 50);
@@ -1477,6 +1479,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         maxStepDown: maxY - minY,
         surfaces,
         maxSlopeCos,
+        preferredFloorY,
       });
       return hit ? hit.floorY : null;
     };

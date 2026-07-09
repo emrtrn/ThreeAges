@@ -46,6 +46,12 @@ export interface GroundProbeOptions {
    * gates the triangle `surfaces`; flat AABB tops are always walkable.
    */
   readonly maxSlopeCos?: number;
+  /**
+   * When several walkable surfaces overlap the probe X/Z (stacked floors), pick
+   * the surface nearest to this Y instead of always taking the highest one.
+   * Movement leaves this unset; navigation sets it to the layer being baked.
+   */
+  readonly preferredFloorY?: number;
 }
 
 export interface GroundHit {
@@ -235,7 +241,7 @@ function highestWalkableSurface(
     if (!overlaps(pz - hz, pz + hz, blocker.min[2], blocker.max[2])) continue;
     const top = blocker.max[1];
     if (!acceptsTop(top)) continue;
-    if (!best || top > best.floorY) best = { floorY: top, blocker };
+    best = betterGroundHit(best, { floorY: top, blocker }, options);
   }
   // Slope surfaces (ramps): sampled at the probe centre for their true incline
   // height, gated on the slope limit. A ramp surface can win over a flat top.
@@ -246,8 +252,21 @@ function highestWalkableSurface(
       if (surface.normalY < minSlopeCos) continue; // too steep to walk → not ground
       const top = sampleTriangleHeight(surface, px, pz);
       if (top === null || !acceptsTop(top)) continue;
-      if (!best || top > best.floorY) best = { floorY: top, blocker: null };
+      best = betterGroundHit(best, { floorY: top, blocker: null }, options);
     }
   }
   return best;
+}
+
+function betterGroundHit(current: GroundHit | null, candidate: GroundHit, options: GroundProbeOptions): GroundHit {
+  if (!current) return candidate;
+  const preferred = options.preferredFloorY;
+  if (typeof preferred === "number" && Number.isFinite(preferred)) {
+    const currentDelta = Math.abs(current.floorY - preferred);
+    const candidateDelta = Math.abs(candidate.floorY - preferred);
+    if (candidateDelta < currentDelta - 1e-6) return candidate;
+    if (Math.abs(candidateDelta - currentDelta) <= 1e-6 && candidate.floorY > current.floorY) return candidate;
+    return current;
+  }
+  return candidate.floorY > current.floorY ? candidate : current;
 }

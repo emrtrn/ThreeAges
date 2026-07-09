@@ -6765,6 +6765,51 @@ check("nav grid heightfield connects stair-like floor samples and preserves wayp
   );
 });
 
+check("nav grid heightfield bakes stacked floors by the requested layer", () => {
+  const lowerFloor: NavAabb = { min: [-2, -0.2, -2], max: [2, 0, 2] };
+  const upperFloor: NavAabb = { min: [-2, 2, -2], max: [2, 2.2, 2] };
+  const blockers = [lowerFloor, upperFloor];
+  const bounds: NavAabb[] = [{ min: [-2, -1, -2], max: [2, 3, 2] }];
+  const sampleLayer = (preferredFloorY: number) => (x: number, z: number): number | null =>
+    findGroundAt([x, 3, z], blockers, {
+      footprintHalf: [0, 0],
+      maxStepUp: 0,
+      maxStepDown: 4,
+      preferredFloorY,
+    })?.floorY ?? null;
+  const cellFloorAt = (grid: NonNullable<ReturnType<typeof buildNavGrid>>, x: number, z: number): number => {
+    const cx = Math.round((x - grid.originX) / grid.cellSize);
+    const cz = Math.round((z - grid.originZ) / grid.cellSize);
+    const idx = cz * grid.cols + cx;
+    assert.equal(grid.passable[idx], 1, `expected passable cell at ${x},${z}`);
+    return grid.floorY[idx]!;
+  };
+
+  const lowerGrid = buildNavGrid({
+    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
+    blockers,
+    bounds,
+    footY: 0,
+    cellSize: 1,
+    safetyMargin: 0,
+    sampleFloorY: sampleLayer(0),
+  });
+  const upperGrid = buildNavGrid({
+    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45 },
+    blockers,
+    bounds,
+    footY: 2.2,
+    cellSize: 1,
+    safetyMargin: 0,
+    sampleFloorY: sampleLayer(2.2),
+  });
+
+  assert.ok(lowerGrid, "lower-layer grid should build");
+  assert.ok(upperGrid, "upper-layer grid should build");
+  assert.equal(cellFloorAt(lowerGrid!, 0, 0), 0);
+  assert.ok(Math.abs(cellFloorAt(upperGrid!, 0, 0) - 2.2) < 1e-6);
+});
+
 check("nav grid heightfield segment shortcut ignores blockers below the segment floor", () => {
   const lowerWall: NavAabb = { min: [1.5, 0, -0.25], max: [2.5, 0.4, 0.25] };
   const grid = buildNavGrid({
@@ -7198,6 +7243,26 @@ check("findGroundAt: a flat AABB top still wins over a lower ramp surface", () =
     maxSlopeCos: slopeCosFromDegrees(45),
   });
   assert.ok(hit && Math.abs(hit.floorY - 1.7) < 1e-9, `floorY=${hit?.floorY}`);
+});
+
+check("findGroundAt: preferredFloorY chooses the intended stacked floor", () => {
+  const lowerFloor: Aabb3 = { min: [-2, -0.2, -2], max: [2, 0, 2] };
+  const upperFloor: Aabb3 = { min: [-2, 1.8, -2], max: [2, 2, 2] };
+  const options = {
+    footprintHalf: [0.25, 0.25] as [number, number],
+    maxStepUp: 0,
+    maxStepDown: 4,
+  };
+
+  assert.equal(findGroundAt([0, 3, 0], [lowerFloor, upperFloor], options)?.floorY, 2);
+  assert.equal(
+    findGroundAt([0, 3, 0], [lowerFloor, upperFloor], { ...options, preferredFloorY: 0 })?.floorY,
+    0,
+  );
+  assert.equal(
+    findGroundAt([0, 3, 0], [lowerFloor, upperFloor], { ...options, preferredFloorY: 2 })?.floorY,
+    2,
+  );
 });
 
 check("ground probe finds walkable tops, landing crossings, and filters step-height blockers", () => {
@@ -16873,6 +16938,20 @@ check("uniqueAiNavigationVolumeId/Name avoid collisions", () => {
   assert.equal(uniqueAiNavigationVolumeName("AI Navigation Volume", volumes), "AI Navigation Volume 2");
 });
 
+check("resolveAiNavigationVolume fills preview agent defaults and overrides", () => {
+  assert.equal(AI_NAVIGATION_VOLUME_DEFAULTS.agentRadius, 0.35);
+  assert.equal(AI_NAVIGATION_VOLUME_DEFAULTS.clearancePadding, 0.1);
+  const resolved = resolveAiNavigationVolume({
+    id: "nav",
+    position: [0, 2, 0],
+    agentRadius: 0.6,
+    clearancePadding: 0.25,
+  });
+  assert.equal(resolved.agentRadius, 0.6);
+  assert.equal(resolved.clearancePadding, 0.25);
+  assert.equal(resolveAiNavigationVolume({ id: "nav", position: [0, 2, 0], agentRadius: -1 }).agentRadius, 0.35);
+});
+
 check("aiNavigationVolumeAabb resolves scaled box bounds and skips hidden volumes", () => {
   const bounds = aiNavigationVolumeAabb({
     id: "nav",
@@ -16895,6 +16974,8 @@ check("validateAiNavigationVolume allowlists fields and round-trips through vali
     rotation: [0, 90, 0],
     scale: 1,
     size: [8, 4, 6],
+    agentRadius: 0.6,
+    clearancePadding: 0,
     color: "#123456",
     bogusField: "dropped",
   });
@@ -16907,6 +16988,8 @@ check("validateAiNavigationVolume allowlists fields and round-trips through vali
     rotation: [0, 90, 0],
     scale: 1,
     size: [8, 4, 6],
+    agentRadius: 0.6,
+    clearancePadding: 0,
   });
   assert.throws(() => validateAiNavigationVolume({ position: [0, 0, 0] }));
   assert.deepEqual(

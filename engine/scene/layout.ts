@@ -744,6 +744,10 @@ export interface LayoutAiNavigationVolume {
   scale?: number | Vec3;
   /** Box dimensions in world units. */
   size?: Vec3;
+  /** Editor navmesh preview agent radius, used to erode walkable area from blockers. */
+  agentRadius?: number;
+  /** Extra editor navmesh preview clearance beyond `agentRadius`. */
+  clearancePadding?: number;
 }
 
 /**

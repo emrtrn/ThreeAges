@@ -53,6 +53,8 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   }) => void;
   setSelectedAiNavigationVolume: (patch: {
     size?: Vec3;
+    agentRadius?: number;
+    clearancePadding?: number;
   }) => void;
   setSelectedTargetPoint: (patch: {
     nextTargetPoint?: string | undefined;
@@ -476,6 +478,19 @@ export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOpti
         ${navigationVolumeDimensionRows(volume, lockedAttr)}
         <div class="detail-hint">AI pathfinding is allowed inside this volume; the transform scale multiplies its size.</div>
       </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Preview Agent</div>
+        <label class="detail-row">
+          <span>Agent Radius</span>
+          <input data-ai-nav-agent="agentRadius" type="number" min="0" step="0.05"
+            value="${volume.agentRadius}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Clearance Padding</span>
+          <input data-ai-nav-agent="clearancePadding" type="number" min="0" step="0.05"
+            value="${volume.clearancePadding}" ${lockedAttr} />
+        </label>
+      </div>
       ${actorLockSection(selection)}
     `;
 
@@ -485,6 +500,16 @@ export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOpti
   body.querySelectorAll<HTMLInputElement>("[data-ai-nav-size]").forEach((input) => {
     input.addEventListener("change", () => {
       options.setSelectedAiNavigationVolume({ size: readNavigationVolumeSize(body, volume) });
+    });
+  });
+
+  body.querySelectorAll<HTMLInputElement>("[data-ai-nav-agent]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const value = Math.max(0, Number(input.value));
+      if (!Number.isFinite(value)) return;
+      const key = input.dataset.aiNavAgent;
+      if (key === "agentRadius") options.setSelectedAiNavigationVolume({ agentRadius: value });
+      if (key === "clearancePadding") options.setSelectedAiNavigationVolume({ clearancePadding: value });
     });
   });
 }

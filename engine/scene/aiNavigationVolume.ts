@@ -5,9 +5,13 @@ export interface ResolvedAiNavigationVolume {
   name: string;
   hidden: boolean;
   size: Vec3;
+  agentRadius: number;
+  clearancePadding: number;
 }
 
 export const AI_NAVIGATION_VOLUME_DEFAULT_SIZE: Vec3 = [10, 4, 10];
+export const AI_NAVIGATION_VOLUME_DEFAULT_AGENT_RADIUS = 0.35;
+export const AI_NAVIGATION_VOLUME_DEFAULT_CLEARANCE_PADDING = 0.1;
 
 /** Fixed wireframe tint for the AI Navigation Volume (not user-editable). */
 export const AI_NAVIGATION_VOLUME_WIRE_COLOR = "#3f86ff";
@@ -16,6 +20,8 @@ export const AI_NAVIGATION_VOLUME_DEFAULTS: ResolvedAiNavigationVolume = {
   name: "AI Navigation Volume",
   hidden: false,
   size: [...AI_NAVIGATION_VOLUME_DEFAULT_SIZE],
+  agentRadius: AI_NAVIGATION_VOLUME_DEFAULT_AGENT_RADIUS,
+  clearancePadding: AI_NAVIGATION_VOLUME_DEFAULT_CLEARANCE_PADDING,
 };
 
 export function resolveAiNavigationVolume(
@@ -27,6 +33,8 @@ export function resolveAiNavigationVolume(
     name: volume.name ?? defaults.name,
     hidden: volume.hidden ?? defaults.hidden,
     size: volume.size ? saneSize(volume.size) : [...defaults.size],
+    agentRadius: finiteNonNegative(volume.agentRadius, defaults.agentRadius),
+    clearancePadding: finiteNonNegative(volume.clearancePadding, defaults.clearancePadding),
   };
 }
 
@@ -82,4 +90,8 @@ function saneSize(size: Vec3): Vec3 {
 
 function finitePositive(value: number | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function finiteNonNegative(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : fallback;
 }

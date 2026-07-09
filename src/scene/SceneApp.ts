@@ -176,6 +176,8 @@ import {
   type BlockingVolumeRenderItem,
 } from "@engine/render-three/blockingVolume";
 import {
+  AI_NAVIGATION_VOLUME_DEFAULT_AGENT_RADIUS,
+  AI_NAVIGATION_VOLUME_DEFAULT_CLEARANCE_PADDING,
   aiNavigationVolumeAabb,
   applyAiNavigationVolumeTransform,
   createAiNavigationVolumeObject,
@@ -483,16 +485,24 @@ const DEFAULT_INPUT_BINDINGS: ActionBindings = {
 };
 
 const AI_NAV_DEBUG_CELL_SIZE = 0.5;
-const AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS = 0.35;
-const AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING = 0.1;
+const AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS = AI_NAVIGATION_VOLUME_DEFAULT_AGENT_RADIUS;
+const AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING = AI_NAVIGATION_VOLUME_DEFAULT_CLEARANCE_PADDING;
 const AI_NAV_DEBUG_GRID_SAFETY_MARGIN = AI_NAV_DEBUG_CELL_SIZE * 0.5;
-const AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS =
-  AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS + AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING + AI_NAV_DEBUG_GRID_SAFETY_MARGIN;
 /** Standing height + step height of the default agent the walkable-area preview bakes for. */
 const AI_NAV_DEBUG_AGENT_HEIGHT = 1.8;
 const AI_NAV_DEBUG_AGENT_STEP_HEIGHT = 0.45;
 const AI_NAV_DEBUG_AGENT_STEP_DOWN = 0.5;
 const AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG = 50;
+
+interface AiNavDebugProfile {
+  readonly agentRadius: number;
+  readonly clearancePadding: number;
+  readonly clearanceRadius: number;
+}
+
+function saneAiNavPreviewNumber(value: number, fallback: number): number {
+  return Number.isFinite(value) && value >= 0 ? Number(value.toFixed(3)) : fallback;
+}
 
 /**
  * Oriented XZ footprint for an editor nav blocker, hulled from a collision
@@ -3977,7 +3987,7 @@ export class SceneApp {
 
   setAiNavigationVolume(
     index: number,
-    patch: { size?: Vec3 },
+    patch: { size?: Vec3; agentRadius?: number; clearancePadding?: number },
     label = "Edit AI Navigation Volume",
   ): void {
     const actor = this.layout?.aiNavigationVolumes?.[index];
@@ -3985,6 +3995,10 @@ export class SceneApp {
     const previous = cloneAiNavigationVolume(actor);
     const next = cloneAiNavigationVolume(actor);
     if (patch.size) next.size = [...patch.size];
+    if (patch.agentRadius !== undefined) next.agentRadius = saneAiNavPreviewNumber(patch.agentRadius, AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS);
+    if (patch.clearancePadding !== undefined) {
+      next.clearancePadding = saneAiNavPreviewNumber(patch.clearancePadding, AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING);
+    }
     const needsRebuild = patch.size !== undefined;
     const apply = (value: LayoutAiNavigationVolume): void => {
       if (!this.layout?.aiNavigationVolumes?.[index]) return;
@@ -4007,7 +4021,7 @@ export class SceneApp {
     });
   }
 
-  setSelectedAiNavigationVolume(patch: { size?: Vec3 }): void {
+  setSelectedAiNavigationVolume(patch: { size?: Vec3; agentRadius?: number; clearancePadding?: number }): void {
     if (this.selection?.kind !== "aiNavigationVolume") return;
     this.setAiNavigationVolume(this.selection.index, patch);
   }
@@ -6696,13 +6710,14 @@ export class SceneApp {
     this.removeAiNavigationView();
     if (!this.showAiNavigation || !this.layout) return;
     const blockers = this.editorNavBlockers();
-    const inflatedBlockers = blockers.map((blocker) => inflateNavBlocker2d(blocker, AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS));
+    const profile = this.aiNavDebugProfile();
+    const inflatedBlockers = blockers.map((blocker) => inflateNavBlocker2d(blocker, profile.clearanceRadius));
     const bounds = this.aiNavigationBounds();
     const perception = this.aiPerceptionView();
     const queries = this.aiQueryView();
     const routes = this.aiTargetPointRouteView();
-    const agentClearances = this.aiAgentClearanceView();
-    const passableCells = this.aiNavPassableCells(blockers, bounds);
+    const agentClearances = this.aiAgentClearanceView(profile);
+    const passableCells = this.aiNavPassableCells(blockers, bounds, profile);
     if (
       blockers.length === 0 &&
       inflatedBlockers.length === 0 &&
@@ -6735,13 +6750,17 @@ export class SceneApp {
    * Baked at the volume floor so floor-level obstacles erode the area while an
    * agent still reads as able to stand under high overhangs (vertical filtering).
    */
-  private aiNavPassableCells(blockers: readonly NavBlocker[], bounds: readonly NavAabb[]): Vec3[] {
+  private aiNavPassableCells(
+    blockers: readonly NavBlocker[],
+    bounds: readonly NavAabb[],
+    profile: AiNavDebugProfile,
+  ): Vec3[] {
     if (bounds.length === 0) return [];
     let floorY = Infinity;
     for (const bound of bounds) floorY = Math.min(floorY, bound.min[1]);
     if (!Number.isFinite(floorY)) return [];
     const agent: NavAgent = {
-      radius: AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS,
+      radius: profile.agentRadius,
       // Realistic standing agent, not the full volume height — a beam above head
       // height must not paint the floor under it as blocked.
       height: AI_NAV_DEBUG_AGENT_HEIGHT,
@@ -6750,14 +6769,14 @@ export class SceneApp {
       stepHeight: AI_NAV_DEBUG_AGENT_STEP_HEIGHT,
       maxStepDown: AI_NAV_DEBUG_AGENT_STEP_DOWN,
       maxSlopeAngleDeg: AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG,
-      clearancePadding: AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING,
+      clearancePadding: profile.clearancePadding,
     };
     const grid = buildNavGrid({
       agent,
       blockers,
       bounds,
       footY: floorY,
-      sampleFloorY: this.aiNavDebugFloorSampler(blockers, bounds, agent),
+      sampleFloorY: this.aiNavDebugFloorSampler(blockers, bounds, agent, floorY),
       cellSize: AI_NAV_DEBUG_CELL_SIZE,
       safetyMargin: AI_NAV_DEBUG_GRID_SAFETY_MARGIN,
     });
@@ -6777,6 +6796,7 @@ export class SceneApp {
     blockers: readonly NavBlocker[],
     bounds: readonly NavAabb[],
     agent: NavAgent,
+    preferredFloorY: number,
   ): (x: number, z: number) => number | null {
     const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
     const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG);
@@ -6796,6 +6816,7 @@ export class SceneApp {
         maxStepDown: maxY - minY,
         surfaces,
         maxSlopeCos,
+        preferredFloorY,
       });
       return hit ? hit.floorY : null;
     };
@@ -6876,17 +6897,36 @@ export class SceneApp {
     return out;
   }
 
-  private aiAgentClearanceView(): AiNavAgentClearanceView[] {
+  private aiAgentClearanceView(profile: AiNavDebugProfile): AiNavAgentClearanceView[] {
     const selectedAiEntityId = this.selectedAiEntityId();
     return this.aiSubsystem.getDebugSnapshot().controllers
       .filter((controller) => controller.position)
       .map((controller) => ({
         entityId: controller.pawnEntityId,
         position: controller.position!,
-        agentRadius: AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS,
-        radius: AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS,
+        agentRadius: profile.agentRadius,
+        radius: profile.clearanceRadius,
         ...(selectedAiEntityId === controller.pawnEntityId ? { selected: true } : {}),
       }));
+  }
+
+  private aiNavDebugProfile(): AiNavDebugProfile {
+    const selectedVolume =
+      this.selection?.kind === "aiNavigationVolume"
+        ? this.layout?.aiNavigationVolumes?.[this.selection.index]
+        : undefined;
+    const fallbackVolume = this.layout?.aiNavigationVolumes?.find((volume) => volume.hidden !== true);
+    const resolved = resolveAiNavigationVolume(selectedVolume ?? fallbackVolume ?? null);
+    const agentRadius = saneAiNavPreviewNumber(resolved.agentRadius, AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS);
+    const clearancePadding = saneAiNavPreviewNumber(
+      resolved.clearancePadding,
+      AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING,
+    );
+    return {
+      agentRadius,
+      clearancePadding,
+      clearanceRadius: agentRadius + clearancePadding + AI_NAV_DEBUG_GRID_SAFETY_MARGIN,
+    };
   }
 
   private selectedAiEntityId(): string | null {
