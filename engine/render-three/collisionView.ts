@@ -12,6 +12,13 @@ export interface CollisionWirebox {
   size: Vec3;
   sensor: boolean;
   navigationRole: NavigationRole;
+  /**
+   * True when `box` is the enclosing hull of a `complexAsSimple` trimesh rather
+   * than a real box collider — its flat top is a fictional plane at peak height
+   * (the mesh's real walkable floors are its surface triangles), so nav ground
+   * seeding must ignore it.
+   */
+  complexHull?: boolean;
 }
 
 /** Render-mesh triangle data for a `complexAsSimple` asset's collision overlay. */
@@ -205,7 +212,7 @@ function complexWirebox(
   }
   const box = new Box3().setFromPoints(world);
   const size = box.getSize(new Vector3());
-  return { box, segments, size: [size.x, size.y, size.z], sensor, navigationRole };
+  return { box, segments, size: [size.x, size.y, size.z], sensor, navigationRole, complexHull: true };
 }
 
 function unitSegmentsForShape(shape: CollisionPrimitive["shape"]): Vec3[] {

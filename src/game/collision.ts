@@ -25,6 +25,14 @@ export interface Aabb3 {
   /** AI navigation interpretation; absent behaves like `auto`. */
   readonly navigationRole?: NavigationRole;
   /**
+   * When `false`, this blocker's flat top can never seed a nav floor layer. Set
+   * for boxes that merely *enclose* non-box geometry — e.g. the editor's hull
+   * AABB around a `complexAsSimple` trimesh, whose real walkable floors come
+   * from its surface triangles: the hull's top is a fictional plane at peak
+   * height, not a standable surface. Absent behaves like `true`.
+   */
+  readonly seedsGround?: boolean;
+  /**
    * Optional tight XZ silhouette for a rotated collider. `min`/`max` remains the
    * broad-phase AABB, while movement collision can use this to avoid the empty
    * corners created by an enclosing AABB around a diagonal wall. A 2-point
@@ -248,6 +256,7 @@ function blockerTopSupportsRadius(blocker: Aabb3, radius: number): boolean {
 }
 
 function blockerCanSeedGround(blocker: Aabb3, options: GroundProbeOptions): boolean {
+  if (blocker.seedsGround === false) return false;
   if (!options.respectNavigationRole) return true;
   return blocker.navigationRole !== "obstacleOnly" && blocker.navigationRole !== "ignored";
 }
@@ -631,4 +640,25 @@ function betterGroundHit(current: GroundHit | null, candidate: GroundHit, option
     return current;
   }
   return candidate.floorY > current.floorY ? candidate : current;
+}
+
+/**
+ * Merges walkable floor samples that sit within `minSeparation` of each other into
+ * one layer, keeping the highest of each cluster (the surface the pawn actually
+ * stands on). Input need not be sorted. Distinct floors farther apart than the
+ * agent's step height survive as separate layers, so stacked platforms/stairs
+ * still bake as multiple navigable levels.
+ */
+export function collapseCoincidentFloors(floors: readonly number[], minSeparation: number): number[] {
+  const sorted = [...floors].sort((a, b) => a - b);
+  const out: number[] = [];
+  for (const y of sorted) {
+    const prev = out[out.length - 1];
+    if (prev !== undefined && y - prev <= minSeparation + 1e-6) {
+      out[out.length - 1] = y; // same floor cluster → keep the higher surface
+    } else {
+      out.push(y);
+    }
+  }
+  return out;
 }

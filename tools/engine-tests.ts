@@ -269,6 +269,7 @@ import {
   uphillSpeedScale,
 } from "../src/game/uphillSlowdown";
 import {
+  collapseCoincidentFloors,
   filterWalkableBlockers,
   findGroundAt,
   findGroundLayersAt,
@@ -7519,6 +7520,38 @@ check("findGroundLayersAt headroom gate treats a blocker underside as a ceiling"
     findGroundLayersAt([0, 3, 0], [floor, lowSlab], options).map((hit) => hit.floorY),
     [1.2],
   );
+});
+
+check("findGroundLayersAt never seeds from a seedsGround:false hull top", () => {
+  const floor: Aabb3 = { min: [-3, -0.2, -3], max: [3, 0, 3] };
+  // The editor's enclosing hull AABB of a complexAsSimple ramp: its flat top is
+  // a fictional plane at peak height, so it must not become a floor layer.
+  const hull: Aabb3 = { min: [-2, 0, -2], max: [2, 1.1, 2], navigationRole: "walkable", seedsGround: false };
+  const options = {
+    footprintHalf: [0.35, 0.35] as [number, number],
+    maxStepUp: 0,
+    maxStepDown: 5,
+    respectNavigationRole: true,
+  };
+  assert.deepEqual(
+    findGroundLayersAt([0, 3, 0], [floor, hull], options).map((hit) => hit.floorY),
+    [0],
+  );
+  // Without the flag the same hull would seed its (fictional) top.
+  const seedingHull: Aabb3 = { min: [-2, 0, -2], max: [2, 1.1, 2], navigationRole: "walkable" };
+  assert.deepEqual(
+    findGroundLayersAt([0, 3, 0], [floor, seedingHull], options).map((hit) => hit.floorY),
+    [0, 1.1],
+  );
+});
+
+check("collapseCoincidentFloors merges same-floor clusters and keeps distinct levels", () => {
+  // A solid floor mesh reports its top face and slab underside a few cm apart:
+  // one navigable floor, keeping the higher surface the pawn stands on.
+  assert.deepEqual(collapseCoincidentFloors([0, 0.03, 2], 0.45), [0.03, 2]);
+  // Unsorted input, chained cluster, and floors beyond the step height survive.
+  assert.deepEqual(collapseCoincidentFloors([2, 0, 0.3, 0.6, 1.8], 0.45), [0.6, 2]);
+  assert.deepEqual(collapseCoincidentFloors([], 0.45), []);
 });
 
 check("ground probe finds walkable tops, landing crossings, and filters step-height blockers", () => {

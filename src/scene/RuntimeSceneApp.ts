@@ -78,7 +78,7 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
-import { findGroundLayersAt } from "@/game/collision";
+import { collapseCoincidentFloors, findGroundLayersAt } from "@/game/collision";
 import { slopeCosFromDegrees } from "@/game/slopeSurface";
 import {
   DialogueSubsystem,
@@ -475,27 +475,6 @@ const AI_NAV_FOOT_Y_BUCKET = AI_NAV_CELL_SIZE;
 function bucketNavFootY(footY: number): number {
   if (!Number.isFinite(footY)) return 0;
   return Math.round(footY / AI_NAV_FOOT_Y_BUCKET) * AI_NAV_FOOT_Y_BUCKET;
-}
-
-/**
- * Merges walkable floor samples that sit within `minSeparation` of each other into
- * one layer, keeping the highest of each cluster (the surface the pawn actually
- * stands on). Input need not be sorted. Distinct floors farther apart than the
- * agent's step height survive as separate layers, so stacked platforms/stairs
- * still bake as multiple navigable levels.
- */
-function collapseCoincidentFloors(floors: readonly number[], minSeparation: number): number[] {
-  const sorted = [...floors].sort((a, b) => a - b);
-  const out: number[] = [];
-  for (const y of sorted) {
-    const prev = out[out.length - 1];
-    if (prev !== undefined && y - prev <= minSeparation + 1e-6) {
-      out[out.length - 1] = y; // same floor cluster → keep the higher surface
-    } else {
-      out.push(y);
-    }
-  }
-  return out;
 }
 
 /** Cheap order-sensitive signature of authored nav bounds for cache invalidation. */

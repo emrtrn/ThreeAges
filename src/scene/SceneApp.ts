@@ -60,7 +60,7 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
-import { findGroundLayersAt } from "@/game/collision";
+import { collapseCoincidentFloors, findGroundLayersAt } from "@/game/collision";
 import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
 import { slopeCosFromDegrees } from "@/game/slopeSurface";
 import type { PlayCameraPose } from "@/play/cameraHandoff";
@@ -6834,9 +6834,19 @@ export class SceneApp {
         maxSlopeCos,
         preferredFloorY,
         requiredSupportRadius: Math.min(Math.max(0, agent.radius), AI_NAV_DEBUG_MIN_TOP_SUPPORT_RADIUS),
+        // Recast walkableHeight, mirroring the runtime sampler: a floor layer with
+        // less than the agent's height of clearance above it (a ramp/stair body
+        // overhead) is not walkable, so no green cells are painted under ramps.
+        requiredHeadroom: Math.max(0, agent.height),
         respectNavigationRole: true,
       });
-      return hits.length > 0 ? hits.map((hit) => hit.floorY) : null;
+      // Same collapse as the runtime sampler: near-coincident surfaces (a solid
+      // floor's top face vs. its slab underside) are one navigable floor.
+      const layers = collapseCoincidentFloors(
+        hits.map((hit) => hit.floorY),
+        Math.max(agent.stepHeight ?? 0, 1e-3),
+      );
+      return layers.length > 0 ? layers : null;
     };
   }
 
@@ -6982,10 +6992,14 @@ export class SceneApp {
     )
       .filter((wirebox) => !wirebox.sensor && wirebox.navigationRole !== "ignored" && !wirebox.box.isEmpty())
       .map((wirebox) => {
-        const aabb: NavBlocker = {
+        const aabb: NavBlocker & { seedsGround?: boolean } = {
           min: [wirebox.box.min.x, wirebox.box.min.y, wirebox.box.min.z],
           max: [wirebox.box.max.x, wirebox.box.max.y, wirebox.box.max.z],
           navigationRole: wirebox.navigationRole,
+          // A complexAsSimple hull box's flat top is fictional (a peak-height
+          // plane over the whole footprint) — the mesh's real floors come from
+          // its surface triangles, so the ground probe must not seed from it.
+          ...(wirebox.complexHull ? { seedsGround: false } : {}),
         };
         // The wirebox `segments` are the collider's *rotated* world corners, so
         // their XZ hull is the true oriented ground footprint — the same tight
