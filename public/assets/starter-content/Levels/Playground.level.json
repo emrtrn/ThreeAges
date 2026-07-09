@@ -526,9 +526,9 @@
     {
       "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        -4.55,
+        -2.71,
         0,
-        0.83
+        0.55
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,

@@ -36,8 +36,8 @@
       "id": "characterMovement",
       "component": "CharacterMovement",
       "props": {
-        "maxWalkSpeed": 5,
-        "sprintMultiplier": 5,
+        "maxWalkSpeed": 3,
+        "sprintMultiplier": 3,
         "jumpSpeed": 4,
         "gravityScale": 1,
         "airControl": 0.25,
@@ -54,7 +54,7 @@
         "movementMode": "walking",
         "maxStepHeight": 0.5,
         "maxStepDown": 0.5,
-        "maxSlopeAngleDeg": 60,
+        "maxSlopeAngleDeg": 50,
         "uphillSpeedScale": 0.65,
         "stepSmoothSpeed": 6
       },

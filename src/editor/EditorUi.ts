@@ -1069,6 +1069,12 @@ export class EditorUi {
       } else if (event.code === "KeyA") {
         event.preventDefault();
         this.app.selectAllObjects();
+      } else if (event.code === "KeyB") {
+        event.preventDefault();
+        void this.browseToSelectedAsset();
+      } else if (event.code === "KeyE") {
+        event.preventDefault();
+        this.openSelectedAssetEditor();
       }
       return;
     }
@@ -1231,6 +1237,77 @@ export class EditorUi {
     this.renderFolderTree();
     this.renderContentFilters();
     this.renderContentAssets();
+  }
+
+  /**
+   * The Content Browser file path backing the current selection, or null when
+   * the selection has no source file (special actors, built-in primitives).
+   * Actor Script / Character instances carry their class file path (`classRef`)
+   * as `assetId`, so they resolve directly; other instances map their manifest
+   * `assetId` to the registered asset path.
+   */
+  private selectedAssetContentPath(): string | null {
+    const selection = this.selected;
+    if (!selection) return null;
+    if (selection.kind === "actor") return normalizeProjectPath(selection.assetId);
+    const asset = this.editableAssets.find((entry) => entry.id === selection.assetId);
+    return asset ? normalizeProjectPath(assetPath(asset)) : null;
+  }
+
+  /**
+   * Ctrl+B "Browse To" (Unreal parity): reveals the selected object's source
+   * asset in the Content Browser — opens the drawer, navigates to its folder,
+   * and highlights the card. Special actors (lights, fog, sky…) and built-in
+   * primitives have no content-file asset, so this reports a hint instead.
+   */
+  private async browseToSelectedAsset(): Promise<void> {
+    const path = this.selectedAssetContentPath();
+    if (!path) {
+      this.setStatus(
+        "Browse To: select a placed asset that maps to a Content Browser file.",
+        "warning",
+      );
+      return;
+    }
+    await this.revealContentAsset(path);
+  }
+
+  /**
+   * Ctrl+E "Edit" (Unreal parity): opens the asset editor for the selected
+   * object's source asset — e.g. a placed static mesh opens the Static Mesh
+   * editor, an Actor Script / Character instance opens the Actor Script editor.
+   * Assets with no dedicated editor (or non-asset selections) report a hint.
+   */
+  private openSelectedAssetEditor(): void {
+    const path = this.selectedAssetContentPath();
+    if (!path) {
+      this.setStatus("Edit: select a placed asset to open its editor.", "warning");
+      return;
+    }
+    const item = this.browserAssetItemForPath(path);
+    const open = this.assetEditorOpener(item);
+    if (!open) {
+      this.setStatus(`No dedicated editor for ${item.label}.`, "warning");
+      return;
+    }
+    open();
+  }
+
+  /** Builds a Content Browser item from a public-root-relative asset path (for editor lookup). */
+  private browserAssetItemForPath(path: string): BrowserAssetItem {
+    const normalized = normalizeProjectPath(path);
+    const editable = this.editableAssetByProjectPath().get(normalized);
+    const fileName = normalized.split("/").pop() ?? normalized;
+    const ext = fileName.includes(".") ? fileName.slice(fileName.lastIndexOf(".") + 1) : "file";
+    const base = {
+      key: normalized,
+      label: editable?.displayName ?? fileName,
+      category: editable?.catalogCategory ?? ext,
+      path: normalized,
+      ext,
+      type: editable ? assetType(editable) : (inferAssetTypeFromPath(normalized) ?? "file"),
+    } satisfies Omit<BrowserAssetItem, "editable">;
+    return editable ? { ...base, editable } : base;
   }
 
   /**

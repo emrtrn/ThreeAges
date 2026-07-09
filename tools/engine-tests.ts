@@ -7592,6 +7592,120 @@ check("physics navigation queries honor collider navigation roles without changi
   assert.equal(physics.staticNavigationSurfaceTriangles().length, 1);
 });
 
+// A `walkable` staircase (trimesh with vertical riser triangles) must contribute
+// ZERO nav blockers: the risers would otherwise become wall blockers whose
+// clearance erosion wipes out the narrow tread strip, making the stair
+// unnavigable (a ramp has no risers, so it always worked). Role is authoritative
+// for nav; physics collision is unaffected so the pawn still climbs the steps.
+check("walkable collider produces no nav blockers from riser triangles, but auto still walls them", () => {
+  // One flat tread (y=0.2) + one vertical riser wall triangle (in the z=0 plane).
+  const stairMesh = {
+    shape: "trimesh" as const,
+    size: [1, 0.2, 1] as [number, number, number],
+    vertices: [
+      [-0.5, 0.2, 0],
+      [0.5, 0.2, 0],
+      [0, 0.2, 0.5],
+      [-0.5, 0, 0],
+      [0.5, 0, 0],
+      [-0.5, 0.2, 0],
+    ] as [number, number, number][],
+    indices: [0, 1, 2, 3, 4, 5],
+  };
+  const makeStair = (navigationRole: "walkable" | "auto") => ({
+    id: "stair",
+    components: {
+      Transform: {
+        position: [0, 0, 0] as [number, number, number],
+        rotation: [0, 0, 0] as [number, number, number],
+        scale: [1, 1, 1] as [number, number, number],
+      },
+      Collider: {
+        shape: "box" as const,
+        size: [1, 0.2, 1] as [number, number, number],
+        isStatic: true,
+        isSensor: false,
+        navigationRole,
+        primitives: [stairMesh],
+      },
+    },
+  });
+
+  const walkable = new PhysicsSubsystem();
+  walkable.setEntities([makeStair("walkable")]);
+  assert.equal(
+    walkable.staticNavigationBlockerAabbs().length,
+    0,
+    "walkable stair seeds no nav blockers (risers do not erode the tread strip)",
+  );
+  assert.ok(
+    walkable.staticNavigationSurfaceTriangles().length >= 1,
+    "walkable stair still seeds a walkable nav surface (the tread)",
+  );
+  assert.ok(
+    walkable.staticBlockerAabbs().length >= 1,
+    "physics collision is unaffected: the pawn still collides with / steps up the riser",
+  );
+
+  const auto = new PhysicsSubsystem();
+  auto.setEntities([makeStair("auto")]);
+  assert.ok(
+    auto.staticNavigationBlockerAabbs().length >= 1,
+    "auto stair still walls the riser (geometry-derived, backward compatible)",
+  );
+});
+
+// End-to-end demonstration of *why* the role fix matters: with the risers present
+// as blockers (the old behavior for an untagged/auto stair) the tread strip is
+// eroded and the staircase is unreachable; dropping them (what `walkable` now
+// does) makes the identical heightfield navigable. Uses the real asset geometry:
+// 0.2 m rise, 0.24 m tread, agent radius 0.35 + clearance 0.1 + safety 0.25 = 0.70 m.
+check("nav grid: riser blockers erode a stair strip; removing them makes it climbable", () => {
+  const rise = 0.2;
+  const tread = 0.24;
+  const nSteps = 8;
+  const agent = { radius: 0.35, height: 1.8, stepHeight: 0.5, maxStepDown: 0.5, clearancePadding: 0.1 };
+  const runLength = nSteps * tread;
+  const bounds: NavAabb[] = [{ min: [-2, -1, -1], max: [runLength + 2, 3, 1] }];
+  // A one-cell-wide stair corridor along +X; null off the strip so there is no way around.
+  const sampleFloorY = (x: number, z: number): number | null => {
+    if (Math.abs(z) > 0.12) return null;
+    const step = Math.min(nSteps, Math.max(0, Math.round(x / tread)));
+    return step * rise;
+  };
+  // One vertical riser wall (thin AABB + line footprint) at each step's front edge.
+  const risers: NavBlocker[] = [];
+  for (let k = 1; k <= nSteps; k += 1) {
+    const edgeX = k * tread - tread / 2;
+    risers.push({
+      min: [edgeX - 0.02, (k - 1) * rise, -1],
+      max: [edgeX + 0.02, k * rise, 1],
+      footprint: [
+        [edgeX, -1],
+        [edgeX, 1],
+      ],
+    });
+  }
+  const start: Vec3 = [0, 0, 0];
+  const goal: Vec3 = [runLength, nSteps * rise, 0];
+
+  const walled = buildNavGrid({ agent, blockers: risers, bounds, footY: 0, cellSize: tread, safetyMargin: 0.25, sampleFloorY });
+  assert.ok(walled, "walled grid builds");
+  assert.equal(
+    searchNavGrid(walled!, start, goal).status,
+    "failure",
+    "risers-as-blockers erode the tread strip -> staircase unreachable (the bug)",
+  );
+
+  const clear = buildNavGrid({ agent, blockers: [], bounds, footY: 0, cellSize: tread, safetyMargin: 0.25, sampleFloorY });
+  assert.ok(clear, "clear grid builds");
+  assert.equal(
+    searchNavGrid(clear!, start, goal).status,
+    "success",
+    "dropping the risers (walkable role) -> identical heightfield is navigable",
+  );
+});
+
 // A collider with a center offset places its AABB at position + center, so a
 // model whose geometry is not centered on its origin still aligns to the mesh.
 check("physics subsystem offsets a collider AABB by its center", () => {
