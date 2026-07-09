@@ -9,7 +9,7 @@ import {
   MeshBasicMaterial,
 } from "three";
 
-import type { NavAabb, NavBlocker } from "../navigation/gridNavigation";
+import type { NavAabb, NavBlocker, NavVec2 } from "../navigation/gridNavigation";
 import type { Vec3 } from "../scene/layout";
 
 export interface AiNavigationFollowerView {
@@ -59,7 +59,7 @@ export interface AiNavAgentClearanceView {
 
 export interface AiNavigationViewInput {
   readonly blockers?: readonly NavBlocker[];
-  readonly inflatedBlockers?: readonly NavAabb[];
+  readonly inflatedBlockers?: readonly NavBlocker[];
   /**
    * Centers of the baked nav grid's walkable cells, drawn as a translucent green
    * fill (the Unreal navmesh-render analogue). Reflects actual erosion + vertical
@@ -262,6 +262,18 @@ export function createAiNavigationView(input: AiNavigationViewInput): Group {
   }
 
   return group;
+}
+
+export function inflateNavBlocker2d(blocker: NavBlocker, radius: number): NavBlocker {
+  const r = Math.max(0, radius);
+  const inflated: NavBlocker = {
+    min: [blocker.min[0] - r, blocker.min[1], blocker.min[2] - r],
+    max: [blocker.max[0] + r, blocker.max[1], blocker.max[2] + r],
+  };
+  const footprint = blocker.footprint;
+  if (!footprint || footprint.length < 3) return inflated;
+  const inflatedFootprint = inflateConvexFootprintXZ(footprint, r);
+  return inflatedFootprint ? { ...inflated, footprint: inflatedFootprint } : inflated;
 }
 
 export function disposeAiNavigationView(group: Group | null): void {
@@ -471,7 +483,7 @@ function pathSegments(path: readonly Vec3[], y: number): Vec3[] {
 
 function pathClearanceViolationSegments(
   path: readonly Vec3[],
-  inflatedBlockers: readonly NavAabb[],
+  inflatedBlockers: readonly NavBlocker[],
   y: number,
 ): Vec3[] {
   if (inflatedBlockers.length === 0) return [];
@@ -479,10 +491,16 @@ function pathClearanceViolationSegments(
   for (let i = 0; i + 1 < path.length; i += 1) {
     const a = path[i]!;
     const b = path[i + 1]!;
-    if (!inflatedBlockers.some((blocker) => segmentIntersectsAabb2d(a, b, blocker))) continue;
+    if (!inflatedBlockers.some((blocker) => segmentIntersectsBlocker2d(a, b, blocker))) continue;
     out.push([a[0], y, a[2]], [b[0], y, b[2]]);
   }
   return out;
+}
+
+function segmentIntersectsBlocker2d(a: Vec3, b: Vec3, blocker: NavBlocker): boolean {
+  const footprint = blocker.footprint;
+  if (footprint && footprint.length >= 3) return Boolean(clipSegmentConvexXZ(a, b, footprint));
+  return segmentIntersectsAabb2d(a, b, blocker);
 }
 
 function segmentIntersectsAabb2d(a: Vec3, b: Vec3, blocker: NavAabb): boolean {
@@ -493,6 +511,109 @@ function segmentIntersectsAabb2d(a: Vec3, b: Vec3, blocker: NavAabb): boolean {
   tMin = xHit[0];
   tMax = xHit[1];
   return Boolean(clipSegmentAxis(a[2], b[2], blocker.min[2], blocker.max[2], tMin, tMax));
+}
+
+function inflateConvexFootprintXZ(poly: readonly NavVec2[], radius: number): NavVec2[] | undefined {
+  const n = poly.length;
+  if (n < 3) return undefined;
+  const r = Math.max(0, radius);
+  if (r <= 1e-9) return poly.map((point) => [point[0], point[1]] as NavVec2);
+  const ccw = signedArea2XZ(poly) > 0;
+  const out: NavVec2[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const prev = poly[(i + n - 1) % n]!;
+    const current = poly[i]!;
+    const next = poly[(i + 1) % n]!;
+    const prevEdge = edgeLine(prev, current, ccw, r);
+    const nextEdge = edgeLine(current, next, ccw, r);
+    if (!prevEdge || !nextEdge) continue;
+    const hit = intersectLinesXZ(prevEdge.point, prevEdge.dir, nextEdge.point, nextEdge.dir);
+    if (hit) {
+      out.push(hit);
+      continue;
+    }
+    const nx = prevEdge.normal[0] + nextEdge.normal[0];
+    const nz = prevEdge.normal[1] + nextEdge.normal[1];
+    const len = Math.hypot(nx, nz);
+    out.push(
+      len > 1e-9
+        ? [current[0] + (nx / len) * r, current[1] + (nz / len) * r]
+        : [current[0] + nextEdge.normal[0] * r, current[1] + nextEdge.normal[1] * r],
+    );
+  }
+  return out.length >= 3 ? out : undefined;
+}
+
+function edgeLine(
+  from: NavVec2,
+  to: NavVec2,
+  ccw: boolean,
+  radius: number,
+): { point: NavVec2; dir: NavVec2; normal: NavVec2 } | null {
+  const dx = to[0] - from[0];
+  const dz = to[1] - from[1];
+  const len = Math.hypot(dx, dz);
+  if (len <= 1e-9) return null;
+  const normal: NavVec2 = ccw ? [dz / len, -dx / len] : [-dz / len, dx / len];
+  return {
+    point: [from[0] + normal[0] * radius, from[1] + normal[1] * radius],
+    dir: [dx, dz],
+    normal,
+  };
+}
+
+function intersectLinesXZ(pointA: NavVec2, dirA: NavVec2, pointB: NavVec2, dirB: NavVec2): NavVec2 | null {
+  const cross = dirA[0] * dirB[1] - dirA[1] * dirB[0];
+  if (Math.abs(cross) <= 1e-9) return null;
+  const bx = pointB[0] - pointA[0];
+  const bz = pointB[1] - pointA[1];
+  const t = (bx * dirB[1] - bz * dirB[0]) / cross;
+  return [pointA[0] + dirA[0] * t, pointA[1] + dirA[1] * t];
+}
+
+function signedArea2XZ(poly: readonly NavVec2[]): number {
+  let area2 = 0;
+  for (let i = 0; i < poly.length; i += 1) {
+    const p = poly[i]!;
+    const q = poly[(i + 1) % poly.length]!;
+    area2 += p[0] * q[1] - q[0] * p[1];
+  }
+  return area2;
+}
+
+function clipSegmentConvexXZ(a: Vec3, b: Vec3, poly: readonly NavVec2[]): [number, number] | null {
+  const n = poly.length;
+  if (n < 3) return null;
+  const ccw = signedArea2XZ(poly) > 0;
+  let tMin = 0;
+  let tMax = 1;
+  const ax = a[0];
+  const az = a[2];
+  const dx = b[0] - a[0];
+  const dz = b[2] - a[2];
+  for (let i = 0; i < n; i += 1) {
+    const p = poly[i]!;
+    const q = poly[(i + 1) % n]!;
+    const ex = q[0] - p[0];
+    const ez = q[1] - p[1];
+    let nx = ccw ? ez : -ez;
+    let nz = ccw ? -ex : ex;
+    const len = Math.hypot(nx, nz);
+    if (len < 1e-12) continue;
+    nx /= len;
+    nz /= len;
+    const dist0 = nx * (ax - p[0]) + nz * (az - p[1]);
+    const rate = nx * dx + nz * dz;
+    if (Math.abs(rate) < 1e-12) {
+      if (dist0 > 1e-9) return null;
+      continue;
+    }
+    const t = -dist0 / rate;
+    if (rate > 0) tMax = Math.min(tMax, t);
+    else tMin = Math.max(tMin, t);
+    if (tMin > tMax) return null;
+  }
+  return tMin <= tMax ? [tMin, tMax] : null;
 }
 
 function clipSegmentAxis(

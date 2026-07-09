@@ -53,6 +53,7 @@ import {
   advanceWaypoint,
   type NavAgent,
   type NavAabb,
+  type NavBlocker,
   type PathFollowingState,
 } from "@engine/navigation/gridNavigation";
 import { resolveNavAgentProfile } from "@engine/navigation/navAgentProfile";
@@ -67,6 +68,7 @@ import {
 import {
   createAiNavigationView,
   disposeAiNavigationView,
+  inflateNavBlocker2d,
   type AiNavAgentClearanceView,
   type AiPerceptionView,
   type AiQueryCandidateView,
@@ -440,7 +442,7 @@ export interface AiNavFollowerDebug {
 
 export interface AiNavigationDebugSnapshot {
   readonly blockers: readonly NavAabb[];
-  readonly inflatedBlockers: readonly NavAabb[];
+  readonly inflatedBlockers: readonly NavBlocker[];
   readonly agentClearances: readonly AiNavAgentClearanceView[];
   readonly bounds: readonly NavAabb[];
   readonly cellSize: number;
@@ -481,14 +483,6 @@ function navBoundsSignature(bounds: readonly NavAabb[]): string {
     signature += `${bound.min[0]},${bound.min[1]},${bound.min[2]},${bound.max[0]},${bound.max[1]},${bound.max[2]};`;
   }
   return signature;
-}
-
-function inflateNavAabb2d(blocker: NavAabb, radius: number): NavAabb {
-  const r = Math.max(0, radius);
-  return {
-    min: [blocker.min[0] - r, blocker.min[1], blocker.min[2] - r],
-    max: [blocker.max[0] + r, blocker.max[1], blocker.max[2] + r],
-  };
 }
 
 export interface RuntimeStatsApp {
@@ -1187,7 +1181,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const maxClearance = Math.max(0, ...agentClearances.map((clearance) => clearance.radius));
     return {
       blockers,
-      inflatedBlockers: maxClearance > 0 ? blockers.map((blocker) => inflateNavAabb2d(blocker, maxClearance)) : [],
+      inflatedBlockers: maxClearance > 0 ? blockers.map((blocker) => inflateNavBlocker2d(blocker, maxClearance)) : [],
       agentClearances,
       bounds: this.aiNavigationBounds(),
       cellSize: AI_NAV_CELL_SIZE,

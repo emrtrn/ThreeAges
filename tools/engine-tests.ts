@@ -108,6 +108,7 @@ import {
   type NavBlocker,
   type NavGridBuildRequest,
 } from "../engine/navigation/gridNavigation";
+import type { Vec3 } from "../engine/scene/layout";
 import { resolveNavAgentProfile } from "../engine/navigation/navAgentProfile";
 import {
   freshStuckState,
@@ -216,6 +217,7 @@ import { LoadProgressTracker, formatLoadDetail } from "../engine/loading/loadPro
 import {
   createAiNavigationView,
   disposeAiNavigationView,
+  inflateNavBlocker2d,
 } from "../engine/render-three/aiNavigationView";
 import { SubsystemProfiler } from "../engine/core/subsystemProfiler";
 import {
@@ -22076,6 +22078,30 @@ check("createAiNavigationView draws inflated blockers and agent clearance rings"
   assert.ok(view.getObjectByName("ai-nav-blockers"), "raw blocker footprint drawn");
   assert.ok(view.getObjectByName("ai-nav-inflated-blockers"), "inflated forbidden footprint drawn");
   assert.ok(view.getObjectByName("ai-nav-agent-clearance"), "agent clearance ring drawn");
+  disposeAiNavigationView(view);
+});
+
+check("createAiNavigationView draws rotated inflated blockers as oriented footprints", () => {
+  const half: Vec3 = [2, 1.5, 0.1];
+  const aabb = rotatedBoxAabb([0, 0, 0], [0, 0, 0], half, [0, 45, 0]);
+  const footprint = rotatedBoxFootprintXZ([0, 0, 0], [0, 0, 0], half, [0, 45, 0])!;
+  const inflated = inflateNavBlocker2d({ ...aabb, footprint }, 0.5);
+  assert.ok(inflated.footprint && inflated.footprint.length >= 3, "inflated blocker preserves oriented footprint");
+
+  const view = createAiNavigationView({ inflatedBlockers: [inflated] });
+  const lines = view.getObjectByName("ai-nav-inflated-blockers") as
+    | { geometry: { getAttribute(name: string): { count: number; getX(index: number): number; getZ(index: number): number } } }
+    | undefined;
+  assert.ok(lines, "inflated blocker line segments drawn");
+  const position = lines.geometry.getAttribute("position");
+  const uniqueX = new Set<string>();
+  const uniqueZ = new Set<string>();
+  for (let i = 0; i < position.count; i += 1) {
+    uniqueX.add(position.getX(i).toFixed(4));
+    uniqueZ.add(position.getZ(i).toFixed(4));
+  }
+  assert.ok(uniqueX.size > 2, "oriented footprint has more than an AABB's two X edges");
+  assert.ok(uniqueZ.size > 2, "oriented footprint has more than an AABB's two Z edges");
   disposeAiNavigationView(view);
 });
 

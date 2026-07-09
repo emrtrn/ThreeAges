@@ -87,6 +87,7 @@ import { collisionWireboxes } from "@engine/render-three/collisionView";
 import {
   createAiNavigationView,
   disposeAiNavigationView,
+  inflateNavBlocker2d,
   type AiNavAgentClearanceView,
   type AiPerceptionView,
   type AiQueryCandidateView,
@@ -492,14 +493,6 @@ const AI_NAV_DEBUG_AGENT_HEIGHT = 1.8;
 const AI_NAV_DEBUG_AGENT_STEP_HEIGHT = 0.45;
 const AI_NAV_DEBUG_AGENT_STEP_DOWN = 0.5;
 const AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG = 50;
-
-function inflateNavAabb2d(blocker: NavAabb, radius: number): NavAabb {
-  const r = Math.max(0, radius);
-  return {
-    min: [blocker.min[0] - r, blocker.min[1], blocker.min[2] - r],
-    max: [blocker.max[0] + r, blocker.max[1], blocker.max[2] + r],
-  };
-}
 
 /**
  * Oriented XZ footprint for an editor nav blocker, hulled from a collision
@@ -6703,7 +6696,7 @@ export class SceneApp {
     this.removeAiNavigationView();
     if (!this.showAiNavigation || !this.layout) return;
     const blockers = this.editorNavBlockers();
-    const inflatedBlockers = blockers.map((blocker) => inflateNavAabb2d(blocker, AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS));
+    const inflatedBlockers = blockers.map((blocker) => inflateNavBlocker2d(blocker, AI_NAV_DEBUG_DEFAULT_CLEARANCE_RADIUS));
     const bounds = this.aiNavigationBounds();
     const perception = this.aiPerceptionView();
     const queries = this.aiQueryView();
