@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "name": "__playwright-smoke",
+  "name": "playground",
   "loadGroups": [],
   "instances": [
     {
@@ -9,38 +9,16 @@
     },
     {
       "assetId": "shape:cube",
-      "placements": [
-        {
-          "position": [
-            0,
-            1,
-            0
-          ],
-          "name": "Smoke Checkpoint",
-          "collisionPreset": "trigger",
-          "sensor": true,
-          "behavior": {
-            "script": "checkpoint",
-            "params": {
-              "slot": "quick"
-            }
-          },
-          "scale": [
-            4,
-            4,
-            4
-          ]
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "marker:playerStart",
       "placements": [
         {
           "position": [
+            -21.13,
             0,
-            0,
-            0
+            -9.43
           ],
           "name": "Player Start",
           "collision": false,
@@ -150,13 +128,31 @@
       "placements": [
         {
           "position": [
+            -22.5,
             0,
-            0,
-            -1.5
+            -13.25
           ],
-          "scaleLocked": true,
+          "materialSlot": "white-material",
           "rotationYDeg": 0,
-          "scale": 3
+          "scale": [
+            4.9,
+            1,
+            7.2
+          ]
+        },
+        {
+          "position": [
+            -18.68,
+            3.18,
+            -10.66
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            1.1,
+            1,
+            1
+          ]
         }
       ]
     },
@@ -360,7 +356,6 @@
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
     "killZ": -10,
-    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"
@@ -445,20 +440,98 @@
     {
       "id": "ai-navigation-volume-1",
       "position": [
-        0,
+        -12.61,
         2,
-        0
+        1.09
       ],
       "name": "AI Navigation Volume",
+      "scale": 1,
       "size": [
-        12,
-        4,
-        10
+        20,
+        6,
+        30
       ],
-      "agentRadius": 0.6,
-      "clearancePadding": 0.25
+      "agentRadius": 0.1
     }
   ],
-  "targetPoints": [],
-  "actors": []
+  "targetPoints": [
+    {
+      "id": "target-point-1",
+      "position": [
+        -12.28,
+        0,
+        -2.11
+      ],
+      "name": "TP_1",
+      "scale": 1,
+      "nextTargetPoint": "target-point-4",
+      "startPoint": true,
+      "waitTime": 0.5,
+      "acceptanceRadius": 1,
+      "color": "#ff0000"
+    },
+    {
+      "id": "target-point-4",
+      "position": [
+        -17.11,
+        0,
+        -9.23
+      ],
+      "name": "TP_2",
+      "scale": 1,
+      "nextTargetPoint": "target-point-2",
+      "waitTime": 0,
+      "color": "#ff0000"
+    },
+    {
+      "id": "target-point-2",
+      "position": [
+        -20.62,
+        0.89,
+        -2.51
+      ],
+      "name": "TP_3",
+      "scale": 1,
+      "nextTargetPoint": "target-point-5"
+    },
+    {
+      "id": "target-point-3",
+      "position": [
+        -16.5,
+        3.14,
+        -8.77
+      ],
+      "name": "TP_5",
+      "scale": 1,
+      "nextTargetPoint": "target-point-1"
+    },
+    {
+      "id": "target-point-5",
+      "position": [
+        -5.11,
+        0,
+        -8.88
+      ],
+      "name": "TP_4",
+      "nextTargetPoint": "target-point-3"
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Script/AI_Character.actor.json",
+      "position": [
+        -14.68,
+        0,
+        0.83
+      ],
+      "scaleLocked": true,
+      "rotationYDeg": 0,
+      "rotation": [
+        0,
+        180,
+        0
+      ],
+      "scale": 0.3
+    }
+  ]
 }
