@@ -5,6 +5,7 @@ import { pivotRow, scaleRow, vectorRow } from "./transformRows";
 
 export interface InstanceDetailsSections {
   material: string;
+  navigation: string;
   collision: string;
   physics: string;
   components: string;
@@ -32,6 +33,7 @@ export interface InstanceDetailsBindOptions {
   handleDetailAction: (action: string) => void;
   handleDetailToggle: (toggle: string, checked: boolean) => void;
   setSelectionCollisionPreset: (preset: CollisionPresetId | undefined) => void;
+  bindNavigationInputs: () => void;
   bindCollisionOverrideInputs: (selection: EditableSelection) => void;
   setSelectionMaterialSlot: (assetId: string | undefined) => void;
   bindPhysicsInputs: () => void;
@@ -111,6 +113,7 @@ export function renderInstanceDetails({
         ${castShadowToggle}
       </div>`
       }
+      ${isAmbientSound ? "" : sections.navigation}
       ${isAmbientSound ? "" : sections.collision}
       ${isAmbientSound ? "" : sections.physics}
       ${sections.components}
@@ -133,6 +136,7 @@ export function bindInstanceDetails({
   handleDetailAction,
   handleDetailToggle,
   setSelectionCollisionPreset,
+  bindNavigationInputs,
   bindCollisionOverrideInputs,
   setSelectionMaterialSlot,
   bindPhysicsInputs,
@@ -201,6 +205,7 @@ export function bindInstanceDetails({
       setSelectionCollisionPreset(value ? (value as CollisionPresetId) : undefined);
     },
   );
+  bindNavigationInputs();
   bindCollisionOverrideInputs(selection);
 
   body.querySelector<HTMLSelectElement>("[data-material-slot]")?.addEventListener(

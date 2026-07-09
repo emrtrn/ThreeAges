@@ -1,5 +1,6 @@
 import type { Entity, SceneJsonValue } from "./entity";
 import type { LayoutPhysicsAxisLocks, Vec3 } from "./layout";
+import { isNavigationRole, type NavigationRole } from "./collision";
 import { resolveCapsuleDimensions } from "./capsule";
 import { isActorEventKind, type ActorEventKind } from "./actorScript";
 import { normalizeBlackboardKeys, type BlackboardKeyDef } from "../ai/blackboard";
@@ -188,6 +189,8 @@ export interface ColliderComponent {
   friction?: number;
   /** Surface restitution / bounciness (Rapier). Absent uses the backend default. */
   restitution?: number;
+  /** AI navigation interpretation; affects nav generation only, not physics collision. */
+  navigationRole?: NavigationRole;
   /** Emit begin/end overlap events for sensors. Absent means true. */
   generateOverlapEvents?: boolean;
   /** Emit hit events while simulating physics. Absent means true. */
@@ -705,6 +708,7 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
   if (primitives) component.primitives = primitives;
   if (typeof data.friction === "number") component.friction = data.friction;
   if (typeof data.restitution === "number") component.restitution = data.restitution;
+  if (isNavigationRole(data.navigationRole)) component.navigationRole = data.navigationRole;
   if (typeof data.generateOverlapEvents === "boolean") {
     component.generateOverlapEvents = data.generateOverlapEvents;
   }

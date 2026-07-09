@@ -173,9 +173,9 @@
       "placements": [
         {
           "position": [
-            13.09,
+            4.47,
             0,
-            -6.95
+            3.34
           ],
           "name": "Player Start",
           "collision": false,
@@ -1376,9 +1376,9 @@
     {
       "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        -0.82,
+        -0.44,
         0.05,
-        7.06
+        6.14
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,

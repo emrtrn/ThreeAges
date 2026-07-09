@@ -51,6 +51,25 @@ export const COLLISION_RESPONSE_VALUES: readonly CollisionResponse[] = [
   "block",
 ];
 
+/**
+ * AI navigation interpretation for a collidable mesh.
+ *
+ * - `auto`: current geometry-derived behavior.
+ * - `walkable`: explicitly allowed to produce nav floor samples.
+ * - `obstacleOnly`: blocks pathing but never produces walkable nav floor.
+ * - `ignored`: ignored by AI nav generation while keeping physics collision.
+ */
+export type NavigationRole = "auto" | "walkable" | "obstacleOnly" | "ignored";
+
+export const NAVIGATION_ROLE_VALUES: readonly NavigationRole[] = [
+  "auto",
+  "walkable",
+  "obstacleOnly",
+  "ignored",
+];
+
+export const DEFAULT_NAVIGATION_ROLE: NavigationRole = "auto";
+
 /** Built-in object channels: a body's collision identity + what it responds to. */
 export type CollisionObjectChannel =
   | "worldStatic"
@@ -163,6 +182,8 @@ export interface AssetCollisionDef {
   primitives: CollisionPrimitive[];
   complexity: CollisionComplexity;
   preset: CollisionPresetId;
+  /** Default AI navigation interpretation for every placement of this asset. */
+  navigationRole?: NavigationRole;
   /** Per-channel overrides; only meaningful when `preset === "custom"`. */
   responses?: CollisionResponseMap;
   /** Physical material reference (friction/restitution/density source). */
@@ -375,6 +396,10 @@ export function isCollisionResponse(value: unknown): value is CollisionResponse 
   return (
     typeof value === "string" && COLLISION_RESPONSE_VALUES.includes(value as CollisionResponse)
   );
+}
+
+export function isNavigationRole(value: unknown): value is NavigationRole {
+  return typeof value === "string" && NAVIGATION_ROLE_VALUES.includes(value as NavigationRole);
 }
 
 export function isCollisionPrimitiveShape(value: unknown): value is CollisionPrimitiveShape {

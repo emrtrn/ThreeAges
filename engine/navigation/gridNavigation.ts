@@ -19,6 +19,7 @@
  * bounds are eroded inward by the same effective radius.
  */
 import type { Vec3 } from "../scene/layout";
+import type { NavigationRole } from "../scene/collision";
 
 export interface NavAabb {
   readonly min: readonly [number, number, number];
@@ -44,6 +45,7 @@ export type NavVec2 = readonly [number, number];
  */
 export interface NavBlocker extends NavAabb {
   readonly footprint?: readonly NavVec2[];
+  readonly navigationRole?: NavigationRole;
 }
 
 export interface NavAgent {

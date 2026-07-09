@@ -83,6 +83,10 @@ import {
   bindCollisionOverrideInputs,
   renderCollisionSection,
 } from "./panels/details/collisionDetails";
+import {
+  bindNavigationInputs,
+  renderNavigationSection,
+} from "./panels/details/navigationDetails";
 import { renderMaterialSection } from "./panels/details/materialDetails";
 import {
   bindPhysicsInputs,
@@ -2925,6 +2929,7 @@ export class EditorUi {
       pivotEditActive: this.app.isPivotEditMode(),
       sections: {
         material: renderMaterialSection(selection, this.editableAssets),
+        navigation: renderNavigationSection(selection),
         collision: renderCollisionSection(selection),
         physics: renderPhysicsSection({
           selection,
@@ -2951,6 +2956,10 @@ export class EditorUi {
       handleDetailAction: (action) => this.handleDetailAction(action),
       handleDetailToggle: (toggle, checked) => this.handleDetailToggle(toggle, checked),
       setSelectionCollisionPreset: (preset) => this.app.setSelectionCollisionPreset(preset),
+      bindNavigationInputs: () =>
+        bindNavigationInputs(this.detailsBody, (role) =>
+          this.app.setSelectionNavigationRole(role),
+        ),
       bindCollisionOverrideInputs: (currentSelection) =>
         bindCollisionOverrideInputs({
           body: this.detailsBody,

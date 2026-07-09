@@ -1,5 +1,6 @@
 {
   "primitives": [],
   "complexity": "complexAsSimple",
-  "preset": "blockAll"
+  "preset": "blockAll",
+  "navigationRole": "walkable"
 }

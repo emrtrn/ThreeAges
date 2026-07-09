@@ -3,6 +3,7 @@ import type {
   CollisionObjectChannel,
   CollisionPresetId,
   CollisionResponseMap,
+  NavigationRole,
 } from "./collision";
 import type { WorldUiWidget } from "../ui/uiWorldWidget";
 
@@ -166,6 +167,8 @@ export interface LayoutPlacement {
   responses?: CollisionResponseMap;
   /** Per-placement physical material override. */
   physicalMaterialId?: string;
+  /** Per-placement AI navigation role override; absent means inherit the asset default. */
+  navigationRole?: NavigationRole;
   /** Emit begin/end overlap events for sensors. Absent means inherit/default true. */
   generateOverlapEvents?: boolean;
   /** Emit hit events while simulating physics. Absent means inherit/default true. */

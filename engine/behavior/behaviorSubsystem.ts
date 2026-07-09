@@ -25,6 +25,7 @@ import {
 import type { AudioComponent, InteractionComponent, TransformComponent } from "../scene/components";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId, SceneJsonValue } from "../scene/entity";
+import type { NavigationRole } from "../scene/collision";
 import type { ActorEventKind } from "../scene/actorScript";
 import type { ActionMap } from "../input/actionMap";
 import type { AudioBus } from "../audio/audioSubsystem";
@@ -386,6 +387,8 @@ export interface PhysicsContact {
 export interface PhysicsAabb {
   readonly min: readonly [number, number, number];
   readonly max: readonly [number, number, number];
+  /** AI navigation interpretation; absent behaves like `auto`. */
+  readonly navigationRole?: NavigationRole;
   /**
    * Oriented convex XZ ground silhouette of a rotated box collider (the exact
    * footprint the `min`/`max` AABB otherwise bloats to enclose). Present only
@@ -415,6 +418,10 @@ export interface PhysicsQuery {
   staticBlockerAabbs(): readonly PhysicsAabb[];
   /** World-space walkable surface triangles (static trimesh) for the ground probe. */
   staticSurfaceTriangles(): readonly PhysicsSurfaceTriangle[];
+  /** AI-nav blockers, after navigation-role filtering. */
+  staticNavigationBlockerAabbs?(): readonly PhysicsAabb[];
+  /** AI-nav surfaces, after navigation-role filtering. */
+  staticNavigationSurfaceTriangles?(): readonly PhysicsSurfaceTriangle[];
   /** Half-extents (size*scale/2) of an entity's collider, or null if it has none. */
   colliderHalfExtents(entityId: EntityId): readonly [number, number, number] | null;
 }

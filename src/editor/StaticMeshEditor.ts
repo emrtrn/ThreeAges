@@ -40,6 +40,8 @@ import { ConvexGeometry } from "three/examples/jsm/geometries/ConvexGeometry.js"
 import {
   COLLISION_COMPLEXITY_VALUES,
   COLLISION_PRESET_IDS,
+  DEFAULT_NAVIGATION_ROLE,
+  NAVIGATION_ROLE_VALUES,
   PHYSICAL_MATERIAL_IDS,
   defaultAssetCollisionDef,
   type AssetCollisionDef,
@@ -47,6 +49,7 @@ import {
   type CollisionPresetId,
   type CollisionPrimitive,
   type CollisionPrimitiveShape,
+  type NavigationRole,
 } from "@engine/scene/collision";
 import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
@@ -113,6 +116,13 @@ const COMPLEXITY_LABELS: Record<CollisionComplexity, string> = {
   simpleAndComplex: "Simple And Complex",
   simpleAsComplex: "Use Simple Collision As Complex",
   complexAsSimple: "Use Complex Collision As Simple",
+};
+
+const NAVIGATION_ROLE_LABELS: Record<NavigationRole, string> = {
+  auto: "Auto",
+  walkable: "Walkable Surface",
+  obstacleOnly: "Obstacle Only",
+  ignored: "Ignored",
 };
 
 const WIRE_COLOR = 0x49e6a2;
@@ -1071,6 +1081,11 @@ export class StaticMeshEditor {
       (id) =>
         `<option value="${id}" ${id === this.collision.complexity ? "selected" : ""}>${COMPLEXITY_LABELS[id]}</option>`,
     ).join("");
+    const navigationRole = this.collision.navigationRole ?? DEFAULT_NAVIGATION_ROLE;
+    const navigationRoleOptions = NAVIGATION_ROLE_VALUES.map(
+      (role) =>
+        `<option value="${role}" ${role === navigationRole ? "selected" : ""}>${NAVIGATION_ROLE_LABELS[role]}</option>`,
+    ).join("");
     const currentMaterial = this.collision.physicalMaterialId ?? "";
     const physMaterialOptions = [`<option value="" ${currentMaterial ? "" : "selected"}>None</option>`]
       .concat(
@@ -1134,6 +1149,10 @@ export class StaticMeshEditor {
           <span>Collision Complexity</span>
           <select data-sm-field="complexity">${complexityOptions}</select>
         </label>
+        <label class="sm-row">
+          <span>AI Navigation Role</span>
+          <select data-sm-field="navigationRole">${navigationRoleOptions}</select>
+        </label>
         ${
           this.collision.complexity === "complexAsSimple"
             ? `<div class="sm-hint">Uses the render mesh as a static trimesh collider. Static-only — placements of this asset can't Simulate Physics. Best for level geometry (walls, rooms) instead of hand-placing boxes.</div>`
@@ -1186,6 +1205,14 @@ export class StaticMeshEditor {
         this.markDirty();
         // Re-render so the static-only hint appears/disappears with the choice.
         this.renderDetails();
+      });
+    this.detailsHost
+      .querySelector<HTMLSelectElement>('[data-sm-field="navigationRole"]')
+      ?.addEventListener("change", (event) => {
+        const value = (event.target as HTMLSelectElement).value as NavigationRole;
+        if (value === DEFAULT_NAVIGATION_ROLE) delete this.collision.navigationRole;
+        else this.collision.navigationRole = value;
+        this.markDirty();
       });
     this.detailsHost
       .querySelector<HTMLInputElement>('[data-sm-field="doubleSided"]')

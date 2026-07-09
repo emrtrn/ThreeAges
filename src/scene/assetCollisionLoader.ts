@@ -10,6 +10,7 @@ import {
   COLLISION_PRIMITIVE_SHAPES,
   COLLISION_RESPONSE_VALUES,
   COLLISION_CHANNELS,
+  NAVIGATION_ROLE_VALUES,
   defaultAssetCollisionDef,
   type AssetCollisionDef,
   type CollisionChannel,
@@ -19,6 +20,7 @@ import {
   type CollisionPrimitiveShape,
   type CollisionResponse,
   type CollisionResponseMap,
+  type NavigationRole,
 } from "@engine/scene/collision";
 import type { Vec3 } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
@@ -100,6 +102,12 @@ export function normalizeAssetCollisionDef(value: unknown): AssetCollisionDef {
     def.primitives = input.primitives
       .map(normalizePrimitive)
       .filter((primitive): primitive is CollisionPrimitive => primitive !== null);
+  }
+  if (
+    NAVIGATION_ROLE_VALUES.includes(input.navigationRole as NavigationRole) &&
+    input.navigationRole !== "auto"
+  ) {
+    def.navigationRole = input.navigationRole as NavigationRole;
   }
   const responses = normalizeResponses(input.responses);
   if (responses) def.responses = responses;

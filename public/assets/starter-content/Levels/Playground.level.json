@@ -275,6 +275,7 @@
             0,
             -6.86
           ],
+          "navigationRole": "auto",
           "rotationYDeg": 0,
           "rotation": [
             0,
@@ -444,9 +445,9 @@
     {
       "id": "ai-navigation-volume-1",
       "position": [
-        -2.43,
-        1.94,
-        -3.59
+        -2.44,
+        1.88,
+        -3.38
       ],
       "name": "AI Navigation Volume",
       "scale": 1,

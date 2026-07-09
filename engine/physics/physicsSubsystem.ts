@@ -6,7 +6,7 @@ import {
   type ColliderPrimitive,
   type TransformComponent,
 } from "../scene/components";
-import { interactionGroupsInteract } from "../scene/collision";
+import { interactionGroupsInteract, type NavigationRole } from "../scene/collision";
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
 import type { Entity, EntityId } from "../scene/entity";
 import type {
@@ -57,6 +57,7 @@ interface PhysicsBody {
 interface Aabb {
   min: [number, number, number];
   max: [number, number, number];
+  navigationRole?: NavigationRole;
   /** Oriented XZ ground silhouette for a rotated box collider (see {@link PhysicsAabb}). */
   footprint?: readonly (readonly [number, number])[];
 }
@@ -96,6 +97,10 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private staticBlockerCache: Aabb[] | null = null;
   /** Cached walkable surface triangles (static trimesh); rebuilt lazily. */
   private staticSurfaceCache: PhysicsSurfaceTriangle[] | null = null;
+  /** Cached AI-navigation blockers, filtered by Collider.navigationRole. */
+  private staticNavigationBlockerCache: Aabb[] | null = null;
+  /** Cached AI-navigation surfaces, filtered by Collider.navigationRole. */
+  private staticNavigationSurfaceCache: PhysicsSurfaceTriangle[] | null = null;
   private rapierModule: RapierModule | null = null;
   private rapierWorld: RapierWorld | null = null;
   private rapierBodies = new Map<EntityId, RapierBodyRecord>();
@@ -160,6 +165,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.collisionDisabled.clear();
     this.staticBlockerCache = null;
     this.staticSurfaceCache = null;
+    this.staticNavigationBlockerCache = null;
+    this.staticNavigationSurfaceCache = null;
     if (this.rapierModule) this.rebuildRapierWorld();
   }
 
@@ -173,6 +180,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (body.collider.isStatic) {
       this.staticBlockerCache = null;
       this.staticSurfaceCache = null;
+      this.staticNavigationBlockerCache = null;
+      this.staticNavigationSurfaceCache = null;
     }
     if (this.rapierWorld && this.rapierModule) this.addRapierBody(body);
     return true;
@@ -186,6 +195,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (body.collider.isStatic) {
       this.staticBlockerCache = null;
       this.staticSurfaceCache = null;
+      this.staticNavigationBlockerCache = null;
+      this.staticNavigationSurfaceCache = null;
     }
     const rapier = this.rapierBodies.get(entityId);
     if (!rapier) return;
@@ -218,6 +229,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       if (removedStatic) {
         this.staticBlockerCache = null;
         this.staticSurfaceCache = null;
+        this.staticNavigationBlockerCache = null;
+        this.staticNavigationSurfaceCache = null;
       }
     }
     this.contacts = this.contacts.filter(
@@ -249,6 +262,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (body?.collider.isStatic) {
       this.staticBlockerCache = null;
       this.staticSurfaceCache = null;
+      this.staticNavigationBlockerCache = null;
+      this.staticNavigationSurfaceCache = null;
     }
     // Clear any live contact for this entity so the next query already reads the
     // new state (mirrors removeEntity); the placeholder loop won't regenerate it.
@@ -300,6 +315,37 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       appendSurfaceTriangles(surfaces, body);
     }
     this.staticSurfaceCache = surfaces;
+    return surfaces;
+  }
+
+  /** AI-navigation blockers: `ignored` bodies are omitted, but still collide in physics. */
+  staticNavigationBlockerAabbs(): readonly PhysicsAabb[] {
+    if (this.staticNavigationBlockerCache) return this.staticNavigationBlockerCache;
+    const blockers: Aabb[] = [];
+    for (const body of this.bodies) {
+      if (!body.collider.isStatic || body.collider.isSensor) continue;
+      if (body.collider.navigationRole === "ignored") continue;
+      if (this.collisionDisabled.has(body.id)) continue;
+      appendBlockerAabbs(blockers, body);
+    }
+    this.staticNavigationBlockerCache = blockers;
+    return blockers;
+  }
+
+  /** AI-navigation surfaces: obstacle-only/ignored bodies cannot seed floor layers. */
+  staticNavigationSurfaceTriangles(): readonly PhysicsSurfaceTriangle[] {
+    if (this.staticNavigationSurfaceCache) return this.staticNavigationSurfaceCache;
+    const surfaces: PhysicsSurfaceTriangle[] = [];
+    for (const body of this.bodies) {
+      if (!body.collider.isStatic || body.collider.isSensor) continue;
+      if (
+        body.collider.navigationRole === "ignored" ||
+        body.collider.navigationRole === "obstacleOnly"
+      ) continue;
+      if (this.collisionDisabled.has(body.id)) continue;
+      appendSurfaceTriangles(surfaces, body);
+    }
+    this.staticNavigationSurfaceCache = surfaces;
     return surfaces;
   }
 
@@ -708,10 +754,12 @@ function bodyAabb(body: PhysicsBody): Aabb {
   const origin = body.transform.position as Vec3;
   const rotation = body.transform.rotation as Vec3;
   const aabb = rotatedBoxAabb(origin, center as Vec3, half, rotation);
+  const role = body.collider.navigationRole;
+  const base = role ? { ...aabb, navigationRole: role } : aabb;
   // The auto/box collider is a box, so its oriented ground silhouette is exact —
   // give navigation the tight footprint instead of the bloated enclosing AABB.
   const footprint = rotatedBoxFootprintXZ(origin, center as Vec3, half, rotation);
-  return footprint ? { ...aabb, footprint } : aabb;
+  return footprint ? { ...base, footprint } : base;
 }
 
 /**
@@ -737,24 +785,30 @@ function appendBlockerAabbs(out: Aabb[], body: PhysicsBody): void {
       primitive.indices &&
       primitive.indices.length >= 3
     ) {
-      appendTriangleAabbs(out, origin, rotation, primitive.vertices, primitive.indices);
+      appendTriangleAabbs(out, origin, rotation, primitive.vertices, primitive.indices, body.collider.navigationRole);
     } else {
-      out.push(primitiveAabb(origin, rotation, primitive));
+      out.push(primitiveAabb(origin, rotation, primitive, body.collider.navigationRole));
     }
   }
 }
 
 /** World AABB of a single non-trimesh primitive, honouring body + primitive rotation. */
-function primitiveAabb(origin: Vec3, bodyRotation: Vec3, primitive: ColliderPrimitive): Aabb {
+function primitiveAabb(
+  origin: Vec3,
+  bodyRotation: Vec3,
+  primitive: ColliderPrimitive,
+  navigationRole: NavigationRole | undefined,
+): Aabb {
   const center = (primitive.center ?? [0, 0, 0]) as Vec3;
   const half: Vec3 = [primitive.size[0] / 2, primitive.size[1] / 2, primitive.size[2] / 2];
   const aabb = rotatedBoxAabb(origin, center, half, bodyRotation, primitive.rotation);
+  const base = navigationRole ? { ...aabb, navigationRole } : aabb;
   // Only a box primitive's oriented footprint equals its projected corners; other
   // authored shapes (sphere/capsule/cylinder/cone) keep the AABB, matching how
   // this function already models them as boxes for the enclosing AABB.
-  if (primitive.shape !== "box") return aabb;
+  if (primitive.shape !== "box") return base;
   const footprint = rotatedBoxFootprintXZ(origin, center, half, bodyRotation, primitive.rotation);
-  return footprint ? { ...aabb, footprint } : aabb;
+  return footprint ? { ...base, footprint } : base;
 }
 
 /**
@@ -809,6 +863,7 @@ function appendTriangleAabbs(
   bodyRotation: Vec3,
   vertices: readonly Vec3[],
   indices: readonly number[],
+  navigationRole: NavigationRole | undefined,
 ): void {
   forEachWorldTriangle(origin, bodyRotation, vertices, indices, (wa, wb, wc) => {
     if (triangleUpNormalY(wa, wb, wc) >= SURFACE_MIN_NORMAL_Y) return; // walkable surface, not a wall
@@ -826,6 +881,7 @@ function appendTriangleAabbs(
     };
     const footprint = triangleFootprintXZ(wa, wb, wc);
     if (footprint) blocker.footprint = footprint;
+    if (navigationRole) blocker.navigationRole = navigationRole;
     out.push(blocker);
   });
 }
@@ -906,6 +962,7 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
   if (collider.primitives) clone.primitives = collider.primitives.map(clonePrimitive);
   if (collider.friction !== undefined) clone.friction = collider.friction;
   if (collider.restitution !== undefined) clone.restitution = collider.restitution;
+  if (collider.navigationRole !== undefined) clone.navigationRole = collider.navigationRole;
   if (collider.generateOverlapEvents !== undefined) {
     clone.generateOverlapEvents = collider.generateOverlapEvents;
   }

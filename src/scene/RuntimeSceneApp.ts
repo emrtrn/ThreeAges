@@ -452,6 +452,7 @@ export interface AiNavigationDebugSnapshot {
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
 const AI_NAV_GRID_SAFETY_MARGIN = AI_NAV_CELL_SIZE * 0.5;
+const AI_NAV_MIN_TOP_SUPPORT_RADIUS = 0.15;
 /**
  * Acceptance radius for intermediate path waypoints. Kept tight (independent of
  * the authored final-goal acceptance) so a generous goal tolerance can't make
@@ -1197,7 +1198,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /** Snapshots AI path following (waypoints, stuck recovery) for `?debug`. */
   getAiNavigationDebugSnapshot(): AiNavigationDebugSnapshot {
-    const blockers = this.physicsSubsystem.staticBlockerAabbs();
+    const blockers = this.physicsSubsystem.staticNavigationBlockerAabbs();
     const agentClearances = this.aiAgentClearanceView();
     const maxClearance = Math.max(0, ...agentClearances.map((clearance) => clearance.radius));
     return {
@@ -1396,13 +1397,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private buildAiPath(entityId: string, start: Vec3, goal: Vec3) {
     const bounds = this.aiNavigationBounds();
     const agent = this.aiNavAgentForEntity(entityId);
-    const blockers = this.physicsSubsystem.staticBlockerAabbs();
+    const blockers = this.physicsSubsystem.staticNavigationBlockerAabbs();
     if (bounds.length === 0) {
       // No authored AI Navigation Volume: the grid extent is derived from
       // start/goal, so it is single-query only and can't be baked/reused.
       return findGridPath({ start, goal: [...goal], agent, blockers, cellSize: AI_NAV_CELL_SIZE });
     }
-    const surfaces = this.physicsSubsystem.staticSurfaceTriangles();
+    const surfaces = this.physicsSubsystem.staticNavigationSurfaceTriangles();
     // Bounded case: bake once per agent profile and reuse across queries. The
     // grid rebuilds automatically when a static blocker moves or a nav volume is
     // edited (both fold into the revision token), so there is no manual build.
@@ -1501,7 +1502,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         surfaces,
         maxSlopeCos,
         preferredFloorY,
-        requiredSupportRadius: Math.max(0, agent.radius),
+        requiredSupportRadius: Math.min(Math.max(0, agent.radius), AI_NAV_MIN_TOP_SUPPORT_RADIUS),
+        respectNavigationRole: true,
       });
       // Collapse near-coincident walkable surfaces into a single navigable floor,
       // keeping the highest of each cluster. A solid floor mesh (`complexAsSimple`)

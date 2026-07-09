@@ -57,6 +57,7 @@ import {
   type CollisionPresetId,
   type CollisionPrimitive,
   type CollisionResponseMap,
+  type NavigationRole,
 } from "./collision";
 import { readRotation, readScale } from "./transform";
 import type { Entity, EntityComponentData, EntityComponentMap, SceneJsonValue } from "./entity";
@@ -497,6 +498,7 @@ function colliderComponent(
     objectType?: LayoutPlacement["objectType"];
     responses?: LayoutPlacement["responses"];
     physicalMaterialId?: string;
+    navigationRole?: NavigationRole;
     generateOverlapEvents?: boolean;
     simulationGeneratesHitEvents?: boolean;
     sensor?: boolean;
@@ -558,6 +560,7 @@ function colliderComponent(
   if (profile?.collisionEnabled === "none" && !simulatePhysics) return null;
   const isSensor = source.sensor === true || profile?.collisionEnabled === "query";
   const isStaticFinal = isStatic && !movable && !simulatePhysics;
+  const navigationRole = source.navigationRole ?? collisionDef?.navigationRole;
 
   let component: ColliderComponent;
   if (complexMeshActive) {
@@ -598,6 +601,7 @@ function colliderComponent(
     }
   }
   if (simulatePhysics) component.simulatePhysics = true;
+  if (navigationRole !== undefined) component.navigationRole = navigationRole;
   const physicalMaterialId = source.physicalMaterialId ?? collisionDef?.physicalMaterialId;
   if (physicalMaterialId) {
     const material = resolvePhysicalMaterial(physicalMaterialId);

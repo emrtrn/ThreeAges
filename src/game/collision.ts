@@ -17,10 +17,13 @@
  * and avoids snapping out of pre-existing overlaps.
  */
 import { sampleTriangleHeight, type GroundTriangle } from "./slopeSurface";
+import type { NavigationRole } from "@engine/scene/collision";
 
 export interface Aabb3 {
   readonly min: readonly [number, number, number];
   readonly max: readonly [number, number, number];
+  /** AI navigation interpretation; absent behaves like `auto`. */
+  readonly navigationRole?: NavigationRole;
   /**
    * Optional tight XZ silhouette for a rotated collider. `min`/`max` remains the
    * broad-phase AABB, while movement collision can use this to avoid the empty
@@ -61,10 +64,13 @@ export interface GroundProbeOptions {
   readonly preferredFloorY?: number;
   /**
    * Optional nav-only support check for flat blocker tops. When >0, a blocker top
-   * is ground only if the probe centre is at least this far inside the support
-   * footprint. This rejects narrow wall tops without collapsing stacked floors.
+   * is ground only if the support footprint is at least this wide in every
+   * horizontal direction. This rejects narrow wall tops without deleting valid
+   * stair/platform samples near an edge.
    */
   readonly requiredSupportRadius?: number;
+  /** When true, obstacle-only/ignored blockers cannot seed ground layers. */
+  readonly respectNavigationRole?: boolean;
 }
 
 export interface GroundHit {
@@ -208,18 +214,32 @@ function distanceToFootprintEdge(
   return distance;
 }
 
-function blockerTopSupportsRadius(x: number, z: number, blocker: Aabb3, radius: number): boolean {
+function footprintCentroid(footprint: readonly (readonly [number, number])[]): readonly [number, number] {
+  let x = 0;
+  let z = 0;
+  for (const point of footprint) {
+    x += point[0];
+    z += point[1];
+  }
+  return [x / footprint.length, z / footprint.length];
+}
+
+function blockerTopSupportsRadius(blocker: Aabb3, radius: number): boolean {
   if (radius <= 0) return true;
   const footprint = validFootprint(blocker);
   if (footprint) {
     if (footprint.length < 3) return false;
+    const [x, z] = footprintCentroid(footprint);
     return pointInsideConvexFootprint(x, z, footprint) &&
       distanceToFootprintEdge(x, z, footprint) + 1e-6 >= radius;
   }
-  return x - radius >= blocker.min[0] - 1e-6 &&
-    x + radius <= blocker.max[0] + 1e-6 &&
-    z - radius >= blocker.min[2] - 1e-6 &&
-    z + radius <= blocker.max[2] + 1e-6;
+  return blocker.max[0] - blocker.min[0] + 1e-6 >= radius * 2 &&
+    blocker.max[2] - blocker.min[2] + 1e-6 >= radius * 2;
+}
+
+function blockerCanSeedGround(blocker: Aabb3, options: GroundProbeOptions): boolean {
+  if (!options.respectNavigationRole) return true;
+  return blocker.navigationRole !== "obstacleOnly" && blocker.navigationRole !== "ignored";
 }
 
 function rectOverlapsBlockerXZ(
@@ -487,11 +507,11 @@ function highestWalkableSurface(
   let best: GroundHit | null = null;
   const requiredSupportRadius = Math.max(0, options.requiredSupportRadius ?? 0);
   for (const blocker of blockers) {
-    if (!overlaps(px - hx, px + hx, blocker.min[0], blocker.max[0])) continue;
-    if (!overlaps(pz - hz, pz + hz, blocker.min[2], blocker.max[2])) continue;
+    if (!blockerCanSeedGround(blocker, options)) continue;
+    if (!rectOverlapsBlockerXZ(px, pz, hx, hz, blocker)) continue;
     const top = blocker.max[1];
     if (!acceptsTop(top)) continue;
-    if (!blockerTopSupportsRadius(px, pz, blocker, requiredSupportRadius)) continue;
+    if (!blockerTopSupportsRadius(blocker, requiredSupportRadius)) continue;
     best = betterGroundHit(best, { floorY: top, blocker }, options);
   }
   // Slope surfaces (ramps): sampled at the probe centre for their true incline
@@ -521,11 +541,11 @@ function collectWalkableSurfaces(
   const hits: GroundHit[] = [];
   const requiredSupportRadius = Math.max(0, options.requiredSupportRadius ?? 0);
   for (const blocker of blockers) {
-    if (!overlaps(px - hx, px + hx, blocker.min[0], blocker.max[0])) continue;
-    if (!overlaps(pz - hz, pz + hz, blocker.min[2], blocker.max[2])) continue;
+    if (!blockerCanSeedGround(blocker, options)) continue;
+    if (!rectOverlapsBlockerXZ(px, pz, hx, hz, blocker)) continue;
     const top = blocker.max[1];
     if (!acceptsTop(top)) continue;
-    if (!blockerTopSupportsRadius(px, pz, blocker, requiredSupportRadius)) continue;
+    if (!blockerTopSupportsRadius(blocker, requiredSupportRadius)) continue;
     pushGroundHit(hits, { floorY: top, blocker });
   }
   const surfaces = options.surfaces;

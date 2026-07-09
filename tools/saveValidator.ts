@@ -19,6 +19,7 @@ import {
   isCollisionPresetId,
   isCollisionPrimitiveShape,
   isCollisionResponse,
+  isNavigationRole,
   type CollisionChannel,
   type CollisionObjectChannel,
 } from "../engine/scene/collision";
@@ -407,6 +408,12 @@ export function applyTransformFields(
       throw new Error(`invalid ${label} physicalMaterialId`);
     }
     target.physicalMaterialId = entry.physicalMaterialId;
+  }
+  if (entry.navigationRole !== undefined) {
+    if (!isNavigationRole(entry.navigationRole)) {
+      throw new Error(`invalid ${label} navigationRole`);
+    }
+    target.navigationRole = entry.navigationRole;
   }
   if (entry.generateOverlapEvents !== undefined) {
     if (typeof entry.generateOverlapEvents !== "boolean") {
@@ -1745,6 +1752,10 @@ export function validateAssetCollisionDef(value: unknown): Record<string, unknow
     complexity: input.complexity,
     preset: input.preset,
   };
+  if (input.navigationRole !== undefined) {
+    if (!isNavigationRole(input.navigationRole)) throw new Error("invalid collision.navigationRole");
+    if (input.navigationRole !== "auto") def.navigationRole = input.navigationRole;
+  }
   const responses = validateCollisionResponses(input.responses, "collision.responses");
   if (responses) def.responses = responses;
   if (input.physicalMaterialId !== undefined) {

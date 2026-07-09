@@ -315,6 +315,7 @@ import type {
   CollisionObjectChannel,
   CollisionPresetId,
   CollisionResponseMap,
+  NavigationRole,
 } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -488,6 +489,7 @@ const AI_NAV_DEBUG_CELL_SIZE = 0.5;
 const AI_NAV_DEBUG_DEFAULT_AGENT_RADIUS = AI_NAVIGATION_VOLUME_DEFAULT_AGENT_RADIUS;
 const AI_NAV_DEBUG_DEFAULT_CLEARANCE_PADDING = AI_NAVIGATION_VOLUME_DEFAULT_CLEARANCE_PADDING;
 const AI_NAV_DEBUG_GRID_SAFETY_MARGIN = AI_NAV_DEBUG_CELL_SIZE * 0.5;
+const AI_NAV_DEBUG_MIN_TOP_SUPPORT_RADIUS = 0.15;
 /** Standing height + step height of the default agent the walkable-area preview bakes for. */
 const AI_NAV_DEBUG_AGENT_HEIGHT = 1.8;
 const AI_NAV_DEBUG_AGENT_STEP_HEIGHT = 0.45;
@@ -5025,6 +5027,11 @@ export class SceneApp {
     this.editorSceneController.setSelectionCollisionOverrides(patch);
   }
 
+  /** Details "AI Navigation" role override (undefined inherits asset default). */
+  setSelectionNavigationRole(value: NavigationRole | undefined): void {
+    this.editorSceneController.setSelectionNavigationRole(value);
+  }
+
   /** Details / Content Drawer material slot override for static mesh instances. */
   setSelectionMaterialSlot(value: string | undefined): void {
     if (value !== undefined && !this.isMaterialAsset(value)) {
@@ -6809,7 +6816,7 @@ export class SceneApp {
   ): (x: number, z: number) => readonly number[] | null {
     const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
     const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG);
-    const surfaces = this.physicsSubsystem.staticSurfaceTriangles();
+    const surfaces = this.physicsSubsystem.staticNavigationSurfaceTriangles();
     return (x, z) => {
       let minY = Infinity;
       let maxY = -Infinity;
@@ -6826,7 +6833,8 @@ export class SceneApp {
         surfaces,
         maxSlopeCos,
         preferredFloorY,
-        requiredSupportRadius: Math.max(0, agent.radius),
+        requiredSupportRadius: Math.min(Math.max(0, agent.radius), AI_NAV_DEBUG_MIN_TOP_SUPPORT_RADIUS),
+        respectNavigationRole: true,
       });
       return hits.length > 0 ? hits.map((hit) => hit.floorY) : null;
     };
@@ -6972,11 +6980,12 @@ export class SceneApp {
       this.collisionDefs,
       this.complexCollisionMeshes,
     )
-      .filter((wirebox) => !wirebox.sensor && !wirebox.box.isEmpty())
+      .filter((wirebox) => !wirebox.sensor && wirebox.navigationRole !== "ignored" && !wirebox.box.isEmpty())
       .map((wirebox) => {
         const aabb: NavBlocker = {
           min: [wirebox.box.min.x, wirebox.box.min.y, wirebox.box.min.z],
           max: [wirebox.box.max.x, wirebox.box.max.y, wirebox.box.max.z],
+          navigationRole: wirebox.navigationRole,
         };
         // The wirebox `segments` are the collider's *rotated* world corners, so
         // their XZ hull is the true oriented ground footprint — the same tight

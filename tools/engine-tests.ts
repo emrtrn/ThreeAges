@@ -38,6 +38,7 @@ import {
   roomLayoutToSceneDocument,
 } from "../engine/scene/legacyRoomLayoutAdapter";
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
+import { normalizeAssetCollisionDef } from "../src/scene/assetCollisionLoader";
 import {
   readAIControllerComponent,
   readAudioComponent,
@@ -7371,16 +7372,58 @@ check("findGroundLayersAt support radius rejects narrow wall tops but keeps stac
     [0, 1],
   );
   assert.deepEqual(
-    findGroundLayersAt([0, 3, 0], [floor, wall], { ...options, requiredSupportRadius: 0.35 }).map(
+    findGroundLayersAt([0, 3, 0], [floor, wall], { ...options, requiredSupportRadius: 0.15 }).map(
       (hit) => hit.floorY,
     ),
     [0],
   );
   assert.deepEqual(
-    findGroundLayersAt([0, 3, 0], [floor, upperFloor], { ...options, requiredSupportRadius: 0.35 }).map(
+    findGroundLayersAt([0, 3, 0], [floor, upperFloor], { ...options, requiredSupportRadius: 0.15 }).map(
       (hit) => hit.floorY,
     ),
     [0, 2],
+  );
+});
+
+check("findGroundLayersAt support radius keeps stair treads walkable", () => {
+  const floor: Aabb3 = { min: [-2, -0.2, -2], max: [2, 0, 1] };
+  const step1: Aabb3 = { min: [-2, 0, -2.6], max: [2, 0.3, -2] };
+  const step2: Aabb3 = { min: [-2, 0, -3.2], max: [2, 0.6, -2.6] };
+  const step3: Aabb3 = { min: [-2, 0, -3.8], max: [2, 0.9, -3.2] };
+  const options = {
+    footprintHalf: [0.35, 0.35] as [number, number],
+    maxStepUp: 0,
+    maxStepDown: 4,
+    requiredSupportRadius: 0.15,
+  };
+
+  assert.ok(findGroundLayersAt([0, 2, -2.3], [floor, step1, step2, step3], options).some((hit) => hit.floorY === 0.3));
+  assert.ok(findGroundLayersAt([0, 2, -2.9], [floor, step1, step2, step3], options).some((hit) => hit.floorY === 0.6));
+  assert.ok(findGroundLayersAt([0, 2, -3.5], [floor, step1, step2, step3], options).some((hit) => hit.floorY === 0.9));
+});
+
+check("findGroundLayersAt can respect navigation roles without changing default ground probes", () => {
+  const floor: Aabb3 = { min: [-2, -0.2, -2], max: [2, 0, 2] };
+  const obstacleTop: Aabb3 = {
+    min: [-1, 0, -1],
+    max: [1, 1, 1],
+    navigationRole: "obstacleOnly",
+  };
+  const options = {
+    footprintHalf: [0.25, 0.25] as [number, number],
+    maxStepUp: 0,
+    maxStepDown: 3,
+  };
+  assert.deepEqual(
+    findGroundLayersAt([0, 2, 0], [floor, obstacleTop], options).map((hit) => hit.floorY),
+    [0, 1],
+  );
+  assert.deepEqual(
+    findGroundLayersAt([0, 2, 0], [floor, obstacleTop], {
+      ...options,
+      respectNavigationRole: true,
+    }).map((hit) => hit.floorY),
+    [0],
   );
 });
 
@@ -7408,7 +7451,7 @@ check("findGroundLayersAt support radius rejects rotated wall footprint tops", (
       footprintHalf: [0.35, 0.35],
       maxStepUp: 0,
       maxStepDown: 3,
-      requiredSupportRadius: 0.35,
+      requiredSupportRadius: 0.15,
     }),
     [],
   );
@@ -7471,6 +7514,82 @@ check("physics subsystem exposes static blocker AABBs and collider half-extents"
   // the entity's transform.scale is no longer reapplied here.
   assert.deepEqual(physics.colliderHalfExtents("player"), [0.5, 0.5, 0.5]);
   assert.equal(physics.colliderHalfExtents("missing"), null);
+});
+
+check("physics navigation queries honor collider navigation roles without changing physics blockers", () => {
+  const physics = new PhysicsSubsystem();
+  const flatTriangle = {
+    shape: "trimesh" as const,
+    size: [1, 0, 1] as [number, number, number],
+    vertices: [
+      [-0.5, 0, -0.5],
+      [0.5, 0, -0.5],
+      [0, 0, 0.5],
+    ],
+    indices: [0, 1, 2],
+  };
+  physics.setEntities([
+    {
+      id: "ignored-wall",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1, 2, 0.2],
+          isStatic: true,
+          isSensor: false,
+          navigationRole: "ignored",
+        },
+      },
+    },
+    {
+      id: "obstacle-wall",
+      components: {
+        Transform: { position: [2, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1, 2, 0.2],
+          isStatic: true,
+          isSensor: false,
+          navigationRole: "obstacleOnly",
+        },
+      },
+    },
+    {
+      id: "obstacle-floor",
+      components: {
+        Transform: { position: [4, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1, 0, 1],
+          isStatic: true,
+          isSensor: false,
+          navigationRole: "obstacleOnly",
+          primitives: [flatTriangle],
+        },
+      },
+    },
+    {
+      id: "walkable-floor",
+      components: {
+        Transform: { position: [6, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1, 0, 1],
+          isStatic: true,
+          isSensor: false,
+          navigationRole: "walkable",
+          primitives: [flatTriangle],
+        },
+      },
+    },
+  ]);
+  assert.equal(physics.staticBlockerAabbs().length, 2);
+  const navBlockers = physics.staticNavigationBlockerAabbs();
+  assert.equal(navBlockers.length, 1);
+  assert.equal(navBlockers[0]?.navigationRole, "obstacleOnly");
+  assert.equal(physics.staticSurfaceTriangles().length, 2);
+  assert.equal(physics.staticNavigationSurfaceTriangles().length, 1);
 });
 
 // A collider with a center offset places its AABB at position + center, so a
@@ -8444,6 +8563,44 @@ check("placement collision overrides beat asset collision defaults at runtime", 
     }),
   );
   assert.equal(collider?.collisionGroups, triggerGroups);
+});
+
+check("navigation role uses placement override before asset collision default", () => {
+  const navRoleLayout: RoomLayout = {
+    schema: 1,
+    name: "navigation-role-fixture",
+    loadGroups: [],
+    instances: [
+      {
+        assetId: "wall",
+        placements: [
+          { position: [0, 0, 0] },
+          { position: [2, 0, 0], navigationRole: "ignored" },
+          { position: [4, 0, 0], navigationRole: "auto" },
+        ],
+      },
+    ],
+    characters: [],
+    lights: [],
+  };
+  const defs = new Map<string, AssetCollisionDef>([
+    [
+      "wall",
+      {
+        primitives: [{ shape: "box", size: [1, 2, 0.2] }],
+        complexity: "projectDefault",
+        preset: "blockAll",
+        navigationRole: "obstacleOnly",
+      },
+    ],
+  ]);
+  const doc = roomLayoutToSceneDocument(navRoleLayout, { collisionDefs: defs });
+  const inherited = doc.entities.find((e) => e.id === instanceEntityId("wall", 0));
+  const ignored = doc.entities.find((e) => e.id === instanceEntityId("wall", 1));
+  const auto = doc.entities.find((e) => e.id === instanceEntityId("wall", 2));
+  assert.equal(inherited ? readColliderComponent(inherited)?.navigationRole : undefined, "obstacleOnly");
+  assert.equal(ignored ? readColliderComponent(ignored)?.navigationRole : undefined, "ignored");
+  assert.equal(auto ? readColliderComponent(auto)?.navigationRole : undefined, "auto");
 });
 
 const UNIT_CUBE_CORNERS: [number, number, number][] = [
@@ -13497,6 +13654,39 @@ check("asset collision validator keeps primitives, preset, complexity", () => {
   assert.equal(def.preset, "blockAll");
   assert.equal(def.doubleSided, true);
 });
+check("asset collision validator and normalizer keep navigation role defaults compact", () => {
+  const def = validateAssetCollisionDef({
+    primitives: [],
+    complexity: "projectDefault",
+    preset: "blockAll",
+    navigationRole: "obstacleOnly",
+  });
+  assert.equal(def.navigationRole, "obstacleOnly");
+  const auto = validateAssetCollisionDef({
+    primitives: [],
+    complexity: "projectDefault",
+    preset: "blockAll",
+    navigationRole: "auto",
+  });
+  assert.equal(auto.navigationRole, undefined);
+  assert.equal(
+    normalizeAssetCollisionDef({
+      primitives: [],
+      complexity: "projectDefault",
+      preset: "blockAll",
+      navigationRole: "ignored",
+    }).navigationRole,
+    "ignored",
+  );
+  assert.throws(() =>
+    validateAssetCollisionDef({
+      primitives: [],
+      complexity: "projectDefault",
+      preset: "blockAll",
+      navigationRole: "floorish",
+    }),
+  );
+});
 check("asset collision validator rejects unknown shape and preset", () => {
   assert.throws(() =>
     validateAssetCollisionDef({ primitives: [{ shape: "pyramid", size: [1, 1, 1] }], complexity: "projectDefault", preset: "blockAll" }),
@@ -13513,6 +13703,7 @@ check("placement validator keeps a valid collisionPreset and rejects bad ones", 
     objectType: "trigger",
     responses: { pawn: "overlap", visibility: "ignore" },
     physicalMaterialId: "rubber",
+    navigationRole: "auto",
     generateOverlapEvents: false,
     simulationGeneratesHitEvents: true,
   });
@@ -13521,12 +13712,14 @@ check("placement validator keeps a valid collisionPreset and rejects bad ones", 
   assert.equal(placement.objectType, "trigger");
   assert.deepEqual(placement.responses, { pawn: "overlap", visibility: "ignore" });
   assert.equal(placement.physicalMaterialId, "rubber");
+  assert.equal(placement.navigationRole, "auto");
   assert.equal(placement.generateOverlapEvents, false);
   assert.equal(placement.simulationGeneratesHitEvents, true);
   assert.throws(() => validatePlacement({ position: [0, 0, 0], collisionPreset: "nope" }));
   assert.throws(() => validatePlacement({ position: [0, 0, 0], collisionEnabled: "maybe" }));
   assert.throws(() => validatePlacement({ position: [0, 0, 0], objectType: "camera" }));
   assert.throws(() => validatePlacement({ position: [0, 0, 0], physicalMaterialId: "ice" }));
+  assert.throws(() => validatePlacement({ position: [0, 0, 0], navigationRole: "floorish" }));
   assert.throws(() => validatePlacement({ position: [0, 0, 0], responses: { pawn: "bounce" } }));
   // Absent override stays absent (inherits asset default).
   assert.equal(validatePlacement({ position: [0, 0, 0] }).collisionPreset, undefined);
