@@ -69,8 +69,11 @@ import {
 } from "@engine/vfx/particleEffectPresets";
 import {
   nextTransformTool,
+  type CameraView,
   type EditorTool,
   type TransformSpace,
+  type ViewMode,
+  type ViewportViewState,
 } from "@editor/core/tools";
 import {
   bindInstanceDetails,
@@ -176,6 +179,58 @@ const TOOL_LABELS: Record<EditorTool, string> = {
   scale: "Scale",
 };
 
+/** UE5-style hover hint shown after a short delay on each transform-tool button. */
+const TOOL_TOOLTIPS: Record<EditorTool, string> = {
+  select: "Select objects — Q",
+  move: "Select and move objects — W",
+  rotate: "Select and rotate objects — E",
+  scale: "Select and scale objects — R",
+};
+
+/**
+ * Inline 16×16 stroke SVGs for the transform toolbar. Kept as strings (no asset
+ * files) so the editor bundle stays self-contained. All use `currentColor` so
+ * the active/hover button colors flow through from CSS.
+ */
+const TOOLBAR_ICONS = {
+  select:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2l9 4.4-4 1.1-1.1 4z"/></svg>',
+  move:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v12M2 8h12"/><path d="M8 2l-2 2M8 2l2 2M8 14l-2-2M8 14l2-2M2 8l2-2M2 8l2 2M14 8l-2-2M14 8l-2 2"/></svg>',
+  rotate:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.6-3.6"/><path d="M13.2 3v2.6h-2.6"/></svg>',
+  scale:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h4.5M3 3v4.5M3 3l6.5 6.5"/><rect x="9" y="9" width="4" height="4"/></svg>',
+  world:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c2.4 2 2.4 10 0 12M8 2c-2.4 2-2.4 10 0 12"/></svg>',
+  local:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l5 3v6l-5 3-5-3V5z"/><path d="M8 8v6M3 5l5 3 5-3"/></svg>',
+  snap:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h12M2 10h12M6 2v12M10 2v12"/></svg>',
+  camera:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h6.5L10 3.5h3.5v9H2z"/><circle cx="6.5" cy="9" r="2.4"/></svg>',
+  viewmode:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 0 0 0 12z" fill="currentColor" stroke="none"/></svg>',
+} as const;
+
+/** Menu-button labels for each Camera view preset. */
+const CAMERA_VIEW_LABELS: Record<CameraView, string> = {
+  perspective: "Perspective",
+  top: "Top",
+  left: "Left",
+  front: "Front",
+};
+
+/** Menu-button labels for each viewport View Mode. */
+const VIEW_MODE_LABELS: Record<ViewMode, string> = {
+  lit: "Lit",
+  wireframe: "Wireframe",
+};
+
+/** Chevron appended to menu buttons that open a hover popover. */
+const MENU_CHEVRON =
+  '<svg class="menu-chevron" viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5L6 7.5 9 4.5"/></svg>';
+
 export class EditorUi {
   private root: HTMLDivElement;
   private contentList: HTMLDivElement;
@@ -250,57 +305,14 @@ export class EditorUi {
     this.root.addEventListener("contextmenu", (event) => event.preventDefault());
     this.root.innerHTML = `
       <header class="editor-topbar">
-        <div class="editor-brand">
-          <strong>Forge Editor</strong>
-          <span data-project-name>loading project</span>
-        </div>
-        <div class="editor-tools" data-tools></div>
-        <div class="editor-snaps">
-          <label class="snap-toggle">
-            <input type="checkbox" data-snap-toggle="move" checked />
-            <span>Grid</span>
-          </label>
-          <label>
-            <span>Move</span>
-            <select data-snap="move">
-              <option value="0.25">0.25</option>
-              <option value="0.5">0.5</option>
-              <option value="1" selected>1</option>
-            </select>
-          </label>
-          <label class="snap-toggle">
-            <input type="checkbox" data-snap-toggle="rotate" checked />
-            <span>Rot</span>
-          </label>
-          <label>
-            <span>Rotate</span>
-            <select data-snap="rotate">
-              <option value="5">5</option>
-              <option value="10">10</option>
-              <option value="15" selected>15</option>
-              <option value="30">30</option>
-              <option value="45">45</option>
-              <option value="90">90</option>
-            </select>
-          </label>
-          <label class="snap-toggle">
-            <input type="checkbox" data-snap-toggle="scale" checked />
-            <span>Scale</span>
-          </label>
-          <label>
-            <span>Scale</span>
-            <select data-snap="scale">
-              <option value="0.05">0.05</option>
-              <option value="0.1" selected>0.1</option>
-              <option value="0.25">0.25</option>
-              <option value="0.5">0.5</option>
-              <option value="1">1</option>
-            </select>
-          </label>
-        </div>
-        <div class="editor-actions">
+        <div class="editor-left">
+          <div class="editor-brand">
+            <strong>Forge Editor</strong>
+            <span data-project-name>loading project</span>
+          </div>
+          <span class="topbar-divider"></span>
           <div class="add-actor-menu">
-            <button type="button" data-add-actor-button data-testid="add-actor-button" title="Add actor">+ Add Actor</button>
+            <button type="button" class="topbar-menu-button" data-add-actor-button data-testid="add-actor-button" title="Add actor">+ Add Actor${MENU_CHEVRON}</button>
             <div class="add-actor-popover" data-add-actor-popover>
               <div class="add-actor-category">
                 <button type="button" class="add-actor-category-label">Lights</button>
@@ -360,8 +372,66 @@ export class EditorUi {
               </div>
             </div>
           </div>
+          <span class="topbar-divider"></span>
+          <div class="editor-tools" data-tools></div>
+        </div>
+        <div class="editor-snaps">
+          <label class="snap-widget" data-tip="Surface snapping — move grid" title="Move snap">
+            <input type="checkbox" data-snap-toggle="move" checked />
+            <span class="snap-icon">${TOOLBAR_ICONS.snap}</span>
+            <select data-snap="move" aria-label="Move snap">
+              <option value="0.25">0.25</option>
+              <option value="0.5">0.5</option>
+              <option value="1" selected>1</option>
+            </select>
+          </label>
+          <label class="snap-widget" data-tip="Rotation snapping — degrees" title="Rotate snap">
+            <input type="checkbox" data-snap-toggle="rotate" checked />
+            <span class="snap-icon">${TOOLBAR_ICONS.rotate}</span>
+            <select data-snap="rotate" aria-label="Rotate snap">
+              <option value="5">5°</option>
+              <option value="10">10°</option>
+              <option value="15" selected>15°</option>
+              <option value="30">30°</option>
+              <option value="45">45°</option>
+              <option value="90">90°</option>
+            </select>
+          </label>
+          <label class="snap-widget" data-tip="Scale snapping — grid" title="Scale snap">
+            <input type="checkbox" data-snap-toggle="scale" checked />
+            <span class="snap-icon">${TOOLBAR_ICONS.scale}</span>
+            <select data-snap="scale" aria-label="Scale snap">
+              <option value="0.05">0.05</option>
+              <option value="0.1" selected>0.1</option>
+              <option value="0.25">0.25</option>
+              <option value="0.5">0.5</option>
+              <option value="1">1</option>
+            </select>
+          </label>
+        </div>
+        <div class="editor-actions">
+          <div class="camera-menu topbar-menu">
+            <button type="button" class="topbar-menu-button" data-camera-button title="Camera view">
+              ${TOOLBAR_ICONS.camera}<span data-camera-label>Perspective</span>${MENU_CHEVRON}
+            </button>
+            <div class="topbar-popover" data-camera-popover>
+              <button type="button" data-camera-view="perspective">Perspective</button>
+              <button type="button" data-camera-view="top">Top</button>
+              <button type="button" data-camera-view="left">Left</button>
+              <button type="button" data-camera-view="front">Front</button>
+            </div>
+          </div>
+          <div class="viewmode-menu topbar-menu">
+            <button type="button" class="topbar-menu-button" data-viewmode-button title="View mode">
+              ${TOOLBAR_ICONS.viewmode}<span data-viewmode-label>Lit</span>${MENU_CHEVRON}
+            </button>
+            <div class="topbar-popover" data-viewmode-popover>
+              <button type="button" data-view-mode="lit">Lit</button>
+              <button type="button" data-view-mode="wireframe">Wireframe</button>
+            </div>
+          </div>
           <div class="show-menu">
-            <button type="button" data-show-button title="Show flags">Show</button>
+            <button type="button" class="topbar-menu-button" data-show-button title="Show flags">Show${MENU_CHEVRON}</button>
             <div class="show-popover" data-show-popover>
               <div class="add-actor-section-title">Show Flags</div>
               <label>
@@ -512,8 +582,11 @@ export class EditorUi {
     (["select", "move", "rotate", "scale"] as EditorTool[]).forEach((tool) => {
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = TOOL_LABELS[tool];
+      button.className = "tool-button";
+      button.innerHTML = TOOLBAR_ICONS[tool];
       button.dataset.tool = tool;
+      button.dataset.tip = TOOL_TOOLTIPS[tool];
+      button.setAttribute("aria-label", TOOL_LABELS[tool]);
       if (tool === "move") button.classList.add("active");
       button.addEventListener("click", () => {
         this.setActiveTool(tool);
@@ -524,13 +597,14 @@ export class EditorUi {
 
     const spaceButton = document.createElement("button");
     spaceButton.type = "button";
-    spaceButton.className = "space-toggle";
+    spaceButton.className = "tool-button space-toggle";
     spaceButton.dataset.spaceToggle = "";
-    spaceButton.title = "Toggle transform space (X)";
+    tools.append(spaceButton);
+    // Render the initial World/Local glyph + tooltip via the shared updater.
+    this.updateSpaceButton(this.app.getTransformSpace());
     spaceButton.addEventListener("click", () => {
       this.updateSpaceButton(this.app.toggleTransformSpace());
     });
-    tools.append(spaceButton);
   }
 
   private bindNumericInputSelection(): void {
@@ -558,17 +632,56 @@ export class EditorUi {
   private updateSpaceButton(space: TransformSpace): void {
     const button = this.root.querySelector<HTMLButtonElement>("[data-space-toggle]");
     if (!button) return;
-    button.textContent = space === "local" ? "Local" : "World";
-    button.classList.toggle("active", space === "local");
+    const isLocal = space === "local";
+    button.innerHTML = isLocal ? TOOLBAR_ICONS.local : TOOLBAR_ICONS.world;
+    const label = isLocal ? "Local" : "World";
+    button.dataset.tip = `Transform in ${label} space — X`;
+    button.setAttribute("aria-label", `${label} space`);
+    button.classList.toggle("active", isLocal);
+  }
+
+  /**
+   * Wires the Camera and View Mode hover menus. The runtime owns the actual
+   * camera/shading state and reports it back through `onViewStateChanged`, so
+   * both menu labels stay correct even when one preset drives the other (a Top
+   * ortho view also flips shading to Wireframe).
+   */
+  private bindViewMenus(): void {
+    this.root.querySelectorAll<HTMLButtonElement>("[data-camera-view]").forEach((button) => {
+      const view = button.dataset.cameraView as CameraView;
+      button.addEventListener("click", () => this.app.setCameraView(view));
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-view-mode]").forEach((button) => {
+      const mode = button.dataset.viewMode as ViewMode;
+      button.addEventListener("click", () => this.app.setViewMode(mode));
+    });
+    this.app.onViewStateChanged = (state) => this.updateViewState(state);
+    this.updateViewState(this.app.getViewState());
+  }
+
+  private updateViewState(state: ViewportViewState): void {
+    const cameraLabel = this.root.querySelector("[data-camera-label]");
+    if (cameraLabel) cameraLabel.textContent = CAMERA_VIEW_LABELS[state.view];
+    const viewModeLabel = this.root.querySelector("[data-viewmode-label]");
+    if (viewModeLabel) viewModeLabel.textContent = VIEW_MODE_LABELS[state.mode];
+    this.root.querySelectorAll<HTMLButtonElement>("[data-camera-view]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.cameraView === state.view);
+    });
+    this.root.querySelectorAll<HTMLButtonElement>("[data-view-mode]").forEach((button) => {
+      button.classList.toggle("active", button.dataset.viewMode === state.mode);
+    });
   }
 
   private bindActions(): void {
-    // The Add Actor button and its category labels are hover-only triggers: they
-    // reveal the flyout on hover and must not react to clicks. Suppressing the
-    // mousedown default keeps them from taking focus (no focus ring, and — paired
-    // with the CSS dropping :focus-within — no click ever pins the menu open).
+    // The Add Actor button, its category labels, and the Show button are
+    // hover-only triggers: they reveal their flyout on hover and must not react
+    // to clicks. Suppressing the mousedown default keeps them from taking focus
+    // (no focus ring, and — paired with the CSS dropping :focus-within — no click
+    // ever pins the menu open).
     this.root
-      .querySelectorAll<HTMLButtonElement>("[data-add-actor-button], .add-actor-category-label")
+      .querySelectorAll<HTMLButtonElement>(
+        "[data-add-actor-button], .add-actor-category-label, [data-show-button], [data-camera-button], [data-viewmode-button]",
+      )
       .forEach((button) => {
         button.addEventListener("mousedown", (event) => event.preventDefault());
       });
@@ -606,6 +719,8 @@ export class EditorUi {
     this.root.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       void this.save();
     });
+
+    this.bindViewMenus();
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-add-actor]").forEach((button) => {
       const type = button.dataset.addActor;
@@ -903,13 +1018,16 @@ export class EditorUi {
       this.app.focusSelected();
     } else if (event.code === "Digit1") {
       event.preventDefault();
-      this.app.setTechnicalView("top");
+      this.app.setCameraView("top");
     } else if (event.code === "Digit2") {
       event.preventDefault();
-      this.app.setTechnicalView("front");
+      this.app.setCameraView("front");
     } else if (event.code === "Digit3") {
       event.preventDefault();
-      this.app.setTechnicalView("side");
+      this.app.setCameraView("left");
+    } else if (event.code === "Digit4") {
+      event.preventDefault();
+      this.app.setCameraView("perspective");
     } else if (event.code === "KeyH" && event.shiftKey) {
       event.preventDefault();
       this.app.showHiddenObjects();

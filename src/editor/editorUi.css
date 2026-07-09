@@ -29,13 +29,29 @@ body.editor-mode #debug-stats {
   inset: 0 0 auto 0;
   height: 44px;
   display: grid;
-  grid-template-columns: 230px 300px minmax(280px, 1fr) 390px;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 8px;
   padding: 0 12px;
   background: rgba(22, 25, 28, 0.94);
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   pointer-events: auto;
+}
+
+/* UE5-style left cluster: brand · Add Actor · transform tools. */
+.editor-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* Thin vertical rule separating toolbar clusters. */
+.topbar-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.14);
+  flex: 0 0 auto;
 }
 
 .editor-brand {
@@ -68,14 +84,91 @@ body.editor-mode #debug-stats {
 }
 
 .editor-tools {
-  justify-content: center;
+  justify-content: flex-start;
 }
 
 .editor-actions {
   justify-content: flex-end;
 }
 
+/* Square icon buttons for Select / Move / Rotate / Scale + World/Local. */
+.editor-shell .tool-button {
+  width: 34px;
+  min-width: 34px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #c8d0d5;
+}
+
+.editor-shell .tool-button svg {
+  display: block;
+  pointer-events: none;
+}
+
+.editor-shell .tool-button.active {
+  color: #07120f;
+}
+
+.editor-shell .tool-button.space-toggle {
+  margin-left: 2px;
+}
+
+/*
+ * Deferred hover hint (UE5 "big tooltip" feel): appears ~0.55s after the pointer
+ * settles on any [data-tip] control. Pure CSS via a transition-delay on opacity.
+ */
+[data-tip] {
+  position: relative;
+}
+
+[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 120;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 5px;
+  background: rgba(12, 14, 16, 0.97);
+  color: #edf2f4;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.08s linear 0.55s;
+}
+
+[data-tip]:hover::after {
+  opacity: 1;
+}
+
 .add-actor-menu {
+  position: relative;
+}
+
+/* Shared trigger styling for the topbar hover menus (Add Actor / Camera /
+   View Mode / Show): icon + label + chevron in a single button. */
+.editor-shell .topbar-menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.menu-chevron {
+  color: #9aa4a9;
+  flex: 0 0 auto;
+}
+
+.topbar-menu {
   position: relative;
 }
 
@@ -86,22 +179,33 @@ body.editor-mode #debug-stats {
 .add-actor-popover {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  left: 0;
   z-index: 80;
   min-width: 180px;
-  display: none;
+  display: grid;
+  gap: 4px;
   padding: 6px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 6px;
   background: rgba(19, 22, 25, 0.98);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  visibility: hidden;
+  opacity: 0;
+  /* Close after a 0.2s grace period: the 6px gap between the button and the
+     popover briefly leaves both un-hovered while the pointer travels down, and
+     an instant close would dismiss the menu mid-travel. Opening stays instant
+     (delay reset to 0 in the :hover rule). */
+  transition:
+    visibility 0s linear 0.2s,
+    opacity 0.12s linear 0.2s;
 }
 
 /* Hover-only reveal: the "+ Add Actor" button never pins the menu on click, so
    moving off the menu always closes it (no focus-within latch). */
 .add-actor-menu:hover .add-actor-popover {
-  display: grid;
-  gap: 4px;
+  visibility: visible;
+  opacity: 1;
+  transition-delay: 0s;
 }
 
 .add-actor-section-title {
@@ -143,8 +247,8 @@ body.editor-mode #debug-stats {
 .add-actor-submenu {
   position: absolute;
   top: -6px;
-  right: 100%;
-  margin-right: 4px;
+  left: 100%;
+  margin-left: 4px;
   z-index: 81;
   min-width: 200px;
   display: none;
@@ -173,18 +277,29 @@ body.editor-mode #debug-stats {
   right: 0;
   z-index: 80;
   min-width: 180px;
-  display: none;
+  display: grid;
+  gap: 4px;
   padding: 6px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 6px;
   background: rgba(19, 22, 25, 0.98);
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  visibility: hidden;
+  opacity: 0;
+  /* Same 0.2s grace period as the Add Actor menu so the button→popover gap
+     doesn't dismiss it mid-travel; opening stays instant (delay 0 on :hover). */
+  transition:
+    visibility 0s linear 0.2s,
+    opacity 0.12s linear 0.2s;
 }
 
-.show-menu:hover .show-popover,
-.show-menu:focus-within .show-popover {
-  display: grid;
-  gap: 4px;
+/* Hover-only reveal (matches the Add Actor menu): the Show button never pins the
+   popover on click, so making a selection keeps it open only while the pointer
+   stays on the menu — moving off always closes it (no focus-within latch). */
+.show-menu:hover .show-popover {
+  visibility: visible;
+  opacity: 1;
+  transition-delay: 0s;
 }
 
 .show-popover label {
@@ -195,6 +310,39 @@ body.editor-mode #debug-stats {
   color: #cdd5d9;
   font-size: 12px;
   cursor: pointer;
+}
+
+/* Camera + View Mode hover menus (mirrors the Add Actor / Show reveal). */
+.topbar-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 80;
+  min-width: 150px;
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px;
+  background: rgba(19, 22, 25, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+  visibility: hidden;
+  opacity: 0;
+  transition:
+    visibility 0s linear 0.2s,
+    opacity 0.12s linear 0.2s;
+}
+
+.topbar-menu:hover .topbar-popover {
+  visibility: visible;
+  opacity: 1;
+  transition-delay: 0s;
+}
+
+.editor-shell .topbar-popover button {
+  width: 100%;
+  justify-content: flex-start;
+  text-align: left;
 }
 
 .show-popover input[type="checkbox"] {
@@ -213,36 +361,61 @@ body.editor-mode #debug-stats {
 }
 
 .editor-snaps {
-  justify-content: flex-start;
+  justify-content: center;
   min-width: 0;
   overflow: visible;
+  gap: 10px;
 }
 
-.editor-snaps label {
-  display: grid;
-  grid-template-columns: auto 58px;
+/* UE5-style snap control: a grid-icon toggle joined to a value dropdown. */
+.editor-snaps .snap-widget {
+  display: inline-flex;
   align-items: center;
-  gap: 5px;
-  color: #aeb8bd;
-  font-size: 11px;
+  cursor: pointer;
 }
 
-.editor-snaps label.snap-toggle {
-  display: flex;
-  grid-template-columns: none;
-  gap: 4px;
+/* The real checkbox stays for state/handlers but is visually replaced by the
+   icon; clicking the icon (inside the label) still toggles it. */
+.editor-snaps .snap-widget input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.editor-snaps label.snap-toggle input {
-  width: 14px;
-  height: 14px;
-  accent-color: #72d49f;
+.editor-snaps .snap-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-right: none;
+  border-radius: 6px 0 0 6px;
+  background: #2b3136;
+  color: #7c868c;
+}
+
+.editor-snaps .snap-icon svg {
+  display: block;
+  pointer-events: none;
+}
+
+.editor-snaps .snap-widget:hover .snap-icon {
+  background: #394148;
+}
+
+/* On (snapping enabled) → accent-tinted icon. */
+.editor-snaps .snap-widget input:checked + .snap-icon {
+  color: #72d49f;
 }
 
 .editor-snaps select {
   height: 30px;
+  min-width: 56px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 6px;
+  border-radius: 0 6px 6px 0;
   padding: 0 6px;
   color: #edf2f4;
   background: #2b3136;
@@ -1221,11 +1394,13 @@ body.editor-mode #debug-stats {
     align-content: center;
   }
 
+  .editor-left,
   .editor-brand,
   .editor-tools,
   .editor-snaps,
   .editor-actions {
     justify-content: center;
+    flex-wrap: wrap;
   }
 
   .editor-panel {

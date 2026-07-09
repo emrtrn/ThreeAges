@@ -369,7 +369,13 @@ import {
   snapValue,
 } from "@editor/core/numeric";
 import { actorClassName, buildEditableSelection, buildSceneObjects } from "@editor/core/sceneObjects";
-import type { EditorTool, TransformSpace } from "@editor/core/tools";
+import type {
+  CameraView,
+  EditorTool,
+  TransformSpace,
+  ViewMode,
+  ViewportViewState,
+} from "@editor/core/tools";
 import {
   worldSettingsEqual,
   type EditableSceneObject,
@@ -673,6 +679,10 @@ export class SceneApp {
   private pivotEditMode = false;
   private activeTool: EditorTool = "move";
   private transformSpace: TransformSpace = "world";
+  /** Current viewport camera preset (drives the editor Camera menu label). */
+  private cameraView: CameraView = "perspective";
+  /** Current viewport shading mode (drives the editor View Mode menu label). */
+  private viewMode: ViewMode = "lit";
   private snapSettings = {
     move: 1,
     rotate: 15,
@@ -708,6 +718,8 @@ export class SceneApp {
   onPivotEditModeChanged: ((enabled: boolean) => void) | null = null;
   onStatus: ((message: string, tone?: "info" | "success" | "warning" | "error") => void) | null =
     null;
+  /** Reports the current camera preset + shading mode so the editor menus sync. */
+  onViewStateChanged: ((state: ViewportViewState) => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, options: EditorOptions = { enabled: false }) {
     this.canvas = canvas;
@@ -1298,6 +1310,61 @@ export class SceneApp {
     this.camera.lookAt(target);
     this.cameraController.syncAnglesFromCurrentView();
     this.onStatus?.(`${view[0]!.toUpperCase()}${view.slice(1)} view`, "info");
+  }
+
+  /** Restores an angled 3/4 perspective orbit around the current focus point. */
+  private applyPerspectivePose(): void {
+    const target = this.getCameraOrbitTarget();
+    const distance = clamp(this.camera.position.distanceTo(target), 4, 12);
+    this.cameraController.markViewChanged();
+    this.camera.up.set(0, 1, 0);
+    this.camera.position
+      .copy(target)
+      .add(new Vector3(distance * 0.7, distance * 0.6, distance * 0.7));
+    this.camera.lookAt(target);
+    this.cameraController.syncAnglesFromCurrentView();
+  }
+
+  /**
+   * Editor Camera menu entry point. Positions the viewport camera for the chosen
+   * preset and, per the UE-style contract, couples shading to it: the technical
+   * (Top/Left/Front) presets read as Wireframe while Perspective returns to Lit.
+   *
+   * NOTE: the technical presets currently reposition the perspective camera; the
+   * true orthographic projection swap + wireframe rendering land in a later step.
+   * The camera/shading *state* is authoritative here so the editor menus and that
+   * later rendering pass share one source of truth.
+   */
+  setCameraView(view: CameraView): void {
+    if (view === "perspective") {
+      this.applyPerspectivePose();
+      this.onStatus?.("Perspective view", "info");
+    } else {
+      this.setTechnicalView(view === "left" ? "side" : view);
+    }
+    this.cameraView = view;
+    this.applyViewMode(view === "perspective" ? "lit" : "wireframe", false);
+    this.notifyViewState();
+  }
+
+  /** Editor View Mode menu entry point (Lit / Wireframe). */
+  setViewMode(mode: ViewMode): void {
+    this.applyViewMode(mode, true);
+    this.notifyViewState();
+  }
+
+  private applyViewMode(mode: ViewMode, announce: boolean): void {
+    this.viewMode = mode;
+    // TODO(view-mode, later step): apply wireframe/lit shading to the scene here.
+    if (announce) this.onStatus?.(`${mode === "lit" ? "Lit" : "Wireframe"} view mode`, "info");
+  }
+
+  getViewState(): ViewportViewState {
+    return { view: this.cameraView, mode: this.viewMode };
+  }
+
+  private notifyViewState(): void {
+    this.onViewStateChanged?.(this.getViewState());
   }
 
   surfaceSnapSelected(): void {
