@@ -219,6 +219,8 @@ const TOOLBAR_ICONS = {
     '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 4.5h9"/><path d="M6 4.5V3h4v1.5"/><path d="M5 4.5l.6 8.5a1 1 0 0 0 1 .9h2.8a1 1 0 0 0 1-.9l.6-8.5"/><path d="M6.7 7v4.2M9.3 7v4.2"/></svg>',
   save:
     '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5h7.4l1.6 1.6v6.9a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5z"/><path d="M5.5 3.5v3h4v-3"/><rect x="5.5" y="9" width="5" height="3.5"/></svg>',
+  play:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"><path d="M5 3.4l7.2 4.6L5 12.6z"/></svg>',
 } as const;
 
 /** Menu-button labels for each Camera view preset. */
@@ -452,21 +454,14 @@ export class EditorUi {
               <button type="button" data-view-mode="wireframe">Wireframe</button>
             </div>
           </div>
-          <div class="show-menu">
+          <div class="show-menu topbar-menu">
             <button type="button" class="topbar-menu-button" data-show-button title="Show flags">Show${MENU_CHEVRON}</button>
-            <div class="show-popover" data-show-popover>
-              <div class="add-actor-section-title">Show Flags</div>
-              <label>
-                <input type="checkbox" data-show-flag="collision" />
-                Collision
-              </label>
-              <label>
-                <input type="checkbox" data-show-flag="ai-navigation" />
-                AI Navigation
-              </label>
+            <div class="topbar-popover" data-show-popover>
+              <button type="button" data-show-flag="collision">Collision</button>
+              <button type="button" data-show-flag="ai-navigation">AI Navigation</button>
             </div>
           </div>
-          <button type="button" class="editor-play-button" data-action="play" data-testid="editor-play" title="Save & open runtime (P)">Play</button>
+          <button type="button" class="tool-button editor-play-button" data-action="play" data-testid="editor-play" data-tip="Play — save &amp; open runtime (P)" aria-label="Play" title="Save & open runtime (P)">${TOOLBAR_ICONS.play}</button>
           </div>
         </div>
       </header>
@@ -691,6 +686,46 @@ export class EditorUi {
     });
   }
 
+  /**
+   * Wires one Show-flag toggle button: reflects the current runtime state as the
+   * green `active` style and flips it on click (mirrors the Camera / View Mode
+   * option buttons, so all three topbar menus behave identically).
+   */
+  private bindShowFlag(
+    flag: string,
+    get: () => boolean,
+    set: (on: boolean) => void,
+  ): void {
+    const button = this.root.querySelector<HTMLButtonElement>(
+      `[data-show-flag="${flag}"]`,
+    );
+    if (!button) return;
+    button.classList.toggle("active", get());
+    button.addEventListener("click", () => {
+      const next = !get();
+      set(next);
+      button.classList.toggle("active", next);
+    });
+  }
+
+  /**
+   * Closes every other topbar hover menu the instant the pointer enters one of
+   * them. The popovers keep a short CSS grace delay before closing on leave, so
+   * sliding between adjacent triggers could briefly show two overlapping menus;
+   * force-closing the siblings on enter removes that flicker without touching the
+   * gentle close-on-leave behaviour.
+   */
+  private bindMenuHoverIntent(): void {
+    const menus = Array.from(
+      this.root.querySelectorAll<HTMLElement>(".add-actor-menu, .topbar-menu"),
+    );
+    menus.forEach((menu) => {
+      menu.addEventListener("pointerenter", () => {
+        menus.forEach((other) => other.classList.toggle("force-closed", other !== menu));
+      });
+    });
+  }
+
   private bindActions(): void {
     // The Add Actor button, its category labels, and the Show button are
     // hover-only triggers: they reveal their flyout on hover and must not react
@@ -717,29 +752,20 @@ export class EditorUi {
     this.root.querySelector('[data-action="play"]')?.addEventListener("click", () => {
       void this.playTest();
     });
-    const collisionToggle = this.root.querySelector<HTMLInputElement>(
-      '[data-show-flag="collision"]',
+    // Show flags are toggle buttons (active = green) matching the Camera / View
+    // Mode option menus, rather than checkboxes.
+    this.bindShowFlag("collision", () => this.app.getShowCollision(), (on) =>
+      this.app.setShowCollision(on),
     );
-    if (collisionToggle) {
-      collisionToggle.checked = this.app.getShowCollision();
-      collisionToggle.addEventListener("change", () => {
-        this.app.setShowCollision(collisionToggle.checked);
-      });
-    }
-    const aiNavigationToggle = this.root.querySelector<HTMLInputElement>(
-      '[data-show-flag="ai-navigation"]',
+    this.bindShowFlag("ai-navigation", () => this.app.getShowAiNavigation(), (on) =>
+      this.app.setShowAiNavigation(on),
     );
-    if (aiNavigationToggle) {
-      aiNavigationToggle.checked = this.app.getShowAiNavigation();
-      aiNavigationToggle.addEventListener("change", () => {
-        this.app.setShowAiNavigation(aiNavigationToggle.checked);
-      });
-    }
     this.root.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       void this.save();
     });
 
     this.bindViewMenus();
+    this.bindMenuHoverIntent();
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-add-actor]").forEach((button) => {
       const type = button.dataset.addActor;

@@ -31,8 +31,8 @@ test("editor AI Navigation clearance overlay smoke: show toggle renders without 
 
   await page.getByRole("button", { name: "Show" }).hover();
   const aiNavToggle = page.locator('[data-show-flag="ai-navigation"]');
-  await aiNavToggle.check();
-  await expect(aiNavToggle).toBeChecked();
+  await aiNavToggle.click();
+  await expect(aiNavToggle).toHaveClass(/active/);
   await expect(page.locator("#game-canvas")).toBeVisible();
 
   expect(pageErrors).toEqual([]);

@@ -334,52 +334,7 @@ body.editor-mode #debug-stats {
   gap: 4px;
 }
 
-.show-menu {
-  position: relative;
-}
-
-.show-popover {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  z-index: 80;
-  min-width: 180px;
-  display: grid;
-  gap: 4px;
-  padding: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
-  background: rgba(19, 22, 25, 0.98);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-  visibility: hidden;
-  opacity: 0;
-  /* Same 0.2s grace period as the Add Actor menu so the button→popover gap
-     doesn't dismiss it mid-travel; opening stays instant (delay 0 on :hover). */
-  transition:
-    visibility 0s linear 0.2s,
-    opacity 0.12s linear 0.2s;
-}
-
-/* Hover-only reveal (matches the Add Actor menu): the Show button never pins the
-   popover on click, so making a selection keeps it open only while the pointer
-   stays on the menu — moving off always closes it (no focus-within latch). */
-.show-menu:hover .show-popover {
-  visibility: visible;
-  opacity: 1;
-  transition-delay: 0s;
-}
-
-.show-popover label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 6px;
-  color: #cdd5d9;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-/* Camera + View Mode hover menus (mirrors the Add Actor / Show reveal). */
+/* Camera + View Mode + Show hover menus (all mirror the Add Actor reveal). */
 .topbar-popover {
   position: absolute;
   top: calc(100% + 6px);
@@ -412,8 +367,15 @@ body.editor-mode #debug-stats {
   text-align: left;
 }
 
-.show-popover input[type="checkbox"] {
-  cursor: pointer;
+/* Hover-intent guard: when the pointer enters another topbar menu, its siblings
+   get `.force-closed` (see bindMenuHoverIntent) which hides them immediately,
+   overriding both the :hover reveal and the gentle close-on-leave delay so two
+   adjacent popovers never overlap while sliding between triggers. */
+.editor-shell .add-actor-menu.force-closed .add-actor-popover,
+.editor-shell .topbar-menu.force-closed .topbar-popover {
+  visibility: hidden;
+  opacity: 0;
+  transition: none;
 }
 
 .editor-mode input[type="number"] {

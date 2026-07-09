@@ -40,8 +40,8 @@ test("editor AI Navigation Volume smoke: add, inspect, show, save, reload", asyn
 
   await page.getByRole("button", { name: "Show" }).hover();
   const aiNavToggle = page.locator('[data-show-flag="ai-navigation"]');
-  await aiNavToggle.check();
-  await expect(aiNavToggle).toBeChecked();
+  await aiNavToggle.click();
+  await expect(aiNavToggle).toHaveClass(/active/);
 
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
