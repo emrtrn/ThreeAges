@@ -1110,7 +1110,7 @@ body.editor-mode #debug-stats {
 
 .content-drawer-top {
   display: grid;
-  grid-template-columns: 250px minmax(180px, 1fr) minmax(230px, 300px) auto auto;
+  grid-template-columns: 250px minmax(180px, 1fr) minmax(230px, 300px) auto auto auto;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
@@ -1180,6 +1180,19 @@ body.editor-mode #debug-stats {
 
 .editor-shell .content-size-toggle {
   min-width: 54px;
+}
+
+.editor-shell .content-lock-toggle {
+  min-width: 32px;
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Active = locked open: a warm highlight so the open-pin state reads clearly. */
+.editor-shell .content-lock-toggle.active {
+  border-color: rgba(255, 186, 84, 0.7);
+  background: rgba(255, 158, 46, 0.22);
 }
 
 .content-drawer-body {
@@ -1522,7 +1535,7 @@ body.editor-mode #debug-stats {
   }
 
   .content-drawer-top {
-    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
   }
 
   .content-drawer-title {

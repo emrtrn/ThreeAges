@@ -54,5 +54,6 @@
     }
   ],
   "complexity": "projectDefault",
-  "preset": "blockAll"
+  "preset": "blockAll",
+  "navigationRole": "obstacleOnly"
 }

@@ -12,8 +12,22 @@
         2.5,
         0
       ]
+    },
+    {
+      "shape": "box",
+      "size": [
+        0.5,
+        5,
+        0.5
+      ],
+      "center": [
+        0,
+        2.5,
+        0
+      ]
     }
   ],
   "complexity": "projectDefault",
-  "preset": "blockAll"
+  "preset": "blockAll",
+  "navigationRole": "obstacleOnly"
 }

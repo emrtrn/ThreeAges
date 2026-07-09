@@ -455,7 +455,8 @@
         20,
         4,
         20
-      ]
+      ],
+      "agentRadius": 0.1
     }
   ],
   "targetPoints": [

@@ -266,6 +266,7 @@ export class EditorUi {
   private contentTypeFilter: HTMLSelectElement;
   private contentDevelopmentToggle: HTMLInputElement;
   private contentSizeToggle: HTMLButtonElement;
+  private contentLockToggle: HTMLButtonElement;
   private folderTree: HTMLElement;
   private outlinerList: HTMLDivElement;
   private detailsBody: HTMLDivElement;
@@ -300,6 +301,8 @@ export class EditorUi {
   private contentType: ContentTypeFilter = CONTENT_FILTER_ALL;
   private contentDrawerOpen = false;
   private contentDrawerTall = false;
+  /** When locked, the drawer never auto-closes on an outside click or asset drop. */
+  private contentDrawerLocked = false;
   private showDevelopmentContent = false;
   private contentRefreshTimer = 0;
   private outlinerObjects: EditableSceneObject[] = [];
@@ -526,6 +529,14 @@ export class EditorUi {
           </div>
           <button
             type="button"
+            class="content-lock-toggle"
+            data-content-lock-toggle
+            aria-pressed="false"
+            title="Keep the Content Drawer open (do not auto-close on outside click)"
+            aria-label="Lock Content Drawer open"
+          >🔓</button>
+          <button
+            type="button"
             class="content-size-toggle"
             data-content-size-toggle
             aria-pressed="false"
@@ -564,6 +575,7 @@ export class EditorUi {
     this.contentTypeFilter = requireElement(this.root, "[data-content-type-filter]");
     this.contentDevelopmentToggle = requireElement(this.root, "[data-content-development-toggle]");
     this.contentSizeToggle = requireElement(this.root, "[data-content-size-toggle]");
+    this.contentLockToggle = requireElement(this.root, "[data-content-lock-toggle]");
     this.folderTree = requireElement(this.root, "[data-folder-tree]");
     this.outlinerList = requireElement(this.root, "[data-outliner-list]");
     this.detailsBody = requireElement(this.root, "[data-details-body]");
@@ -951,6 +963,26 @@ export class EditorUi {
       this.setContentDrawerTall(!this.contentDrawerTall);
     });
 
+    this.contentLockToggle.addEventListener("click", () => {
+      this.setContentDrawerLocked(!this.contentDrawerLocked);
+    });
+
+    // Auto-close on an outside click when the drawer is unlocked. Uses capture +
+    // pointerdown so it beats the viewport's own pointer handling; clicks inside
+    // the drawer or on the footer toggle (which owns open/close) are ignored.
+    document.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (!this.contentDrawerOpen || this.contentDrawerLocked) return;
+        const target = event.target as Node | null;
+        if (!target) return;
+        if (this.contentDrawer.contains(target)) return;
+        if (this.contentToggle.contains(target)) return;
+        this.setContentDrawerOpen(false);
+      },
+      true,
+    );
+
     // Right-click empty asset-grid space -> create content in the current folder.
     // (Right-clicking a card stops propagation and shows the asset menu instead.)
     this.contentList.addEventListener("contextmenu", (event) => {
@@ -1168,6 +1200,28 @@ export class EditorUi {
     this.contentSizeToggle.classList.toggle("active", tall);
     this.contentSizeToggle.setAttribute("aria-pressed", String(tall));
     this.contentSizeToggle.textContent = tall ? "Short" : "Tall";
+  }
+
+  /**
+   * Ends the viewport ghost preview when an asset drag finishes. A drag starts
+   * inside the drawer (so the outside-click handler never fires for it), so the
+   * drop is where we honor the auto-close: close the drawer unless it is locked.
+   */
+  private handleAssetDragEnd(): void {
+    this.app.endAssetDragPreview();
+    if (this.contentDrawerOpen && !this.contentDrawerLocked) {
+      this.setContentDrawerOpen(false);
+    }
+  }
+
+  private setContentDrawerLocked(locked: boolean): void {
+    this.contentDrawerLocked = locked;
+    this.contentLockToggle.classList.toggle("active", locked);
+    this.contentLockToggle.setAttribute("aria-pressed", String(locked));
+    this.contentLockToggle.textContent = locked ? "🔒" : "🔓";
+    this.contentLockToggle.title = locked
+      ? "Content Drawer locked open — click to allow auto-close"
+      : "Keep the Content Drawer open (do not auto-close on outside click)";
   }
 
   private setDevelopmentContentVisible(visible: boolean): void {
@@ -1407,7 +1461,7 @@ export class EditorUi {
         renderMaterialThumbnail: (item, thumb) => this.renderMaterialThumbnail(item, thumb),
         renderTextureThumbnail: (item, thumb) => this.renderTextureThumbnail(item, thumb),
         beginAssetDragPreview: (assetId) => this.app.beginAssetDragPreview(assetId),
-        endAssetDragPreview: () => this.app.endAssetDragPreview(),
+        endAssetDragPreview: () => this.handleAssetDragEnd(),
         setStatus: (message, tone) => this.setStatus(message, tone),
       });
       return;
@@ -1462,7 +1516,7 @@ export class EditorUi {
       renderMaterialThumbnail: (item, thumb) => this.renderMaterialThumbnail(item, thumb),
       renderTextureThumbnail: (item, thumb) => this.renderTextureThumbnail(item, thumb),
       beginAssetDragPreview: (assetId) => this.app.beginAssetDragPreview(assetId),
-      endAssetDragPreview: () => this.app.endAssetDragPreview(),
+      endAssetDragPreview: () => this.handleAssetDragEnd(),
       setStatus: (message, tone) => this.setStatus(message, tone),
     });
   }
