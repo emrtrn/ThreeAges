@@ -36,8 +36,8 @@
       "id": "characterMovement",
       "component": "CharacterMovement",
       "props": {
-        "maxWalkSpeed": 3,
-        "sprintMultiplier": 3,
+        "maxWalkSpeed": 5,
+        "sprintMultiplier": 5,
         "jumpSpeed": 4,
         "gravityScale": 1,
         "airControl": 0.25,

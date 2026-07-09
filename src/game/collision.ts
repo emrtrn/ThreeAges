@@ -69,6 +69,16 @@ export interface GroundProbeOptions {
    * stair/platform samples near an edge.
    */
   readonly requiredSupportRadius?: number;
+  /**
+   * Optional nav-only headroom (Recast `walkableHeight`). When >0, a ground layer
+   * is rejected if the nearest obstruction directly above it — a higher walkable
+   * surface at this X/Z, or a blocker's underside — leaves less than this much
+   * vertical clearance. This removes the floor *beneath* a ramp/stair (and the
+   * downward-facing underside sample of a solid wedge), so the AI cannot plan a
+   * walkable cell under the ramp and try to reach a target on top by going under
+   * it. Movement leaves this unset, so its ground probe is unchanged.
+   */
+  readonly requiredHeadroom?: number;
   /** When true, obstacle-only/ignored blockers cannot seed ground layers. */
   readonly respectNavigationRole?: boolean;
 }
@@ -558,7 +568,45 @@ function collectWalkableSurfaces(
       pushGroundHit(hits, { floorY: top, blocker: null });
     }
   }
+  const requiredHeadroom = Math.max(0, options.requiredHeadroom ?? 0);
+  if (requiredHeadroom > 0) {
+    return hits.filter(
+      (hit) => nearestCeilingAbove(hit.floorY, px, pz, hx, hz, blockers, surfaces) - hit.floorY >= requiredHeadroom,
+    );
+  }
   return hits;
+}
+
+/**
+ * Height of the lowest obstruction strictly above `floorY` at this X/Z footprint,
+ * or `Infinity` when the sky is clear. Feeds the nav headroom gate: a higher
+ * walkable surface (the top face of a ramp/stair whose underside this floor sits
+ * beneath) or a blocker's underside both count as a ceiling.
+ */
+function nearestCeilingAbove(
+  floorY: number,
+  px: number,
+  pz: number,
+  hx: number,
+  hz: number,
+  blockers: readonly Aabb3[],
+  surfaces: readonly GroundTriangle[] | undefined,
+): number {
+  const eps = 1e-3;
+  let ceiling = Infinity;
+  for (const blocker of blockers) {
+    if (blocker.min[1] <= floorY + eps) continue; // sits at/below this floor, not overhead
+    if (!rectOverlapsBlockerXZ(px, pz, hx, hz, blocker)) continue;
+    ceiling = Math.min(ceiling, blocker.min[1]);
+  }
+  if (surfaces) {
+    for (const surface of surfaces) {
+      const top = sampleTriangleHeight(surface, px, pz);
+      if (top === null || top <= floorY + eps) continue; // the floor itself, or below it
+      ceiling = Math.min(ceiling, top);
+    }
+  }
+  return ceiling;
 }
 
 function pushGroundHit(hits: GroundHit[], hit: GroundHit): void {

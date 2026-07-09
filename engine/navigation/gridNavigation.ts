@@ -269,11 +269,19 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
   const stepHeight = Math.max(0, finiteOr(request.agent.stepHeight, 0));
   const maxStepDown = Math.max(0, finiteOr(request.agent.maxStepDown, stepHeight));
   const footY = finiteOr(request.footY, 0);
-  const flatBlockers = request.blockers.filter((blocker) =>
+  // Erosion honors `navigationRole`: a `walkable` body is declared navigable
+  // ground, so it must never erode the grid. This is what lets a `walkable`
+  // staircase be climbed — its vertical riser AABBs would otherwise carve out the
+  // narrow tread strip between steps (a ramp has no risers, so it always worked).
+  // Ground seeding is unaffected: it comes from `sampleFloorY`/`sampleFloorYs`
+  // (the host's role-aware floor probe), not from this list, so a `walkable`
+  // floor/platform still contributes its walkable surface.
+  const erosionBlockers = request.blockers.filter((blocker) => blocker.navigationRole !== "walkable");
+  const flatBlockers = erosionBlockers.filter((blocker) =>
     blocksAgentVertically(blocker, footY, height, stepHeight),
   );
   const heightfield = Boolean(request.sampleFloorY || request.sampleFloorYs);
-  const blockers = heightfield ? request.blockers : flatBlockers;
+  const blockers = heightfield ? erosionBlockers : flatBlockers;
   const authoredBounds = request.bounds && request.bounds.length > 0 ? request.bounds : undefined;
   const extent = authoredBounds
     ? navBoundsFromAuthored(authoredBounds, clearanceRadius)

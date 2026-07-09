@@ -1503,6 +1503,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         maxSlopeCos,
         preferredFloorY,
         requiredSupportRadius: Math.min(Math.max(0, agent.radius), AI_NAV_MIN_TOP_SUPPORT_RADIUS),
+        // Recast walkableHeight: reject floor cells with less than the agent's
+        // height of clearance above them, so no nav floor is baked under a
+        // ramp/stair (nor on a wedge's downward-facing underside).
+        requiredHeadroom: Math.max(0, agent.height),
         respectNavigationRole: true,
       });
       // Collapse near-coincident walkable surfaces into a single navigable floor,

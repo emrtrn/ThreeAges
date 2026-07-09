@@ -7466,6 +7466,61 @@ check("findGroundLayersAt support radius rejects rotated wall footprint tops", (
   );
 });
 
+// Recast walkableHeight: the nav floor probe drops a layer that lacks the agent's
+// height of clearance above it, so no nav floor is baked under a ramp/stair. A
+// higher walkable surface (ramp top) and a blocker underside both count as ceilings.
+check("findGroundLayersAt headroom gate drops floor cells under a low ceiling", () => {
+  const floor: Aabb3 = { min: [-3, -0.2, -3], max: [3, 0, 3] };
+  // A walkable roof 1 m above the floor (the top face of a ramp/platform whose
+  // underside this floor sits beneath).
+  const roofA: GroundTriangle = { a: [-3, 1, -3], b: [3, 1, -3], c: [3, 1, 3], normalY: 1 };
+  const roofB: GroundTriangle = { a: [-3, 1, -3], b: [3, 1, 3], c: [-3, 1, 3], normalY: 1 };
+  const base = {
+    footprintHalf: [0.35, 0.35] as [number, number],
+    maxStepUp: 0,
+    maxStepDown: 5,
+    surfaces: [roofA, roofB],
+    maxSlopeCos: 0.5,
+  };
+  // No gate: both the floor (0) and the roof (1) are walkable layers.
+  assert.deepEqual(
+    findGroundLayersAt([0, 3, 0], [floor], base).map((hit) => hit.floorY),
+    [0, 1],
+  );
+  // Gate 1.8: the floor at 0 has only 1 m of clearance -> dropped; the roof at 1
+  // has open sky above -> kept.
+  assert.deepEqual(
+    findGroundLayersAt([0, 3, 0], [floor], { ...base, requiredHeadroom: 1.8 }).map((hit) => hit.floorY),
+    [1],
+  );
+  // A high roof (2.5 m) leaves enough clearance -> the floor stays walkable.
+  const highA: GroundTriangle = { a: [-3, 2.5, -3], b: [3, 2.5, -3], c: [3, 2.5, 3], normalY: 1 };
+  const highB: GroundTriangle = { a: [-3, 2.5, -3], b: [3, 2.5, 3], c: [-3, 2.5, 3], normalY: 1 };
+  assert.deepEqual(
+    findGroundLayersAt([0, 3, 0], [floor], { ...base, surfaces: [highA, highB], requiredHeadroom: 1.8 }).map(
+      (hit) => hit.floorY,
+    ),
+    [0, 2.5],
+  );
+});
+
+check("findGroundLayersAt headroom gate treats a blocker underside as a ceiling", () => {
+  const floor: Aabb3 = { min: [-3, -0.2, -3], max: [3, 0, 3] };
+  const lowSlab: Aabb3 = { min: [-3, 1, -3], max: [3, 1.2, 3] }; // solid slab 1 m up
+  const options = {
+    footprintHalf: [0.35, 0.35] as [number, number],
+    maxStepUp: 0,
+    maxStepDown: 5,
+    requiredHeadroom: 1.8,
+  };
+  // Floor(0) has the slab underside (1 m) overhead -> dropped; the slab top (1.2)
+  // has clear sky -> kept.
+  assert.deepEqual(
+    findGroundLayersAt([0, 3, 0], [floor, lowSlab], options).map((hit) => hit.floorY),
+    [1.2],
+  );
+});
+
 check("ground probe finds walkable tops, landing crossings, and filters step-height blockers", () => {
   const floor: Aabb3 = { min: [-5, -0.2, -5], max: [5, 0, 5] };
   const lowPlatform: Aabb3 = { min: [-0.5, 0, -0.5], max: [0.5, 0.3, 0.5] };
@@ -7592,12 +7647,11 @@ check("physics navigation queries honor collider navigation roles without changi
   assert.equal(physics.staticNavigationSurfaceTriangles().length, 1);
 });
 
-// A `walkable` staircase (trimesh with vertical riser triangles) must contribute
-// ZERO nav blockers: the risers would otherwise become wall blockers whose
-// clearance erosion wipes out the narrow tread strip, making the stair
-// unnavigable (a ramp has no risers, so it always worked). Role is authoritative
-// for nav; physics collision is unaffected so the pawn still climbs the steps.
-check("walkable collider produces no nav blockers from riser triangles, but auto still walls them", () => {
+// A `walkable` staircase's vertical riser triangles are still EMITTED as nav
+// blockers (a solid walkable top can only seed ground via a blocker top, so the
+// list must stay complete for ground probing) but each carries `navigationRole:
+// "walkable"` so grid erosion can exclude them. Physics collision is unaffected.
+check("walkable stair emits riser nav blockers tagged with their role; auto does not", () => {
   // One flat tread (y=0.2) + one vertical riser wall triangle (in the z=0 plane).
   const stairMesh = {
     shape: "trimesh" as const,
@@ -7633,10 +7687,14 @@ check("walkable collider produces no nav blockers from riser triangles, but auto
 
   const walkable = new PhysicsSubsystem();
   walkable.setEntities([makeStair("walkable")]);
-  assert.equal(
-    walkable.staticNavigationBlockerAabbs().length,
-    0,
-    "walkable stair seeds no nav blockers (risers do not erode the tread strip)",
+  const navBlockers = walkable.staticNavigationBlockerAabbs();
+  assert.ok(
+    navBlockers.length >= 1,
+    "walkable riser is still emitted, so a solid walkable top can seed ground",
+  );
+  assert.ok(
+    navBlockers.every((b) => b.navigationRole === "walkable"),
+    "each walkable nav blocker carries its role so grid erosion can exclude it",
   );
   assert.ok(
     walkable.staticNavigationSurfaceTriangles().length >= 1,
@@ -7649,18 +7707,20 @@ check("walkable collider produces no nav blockers from riser triangles, but auto
 
   const auto = new PhysicsSubsystem();
   auto.setEntities([makeStair("auto")]);
+  const autoBlockers = auto.staticNavigationBlockerAabbs();
+  assert.ok(autoBlockers.length >= 1, "auto stair still walls the riser (geometry-derived)");
   assert.ok(
-    auto.staticNavigationBlockerAabbs().length >= 1,
-    "auto stair still walls the riser (geometry-derived, backward compatible)",
+    autoBlockers.every((b) => b.navigationRole !== "walkable"),
+    "auto blockers are not tagged walkable, so erosion keeps walling them",
   );
 });
 
-// End-to-end demonstration of *why* the role fix matters: with the risers present
-// as blockers (the old behavior for an untagged/auto stair) the tread strip is
-// eroded and the staircase is unreachable; dropping them (what `walkable` now
-// does) makes the identical heightfield navigable. Uses the real asset geometry:
-// 0.2 m rise, 0.24 m tread, agent radius 0.35 + clearance 0.1 + safety 0.25 = 0.70 m.
-check("nav grid: riser blockers erode a stair strip; removing them makes it climbable", () => {
+// End-to-end demonstration of the role fix: identical riser blockers erode the
+// tread strip (untagged -> the bug) but are excluded from erosion when tagged
+// `walkable` (the fix), while ground seeding via `sampleFloorY` is untouched.
+// Real asset geometry: 0.2 m rise, 0.24 m tread, agent radius 0.35 + clearance
+// 0.1 + safety 0.25 = 0.70 m.
+check("nav grid erosion excludes walkable blockers so a walkable staircase is climbable", () => {
   const rise = 0.2;
   const tread = 0.24;
   const nSteps = 8;
@@ -7694,15 +7754,16 @@ check("nav grid: riser blockers erode a stair strip; removing them makes it clim
   assert.equal(
     searchNavGrid(walled!, start, goal).status,
     "failure",
-    "risers-as-blockers erode the tread strip -> staircase unreachable (the bug)",
+    "untagged risers erode the tread strip -> staircase unreachable (the bug)",
   );
 
-  const clear = buildNavGrid({ agent, blockers: [], bounds, footY: 0, cellSize: tread, safetyMargin: 0.25, sampleFloorY });
-  assert.ok(clear, "clear grid builds");
+  const walkableRisers: NavBlocker[] = risers.map((r) => ({ ...r, navigationRole: "walkable" as const }));
+  const climbable = buildNavGrid({ agent, blockers: walkableRisers, bounds, footY: 0, cellSize: tread, safetyMargin: 0.25, sampleFloorY });
+  assert.ok(climbable, "walkable grid builds");
   assert.equal(
-    searchNavGrid(clear!, start, goal).status,
+    searchNavGrid(climbable!, start, goal).status,
     "success",
-    "dropping the risers (walkable role) -> identical heightfield is navigable",
+    "walkable-tagged risers are excluded from erosion -> identical heightfield is navigable",
   );
 });
 

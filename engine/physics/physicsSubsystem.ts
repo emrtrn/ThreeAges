@@ -319,28 +319,23 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   /**
-   * AI-navigation blockers. `navigationRole` is authoritative here — the physics
-   * collision (`staticBlockerAabbs`) is unaffected, so the pawn still physically
-   * collides with and steps up every one of these bodies:
-   * - `ignored` / `walkable`: contribute no nav blockers. A `walkable` body is
-   *   declared navigable ground, so its geometry seeds floor samples
-   *   (`staticNavigationSurfaceTriangles`) and must never also erode the grid.
-   *   This is what lets a `walkable` staircase be climbed: its vertical riser
-   *   triangles would otherwise become wall blockers whose clearance erosion wipes
-   *   out the narrow tread strip between steps (a ramp has no risers, so it always
-   *   worked). Role replaces the old geometric wall-top heuristics.
-   * - `obstacleOnly` / `auto` / unset: contribute blockers as before (`auto`
-   *   derives walls vs. walkable surfaces from triangle slope).
+   * AI-navigation blockers: `ignored` bodies are omitted, but still collide in
+   * physics. Every other body is emitted with its `navigationRole` carried on each
+   * AABB, because this list feeds two consumers with opposite needs:
+   * - Ground seeding (`findGroundLayersAt` via the host floor sampler) needs
+   *   `walkable` bodies IN the list — a solid floor/platform box has no trimesh
+   *   surface triangles, so its walkable top is only discoverable as a blocker top.
+   * - Grid erosion (`buildNavGrid`) must NOT erode around `walkable` bodies, or a
+   *   `walkable` staircase's vertical riser AABBs wipe out the tread strip between
+   *   steps. That exclusion lives in `buildNavGrid` (role-aware), keyed off the
+   *   `navigationRole` carried here — not by dropping the body from this list.
    */
   staticNavigationBlockerAabbs(): readonly PhysicsAabb[] {
     if (this.staticNavigationBlockerCache) return this.staticNavigationBlockerCache;
     const blockers: Aabb[] = [];
     for (const body of this.bodies) {
       if (!body.collider.isStatic || body.collider.isSensor) continue;
-      if (
-        body.collider.navigationRole === "ignored" ||
-        body.collider.navigationRole === "walkable"
-      ) continue;
+      if (body.collider.navigationRole === "ignored") continue;
       if (this.collisionDisabled.has(body.id)) continue;
       appendBlockerAabbs(blockers, body);
     }
