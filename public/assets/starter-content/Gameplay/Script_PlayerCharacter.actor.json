@@ -58,7 +58,8 @@
         "isSensor": false,
         "capsuleRadius": 0.3,
         "capsuleHalfHeight": 0.9,
-        "simulatePhysics": false
+        "simulatePhysics": false,
+        "hideInGame": true
       },
       "parent": "root"
     },
