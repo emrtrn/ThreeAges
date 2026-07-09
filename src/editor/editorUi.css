@@ -29,7 +29,10 @@ body.editor-mode #debug-stats {
   inset: 0 0 auto 0;
   height: 44px;
   display: grid;
-  grid-template-columns: 284px minmax(0, 1fr);
+  /* Left column matches the Scene Outliner width (see .editor-outliner) so the
+     brand + Save/Undo/Redo/Delete cluster sits above the outliner and the
+     Add Actor row starts exactly at the outliner's right edge. */
+  grid-template-columns: 260px minmax(0, 1fr);
   align-items: center;
   gap: 0;
   padding: 0;
@@ -38,16 +41,41 @@ body.editor-mode #debug-stats {
   pointer-events: auto;
 }
 
-/* UE5-style left cluster: brand · Add Actor · transform tools. */
+/* Left cluster over the outliner: brand (level name) + history icon buttons. */
+.editor-lead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  min-width: 0;
+  padding: 0 8px;
+  overflow: hidden;
+}
+
+.editor-lead .editor-brand {
+  min-width: 0;
+  max-width: none;
+  padding-left: 0;
+}
+
+/* Workbar groups (Add Actor · transform tools · snaps · view controls) laid out
+   left-to-right with a clear gap between groups; view controls anchor right. */
 .editor-workbar {
   position: relative;
   height: 36px;
-  display: grid;
-  grid-template-columns: auto auto auto auto auto minmax(180px, 1fr) auto;
+  display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 18px;
   min-width: 0;
   padding: 0 12px;
+}
+
+.editor-workbar > .editor-view-controls {
+  margin-left: auto;
+  /* Pull the Camera/View/Show/Play cluster left by the Details panel width
+     (see .editor-details) so it sits above the viewport, ending at the Details
+     panel's left edge instead of on top of the panel. */
+  margin-right: 360px;
 }
 
 /* Thin vertical rule separating toolbar clusters. */
@@ -122,12 +150,13 @@ body.editor-mode #debug-stats {
   padding-right: 12px;
 }
 
-/* Inline Save / Undo / Redo / Delete icon cluster, sat between the level name
-   and Add Actor at the start of the workbar (no trailing pad, tight spacing). */
+/* Save / Undo / Redo / Delete icon cluster, sat next to the level name in the
+   left lead cluster (above the outliner), tight spacing. */
 .editor-history-actions {
-  justify-content: flex-start;
-  padding-right: 0;
+  display: flex;
+  align-items: center;
   gap: 4px;
+  flex: 0 0 auto;
 }
 
 /* Play sits directly to the right of the Show menu, so give it a hair of gap. */
@@ -1422,11 +1451,14 @@ body.editor-mode #debug-stats {
   }
 
   .editor-topbar {
+    /* Full-width stacked bar on narrow screens (Details panel drops below). */
+    inset: 0 0 auto 0;
     grid-template-columns: 1fr;
     height: 158px;
     align-content: center;
   }
 
+  .editor-lead,
   .editor-brand,
   .editor-tools,
   .editor-snaps,
@@ -1436,13 +1468,22 @@ body.editor-mode #debug-stats {
     flex-wrap: wrap;
   }
 
+  .editor-lead {
+    overflow: visible;
+  }
+
   .editor-workbar {
     width: 100%;
     height: auto;
     min-height: 70px;
-    grid-template-columns: 1fr;
-    justify-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
     padding: 6px 10px;
+  }
+
+  .editor-workbar > .editor-view-controls {
+    margin-left: 0;
   }
 
   .editor-panel {

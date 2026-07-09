@@ -324,18 +324,19 @@ export class EditorUi {
     this.root.addEventListener("contextmenu", (event) => event.preventDefault());
     this.root.innerHTML = `
       <header class="editor-topbar">
-        <div class="editor-brand">
-          <span class="editor-logo" aria-hidden="true">F</span>
-          <strong data-project-name>loading level</strong>
-        </div>
-        <div class="editor-workbar">
-          <div class="editor-actions editor-history-actions">
+        <div class="editor-lead">
+          <div class="editor-brand">
+            <span class="editor-logo" aria-hidden="true">F</span>
+            <strong data-project-name>loading level</strong>
+          </div>
+          <div class="editor-history-actions">
             <button type="button" class="tool-button" data-action="save" data-testid="editor-save" data-tip="Save Layout" aria-label="Save Layout">${TOOLBAR_ICONS.save}</button>
             <button type="button" class="tool-button" data-action="undo" data-testid="editor-undo" data-tip="Undo" aria-label="Undo">${TOOLBAR_ICONS.undo}</button>
             <button type="button" class="tool-button" data-action="redo" data-testid="editor-redo" data-tip="Redo" aria-label="Redo">${TOOLBAR_ICONS.redo}</button>
             <button type="button" class="tool-button" data-action="delete" data-tip="Delete" aria-label="Delete">${TOOLBAR_ICONS.trash}</button>
           </div>
-          <span class="topbar-divider"></span>
+        </div>
+        <div class="editor-workbar">
           <div class="add-actor-menu">
             <button type="button" class="topbar-menu-button" data-add-actor-button data-testid="add-actor-button" title="Add actor">+ Add Actor${MENU_CHEVRON}</button>
             <div class="add-actor-popover" data-add-actor-popover>
@@ -397,7 +398,6 @@ export class EditorUi {
               </div>
             </div>
           </div>
-          <span class="topbar-divider"></span>
           <div class="editor-tools" data-tools></div>
           <div class="editor-snaps">
           <label class="snap-widget" data-tip="Surface snapping — move grid" title="Move snap">
