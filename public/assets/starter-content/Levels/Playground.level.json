@@ -458,9 +458,9 @@
     {
       "id": "target-point-1",
       "position": [
-        -14.68,
+        -12.28,
         0,
-        -1.74
+        -2.11
       ],
       "name": "TP_1",
       "scale": 1,
@@ -492,27 +492,37 @@
       ],
       "name": "TP_3",
       "scale": 1,
-      "nextTargetPoint": "target-point-3"
+      "nextTargetPoint": "target-point-5"
     },
     {
       "id": "target-point-3",
       "position": [
-        -9.36,
-        1.73,
-        -8.73
+        -16.5,
+        3.14,
+        -8.77
       ],
-      "name": "TP_4",
+      "name": "TP_5",
       "scale": 1,
       "nextTargetPoint": "target-point-1"
+    },
+    {
+      "id": "target-point-5",
+      "position": [
+        -5.11,
+        0,
+        -8.88
+      ],
+      "name": "TP_4",
+      "nextTargetPoint": "target-point-3"
     }
   ],
   "actors": [
     {
       "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        -11.09,
+        -14.68,
         0,
-        -2.34
+        0.83
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,

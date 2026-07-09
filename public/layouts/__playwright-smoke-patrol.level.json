@@ -16,9 +16,9 @@
       "placements": [
         {
           "position": [
-            -16.33,
+            -21.13,
             0,
-            -5.39
+            -9.43
           ],
           "name": "Player Start",
           "collision": false,
@@ -128,36 +128,22 @@
       "placements": [
         {
           "position": [
-            -17.57,
+            -22.5,
             0,
-            -12.01
+            -13.25
           ],
           "materialSlot": "white-material",
           "rotationYDeg": 0,
           "scale": [
-            3.4,
+            4.9,
             1,
-            2
+            7.2
           ]
         },
         {
           "position": [
-            -20,
-            0,
-            -4
-          ],
-          "materialSlot": "white-material",
-          "rotationYDeg": 0,
-          "scale": [
-            4,
-            1,
-            5
-          ]
-        },
-        {
-          "position": [
-            -15.62,
-            3.2,
+            -18.68,
+            3.18,
             -10.66
           ],
           "materialSlot": "white-material",
@@ -179,7 +165,7 @@
       "placements": [
         {
           "position": [
-            -15.42,
+            -18.48,
             0,
             -10.56
           ],
@@ -189,7 +175,7 @@
         },
         {
           "position": [
-            -11.32,
+            -14.38,
             0,
             -10.66
           ],
@@ -209,7 +195,7 @@
       "placements": [
         {
           "position": [
-            -15.52,
+            -18.58,
             0,
             -10.66
           ],
@@ -282,11 +268,67 @@
     },
     {
       "assetId": "sm-linearstair",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -7.15,
+            0,
+            -6.86
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            180,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1.9
+          ]
+        }
+      ]
     },
     {
       "assetId": "sm-ramp",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -10.1,
+            -0.02,
+            -6.89
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -17.74,
+            -2.16,
+            -0.63
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        }
+      ]
     },
     {
       "assetId": "sm-rightarm",
@@ -302,90 +344,11 @@
     },
     {
       "assetId": "wall-400x400",
-      "placements": [
-        {
-          "position": [
-            -34,
-            0,
-            6
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -30,
-            0,
-            6
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -34,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -34,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -30,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -10,
-            0,
-            -2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -14,
-            0,
-            -2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -18,
-            0,
-            -2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
+    },
+    {
+      "assetId": "wall-500x500",
+      "placements": []
     }
   ],
   "characters": [],
@@ -393,7 +356,6 @@
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
     "killZ": -10,
-    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"
@@ -456,8 +418,8 @@
       "type": "directional",
       "position": [
         -12,
-        6.14,
-        7
+        4,
+        -3.35
       ],
       "name": "Sun",
       "rotation": [
@@ -471,33 +433,7 @@
     }
   ],
   "reflectionPlanes": [],
-  "reflectiveSurfaces": [
-    {
-      "id": "reflective-surface-1",
-      "position": [
-        -13.57,
-        0.01,
-        -8.01
-      ],
-      "name": "Reflective Surface",
-      "rotation": [
-        -90,
-        0,
-        0
-      ],
-      "scale": [
-        8,
-        8,
-        1.5
-      ],
-      "material": "m-wood-floor-material",
-      "reflectionStrength": 0.2,
-      "fresnelPower": 1,
-      "fresnelBias": 0.1,
-      "distortion": 0.2,
-      "resolution": 512
-    }
-  ],
+  "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
   "aiNavigationVolumes": [
@@ -505,77 +441,94 @@
       "id": "ai-navigation-volume-1",
       "position": [
         -12.61,
-        1.81,
-        1
+        2,
+        1.09
       ],
       "name": "AI Navigation Volume",
-      "scale": [
-        1.8,
-        1,
-        3
-      ],
+      "scale": 1,
       "size": [
-        10,
-        4,
-        10
-      ]
+        20,
+        6,
+        30
+      ],
+      "agentRadius": 0.1
     }
   ],
   "targetPoints": [
     {
       "id": "target-point-1",
       "position": [
-        -6,
+        -12.28,
         0,
-        14
+        -2.11
       ],
-      "name": "Target Point",
+      "name": "TP_1",
       "scale": 1,
-      "nextTargetPoint": "target-point-2",
+      "nextTargetPoint": "target-point-4",
       "startPoint": true,
       "waitTime": 0.5,
-      "acceptanceRadius": 1
+      "acceptanceRadius": 1,
+      "color": "#ff0000"
+    },
+    {
+      "id": "target-point-4",
+      "position": [
+        -17.11,
+        0,
+        -9.23
+      ],
+      "name": "TP_2",
+      "scale": 1,
+      "nextTargetPoint": "target-point-2",
+      "waitTime": 0,
+      "color": "#ff0000"
     },
     {
       "id": "target-point-2",
       "position": [
-        -6,
-        0,
-        5
+        -20.62,
+        0.89,
+        -2.51
       ],
-      "name": "Target Point 2",
+      "name": "TP_3",
       "scale": 1,
-      "nextTargetPoint": "target-point-3",
-      "waitTime": 0.5,
-      "acceptanceRadius": 1
+      "nextTargetPoint": "target-point-5"
     },
     {
       "id": "target-point-3",
       "position": [
-        -9,
-        0,
-        10
+        -16.5,
+        3.14,
+        -8.77
       ],
-      "name": "Target Point 3",
+      "name": "TP_5",
       "scale": 1,
-      "nextTargetPoint": "target-point-1",
-      "waitTime": 0.5,
-      "acceptanceRadius": 1
+      "nextTargetPoint": "target-point-1"
+    },
+    {
+      "id": "target-point-5",
+      "position": [
+        -5.11,
+        0,
+        -8.88
+      ],
+      "name": "TP_4",
+      "nextTargetPoint": "target-point-3"
     }
   ],
   "actors": [
     {
-      "classRef": "assets/starter-content/Script/AI_Test.actor.json",
+      "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        -13.07,
+        -14.68,
         0,
-        13.59
+        0.83
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,
       "rotation": [
         0,
-        75,
+        180,
         0
       ],
       "scale": 0.3

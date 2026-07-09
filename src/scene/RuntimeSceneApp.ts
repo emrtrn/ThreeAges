@@ -78,7 +78,7 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { isAudioBusId, type AudioBusId } from "@engine/audio/audioBus";
 import { evaluateSoundCue } from "@engine/audio/soundCueEvaluator";
 import type { SoundCueAsset } from "@engine/audio/soundCueTypes";
-import { findGroundAt } from "@/game/collision";
+import { findGroundLayersAt } from "@/game/collision";
 import { slopeCosFromDegrees } from "@/game/slopeSurface";
 import {
   DialogueSubsystem,
@@ -474,6 +474,27 @@ const AI_NAV_FOOT_Y_BUCKET = AI_NAV_CELL_SIZE;
 function bucketNavFootY(footY: number): number {
   if (!Number.isFinite(footY)) return 0;
   return Math.round(footY / AI_NAV_FOOT_Y_BUCKET) * AI_NAV_FOOT_Y_BUCKET;
+}
+
+/**
+ * Merges walkable floor samples that sit within `minSeparation` of each other into
+ * one layer, keeping the highest of each cluster (the surface the pawn actually
+ * stands on). Input need not be sorted. Distinct floors farther apart than the
+ * agent's step height survive as separate layers, so stacked platforms/stairs
+ * still bake as multiple navigable levels.
+ */
+function collapseCoincidentFloors(floors: readonly number[], minSeparation: number): number[] {
+  const sorted = [...floors].sort((a, b) => a - b);
+  const out: number[] = [];
+  for (const y of sorted) {
+    const prev = out[out.length - 1];
+    if (prev !== undefined && y - prev <= minSeparation + 1e-6) {
+      out[out.length - 1] = y; // same floor cluster → keep the higher surface
+    } else {
+      out.push(y);
+    }
+  }
+  return out;
 }
 
 /** Cheap order-sensitive signature of authored nav bounds for cache invalidation. */
@@ -1392,7 +1413,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       bounds,
       footY: navFootY,
       cellSize: AI_NAV_CELL_SIZE,
-      sampleFloorY: this.aiNavFloorSampler(blockers, surfaces, bounds, agent, navFootY),
+      sampleFloorYs: this.aiNavFloorSampler(blockers, surfaces, bounds, agent, navFootY),
     });
     if (!grid) return { status: "failure" as const, points: [], visited: 0 };
     return searchNavGrid(grid, start, goal);
@@ -1461,7 +1482,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     bounds: readonly NavAabb[],
     agent: NavAgent,
     preferredFloorY: number,
-  ): (x: number, z: number) => number | null {
+  ): (x: number, z: number) => readonly number[] | null {
     const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
     const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? 50);
     return (x, z) => {
@@ -1473,7 +1494,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         maxY = Math.max(maxY, bound.max[1]);
       }
       if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY < minY) return null;
-      const hit = findGroundAt([x, maxY, z], blockers, {
+      const hits = findGroundLayersAt([x, maxY, z], blockers, {
         footprintHalf,
         maxStepUp: 0,
         maxStepDown: maxY - minY,
@@ -1481,7 +1502,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         maxSlopeCos,
         preferredFloorY,
       });
-      return hit ? hit.floorY : null;
+      // Collapse near-coincident walkable surfaces into a single navigable floor,
+      // keeping the highest of each cluster. A solid floor mesh (`complexAsSimple`)
+      // reports both its top face and its slab underside/thickness as walkable
+      // layers a few centimetres apart; CharacterMovement grounds the pawn on the
+      // highest one, but the multi-layer nav grid would otherwise keep the lower
+      // phantom layer and route the path through it — leaving interior waypoints
+      // below the walking pawn. The follower's tight vertical acceptance can't
+      // clear that gap, so the agent stalls a few steps in. Surfaces within the
+      // agent's step height are one floor it can freely traverse, so this matches
+      // movement while leaving genuinely distinct floors (upper platforms) intact.
+      const layers = collapseCoincidentFloors(
+        hits.map((hit) => hit.floorY),
+        Math.max(agent.stepHeight ?? 0, 1e-3),
+      );
+      return layers.length > 0 ? layers : null;
     };
   }
 

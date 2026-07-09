@@ -60,7 +60,7 @@ import { AudioSubsystem } from "@engine/audio/audioSubsystem";
 import { KeyboardInputSource } from "@/input/keyboardInputSource";
 import { createBehaviorRegistry } from "@/game/behaviors";
 import { createGameAiTaskRegistry } from "@/game/ai/tasks";
-import { findGroundAt } from "@/game/collision";
+import { findGroundLayersAt } from "@/game/collision";
 import { DEFAULT_GAME_MODE_ID, normalizeGameModeId } from "@/game/gameModes/catalog";
 import { slopeCosFromDegrees } from "@/game/slopeSurface";
 import type { PlayCameraPose } from "@/play/cameraHandoff";
@@ -6776,12 +6776,21 @@ export class SceneApp {
       blockers,
       bounds,
       footY: floorY,
-      sampleFloorY: this.aiNavDebugFloorSampler(blockers, bounds, agent, floorY),
+      sampleFloorYs: this.aiNavDebugFloorSampler(blockers, bounds, agent, floorY),
       cellSize: AI_NAV_DEBUG_CELL_SIZE,
       safetyMargin: AI_NAV_DEBUG_GRID_SAFETY_MARGIN,
     });
     if (!grid) return [];
     const cells: Vec3[] = [];
+    if (grid.layerOffsets && grid.layerCell && grid.layerFloorY) {
+      for (let i = 0; i < grid.layerFloorY.length; i += 1) {
+        const cell = grid.layerCell[i] ?? 0;
+        const x = cell % grid.cols;
+        const z = Math.floor(cell / grid.cols);
+        cells.push([grid.originX + x * grid.cellSize, grid.layerFloorY[i] ?? floorY, grid.originZ + z * grid.cellSize]);
+      }
+      return cells;
+    }
     for (let z = 0; z < grid.rows; z += 1) {
       for (let x = 0; x < grid.cols; x += 1) {
         const idx = z * grid.cols + x;
@@ -6797,7 +6806,7 @@ export class SceneApp {
     bounds: readonly NavAabb[],
     agent: NavAgent,
     preferredFloorY: number,
-  ): (x: number, z: number) => number | null {
+  ): (x: number, z: number) => readonly number[] | null {
     const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
     const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG);
     const surfaces = this.physicsSubsystem.staticSurfaceTriangles();
@@ -6810,7 +6819,7 @@ export class SceneApp {
         maxY = Math.max(maxY, bound.max[1]);
       }
       if (!Number.isFinite(minY) || !Number.isFinite(maxY) || maxY < minY) return null;
-      const hit = findGroundAt([x, maxY, z], blockers, {
+      const hits = findGroundLayersAt([x, maxY, z], blockers, {
         footprintHalf,
         maxStepUp: 0,
         maxStepDown: maxY - minY,
@@ -6818,7 +6827,7 @@ export class SceneApp {
         maxSlopeCos,
         preferredFloorY,
       });
-      return hit ? hit.floorY : null;
+      return hits.length > 0 ? hits.map((hit) => hit.floorY) : null;
     };
   }
 

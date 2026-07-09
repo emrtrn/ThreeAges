@@ -270,6 +270,7 @@ import {
 import {
   filterWalkableBlockers,
   findGroundAt,
+  findGroundLayersAt,
   findLandingGround,
   resolvePlanarMovement,
   resolvePlanarMovementSubstepped,
@@ -6810,6 +6811,50 @@ check("nav grid heightfield bakes stacked floors by the requested layer", () => 
   assert.ok(Math.abs(cellFloorAt(upperGrid!, 0, 0) - 2.2) < 1e-6);
 });
 
+check("nav grid multi-layer heightfield keeps upper and lower floors at the same XZ", () => {
+  const grid = buildNavGrid({
+    agent: { radius: 0, height: 1.8, stepHeight: 0.6, maxStepDown: 0.6 },
+    blockers: [],
+    bounds: [{ min: [0, -1, 0], max: [6, 3, 0] }],
+    footY: 2,
+    cellSize: 1,
+    safetyMargin: 0,
+    sampleFloorYs: (x, z) => {
+      if (Math.abs(z) > 1e-6) return null;
+      const floors = [0];
+      if (x <= 2.5) floors.push(2);
+      if (Math.abs(x - 3) < 1e-6) floors.push(1.5);
+      if (Math.abs(x - 4) < 1e-6) floors.push(1);
+      if (Math.abs(x - 5) < 1e-6) floors.push(0.5);
+      return floors;
+    },
+  });
+  assert.ok(grid, "multi-layer grid should build");
+  assert.ok(grid!.layerFloorY && grid!.layerFloorY.length > grid!.passable.length, "stacked layers should be retained");
+
+  const path = searchNavGrid(grid!, [0, 2, 0], [0, 0, 0]);
+  assert.equal(path.status, "success");
+  assert.ok(path.points.some((point) => Math.abs(point[1] - 2) < 1e-6), `path includes upper floor: ${JSON.stringify(path.points)}`);
+  assert.ok(path.points.some((point) => Math.abs(point[1]) < 1e-6), `path reaches lower floor: ${JSON.stringify(path.points)}`);
+});
+
+check("nav grid multi-layer endpoint projection avoids vertical-only first waypoints", () => {
+  const grid = buildNavGrid({
+    agent: { radius: 0, height: 1.8, stepHeight: 0.45, maxStepDown: 0.5 },
+    blockers: [],
+    bounds: [{ min: [0, -1, 0], max: [3, 3, 0] }],
+    footY: 0,
+    cellSize: 1,
+    safetyMargin: 0,
+    sampleFloorYs: (x, z) => (Math.abs(z) < 1e-6 && x >= 0 && x <= 3 ? [0] : null),
+  });
+  assert.ok(grid, "multi-layer grid should build");
+
+  const path = searchNavGrid(grid!, [0, 0.3, 0], [3, 0, 0]);
+  assert.equal(path.status, "success");
+  assert.notDeepEqual(path.points[1], [0, 0, 0], `first movement waypoint must not be vertical-only: ${JSON.stringify(path.points)}`);
+});
+
 check("nav grid heightfield segment shortcut ignores blockers below the segment floor", () => {
   const lowerWall: NavAabb = { min: [1.5, 0, -0.25], max: [2.5, 0.4, 0.25] };
   const grid = buildNavGrid({
@@ -7263,6 +7308,17 @@ check("findGroundAt: preferredFloorY chooses the intended stacked floor", () => 
     findGroundAt([0, 3, 0], [lowerFloor, upperFloor], { ...options, preferredFloorY: 2 })?.floorY,
     2,
   );
+});
+
+check("findGroundLayersAt returns every walkable stacked floor", () => {
+  const lowerFloor: Aabb3 = { min: [-2, -0.2, -2], max: [2, 0, 2] };
+  const upperFloor: Aabb3 = { min: [-2, 1.8, -2], max: [2, 2, 2] };
+  const layers = findGroundLayersAt([0, 3, 0], [lowerFloor, upperFloor], {
+    footprintHalf: [0.25, 0.25],
+    maxStepUp: 0,
+    maxStepDown: 4,
+  });
+  assert.deepEqual(layers.map((hit) => hit.floorY), [0, 2]);
 });
 
 check("ground probe finds walkable tops, landing crossings, and filters step-height blockers", () => {

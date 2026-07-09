@@ -205,6 +205,26 @@ export function findGroundAt(
   );
 }
 
+export function findGroundLayersAt(
+  position: readonly [number, number, number],
+  blockers: readonly Aabb3[],
+  options: GroundProbeOptions,
+): readonly GroundHit[] {
+  const [px, py, pz] = position;
+  const [hx, hz] = options.footprintHalf;
+  const minY = py - Math.max(0, options.maxStepDown);
+  const maxY = py + Math.max(0, options.maxStepUp);
+  return collectWalkableSurfaces(
+    blockers,
+    px,
+    pz,
+    hx,
+    hz,
+    (top) => top >= minY && top <= maxY,
+    options,
+  ).sort((a, b) => a.floorY - b.floorY);
+}
+
 export function findLandingGround(
   previousFootY: number,
   nextFootY: number,
@@ -256,6 +276,47 @@ function highestWalkableSurface(
     }
   }
   return best;
+}
+
+function collectWalkableSurfaces(
+  blockers: readonly Aabb3[],
+  px: number,
+  pz: number,
+  hx: number,
+  hz: number,
+  acceptsTop: (top: number) => boolean,
+  options: GroundProbeOptions,
+): GroundHit[] {
+  const hits: GroundHit[] = [];
+  for (const blocker of blockers) {
+    if (!overlaps(px - hx, px + hx, blocker.min[0], blocker.max[0])) continue;
+    if (!overlaps(pz - hz, pz + hz, blocker.min[2], blocker.max[2])) continue;
+    const top = blocker.max[1];
+    if (!acceptsTop(top)) continue;
+    pushGroundHit(hits, { floorY: top, blocker });
+  }
+  const surfaces = options.surfaces;
+  if (surfaces && surfaces.length > 0) {
+    const minSlopeCos = options.maxSlopeCos ?? 0;
+    for (const surface of surfaces) {
+      if (surface.normalY < minSlopeCos) continue;
+      const top = sampleTriangleHeight(surface, px, pz);
+      if (top === null || !acceptsTop(top)) continue;
+      pushGroundHit(hits, { floorY: top, blocker: null });
+    }
+  }
+  return hits;
+}
+
+function pushGroundHit(hits: GroundHit[], hit: GroundHit): void {
+  const existing = hits.find((candidate) => Math.abs(candidate.floorY - hit.floorY) <= 1e-6);
+  if (!existing) {
+    hits.push(hit);
+    return;
+  }
+  if (existing.blocker && !hit.blocker) {
+    hits[hits.indexOf(existing)] = hit;
+  }
 }
 
 function betterGroundHit(current: GroundHit | null, candidate: GroundHit, options: GroundProbeOptions): GroundHit {

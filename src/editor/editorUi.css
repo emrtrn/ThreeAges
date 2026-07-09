@@ -29,36 +29,42 @@ body.editor-mode #debug-stats {
   inset: 0 0 auto 0;
   height: 44px;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: 284px minmax(0, 1fr);
   align-items: center;
-  gap: 8px;
-  padding: 0 12px;
+  gap: 0;
+  padding: 0;
   background: rgba(22, 25, 28, 0.94);
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   pointer-events: auto;
 }
 
 /* UE5-style left cluster: brand · Add Actor · transform tools. */
-.editor-left {
-  display: flex;
+.editor-workbar {
+  position: relative;
+  height: 36px;
+  display: grid;
+  grid-template-columns: auto auto auto auto auto minmax(180px, 1fr) auto;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
+  padding: 0 12px;
 }
 
 /* Thin vertical rule separating toolbar clusters. */
 .topbar-divider {
   width: 1px;
-  height: 22px;
+  height: 18px;
   background: rgba(255, 255, 255, 0.14);
   flex: 0 0 auto;
 }
 
 .editor-brand {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   min-width: 0;
+  max-width: 220px;
+  padding-left: 8px;
 }
 
 .editor-brand strong,
@@ -68,7 +74,30 @@ body.editor-mode #debug-stats {
   font-weight: 700;
 }
 
-.editor-brand span,
+.editor-brand strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-logo {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: linear-gradient(135deg, #13b98a, #46a2ff);
+  color: #06110e;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.26);
+  flex: 0 0 auto;
+}
+
+.editor-brand span:not(.editor-logo),
 .detail-heading span,
 .empty-details span {
   color: #aeb8bd;
@@ -77,7 +106,8 @@ body.editor-mode #debug-stats {
 
 .editor-tools,
 .editor-actions,
-.editor-snaps {
+.editor-snaps,
+.editor-view-controls {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -89,13 +119,33 @@ body.editor-mode #debug-stats {
 
 .editor-actions {
   justify-content: flex-end;
+  padding-right: 12px;
+}
+
+/* Inline Save / Undo / Redo / Delete icon cluster, sat between the level name
+   and Add Actor at the start of the workbar (no trailing pad, tight spacing). */
+.editor-history-actions {
+  justify-content: flex-start;
+  padding-right: 0;
+  gap: 4px;
+}
+
+/* Play sits directly to the right of the Show menu, so give it a hair of gap. */
+.editor-play-button {
+  margin-left: 4px;
+}
+
+.editor-view-controls {
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 /* Square icon buttons for Select / Move / Rotate / Scale + World/Local. */
 .editor-shell .tool-button {
-  width: 34px;
-  min-width: 34px;
-  height: 30px;
+  width: 28px;
+  min-width: 28px;
+  height: 26px;
+  min-height: 26px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -104,6 +154,8 @@ body.editor-mode #debug-stats {
 }
 
 .editor-shell .tool-button svg {
+  width: 14px;
+  height: 14px;
   display: block;
   pointer-events: none;
 }
@@ -163,6 +215,20 @@ body.editor-mode #debug-stats {
   white-space: nowrap;
 }
 
+.editor-workbar .topbar-menu-button {
+  height: 26px;
+  min-height: 26px;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 12px;
+}
+
+.editor-workbar .topbar-menu-button svg:not(.menu-chevron) {
+  width: 14px;
+  height: 14px;
+}
+
 .menu-chevron {
   color: #9aa4a9;
   flex: 0 0 auto;
@@ -172,7 +238,8 @@ body.editor-mode #debug-stats {
   position: relative;
 }
 
-.editor-actions button {
+.editor-actions button,
+.editor-view-controls button {
   white-space: nowrap;
 }
 
@@ -364,7 +431,7 @@ body.editor-mode #debug-stats {
   justify-content: center;
   min-width: 0;
   overflow: visible;
-  gap: 10px;
+  gap: 8px;
 }
 
 /* UE5-style snap control: a grid-icon toggle joined to a value dropdown. */
@@ -388,16 +455,18 @@ body.editor-mode #debug-stats {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-right: none;
-  border-radius: 6px 0 0 6px;
+  border-radius: 5px 0 0 5px;
   background: #2b3136;
   color: #7c868c;
 }
 
 .editor-snaps .snap-icon svg {
+  width: 14px;
+  height: 14px;
   display: block;
   pointer-events: none;
 }
@@ -412,12 +481,14 @@ body.editor-mode #debug-stats {
 }
 
 .editor-snaps select {
-  height: 30px;
-  min-width: 56px;
+  height: 26px;
+  min-height: 26px;
+  min-width: 52px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 0 6px 6px 0;
-  padding: 0 6px;
+  border-radius: 0 5px 5px 0;
+  padding: 0 5px;
   color: #edf2f4;
+  font-size: 12px;
   background: #2b3136;
 }
 
@@ -1394,13 +1465,22 @@ body.editor-mode #debug-stats {
     align-content: center;
   }
 
-  .editor-left,
   .editor-brand,
   .editor-tools,
   .editor-snaps,
+  .editor-view-controls,
   .editor-actions {
     justify-content: center;
     flex-wrap: wrap;
+  }
+
+  .editor-workbar {
+    width: 100%;
+    height: auto;
+    min-height: 70px;
+    grid-template-columns: 1fr;
+    justify-items: center;
+    padding: 6px 10px;
   }
 
   .editor-panel {

@@ -211,6 +211,14 @@ const TOOLBAR_ICONS = {
     '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5h6.5L10 3.5h3.5v9H2z"/><circle cx="6.5" cy="9" r="2.4"/></svg>',
   viewmode:
     '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 2a6 6 0 0 0 0 12z" fill="currentColor" stroke="none"/></svg>',
+  undo:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4L3 7l3 3"/><path d="M3 7h5.5a3.5 3.5 0 0 1 0 7H7"/></svg>',
+  redo:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 4l3 3-3 3"/><path d="M13 7H7.5a3.5 3.5 0 0 0 0 7H9"/></svg>',
+  trash:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 4.5h9"/><path d="M6 4.5V3h4v1.5"/><path d="M5 4.5l.6 8.5a1 1 0 0 0 1 .9h2.8a1 1 0 0 0 1-.9l.6-8.5"/><path d="M6.7 7v4.2M9.3 7v4.2"/></svg>',
+  save:
+    '<svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5h7.4l1.6 1.6v6.9a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5z"/><path d="M5.5 3.5v3h4v-3"/><rect x="5.5" y="9" width="5" height="3.5"/></svg>',
 } as const;
 
 /** Menu-button labels for each Camera view preset. */
@@ -230,6 +238,15 @@ const VIEW_MODE_LABELS: Record<ViewMode, string> = {
 /** Chevron appended to menu buttons that open a hover popover. */
 const MENU_CHEVRON =
   '<svg class="menu-chevron" viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5L6 7.5 9 4.5"/></svg>';
+
+function formatActiveLevelName(path: string | undefined): string {
+  const fileName = normalizeProjectPath(path ?? "").split("/").filter(Boolean).at(-1) ?? "";
+  const levelName = fileName
+    .replace(/\.level\.json$/i, "")
+    .replace(/\.layout\.json$/i, "")
+    .replace(/\.json$/i, "");
+  return levelName || "Untitled Level";
+}
 
 export class EditorUi {
   private root: HTMLDivElement;
@@ -305,10 +322,16 @@ export class EditorUi {
     this.root.addEventListener("contextmenu", (event) => event.preventDefault());
     this.root.innerHTML = `
       <header class="editor-topbar">
-        <div class="editor-left">
-          <div class="editor-brand">
-            <strong>Forge Editor</strong>
-            <span data-project-name>loading project</span>
+        <div class="editor-brand">
+          <span class="editor-logo" aria-hidden="true">F</span>
+          <strong data-project-name>loading level</strong>
+        </div>
+        <div class="editor-workbar">
+          <div class="editor-actions editor-history-actions">
+            <button type="button" class="tool-button" data-action="save" data-testid="editor-save" data-tip="Save Layout" aria-label="Save Layout">${TOOLBAR_ICONS.save}</button>
+            <button type="button" class="tool-button" data-action="undo" data-testid="editor-undo" data-tip="Undo" aria-label="Undo">${TOOLBAR_ICONS.undo}</button>
+            <button type="button" class="tool-button" data-action="redo" data-testid="editor-redo" data-tip="Redo" aria-label="Redo">${TOOLBAR_ICONS.redo}</button>
+            <button type="button" class="tool-button" data-action="delete" data-tip="Delete" aria-label="Delete">${TOOLBAR_ICONS.trash}</button>
           </div>
           <span class="topbar-divider"></span>
           <div class="add-actor-menu">
@@ -374,8 +397,7 @@ export class EditorUi {
           </div>
           <span class="topbar-divider"></span>
           <div class="editor-tools" data-tools></div>
-        </div>
-        <div class="editor-snaps">
+          <div class="editor-snaps">
           <label class="snap-widget" data-tip="Surface snapping — move grid" title="Move snap">
             <input type="checkbox" data-snap-toggle="move" checked />
             <span class="snap-icon">${TOOLBAR_ICONS.snap}</span>
@@ -408,8 +430,8 @@ export class EditorUi {
               <option value="1">1</option>
             </select>
           </label>
-        </div>
-        <div class="editor-actions">
+          </div>
+          <div class="editor-view-controls">
           <div class="camera-menu topbar-menu">
             <button type="button" class="topbar-menu-button" data-camera-button title="Camera view">
               ${TOOLBAR_ICONS.camera}<span data-camera-label>Perspective</span>${MENU_CHEVRON}
@@ -444,11 +466,8 @@ export class EditorUi {
               </label>
             </div>
           </div>
-          <button type="button" data-action="undo" data-testid="editor-undo" title="Undo">Undo</button>
-          <button type="button" data-action="redo" data-testid="editor-redo" title="Redo">Redo</button>
-          <button type="button" data-action="delete">Delete</button>
-          <button type="button" data-action="play" data-testid="editor-play" title="Save & open runtime (P)">Play</button>
-          <button type="button" data-action="save" data-testid="editor-save" class="primary">Save Layout</button>
+          <button type="button" class="editor-play-button" data-action="play" data-testid="editor-play" title="Save & open runtime (P)">Play</button>
+          </div>
         </div>
       </header>
       <aside class="editor-panel editor-outliner">
@@ -1081,7 +1100,8 @@ export class EditorUi {
       this.metadataSchema = this.app.getMetadataSchema();
       this.editableAssets = assets;
       this.selectedFolder = normalizeProjectPath(projectInfo.assetRoot);
-      projectName.textContent = projectInfo.rootName;
+      projectName.textContent = formatActiveLevelName(projectInfo.manifest.editor.defaultScene);
+      projectName.title = `Active level: ${projectInfo.manifest.editor.defaultScene}`;
       this.contentRootLabel.textContent = this.selectedFolder;
       await this.refreshAssetTree({ quiet: true });
     } catch (error) {
@@ -2737,8 +2757,12 @@ export class EditorUi {
   private renderHistory(state: EditorHistoryState): void {
     this.undoButton.disabled = !state.canUndo;
     this.redoButton.disabled = !state.canRedo;
-    this.undoButton.title = state.undoLabel ? `Undo ${state.undoLabel}` : "Undo";
-    this.redoButton.title = state.redoLabel ? `Redo ${state.redoLabel}` : "Redo";
+    const undoTip = state.undoLabel ? `Undo ${state.undoLabel}` : "Undo";
+    const redoTip = state.redoLabel ? `Redo ${state.redoLabel}` : "Redo";
+    this.undoButton.title = undoTip;
+    this.redoButton.title = redoTip;
+    this.undoButton.dataset.tip = undoTip;
+    this.redoButton.dataset.tip = redoTip;
   }
 
   private setInspectorTab(tab: InspectorTab): void {

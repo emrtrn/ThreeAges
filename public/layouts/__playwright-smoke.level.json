@@ -169,7 +169,7 @@
       "placements": [
         {
           "position": [
-            -15.42,
+            -18.48,
             0,
             -10.56
           ],
@@ -179,7 +179,7 @@
         },
         {
           "position": [
-            -11.32,
+            -14.38,
             0,
             -10.66
           ],
@@ -199,7 +199,7 @@
       "placements": [
         {
           "position": [
-            -15.52,
+            -18.58,
             0,
             -10.66
           ],
@@ -272,11 +272,67 @@
     },
     {
       "assetId": "sm-linearstair",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -7.15,
+            0,
+            -6.86
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            180,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1.9
+          ]
+        }
+      ]
     },
     {
       "assetId": "sm-ramp",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -10.1,
+            -0.02,
+            -6.89
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -17.74,
+            -2.16,
+            -0.63
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        }
+      ]
     },
     {
       "assetId": "sm-rightarm",
@@ -292,90 +348,11 @@
     },
     {
       "assetId": "wall-400x400",
-      "placements": [
-        {
-          "position": [
-            -34,
-            0,
-            6
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -30,
-            0,
-            6
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -34,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -34,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -30,
-            0,
-            2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -10,
-            0,
-            -2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -14,
-            0,
-            -2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -18,
-            0,
-            -2
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
+    },
+    {
+      "assetId": "wall-500x500",
+      "placements": []
     }
   ],
   "characters": [],
@@ -446,8 +423,8 @@
       "type": "directional",
       "position": [
         -12,
-        6.14,
-        7
+        4,
+        -3.35
       ],
       "name": "Sun",
       "rotation": [
@@ -477,7 +454,9 @@
         12,
         4,
         10
-      ]
+      ],
+      "agentRadius": 0.6,
+      "clearancePadding": 0.25
     }
   ],
   "targetPoints": [],

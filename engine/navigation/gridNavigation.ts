@@ -146,6 +146,12 @@ interface SearchNode extends GridCoord {
   readonly f: number;
 }
 
+interface LayerSearchNode {
+  readonly id: number;
+  readonly g: number;
+  readonly f: number;
+}
+
 const DEFAULT_CELL_SIZE = 0.5;
 const DEFAULT_BOUNDS_PADDING = 2;
 const MAX_GRID_CELLS = 20000;
@@ -192,10 +198,25 @@ export interface NavGrid {
   readonly floorY: Float32Array;
   /** `cols*rows` row-major soft clearance cost added when stepping onto a cell. */
   readonly penalty: Float32Array;
+  /** Optional multi-layer heightfield offsets into `layer*` arrays, length `cols*rows + 1`. */
+  readonly layerOffsets?: Uint32Array;
+  /** Optional multi-layer cell index per layer entry. */
+  readonly layerCell?: Uint32Array;
+  /** Optional multi-layer floor heights. */
+  readonly layerFloorY?: Float32Array;
+  /** Optional multi-layer soft clearance costs. */
+  readonly layerPenalty?: Float32Array;
   /** Vertically-filtered blockers, retained for final-path segment shortcutting. */
   readonly blockers: readonly NavBlocker[];
   /** Authored navigation bounds, retained for membership + segment checks. */
   readonly bounds?: readonly NavAabb[];
+}
+
+interface LayeredNavGrid extends NavGrid {
+  readonly layerOffsets: Uint32Array;
+  readonly layerCell: Uint32Array;
+  readonly layerFloorY: Float32Array;
+  readonly layerPenalty: Float32Array;
 }
 
 export interface NavGridBuildRequest {
@@ -211,6 +232,11 @@ export interface NavGridBuildRequest {
    * grid remains a flat `footY` plane for backwards compatibility.
    */
   readonly sampleFloorY?: (x: number, z: number) => number | null;
+  /**
+   * Optional multi-layer heightfield hook. Use when stacked walkable surfaces
+   * overlap the same X/Z cell (e.g. a lower floor under an upper platform).
+   */
+  readonly sampleFloorYs?: (x: number, z: number) => readonly number[] | null;
   readonly cellSize?: number;
   readonly safetyMargin?: number;
   readonly boundsPadding?: number;
@@ -244,7 +270,8 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
   const flatBlockers = request.blockers.filter((blocker) =>
     blocksAgentVertically(blocker, footY, height, stepHeight),
   );
-  const blockers = request.sampleFloorY ? request.blockers : flatBlockers;
+  const heightfield = Boolean(request.sampleFloorY || request.sampleFloorYs);
+  const blockers = heightfield ? request.blockers : flatBlockers;
   const authoredBounds = request.bounds && request.bounds.length > 0 ? request.bounds : undefined;
   const extent = authoredBounds
     ? navBoundsFromAuthored(authoredBounds, clearanceRadius)
@@ -262,15 +289,52 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
   const floorY = new Float32Array(cols * rows);
   const penalty = new Float32Array(cols * rows);
   const clearanceCostRadius = cellSize * CLEARANCE_COST_CELL_RADIUS;
+  const layerOffsets = request.sampleFloorYs ? new Uint32Array(cols * rows + 1) : undefined;
+  const layerCells: number[] = [];
+  const layerFloors: number[] = [];
+  const layerPenalties: number[] = [];
   for (let z = 0; z < rows; z += 1) {
     for (let x = 0; x < cols; x += 1) {
       const point: Vec3 = [originX + x * cellSize, footY, originZ + z * cellSize];
       const idx = z * cols + x;
+      if (request.sampleFloorYs && layerOffsets) {
+        layerOffsets[idx] = layerFloors.length;
+        const sampledFloors = uniqueSortedFloors(request.sampleFloorYs(point[0], point[2]) ?? []);
+        const firstLayer = layerFloors.length;
+        for (const sampledFloorY of sampledFloors) {
+          point[1] = sampledFloorY;
+          const cellBlockers = blockers.filter((blocker) =>
+            blocksAgentVertically(blocker, sampledFloorY, height, stepHeight),
+          );
+          const walkable =
+            !pointBlocked(point, cellBlockers, clearanceRadius) &&
+            (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
+          if (!walkable) continue;
+          let layerPenalty = 0;
+          if (cellBlockers.length > 0) {
+            const distance = nearestInflatedBlockerDistance(point, cellBlockers, clearanceRadius);
+            const pressure = distance >= clearanceCostRadius ? 0 : 1 - distance / clearanceCostRadius;
+            layerPenalty = pressure * pressure * CLEARANCE_COST_WEIGHT;
+          }
+          layerCells.push(idx);
+          layerFloors.push(sampledFloorY);
+          layerPenalties.push(layerPenalty);
+        }
+        if (layerFloors.length <= firstLayer) {
+          floorY[idx] = footY;
+          continue;
+        }
+        const representative = nearestLayerIndex(layerFloors, firstLayer, layerFloors.length, footY);
+        passable[idx] = 1;
+        floorY[idx] = layerFloors[representative] ?? footY;
+        penalty[idx] = layerPenalties[representative] ?? 0;
+        continue;
+      }
       const sampledFloorY = request.sampleFloorY ? request.sampleFloorY(point[0], point[2]) : footY;
       floorY[idx] = sampledFloorY ?? footY;
       if (sampledFloorY === null || !Number.isFinite(sampledFloorY)) continue;
       point[1] = sampledFloorY;
-      const cellBlockers = request.sampleFloorY
+      const cellBlockers = heightfield
         ? blockers.filter((blocker) => blocksAgentVertically(blocker, sampledFloorY, height, stepHeight))
         : flatBlockers;
       const walkable =
@@ -285,6 +349,7 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
       }
     }
   }
+  if (layerOffsets) layerOffsets[cols * rows] = layerFloors.length;
   return {
     cellSize,
     cols,
@@ -299,6 +364,14 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
     passable,
     floorY,
     penalty,
+    ...(layerOffsets
+      ? {
+          layerOffsets,
+          layerCell: Uint32Array.from(layerCells),
+          layerFloorY: Float32Array.from(layerFloors),
+          layerPenalty: Float32Array.from(layerPenalties),
+        }
+      : {}),
     blockers,
     ...(authoredBounds ? { bounds: authoredBounds } : {}),
   };
@@ -317,6 +390,9 @@ export function searchNavGrid(grid: NavGrid, start: Vec3, goal: Vec3): PathResul
   }
   if (authoredBounds && !pointInsideAnyAabb2d(goal, authoredBounds)) {
     return { status: "failure", points: [], visited: 0 };
+  }
+  if (hasLayerData(grid)) {
+    return searchLayeredNavGrid(grid, start, goal, authoredBounds);
   }
   const { cols, rows, cellSize, originX, originZ } = grid;
   const toCoord = (point: Vec3): GridCoord => ({
@@ -386,6 +462,59 @@ export function searchNavGrid(grid: NavGrid, start: Vec3, goal: Vec3): PathResul
   return { status: "failure", points: [], visited };
 }
 
+function searchLayeredNavGrid(
+  grid: LayeredNavGrid,
+  start: Vec3,
+  goal: Vec3,
+  authoredBounds: readonly NavAabb[] | undefined,
+): PathResult {
+  const startFix = projectLayeredEndpoint(grid, start);
+  const goalFix = projectLayeredEndpoint(grid, goal);
+  if (!startFix || !goalFix) return { status: "failure", points: [], visited: 0 };
+  if (startFix.id === goalFix.id) {
+    return { status: "success", points: [cloneVec3(startFix.point), cloneVec3(goalFix.point)], visited: 1 };
+  }
+
+  const open: LayerSearchNode[] = [{ id: startFix.id, g: 0, f: layeredHeuristic(grid, startFix.id, goalFix.id) }];
+  const bestG = new Map<string, number>([[layerKey(startFix.id), 0]]);
+  const cameFrom = new Map<string, string>();
+  let visited = 0;
+
+  while (open.length > 0) {
+    const current = popLowestLayer(open);
+    visited += 1;
+    if (current.id === goalFix.id) {
+      const layers = reconstructLayers(cameFrom, current.id);
+      return {
+        status: "success",
+        points: layerPathPoints(
+          startFix.point,
+          goalFix.point,
+          layers,
+          grid,
+          (a, b) =>
+            segmentSafe(a, b, grid.blockers, grid.clearanceRadius, grid.height, grid.stepHeight, authoredBounds),
+        ),
+        visited,
+      };
+    }
+
+    for (const nextId of layeredNeighbors(grid, current.id)) {
+      const currentCoord = layerCoord(grid, current.id);
+      const nextCoord = layerCoord(grid, nextId);
+      const step = currentCoord.x !== nextCoord.x && currentCoord.z !== nextCoord.z ? Math.SQRT2 : 1;
+      const nextG = current.g + step + (grid.layerPenalty[nextId] ?? 0);
+      const key = layerKey(nextId);
+      if (nextG >= (bestG.get(key) ?? Infinity)) continue;
+      bestG.set(key, nextG);
+      cameFrom.set(key, layerKey(current.id));
+      open.push({ id: nextId, g: nextG, f: nextG + layeredHeuristic(grid, nextId, goalFix.id) });
+    }
+  }
+
+  return { status: "failure", points: [], visited };
+}
+
 export function findGridPath(request: PathRequest): PathResult {
   const cellSize = sanePositive(request.cellSize, DEFAULT_CELL_SIZE);
   const authoredBounds = request.bounds && request.bounds.length > 0 ? request.bounds : undefined;
@@ -445,7 +574,7 @@ function navGridAgentKey(request: NavGridBuildRequest): string {
     finiteOr(agent.maxStepDown, finiteOr(agent.stepHeight, 0)),
     finiteOr(agent.maxSlopeAngleDeg, 0),
     finiteOr(request.footY, 0),
-    request.sampleFloorY ? "heightfield" : "flat",
+    request.sampleFloorYs ? "heightfield-layers" : request.sampleFloorY ? "heightfield" : "flat",
     cellSize,
     safetyMargin,
   ].join(":");
@@ -580,6 +709,163 @@ function neighbors(
     }
   }
   return out;
+}
+
+function hasLayerData(grid: NavGrid): grid is LayeredNavGrid {
+  return Boolean(grid.layerOffsets && grid.layerCell && grid.layerFloorY && grid.layerPenalty);
+}
+
+function uniqueSortedFloors(values: readonly number[]): number[] {
+  const out: number[] = [];
+  for (const value of values) {
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    if (out.some((existing) => Math.abs(existing - value) <= 1e-6)) continue;
+    out.push(value);
+  }
+  return out.sort((a, b) => a - b);
+}
+
+function nearestLayerIndex(values: ArrayLike<number>, start: number, end: number, y: number): number {
+  let best = start;
+  let bestDelta = Infinity;
+  for (let i = start; i < end; i += 1) {
+    const delta = Math.abs((values[i] ?? 0) - y);
+    if (delta < bestDelta) {
+      best = i;
+      bestDelta = delta;
+    }
+  }
+  return best;
+}
+
+function projectLayeredEndpoint(
+  grid: LayeredNavGrid,
+  point: Vec3,
+): { readonly id: number; readonly point: Vec3 } | null {
+  const baseX = clamp(Math.round((point[0] - grid.originX) / grid.cellSize), 0, grid.cols - 1);
+  const baseZ = clamp(Math.round((point[2] - grid.originZ) / grid.cellSize), 0, grid.rows - 1);
+  const base = baseZ * grid.cols + baseX;
+  const baseLayer = nearestLayerInCell(grid, base, point[1]);
+  if (baseLayer !== null && Math.abs((grid.layerFloorY[baseLayer] ?? grid.footY) - point[1]) <= 1e-4) {
+    return { id: baseLayer, point: cloneVec3(point) };
+  }
+
+  let best: { id: number; d2: number } | null = null;
+  for (let dz = -PROJECTION_MAX_CELL_RADIUS; dz <= PROJECTION_MAX_CELL_RADIUS; dz += 1) {
+    for (let dx = -PROJECTION_MAX_CELL_RADIUS; dx <= PROJECTION_MAX_CELL_RADIUS; dx += 1) {
+      const x = baseX + dx;
+      const z = baseZ + dz;
+      if (x < 0 || z < 0 || x >= grid.cols || z >= grid.rows) continue;
+      const cell = z * grid.cols + x;
+      for (let id = grid.layerOffsets[cell] ?? 0; id < (grid.layerOffsets[cell + 1] ?? 0); id += 1) {
+        const candidate = layerPoint(grid, id);
+        const ex = candidate[0] - point[0];
+        const ey = candidate[1] - point[1];
+        const ez = candidate[2] - point[2];
+        const d2 = ex * ex + ey * ey + ez * ez;
+        if (!best || d2 < best.d2) best = { id, d2 };
+      }
+    }
+  }
+  return best ? { id: best.id, point: layerPoint(grid, best.id) } : null;
+}
+
+function nearestLayerInCell(grid: LayeredNavGrid, cell: number, y: number): number | null {
+  const start = grid.layerOffsets[cell] ?? 0;
+  const end = grid.layerOffsets[cell + 1] ?? 0;
+  if (end <= start) return null;
+  return nearestLayerIndex(grid.layerFloorY, start, end, y);
+}
+
+function layeredNeighbors(grid: LayeredNavGrid, id: number): number[] {
+  const coord = layerCoord(grid, id);
+  const out: number[] = [];
+  for (let dz = -1; dz <= 1; dz += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dz === 0) continue;
+      const x = coord.x + dx;
+      const z = coord.z + dz;
+      if (x < 0 || z < 0 || x >= grid.cols || z >= grid.rows) continue;
+      if (dx !== 0 && dz !== 0) {
+        const sideX = coord.z * grid.cols + x;
+        const sideZ = z * grid.cols + coord.x;
+        if (!hasTraversableLayer(grid, id, sideX) || !hasTraversableLayer(grid, id, sideZ)) continue;
+      }
+      const cell = z * grid.cols + x;
+      for (let next = grid.layerOffsets[cell] ?? 0; next < (grid.layerOffsets[cell + 1] ?? 0); next += 1) {
+        if (canTraverseLayer(grid, id, next)) out.push(next);
+      }
+    }
+  }
+  return out;
+}
+
+function hasTraversableLayer(grid: LayeredNavGrid, from: number, cell: number): boolean {
+  for (let id = grid.layerOffsets[cell] ?? 0; id < (grid.layerOffsets[cell + 1] ?? 0); id += 1) {
+    if (canTraverseLayer(grid, from, id)) return true;
+  }
+  return false;
+}
+
+function canTraverseLayer(grid: LayeredNavGrid, from: number, to: number): boolean {
+  const delta = (grid.layerFloorY[to] ?? grid.footY) - (grid.layerFloorY[from] ?? grid.footY);
+  return delta <= grid.stepHeight + 1e-6 && -delta <= grid.maxStepDown + 1e-6;
+}
+
+function layerCoord(grid: LayeredNavGrid, id: number): GridCoord & { readonly id: number } {
+  const cell = grid.layerCell[id] ?? 0;
+  return { id, x: cell % grid.cols, z: Math.floor(cell / grid.cols) };
+}
+
+function layerPoint(grid: LayeredNavGrid, id: number): Vec3 {
+  const coord = layerCoord(grid, id);
+  return [
+    grid.originX + coord.x * grid.cellSize,
+    grid.layerFloorY[id] ?? grid.footY,
+    grid.originZ + coord.z * grid.cellSize,
+  ];
+}
+
+function reconstructLayers(cameFrom: ReadonlyMap<string, string>, current: number): number[] {
+  const layers = [current];
+  let cursor = layerKey(current);
+  while (cameFrom.has(cursor)) {
+    cursor = cameFrom.get(cursor)!;
+    layers.push(Number(cursor));
+  }
+  layers.reverse();
+  return layers;
+}
+
+function layerPathPoints(
+  start: Vec3,
+  goal: Vec3,
+  layers: readonly number[],
+  grid: LayeredNavGrid,
+  segmentSafe: (a: Vec3, b: Vec3) => boolean,
+): Vec3[] {
+  const raw: Vec3[] = [cloneVec3(start)];
+  for (const layer of layers) pushDistinctPoint(raw, layerPoint(grid, layer));
+  pushDistinctPoint(raw, cloneVec3(goal));
+  return compressPathPoints(raw, segmentSafe);
+}
+
+function popLowestLayer(open: LayerSearchNode[]): LayerSearchNode {
+  let bestIndex = 0;
+  for (let i = 1; i < open.length; i += 1) {
+    if (open[i]!.f < open[bestIndex]!.f) bestIndex = i;
+  }
+  return open.splice(bestIndex, 1)[0]!;
+}
+
+function layeredHeuristic(grid: LayeredNavGrid, a: number, b: number): number {
+  const ca = layerCoord(grid, a);
+  const cb = layerCoord(grid, b);
+  return Math.hypot(ca.x - cb.x, ca.z - cb.z);
+}
+
+function layerKey(id: number): string {
+  return String(id);
 }
 
 /**
