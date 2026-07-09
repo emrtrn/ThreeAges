@@ -16,11 +16,32 @@
             0,
             0
           ],
+          "locked": true,
+          "materialSlot": "white-material",
           "rotationYDeg": 0,
           "scale": [
             20,
             2,
             20
+          ]
+        },
+        {
+          "position": [
+            37.94,
+            0.05,
+            44.85
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -135,
+            0
+          ],
+          "scale": [
+            5,
+            1,
+            1
           ]
         }
       ]
@@ -56,10 +77,919 @@
     {
       "assetId": "sm-chair-ktx2",
       "placements": []
+    },
+    {
+      "assetId": "wall-400x300",
+      "placements": [
+        {
+          "position": [
+            45.09,
+            0,
+            41.21
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            41.28,
+            0,
+            34.89
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            34.89,
+            0,
+            38.71
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            180,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            38.71,
+            0,
+            45.08
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            270,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            45.09,
+            0,
+            38.76
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            38.83,
+            0,
+            34.89
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            34.89,
+            0,
+            41.16
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            -180,
+            0,
+            -180
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            41.16,
+            0,
+            45.08
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            53.09,
+            0,
+            41.19
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -60,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            57.07,
+            0,
+            48.16
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -105,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            48.2,
+            0,
+            22.87
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -15,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            23,
+            0,
+            31.85
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            75,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            41.26,
+            0,
+            26.89
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            30,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            26.89,
+            0,
+            38.73
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            -180,
+            60,
+            -180
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            38.73,
+            0,
+            53.08
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            -180,
+            -30,
+            -180
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            53.09,
+            0,
+            38.76
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            60,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            38.83,
+            0,
+            26.89
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            -180,
+            30,
+            -180
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            26.89,
+            0,
+            41.16
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            -180,
+            -60,
+            -180
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            41.16,
+            0,
+            53.08
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -30,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            48.2,
+            0,
+            57.1
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            15,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            57.14,
+            0,
+            31.74
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            105,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            31.87,
+            0,
+            22.91
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            195,
+            0
+          ],
+          "scale": [
+            1.8,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            57.15,
+            0,
+            31.86
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "scale": [
+            3,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            31.93,
+            0,
+            22.83
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            3,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            22.83,
+            0,
+            48.06
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            -180,
+            0,
+            -180
+          ],
+          "scale": [
+            3,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            48.06,
+            0,
+            57.14
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": [
+            3,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            69.03,
+            0,
+            31.96
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": [
+            4,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            32.03,
+            0,
+            10.95
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "scale": [
+            4,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            10.95,
+            0,
+            47.96
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            4,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            47.96,
+            0,
+            69.02
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            -180,
+            0,
+            -180
+          ],
+          "scale": [
+            4,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            57.15,
+            0,
+            48.07
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "scale": [
+            3,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            48.14,
+            0,
+            22.83
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            3,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            22.83,
+            0,
+            31.85
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            -180,
+            0,
+            -180
+          ],
+          "scale": [
+            3,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            31.85,
+            0,
+            57.14
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": [
+            3,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            35.14,
+            0,
+            42.16
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -135,
+            0
+          ],
+          "scale": [
+            5,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            37.86,
+            0,
+            44.88
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -135,
+            0
+          ],
+          "scale": [
+            5,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            20.94,
+            0.02,
+            56.25
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -45,
+            0
+          ],
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "wall-door-400x300",
+      "placements": [
+        {
+          "position": [
+            38,
+            0,
+            35
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            38,
+            0,
+            45
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            35,
+            0,
+            42
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            45,
+            0,
+            42
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            42.07,
+            0,
+            44.95
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            45,
+            0
+          ],
+          "scale": [
+            1.02,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            35.03,
+            0,
+            37.91
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            45,
+            0
+          ],
+          "scale": [
+            1.02,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            44.96,
+            0,
+            37.93
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            135,
+            0
+          ],
+          "scale": [
+            1.02,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            37.94,
+            0,
+            44.95
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            135,
+            0
+          ],
+          "scale": [
+            1.02,
+            1,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "pillar-50x500",
+      "placements": [
+        {
+          "position": [
+            37.94,
+            0,
+            35
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.6,
+            1
+          ]
+        },
+        {
+          "position": [
+            42.05,
+            0,
+            35
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.6,
+            1
+          ]
+        },
+        {
+          "position": [
+            45,
+            0,
+            37.94
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.6,
+            1
+          ]
+        },
+        {
+          "position": [
+            45,
+            0,
+            42
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.6,
+            1
+          ]
+        },
+        {
+          "position": [
+            42.09,
+            0,
+            45
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.6,
+            1
+          ]
+        },
+        {
+          "position": [
+            37.98,
+            0,
+            45
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.6,
+            1
+          ]
+        },
+        {
+          "position": [
+            35.01,
+            0,
+            42.11
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.6,
+            1
+          ]
+        },
+        {
+          "position": [
+            35.01,
+            0,
+            37.91
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.6,
+            1
+          ]
+        }
+      ]
     }
   ],
   "characters": [],
   "worldSettings": {
+    "staticObjectsCastShadow": true,
     "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
   },
   "skyAtmosphere": {
@@ -104,7 +1034,7 @@
       "id": "ai-navigation-volume-1",
       "position": [
         40,
-        1,
+        2,
         40
       ],
       "name": "AI Navigation Volume",
