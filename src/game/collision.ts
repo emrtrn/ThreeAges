@@ -21,6 +21,13 @@ import { sampleTriangleHeight, type GroundTriangle } from "./slopeSurface";
 export interface Aabb3 {
   readonly min: readonly [number, number, number];
   readonly max: readonly [number, number, number];
+  /**
+   * Optional tight XZ silhouette for a rotated collider. `min`/`max` remains the
+   * broad-phase AABB, while movement collision can use this to avoid the empty
+   * corners created by an enclosing AABB around a diagonal wall. A 2-point
+   * footprint represents a vertical trimesh triangle projected to a line segment.
+   */
+  readonly footprint?: readonly (readonly [number, number])[];
 }
 
 export interface PlanarDelta {
@@ -81,6 +88,134 @@ function alreadyPenetrating(min: number, max: number, blockerMin: number, blocke
   return overlaps(min + PENETRATION_EPSILON, max - PENETRATION_EPSILON, blockerMin, blockerMax);
 }
 
+function validFootprint(blocker: Aabb3): readonly (readonly [number, number])[] | undefined {
+  const footprint = blocker.footprint;
+  return footprint && footprint.length >= 2 ? footprint : undefined;
+}
+
+function rectOverlapsAabbXZ(
+  x: number,
+  z: number,
+  hx: number,
+  hz: number,
+  blocker: Aabb3,
+): boolean {
+  return overlaps(x - hx, x + hx, blocker.min[0], blocker.max[0]) &&
+    overlaps(z - hz, z + hz, blocker.min[2], blocker.max[2]);
+}
+
+function rectOverlapsFootprint(
+  x: number,
+  z: number,
+  hx: number,
+  hz: number,
+  footprint: readonly (readonly [number, number])[],
+): boolean {
+  if (!overlaps(x - hx, x + hx, minFootprintAxis(footprint, 0), maxFootprintAxis(footprint, 0))) {
+    return false;
+  }
+  if (!overlaps(z - hz, z + hz, minFootprintAxis(footprint, 1), maxFootprintAxis(footprint, 1))) {
+    return false;
+  }
+  for (let i = 0; i < footprint.length; i += 1) {
+    const a = footprint[i]!;
+    const b = footprint[(i + 1) % footprint.length]!;
+    const edgeX = b[0] - a[0];
+    const edgeZ = b[1] - a[1];
+    const axisX = -edgeZ;
+    const axisZ = edgeX;
+    const axisLen = Math.hypot(axisX, axisZ);
+    if (axisLen <= 1e-9) continue;
+    const rectCenter = x * axisX + z * axisZ;
+    const rectRadius = Math.abs(axisX) * hx + Math.abs(axisZ) * hz;
+    let polyMin = Infinity;
+    let polyMax = -Infinity;
+    for (const point of footprint) {
+      const projected = point[0] * axisX + point[1] * axisZ;
+      polyMin = Math.min(polyMin, projected);
+      polyMax = Math.max(polyMax, projected);
+    }
+    if (rectCenter + rectRadius <= polyMin || rectCenter - rectRadius >= polyMax) return false;
+  }
+  return true;
+}
+
+function minFootprintAxis(footprint: readonly (readonly [number, number])[], axis: 0 | 1): number {
+  let min = Infinity;
+  for (const point of footprint) min = Math.min(min, point[axis]);
+  return min;
+}
+
+function maxFootprintAxis(footprint: readonly (readonly [number, number])[], axis: 0 | 1): number {
+  let max = -Infinity;
+  for (const point of footprint) max = Math.max(max, point[axis]);
+  return max;
+}
+
+function rectOverlapsBlockerXZ(
+  x: number,
+  z: number,
+  hx: number,
+  hz: number,
+  blocker: Aabb3,
+): boolean {
+  if (!rectOverlapsAabbXZ(x, z, hx, hz, blocker)) return false;
+  const footprint = validFootprint(blocker);
+  return footprint ? rectOverlapsFootprint(x, z, hx, hz, footprint) : true;
+}
+
+function alreadyOverlapsBlockerXZ(
+  x: number,
+  z: number,
+  hx: number,
+  hz: number,
+  blocker: Aabb3,
+): boolean {
+  return rectOverlapsBlockerXZ(
+    x,
+    z,
+    Math.max(0, hx - PENETRATION_EPSILON),
+    Math.max(0, hz - PENETRATION_EPSILON),
+    blocker,
+  );
+}
+
+function clampXAgainstFootprint(
+  startX: number,
+  targetX: number,
+  z: number,
+  hx: number,
+  hz: number,
+  blocker: Aabb3,
+): number {
+  let safe = startX;
+  let blocked = targetX;
+  for (let i = 0; i < 28; i += 1) {
+    const mid = (safe + blocked) / 2;
+    if (rectOverlapsBlockerXZ(mid, z, hx, hz, blocker)) blocked = mid;
+    else safe = mid;
+  }
+  return safe;
+}
+
+function clampZAgainstFootprint(
+  x: number,
+  startZ: number,
+  targetZ: number,
+  hx: number,
+  hz: number,
+  blocker: Aabb3,
+): number {
+  let safe = startZ;
+  let blocked = targetZ;
+  for (let i = 0; i < 28; i += 1) {
+    const mid = (safe + blocked) / 2;
+    if (rectOverlapsBlockerXZ(x, mid, hx, hz, blocker)) blocked = mid;
+    else safe = mid;
+  }
+  return safe;
+}
+
 /**
  * Returns the proposed `delta` clamped so the player's AABB (centered at
  * `position`, with `half` extents) does not enter any blocker. Each axis is
@@ -102,6 +237,12 @@ export function resolvePlanarMovement(
   // Resolve X against the player's current Z span.
   let x = px + delta.dx;
   for (const b of active) {
+    if (validFootprint(b)) {
+      if (alreadyOverlapsBlockerXZ(px, pz, hx, hz, b)) continue;
+      if (!rectOverlapsBlockerXZ(x, pz, hx, hz, b)) continue;
+      x = clampXAgainstFootprint(px, x, pz, hx, hz, b);
+      continue;
+    }
     if (!overlaps(pz - hz, pz + hz, b.min[2], b.max[2])) continue;
     if (alreadyPenetrating(px - hx, px + hx, b.min[0], b.max[0])) continue; // already inside on X: not new
     if (!overlaps(x - hx, x + hx, b.min[0], b.max[0])) continue;
@@ -112,6 +253,12 @@ export function resolvePlanarMovement(
   // Resolve Z against the now-resolved X span (so blocking X still lets Z slide).
   let z = pz + delta.dz;
   for (const b of active) {
+    if (validFootprint(b)) {
+      if (alreadyOverlapsBlockerXZ(x, pz, hx, hz, b)) continue;
+      if (!rectOverlapsBlockerXZ(x, z, hx, hz, b)) continue;
+      z = clampZAgainstFootprint(x, pz, z, hx, hz, b);
+      continue;
+    }
     if (!overlaps(x - hx, x + hx, b.min[0], b.max[0])) continue;
     if (alreadyPenetrating(pz - hz, pz + hz, b.min[2], b.max[2])) continue; // already inside on Z: not new
     if (!overlaps(z - hz, z + hz, b.min[2], b.max[2])) continue;
@@ -139,6 +286,18 @@ export function safeSubstepLength(blockers: readonly Aabb3[]): number {
   let thinnest = Infinity;
   for (const b of blockers) {
     thinnest = Math.min(thinnest, b.max[0] - b.min[0], b.max[2] - b.min[2]);
+    const footprint = validFootprint(b);
+    if (!footprint) continue;
+    if (footprint.length === 2) {
+      thinnest = Math.min(thinnest, 0.01);
+      continue;
+    }
+    for (let i = 0; i < footprint.length; i += 1) {
+      const a = footprint[i]!;
+      const c = footprint[(i + 1) % footprint.length]!;
+      const edgeLength = Math.hypot(c[0] - a[0], c[1] - a[1]);
+      if (edgeLength > 1e-9) thinnest = Math.min(thinnest, edgeLength);
+    }
   }
   return thinnest === Infinity ? Infinity : Math.max(thinnest / 2, 0.01);
 }

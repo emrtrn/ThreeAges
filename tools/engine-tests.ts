@@ -6384,6 +6384,41 @@ check("safeSubstepLength: half the thinnest X/Z extent, Infinity for no blockers
   assert.ok(Math.abs(safeSubstepLength([sliver]) - 0.01) < 1e-12);
 });
 
+check("resolvePlanarMovement: rotated wall footprint does not block its empty AABB corners", () => {
+  const half: [number, number, number] = [2, 1.5, 0.1];
+  const aabb = rotatedBoxAabb([0, 0, 0], [0, 0, 0], half, [0, 45, 0]);
+  const footprint = rotatedBoxFootprintXZ([0, 0, 0], [0, 0, 0], half, [0, 45, 0]);
+  assert.ok(footprint && footprint.length >= 3);
+  const wall: Aabb3 = { ...aabb, footprint };
+  const characterHalf: [number, number, number] = [0.1, 0.5, 0.1];
+
+  // This move enters the enclosing AABB's north-east pocket, but remains clear
+  // of the real diagonal wall strip. The old AABB-only path clamped it.
+  const moved = resolvePlanarMovement([1.7, 0, 1.2], { dx: -0.4, dz: 0 }, characterHalf, [wall]);
+  assert.ok(Math.abs(moved.dx + 0.4) < 1e-9, `dx=${moved.dx}`);
+  assert.equal(moved.dz, 0);
+});
+
+check("safeSubstepLength: rotated wall footprint uses the real thin edge", () => {
+  const half: [number, number, number] = [2, 1.5, 0.1];
+  const aabb = rotatedBoxAabb([0, 0, 0], [0, 0, 0], half, [0, 45, 0]);
+  const footprint = rotatedBoxFootprintXZ([0, 0, 0], [0, 0, 0], half, [0, 45, 0]);
+  assert.ok(footprint && footprint.length >= 3);
+  assert.ok(Math.abs(safeSubstepLength([{ ...aabb, footprint }]) - 0.1) < 1e-9);
+});
+
+check("resolvePlanarMovement: trimesh wall segment footprint does not block its empty AABB corners", () => {
+  const wall: Aabb3 = {
+    min: [-1.5, -1, -1.5],
+    max: [1.5, 1, 1.5],
+    footprint: [[-1, 1], [1, -1]],
+  };
+  const moved = resolvePlanarMovement([1.7, 0, 0.8], { dx: -0.4, dz: 0 }, [0.1, 0.5, 0.1], [wall]);
+  assert.ok(Math.abs(moved.dx + 0.4) < 1e-9, `dx=${moved.dx}`);
+  assert.equal(moved.dz, 0);
+  assert.equal(safeSubstepLength([wall]), 0.01);
+});
+
 check("resolvePlanarMovementSubstepped: a fast move cannot tunnel through a thin wall", () => {
   const thinWall: Aabb3 = { min: [0.9, -1, -5], max: [1.1, 1, 5] }; // 0.2 thick
   const half: [number, number, number] = [0.3, 0.5, 0.3];
@@ -7706,8 +7741,43 @@ check("physics subsystem expands a trimesh collider into per-triangle blockers",
   assert.equal(blockers.length, 2); // one AABB per triangle, not one enclosing box
   // Each triangle's AABB is translated by the body origin (10, 0, 0); the gap
   // between x=9 and x=11 is walkable (the concave region of the L).
-  assert.deepEqual(blockers[0], { min: [8, 0, -2], max: [9, 1, -2] });
-  assert.deepEqual(blockers[1], { min: [11, 0, 2], max: [12, 1, 2] });
+  assert.deepEqual({ min: blockers[0]?.min, max: blockers[0]?.max }, { min: [8, 0, -2], max: [9, 1, -2] });
+  assert.deepEqual({ min: blockers[1]?.min, max: blockers[1]?.max }, { min: [11, 0, 2], max: [12, 1, 2] });
+});
+
+check("physics subsystem gives steep trimesh triangle blockers a tight XZ footprint", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "rotated-trimesh-wall",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 45, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [4, 3, 0.2],
+          isStatic: true,
+          isSensor: false,
+          primitives: [
+            {
+              shape: "trimesh",
+              size: [4, 3, 0.2],
+              vertices: [
+                [-2, 0, 0],
+                [2, 0, 0],
+                [-2, 3, 0],
+              ],
+              indices: [0, 1, 2],
+            },
+          ],
+        },
+      },
+    },
+  ]);
+  const blockers = physics.staticBlockerAabbs();
+  assert.equal(blockers.length, 1);
+  assert.ok(blockers[0]?.footprint && blockers[0].footprint.length === 2, "vertical triangle projects to a segment");
+  const moved = resolvePlanarMovement([1.7, 0, 0.8], { dx: -0.4, dz: 0 }, [0.1, 0.5, 0.1], blockers);
+  assert.ok(Math.abs(moved.dx + 0.4) < 1e-9, `dx=${moved.dx}`);
 });
 
 check("input-move behavior: the player cannot walk through a static wall", () => {

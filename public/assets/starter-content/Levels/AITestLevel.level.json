@@ -12,9 +12,9 @@
       "placements": [
         {
           "position": [
-            10,
+            -25.25,
             0,
-            10
+            -27.5
           ],
           "scaleLocked": true,
           "materialSlot": "white-material",
@@ -23,9 +23,9 @@
         },
         {
           "position": [
-            37.94,
+            2.69,
             0.05,
-            44.85
+            7.35
           ],
           "materialSlot": "m-wood-floor-material",
           "rotationYDeg": 0,
@@ -39,12 +39,130 @@
             1,
             1
           ]
+        },
+        {
+          "position": [
+            -13.99,
+            1.99,
+            23.19
+          ],
+          "materialSlot": "m-wood-floor-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -135,
+            0
+          ],
+          "scale": [
+            1.25,
+            1,
+            0.62
+          ]
         }
       ]
     },
     {
       "assetId": "shape-cube",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -20,
+            0,
+            7
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
+        },
+        {
+          "position": [
+            -20,
+            0,
+            -2
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 2
+        },
+        {
+          "position": [
+            -15.7,
+            0,
+            1.83
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            2,
+            2,
+            4
+          ]
+        },
+        {
+          "position": [
+            14,
+            0,
+            16
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            2,
+            1
+          ]
+        },
+        {
+          "position": [
+            10,
+            0,
+            12
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            2,
+            1
+          ]
+        },
+        {
+          "position": [
+            14,
+            0,
+            12
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            2,
+            1
+          ]
+        },
+        {
+          "position": [
+            18,
+            0,
+            12
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            2,
+            1
+          ]
+        },
+        {
+          "position": [
+            14,
+            0,
+            8
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            2,
+            1
+          ]
+        }
+      ]
     },
     {
       "assetId": "sm-pickup-coin",
@@ -55,9 +173,9 @@
       "placements": [
         {
           "position": [
-            40,
+            13.09,
             0,
-            40
+            -6.95
           ],
           "name": "Player Start",
           "collision": false,
@@ -79,9 +197,9 @@
       "placements": [
         {
           "position": [
-            45.09,
+            9.84,
             0,
-            41.21
+            3.71
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -93,9 +211,9 @@
         },
         {
           "position": [
-            41.28,
+            6.03,
             0,
-            34.89
+            -2.61
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -112,9 +230,9 @@
         },
         {
           "position": [
-            34.89,
+            -0.36,
             0,
-            38.71
+            1.21
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -131,9 +249,9 @@
         },
         {
           "position": [
-            38.71,
+            3.46,
             0,
-            45.08
+            7.58
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -150,9 +268,9 @@
         },
         {
           "position": [
-            45.09,
+            9.84,
             0,
-            38.76
+            1.26
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -164,9 +282,9 @@
         },
         {
           "position": [
-            38.83,
+            3.58,
             0,
-            34.89
+            -2.61
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -183,9 +301,9 @@
         },
         {
           "position": [
-            34.89,
+            -0.36,
             0,
-            41.16
+            3.66
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -202,9 +320,9 @@
         },
         {
           "position": [
-            41.16,
+            5.91,
             0,
-            45.08
+            7.58
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -221,9 +339,9 @@
         },
         {
           "position": [
-            53.09,
+            17.84,
             0,
-            41.19
+            3.69
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -240,9 +358,9 @@
         },
         {
           "position": [
-            57.07,
+            21.82,
             0,
-            48.16
+            10.66
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -259,9 +377,9 @@
         },
         {
           "position": [
-            48.2,
+            12.95,
             0,
-            22.87
+            -14.63
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -278,9 +396,9 @@
         },
         {
           "position": [
-            23,
+            -12.25,
             0,
-            31.85
+            -5.65
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -297,9 +415,9 @@
         },
         {
           "position": [
-            41.26,
+            6.01,
             0,
-            26.89
+            -10.61
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -316,9 +434,9 @@
         },
         {
           "position": [
-            26.89,
+            -8.36,
             0,
-            38.73
+            1.23
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -335,9 +453,9 @@
         },
         {
           "position": [
-            38.73,
+            3.48,
             0,
-            53.08
+            15.58
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -354,9 +472,9 @@
         },
         {
           "position": [
-            53.09,
+            17.84,
             0,
-            38.76
+            1.26
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -373,9 +491,9 @@
         },
         {
           "position": [
-            38.83,
+            3.58,
             0,
-            26.89
+            -10.61
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -392,9 +510,9 @@
         },
         {
           "position": [
-            26.89,
+            -8.36,
             0,
-            41.16
+            3.66
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -411,9 +529,9 @@
         },
         {
           "position": [
-            41.16,
+            5.91,
             0,
-            53.08
+            15.58
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -430,9 +548,9 @@
         },
         {
           "position": [
-            48.2,
+            12.95,
             0,
-            57.1
+            19.6
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -449,9 +567,9 @@
         },
         {
           "position": [
-            57.14,
+            21.89,
             0,
-            31.74
+            -5.76
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -468,9 +586,9 @@
         },
         {
           "position": [
-            31.87,
+            -3.38,
             0,
-            22.91
+            -14.59
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -487,9 +605,9 @@
         },
         {
           "position": [
-            57.15,
+            21.9,
             0,
-            31.86
+            -5.64
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -501,9 +619,9 @@
         },
         {
           "position": [
-            31.93,
+            -3.32,
             0,
-            22.83
+            -14.67
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -520,9 +638,9 @@
         },
         {
           "position": [
-            22.83,
+            -12.42,
             0,
-            48.06
+            10.56
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -539,9 +657,9 @@
         },
         {
           "position": [
-            48.06,
+            12.81,
             0,
-            57.14
+            19.64
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -558,9 +676,9 @@
         },
         {
           "position": [
-            69.03,
+            33.78,
             0,
-            31.96
+            -5.54
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -577,9 +695,9 @@
         },
         {
           "position": [
-            32.03,
+            -3.22,
             0,
-            10.95
+            -26.55
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -591,9 +709,9 @@
         },
         {
           "position": [
-            10.95,
+            -24.3,
             0,
-            47.96
+            10.46
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -610,9 +728,9 @@
         },
         {
           "position": [
-            47.96,
+            12.71,
             0,
-            69.02
+            31.52
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -629,9 +747,9 @@
         },
         {
           "position": [
-            57.15,
+            21.9,
             0,
-            48.07
+            10.57
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -643,9 +761,9 @@
         },
         {
           "position": [
-            48.14,
+            12.89,
             0,
-            22.83
+            -14.67
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -662,9 +780,9 @@
         },
         {
           "position": [
-            22.83,
+            -12.42,
             0,
-            31.85
+            -5.65
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -681,9 +799,9 @@
         },
         {
           "position": [
-            31.85,
+            -3.4,
             0,
-            57.14
+            19.64
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -700,9 +818,9 @@
         },
         {
           "position": [
-            35.14,
+            -0.11,
             0,
-            42.16
+            4.66
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -719,9 +837,9 @@
         },
         {
           "position": [
-            37.86,
+            2.61,
             0,
-            44.88
+            7.38
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -738,9 +856,47 @@
         },
         {
           "position": [
-            20.94,
+            -11.89,
+            0,
+            21.21
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -135,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -13.75,
+            0,
+            19.37
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -135,
+            0
+          ],
+          "scale": [
+            2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -14.23,
             0.02,
-            56.25
+            18.87
           ],
           "materialSlot": "gray-material",
           "rotationYDeg": 0,
@@ -749,7 +905,107 @@
             -45,
             0
           ],
+          "scale": [
+            0.2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -11.95,
+            0.02,
+            21.13
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -45,
+            0
+          ],
+          "scale": [
+            0.2,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -17.46,
+            0.03,
+            26.86
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            135,
+            0
+          ],
+          "scale": [
+            0.7,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -12.09,
+            0,
+            -5.59
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            2.1,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -7.03,
+            0,
+            -9.06
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            2.6,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -3.61,
+            0,
+            -5.66
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
           "scale": 1
+        },
+        {
+          "position": [
+            -3.61,
+            0,
+            -9.11
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            0.5,
+            1,
+            1
+          ]
         }
       ]
     },
@@ -758,41 +1014,27 @@
       "placements": [
         {
           "position": [
-            38,
+            2.75,
             0,
-            35
+            -2.5
           ],
           "rotationYDeg": 0,
           "scale": 1
         },
         {
           "position": [
-            38,
+            2.75,
             0,
-            45
+            7.5
           ],
           "rotationYDeg": 0,
           "scale": 1
         },
         {
           "position": [
-            35,
+            -0.25,
             0,
-            42
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            45,
-            0,
-            42
+            4.5
           ],
           "rotationYDeg": 0,
           "rotation": [
@@ -804,9 +1046,23 @@
         },
         {
           "position": [
-            42.07,
+            9.75,
             0,
-            44.95
+            4.5
+          ],
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            6.82,
+            0,
+            7.45
           ],
           "rotationYDeg": 0,
           "rotation": [
@@ -822,9 +1078,9 @@
         },
         {
           "position": [
-            35.03,
+            -0.22,
             0,
-            37.91
+            0.41
           ],
           "rotationYDeg": 0,
           "rotation": [
@@ -840,9 +1096,9 @@
         },
         {
           "position": [
-            44.96,
+            9.71,
             0,
-            37.93
+            0.43
           ],
           "rotationYDeg": 0,
           "rotation": [
@@ -858,9 +1114,9 @@
         },
         {
           "position": [
-            37.94,
+            2.69,
             0,
-            44.95
+            7.45
           ],
           "rotationYDeg": 0,
           "rotation": [
@@ -881,9 +1137,9 @@
       "placements": [
         {
           "position": [
-            37.94,
+            2.69,
             0,
-            35
+            -2.5
           ],
           "rotationYDeg": 0,
           "scale": [
@@ -894,9 +1150,9 @@
         },
         {
           "position": [
-            42.05,
+            6.8,
             0,
-            35
+            -2.5
           ],
           "rotationYDeg": 0,
           "scale": [
@@ -907,9 +1163,9 @@
         },
         {
           "position": [
-            45,
+            9.75,
             0,
-            37.94
+            0.44
           ],
           "rotationYDeg": 0,
           "scale": [
@@ -920,9 +1176,9 @@
         },
         {
           "position": [
-            45,
+            9.75,
             0,
-            42
+            4.5
           ],
           "rotationYDeg": 0,
           "scale": [
@@ -933,9 +1189,9 @@
         },
         {
           "position": [
-            42.09,
+            6.84,
             0,
-            45
+            7.5
           ],
           "rotationYDeg": 0,
           "scale": [
@@ -946,9 +1202,9 @@
         },
         {
           "position": [
-            37.98,
+            2.73,
             0,
-            45
+            7.5
           ],
           "rotationYDeg": 0,
           "scale": [
@@ -959,9 +1215,9 @@
         },
         {
           "position": [
-            35.01,
+            -0.24,
             0,
-            42.11
+            4.61
           ],
           "rotationYDeg": 0,
           "scale": [
@@ -972,9 +1228,9 @@
         },
         {
           "position": [
-            35.01,
+            -0.24,
             0,
-            37.91
+            0.41
           ],
           "rotationYDeg": 0,
           "scale": [
@@ -984,6 +1240,34 @@
           ]
         }
       ]
+    },
+    {
+      "assetId": "sm-linearstair",
+      "placements": [
+        {
+          "position": [
+            -11.89,
+            0,
+            21.07
+          ],
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -135,
+            0
+          ],
+          "scale": [
+            1,
+            1,
+            1.2
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "sm-ramp",
+      "placements": []
     }
   ],
   "characters": [],
@@ -997,15 +1281,21 @@
     "mie": 0.004,
     "mieDirectionalG": 0.7,
     "skyLightCapture": {
-      "intensity": 0.6
+      "intensity": 0.4
     }
   },
   "postProcess": {
+    "toneMapping": "aces",
+    "exposure": 1,
     "bloom": {
       "enabled": true,
       "threshold": 1,
       "intensity": 1,
       "radius": 1
+    },
+    "ao": {
+      "radius": 1,
+      "intensity": 1
     }
   },
   "lights": [
@@ -1013,9 +1303,9 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        40,
+        4.75,
         4,
-        40
+        2.5
       ],
       "name": "Sun",
       "rotation": [
@@ -1032,15 +1322,15 @@
     {
       "id": "ai-navigation-volume-1",
       "position": [
-        41.08,
+        4.77,
         2,
-        39.02
+        2.4
       ],
       "name": "AI Navigation Volume",
       "scale": 1,
       "size": [
         60,
-        4,
+        5,
         60
       ],
       "agentRadius": 0.1
@@ -1050,22 +1340,34 @@
     {
       "id": "target-point-1",
       "position": [
-        24.03,
+        -1.36,
         0.05,
-        56.69
+        8.73
       ],
       "name": "TP1",
+      "scale": 1,
       "nextTargetPoint": "target-point-2",
       "startPoint": true
     },
     {
       "id": "target-point-2",
       "position": [
-        35.18,
+        -9.8,
         0.05,
-        44.69
+        17.19
       ],
       "name": "TP2",
+      "scale": 1,
+      "nextTargetPoint": "target-point-3"
+    },
+    {
+      "id": "target-point-3",
+      "position": [
+        -17.4,
+        1.98,
+        24.85
+      ],
+      "name": "TP3",
       "scale": 1,
       "nextTargetPoint": "target-point-1"
     }
@@ -1074,9 +1376,9 @@
     {
       "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        26.32,
+        -0.82,
         0.05,
-        53.61
+        7.06
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,

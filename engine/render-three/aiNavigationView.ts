@@ -271,7 +271,8 @@ export function inflateNavBlocker2d(blocker: NavBlocker, radius: number): NavBlo
     max: [blocker.max[0] + r, blocker.max[1], blocker.max[2] + r],
   };
   const footprint = blocker.footprint;
-  if (!footprint || footprint.length < 3) return inflated;
+  if (!footprint || footprint.length < 2) return inflated;
+  if (footprint.length === 2) return { ...inflated, footprint: footprint.map((point) => [point[0], point[1]] as NavVec2) };
   const inflatedFootprint = inflateConvexFootprintXZ(footprint, r);
   return inflatedFootprint ? { ...inflated, footprint: inflatedFootprint } : inflated;
 }
@@ -442,7 +443,7 @@ function blockerFootprintSegments(blockers: readonly NavBlocker[], y: number): V
   const out: Vec3[] = [];
   for (const blocker of blockers) {
     const footprint = blocker.footprint;
-    if (footprint && footprint.length >= 3) {
+    if (footprint && footprint.length >= 2) {
       // Rotated obstacle: trace its true oriented ground silhouette so the red
       // outline matches the tight shape navigation actually erodes against,
       // instead of the axis-aligned box that encloses (and visually bloats) it.
@@ -499,6 +500,7 @@ function pathClearanceViolationSegments(
 
 function segmentIntersectsBlocker2d(a: Vec3, b: Vec3, blocker: NavBlocker): boolean {
   const footprint = blocker.footprint;
+  if (footprint && footprint.length === 2) return segmentIntersectsAabb2d(a, b, blocker);
   if (footprint && footprint.length >= 3) return Boolean(clipSegmentConvexXZ(a, b, footprint));
   return segmentIntersectsAabb2d(a, b, blocker);
 }

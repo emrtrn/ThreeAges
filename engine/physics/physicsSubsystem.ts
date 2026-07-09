@@ -812,7 +812,7 @@ function appendTriangleAabbs(
 ): void {
   forEachWorldTriangle(origin, bodyRotation, vertices, indices, (wa, wb, wc) => {
     if (triangleUpNormalY(wa, wb, wc) >= SURFACE_MIN_NORMAL_Y) return; // walkable surface, not a wall
-    out.push({
+    const blocker: Aabb = {
       min: [
         Math.min(wa[0], wb[0], wc[0]),
         Math.min(wa[1], wb[1], wc[1]),
@@ -823,8 +823,22 @@ function appendTriangleAabbs(
         Math.max(wa[1], wb[1], wc[1]),
         Math.max(wa[2], wb[2], wc[2]),
       ],
-    });
+    };
+    const footprint = triangleFootprintXZ(wa, wb, wc);
+    if (footprint) blocker.footprint = footprint;
+    out.push(blocker);
   });
+}
+
+function triangleFootprintXZ(a: Vec3, b: Vec3, c: Vec3): readonly (readonly [number, number])[] | undefined {
+  const unique: [number, number][] = [];
+  for (const point of [[a[0], a[2]], [b[0], b[2]], [c[0], c[2]]] as [number, number][]) {
+    if (unique.some((candidate) => Math.hypot(candidate[0] - point[0], candidate[1] - point[1]) <= 1e-9)) {
+      continue;
+    }
+    unique.push(point);
+  }
+  return unique.length >= 2 ? unique : undefined;
 }
 
 /** Appends walkable surface triangles for a body's trimesh primitives (world-space + normalY). */

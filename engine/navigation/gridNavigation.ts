@@ -648,10 +648,10 @@ function pointBlocked(point: Vec3, blockers: readonly NavBlocker[], radius: numb
       return false;
     }
     const footprint = blocker.footprint;
-    if (footprint && footprint.length >= 3) {
+    if (footprint && footprint.length >= 2) {
       // Oriented (rotated) obstacle: block when the capsule center is within the
-      // effective radius of the convex ground silhouette (rounded-corner erosion).
-      return distancePointToConvexXZ(point[0], point[2], footprint) <= radius;
+      // effective radius of the tight ground silhouette (rounded-corner erosion).
+      return distancePointToFootprintXZ(point[0], point[2], footprint) <= radius;
     }
     // Axis-aligned: the broadphase test above already is the exact answer.
     return true;
@@ -663,8 +663,8 @@ function nearestInflatedBlockerDistance(point: Vec3, blockers: readonly NavBlock
   for (const blocker of blockers) {
     const footprint = blocker.footprint;
     const distance =
-      footprint && footprint.length >= 3
-        ? Math.max(0, distancePointToConvexXZ(point[0], point[2], footprint) - radius)
+      footprint && footprint.length >= 2
+        ? Math.max(0, distancePointToFootprintXZ(point[0], point[2], footprint) - radius)
         : distanceToAabb2d(point, blocker, radius);
     nearest = Math.min(nearest, distance);
   }
@@ -679,6 +679,15 @@ function distanceToAabb2d(point: Vec3, blocker: NavAabb, radius: number): number
   const dx = point[0] < minX ? minX - point[0] : point[0] > maxX ? point[0] - maxX : 0;
   const dz = point[2] < minZ ? minZ - point[2] : point[2] > maxZ ? point[2] - maxZ : 0;
   return Math.hypot(dx, dz);
+}
+
+function distancePointToFootprintXZ(px: number, pz: number, footprint: readonly NavVec2[]): number {
+  if (footprint.length === 2) {
+    const a = footprint[0]!;
+    const b = footprint[1]!;
+    return distancePointToSegmentXZ(px, pz, a[0], a[1], b[0], b[1]);
+  }
+  return distancePointToConvexXZ(px, pz, footprint);
 }
 
 function neighbors(
@@ -1001,10 +1010,15 @@ function segmentIntersectsBlockingAabb(
   agentHeight: number,
   stepHeight: number,
 ): boolean {
-  const clipped =
-    blocker.footprint && blocker.footprint.length >= 3
-      ? clipSegmentConvexXZ(a, b, blocker.footprint, radius)
-      : clipSegmentAabb2d(a, b, blocker, radius);
+  const footprint = blocker.footprint;
+  let clipped: [number, number] | null;
+  if (footprint && footprint.length === 2) {
+    clipped = segmentIntersectsSegmentFootprintXZ(a, b, footprint[0]!, footprint[1]!, radius) ? [0, 1] : null;
+  } else if (footprint && footprint.length >= 3) {
+    clipped = clipSegmentConvexXZ(a, b, footprint, radius);
+  } else {
+    clipped = clipSegmentAabb2d(a, b, blocker, radius);
+  }
   if (!clipped) return false;
   const [tMin, tMax] = clipped;
   const y0 = a[1] + (b[1] - a[1]) * tMin;
@@ -1013,6 +1027,16 @@ function segmentIntersectsBlockingAabb(
   const maxFootY = Math.max(y0, y1);
   return maxFootY > blocker.min[1] - Math.max(agentHeight, 0.001) &&
     minFootY < blocker.max[1] - stepHeight;
+}
+
+function segmentIntersectsSegmentFootprintXZ(
+  a: Vec3,
+  b: Vec3,
+  p: NavVec2,
+  q: NavVec2,
+  radius: number,
+): boolean {
+  return distanceSegmentToSegmentXZ(a[0], a[2], b[0], b[2], p[0], p[1], q[0], q[1]) <= radius;
 }
 
 function clipSegmentAabb2d(a: Vec3, b: Vec3, blocker: NavAabb, radius: number): [number, number] | null {
@@ -1071,6 +1095,74 @@ function distancePointToConvexXZ(px: number, pz: number, poly: readonly NavVec2[
  * rounded corner caps are (slightly permissively) not covered, matching the soft
  * role of this test in path-segment shortcutting.
  */
+function distancePointToSegmentXZ(
+  px: number,
+  pz: number,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+): number {
+  const ex = bx - ax;
+  const ez = bz - az;
+  const lenSq = ex * ex + ez * ez;
+  const t = lenSq > 0 ? clamp(((px - ax) * ex + (pz - az) * ez) / lenSq, 0, 1) : 0;
+  const cx = ax + ex * t;
+  const cz = az + ez * t;
+  return Math.hypot(px - cx, pz - cz);
+}
+
+function distanceSegmentToSegmentXZ(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  cx: number,
+  cz: number,
+  dx: number,
+  dz: number,
+): number {
+  if (segmentsIntersectXZ(ax, az, bx, bz, cx, cz, dx, dz)) return 0;
+  return Math.min(
+    distancePointToSegmentXZ(ax, az, cx, cz, dx, dz),
+    distancePointToSegmentXZ(bx, bz, cx, cz, dx, dz),
+    distancePointToSegmentXZ(cx, cz, ax, az, bx, bz),
+    distancePointToSegmentXZ(dx, dz, ax, az, bx, bz),
+  );
+}
+
+function segmentsIntersectXZ(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  cx: number,
+  cz: number,
+  dx: number,
+  dz: number,
+): boolean {
+  const o1 = orientXZ(ax, az, bx, bz, cx, cz);
+  const o2 = orientXZ(ax, az, bx, bz, dx, dz);
+  const o3 = orientXZ(cx, cz, dx, dz, ax, az);
+  const o4 = orientXZ(cx, cz, dx, dz, bx, bz);
+  if (Math.abs(o1) <= 1e-9 && pointOnSegmentXZ(cx, cz, ax, az, bx, bz)) return true;
+  if (Math.abs(o2) <= 1e-9 && pointOnSegmentXZ(dx, dz, ax, az, bx, bz)) return true;
+  if (Math.abs(o3) <= 1e-9 && pointOnSegmentXZ(ax, az, cx, cz, dx, dz)) return true;
+  if (Math.abs(o4) <= 1e-9 && pointOnSegmentXZ(bx, bz, cx, cz, dx, dz)) return true;
+  return (o1 > 0) !== (o2 > 0) && (o3 > 0) !== (o4 > 0);
+}
+
+function orientXZ(ax: number, az: number, bx: number, bz: number, cx: number, cz: number): number {
+  return (bx - ax) * (cz - az) - (bz - az) * (cx - ax);
+}
+
+function pointOnSegmentXZ(px: number, pz: number, ax: number, az: number, bx: number, bz: number): boolean {
+  return px >= Math.min(ax, bx) - 1e-9 &&
+    px <= Math.max(ax, bx) + 1e-9 &&
+    pz >= Math.min(az, bz) - 1e-9 &&
+    pz <= Math.max(az, bz) + 1e-9;
+}
+
 function clipSegmentConvexXZ(a: Vec3, b: Vec3, poly: readonly NavVec2[], radius: number): [number, number] | null {
   const n = poly.length;
   if (n < 3) return null;
