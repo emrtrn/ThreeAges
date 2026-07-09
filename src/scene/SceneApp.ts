@@ -6826,6 +6826,7 @@ export class SceneApp {
         surfaces,
         maxSlopeCos,
         preferredFloorY,
+        requiredSupportRadius: Math.max(0, agent.radius),
       });
       return hits.length > 0 ? hits.map((hit) => hit.floorY) : null;
     };

@@ -137,7 +137,7 @@
           "scale": [
             4.9,
             1,
-            7.2
+            4.9
           ]
         },
         {
@@ -184,31 +184,6 @@
           "rotation": [
             0,
             -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -7.22,
-            0,
-            12.65
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -6.7,
-            0,
-            9.48
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            45,
             0
           ],
           "scale": 1
@@ -469,18 +444,17 @@
     {
       "id": "ai-navigation-volume-1",
       "position": [
-        -5.29,
-        2,
-        9.11
+        -2.43,
+        1.94,
+        -3.59
       ],
       "name": "AI Navigation Volume",
       "scale": 1,
       "size": [
-        10,
+        20,
         4,
-        10
-      ],
-      "agentRadius": 0.1
+        20
+      ]
     }
   ],
   "targetPoints": [

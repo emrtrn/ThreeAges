@@ -59,6 +59,12 @@ export interface GroundProbeOptions {
    * Movement leaves this unset; navigation sets it to the layer being baked.
    */
   readonly preferredFloorY?: number;
+  /**
+   * Optional nav-only support check for flat blocker tops. When >0, a blocker top
+   * is ground only if the probe centre is at least this far inside the support
+   * footprint. This rejects narrow wall tops without collapsing stacked floors.
+   */
+  readonly requiredSupportRadius?: number;
 }
 
 export interface GroundHit {
@@ -150,6 +156,70 @@ function maxFootprintAxis(footprint: readonly (readonly [number, number])[], axi
   let max = -Infinity;
   for (const point of footprint) max = Math.max(max, point[axis]);
   return max;
+}
+
+function pointInsideConvexFootprint(
+  x: number,
+  z: number,
+  footprint: readonly (readonly [number, number])[],
+): boolean {
+  let sign = 0;
+  for (let i = 0; i < footprint.length; i += 1) {
+    const a = footprint[i]!;
+    const b = footprint[(i + 1) % footprint.length]!;
+    const cross = (b[0] - a[0]) * (z - a[1]) - (b[1] - a[1]) * (x - a[0]);
+    if (Math.abs(cross) <= 1e-9) continue;
+    const current = cross > 0 ? 1 : -1;
+    if (sign === 0) {
+      sign = current;
+    } else if (current !== sign) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function distancePointToSegmentXZ(
+  x: number,
+  z: number,
+  a: readonly [number, number],
+  b: readonly [number, number],
+): number {
+  const dx = b[0] - a[0];
+  const dz = b[1] - a[1];
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq <= 1e-12) return Math.hypot(x - a[0], z - a[1]);
+  const t = Math.max(0, Math.min(1, ((x - a[0]) * dx + (z - a[1]) * dz) / lenSq));
+  return Math.hypot(x - (a[0] + dx * t), z - (a[1] + dz * t));
+}
+
+function distanceToFootprintEdge(
+  x: number,
+  z: number,
+  footprint: readonly (readonly [number, number])[],
+): number {
+  let distance = Infinity;
+  for (let i = 0; i < footprint.length; i += 1) {
+    distance = Math.min(
+      distance,
+      distancePointToSegmentXZ(x, z, footprint[i]!, footprint[(i + 1) % footprint.length]!),
+    );
+  }
+  return distance;
+}
+
+function blockerTopSupportsRadius(x: number, z: number, blocker: Aabb3, radius: number): boolean {
+  if (radius <= 0) return true;
+  const footprint = validFootprint(blocker);
+  if (footprint) {
+    if (footprint.length < 3) return false;
+    return pointInsideConvexFootprint(x, z, footprint) &&
+      distanceToFootprintEdge(x, z, footprint) + 1e-6 >= radius;
+  }
+  return x - radius >= blocker.min[0] - 1e-6 &&
+    x + radius <= blocker.max[0] + 1e-6 &&
+    z - radius >= blocker.min[2] - 1e-6 &&
+    z + radius <= blocker.max[2] + 1e-6;
 }
 
 function rectOverlapsBlockerXZ(
@@ -415,11 +485,13 @@ function highestWalkableSurface(
   options: GroundProbeOptions,
 ): GroundHit | null {
   let best: GroundHit | null = null;
+  const requiredSupportRadius = Math.max(0, options.requiredSupportRadius ?? 0);
   for (const blocker of blockers) {
     if (!overlaps(px - hx, px + hx, blocker.min[0], blocker.max[0])) continue;
     if (!overlaps(pz - hz, pz + hz, blocker.min[2], blocker.max[2])) continue;
     const top = blocker.max[1];
     if (!acceptsTop(top)) continue;
+    if (!blockerTopSupportsRadius(px, pz, blocker, requiredSupportRadius)) continue;
     best = betterGroundHit(best, { floorY: top, blocker }, options);
   }
   // Slope surfaces (ramps): sampled at the probe centre for their true incline
@@ -447,11 +519,13 @@ function collectWalkableSurfaces(
   options: GroundProbeOptions,
 ): GroundHit[] {
   const hits: GroundHit[] = [];
+  const requiredSupportRadius = Math.max(0, options.requiredSupportRadius ?? 0);
   for (const blocker of blockers) {
     if (!overlaps(px - hx, px + hx, blocker.min[0], blocker.max[0])) continue;
     if (!overlaps(pz - hz, pz + hz, blocker.min[2], blocker.max[2])) continue;
     const top = blocker.max[1];
     if (!acceptsTop(top)) continue;
+    if (!blockerTopSupportsRadius(px, pz, blocker, requiredSupportRadius)) continue;
     pushGroundHit(hits, { floorY: top, blocker });
   }
   const surfaces = options.surfaces;

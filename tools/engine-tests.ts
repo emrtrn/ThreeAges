@@ -7356,6 +7356,73 @@ check("findGroundLayersAt returns every walkable stacked floor", () => {
   assert.deepEqual(layers.map((hit) => hit.floorY), [0, 2]);
 });
 
+check("findGroundLayersAt support radius rejects narrow wall tops but keeps stacked floors", () => {
+  const floor: Aabb3 = { min: [-3, -0.2, -3], max: [3, 0, 3] };
+  const wall: Aabb3 = { min: [-2, 0, -0.1], max: [2, 1, 0.1] };
+  const upperFloor: Aabb3 = { min: [-3, 1.8, -3], max: [3, 2, 3] };
+  const options = {
+    footprintHalf: [0.35, 0.35] as [number, number],
+    maxStepUp: 0,
+    maxStepDown: 4,
+  };
+
+  assert.deepEqual(
+    findGroundLayersAt([0, 3, 0], [floor, wall], options).map((hit) => hit.floorY),
+    [0, 1],
+  );
+  assert.deepEqual(
+    findGroundLayersAt([0, 3, 0], [floor, wall], { ...options, requiredSupportRadius: 0.35 }).map(
+      (hit) => hit.floorY,
+    ),
+    [0],
+  );
+  assert.deepEqual(
+    findGroundLayersAt([0, 3, 0], [floor, upperFloor], { ...options, requiredSupportRadius: 0.35 }).map(
+      (hit) => hit.floorY,
+    ),
+    [0, 2],
+  );
+});
+
+check("findGroundLayersAt support radius rejects rotated wall footprint tops", () => {
+  const c = Math.SQRT1_2;
+  const halfLength = 2;
+  const halfWidth = 0.1;
+  const dx = c * halfLength;
+  const dz = c * halfLength;
+  const px = -c * halfWidth;
+  const pz = c * halfWidth;
+  const wall: Aabb3 = {
+    min: [-dx - Math.abs(px), 0, -dz - Math.abs(pz)],
+    max: [dx + Math.abs(px), 1, dz + Math.abs(pz)],
+    footprint: [
+      [-dx + px, -dz + pz],
+      [dx + px, dz + pz],
+      [dx - px, dz - pz],
+      [-dx - px, -dz - pz],
+    ],
+  };
+
+  assert.deepEqual(
+    findGroundLayersAt([0, 2, 0], [wall], {
+      footprintHalf: [0.35, 0.35],
+      maxStepUp: 0,
+      maxStepDown: 3,
+      requiredSupportRadius: 0.35,
+    }),
+    [],
+  );
+  assert.deepEqual(
+    findGroundLayersAt([0, 2, 0], [wall], {
+      footprintHalf: [0.05, 0.05],
+      maxStepUp: 0,
+      maxStepDown: 3,
+      requiredSupportRadius: 0.05,
+    }).map((hit) => hit.floorY),
+    [1],
+  );
+});
+
 check("ground probe finds walkable tops, landing crossings, and filters step-height blockers", () => {
   const floor: Aabb3 = { min: [-5, -0.2, -5], max: [5, 0, 5] };
   const lowPlatform: Aabb3 = { min: [-0.5, 0, -0.5], max: [0.5, 0.3, 0.5] };

@@ -1501,6 +1501,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         surfaces,
         maxSlopeCos,
         preferredFloorY,
+        requiredSupportRadius: Math.max(0, agent.radius),
       });
       // Collapse near-coincident walkable surfaces into a single navigable floor,
       // keeping the highest of each cluster. A solid floor mesh (`complexAsSimple`)
