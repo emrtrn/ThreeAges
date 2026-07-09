@@ -16,26 +16,18 @@
             0,
             0
           ],
-          "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 3
+          "scale": [
+            20,
+            2,
+            20
+          ]
         }
       ]
     },
     {
       "assetId": "shape-cube",
-      "placements": [
-        {
-          "position": [
-            4.59,
-            0,
-            8.23
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 2
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-pickup-coin",
@@ -46,9 +38,9 @@
       "placements": [
         {
           "position": [
-            6.38,
+            40,
             0,
-            5.88
+            40
           ],
           "name": "Player Start",
           "collision": false,
@@ -92,9 +84,9 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        5,
+        40,
         4,
-        5
+        40
       ],
       "name": "Sun",
       "rotation": [
@@ -111,16 +103,16 @@
     {
       "id": "ai-navigation-volume-1",
       "position": [
-        7.02,
-        1.67,
-        6.45
+        40,
+        1,
+        40
       ],
       "name": "AI Navigation Volume",
       "scale": 1,
       "size": [
-        10,
+        80,
         4,
-        10
+        80
       ]
     }
   ]

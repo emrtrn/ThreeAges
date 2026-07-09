@@ -2289,10 +2289,10 @@
     },
     {
       "id": "testlevel",
-      "name": "Test Level",
+      "name": "AITestLevel",
       "assetType": "level",
       "category": "Levels",
-      "path": "assets/starter-content/Levels/TestLevel.level.json",
+      "path": "assets/starter-content/Levels/AITestLevel.level.json",
       "tags": [],
       "placeable": false,
       "placement": {
