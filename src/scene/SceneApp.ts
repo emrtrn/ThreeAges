@@ -83,7 +83,7 @@ import {
   colliderBoxFromBounds,
   composePlacementMatrix,
 } from "@engine/render-three/transforms";
-import { collisionWireboxes } from "@engine/render-three/collisionView";
+import { collisionWireboxes, collisionSurfaceTriangles } from "@engine/render-three/collisionView";
 import {
   createAiNavigationView,
   disposeAiNavigationView,
@@ -6566,6 +6566,20 @@ export class SceneApp {
   }
 
   /**
+   * Forces the AI Navigation preview to recompute from the live layout. The
+   * overlay already rebakes automatically on every scene edit (see
+   * {@link emitSceneObjectsChanged}) and the runtime bakes on demand via the
+   * revision-tokened grid cache, so there is no persistent bake to regenerate;
+   * this is the explicit "recompute now" for the Nav Volume details panel. It also
+   * reloads `*.collision.json` sidecars so externally edited collision picks up.
+   */
+  rebakeAiNavigation(): void {
+    void this.refreshCollisionDefs();
+    this.updateAiNavigationView();
+    this.onStatus?.("AI Navigation rebaked.", "info");
+  }
+
+  /**
    * Loads authored collision sidecars (`*.collision.json`) for the assets in the
    * current layout into `collisionDefs`, then rebuilds the overlay. Async and
    * race-safe: only definitions with primitives are kept (others fall back to the
@@ -6816,7 +6830,12 @@ export class SceneApp {
   ): (x: number, z: number) => readonly number[] | null {
     const footprintHalf: [number, number] = [Math.max(0, agent.radius), Math.max(0, agent.radius)];
     const maxSlopeCos = slopeCosFromDegrees(agent.maxSlopeAngleDeg ?? AI_NAV_DEBUG_AGENT_MAX_SLOPE_DEG);
-    const surfaces = this.physicsSubsystem.staticNavigationSurfaceTriangles();
+    // Live surfaces from the layout (like `editorNavBlockers`), NOT the physics
+    // cache — physics static bodies are only populated at scene load, so a deleted
+    // or moved ramp would otherwise leave its walkable cells frozen in the preview.
+    const surfaces = this.layout
+      ? collisionSurfaceTriangles(this.layout, this.complexCollisionMeshes, this.collisionDefs)
+      : [];
     return (x, z) => {
       let minY = Infinity;
       let maxY = -Infinity;
@@ -7270,6 +7289,12 @@ export class SceneApp {
 
   private emitSceneObjectsChanged(): void {
     this.onSceneObjectsChanged?.(this.getSceneObjects());
+    // Any structural change (add/delete/edit of a collider, placement or nav
+    // volume) can alter the baked walkable area, so refresh the AI Navigation
+    // overlay from the live layout. Without this, deleting an obstacle left its
+    // eroded footprint and stale walkable cells frozen in the view. Cheap when the
+    // overlay is off (updateAiNavigationView early-returns on !showAiNavigation).
+    this.updateAiNavigationView();
   }
 
   private emitHistoryChanged(): void {

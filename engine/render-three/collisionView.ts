@@ -94,6 +94,78 @@ export function collisionWireboxes(
   return boxes;
 }
 
+/** A world-space walkable surface triangle (`normalY` = |unit normal.y|). */
+export interface CollisionSurfaceTriangle {
+  a: Vec3;
+  b: Vec3;
+  c: Vec3;
+  normalY: number;
+}
+
+/** Steepest walkable surface: matches the physics `SURFACE_MAX_WALL_DEGREES` (50°) gate. */
+const SURFACE_MIN_NORMAL_Y = Math.cos((50 * Math.PI) / 180);
+
+/**
+ * World-space walkable surface triangles for every `complexAsSimple` placement in
+ * a layout — the live, layout-derived twin of the physics subsystem's
+ * `staticNavigationSurfaceTriangles()`. The editor AI-nav preview samples this so
+ * a ramp/complex mesh's walkable cells track add/delete/move/rotate/scale edits
+ * immediately, instead of freezing on the physics bodies (populated only once at
+ * scene load). Sensors, `collision:false` placements, and obstacle/ignored nav
+ * roles never seed nav floor, so they are skipped — mirroring the physics path.
+ */
+export function collisionSurfaceTriangles(
+  layout: RoomLayout,
+  complexMeshes: ReadonlyMap<string, ComplexCollisionMesh>,
+  collisionDefs?: ReadonlyMap<string, AssetCollisionDef>,
+): CollisionSurfaceTriangle[] {
+  const out: CollisionSurfaceTriangle[] = [];
+  const emit = (source: ColliderSource, assetId: string, sensor: boolean): void => {
+    if (sensor) return;
+    if (source.collision === false && source.simulatePhysics !== true) return;
+    const def = collisionDefs?.get(assetId);
+    if (def?.complexity !== "complexAsSimple") return;
+    const mesh = complexMeshes.get(assetId);
+    if (!mesh || mesh.indices.length < 3) return;
+    const navigationRole = source.navigationRole ?? def?.navigationRole ?? "auto";
+    if (navigationRole === "obstacleOnly" || navigationRole === "ignored") return;
+    const place = composeTransformMatrix(source.position, readRotation(source), readScale(source));
+    const world = mesh.vertices.map((point) =>
+      new Vector3(point[0], point[1], point[2]).applyMatrix4(place),
+    );
+    for (let t = 0; t + 2 < mesh.indices.length; t += 3) {
+      const a = world[mesh.indices[t]!];
+      const b = world[mesh.indices[t + 1]!];
+      const c = world[mesh.indices[t + 2]!];
+      if (!a || !b || !c) continue;
+      const normalY = triangleUpNormalY(a, b, c);
+      if (normalY < SURFACE_MIN_NORMAL_Y) continue; // steep → wall blocker, not a walk surface
+      out.push({ a: [a.x, a.y, a.z], b: [b.x, b.y, b.z], c: [c.x, c.y, c.z], normalY });
+    }
+  };
+  for (const instance of layout.instances) {
+    for (const placement of instance.placements) {
+      emit(placement, instance.assetId, placement.sensor === true);
+    }
+  }
+  return out;
+}
+
+/** |unit normal.y| of a triangle (1 = flat floor, 0 = vertical/degenerate). */
+function triangleUpNormalY(a: Vector3, b: Vector3, c: Vector3): number {
+  const ux = b.x - a.x;
+  const uy = b.y - a.y;
+  const uz = b.z - a.z;
+  const vx = c.x - a.x;
+  const vy = c.y - a.y;
+  const vz = c.z - a.z;
+  const ny = uz * vx - ux * vz;
+  const nx = uy * vz - uz * vy;
+  const nz = ux * vy - uy * vx;
+  const len = Math.hypot(nx, ny, nz);
+  return len <= 1e-12 ? 0 : Math.abs(ny) / len;
+}
+
 /** Placement/character fields the wirebox builder reads. */
 type ColliderSource = {
   position: Vec3;

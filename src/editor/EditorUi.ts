@@ -2976,6 +2976,17 @@ export class EditorUi {
         this.app.isSelectedReflectionCaptureBakeStale(),
       recaptureSelectedReflectionCapture: () => this.app.recaptureSelectedReflectionCapture(),
       recaptureAllReflectionCaptures: () => this.app.recaptureAllReflectionCaptures(),
+      rebakeAiNavigation: () => {
+        // Make sure the overlay is visible so the rebake is seen, keeping the
+        // toolbar Show flag in sync (bindShowFlag only tracks its own clicks).
+        if (!this.app.getShowAiNavigation()) {
+          this.app.setShowAiNavigation(true);
+          this.root
+            .querySelector<HTMLButtonElement>('[data-show-flag="ai-navigation"]')
+            ?.classList.add("active");
+        }
+        this.app.rebakeAiNavigation();
+      },
     };
   }
 

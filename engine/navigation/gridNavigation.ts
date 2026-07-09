@@ -298,6 +298,11 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
   const passable = new Uint8Array(cols * rows);
   const floorY = new Float32Array(cols * rows);
   const penalty = new Float32Array(cols * rows);
+  // Ground presence per cell, independent of walkability (blocked cells that still
+  // have a floor count as ground). Used by ledge erosion to tell a genuine
+  // drop-off apart from a floor the agent simply can't stand on. Single-layer only;
+  // the layered path reads ground heights straight from the packed layer arrays.
+  const hasGround = new Uint8Array(cols * rows);
   const clearanceCostRadius = cellSize * CLEARANCE_COST_CELL_RADIUS;
   const layerOffsets = request.sampleFloorYs ? new Uint32Array(cols * rows + 1) : undefined;
   const layerCells: number[] = [];
@@ -344,6 +349,7 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
       floorY[idx] = sampledFloorY ?? footY;
       if (sampledFloorY === null || !Number.isFinite(sampledFloorY)) continue;
       point[1] = sampledFloorY;
+      hasGround[idx] = 1;
       const cellBlockers = heightfield
         ? blockers.filter((blocker) => blocksAgentVertically(blocker, sampledFloorY, height, stepHeight))
         : flatBlockers;
@@ -360,6 +366,127 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
     }
   }
   if (layerOffsets) layerOffsets[cols * rows] = layerFloors.length;
+
+  let finalLayerOffsets = layerOffsets;
+  let finalLayerCells = layerCells;
+  let finalLayerFloors = layerFloors;
+  let finalLayerPenalties = layerPenalties;
+
+  // Ledge (drop-off) erosion — the walkable-surface analogue of blocker erosion.
+  // Blocker erosion above insets the grid only where an obstacle footprint pushes
+  // in; an open *walkable edge* (a ramp's side, a platform rim, a stair's flank)
+  // got no inset, so an agent could path to the very lip and fall — the missing
+  // "border" a walkable surface has that a wall does. Recast/Unreal inset the
+  // navigable surface from every ledge by the agent radius; this pass reproduces
+  // that: demote any walkable cell within `clearanceRadius` of a genuine drop.
+  //
+  // A neighbour is a drop only when (a) it has no ground reachable within
+  // `maxStepDown` of this cell's floor — so a ramp/stair's own traversable steps
+  // and the ramp-to-floor join are kept, satisfying the "only drops beyond
+  // maxStepDown" rule — and (b) it is not a solid wall face at this height, since
+  // walls are already handled by blocker erosion and must not be inset twice.
+  // Flat/non-heightfield grids have no ledges (uniform floor), so this is a no-op
+  // there; with `clearanceRadius` 0 (e.g. radius-0 exact-grid tests) it never runs.
+  if (heightfield && clearanceRadius > 0) {
+    const EPS = 1e-6;
+    const ledgeReach = Math.max(1, Math.ceil(clearanceRadius / cellSize));
+    const solidAt = (worldX: number, worldZ: number, refY: number): boolean =>
+      request.blockers.some(
+        (blocker) =>
+          blocksAgentVertically(blocker, refY, height, stepHeight) &&
+          blockerCoversPointXZ(blocker, worldX, worldZ),
+      );
+    const hasLedgeWithinReach = (
+      x: number,
+      z: number,
+      refY: number,
+      reachableGround: (cellIdx: number, refY: number) => boolean,
+    ): boolean => {
+      for (let dz = -ledgeReach; dz <= ledgeReach; dz += 1) {
+        for (let dx = -ledgeReach; dx <= ledgeReach; dx += 1) {
+          if (dx === 0 && dz === 0) continue;
+          if (Math.hypot(dx * cellSize, dz * cellSize) > clearanceRadius + EPS) continue;
+          const nx = x + dx;
+          const nz = z + dz;
+          if (nx < 0 || nz < 0 || nx >= cols || nz >= rows) continue;
+          if (reachableGround(nz * cols + nx, refY)) continue;
+          if (solidAt(originX + nx * cellSize, originZ + nz * cellSize, refY)) continue;
+          return true;
+        }
+      }
+      return false;
+    };
+
+    if (finalLayerOffsets) {
+      const layerOffs = finalLayerOffsets;
+      const cellHasReachableLayer = (cellIdx: number, refY: number): boolean => {
+        for (let id = layerOffs[cellIdx] ?? 0; id < (layerOffs[cellIdx + 1] ?? 0); id += 1) {
+          const lf = finalLayerFloors[id]!;
+          if (refY - lf <= maxStepDown + EPS && lf - refY <= stepHeight + EPS) return true;
+        }
+        return false;
+      };
+      const removeLayer = new Uint8Array(finalLayerFloors.length);
+      let removedAny = false;
+      for (let z = 0; z < rows; z += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          const cellIdx = z * cols + x;
+          for (let id = layerOffs[cellIdx] ?? 0; id < (layerOffs[cellIdx + 1] ?? 0); id += 1) {
+            if (hasLedgeWithinReach(x, z, finalLayerFloors[id]!, cellHasReachableLayer)) {
+              removeLayer[id] = 1;
+              removedAny = true;
+            }
+          }
+        }
+      }
+      if (removedAny) {
+        const newOffsets = new Uint32Array(cols * rows + 1);
+        const newCells: number[] = [];
+        const newFloors: number[] = [];
+        const newPenalties: number[] = [];
+        for (let cellIdx = 0; cellIdx < cols * rows; cellIdx += 1) {
+          newOffsets[cellIdx] = newFloors.length;
+          const first = newFloors.length;
+          for (let id = layerOffs[cellIdx] ?? 0; id < (layerOffs[cellIdx + 1] ?? 0); id += 1) {
+            if (removeLayer[id]) continue;
+            newCells.push(cellIdx);
+            newFloors.push(finalLayerFloors[id]!);
+            newPenalties.push(finalLayerPenalties[id]!);
+          }
+          if (newFloors.length <= first) {
+            passable[cellIdx] = 0;
+            floorY[cellIdx] = footY;
+            penalty[cellIdx] = 0;
+          } else {
+            const rep = nearestLayerIndex(newFloors, first, newFloors.length, footY);
+            passable[cellIdx] = 1;
+            floorY[cellIdx] = newFloors[rep] ?? footY;
+            penalty[cellIdx] = newPenalties[rep] ?? 0;
+          }
+        }
+        newOffsets[cols * rows] = newFloors.length;
+        finalLayerOffsets = newOffsets;
+        finalLayerCells = newCells;
+        finalLayerFloors = newFloors;
+        finalLayerPenalties = newPenalties;
+      }
+    } else {
+      const reachableSingle = (nIdx: number, refY: number): boolean =>
+        hasGround[nIdx] === 1 &&
+        refY - floorY[nIdx]! <= maxStepDown + EPS &&
+        floorY[nIdx]! - refY <= stepHeight + EPS;
+      const toDemote: number[] = [];
+      for (let z = 0; z < rows; z += 1) {
+        for (let x = 0; x < cols; x += 1) {
+          const cellIdx = z * cols + x;
+          if (passable[cellIdx] !== 1) continue;
+          if (hasLedgeWithinReach(x, z, floorY[cellIdx]!, reachableSingle)) toDemote.push(cellIdx);
+        }
+      }
+      for (const idx of toDemote) passable[idx] = 0;
+    }
+  }
+
   return {
     cellSize,
     cols,
@@ -374,12 +501,12 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
     passable,
     floorY,
     penalty,
-    ...(layerOffsets
+    ...(finalLayerOffsets
       ? {
-          layerOffsets,
-          layerCell: Uint32Array.from(layerCells),
-          layerFloorY: Float32Array.from(layerFloors),
-          layerPenalty: Float32Array.from(layerPenalties),
+          layerOffsets: finalLayerOffsets,
+          layerCell: Uint32Array.from(finalLayerCells),
+          layerFloorY: Float32Array.from(finalLayerFloors),
+          layerPenalty: Float32Array.from(finalLayerPenalties),
         }
       : {}),
     blockers,
@@ -666,6 +793,23 @@ function pointBlocked(point: Vec3, blockers: readonly NavBlocker[], radius: numb
     // Axis-aligned: the broadphase test above already is the exact answer.
     return true;
   });
+}
+
+/**
+ * True when world XZ `(x, z)` lies on/inside the blocker's ground silhouette
+ * (radius 0, unlike {@link pointBlocked}). Ledge erosion uses this to tell a wall
+ * face from open air: a neighbour under a solid body is a wall (handled by blocker
+ * erosion), not a fall, so it must not seed a second inset.
+ */
+function blockerCoversPointXZ(blocker: NavBlocker, x: number, z: number): boolean {
+  if (x < blocker.min[0] || x > blocker.max[0] || z < blocker.min[2] || z > blocker.max[2]) {
+    return false;
+  }
+  const footprint = blocker.footprint;
+  if (footprint && footprint.length >= 2) {
+    return distancePointToFootprintXZ(x, z, footprint) <= 1e-6;
+  }
+  return true;
 }
 
 function nearestInflatedBlockerDistance(point: Vec3, blockers: readonly NavBlocker[], radius: number): number {

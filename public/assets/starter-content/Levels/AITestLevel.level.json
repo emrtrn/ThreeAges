@@ -1272,8 +1272,7 @@
   ],
   "characters": [],
   "worldSettings": {
-    "staticObjectsCastShadow": true,
-    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
+    "staticObjectsCastShadow": true
   },
   "skyAtmosphere": {
     "rayleigh": 1,

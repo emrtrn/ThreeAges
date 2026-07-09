@@ -85,6 +85,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   isSelectedReflectionCaptureBakeStale: () => boolean;
   recaptureSelectedReflectionCapture: () => void;
   recaptureAllReflectionCaptures: () => void;
+  rebakeAiNavigation: () => void;
 }
 
 export function renderLightDetails(options: SpecialActorDetailsOptions): void {
@@ -491,6 +492,11 @@ export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOpti
             value="${volume.clearancePadding}" ${lockedAttr} />
         </label>
       </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Navigation Bake</div>
+        <button type="button" data-ai-nav-rebake class="detail-button">Rebake Navigation</button>
+        <div class="detail-hint">The walkable area rebakes automatically on every scene edit and at runtime. Press to force a recompute now (also reloads edited collision sidecars) and show the preview.</div>
+      </div>
       ${actorLockSection(selection)}
     `;
 
@@ -512,6 +518,10 @@ export function renderAiNavigationVolumeDetails(options: SpecialActorDetailsOpti
       if (key === "clearancePadding") options.setSelectedAiNavigationVolume({ clearancePadding: value });
     });
   });
+
+  body
+    .querySelector<HTMLButtonElement>("[data-ai-nav-rebake]")
+    ?.addEventListener("click", () => options.rebakeAiNavigation());
 }
 
 export function renderTargetPointDetails(options: SpecialActorDetailsOptions): void {

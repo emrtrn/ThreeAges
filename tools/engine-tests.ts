@@ -540,7 +540,7 @@ import {
   clonePlacement,
 } from "../editor/core/layoutSnapshots";
 import { colliderBoxFromBounds } from "../engine/render-three/transforms";
-import { collisionWireboxes } from "../engine/render-three/collisionView";
+import { collisionWireboxes, collisionSurfaceTriangles } from "../engine/render-three/collisionView";
 import { attachActorLight } from "../engine/render-three/lights";
 import {
   applySkyToneMapping,
@@ -6925,6 +6925,64 @@ check("nav grid heightfield rejects neighbor steps above the agent step height",
   assert.equal(path.status, "failure");
 });
 
+check("ledge erosion insets a raised platform edge by the agent clearance", () => {
+  const agent = { radius: 0.35, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45, clearancePadding: 0 };
+  const bounds: NavAabb[] = [{ min: [-2, -1, -2], max: [6, 4, 6] }];
+  // A raised platform (y=2) over [0,4] x [0,4], surrounded by void (a fall on every
+  // side). The platform sits well inside the volume, so its rim is a genuine ledge,
+  // not the (separately eroded) authored-bounds edge.
+  const sampleFloorYs = (x: number, z: number): number[] | null =>
+    x >= 0 && x <= 4 && z >= 0 && z <= 4 ? [2] : null;
+  const grid = buildNavGrid({ agent, blockers: [], bounds, footY: 2, cellSize: 0.5, safetyMargin: 0.25, sampleFloorYs })!;
+  assert.ok(grid, "platform grid builds");
+  const cellPassable = (g: NonNullable<ReturnType<typeof buildNavGrid>>, x: number, z: number): boolean => {
+    const cx = Math.round((x - g.originX) / g.cellSize);
+    const cz = Math.round((z - g.originZ) / g.cellSize);
+    return cx >= 0 && cz >= 0 && cx < g.cols && cz < g.rows && g.passable[cz * g.cols + cx] === 1;
+  };
+  // Interior stays walkable; the outer lip (within clearance 0.60 of the drop) is inset.
+  assert.equal(cellPassable(grid, 2, 2), true, "platform interior remains walkable");
+  assert.equal(cellPassable(grid, 0, 2), false, "platform x=0 lip is eroded (fall border)");
+  assert.equal(cellPassable(grid, 4, 2), false, "platform x=4 lip is eroded (fall border)");
+  assert.equal(cellPassable(grid, 2, 0), false, "platform z=0 lip is eroded (fall border)");
+  // A radius-0 build has no fall border, so it keeps strictly more walkable cells.
+  const bare = buildNavGrid({
+    agent: { ...agent, radius: 0 },
+    blockers: [],
+    bounds,
+    footY: 2,
+    cellSize: 0.5,
+    safetyMargin: 0,
+    sampleFloorYs,
+  })!;
+  const count = (g: NonNullable<ReturnType<typeof buildNavGrid>>): number => g.passable.reduce((s, v) => s + v, 0);
+  assert.ok(count(grid) < count(bare), `ledge erosion removes edge cells (${count(grid)} < ${count(bare)})`);
+});
+
+check("ledge erosion keeps a step-down within maxStepDown (a shallow join is not a ledge)", () => {
+  const agent = { radius: 0.35, height: 1.8, stepHeight: 0.5, maxStepDown: 0.5, clearancePadding: 0 };
+  const bounds: NavAabb[] = [{ min: [-2, -1, -2], max: [8, 4, 8] }];
+  // Upper apron (y=0.4) for x<=3, lower floor (y=0) for x>3; the 0.4 m drop is within
+  // maxStepDown, so the seam is a walkable join (like a ramp meeting the ground), not
+  // a fall edge, and must survive erosion.
+  const sampleFloorYs = (x: number, z: number): number[] | null => {
+    if (x < 0 || x > 6 || z < 0 || z > 6) return null;
+    return [x <= 3 ? 0.4 : 0];
+  };
+  const grid = buildNavGrid({ agent, blockers: [], bounds, footY: 0, cellSize: 0.5, safetyMargin: 0.25, sampleFloorYs })!;
+  assert.ok(grid, "join grid builds");
+  const cellPassable = (x: number, z: number): boolean => {
+    const cx = Math.round((x - grid.originX) / grid.cellSize);
+    const cz = Math.round((z - grid.originZ) / grid.cellSize);
+    return cx >= 0 && cz >= 0 && cx < grid.cols && cz < grid.rows && grid.passable[cz * grid.cols + cx] === 1;
+  };
+  // The interior seam cells stay walkable, and a path crosses the shallow step-down.
+  assert.equal(cellPassable(3, 3), true, "upper side of the shallow seam stays walkable");
+  assert.equal(cellPassable(3.5, 3), true, "lower side of the shallow seam stays walkable");
+  const path = searchNavGrid(grid, [1, 0.4, 3], [5, 0, 3]);
+  assert.equal(path.status, "success", "agent crosses the shallow step-down join");
+});
+
 // Height-aware two-level layout with a one-cell hole at x=3: lower floor (y=0)
 // for x<=2, an unwalkable hole at x=3, an upper platform (y=2) for x>=4.
 function twoLevelHeightfieldGrid() {
@@ -7752,30 +7810,34 @@ check("walkable stair emits riser nav blockers tagged with their role; auto does
 // tread strip (untagged -> the bug) but are excluded from erosion when tagged
 // `walkable` (the fix), while ground seeding via `sampleFloorY` is untouched.
 // Real asset geometry: 0.2 m rise, 0.24 m tread, agent radius 0.35 + clearance
-// 0.1 + safety 0.25 = 0.70 m.
+// 0.1 + safety 0.25 = 0.70 m. The stair is modelled wide (|z| <= 2 m) because
+// ledge erosion now insets each flank by the clearance radius; a real staircase
+// wider than the agent keeps a navigable interior, whereas a one-cell strip would
+// (correctly) be entirely inside the fall border.
 check("nav grid erosion excludes walkable blockers so a walkable staircase is climbable", () => {
   const rise = 0.2;
   const tread = 0.24;
   const nSteps = 8;
   const agent = { radius: 0.35, height: 1.8, stepHeight: 0.5, maxStepDown: 0.5, clearancePadding: 0.1 };
   const runLength = nSteps * tread;
-  const bounds: NavAabb[] = [{ min: [-2, -1, -1], max: [runLength + 2, 3, 1] }];
-  // A one-cell-wide stair corridor along +X; null off the strip so there is no way around.
+  const bounds: NavAabb[] = [{ min: [-2, -1, -3], max: [runLength + 2, 3, 3] }];
+  // A wide stair corridor along +X; null off the strip so there is no way around.
   const sampleFloorY = (x: number, z: number): number | null => {
-    if (Math.abs(z) > 0.12) return null;
+    if (Math.abs(z) > 2) return null;
     const step = Math.min(nSteps, Math.max(0, Math.round(x / tread)));
     return step * rise;
   };
-  // One vertical riser wall (thin AABB + line footprint) at each step's front edge.
+  // One vertical riser wall (thin AABB + line footprint) at each step's front edge,
+  // spanning the full stair width so untagged erosion walls the whole corridor.
   const risers: NavBlocker[] = [];
   for (let k = 1; k <= nSteps; k += 1) {
     const edgeX = k * tread - tread / 2;
     risers.push({
-      min: [edgeX - 0.02, (k - 1) * rise, -1],
-      max: [edgeX + 0.02, k * rise, 1],
+      min: [edgeX - 0.02, (k - 1) * rise, -3],
+      max: [edgeX + 0.02, k * rise, 3],
       footprint: [
-        [edgeX, -1],
-        [edgeX, 1],
+        [edgeX, -3],
+        [edgeX, 3],
       ],
     });
   }
@@ -9049,6 +9111,44 @@ check("collisionWireboxes draws convex primitive points instead of the AABB box"
   const box = authored[0]!.box;
   assert.deepEqual(box.min.toArray(), [1, 0, 0]);
   assert.deepEqual(box.max.toArray(), [3, 2, 2]);
+});
+
+check("collisionSurfaceTriangles derives live walkable surfaces and drops deleted placements", () => {
+  const mesh = {
+    vertices: [
+      [-1, 0, -1],
+      [1, 0, -1],
+      [1, 0, 1],
+      [-1, 0, 1],
+    ] as Vec3[],
+    indices: [0, 1, 2, 0, 2, 3],
+  };
+  const complexMeshes = new Map([["ramp", mesh]]);
+  const defs = new Map<string, AssetCollisionDef>([
+    ["ramp", { primitives: [], complexity: "complexAsSimple", preset: "blockAll" }],
+  ]);
+  const withRamp: RoomLayout = {
+    schema: 1,
+    name: "ramp",
+    loadGroups: [],
+    instances: [{ assetId: "ramp", placements: [{ position: [0, 0, 0] }] }],
+    characters: [],
+    lights: [],
+  };
+  const surfaces = collisionSurfaceTriangles(withRamp, complexMeshes, defs);
+  assert.equal(surfaces.length, 2, "flat complexAsSimple top yields two walkable triangles");
+  assert.ok(surfaces.every((tri) => Math.abs(tri.normalY - 1) < 1e-9), "a flat top has an upward normal");
+
+  // Deleting the placement removes its surfaces (live derivation, not a stale cache).
+  const deleted: RoomLayout = { ...withRamp, instances: [{ assetId: "ramp", placements: [] }] };
+  assert.equal(collisionSurfaceTriangles(deleted, complexMeshes, defs).length, 0, "deleted placement seeds no surfaces");
+
+  // Obstacle-only role never seeds nav floor (mirrors staticNavigationSurfaceTriangles).
+  const obstacle: RoomLayout = {
+    ...withRamp,
+    instances: [{ assetId: "ramp", placements: [{ position: [0, 0, 0], navigationRole: "obstacleOnly" }] }],
+  };
+  assert.equal(collisionSurfaceTriangles(obstacle, complexMeshes, defs).length, 0, "obstacle-only role seeds no surfaces");
 });
 
 check("save validator allowlist keeps a placement sensor flag", () => {
