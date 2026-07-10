@@ -21430,6 +21430,35 @@ check("forge.moveToPatrolTarget can advance the route after arrival", () => {
   assert.deepEqual(bb.getVec3("patrolPosition"), [4, 0, 0]);
 });
 
+check("forge.waitAtPatrolTarget waits the current point's authored waitTime", () => {
+  const bb = new Blackboard([{ key: "currentPatrolTarget", kind: "string", default: null }]);
+  const controller = new AIController("ai:guard", "guard", bb);
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.waitAtPatrolTarget", params: { seconds: 0.1 } },
+  });
+  const targetPoints = createTargetPointIndex([
+    { id: "dwell", name: "Dwell", position: [0, 0, 0], nextTargetPoint: null, waitTime: 1, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "" },
+    { id: "instant", name: "Instant", position: [4, 0, 0], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.5, speedOverride: null, patrolTag: "" },
+  ]);
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    targetPoints,
+  });
+  // Broken / unset target id => safe failure.
+  assert.equal(runner.tick({ deltaSeconds: 0.4, elapsedSeconds: 0.4, frame: 1 }), "failure");
+  // Point with waitTime 1: still running after 0.4s, succeeds once the second elapses.
+  bb.set("currentPatrolTarget", "dwell");
+  assert.equal(runner.tick({ deltaSeconds: 0.4, elapsedSeconds: 0.8, frame: 2 }), "running");
+  assert.equal(runner.tick({ deltaSeconds: 0.4, elapsedSeconds: 1.2, frame: 3 }), "running");
+  assert.equal(runner.tick({ deltaSeconds: 0.4, elapsedSeconds: 1.6, frame: 4 }), "success");
+  // Point with waitTime 0 falls back to the `seconds` param (0.1s here).
+  bb.set("currentPatrolTarget", "instant");
+  assert.equal(runner.tick({ deltaSeconds: 0.05, elapsedSeconds: 1.65, frame: 5 }), "running");
+  assert.equal(runner.tick({ deltaSeconds: 0.1, elapsedSeconds: 1.75, frame: 6 }), "success");
+});
+
 check("forge.stopMovement requests the pawn's current position", () => {
   const controller = new AIController("ai:guard", "guard", new Blackboard());
   const asset = normalizeAiBehaviorTreeAsset({

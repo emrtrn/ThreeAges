@@ -136,6 +136,7 @@ export function createDefaultAiTaskRegistry(): AiTaskRegistry {
     ["forge.moveToBlackboard", moveToBlackboardTask],
     ["forge.setPatrolTarget", setPatrolTargetTask],
     ["forge.moveToPatrolTarget", moveToPatrolTargetTask],
+    ["forge.waitAtPatrolTarget", waitAtPatrolTargetTask],
     ["forge.advancePatrolTarget", advancePatrolTargetTask],
     ["forge.startConversation", startConversationTask],
     ["forge.runQueryToBlackboard", runQueryToBlackboardTask],
@@ -535,6 +536,37 @@ function moveToPatrolTargetTask(context: AiTaskContext): AiBehaviorStatus {
     return advancePatrolTarget(context);
   }
   return status;
+}
+
+/**
+ * Waits for the authored `waitTime` of the Blackboard's current patrol Target
+ * Point (the `key` param, default `currentPatrolTarget`). Mirrors `forge.wait`
+ * but sources its duration from the point instead of a static param, so authored
+ * per-point dwell times drive the pause. A missing/zero `waitTime` succeeds
+ * immediately; a broken/unset target id is a safe failure. An optional
+ * `seconds` param sets a fallback used only when the point has no positive
+ * `waitTime`.
+ */
+function waitAtPatrolTargetTask(context: AiTaskContext): AiBehaviorStatus {
+  const index = context.targetPoints;
+  if (!index) return "failure";
+  const key = stringParam(context.params.key) ?? DEFAULT_PATROL_KEY;
+  const entry = index.get(context.blackboard.getString(key));
+  if (!entry) return "failure";
+  const fallback = optionalNonNegativeNumberParam(context.params.seconds) ?? 0;
+  const seconds = entry.waitTime > 0 ? entry.waitTime : fallback;
+  if (!(seconds > 0)) {
+    context.memory.delete("remaining");
+    return "success";
+  }
+  const remaining = (context.memory.get("remaining") as number | undefined) ?? seconds;
+  const next = remaining - Math.max(0, context.engine.deltaSeconds);
+  if (next > 0) {
+    context.memory.set("remaining", next);
+    return "running";
+  }
+  context.memory.delete("remaining");
+  return "success";
 }
 
 /**

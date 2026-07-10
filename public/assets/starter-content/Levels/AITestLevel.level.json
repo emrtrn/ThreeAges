@@ -1253,6 +1253,7 @@
       "name": "TP2",
       "scale": 1,
       "nextTargetPoint": "target-point-3",
+      "waitTime": 0,
       "acceptanceRadius": 0.2
     },
     {
@@ -1265,21 +1266,19 @@
       "name": "TP3",
       "scale": 1,
       "nextTargetPoint": "target-point-1",
-      "waitTime": 1,
+      "waitTime": 2,
       "acceptanceRadius": 0.2
     }
   ],
   "actors": [
     {
-      "classRef": "assets/starter-content/Script/AI_Character.actor.json",
+      "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
       "position": [
-        -0.18,
+        -0.7,
         0.05,
-        6.31
+        6.28
       ],
-      "scaleLocked": true,
-      "rotationYDeg": 0,
-      "scale": 0.3
+      "rotationYDeg": 0
     }
   ]
 }
