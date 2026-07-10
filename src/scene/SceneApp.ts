@@ -566,6 +566,8 @@ const GIZMO_MIN_SCALE = 0.35;
 const GIZMO_MAX_SCALE = 4;
 const GIZMO_SCREEN_SIZE_PX = 118;
 
+type WireframeCapableMaterial = Material & { wireframe: boolean };
+
 const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
   "Damage.Apply",
   "Damage.Died",
@@ -680,6 +682,7 @@ export class SceneApp {
   private readonly textureLoader = new TextureLoader();
   private readonly materialCache = new Map<string, Material>();
   private readonly materialLoads = new Map<string, Promise<Material>>();
+  private readonly wireframeMaterialStates = new Map<WireframeCapableMaterial, boolean>();
   private characterObjects: Object3D[] = [];
   /** Render object per placed actor instance, index-aligned with `layout.actors`. */
   private actorObjects: Object3D[] = [];
@@ -1450,8 +1453,48 @@ export class SceneApp {
 
   private applyViewMode(mode: ViewMode, announce: boolean): void {
     this.viewMode = mode;
-    // TODO(view-mode, later step): apply wireframe/lit shading to the scene here.
+    this.applyWireframeViewMode(mode === "wireframe");
     if (announce) this.onStatus?.(`${mode === "lit" ? "Lit" : "Wireframe"} view mode`, "info");
+  }
+
+  private applyWireframeViewMode(enabled: boolean): void {
+    if (!enabled) {
+      for (const [material, wireframe] of this.wireframeMaterialStates) {
+        material.wireframe = wireframe;
+        material.needsUpdate = true;
+      }
+      this.wireframeMaterialStates.clear();
+      return;
+    }
+
+    for (const root of this.levelWireframeRoots()) this.applyWireframeToLevelObject(root);
+  }
+
+  private applyWireframeToLevelObject(root: Object3D): void {
+    if (this.viewMode !== "wireframe") return;
+    root.traverse((object) => {
+      if (!isRenderableMesh(object)) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      for (const material of materials) this.setMaterialWireframe(material, true);
+    });
+  }
+
+  private setMaterialWireframe(material: Material, wireframe: boolean): void {
+    if (!isWireframeCapableMaterial(material)) return;
+    if (!this.wireframeMaterialStates.has(material)) {
+      this.wireframeMaterialStates.set(material, material.wireframe);
+    }
+    material.wireframe = wireframe;
+    material.needsUpdate = true;
+  }
+
+  private levelWireframeRoots(): Object3D[] {
+    const roots: Object3D[] = [];
+    for (const meshes of this.instanceMeshes.values()) roots.push(...meshes);
+    for (const objects of this.instanceOverrideObjects.values()) roots.push(...objects);
+    roots.push(...this.characterObjects);
+    roots.push(...this.actorObjects);
+    return roots;
   }
 
   getViewState(): ViewportViewState {
@@ -2696,6 +2739,7 @@ export class SceneApp {
     this.instanceMeshes.set(assetId, meshes);
     this.instanceOverrideObjects.set(assetId, renderedOverrideObjects);
     this.instanceProbeMaterials.set(assetId, clonedMaterials);
+    this.applyWireframeToLevelObject(group);
     return group;
   }
 
@@ -2985,6 +3029,7 @@ export class SceneApp {
 
     const character = this.createCharacterObject(gltf, placement, this.characterObjects.length);
     character.userData.characterIndex = this.characterObjects.length;
+    this.applyWireframeToLevelObject(character);
     this.scene.add(character);
     this.characterObjects.push(character);
     this.playCharacterAnimation(character, gltf, placement.animation);
@@ -2997,6 +3042,7 @@ export class SceneApp {
 
     const insertionIndex = clampIndex(index, this.layout.characters.length);
     const character = this.createCharacterObject(gltf, placement, insertionIndex);
+    this.applyWireframeToLevelObject(character);
     this.layout.characters.splice(insertionIndex, 0, cloneCharacter(placement));
     this.characterObjects.splice(insertionIndex, 0, character);
     this.scene.add(character);
@@ -3076,6 +3122,7 @@ export class SceneApp {
     entities.forEach((entity, index) => {
       const object = this.buildActorObject(entity);
       object.userData.actorIndex = index;
+      this.applyWireframeToLevelObject(object);
       this.scene.add(object);
       this.actorObjects[index] = object;
     });
@@ -3119,6 +3166,7 @@ export class SceneApp {
     const entity = actorInstanceToEntity(def, instance, insertionIndex);
     const object = this.buildActorObject(entity);
     object.userData.actorIndex = insertionIndex;
+    this.applyWireframeToLevelObject(object);
     this.layout.actors.splice(insertionIndex, 0, cloneActorInstance(instance));
     this.actorObjects.splice(insertionIndex, 0, object);
     this.scene.add(object);
@@ -7508,4 +7556,11 @@ function drawWorldWidgetGlyph(ctx: CanvasRenderingContext2D, size: number): void
   const lineH = size * 0.07;
   ctx.fillRect(left + radius, top + size * 0.16, (right - left) * 0.62, lineH);
   ctx.fillRect(left + radius, top + size * 0.31, (right - left) * 0.4, lineH);
+}
+
+function isWireframeCapableMaterial(material: Material): material is WireframeCapableMaterial {
+  return (
+    "wireframe" in material &&
+    typeof (material as Partial<WireframeCapableMaterial>).wireframe === "boolean"
+  );
 }

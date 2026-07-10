@@ -2,8 +2,8 @@
 
 > Tarih: 2026-07-09
 > Güncel durum: 2026-07-10 itibarıyla F2.1 aktif kamera + ortografik projeksiyon
-> temel dilimi kodlandı; F2.2 wireframe shading henüz uygulanmadı.
-> Durum: Uygulama başladı; F2.1/F2.4 temel kamera dilimi kodlandı.
+> temel dilimi ve F2.2 wireframe shading kodlandı.
+> Durum: Uygulama başladı; F2.1/F2.2/F2.4 temel dilimleri kodlandı.
 > Önkoşul: **Faz 1 (UE5 tarzı üst bar) tamamlandı ve commit'lendi** (commit
 > `feat(editor): UE5-style toolbar — icon tools, tooltips, snap + camera/view menus`).
 > Amaç: Faz 1'de yalnızca **durum + menü** olarak bağlanan Camera ve View Mode
@@ -127,17 +127,17 @@ Yaklaşım kararı: **iki kamera bulundur, aktif olanı referansla** (tam swap y
   yalnızca level mesh'lerine uygula, gizmo/helper hariç. Daha çok kod ama editör
   overlay'lerini bozmaz. **Muhtemel doğru seçim**, çünkü gizmo wireframe'de de
   düzgün görünmeli.
-- [ ] Karar ver (B öneriliyor), uygula, Lit'e dönüşte orijinal durumları geri yükle.
-- [ ] Yeni yüklenen/spawn edilen mesh'ler aktif wireframe durumuna uymalı
+- [x] Karar ver (B öneriliyor), uygula, Lit'e dönüşte orijinal durumları geri yükle.
+- [x] Yeni yüklenen/spawn edilen mesh'ler aktif wireframe durumuna uymalı
       (mesh ekleme yolunda `viewMode` kontrolü).
 
 ### F2.3 — Camera ↔ View Mode bağlama davranışı (kural)
 
 Durum kuralları Faz 1'de kodlu; bu fazda **render'a bağlanır**:
 
-- [ ] Top/Left/Front seçilince: ortografik projeksiyon **ve** wireframe render aktif.
-- [ ] Perspective seçilince: perspektif projeksiyon **ve** lit render.
-- [ ] View Mode menüsünden manuel Lit/Wireframe: yalnızca shading'i değiştirir,
+- [x] Top/Left/Front seçilince: ortografik projeksiyon **ve** wireframe render aktif.
+- [x] Perspective seçilince: perspektif projeksiyon **ve** lit render.
+- [x] View Mode menüsünden manuel Lit/Wireframe: yalnızca shading'i değiştirir,
       projeksiyonu değiştirmez (UE davranışı). `onViewStateChanged` etiketleri
       zaten güncelliyor.
 
@@ -161,11 +161,23 @@ Durum kuralları Faz 1'de kodlu; bu fazda **render'a bağlanır**:
   perspektif kamerayı kullanır ve layout/save şemasına alan eklenmedi.
 - `EditorCameraController` ortografikte orbit/fly rotasyonu yerine pan + zoom
   davranışını kullanır; picker line toleransı ortografik frustum yüksekliği/zoom
-  ile hesaplanır. Kod yolu bağlandı; Playwright/manual görsel doğrulama bekliyor.
-- `npx.cmd tsc --noEmit` bu dilimden bağımsız mevcut
-  `navigationCutsFloor` / `navigationFloorCut` tip uyuşmazlıkları nedeniyle
-  geçmedi. Filtreli kontrolde `SceneApp.ts` içindeki eski navigation rename borcu
-  da göründü; kamera dilimiyle ilgili ayrı bir TypeScript hatası raporlanmadı.
+  ile hesaplanır. Kod yolu bağlandı; hedefli Playwright label smoke geçti.
+- 2026-07-10 F2.2 turunda `npm run build:verify` geçti; önceki
+  `navigationCutsFloor` / `navigationFloorCut` rename blokajı bu çalışma ağacı
+  durumunda artık typecheck'i durdurmuyor.
+
+### F2.2 uygulama notu - 2026-07-10
+
+- `applyViewMode()` artık yalnızca menü durumunu değil render davranışını da
+  değiştirir. Wireframe modunda level mesh kökleri gezilir; gizmo/helper, sky,
+  cloud, marker icon ve editor overlay malzemeleri değiştirilmez.
+- Seçilen yaklaşım B'dir: `material.wireframe` orijinal değerleri cache'lenir,
+  Wireframe modunda `true` yapılır, Lit'e dönünce eski değerler geri yüklenir.
+- Instance rebuild, character spawn ve actor spawn yolları aktif Wireframe modunu
+  yeni gelen mesh'lere uygular.
+- Hedefli Playwright smoke: Top seçimi `Wireframe` moduna geçirdi; ortografikte
+  manuel `Lit` projeksiyonu bozmadı; Perspective'e dönüş `Lit` yaptı; Perspective
+  içinden manuel `Wireframe` projeksiyonu değiştirmedi.
 
 ### F2.5 — Cila (opsiyonel, sonra)
 
@@ -178,14 +190,14 @@ Durum kuralları Faz 1'de kodlu; bu fazda **render'a bağlanır**:
 
 ## 5. Test planı
 
-- [ ] `npx tsc --noEmit` temiz.
+- [x] `npx tsc --noEmit` temiz.
 - [ ] Görsel: Perspective↔Top↔Left↔Front geçişlerinde projeksiyon ve shading
       birlikte değişiyor; menü etiketleri (`Perspective`/`Top`... + `Lit`/`Wireframe`)
       senkron. (Playwright screenshot ile — Faz 1'deki `shot.mjs` deseni kullanılabilir.)
 - [ ] Gizmo ortografikte doğru boyutta ve tutamaklar tıklanabilir.
 - [ ] Seçim/pick ortografikte çalışıyor; yüzey snap doğru.
-- [ ] View Mode'dan manuel Wireframe (Perspective'deyken) projeksiyonu bozmuyor.
-- [ ] `npm run build:verify` yeşil; runtime `/` hâlâ perspektif ve etkilenmemiş.
+- [x] View Mode'dan manuel Wireframe (Perspective'deyken) projeksiyonu bozmuyor.
+- [x] `npm run build:verify` yeşil; runtime `/` hâlâ perspektif ve etkilenmemiş.
 - [ ] `npm run smoke:browser` (editör boot / placement / undo-redo / save) geçiyor.
 
 ## 6. Notlar / risk
