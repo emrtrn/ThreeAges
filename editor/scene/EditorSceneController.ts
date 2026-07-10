@@ -62,6 +62,7 @@ import type {
   CollisionObjectChannel,
   CollisionPresetId,
   CollisionResponseMap,
+  NavigationFloorCut,
   NavigationRole,
 } from "@engine/scene/collision";
 
@@ -83,7 +84,7 @@ type MutableHierarchyTransform = {
   responses?: CollisionResponseMap;
   physicalMaterialId?: string;
   navigationRole?: NavigationRole;
-  navigationCutsFloor?: boolean;
+  navigationFloorCut?: NavigationFloorCut;
   generateOverlapEvents?: boolean;
   simulationGeneratesHitEvents?: boolean;
   materialSlot?: string;
@@ -978,8 +979,8 @@ export class EditorSceneController {
     if (options.notify !== false) this.host.emitSelectionChanged();
   }
 
-  /** Sets (or clears) the per-placement nav-hole override for static mesh instances. */
-  setSelectionNavigationCutsFloor(value: boolean | undefined): void {
+  /** Sets (or clears) the per-placement nav-hole mode for static mesh instances. */
+  setSelectionNavigationFloorCut(value: NavigationFloorCut | undefined): void {
     if (!this.selection || !this.host.hasSelection(this.selection)) return;
     if (this.selection.kind !== "instance") {
       this.host.onStatus("Navigation overrides are available for static mesh instances.", "info");
@@ -988,14 +989,14 @@ export class EditorSceneController {
     const entries = this.getSelectedSelectionsWithTargets((selection) => selection.kind === "instance")
       .flatMap((selection) => {
         const target = this.host.getMutableTransform(selection);
-        if (!target || target.navigationCutsFloor === value) return [];
-        return [{ selection: cloneSelection(selection), previous: target.navigationCutsFloor }];
+        if (!target || target.navigationFloorCut === value) return [];
+        return [{ selection: cloneSelection(selection), previous: target.navigationFloorCut }];
       });
     if (entries.length === 0) return;
 
     const applyEntries = (mode: EditorCommandPhase): void => {
       for (const entry of entries) {
-        this.applyNavigationCutsFloor(
+        this.applyNavigationFloorCut(
           entry.selection,
           mode === "redo" ? value : entry.previous,
           { notify: false },
@@ -1005,22 +1006,22 @@ export class EditorSceneController {
     };
 
     this.executeCommand({
-      label: entries.length === 1 ? "Set navigation cuts floor" : "Set selected navigation cuts floor",
+      label: entries.length === 1 ? "Set navigation floor cut" : "Set selected navigation floor cut",
       redo: () => applyEntries("redo"),
       undo: () => applyEntries("undo"),
     });
   }
 
-  private applyNavigationCutsFloor(
+  private applyNavigationFloorCut(
     selection: Selection,
-    value: boolean | undefined,
+    value: NavigationFloorCut | undefined,
     options: { notify?: boolean } = {},
   ): void {
     if (selection.kind !== "instance") return;
     const target = this.host.getMutableTransform(selection);
     if (!target) return;
-    if (!value) delete target.navigationCutsFloor;
-    else target.navigationCutsFloor = true;
+    if (!value) delete target.navigationFloorCut;
+    else target.navigationFloorCut = value;
     if (options.notify !== false) this.host.emitSelectionChanged();
   }
 

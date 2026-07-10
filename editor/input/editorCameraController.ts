@@ -1,5 +1,5 @@
 import { Vector3 } from "three";
-import type { PerspectiveCamera } from "three";
+import type { Camera, OrthographicCamera, PerspectiveCamera } from "three";
 
 import { clamp } from "@editor/core/numeric";
 
@@ -31,7 +31,7 @@ type CameraDrag =
 type StatusTone = "info" | "success" | "warning" | "error";
 
 export interface EditorCameraControllerOptions {
-  camera: PerspectiveCamera;
+  camera: () => PerspectiveCamera | OrthographicCamera;
   canvas: HTMLCanvasElement;
   /** Selection-aware orbit/pan focus point, with a viewport-distance fallback. */
   getOrbitTarget: () => Vector3;
@@ -47,7 +47,7 @@ export interface EditorCameraControllerOptions {
  * `SceneApp` camera passed in. Editor-only — never reached by the game runtime.
  */
 export class EditorCameraController {
-  private readonly camera: PerspectiveCamera;
+  private readonly getCamera: () => PerspectiveCamera | OrthographicCamera;
   private readonly canvas: HTMLCanvasElement;
   private readonly getOrbitTarget: () => Vector3;
   private readonly onInteractionStart: () => void;
@@ -66,7 +66,7 @@ export class EditorCameraController {
   private drag: CameraDrag | null = null;
 
   constructor(options: EditorCameraControllerOptions) {
-    this.camera = options.camera;
+    this.getCamera = options.camera;
     this.canvas = options.canvas;
     this.getOrbitTarget = options.getOrbitTarget;
     this.onInteractionStart = options.onInteractionStart;
@@ -116,10 +116,15 @@ export class EditorCameraController {
 
   beginNavigation(event: PointerEvent): void {
     event.preventDefault();
+    const camera = this.getCamera();
+    if (isOrthographicCamera(camera)) {
+      this.onStatus?.("Orthographic view: use pan and zoom.", "info");
+      return;
+    }
     this.navigationActive = true;
     this.viewTouched = true;
     this.navigationPointer = event.pointerId;
-    this.camera.up.set(0, 1, 0);
+    camera.up.set(0, 1, 0);
     this.drag = null;
     this.onInteractionStart();
     this.canvas.style.cursor = "none";
@@ -151,27 +156,34 @@ export class EditorCameraController {
     this.viewTouched = true;
     this.drag = null;
     this.onInteractionStart();
+    const camera = this.getCamera();
 
     if (event.button === 0) {
-      this.camera.up.set(0, 1, 0);
-      const target = this.getOrbitTarget();
-      this.drag = {
-        mode: "orbit",
-        pointerId: event.pointerId,
-        target,
-        distance: Math.max(0.3, this.camera.position.distanceTo(target)),
-      };
-      this.canvas.style.cursor = "grabbing";
-      this.onStatus?.("Camera orbit");
+      if (isOrthographicCamera(camera)) {
+        this.drag = { mode: "pan", pointerId: event.pointerId };
+        this.canvas.style.cursor = "move";
+        this.onStatus?.("Camera pan");
+      } else {
+        camera.up.set(0, 1, 0);
+        const target = this.getOrbitTarget();
+        this.drag = {
+          mode: "orbit",
+          pointerId: event.pointerId,
+          target,
+          distance: Math.max(0.3, camera.position.distanceTo(target)),
+        };
+        this.canvas.style.cursor = "grabbing";
+        this.onStatus?.("Camera orbit");
+      }
     } else if (event.button === 1) {
       this.drag = { mode: "pan", pointerId: event.pointerId };
       this.canvas.style.cursor = "move";
       this.onStatus?.("Camera pan");
     } else {
-      this.camera.up.set(0, 1, 0);
+      if (!isOrthographicCamera(camera)) camera.up.set(0, 1, 0);
       this.drag = { mode: "dolly", pointerId: event.pointerId };
       this.canvas.style.cursor = "ns-resize";
-      this.onStatus?.("Camera dolly");
+      this.onStatus?.(isOrthographicCamera(camera) ? "Camera zoom" : "Camera dolly");
     }
 
     try {
@@ -186,6 +198,7 @@ export class EditorCameraController {
     if (!this.drag) return;
     event.preventDefault();
     this.viewTouched = true;
+    const camera = this.getCamera();
 
     if (this.drag.mode === "orbit") {
       this.yaw -= event.movementX * CAMERA_ORBIT_SENSITIVITY;
@@ -195,19 +208,21 @@ export class EditorCameraController {
         CAMERA_PITCH_LIMIT,
       );
       const lookDirection = this.lookDirection();
-      this.camera.position
+      camera.position
         .copy(this.drag.target)
         .addScaledVector(lookDirection, -this.drag.distance);
-      this.camera.lookAt(this.drag.target);
+      camera.lookAt(this.drag.target);
       this.syncAnglesFromCurrentView();
       return;
     }
 
     if (this.drag.mode === "pan") {
-      const distanceScale = Math.max(1, this.getOrbitTarget().distanceTo(this.camera.position));
-      const right = new Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion).normalize();
-      const up = new Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion).normalize();
-      this.camera.position
+      const distanceScale = isOrthographicCamera(camera)
+        ? orthographicViewHeight(camera)
+        : Math.max(1, this.getOrbitTarget().distanceTo(camera.position));
+      const right = new Vector3(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+      const up = new Vector3(0, 1, 0).applyQuaternion(camera.quaternion).normalize();
+      camera.position
         .addScaledVector(right, -event.movementX * CAMERA_PAN_SENSITIVITY * distanceScale)
         .addScaledVector(up, event.movementY * CAMERA_PAN_SENSITIVITY * distanceScale);
       return;
@@ -241,6 +256,7 @@ export class EditorCameraController {
   }
 
   updateLook(movementX: number, movementY: number): void {
+    if (isOrthographicCamera(this.getCamera())) return;
     this.yaw -= movementX * CAMERA_LOOK_SENSITIVITY;
     this.pitch = clamp(
       this.pitch - movementY * CAMERA_LOOK_SENSITIVITY,
@@ -253,6 +269,7 @@ export class EditorCameraController {
   /** Per-frame WASD/QE fly movement; call from the render loop. */
   update(deltaSeconds: number): void {
     if (!this.navigationActive || this.pressedKeys.size === 0) return;
+    const camera = this.getCamera();
 
     this.computeBasis();
     this.move.set(0, 0, 0);
@@ -266,13 +283,13 @@ export class EditorCameraController {
 
     if (this.move.lengthSq() === 0) return;
     this.move.normalize().multiplyScalar(this.moveSpeed * deltaSeconds);
-    this.camera.position.add(this.move);
+    camera.position.add(this.move);
   }
 
   /** Re-derives yaw/pitch from the current camera orientation. */
   syncAnglesFromCurrentView(): void {
     const direction = new Vector3();
-    this.camera.getWorldDirection(direction);
+    this.getCamera().getWorldDirection(direction);
     this.yaw = Math.atan2(-direction.x, -direction.z);
     this.pitch = Math.asin(clamp(direction.y, -1, 1));
   }
@@ -286,10 +303,17 @@ export class EditorCameraController {
   }
 
   private dolly(amount: number): void {
+    const camera = this.getCamera();
+    if (isOrthographicCamera(camera)) {
+      const factor = amount < 0 ? 1.1 : 1 / 1.1;
+      camera.zoom = clamp(camera.zoom * factor, 0.05, 20);
+      camera.updateProjectionMatrix();
+      return;
+    }
     const direction = new Vector3();
-    this.camera.getWorldDirection(direction);
+    camera.getWorldDirection(direction);
     if (direction.lengthSq() === 0) return;
-    this.camera.position.addScaledVector(direction.normalize(), -amount);
+    camera.position.addScaledVector(direction.normalize(), -amount);
   }
 
   private adjustMoveSpeed(deltaY: number): void {
@@ -299,20 +323,30 @@ export class EditorCameraController {
   }
 
   private computeBasis(): void {
-    this.camera.getWorldDirection(this.forward);
+    const camera = this.getCamera();
+    camera.getWorldDirection(this.forward);
     this.forward.y = 0;
     if (this.forward.lengthSq() === 0) this.forward.set(0, 0, -1);
     this.forward.normalize();
-    this.right.crossVectors(this.forward, this.camera.up).normalize();
+    this.right.crossVectors(this.forward, camera.up).normalize();
   }
 
   private applyOrientation(): void {
-    this.camera.up.set(0, 1, 0);
+    const camera = this.getCamera();
+    camera.up.set(0, 1, 0);
     const lookDirection = new Vector3(
       -Math.sin(this.yaw) * Math.cos(this.pitch),
       Math.sin(this.pitch),
       -Math.cos(this.yaw) * Math.cos(this.pitch),
     );
-    this.camera.lookAt(this.camera.position.clone().add(lookDirection));
+    camera.lookAt(camera.position.clone().add(lookDirection));
   }
+}
+
+function isOrthographicCamera(camera: Camera): camera is OrthographicCamera {
+  return (camera as OrthographicCamera).isOrthographicCamera === true;
+}
+
+function orthographicViewHeight(camera: OrthographicCamera): number {
+  return (camera.top - camera.bottom) / Math.max(camera.zoom, 0.01);
 }

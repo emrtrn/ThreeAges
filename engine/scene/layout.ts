@@ -3,6 +3,7 @@ import type {
   CollisionObjectChannel,
   CollisionPresetId,
   CollisionResponseMap,
+  NavigationFloorCut,
   NavigationRole,
 } from "./collision";
 import type { WorldUiWidget } from "../ui/uiWorldWidget";
@@ -170,11 +171,11 @@ export interface LayoutPlacement {
   /** Per-placement AI navigation role override; absent means inherit the asset default. */
   navigationRole?: NavigationRole;
   /**
-   * Per-placement nav-hole override: when true this placement carves the AI nav
-   * floor inside its footprint (+ agent clearance) instead of contributing
-   * walkable ground. Absent means inherit the asset default.
+   * Per-placement nav-hole override (see `NavigationFloorCut`): `"hole"` carves the
+   * whole footprint, `"under"` carves only the surrounding ground ring and keeps
+   * the body's walkable top. Absent means inherit the asset default.
    */
-  navigationCutsFloor?: boolean;
+  navigationFloorCut?: NavigationFloorCut;
   /** Emit begin/end overlap events for sensors. Absent means inherit/default true. */
   generateOverlapEvents?: boolean;
   /** Emit hit events while simulating physics. Absent means inherit/default true. */

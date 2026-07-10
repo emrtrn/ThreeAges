@@ -1,7 +1,9 @@
 # Editör Ortografik Kamera + Wireframe View Mode Planı
 
 > Tarih: 2026-07-09
-> Durum: Gelecek faz planı. Kod uygulanmadı.
+> Güncel durum: 2026-07-10 itibarıyla F2.1 aktif kamera + ortografik projeksiyon
+> temel dilimi kodlandı; F2.2 wireframe shading henüz uygulanmadı.
+> Durum: Uygulama başladı; F2.1/F2.4 temel kamera dilimi kodlandı.
 > Önkoşul: **Faz 1 (UE5 tarzı üst bar) tamamlandı ve commit'lendi** (commit
 > `feat(editor): UE5-style toolbar — icon tools, tooltips, snap + camera/view menus`).
 > Amaç: Faz 1'de yalnızca **durum + menü** olarak bağlanan Camera ve View Mode
@@ -91,19 +93,19 @@ Kamera tek bir **`PerspectiveCamera`**:
 
 Yaklaşım kararı: **iki kamera bulundur, aktif olanı referansla** (tam swap yerine).
 
-- [ ] `SceneApp`'e `private orthoCamera: OrthographicCamera` ekle; perspektif
+- [x] `SceneApp`'e `private orthoCamera: OrthographicCamera` ekle; perspektif
       kamerayla aynı `position/quaternion/near/far` senkronize edilir.
-- [ ] `private activeCamera: Camera` (veya getter `get activeCamera()`) ekle;
+- [x] `private activeCamera: Camera` (veya getter `get activeCamera()`) ekle;
       **render, raycast, gizmo ölçeği ve kamera kontrolü** `this.camera` yerine
       aktif kamerayı kullanacak şekilde güncellenir. (Runtime `/` her zaman
       perspektif kullanır — bu değişiklik editöre özgü kalmalı.)
-- [ ] `applyPerspectivePose()` ve `setTechnicalView()` içinde projeksiyonu ata:
+- [x] `applyPerspectivePose()` ve `setTechnicalView()` içinde projeksiyonu ata:
       teknik görünümler ortografik kamerayı hedef eksene kilitler; Perspective
       perspektif kameraya döner.
-- [ ] Ortografik frustum'u içeriğe göre çerçevele: hedef etrafındaki mesafeye ve
+- [x] Ortografik frustum'u içeriğe göre çerçevele: hedef etrafındaki mesafeye ve
       viewport en-boy oranına göre `left/right/top/bottom` hesapla; resize'da
       güncelle.
-- [ ] `getCameraOrbitTarget()` / `markViewChanged()` / `syncAnglesFromCurrentView()`
+- [x] `getCameraOrbitTarget()` / `markViewChanged()` / `syncAnglesFromCurrentView()`
       aktif kamerayla tutarlı çalışmalı.
 
 > Alternatif (daha küçük ama daha kısıtlı): tek `PerspectiveCamera`'yı koru,
@@ -141,13 +143,29 @@ Durum kuralları Faz 1'de kodlu; bu fazda **render'a bağlanır**:
 
 ### F2.4 — Gizmo, picking ve navigasyon ortografik uyumu
 
-- [ ] `updateGizmoScreenScale()`: ortografikte fov yerine frustum yüksekliği/zoom
+- [x] `updateGizmoScreenScale()`: ortografikte fov yerine frustum yüksekliği/zoom
       tabanlı ölçek (`calculateGizmoScreenScale`'e ortografik varyant veya ayrı
       hesap).
-- [ ] `EditorCameraController`: ortografik modda dolly → `orthoCamera.zoom` /
+- [x] `EditorCameraController`: ortografik modda dolly → `orthoCamera.zoom` /
       frustum ölçeği; orbit → devre dışı veya eksene kilitli; pan aynen çalışır.
 - [ ] Raycast/picking'in aktif kamerayla doğru NDC ürettiğini doğrula (seçim,
       gizmo tutamakları, yüzey snap).
+
+### F2.1 uygulama notu - 2026-07-10
+
+- `SceneApp` artık perspektif runtime kamerası ile editor-only `OrthographicCamera`
+  arasında aktif kamera seçiyor; render, picker, gizmo ölçeği, camera controller,
+  post-process `RenderPass` ve selection outline aktif kameraya bağlandı.
+- Technical view seçimleri ortografik kamerayı Top/Front/Left eksenlerine kilitler;
+  Perspective seçimi runtime perspektif kamerasına geri döner. Play handoff halen
+  perspektif kamerayı kullanır ve layout/save şemasına alan eklenmedi.
+- `EditorCameraController` ortografikte orbit/fly rotasyonu yerine pan + zoom
+  davranışını kullanır; picker line toleransı ortografik frustum yüksekliği/zoom
+  ile hesaplanır. Kod yolu bağlandı; Playwright/manual görsel doğrulama bekliyor.
+- `npx.cmd tsc --noEmit` bu dilimden bağımsız mevcut
+  `navigationCutsFloor` / `navigationFloorCut` tip uyuşmazlıkları nedeniyle
+  geçmedi. Filtreli kontrolde `SceneApp.ts` içindeki eski navigation rename borcu
+  da göründü; kamera dilimiyle ilgili ayrı bir TypeScript hatası raporlanmadı.
 
 ### F2.5 — Cila (opsiyonel, sonra)
 

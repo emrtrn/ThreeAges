@@ -25,7 +25,7 @@ import {
 import type { AudioComponent, InteractionComponent, TransformComponent } from "../scene/components";
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId, SceneJsonValue } from "../scene/entity";
-import type { NavigationRole } from "../scene/collision";
+import type { NavigationFloorCut, NavigationRole } from "../scene/collision";
 import type { ActorEventKind } from "../scene/actorScript";
 import type { ActionMap } from "../input/actionMap";
 import type { AudioBus } from "../audio/audioSubsystem";
@@ -390,11 +390,11 @@ export interface PhysicsAabb {
   /** AI navigation interpretation; absent behaves like `auto`. */
   readonly navigationRole?: NavigationRole;
   /**
-   * Nav-hole flag: when true this body carves the AI nav floor inside its
-   * footprint (+ agent clearance) instead of contributing walkable ground, at any
-   * floor up to its top (see {@link NavBlocker.navigationCutsFloor}).
+   * Nav-hole mode: carves the AI nav floor for this body instead of contributing
+   * walkable ground (see {@link NavBlocker.navigationFloorCut}). `"hole"` carves the
+   * whole footprint; `"under"` carves only the surrounding ground ring.
    */
-  readonly navigationCutsFloor?: boolean;
+  readonly navigationFloorCut?: NavigationFloorCut;
   /**
    * Oriented convex XZ ground silhouette of a rotated box collider (the exact
    * footprint the `min`/`max` AABB otherwise bloats to enclose). Present only

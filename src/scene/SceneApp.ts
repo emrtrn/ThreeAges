@@ -18,6 +18,7 @@ import {
   Mesh,
   MeshStandardMaterial,
   Object3D,
+  OrthographicCamera,
   Plane,
   Raycaster,
   SphereGeometry,
@@ -27,6 +28,7 @@ import {
 } from "three";
 import type {
   AmbientLight,
+  Camera,
   InstancedMesh,
   Material,
   PerspectiveCamera,
@@ -315,6 +317,7 @@ import type {
   CollisionObjectChannel,
   CollisionPresetId,
   CollisionResponseMap,
+  NavigationFloorCut,
   NavigationRole,
 } from "@engine/scene/collision";
 import {
@@ -556,6 +559,13 @@ export interface LayoutSaveResult {
 
 export type LayoutSaver = (payload: LayoutSavePayload) => Promise<LayoutSaveResult>;
 
+const ORTHO_MIN_VIEW_HEIGHT = 3;
+const ORTHO_MAX_VIEW_HEIGHT = 80;
+const ORTHO_DEFAULT_VIEW_HEIGHT = 10;
+const GIZMO_MIN_SCALE = 0.35;
+const GIZMO_MAX_SCALE = 4;
+const GIZMO_SCREEN_SIZE_PX = 118;
+
 const AI_SCRIPT_STIMULUS_MESSAGE_TYPES = [
   "Damage.Apply",
   "Damage.Died",
@@ -569,6 +579,9 @@ export class SceneApp {
   private renderer: WebGLRenderer;
   private scene: Scene;
   private camera: PerspectiveCamera;
+  private readonly orthoCamera: OrthographicCamera;
+  private activeCamera: Camera;
+  private orthoViewHeight = ORTHO_DEFAULT_VIEW_HEIGHT;
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
   /** Sky Atmosphere dome (singleton); null when no sky actor is placed. */
@@ -764,6 +777,9 @@ export class SceneApp {
     this.renderer = runtimeCore.renderer;
     this.scene = runtimeCore.scene;
     this.camera = runtimeCore.camera;
+    this.orthoCamera = new OrthographicCamera(-5, 5, 5, -5, this.camera.near, this.camera.far);
+    this.activeCamera = this.camera;
+    this.syncOrthoCameraFromPerspective();
     this.editorSceneController = new EditorSceneController({
       applyCastShadow: (selection) => this.applyCastShadow(selection),
       applyGroupId: (selection, groupId, options) =>
@@ -795,7 +811,7 @@ export class SceneApp {
       updateSelectionBox: () => this.updateSelectionBox(),
     });
     this.cameraController = new EditorCameraController({
-      camera: this.camera,
+      camera: () => this.editorViewportCamera(),
       canvas: this.canvas,
       getOrbitTarget: () => this.getCameraOrbitTarget(),
       onInteractionStart: () => {
@@ -805,7 +821,7 @@ export class SceneApp {
       onStatus: (message, tone) => this.onStatus?.(message, tone),
     });
     this.picker = new ScenePicker({
-      camera: this.camera,
+      camera: () => this.editorViewportCamera(),
       canvas: this.canvas,
       pickables: () => {
         const objects: Object3D[] = [];
@@ -848,13 +864,13 @@ export class SceneApp {
       this.postProcessPipeline = new PostProcessPipeline({
         renderer: this.renderer,
         scene: this.scene,
-        camera: this.camera,
+        camera: this.editorViewportCamera(),
         width: window.innerWidth,
         height: window.innerHeight,
       });
       this.selectionOutline = new EditorSelectionOutline({
         scene: this.scene,
-        camera: this.camera,
+        camera: this.editorViewportCamera(),
         pipeline: this.postProcessPipeline,
         width: window.innerWidth,
         height: window.innerHeight,
@@ -942,7 +958,7 @@ export class SceneApp {
       }
 
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaSeconds);
-      else this.renderer.render(this.scene, this.camera);
+      else this.renderer.render(this.scene, this.editorViewportCamera());
       this.onFrame?.(deltaMs);
     };
     this.frameHandle = requestAnimationFrame(loop);
@@ -1212,6 +1228,41 @@ export class SceneApp {
     return this.cameraController.isInteracting;
   }
 
+  private editorViewportCamera(): PerspectiveCamera | OrthographicCamera {
+    return this.activeCamera instanceof OrthographicCamera ? this.orthoCamera : this.camera;
+  }
+
+  private syncOrthoCameraFromPerspective(): void {
+    this.orthoCamera.position.copy(this.camera.position);
+    this.orthoCamera.quaternion.copy(this.camera.quaternion);
+    this.orthoCamera.up.copy(this.camera.up);
+    this.orthoCamera.near = this.camera.near;
+    this.orthoCamera.far = this.camera.far;
+    this.updateOrthoProjection();
+  }
+
+  private setActiveCamera(camera: Camera): void {
+    if (this.activeCamera === camera) return;
+    this.activeCamera = camera;
+    this.postProcessPipeline?.setCamera(camera);
+    this.selectionOutline?.setCamera(camera);
+    this.applyPostProcess();
+    this.updateGizmoScreenScale();
+  }
+
+  private updateOrthoProjection(): void {
+    const width = this.renderer?.domElement.clientWidth || window.innerWidth || 1;
+    const height = this.renderer?.domElement.clientHeight || window.innerHeight || 1;
+    const aspect = width / Math.max(height, 1);
+    const halfHeight = this.orthoViewHeight * 0.5;
+    const halfWidth = halfHeight * aspect;
+    this.orthoCamera.left = -halfWidth;
+    this.orthoCamera.right = halfWidth;
+    this.orthoCamera.top = halfHeight;
+    this.orthoCamera.bottom = -halfHeight;
+    this.orthoCamera.updateProjectionMatrix();
+  }
+
   setSnapSettings(values: Partial<typeof this.snapSettings>): void {
     this.snapSettings = { ...this.snapSettings, ...values };
     this.onStatus?.(
@@ -1292,16 +1343,21 @@ export class SceneApp {
       : new Vector3(selected.position[0], selected.position[1] + 0.65, selected.position[2]);
 
     const viewDirection = new Vector3();
-    this.camera.getWorldDirection(viewDirection);
+    const camera = this.editorViewportCamera();
+    camera.getWorldDirection(viewDirection);
     if (viewDirection.lengthSq() === 0) {
-      viewDirection.copy(SCENE_CAMERA_TARGET).sub(this.camera.position).normalize();
+      viewDirection.copy(SCENE_CAMERA_TARGET).sub(camera.position).normalize();
     }
 
     const radius = box && !box.isEmpty() ? box.getSize(new Vector3()).length() * 0.5 : 0.8;
     const distance = clamp(radius * 1.8, 1.25, 4.2);
-    this.camera.position.copy(target).addScaledVector(viewDirection, -distance);
-    this.camera.up.set(0, 1, 0);
-    this.camera.lookAt(target);
+    if (camera instanceof OrthographicCamera) {
+      this.orthoViewHeight = clamp(radius * 4, ORTHO_MIN_VIEW_HEIGHT, ORTHO_MAX_VIEW_HEIGHT);
+      this.updateOrthoProjection();
+    }
+    camera.position.copy(target).addScaledVector(viewDirection, -distance);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(target);
     this.cameraController.markViewChanged();
     this.cameraController.syncAnglesFromCurrentView();
     this.onStatus?.(`Focused ${selected.label}.`, "info");
@@ -1326,21 +1382,26 @@ export class SceneApp {
 
   setTechnicalView(view: "top" | "front" | "side"): void {
     const target = this.getCameraOrbitTarget();
-    const distance = clamp(this.camera.position.distanceTo(target), 3, 10);
+    const currentCamera = this.editorViewportCamera();
+    const distance = clamp(currentCamera.position.distanceTo(target), 3, 10);
     this.cameraController.markViewChanged();
+    this.orthoViewHeight = clamp(distance * 1.8, ORTHO_MIN_VIEW_HEIGHT, ORTHO_MAX_VIEW_HEIGHT);
+    this.orthoCamera.zoom = 1;
+    this.updateOrthoProjection();
 
     if (view === "top") {
-      this.camera.up.set(0, 0, -1);
-      this.camera.position.copy(target).add(new Vector3(0, distance, 0));
+      this.orthoCamera.up.set(0, 0, -1);
+      this.orthoCamera.position.copy(target).add(new Vector3(0, distance, 0));
     } else if (view === "front") {
-      this.camera.up.set(0, 1, 0);
-      this.camera.position.copy(target).add(new Vector3(0, 0, distance));
+      this.orthoCamera.up.set(0, 1, 0);
+      this.orthoCamera.position.copy(target).add(new Vector3(0, 0, distance));
     } else {
-      this.camera.up.set(0, 1, 0);
-      this.camera.position.copy(target).add(new Vector3(distance, 0, 0));
+      this.orthoCamera.up.set(0, 1, 0);
+      this.orthoCamera.position.copy(target).add(new Vector3(distance, 0, 0));
     }
 
-    this.camera.lookAt(target);
+    this.orthoCamera.lookAt(target);
+    this.setActiveCamera(this.orthoCamera);
     this.cameraController.syncAnglesFromCurrentView();
     this.onStatus?.(`${view[0]!.toUpperCase()}${view.slice(1)} view`, "info");
   }
@@ -1348,13 +1409,14 @@ export class SceneApp {
   /** Restores an angled 3/4 perspective orbit around the current focus point. */
   private applyPerspectivePose(): void {
     const target = this.getCameraOrbitTarget();
-    const distance = clamp(this.camera.position.distanceTo(target), 4, 12);
+    const distance = clamp(this.editorViewportCamera().position.distanceTo(target), 4, 12);
     this.cameraController.markViewChanged();
     this.camera.up.set(0, 1, 0);
     this.camera.position
       .copy(target)
       .add(new Vector3(distance * 0.7, distance * 0.6, distance * 0.7));
     this.camera.lookAt(target);
+    this.setActiveCamera(this.camera);
     this.cameraController.syncAnglesFromCurrentView();
   }
 
@@ -3143,8 +3205,9 @@ export class SceneApp {
 
   private defaultActorPosition(distance: number): Vec3 {
     const direction = new Vector3();
-    this.camera.getWorldDirection(direction);
-    const position = this.camera.position.clone().addScaledVector(direction.normalize(), distance);
+    const camera = this.editorViewportCamera();
+    camera.getWorldDirection(direction);
+    const position = camera.position.clone().addScaledVector(direction.normalize(), distance);
     position.y = Math.max(1, position.y);
     return [round(position.x), round(position.y), round(position.z)];
   }
@@ -4806,8 +4869,9 @@ export class SceneApp {
   /** A point ~5 units in front of the camera (where a new world widget lands). */
   private defaultWorldWidgetAnchor(): Vec3 {
     const direction = new Vector3();
-    this.camera.getWorldDirection(direction);
-    const point = this.camera.position.clone().addScaledVector(direction, 5);
+    const camera = this.editorViewportCamera();
+    camera.getWorldDirection(direction);
+    const point = camera.position.clone().addScaledVector(direction, 5);
     return [
       Number(point.x.toFixed(3)),
       Number(point.y.toFixed(3)),
@@ -5032,9 +5096,9 @@ export class SceneApp {
     this.editorSceneController.setSelectionNavigationRole(value);
   }
 
-  /** Details "AI Navigation" nav-hole override (undefined/false clears it). */
-  setSelectionNavigationCutsFloor(value: boolean | undefined): void {
-    this.editorSceneController.setSelectionNavigationCutsFloor(value);
+  /** Details "AI Navigation" nav-hole override (undefined clears it). */
+  setSelectionNavigationFloorCut(value: NavigationFloorCut | undefined): void {
+    this.editorSceneController.setSelectionNavigationFloorCut(value);
   }
 
   /** Details / Content Drawer material slot override for static mesh instances. */
@@ -5541,7 +5605,7 @@ export class SceneApp {
     this.postProcessPipeline?.setEffectPasses(
       createPostProcessEffectPasses(resolved, {
         scene: this.scene,
-        camera: this.camera,
+        camera: this.editorViewportCamera(),
         width: window.innerWidth,
         height: window.innerHeight,
       }),
@@ -5851,11 +5915,12 @@ export class SceneApp {
     }
 
     const direction = new Vector3();
-    this.camera.getWorldDirection(direction);
+    const camera = this.editorViewportCamera();
+    camera.getWorldDirection(direction);
     const floorHit = this.raycaster.ray
-      .set(this.camera.position, direction)
+      .set(camera.position, direction)
       .intersectPlane(this.floorPlane, new Vector3());
-    return floorHit ?? this.camera.position.clone().addScaledVector(direction, 5);
+    return floorHit ?? camera.position.clone().addScaledVector(direction, 5);
   }
 
   private commitPointerDrag(drag: GizmoPointerDrag): void {
@@ -6084,7 +6149,7 @@ export class SceneApp {
   }
 
   private getScreenSpaceMoveBasis(): { right: Vector3; up: Vector3 } {
-    return screenSpaceMoveBasis(this.camera.quaternion);
+    return screenSpaceMoveBasis(this.editorViewportCamera().quaternion);
   }
 
   private select(selection: Selection | null): void {
@@ -7020,7 +7085,7 @@ export class SceneApp {
           min: [wirebox.box.min.x, wirebox.box.min.y, wirebox.box.min.z],
           max: [wirebox.box.max.x, wirebox.box.max.y, wirebox.box.max.z],
           navigationRole: wirebox.navigationRole,
-          ...(wirebox.navigationCutsFloor ? { navigationCutsFloor: true } : {}),
+          ...(wirebox.navigationFloorCut ? { navigationFloorCut: wirebox.navigationFloorCut } : {}),
           // A complexAsSimple hull box's flat top is fictional (a peak-height
           // plane over the whole footprint) — the mesh's real floors come from
           // its surface triangles, so the ground probe must not seed from it.
@@ -7114,11 +7179,20 @@ export class SceneApp {
   private updateGizmoScreenScale(): void {
     if (!this.gizmoGroup.visible) return;
     const viewportHeight = this.renderer.domElement.clientHeight || window.innerHeight || 1;
-    const scale = calculateGizmoScreenScale(
-      this.camera.fov,
-      this.camera.position.distanceTo(this.gizmoGroup.position),
-      viewportHeight,
-    );
+    const camera = this.editorViewportCamera();
+    const scale =
+      camera instanceof OrthographicCamera
+        ? clamp(
+            ((camera.top - camera.bottom) / Math.max(camera.zoom, 0.01) / viewportHeight) *
+              GIZMO_SCREEN_SIZE_PX,
+            GIZMO_MIN_SCALE,
+            GIZMO_MAX_SCALE,
+          )
+        : calculateGizmoScreenScale(
+            camera.fov,
+            camera.position.distanceTo(this.gizmoGroup.position),
+            viewportHeight,
+          );
     this.gizmoGroup.scale.setScalar(scale);
   }
 
@@ -7385,8 +7459,10 @@ export class SceneApp {
       height,
       viewTouched: this.cameraController.hasTouched,
     });
+    this.updateOrthoProjection();
     this.postProcessPipeline?.setSize(width, height);
     if (resetView) {
+      this.syncOrthoCameraFromPerspective();
       this.cameraController.syncAnglesFromCurrentView();
     }
   };

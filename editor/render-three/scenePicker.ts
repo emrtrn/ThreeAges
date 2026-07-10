@@ -1,5 +1,5 @@
 import { Plane, Raycaster, Vector2, Vector3 } from "three";
-import type { Intersection, Object3D, PerspectiveCamera } from "three";
+import type { Camera, Intersection, Object3D, OrthographicCamera, PerspectiveCamera } from "three";
 
 import {
   findParentActor,
@@ -19,7 +19,7 @@ import { pickGizmoHandle as pickGizmoHandleFromObjects } from "@editor/gizmos/in
 import type { GizmoHandle } from "@editor/gizmos/handles";
 
 export interface ScenePickerOptions {
-  camera: PerspectiveCamera;
+  camera: () => Camera;
   canvas: HTMLCanvasElement;
   /** All selectable scene objects: instanced meshes + characters + light roots. */
   pickables: () => Object3D[];
@@ -36,7 +36,7 @@ export interface ScenePickerOptions {
  * supplier callbacks so it stays correct as the scene mutates. Editor-only.
  */
 export class ScenePicker {
-  private readonly camera: PerspectiveCamera;
+  private readonly getCamera: () => Camera;
   private readonly canvas: HTMLCanvasElement;
   private readonly getPickables: () => Object3D[];
   private readonly getSurfacePickables: () => Object3D[];
@@ -70,7 +70,7 @@ export class ScenePicker {
   private static readonly LINE_THRESHOLD_SAFETY = 4;
 
   constructor(options: ScenePickerOptions) {
-    this.camera = options.camera;
+    this.getCamera = options.camera;
     this.canvas = options.canvas;
     this.getPickables = options.pickables;
     this.getSurfacePickables = options.surfacePickables;
@@ -81,9 +81,10 @@ export class ScenePicker {
     const gizmo = this.getGizmo();
     if (!gizmo.visible || gizmo.pickables.length === 0) return null;
     this.setPointerNdc(clientX, clientY);
+    const camera = this.getCamera();
     return pickGizmoHandleFromObjects(
       this.raycaster,
-      this.camera,
+      camera,
       this.pointerNdc,
       gizmo.visible,
       gizmo.pickables,
@@ -92,7 +93,8 @@ export class ScenePicker {
 
   pickSelection(clientX: number, clientY: number): Selection | null {
     this.setPointerNdc(clientX, clientY);
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+    const camera = this.getCamera();
+    this.raycaster.setFromCamera(this.pointerNdc, camera);
 
     const pickables = this.getPickables();
     // Broad-phase line tube: generous enough that any edge within the screen-space
@@ -180,7 +182,7 @@ export class ScenePicker {
 
   clientToFloor(clientX: number, clientY: number): Vector3 | null {
     this.setPointerNdc(clientX, clientY);
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+    this.raycaster.setFromCamera(this.pointerNdc, this.getCamera());
     const hit = this.raycaster.ray.intersectPlane(this.floorPlane, this.floorHit);
     return hit ? this.floorHit.clone() : null;
   }
@@ -192,7 +194,7 @@ export class ScenePicker {
    */
   clientToSurface(clientX: number, clientY: number): Vector3 | null {
     this.setPointerNdc(clientX, clientY);
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+    this.raycaster.setFromCamera(this.pointerNdc, this.getCamera());
 
     const hits = this.visibleHits(this.raycaster.intersectObjects(this.getSurfacePickables(), true));
     if (hits[0]) return hits[0].point.clone();
@@ -203,7 +205,7 @@ export class ScenePicker {
 
   clientToPlane(clientX: number, clientY: number, plane: Plane): Vector3 | null {
     this.setPointerNdc(clientX, clientY);
-    this.raycaster.setFromCamera(this.pointerNdc, this.camera);
+    this.raycaster.setFromCamera(this.pointerNdc, this.getCamera());
     const target = new Vector3();
     return this.raycaster.ray.intersectPlane(plane, target) ? target : null;
   }
@@ -285,9 +287,14 @@ export class ScenePicker {
     return hits.filter((hit) => isVisibleInHierarchy(hit.object));
   }
 
-  /** World-space size of one viewport pixel at `distance` from the camera (perspective). */
+  /** World-space size of one viewport pixel at `distance` from the active camera. */
   private worldUnitsPerPixel(distance: number): number {
-    const fovRadians = (this.camera.fov * Math.PI) / 180;
+    const camera = this.getCamera();
+    if (isOrthographicCamera(camera)) {
+      const viewHeight = (camera.top - camera.bottom) / Math.max(camera.zoom, 0.01);
+      return viewHeight / Math.max(this.viewportHeightPx, 1);
+    }
+    const fovRadians = ((camera as PerspectiveCamera).fov * Math.PI) / 180;
     const viewHeight = 2 * Math.tan(fovRadians / 2) * Math.max(distance, 0.01);
     return viewHeight / Math.max(this.viewportHeightPx, 1);
   }
@@ -299,7 +306,7 @@ export class ScenePicker {
    * per-hit test in {@link isScreenFarLineHit} enforces the true pixel tolerance.
    */
   private lineThresholdFor(pickables: Object3D[]): number {
-    const cameraPosition = this.camera.position;
+    const cameraPosition = this.getCamera().position;
     let maxDistance = 0.01;
     for (const object of pickables) {
       object.getWorldPosition(this.worldPoint);
@@ -332,6 +339,10 @@ export class ScenePicker {
     this.pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
     this.pointerNdc.y = -(((clientY - rect.top) / rect.height) * 2 - 1);
   }
+}
+
+function isOrthographicCamera(camera: Camera): camera is OrthographicCamera {
+  return (camera as OrthographicCamera).isOrthographicCamera === true;
 }
 
 function isVisibleInHierarchy(object: Object3D): boolean {

@@ -6925,7 +6925,7 @@ check("nav grid heightfield rejects neighbor steps above the agent step height",
   assert.equal(path.status, "failure");
 });
 
-check("nav grid navigationCutsFloor carves the footprint plus agent clearance", () => {
+check("nav grid navigationFloorCut hole carves the footprint plus agent clearance", () => {
   const agent = { radius: 0.5, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45, clearancePadding: 0 };
   const bounds: NavAabb[] = [{ min: [-4, -1, -4], max: [4, 4, 4] }];
   // Flat ground across the whole volume.
@@ -6941,7 +6941,7 @@ check("nav grid navigationCutsFloor carves the footprint plus agent clearance", 
   };
   // A thin pad sitting ON the ground (top 0.05, far under the 0.45 step height, so as a
   // plain obstacle it would be stepped over and carve nothing), footprint [-1,1]x[-1,1].
-  const pad: NavBlocker = { min: [-1, 0, -1], max: [1, 0.05, 1], navigationCutsFloor: true };
+  const pad: NavBlocker = { min: [-1, 0, -1], max: [1, 0.05, 1], navigationFloorCut: "hole" };
   const cut = buildNavGrid({ agent, blockers: [pad], bounds, footY: 0, cellSize: 0.5, safetyMargin: 0, sampleFloorYs })!;
   assert.ok(cut, "cut grid builds");
   assert.equal(cellPassable(cut, 0, 0), false, "cell inside the pad footprint is carved");
@@ -6974,6 +6974,41 @@ check("nav grid navigationCutsFloor carves the footprint plus agent clearance", 
     sampleFloorYs: () => [3],
   })!;
   assert.equal(cellPassable(highGrid, 0, 0), true, "a floor above the pad top is not carved");
+});
+
+check("nav grid navigationFloorCut under keeps the body's own top and carves only the ring", () => {
+  const agent = { radius: 0.5, height: 1.8, stepHeight: 0.45, maxStepDown: 0.45, clearancePadding: 0 };
+  const bounds: NavAabb[] = [{ min: [-4, -1, -4], max: [4, 4, 4] }];
+  const cellPassable = (
+    g: NonNullable<ReturnType<typeof buildNavGrid>>,
+    x: number,
+    z: number,
+  ): boolean => {
+    const cx = Math.round((x - g.originX) / g.cellSize);
+    const cz = Math.round((z - g.originZ) / g.cellSize);
+    return cx >= 0 && cz >= 0 && cx < g.cols && cz < g.rows && g.passable[cz * g.cols + cx] === 1;
+  };
+  // A raised platform, footprint [-1,1]x[-1,1], top at 0.4 (reachable via step height).
+  // Ground everywhere; inside the footprint the walkable floor is the platform top,
+  // outside it is the ground plane.
+  const inFootprint = (x: number, z: number): boolean => x >= -1 && x <= 1 && z >= -1 && z <= 1;
+  const platform: NavBlocker = { min: [-1, 0, -1], max: [1, 0.4, 1], navigationFloorCut: "under" };
+  const grid = buildNavGrid({
+    agent,
+    blockers: [platform],
+    bounds,
+    footY: 0,
+    cellSize: 0.5,
+    safetyMargin: 0,
+    sampleFloorYs: (x, z) => (inFootprint(x, z) ? [0.4] : [0]),
+  })!;
+  assert.ok(grid, "under grid builds");
+  // The platform's own top stays walkable — never carved inside the footprint.
+  assert.equal(cellPassable(grid, 0, 0), true, "the body's own walkable top is kept (climbable)");
+  // The surrounding ground ring within agent clearance of the footprint is carved.
+  assert.equal(cellPassable(grid, 1.5, 0), false, "the ground ring within clearance is carved");
+  // Ground well clear of the platform stays walkable.
+  assert.equal(cellPassable(grid, 3, 0), true, "ground beyond the clearance ring stays walkable");
 });
 
 check("ledge erosion insets a raised platform edge by the agent clearance", () => {

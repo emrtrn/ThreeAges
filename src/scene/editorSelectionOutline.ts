@@ -68,6 +68,10 @@ export class EditorSelectionOutline {
     this.outlinePass.selectedObjects = [...this.proxyRoot.children];
   }
 
+  setCamera(camera: Camera): void {
+    this.outlinePass.renderCamera = camera;
+  }
+
   dispose(): void {
     this.clearTargets();
     this.proxyRoot.removeFromParent();

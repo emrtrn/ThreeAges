@@ -5,7 +5,6 @@ import {
   Vector2,
   type Camera,
   type Object3D,
-  type PerspectiveCamera,
   type Scene,
   type WebGLRenderer,
 } from "three";
@@ -175,7 +174,7 @@ function hasColorGrading(resolved: ResolvedPostProcess): boolean {
 
 export function createPostProcessEffectPasses(
   resolved: ResolvedPostProcess | null,
-  context: { scene: Scene; camera: PerspectiveCamera; width: number; height: number },
+  context: { scene: Scene; camera: Camera; width: number; height: number },
 ): Pass[] {
   if (!resolved || resolved.hidden) return [];
   const { width, height } = context;
@@ -272,6 +271,7 @@ export function createPostProcessAntialiasPass(
  */
 export class PostProcessPipeline {
   private readonly composer: EffectComposer;
+  private readonly renderPass: RenderPass;
   private readonly outputPass: OutputPass;
   private readonly injectedPasses: Pass[] = [];
   private effectPasses: Pass[] = [];
@@ -285,10 +285,15 @@ export class PostProcessPipeline {
     height: number;
   }) {
     this.composer = new EffectComposer(options.renderer);
-    this.composer.addPass(new RenderPass(options.scene, options.camera));
+    this.renderPass = new RenderPass(options.scene, options.camera);
+    this.composer.addPass(this.renderPass);
     this.outputPass = new OutputPass();
     this.composer.addPass(this.outputPass);
     this.composer.setSize(options.width, options.height);
+  }
+
+  setCamera(camera: Camera): void {
+    this.renderPass.camera = camera;
   }
 
   addPassBeforeOutput(pass: Pass): void {

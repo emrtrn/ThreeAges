@@ -6,7 +6,7 @@ import {
   type ColliderPrimitive,
   type TransformComponent,
 } from "../scene/components";
-import { interactionGroupsInteract, type NavigationRole } from "../scene/collision";
+import { interactionGroupsInteract, type NavigationFloorCut, type NavigationRole } from "../scene/collision";
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
 import type { Entity, EntityId } from "../scene/entity";
 import type {
@@ -58,8 +58,8 @@ interface Aabb {
   min: [number, number, number];
   max: [number, number, number];
   navigationRole?: NavigationRole;
-  /** Nav-hole flag carried from the collider (see {@link PhysicsAabb.navigationCutsFloor}). */
-  navigationCutsFloor?: boolean;
+  /** Nav-hole mode carried from the collider (see {@link PhysicsAabb.navigationFloorCut}). */
+  navigationFloorCut?: NavigationFloorCut;
   /** Oriented XZ ground silhouette for a rotated box collider (see {@link PhysicsAabb}). */
   footprint?: readonly (readonly [number, number])[];
 }
@@ -769,7 +769,7 @@ function bodyAabb(body: PhysicsBody): Aabb {
   const aabb = rotatedBoxAabb(origin, center as Vec3, half, rotation);
   const role = body.collider.navigationRole;
   let base: Aabb = role ? { ...aabb, navigationRole: role } : aabb;
-  if (body.collider.navigationCutsFloor) base = { ...base, navigationCutsFloor: true };
+  if (body.collider.navigationFloorCut) base = { ...base, navigationFloorCut: body.collider.navigationFloorCut };
   // The auto/box collider is a box, so its oriented ground silhouette is exact —
   // give navigation the tight footprint instead of the bloated enclosing AABB.
   const footprint = rotatedBoxFootprintXZ(origin, center as Vec3, half, rotation);
@@ -806,11 +806,11 @@ function appendBlockerAabbs(out: Aabb[], body: PhysicsBody): void {
         primitive.vertices,
         primitive.indices,
         body.collider.navigationRole,
-        body.collider.navigationCutsFloor,
+        body.collider.navigationFloorCut,
       );
     } else {
       out.push(
-        primitiveAabb(origin, rotation, primitive, body.collider.navigationRole, body.collider.navigationCutsFloor),
+        primitiveAabb(origin, rotation, primitive, body.collider.navigationRole, body.collider.navigationFloorCut),
       );
     }
   }
@@ -822,13 +822,13 @@ function primitiveAabb(
   bodyRotation: Vec3,
   primitive: ColliderPrimitive,
   navigationRole: NavigationRole | undefined,
-  navigationCutsFloor: boolean | undefined,
+  navigationFloorCut: NavigationFloorCut | undefined,
 ): Aabb {
   const center = (primitive.center ?? [0, 0, 0]) as Vec3;
   const half: Vec3 = [primitive.size[0] / 2, primitive.size[1] / 2, primitive.size[2] / 2];
   const aabb = rotatedBoxAabb(origin, center, half, bodyRotation, primitive.rotation);
   let base: Aabb = navigationRole ? { ...aabb, navigationRole } : aabb;
-  if (navigationCutsFloor) base = { ...base, navigationCutsFloor: true };
+  if (navigationFloorCut) base = { ...base, navigationFloorCut };
   // Only a box primitive's oriented footprint equals its projected corners; other
   // authored shapes (sphere/capsule/cylinder/cone) keep the AABB, matching how
   // this function already models them as boxes for the enclosing AABB.
@@ -890,7 +890,7 @@ function appendTriangleAabbs(
   vertices: readonly Vec3[],
   indices: readonly number[],
   navigationRole: NavigationRole | undefined,
-  navigationCutsFloor: boolean | undefined,
+  navigationFloorCut: NavigationFloorCut | undefined,
 ): void {
   forEachWorldTriangle(origin, bodyRotation, vertices, indices, (wa, wb, wc) => {
     if (triangleUpNormalY(wa, wb, wc) >= SURFACE_MIN_NORMAL_Y) return; // walkable surface, not a wall
@@ -909,7 +909,7 @@ function appendTriangleAabbs(
     const footprint = triangleFootprintXZ(wa, wb, wc);
     if (footprint) blocker.footprint = footprint;
     if (navigationRole) blocker.navigationRole = navigationRole;
-    if (navigationCutsFloor) blocker.navigationCutsFloor = true;
+    if (navigationFloorCut) blocker.navigationFloorCut = navigationFloorCut;
     out.push(blocker);
   });
 }
@@ -991,7 +991,7 @@ function cloneCollider(collider: ColliderComponent): ColliderComponent {
   if (collider.friction !== undefined) clone.friction = collider.friction;
   if (collider.restitution !== undefined) clone.restitution = collider.restitution;
   if (collider.navigationRole !== undefined) clone.navigationRole = collider.navigationRole;
-  if (collider.navigationCutsFloor !== undefined) clone.navigationCutsFloor = collider.navigationCutsFloor;
+  if (collider.navigationFloorCut !== undefined) clone.navigationFloorCut = collider.navigationFloorCut;
   if (collider.generateOverlapEvents !== undefined) {
     clone.generateOverlapEvents = collider.generateOverlapEvents;
   }

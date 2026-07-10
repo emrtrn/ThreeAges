@@ -70,6 +70,24 @@ export const NAVIGATION_ROLE_VALUES: readonly NavigationRole[] = [
 
 export const DEFAULT_NAVIGATION_ROLE: NavigationRole = "auto";
 
+/**
+ * Nav-hole ("cut floor") mode for a body (Unreal "Nav Modifier / Null Area").
+ * Absent means off — the body follows its {@link NavigationRole}.
+ * - `hole`: carve the whole footprint (+ agent clearance) at every floor up to the
+ *   body's top. Use for flush ground pads/props you never want nav on or under.
+ * - `under`: keep the body's own walkable top (stairs/ramp/platform stay
+ *   climbable); carve only the surrounding ground ring within agent clearance of
+ *   the footprint. The ground directly beneath is already dropped by the headroom
+ *   gate, so this adds the clean clearance margin at the base.
+ */
+export type NavigationFloorCut = "hole" | "under";
+
+export const NAVIGATION_FLOOR_CUT_VALUES: readonly NavigationFloorCut[] = ["hole", "under"];
+
+export function isNavigationFloorCut(value: unknown): value is NavigationFloorCut {
+  return value === "hole" || value === "under";
+}
+
 /** Built-in object channels: a body's collision identity + what it responds to. */
 export type CollisionObjectChannel =
   | "worldStatic"
@@ -185,11 +203,10 @@ export interface AssetCollisionDef {
   /** Default AI navigation interpretation for every placement of this asset. */
   navigationRole?: NavigationRole;
   /**
-   * Default nav-hole flag for every placement of this asset: when true the body
-   * carves the AI nav floor (footprint + agent clearance) instead of seeding
-   * walkable ground. Per-placement `navigationCutsFloor` overrides this.
+   * Default nav-hole mode for every placement of this asset (see
+   * {@link NavigationFloorCut}). Per-placement `navigationFloorCut` overrides this.
    */
-  navigationCutsFloor?: boolean;
+  navigationFloorCut?: NavigationFloorCut;
   /** Per-channel overrides; only meaningful when `preset === "custom"`. */
   responses?: CollisionResponseMap;
   /** Physical material reference (friction/restitution/density source). */

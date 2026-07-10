@@ -1,6 +1,6 @@
 import type { Entity, SceneJsonValue } from "./entity";
 import type { LayoutPhysicsAxisLocks, Vec3 } from "./layout";
-import { isNavigationRole, type NavigationRole } from "./collision";
+import { isNavigationFloorCut, isNavigationRole, type NavigationFloorCut, type NavigationRole } from "./collision";
 import { resolveCapsuleDimensions } from "./capsule";
 import { isActorEventKind, type ActorEventKind } from "./actorScript";
 import { normalizeBlackboardKeys, type BlackboardKeyDef } from "../ai/blackboard";
@@ -191,8 +191,8 @@ export interface ColliderComponent {
   restitution?: number;
   /** AI navigation interpretation; affects nav generation only, not physics collision. */
   navigationRole?: NavigationRole;
-  /** Nav-hole flag: carve the AI nav floor in this collider's footprint (+ agent clearance). */
-  navigationCutsFloor?: boolean;
+  /** Nav-hole mode: carve AI nav floor in this collider's footprint (see `NavigationFloorCut`). */
+  navigationFloorCut?: NavigationFloorCut;
   /** Emit begin/end overlap events for sensors. Absent means true. */
   generateOverlapEvents?: boolean;
   /** Emit hit events while simulating physics. Absent means true. */
@@ -711,7 +711,7 @@ export function readColliderComponent(entity: Entity): ColliderComponent | undef
   if (typeof data.friction === "number") component.friction = data.friction;
   if (typeof data.restitution === "number") component.restitution = data.restitution;
   if (isNavigationRole(data.navigationRole)) component.navigationRole = data.navigationRole;
-  if (typeof data.navigationCutsFloor === "boolean") component.navigationCutsFloor = data.navigationCutsFloor;
+  if (isNavigationFloorCut(data.navigationFloorCut)) component.navigationFloorCut = data.navigationFloorCut;
   if (typeof data.generateOverlapEvents === "boolean") {
     component.generateOverlapEvents = data.generateOverlapEvents;
   }

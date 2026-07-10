@@ -1,7 +1,12 @@
 import { Box3, Vector3 } from "three";
 
 import type { RoomLayout, Vec3 } from "@engine/scene/layout";
-import type { AssetCollisionDef, CollisionPrimitive, NavigationRole } from "@engine/scene/collision";
+import type {
+  AssetCollisionDef,
+  CollisionPrimitive,
+  NavigationFloorCut,
+  NavigationRole,
+} from "@engine/scene/collision";
 import { readRotation, readScale } from "@engine/scene/transform";
 import { colliderBoxFromBounds, composeTransformMatrix, type ColliderBox } from "./transforms";
 
@@ -12,8 +17,8 @@ export interface CollisionWirebox {
   size: Vec3;
   sensor: boolean;
   navigationRole: NavigationRole;
-  /** Nav-hole flag: carve the AI nav floor in this collider's footprint (+ agent clearance). */
-  navigationCutsFloor?: boolean;
+  /** Nav-hole mode: carve the AI nav floor for this collider (see `NavigationFloorCut`). */
+  navigationFloorCut?: NavigationFloorCut;
   /**
    * True when `box` is the enclosing hull of a `complexAsSimple` trimesh rather
    * than a real box collider — its flat top is a fictional plane at peak height
@@ -58,19 +63,19 @@ export function collisionWireboxes(
     if (source.collision === false && source.simulatePhysics !== true) return;
     const def = collisionDefs?.get(assetId);
     const navigationRole = source.navigationRole ?? def?.navigationRole ?? "auto";
-    const navigationCutsFloor = source.navigationCutsFloor ?? def?.navigationCutsFloor ?? false;
+    const navigationFloorCut = source.navigationFloorCut ?? def?.navigationFloorCut;
     // `complexAsSimple` uses the render mesh: draw its triangle edges so the
     // overlay shows the actual collision shape (e.g. an L-corner), not a box.
     const complexMesh = complexMeshes?.get(assetId);
     if (def?.complexity === "complexAsSimple" && complexMesh) {
-      boxes.push(complexWirebox(source, complexMesh, sensor, navigationRole, navigationCutsFloor));
+      boxes.push(complexWirebox(source, complexMesh, sensor, navigationRole, navigationFloorCut));
       return;
     }
     // Authored simple-collision primitives (from the Static Mesh editor's
     // sidecar) replace the auto bounding box when present.
     if (def && def.primitives.length > 0) {
       for (const primitive of def.primitives) {
-        boxes.push(authoredWirebox(source, primitive, sensor, navigationRole, navigationCutsFloor));
+        boxes.push(authoredWirebox(source, primitive, sensor, navigationRole, navigationFloorCut));
       }
       return;
     }
@@ -83,7 +88,7 @@ export function collisionWireboxes(
       size: [...collider.size],
       sensor,
       navigationRole,
-      ...(navigationCutsFloor ? { navigationCutsFloor: true } : {}),
+      ...(navigationFloorCut ? { navigationFloorCut } : {}),
     });
   };
 
@@ -180,7 +185,7 @@ type ColliderSource = {
   sensor?: boolean;
   simulatePhysics?: boolean;
   navigationRole?: NavigationRole;
-  navigationCutsFloor?: boolean;
+  navigationFloorCut?: NavigationFloorCut;
 };
 
 const UNIT_CORNERS: readonly Vec3[] = [
@@ -220,7 +225,7 @@ function authoredWirebox(
   primitive: CollisionPrimitive,
   sensor: boolean,
   navigationRole: NavigationRole,
-  navigationCutsFloor: boolean,
+  navigationFloorCut: NavigationFloorCut | undefined,
 ): CollisionWirebox {
   const place = composeTransformMatrix(source.position, readRotation(source), readScale(source));
   if (primitive.shape === "convex" && primitive.points && primitive.points.length >= 4) {
@@ -239,7 +244,7 @@ function authoredWirebox(
       size: [...primitive.size],
       sensor,
       navigationRole,
-      ...(navigationCutsFloor ? { navigationCutsFloor: true } : {}),
+      ...(navigationFloorCut ? { navigationFloorCut } : {}),
     };
   }
   const local = composeTransformMatrix(
@@ -264,7 +269,7 @@ function authoredWirebox(
     size: [...primitive.size],
     sensor,
     navigationRole,
-    ...(navigationCutsFloor ? { navigationCutsFloor: true } : {}),
+    ...(navigationFloorCut ? { navigationFloorCut } : {}),
   };
 }
 
@@ -278,7 +283,7 @@ function complexWirebox(
   mesh: ComplexCollisionMesh,
   sensor: boolean,
   navigationRole: NavigationRole,
-  navigationCutsFloor: boolean,
+  navigationFloorCut: NavigationFloorCut | undefined,
 ): CollisionWirebox {
   const place = composeTransformMatrix(source.position, readRotation(source), readScale(source));
   const world = mesh.vertices.map((point) =>
@@ -305,7 +310,7 @@ function complexWirebox(
     size: [size.x, size.y, size.z],
     sensor,
     navigationRole,
-    ...(navigationCutsFloor ? { navigationCutsFloor: true } : {}),
+    ...(navigationFloorCut ? { navigationFloorCut } : {}),
     complexHull: true,
   };
 }
