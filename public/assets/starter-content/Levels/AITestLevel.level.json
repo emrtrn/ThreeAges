@@ -20,25 +20,6 @@
           "materialSlot": "white-material",
           "rotationYDeg": 0,
           "scale": 15
-        },
-        {
-          "position": [
-            2.69,
-            0.05,
-            7.35
-          ],
-          "materialSlot": "m-wood-floor-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -135,
-            0
-          ],
-          "scale": [
-            5,
-            1,
-            1
-          ]
         }
       ]
     },
@@ -162,9 +143,9 @@
       "placements": [
         {
           "position": [
-            4.47,
+            3.93,
             0,
-            3.34
+            2.45
           ],
           "name": "Player Start",
           "collision": false,
@@ -1165,7 +1146,8 @@
   ],
   "characters": [],
   "worldSettings": {
-    "staticObjectsCastShadow": true
+    "staticObjectsCastShadow": true,
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
   },
   "skyAtmosphere": {
     "rayleigh": 1,
@@ -1232,9 +1214,9 @@
     {
       "id": "target-point-1",
       "position": [
-        -0.97,
+        -0.01,
         0.05,
-        7.9
+        7.41
       ],
       "name": "TP1",
       "scale": 1,
@@ -1246,9 +1228,9 @@
     {
       "id": "target-point-2",
       "position": [
-        -6.32,
+        -5.15,
         0.05,
-        13.6
+        12.32
       ],
       "name": "TP2",
       "scale": 1,
@@ -1259,9 +1241,9 @@
     {
       "id": "target-point-3",
       "position": [
-        -11.21,
+        -11.9,
         0,
-        18.54
+        19.08
       ],
       "name": "TP3",
       "scale": 1,
@@ -1274,11 +1256,12 @@
     {
       "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
       "position": [
-        -0.7,
+        -0.68,
         0.05,
-        6.28
+        6
       ],
-      "rotationYDeg": 0
+      "rotationYDeg": 0,
+      "scale": 1
     }
   ]
 }

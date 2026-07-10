@@ -71,13 +71,14 @@
           "sightRadius": 18,
           "nearSightRadius": 2,
           "fieldOfViewDeg": 110,
-          "hearingRadius": 12
+          "hearingRadius": 12,
+          "targetLostGraceSeconds": 3
         },
         "navAgent": {
-          "radius": 0.35,
+          "radius": 0.1,
           "height": 1.8,
           "maxSpeed": 3.2,
-          "clearancePadding": 0.1
+          "clearancePadding": 0
         }
       },
       "parent": "root"

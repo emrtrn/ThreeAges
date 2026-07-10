@@ -16,9 +16,9 @@
       "placements": [
         {
           "position": [
-            -11,
+            -4,
             0,
-            -9.43
+            3.03
           ],
           "name": "Player Start",
           "collision": false,
@@ -369,6 +369,7 @@
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
     "killZ": -10,
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"
@@ -538,15 +539,13 @@
   ],
   "actors": [
     {
-      "classRef": "assets/starter-content/Script/AI_Character.actor.json",
+      "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
       "position": [
-        -0.94,
+        0.81,
         0,
-        -0.49
+        -2.3
       ],
-      "scaleLocked": true,
-      "rotationYDeg": 0,
-      "scale": 0.4
+      "rotationYDeg": 0
     }
   ]
 }
