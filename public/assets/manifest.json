@@ -20586,6 +20586,84 @@
         "bytes": 1800
       },
       "license": "Unknown"
+    },
+    {
+      "id": "testrange-sentry-blackboard",
+      "name": "TestRange Sentry.Blackboard",
+      "assetType": "blackboard",
+      "category": "AI",
+      "path": "assets/starter-content/AI/TestRange_Sentry.blackboard.json",
+      "tags": [
+        "ai",
+        "testrange"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 417
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "testrange-sentry-behavior-tree",
+      "name": "TestRange Sentry.Behavior",
+      "assetType": "behaviorTree",
+      "category": "AI",
+      "path": "assets/starter-content/AI/TestRange_Sentry.behavior.json",
+      "tags": [
+        "ai",
+        "testrange"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "AI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2917
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "testrange-sentry-actor",
+      "name": "TestRange Sentry.Actor",
+      "assetType": "prefab",
+      "category": "Actors",
+      "path": "assets/starter-content/Actors/TestRange_Sentry.actor.json",
+      "tags": [
+        "ai",
+        "testrange"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Actors",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": false,
+        "bytes": 2205
+      },
+      "license": "Unknown"
     }
   ]
 }
