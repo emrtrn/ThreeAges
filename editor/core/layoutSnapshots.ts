@@ -97,7 +97,6 @@ export function clonePlacement(placement: LayoutPlacement): LayoutPlacement {
   if (placement.responses !== undefined) clone.responses = { ...placement.responses };
   if (placement.physicalMaterialId !== undefined) clone.physicalMaterialId = placement.physicalMaterialId;
   if (placement.navigationRole !== undefined) clone.navigationRole = placement.navigationRole;
-  if (placement.navigationFloorCut !== undefined) clone.navigationFloorCut = placement.navigationFloorCut;
   if (placement.generateOverlapEvents !== undefined) {
     clone.generateOverlapEvents = placement.generateOverlapEvents;
   }

@@ -16,7 +16,6 @@ import type {
   CollisionObjectChannel,
   CollisionPresetId,
   CollisionResponseMap,
-  NavigationFloorCut,
   NavigationRole,
 } from "@engine/scene/collision";
 import type { Selection } from "./selection";
@@ -249,8 +248,6 @@ export interface EditableSelection {
   physicalMaterialId?: string;
   /** Per-placement AI navigation role override; absent means inherit asset default. */
   navigationRole?: NavigationRole;
-  /** Per-placement nav-hole override (see `NavigationFloorCut`); absent means inherit. */
-  navigationFloorCut?: NavigationFloorCut;
   /** Per-placement overlap-event override. */
   generateOverlapEvents?: boolean;
   /** Per-placement hit-event override. */

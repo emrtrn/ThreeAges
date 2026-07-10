@@ -19,7 +19,6 @@ import {
   isCollisionPresetId,
   isCollisionPrimitiveShape,
   isCollisionResponse,
-  isNavigationFloorCut,
   isNavigationRole,
   type CollisionChannel,
   type CollisionObjectChannel,
@@ -415,12 +414,6 @@ export function applyTransformFields(
       throw new Error(`invalid ${label} navigationRole`);
     }
     target.navigationRole = entry.navigationRole;
-  }
-  if (entry.navigationFloorCut !== undefined) {
-    if (!isNavigationFloorCut(entry.navigationFloorCut)) {
-      throw new Error(`invalid ${label} navigationFloorCut`);
-    }
-    target.navigationFloorCut = entry.navigationFloorCut;
   }
   if (entry.generateOverlapEvents !== undefined) {
     if (typeof entry.generateOverlapEvents !== "boolean") {
@@ -1762,12 +1755,6 @@ export function validateAssetCollisionDef(value: unknown): Record<string, unknow
   if (input.navigationRole !== undefined) {
     if (!isNavigationRole(input.navigationRole)) throw new Error("invalid collision.navigationRole");
     if (input.navigationRole !== "auto") def.navigationRole = input.navigationRole;
-  }
-  if (input.navigationFloorCut !== undefined) {
-    if (!isNavigationFloorCut(input.navigationFloorCut)) {
-      throw new Error("invalid collision.navigationFloorCut");
-    }
-    def.navigationFloorCut = input.navigationFloorCut;
   }
   const responses = validateCollisionResponses(input.responses, "collision.responses");
   if (responses) def.responses = responses;

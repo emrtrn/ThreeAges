@@ -19,7 +19,7 @@
  * bounds are eroded inward by the same effective radius.
  */
 import type { Vec3 } from "../scene/layout";
-import type { NavigationFloorCut, NavigationRole } from "../scene/collision";
+import type { NavigationRole } from "../scene/collision";
 
 export interface NavAabb {
   readonly min: readonly [number, number, number];
@@ -46,18 +46,6 @@ export type NavVec2 = readonly [number, number];
 export interface NavBlocker extends NavAabb {
   readonly footprint?: readonly NavVec2[];
   readonly navigationRole?: NavigationRole;
-  /**
-   * Nav-hole ("cut floor") mode (Unreal "Nav Modifier / Null Area"). Absent = off.
-   * Works regardless of the body's height and independent of {@link navigationRole}.
-   * Floors strictly above the body's top (a genuinely higher platform passing over
-   * it) are always left intact.
-   * - `"hole"`: carve the whole footprint (+ agent clearance) at every floor up to
-   *   the body's top — a thin ground pad included.
-   * - `"under"`: keep the body's own walkable top (never carve inside the exact
-   *   footprint), carve only the surrounding ground ring within agent clearance —
-   *   so a `walkable` staircase/ramp stays climbable but gets a clean base margin.
-   */
-  readonly navigationFloorCut?: NavigationFloorCut;
 }
 
 export interface NavAgent {
@@ -289,13 +277,6 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
   // (the host's role-aware floor probe), not from this list, so a `walkable`
   // floor/platform still contributes its walkable surface.
   const erosionBlockers = request.blockers.filter((blocker) => blocker.navigationRole !== "walkable");
-  // Nav-hole bodies (navigationFloorCut): they suppress cells at floors up to their
-  // top, independent of role and height (see NavBlocker.navigationFloorCut). Split
-  // by mode and kept separate so they cut even when walkable-role would exempt them
-  // from `erosionBlockers`. `hole` carves footprint + margin; `under` carves only
-  // the surrounding margin ring and never the object's own footprint (its top stays).
-  const holeBlockers = request.blockers.filter((blocker) => blocker.navigationFloorCut === "hole");
-  const underBlockers = request.blockers.filter((blocker) => blocker.navigationFloorCut === "under");
   const flatBlockers = erosionBlockers.filter((blocker) =>
     blocksAgentVertically(blocker, footY, height, stepHeight),
   );
@@ -342,7 +323,6 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
           );
           const walkable =
             !pointBlocked(point, cellBlockers, clearanceRadius) &&
-            !pointCutsNavFloor(point, holeBlockers, underBlockers, clearanceRadius) &&
             (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
           if (!walkable) continue;
           let layerPenalty = 0;
@@ -375,7 +355,6 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
         : flatBlockers;
       const walkable =
         !pointBlocked(point, cellBlockers, clearanceRadius) &&
-        !pointCutsNavFloor(point, holeBlockers, underBlockers, clearanceRadius) &&
         (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
       if (!walkable) continue;
       passable[idx] = 1;
@@ -817,37 +796,6 @@ function blockerContainsPointXZ(point: Vec3, blocker: NavBlocker, radius: number
   }
   // Axis-aligned: the broadphase test above already is the exact answer.
   return true;
-}
-
-/**
- * True when `point` (X/Z + its floor height `point[1]`) is carved by a nav-hole
- * body, for a floor at or below that body's top (a genuinely higher platform above
- * it is always kept). See {@link NavBlocker.navigationFloorCut}.
- * - `hole` bodies carve their whole footprint expanded by `radius` (a margin ring
- *   plus the interior).
- * - `under` bodies carve only the surrounding margin ring — within `radius` of the
- *   footprint but *outside* the exact footprint — so the body's own walkable top
- *   (a stair tread / ramp / platform) is never removed.
- */
-function pointCutsNavFloor(
-  point: Vec3,
-  holeBlockers: readonly NavBlocker[],
-  underBlockers: readonly NavBlocker[],
-  radius: number,
-): boolean {
-  for (const blocker of holeBlockers) {
-    if (point[1] <= blocker.max[1] + 1e-6 && blockerContainsPointXZ(point, blocker, radius)) return true;
-  }
-  for (const blocker of underBlockers) {
-    if (
-      point[1] <= blocker.max[1] + 1e-6 &&
-      blockerContainsPointXZ(point, blocker, radius) &&
-      !blockerContainsPointXZ(point, blocker, 0)
-    ) {
-      return true;
-    }
-  }
-  return false;
 }
 
 /**

@@ -11,7 +11,6 @@ import {
   COLLISION_RESPONSE_VALUES,
   COLLISION_CHANNELS,
   NAVIGATION_ROLE_VALUES,
-  isNavigationFloorCut,
   defaultAssetCollisionDef,
   type AssetCollisionDef,
   type CollisionChannel,
@@ -110,7 +109,6 @@ export function normalizeAssetCollisionDef(value: unknown): AssetCollisionDef {
   ) {
     def.navigationRole = input.navigationRole as NavigationRole;
   }
-  if (isNavigationFloorCut(input.navigationFloorCut)) def.navigationFloorCut = input.navigationFloorCut;
   const responses = normalizeResponses(input.responses);
   if (responses) def.responses = responses;
   if (typeof input.physicalMaterialId === "string" && input.physicalMaterialId.length > 0) {

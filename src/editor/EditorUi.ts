@@ -3102,7 +3102,6 @@ export class EditorUi {
         bindNavigationInputs(
           this.detailsBody,
           (role) => this.app.setSelectionNavigationRole(role),
-          (value) => this.app.setSelectionNavigationFloorCut(value),
         ),
       bindCollisionOverrideInputs: (currentSelection) =>
         bindCollisionOverrideInputs({

@@ -146,6 +146,22 @@
             3.18,
             -10.66
           ],
+          "navigationRole": "walkable",
+          "materialSlot": "white-material",
+          "rotationYDeg": 0,
+          "scale": [
+            1.1,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -4.3,
+            2.2,
+            -10.66
+          ],
+          "navigationRole": "walkable",
           "materialSlot": "white-material",
           "rotationYDeg": 0,
           "scale": [
@@ -179,6 +195,7 @@
             0,
             -10.66
           ],
+          "navigationRole": "obstacleOnly",
           "materialSlot": "white-material",
           "rotationYDeg": 0,
           "rotation": [
@@ -271,9 +288,9 @@
       "placements": [
         {
           "position": [
-            2.98,
+            3.1,
             0,
-            -6.86
+            -6.67
           ],
           "navigationRole": "walkable",
           "rotationYDeg": 0,
@@ -285,7 +302,7 @@
           "scale": [
             1,
             1,
-            1.9
+            2
           ]
         }
       ]
@@ -295,23 +312,18 @@
       "placements": [
         {
           "position": [
-            0.03,
-            0,
-            -6.89
+            -6.28,
+            -2.17,
+            1.91
           ],
           "navigationRole": "walkable",
-          "navigationFloorCut": "under",
           "rotationYDeg": 0,
           "rotation": [
             0,
             90,
             0
           ],
-          "scale": [
-            1.8,
-            1,
-            1
-          ]
+          "scale": 1
         }
       ]
     },
@@ -456,9 +468,9 @@
     {
       "id": "target-point-1",
       "position": [
-        5.51,
+        5.28,
         0,
-        -8.54
+        -8.86
       ],
       "name": "1",
       "scale": 1,
@@ -469,9 +481,9 @@
     {
       "id": "target-point-2",
       "position": [
-        -3.27,
-        3,
-        -8.63
+        -1.2,
+        2.2,
+        -8.93
       ],
       "name": "2",
       "scale": 1,
@@ -484,9 +496,9 @@
     {
       "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        5.35,
+        5.65,
         0,
-        -11.96
+        -11.81
       ],
       "scaleLocked": true,
       "rotationYDeg": 0,

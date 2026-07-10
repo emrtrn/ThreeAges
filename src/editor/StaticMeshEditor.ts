@@ -41,7 +41,6 @@ import {
   COLLISION_COMPLEXITY_VALUES,
   COLLISION_PRESET_IDS,
   DEFAULT_NAVIGATION_ROLE,
-  NAVIGATION_FLOOR_CUT_VALUES,
   NAVIGATION_ROLE_VALUES,
   PHYSICAL_MATERIAL_IDS,
   defaultAssetCollisionDef,
@@ -50,7 +49,6 @@ import {
   type CollisionPresetId,
   type CollisionPrimitive,
   type CollisionPrimitiveShape,
-  type NavigationFloorCut,
   type NavigationRole,
 } from "@engine/scene/collision";
 import type { Vec3 } from "@engine/scene/layout";
@@ -125,11 +123,6 @@ const NAVIGATION_ROLE_LABELS: Record<NavigationRole, string> = {
   walkable: "Walkable Surface",
   obstacleOnly: "Obstacle Only",
   ignored: "Ignored",
-};
-
-const NAVIGATION_FLOOR_CUT_LABELS: Record<NavigationFloorCut, string> = {
-  hole: "Full Hole",
-  under: "Under Only (keep top)",
 };
 
 const WIRE_COLOR = 0x49e6a2;
@@ -1093,15 +1086,6 @@ export class StaticMeshEditor {
       (role) =>
         `<option value="${role}" ${role === navigationRole ? "selected" : ""}>${NAVIGATION_ROLE_LABELS[role]}</option>`,
     ).join("");
-    const floorCut = this.collision.navigationFloorCut;
-    const navigationFloorCutOptions = [`<option value="" ${floorCut ? "" : "selected"}>Off</option>`]
-      .concat(
-        NAVIGATION_FLOOR_CUT_VALUES.map(
-          (mode) =>
-            `<option value="${mode}" ${mode === floorCut ? "selected" : ""}>${NAVIGATION_FLOOR_CUT_LABELS[mode]}</option>`,
-        ),
-      )
-      .join("");
     const currentMaterial = this.collision.physicalMaterialId ?? "";
     const physMaterialOptions = [`<option value="" ${currentMaterial ? "" : "selected"}>None</option>`]
       .concat(
@@ -1169,10 +1153,6 @@ export class StaticMeshEditor {
           <span>AI Navigation Role</span>
           <select data-sm-field="navigationRole">${navigationRoleOptions}</select>
         </label>
-        <label class="sm-row" title="Carve the AI nav floor around this asset (agent-radius clearance). Full Hole removes the whole footprint; Under Only keeps a walkable top (stairs/ramps) and clears only the surrounding ground.">
-          <span>Cut Nav Floor</span>
-          <select data-sm-field="navigationFloorCut">${navigationFloorCutOptions}</select>
-        </label>
         ${
           this.collision.complexity === "complexAsSimple"
             ? `<div class="sm-hint">Uses the render mesh as a static trimesh collider. Static-only — placements of this asset can't Simulate Physics. Best for level geometry (walls, rooms) instead of hand-placing boxes.</div>`
@@ -1225,14 +1205,6 @@ export class StaticMeshEditor {
         this.markDirty();
         // Re-render so the static-only hint appears/disappears with the choice.
         this.renderDetails();
-      });
-    this.detailsHost
-      .querySelector<HTMLSelectElement>('[data-sm-field="navigationFloorCut"]')
-      ?.addEventListener("change", (event) => {
-        const value = (event.target as HTMLSelectElement).value;
-        if (value) this.collision.navigationFloorCut = value as NavigationFloorCut;
-        else delete this.collision.navigationFloorCut;
-        this.markDirty();
       });
     this.detailsHost
       .querySelector<HTMLSelectElement>('[data-sm-field="navigationRole"]')
