@@ -98,7 +98,7 @@ export function collisionWireboxes(
   return boxes;
 }
 
-/** A world-space walkable surface triangle (`normalY` = |unit normal.y|). */
+/** A world-space walkable surface triangle (`normalY` = signed unit normal.y, up-facing > 0). */
 export interface CollisionSurfaceTriangle {
   a: Vec3;
   b: Vec3;
@@ -155,7 +155,14 @@ export function collisionSurfaceTriangles(
   return out;
 }
 
-/** |unit normal.y| of a triangle (1 = flat floor, 0 = vertical/degenerate). */
+/**
+ * Signed upward component of a triangle's unit normal (+1 = up-facing floor,
+ * 0 = vertical, -1 = down-facing underside; 0 if degenerate). Signed (not
+ * `Math.abs`) so a solid `complexAsSimple` body's *downward* faces — a staircase's
+ * flat bottom, a wedge underside — are not classified as walkable ground. This
+ * mirrors the physics `triangleUpNormalY`, keeping the editor nav preview in sync
+ * with the runtime bake. Assumes outward (CCW) triangle winding.
+ */
 function triangleUpNormalY(a: Vector3, b: Vector3, c: Vector3): number {
   const ux = b.x - a.x;
   const uy = b.y - a.y;
@@ -167,7 +174,7 @@ function triangleUpNormalY(a: Vector3, b: Vector3, c: Vector3): number {
   const nx = uy * vz - uz * vy;
   const nz = ux * vy - uy * vx;
   const len = Math.hypot(nx, ny, nz);
-  return len <= 1e-12 ? 0 : Math.abs(ny) / len;
+  return len <= 1e-12 ? 0 : ny / len;
 }
 
 /** Placement/character fields the wirebox builder reads. */

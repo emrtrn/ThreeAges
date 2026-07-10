@@ -16,7 +16,7 @@ export interface GroundTriangle {
   readonly a: readonly [number, number, number];
   readonly b: readonly [number, number, number];
   readonly c: readonly [number, number, number];
-  /** |normal.y| after normalization: 1 = flat floor, 0 = vertical. Precomputed. */
+  /** Signed normal.y after normalization: +1 = up-facing floor, 0 = vertical, -1 = down-facing. Precomputed. */
   readonly normalY: number;
 }
 
@@ -24,8 +24,11 @@ export interface GroundTriangle {
 const EPSILON = 1e-6;
 
 /**
- * Upward component of a triangle's unit normal (`|n.y|`): 1 for a flat floor, 0
- * for a vertical wall. Returns 0 for a degenerate (zero-area) triangle.
+ * Signed upward component of a triangle's unit normal: +1 for an up-facing floor,
+ * 0 for a vertical wall, -1 for a down-facing underside. Returns 0 for a
+ * degenerate (zero-area) triangle. Signed (not `Math.abs`) so a solid body's
+ * downward faces are not mistaken for walkable ground; assumes outward (CCW)
+ * winding, which the prototype collision meshes follow.
  */
 export function triangleUpNormal(
   a: readonly [number, number, number],
@@ -43,7 +46,7 @@ export function triangleUpNormal(
   const nz = ux * vy - uy * vx;
   const len = Math.hypot(nx, ny, nz);
   if (len <= EPSILON) return 0;
-  return Math.abs(ny) / len;
+  return ny / len;
 }
 
 /**

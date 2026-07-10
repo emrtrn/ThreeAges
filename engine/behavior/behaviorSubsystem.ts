@@ -408,7 +408,7 @@ export interface PhysicsSurfaceTriangle {
   readonly a: readonly [number, number, number];
   readonly b: readonly [number, number, number];
   readonly c: readonly [number, number, number];
-  /** |normal.y| after normalization: 1 = flat floor, 0 = vertical. */
+  /** Signed normal.y after normalization: +1 = up-facing floor, 0 = vertical, -1 = down-facing. */
   readonly normalY: number;
 }
 

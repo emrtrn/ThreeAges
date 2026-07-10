@@ -7328,9 +7328,11 @@ check("stuck state flags a stalled agent and resets on progress", () => {
 const RAMP_NORMAL_Y = 8 / Math.hypot(4, 8, 0); // ≈0.894, a 26.57° ramp rising along +X
 
 check("triangleUpNormal: flat floor = 1, vertical wall = 0, ramp = cos(angle)", () => {
-  assert.ok(Math.abs(triangleUpNormal([0, 0, 0], [1, 0, 0], [0, 0, 1]) - 1) < 1e-9);
+  // Up-facing floors are wound CCW (outward), matching the exported prototype
+  // meshes, so their signed upward normal is +1 (not the old winding-agnostic |ny|).
+  assert.ok(Math.abs(triangleUpNormal([0, 0, 0], [0, 0, 1], [1, 0, 0]) - 1) < 1e-9);
   assert.ok(Math.abs(triangleUpNormal([0, 0, 0], [1, 0, 0], [0, 1, 0]) - 0) < 1e-9);
-  assert.ok(Math.abs(triangleUpNormal([0, 0, -1], [4, 2, -1], [4, 2, 1]) - RAMP_NORMAL_Y) < 1e-9);
+  assert.ok(Math.abs(triangleUpNormal([0, 0, -1], [4, 2, 1], [4, 2, -1]) - RAMP_NORMAL_Y) < 1e-9);
 });
 
 check("sampleTriangleHeight: interpolates inside, null outside / for vertical triangles", () => {
@@ -7672,7 +7674,7 @@ check("physics navigation queries honor collider navigation roles without changi
       [0.5, 0, -0.5],
       [0, 0, 0.5],
     ],
-    indices: [0, 1, 2],
+    indices: [0, 2, 1], // CCW up-facing floor (signed normal +1)
   };
   physics.setEntities([
     {
@@ -7755,7 +7757,7 @@ check("walkable stair emits riser nav blockers tagged with their role; auto does
       [0.5, 0, 0],
       [-0.5, 0.2, 0],
     ] as [number, number, number][],
-    indices: [0, 1, 2, 3, 4, 5],
+    indices: [0, 2, 1, 3, 4, 5], // CCW up-facing tread (signed +1); riser stays vertical
   };
   const makeStair = (navigationRole: "walkable" | "auto") => ({
     id: "stair",
@@ -8015,7 +8017,7 @@ check("physics subsystem exposes trimesh surfaces and excludes flat ones from bl
               shape: "trimesh",
               size: [4, 2, 2],
               vertices: [[0, 0, -1], [4, 2, -1], [4, 2, 1], [0, 0, 1]], // 26.57° ramp up +X
-              indices: [0, 1, 2, 0, 2, 3],
+              indices: [0, 2, 1, 0, 3, 2], // CCW up-facing (signed normal +cos)
             },
           ],
         },
@@ -8056,6 +8058,48 @@ check("physics subsystem keeps a steep trimesh triangle as a wall blocker (not a
   assert.equal(physics.staticSurfaceTriangles().length, 0);
 });
 
+// Regression: a solid `complexAsSimple` slab (a staircase/floor block) has an
+// up-facing top AND a down-facing bottom. The signed surface normal must accept
+// only the top, so no phantom nav floor is seeded on the underside — the defect
+// that let an AI path route through the interior of a solid staircase and stall
+// the pawn mid-climb.
+check("physics subsystem never seeds a walkable surface on a solid body's downward face", () => {
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "slab",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [2, 1, 2],
+          isStatic: true,
+          isSensor: false,
+          primitives: [
+            {
+              shape: "trimesh",
+              size: [2, 1, 2],
+              vertices: [
+                [-1, 1, -1], [1, 1, -1], [1, 1, 1], [-1, 1, 1], // top face (y=1, up)
+                [-1, 0, -1], [1, 0, -1], [1, 0, 1], [-1, 0, 1], // bottom face (y=0, down)
+              ],
+              // CCW top (signed normal +1); CW bottom (signed normal -1).
+              indices: [0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7],
+            },
+          ],
+        },
+      },
+    },
+  ]);
+  const surfaces = physics.staticSurfaceTriangles();
+  assert.equal(surfaces.length, 2, "only the two up-facing top triangles are walkable surfaces");
+  assert.ok(surfaces.every((tri) => tri.normalY > 0.9), "every walkable surface faces up (signed +1)");
+  assert.ok(
+    surfaces.every((tri) => Math.abs(tri.a[1] - 1) < 1e-9),
+    "the surviving surfaces are the top face (y=1), never the y=0 underside",
+  );
+});
+
 check("physics subsystem bakes body rotation into surface-triangle normals", () => {
   const physics = new PhysicsSubsystem();
   physics.setEntities([
@@ -8073,7 +8117,7 @@ check("physics subsystem bakes body rotation into surface-triangle normals", () 
               shape: "trimesh",
               size: [2, 0.1, 2],
               vertices: [[0, 0, 0], [2, 0, 0], [0, 0, 2]], // flat, then tilted 30° about Z
-              indices: [0, 1, 2],
+              indices: [0, 2, 1], // CCW up-facing floor (signed normal +cos30 after tilt)
             },
           ],
         },
@@ -8114,7 +8158,7 @@ check("CharacterMovement subsystem walks up a trimesh ramp, following the inclin
               shape: "trimesh",
               size: [4, 2, 4],
               vertices: [[0, 0, -2], [4, 2, -2], [4, 2, 2], [0, 0, 2]], // y = 0.5*x, 26.57°
-              indices: [0, 1, 2, 0, 2, 3],
+              indices: [0, 2, 1, 0, 3, 2], // CCW up-facing (signed normal +cos)
             },
           ],
         },
@@ -9121,7 +9165,7 @@ check("collisionSurfaceTriangles derives live walkable surfaces and drops delete
       [1, 0, 1],
       [-1, 0, 1],
     ] as Vec3[],
-    indices: [0, 1, 2, 0, 2, 3],
+    indices: [0, 2, 1, 0, 3, 2], // CCW up-facing top (signed normal +1)
   };
   const complexMeshes = new Map([["ramp", mesh]]);
   const defs = new Map<string, AssetCollisionDef>([

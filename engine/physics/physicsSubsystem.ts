@@ -838,7 +838,15 @@ function primitiveAabb(
 const SURFACE_MAX_WALL_DEGREES = 50;
 const SURFACE_MIN_NORMAL_Y = Math.cos(degreesToRadians(SURFACE_MAX_WALL_DEGREES));
 
-/** Upward component of a triangle's unit normal (1 = flat, 0 = vertical); 0 if degenerate. */
+/**
+ * Signed upward component of a triangle's unit normal (+1 = up-facing floor,
+ * 0 = vertical, -1 = down-facing underside); 0 if degenerate. Signed (not
+ * `Math.abs`) so a solid `complexAsSimple` body's *downward* faces — a staircase's
+ * flat bottom, a wedge underside — are never mistaken for walkable ground, which
+ * would otherwise seed a phantom nav floor inside/under the solid body and route
+ * paths straight through the steps. Assumes outward (CCW) triangle winding, the
+ * glTF/Three.js convention the prototype collision meshes follow.
+ */
 function triangleUpNormalY(a: Vec3, b: Vec3, c: Vec3): number {
   const ux = b[0] - a[0];
   const uy = b[1] - a[1];
@@ -850,7 +858,7 @@ function triangleUpNormalY(a: Vec3, b: Vec3, c: Vec3): number {
   const ny = uz * vx - ux * vz;
   const nz = ux * vy - uy * vx;
   const len = Math.hypot(nx, ny, nz);
-  return len <= 1e-9 ? 0 : Math.abs(ny) / len;
+  return len <= 1e-9 ? 0 : ny / len;
 }
 
 /** Invokes `visit` with each trimesh triangle's world-space vertices (rotation baked). */
