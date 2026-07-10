@@ -5032,6 +5032,11 @@ export class SceneApp {
     this.editorSceneController.setSelectionNavigationRole(value);
   }
 
+  /** Details "AI Navigation" nav-hole override (undefined/false clears it). */
+  setSelectionNavigationCutsFloor(value: boolean | undefined): void {
+    this.editorSceneController.setSelectionNavigationCutsFloor(value);
+  }
+
   /** Details / Content Drawer material slot override for static mesh instances. */
   setSelectionMaterialSlot(value: string | undefined): void {
     if (value !== undefined && !this.isMaterialAsset(value)) {
@@ -7015,6 +7020,7 @@ export class SceneApp {
           min: [wirebox.box.min.x, wirebox.box.min.y, wirebox.box.min.z],
           max: [wirebox.box.max.x, wirebox.box.max.y, wirebox.box.max.z],
           navigationRole: wirebox.navigationRole,
+          ...(wirebox.navigationCutsFloor ? { navigationCutsFloor: true } : {}),
           // A complexAsSimple hull box's flat top is fictional (a peak-height
           // plane over the whole footprint) — the mesh's real floors come from
           // its surface triangles, so the ground probe must not seed from it.

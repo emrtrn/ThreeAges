@@ -390,6 +390,12 @@ export interface PhysicsAabb {
   /** AI navigation interpretation; absent behaves like `auto`. */
   readonly navigationRole?: NavigationRole;
   /**
+   * Nav-hole flag: when true this body carves the AI nav floor inside its
+   * footprint (+ agent clearance) instead of contributing walkable ground, at any
+   * floor up to its top (see {@link NavBlocker.navigationCutsFloor}).
+   */
+  readonly navigationCutsFloor?: boolean;
+  /**
    * Oriented convex XZ ground silhouette of a rotated box collider (the exact
    * footprint the `min`/`max` AABB otherwise bloats to enclose). Present only
    * when the collider is rotated off-axis; consumers that only need the AABB

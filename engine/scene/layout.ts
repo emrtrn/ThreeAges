@@ -169,6 +169,12 @@ export interface LayoutPlacement {
   physicalMaterialId?: string;
   /** Per-placement AI navigation role override; absent means inherit the asset default. */
   navigationRole?: NavigationRole;
+  /**
+   * Per-placement nav-hole override: when true this placement carves the AI nav
+   * floor inside its footprint (+ agent clearance) instead of contributing
+   * walkable ground. Absent means inherit the asset default.
+   */
+  navigationCutsFloor?: boolean;
   /** Emit begin/end overlap events for sensors. Absent means inherit/default true. */
   generateOverlapEvents?: boolean;
   /** Emit hit events while simulating physics. Absent means inherit/default true. */

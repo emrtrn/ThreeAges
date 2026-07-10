@@ -83,6 +83,7 @@ type MutableHierarchyTransform = {
   responses?: CollisionResponseMap;
   physicalMaterialId?: string;
   navigationRole?: NavigationRole;
+  navigationCutsFloor?: boolean;
   generateOverlapEvents?: boolean;
   simulationGeneratesHitEvents?: boolean;
   materialSlot?: string;
@@ -974,6 +975,52 @@ export class EditorSceneController {
     if (!target) return;
     if (value === undefined) delete target.navigationRole;
     else target.navigationRole = value;
+    if (options.notify !== false) this.host.emitSelectionChanged();
+  }
+
+  /** Sets (or clears) the per-placement nav-hole override for static mesh instances. */
+  setSelectionNavigationCutsFloor(value: boolean | undefined): void {
+    if (!this.selection || !this.host.hasSelection(this.selection)) return;
+    if (this.selection.kind !== "instance") {
+      this.host.onStatus("Navigation overrides are available for static mesh instances.", "info");
+      return;
+    }
+    const entries = this.getSelectedSelectionsWithTargets((selection) => selection.kind === "instance")
+      .flatMap((selection) => {
+        const target = this.host.getMutableTransform(selection);
+        if (!target || target.navigationCutsFloor === value) return [];
+        return [{ selection: cloneSelection(selection), previous: target.navigationCutsFloor }];
+      });
+    if (entries.length === 0) return;
+
+    const applyEntries = (mode: EditorCommandPhase): void => {
+      for (const entry of entries) {
+        this.applyNavigationCutsFloor(
+          entry.selection,
+          mode === "redo" ? value : entry.previous,
+          { notify: false },
+        );
+      }
+      this.host.emitSelectionChanged();
+    };
+
+    this.executeCommand({
+      label: entries.length === 1 ? "Set navigation cuts floor" : "Set selected navigation cuts floor",
+      redo: () => applyEntries("redo"),
+      undo: () => applyEntries("undo"),
+    });
+  }
+
+  private applyNavigationCutsFloor(
+    selection: Selection,
+    value: boolean | undefined,
+    options: { notify?: boolean } = {},
+  ): void {
+    if (selection.kind !== "instance") return;
+    const target = this.host.getMutableTransform(selection);
+    if (!target) return;
+    if (!value) delete target.navigationCutsFloor;
+    else target.navigationCutsFloor = true;
     if (options.notify !== false) this.host.emitSelectionChanged();
   }
 

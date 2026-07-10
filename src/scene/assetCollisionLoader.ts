@@ -109,6 +109,7 @@ export function normalizeAssetCollisionDef(value: unknown): AssetCollisionDef {
   ) {
     def.navigationRole = input.navigationRole as NavigationRole;
   }
+  if (input.navigationCutsFloor === true) def.navigationCutsFloor = true;
   const responses = normalizeResponses(input.responses);
   if (responses) def.responses = responses;
   if (typeof input.physicalMaterialId === "string" && input.physicalMaterialId.length > 0) {

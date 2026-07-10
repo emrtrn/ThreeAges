@@ -12,6 +12,8 @@ export interface CollisionWirebox {
   size: Vec3;
   sensor: boolean;
   navigationRole: NavigationRole;
+  /** Nav-hole flag: carve the AI nav floor in this collider's footprint (+ agent clearance). */
+  navigationCutsFloor?: boolean;
   /**
    * True when `box` is the enclosing hull of a `complexAsSimple` trimesh rather
    * than a real box collider — its flat top is a fictional plane at peak height
@@ -56,18 +58,19 @@ export function collisionWireboxes(
     if (source.collision === false && source.simulatePhysics !== true) return;
     const def = collisionDefs?.get(assetId);
     const navigationRole = source.navigationRole ?? def?.navigationRole ?? "auto";
+    const navigationCutsFloor = source.navigationCutsFloor ?? def?.navigationCutsFloor ?? false;
     // `complexAsSimple` uses the render mesh: draw its triangle edges so the
     // overlay shows the actual collision shape (e.g. an L-corner), not a box.
     const complexMesh = complexMeshes?.get(assetId);
     if (def?.complexity === "complexAsSimple" && complexMesh) {
-      boxes.push(complexWirebox(source, complexMesh, sensor, navigationRole));
+      boxes.push(complexWirebox(source, complexMesh, sensor, navigationRole, navigationCutsFloor));
       return;
     }
     // Authored simple-collision primitives (from the Static Mesh editor's
     // sidecar) replace the auto bounding box when present.
     if (def && def.primitives.length > 0) {
       for (const primitive of def.primitives) {
-        boxes.push(authoredWirebox(source, primitive, sensor, navigationRole));
+        boxes.push(authoredWirebox(source, primitive, sensor, navigationRole, navigationCutsFloor));
       }
       return;
     }
@@ -80,6 +83,7 @@ export function collisionWireboxes(
       size: [...collider.size],
       sensor,
       navigationRole,
+      ...(navigationCutsFloor ? { navigationCutsFloor: true } : {}),
     });
   };
 
@@ -176,6 +180,7 @@ type ColliderSource = {
   sensor?: boolean;
   simulatePhysics?: boolean;
   navigationRole?: NavigationRole;
+  navigationCutsFloor?: boolean;
 };
 
 const UNIT_CORNERS: readonly Vec3[] = [
@@ -215,6 +220,7 @@ function authoredWirebox(
   primitive: CollisionPrimitive,
   sensor: boolean,
   navigationRole: NavigationRole,
+  navigationCutsFloor: boolean,
 ): CollisionWirebox {
   const place = composeTransformMatrix(source.position, readRotation(source), readScale(source));
   if (primitive.shape === "convex" && primitive.points && primitive.points.length >= 4) {
@@ -233,6 +239,7 @@ function authoredWirebox(
       size: [...primitive.size],
       sensor,
       navigationRole,
+      ...(navigationCutsFloor ? { navigationCutsFloor: true } : {}),
     };
   }
   const local = composeTransformMatrix(
@@ -251,7 +258,14 @@ function authoredWirebox(
     return [point.x, point.y, point.z] as Vec3;
   });
   const box = new Box3().setFromPoints(world.map((p) => new Vector3(p[0], p[1], p[2])));
-  return { box, segments, size: [...primitive.size], sensor, navigationRole };
+  return {
+    box,
+    segments,
+    size: [...primitive.size],
+    sensor,
+    navigationRole,
+    ...(navigationCutsFloor ? { navigationCutsFloor: true } : {}),
+  };
 }
 
 /**
@@ -264,6 +278,7 @@ function complexWirebox(
   mesh: ComplexCollisionMesh,
   sensor: boolean,
   navigationRole: NavigationRole,
+  navigationCutsFloor: boolean,
 ): CollisionWirebox {
   const place = composeTransformMatrix(source.position, readRotation(source), readScale(source));
   const world = mesh.vertices.map((point) =>
@@ -284,7 +299,15 @@ function complexWirebox(
   }
   const box = new Box3().setFromPoints(world);
   const size = box.getSize(new Vector3());
-  return { box, segments, size: [size.x, size.y, size.z], sensor, navigationRole, complexHull: true };
+  return {
+    box,
+    segments,
+    size: [size.x, size.y, size.z],
+    sensor,
+    navigationRole,
+    ...(navigationCutsFloor ? { navigationCutsFloor: true } : {}),
+    complexHull: true,
+  };
 }
 
 function unitSegmentsForShape(shape: CollisionPrimitive["shape"]): Vec3[] {

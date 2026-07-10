@@ -46,6 +46,16 @@ export type NavVec2 = readonly [number, number];
 export interface NavBlocker extends NavAabb {
   readonly footprint?: readonly NavVec2[];
   readonly navigationRole?: NavigationRole;
+  /**
+   * When true, this body is a *navigation hole* (Unreal "Nav Modifier / Null
+   * Area"): no walkable cell is generated inside its XZ footprint — expanded by
+   * the agent clearance radius — for any floor at or below its top. Unlike an
+   * `obstacleOnly` blocker it works regardless of the body's height (a thin
+   * ground-level pad still carves), and unlike `walkable` it is never exempt from
+   * erosion. Floors strictly above its top (a genuinely higher platform passing
+   * over it) are left intact. Independent of {@link navigationRole}.
+   */
+  readonly navigationCutsFloor?: boolean;
 }
 
 export interface NavAgent {
@@ -277,6 +287,11 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
   // (the host's role-aware floor probe), not from this list, so a `walkable`
   // floor/platform still contributes its walkable surface.
   const erosionBlockers = request.blockers.filter((blocker) => blocker.navigationRole !== "walkable");
+  // Nav-hole bodies (navigationCutsFloor): they suppress cells inside footprint +
+  // clearance at every floor up to their top, independent of role and height (see
+  // NavBlocker.navigationCutsFloor). Kept as a separate list so they cut even when
+  // walkable-role would exempt them from `erosionBlockers`.
+  const cutBlockers = request.blockers.filter((blocker) => blocker.navigationCutsFloor);
   const flatBlockers = erosionBlockers.filter((blocker) =>
     blocksAgentVertically(blocker, footY, height, stepHeight),
   );
@@ -323,6 +338,7 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
           );
           const walkable =
             !pointBlocked(point, cellBlockers, clearanceRadius) &&
+            !pointCutsNavFloor(point, cutBlockers, clearanceRadius) &&
             (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
           if (!walkable) continue;
           let layerPenalty = 0;
@@ -355,6 +371,7 @@ export function buildNavGrid(request: NavGridBuildRequest): NavGrid | null {
         : flatBlockers;
       const walkable =
         !pointBlocked(point, cellBlockers, clearanceRadius) &&
+        !pointCutsNavFloor(point, cutBlockers, clearanceRadius) &&
         (!authoredBounds || pointInsideAnyAabb2d(point, authoredBounds));
       if (!walkable) continue;
       passable[idx] = 1;
@@ -773,26 +790,43 @@ function blocksAgentVertically(
 }
 
 function pointBlocked(point: Vec3, blockers: readonly NavBlocker[], radius: number): boolean {
-  return blockers.some((blocker) => {
-    // Broadphase: the AABB (inflated by radius) always bounds the footprint, so a
-    // point outside it can never be within `radius` of the oriented shape.
-    if (
-      point[0] < blocker.min[0] - radius ||
-      point[0] > blocker.max[0] + radius ||
-      point[2] < blocker.min[2] - radius ||
-      point[2] > blocker.max[2] + radius
-    ) {
-      return false;
-    }
-    const footprint = blocker.footprint;
-    if (footprint && footprint.length >= 2) {
-      // Oriented (rotated) obstacle: block when the capsule center is within the
-      // effective radius of the tight ground silhouette (rounded-corner erosion).
-      return distancePointToFootprintXZ(point[0], point[2], footprint) <= radius;
-    }
-    // Axis-aligned: the broadphase test above already is the exact answer.
-    return true;
-  });
+  return blockers.some((blocker) => blockerContainsPointXZ(point, blocker, radius));
+}
+
+/** True when world XZ `point` is within `radius` of `blocker`'s inflated footprint (ignores Y). */
+function blockerContainsPointXZ(point: Vec3, blocker: NavBlocker, radius: number): boolean {
+  // Broadphase: the AABB (inflated by radius) always bounds the footprint, so a
+  // point outside it can never be within `radius` of the oriented shape.
+  if (
+    point[0] < blocker.min[0] - radius ||
+    point[0] > blocker.max[0] + radius ||
+    point[2] < blocker.min[2] - radius ||
+    point[2] > blocker.max[2] + radius
+  ) {
+    return false;
+  }
+  const footprint = blocker.footprint;
+  if (footprint && footprint.length >= 2) {
+    // Oriented (rotated) obstacle: block when the capsule center is within the
+    // effective radius of the tight ground silhouette (rounded-corner erosion).
+    return distancePointToFootprintXZ(point[0], point[2], footprint) <= radius;
+  }
+  // Axis-aligned: the broadphase test above already is the exact answer.
+  return true;
+}
+
+/**
+ * True when `point` (X/Z + its floor height `point[1]`) falls in a nav-hole
+ * body's footprint expanded by `radius`, for a floor at or below that body's top.
+ * This carves the body's own footprint plus an agent-clearance margin at every
+ * floor up to its top, while leaving a genuinely higher platform above it walkable
+ * (see {@link NavBlocker.navigationCutsFloor}).
+ */
+function pointCutsNavFloor(point: Vec3, cutBlockers: readonly NavBlocker[], radius: number): boolean {
+  if (cutBlockers.length === 0) return false;
+  return cutBlockers.some(
+    (blocker) => point[1] <= blocker.max[1] + 1e-6 && blockerContainsPointXZ(point, blocker, radius),
+  );
 }
 
 /**

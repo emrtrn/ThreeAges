@@ -1153,6 +1153,10 @@ export class StaticMeshEditor {
           <span>AI Navigation Role</span>
           <select data-sm-field="navigationRole">${navigationRoleOptions}</select>
         </label>
+        <label class="sm-row" title="Carve the AI nav floor in this asset's footprint (plus agent-radius clearance), like an obstacle, regardless of height.">
+          <span>Cuts Nav Floor</span>
+          <input type="checkbox" data-sm-field="navigationCutsFloor" ${this.collision.navigationCutsFloor ? "checked" : ""} />
+        </label>
         ${
           this.collision.complexity === "complexAsSimple"
             ? `<div class="sm-hint">Uses the render mesh as a static trimesh collider. Static-only — placements of this asset can't Simulate Physics. Best for level geometry (walls, rooms) instead of hand-placing boxes.</div>`
@@ -1205,6 +1209,13 @@ export class StaticMeshEditor {
         this.markDirty();
         // Re-render so the static-only hint appears/disappears with the choice.
         this.renderDetails();
+      });
+    this.detailsHost
+      .querySelector<HTMLInputElement>('[data-sm-field="navigationCutsFloor"]')
+      ?.addEventListener("change", (event) => {
+        if ((event.target as HTMLInputElement).checked) this.collision.navigationCutsFloor = true;
+        else delete this.collision.navigationCutsFloor;
+        this.markDirty();
       });
     this.detailsHost
       .querySelector<HTMLSelectElement>('[data-sm-field="navigationRole"]')

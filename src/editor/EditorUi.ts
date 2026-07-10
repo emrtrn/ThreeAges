@@ -3099,8 +3099,10 @@ export class EditorUi {
       handleDetailToggle: (toggle, checked) => this.handleDetailToggle(toggle, checked),
       setSelectionCollisionPreset: (preset) => this.app.setSelectionCollisionPreset(preset),
       bindNavigationInputs: () =>
-        bindNavigationInputs(this.detailsBody, (role) =>
-          this.app.setSelectionNavigationRole(role),
+        bindNavigationInputs(
+          this.detailsBody,
+          (role) => this.app.setSelectionNavigationRole(role),
+          (value) => this.app.setSelectionNavigationCutsFloor(value),
         ),
       bindCollisionOverrideInputs: (currentSelection) =>
         bindCollisionOverrideInputs({

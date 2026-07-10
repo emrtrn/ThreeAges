@@ -184,6 +184,12 @@ export interface AssetCollisionDef {
   preset: CollisionPresetId;
   /** Default AI navigation interpretation for every placement of this asset. */
   navigationRole?: NavigationRole;
+  /**
+   * Default nav-hole flag for every placement of this asset: when true the body
+   * carves the AI nav floor (footprint + agent clearance) instead of seeding
+   * walkable ground. Per-placement `navigationCutsFloor` overrides this.
+   */
+  navigationCutsFloor?: boolean;
   /** Per-channel overrides; only meaningful when `preset === "custom"`. */
   responses?: CollisionResponseMap;
   /** Physical material reference (friction/restitution/density source). */

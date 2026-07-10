@@ -415,6 +415,12 @@ export function applyTransformFields(
     }
     target.navigationRole = entry.navigationRole;
   }
+  if (entry.navigationCutsFloor !== undefined) {
+    if (typeof entry.navigationCutsFloor !== "boolean") {
+      throw new Error(`${label} navigationCutsFloor must be boolean`);
+    }
+    if (entry.navigationCutsFloor) target.navigationCutsFloor = true;
+  }
   if (entry.generateOverlapEvents !== undefined) {
     if (typeof entry.generateOverlapEvents !== "boolean") {
       throw new Error(`${label} generateOverlapEvents must be boolean`);
@@ -1755,6 +1761,12 @@ export function validateAssetCollisionDef(value: unknown): Record<string, unknow
   if (input.navigationRole !== undefined) {
     if (!isNavigationRole(input.navigationRole)) throw new Error("invalid collision.navigationRole");
     if (input.navigationRole !== "auto") def.navigationRole = input.navigationRole;
+  }
+  if (input.navigationCutsFloor !== undefined) {
+    if (typeof input.navigationCutsFloor !== "boolean") {
+      throw new Error("collision.navigationCutsFloor must be boolean");
+    }
+    if (input.navigationCutsFloor) def.navigationCutsFloor = true;
   }
   const responses = validateCollisionResponses(input.responses, "collision.responses");
   if (responses) def.responses = responses;
