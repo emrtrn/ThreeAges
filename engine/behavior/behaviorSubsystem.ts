@@ -418,6 +418,12 @@ export interface PhysicsQuery {
   staticBlockerAabbs(): readonly PhysicsAabb[];
   /** World-space walkable surface triangles (static trimesh) for the ground probe. */
   staticSurfaceTriangles(): readonly PhysicsSurfaceTriangle[];
+  /**
+   * Candidate static surface triangles near a world X/Z point. Implementations may
+   * use a spatial index; callers must fall back to `staticSurfaceTriangles()` when
+   * this optional fast path is unavailable.
+   */
+  staticSurfaceTrianglesNear?(x: number, z: number): readonly PhysicsSurfaceTriangle[];
   /** AI-nav blockers, after navigation-role filtering. */
   staticNavigationBlockerAabbs?(): readonly PhysicsAabb[];
   /** AI-nav surfaces, after navigation-role filtering. */

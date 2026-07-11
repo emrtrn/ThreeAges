@@ -88,6 +88,13 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   fillSelectedLandscapeLayer: (layerId?: string) => void;
   getSelectedLandscapeLayers: () => LandscapeLayerView[];
   setSelectedLandscapeLayerMaterial: (layerId: string, materialId: string | null) => void;
+  importSelectedLandscapeHeightmap: (file: File, rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
+  exportSelectedLandscapeHeightmap: () => { width: number; height: number; pixels: Uint8ClampedArray } | null;
+  getSelectedLandscapeResolution: () => { verticesX: number; verticesZ: number; worldSize: number } | null;
+  resampleSelectedLandscape: (preset: "small" | "medium") => void;
+  setSelectedLandscapeWorldSize: (worldSize: number) => void;
+  getSelectedLandscapeImportHeight: () => number;
+  setSelectedLandscapeImportHeight: (heightRange: number) => Promise<void>;
   setSelectedWorldWidget: (patch: {
     widget?: string;
     worldPos?: Vec3;
@@ -118,6 +125,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   const lockedAttr = selection.locked ? "disabled" : "";
   const settings = options.getLandscapeSculptSettings();
   const layers = options.getSelectedLandscapeLayers();
+  const resolution = options.getSelectedLandscapeResolution();
+  const importHeight = options.getSelectedLandscapeImportHeight();
   const materialAssets = editableAssets.filter((asset) => assetType(asset) === "material");
   const materialNameById = new Map(
     materialAssets.map((asset) => [asset.id, asset.displayName ?? asset.name] as const),
@@ -234,6 +243,33 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           <span>Collision</span>
         </label>
       </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Landscape Size</div>
+        <label class="detail-row">
+          <span>Resolution</span>
+          <select data-landscape-resolution ${lockedAttr}>
+            <option value="small" ${resolution?.verticesX === 65 && resolution.verticesZ === 65 ? "selected" : ""}>Small (65 × 65)</option>
+            <option value="medium" ${resolution?.verticesX === 129 && resolution.verticesZ === 129 ? "selected" : ""}>Medium (129 × 129)</option>
+          </select>
+        </label>
+        <label class="detail-row">
+          <span>World Size</span>
+          <input data-landscape-world-size type="number" min="${resolution ? (resolution.verticesX - 1) * 0.01 : 0.01}" max="${resolution ? (resolution.verticesX - 1) * 100 : 10000}" step="0.1" value="${resolution?.worldSize ?? ""}" ${lockedAttr} />
+        </label>
+        <div class="detail-hint">Changes the terrain width and depth while keeping its height and paint data.</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Heightmap</div>
+        <label class="detail-row">
+          <span>Import Height</span>
+          <input data-landscape-import-range type="number" min="0" step="0.1" value="${importHeight}" ${lockedAttr} />
+        </label>
+        <div class="landscape-heightmap-actions">
+          <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
+          <button type="button" class="detail-action-button" data-landscape-heightmap-export>Export PNG</button>
+        </div>
+        <div class="detail-hint">PNG is saved into Starter Content. Changing Import Height reapplies it, including after editor reload.</div>
+      </div>
       ${actorLockSection(selection)}
     `;
 
@@ -318,6 +354,74 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       options.setSelectedLandscape({ collision: (event.currentTarget as HTMLInputElement).checked });
     },
   );
+
+  body.querySelector<HTMLInputElement>("[data-landscape-heightmap-import]")?.addEventListener("change", async (event) => {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    const heightRange = Number(body.querySelector<HTMLInputElement>("[data-landscape-import-range]")?.value ?? 20);
+    if (!Number.isFinite(heightRange) || heightRange < 0) return;
+    try {
+      const bitmap = await createImageBitmap(file);
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("Unable to read PNG pixels.");
+      context.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      await options.importSelectedLandscapeHeightmap(file, context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, heightRange);
+    } catch {
+      // The browser only decodes image/png here; malformed files leave the terrain untouched.
+    } finally {
+      input.value = "";
+    }
+  });
+
+  body.querySelector<HTMLSelectElement>("[data-landscape-resolution]")?.addEventListener("change", (event) => {
+    const preset = (event.currentTarget as HTMLSelectElement).value;
+    if (preset !== "small" && preset !== "medium") return;
+    options.resampleSelectedLandscape(preset);
+    renderLandscapeDetails(options);
+  });
+
+  body.querySelector<HTMLInputElement>("[data-landscape-world-size]")?.addEventListener("change", (event) => {
+    const worldSize = Number((event.currentTarget as HTMLInputElement).value);
+    if (!Number.isFinite(worldSize)) return;
+    options.setSelectedLandscapeWorldSize(worldSize);
+    renderLandscapeDetails(options);
+  });
+
+  body.querySelector<HTMLInputElement>("[data-landscape-import-range]")?.addEventListener("change", async (event) => {
+    const heightRange = Number((event.currentTarget as HTMLInputElement).value);
+    if (!Number.isFinite(heightRange) || heightRange < 0) return;
+    await options.setSelectedLandscapeImportHeight(heightRange);
+    renderLandscapeDetails(options);
+  });
+
+  body.querySelector<HTMLButtonElement>("[data-landscape-heightmap-export]")?.addEventListener("click", () => {
+    const heightmap = options.exportSelectedLandscapeHeightmap();
+    if (!heightmap) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = heightmap.width;
+    canvas.height = heightmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.putImageData(
+      new ImageData(new Uint8ClampedArray(heightmap.pixels), heightmap.width, heightmap.height),
+      0,
+      0,
+    );
+    canvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "landscape-heightmap.png";
+      anchor.click();
+      URL.revokeObjectURL(url);
+    }, "image/png");
+  });
 }
 
 export function renderLightDetails(options: SpecialActorDetailsOptions): void {

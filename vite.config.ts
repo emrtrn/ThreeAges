@@ -1467,6 +1467,7 @@ function layoutEditorPlugin(): Plugin {
               return;
             }
             const body = await readRawBody(req, IMPORT_MAX_BYTES);
+            await mkdir(resolve(absPath, ".."), { recursive: true });
             await writeFile(absPath, body);
             // Best-effort manifest registration so the file isn't a loose file.
             // The import itself still succeeds if registration throws.

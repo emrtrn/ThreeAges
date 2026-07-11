@@ -171,6 +171,10 @@ import {
   LANDSCAPE_DEFAULT_LAYERS,
   landscapeDataPath,
   normalizeLandscapeLayerWeights,
+  resampleLandscapeHeightmap,
+  landscapeHeightsToGrayscale,
+  landscapeSizeForPreset,
+  resampleLandscapeData,
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
@@ -706,6 +710,10 @@ export class SceneApp {
   private landscapeObjects: LandscapeObject[] = [];
   /** In-memory sidecar height/layer data for placed Landscape actors, keyed by landscape id. */
   private landscapeData = new Map<string, ForgeLandscapeData>();
+  /** Unit-range height samples from the last imported PNG for each landscape (editor-session only). */
+  private landscapeImportSamples = new Map<string, number[]>();
+  /** The last applied import height for each landscape (editor-session only). */
+  private landscapeImportHeights = new Map<string, number>();
   /** Landscape ids whose sidecar has changed since the last successful save. */
   private landscapeDataDirty = new Set<string>();
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
@@ -4717,10 +4725,13 @@ export class SceneApp {
     this.landscapeObjects = [];
     this.landscapeData.clear();
     this.landscapeDataDirty.clear();
+    this.landscapeImportSamples.clear();
+    this.landscapeImportHeights.clear();
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
       const data = await this.fetchLandscapeData(actor.dataRef);
       if (ensureLandscapeLayers(data)) this.landscapeDataDirty.add(actor.id);
+      await this.restoreLandscapeHeightmapImport(actor.id, data);
       this.landscapeData.set(actor.id, data);
     }
     landscapes.forEach((actor, index) => {
@@ -4735,6 +4746,31 @@ export class SceneApp {
     landscapes.forEach((_actor, index) => {
       void this.warmLandscapeLayerMaterials(index);
     });
+  }
+
+  /** Restores a persisted Starter Content PNG so Import Height remains editable after reload. */
+  private async restoreLandscapeHeightmapImport(landscapeId: string, data: ForgeLandscapeData): Promise<void> {
+    const imported = data.heightmapImport;
+    if (!imported) return;
+    try {
+      const response = await fetch(`/${imported.source}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const bitmap = await createImageBitmap(await response.blob());
+      const canvas = document.createElement("canvas");
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("Unable to read heightmap PNG.");
+      context.drawImage(bitmap, 0, 0);
+      bitmap.close();
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      const samples = resampleLandscapeHeightmap(pixels, canvas.width, canvas.height, data.size, 1);
+      this.landscapeImportSamples.set(landscapeId, samples);
+      this.landscapeImportHeights.set(landscapeId, imported.height);
+      data.heights = samples.map((sample) => Math.round(sample * imported.height * 1_000_000) / 1_000_000);
+    } catch (error) {
+      this.onStatus?.(`Landscape heightmap source could not be restored: ${error instanceof Error ? error.message : String(error)}`, "error");
+    }
   }
 
   /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
@@ -5153,7 +5189,11 @@ export class SceneApp {
       this.scene.remove(object);
       disposeLandscapeObject(object);
     }
-    if (removed) this.landscapeData.delete(removed.id);
+    if (removed) {
+      this.landscapeData.delete(removed.id);
+      this.landscapeImportSamples.delete(removed.id);
+      this.landscapeImportHeights.delete(removed.id);
+    }
     this.refreshLandscapeIndices();
     return removed ? cloneLandscape(removed) : null;
   }
@@ -5354,6 +5394,198 @@ export class SceneApp {
       undo: () => applyLayers(before),
     });
     this.onStatus?.(`Filled Landscape layer: ${layerId}`, "info");
+  }
+
+  /** Imports decoded PNG pixels into the selected landscape without changing its grid resolution. */
+  async importSelectedLandscapeHeightmap(
+    file: File,
+    rgba: ArrayLike<number>,
+    width: number,
+    height: number,
+    heightRange = 20,
+  ): Promise<void> {
+    if (this.selection?.kind !== "landscape") return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return;
+    const fileName = `${actor.id}-heightmap-${Date.now()}.png`;
+    try {
+      const response = await fetch(
+        `/__import-asset?dir=${encodeURIComponent("assets/starter-content/Landscapes/Heightmaps")}&name=${encodeURIComponent(fileName)}`,
+        { method: "POST", headers: { "Content-Type": "image/png" }, body: file },
+      );
+      const result = (await response.json()) as { ok?: boolean; path?: string; error?: string };
+      if (!response.ok || !result.ok || !result.path) throw new Error(result.error ?? "Heightmap PNG could not be saved.");
+      data.heightmapImport = { source: result.path, height: heightRange };
+    } catch (error) {
+      this.onStatus?.(error instanceof Error ? error.message : "Heightmap PNG could not be saved.", "error");
+      return;
+    }
+    let samples: number[];
+    try {
+      samples = resampleLandscapeHeightmap(rgba, width, height, data.size, 1);
+    } catch (error) {
+      this.onStatus?.(error instanceof Error ? error.message : "Heightmap import failed.", "error");
+      return;
+    }
+    this.landscapeImportSamples.set(actor.id, samples);
+    this.landscapeImportHeights.set(actor.id, heightRange);
+    this.applyImportedLandscapeHeightmap(index, actor.id, samples, heightRange, "Import Landscape Heightmap");
+    try {
+      await this.saveLandscapeData(actor.id);
+    } catch (error) {
+      this.onStatus?.(`Heightmap metadata save failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+    }
+    this.onStatus?.(`Imported ${width} x ${height} heightmap.`, "info");
+  }
+
+  /** Reapplies the last PNG imported during this editor session at a new height range. */
+  async setSelectedLandscapeImportHeight(heightRange: number): Promise<void> {
+    if (this.selection?.kind !== "landscape" || !Number.isFinite(heightRange) || heightRange < 0) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const samples = actor ? this.landscapeImportSamples.get(actor.id) : undefined;
+    if (!actor || !samples) {
+      this.onStatus?.("Import a heightmap PNG before changing Import Height.", "error");
+      return;
+    }
+    this.landscapeImportHeights.set(actor.id, heightRange);
+    const data = this.landscapeData.get(actor.id);
+    if (data?.heightmapImport) data.heightmapImport.height = heightRange;
+    this.applyImportedLandscapeHeightmap(index, actor.id, samples, heightRange, "Adjust Landscape Import Height");
+    try {
+      await this.saveLandscapeData(actor.id);
+    } catch (error) {
+      this.onStatus?.(`Heightmap metadata save failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+    }
+  }
+
+  getSelectedLandscapeImportHeight(): number {
+    if (this.selection?.kind !== "landscape") return 20;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    return actor ? this.landscapeImportHeights.get(actor.id) ?? 20 : 20;
+  }
+
+  private applyImportedLandscapeHeightmap(
+    index: number,
+    landscapeId: string,
+    samples: readonly number[],
+    heightRange: number,
+    label: string,
+  ): void {
+    const data = this.landscapeData.get(landscapeId);
+    if (!data) return;
+    const before = data.heights.slice();
+    const after = samples.map((sample) => Math.round(sample * heightRange * 1_000_000) / 1_000_000);
+    const dirty = this.landscapeFullDirtyBounds(data);
+    const selection: Selection = { kind: "landscape", index };
+    const apply = (heights: readonly number[]): void => {
+      const current = this.landscapeData.get(landscapeId);
+      if (!current) return;
+      current.heights = heights.slice();
+      this.landscapeDataDirty.add(landscapeId);
+      this.refreshLandscapeGeometry(index, dirty);
+      this.select(selection);
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label, redo: () => apply(after), undo: () => apply(before) });
+  }
+
+  /** Produces a normalized grayscale PNG-ready buffer for the selected landscape. */
+  exportSelectedLandscapeHeightmap(): { width: number; height: number; pixels: Uint8ClampedArray } | null {
+    if (this.selection?.kind !== "landscape") return null;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!data) return null;
+    return {
+      width: data.size.verticesX,
+      height: data.size.verticesZ,
+      pixels: landscapeHeightsToGrayscale(data),
+    };
+  }
+
+  getSelectedLandscapeResolution(): { verticesX: number; verticesZ: number; worldSize: number } | null {
+    if (this.selection?.kind !== "landscape") return null;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    return data
+      ? {
+          verticesX: data.size.verticesX,
+          verticesZ: data.size.verticesZ,
+          worldSize: (data.size.verticesX - 1) * data.size.spacing,
+        }
+      : null;
+  }
+
+  /** Resamples the selected terrain and paint layers to a supported editor preset. */
+  resampleSelectedLandscape(preset: "small" | "medium"): void {
+    if (this.selection?.kind !== "landscape") return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return;
+    const target = landscapeSizeForPreset(preset);
+    if (data.size.verticesX === target.verticesX && data.size.verticesZ === target.verticesZ) return;
+    const before: ForgeLandscapeData = {
+      schema: 1,
+      type: "landscape",
+      size: { ...data.size },
+      chunks: { ...data.chunks },
+      heights: [...data.heights],
+      layers: cloneLandscapeLayers(data.layers),
+      ...(data.heightmapImport ? { heightmapImport: { ...data.heightmapImport } } : {}),
+    };
+    const after = resampleLandscapeData(before, target);
+    this.landscapeImportSamples.delete(actor.id);
+    this.landscapeImportHeights.delete(actor.id);
+    const selection: Selection = { kind: "landscape", index };
+    const apply = (snapshot: ForgeLandscapeData): void => {
+      const current = this.landscapeData.get(actor.id);
+      if (!current) return;
+      current.size = { ...snapshot.size };
+      current.chunks = { ...snapshot.chunks };
+      current.heights = [...snapshot.heights];
+      current.layers = cloneLandscapeLayers(snapshot.layers);
+      this.landscapeDataDirty.add(actor.id);
+      this.rebuildLandscapeObject(index);
+      this.select(selection);
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label: "Resample Landscape Resolution", redo: () => apply(after), undo: () => apply(before) });
+    this.onStatus?.(`Landscape resampled to ${target.verticesX} x ${target.verticesZ}.`, "info");
+  }
+
+  /** Changes the selected terrain's X/Z footprint while retaining its grid and authored data. */
+  setSelectedLandscapeWorldSize(worldSize: number): void {
+    if (this.selection?.kind !== "landscape" || !Number.isFinite(worldSize)) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return;
+    const spacing = worldSize / Math.max(1, data.size.verticesX - 1);
+    if (spacing < 0.01 || spacing > 100) {
+      this.onStatus?.("Landscape world size is outside the supported range.", "error");
+      return;
+    }
+    if (Math.abs(spacing - data.size.spacing) < 0.000001) return;
+    const before = { ...data.size };
+    const after = { ...data.size, spacing };
+    const selection: Selection = { kind: "landscape", index };
+    const apply = (size: typeof data.size): void => {
+      const current = this.landscapeData.get(actor.id);
+      if (!current) return;
+      current.size = { ...size };
+      this.landscapeDataDirty.add(actor.id);
+      this.rebuildLandscapeObject(index);
+      this.select(selection);
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label: "Resize Landscape", redo: () => apply(after), undo: () => apply(before) });
+    this.onStatus?.(`Landscape world size set to ${worldSize.toFixed(2)}.`, "info");
   }
 
   /**

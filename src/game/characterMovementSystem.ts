@@ -386,14 +386,22 @@ export class CharacterMovementSubsystem implements Subsystem {
       if (jump) {
         vertical.floorY = ground?.floorY ?? vertical.floorY;
       } else if (ground) {
-        // Ease the resting height toward the new floor so a step is climbed over a
-        // few frames instead of snapping in one (which pops the camera). Ramps have
-        // a tiny per-frame rise, so they reach the target every frame (no lag).
-        vertical.floorY = approachHeight(
-          vertical.floorY,
-          ground.floorY,
-          movement.stepSmoothSpeed * engine.deltaSeconds,
-        );
+        // Keep authored step smoothing for flat blocker tops, but never let it
+        // accumulate a gap above a walkable trimesh surface. On a fast descent,
+        // a landscape can fall faster than `stepSmoothSpeed`; easing then leaves
+        // the pawn suspended above the slope until the next probe misses it and
+        // incorrectly starts falling. A walkable surface is continuous support,
+        // so its downward height is safe to follow exactly. Steep surfaces remain
+        // non-walkable and keep their slide behaviour below.
+        const followsWalkableSlope =
+          ground.walkable && ground.blocker === null && ground.floorY < vertical.floorY;
+        vertical.floorY = followsWalkableSlope
+          ? ground.floorY
+          : approachHeight(
+              vertical.floorY,
+              ground.floorY,
+              movement.stepSmoothSpeed * engine.deltaSeconds,
+            );
         vertical.state = groundedAt(vertical.floorY);
       } else if (!this.hasGroundProbe()) {
         vertical.state = groundedAt(vertical.floorY);
@@ -550,7 +558,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     planarDistance: number,
   ) {
     const blockers = this.groundBlockers(platformAabbs);
-    const surfaces = this.physics?.staticSurfaceTriangles() ?? [];
+    const surfaces = this.groundSurfacesAt(runtime.transform.position);
     if (blockers.length === 0 && surfaces.length === 0) return null;
     return findGroundAt(
       runtime.transform.position,
@@ -567,7 +575,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     planarDistance: number,
   ) {
     const blockers = this.groundBlockers(platformAabbs);
-    const surfaces = this.physics?.staticSurfaceTriangles() ?? [];
+    const surfaces = this.groundSurfacesAt(runtime.transform.position);
     if (blockers.length === 0 && surfaces.length === 0) return null;
     return findLandingGround(
       previousY,
@@ -583,6 +591,11 @@ export class CharacterMovementSubsystem implements Subsystem {
     const staticBlockers = this.physics?.staticBlockerAabbs() ?? [];
     if (platformAabbs.length === 0) return staticBlockers;
     return [...staticBlockers, ...platformAabbs];
+  }
+
+  /** Uses the physics spatial broad phase when available; older query hosts keep the full-list fallback. */
+  private groundSurfacesAt(position: readonly [number, number, number]) {
+    return this.physics?.staticSurfaceTrianglesNear?.(position[0], position[2]) ?? this.physics?.staticSurfaceTriangles() ?? [];
   }
 
   /**

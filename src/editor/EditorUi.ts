@@ -3072,6 +3072,14 @@ export class EditorUi {
       getSelectedLandscapeLayers: () => this.app.getSelectedLandscapeLayers(),
       setSelectedLandscapeLayerMaterial: (layerId, materialId) =>
         this.app.setSelectedLandscapeLayerMaterial(layerId, materialId),
+      importSelectedLandscapeHeightmap: (file, rgba, width, height, heightRange) =>
+        this.app.importSelectedLandscapeHeightmap(file, rgba, width, height, heightRange),
+      exportSelectedLandscapeHeightmap: () => this.app.exportSelectedLandscapeHeightmap(),
+      getSelectedLandscapeResolution: () => this.app.getSelectedLandscapeResolution(),
+      resampleSelectedLandscape: (preset) => this.app.resampleSelectedLandscape(preset),
+      setSelectedLandscapeWorldSize: (worldSize) => this.app.setSelectedLandscapeWorldSize(worldSize),
+      getSelectedLandscapeImportHeight: () => this.app.getSelectedLandscapeImportHeight(),
+      setSelectedLandscapeImportHeight: (heightRange) => this.app.setSelectedLandscapeImportHeight(heightRange),
       setSelectedWorldWidget: (patch) => this.app.setSelectedWorldWidget(patch),
       isSelectedReflectionCaptureBakeStale: () =>
         this.app.isSelectedReflectionCaptureBakeStale(),

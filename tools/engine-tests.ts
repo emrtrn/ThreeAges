@@ -138,6 +138,9 @@ import {
   createFlatLandscapeData,
   createLandscapeColliderPrimitive,
   ensureLandscapeLayers,
+  landscapeHeightsToGrayscale,
+  resampleLandscapeHeightmap,
+  resampleLandscapeData,
 } from "../engine/scene/landscape";
 import { EngineApp } from "../engine/core/EngineApp";
 import type { Subsystem } from "../engine/core/Subsystem";
@@ -8120,6 +8123,37 @@ check("physics subsystem exposes trimesh surfaces and excludes flat ones from bl
   assert.ok(Math.abs(surfaces[0]!.normalY - RAMP_NORMAL_Y) < 1e-9, `normalY=${surfaces[0]!.normalY}`);
 });
 
+check("physics subsystem keeps a steep up-facing terrain triangle as a support surface", () => {
+  const physics = new PhysicsSubsystem();
+  const rise = 2 * Math.tan((60 * Math.PI) / 180);
+  physics.setEntities([
+    {
+      id: "steep-terrain",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [2, rise, 2],
+          isStatic: true,
+          isSensor: false,
+          primitives: [
+            {
+              shape: "trimesh",
+              size: [2, rise, 2],
+              vertices: [[-1, 0, -1], [1, rise, -1], [1, rise, 1], [-1, 0, 1]],
+              indices: [0, 2, 1, 0, 3, 2],
+            },
+          ],
+        },
+      },
+    },
+  ]);
+  assert.equal(physics.staticBlockerAabbs().length, 0, "terrain support is never represented as flat wall AABBs");
+  const surfaces = physics.staticSurfaceTriangles();
+  assert.equal(surfaces.length, 2);
+  assert.ok(surfaces.every((surface) => Math.abs(surface.normalY - 0.5) < 1e-9));
+});
+
 check("physics subsystem keeps a steep trimesh triangle as a wall blocker (not a surface)", () => {
   const physics = new PhysicsSubsystem();
   physics.setEntities([
@@ -12820,6 +12854,74 @@ check("CharacterMovement subsystem stays glued to a descending slope while runni
   assert.ok(z < -4, `moved forward down the ramp: z=${z}`);
   // Followed the incline down rather than staying at the launch height.
   assert.ok(Math.abs(y - yAt(z)) < 0.15, `hugs the slope surface: y=${y} expected≈${yAt(z)}`);
+});
+
+check("CharacterMovement subsystem follows a walkable landscape slope at the player sprint smoothing speed", () => {
+  const actions = new ActionMap({ KeyW: "move-forward", ShiftLeft: "sprint" });
+  // Mirrors Script_PlayerCharacter: walk=2, sprint multiplier=3, vertical
+  // step smoothing=2. A 40 degree descent needs ~5.03 vertical units/s while
+  // sprinting, so generic step smoothing used to accumulate enough lag for the
+  // next ground probe to miss this otherwise walkable surface.
+  const SLOPE = (40 * Math.PI) / 180;
+  const tan = Math.tan(SLOPE);
+  const normalY = Math.cos(SLOPE);
+  const yAt = (z: number): number => (z - 2) * tan;
+  const rampA: GroundTriangle = {
+    a: [-2, yAt(2), 2],
+    b: [2, yAt(2), 2],
+    c: [2, yAt(-10), -10],
+    normalY,
+  };
+  const rampB: GroundTriangle = {
+    a: [-2, yAt(2), 2],
+    b: [2, yAt(-10), -10],
+    c: [-2, yAt(-10), -10],
+    normalY,
+  };
+  const physics = {
+    staticBlockerAabbs: () => [],
+    staticSurfaceTriangles: () => [rampA, rampB],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:player-sprint-descender",
+    components: {
+      Transform: { position: [0, yAt(0), 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      CharacterMovement: {
+        maxWalkSpeed: 2,
+        sprintMultiplier: 3,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        maxStepDown: 0.5,
+        maxSlopeAngleDeg: 45,
+        stepSmoothSpeed: 2,
+      },
+    },
+  };
+  let y = yAt(0);
+  let z = 0;
+  const grounded: boolean[] = [];
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      y = next.position[1];
+      z = next.position[2];
+    },
+    physics,
+    { getGravityY: () => -10, reportLocomotion: (_id, report) => grounded.push(report.grounded) },
+  );
+  movement.setEntities([entity]);
+  actions.handleDown("KeyW");
+  actions.handleDown("ShiftLeft");
+  for (let frame = 1; frame <= 60; frame += 1) {
+    actions.advance();
+    movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+  }
+  assert.ok(grounded.every(Boolean), `sprint stays grounded: ${grounded}`);
+  assert.ok(z < -5.5, `sprinted down the slope: z=${z}`);
+  assert.ok(Math.abs(y - yAt(z)) < 1e-9, `follows the slope exactly: y=${y} expected=${yAt(z)}`);
 });
 
 check("CharacterMovement subsystem still falls off a drop beyond Max Step Down", () => {
@@ -17665,6 +17767,58 @@ check("validateReflectionPlane allowlists fields and round-trips through validat
   assert.deepEqual(validateLayout(layout), layout);
 });
 
+check("landscape heightmaps bilinearly resample and export normalized grayscale", () => {
+  const rgba = new Uint8ClampedArray([
+    0, 0, 0, 255,
+    255, 255, 255, 255,
+    255, 255, 255, 255,
+    0, 0, 0, 255,
+  ]);
+  assert.deepEqual(
+    resampleLandscapeHeightmap(rgba, 2, 2, { verticesX: 3, verticesZ: 3 }, 10),
+    [0, 5, 10, 5, 5, 5, 10, 5, 0],
+  );
+  const data = createFlatLandscapeData("small");
+  data.size.verticesX = 2;
+  data.size.verticesZ = 2;
+  data.heights = [5, 10, 15, 20];
+  assert.deepEqual([...landscapeHeightsToGrayscale(data)], [
+    0, 0, 0, 255, 85, 85, 85, 255, 170, 170, 170, 255, 255, 255, 255, 255,
+  ]);
+  assert.throws(() => resampleLandscapeHeightmap(rgba, 0, 2, { verticesX: 2, verticesZ: 2 }, 1));
+});
+
+check("landscape resolution resample preserves world footprint, height shape, and normalized paint", () => {
+  const data = createFlatLandscapeData("small");
+  data.size = { verticesX: 2, verticesZ: 2, spacing: 4, heightScale: 2 };
+  data.heights = [0, 10, 20, 30];
+  data.layers = [
+    { id: "grass", name: "Grass", weights: [1, 0, 0, 1] },
+    { id: "dirt", name: "Dirt", weights: [0, 1, 1, 0] },
+    { id: "rock", name: "Rock", weights: [0, 0, 0, 0] },
+    { id: "snow", name: "Snow", weights: [0, 0, 0, 0] },
+  ];
+  const result = resampleLandscapeData(data, { verticesX: 3, verticesZ: 3 });
+  assert.deepEqual(result.size, { verticesX: 3, verticesZ: 3, spacing: 2, heightScale: 2 });
+  assert.deepEqual(result.heights, [0, 5, 10, 10, 15, 20, 20, 25, 30]);
+  assert.equal(result.layers[0]!.weights[4], 0.5);
+  assert.equal(result.layers[1]!.weights[4], 0.5);
+  for (let index = 0; index < result.heights.length; index += 1) {
+    assert.equal(result.layers.reduce((sum, layer) => sum + layer.weights[index]!, 0), 1);
+  }
+});
+
+check("landscape sidecar preserves a Starter Content heightmap import reference", () => {
+  const data = createFlatLandscapeData("small");
+  data.heightmapImport = {
+    source: "assets/starter-content/Landscapes/Heightmaps/landscape-1-heightmap.png",
+    height: 50,
+  };
+  const validated = validateLandscapeData(data) as typeof data;
+  assert.deepEqual(validated.heightmapImport, data.heightmapImport);
+  assert.throws(() => validateLandscapeData({ ...data, heightmapImport: { source: "../outside.png", height: 20 } }));
+});
+
 check("validateLandscape allowlists fields and round-trips through validateLayout", () => {
   const landscape = validateLandscape({
     id: "landscape-1",
@@ -17852,6 +18006,36 @@ check("createLandscapeColliderPrimitive builds a centered up-facing heightfield 
   assert.equal(surfaces.length, 8);
   assert.ok(surfaces.every((surface) => surface.normalY > 0.6), "landscape surfaces are up-facing");
   assert.equal(physics.staticNavigationSurfaceTriangles().length, 8);
+});
+
+check("physics subsystem spatially narrows static landscape surface candidates for ground probes", () => {
+  const data = createFlatLandscapeData("small");
+  data.size = { verticesX: 9, verticesZ: 9, spacing: 1, heightScale: 1 };
+  data.heights = new Array(81).fill(0);
+  data.layers = [];
+  const primitive = createLandscapeColliderPrimitive(data);
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "landscape:spatial-index",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: primitive.size,
+          center: primitive.center,
+          isStatic: true,
+          isSensor: false,
+          primitives: [primitive],
+        },
+      },
+    },
+  ]);
+  const all = physics.staticSurfaceTriangles();
+  const near = physics.staticSurfaceTrianglesNear(0, 0);
+  assert.equal(all.length, 128);
+  assert.ok(near.length > 0 && near.length < all.length, `near candidates=${near.length} all=${all.length}`);
+  assert.equal(physics.staticSurfaceTrianglesNear(20, 20).length, 0, "outside the terrain has no candidates");
 });
 
 check("resolveBlockingVolume fills defaults and overrides per field", () => {

@@ -573,6 +573,7 @@ Yeni dev endpoint önerileri:
 
 ### Faz 1 - Landscape Actor + Render + Save
 
+- [x] Landscape world-size (spacing) ayarı; terrain X/Z footprint'i data kaybetmeden güncellenir.
 - [x] `LayoutLandscape` veri modeli (`engine/scene/layout.ts`).
 - [x] Landscape data sidecar modeli (`engine/scene/landscape.ts`, `ForgeLandscapeData`).
 - [x] `/__save-landscape` endpoint (`vite.config.ts` + `validateSaveLandscapePayload`).
@@ -628,10 +629,9 @@ Yeni dev endpoint önerileri:
 
 ### Faz 5 - Import/Export
 
-- [ ] Heightmap PNG import.
-- [ ] Heightmap export.
-- [ ] Weightmap import/export.
-- [ ] Resolution resample.
+- [x] Heightmap PNG import; source PNG and Import Height persist in Starter Content / landscape sidecar.
+- [x] Heightmap export.
+- [x] Resolution resample.
 
 ### Faz 6 - Landscape Splines / Road Tool
 
@@ -729,41 +729,32 @@ araçlarla sınırları temiz bırakır.
 
 ## Bilinen Sorunlar
 
-### AÇIK — Landscape üzerinde koşarken yürünebilir eğimde düşme (2026-07-11)
+### ÇÖZÜLDÜ — Landscape üzerinde koşarken yürünebilir eğimde düşme (2026-07-11)
 
-**Belirti:** Play modunda landscape üzerinde **yürürken** sorunsuz geçilen,
-**dik olmayan / yürünebilir** eğimli alanlarda **koşarken (sprint) karakter
-düşüyor**. Sorun hıza bağlı: yürümede olmuyor, koşmada oluyor.
+**Kök neden:** `Script_PlayerCharacter` sprintte `2 × 3 = 6 u/s` hareket ederken
+`stepSmoothSpeed: 2` kullanıyordu. Yürünebilir bir eğimde gereken düşey takip hızı
+bu değeri geçtiğinde `floorY` yüzeyin üzerinde birikerek geride kalıyor, sonraki
+ground probe da zemini kaçırıp falling durumuna geçiyordu. Bu nedenle yürüyüş
+sorunsuzken sprintte düşme görülüyordu.
 
-**Not — bu sorun DEĞİL:** Çok dik yüzeylerde durma + aşağı kayma davranışı doğru
-çalışıyor (Öneri A + C). Yani sorun dik yüzeylerde değil; düşülen yüzeyler
-gerçekte yürünebilir (limitin altında) eğime sahip.
+**Çözüm:** CharacterMovement, aşağı yönde yürünebilir bir trimesh yüzeyi bulursa
+`stepSmoothSpeed` ile geriden takip etmek yerine doğrudan yüzey yüksekliğine oturur.
+Flat AABB basamaklarında yumuşatma korunur; dik/yürünemez yüzeyler hâlâ mevcut
+slide davranışını kullanır.
 
-**Şu ana kadar yapılanlar (bu sorunu tam çözmedi):**
-- **Öneri A** — dik yüzeyler artık zemin olarak destekleniyor (içinden düşme
-  bitti), `walkable` bayrağıyla işaretleniyor. (`src/game/collision.ts`
-  `highestWalkableSurface`, `GroundHit.walkable`.)
-- **Ölçekli ground-snap** — zemin-takip aşağı sondası (`maxStepDown`) artık kare
-  başına yatay ilerlemeyle ölçekleniyor: `maxStepDown + planarDistance ·
-  tan(slopeLimit)`, `GROUND_SNAP_MAX_SLOPE_DEG = 55` ile sınırlı.
-  (`src/game/characterMovementSystem.ts` `groundSnapDown`.) Koşarken düşmeyi
-  azaltması beklendi ama kullanıcı hâlâ düşme bildiriyor.
-- **Öneri C** — yürünemez yüzeyde yokuş aşağı kayma. (`applySteepSlide`,
-  `slopeNormal`, `triangleNormal`.)
+**Doğrulama:** Engine regresyon testi gerçek oyuncu ayarlarıyla 40° eğimde sprint
+senaryosunu çalıştırır ve karakterin tüm karelerde grounded kalıp terrain yüksekliğini
+takip ettiğini doğrular. `npx tsc --noEmit` ve `npm run test:engine` geçti
+(757 test).
 
-**Açık hipotezler / bir sonraki adım için ipuçları:**
-- Ölçekli ground-snap yeterli değil olabilir; asıl kayıp **dik/hızlı iniş** yerine
-  başka bir mekanizmada olabilir (ör. `stepSmoothSpeed`'in yüksek hız + büyük
-  dt'de `floorY`'yi yeterince hızlı indirememesi → karakter yüzeyin üstünde asılı
-  kalıp bir sonraki sondada zemini kaçırması).
-- Landscape trimesh **çok sayıda üçgen** üretiyor; `staticSurfaceTriangles()` her
-  kare tüm üçgenleri geziyor (`findGroundAt` → `highestWalkableSurface` O(üçgen)).
-  Bu FPS'i düşürüp `dt`'yi 100ms tavanına itebilir; büyük `dt` = büyük kare-adımı
-  = ski-jump. **Uzamsal hızlandırma (broad-phase/grid) yok** — muhtemel asıl kök
-  neden burası. Doğrulama: `?debug` overlay ile FPS/dt'yi ve düşme anını izle.
-- ASCENDING (yokuş yukarı hızlı) tarafı `maxStepUp` ile sınırlı ve ölçeklenmiyor;
-  crest/tümsek üstünden koşarken kısa bir kopma olabilir.
+**Ek sağlamlaştırma:** Ground probe artık static landscape yüzeylerini X/Z uzamsal
+indeks üzerinden sorgular; bulunduğu hücredeki aday üçgenler kullanılır. Böylece
+32.768 üçgenli Medium landscape gibi sahnelerde sprint sırasında tüm terrain'i
+taramaktan doğan frame spike riski azaltılır. Çok büyük genel mesh üçgenleri,
+indeksin şişmesini önlemek için güvenli bir overflow sorgusunda kalır.
 
-**Sonraki muhtemel iş:** (a) ground probe için landscape'e uzamsal indeks/kafes,
-(b) descending ground-follow'u `stepSmoothSpeed`'den bağımsızlaştırma, (c) gerekiyorsa
-Öneri B (dik eğimi yatay engel sayma). Önce `?debug` ile dt/FPS ölçülmeli.
+**Dik terrain temsili:** Önceki 50° fizik duvar eşiği kaldırıldı. Artık her
+yukarı bakan trimesh terrain üçgeni zemin desteğidir; CharacterMovement kendi
+`maxSlopeAngleDeg` limitiyle yüzeyi yürünebilir veya kayılacak olarak sınıflar.
+Böylece 50° üzerindeki terrain, sprintte boşluklu flat AABB basamakları gibi
+davranıp karakteri düşüremez; yalnızca dikey ve aşağı bakan yüzeyler duvar kalır.

@@ -124,6 +124,12 @@ export interface ForgeLandscapeMaterialDef {
   }>;
 }
 
+/** Persistent source metadata for a PNG imported into this landscape. */
+export interface LandscapeHeightmapImport {
+  source: string;
+  height: number;
+}
+
 export const DEFAULT_LANDSCAPE_MATERIAL: ForgeLandscapeMaterialDef = {
   schema: 1,
   type: "landscapeMaterial",
@@ -142,6 +148,7 @@ export interface ForgeLandscapeData {
   heights: number[];
   /** Paint layers (Grass/Dirt/Rock/Snow). Empty in Faz 1 — populated starting Faz 3. */
   layers: LandscapeLayerWeights[];
+  heightmapImport?: LandscapeHeightmapImport;
 }
 
 export interface LandscapeColliderPrimitive extends ColliderPrimitive {
@@ -250,6 +257,132 @@ export function createFlatLandscapeData(preset: LandscapeSizePreset): ForgeLands
     heights: new Array(vertexCount).fill(0),
     layers: createDefaultLandscapeLayers(vertexCount),
   };
+}
+
+/**
+ * Resamples an RGBA heightmap into the landscape vertex grid. Pixel luminance
+ * is interpreted as a normalized height (black = 0, white = `heightRange`).
+ * Bilinear sampling keeps a source PNG independent of the current terrain
+ * resolution, so imports never need to mutate the level's grid shape.
+ */
+export function resampleLandscapeHeightmap(
+  rgba: ArrayLike<number>,
+  width: number,
+  height: number,
+  target: Pick<LandscapeSize, "verticesX" | "verticesZ">,
+  heightRange: number,
+): number[] {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1) {
+    throw new Error("Heightmap image dimensions must be positive integers.");
+  }
+  if (rgba.length < width * height * 4) throw new Error("Heightmap pixel data is incomplete.");
+  if (!Number.isFinite(heightRange) || heightRange < 0) {
+    throw new Error("Heightmap height range must be a non-negative finite number.");
+  }
+  const luminanceAt = (x: number, z: number): number => {
+    const offset = (z * width + x) * 4;
+    return (0.2126 * (rgba[offset] ?? 0) + 0.7152 * (rgba[offset + 1] ?? 0) + 0.0722 * (rgba[offset + 2] ?? 0)) / 255;
+  };
+  const samples: number[] = [];
+  for (let z = 0; z < target.verticesZ; z += 1) {
+    const sourceZ = target.verticesZ <= 1 ? 0 : (z * (height - 1)) / (target.verticesZ - 1);
+    const z0 = Math.floor(sourceZ);
+    const z1 = Math.min(height - 1, z0 + 1);
+    const tz = sourceZ - z0;
+    for (let x = 0; x < target.verticesX; x += 1) {
+      const sourceX = target.verticesX <= 1 ? 0 : (x * (width - 1)) / (target.verticesX - 1);
+      const x0 = Math.floor(sourceX);
+      const x1 = Math.min(width - 1, x0 + 1);
+      const tx = sourceX - x0;
+      const top = luminanceAt(x0, z0) + (luminanceAt(x1, z0) - luminanceAt(x0, z0)) * tx;
+      const bottom = luminanceAt(x0, z1) + (luminanceAt(x1, z1) - luminanceAt(x0, z1)) * tx;
+      samples.push(Math.round((top + (bottom - top) * tz) * heightRange * 1_000_000) / 1_000_000);
+    }
+  }
+  return samples;
+}
+
+/** Builds an 8-bit grayscale preview/export buffer from the current heights. */
+export function landscapeHeightsToGrayscale(data: Pick<ForgeLandscapeData, "size" | "heights">): Uint8ClampedArray {
+  const count = landscapeVertexCount(data);
+  const values = data.heights.slice(0, count);
+  while (values.length < count) values.push(0);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min;
+  const pixels = new Uint8ClampedArray(count * 4);
+  for (let index = 0; index < count; index += 1) {
+    const value = range > 0.000001 ? Math.round(((values[index]! - min) / range) * 255) : 0;
+    const offset = index * 4;
+    pixels[offset] = value;
+    pixels[offset + 1] = value;
+    pixels[offset + 2] = value;
+    pixels[offset + 3] = 255;
+  }
+  return pixels;
+}
+
+function resampleLandscapeGrid(
+  values: readonly number[],
+  source: Pick<LandscapeSize, "verticesX" | "verticesZ">,
+  target: Pick<LandscapeSize, "verticesX" | "verticesZ">,
+): number[] {
+  const at = (x: number, z: number): number => values[z * source.verticesX + x] ?? 0;
+  const output: number[] = [];
+  for (let z = 0; z < target.verticesZ; z += 1) {
+    const sourceZ = target.verticesZ <= 1 ? 0 : (z * (source.verticesZ - 1)) / (target.verticesZ - 1);
+    const z0 = Math.floor(sourceZ);
+    const z1 = Math.min(source.verticesZ - 1, z0 + 1);
+    const tz = sourceZ - z0;
+    for (let x = 0; x < target.verticesX; x += 1) {
+      const sourceX = target.verticesX <= 1 ? 0 : (x * (source.verticesX - 1)) / (target.verticesX - 1);
+      const x0 = Math.floor(sourceX);
+      const x1 = Math.min(source.verticesX - 1, x0 + 1);
+      const tx = sourceX - x0;
+      const top = at(x0, z0) + (at(x1, z0) - at(x0, z0)) * tx;
+      const bottom = at(x0, z1) + (at(x1, z1) - at(x0, z1)) * tx;
+      output.push(Math.round((top + (bottom - top) * tz) * 1_000_000) / 1_000_000);
+    }
+  }
+  return output;
+}
+
+/**
+ * Changes a landscape's vertex density while preserving its world-space X/Z
+ * footprint. Heights and paint weights are bilinearly resampled together.
+ */
+export function resampleLandscapeData(
+  data: ForgeLandscapeData,
+  target: Pick<LandscapeSize, "verticesX" | "verticesZ">,
+): ForgeLandscapeData {
+  if (!Number.isInteger(target.verticesX) || !Number.isInteger(target.verticesZ) || target.verticesX < 2 || target.verticesZ < 2) {
+    throw new Error("Landscape resolution must contain at least 2 vertices per axis.");
+  }
+  const source = data.size;
+  const vertexCount = target.verticesX * target.verticesZ;
+  const result: ForgeLandscapeData = {
+    schema: 1,
+    type: "landscape",
+    size: {
+      verticesX: target.verticesX,
+      verticesZ: target.verticesZ,
+      // Preserve the terrain's width/depth rather than growing it with the grid.
+      spacing: ((source.verticesX - 1) * source.spacing) / (target.verticesX - 1),
+      heightScale: source.heightScale,
+    },
+    chunks: { ...data.chunks },
+    heights: resampleLandscapeGrid(data.heights, source, target),
+    layers: data.layers.map((layer) => ({
+      id: layer.id,
+      name: layer.name,
+      ...(layer.material ? { material: layer.material } : {}),
+      weights: resampleLandscapeGrid(layer.weights, source, target),
+    })),
+    ...(data.heightmapImport ? { heightmapImport: { ...data.heightmapImport } } : {}),
+  };
+  ensureLandscapeLayers(result);
+  if (result.heights.length !== vertexCount) result.heights = new Array(vertexCount).fill(0);
+  return result;
 }
 
 /** Default public-root-relative sidecar path for a landscape id. */

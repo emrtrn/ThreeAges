@@ -1048,6 +1048,30 @@ body.editor-mode #debug-stats {
   background: #303744;
 }
 
+.detail-action-button--centered {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.landscape-heightmap-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.landscape-heightmap-actions .detail-action-button {
+  flex: 1;
+  width: auto;
+  min-height: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 5px;
+  border-color: #303640;
+  background: #242a33;
+  color: #d6dde7;
+}
+
 .detail-subsection-title {
   margin-top: 2px;
   font-size: 11px;

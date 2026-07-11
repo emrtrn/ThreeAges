@@ -62,6 +62,16 @@ interface Aabb {
   footprint?: readonly (readonly [number, number])[];
 }
 
+interface StaticSurfaceSpatialIndex {
+  readonly cells: ReadonlyMap<string, readonly PhysicsSurfaceTriangle[]>;
+  readonly overflow: readonly PhysicsSurfaceTriangle[];
+}
+
+/** Terrain cells are normally 1 unit wide; four-unit bins keep lookup compact. */
+const STATIC_SURFACE_GRID_CELL_SIZE = 4;
+/** Huge generic mesh triangles stay in an overflow list instead of bloating the grid. */
+const STATIC_SURFACE_GRID_MAX_CELLS_PER_TRIANGLE = 256;
+
 type RapierModule = typeof import("@dimforge/rapier3d-compat");
 type RapierWorld = InstanceType<RapierModule["World"]>;
 type RapierRigidBody = ReturnType<RapierWorld["createRigidBody"]>;
@@ -97,6 +107,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private staticBlockerCache: Aabb[] | null = null;
   /** Cached walkable surface triangles (static trimesh); rebuilt lazily. */
   private staticSurfaceCache: PhysicsSurfaceTriangle[] | null = null;
+  /** X/Z broad phase for ground probes over large landscape trimeshes. */
+  private staticSurfaceSpatialIndex: StaticSurfaceSpatialIndex | null = null;
   /** Cached AI-navigation blockers, filtered by Collider.navigationRole. */
   private staticNavigationBlockerCache: Aabb[] | null = null;
   /** Cached AI-navigation surfaces, filtered by Collider.navigationRole. */
@@ -165,6 +177,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.collisionDisabled.clear();
     this.staticBlockerCache = null;
     this.staticSurfaceCache = null;
+    this.staticSurfaceSpatialIndex = null;
     this.staticNavigationBlockerCache = null;
     this.staticNavigationSurfaceCache = null;
     if (this.rapierModule) this.rebuildRapierWorld();
@@ -180,6 +193,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (body.collider.isStatic) {
       this.staticBlockerCache = null;
       this.staticSurfaceCache = null;
+      this.staticSurfaceSpatialIndex = null;
       this.staticNavigationBlockerCache = null;
       this.staticNavigationSurfaceCache = null;
     }
@@ -195,6 +209,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (body.collider.isStatic) {
       this.staticBlockerCache = null;
       this.staticSurfaceCache = null;
+      this.staticSurfaceSpatialIndex = null;
       this.staticNavigationBlockerCache = null;
       this.staticNavigationSurfaceCache = null;
     }
@@ -229,6 +244,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       if (removedStatic) {
         this.staticBlockerCache = null;
         this.staticSurfaceCache = null;
+        this.staticSurfaceSpatialIndex = null;
         this.staticNavigationBlockerCache = null;
         this.staticNavigationSurfaceCache = null;
       }
@@ -262,6 +278,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (body?.collider.isStatic) {
       this.staticBlockerCache = null;
       this.staticSurfaceCache = null;
+      this.staticSurfaceSpatialIndex = null;
       this.staticNavigationBlockerCache = null;
       this.staticNavigationSurfaceCache = null;
     }
@@ -316,6 +333,22 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
     this.staticSurfaceCache = surfaces;
     return surfaces;
+  }
+
+  /**
+   * Static ground candidates at X/Z. Landscapes otherwise make every character
+   * probe scan every triangle, which turns sprinting into long frame spikes and
+   * can make the movement step skip its ground follow window.
+   */
+  staticSurfaceTrianglesNear(x: number, z: number): readonly PhysicsSurfaceTriangle[] {
+    const surfaces = this.staticSurfaceTriangles();
+    if (surfaces.length === 0) return surfaces;
+    const index = this.staticSurfaceSpatialIndex ?? buildStaticSurfaceSpatialIndex(surfaces);
+    this.staticSurfaceSpatialIndex = index;
+    const candidates = index.cells.get(staticSurfaceCellKey(x, z));
+    if (!candidates || candidates.length === 0) return index.overflow;
+    if (index.overflow.length === 0) return candidates;
+    return [...candidates, ...index.overflow];
   }
 
   /**
@@ -830,13 +863,13 @@ function primitiveAabb(
 }
 
 /**
- * A trimesh triangle is a movement blocker (wall) only when it is steeper than
- * `SURFACE_MAX_WALL_DEGREES`; flatter triangles are walkable surfaces (ramps/floors)
- * handled by the ground probe, so blocking them would freeze a ramp ascent. The
- * character's authored slope limit (≤ this) then decides walkable vs. slide.
+ * Every appreciably up-facing trimesh triangle is a support surface. The
+ * character's authored slope limit decides whether it can walk or must slide;
+ * turning a steep terrain triangle into an AABB wall makes it appear as a series
+ * of false flat steps and lets a sprinting pawn fall between them. Only vertical
+ * and downward-facing triangles remain movement blockers.
  */
-const SURFACE_MAX_WALL_DEGREES = 50;
-const SURFACE_MIN_NORMAL_Y = Math.cos(degreesToRadians(SURFACE_MAX_WALL_DEGREES));
+const SURFACE_MIN_SUPPORT_NORMAL_Y = 1e-4;
 
 /**
  * Signed upward component of a triangle's unit normal (+1 = up-facing floor,
@@ -892,7 +925,7 @@ function appendTriangleAabbs(
   navigationRole: NavigationRole | undefined,
 ): void {
   forEachWorldTriangle(origin, bodyRotation, vertices, indices, (wa, wb, wc) => {
-    if (triangleUpNormalY(wa, wb, wc) >= SURFACE_MIN_NORMAL_Y) return; // walkable surface, not a wall
+    if (triangleUpNormalY(wa, wb, wc) >= SURFACE_MIN_SUPPORT_NORMAL_Y) return; // support surface, not a wall
     const blocker: Aabb = {
       min: [
         Math.min(wa[0], wb[0], wc[0]),
@@ -941,10 +974,53 @@ function appendSurfaceTriangles(out: PhysicsSurfaceTriangle[], body: PhysicsBody
     }
     forEachWorldTriangle(origin, rotation, primitive.vertices, primitive.indices, (wa, wb, wc) => {
       const normalY = triangleUpNormalY(wa, wb, wc);
-      if (normalY < SURFACE_MIN_NORMAL_Y) return; // steep → wall blocker, not a walk surface
+      if (normalY < SURFACE_MIN_SUPPORT_NORMAL_Y) return; // vertical/downward → wall blocker
       out.push({ a: wa, b: wb, c: wc, normalY });
     });
   }
+}
+
+/** A stable four-unit X/Z grid key for cached static surface broad-phase cells. */
+function staticSurfaceCellKey(x: number, z: number): string {
+  const cellX = Math.floor(x / STATIC_SURFACE_GRID_CELL_SIZE);
+  const cellZ = Math.floor(z / STATIC_SURFACE_GRID_CELL_SIZE);
+  return `${cellX},${cellZ}`;
+}
+
+/**
+ * Bins each static surface into the X/Z cells its triangle projection touches.
+ * Landscapes have compact one-cell triangles, while very large generic mesh faces
+ * are held in a small overflow list so they cannot create an unbounded grid.
+ */
+function buildStaticSurfaceSpatialIndex(
+  surfaces: readonly PhysicsSurfaceTriangle[],
+): StaticSurfaceSpatialIndex {
+  const cells = new Map<string, PhysicsSurfaceTriangle[]>();
+  const overflow: PhysicsSurfaceTriangle[] = [];
+  for (const surface of surfaces) {
+    const minX = Math.min(surface.a[0], surface.b[0], surface.c[0]);
+    const maxX = Math.max(surface.a[0], surface.b[0], surface.c[0]);
+    const minZ = Math.min(surface.a[2], surface.b[2], surface.c[2]);
+    const maxZ = Math.max(surface.a[2], surface.b[2], surface.c[2]);
+    const minCellX = Math.floor(minX / STATIC_SURFACE_GRID_CELL_SIZE);
+    const maxCellX = Math.floor(maxX / STATIC_SURFACE_GRID_CELL_SIZE);
+    const minCellZ = Math.floor(minZ / STATIC_SURFACE_GRID_CELL_SIZE);
+    const maxCellZ = Math.floor(maxZ / STATIC_SURFACE_GRID_CELL_SIZE);
+    const cellCount = (maxCellX - minCellX + 1) * (maxCellZ - minCellZ + 1);
+    if (cellCount > STATIC_SURFACE_GRID_MAX_CELLS_PER_TRIANGLE) {
+      overflow.push(surface);
+      continue;
+    }
+    for (let cellZ = minCellZ; cellZ <= maxCellZ; cellZ += 1) {
+      for (let cellX = minCellX; cellX <= maxCellX; cellX += 1) {
+        const key = `${cellX},${cellZ}`;
+        const bucket = cells.get(key);
+        if (bucket) bucket.push(surface);
+        else cells.set(key, [surface]);
+      }
+    }
+  }
+  return { cells, overflow };
 }
 
 function aabbOverlaps(a: Aabb, b: Aabb): boolean {
