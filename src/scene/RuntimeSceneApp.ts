@@ -3621,8 +3621,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * from {@link PhysicsSubsystem.colliderDebugBox} whenever the collider's baked
    * extents change and repositioned every frame, so it traces the actual
    * scale-baked collider and makes collider scaling observable in Play.
+   *
+   * Debug-only: normal Play (no `?debug`) ships a clean game with no collider
+   * wires; add `?debug` to the runtime URL to visualise every collider (actors,
+   * characters, and the landscape heightfield). The editor's own authoring view
+   * is the separate "Show > Collision" toggle.
    */
   private addColliderDebugWire(entity: Entity): void {
+    if (!this.debug) return;
     const collider = readColliderComponent(entity);
     if (!collider || collider.hideInGame === true) return;
     const wire = new LineSegments(

@@ -7907,6 +7907,11 @@ export class SceneApp {
         "position",
         new Float32BufferAttribute(segments.flatMap((point) => point), 3),
       );
+      // Depth-tested (like the other editor collision wireboxes): the terrain
+      // occludes edges behind its surface, so the overlay stays readable and
+      // doesn't draw over the actors in front of it. The runtime's Play wire
+      // uses depthTest:false for an always-on-top debug look; the editor
+      // authoring overlay deliberately does not.
       const helper = new LineSegments(
         geometry,
         new LineBasicMaterial({ color: 0x4cd07d }),
