@@ -523,12 +523,18 @@ export interface LandscapeSculptSettings {
   falloff: number;
   flattenTargetHeight: number;
   activeSplineId: string | null;
+  activeSplinePointId: string | null;
 }
 
 export interface LandscapeSplineView {
   id: string;
   name: string;
   pointCount: number;
+}
+
+export interface LandscapeSplinePointView {
+  id: string;
+  position: Vec3;
 }
 
 /**
@@ -757,6 +763,7 @@ export class SceneApp {
     falloff: 2,
     flattenTargetHeight: 0,
     activeSplineId: null,
+    activeSplinePointId: null,
   };
   private landscapeSculptStroke: LandscapeSculptStroke | null = null;
   private landscapeBrushCursor: Mesh | null = null;
@@ -1417,6 +1424,7 @@ export class SceneApp {
       falloff: clamp(next.falloff, 0.25, 8),
       flattenTargetHeight: clamp(next.flattenTargetHeight, -1000, 1000),
       activeSplineId: typeof next.activeSplineId === "string" && next.activeSplineId.length > 0 ? next.activeSplineId : null,
+      activeSplinePointId: typeof next.activeSplinePointId === "string" && next.activeSplinePointId.length > 0 ? next.activeSplinePointId : null,
     };
     this.updateLandscapeBrushCursorScale();
     if (previousViewMode !== this.landscapeSculptSettings.viewMode) {
@@ -4955,7 +4963,7 @@ export class SceneApp {
         endPointId: pointId,
       });
     }
-    this.applySelectedLandscapeSplines(index, actor.id, data.splines ? cloneLandscapeSplines(data.splines) : [], before, "Add Landscape Spline Point", spline.id);
+    this.applySelectedLandscapeSplines(index, actor.id, data.splines ? cloneLandscapeSplines(data.splines) : [], before, "Add Landscape Spline Point", spline.id, pointId);
     return true;
   }
 
@@ -5397,6 +5405,15 @@ export class SceneApp {
     }));
   }
 
+  getSelectedLandscapeSplinePoints(): LandscapeSplinePointView[] {
+    if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return [];
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    const spline = actor
+      ? this.landscapeData.get(actor.id)?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId)
+      : undefined;
+    return (spline?.points ?? []).map((point) => ({ id: point.id, position: [...point.position] as Vec3 }));
+  }
+
   createSelectedLandscapeSpline(): void {
     if (this.selection?.kind !== "landscape") return;
     const index = this.selection.index;
@@ -5422,14 +5439,47 @@ export class SceneApp {
     this.applySelectedLandscapeSplines(index, actor.id, before, after, "Delete Landscape Spline", after[0]?.id ?? null);
   }
 
-  private applySelectedLandscapeSplines(index: number, landscapeId: string, before: ForgeLandscapeSpline[], after: ForgeLandscapeSpline[], label: string, activeSplineId: string | null): void {
+  setSelectedLandscapeSplinePointPosition(pointId: string, position: Vec3): void {
+    if (this.selection?.kind !== "landscape" || !Number.isFinite(position[0]) || !Number.isFinite(position[1]) || !Number.isFinite(position[2])) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const splineId = this.landscapeSculptSettings.activeSplineId;
+    if (!actor || !data || !splineId) return;
+    const before = cloneLandscapeSplines(data.splines ?? []);
+    const after = cloneLandscapeSplines(before);
+    const point = after.find((spline) => spline.id === splineId)?.points.find((entry) => entry.id === pointId);
+    if (!point) return;
+    const next: Vec3 = [round(position[0]), round(position[1]), round(position[2])];
+    if (point.position.every((value, axis) => value === next[axis])) return;
+    point.position = next;
+    this.applySelectedLandscapeSplines(index, actor.id, before, after, "Move Landscape Spline Point", splineId, pointId);
+  }
+
+  deleteSelectedLandscapeSplinePoint(pointId = this.landscapeSculptSettings.activeSplinePointId): void {
+    if (this.selection?.kind !== "landscape" || !pointId || !this.landscapeSculptSettings.activeSplineId) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const splineId = this.landscapeSculptSettings.activeSplineId;
+    if (!actor || !data) return;
+    const before = cloneLandscapeSplines(data.splines ?? []);
+    const after = cloneLandscapeSplines(before);
+    const spline = after.find((entry) => entry.id === splineId);
+    if (!spline || !spline.points.some((point) => point.id === pointId)) return;
+    spline.points = spline.points.filter((point) => point.id !== pointId);
+    spline.segments = spline.segments.filter((segment) => segment.startPointId !== pointId && segment.endPointId !== pointId);
+    this.applySelectedLandscapeSplines(index, actor.id, before, after, "Delete Landscape Spline Point", splineId);
+  }
+
+  private applySelectedLandscapeSplines(index: number, landscapeId: string, before: ForgeLandscapeSpline[], after: ForgeLandscapeSpline[], label: string, activeSplineId: string | null, activeSplinePointId: string | null = null): void {
     const selection: Selection = { kind: "landscape", index };
     const apply = (splines: ForgeLandscapeSpline[]): void => {
       const data = this.landscapeData.get(landscapeId);
       if (!data) return;
       data.splines = cloneLandscapeSplines(splines);
       this.landscapeDataDirty.add(landscapeId);
-      this.setLandscapeSculptSettings({ activeSplineId });
+      this.setLandscapeSculptSettings({ activeSplineId, activeSplinePointId });
       this.select(selection);
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();

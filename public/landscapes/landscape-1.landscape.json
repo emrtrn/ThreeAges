@@ -83242,5 +83242,55 @@
         0
       ]
     }
+  ],
+  "splines": [
+    {
+      "id": "spline-1",
+      "points": [
+        {
+          "id": "point-1",
+          "position": [
+            12.22,
+            0,
+            4.98
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-2",
+          "position": [
+            12.19,
+            0,
+            7.59
+          ],
+          "width": 6,
+          "falloff": 3
+        },
+        {
+          "id": "point-3",
+          "position": [
+            4.6,
+            0,
+            12.15
+          ],
+          "width": 6,
+          "falloff": 3
+        }
+      ],
+      "segments": [
+        {
+          "id": "segment-1",
+          "startPointId": "point-1",
+          "endPointId": "point-2"
+        },
+        {
+          "id": "segment-2",
+          "startPointId": "point-2",
+          "endPointId": "point-3"
+        }
+      ],
+      "name": "Spline 1"
+    }
   ]
 }
