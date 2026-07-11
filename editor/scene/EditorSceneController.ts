@@ -712,6 +712,7 @@ export class EditorSceneController {
         selection.kind === "reflectiveSurface" ||
         selection.kind === "reflectionCapture" ||
         selection.kind === "worldWidget" ||
+        selection.kind === "landscape" ||
         selection.kind === "post"
       ) {
         continue;
@@ -1315,7 +1316,8 @@ export class EditorSceneController {
       selection.kind === "reflectionPlane" ||
       selection.kind === "reflectiveSurface" ||
       selection.kind === "reflectionCapture" ||
-      selection.kind === "worldWidget"
+      selection.kind === "worldWidget" ||
+      selection.kind === "landscape"
     ) {
       return null;
     }

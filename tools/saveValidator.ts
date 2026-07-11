@@ -972,6 +972,178 @@ export function validateSphereReflectionCapture(value: unknown): Record<string, 
 }
 
 /**
+ * Allowlist validator for one placed Landscape (heightfield terrain) actor.
+ * Mirrors {@link validateReflectionPlane}: a required `id` + `position`, the
+ * shared transform/hierarchy/flag fields, plus `dataRef` (required sidecar
+ * path), `material`, and `collision`. There is no `scale` — terrain size is
+ * fixed by the sidecar's `size`, not a transform scale.
+ */
+export function validateLandscape(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object") throw new Error("landscape must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) {
+    throw new Error("landscape id must be a string");
+  }
+  if (!isNumberTuple(input.position)) throw new Error("invalid landscape position");
+  if (typeof input.dataRef !== "string" || input.dataRef.length === 0) {
+    throw new Error("landscape dataRef must be a non-empty string");
+  }
+
+  const landscape: Record<string, unknown> = {
+    id: input.id,
+    position: input.position.map((number) => Number(number.toFixed(3))),
+    dataRef: input.dataRef,
+  };
+  if (typeof input.name === "string") landscape.name = input.name;
+  if (input.hidden === true) landscape.hidden = true;
+  if (input.locked === true) landscape.locked = true;
+  if (input.scaleLocked === true) landscape.scaleLocked = true;
+  if (typeof input.groupId === "string") landscape.groupId = input.groupId;
+  if (typeof input.nodeId === "string") landscape.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") landscape.parentId = input.parentId;
+  if (input.rotation !== undefined) {
+    if (!isNumberTuple(input.rotation)) throw new Error("invalid landscape rotation");
+    landscape.rotation = input.rotation.map((axis) =>
+      validateRotationDeg(axis, "landscape rotation component"),
+    );
+  }
+  if (typeof input.material === "string" && input.material.length > 0) {
+    landscape.material = input.material;
+  }
+  if (typeof input.collision === "boolean") landscape.collision = input.collision;
+  return landscape;
+}
+
+const LANDSCAPE_MIN_VERTICES = 65;
+const LANDSCAPE_MAX_VERTICES = 257;
+
+function validateLandscapeSize(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("landscape.size must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const verticesX = validateOptionalNumber(
+    input.verticesX,
+    "landscape.size.verticesX",
+    LANDSCAPE_MIN_VERTICES,
+    LANDSCAPE_MAX_VERTICES,
+  );
+  const verticesZ = validateOptionalNumber(
+    input.verticesZ,
+    "landscape.size.verticesZ",
+    LANDSCAPE_MIN_VERTICES,
+    LANDSCAPE_MAX_VERTICES,
+  );
+  if (verticesX === undefined) throw new Error("landscape.size.verticesX is required");
+  if (verticesZ === undefined) throw new Error("landscape.size.verticesZ is required");
+  const spacing = validateOptionalNumber(input.spacing, "landscape.size.spacing", 0.01, 100);
+  const heightScale = validateOptionalNumber(
+    input.heightScale,
+    "landscape.size.heightScale",
+    0.01,
+    1000,
+  );
+  return {
+    verticesX: Math.round(verticesX),
+    verticesZ: Math.round(verticesZ),
+    spacing: spacing ?? 1,
+    heightScale: heightScale ?? 1,
+  };
+}
+
+function validateLandscapeLayer(value: unknown, path: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${path} must be an object`);
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) {
+    throw new Error(`${path}.id must be a string`);
+  }
+  if (typeof input.name !== "string" || input.name.length === 0) {
+    throw new Error(`${path}.name must be a string`);
+  }
+  if (!Array.isArray(input.weights) || !input.weights.every((weight) => typeof weight === "number")) {
+    throw new Error(`${path}.weights must be a number array`);
+  }
+  return {
+    id: input.id,
+    name: input.name,
+    weights: input.weights.map((weight) => Math.min(1, Math.max(0, Number(weight)))),
+  };
+}
+
+/**
+ * Allowlist validator for one `*.landscape.json` sidecar (height/layer data).
+ * Any new `ForgeLandscapeData` field must be added here or it is silently
+ * dropped on save (see the CLAUDE.md allowlist gotcha).
+ */
+export function validateLandscapeData(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("landscape data must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.schema !== 1) throw new Error("landscape data schema must be 1");
+  if (input.type !== "landscape") throw new Error('landscape data type must be "landscape"');
+  const size = validateLandscapeSize(input.size);
+  const vertexCount = (size.verticesX as number) * (size.verticesZ as number);
+
+  if (!Array.isArray(input.heights) || input.heights.length !== vertexCount) {
+    throw new Error(`landscape data heights must have length ${vertexCount}`);
+  }
+  if (!input.heights.every((height) => typeof height === "number" && Number.isFinite(height))) {
+    throw new Error("landscape data heights must all be finite numbers");
+  }
+
+  const chunksInput = input.chunks as Record<string, unknown> | undefined;
+  const quadsPerChunk = validateOptionalNumber(
+    chunksInput?.quadsPerChunk,
+    "landscape.chunks.quadsPerChunk",
+    1,
+    size.verticesX as number,
+  );
+
+  const layers = Array.isArray(input.layers)
+    ? input.layers.map((layer, index) => {
+        const validated = validateLandscapeLayer(layer, `landscape.layers[${index}]`);
+        if ((validated.weights as number[]).length !== vertexCount) {
+          throw new Error(`landscape.layers[${index}].weights must have length ${vertexCount}`);
+        }
+        return validated;
+      })
+    : [];
+  if (layers.length > 8) throw new Error("landscape data supports at most 8 layers");
+
+  return {
+    schema: 1,
+    type: "landscape",
+    size,
+    chunks: { quadsPerChunk: quadsPerChunk ? Math.round(quadsPerChunk) : 32 },
+    heights: input.heights.map((height) => Number(Number(height).toFixed(4))),
+    layers,
+  };
+}
+
+export function validateSaveLandscapePayload(value: unknown): {
+  path: string;
+  landscape: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("landscape payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".landscape.json")) {
+    throw new Error("landscape payload path must end with .landscape.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("landscape payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    landscape: validateLandscapeData(input.landscape),
+  };
+}
+
+/**
  * Allowlist validator for one placed Blocking Volume (parametric blockout brush)
  * actor. Mirrors {@link validateReflectionPlane}: a required `id` + `position`, the
  * shared transform/hierarchy/flag fields, plus the brush `brushShape` / `size` /
@@ -1558,6 +1730,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("targetPoints must be an array");
         })();
+  const landscapes = layout.landscapes === undefined
+    ? null
+    : Array.isArray(layout.landscapes)
+      ? layout.landscapes.map(validateLandscape)
+      : (() => {
+          throw new Error("landscapes must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -1640,6 +1819,7 @@ export function validateLayout(value: unknown): unknown {
   if (blockingVolumes) output.blockingVolumes = blockingVolumes;
   if (aiNavigationVolumes) output.aiNavigationVolumes = aiNavigationVolumes;
   if (targetPoints) output.targetPoints = targetPoints;
+  if (landscapes) output.landscapes = landscapes;
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;

@@ -470,6 +470,9 @@ import {
   validateBlockingVolume,
   validateAiNavigationVolume,
   validateTargetPoint,
+  validateLandscape,
+  validateLandscapeData,
+  validateSaveLandscapePayload,
   validatePostProcess,
   validateSaveActorPayload,
   validateSaveUiPayload,
@@ -17528,6 +17531,112 @@ check("validateReflectionPlane allowlists fields and round-trips through validat
   }) as RoomLayout;
   assert.deepEqual(layout.reflectionPlanes, [{ id: "rp1", position: [0, 0, 0] }]);
   assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("validateLandscape allowlists fields and round-trips through validateLayout", () => {
+  const landscape = validateLandscape({
+    id: "landscape-1",
+    position: [1, 2, 3],
+    name: "Landscape",
+    dataRef: "landscapes/landscape-1.landscape.json",
+    rotation: [0, 45, 0],
+    collision: false,
+    material: "mat1",
+    bogusField: "dropped",
+  });
+  assert.deepEqual(landscape, {
+    id: "landscape-1",
+    position: [1, 2, 3],
+    dataRef: "landscapes/landscape-1.landscape.json",
+    name: "Landscape",
+    rotation: [0, 45, 0],
+    material: "mat1",
+    collision: false,
+  });
+  // A missing id or dataRef rejects the save.
+  assert.throws(() => validateLandscape({ position: [0, 0, 0], dataRef: "x.landscape.json" }));
+  assert.throws(() => validateLandscape({ id: "x", position: [0, 0, 0] }));
+
+  const layout = validateLayout({
+    schema: 1,
+    name: "WithLandscape",
+    loadGroups: [],
+    instances: [],
+    characters: [],
+    landscapes: [
+      { id: "landscape-1", position: [0, 0, 0], dataRef: "landscapes/landscape-1.landscape.json" },
+    ],
+  }) as RoomLayout;
+  assert.deepEqual(layout.landscapes, [
+    { id: "landscape-1", position: [0, 0, 0], dataRef: "landscapes/landscape-1.landscape.json" },
+  ]);
+  assert.deepEqual(validateLayout(layout), layout);
+});
+
+check("validateLandscapeData accepts a valid flat heightfield and rejects malformed sidecars", () => {
+  const size = { verticesX: 65, verticesZ: 65, spacing: 1, heightScale: 1 };
+  const heights = new Array(65 * 65).fill(0);
+  const data = validateLandscapeData({
+    schema: 1,
+    type: "landscape",
+    size,
+    chunks: { quadsPerChunk: 32 },
+    heights,
+    layers: [],
+  });
+  assert.equal(data.schema, 1);
+  assert.equal(data.type, "landscape");
+  assert.deepEqual(data.size, size);
+  assert.equal((data.heights as number[]).length, 65 * 65);
+
+  // Wrong schema/type rejects.
+  assert.throws(() =>
+    validateLandscapeData({ schema: 2, type: "landscape", size, heights, layers: [] }),
+  );
+  assert.throws(() =>
+    validateLandscapeData({ schema: 1, type: "not-landscape", size, heights, layers: [] }),
+  );
+  // Grid size outside 65..257 rejects.
+  assert.throws(() =>
+    validateLandscapeData({
+      schema: 1,
+      type: "landscape",
+      size: { ...size, verticesX: 32 },
+      heights: new Array(32 * 65).fill(0),
+      layers: [],
+    }),
+  );
+  // Mismatched heights length rejects.
+  assert.throws(() =>
+    validateLandscapeData({
+      schema: 1,
+      type: "landscape",
+      size,
+      heights: heights.slice(0, 10),
+      layers: [],
+    }),
+  );
+  // A layer weights array of the wrong length rejects.
+  assert.throws(() =>
+    validateLandscapeData({
+      schema: 1,
+      type: "landscape",
+      size,
+      heights,
+      layers: [{ id: "grass", name: "Grass", weights: [0, 1] }],
+    }),
+  );
+
+  // Missing dataRef path / wrong extension rejects the save payload.
+  assert.throws(() =>
+    validateSaveLandscapePayload({ path: "landscapes/x.json", landscape: data }),
+  );
+  const payload = validateSaveLandscapePayload({
+    path: "landscapes/landscape-1.landscape.json",
+    landscape: data,
+  });
+  assert.equal(payload.path, "landscapes/landscape-1.landscape.json");
+  assert.deepEqual(payload.landscape, data);
 });
 
 check("resolveBlockingVolume fills defaults and overrides per field", () => {

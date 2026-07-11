@@ -23,6 +23,7 @@ import {
   validateSaveMaterialSlotsPayload,
   validateSavePayload,
   validateSaveSkeletonPayload,
+  validateSaveLandscapePayload,
   validateSaveUiPayload,
   validateSaveUvwPayload,
   validateSaveSoundCuePayload,
@@ -679,6 +680,7 @@ const PRIVILEGED_URLS = new Set([
   "/__save-collision",
   "/__save-material-slots",
   "/__save-skeleton",
+  "/__save-landscape",
   "/__save-soundcue",
   "/__save-effect",
   "/__save-dialogue-voice",
@@ -887,6 +889,34 @@ function layoutEditorPlugin(): Plugin {
             const sidecarPath = resolvePublicPath(payload.path);
             const previous = await readFile(sidecarPath, "utf8").catch(() => null);
             const nextSidecar = `${JSON.stringify(payload.skeleton, null, 2)}\n`;
+            await writeFile(sidecarPath, nextSidecar, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== nextSidecar }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Landscape editor save: writes a `<id>.landscape.json` height/layer
+        // sidecar. Validated/normalized server-side (validateSaveLandscapePayload),
+        // kept inside public/ by resolvePublicPath.
+        if (req.url === "/__save-landscape") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveLandscapePayload(await readJsonBody(req));
+            const sidecarPath = resolvePublicPath(payload.path);
+            await mkdir(resolve(sidecarPath, ".."), { recursive: true });
+            const previous = await readFile(sidecarPath, "utf8").catch(() => null);
+            const nextSidecar = `${JSON.stringify(payload.landscape, null, 2)}\n`;
             await writeFile(sidecarPath, nextSidecar, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== nextSidecar }));

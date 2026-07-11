@@ -4,6 +4,7 @@ import type {
   LayoutBehavior,
   LayoutBlockingVolume,
   LayoutCharacter,
+  LayoutLandscape,
   LayoutLightActor,
   LayoutMetadata,
   LayoutMovingPlatform,
@@ -300,6 +301,25 @@ export function cloneSphereReflectionCapture(
   if (capture.far !== undefined) clone.far = capture.far;
   if (capture.parallax !== undefined) clone.parallax = capture.parallax;
   if (capture.priority !== undefined) clone.priority = capture.priority;
+  return clone;
+}
+
+export function cloneLandscape(landscape: LayoutLandscape): LayoutLandscape {
+  const clone: LayoutLandscape = {
+    id: landscape.id,
+    position: [...landscape.position],
+    dataRef: landscape.dataRef,
+  };
+  if (landscape.name !== undefined) clone.name = landscape.name;
+  if (landscape.hidden !== undefined) clone.hidden = landscape.hidden;
+  if (landscape.locked !== undefined) clone.locked = landscape.locked;
+  if (landscape.scaleLocked !== undefined) clone.scaleLocked = landscape.scaleLocked;
+  if (landscape.groupId !== undefined) clone.groupId = landscape.groupId;
+  if (landscape.nodeId !== undefined) clone.nodeId = landscape.nodeId;
+  if (landscape.parentId !== undefined) clone.parentId = landscape.parentId;
+  if (landscape.rotation !== undefined) clone.rotation = [...landscape.rotation];
+  if (landscape.material !== undefined) clone.material = landscape.material;
+  if (landscape.collision !== undefined) clone.collision = landscape.collision;
   return clone;
 }
 

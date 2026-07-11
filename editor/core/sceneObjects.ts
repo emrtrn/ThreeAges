@@ -3,6 +3,7 @@ import { resolveSkyAtmosphere } from "@engine/scene/skyAtmosphere";
 import { resolveHeightFog } from "@engine/scene/heightFog";
 import { resolveCloudLayer } from "@engine/scene/cloudLayer";
 import { resolveReflectionPlane } from "@engine/scene/reflectionPlane";
+import { resolveLandscape } from "@engine/scene/landscape";
 import { resolveReflectiveSurface } from "@engine/scene/reflectiveSurface";
 import { resolveSphereReflectionCapture } from "@engine/scene/reflectionCapture";
 import { resolveBlockingVolume } from "@engine/scene/blockingVolume";
@@ -16,6 +17,7 @@ import type {
   LayoutCloudLayer,
   LayoutCharacter,
   LayoutHeightFog,
+  LayoutLandscape,
   LayoutLightActor,
   LayoutPlacement,
   LayoutPostProcess,
@@ -221,6 +223,36 @@ function buildReflectionPlaneEditableSelection(
     physics: {},
     color: resolved.color,
     reflectionResolution: resolved.resolution,
+    metadata: {},
+  };
+}
+
+/**
+ * Builds the Details/Outliner view-model for a placed Landscape (heightfield
+ * terrain) actor. There is no `scale` — terrain size is fixed by the sidecar's
+ * `size`, not a transform scale.
+ */
+function buildLandscapeEditableSelection(
+  actor: LayoutLandscape,
+  index: number,
+): EditableSelection {
+  const resolved = resolveLandscape(actor);
+  return {
+    id: selectionId({ kind: "landscape", index }),
+    kind: "landscape",
+    assetId: "landscape",
+    category: "terrain",
+    label: resolved.name,
+    position: [...actor.position],
+    rotation: readRotation(actor),
+    scale: [1, 1, 1],
+    pivot: [0, 0, 0],
+    scaleLocked: actor.scaleLocked ?? false,
+    locked: actor.locked ?? false,
+    castShadow: false,
+    collision: resolved.collision,
+    simulatePhysics: false,
+    physics: {},
     metadata: {},
   };
 }
@@ -681,6 +713,19 @@ export function buildSceneObjects(
       groupId: point.groupId,
       nodeId: point.nodeId,
       parentId: point.parentId,
+    });
+  });
+
+  layout.landscapes?.forEach((actor, index) => {
+    const selection: Selection = { kind: "landscape", index };
+    objects.push({
+      ...buildLandscapeEditableSelection(actor, index),
+      selected: deps.isSelected(selection),
+      hidden: actor.hidden ?? false,
+      locked: actor.locked ?? false,
+      groupId: actor.groupId,
+      nodeId: actor.nodeId,
+      parentId: actor.parentId,
     });
   });
 

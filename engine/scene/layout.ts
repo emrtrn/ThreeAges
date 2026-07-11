@@ -788,6 +788,34 @@ export interface LayoutTargetPoint {
   color?: string;
 }
 
+/**
+ * Placed Landscape actor (à la Unreal's Landscape): a level-owned heightfield
+ * terrain. Faz 1 models only the placed actor + a reference to its height/layer
+ * sidecar data (`dataRef`); sculpt/paint tools are later phases. Unlike the other
+ * placed actors there is no `scale` field — terrain size is fixed by the sidecar's
+ * `size` (vertex grid + spacing), not a transform scale. Optional fields read
+ * defaults from `engine/scene/landscape.ts`.
+ */
+export interface LayoutLandscape {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  position: Vec3;
+  /** Full Euler rotation (XYZ order) in degrees. */
+  rotation?: Vec3;
+  /** Public-root-relative path to this landscape's `*.landscape.json` height/layer sidecar. */
+  dataRef: string;
+  /** Landscape material asset id, unused until Faz 3 (layer paint + landscape material). */
+  material?: string;
+  /** Runtime collision. Absent means true (statically collidable, rebuilt on Save/Play). */
+  collision?: boolean;
+}
+
 export interface RoomLayout {
   schema: 1;
   name: string;
@@ -816,6 +844,8 @@ export interface RoomLayout {
   aiNavigationVolumes?: LayoutAiNavigationVolume[];
   /** Placed Target Points for AI patrol route authoring. */
   targetPoints?: LayoutTargetPoint[];
+  /** Placed Landscape (heightfield terrain) actors. Faz 1 UX keeps this to one entry. */
+  landscapes?: LayoutLandscape[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

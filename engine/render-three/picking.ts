@@ -90,6 +90,15 @@ export function findParentTargetPoint(object: Object3D): Object3D | null {
   return null;
 }
 
+export function findParentLandscape(object: Object3D): Object3D | null {
+  let current: Object3D | null = object;
+  while (current) {
+    if (current.userData.landscapeIndex !== undefined) return current;
+    current = current.parent;
+  }
+  return null;
+}
+
 export function findParentWorldWidget(object: Object3D): Object3D | null {
   let current: Object3D | null = object;
   while (current) {

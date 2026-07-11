@@ -569,17 +569,23 @@ Yeni dev endpoint önerileri:
 - [x] Unreal Landscape ana parçalarını araştır.
 - [x] Forge'da Landscape'i ayrı ana editor mode olarak konumlandır.
 - [x] Foliage Mode'u bu çalışmadan ayır.
-- [ ] Kullanıcıyla Faz 1 sınırlarını onayla.
+- [x] Kullanıcıyla Faz 1 sınırlarını onayla. (2026-07-11, aşağıdaki "Kesinleşen kararlar" bölümü)
 
 ### Faz 1 - Landscape Actor + Render + Save
 
-- [ ] `LayoutLandscape` veri modeli.
-- [ ] Landscape data sidecar modeli.
-- [ ] `/__save-landscape` endpoint.
-- [ ] Scene Editor'da Manage > Create Landscape.
-- [ ] Chunked heightfield render.
-- [ ] Save/Reload doğrulaması.
-- [ ] Engine tests: normalize/validate landscape data.
+- [x] `LayoutLandscape` veri modeli (`engine/scene/layout.ts`).
+- [x] Landscape data sidecar modeli (`engine/scene/landscape.ts`, `ForgeLandscapeData`).
+- [x] `/__save-landscape` endpoint (`vite.config.ts` + `validateSaveLandscapePayload`).
+- [x] Scene Editor'da Add Actor > Terrain > Landscape (Manage tab/panel yerine
+      Faz 1'de Add-Actor + generic Details transform kullanıldı; ayrı Landscape
+      Mode toolbar'ı Faz 2 sculpt aracıyla birlikte gelecek).
+- [x] Chunked heightfield render (`engine/render-three/landscape.ts`, editor +
+      runtime paritesi: `SceneApp.buildLandscapes` / `RuntimeSceneApp.buildRuntimeLandscapes`).
+- [x] Save/Reload doğrulaması (kod tarafı tamam: `saveLayout()` dirty
+      landscape sidecar'larını da yazıyor, `buildLandscapes()` sidecar'ı fetch
+      ediyor; **kullanıcı taraflı tarayıcı smoke'u henüz yapılmadı**).
+- [x] Engine tests: normalize/validate landscape data (`tools/engine-tests.ts`,
+      `validateLandscape` + `validateLandscapeData` + `validateSaveLandscapePayload`).
 
 ### Faz 2 - Sculpt
 
@@ -678,6 +684,19 @@ Kullanıcı onayı gerekenler:
    yoksa spline fazında ayrı mı eklensin?
 8. Spline mesh ilk sürümde instanced segment dizilimi mi olsun, yoksa gerçek mesh
    deformation beklenmeli mi?
+
+## Kesinleşen kararlar (2026-07-11)
+
+Kullanıcı, önerilen varsayılanların tamamını onayladı:
+
+1. İlk Landscape **tekli** başlar (`landscapes[]` array yapısı korunur ama Faz 1 UX tek instance varsayar).
+2. Faz 1 üst preset sınırı **129x129** (Medium).
+3. İlk paint layer seti **sabit 4 layer**: Grass/Dirt/Rock/Snow.
+4. Landscape material **ayrı asset tipi** (`ForgeLandscapeMaterialDef`), mevcut tek-surface material şemasına karıştırılmaz.
+5. Runtime collision **Save/Play sırasında rebuild** edilir; sculpt anında collider güncellenmez.
+6. Landscape Splines (Faz 6) **destructive apply** ile başlar; non-destructive stack Edit Layers gelene kadar ertelenir.
+7. **Road layer Faz 6'da ayrı eklenir**; Faz 1-3 sabit 4 layer setine dahil değildir.
+8. Spline mesh ilk sürümde **instanced segment dizilimi**; gerçek mesh deformation sonraki faz.
 
 ## Son karar önerisi
 

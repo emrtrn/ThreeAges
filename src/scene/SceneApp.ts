@@ -155,6 +155,19 @@ import {
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
 import {
+  applyLandscapeTransform,
+  createFlatLandscapeData,
+  createLandscapeObject,
+  disposeLandscapeObject,
+  landscapeDataPath,
+  resolveLandscape,
+  uniqueLandscapeId,
+  uniqueLandscapeName,
+  type ForgeLandscapeData,
+  type LandscapeObject,
+  type LandscapeRenderItem,
+} from "@engine/render-three/landscape";
+import {
   applyReflectiveSurfaceTransform,
   createReflectiveSurfaceObject,
   disposeReflectiveSurfaceObject,
@@ -298,6 +311,7 @@ import type {
   LayoutPhysics,
   LayoutPostProcess,
   LayoutBlockingVolume,
+  LayoutLandscape,
   LayoutReflectionPlane,
   LayoutReflectiveSurface,
   LayoutSkyAtmosphere,
@@ -355,6 +369,7 @@ import {
   cloneAiNavigationVolume,
   cloneBlockingVolume,
   cloneCharacter,
+  cloneLandscape,
   cloneLightActor,
   clonePlacement,
   cloneReflectionPlane,
@@ -601,6 +616,12 @@ export class SceneApp {
   private blockingVolumeObjects: BlockingVolumeObject[] = [];
   /** Editor box volumes limiting AI grid navigation, by index. */
   private aiNavigationVolumeObjects: AiNavigationVolumeObject[] = [];
+  /** Live chunked terrain meshes for placed Landscape actors, by index. */
+  private landscapeObjects: LandscapeObject[] = [];
+  /** In-memory sidecar height/layer data for placed Landscape actors, keyed by landscape id. */
+  private landscapeData = new Map<string, ForgeLandscapeData>();
+  /** Landscape ids whose sidecar has changed since the last successful save. */
+  private landscapeDataDirty = new Set<string>();
   /** Editor markers for AI patrol Target Points, by index. */
   private targetPointObjects: TargetPointObject[] = [];
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
@@ -848,6 +869,7 @@ export class SceneApp {
         objects.push(...this.worldWidgetIcons);
         objects.push(...this.aiNavigationVolumeObjects);
         objects.push(...this.targetPointObjects);
+        objects.push(...this.landscapeObjects);
         return objects;
       },
       surfacePickables: () => {
@@ -858,6 +880,7 @@ export class SceneApp {
         }
         objects.push(...this.characterObjects);
         objects.push(...this.actorObjects);
+        objects.push(...this.landscapeObjects);
         return objects;
       },
       gizmo: () => ({ visible: this.gizmoGroup.visible, pickables: this.gizmoPickables }),
@@ -2017,6 +2040,13 @@ export class SceneApp {
       this.removeWorldWidget(this.selection.index);
       return;
     }
+    if (
+      this.selection?.kind === "landscape" &&
+      this.editorSceneController.selectedCount <= 1
+    ) {
+      this.removeLandscape(this.selection.index);
+      return;
+    }
     this.editorSceneController.deleteSelected();
   }
 
@@ -2468,6 +2498,9 @@ export class SceneApp {
         snapScaleEnabled: this.snapSettings.scaleEnabled,
       },
     });
+    for (const id of this.landscapeDataDirty) {
+      await this.saveLandscapeData(id);
+    }
     this.onStatus?.(`Saved ${result.path ?? "layout"}.`, "success");
   }
 
@@ -2538,6 +2571,7 @@ export class SceneApp {
     this.buildBlockingVolumes();
     this.buildAiNavigationVolumes();
     this.buildTargetPoints();
+    await this.buildLandscapes();
     this.buildWorldWidgetMarkers();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
@@ -2997,6 +3031,11 @@ export class SceneApp {
 
     if (selection.kind === "targetPoint") {
       this.refreshTargetPointObject(selection.index);
+      return;
+    }
+
+    if (selection.kind === "landscape") {
+      this.refreshLandscapeObject(selection.index);
       return;
     }
 
@@ -4383,6 +4422,209 @@ export class SceneApp {
       id: point.id,
       name: resolveTargetPoint(point).name,
     }));
+  }
+
+  // --- Landscape (heightfield terrain) actors --------------------------------
+
+  /** Resolved settings + world transform + sidecar data for a landscape layout actor. */
+  private landscapeItem(actor: LayoutLandscape): LandscapeRenderItem {
+    return {
+      ...resolveLandscape(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      data: this.landscapeData.get(actor.id) ?? createFlatLandscapeData("medium"),
+    };
+  }
+
+  /**
+   * Rebuilds every landscape mesh from `layout.landscapes` (used on load). Also
+   * fetches each landscape's `dataRef` sidecar (public-root-relative), falling
+   * back to a flat Medium heightfield if the sidecar can't be read yet (e.g. a
+   * freshly authored landscape whose sidecar hasn't been saved).
+   */
+  private async buildLandscapes(): Promise<void> {
+    for (const object of this.landscapeObjects) {
+      this.scene.remove(object);
+      disposeLandscapeObject(object);
+    }
+    this.landscapeObjects = [];
+    this.landscapeData.clear();
+    this.landscapeDataDirty.clear();
+    const landscapes = this.layout?.landscapes ?? [];
+    for (const actor of landscapes) {
+      const data = await this.fetchLandscapeData(actor.dataRef);
+      this.landscapeData.set(actor.id, data);
+    }
+    landscapes.forEach((actor, index) => {
+      const object = createLandscapeObject(this.landscapeItem(actor));
+      object.userData.landscapeIndex = index;
+      object.traverse((child) => {
+        child.userData.landscapeIndex = index;
+      });
+      this.landscapeObjects.push(object);
+      this.scene.add(object);
+    });
+  }
+
+  /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
+  private async fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
+    try {
+      const response = await fetch(`/${dataRef}`);
+      if (!response.ok) return createFlatLandscapeData("medium");
+      return (await response.json()) as ForgeLandscapeData;
+    } catch {
+      return createFlatLandscapeData("medium");
+    }
+  }
+
+  /** Cheap transform/visibility sync for one landscape (gizmo drag). */
+  private refreshLandscapeObject(index: number): void {
+    const actor = this.layout?.landscapes?.[index];
+    const object = this.landscapeObjects[index];
+    if (!actor || !object) return;
+    applyLandscapeTransform(object, this.landscapeItem(actor));
+  }
+
+  private refreshLandscapeIndices(): void {
+    this.landscapeObjects.forEach((object, index) => {
+      object.userData.landscapeIndex = index;
+      object.traverse((child) => {
+        child.userData.landscapeIndex = index;
+      });
+    });
+  }
+
+  private insertLandscape(index: number, actor: LayoutLandscape, data: ForgeLandscapeData): void {
+    if (!this.layout) return;
+    this.layout.landscapes ??= [];
+    const insertionIndex = clampIndex(index, this.layout.landscapes.length);
+    this.layout.landscapes.splice(insertionIndex, 0, cloneLandscape(actor));
+    this.landscapeData.set(actor.id, data);
+    this.landscapeDataDirty.add(actor.id);
+    const object = createLandscapeObject(this.landscapeItem(actor));
+    this.landscapeObjects.splice(insertionIndex, 0, object);
+    this.scene.add(object);
+    this.refreshLandscapeIndices();
+  }
+
+  private removeLandscapeAt(index: number): LayoutLandscape | null {
+    if (!this.layout?.landscapes) return null;
+    const [removed] = this.layout.landscapes.splice(index, 1);
+    const [object] = this.landscapeObjects.splice(index, 1);
+    if (object) {
+      this.scene.remove(object);
+      disposeLandscapeObject(object);
+    }
+    if (removed) this.landscapeData.delete(removed.id);
+    this.refreshLandscapeIndices();
+    return removed ? cloneLandscape(removed) : null;
+  }
+
+  /** Adds a flat Medium (129x129) Landscape actor at the origin and selects it. */
+  addLandscape(): void {
+    if (!this.layout) return;
+    const landscapes = this.layout.landscapes ?? [];
+    if (landscapes.length > 0) {
+      this.onStatus?.("Only one Landscape is supported per level in this build.", "error");
+      return;
+    }
+    const id = uniqueLandscapeId(landscapes);
+    const actor: LayoutLandscape = {
+      id,
+      name: uniqueLandscapeName("Landscape", landscapes),
+      position: [0, 0, 0],
+      dataRef: landscapeDataPath(id),
+    };
+    const data = createFlatLandscapeData("medium");
+    const index = landscapes.length;
+    this.executeCommand({
+      label: "Add Landscape",
+      redo: () => {
+        this.insertLandscape(index, actor, data);
+        this.select({ kind: "landscape", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+        this.saveLandscapeData(actor.id).catch(() => {});
+      },
+      undo: () => {
+        this.removeLandscapeAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Added Landscape.", "info");
+  }
+
+  /** Removes a Landscape actor (undoable). */
+  removeLandscape(index: number): void {
+    const actor = this.layout?.landscapes?.[index];
+    if (!actor) return;
+    const snapshot = cloneLandscape(actor);
+    const data = this.landscapeData.get(actor.id);
+    this.executeCommand({
+      label: "Delete Landscape",
+      redo: () => {
+        this.removeLandscapeAt(index);
+        if (this.selection?.kind === "landscape") this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.insertLandscape(index, snapshot, data ?? createFlatLandscapeData("medium"));
+        this.select({ kind: "landscape", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Deleted Landscape.", "info");
+  }
+
+  /** Applies a partial property edit (name/collision) to a landscape actor as one undoable command. */
+  setLandscape(index: number, patch: { collision?: boolean }, label = "Edit Landscape"): void {
+    const actor = this.layout?.landscapes?.[index];
+    if (!actor) return;
+    const previous = cloneLandscape(actor);
+    const next = cloneLandscape(actor);
+    if (patch.collision !== undefined) next.collision = patch.collision;
+
+    const apply = (value: LayoutLandscape): void => {
+      if (!this.layout?.landscapes?.[index]) return;
+      this.layout.landscapes[index] = cloneLandscape(value);
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+
+    this.executeCommand({
+      label,
+      redo: () => apply(next),
+      undo: () => apply(previous),
+    });
+  }
+
+  /** Edits the currently selected landscape's collision toggle (Details panel). */
+  setSelectedLandscape(patch: { collision?: boolean }): void {
+    if (this.selection?.kind !== "landscape") return;
+    this.setLandscape(this.selection.index, patch);
+  }
+
+  /**
+   * Persists one landscape's in-memory sidecar data to disk via `/__save-landscape`.
+   * Called after `addLandscape()` and from `saveLayout()` for every dirty landscape,
+   * mirroring how the layout itself is saved through the dev-endpoint saver.
+   */
+  private async saveLandscapeData(landscapeId: string): Promise<void> {
+    const actor = this.layout?.landscapes?.find((entry) => entry.id === landscapeId);
+    const data = this.landscapeData.get(landscapeId);
+    if (!actor || !data) return;
+    const response = await fetch("/__save-landscape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: actor.dataRef, landscape: data }),
+    });
+    if (!response.ok) throw new Error(`Landscape data save failed: HTTP ${response.status}`);
+    this.landscapeDataDirty.delete(landscapeId);
   }
 
   // --- Sphere Reflection Capture (probe) actors ----------------------------
@@ -5870,6 +6112,10 @@ export class SceneApp {
       this.refreshTargetPointObject(selection.index);
       return;
     }
+    if (selection.kind === "landscape") {
+      this.refreshLandscapeObject(selection.index);
+      return;
+    }
     // The Sky Atmosphere's visibility is applied through applySkyAtmosphere().
     if (selection.kind === "sky") {
       this.applySkyAtmosphere();
@@ -6373,6 +6619,10 @@ export class SceneApp {
       if (!options.includeHidden && point.hidden) return;
       selections.push({ kind: "targetPoint", index });
     });
+    this.layout.landscapes?.forEach((actor, index) => {
+      if (!options.includeHidden && actor.hidden) return;
+      selections.push({ kind: "landscape", index });
+    });
     return selections;
   }
 
@@ -6411,6 +6661,9 @@ export class SceneApp {
     if (selection.kind === "targetPoint") {
       return resolveTargetPoint(this.layout?.targetPoints?.[selection.index] ?? null).name;
     }
+    if (selection.kind === "landscape") {
+      return resolveLandscape(this.layout?.landscapes?.[selection.index] ?? null).name;
+    }
     const transform = this.getMutableTransform(selection);
     if (selection.kind === "instance") {
       return transform?.name ?? selection.assetId;
@@ -6434,7 +6687,8 @@ export class SceneApp {
       selection.kind === "actor" ||
       selection.kind === "reflectionCapture" ||
       selection.kind === "aiNavigationVolume" ||
-      selection.kind === "targetPoint"
+      selection.kind === "targetPoint" ||
+      selection.kind === "landscape"
     ) {
       return [0, 0, 0];
     }
@@ -6505,6 +6759,10 @@ export class SceneApp {
       const icon = this.worldWidgetIcons[selection.index];
       return icon ? new Box3().setFromObject(icon) : null;
     }
+    if (selection.kind === "landscape") {
+      const object = this.landscapeObjects[selection.index];
+      return object ? new Box3().setFromObject(object) : null;
+    }
     // Environment singletons have no transform bounds.
     if (
       selection.kind === "sky" ||
@@ -6557,6 +6815,13 @@ export class SceneApp {
       const actor = this.layout.reflectionPlanes?.[selection.index];
       if (!reflector || actor?.hidden) return null;
       return this.selectionOutline.cloneRenderableMeshes(reflector);
+    }
+
+    if (selection.kind === "landscape") {
+      const object = this.landscapeObjects[selection.index];
+      const actor = this.layout.landscapes?.[selection.index];
+      if (!object || actor?.hidden) return null;
+      return this.selectionOutline.cloneRenderableMeshes(object);
     }
 
     if (selection.kind === "reflectiveSurface") {
@@ -7277,6 +7542,7 @@ export class SceneApp {
     | LayoutBlockingVolume
     | LayoutAiNavigationVolume
     | LayoutTargetPoint
+    | LayoutLandscape
     | null {
     if (!this.layout) return null;
     if (selection.kind === "instance") {
@@ -7303,6 +7569,9 @@ export class SceneApp {
     if (selection.kind === "targetPoint") {
       return this.layout.targetPoints?.[selection.index] ?? null;
     }
+    if (selection.kind === "landscape") {
+      return this.layout.landscapes?.[selection.index] ?? null;
+    }
     // Environment singletons are transform-less (no gizmo / move target). World
     // widgets are placed via the Details panel + marker, not the gizmo (v1).
     if (
@@ -7324,7 +7593,9 @@ export class SceneApp {
       position: [...transform.position],
       rotation: readRotation(transform),
       scale:
-        selection.kind === "light" || selection.kind === "reflectionCapture"
+        selection.kind === "light" ||
+        selection.kind === "reflectionCapture" ||
+        selection.kind === "landscape"
           ? [1, 1, 1]
           : readScale(
               transform as
@@ -7345,8 +7616,11 @@ export class SceneApp {
     transform.position = [...values.position];
     writeRotation(transform, values.rotation);
     // A Sphere Reflection Capture has no meaningful scale (its size is the
-    // `radius`), so never write a phantom `scale` field onto it.
-    if (selection.kind !== "reflectionCapture") writeScale(transform, values.scale);
+    // `radius`); a Landscape has no scale either (terrain size is the sidecar's
+    // `size`) — never write a phantom `scale` field onto either.
+    if (selection.kind !== "reflectionCapture" && selection.kind !== "landscape") {
+      writeScale(transform, values.scale);
+    }
     this.refreshSelectionObject(selection);
     this.updateSelectionBox();
     this.updateGizmo();
@@ -7510,6 +7784,9 @@ export class SceneApp {
     }
     if (selection.kind === "targetPoint") {
       return Boolean(this.layout.targetPoints?.[selection.index]);
+    }
+    if (selection.kind === "landscape") {
+      return Boolean(this.layout.landscapes?.[selection.index]);
     }
     if (selection.kind === "worldWidget") {
       return Boolean(this.layout.worldWidgets?.[selection.index]);

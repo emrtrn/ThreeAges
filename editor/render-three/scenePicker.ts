@@ -8,6 +8,7 @@ import {
   findParentCharacter,
   findParentInstancedMesh,
   findParentLight,
+  findParentLandscape,
   findParentReflectionCapture,
   findParentReflectionPlane,
   findParentReflectiveSurface,
@@ -176,6 +177,12 @@ export class ScenePicker {
         const index = Number(worldWidget.userData.worldWidgetIndex);
         if (Number.isInteger(index)) return { kind: "worldWidget", index };
       }
+
+      const landscape = findParentLandscape(hit.object);
+      if (landscape) {
+        const index = Number(landscape.userData.landscapeIndex);
+        if (Number.isInteger(index)) return { kind: "landscape", index };
+      }
     }
     return null;
   }
@@ -269,6 +276,10 @@ export class ScenePicker {
     if (selection.kind === "worldWidget") {
       const widget = findParentWorldWidget(hit.object);
       return widget ? Number(widget.userData.worldWidgetIndex) === selection.index : false;
+    }
+    if (selection.kind === "landscape") {
+      const object = findParentLandscape(hit.object);
+      return object ? Number(object.userData.landscapeIndex) === selection.index : false;
     }
     // Environment singletons have no pickable geometry.
     if (

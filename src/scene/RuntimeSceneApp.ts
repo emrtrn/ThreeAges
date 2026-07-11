@@ -213,6 +213,15 @@ import {
   type ReflectionPlaneRenderItem,
 } from "@engine/render-three/reflectionPlane";
 import {
+  createFlatLandscapeData,
+  createLandscapeObject,
+  disposeLandscapeObject,
+  resolveLandscape,
+  type ForgeLandscapeData,
+  type LandscapeObject,
+  type LandscapeRenderItem,
+} from "@engine/render-three/landscape";
+import {
   createReflectiveSurfaceObject,
   disposeReflectiveSurfaceObject,
   resolveReflectiveSurface,
@@ -246,6 +255,7 @@ import type {
   LayoutLightActor,
   LayoutPlacement,
   LayoutBlockingVolume,
+  LayoutLandscape,
   LayoutReflectionPlane,
   LayoutReflectiveSurface,
   LayoutSphereReflectionCapture,
@@ -707,6 +717,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private blockingVolumeObjects: BlockingVolumeObject[] = [];
   /** Textured reflective-surface meshes built from `layout.reflectiveSurfaces`. */
   private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
+  /** Chunked terrain meshes built from `layout.landscapes`. */
+  private landscapeObjects: LandscapeObject[] = [];
   private characterObjects: Object3D[] = [];
   private characterRefs: RuntimeCharacterRef[] = [];
   private lightObjects: LightObjectRecord[] = [];
@@ -1129,6 +1141,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeBlockingVolumeObject(volume);
     }
     this.blockingVolumeObjects = [];
+    for (const object of this.landscapeObjects) {
+      this.scene.remove(object);
+      disposeLandscapeObject(object);
+    }
+    this.landscapeObjects = [];
     this.disposeInstanceProbeMaterials();
     this.interactionPromptElement.remove();
     void this.engineApp.dispose();
@@ -1861,6 +1878,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.buildRuntimeReflectionPlanes();
     this.buildRuntimeReflectiveSurfaces();
     this.buildRuntimeBlockingVolumes();
+    await this.buildRuntimeLandscapes();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);
@@ -2146,6 +2164,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeBlockingVolumeObject(volume);
     }
     this.blockingVolumeObjects = [];
+    for (const object of this.landscapeObjects) {
+      this.scene.remove(object);
+      disposeLandscapeObject(object);
+    }
+    this.landscapeObjects = [];
 
     // Characters + actor host objects: clones over cached GLTFs, so remove only.
     for (const object of this.characterObjects) this.scene.remove(object);
@@ -4118,6 +4141,42 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.blockingVolumeObjects.push(object);
       this.scene.add(object);
     });
+  }
+
+  /** Resolved settings + world transform + sidecar data for a landscape layout actor. */
+  private landscapeItem(actor: LayoutLandscape, data: ForgeLandscapeData): LandscapeRenderItem {
+    return {
+      ...resolveLandscape(actor),
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      data,
+    };
+  }
+
+  /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
+  private async fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
+    try {
+      const response = await fetch(`/${dataRef}`);
+      if (!response.ok) return createFlatLandscapeData("medium");
+      return (await response.json()) as ForgeLandscapeData;
+    } catch {
+      return createFlatLandscapeData("medium");
+    }
+  }
+
+  /**
+   * Builds the Landscape terrain meshes (`layout.landscapes`) for Play — editor
+   * parity with {@link SceneApp.buildLandscapes}. Faz 1 collision is out of scope
+   * here (Faz 4); the terrain is visual-only in Play for now.
+   */
+  private async buildRuntimeLandscapes(): Promise<void> {
+    const landscapes = this.layout?.landscapes ?? [];
+    for (const actor of landscapes) {
+      const data = await this.fetchLandscapeData(actor.dataRef);
+      const object = createLandscapeObject(this.landscapeItem(actor, data));
+      this.landscapeObjects.push(object);
+      this.scene.add(object);
+    }
   }
 
   /**

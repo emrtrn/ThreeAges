@@ -389,6 +389,12 @@ export class EditorUi {
                 </div>
               </div>
               <div class="add-actor-category">
+                <button type="button" class="add-actor-category-label">Terrain</button>
+                <div class="add-actor-submenu">
+                  <button type="button" data-add-landscape>Landscape</button>
+                </div>
+              </div>
+              <div class="add-actor-category">
                 <button type="button" class="add-actor-category-label">Sounds</button>
                 <div class="add-actor-submenu">
                   <button type="button" data-add-ambient-sound>Ambient Sound</button>
@@ -907,6 +913,13 @@ export class EditorUi {
       .querySelector<HTMLButtonElement>("[data-add-reflection-capture]")
       ?.addEventListener("click", () => {
         this.app.addReflectionCapture();
+      });
+
+    // Landscape (heightfield terrain) is a level-owned singleton actor created at the origin.
+    this.root
+      .querySelector<HTMLButtonElement>("[data-add-landscape]")
+      ?.addEventListener("click", () => {
+        this.app.addLandscape();
       });
 
     // Blocking Volume (parametric blockout brush) is a placed actor with a transform.
