@@ -635,8 +635,8 @@ Yeni dev endpoint önerileri:
 
 ### Faz 6 - Landscape Splines / Road Tool
 
-- [ ] `ForgeLandscapeSpline` veri modeli.
-- [ ] Landscape data `splines[]` save/load.
+- [x] `ForgeLandscapeSpline` veri modeli (point/segment, destructive deform, layer paint ve instanced mesh ayarları).
+- [x] Landscape data `splines[]` save/load (allowlist doğrulaması ve engine regresyon testiyle).
 - [ ] Landscape Mode > Splines sekmesi.
 - [ ] Control point ekle/sil/taşı.
 - [ ] Segment seçimi ve split/join temel akışı.

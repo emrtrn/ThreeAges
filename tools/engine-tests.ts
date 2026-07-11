@@ -17819,6 +17819,44 @@ check("landscape sidecar preserves a Starter Content heightmap import reference"
   assert.throws(() => validateLandscapeData({ ...data, heightmapImport: { source: "../outside.png", height: 20 } }));
 });
 
+check("landscape spline data is allowlisted and rejects broken point links", () => {
+  const data = createFlatLandscapeData("small");
+  data.splines = [
+    {
+      id: "road-main",
+      name: "Main Road",
+      points: [
+        { id: "p0", position: [-10, 2, 0], width: 6, falloff: 3 },
+        { id: "p1", position: [10, 2, 0], width: 8, falloff: 4, leaveTangent: [4, 0, 0] },
+      ],
+      segments: [
+        {
+          id: "s0",
+          startPointId: "p0",
+          endPointId: "p1",
+          deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true, targetOffset: 0.2 },
+          paint: { enabled: true, layerId: "road", strength: 0.8 },
+          mesh: { enabled: true, assetId: "road-tile", spacing: 2, scale: [1, 1, 1], alignToTerrain: true },
+        },
+      ],
+    },
+  ];
+  const validated = validateLandscapeData(data) as typeof data;
+  assert.deepEqual(validated.splines, data.splines);
+  assert.throws(() =>
+    validateLandscapeData({
+      ...data,
+      splines: [{ ...data.splines![0]!, segments: [{ id: "bad", startPointId: "p0", endPointId: "missing" }] }],
+    }),
+  );
+  assert.throws(() =>
+    validateLandscapeData({
+      ...data,
+      splines: [{ ...data.splines![0]!, points: [{ id: "p0", position: [0, 0], width: 1, falloff: 0 }], segments: [] }],
+    }),
+  );
+});
+
 check("validateLandscape allowlists fields and round-trips through validateLayout", () => {
   const landscape = validateLandscape({
     id: "landscape-1",

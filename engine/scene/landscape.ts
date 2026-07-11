@@ -124,6 +124,54 @@ export interface ForgeLandscapeMaterialDef {
   }>;
 }
 
+/** One editable control point in a Landscape road/spline. */
+export interface ForgeLandscapeSplinePoint {
+  id: string;
+  position: Vec3;
+  arriveTangent?: Vec3;
+  leaveTangent?: Vec3;
+  width: number;
+  falloff: number;
+}
+
+/** A directed connection between two control points. Effects are applied explicitly. */
+export interface ForgeLandscapeSplineSegment {
+  id: string;
+  startPointId: string;
+  endPointId: string;
+  deform?: {
+    enabled: boolean;
+    raiseTerrain: boolean;
+    lowerTerrain: boolean;
+    flatten: boolean;
+    targetOffset?: number;
+  };
+  paint?: {
+    enabled: boolean;
+    layerId: string;
+    strength: number;
+  };
+  mesh?: {
+    enabled: boolean;
+    assetId: string;
+    spacing?: number;
+    scale?: Vec3;
+    offset?: Vec3;
+    alignToTerrain?: boolean;
+    collision?: boolean;
+  };
+}
+
+/** Persisted, level-owned spline used by the Landscape Road Tool (Faz 6). */
+export interface ForgeLandscapeSpline {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  points: ForgeLandscapeSplinePoint[];
+  segments: ForgeLandscapeSplineSegment[];
+}
+
 /** Persistent source metadata for a PNG imported into this landscape. */
 export interface LandscapeHeightmapImport {
   source: string;
@@ -149,6 +197,8 @@ export interface ForgeLandscapeData {
   /** Paint layers (Grass/Dirt/Rock/Snow). Empty in Faz 1 — populated starting Faz 3. */
   layers: LandscapeLayerWeights[];
   heightmapImport?: LandscapeHeightmapImport;
+  /** Faz 6 road/spline authoring data. Its terrain effects are destructive applies. */
+  splines?: ForgeLandscapeSpline[];
 }
 
 export interface LandscapeColliderPrimitive extends ColliderPrimitive {
@@ -256,6 +306,7 @@ export function createFlatLandscapeData(preset: LandscapeSizePreset): ForgeLands
     chunks: { quadsPerChunk: LANDSCAPE_QUADS_PER_CHUNK },
     heights: new Array(vertexCount).fill(0),
     layers: createDefaultLandscapeLayers(vertexCount),
+    splines: [],
   };
 }
 
@@ -379,6 +430,33 @@ export function resampleLandscapeData(
       weights: resampleLandscapeGrid(layer.weights, source, target),
     })),
     ...(data.heightmapImport ? { heightmapImport: { ...data.heightmapImport } } : {}),
+    ...(data.splines
+      ? {
+          splines: data.splines.map((spline) => ({
+            ...spline,
+            points: spline.points.map((point) => ({
+              ...point,
+              position: [...point.position] as Vec3,
+              ...(point.arriveTangent ? { arriveTangent: [...point.arriveTangent] as Vec3 } : {}),
+              ...(point.leaveTangent ? { leaveTangent: [...point.leaveTangent] as Vec3 } : {}),
+            })),
+            segments: spline.segments.map((segment) => ({
+              ...segment,
+              ...(segment.deform ? { deform: { ...segment.deform } } : {}),
+              ...(segment.paint ? { paint: { ...segment.paint } } : {}),
+              ...(segment.mesh
+                ? {
+                    mesh: {
+                      ...segment.mesh,
+                      ...(segment.mesh.scale ? { scale: [...segment.mesh.scale] as Vec3 } : {}),
+                      ...(segment.mesh.offset ? { offset: [...segment.mesh.offset] as Vec3 } : {}),
+                    },
+                  }
+                : {}),
+            })),
+          })),
+        }
+      : {}),
   };
   ensureLandscapeLayers(result);
   if (result.heights.length !== vertexCount) result.heights = new Array(vertexCount).fill(0);
