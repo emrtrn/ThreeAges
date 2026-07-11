@@ -61,6 +61,26 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   await page.mouse.move(x + 10, y + 3);
   await page.mouse.up();
 
+  // Assign a material to the (active) dirt layer and switch back to lit so the
+  // weight-blended splat material builds — a shader compile error would surface
+  // as a console/page error and fail the final assertion.
+  await page.locator("[data-landscape-view]").selectOption("lit");
+  const layerMaterial = page.locator("[data-landscape-layer-material]");
+  await expect(layerMaterial).toBeVisible();
+  const assignedMaterial = await layerMaterial.evaluate((element) => {
+    const select = element as HTMLSelectElement;
+    const option = Array.from(select.options).find((entry) => entry.value.length > 0);
+    if (!option) throw new Error("no material asset available to assign");
+    select.value = option.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+    return { id: option.value, label: option.textContent ?? "" };
+  });
+  // The layer button now shows the material's name instead of "Dirt".
+  await expect(
+    page.locator('[data-landscape-layer="dirt"]'),
+  ).toContainText(assignedMaterial.label.trim(), { timeout: 10_000 });
+  await page.waitForTimeout(1500);
+
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
 
@@ -68,7 +88,7 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
     const response = await fetch(`/landscapes/landscape-1.landscape.json?smoke=${Date.now()}`);
     if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);
     return (await response.json()) as {
-      layers: Array<{ id: string; weights: number[] }>;
+      layers: Array<{ id: string; material?: string; weights: number[] }>;
     };
   });
   const grass = landscapeData.layers.find((layer) => layer.id === "grass");
@@ -76,21 +96,30 @@ test("editor Landscape paint smoke: paint layer, save, reload", async ({ page })
   expect(landscapeData.layers).toHaveLength(4);
   expect(dirt?.weights.some((weight) => weight > 0.05)).toBeTruthy();
   expect(grass?.weights.some((weight) => weight < 0.95)).toBeTruthy();
+  // The assigned layer material persisted into the sidecar.
+  expect(dirt?.material).toBe(assignedMaterial.id);
 
   await page.goto(`/?editor&landscapePaintReload=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first().click();
   await page.locator('[data-landscape-mode="paint"]').click();
   await expect(page.locator('[data-landscape-layer="dirt"]')).toBeVisible();
+  // Reload rebuilds the splat material from the sidecar's assigned material — wait
+  // for it to settle so a load-time shader error would be caught below.
+  await page.waitForTimeout(1500);
   const reloadedData = await page.evaluate(async () => {
     const response = await fetch(`/landscapes/landscape-1.landscape.json?reload=${Date.now()}`);
     if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);
     return (await response.json()) as {
-      layers: Array<{ id: string; weights: number[] }>;
+      layers: Array<{ id: string; material?: string; weights: number[] }>;
     };
   });
   const reloadedDirt = reloadedData.layers.find((layer) => layer.id === "dirt");
   expect(reloadedDirt?.weights.some((weight) => weight > 0.05)).toBeTruthy();
+  // A layer material persisted across reload (exact id can vary with the dev
+  // server's demo-layout autosave; the pre-reload assertion pins the exact id).
+  expect(typeof reloadedDirt?.material).toBe("string");
+  expect((reloadedDirt?.material ?? "").length).toBeGreaterThan(0);
 
   expect(pageErrors).toEqual([]);
 });

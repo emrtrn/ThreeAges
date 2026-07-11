@@ -608,9 +608,16 @@ Yeni dev endpoint önerileri:
 - [x] Save/Reload sonrasi paint korunur (`tests/smoke/landscape-paint.spec.ts`, 2026-07-11).
 - [x] Paint layer'lara materyal atama: Grass/Dirt/Rock/Snow her biri bir material
       asset'e bağlanabilir (`LandscapeLayerWeights.material`, sidecar allowlist).
-      Atanınca layer, materyalin adını (Details picker etiketi) ve base color'ını
-      alır; render editor + Play paritesiyle o rengi tint olarak kullanır
-      (tam texture-splat blend sonraki faz). 2026-07-11.
+      Atanınca layer, materyalin adını (Details picker etiketi) ve base color'ını alır.
+- [x] Weight-blended texture splat: atanan materyalin base-color dokusu, katman
+      ağırlığına göre terrain üzerinde karıştırılarak render edilir
+      (`createLandscapeSplatMaterial`, MeshStandardMaterial `onBeforeCompile` ile
+      4 katmana kadar; PBR ışık/gölge korunur). `landscapeWeight` vec4 vertex
+      attribute + `USE_UV`/`vUv` tiling. Editor + Play paritesi; view mode/materyal
+      değişiminde tam obje rebuild, sculpt/paint dab'da geometri-only refresh.
+      Debug view'lar (Height/Slope/Layer) hâlâ vertex-color yolunu kullanır.
+      Kullanıcı Playground'da görsel doğrulama yaptı (2026-07-11). Kalan: heightmap
+      import, çoklu-doku (normal/roughness) splat, triplanar — sonraki fazlar.
 
 ### Faz 4 - Runtime Collision
 

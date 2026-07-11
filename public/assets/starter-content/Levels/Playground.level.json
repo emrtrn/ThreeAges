@@ -16,9 +16,9 @@
       "placements": [
         {
           "position": [
-            -4,
+            -8.01,
             0,
-            3.03
+            -18.21
           ],
           "name": "Player Start",
           "collision": false,
@@ -126,20 +126,6 @@
     {
       "assetId": "floor-400x400",
       "placements": [
-        {
-          "position": [
-            -12.37,
-            0,
-            -13.25
-          ],
-          "materialSlot": "white-material",
-          "rotationYDeg": 0,
-          "scale": [
-            4.9,
-            1,
-            4.9
-          ]
-        },
         {
           "position": [
             -4.28,
@@ -473,9 +459,9 @@
     {
       "id": "target-point-3",
       "position": [
-        -0.67,
-        0,
-        0.98
+        -1.75,
+        3.16,
+        -7.79
       ],
       "name": "Target Point 1",
       "scale": 1,
@@ -542,7 +528,7 @@
       "id": "landscape-1",
       "position": [
         0,
-        -0.1,
+        0,
         0
       ],
       "dataRef": "landscapes/landscape-1.landscape.json",
@@ -553,11 +539,12 @@
     {
       "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
       "position": [
-        0.81,
-        0,
-        -2.3
+        5.1,
+        0.35,
+        2.85
       ],
-      "rotationYDeg": 0
+      "rotationYDeg": 0,
+      "scale": 1
     }
   ]
 }

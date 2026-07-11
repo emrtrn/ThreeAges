@@ -1,4 +1,4 @@
-import { TextureLoader } from "three";
+import { RepeatWrapping, SRGBColorSpace, TextureLoader, type Texture } from "three";
 
 import { assetPath, assetRecordById, assetType, type AssetManifest } from "@engine/assets/manifest";
 import { normalizeForgeMaterialDef } from "@engine/assets/material";
@@ -82,23 +82,41 @@ export async function loadForgeMaterial(
   );
 }
 
+export interface ForgeMaterialLayer {
+  /** Material base color (hex), used as the flat tint when there's no texture. */
+  baseColor: string;
+  /** Base-color (albedo) texture, tiling-wrapped for terrain splatting, or `null`. */
+  texture: Texture | null;
+}
+
 /**
- * Resolves a material asset's base color (hex string), without loading any of
- * its textures. Used by the Landscape paint layers to tint the terrain with an
- * assigned material's color cheaply — full texture splatting is a later phase.
- * Returns `null` if the id isn't a material asset or can't be read.
+ * Loads just the albedo inputs of a material for Landscape layer splatting: the
+ * base color plus the base-color texture (repeat-wrapped, sRGB). Skips normal /
+ * roughness / layer-blend loading that the full material loader does. Returns
+ * `null` if the id isn't a material asset or can't be read.
  */
-export async function loadForgeMaterialBaseColor(
+export async function loadForgeMaterialLayer(
   manifest: AssetManifest,
   materialId: string,
-): Promise<string | null> {
+  textureLoader = new TextureLoader(),
+  options: { maxAnisotropy?: number } = {},
+): Promise<ForgeMaterialLayer | null> {
   const materialRecord = assetRecordById(manifest, materialId);
   if (!materialRecord || assetType(materialRecord) !== "material") return null;
   try {
     const response = await fetch(projectFileUrl(assetPath(materialRecord)), { cache: "no-cache" });
     if (!response.ok) return null;
     const def = normalizeForgeMaterialDef(await response.json(), materialRecord.name);
-    return def.baseColor ?? null;
+    let texture: Texture | null = null;
+    if (def.baseColorTexture) {
+      texture = await loadTextureByAssetId(manifest, def.baseColorTexture, textureLoader);
+      texture.colorSpace = SRGBColorSpace;
+      texture.wrapS = RepeatWrapping;
+      texture.wrapT = RepeatWrapping;
+      if (options.maxAnisotropy) texture.anisotropy = options.maxAnisotropy;
+      texture.needsUpdate = true;
+    }
+    return { baseColor: def.baseColor ?? "#ffffff", texture };
   } catch {
     return null;
   }

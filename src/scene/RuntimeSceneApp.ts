@@ -1,4 +1,4 @@
-import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, TextureLoader, Vector3 } from "three";
+import { Box3, BoxGeometry, BufferGeometry, DirectionalLight, EdgesGeometry, Float32BufferAttribute, Group, Light as ThreeLight, LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, Object3D, type Texture, TextureLoader, Vector3 } from "three";
 import type {
   AmbientLight,
   InstancedMesh,
@@ -217,8 +217,10 @@ import {
   createLandscapeColliderPrimitive,
   createLandscapeObject,
   disposeLandscapeObject,
+  LANDSCAPE_DEFAULT_LAYERS,
   resolveLandscape,
   type ForgeLandscapeData,
+  type LandscapeLayerTexture,
   type LandscapeObject,
   type LandscapeRenderItem,
 } from "@engine/render-three/landscape";
@@ -285,7 +287,7 @@ import {
   applyAssetUvwMapping,
   loadAssetUvw,
 } from "@/scene/assetUvwLoader";
-import { loadForgeMaterial, loadForgeMaterialBaseColor } from "@/scene/materialAssets";
+import { loadForgeMaterial, loadForgeMaterialLayer } from "@/scene/materialAssets";
 import {
   applyMaterialSlotOverrides,
   assignedMaterialSlotIds,
@@ -722,6 +724,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
   /** Chunked terrain meshes built from `layout.landscapes`. */
   private landscapeObjects: LandscapeObject[] = [];
+  /** Base-color textures loaded for landscape paint-layer splatting; disposed on scene rebuild. */
+  private landscapeLayerTextures: Texture[] = [];
   /** Static collider entities generated from collidable runtime landscapes. */
   private landscapeColliderEntities: Entity[] = [];
   /** Render host per generated landscape collider entity, for Play collision debug wires. */
@@ -1153,6 +1157,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    for (const texture of this.landscapeLayerTextures) texture.dispose();
+    this.landscapeLayerTextures = [];
     this.landscapeColliderEntities = [];
     this.landscapeColliderObjects.clear();
     this.disposeInstanceProbeMaterials();
@@ -2182,6 +2188,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    for (const texture of this.landscapeLayerTextures) texture.dispose();
+    this.landscapeLayerTextures = [];
     this.landscapeColliderEntities = [];
     this.landscapeColliderObjects.clear();
 
@@ -4183,7 +4191,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private landscapeItem(
     actor: LayoutLandscape,
     data: ForgeLandscapeData,
-    layerColors?: Record<string, string>,
+    layerTextures?: LandscapeLayerTexture[],
   ): LandscapeRenderItem {
     const item: LandscapeRenderItem = {
       ...resolveLandscape(actor),
@@ -4191,29 +4199,45 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       rotation: readRotation(actor),
       data,
     };
-    if (layerColors) item.layerColors = layerColors;
+    if (layerTextures) {
+      item.layerTextures = layerTextures;
+      item.layerColors = Object.fromEntries(layerTextures.map((layer) => [layer.id, layer.color]));
+    }
     return item;
   }
 
   /**
-   * Resolves the layerId→hex tint map for a landscape's material-assigned paint
-   * layers (Play parity with the editor). Layers without a material — or whose
-   * base color can't be read — are omitted so the preset color is used.
+   * Resolves the per-layer splat inputs (base color + tiling texture) for a
+   * landscape's material-assigned paint layers, aligned to `data.layers` order
+   * (Play parity with the editor). Layers without a material — or whose material
+   * can't be read — carry a null texture and the preset color.
    */
-  private async resolveRuntimeLandscapeLayerColors(
+  private async resolveRuntimeLandscapeLayerTextures(
     data: ForgeLandscapeData,
-  ): Promise<Record<string, string>> {
+  ): Promise<LandscapeLayerTexture[]> {
     const manifest = this.assetManifest;
-    const colors: Record<string, string> = {};
-    if (!manifest) return colors;
-    await Promise.all(
+    const worldSize = (data.size.verticesX - 1) * data.size.spacing;
+    const tiling = Math.min(128, Math.max(1, Math.round(worldSize / 8)));
+    const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    const presetById = new Map(LANDSCAPE_DEFAULT_LAYERS.map((preset) => [preset.id as string, preset]));
+    return Promise.all(
       data.layers.map(async (layer) => {
-        if (!layer.material) return;
-        const color = await loadForgeMaterialBaseColor(manifest, layer.material);
-        if (color) colors[layer.id] = color;
+        const presetColor = presetById.get(layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color;
+        const resolved =
+          manifest && layer.material
+            ? await loadForgeMaterialLayer(manifest, layer.material, this.textureLoader, {
+                maxAnisotropy,
+              })
+            : null;
+        if (resolved?.texture) this.landscapeLayerTextures.push(resolved.texture);
+        return {
+          id: layer.id,
+          texture: resolved?.texture ?? null,
+          color: resolved?.baseColor ?? presetColor,
+          tiling,
+        } satisfies LandscapeLayerTexture;
       }),
     );
-    return colors;
   }
 
   private landscapeColliderEntity(actor: LayoutLandscape, data: ForgeLandscapeData): Entity | null {
@@ -4265,8 +4289,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
       const data = await this.fetchLandscapeData(actor.dataRef);
-      const layerColors = await this.resolveRuntimeLandscapeLayerColors(data);
-      const object = createLandscapeObject(this.landscapeItem(actor, data, layerColors));
+      const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(data);
+      const object = createLandscapeObject(this.landscapeItem(actor, data, layerTextures));
       this.landscapeObjects.push(object);
       this.scene.add(object);
       const colliderEntity = this.landscapeColliderEntity(actor, data);

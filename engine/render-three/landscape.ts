@@ -5,6 +5,7 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  type Texture,
 } from "three";
 
 import type { Vec3 } from "@engine/scene/layout";
@@ -69,6 +70,19 @@ export type LandscapeViewMode = "lit" | "height" | "slope" | "layer";
 /** Per-layer color override (layerId → hex), resolved from assigned materials. */
 export type LandscapeLayerColors = Record<string, string>;
 
+/**
+ * A paint layer's resolved render inputs, aligned to `data.layers` order. The
+ * base-color `texture` (when present) is weight-blended across the terrain in
+ * "lit" view; `color` is the fallback tint (and the debug/vertex-color look).
+ */
+export interface LandscapeLayerTexture {
+  id: string;
+  texture: Texture | null;
+  color: string;
+  /** UV repeat count across the whole terrain for this layer's texture. */
+  tiling: number;
+}
+
 /** Resolved settings + world transform + sidecar data the binding needs to build a landscape. */
 export interface LandscapeRenderItem extends ResolvedLandscape {
   position: Vec3;
@@ -79,6 +93,8 @@ export interface LandscapeRenderItem extends ResolvedLandscape {
   activeLayerId?: string;
   /** Layer tint overrides (assigned-material base colors); falls back to preset colors. */
   layerColors?: LandscapeLayerColors;
+  /** Per-layer base-color textures for weight-blended splat rendering (lit view). */
+  layerTextures?: LandscapeLayerTexture[];
 }
 
 const DEFAULT_LAYER_COLOR = new Color(LANDSCAPE_DEFAULT_LAYERS[0]!.color);
@@ -173,6 +189,9 @@ function buildChunkGeometry(
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
   const colors = new Float32Array(vertexCount * 3);
+  // Per-vertex weight of the first four paint layers (grass/dirt/rock/snow),
+  // consumed by the splat material to blend up to four base-color textures.
+  const layerWeights = new Float32Array(vertexCount * 4);
   const range = heightRange(data);
 
   // World-space origin centers the full grid on the actor's position.
@@ -219,6 +238,10 @@ function buildChunkGeometry(
           layerColors,
         ),
       );
+      for (let layer = 0; layer < 4; layer += 1) {
+        const weight = data.layers[layer]?.weights[globalVertexIndex] ?? 0;
+        layerWeights[vertexIndex * 4 + layer] = Math.min(1, Math.max(0, weight));
+      }
     }
   }
 
@@ -246,10 +269,83 @@ function buildChunkGeometry(
   geometry.setAttribute("normal", new BufferAttribute(normals, 3));
   geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
   geometry.setAttribute("color", new BufferAttribute(colors, 3));
+  geometry.setAttribute("landscapeWeight", new BufferAttribute(layerWeights, 4));
   if (indices.length > 0) geometry.setIndex(new BufferAttribute(indices, 1));
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return geometry;
+}
+
+/**
+ * Builds a MeshStandardMaterial that blends up to four paint-layer base-color
+ * textures by the per-vertex `landscapeWeight` attribute, keeping full PBR
+ * lighting/shadows. Layers without a texture fall back to their flat color.
+ * Used only in "lit" view when at least one layer has a texture; otherwise the
+ * plain vertex-color material renders the tint and the debug view modes.
+ */
+function createLandscapeSplatMaterial(layerTextures: LandscapeLayerTexture[]): MeshStandardMaterial {
+  const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
+  material.defines = { ...(material.defines ?? {}), USE_UV: "" };
+  const texAt = (index: number): Texture | null => layerTextures[index]?.texture ?? null;
+  const colorAt = (index: number): Color =>
+    new Color(layerTextures[index]?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color);
+  const tilingAt = (index: number): number => Math.max(0.0001, layerTextures[index]?.tiling ?? 1);
+
+  material.onBeforeCompile = (shader) => {
+    for (let index = 0; index < 4; index += 1) {
+      shader.uniforms[`uLayerTex${index}`] = { value: texAt(index) };
+      shader.uniforms[`uLayerColor${index}`] = { value: colorAt(index) };
+      shader.uniforms[`uLayerHasTex${index}`] = { value: texAt(index) ? 1 : 0 };
+      shader.uniforms[`uLayerTiling${index}`] = { value: tilingAt(index) };
+    }
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nattribute vec4 landscapeWeight;\nvarying vec4 vLandscapeWeight;")
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvLandscapeWeight = landscapeWeight;");
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        "#include <common>",
+        `#include <common>
+uniform sampler2D uLayerTex0;
+uniform sampler2D uLayerTex1;
+uniform sampler2D uLayerTex2;
+uniform sampler2D uLayerTex3;
+uniform vec3 uLayerColor0;
+uniform vec3 uLayerColor1;
+uniform vec3 uLayerColor2;
+uniform vec3 uLayerColor3;
+uniform float uLayerHasTex0;
+uniform float uLayerHasTex1;
+uniform float uLayerHasTex2;
+uniform float uLayerHasTex3;
+uniform float uLayerTiling0;
+uniform float uLayerTiling1;
+uniform float uLayerTiling2;
+uniform float uLayerTiling3;
+varying vec4 vLandscapeWeight;`,
+      )
+      // Inlined here (not a helper at <common>) because vUv is only in scope
+      // inside main(), after three's <uv_pars_fragment> declares it.
+      .replace(
+        "#include <color_fragment>",
+        `#include <color_fragment>
+{
+  vec3 forgeC0 = uLayerHasTex0 > 0.5 ? texture2D(uLayerTex0, vUv * uLayerTiling0).rgb : uLayerColor0;
+  vec3 forgeC1 = uLayerHasTex1 > 0.5 ? texture2D(uLayerTex1, vUv * uLayerTiling1).rgb : uLayerColor1;
+  vec3 forgeC2 = uLayerHasTex2 > 0.5 ? texture2D(uLayerTex2, vUv * uLayerTiling2).rgb : uLayerColor2;
+  vec3 forgeC3 = uLayerHasTex3 > 0.5 ? texture2D(uLayerTex3, vUv * uLayerTiling3).rgb : uLayerColor3;
+  vec3 forgeAlbedo =
+    forgeC0 * vLandscapeWeight.x +
+    forgeC1 * vLandscapeWeight.y +
+    forgeC2 * vLandscapeWeight.z +
+    forgeC3 * vLandscapeWeight.w;
+  float forgeWeight = vLandscapeWeight.x + vLandscapeWeight.y + vLandscapeWeight.z + vLandscapeWeight.w;
+  diffuseColor.rgb = forgeWeight > 0.0001 ? forgeAlbedo / forgeWeight : uLayerColor0;
+}`,
+      );
+  };
+  // Distinguish this program from the plain landscape material in three's cache.
+  material.customProgramCacheKey = () => "forge-landscape-splat";
+  return material;
 }
 
 /** Splits the vertex grid into `quadsPerChunk`-sized chunk meshes under one shared material. */
@@ -258,16 +354,20 @@ function buildLandscapeChunkMeshes(
   viewMode: LandscapeViewMode,
   activeLayerId: string,
   colors?: LandscapeLayerColors,
+  layerTextures?: LandscapeLayerTexture[],
 ): Mesh[] {
   const { verticesX, verticesZ } = data.size;
   const quadsPerChunk = Math.max(1, data.chunks?.quadsPerChunk || LANDSCAPE_QUADS_PER_CHUNK);
   ensureLandscapeLayers(data);
-  const material = new MeshStandardMaterial({
-    color: new Color("#ffffff"),
-    roughness: 1,
-    metalness: 0,
-    vertexColors: true,
-  });
+  const useSplat = viewMode === "lit" && Boolean(layerTextures?.some((layer) => layer.texture));
+  const material = useSplat
+    ? createLandscapeSplatMaterial(layerTextures!)
+    : new MeshStandardMaterial({
+        color: new Color("#ffffff"),
+        roughness: 1,
+        metalness: 0,
+        vertexColors: true,
+      });
   const meshes: Mesh[] = [];
   for (let z0 = 0; z0 < verticesZ - 1; z0 += quadsPerChunk) {
     const z1 = Math.min(z0 + quadsPerChunk, verticesZ - 1);
@@ -291,7 +391,13 @@ export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObjec
   group.name = item.name;
   const viewMode = item.viewMode ?? "lit";
   const activeLayerId = item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id;
-  for (const mesh of buildLandscapeChunkMeshes(item.data, viewMode, activeLayerId, item.layerColors)) {
+  for (const mesh of buildLandscapeChunkMeshes(
+    item.data,
+    viewMode,
+    activeLayerId,
+    item.layerColors,
+    item.layerTextures,
+  )) {
     group.add(mesh);
   }
   applyLandscapeTransform(group, item);

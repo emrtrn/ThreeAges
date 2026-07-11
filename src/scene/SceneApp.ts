@@ -88,7 +88,11 @@ import {
   colliderBoxFromBounds,
   composePlacementMatrix,
 } from "@engine/render-three/transforms";
-import { collisionWireboxes, collisionSurfaceTriangles } from "@engine/render-three/collisionView";
+import {
+  collisionWireboxes,
+  collisionSurfaceTriangles,
+  trimeshWireSegments,
+} from "@engine/render-three/collisionView";
 import {
   createAiNavigationView,
   disposeAiNavigationView,
@@ -160,6 +164,7 @@ import {
 import {
   applyLandscapeTransform,
   createFlatLandscapeData,
+  createLandscapeColliderPrimitive,
   createLandscapeObject,
   disposeLandscapeObject,
   ensureLandscapeLayers,
@@ -173,6 +178,7 @@ import {
   type ForgeLandscapeData,
   type LandscapeDirtyBounds,
   type LandscapeLayerColors,
+  type LandscapeLayerTexture,
   type LandscapeLayerWeights,
   type LandscapeObject,
   type LandscapeRenderItem,
@@ -300,7 +306,7 @@ import {
 } from "./markerPrimitives";
 import { createPlayerStartIcon } from "./playerStartIcon";
 import { createAmbientSoundIcon } from "./ambientSoundIcon";
-import { loadForgeMaterial, loadForgeMaterialBaseColor } from "./materialAssets";
+import { loadForgeMaterial, loadForgeMaterialLayer, type ForgeMaterialLayer } from "./materialAssets";
 import {
   readPivot,
   readRotation,
@@ -702,8 +708,8 @@ export class SceneApp {
   private landscapeData = new Map<string, ForgeLandscapeData>();
   /** Landscape ids whose sidecar has changed since the last successful save. */
   private landscapeDataDirty = new Set<string>();
-  /** Resolved base colors of materials assigned to landscape layers, keyed by material id. */
-  private landscapeLayerColorCache = new Map<string, string>();
+  /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
+  private landscapeLayerMaterialCache = new Map<string, ForgeMaterialLayer>();
   private landscapeSculptSettings: LandscapeSculptSettings = {
     editMode: "sculpt",
     tool: "raise",
@@ -1134,6 +1140,8 @@ export class SceneApp {
       else material.dispose();
       this.landscapeBrushCursor = null;
     }
+    for (const layer of this.landscapeLayerMaterialCache.values()) layer.texture?.dispose();
+    this.landscapeLayerMaterialCache.clear();
     this.lightOutlineGeometry.dispose();
     this.captureOutlineGeometry.dispose();
     // EngineApp.dispose() is async (subsystems may release async resources);
@@ -1373,10 +1381,11 @@ export class SceneApp {
       flattenTargetHeight: clamp(next.flattenTargetHeight, -1000, 1000),
     };
     this.updateLandscapeBrushCursorScale();
-    if (
-      previousViewMode !== this.landscapeSculptSettings.viewMode ||
-      previousLayerId !== this.landscapeSculptSettings.activeLayerId
-    ) {
+    if (previousViewMode !== this.landscapeSculptSettings.viewMode) {
+      // Switching to/from "lit" can flip between the splat and vertex-color
+      // material, so rebuild the whole object rather than just its geometry.
+      this.landscapeObjects.forEach((_object, index) => this.rebuildLandscapeObject(index));
+    } else if (previousLayerId !== this.landscapeSculptSettings.activeLayerId) {
       this.refreshAllLandscapeGeometry();
     }
     const mode =
@@ -4590,12 +4599,19 @@ export class SceneApp {
       viewMode: this.landscapeSculptSettings.viewMode,
       activeLayerId: this.landscapeSculptSettings.activeLayerId,
       layerColors: this.resolveLandscapeLayerColors(data),
+      layerTextures: this.resolveLandscapeLayerTextures(data),
     };
+  }
+
+  /** UV repeat count so each layer texture tiles roughly every ~8 world units. */
+  private landscapeLayerTiling(data: ForgeLandscapeData): number {
+    const worldSize = (data.size.verticesX - 1) * data.size.spacing;
+    return Math.min(128, Math.max(1, Math.round(worldSize / 8)));
   }
 
   /**
    * Builds the layerId→hex tint map for a landscape from its layers' assigned
-   * materials, reading cached base colors (populated by `warmLandscapeLayerColors`).
+   * materials, reading cached base colors (populated by `warmLandscapeLayerMaterials`).
    * Layers with no material — or whose color hasn't loaded yet — are omitted so the
    * render binding falls back to the preset swatch.
    */
@@ -4604,18 +4620,40 @@ export class SceneApp {
     for (const layer of data.layers) {
       const materialId = layer.material;
       if (!materialId) continue;
-      const color = this.landscapeLayerColorCache.get(materialId);
+      const color = this.landscapeLayerMaterialCache.get(materialId)?.baseColor;
       if (color) colors[layer.id] = color;
     }
     return colors;
   }
 
   /**
-   * Fetches (once, then caches) the base color of every material assigned to a
-   * landscape's layers, then refreshes that landscape's geometry so newly loaded
-   * tints appear. Safe to call repeatedly; skips ids already cached.
+   * Resolved per-layer splat inputs (base-color texture + tint), aligned to
+   * `data.layers` order, from the material cache. Layers with no assigned
+   * material — or whose material hasn't loaded yet — carry a `null` texture and
+   * the preset color, so the render falls back to the flat vertex-color look.
    */
-  private async warmLandscapeLayerColors(index: number): Promise<void> {
+  private resolveLandscapeLayerTextures(data: ForgeLandscapeData): LandscapeLayerTexture[] {
+    const tiling = this.landscapeLayerTiling(data);
+    const presetById = new Map(LANDSCAPE_DEFAULT_LAYERS.map((preset) => [preset.id as string, preset]));
+    return data.layers.map((layer) => {
+      const presetColor = presetById.get(layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color;
+      const cached = layer.material ? this.landscapeLayerMaterialCache.get(layer.material) : undefined;
+      return {
+        id: layer.id,
+        texture: cached?.texture ?? null,
+        color: cached?.baseColor ?? presetColor,
+        tiling,
+      };
+    });
+  }
+
+  /**
+   * Loads (once, then caches) the albedo — base color + tiling texture — of every
+   * material assigned to a landscape's layers, then rebuilds that landscape so the
+   * splat material picks up the new textures. Safe to call repeatedly; skips ids
+   * already cached.
+   */
+  private async warmLandscapeLayerMaterials(index: number): Promise<void> {
     const actor = this.layout?.landscapes?.[index];
     const data = actor ? this.landscapeData.get(actor.id) : null;
     if (!actor || !data) return;
@@ -4623,19 +4661,46 @@ export class SceneApp {
     if (!manifest) return;
     const pending = data.layers
       .map((layer) => layer.material)
-      .filter((id): id is string => Boolean(id) && !this.landscapeLayerColorCache.has(id!));
+      .filter((id): id is string => Boolean(id) && !this.landscapeLayerMaterialCache.has(id!));
     if (pending.length === 0) return;
+    const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
     let loadedAny = false;
     await Promise.all(
       Array.from(new Set(pending)).map(async (materialId) => {
-        const color = await loadForgeMaterialBaseColor(manifest, materialId);
-        if (color) {
-          this.landscapeLayerColorCache.set(materialId, color);
+        const layer = await loadForgeMaterialLayer(manifest, materialId, this.textureLoader, {
+          maxAnisotropy,
+        });
+        if (layer) {
+          this.landscapeLayerMaterialCache.set(materialId, layer);
           loadedAny = true;
         }
       }),
     );
-    if (loadedAny) this.refreshLandscapeGeometry(index, this.landscapeFullDirtyBounds(data));
+    if (loadedAny) this.rebuildLandscapeObject(index);
+  }
+
+  /**
+   * Fully rebuilds one landscape's chunk group (geometry + material) in place,
+   * preserving its scene slot and index. Needed when the material *kind* changes
+   * (a layer texture assigned, or a view-mode switch between splat and vertex
+   * colors) — sculpt/paint dabs use the lighter geometry-only refresh.
+   */
+  private rebuildLandscapeObject(index: number): void {
+    const actor = this.layout?.landscapes?.[index];
+    const previous = this.landscapeObjects[index];
+    if (!actor || !previous) return;
+    const object = createLandscapeObject(this.landscapeItem(actor));
+    object.userData.landscapeIndex = index;
+    object.traverse((child) => {
+      child.userData.landscapeIndex = index;
+    });
+    this.scene.remove(previous);
+    disposeLandscapeObject(previous);
+    this.scene.add(object);
+    this.landscapeObjects[index] = object;
+    if (this.selection?.kind === "landscape" && this.selection.index === index) {
+      this.updateSelectionBox();
+    }
   }
 
   /**
@@ -4668,7 +4733,7 @@ export class SceneApp {
       this.scene.add(object);
     });
     landscapes.forEach((_actor, index) => {
-      void this.warmLandscapeLayerColors(index);
+      void this.warmLandscapeLayerMaterials(index);
     });
   }
 
@@ -5204,7 +5269,7 @@ export class SceneApp {
         id: layer.id,
         baseName,
         color: materialId
-          ? this.landscapeLayerColorCache.get(materialId) ?? presetColor
+          ? this.landscapeLayerMaterialCache.get(materialId)?.baseColor ?? presetColor
           : presetColor,
         material: materialId,
       };
@@ -5235,7 +5300,6 @@ export class SceneApp {
           : { id: entry.id, name: entry.name, weights: entry.weights }
         : entry,
     );
-    const dirty = this.landscapeFullDirtyBounds(data);
     const selection: Selection = { kind: "landscape", index };
     const applyLayers = (layers: LandscapeLayerWeights[]): void => {
       const current = this.landscapeData.get(actor.id);
@@ -5243,8 +5307,10 @@ export class SceneApp {
       current.layers = cloneLandscapeLayers(layers);
       ensureLandscapeLayers(current);
       this.landscapeDataDirty.add(actor.id);
-      this.refreshLandscapeGeometry(index, dirty);
-      void this.warmLandscapeLayerColors(index);
+      // A material change swaps the layer's texture, so the splat material itself
+      // must be rebuilt (not just geometry); warming then reloads any new texture.
+      this.rebuildLandscapeObject(index);
+      void this.warmLandscapeLayerMaterials(index);
       this.select(selection);
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();
@@ -7812,6 +7878,47 @@ export class SceneApp {
       const material = new LineBasicMaterial({ color: sensor ? 0xffb454 : 0x4cd07d });
       const helper = new LineSegments(geometry, material);
       helper.name = "editor-collision-box";
+      this.collisionBoxes.push(helper);
+      this.scene.add(helper);
+    }
+    this.updateLandscapeCollisionWires();
+  }
+
+  /**
+   * Adds the terrain trimesh wire for every collidable landscape actor to the
+   * "Show > Collision" overlay — the editor twin of the collider debug wire the
+   * runtime always draws in Play. The heightfield collider mirrors the render
+   * mesh, so this reveals exactly the surface characters walk on. Built in local
+   * landscape space and positioned by the actor transform, matching
+   * `applyLandscapeTransform` (there is no landscape transform scale).
+   */
+  private updateLandscapeCollisionWires(): void {
+    if (!this.layout) return;
+    for (const actor of this.layout.landscapes ?? []) {
+      const item = this.landscapeItem(actor);
+      if (!item.collision) continue;
+      const data = this.landscapeData.get(actor.id);
+      if (!data) continue;
+      const primitive = createLandscapeColliderPrimitive(data);
+      const segments = trimeshWireSegments(primitive.vertices, primitive.indices);
+      if (segments.length === 0) continue;
+      const geometry = new BufferGeometry();
+      geometry.setAttribute(
+        "position",
+        new Float32BufferAttribute(segments.flatMap((point) => point), 3),
+      );
+      const helper = new LineSegments(
+        geometry,
+        new LineBasicMaterial({ color: 0x4cd07d }),
+      );
+      helper.name = "editor-collision-box";
+      helper.position.set(actor.position[0], actor.position[1], actor.position[2]);
+      helper.rotation.set(
+        (item.rotation[0] * Math.PI) / 180,
+        (item.rotation[1] * Math.PI) / 180,
+        (item.rotation[2] * Math.PI) / 180,
+        "XYZ",
+      );
       this.collisionBoxes.push(helper);
       this.scene.add(helper);
     }
