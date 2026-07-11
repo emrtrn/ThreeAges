@@ -942,8 +942,23 @@ function layoutEditorPlugin(): Plugin {
             const previous = await readFile(filePath, "utf8").catch(() => null);
             const next = `${JSON.stringify(payload.material, null, 2)}\n`;
             await writeFile(filePath, next, "utf8");
+            // Register newly-authored materials in the manifest so they appear in
+            // asset pickers (Details material slots, landscape paint layers, ...).
+            // Idempotent: registerImportedAsset no-ops when the path already exists.
+            let registeredId: string | null = null;
+            try {
+              registeredId = await registerImportedAsset(
+                payload.path,
+                Buffer.byteLength(next, "utf8"),
+                inferImportedAssetTypeFromContent(payload.path, next),
+              );
+            } catch {
+              registeredId = null;
+            }
             res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+            res.end(
+              JSON.stringify({ ok: true, path: payload.path, changed: previous !== next, registeredId }),
+            );
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");

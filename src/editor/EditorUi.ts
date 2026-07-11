@@ -2329,7 +2329,14 @@ export class EditorUi {
           this.materialPreviewCache.delete(key);
           this.modelMaterialPreviewCache.clear();
           this.thumbnailRenderer.clearCache();
-          this.renderContentAssets();
+          // A newly-authored material is now registered in the manifest server-side;
+          // reload the editable-asset list so pickers (material slots, landscape
+          // paint layers) pick it up without a full editor reload.
+          void (async () => {
+            this.editableAssets = await this.app.reloadEditableAssets();
+            this.renderContentAssets();
+            this.renderDetails(this.selected);
+          })();
           if (item.editable) void this.app.refreshMaterialAsset(item.editable.id);
         },
         onApplyToSelected: (materialId) => this.app.setSelectionMaterialSlot(materialId),

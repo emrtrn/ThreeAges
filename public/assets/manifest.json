@@ -20714,6 +20714,52 @@
         "bytes": 95
       },
       "license": "Unknown"
+    },
+    {
+      "id": "m-moss-material",
+      "name": "M Moss.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Moss.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 625
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-gravel-material",
+      "name": "M Gravel.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Gravel.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 630
+      },
+      "license": "Unknown"
     }
   ]
 }
