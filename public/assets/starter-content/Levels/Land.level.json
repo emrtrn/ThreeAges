@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "name": "Land",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "shape-cube",
+      "placements": [
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    }
+  ],
+  "characters": [],
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 1,
+    "mie": 0.002
+  },
+  "heightFog": {},
+  "cloudLayer": {
+    "density": 0.4
+  },
+  "postProcess": {
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    }
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        3,
+        9,
+        4
+      ],
+      "name": "Sun",
+      "rotation": [
+        -55,
+        35,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 2,
+      "castShadow": true
+    }
+  ],
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "landscapes/landscape-1.landscape.json",
+      "name": "Landscape"
+    }
+  ]
+}

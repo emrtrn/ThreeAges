@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "name": "__playwright-smoke",
+  "name": "playground",
   "loadGroups": [],
   "instances": [
     {
@@ -9,38 +9,16 @@
     },
     {
       "assetId": "shape:cube",
-      "placements": [
-        {
-          "position": [
-            0,
-            1,
-            0
-          ],
-          "name": "Smoke Checkpoint",
-          "collisionPreset": "trigger",
-          "sensor": true,
-          "behavior": {
-            "script": "checkpoint",
-            "params": {
-              "slot": "quick"
-            }
-          },
-          "scale": [
-            4,
-            4,
-            4
-          ]
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "marker:playerStart",
       "placements": [
         {
           "position": [
+            -4,
             0,
-            0,
-            0
+            3.03
           ],
           "name": "Player Start",
           "collision": false,
@@ -150,13 +128,38 @@
       "placements": [
         {
           "position": [
+            -12.37,
             0,
-            0,
-            -1.5
+            -13.25
           ],
-          "scaleLocked": true,
+          "materialSlot": "white-material",
           "rotationYDeg": 0,
-          "scale": 3
+          "scale": [
+            4.9,
+            1,
+            4.9
+          ]
+        },
+        {
+          "position": [
+            -4.28,
+            3.18,
+            -4.29
+          ],
+          "navigationRole": "walkable",
+          "materialSlot": "white-material",
+          "groupId": "group-mrerp2ou-3ka",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": [
+            1.1,
+            1,
+            1
+          ]
         }
       ]
     },
@@ -169,27 +172,30 @@
       "placements": [
         {
           "position": [
-            -18.48,
+            -4.18,
             0,
-            -10.56
+            -4.49
           ],
           "materialSlot": "white-material",
+          "groupId": "group-mrerp2ou-3ka",
           "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
           "scale": 1
         },
         {
           "position": [
-            -14.38,
+            -4.28,
             0,
-            -10.66
+            -8.59
           ],
+          "navigationRole": "obstacleOnly",
           "materialSlot": "white-material",
+          "groupId": "group-mrerp2ou-3ka",
           "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
           "scale": 1
         }
       ]
@@ -199,17 +205,13 @@
       "placements": [
         {
           "position": [
-            -18.58,
+            -4.28,
             0,
-            -10.66
+            -4.39
           ],
           "materialSlot": "white-material",
+          "groupId": "group-mrerp2ou-3ka",
           "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
           "scale": 1
         }
       ]
@@ -272,65 +274,60 @@
     },
     {
       "assetId": "sm-linearstair",
-      "placements": [
-        {
-          "position": [
-            -7.15,
-            0,
-            -6.86
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            180,
-            0
-          ],
-          "scale": [
-            1,
-            1,
-            1.9
-          ]
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-ramp",
       "placements": [
         {
           "position": [
-            -10.1,
-            -0.02,
-            -6.89
+            -6.28,
+            -2.17,
+            1.91
           ],
+          "navigationRole": "walkable",
           "rotationYDeg": 0,
           "rotation": [
             0,
             90,
             0
           ],
-          "scale": [
-            1.8,
-            1,
-            1
-          ]
+          "scale": 1
         },
         {
           "position": [
-            -17.74,
-            -2.16,
-            -0.63
+            -10.48,
+            -1.38,
+            -0.09
           ],
+          "navigationRole": "walkable",
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -8.48,
+            -0.58,
+            -4.29
+          ],
+          "navigationRole": "walkable",
           "rotationYDeg": 0,
           "rotation": [
             0,
-            90,
+            -90,
             0
           ],
-          "scale": [
-            1.8,
-            1,
-            1
-          ]
+          "scale": 1
+        },
+        {
+          "position": [
+            -6.28,
+            0.22,
+            -4.29
+          ],
+          "navigationRole": "walkable",
+          "rotationYDeg": 0,
+          "scale": 1
         }
       ]
     },
@@ -352,6 +349,18 @@
     },
     {
       "assetId": "wall-500x500",
+      "placements": []
+    },
+    {
+      "assetId": "sm-assetplatform",
+      "placements": []
+    },
+    {
+      "assetId": "pillar-50x500",
+      "placements": []
+    },
+    {
+      "assetId": "wall-400x200",
       "placements": []
     }
   ],
@@ -422,7 +431,7 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        -12,
+        -1.87,
         4,
         -3.35
       ],
@@ -445,20 +454,110 @@
     {
       "id": "ai-navigation-volume-1",
       "position": [
-        0,
-        2,
-        0
+        -2.73,
+        2.44,
+        -3.1
       ],
       "name": "AI Navigation Volume",
+      "scale": 1,
       "size": [
-        12,
-        4,
-        10
+        20,
+        5,
+        20
       ],
-      "agentRadius": 0.6,
-      "clearancePadding": 0.25
+      "agentRadius": 0.1,
+      "clearancePadding": 0.1
     }
   ],
-  "targetPoints": [],
-  "actors": []
+  "targetPoints": [
+    {
+      "id": "target-point-3",
+      "position": [
+        -0.67,
+        0,
+        0.98
+      ],
+      "name": "Target Point 1",
+      "scale": 1,
+      "nextTargetPoint": "target-point-4",
+      "startPoint": true
+    },
+    {
+      "id": "target-point-4",
+      "position": [
+        -9.47,
+        0.83,
+        0.92
+      ],
+      "name": "Target Point 2",
+      "nextTargetPoint": "target-point-1",
+      "acceptanceRadius": 0.1
+    },
+    {
+      "id": "target-point-1",
+      "position": [
+        -9.52,
+        1.62,
+        -3.14
+      ],
+      "name": "Target Point 3",
+      "nextTargetPoint": "target-point-5",
+      "acceptanceRadius": 0.1
+    },
+    {
+      "id": "target-point-5",
+      "position": [
+        -5.28,
+        2.42,
+        -3.16
+      ],
+      "name": "Target Point 4",
+      "nextTargetPoint": "target-point-2",
+      "acceptanceRadius": 0.1
+    },
+    {
+      "id": "target-point-2",
+      "position": [
+        -5.29,
+        3.22,
+        -7.48
+      ],
+      "name": "Target Point 5",
+      "nextTargetPoint": "target-point-6"
+    },
+    {
+      "id": "target-point-6",
+      "position": [
+        -1.02,
+        3.18,
+        -4.86
+      ],
+      "name": "Target Point 6",
+      "scale": 1,
+      "nextTargetPoint": "target-point-3"
+    }
+  ],
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "landscapes/landscape-1.landscape.json",
+      "name": "Landscape"
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
+      "position": [
+        0.81,
+        0,
+        -2.3
+      ],
+      "rotationYDeg": 0
+    }
+  ]
 }

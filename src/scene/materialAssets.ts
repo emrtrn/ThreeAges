@@ -82,6 +82,28 @@ export async function loadForgeMaterial(
   );
 }
 
+/**
+ * Resolves a material asset's base color (hex string), without loading any of
+ * its textures. Used by the Landscape paint layers to tint the terrain with an
+ * assigned material's color cheaply — full texture splatting is a later phase.
+ * Returns `null` if the id isn't a material asset or can't be read.
+ */
+export async function loadForgeMaterialBaseColor(
+  manifest: AssetManifest,
+  materialId: string,
+): Promise<string | null> {
+  const materialRecord = assetRecordById(manifest, materialId);
+  if (!materialRecord || assetType(materialRecord) !== "material") return null;
+  try {
+    const response = await fetch(projectFileUrl(assetPath(materialRecord)), { cache: "no-cache" });
+    if (!response.ok) return null;
+    const def = normalizeForgeMaterialDef(await response.json(), materialRecord.name);
+    return def.baseColor ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function loadTextureByAssetId(
   manifest: AssetManifest,
   textureId: string,

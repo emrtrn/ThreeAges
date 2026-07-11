@@ -12,7 +12,7 @@ async function deleteExistingLandscape(page: Page): Promise<void> {
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
 }
 
-test("editor Landscape sculpt smoke: add, sculpt, undo, save, reload", async ({ page }) => {
+test("editor Landscape paint smoke: paint layer, save, reload", async ({ page }) => {
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("console", (message) => {
@@ -35,8 +35,11 @@ test("editor Landscape sculpt smoke: add, sculpt, undo, save, reload", async ({ 
   await expect(page.locator('[data-inspector-pane="details"] .detail-heading')).toContainText(
     "terrain / landscape",
   );
-  await expect(page.locator('[data-landscape-tool="raise"]')).toBeVisible();
 
+  await page.locator('[data-landscape-mode="paint"]').click();
+  await expect(page.locator('[data-landscape-paint-tool="paint"]')).toBeVisible();
+  await page.locator('[data-landscape-layer="dirt"]').click();
+  await page.locator("[data-landscape-view]").selectOption("layer");
   await page.evaluate(() => {
     const setNumber = (key: string, value: string): void => {
       const input = document.querySelector<HTMLInputElement>(`[data-landscape-number="${key}"]`);
@@ -47,8 +50,6 @@ test("editor Landscape sculpt smoke: add, sculpt, undo, save, reload", async ({ 
     setNumber("brushSize", "10");
     setNumber("strength", "1");
   });
-  await expect(page.locator('[data-landscape-number="brushSize"]')).toHaveValue("10");
-  await expect(page.locator('[data-landscape-number="strength"]')).toHaveValue("1");
 
   const canvas = page.locator("#game-canvas");
   const box = await canvas.boundingBox();
@@ -57,12 +58,8 @@ test("editor Landscape sculpt smoke: add, sculpt, undo, save, reload", async ({ 
   const y = box.y + box.height * 0.55;
   await page.mouse.move(x, y);
   await page.mouse.down();
-  await page.mouse.move(x + 12, y + 4);
+  await page.mouse.move(x + 10, y + 3);
   await page.mouse.up();
-
-  await expect(page.getByTestId("editor-undo")).toBeEnabled();
-  await page.getByTestId("editor-undo").click();
-  await page.getByTestId("editor-redo").click();
 
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 10_000 });
@@ -70,22 +67,30 @@ test("editor Landscape sculpt smoke: add, sculpt, undo, save, reload", async ({ 
   const landscapeData = await page.evaluate(async () => {
     const response = await fetch(`/landscapes/landscape-1.landscape.json?smoke=${Date.now()}`);
     if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);
-    return (await response.json()) as { heights: number[] };
+    return (await response.json()) as {
+      layers: Array<{ id: string; weights: number[] }>;
+    };
   });
-  expect(landscapeData.heights.some((height) => Math.abs(height) > 0.001)).toBeTruthy();
+  const grass = landscapeData.layers.find((layer) => layer.id === "grass");
+  const dirt = landscapeData.layers.find((layer) => layer.id === "dirt");
+  expect(landscapeData.layers).toHaveLength(4);
+  expect(dirt?.weights.some((weight) => weight > 0.05)).toBeTruthy();
+  expect(grass?.weights.some((weight) => weight < 0.95)).toBeTruthy();
 
-  await page.goto(`/?editor&landscapeSmokeReload=${Date.now()}`);
+  await page.goto(`/?editor&landscapePaintReload=${Date.now()}`);
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
   await page.getByTestId("outliner-row").filter({ hasText: "Landscape" }).first().click();
-  await expect(page.locator('[data-inspector-pane="details"] .detail-heading')).toContainText(
-    "terrain / landscape",
-  );
+  await page.locator('[data-landscape-mode="paint"]').click();
+  await expect(page.locator('[data-landscape-layer="dirt"]')).toBeVisible();
   const reloadedData = await page.evaluate(async () => {
     const response = await fetch(`/landscapes/landscape-1.landscape.json?reload=${Date.now()}`);
     if (!response.ok) throw new Error(`Landscape sidecar fetch failed: ${response.status}`);
-    return (await response.json()) as { heights: number[] };
+    return (await response.json()) as {
+      layers: Array<{ id: string; weights: number[] }>;
+    };
   });
-  expect(reloadedData.heights.some((height) => Math.abs(height) > 0.001)).toBeTruthy();
+  const reloadedDirt = reloadedData.layers.find((layer) => layer.id === "dirt");
+  expect(reloadedDirt?.weights.some((weight) => weight > 0.05)).toBeTruthy();
 
   expect(pageErrors).toEqual([]);
 });

@@ -143,11 +143,14 @@ const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> 
   { kind: "material", label: "Material" },
   { kind: "particle", label: "Particle" },
   { kind: "script", label: "Script" },
-  { kind: "sound", label: "Sound" },
   { kind: "soundCue", label: "Sound Cue" },
   { kind: "dialogueVoice", label: "Dialogue Voice" },
   { kind: "dialogueLine", label: "Dialogue Line" },
   { kind: "ui", label: "UI" },
+];
+
+/** AI-authoring assets, grouped under an "Artificial Intelligence" flyout in the Content Browser menu. */
+const CONTENT_NEW_AI_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> = [
   { kind: "blackboard", label: "AI Blackboard" },
   { kind: "behaviorTree", label: "AI Behavior Tree" },
   { kind: "aiQuery", label: "AI Query (EQS)" },
@@ -173,9 +176,20 @@ const MATERIAL_PRESET_DESCRIPTIONS: Record<ForgeMaterialPreset, string> = {
 };
 
 /** A context-menu entry: a clickable item or a visual separator. */
-type ContextMenuItem =
-  | { separator: true }
-  | { separator?: false; label: string; enabled?: boolean; danger?: boolean; run: () => void };
+type ContextMenuSeparator = { separator: true };
+type ContextMenuAction = {
+  separator?: false;
+  label: string;
+  enabled?: boolean;
+  danger?: boolean;
+  run: () => void;
+};
+type ContextMenuSubmenu = { separator?: false; label: string; items: ContextMenuItem[] };
+type ContextMenuItem = ContextMenuSeparator | ContextMenuAction | ContextMenuSubmenu;
+
+function isContextMenuAction(item: ContextMenuItem): item is ContextMenuAction {
+  return !item.separator && "run" in item;
+}
 
 const TOOL_LABELS: Record<EditorTool, string> = {
   select: "Select",
@@ -2575,6 +2589,53 @@ export class EditorUi {
         menu.appendChild(divider);
         continue;
       }
+      if ("items" in item) {
+        const wrap = document.createElement("div");
+        wrap.className = "context-menu-submenu-wrap";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "context-menu-item context-menu-item-submenu";
+        button.textContent = item.label;
+        const submenu = document.createElement("div");
+        submenu.className = "context-menu-submenu";
+        for (const sub of item.items) {
+          if (sub.separator) {
+            const divider = document.createElement("div");
+            divider.className = "context-menu-separator";
+            submenu.appendChild(divider);
+            continue;
+          }
+          if (!isContextMenuAction(sub)) continue;
+          const subButton = document.createElement("button");
+          subButton.type = "button";
+          subButton.className = `context-menu-item${sub.danger ? " danger" : ""}`;
+          subButton.textContent = sub.label;
+          subButton.disabled = sub.enabled === false;
+          subButton.addEventListener("click", () => {
+            this.closeContextMenu();
+            sub.run();
+          });
+          submenu.appendChild(subButton);
+        }
+        wrap.appendChild(button);
+        wrap.appendChild(submenu);
+        menu.appendChild(wrap);
+        // Flip the flyout upward when it would otherwise overflow the bottom
+        // of the viewport (submenu height is only known once it's visible).
+        wrap.addEventListener("mouseenter", () => {
+          const wrapRect = wrap.getBoundingClientRect();
+          const submenuRect = submenu.getBoundingClientRect();
+          const overflowsBottom = wrapRect.top + submenuRect.height > window.innerHeight - 8;
+          if (overflowsBottom) {
+            submenu.style.top = "auto";
+            submenu.style.bottom = "-4px";
+          } else {
+            submenu.style.top = "-4px";
+            submenu.style.bottom = "auto";
+          }
+        });
+        continue;
+      }
       const button = document.createElement("button");
       button.type = "button";
       button.className = `context-menu-item${item.danger ? " danger" : ""}`;
@@ -2624,6 +2685,14 @@ export class EditorUi {
         label: item.label,
         run: () => void this.createContent(item.kind, dir),
       })),
+      { separator: true },
+      {
+        label: "Artificial Intelligence",
+        items: CONTENT_NEW_AI_ITEMS.map((item) => ({
+          label: item.label,
+          run: () => void this.createContent(item.kind, dir),
+        })),
+      },
     ];
     this.openContextMenu(event, items);
   }
@@ -2992,6 +3061,10 @@ export class EditorUi {
       setSelectedLandscape: (patch) => this.app.setSelectedLandscape(patch),
       getLandscapeSculptSettings: () => this.app.getLandscapeSculptSettings(),
       setLandscapeSculptSettings: (patch) => this.app.setLandscapeSculptSettings(patch),
+      fillSelectedLandscapeLayer: (layerId) => this.app.fillSelectedLandscapeLayer(layerId),
+      getSelectedLandscapeLayers: () => this.app.getSelectedLandscapeLayers(),
+      setSelectedLandscapeLayerMaterial: (layerId, materialId) =>
+        this.app.setSelectedLandscapeLayerMaterial(layerId, materialId),
       setSelectedWorldWidget: (patch) => this.app.setSelectedWorldWidget(patch),
       isSelectedReflectionCaptureBakeStale: () =>
         this.app.isSelectedReflectionCaptureBakeStale(),

@@ -33,6 +33,14 @@ export interface ScenePickerOptions {
   surfacePickables: () => Object3D[];
   /** The transform gizmo group's visibility + its pickable handle meshes. */
   gizmo: () => { visible: boolean; pickables: Object3D[] };
+  /**
+   * True when a selection is locked in the outliner. Locked objects are
+   * click-through for viewport picking (like Unreal): the pick falls through to
+   * whatever solid geometry sits behind them, and they can only be re-selected
+   * by unlocking them in the Scene Outliner. Optional — omitting it disables the
+   * behavior (nothing is treated as locked).
+   */
+  isSelectionLocked?: (selection: Selection) => boolean;
 }
 
 /**
@@ -47,6 +55,7 @@ export class ScenePicker {
   private readonly getPickables: () => Object3D[];
   private readonly getSurfacePickables: () => Object3D[];
   private readonly getGizmo: () => { visible: boolean; pickables: Object3D[] };
+  private readonly isSelectionLocked: ((selection: Selection) => boolean) | undefined;
 
   private readonly raycaster = new Raycaster();
   private readonly pointerNdc = new Vector2();
@@ -81,6 +90,7 @@ export class ScenePicker {
     this.getPickables = options.pickables;
     this.getSurfacePickables = options.surfacePickables;
     this.getGizmo = options.gizmo;
+    this.isSelectionLocked = options.isSelectionLocked;
   }
 
   pickGizmoHandle(clientX: number, clientY: number): GizmoHandle | null {
@@ -113,82 +123,94 @@ export class ScenePicker {
       // translucent face or just outside the volume never selects it.
       if (this.isScreenFarLineHit(hit)) continue;
 
-      const mesh = findParentInstancedMesh(hit.object);
-      if (mesh) {
-        const assetId = String(mesh.userData.assetId ?? "");
-        if (!assetId || hit.instanceId == null) continue;
-        return { kind: "instance", assetId, placementIndex: hit.instanceId };
-      }
-
-      const instance = findParentMaterialOverride(hit.object);
-      if (instance) return instance;
-
-      const character = findParentCharacter(hit.object);
-      if (character) {
-        const index = Number(character.userData.characterIndex);
-        if (Number.isInteger(index)) return { kind: "character", index };
-      }
-
-      const actor = findParentActor(hit.object);
-      if (actor) {
-        const index = Number(actor.userData.actorIndex);
-        if (Number.isInteger(index)) return { kind: "actor", index };
-      }
-
-      const light = findParentLight(hit.object);
-      if (light) {
-        const index = Number(light.userData.lightIndex);
-        if (Number.isInteger(index)) return { kind: "light", index };
-      }
-
-      const reflectionPlane = findParentReflectionPlane(hit.object);
-      if (reflectionPlane) {
-        const index = Number(reflectionPlane.userData.reflectionPlaneIndex);
-        if (Number.isInteger(index)) return { kind: "reflectionPlane", index };
-      }
-
-      const reflectiveSurface = findParentReflectiveSurface(hit.object);
-      if (reflectiveSurface) {
-        const index = Number(reflectiveSurface.userData.reflectiveSurfaceIndex);
-        if (Number.isInteger(index)) return { kind: "reflectiveSurface", index };
-      }
-
-      const reflectionCapture = findParentReflectionCapture(hit.object);
-      if (reflectionCapture) {
-        const index = Number(reflectionCapture.userData.reflectionCaptureIndex);
-        if (Number.isInteger(index)) return { kind: "reflectionCapture", index };
-      }
-
-      const blockingVolume = findParentBlockingVolume(hit.object);
-      if (blockingVolume) {
-        const index = Number(blockingVolume.userData.blockingVolumeIndex);
-        if (Number.isInteger(index)) return { kind: "blockingVolume", index };
-      }
-
-      const aiNavigationVolume = findParentAiNavigationVolume(hit.object);
-      if (aiNavigationVolume) {
-        const index = Number(aiNavigationVolume.userData.aiNavigationVolumeIndex);
-        if (Number.isInteger(index)) return { kind: "aiNavigationVolume", index };
-      }
-
-      const targetPoint = findParentTargetPoint(hit.object);
-      if (targetPoint) {
-        const index = Number(targetPoint.userData.targetPointIndex);
-        if (Number.isInteger(index)) return { kind: "targetPoint", index };
-      }
-
-      const worldWidget = findParentWorldWidget(hit.object);
-      if (worldWidget) {
-        const index = Number(worldWidget.userData.worldWidgetIndex);
-        if (Number.isInteger(index)) return { kind: "worldWidget", index };
-      }
-
-      const landscape = findParentLandscape(hit.object);
-      if (landscape) {
-        const index = Number(landscape.userData.landscapeIndex);
-        if (Number.isInteger(index)) return { kind: "landscape", index };
-      }
+      const selection = this.resolveSelection(hit);
+      if (!selection) continue;
+      // Locked objects are click-through: fall through to whatever is behind them
+      // so they can only be re-selected by unlocking in the Scene Outliner.
+      if (this.isSelectionLocked?.(selection)) continue;
+      return selection;
     }
+    return null;
+  }
+
+  /** Maps a single raycast hit to the scene Selection it belongs to, or null. */
+  private resolveSelection(hit: Intersection): Selection | null {
+    const mesh = findParentInstancedMesh(hit.object);
+    if (mesh) {
+      const assetId = String(mesh.userData.assetId ?? "");
+      if (!assetId || hit.instanceId == null) return null;
+      return { kind: "instance", assetId, placementIndex: hit.instanceId };
+    }
+
+    const instance = findParentMaterialOverride(hit.object);
+    if (instance) return instance;
+
+    const character = findParentCharacter(hit.object);
+    if (character) {
+      const index = Number(character.userData.characterIndex);
+      if (Number.isInteger(index)) return { kind: "character", index };
+    }
+
+    const actor = findParentActor(hit.object);
+    if (actor) {
+      const index = Number(actor.userData.actorIndex);
+      if (Number.isInteger(index)) return { kind: "actor", index };
+    }
+
+    const light = findParentLight(hit.object);
+    if (light) {
+      const index = Number(light.userData.lightIndex);
+      if (Number.isInteger(index)) return { kind: "light", index };
+    }
+
+    const reflectionPlane = findParentReflectionPlane(hit.object);
+    if (reflectionPlane) {
+      const index = Number(reflectionPlane.userData.reflectionPlaneIndex);
+      if (Number.isInteger(index)) return { kind: "reflectionPlane", index };
+    }
+
+    const reflectiveSurface = findParentReflectiveSurface(hit.object);
+    if (reflectiveSurface) {
+      const index = Number(reflectiveSurface.userData.reflectiveSurfaceIndex);
+      if (Number.isInteger(index)) return { kind: "reflectiveSurface", index };
+    }
+
+    const reflectionCapture = findParentReflectionCapture(hit.object);
+    if (reflectionCapture) {
+      const index = Number(reflectionCapture.userData.reflectionCaptureIndex);
+      if (Number.isInteger(index)) return { kind: "reflectionCapture", index };
+    }
+
+    const blockingVolume = findParentBlockingVolume(hit.object);
+    if (blockingVolume) {
+      const index = Number(blockingVolume.userData.blockingVolumeIndex);
+      if (Number.isInteger(index)) return { kind: "blockingVolume", index };
+    }
+
+    const aiNavigationVolume = findParentAiNavigationVolume(hit.object);
+    if (aiNavigationVolume) {
+      const index = Number(aiNavigationVolume.userData.aiNavigationVolumeIndex);
+      if (Number.isInteger(index)) return { kind: "aiNavigationVolume", index };
+    }
+
+    const targetPoint = findParentTargetPoint(hit.object);
+    if (targetPoint) {
+      const index = Number(targetPoint.userData.targetPointIndex);
+      if (Number.isInteger(index)) return { kind: "targetPoint", index };
+    }
+
+    const worldWidget = findParentWorldWidget(hit.object);
+    if (worldWidget) {
+      const index = Number(worldWidget.userData.worldWidgetIndex);
+      if (Number.isInteger(index)) return { kind: "worldWidget", index };
+    }
+
+    const landscape = findParentLandscape(hit.object);
+    if (landscape) {
+      const index = Number(landscape.userData.landscapeIndex);
+      if (Number.isInteger(index)) return { kind: "landscape", index };
+    }
+
     return null;
   }
 

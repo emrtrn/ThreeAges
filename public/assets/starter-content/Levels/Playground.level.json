@@ -537,6 +537,18 @@
       "nextTargetPoint": "target-point-3"
     }
   ],
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        -0.1,
+        0
+      ],
+      "dataRef": "landscapes/landscape-1.landscape.json",
+      "name": "Landscape"
+    }
+  ],
   "actors": [
     {
       "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",

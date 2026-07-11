@@ -600,19 +600,24 @@ Yeni dev endpoint önerileri:
 
 ### Faz 3 - Paint Layers + Landscape Material
 
-- [ ] 4 layer weightmap modeli.
-- [ ] Paint/Erase/Fill/Smooth Weights.
-- [ ] Layer view modes.
-- [ ] `ForgeLandscapeMaterialDef`.
-- [ ] Runtime shader/material layer blend.
-- [ ] Save/Reload sonrası paint korunur.
+- [x] 4 layer weightmap modeli (`Grass/Dirt/Rock/Snow`, eski bos sidecar'lar load sirasinda normalize edilir).
+- [x] Paint/Erase/Fill/Smooth Weights (`Details > Landscape Mode > Paint`).
+- [x] Layer view modes (`Lit/Height/Slope/Layer Weight`).
+- [x] `ForgeLandscapeMaterialDef` render-agnostic type scaffold (`engine/scene/landscape.ts`).
+- [x] Runtime shader/material layer blend (vertex color layer blend, editor + runtime render yolu ortak).
+- [x] Save/Reload sonrasi paint korunur (`tests/smoke/landscape-paint.spec.ts`, 2026-07-11).
+- [x] Paint layer'lara materyal atama: Grass/Dirt/Rock/Snow her biri bir material
+      asset'e bağlanabilir (`LandscapeLayerWeights.material`, sidecar allowlist).
+      Atanınca layer, materyalin adını (Details picker etiketi) ve base color'ını
+      alır; render editor + Play paritesiyle o rengi tint olarak kullanır
+      (tam texture-splat blend sonraki faz). 2026-07-11.
 
 ### Faz 4 - Runtime Collision
 
-- [ ] Static landscape collider.
-- [ ] Character/player movement landscape üstünde çalışır.
-- [ ] Collision debug view.
-- [ ] Chunk rebuild sonrası collider refresh.
+- [x] Static landscape collider (`landscape:<id>` runtime entity, static trimesh primitive).
+- [x] Character/player movement landscape üstünde çalışır (mevcut ground probe `staticSurfaceTriangles()` yolunu kullanır).
+- [x] Collision debug view (Play collider debug wire gerçek landscape trimesh edge'lerini çizer).
+- [x] Chunk rebuild sonrası collider refresh (Save/Play sırasında sidecar'dan yeniden üretilir; sculpt anında live collider update yok).
 
 ### Faz 5 - Import/Export
 

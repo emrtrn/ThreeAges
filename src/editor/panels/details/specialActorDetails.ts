@@ -5,10 +5,14 @@ import type {
   EditableAiNavigationVolume,
   EditableBlockingVolume,
   EditableSelection,
+  LandscapeEditMode,
+  LandscapeLayerView,
+  LandscapePaintTool,
   LandscapeSculptSettings,
   LandscapeSculptTool,
   TargetPointReference,
 } from "@/scene/SceneApp";
+import { type LandscapeViewMode } from "@engine/render-three/landscape";
 import { scaleRow, vectorRow } from "./transformRows";
 
 type CaptureNumericKey = "radius" | "intensity" | "resolution" | "near" | "far" | "priority";
@@ -81,6 +85,9 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   setLandscapeSculptSettings: (
     patch: Partial<LandscapeSculptSettings>,
   ) => LandscapeSculptSettings;
+  fillSelectedLandscapeLayer: (layerId?: string) => void;
+  getSelectedLandscapeLayers: () => LandscapeLayerView[];
+  setSelectedLandscapeLayerMaterial: (layerId: string, materialId: string | null) => void;
   setSelectedWorldWidget: (patch: {
     widget?: string;
     worldPos?: Vec3;
@@ -101,12 +108,37 @@ const LANDSCAPE_SCULPT_TOOLS: readonly LandscapeSculptTool[] = [
   "smooth",
   "flatten",
 ];
+const LANDSCAPE_PAINT_TOOLS: readonly LandscapePaintTool[] = ["paint", "erase", "smoothWeights"];
+const LANDSCAPE_VIEW_MODES: readonly LandscapeViewMode[] = ["lit", "height", "slope", "layer"];
+const LANDSCAPE_EDIT_MODES: readonly LandscapeEditMode[] = ["sculpt", "paint"];
 
 export function renderLandscapeDetails(options: SpecialActorDetailsOptions): void {
-  const { body, selection } = options;
+  const { body, selection, editableAssets } = options;
   options.setDetailsScale([1, 1, 1]);
   const lockedAttr = selection.locked ? "disabled" : "";
   const settings = options.getLandscapeSculptSettings();
+  const layers = options.getSelectedLandscapeLayers();
+  const materialAssets = editableAssets.filter((asset) => assetType(asset) === "material");
+  const materialNameById = new Map(
+    materialAssets.map((asset) => [asset.id, asset.displayName ?? asset.name] as const),
+  );
+  const layerDisplayName = (layer: LandscapeLayerView): string =>
+    layer.material ? materialNameById.get(layer.material) ?? layer.baseName : layer.baseName;
+  const activeLayer = layers.find((layer) => layer.id === settings.activeLayerId) ?? layers[0];
+  const layerMaterialOptions = [
+    `<option value="" ${activeLayer?.material ? "" : "selected"}>None (preset ${escapeHtml(
+      activeLayer?.baseName ?? "",
+    )})</option>`,
+  ]
+    .concat(
+      materialAssets.map(
+        (asset) =>
+          `<option value="${escapeHtml(asset.id)}" ${
+            activeLayer?.material === asset.id ? "selected" : ""
+          }>${escapeHtml(asset.displayName ?? asset.name)}</option>`,
+      ),
+    )
+    .join("");
   body.innerHTML = `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
@@ -121,13 +153,54 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
       <div class="detail-section">
         <div class="detail-section-title">Landscape Mode</div>
-        <div class="landscape-tool-segment" role="group" aria-label="Landscape sculpt tool">
-          ${LANDSCAPE_SCULPT_TOOLS.map(
-            (tool) => `<button type="button" data-landscape-tool="${tool}" class="${
-              settings.tool === tool ? "active" : ""
-            }" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`,
+        <div class="landscape-tool-segment landscape-tool-segment--two" role="group" aria-label="Landscape edit mode">
+          ${LANDSCAPE_EDIT_MODES.map(
+            (mode) => `<button type="button" data-landscape-mode="${mode}" class="${
+              settings.editMode === mode ? "active" : ""
+            }" ${lockedAttr}>${mode === "sculpt" ? "Sculpt" : "Paint"}</button>`,
           ).join("")}
         </div>
+        ${
+          settings.editMode === "paint"
+            ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape paint tool">
+              ${LANDSCAPE_PAINT_TOOLS.map(
+                (tool) => `<button type="button" data-landscape-paint-tool="${tool}" class="${
+                  settings.paintTool === tool ? "active" : ""
+                }" ${lockedAttr}>${formatLandscapePaintTool(tool)}</button>`,
+              ).join("")}
+            </div>
+            <div class="detail-subsection-title">Layer</div>
+            <div class="landscape-layer-list">
+              ${layers
+                .map(
+                  (layer) => `<button type="button" data-landscape-layer="${escapeHtml(layer.id)}" class="${
+                    settings.activeLayerId === layer.id ? "active" : ""
+                  }" ${lockedAttr}>
+                  <span class="landscape-layer-swatch" style="background:${escapeHtml(layer.color)}"></span>
+                  <span>${escapeHtml(layerDisplayName(layer))}</span>
+                </button>`,
+                )
+                .join("")}
+            </div>
+            <label class="detail-row">
+              <span>Material</span>
+              <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
+            </label>
+            <div class="detail-hint">Assigns a material to the active layer; the layer then takes the material's name and color.</div>
+            <button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`
+            : `<div class="landscape-tool-segment" role="group" aria-label="Landscape sculpt tool">
+              ${LANDSCAPE_SCULPT_TOOLS.map(
+                (tool) => `<button type="button" data-landscape-tool="${tool}" class="${
+                  settings.tool === tool ? "active" : ""
+                }" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`,
+              ).join("")}
+            </div>
+            <label class="detail-row">
+              <span>Flatten Target</span>
+              <input data-landscape-number="flattenTargetHeight" type="number" step="0.1"
+                value="${settings.flattenTargetHeight}" ${lockedAttr} />
+            </label>`
+        }
         <label class="detail-row">
           <span>Brush Size</span>
           <input data-landscape-number="brushSize" type="number" min="0.5" max="50" step="0.5"
@@ -144,9 +217,14 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
             value="${settings.falloff}" ${lockedAttr} />
         </label>
         <label class="detail-row">
-          <span>Flatten Target</span>
-          <input data-landscape-number="flattenTargetHeight" type="number" step="0.1"
-            value="${settings.flattenTargetHeight}" ${lockedAttr} />
+          <span>View</span>
+          <select data-landscape-view ${lockedAttr}>
+            ${LANDSCAPE_VIEW_MODES.map(
+              (mode) => `<option value="${mode}" ${
+                settings.viewMode === mode ? "selected" : ""
+              }>${formatLandscapeViewMode(mode)}</option>`,
+            ).join("")}
+          </select>
         </label>
       </div>
       <div class="detail-section">
@@ -162,6 +240,15 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   bindPositionRotation(options);
   bindNameAndLock(options);
 
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const editMode = button.dataset.landscapeMode as LandscapeEditMode | undefined;
+      if (!editMode || !LANDSCAPE_EDIT_MODES.includes(editMode)) return;
+      options.setLandscapeSculptSettings({ editMode });
+      renderLandscapeDetails(options);
+    });
+  });
+
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-tool]").forEach((button) => {
     button.addEventListener("click", () => {
       const tool = button.dataset.landscapeTool as LandscapeSculptTool | undefined;
@@ -169,6 +256,50 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       options.setLandscapeSculptSettings({ tool });
       renderLandscapeDetails(options);
     });
+  });
+
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-paint-tool]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const paintTool = button.dataset.landscapePaintTool as LandscapePaintTool | undefined;
+      if (!paintTool || !LANDSCAPE_PAINT_TOOLS.includes(paintTool)) return;
+      options.setLandscapeSculptSettings({ paintTool });
+      renderLandscapeDetails(options);
+    });
+  });
+
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-layer]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const activeLayerId = button.dataset.landscapeLayer;
+      if (!activeLayerId) return;
+      options.setLandscapeSculptSettings({ activeLayerId });
+      renderLandscapeDetails(options);
+    });
+  });
+
+  body.querySelector<HTMLSelectElement>("[data-landscape-view]")?.addEventListener(
+    "change",
+    (event) => {
+      const viewMode = (event.currentTarget as HTMLSelectElement).value as LandscapeViewMode;
+      if (!LANDSCAPE_VIEW_MODES.includes(viewMode)) return;
+      options.setLandscapeSculptSettings({ viewMode });
+      renderLandscapeDetails(options);
+    },
+  );
+
+  body
+    .querySelector<HTMLSelectElement>("[data-landscape-layer-material]")
+    ?.addEventListener("change", (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value;
+      options.setSelectedLandscapeLayerMaterial(
+        options.getLandscapeSculptSettings().activeLayerId,
+        value || null,
+      );
+      renderLandscapeDetails(options);
+    });
+
+  body.querySelector<HTMLButtonElement>("[data-landscape-fill]")?.addEventListener("click", () => {
+    options.fillSelectedLandscapeLayer(options.getLandscapeSculptSettings().activeLayerId);
+    renderLandscapeDetails(options);
   });
 
   body.querySelectorAll<HTMLInputElement>("[data-landscape-number]").forEach((input) => {
@@ -999,6 +1130,19 @@ function formatLandscapeTool(tool: LandscapeSculptTool): string {
   if (tool === "lower") return "Lower";
   if (tool === "smooth") return "Smooth";
   return "Flatten";
+}
+
+function formatLandscapePaintTool(tool: LandscapePaintTool): string {
+  if (tool === "paint") return "Paint";
+  if (tool === "erase") return "Erase";
+  return "Smooth Weights";
+}
+
+function formatLandscapeViewMode(mode: LandscapeViewMode): string {
+  if (mode === "height") return "Height";
+  if (mode === "slope") return "Slope";
+  if (mode === "layer") return "Layer Weight";
+  return "Lit";
 }
 
 function targetPointSelect(

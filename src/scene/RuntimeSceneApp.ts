@@ -214,6 +214,7 @@ import {
 } from "@engine/render-three/reflectionPlane";
 import {
   createFlatLandscapeData,
+  createLandscapeColliderPrimitive,
   createLandscapeObject,
   disposeLandscapeObject,
   resolveLandscape,
@@ -284,7 +285,7 @@ import {
   applyAssetUvwMapping,
   loadAssetUvw,
 } from "@/scene/assetUvwLoader";
-import { loadForgeMaterial } from "@/scene/materialAssets";
+import { loadForgeMaterial, loadForgeMaterialBaseColor } from "@/scene/materialAssets";
 import {
   applyMaterialSlotOverrides,
   assignedMaterialSlotIds,
@@ -341,6 +342,7 @@ import {
   complexAsSimpleAssetIds,
 } from "@engine/scene/collision";
 import {
+  COLLIDER_COMPONENT,
   readAudioComponent,
   readAIControllerComponent,
   readBehaviorComponent,
@@ -351,9 +353,10 @@ import {
   readParticleEmitterComponent,
   readScriptActorComponent,
   readTransformComponent,
+  TRANSFORM_COMPONENT,
 } from "@engine/scene/components";
-import type { ColliderShape, TransformComponent } from "@engine/scene/components";
-import type { Entity } from "@engine/scene/entity";
+import type { ColliderComponent, ColliderPrimitive, ColliderShape, TransformComponent } from "@engine/scene/components";
+import type { Entity, EntityComponentData } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import { VfxSubsystem, type VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 
@@ -719,6 +722,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
   /** Chunked terrain meshes built from `layout.landscapes`. */
   private landscapeObjects: LandscapeObject[] = [];
+  /** Static collider entities generated from collidable runtime landscapes. */
+  private landscapeColliderEntities: Entity[] = [];
+  /** Render host per generated landscape collider entity, for Play collision debug wires. */
+  private readonly landscapeColliderObjects = new Map<string, Object3D>();
   private characterObjects: Object3D[] = [];
   private characterRefs: RuntimeCharacterRef[] = [];
   private lightObjects: LightObjectRecord[] = [];
@@ -1146,6 +1153,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    this.landscapeColliderEntities = [];
+    this.landscapeColliderObjects.clear();
     this.disposeInstanceProbeMaterials();
     this.interactionPromptElement.remove();
     void this.engineApp.dispose();
@@ -1906,7 +1915,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // alongside the legacy instances/characters/lights.
     const sceneDocument: SceneDocument = {
       ...baseDocument,
-      entities: [...baseDocument.entities, ...this.actorEntities],
+      entities: [
+        ...baseDocument.entities,
+        ...this.actorEntities,
+        ...this.landscapeColliderEntities,
+      ],
     };
     await startSceneRuntime({
       sceneDocument,
@@ -2169,6 +2182,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    this.landscapeColliderEntities = [];
+    this.landscapeColliderObjects.clear();
 
     // Characters + actor host objects: clones over cached GLTFs, so remove only.
     for (const object of this.characterObjects) this.scene.remove(object);
@@ -3607,6 +3622,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       new LineBasicMaterial({ color: 0x49e6a2, depthTest: false, transparent: true }),
     );
     wire.userData.colliderShape = collider.shape;
+    if (collider.primitives?.some((primitive) => primitive.shape === "trimesh")) {
+      wire.userData.colliderPrimitives = collider.primitives;
+      wire.userData.colliderPrimitiveWire = true;
+    }
     wire.renderOrder = 999;
     wire.frustumCulled = false;
     this.scene.add(wire);
@@ -3621,14 +3640,31 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
   }
 
+  private colliderDebugObject(entityId: string): Object3D | undefined {
+    return this.actorObjects.get(entityId) ?? this.landscapeColliderObjects.get(entityId);
+  }
+
   private updateColliderDebugWire(entityId: string, wire: LineSegments): void {
-    const object = this.actorObjects.get(entityId);
+    const object = this.colliderDebugObject(entityId);
     const box = this.physicsSubsystem.colliderDebugBox(entityId);
     if (!object || !box) {
       wire.visible = false;
       return;
     }
     wire.visible = true;
+    if (wire.userData.colliderPrimitiveWire === true) {
+      if (wire.userData.builtPrimitiveWire !== true) {
+        wire.geometry.dispose();
+        wire.geometry = colliderTrimeshWireGeometry(
+          wire.userData.colliderPrimitives as ColliderPrimitive[] | undefined,
+        );
+        wire.userData.builtPrimitiveWire = true;
+      }
+      wire.position.copy(object.position);
+      wire.rotation.copy(object.rotation);
+      wire.scale.set(1, 1, 1);
+      return;
+    }
     // The baked collider size is static during Play, so rebuild the exact-size
     // outline only when it actually changes (never, in practice, after the first
     // resolve) instead of scaling a unit mesh — a non-uniform scale would distort
@@ -4144,12 +4180,68 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /** Resolved settings + world transform + sidecar data for a landscape layout actor. */
-  private landscapeItem(actor: LayoutLandscape, data: ForgeLandscapeData): LandscapeRenderItem {
-    return {
+  private landscapeItem(
+    actor: LayoutLandscape,
+    data: ForgeLandscapeData,
+    layerColors?: Record<string, string>,
+  ): LandscapeRenderItem {
+    const item: LandscapeRenderItem = {
       ...resolveLandscape(actor),
       position: [...actor.position],
       rotation: readRotation(actor),
       data,
+    };
+    if (layerColors) item.layerColors = layerColors;
+    return item;
+  }
+
+  /**
+   * Resolves the layerId→hex tint map for a landscape's material-assigned paint
+   * layers (Play parity with the editor). Layers without a material — or whose
+   * base color can't be read — are omitted so the preset color is used.
+   */
+  private async resolveRuntimeLandscapeLayerColors(
+    data: ForgeLandscapeData,
+  ): Promise<Record<string, string>> {
+    const manifest = this.assetManifest;
+    const colors: Record<string, string> = {};
+    if (!manifest) return colors;
+    await Promise.all(
+      data.layers.map(async (layer) => {
+        if (!layer.material) return;
+        const color = await loadForgeMaterialBaseColor(manifest, layer.material);
+        if (color) colors[layer.id] = color;
+      }),
+    );
+    return colors;
+  }
+
+  private landscapeColliderEntity(actor: LayoutLandscape, data: ForgeLandscapeData): Entity | null {
+    const item = this.landscapeItem(actor, data);
+    if (!item.collision) return null;
+    const primitive = createLandscapeColliderPrimitive(data);
+    const collider: ColliderComponent = {
+      shape: "box",
+      size: [...primitive.size] as [number, number, number],
+      isStatic: true,
+      isSensor: false,
+      navigationRole: "walkable",
+      primitives: [primitive],
+    };
+    if (primitive.center && !isZeroVec3(primitive.center)) {
+      collider.center = [...primitive.center] as [number, number, number];
+    }
+    return {
+      id: `landscape:${actor.id}`,
+      name: `${item.name} Collider`,
+      components: {
+        [TRANSFORM_COMPONENT]: {
+          position: [...actor.position] as [number, number, number],
+          rotation: [...item.rotation] as [number, number, number],
+          scale: [1, 1, 1],
+        },
+        [COLLIDER_COMPONENT]: collider as unknown as EntityComponentData,
+      },
     };
   }
 
@@ -4165,17 +4257,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Builds the Landscape terrain meshes (`layout.landscapes`) for Play — editor
-   * parity with {@link SceneApp.buildLandscapes}. Faz 1 collision is out of scope
-   * here (Faz 4); the terrain is visual-only in Play for now.
+   * Builds the Landscape terrain meshes (`layout.landscapes`) for Play. Collidable
+   * landscapes also emit a hidden static trimesh entity so Play physics, character
+   * movement and debug collision wires rebuild from the latest saved sidecar.
    */
   private async buildRuntimeLandscapes(): Promise<void> {
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
       const data = await this.fetchLandscapeData(actor.dataRef);
-      const object = createLandscapeObject(this.landscapeItem(actor, data));
+      const layerColors = await this.resolveRuntimeLandscapeLayerColors(data);
+      const object = createLandscapeObject(this.landscapeItem(actor, data, layerColors));
       this.landscapeObjects.push(object);
       this.scene.add(object);
+      const colliderEntity = this.landscapeColliderEntity(actor, data);
+      if (colliderEntity) {
+        this.landscapeColliderEntities.push(colliderEntity);
+        this.landscapeColliderObjects.set(colliderEntity.id, object);
+        this.addColliderDebugWire(colliderEntity);
+      }
     }
   }
 
@@ -4512,6 +4611,48 @@ function disposeSceneMeshResources(root: Object3D): void {
       material?.dispose();
     }
   });
+}
+
+function isZeroVec3(vec: readonly [number, number, number]): boolean {
+  return Math.abs(vec[0]) <= 1e-9 && Math.abs(vec[1]) <= 1e-9 && Math.abs(vec[2]) <= 1e-9;
+}
+
+function colliderTrimeshWireGeometry(primitives: readonly ColliderPrimitive[] | undefined): BufferGeometry {
+  const positions: number[] = [];
+  if (!primitives) {
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+    return geometry;
+  }
+  const pushEdge = (
+    a: readonly [number, number, number] | undefined,
+    b: readonly [number, number, number] | undefined,
+  ): void => {
+    if (!a || !b) return;
+    positions.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+  };
+  for (const primitive of primitives) {
+    if (
+      primitive.shape !== "trimesh" ||
+      !primitive.vertices ||
+      !primitive.indices ||
+      primitive.vertices.length < 3 ||
+      primitive.indices.length < 3
+    ) {
+      continue;
+    }
+    for (let index = 0; index + 2 < primitive.indices.length; index += 3) {
+      const a = primitive.vertices[primitive.indices[index]!];
+      const b = primitive.vertices[primitive.indices[index + 1]!];
+      const c = primitive.vertices[primitive.indices[index + 2]!];
+      pushEdge(a, b);
+      pushEdge(b, c);
+      pushEdge(c, a);
+    }
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
+  return geometry;
 }
 
 /**

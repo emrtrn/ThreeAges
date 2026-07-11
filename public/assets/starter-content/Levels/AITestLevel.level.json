@@ -1,151 +1,46 @@
 {
   "schema": 1,
-  "name": "TestLevel",
+  "name": "__playwright-smoke",
   "loadGroups": [],
   "instances": [
     {
-      "assetId": "starter-sm-platform",
+      "assetId": "shape:plane",
       "placements": []
     },
     {
-      "assetId": "floor-400x400",
+      "assetId": "shape:cube",
       "placements": [
         {
           "position": [
-            -25.25,
             0,
-            -27.5
+            1,
+            0
           ],
-          "scaleLocked": true,
-          "materialSlot": "white-material",
-          "rotationYDeg": 0,
-          "scale": 15
-        }
-      ]
-    },
-    {
-      "assetId": "shape-cube",
-      "placements": [
-        {
-          "position": [
-            -20,
-            0,
-            7
-          ],
-          "scaleLocked": true,
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": 2
-        },
-        {
-          "position": [
-            -20,
-            0,
-            -2
-          ],
-          "scaleLocked": true,
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": 2
-        },
-        {
-          "position": [
-            -15.7,
-            0,
-            1.83
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
+          "name": "Smoke Checkpoint",
+          "collisionPreset": "trigger",
+          "sensor": true,
+          "behavior": {
+            "script": "checkpoint",
+            "params": {
+              "slot": "quick"
+            }
+          },
           "scale": [
-            2,
-            2,
+            4,
+            4,
             4
           ]
-        },
-        {
-          "position": [
-            14,
-            0,
-            16
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            2,
-            1
-          ]
-        },
-        {
-          "position": [
-            10,
-            0,
-            12
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            2,
-            1
-          ]
-        },
-        {
-          "position": [
-            14,
-            0,
-            12
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            2,
-            1
-          ]
-        },
-        {
-          "position": [
-            18,
-            0,
-            12
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            2,
-            1
-          ]
-        },
-        {
-          "position": [
-            14,
-            0,
-            8
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            2,
-            1
-          ]
         }
       ]
-    },
-    {
-      "assetId": "sm-pickup-coin",
-      "placements": []
     },
     {
       "assetId": "marker:playerStart",
       "placements": [
         {
           "position": [
-            3.93,
             0,
-            2.45
+            0,
+            0
           ],
           "name": "Player Start",
           "collision": false,
@@ -155,11 +50,118 @@
       ]
     },
     {
+      "assetId": "starter-sm-wall",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-crate",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-platform",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-ramp",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-pillar",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-sphere",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-cube",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-cylinder",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-plane",
+      "placements": []
+    },
+    {
+      "assetId": "starter-sm-cone",
+      "placements": []
+    },
+    {
+      "assetId": "base-basic-pbr",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pano",
+      "placements": []
+    },
+    {
       "assetId": "sm-chair",
       "placements": []
     },
     {
-      "assetId": "sm-chair-ktx2",
+      "assetId": "shape-cone",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cube",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cylender",
+      "placements": []
+    },
+    {
+      "assetId": "shape-cylinder",
+      "placements": []
+    },
+    {
+      "assetId": "shape-narrowcapsule",
+      "placements": []
+    },
+    {
+      "assetId": "shape-pipe-180",
+      "placements": []
+    },
+    {
+      "assetId": "shape-pipe-90",
+      "placements": []
+    },
+    {
+      "assetId": "shape-pipe",
+      "placements": []
+    },
+    {
+      "assetId": "shape-quadpyramid",
+      "placements": []
+    },
+    {
+      "assetId": "shape-sphere",
+      "placements": []
+    },
+    {
+      "assetId": "shape-plane",
+      "placements": []
+    },
+    {
+      "assetId": "floor-400x400",
+      "placements": [
+        {
+          "position": [
+            0,
+            0,
+            -1.5
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "wall-door-400x300",
       "placements": []
     },
     {
@@ -167,1012 +169,105 @@
       "placements": [
         {
           "position": [
-            9.84,
+            -4.18,
             0,
-            3.71
+            -4.49
           ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            6.03,
-            0,
-            -2.61
-          ],
-          "materialSlot": "gray-material",
+          "materialSlot": "white-material",
+          "groupId": "group-mrerp2ou-3ka",
           "rotationYDeg": 0,
           "rotation": [
             0,
             90,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -0.36,
-            0,
-            1.21
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            180,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            3.46,
-            0,
-            7.58
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            270,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            9.84,
-            0,
-            1.26
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            3.58,
-            0,
-            -2.61
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -0.36,
-            0,
-            3.66
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            -180,
-            0,
-            -180
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            5.91,
-            0,
-            7.58
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            17.84,
-            0,
-            3.69
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -60,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            21.82,
-            0,
-            10.66
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -105,
-            0
-          ],
-          "scale": [
-            1.8,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            12.95,
-            0,
-            -14.63
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -15,
-            0
-          ],
-          "scale": [
-            1.8,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -12.25,
-            0,
-            -5.65
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            75,
-            0
-          ],
-          "scale": [
-            1.8,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            6.01,
-            0,
-            -10.61
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            30,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -8.36,
-            0,
-            1.23
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            -180,
-            60,
-            -180
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            3.48,
-            0,
-            15.58
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            -180,
-            -30,
-            -180
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            17.84,
-            0,
-            1.26
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            60,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            3.58,
-            0,
-            -10.61
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            -180,
-            30,
-            -180
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -8.36,
-            0,
-            3.66
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            -180,
-            -60,
-            -180
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            5.91,
-            0,
-            15.58
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -30,
-            0
-          ],
-          "scale": [
-            2,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            12.85,
-            -0.05,
-            19.6
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            15,
-            0
-          ],
-          "scale": [
-            1.8,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            21.89,
-            0,
-            -5.76
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            105,
-            0
-          ],
-          "scale": [
-            1.8,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -3.38,
-            0,
-            -14.59
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            195,
-            0
-          ],
-          "scale": [
-            1.8,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            21.9,
-            0,
-            -5.64
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            3,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -3.32,
-            0,
-            -14.67
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": [
-            3,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -12.42,
-            0,
-            10.56
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            -180,
-            0,
-            -180
-          ],
-          "scale": [
-            3,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            12.81,
-            0,
-            19.64
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": [
-            3,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            33.78,
-            0,
-            -5.54
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": [
-            4,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -3.22,
-            0,
-            -26.55
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            4,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -24.3,
-            0,
-            10.46
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": [
-            4,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            12.71,
-            0,
-            31.52
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            -180,
-            0,
-            -180
-          ],
-          "scale": [
-            4,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            21.9,
-            0,
-            10.57
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            3,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            12.89,
-            0,
-            -14.67
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": [
-            3,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -12.42,
-            0,
-            -5.65
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            -180,
-            0,
-            -180
-          ],
-          "scale": [
-            3,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -3.4,
-            0,
-            19.64
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": [
-            3,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -0.11,
-            0,
-            4.66
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -135,
-            0
-          ],
-          "scale": [
-            5,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            2.61,
-            0,
-            7.38
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -135,
-            0
-          ],
-          "scale": [
-            5,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -11.51,
-            0.03,
-            21.61
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            135,
             0
           ],
           "scale": 1
         },
         {
           "position": [
-            -12.09,
+            -4.28,
             0,
-            -5.59
+            -8.59
           ],
-          "materialSlot": "gray-material",
+          "navigationRole": "obstacleOnly",
+          "materialSlot": "white-material",
+          "groupId": "group-mrerp2ou-3ka",
           "rotationYDeg": 0,
-          "scale": [
-            2.1,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -7.03,
-            0,
-            -9.06
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "scale": [
-            2.6,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -3.61,
-            0,
-            -5.66
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
           "scale": 1
-        },
-        {
-          "position": [
-            -3.61,
-            0,
-            -9.11
-          ],
-          "materialSlot": "gray-material",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": [
-            0.5,
-            1,
-            1
-          ]
         }
       ]
     },
     {
-      "assetId": "wall-door-400x300",
+      "assetId": "wall-window-400x300",
       "placements": [
         {
           "position": [
-            2.75,
+            -4.28,
             0,
-            -2.5
+            -4.39
           ],
+          "materialSlot": "white-material",
+          "groupId": "group-mrerp2ou-3ka",
           "rotationYDeg": 0,
           "scale": 1
-        },
-        {
-          "position": [
-            2.75,
-            0,
-            7.5
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -0.25,
-            0,
-            4.5
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            9.75,
-            0,
-            4.5
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            6.82,
-            0,
-            7.45
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            45,
-            0
-          ],
-          "scale": [
-            1.02,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            -0.22,
-            0,
-            0.41
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            45,
-            0
-          ],
-          "scale": [
-            1.02,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            9.71,
-            0,
-            0.43
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            135,
-            0
-          ],
-          "scale": [
-            1.02,
-            1,
-            1
-          ]
-        },
-        {
-          "position": [
-            2.69,
-            0,
-            7.45
-          ],
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            135,
-            0
-          ],
-          "scale": [
-            1.02,
-            1,
-            1
-          ]
         }
       ]
     },
     {
-      "assetId": "pillar-50x500",
-      "placements": [
-        {
-          "position": [
-            2.69,
-            0,
-            -2.5
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            -10.27,
-            0,
-            -12.74
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            6.8,
-            0,
-            -2.5
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            20.02,
-            0,
-            -12.65
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            9.75,
-            0,
-            0.44
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            9.75,
-            0,
-            4.5
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            6.84,
-            0,
-            7.5
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            20.01,
-            0,
-            17.65
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            2.73,
-            0,
-            7.5
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            -0.24,
-            0,
-            4.61
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        },
-        {
-          "position": [
-            -0.24,
-            0,
-            0.41
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            1,
-            0.61,
-            1
-          ]
-        }
-      ]
+      "assetId": "sm-coin",
+      "placements": []
+    },
+    {
+      "assetId": "coin",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pickup-health",
+      "placements": []
+    },
+    {
+      "assetId": "sm-pickup-coin",
+      "placements": []
+    },
+    {
+      "assetId": "sm-picku-health",
+      "placements": []
+    },
+    {
+      "assetId": "sm-trigger-pad",
+      "placements": []
+    },
+    {
+      "assetId": "axe",
+      "placements": []
+    },
+    {
+      "assetId": "archery-firstage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "archery-firstage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "archery-firstage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "ar-1",
+      "placements": []
+    },
+    {
+      "assetId": "marker:ambientSound",
+      "placements": []
+    },
+    {
+      "assetId": "sm-leftarm",
+      "placements": []
+    },
+    {
+      "assetId": "sm-bump",
+      "placements": []
     },
     {
       "assetId": "sm-linearstair",
@@ -1180,25 +275,123 @@
     },
     {
       "assetId": "sm-ramp",
+      "placements": [
+        {
+          "position": [
+            -6.28,
+            -2.17,
+            1.91
+          ],
+          "navigationRole": "walkable",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -10.48,
+            -1.38,
+            -0.09
+          ],
+          "navigationRole": "walkable",
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "position": [
+            -8.48,
+            -0.58,
+            -4.29
+          ],
+          "navigationRole": "walkable",
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 1
+        },
+        {
+          "position": [
+            -6.28,
+            0.22,
+            -4.29
+          ],
+          "navigationRole": "walkable",
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "sm-rightarm",
+      "placements": []
+    },
+    {
+      "assetId": "sm-chair-ktx2",
+      "placements": []
+    },
+    {
+      "assetId": "test",
+      "placements": []
+    },
+    {
+      "assetId": "wall-400x400",
+      "placements": []
+    },
+    {
+      "assetId": "wall-500x500",
+      "placements": []
+    },
+    {
+      "assetId": "sm-assetplatform",
+      "placements": []
+    },
+    {
+      "assetId": "pillar-50x500",
+      "placements": []
+    },
+    {
+      "assetId": "wall-400x200",
       "placements": []
     }
   ],
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
+    "backgroundColor": "#ffffff",
+    "killZ": -10,
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
+    "hudWidget": "hud",
+    "pauseMenuWidget": "menu",
+    "locale": "en"
   },
   "skyAtmosphere": {
     "rayleigh": 1,
     "turbidity": 1,
-    "mie": 0.004,
-    "mieDirectionalG": 0.7,
+    "mie": 0.002,
+    "mieDirectionalG": 0.8,
+    "exposure": 1,
     "skyLightCapture": {
-      "intensity": 0.4
+      "intensity": 0.6
     }
+  },
+  "cloudLayer": {
+    "color": "#ffffff",
+    "coverage": 0.4,
+    "density": 0.4,
+    "softness": 0.4,
+    "scale": 4,
+    "speed": 0.2
   },
   "postProcess": {
     "toneMapping": "aces",
+    "antialias": "smaa",
     "exposure": 1,
     "bloom": {
       "enabled": true,
@@ -1206,179 +399,67 @@
       "intensity": 1,
       "radius": 1
     },
+    "vignette": {
+      "intensity": 1,
+      "offset": 1
+    },
+    "chromaticAberration": {
+      "amount": 0.05
+    },
+    "grain": {
+      "intensity": 0.5
+    },
+    "dof": {
+      "focusDistance": 10,
+      "aperture": 1,
+      "maxBlur": 1
+    },
     "ao": {
       "radius": 1,
       "intensity": 1
-    }
+    },
+    "saturation": 1,
+    "contrast": 1,
+    "temperature": 0,
+    "tint": 0
   },
   "lights": [
     {
       "id": "sun",
       "type": "directional",
       "position": [
-        4.75,
+        -1.87,
         4,
-        2.5
+        -3.35
       ],
       "name": "Sun",
       "rotation": [
-        -55,
-        35,
+        -30,
+        0,
         0
       ],
       "color": "#ffffff",
-      "intensity": 2,
+      "intensity": 5,
       "castShadow": true
     }
   ],
-  "aiNavigationVolumes": [
+  "reflectionPlanes": [],
+  "reflectiveSurfaces": [],
+  "reflectionCaptures": [],
+  "blockingVolumes": [],
+  "aiNavigationVolumes": [],
+  "targetPoints": [],
+  "landscapes": [
     {
-      "id": "ai-navigation-volume-1",
+      "id": "landscape-1",
       "position": [
-        4.77,
-        2,
-        2.4
+        0,
+        0,
+        0
       ],
-      "name": "AI Navigation Volume",
-      "scale": 1,
-      "size": [
-        60,
-        5,
-        60
-      ],
-      "agentRadius": 0.1
+      "dataRef": "landscapes/landscape-1.landscape.json",
+      "name": "Landscape"
     }
   ],
-  "targetPoints": [
-    {
-      "id": "target-point-1",
-      "position": [
-        -0.01,
-        0.05,
-        7.41
-      ],
-      "name": "TP1",
-      "scale": 1,
-      "nextTargetPoint": "target-point-2",
-      "waitTime": 1,
-      "acceptanceRadius": 0.2
-    },
-    {
-      "id": "target-point-2",
-      "position": [
-        -5.15,
-        0.05,
-        12.32
-      ],
-      "name": "TP2",
-      "scale": 1,
-      "nextTargetPoint": "target-point-3",
-      "waitTime": 0,
-      "acceptanceRadius": 0.2
-    },
-    {
-      "id": "target-point-3",
-      "position": [
-        -11.9,
-        0,
-        19.08
-      ],
-      "name": "TP3",
-      "scale": 1,
-      "nextTargetPoint": "target-point-1",
-      "waitTime": 2,
-      "acceptanceRadius": 0.2
-    },
-    {
-      "id": "target-point-4",
-      "position": [
-        0.32,
-        0,
-        -11.06
-      ],
-      "name": "Target Point",
-      "nextTargetPoint": "target-point-5"
-    },
-    {
-      "id": "target-point-5",
-      "position": [
-        -8.07,
-        0,
-        -11.94
-      ],
-      "name": "Target Point 2",
-      "nextTargetPoint": "target-point-4"
-    },
-    {
-      "id": "target-point-6",
-      "position": [
-        -5.83,
-        0,
-        -4.59
-      ],
-      "name": "Target Point 3",
-      "nextTargetPoint": "target-point-7"
-    },
-    {
-      "id": "target-point-7",
-      "position": [
-        -10.18,
-        0,
-        -3.7
-      ],
-      "name": "Target Point 4",
-      "nextTargetPoint": "target-point-6",
-      "startPoint": true
-    }
-  ],
-  "actors": [
-    {
-      "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
-      "position": [
-        -0.68,
-        0.05,
-        6
-      ],
-      "rotationYDeg": 0,
-      "scale": 1
-    },
-    {
-      "classRef": "assets/starter-content/Actors/TestRange_Sentry.actor.json",
-      "position": [
-        -16.58,
-        0,
-        -3.37
-      ],
-      "rotationYDeg": 0,
-      "scale": 1
-    },
-    {
-      "classRef": "assets/starter-content/Actors/TestRange_AlarmButton.actor.json",
-      "position": [
-        -0.74,
-        0.35,
-        -17.31
-      ],
-      "rotationYDeg": 0,
-      "scale": 1
-    },
-    {
-      "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
-      "position": [
-        -3.71,
-        0,
-        -13.85
-      ],
-      "rotationYDeg": 0
-    },
-    {
-      "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
-      "position": [
-        -11.31,
-        0,
-        -4.9
-      ],
-      "rotationYDeg": 0
-    }
-  ]
+  "actors": []
 }

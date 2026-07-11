@@ -20691,6 +20691,29 @@
         "bytes": 1464
       },
       "license": "Unknown"
+    },
+    {
+      "id": "land-level",
+      "name": "Land.Level",
+      "assetType": "level",
+      "category": "Levels",
+      "path": "assets/starter-content/Levels/Land.level.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 95
+      },
+      "license": "Unknown"
     }
   ]
 }

@@ -1065,11 +1065,17 @@ function validateLandscapeLayer(value: unknown, path: string): Record<string, un
   if (!Array.isArray(input.weights) || !input.weights.every((weight) => typeof weight === "number")) {
     throw new Error(`${path}.weights must be a number array`);
   }
-  return {
+  const layer: Record<string, unknown> = {
     id: input.id,
     name: input.name,
     weights: input.weights.map((weight) => Math.min(1, Math.max(0, Number(weight)))),
   };
+  if (typeof input.material === "string" && input.material.length > 0) {
+    layer.material = input.material;
+  } else if (input.material !== undefined && input.material !== null) {
+    throw new Error(`${path}.material must be a string, null, or omitted`);
+  }
+  return layer;
 }
 
 /**

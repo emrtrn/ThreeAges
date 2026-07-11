@@ -9,27 +9,37 @@ import {
 
 import type { Vec3 } from "@engine/scene/layout";
 import {
+  LANDSCAPE_DEFAULT_LAYERS,
   LANDSCAPE_QUADS_PER_CHUNK,
+  ensureLandscapeLayers,
   type ForgeLandscapeData,
   type ResolvedLandscape,
 } from "@engine/scene/landscape";
 
 export {
+  DEFAULT_LANDSCAPE_MATERIAL,
   resolveLandscape,
   LANDSCAPE_DEFAULTS,
+  LANDSCAPE_DEFAULT_LAYERS,
   uniqueLandscapeId,
   uniqueLandscapeName,
   landscapeSizeForPreset,
   createFlatLandscapeData,
+  createLandscapeColliderPrimitive,
   landscapeDataPath,
+  ensureLandscapeLayers,
+  normalizeLandscapeLayerWeights,
   LANDSCAPE_MIN_VERTICES,
   LANDSCAPE_MAX_VERTICES,
   LANDSCAPE_QUADS_PER_CHUNK,
   type ResolvedLandscape,
   type ForgeLandscapeData,
+  type ForgeLandscapeMaterialDef,
   type LandscapeSize,
   type LandscapeSizePreset,
   type LandscapeLayerWeights,
+  type LandscapeDefaultLayer,
+  type LandscapeLayerId,
 } from "@engine/scene/landscape";
 
 /**
@@ -54,22 +64,90 @@ export interface LandscapeDirtyBounds {
   z1: number;
 }
 
+export type LandscapeViewMode = "lit" | "height" | "slope" | "layer";
+
+/** Per-layer color override (layerId → hex), resolved from assigned materials. */
+export type LandscapeLayerColors = Record<string, string>;
+
 /** Resolved settings + world transform + sidecar data the binding needs to build a landscape. */
 export interface LandscapeRenderItem extends ResolvedLandscape {
   position: Vec3;
   /** XYZ-order Euler rotation in degrees. */
   rotation: Vec3;
   data: ForgeLandscapeData;
+  viewMode?: LandscapeViewMode;
+  activeLayerId?: string;
+  /** Layer tint overrides (assigned-material base colors); falls back to preset colors. */
+  layerColors?: LandscapeLayerColors;
 }
 
-/** Flat terrain-green fill color for the Faz 1 unpainted landscape material. */
-const LANDSCAPE_DEFAULT_COLOR = "#5c8a4a";
+const DEFAULT_LAYER_COLOR = new Color(LANDSCAPE_DEFAULT_LAYERS[0]!.color);
 
 function heightAt(data: ForgeLandscapeData, x: number, z: number): number {
   const { verticesX, verticesZ } = data.size;
   const cx = Math.min(Math.max(x, 0), verticesX - 1);
   const cz = Math.min(Math.max(z, 0), verticesZ - 1);
   return data.heights[cz * verticesX + cx] ?? 0;
+}
+
+function heightRange(data: ForgeLandscapeData): { min: number; max: number } {
+  let min = Infinity;
+  let max = -Infinity;
+  for (const height of data.heights) {
+    if (!Number.isFinite(height)) continue;
+    min = Math.min(min, height);
+    max = Math.max(max, height);
+  }
+  if (!Number.isFinite(min) || !Number.isFinite(max)) return { min: 0, max: 1 };
+  if (Math.abs(max - min) < 0.0001) return { min: min - 0.5, max: max + 0.5 };
+  return { min, max };
+}
+
+function layerColor(layerId: string, colors?: LandscapeLayerColors): Color {
+  const override = colors?.[layerId];
+  if (override) return new Color(override);
+  const defaults = LANDSCAPE_DEFAULT_LAYERS.find((layer) => layer.id === layerId);
+  return new Color(defaults?.color ?? DEFAULT_LAYER_COLOR);
+}
+
+function setColor(values: Float32Array, vertexIndex: number, color: Color): void {
+  values[vertexIndex * 3] = color.r;
+  values[vertexIndex * 3 + 1] = color.g;
+  values[vertexIndex * 3 + 2] = color.b;
+}
+
+function landscapeVertexColor(
+  data: ForgeLandscapeData,
+  vertexIndex: number,
+  height: number,
+  normalY: number,
+  viewMode: LandscapeViewMode,
+  activeLayerId: string,
+  range: { min: number; max: number },
+  colors?: LandscapeLayerColors,
+): Color {
+  if (viewMode === "height") {
+    const t = (height - range.min) / Math.max(0.0001, range.max - range.min);
+    return new Color().setRGB(0.16 + t * 0.62, 0.28 + t * 0.5, 0.2 + t * 0.68);
+  }
+  if (viewMode === "slope") {
+    const slope = Math.min(1, Math.max(0, 1 - normalY));
+    return new Color().setRGB(0.15 + slope * 0.75, 0.62 - slope * 0.34, 0.22 + slope * 0.32);
+  }
+
+  if (viewMode === "layer") {
+    const layer = data.layers.find((entry) => entry.id === activeLayerId) ?? data.layers[0];
+    const weight = Math.min(1, Math.max(0, layer?.weights[vertexIndex] ?? 0));
+    return layerColor(layer?.id ?? activeLayerId, colors).multiplyScalar(0.2 + weight * 0.8);
+  }
+
+  const color = new Color(0, 0, 0);
+  for (const layer of data.layers) {
+    const weight = Math.min(1, Math.max(0, layer.weights[vertexIndex] ?? 0));
+    if (weight <= 0) continue;
+    color.add(layerColor(layer.id, colors).multiplyScalar(weight));
+  }
+  return color.r + color.g + color.b > 0 ? color : DEFAULT_LAYER_COLOR.clone();
 }
 
 /**
@@ -83,6 +161,9 @@ function buildChunkGeometry(
   x1: number,
   z0: number,
   z1: number,
+  viewMode: LandscapeViewMode,
+  activeLayerId: string,
+  layerColors?: LandscapeLayerColors,
 ): BufferGeometry {
   const { spacing, heightScale, verticesX, verticesZ } = data.size;
   const cols = x1 - x0 + 1;
@@ -91,6 +172,8 @@ function buildChunkGeometry(
   const positions = new Float32Array(vertexCount * 3);
   const normals = new Float32Array(vertexCount * 3);
   const uvs = new Float32Array(vertexCount * 2);
+  const colors = new Float32Array(vertexCount * 3);
+  const range = heightRange(data);
 
   // World-space origin centers the full grid on the actor's position.
   const originX = ((verticesX - 1) * spacing) / 2;
@@ -114,11 +197,28 @@ function buildChunkGeometry(
       const dz = up - down;
       const length = Math.sqrt(dx * dx + 4 * spacing * spacing + dz * dz) || 1;
       normals[vertexIndex * 3] = dx / length;
-      normals[vertexIndex * 3 + 1] = (2 * spacing) / length;
+      const normalY = (2 * spacing) / length;
+      normals[vertexIndex * 3 + 1] = normalY;
       normals[vertexIndex * 3 + 2] = dz / length;
 
       uvs[vertexIndex * 2] = x / (verticesX - 1);
       uvs[vertexIndex * 2 + 1] = z / (verticesZ - 1);
+
+      const globalVertexIndex = z * verticesX + x;
+      setColor(
+        colors,
+        vertexIndex,
+        landscapeVertexColor(
+          data,
+          globalVertexIndex,
+          height,
+          normalY,
+          viewMode,
+          activeLayerId,
+          range,
+          layerColors,
+        ),
+      );
     }
   }
 
@@ -145,6 +245,7 @@ function buildChunkGeometry(
   geometry.setAttribute("position", new BufferAttribute(positions, 3));
   geometry.setAttribute("normal", new BufferAttribute(normals, 3));
   geometry.setAttribute("uv", new BufferAttribute(uvs, 2));
+  geometry.setAttribute("color", new BufferAttribute(colors, 3));
   if (indices.length > 0) geometry.setIndex(new BufferAttribute(indices, 1));
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
@@ -152,20 +253,27 @@ function buildChunkGeometry(
 }
 
 /** Splits the vertex grid into `quadsPerChunk`-sized chunk meshes under one shared material. */
-function buildLandscapeChunkMeshes(data: ForgeLandscapeData, color: string): Mesh[] {
+function buildLandscapeChunkMeshes(
+  data: ForgeLandscapeData,
+  viewMode: LandscapeViewMode,
+  activeLayerId: string,
+  colors?: LandscapeLayerColors,
+): Mesh[] {
   const { verticesX, verticesZ } = data.size;
   const quadsPerChunk = Math.max(1, data.chunks?.quadsPerChunk || LANDSCAPE_QUADS_PER_CHUNK);
+  ensureLandscapeLayers(data);
   const material = new MeshStandardMaterial({
-    color: new Color(color),
+    color: new Color("#ffffff"),
     roughness: 1,
     metalness: 0,
+    vertexColors: true,
   });
   const meshes: Mesh[] = [];
   for (let z0 = 0; z0 < verticesZ - 1; z0 += quadsPerChunk) {
     const z1 = Math.min(z0 + quadsPerChunk, verticesZ - 1);
     for (let x0 = 0; x0 < verticesX - 1; x0 += quadsPerChunk) {
       const x1 = Math.min(x0 + quadsPerChunk, verticesX - 1);
-      const geometry = buildChunkGeometry(data, x0, x1, z0, z1);
+      const geometry = buildChunkGeometry(data, x0, x1, z0, z1, viewMode, activeLayerId, colors);
       const mesh = new Mesh(geometry, material);
       mesh.name = "landscape-chunk";
       mesh.receiveShadow = true;
@@ -181,7 +289,9 @@ function buildLandscapeChunkMeshes(data: ForgeLandscapeData, color: string): Mes
 export function createLandscapeObject(item: LandscapeRenderItem): LandscapeObject {
   const group = new Group();
   group.name = item.name;
-  for (const mesh of buildLandscapeChunkMeshes(item.data, LANDSCAPE_DEFAULT_COLOR)) {
+  const viewMode = item.viewMode ?? "lit";
+  const activeLayerId = item.activeLayerId ?? LANDSCAPE_DEFAULT_LAYERS[0]!.id;
+  for (const mesh of buildLandscapeChunkMeshes(item.data, viewMode, activeLayerId, item.layerColors)) {
     group.add(mesh);
   }
   applyLandscapeTransform(group, item);
@@ -219,13 +329,26 @@ export function updateLandscapeObjectGeometry(
   object: LandscapeObject,
   data: ForgeLandscapeData,
   dirty: LandscapeDirtyBounds,
+  viewMode: LandscapeViewMode = "lit",
+  activeLayerId: string = LANDSCAPE_DEFAULT_LAYERS[0]!.id,
+  colors?: LandscapeLayerColors,
 ): void {
+  ensureLandscapeLayers(data);
   object.traverse((child) => {
     if (!(child instanceof Mesh)) return;
     const chunk = child.userData.landscapeChunk as LandscapeDirtyBounds | undefined;
     if (!chunk || !intersectsDirtyBounds(chunk, dirty)) return;
     child.geometry.dispose();
-    child.geometry = buildChunkGeometry(data, chunk.x0, chunk.x1, chunk.z0, chunk.z1);
+    child.geometry = buildChunkGeometry(
+      data,
+      chunk.x0,
+      chunk.x1,
+      chunk.z0,
+      chunk.z1,
+      viewMode,
+      activeLayerId,
+      colors,
+    );
   });
 }
 

@@ -162,15 +162,21 @@ import {
   createFlatLandscapeData,
   createLandscapeObject,
   disposeLandscapeObject,
+  ensureLandscapeLayers,
+  LANDSCAPE_DEFAULT_LAYERS,
   landscapeDataPath,
+  normalizeLandscapeLayerWeights,
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
   updateLandscapeObjectGeometry,
   type ForgeLandscapeData,
   type LandscapeDirtyBounds,
+  type LandscapeLayerColors,
+  type LandscapeLayerWeights,
   type LandscapeObject,
   type LandscapeRenderItem,
+  type LandscapeViewMode,
 } from "@engine/render-three/landscape";
 import {
   applyReflectiveSurfaceTransform,
@@ -294,7 +300,7 @@ import {
 } from "./markerPrimitives";
 import { createPlayerStartIcon } from "./playerStartIcon";
 import { createAmbientSoundIcon } from "./ambientSoundIcon";
-import { loadForgeMaterial } from "./materialAssets";
+import { loadForgeMaterial, loadForgeMaterialBaseColor } from "./materialAssets";
 import {
   readPivot,
   readRotation,
@@ -492,22 +498,60 @@ export interface TargetPointReference {
 }
 
 export type LandscapeSculptTool = "raise" | "lower" | "smooth" | "flatten";
+export type LandscapeEditMode = "sculpt" | "paint";
+export type LandscapePaintTool = "paint" | "erase" | "smoothWeights";
 
 export interface LandscapeSculptSettings {
+  editMode: LandscapeEditMode;
   tool: LandscapeSculptTool;
+  paintTool: LandscapePaintTool;
+  activeLayerId: string;
+  viewMode: LandscapeViewMode;
   brushSize: number;
   strength: number;
   falloff: number;
   flattenTargetHeight: number;
 }
 
+/**
+ * A landscape paint layer as shown in the Details panel. The display name is
+ * resolved by the panel from `material` against its asset list (so it matches
+ * the picker labels); SceneApp supplies the base placeholder name and the
+ * resolved swatch color.
+ */
+export interface LandscapeLayerView {
+  id: string;
+  /** Built-in placeholder name (Grass/Dirt/Rock/Snow). */
+  baseName: string;
+  /** Swatch/tint color — the assigned material's base color, else the preset color. */
+  color: string;
+  /** Assigned material asset id, or `null` for the built-in preset look. */
+  material: string | null;
+}
+
 interface LandscapeSculptStroke {
   pointerId: number;
   landscapeIndex: number;
   landscapeId: string;
+  mode: LandscapeEditMode;
   beforeHeights: number[];
+  beforeLayers: LandscapeLayerWeights[];
   changed: boolean;
   dirty: LandscapeDirtyBounds | null;
+}
+
+function cloneLandscapeLayers(layers: readonly LandscapeLayerWeights[]): LandscapeLayerWeights[] {
+  return layers.map((layer) => {
+    const clone: LandscapeLayerWeights = {
+      id: layer.id,
+      name: layer.name,
+      weights: [...layer.weights],
+    };
+    if (typeof layer.material === "string" && layer.material.length > 0) {
+      clone.material = layer.material;
+    }
+    return clone;
+  });
 }
 
 function mergeLandscapeDirtyBounds(
@@ -658,8 +702,14 @@ export class SceneApp {
   private landscapeData = new Map<string, ForgeLandscapeData>();
   /** Landscape ids whose sidecar has changed since the last successful save. */
   private landscapeDataDirty = new Set<string>();
+  /** Resolved base colors of materials assigned to landscape layers, keyed by material id. */
+  private landscapeLayerColorCache = new Map<string, string>();
   private landscapeSculptSettings: LandscapeSculptSettings = {
+    editMode: "sculpt",
     tool: "raise",
+    paintTool: "paint",
+    activeLayerId: LANDSCAPE_DEFAULT_LAYERS[0]!.id,
+    viewMode: "lit",
     brushSize: 6,
     strength: 0.25,
     falloff: 2,
@@ -929,6 +979,10 @@ export class SceneApp {
         return objects;
       },
       gizmo: () => ({ visible: this.gizmoGroup.visible, pickables: this.gizmoPickables }),
+      // Locked objects are click-through in the viewport: picking skips them and
+      // falls through to whatever is behind, so a locked object can only be
+      // re-selected by unlocking it in the Scene Outliner.
+      isSelectionLocked: (selection) => this.isSelectionLocked(selection),
     });
 
     if (this.editorEnabled) {
@@ -1297,16 +1351,39 @@ export class SceneApp {
   }
 
   setLandscapeSculptSettings(patch: Partial<LandscapeSculptSettings>): LandscapeSculptSettings {
+    const previousViewMode = this.landscapeSculptSettings.viewMode;
+    const previousLayerId = this.landscapeSculptSettings.activeLayerId;
     const next = { ...this.landscapeSculptSettings, ...patch };
+    const layerIds = new Set<string>(LANDSCAPE_DEFAULT_LAYERS.map((layer) => layer.id));
     this.landscapeSculptSettings = {
-      tool: next.tool,
+      editMode: next.editMode === "paint" ? "paint" : "sculpt",
+      tool: ["raise", "lower", "smooth", "flatten"].includes(next.tool) ? next.tool : "raise",
+      paintTool: ["paint", "erase", "smoothWeights"].includes(next.paintTool)
+        ? next.paintTool
+        : "paint",
+      activeLayerId: layerIds.has(next.activeLayerId)
+        ? next.activeLayerId
+        : LANDSCAPE_DEFAULT_LAYERS[0]!.id,
+      viewMode: ["lit", "height", "slope", "layer"].includes(next.viewMode)
+        ? next.viewMode
+        : "lit",
       brushSize: clamp(next.brushSize, 0.5, 50),
       strength: clamp(next.strength, 0.01, 2),
       falloff: clamp(next.falloff, 0.25, 8),
       flattenTargetHeight: clamp(next.flattenTargetHeight, -1000, 1000),
     };
     this.updateLandscapeBrushCursorScale();
-    this.onStatus?.(`Landscape ${this.landscapeSculptSettings.tool}`, "info");
+    if (
+      previousViewMode !== this.landscapeSculptSettings.viewMode ||
+      previousLayerId !== this.landscapeSculptSettings.activeLayerId
+    ) {
+      this.refreshAllLandscapeGeometry();
+    }
+    const mode =
+      this.landscapeSculptSettings.editMode === "paint"
+        ? this.landscapeSculptSettings.paintTool
+        : this.landscapeSculptSettings.tool;
+    this.onStatus?.(`Landscape ${mode}`, "info");
     return this.getLandscapeSculptSettings();
   }
 
@@ -4503,12 +4580,62 @@ export class SceneApp {
 
   /** Resolved settings + world transform + sidecar data for a landscape layout actor. */
   private landscapeItem(actor: LayoutLandscape): LandscapeRenderItem {
+    const data = this.landscapeData.get(actor.id) ?? createFlatLandscapeData("medium");
+    ensureLandscapeLayers(data);
     return {
       ...resolveLandscape(actor),
       position: [...actor.position],
       rotation: readRotation(actor),
-      data: this.landscapeData.get(actor.id) ?? createFlatLandscapeData("medium"),
+      data,
+      viewMode: this.landscapeSculptSettings.viewMode,
+      activeLayerId: this.landscapeSculptSettings.activeLayerId,
+      layerColors: this.resolveLandscapeLayerColors(data),
     };
+  }
+
+  /**
+   * Builds the layerId→hex tint map for a landscape from its layers' assigned
+   * materials, reading cached base colors (populated by `warmLandscapeLayerColors`).
+   * Layers with no material — or whose color hasn't loaded yet — are omitted so the
+   * render binding falls back to the preset swatch.
+   */
+  private resolveLandscapeLayerColors(data: ForgeLandscapeData): LandscapeLayerColors {
+    const colors: LandscapeLayerColors = {};
+    for (const layer of data.layers) {
+      const materialId = layer.material;
+      if (!materialId) continue;
+      const color = this.landscapeLayerColorCache.get(materialId);
+      if (color) colors[layer.id] = color;
+    }
+    return colors;
+  }
+
+  /**
+   * Fetches (once, then caches) the base color of every material assigned to a
+   * landscape's layers, then refreshes that landscape's geometry so newly loaded
+   * tints appear. Safe to call repeatedly; skips ids already cached.
+   */
+  private async warmLandscapeLayerColors(index: number): Promise<void> {
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return;
+    const manifest = this.manifest;
+    if (!manifest) return;
+    const pending = data.layers
+      .map((layer) => layer.material)
+      .filter((id): id is string => Boolean(id) && !this.landscapeLayerColorCache.has(id!));
+    if (pending.length === 0) return;
+    let loadedAny = false;
+    await Promise.all(
+      Array.from(new Set(pending)).map(async (materialId) => {
+        const color = await loadForgeMaterialBaseColor(manifest, materialId);
+        if (color) {
+          this.landscapeLayerColorCache.set(materialId, color);
+          loadedAny = true;
+        }
+      }),
+    );
+    if (loadedAny) this.refreshLandscapeGeometry(index, this.landscapeFullDirtyBounds(data));
   }
 
   /**
@@ -4528,6 +4655,7 @@ export class SceneApp {
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
       const data = await this.fetchLandscapeData(actor.dataRef);
+      if (ensureLandscapeLayers(data)) this.landscapeDataDirty.add(actor.id);
       this.landscapeData.set(actor.id, data);
     }
     landscapes.forEach((actor, index) => {
@@ -4538,6 +4666,9 @@ export class SceneApp {
       });
       this.landscapeObjects.push(object);
       this.scene.add(object);
+    });
+    landscapes.forEach((_actor, index) => {
+      void this.warmLandscapeLayerColors(index);
     });
   }
 
@@ -4646,7 +4777,9 @@ export class SceneApp {
       pointerId: event.pointerId,
       landscapeIndex: selectedIndex,
       landscapeId: actor.id,
+      mode: this.landscapeSculptSettings.editMode,
       beforeHeights: [...data.heights],
+      beforeLayers: cloneLandscapeLayers(data.layers),
       changed: false,
       dirty: null,
     };
@@ -4679,22 +4812,30 @@ export class SceneApp {
     if (!actor || !data || !stroke.changed) return true;
     const before = stroke.beforeHeights;
     const after = [...data.heights];
+    const beforeLayers = stroke.beforeLayers;
+    const afterLayers = cloneLandscapeLayers(data.layers);
     const dirty = stroke.dirty;
     const selection: Selection = { kind: "landscape", index: stroke.landscapeIndex };
-    const applyHeights = (heights: number[]): void => {
+    const applySnapshot = (heights: number[], layers: LandscapeLayerWeights[]): void => {
       const current = this.landscapeData.get(stroke.landscapeId);
       if (!current) return;
       current.heights = [...heights];
+      current.layers = cloneLandscapeLayers(layers);
+      ensureLandscapeLayers(current);
       this.landscapeDataDirty.add(stroke.landscapeId);
       if (dirty) this.refreshLandscapeGeometry(stroke.landscapeIndex, dirty);
       this.select(selection);
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();
     };
+    const label =
+      stroke.mode === "paint"
+        ? `Landscape ${this.landscapeSculptSettings.paintTool}`
+        : `Landscape ${this.landscapeSculptSettings.tool}`;
     this.executeCommand({
-      label: `Landscape ${this.landscapeSculptSettings.tool}`,
-      redo: () => applyHeights(after),
-      undo: () => applyHeights(before),
+      label,
+      redo: () => applySnapshot(after, afterLayers),
+      undo: () => applySnapshot(before, beforeLayers),
     });
     return true;
   }
@@ -4704,7 +4845,32 @@ export class SceneApp {
     const object = this.landscapeObjects[index];
     const data = actor ? this.landscapeData.get(actor.id) : null;
     if (!actor || !object || !data) return;
-    updateLandscapeObjectGeometry(object, data, dirty);
+    updateLandscapeObjectGeometry(
+      object,
+      data,
+      dirty,
+      this.landscapeSculptSettings.viewMode,
+      this.landscapeSculptSettings.activeLayerId,
+      this.resolveLandscapeLayerColors(data),
+    );
+  }
+
+  private landscapeFullDirtyBounds(data: ForgeLandscapeData): LandscapeDirtyBounds {
+    return {
+      x0: 0,
+      x1: data.size.verticesX - 1,
+      z0: 0,
+      z1: data.size.verticesZ - 1,
+    };
+  }
+
+  private refreshAllLandscapeGeometry(): void {
+    const landscapes = this.layout?.landscapes ?? [];
+    landscapes.forEach((actor, index) => {
+      const data = this.landscapeData.get(actor.id);
+      if (!data) return;
+      this.refreshLandscapeGeometry(index, this.landscapeFullDirtyBounds(data));
+    });
   }
 
   private applyLandscapeSculptDab(index: number, localHit: Vector3): void {
@@ -4712,7 +4878,10 @@ export class SceneApp {
     const data = actor ? this.landscapeData.get(actor.id) : null;
     const stroke = this.landscapeSculptStroke;
     if (!actor || !data || !stroke) return;
-    const dirty = this.editLandscapeHeights(data, localHit);
+    const dirty =
+      stroke.mode === "paint"
+        ? this.editLandscapeWeights(data, localHit)
+        : this.editLandscapeHeights(data, localHit);
     if (!dirty) return;
     stroke.changed = true;
     stroke.dirty = stroke.dirty ? mergeLandscapeDirtyBounds(stroke.dirty, dirty) : dirty;
@@ -4761,6 +4930,107 @@ export class SceneApp {
     }
 
     return changed ? { x0: minX, x1: maxX, z0: minZ, z1: maxZ } : null;
+  }
+
+  private editLandscapeWeights(data: ForgeLandscapeData, localHit: Vector3): LandscapeDirtyBounds | null {
+    ensureLandscapeLayers(data);
+    const { verticesX, verticesZ, spacing } = data.size;
+    const radius = this.landscapeSculptSettings.brushSize;
+    const originX = ((verticesX - 1) * spacing) / 2;
+    const originZ = ((verticesZ - 1) * spacing) / 2;
+    const centerX = (localHit.x + originX) / spacing;
+    const centerZ = (localHit.z + originZ) / spacing;
+    const minX = Math.max(0, Math.floor(centerX - radius / spacing));
+    const maxX = Math.min(verticesX - 1, Math.ceil(centerX + radius / spacing));
+    const minZ = Math.max(0, Math.floor(centerZ - radius / spacing));
+    const maxZ = Math.min(verticesZ - 1, Math.ceil(centerZ + radius / spacing));
+    const sourceLayers = cloneLandscapeLayers(data.layers);
+    const activeIndex = Math.max(
+      0,
+      data.layers.findIndex((layer) => layer.id === this.landscapeSculptSettings.activeLayerId),
+    );
+    let changed = false;
+
+    for (let z = minZ; z <= maxZ; z += 1) {
+      for (let x = minX; x <= maxX; x += 1) {
+        const worldX = x * spacing - originX;
+        const worldZ = z * spacing - originZ;
+        const distance = Math.hypot(worldX - localHit.x, worldZ - localHit.z);
+        if (distance > radius) continue;
+        const falloff = Math.pow(clamp(1 - distance / radius, 0, 1), this.landscapeSculptSettings.falloff);
+        if (falloff <= 0) continue;
+        const vertexIndex = z * verticesX + x;
+        if (this.applyLandscapeWeightEdit(data, sourceLayers, vertexIndex, x, z, activeIndex, falloff)) {
+          changed = true;
+        }
+      }
+    }
+
+    return changed ? { x0: minX, x1: maxX, z0: minZ, z1: maxZ } : null;
+  }
+
+  private applyLandscapeWeightEdit(
+    data: ForgeLandscapeData,
+    sourceLayers: readonly LandscapeLayerWeights[],
+    vertexIndex: number,
+    x: number,
+    z: number,
+    activeIndex: number,
+    falloff: number,
+  ): boolean {
+    const amount = clamp(this.landscapeSculptSettings.strength * falloff, 0, 1);
+    const before = data.layers.map((layer) => layer.weights[vertexIndex] ?? 0);
+
+    if (this.landscapeSculptSettings.paintTool === "smoothWeights") {
+      for (const [layerIndex, layer] of data.layers.entries()) {
+        let total = 0;
+        let count = 0;
+        for (let dz = -1; dz <= 1; dz += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            const sx = x + dx;
+            const sz = z + dz;
+            if (sx < 0 || sx >= data.size.verticesX || sz < 0 || sz >= data.size.verticesZ) continue;
+            total += sourceLayers[layerIndex]?.weights[sz * data.size.verticesX + sx] ?? 0;
+            count += 1;
+          }
+        }
+        const average = count > 0 ? total / count : before[layerIndex] ?? 0;
+        layer.weights[vertexIndex] = (before[layerIndex] ?? 0) + (average - (before[layerIndex] ?? 0)) * amount;
+      }
+      normalizeLandscapeLayerWeights(data, vertexIndex);
+      return data.layers.some(
+        (layer, index) => Math.abs((layer.weights[vertexIndex] ?? 0) - (before[index] ?? 0)) > 0.0001,
+      );
+    }
+
+    const activeLayer = data.layers[activeIndex];
+    if (!activeLayer) return false;
+    if (this.landscapeSculptSettings.paintTool === "erase") {
+      const removed = Math.min(activeLayer.weights[vertexIndex] ?? 0, amount);
+      if (removed <= 0.0001) return false;
+      activeLayer.weights[vertexIndex] = (activeLayer.weights[vertexIndex] ?? 0) - removed;
+      const baseLayer = data.layers[0]!;
+      if (activeIndex !== 0) baseLayer.weights[vertexIndex] = (baseLayer.weights[vertexIndex] ?? 0) + removed;
+      normalizeLandscapeLayerWeights(data, vertexIndex);
+      return true;
+    }
+
+    const target = Math.min(1, (activeLayer.weights[vertexIndex] ?? 0) + amount);
+    const remaining = 1 - target;
+    const otherTotal = data.layers.reduce(
+      (total, layer, index) => total + (index === activeIndex ? 0 : layer.weights[vertexIndex] ?? 0),
+      0,
+    );
+    activeLayer.weights[vertexIndex] = target;
+    for (const [layerIndex, layer] of data.layers.entries()) {
+      if (layerIndex === activeIndex) continue;
+      const current = layer.weights[vertexIndex] ?? 0;
+      layer.weights[vertexIndex] = otherTotal > 0 ? (current / otherTotal) * remaining : 0;
+    }
+    normalizeLandscapeLayerWeights(data, vertexIndex);
+    return data.layers.some(
+      (layer, index) => Math.abs((layer.weights[vertexIndex] ?? 0) - (before[index] ?? 0)) > 0.0001,
+    );
   }
 
   private nextLandscapeHeight(
@@ -4910,6 +5180,114 @@ export class SceneApp {
   setSelectedLandscape(patch: { collision?: boolean }): void {
     if (this.selection?.kind !== "landscape") return;
     this.setLandscape(this.selection.index, patch);
+  }
+
+  /**
+   * Resolved paint layers for the selected landscape: each layer's display name
+   * and swatch follow its assigned material (falling back to the built-in preset).
+   * Returns the preset four layers if no landscape is selected.
+   */
+  getSelectedLandscapeLayers(): LandscapeLayerView[] {
+    const presets = LANDSCAPE_DEFAULT_LAYERS;
+    const presetById = new Map(presets.map((preset) => [preset.id as string, preset] as const));
+    const layers =
+      this.selection?.kind === "landscape"
+        ? this.landscapeData.get(this.layout?.landscapes?.[this.selection.index]?.id ?? "")?.layers
+        : undefined;
+    const source = layers ?? presets.map((preset) => ({ id: preset.id, name: preset.name, weights: [] }));
+    return source.map((layer) => {
+      const preset = presetById.get(layer.id);
+      const baseName = preset?.name ?? layer.name;
+      const presetColor = preset?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color;
+      const materialId = ("material" in layer && layer.material) || null;
+      return {
+        id: layer.id,
+        baseName,
+        color: materialId
+          ? this.landscapeLayerColorCache.get(materialId) ?? presetColor
+          : presetColor,
+        material: materialId,
+      };
+    });
+  }
+
+  /**
+   * Assigns (or clears, with `null`) the material of one paint layer on the
+   * selected landscape. Undoable; the layer's display name and terrain tint then
+   * follow the material. Only the layer's `material` changes — weights are kept.
+   */
+  setSelectedLandscapeLayerMaterial(layerId: string, materialId: string | null): void {
+    if (this.selection?.kind !== "landscape") return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return;
+    ensureLandscapeLayers(data);
+    const layer = data.layers.find((entry) => entry.id === layerId);
+    if (!layer) return;
+    const nextMaterial = materialId && materialId.length > 0 ? materialId : null;
+    if ((layer.material ?? null) === nextMaterial) return;
+    const before = cloneLandscapeLayers(data.layers);
+    const after = cloneLandscapeLayers(data.layers).map((entry) =>
+      entry.id === layerId
+        ? nextMaterial
+          ? { ...entry, material: nextMaterial }
+          : { id: entry.id, name: entry.name, weights: entry.weights }
+        : entry,
+    );
+    const dirty = this.landscapeFullDirtyBounds(data);
+    const selection: Selection = { kind: "landscape", index };
+    const applyLayers = (layers: LandscapeLayerWeights[]): void => {
+      const current = this.landscapeData.get(actor.id);
+      if (!current) return;
+      current.layers = cloneLandscapeLayers(layers);
+      ensureLandscapeLayers(current);
+      this.landscapeDataDirty.add(actor.id);
+      this.refreshLandscapeGeometry(index, dirty);
+      void this.warmLandscapeLayerColors(index);
+      this.select(selection);
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: nextMaterial ? "Assign Landscape Layer Material" : "Clear Landscape Layer Material",
+      redo: () => applyLayers(after),
+      undo: () => applyLayers(before),
+    });
+  }
+
+  fillSelectedLandscapeLayer(layerId = this.landscapeSculptSettings.activeLayerId): void {
+    if (this.selection?.kind !== "landscape") return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return;
+    ensureLandscapeLayers(data);
+    if (!data.layers.some((layer) => layer.id === layerId)) return;
+    const before = cloneLandscapeLayers(data.layers);
+    const after = cloneLandscapeLayers(data.layers).map((layer) => ({
+      ...layer,
+      weights: layer.weights.map(() => (layer.id === layerId ? 1 : 0)),
+    }));
+    const dirty = this.landscapeFullDirtyBounds(data);
+    const selection: Selection = { kind: "landscape", index };
+    const applyLayers = (layers: LandscapeLayerWeights[]): void => {
+      const current = this.landscapeData.get(actor.id);
+      if (!current) return;
+      current.layers = cloneLandscapeLayers(layers);
+      ensureLandscapeLayers(current);
+      this.landscapeDataDirty.add(actor.id);
+      this.refreshLandscapeGeometry(index, dirty);
+      this.select(selection);
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: "Landscape Fill Layer",
+      redo: () => applyLayers(after),
+      undo: () => applyLayers(before),
+    });
+    this.onStatus?.(`Filled Landscape layer: ${layerId}`, "info");
   }
 
   /**

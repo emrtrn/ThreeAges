@@ -134,6 +134,11 @@ import {
   rightVectorFromRotation,
   upVectorFromRotation,
 } from "../engine/scene/transform";
+import {
+  createFlatLandscapeData,
+  createLandscapeColliderPrimitive,
+  ensureLandscapeLayers,
+} from "../engine/scene/landscape";
 import { EngineApp } from "../engine/core/EngineApp";
 import type { Subsystem } from "../engine/core/Subsystem";
 import { AnimationSubsystem } from "../engine/render-three/animationSubsystem";
@@ -17637,6 +17642,89 @@ check("validateLandscapeData accepts a valid flat heightfield and rejects malfor
   });
   assert.equal(payload.path, "landscapes/landscape-1.landscape.json");
   assert.deepEqual(payload.landscape, data);
+});
+
+check("landscape layer material is allowlisted, round-trips, and survives normalization", () => {
+  const size = { verticesX: 65, verticesZ: 65, spacing: 1, heightScale: 1 };
+  const heights = new Array(65 * 65).fill(0);
+  const weights = new Array(65 * 65).fill(0);
+  const validated = validateLandscapeData({
+    schema: 1,
+    type: "landscape",
+    size,
+    heights,
+    layers: [
+      { id: "grass", name: "Grass", material: "mat-rocky-soil", weights: weights.map(() => 1) },
+      { id: "dirt", name: "Dirt", weights },
+    ],
+  });
+  const layers = validated.layers as Array<Record<string, unknown>>;
+  assert.equal(layers[0]!.material, "mat-rocky-soil");
+  assert.equal("material" in layers[1]!, false);
+
+  // A non-string, non-null material rejects.
+  assert.throws(() =>
+    validateLandscapeData({
+      schema: 1,
+      type: "landscape",
+      size,
+      heights,
+      layers: [{ id: "grass", name: "Grass", material: 5, weights }],
+    }),
+  );
+
+  // ensureLandscapeLayers backfills the four presets while preserving assignments.
+  const data = createFlatLandscapeData("small");
+  data.layers[1]!.material = "mat-desert-sand";
+  data.layers = [data.layers[1]!, data.layers[0]!]; // reorder to prove id-keyed preservation
+  ensureLandscapeLayers(data);
+  assert.equal(data.layers.length, 4);
+  assert.equal(data.layers.find((layer) => layer.id === "dirt")?.material, "mat-desert-sand");
+  assert.equal(data.layers.find((layer) => layer.id === "grass")?.material, undefined);
+});
+
+check("createLandscapeColliderPrimitive builds a centered up-facing heightfield trimesh", () => {
+  const data = createFlatLandscapeData("small");
+  data.size = { verticesX: 3, verticesZ: 3, spacing: 2, heightScale: 1 };
+  data.heights = [
+    0, 0, 0,
+    0, 1, 0,
+    0, 0, 0,
+  ];
+  data.layers = [];
+  const primitive = createLandscapeColliderPrimitive(data);
+  assert.equal(primitive.shape, "trimesh");
+  assert.equal(primitive.vertices.length, 9);
+  assert.equal(primitive.indices.length, 24);
+  assert.deepEqual(primitive.vertices[0], [-2, 0, -2]);
+  assert.deepEqual(primitive.vertices[4], [0, 1, 0]);
+  assert.deepEqual(primitive.size, [4, 1, 4]);
+  assert.deepEqual(primitive.center, [0, 0.5, 0]);
+  assert.deepEqual(primitive.indices.slice(0, 6), [0, 3, 1, 1, 3, 4]);
+
+  const physics = new PhysicsSubsystem();
+  physics.setEntities([
+    {
+      id: "landscape:unit",
+      components: {
+        Transform: { position: [10, 2, -3], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: primitive.size,
+          center: primitive.center,
+          isStatic: true,
+          isSensor: false,
+          navigationRole: "walkable",
+          primitives: [primitive],
+        },
+      },
+    },
+  ]);
+  assert.equal(physics.staticBlockerAabbs().length, 0, "walkable landscape triangles are not wall blockers");
+  const surfaces = physics.staticSurfaceTriangles();
+  assert.equal(surfaces.length, 8);
+  assert.ok(surfaces.every((surface) => surface.normalY > 0.6), "landscape surfaces are up-facing");
+  assert.equal(physics.staticNavigationSurfaceTriangles().length, 8);
 });
 
 check("resolveBlockingVolume fills defaults and overrides per field", () => {
