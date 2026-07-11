@@ -50,6 +50,31 @@ export function triangleUpNormal(
 }
 
 /**
+ * Full unit normal of a triangle (outward, CCW winding), or `null` for a
+ * degenerate (zero-area) triangle. The `y` component matches {@link triangleUpNormal};
+ * the horizontal `(x, z)` components give the downhill direction on an up-facing
+ * surface, which the slide response uses to push a pawn off a too-steep slope.
+ */
+export function triangleNormal(
+  a: readonly [number, number, number],
+  b: readonly [number, number, number],
+  c: readonly [number, number, number],
+): readonly [number, number, number] | null {
+  const ux = b[0] - a[0];
+  const uy = b[1] - a[1];
+  const uz = b[2] - a[2];
+  const vx = c[0] - a[0];
+  const vy = c[1] - a[1];
+  const vz = c[2] - a[2];
+  const nx = uy * vz - uz * vy;
+  const ny = uz * vx - ux * vz;
+  const nz = ux * vy - uy * vx;
+  const len = Math.hypot(nx, ny, nz);
+  if (len <= EPSILON) return null;
+  return [nx / len, ny / len, nz / len];
+}
+
+/**
  * Interpolated surface Y at world `(x, z)` if that point lies within the
  * triangle's XZ projection, else `null` (outside the triangle, or the triangle is
  * vertical/degenerate in XZ so it carries no walkable surface). Uses barycentric

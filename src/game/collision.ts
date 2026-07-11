@@ -16,7 +16,7 @@
  * player stands inside (its collider AABB) from freezing horizontal movement,
  * and avoids snapping out of pre-existing overlaps.
  */
-import { sampleTriangleHeight, type GroundTriangle } from "./slopeSurface";
+import { sampleTriangleHeight, triangleNormal, type GroundTriangle } from "./slopeSurface";
 import type { NavigationRole } from "@engine/scene/collision";
 
 export interface Aabb3 {
@@ -102,6 +102,13 @@ export interface GroundHit {
    * always walkable.
    */
   readonly walkable: boolean;
+  /**
+   * Unit normal of the surface under the probe, present only for slope-surface
+   * hits (absent for flat AABB tops). The horizontal `(x, z)` components point
+   * downhill; the slide response (`walkable === false`) uses this to push the pawn
+   * off a too-steep surface instead of letting it stand frozen.
+   */
+  readonly slopeNormal?: readonly [number, number, number];
 }
 
 /** Half-open interval overlap: touching edges (equal) do not count, so a flush slide is allowed. */
@@ -551,7 +558,13 @@ function highestWalkableSurface(
       const top = sampleTriangleHeight(surface, px, pz);
       if (top === null || !acceptsTop(top)) continue;
       const walkable = surface.normalY >= minSlopeCos;
-      best = betterGroundHit(best, { floorY: top, blocker: null, walkable }, options);
+      // The full normal (downhill direction) is only needed to slide off a
+      // too-steep surface, so compute it only for non-walkable hits.
+      const slopeNormal = walkable ? null : triangleNormal(surface.a, surface.b, surface.c);
+      const hit: GroundHit = slopeNormal
+        ? { floorY: top, blocker: null, walkable, slopeNormal }
+        : { floorY: top, blocker: null, walkable };
+      best = betterGroundHit(best, hit, options);
     }
   }
   return best;

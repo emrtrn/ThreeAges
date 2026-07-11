@@ -23,6 +23,7 @@ import {
   resolvePlanarMovementSubstepped,
   safeSubstepLength,
   type Aabb3,
+  type GroundHit,
   type PlanarDelta,
 } from "./collision";
 import { slopeCosFromDegrees } from "./slopeSurface";
@@ -103,6 +104,14 @@ const ZERO_DELTA: readonly [number, number, number] = [0, 0, 0];
 /** Horizontal knockback damping (per second) and the speed below which it stops. */
 const LAUNCH_HORIZONTAL_DAMPING = 4;
 const LAUNCH_MIN_SPEED = 0.05;
+/**
+ * Downhill slide (Öneri C) applied while grounded on a surface steeper than the
+ * character's slope limit: gravity along the slope accelerates the pawn downhill,
+ * damped toward a terminal speed. The damping also bleeds the slide away once the
+ * pawn reaches walkable ground, and the pawn stops once it drops below the min.
+ */
+const SLIDE_DAMPING = 3;
+const SLIDE_MIN_SPEED = 0.05;
 
 export class CharacterMovementSubsystem implements Subsystem {
   readonly id = CHARACTER_MOVEMENT_SUBSYSTEM_ID;
@@ -119,6 +128,12 @@ export class CharacterMovementSubsystem implements Subsystem {
    * of input movement. Vertical launch feeds the existing vertical-motion state.
    */
   private launchXZ = new Map<EntityId, [number, number]>();
+  /**
+   * Active downhill slide velocity (units/s) per character from standing on a
+   * too-steep surface (Öneri C). Accumulates under gravity along the slope and
+   * decays once the pawn reaches walkable ground.
+   */
+  private slideXZ = new Map<EntityId, [number, number]>();
   private readonly getGravityY: () => number;
   private readonly getControlYaw: (entityId: EntityId) => number | null | undefined;
   private readonly isPlayerControlled: (entityId: EntityId) => boolean;
@@ -154,6 +169,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     this.vertical.clear();
     this.velocity.clear();
     this.launchXZ.clear();
+    this.slideXZ.clear();
     this.runtimes = [];
     for (const entity of entities) {
       const transform = readTransformComponent(entity);
@@ -173,6 +189,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     this.vertical.clear();
     this.velocity.clear();
     this.launchXZ.clear();
+    this.slideXZ.clear();
   }
 
   resetEntityTransform(entityId: EntityId, transform: TransformComponent): void {
@@ -185,6 +202,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     // knockback is cancelled too — a respawned pawn starts at rest.
     this.velocity.delete(entityId);
     this.launchXZ.delete(entityId);
+    this.slideXZ.delete(entityId);
   }
 
   update(engine: EngineUpdateContext): void {
@@ -411,7 +429,55 @@ export class CharacterMovementSubsystem implements Subsystem {
       }
     }
     runtime.transform.position[1] = vertical.state.y;
+    this.applySteepSlide(runtime, engine, ground, vertical.state.grounded, platformCtx.aabbs);
     return vertical.state;
+  }
+
+  /**
+   * Downhill slide off a too-steep surface (Öneri C). While grounded on a
+   * non-walkable slope, gravity along the incline accelerates the pawn downhill
+   * (direction from the surface normal's horizontal component), damped toward a
+   * terminal speed and resolved against walls. On walkable ground / airborne the
+   * accumulated slide simply decays, so the pawn coasts to a stop once it reaches a
+   * surface it can stand on.
+   */
+  private applySteepSlide(
+    runtime: CharacterMovementRuntime,
+    engine: EngineUpdateContext,
+    ground: GroundHit | null,
+    grounded: boolean,
+    platformAabbs: readonly Aabb3[],
+  ): void {
+    const dt = Math.max(0, engine.deltaSeconds);
+    const prev = this.slideXZ.get(runtime.id) ?? [0, 0];
+    let sx = prev[0];
+    let sz = prev[1];
+    const normal = ground?.slopeNormal;
+    if (grounded && ground && ground.walkable === false && normal) {
+      const horiz = Math.hypot(normal[0], normal[2]);
+      if (horiz > 1e-4) {
+        // Horizontal projection of an up-facing normal points downhill; gravity's
+        // component along the slope is `g·sinθ`, and its horizontal part `g·sinθ·cosθ`.
+        const sinT = Math.min(1, horiz);
+        const cosT = Math.max(0, normal[1]);
+        const accel = Math.abs(this.getGravityY() * runtime.movement.gravityScale) * sinT * cosT;
+        sx += (normal[0] / horiz) * accel * dt;
+        sz += (normal[2] / horiz) * accel * dt;
+      }
+    }
+    const damp = Math.exp(-SLIDE_DAMPING * dt);
+    sx *= damp;
+    sz *= damp;
+    if (Math.hypot(sx, sz) < SLIDE_MIN_SPEED) {
+      this.slideXZ.delete(runtime.id);
+      return;
+    }
+    this.slideXZ.set(runtime.id, [sx, sz]);
+    if (dt > 0) {
+      const moved = this.resolvePlanarAgainstBlockers(runtime, { dx: sx * dt, dz: sz * dt }, platformAabbs);
+      runtime.transform.position[0] += moved.dx;
+      runtime.transform.position[2] += moved.dz;
+    }
   }
 
   /** Applies + decays this frame's horizontal knockback (A6 LaunchCharacter). */

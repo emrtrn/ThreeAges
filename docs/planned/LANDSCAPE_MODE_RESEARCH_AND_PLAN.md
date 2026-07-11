@@ -726,3 +726,44 @@ Foliage, water, edit layers ve world streaming ayrı çalışmalar olarak planla
 Landscape Splines ise Landscape Mode içinde sonraki Road Tool fazı olarak kalmalı.
 Bu ayrım sistemi uygulanabilir tutar ve Mesh Paint / Foliage gibi diğer ana
 araçlarla sınırları temiz bırakır.
+
+## Bilinen Sorunlar
+
+### AÇIK — Landscape üzerinde koşarken yürünebilir eğimde düşme (2026-07-11)
+
+**Belirti:** Play modunda landscape üzerinde **yürürken** sorunsuz geçilen,
+**dik olmayan / yürünebilir** eğimli alanlarda **koşarken (sprint) karakter
+düşüyor**. Sorun hıza bağlı: yürümede olmuyor, koşmada oluyor.
+
+**Not — bu sorun DEĞİL:** Çok dik yüzeylerde durma + aşağı kayma davranışı doğru
+çalışıyor (Öneri A + C). Yani sorun dik yüzeylerde değil; düşülen yüzeyler
+gerçekte yürünebilir (limitin altında) eğime sahip.
+
+**Şu ana kadar yapılanlar (bu sorunu tam çözmedi):**
+- **Öneri A** — dik yüzeyler artık zemin olarak destekleniyor (içinden düşme
+  bitti), `walkable` bayrağıyla işaretleniyor. (`src/game/collision.ts`
+  `highestWalkableSurface`, `GroundHit.walkable`.)
+- **Ölçekli ground-snap** — zemin-takip aşağı sondası (`maxStepDown`) artık kare
+  başına yatay ilerlemeyle ölçekleniyor: `maxStepDown + planarDistance ·
+  tan(slopeLimit)`, `GROUND_SNAP_MAX_SLOPE_DEG = 55` ile sınırlı.
+  (`src/game/characterMovementSystem.ts` `groundSnapDown`.) Koşarken düşmeyi
+  azaltması beklendi ama kullanıcı hâlâ düşme bildiriyor.
+- **Öneri C** — yürünemez yüzeyde yokuş aşağı kayma. (`applySteepSlide`,
+  `slopeNormal`, `triangleNormal`.)
+
+**Açık hipotezler / bir sonraki adım için ipuçları:**
+- Ölçekli ground-snap yeterli değil olabilir; asıl kayıp **dik/hızlı iniş** yerine
+  başka bir mekanizmada olabilir (ör. `stepSmoothSpeed`'in yüksek hız + büyük
+  dt'de `floorY`'yi yeterince hızlı indirememesi → karakter yüzeyin üstünde asılı
+  kalıp bir sonraki sondada zemini kaçırması).
+- Landscape trimesh **çok sayıda üçgen** üretiyor; `staticSurfaceTriangles()` her
+  kare tüm üçgenleri geziyor (`findGroundAt` → `highestWalkableSurface` O(üçgen)).
+  Bu FPS'i düşürüp `dt`'yi 100ms tavanına itebilir; büyük `dt` = büyük kare-adımı
+  = ski-jump. **Uzamsal hızlandırma (broad-phase/grid) yok** — muhtemel asıl kök
+  neden burası. Doğrulama: `?debug` overlay ile FPS/dt'yi ve düşme anını izle.
+- ASCENDING (yokuş yukarı hızlı) tarafı `maxStepUp` ile sınırlı ve ölçeklenmiyor;
+  crest/tümsek üstünden koşarken kısa bir kopma olabilir.
+
+**Sonraki muhtemel iş:** (a) ground probe için landscape'e uzamsal indeks/kafes,
+(b) descending ground-follow'u `stepSmoothSpeed`'den bağımsızlaştırma, (c) gerekiyorsa
+Öneri B (dik eğimi yatay engel sayma). Önce `?debug` ile dt/FPS ölçülmeli.

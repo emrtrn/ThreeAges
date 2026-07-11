@@ -12650,6 +12650,66 @@ check("CharacterMovement subsystem slows the walk while climbing stairs and reco
   assert.ok(speeds[189] > 1.95, `recovered on the landing: ${speeds[189]}`);
 });
 
+check("CharacterMovement subsystem slides downhill off a too-steep surface (Öneri C)", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  // A 48° slope: steeper than the 45° walk limit (non-walkable) but shallower than
+  // the 50° wall gate, so it is exactly the surface the pawn now stands on and
+  // must slide down instead of standing frozen. Downhill is +Z (uphill toward -Z).
+  const SLOPE = (48 * Math.PI) / 180;
+  const tan = Math.tan(SLOPE);
+  const nY = Math.cos(SLOPE);
+  const yAt = (z: number): number => -z * tan;
+  // Vertices wound so the geometric normal is up-facing (ny > 0) and tilts toward +Z.
+  const rampA: GroundTriangle = { a: [-3, yAt(-3), -3], b: [-3, yAt(3), 3], c: [3, yAt(3), 3], normalY: nY };
+  const rampB: GroundTriangle = { a: [-3, yAt(-3), -3], b: [3, yAt(3), 3], c: [3, yAt(-3), -3], normalY: nY };
+  const physics = {
+    staticBlockerAabbs: () => [],
+    staticSurfaceTriangles: () => [rampA, rampB],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:slider",
+    components: {
+      Transform: { position: [0, yAt(0), 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      CharacterMovement: {
+        maxWalkSpeed: 2,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        maxStepDown: 0.5,
+        maxSlopeAngleDeg: 45,
+        stepSmoothSpeed: 60,
+      },
+    },
+  };
+  let y = yAt(0);
+  let z = 0;
+  const grounded: boolean[] = [];
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      y = next.position[1];
+      z = next.position[2];
+    },
+    physics,
+    {
+      getGravityY: () => -10,
+      // No input: the slide alone must carry the pawn downhill.
+      isPlayerControlled: () => false,
+      getMoveIntent: () => ({ direction: [0, 0], speed: 0 }),
+      reportLocomotion: (_id, report) => grounded.push(report.grounded),
+    },
+  );
+  movement.setEntities([entity]);
+  for (let frame = 1; frame <= 90; frame += 1) {
+    movement.update({ deltaSeconds: 1 / 60, elapsedSeconds: frame / 60, frame });
+  }
+  assert.ok(grounded.every(Boolean), "stays supported (never falls through) while sliding");
+  assert.ok(z > 0.3, `slid downhill (+Z) under gravity: z=${z}`);
+  assert.ok(y < -0.3 && Math.abs(y - yAt(z)) < 0.15, `hugged the slope on the way down: y=${y}`);
+});
+
 check("CharacterMovement subsystem walks down a 0.4 ledge without entering falling", () => {
   const actions = new ActionMap({ KeyW: "move-forward" });
   const platform: Aabb3 = { min: [-2, 0, -1], max: [2, 0.4, 1] };
