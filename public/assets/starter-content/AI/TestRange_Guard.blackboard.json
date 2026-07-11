@@ -46,6 +46,21 @@
       "key": "patrolTargetPosition",
       "kind": "vec3",
       "default": null
+    },
+    {
+      "key": "lastStimulusPosition",
+      "kind": "vec3",
+      "default": null
+    },
+    {
+      "key": "lastStimulusSense",
+      "kind": "string",
+      "default": null
+    },
+    {
+      "key": "lastStimulusEvent",
+      "kind": "string",
+      "default": null
     }
   ]
 }

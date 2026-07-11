@@ -1,4 +1,4 @@
-import type { Entity, SceneJsonValue } from "./entity";
+import type { Entity, EntityComponentData, SceneJsonValue } from "./entity";
 import type { LayoutPhysicsAxisLocks, Vec3 } from "./layout";
 import { isNavigationRole, type NavigationRole } from "./collision";
 import { resolveCapsuleDimensions } from "./capsule";
@@ -7,6 +7,8 @@ import { normalizeBlackboardKeys, type BlackboardKeyDef } from "../ai/blackboard
 
 export const TRANSFORM_COMPONENT = "Transform";
 export const MESH_RENDERER_COMPONENT = "MeshRenderer";
+export const STATIC_MESH_COMPONENT = "StaticMeshComponent";
+export const SKELETAL_MESH_COMPONENT = "SkeletalMeshComponent";
 export const LIGHT_COMPONENT = "Light";
 export const METADATA_COMPONENT = "Metadata";
 export const BEHAVIOR_COMPONENT = "Behavior";
@@ -54,6 +56,53 @@ export interface MeshRendererComponent {
    * shrink/grow its visual without changing the placement transform. Absent = unit.
    */
   scale?: Vec3;
+}
+
+/**
+ * Unreal-style `UStaticMeshComponent`: renders a rigid (non-skinned) mesh asset
+ * (`manifest.assetType === "staticMesh"`). Same visual props as the legacy
+ * {@link MeshRendererComponent} minus any animation concept.
+ */
+export interface StaticMeshComponent {
+  assetId: string;
+  materialSlot?: string;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  /** Local mesh scale (see {@link MeshRendererComponent.scale}). */
+  scale?: Vec3;
+}
+
+/**
+ * Unreal-style `USkeletalMeshComponent`: renders a skinned mesh asset
+ * (`manifest.assetType === "skeletalMesh"`). Adds an authored `animation` clip
+ * name that plays in Play mode; Forge has no Animation Blueprint, so this is a
+ * plain clip reference resolved from the skeleton sidecar / GLTF clips.
+ */
+export interface SkeletalMeshComponent {
+  assetId: string;
+  /** Clip name that plays in Play mode. Absent = no default clip. */
+  animation?: string;
+  materialSlot?: string;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  /** Local mesh scale (see {@link MeshRendererComponent.scale}). */
+  scale?: Vec3;
+}
+
+/**
+ * The common shape read by the render path from whichever mesh component an
+ * entity carries — legacy {@link MeshRendererComponent}, {@link StaticMeshComponent},
+ * or {@link SkeletalMeshComponent}. The internal render helper stays unified while
+ * the authoring surface splits into typed static/skeletal components.
+ */
+export interface RenderableMeshComponent {
+  assetId: string;
+  materialSlot?: string;
+  castShadow?: boolean;
+  receiveShadow?: boolean;
+  scale?: Vec3;
+  /** Skeletal-only clip name; absent on static meshes. */
+  animation?: string;
 }
 
 export interface LightComponent {
@@ -457,18 +506,57 @@ export function readTransformComponent(entity: Entity): TransformComponent | und
   return { position, rotation, scale };
 }
 
-/** Reads a typed mesh renderer from an entity's serializable component data. */
-export function readMeshRendererComponent(entity: Entity): MeshRendererComponent | undefined {
-  const data = entity.components[MESH_RENDERER_COMPONENT];
+/**
+ * Parses the shared renderable-mesh fields (`assetId` + visual props) from any
+ * mesh component's serializable data. `includeAnimation` keeps the skeletal-only
+ * `animation` clip name; static meshes drop it.
+ */
+function parseRenderableMeshData(
+  data: EntityComponentData | undefined,
+  includeAnimation: boolean,
+): RenderableMeshComponent | undefined {
   if (!data) return undefined;
   if (typeof data.assetId !== "string") return undefined;
-  const component: MeshRendererComponent = { assetId: data.assetId };
+  const component: RenderableMeshComponent = { assetId: data.assetId };
   if (typeof data.materialSlot === "string") component.materialSlot = data.materialSlot;
   if (typeof data.castShadow === "boolean") component.castShadow = data.castShadow;
   if (typeof data.receiveShadow === "boolean") component.receiveShadow = data.receiveShadow;
   const scale = readVec3(data.scale);
   if (scale) component.scale = scale;
+  if (includeAnimation && typeof data.animation === "string" && data.animation.length > 0) {
+    component.animation = data.animation;
+  }
   return component;
+}
+
+/** Reads a typed (legacy) mesh renderer from an entity's serializable component data. */
+export function readMeshRendererComponent(entity: Entity): MeshRendererComponent | undefined {
+  return parseRenderableMeshData(entity.components[MESH_RENDERER_COMPONENT], false);
+}
+
+/** Reads a typed Static Mesh component from an entity's serializable component data. */
+export function readStaticMeshComponent(entity: Entity): StaticMeshComponent | undefined {
+  return parseRenderableMeshData(entity.components[STATIC_MESH_COMPONENT], false);
+}
+
+/** Reads a typed Skeletal Mesh component from an entity's serializable component data. */
+export function readSkeletalMeshComponent(entity: Entity): SkeletalMeshComponent | undefined {
+  return parseRenderableMeshData(entity.components[SKELETAL_MESH_COMPONENT], true);
+}
+
+/**
+ * Reads the entity's renderable mesh from whichever mesh component it carries,
+ * preferring the new typed components over the legacy {@link MeshRendererComponent}.
+ * The single reader the render path uses so static/skeletal authoring stays
+ * unified downstream (mesh clone, scale, shadows). Only the skeletal component
+ * contributes `animation`.
+ */
+export function readRenderableMeshComponent(entity: Entity): RenderableMeshComponent | undefined {
+  return (
+    parseRenderableMeshData(entity.components[STATIC_MESH_COMPONENT], false) ??
+    parseRenderableMeshData(entity.components[SKELETAL_MESH_COMPONENT], true) ??
+    parseRenderableMeshData(entity.components[MESH_RENDERER_COMPONENT], true)
+  );
 }
 
 /** Reads a typed metadata component from an entity's serializable component data. */

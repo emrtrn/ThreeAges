@@ -194,6 +194,26 @@ export function defaultBlendSpaceAxis(name: string): BlendSpaceAxisDef {
   return { name, min: 0, max: 1 };
 }
 
+/**
+ * Best-effort, de-duplicated list of clip names a skeleton sidecar references
+ * (animation-set roles, montages, blend-space samples, notifies, root-motion,
+ * preview selection). The GLTF is the ultimate source of playable clips, but the
+ * sidecar names are enough to offer an authoring dropdown without loading the
+ * model. Sorted for stable UI ordering.
+ */
+export function skeletonClipNames(def: AssetSkeletonDef): string[] {
+  const names = new Set<string>();
+  for (const clip of Object.values(def.animationSet)) if (clip) names.add(clip);
+  for (const montage of def.montages) names.add(montage.clip);
+  for (const blendSpace of def.blendSpaces) {
+    for (const sample of blendSpace.samples) names.add(sample.clip);
+  }
+  for (const notify of def.notifies) names.add(notify.clip);
+  for (const entry of def.rootMotion) names.add(entry.clip);
+  if (def.preview.selectedClip) names.add(def.preview.selectedClip);
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
 export function skeletonSidecarPath(modelPath: string): string {
   const normalized = modelPath.replace(/\\/g, "/").replace(/^\/+/, "");
   const withoutExt = normalized.replace(/\.[^./]+$/, "");

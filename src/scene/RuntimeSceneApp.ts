@@ -337,7 +337,7 @@ import {
   readCharacterMovementComponent,
   readColliderComponent,
   readLightComponent,
-  readMeshRendererComponent,
+  readRenderableMeshComponent,
   readParticleEmitterComponent,
   readScriptActorComponent,
   readTransformComponent,
@@ -1778,7 +1778,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     for (const id of sceneModelAssetIds(this.layout)) if (loadable.has(id)) ids.add(id);
     for (const entity of this.actorEntities) {
-      const renderer = readMeshRendererComponent(entity);
+      const renderer = readRenderableMeshComponent(entity);
       if (renderer && loadable.has(renderer.assetId)) ids.add(renderer.assetId);
     }
     return [...ids];
@@ -3526,7 +3526,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!this.assetLoader) return;
     const needed = new Set<string>();
     for (const entity of entities) {
-      const renderer = readMeshRendererComponent(entity);
+      const renderer = readRenderableMeshComponent(entity);
       if (renderer && !this.models.has(renderer.assetId)) needed.add(renderer.assetId);
     }
     if (needed.size === 0) return;
@@ -3561,7 +3561,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     object.userData.actorEntityId = entity.id;
     this.scene.add(object);
     this.actorObjects.set(entity.id, object);
-    const meshScale = readMeshRendererComponent(entity)?.scale;
+    const meshScale = readRenderableMeshComponent(entity)?.scale;
     if (meshScale) this.actorMeshScales.set(entity.id, meshScale);
     this.addColliderDebugWire(entity);
     this.addActorCharacterRef(entity, object);
@@ -3631,7 +3631,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!actor) return;
     const def = this.actorClassCache.get(actor.classRef);
     if (def?.parentClass !== "character") return;
-    const renderer = readMeshRendererComponent(entity);
+    const renderer = readRenderableMeshComponent(entity);
     const gltf = renderer ? this.models.get(renderer.assetId) : undefined;
     const transform = readTransformComponent(entity);
     if (!gltf) return;
@@ -3643,6 +3643,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       placement: {
         assetId: renderer?.assetId ?? "actor-character",
         ...(entity.name ? { name: entity.name } : {}),
+        // A SkeletalMeshComponent's authored clip drives the ambient single-clip
+        // mixer for unpossessed characters (startGameMode), matching the scene
+        // `layout.characters[]` animation path.
+        ...(renderer?.animation ? { animation: renderer.animation } : {}),
         position: transform ? [...transform.position] : [0, 0, 0],
         rotation: transform ? [...transform.rotation] : [0, 0, 0],
         scale: transform ? [...transform.scale] : [1, 1, 1],
@@ -3662,7 +3666,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * component is attached as a child so it illuminates and tracks the host.
    */
   private buildActorHostObject(entity: Entity): Object3D | null {
-    const renderer = readMeshRendererComponent(entity);
+    const renderer = readRenderableMeshComponent(entity);
     const gltf = renderer ? this.models.get(renderer.assetId) : undefined;
     const hasLight = readLightComponent(entity) !== undefined;
     let object: Object3D | null = null;

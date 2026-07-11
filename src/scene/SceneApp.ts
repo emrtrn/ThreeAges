@@ -336,13 +336,14 @@ import {
   applyAssetUvwMapping,
   loadAssetUvw,
 } from "@/scene/assetUvwLoader";
+import { loadAssetSkeleton, skeletonClipNames } from "@/scene/assetSkeletonLoader";
 import {
   lightEntity,
   roomLayoutToSceneDocument,
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
-import { readMeshRendererComponent } from "@engine/scene/components";
+import { readRenderableMeshComponent } from "@engine/scene/components";
 import type { TransformComponent } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
@@ -3099,7 +3100,7 @@ export class SceneApp {
     if (!this.assetLoader) return;
     const needed = new Set<string>();
     for (const entity of entities) {
-      const renderer = readMeshRendererComponent(entity);
+      const renderer = readRenderableMeshComponent(entity);
       if (renderer && !this.models.has(renderer.assetId)) needed.add(renderer.assetId);
     }
     if (needed.size === 0) return;
@@ -3134,7 +3135,7 @@ export class SceneApp {
    * moves it.
    */
   private buildActorObject(entity: Entity): Object3D {
-    const renderer = readMeshRendererComponent(entity);
+    const renderer = readRenderableMeshComponent(entity);
     const gltf = renderer ? this.models.get(renderer.assetId) : undefined;
     let object: Object3D;
     if (gltf) {
@@ -5195,6 +5196,32 @@ export class SceneApp {
   /** Sets (or clears, when `undefined`) the selection's Moving Platform component with undo/redo. */
   setSelectionMovingPlatform(value: LayoutMovingPlatform | undefined): void {
     this.editorSceneController.setSelectionMovingPlatform(value);
+  }
+
+  /**
+   * Sets (or clears, when `undefined`) the Play-mode animation clip for the
+   * selected directly-placed skeletal mesh (character), with undo/redo.
+   */
+  setSelectionAnimation(value: string | undefined): void {
+    this.editorSceneController.setSelectionAnimation(value);
+  }
+
+  /**
+   * Best-effort clip names for a skeletal mesh asset id, read from its
+   * `*.skeleton.json` sidecar. Empty when the asset is missing, not skeletal, or
+   * has no sidecar clips. Used by the character Details Animation dropdown.
+   */
+  async getSkeletonClipNames(assetId: string): Promise<string[]> {
+    if (!this.assetLoader) return [];
+    const manifest = this.manifest ?? (await this.assetLoader.loadManifest());
+    const record = manifest.assets.find((asset) => asset.id === assetId);
+    if (!record || assetType(record) !== "skeletalMesh") return [];
+    try {
+      const skeleton = await loadAssetSkeleton(assetPath(record));
+      return skeletonClipNames(skeleton);
+    } catch {
+      return [];
+    }
   }
 
   /** Active project's gameplay metadata schema, or null when none is declared. */

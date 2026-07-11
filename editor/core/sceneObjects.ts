@@ -881,6 +881,7 @@ export function buildEditableSelection(
     simulatePhysics: character.simulatePhysics ?? false,
     physics: clonePhysics(character.physics) ?? {},
     metadata: cloneMetadata(character.metadata),
+    ...(character.animation ? { animation: character.animation } : {}),
     ...(character.audio ? { audio: { ...character.audio } } : {}),
     ...(character.behavior ? { behavior: cloneBehavior(character.behavior) } : {}),
     ...(character.particle ? { particle: cloneParticle(character.particle) } : {}),

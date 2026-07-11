@@ -5,6 +5,8 @@ import { pivotRow, scaleRow, vectorRow } from "./transformRows";
 
 export interface InstanceDetailsSections {
   material: string;
+  /** Play-mode animation clip picker; only non-empty for a skeletal `character`. */
+  animation: string;
   navigation: string;
   collision: string;
   physics: string;
@@ -36,6 +38,7 @@ export interface InstanceDetailsBindOptions {
   bindNavigationInputs: () => void;
   bindCollisionOverrideInputs: (selection: EditableSelection) => void;
   setSelectionMaterialSlot: (assetId: string | undefined) => void;
+  setSelectionAnimation: (clip: string | undefined) => void;
   bindPhysicsInputs: () => void;
   bindComponentsInputs: () => void;
   bindMetadataInputs: () => void;
@@ -113,6 +116,7 @@ export function renderInstanceDetails({
         ${castShadowToggle}
       </div>`
       }
+      ${sections.animation}
       ${isAmbientSound ? "" : sections.navigation}
       ${isAmbientSound ? "" : sections.collision}
       ${isAmbientSound ? "" : sections.physics}
@@ -139,6 +143,7 @@ export function bindInstanceDetails({
   bindNavigationInputs,
   bindCollisionOverrideInputs,
   setSelectionMaterialSlot,
+  setSelectionAnimation,
   bindPhysicsInputs,
   bindComponentsInputs,
   bindMetadataInputs,
@@ -213,6 +218,14 @@ export function bindInstanceDetails({
     (event) => {
       const value = (event.target as HTMLSelectElement).value;
       setSelectionMaterialSlot(value || undefined);
+    },
+  );
+
+  body.querySelector<HTMLSelectElement>("[data-animation-clip]")?.addEventListener(
+    "change",
+    (event) => {
+      const value = (event.target as HTMLSelectElement).value;
+      setSelectionAnimation(value || undefined);
     },
   );
 

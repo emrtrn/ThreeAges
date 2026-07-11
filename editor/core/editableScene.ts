@@ -270,6 +270,11 @@ export interface EditableSelection {
   interaction?: LayoutInteraction;
   /** Authored moving-platform motion; absent when the object has no Moving Platform component. */
   movingPlatform?: LayoutMovingPlatform;
+  /**
+   * Play-mode animation clip for a directly-placed skeletal mesh; present only
+   * when `kind === "character"`. Mirrors {@link LayoutCharacter.animation}.
+   */
+  animation?: string;
   lightType?: LayoutLightActor["type"];
   color?: string;
   intensity?: number;

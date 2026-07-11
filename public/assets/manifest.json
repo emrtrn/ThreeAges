@@ -20531,7 +20531,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 693
+        "bytes": 1162
       },
       "license": "Unknown"
     },
@@ -20557,7 +20557,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 5772
+        "bytes": 7636
       },
       "license": "Unknown"
     },
@@ -20662,6 +20662,33 @@
         "receiveShadow": true,
         "collision": false,
         "bytes": 2205
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "testrange-alarm-button-actor",
+      "name": "TestRange AlarmButton.Actor",
+      "assetType": "prefab",
+      "category": "Actors",
+      "path": "assets/starter-content/Actors/TestRange_AlarmButton.actor.json",
+      "tags": [
+        "ai",
+        "testrange",
+        "interaction"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Actors",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": false,
+        "bytes": 1425
       },
       "license": "Unknown"
     }

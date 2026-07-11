@@ -42,6 +42,7 @@ export const BEHAVIOR_SCRIPT_IDS = [
   "velocity-gate",
   "apply-damage",
   "damage-zone",
+  "raise-alert",
 ] as const;
 export type BehaviorScriptId = (typeof BEHAVIOR_SCRIPT_IDS)[number];
 
@@ -516,6 +517,24 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     context.messages.send(other, "Damage.Apply", payload);
   };
 
+  // Turns an interaction into an AI-perceivable `alert` gameplay stimulus at this
+  // actor's own location. Bind it via a Message Binding on the actor's interaction
+  // message (e.g. `Interaction.Activated`, target `any`) so triggering the actor
+  // trips an alarm: the AI script-stimulus bridge (SceneApp/RuntimeSceneApp)
+  // converts the emitted `alert` into an `alert` perception sense for every AI
+  // within hearing range, and `forge.updatePerceptionBlackboard` writes it to the
+  // listener's `lastStimulus*` keys. The self-source guard keeps multiple alarm
+  // points independent (an actor only re-broadcasts its own interaction, never a
+  // sibling's). Generic on purpose — the alarm owns no reaction; each AI decides
+  // via its behavior tree.
+  const raiseAlert: BehaviorUpdate = (context) => {
+    if (context.message && context.message.source !== context.entityId) return;
+    const payload: Record<string, unknown> = {};
+    const urgency = stringParam(context.params.urgency);
+    if (urgency) payload.urgency = urgency;
+    context.messages.emit("alert", payload);
+  };
+
   const behaviors = new Map<string, BehaviorUpdate>([
     ["spin", spin],
     ["input-move", inputMove],
@@ -532,6 +551,7 @@ export function createBehaviorRegistry(options: BehaviorRegistryOptions = {}): B
     ["velocity-gate", velocityGate],
     ["apply-damage", applyDamage],
     ["damage-zone", damageZone],
+    ["raise-alert", raiseAlert],
   ]);
   return { get: (scriptId) => behaviors.get(scriptId) };
 }

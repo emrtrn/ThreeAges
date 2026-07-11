@@ -119,6 +119,10 @@ export function isActorEventKind(value: unknown): value is ActorEventKind {
  */
 export const ACTOR_COMPONENT_KINDS = [
   "Transform",
+  "StaticMeshComponent",
+  "SkeletalMeshComponent",
+  // Legacy single mesh component (Unreal-split into Static/Skeletal above). Kept a
+  // valid kind so old `*.actor.json` files round-trip; hidden from the Add menu.
   "MeshRenderer",
   "Collider",
   "Audio",
@@ -136,6 +140,28 @@ export type ActorComponentKind = (typeof ACTOR_COMPONENT_KINDS)[number];
 
 export function isActorComponentKind(value: unknown): value is ActorComponentKind {
   return typeof value === "string" && (ACTOR_COMPONENT_KINDS as readonly string[]).includes(value);
+}
+
+/** Renderable mesh component kinds (both the split ones and the legacy one). */
+export const MESH_COMPONENT_KINDS: readonly ActorComponentKind[] = [
+  "StaticMeshComponent",
+  "SkeletalMeshComponent",
+  "MeshRenderer",
+];
+
+export function isMeshComponentKind(value: ActorComponentKind): boolean {
+  return MESH_COMPONENT_KINDS.includes(value);
+}
+
+/**
+ * Legacy component kinds kept only for back-compat load/round-trip; the editor
+ * hides these from the Add-Component menu and the component-kind dropdown (unless
+ * a node already carries one).
+ */
+export const LEGACY_ACTOR_COMPONENT_KINDS: readonly ActorComponentKind[] = ["MeshRenderer"];
+
+export function isLegacyActorComponentKind(value: ActorComponentKind): boolean {
+  return LEGACY_ACTOR_COMPONENT_KINDS.includes(value);
 }
 
 /** Binds a runtime event to a behavior script id plus authored params. */
@@ -220,9 +246,9 @@ function defaultCharacterComponents(): ComponentTemplateNode[] {
       },
     },
     {
-      id: "meshRenderer",
+      id: "skeletalMesh",
       parent: "root",
-      component: "MeshRenderer",
+      component: "SkeletalMeshComponent",
       props: { assetId: "character-a" },
     },
     {

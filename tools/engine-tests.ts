@@ -51,6 +51,9 @@ import {
   readLightComponent,
   readMessageBindingsComponent,
   readMeshRendererComponent,
+  readRenderableMeshComponent,
+  readStaticMeshComponent,
+  readSkeletalMeshComponent,
   readMetadataComponent,
   readMovingPlatformComponent,
   readParticleEmitterComponent,
@@ -1497,6 +1500,81 @@ check("entityCharacterItem multiplies the MeshRenderer local scale into the plac
   });
   const plainEntity = actorInstanceToEntity(plain, { classRef: "Plain.actor.json", position: [0, 0, 0], scale: [1, 2, 3] }, 0);
   assert.deepEqual(entityCharacterItem(plainEntity).scale, [1, 2, 3]);
+});
+
+check("readStaticMeshComponent / readSkeletalMeshComponent read only their own component key", () => {
+  const staticDef = normalizeActorScriptDef({
+    name: "Crate",
+    parentClass: "actor",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "mesh", parent: "root", component: "StaticMeshComponent", props: { assetId: "crate" } },
+    ],
+  });
+  const staticEntity = actorInstanceToEntity(staticDef, { classRef: "Crate.actor.json", position: [0, 0, 0] }, 0);
+  assert.equal(readStaticMeshComponent(staticEntity)?.assetId, "crate");
+  assert.equal(readSkeletalMeshComponent(staticEntity), undefined);
+  // A static mesh drops any stray animation prop (skeletal-only field).
+  assert.equal(
+    (readStaticMeshComponent(staticEntity) as { animation?: string }).animation,
+    undefined,
+  );
+
+  const skeletalDef = normalizeActorScriptDef({
+    name: "Hero",
+    parentClass: "character",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "mesh", parent: "root", component: "SkeletalMeshComponent", props: { assetId: "hero", animation: "run" } },
+    ],
+  });
+  const skeletalEntity = actorInstanceToEntity(skeletalDef, { classRef: "Hero.actor.json", position: [0, 0, 0] }, 0);
+  assert.equal(readSkeletalMeshComponent(skeletalEntity)?.assetId, "hero");
+  assert.equal(readSkeletalMeshComponent(skeletalEntity)?.animation, "run");
+  assert.equal(readStaticMeshComponent(skeletalEntity), undefined);
+});
+
+check("readRenderableMeshComponent reads static, skeletal, and legacy MeshRenderer keys", () => {
+  const build = (component: string, props: Record<string, unknown>) =>
+    actorInstanceToEntity(
+      normalizeActorScriptDef({
+        name: component,
+        parentClass: "actor",
+        components: [
+          { id: "root", component: "Transform", props: {} },
+          { id: "mesh", parent: "root", component, props },
+        ],
+      }),
+      { classRef: `${component}.actor.json`, position: [0, 0, 0] },
+      0,
+    );
+
+  const legacy = build("MeshRenderer", { assetId: "door" });
+  assert.equal(readRenderableMeshComponent(legacy)?.assetId, "door");
+  // Legacy render path carries no skeletal animation.
+  assert.equal(readRenderableMeshComponent(legacy)?.animation, undefined);
+
+  const staticMesh = build("StaticMeshComponent", { assetId: "wall" });
+  assert.equal(readRenderableMeshComponent(staticMesh)?.assetId, "wall");
+  assert.equal(readRenderableMeshComponent(staticMesh)?.animation, undefined);
+
+  const skeletal = build("SkeletalMeshComponent", { assetId: "hero", animation: "idle" });
+  assert.equal(readRenderableMeshComponent(skeletal)?.assetId, "hero");
+  assert.equal(readRenderableMeshComponent(skeletal)?.animation, "idle");
+});
+
+check("normalizeActorScriptDef round-trips legacy MeshRenderer nodes without breaking", () => {
+  const def = normalizeActorScriptDef({
+    name: "Legacy",
+    parentClass: "actor",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      { id: "mesh", parent: "root", component: "MeshRenderer", props: { assetId: "old" } },
+    ],
+  });
+  const mesh = def.components.find((node) => node.component === "MeshRenderer");
+  assert.ok(mesh, "legacy MeshRenderer node is preserved");
+  assert.equal(mesh?.props.assetId, "old");
 });
 
 check("actorInstanceToEntity bakes placement scale into the flattened capsule collider", () => {
@@ -16490,7 +16568,9 @@ check("normalizeActorScriptDef coerces malformed/legacy data to a valid class", 
 
   const character = defaultActorScriptDef("Player", "character");
   assert.equal(character.components.some((node) => node.component === "Collider"), true);
-  assert.equal(character.components.some((node) => node.component === "MeshRenderer"), true);
+  // Character default mesh is now a SkeletalMeshComponent (Unreal-style split).
+  assert.equal(character.components.some((node) => node.component === "SkeletalMeshComponent"), true);
+  assert.equal(character.components.some((node) => node.component === "MeshRenderer"), false);
   assert.equal(character.components.some((node) => node.component === "CharacterMovement"), true);
   const characterMovement = character.components.find((node) => node.component === "CharacterMovement");
   assert.equal(characterMovement?.props.capsuleRadius, undefined);

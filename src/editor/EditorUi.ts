@@ -308,6 +308,10 @@ export class EditorUi {
   private outlinerObjects: EditableSceneObject[] = [];
   private outlinerFilter = "";
   private selected: EditableSelection | null = null;
+  /** Cached skeletal clip names per asset id, for the character Animation dropdown. */
+  private readonly characterClipCache = new Map<string, readonly string[]>();
+  /** Asset ids whose skeletal clip load is in flight (avoids duplicate fetches). */
+  private readonly characterClipLoading = new Set<string>();
   private worldSettings: EditorWorldSettings | null = null;
   private detailsBaseline: EditableTransformSnapshot[] | null = null;
   private detailsScale: [number, number, number] | null = null;
@@ -3071,6 +3075,7 @@ export class EditorUi {
       pivotEditActive: this.app.isPivotEditMode(),
       sections: {
         material: renderMaterialSection(selection, this.editableAssets),
+        animation: this.renderCharacterAnimationSection(selection),
         navigation: renderNavigationSection(selection),
         collision: renderCollisionSection(selection),
         physics: renderPhysicsSection({
@@ -3112,6 +3117,7 @@ export class EditorUi {
             this.app.setSelectionCollisionOverrides(patch),
         }),
       setSelectionMaterialSlot: (assetId) => this.app.setSelectionMaterialSlot(assetId),
+      setSelectionAnimation: (clip) => this.app.setSelectionAnimation(clip),
       bindPhysicsInputs: () =>
         bindPhysicsInputs({
           body: this.detailsBody,
@@ -3137,6 +3143,70 @@ export class EditorUi {
             this.app.setSelectionMetadata(key, value, label),
         }),
     });
+  }
+
+  /**
+   * The character (directly-placed skeletal mesh) "Animation" section: a dropdown
+   * of Play-mode clips read from the asset's `*.skeleton.json` sidecar. Clips load
+   * lazily into {@link characterClipCache}; while loading, a placeholder shows and
+   * the panel re-renders once the fetch resolves. An unknown/authored value is
+   * preserved so it round-trips. Empty for any non-character selection.
+   */
+  private renderCharacterAnimationSection(selection: EditableSelection): string {
+    if (selection.kind !== "character") return "";
+    const assetId = selection.assetId;
+    const current = selection.animation ?? "";
+    const clips = this.characterClipCache.get(assetId);
+    if (!clips) {
+      void this.loadCharacterClips(assetId);
+      return `
+        <div class="detail-section">
+          <div class="detail-section-title">Animation</div>
+          <div class="detail-row"><span class="detail-value">Loading clips…</span></div>
+        </div>`;
+    }
+    const known = clips.includes(current);
+    const options = [
+      `<option value="" ${current ? "" : "selected"}>— none —</option>`,
+      ...clips.map(
+        (clip) =>
+          `<option value="${escapeHtml(clip)}" ${clip === current ? "selected" : ""}>${escapeHtml(clip)}</option>`,
+      ),
+      ...(current && !known
+        ? [`<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (unknown)</option>`]
+        : []),
+    ].join("");
+    const emptyNote =
+      clips.length === 0
+        ? `<div class="detail-row"><span class="detail-value">This mesh defines no clips yet.</span></div>`
+        : "";
+    return `
+      <div class="detail-section">
+        <div class="detail-section-title">Animation</div>
+        <label class="detail-row">
+          <span>Clip (Play)</span>
+          <select data-animation-clip>${options}</select>
+        </label>
+        ${emptyNote}
+      </div>`;
+  }
+
+  /** Loads (once) a skeletal asset's clip names, caches them, and re-renders the panel. */
+  private async loadCharacterClips(assetId: string): Promise<void> {
+    if (this.characterClipCache.has(assetId) || this.characterClipLoading.has(assetId)) return;
+    this.characterClipLoading.add(assetId);
+    let clips: readonly string[] = [];
+    try {
+      clips = await this.app.getSkeletonClipNames(assetId);
+    } catch {
+      clips = [];
+    }
+    this.characterClipLoading.delete(assetId);
+    this.characterClipCache.set(assetId, clips);
+    // Re-render only if this asset is still the active character selection.
+    if (this.selected?.kind === "character" && this.selected.assetId === assetId) {
+      this.renderDetails(this.selected);
+    }
   }
 
   /** First `*.ui.json` widget asset id (for a new World Widget), or "" when none. */

@@ -12,7 +12,10 @@
         "params": {
           "targetKey": "target",
           "hasLineOfSightKey": "hasLineOfSight",
-          "lastKnownPositionKey": "lastKnownTargetPosition"
+          "lastKnownPositionKey": "lastKnownTargetPosition",
+          "lastStimulusPositionKey": "lastStimulusPosition",
+          "lastStimulusSenseKey": "lastStimulusSense",
+          "lastStimulusEventKey": "lastStimulusEvent"
         }
       },
       {
@@ -154,6 +157,76 @@
             "task": "forge.setBlackboard",
             "params": {
               "key": "lastKnownTargetPosition",
+              "value": null
+            }
+          }
+        ]
+      },
+      {
+        "id": "guard-investigate-noise",
+        "kind": "sequence",
+        "decorators": [
+          {
+            "kind": "blackboard",
+            "key": "lastStimulusPosition",
+            "op": "isSet"
+          },
+          {
+            "kind": "blackboard",
+            "key": "hasLineOfSight",
+            "op": "equals",
+            "value": false
+          }
+        ],
+        "children": [
+          {
+            "id": "guard-state-alert",
+            "kind": "task",
+            "task": "forge.setBlackboard",
+            "params": {
+              "key": "combatState",
+              "value": "alert"
+            }
+          },
+          {
+            "id": "guard-move-to-noise",
+            "kind": "task",
+            "task": "forge.moveToBlackboard",
+            "params": {
+              "key": "lastStimulusPosition",
+              "speed": 4.6,
+              "acceptanceRadius": 1
+            }
+          },
+          {
+            "id": "guard-pause-at-noise",
+            "kind": "wait",
+            "seconds": 1.4
+          },
+          {
+            "id": "guard-clear-noise-position",
+            "kind": "task",
+            "task": "forge.setBlackboard",
+            "params": {
+              "key": "lastStimulusPosition",
+              "value": null
+            }
+          },
+          {
+            "id": "guard-clear-noise-sense",
+            "kind": "task",
+            "task": "forge.setBlackboard",
+            "params": {
+              "key": "lastStimulusSense",
+              "value": null
+            }
+          },
+          {
+            "id": "guard-clear-noise-event",
+            "kind": "task",
+            "task": "forge.setBlackboard",
+            "params": {
+              "key": "lastStimulusEvent",
               "value": null
             }
           }

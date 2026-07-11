@@ -94,6 +94,8 @@ type MutableHierarchyTransform = {
   particle?: LayoutParticleEmitter;
   interaction?: LayoutInteraction;
   movingPlatform?: LayoutMovingPlatform;
+  /** Play-mode animation clip for a directly-placed skeletal mesh (characters only). */
+  animation?: string;
   nodeId?: string;
   parentId?: string;
 };
@@ -1191,6 +1193,28 @@ export class EditorSceneController {
         clone: cloneBehavior,
         equals: behaviorsEqual,
         label: value ? "Set behavior" : "Remove behavior",
+      },
+      value,
+    );
+  }
+
+  /**
+   * Sets (or clears, when `undefined`) the Play-mode animation clip for a
+   * directly-placed skeletal mesh (character selection). Undoable; edit-mode is
+   * static so this is data-only until Play.
+   */
+  setSelectionAnimation(value: string | undefined): void {
+    if (this.selection && this.selection.kind !== "character") return;
+    this.setSelectionOptionalComponent(
+      {
+        read: (target) => target.animation,
+        write: (target, next) => {
+          if (next === undefined || next.length === 0) delete target.animation;
+          else target.animation = next;
+        },
+        clone: (component) => component,
+        equals: (a, b) => (a ?? "") === (b ?? ""),
+        label: value ? "Set animation" : "Clear animation",
       },
       value,
     );

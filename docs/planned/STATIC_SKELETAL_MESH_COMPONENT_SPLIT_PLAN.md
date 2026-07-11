@@ -1,7 +1,10 @@
 # Static Mesh / Skeletal Mesh Component Split Planı
 
 > Tarih: 2026-07-03
-> Durum: Plan. Kod uygulanmadı.
+> Durum: UYGULANDI (2026-07-11). Faz 0–7 tamam; tsc + test:engine (750) +
+> build:verify + check:assets yeşil. Kalan tek açık: Playwright browser smoke
+> (öneri) ve starter-content actor dosyalarının opsiyonel migration'ı (legacy
+> MeshRenderer geriye dönük çalışıyor, zorunlu değil).
 > Amaç: Forge Actor Script ve sahne Details yüzeylerinde Unreal'a daha yakın
 > şekilde `StaticMeshComponent` ve `SkeletalMeshComponent` ayrımını kurmak;
 > mesh picker'ları asset tipine göre filtrelemek; sahneye doğrudan bırakılan

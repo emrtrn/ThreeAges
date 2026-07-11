@@ -518,8 +518,8 @@
         },
         {
           "position": [
-            12.95,
-            0,
+            12.85,
+            -0.05,
             19.6
           ],
           "materialSlot": "gray-material",
@@ -1038,7 +1038,20 @@
           "rotationYDeg": 0,
           "scale": [
             1,
-            0.6,
+            0.61,
+            1
+          ]
+        },
+        {
+          "position": [
+            -10.27,
+            0,
+            -12.74
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.61,
             1
           ]
         },
@@ -1051,7 +1064,20 @@
           "rotationYDeg": 0,
           "scale": [
             1,
-            0.6,
+            0.61,
+            1
+          ]
+        },
+        {
+          "position": [
+            20.02,
+            0,
+            -12.65
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.61,
             1
           ]
         },
@@ -1064,7 +1090,7 @@
           "rotationYDeg": 0,
           "scale": [
             1,
-            0.6,
+            0.61,
             1
           ]
         },
@@ -1077,7 +1103,7 @@
           "rotationYDeg": 0,
           "scale": [
             1,
-            0.6,
+            0.61,
             1
           ]
         },
@@ -1090,7 +1116,20 @@
           "rotationYDeg": 0,
           "scale": [
             1,
-            0.6,
+            0.61,
+            1
+          ]
+        },
+        {
+          "position": [
+            20.01,
+            0,
+            17.65
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            0.61,
             1
           ]
         },
@@ -1103,7 +1142,7 @@
           "rotationYDeg": 0,
           "scale": [
             1,
-            0.6,
+            0.61,
             1
           ]
         },
@@ -1116,7 +1155,7 @@
           "rotationYDeg": 0,
           "scale": [
             1,
-            0.6,
+            0.61,
             1
           ]
         },
@@ -1129,7 +1168,7 @@
           "rotationYDeg": 0,
           "scale": [
             1,
-            0.6,
+            0.61,
             1
           ]
         }
@@ -1146,8 +1185,7 @@
   ],
   "characters": [],
   "worldSettings": {
-    "staticObjectsCastShadow": true,
-    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
+    "staticObjectsCastShadow": true
   },
   "skyAtmosphere": {
     "rayleigh": 1,
@@ -1221,7 +1259,6 @@
       "name": "TP1",
       "scale": 1,
       "nextTargetPoint": "target-point-2",
-      "startPoint": true,
       "waitTime": 1,
       "acceptanceRadius": 0.2
     },
@@ -1250,6 +1287,47 @@
       "nextTargetPoint": "target-point-1",
       "waitTime": 2,
       "acceptanceRadius": 0.2
+    },
+    {
+      "id": "target-point-4",
+      "position": [
+        0.32,
+        0,
+        -11.06
+      ],
+      "name": "Target Point",
+      "nextTargetPoint": "target-point-5"
+    },
+    {
+      "id": "target-point-5",
+      "position": [
+        -8.07,
+        0,
+        -11.94
+      ],
+      "name": "Target Point 2",
+      "nextTargetPoint": "target-point-4"
+    },
+    {
+      "id": "target-point-6",
+      "position": [
+        -5.83,
+        0,
+        -4.59
+      ],
+      "name": "Target Point 3",
+      "nextTargetPoint": "target-point-7"
+    },
+    {
+      "id": "target-point-7",
+      "position": [
+        -10.18,
+        0,
+        -3.7
+      ],
+      "name": "Target Point 4",
+      "nextTargetPoint": "target-point-6",
+      "startPoint": true
     }
   ],
   "actors": [
@@ -1272,6 +1350,34 @@
       ],
       "rotationYDeg": 0,
       "scale": 1
+    },
+    {
+      "classRef": "assets/starter-content/Actors/TestRange_AlarmButton.actor.json",
+      "position": [
+        -0.76,
+        0.07,
+        -5.49
+      ],
+      "rotationYDeg": 0,
+      "scale": 1
+    },
+    {
+      "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
+      "position": [
+        -3.71,
+        0,
+        -13.85
+      ],
+      "rotationYDeg": 0
+    },
+    {
+      "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
+      "position": [
+        -11.31,
+        0,
+        -4.9
+      ],
+      "rotationYDeg": 0
     }
   ]
 }

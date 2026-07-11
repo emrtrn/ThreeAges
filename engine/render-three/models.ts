@@ -3,7 +3,7 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import type { Entity } from "@engine/scene/entity";
-import { readMeshRendererComponent, readTransformComponent } from "@engine/scene/components";
+import { readRenderableMeshComponent, readTransformComponent } from "@engine/scene/components";
 import type { LayoutCharacter, LayoutPlacement, Vec3 } from "@engine/scene/layout";
 import { readRotation, readScale } from "@engine/scene/transform";
 import { isRenderableMesh } from "./materials";
@@ -146,7 +146,7 @@ export function placementCharacterItem(placement: LayoutCharacter): CharacterRen
  */
 export function entityCharacterItem(entity: Entity): CharacterRenderItem {
   const transform = readTransformComponent(entity);
-  const renderer = readMeshRendererComponent(entity);
+  const renderer = readRenderableMeshComponent(entity);
   // The placement Transform positions the actor in the world; the MeshRenderer's
   // local scale (authored on the class node) shrinks/grows the visual on top of
   // it, so a "small character" class renders small wherever it is placed/spawned.

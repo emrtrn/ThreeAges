@@ -13,10 +13,11 @@
  * parents each node to its `parent` so Three.js composes the world transform.
  * Headless tests exercise the transform/payload extraction here.
  */
-import type {
-  ActorComponentKind,
-  ActorScriptDef,
-  ComponentTemplateNode,
+import {
+  isMeshComponentKind,
+  type ActorComponentKind,
+  type ActorScriptDef,
+  type ComponentTemplateNode,
 } from "./actorScript";
 import type { ColliderShape, SceneLightType } from "./components";
 import type { SceneJsonValue } from "./entity";
@@ -149,7 +150,7 @@ function previewNode(node: ComponentTemplateNode): ActorPreviewNode {
     rotation: readVec3(props.rotation) ?? [0, 0, 0],
     scale: readVec3(props.scale) ?? [1, 1, 1],
   };
-  if (node.component === "MeshRenderer") preview.mesh = meshPayload(props);
+  if (isMeshComponentKind(node.component)) preview.mesh = meshPayload(props);
   else if (node.component === "Collider") {
     preview.collider = colliderPayload(props);
     // The collider shape carries its own size/center/rotation; keep the node

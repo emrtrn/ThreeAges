@@ -23,6 +23,8 @@ import {
   PARENT_CLASSES,
   PARENT_CLASS_LABELS,
   defaultActorScriptDef,
+  isLegacyActorComponentKind,
+  isMeshComponentKind,
   normalizeActorScriptDef,
   readGameModeDefaultPawnClassRef,
   type ActorComponentKind,
@@ -45,7 +47,11 @@ import { isModelAssetType, type AssetType } from "@engine/assets/manifest";
 import { loadActorScript, saveActorScript } from "@/editor/actorScriptStore";
 import { createBehaviorStub } from "@/editor/behaviorStubStore";
 import { ActorScriptViewport } from "@/editor/ActorScriptViewport";
-import { loadAssetSkeleton, type AssetSkeletonMontageDef } from "@/scene/assetSkeletonLoader";
+import {
+  loadAssetSkeleton,
+  skeletonClipNames,
+  type AssetSkeletonMontageDef,
+} from "@/scene/assetSkeletonLoader";
 import { getGameEditorCatalog } from "@/editor/gameEditorRegistry";
 
 type StatusTone = "info" | "success" | "warning" | "error";
@@ -93,6 +99,8 @@ const METADATA_FIELD_TYPES: readonly MetadataFieldType[] = [
 
 const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   Transform: "✥",
+  StaticMeshComponent: "◰",
+  SkeletalMeshComponent: "⛷",
   MeshRenderer: "◰",
   Collider: "▢",
   Audio: "♪",
@@ -151,6 +159,8 @@ export class ActorScriptEditor {
   private modelPathById: Map<string, string> | null = null;
   /** Cached montages per skeletalMesh asset id, for the read-only montage-input panel. */
   private readonly montagesByAssetId = new Map<string, readonly AssetSkeletonMontageDef[]>();
+  /** Cached clip names per skeletalMesh asset id, for the Animation clip dropdown. */
+  private readonly clipsByAssetId = new Map<string, readonly string[]>();
   /** Asset ids whose skeleton sidecar load was already kicked off (avoid refetch). */
   private readonly skeletonLoadStarted = new Set<string>();
 
@@ -301,7 +311,9 @@ export class ActorScriptEditor {
       return rows.join("");
     };
     const tree = childrenOf(undefined).map((root) => renderNode(root, 0)).join("");
-    const options = ACTOR_COMPONENT_KINDS.filter((kind) => kind !== "Transform")
+    const options = ACTOR_COMPONENT_KINDS.filter(
+      (kind) => kind !== "Transform" && !isLegacyActorComponentKind(kind),
+    )
       .map((kind) => `<option value="${kind}">${kind}</option>`)
       .join("");
     this.componentsHost.innerHTML = `
@@ -492,12 +504,31 @@ export class ActorScriptEditor {
     return this.modelPathById.get(assetId);
   }
 
-  /** Model assets ({id,name}) offered by the MeshRenderer mesh picker, name-sorted. */
+  /** Model assets ({id,name}) offered by the legacy MeshRenderer mesh picker, name-sorted. */
   private modelAssets(): Array<{ id: string; name: string }> {
     return (this.options.assets ?? [])
       .filter((asset) => isModelAssetType(asset.assetType as AssetType))
       .map((asset) => ({ id: asset.id, name: asset.name }))
       .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /** Manifest assets of a single model type ({id,name}), name-sorted. */
+  private meshAssetsOfType(type: "staticMesh" | "skeletalMesh"): Array<{ id: string; name: string }> {
+    return (this.options.assets ?? [])
+      .filter((asset) => asset.assetType === type)
+      .map((asset) => ({ id: asset.id, name: asset.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
+   * Mesh assets offered by a mesh component's picker: StaticMeshComponent lists
+   * only `staticMesh`, SkeletalMeshComponent only `skeletalMesh`, and the legacy
+   * MeshRenderer lists all models (so old files keep every option).
+   */
+  private meshAssetsForKind(kind: ActorComponentKind): Array<{ id: string; name: string }> {
+    if (kind === "StaticMeshComponent") return this.meshAssetsOfType("staticMesh");
+    if (kind === "SkeletalMeshComponent") return this.meshAssetsOfType("skeletalMesh");
+    return this.modelAssets();
   }
 
   /** Effect assets ({id,name}) offered by the ParticleEmitter effect picker, name-sorted. */
@@ -736,9 +767,14 @@ export class ActorScriptEditor {
     const node = this.selectedComponent();
     if (!node) return `<div class="as-details-head">Component</div><p class="as-empty">Not found.</p>`;
     const isRoot = node.parent === undefined;
-    const kindOptions = ACTOR_COMPONENT_KINDS.map(
-      (kind) => `<option value="${kind}" ${kind === node.component ? "selected" : ""}>${kind}</option>`,
-    ).join("");
+    const kindOptions = ACTOR_COMPONENT_KINDS.filter(
+      // Hide legacy kinds unless this node already is one (so it round-trips).
+      (kind) => !isLegacyActorComponentKind(kind) || kind === node.component,
+    )
+      .map(
+        (kind) => `<option value="${kind}" ${kind === node.component ? "selected" : ""}>${kind}</option>`,
+      )
+      .join("");
     const parentOptions = [
       `<option value="" ${isRoot ? "selected" : ""}>— none (root)</option>`,
       ...this.def.components
@@ -749,9 +785,15 @@ export class ActorScriptEditor {
         ),
     ].join("");
     const colliderField = node.component === "Collider" ? colliderFields(node) : "";
-    const meshField = node.component === "MeshRenderer" ? this.meshPickerField(node) : "";
+    const meshField = isMeshComponentKind(node.component) ? this.meshPickerField(node) : "";
+    const animationField =
+      node.component === "SkeletalMeshComponent" ? this.skeletalAnimationField(node) : "";
+    // Montage inputs are skeletal-only (legacy MeshRenderer gates internally on a
+    // skeletalMesh assetId); a StaticMeshComponent never shows them.
     const montageInputField =
-      node.component === "MeshRenderer" ? this.montageInputField(node) : "";
+      node.component === "SkeletalMeshComponent" || node.component === "MeshRenderer"
+        ? this.montageInputField(node)
+        : "";
     const lightField = node.component === "Light" ? lightFields(node) : "";
     const particleField = node.component === "ParticleEmitter" ? this.particleFields(node) : "";
     const audioField = node.component === "Audio" ? this.audioFields(node) : "";
@@ -785,6 +827,7 @@ export class ActorScriptEditor {
       </label>
       ${colliderField}
       ${meshField}
+      ${animationField}
       ${montageInputField}
       ${lightField}
       ${particleField}
@@ -803,10 +846,14 @@ export class ActorScriptEditor {
     `;
   }
 
-  /** The MeshRenderer "Mesh" dropdown: model assets by name → sets props.assetId. */
+  /**
+   * The mesh component "Mesh" dropdown: assets filtered by the node's kind
+   * (static/skeletal/legacy) by name → sets props.assetId. An unknown/hand-typed
+   * id is preserved so the picker never silently drops it.
+   */
   private meshPickerField(node: ComponentTemplateNode): string {
     const current = typeof node.props.assetId === "string" ? node.props.assetId : "";
-    const assets = this.modelAssets();
+    const assets = this.meshAssetsForKind(node.component);
     const known = assets.some((asset) => asset.id === current);
     const options = [
       `<option value="" ${current ? "" : "selected"}>— none —</option>`,
@@ -824,6 +871,53 @@ export class ActorScriptEditor {
         <span>Mesh</span>
         <select data-as-node-mesh>${options}</select>
       </label>
+    `;
+  }
+
+  /**
+   * The SkeletalMeshComponent "Animation" dropdown: the clip that plays in Play
+   * mode (props.animation). Clips come from the selected mesh's `*.skeleton.json`
+   * sidecar (loaded lazily like the montage panel). An unknown/hand-typed value is
+   * preserved so it round-trips; with no mesh or no clips a clear empty state shows.
+   */
+  private skeletalAnimationField(node: ComponentTemplateNode): string {
+    const assetId = typeof node.props.assetId === "string" ? node.props.assetId : "";
+    const current = typeof node.props.animation === "string" ? node.props.animation : "";
+    if (!assetId) {
+      return `
+        <div class="as-section-label">Animation</div>
+        <p class="as-details-note">Pick a skeletal mesh to choose a Play-mode clip.</p>
+      `;
+    }
+    const clips = this.clipsByAssetId.get(assetId);
+    if (!clips) {
+      void this.ensureSkeletonLoaded(assetId, node.id);
+      return `
+        <div class="as-section-label">Animation</div>
+        <div class="as-inspect"><div class="as-empty">Loading clips…</div></div>
+      `;
+    }
+    const known = clips.includes(current);
+    const options = [
+      `<option value="" ${current ? "" : "selected"}>— none —</option>`,
+      ...clips.map(
+        (clip) =>
+          `<option value="${escapeHtml(clip)}" ${clip === current ? "selected" : ""}>${escapeHtml(clip)}</option>`,
+      ),
+      ...(current && !known
+        ? [`<option value="${escapeHtml(current)}" selected>${escapeHtml(current)} (unknown)</option>`]
+        : []),
+    ].join("");
+    const emptyNote =
+      clips.length === 0
+        ? `<p class="as-details-note">This mesh's skeleton defines no clips yet.</p>`
+        : "";
+    return `
+      <label class="as-field">
+        <span>Animation</span>
+        <select data-as-node-animation>${options}</select>
+      </label>
+      ${emptyNote}
     `;
   }
 
@@ -990,15 +1084,20 @@ export class ActorScriptEditor {
     this.skeletonLoadStarted.add(assetId);
     const modelPath = this.resolveModelPath(assetId);
     let montages: readonly AssetSkeletonMontageDef[] = [];
+    let clips: readonly string[] = [];
     if (modelPath) {
       try {
-        montages = (await loadAssetSkeleton(modelPath)).montages;
+        const skeleton = await loadAssetSkeleton(modelPath);
+        montages = skeleton.montages;
+        clips = skeletonClipNames(skeleton);
       } catch {
         montages = [];
+        clips = [];
       }
     }
     if (this.disposed) return;
     this.montagesByAssetId.set(assetId, montages);
+    this.clipsByAssetId.set(assetId, clips);
     const node = this.def.components.find((component) => component.id === componentId);
     if (
       this.selection.kind === "component" &&
@@ -1160,6 +1259,9 @@ export class ActorScriptEditor {
     const kind = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-node-kind]");
     kind?.addEventListener("change", () => {
       node.component = kind.value as ActorComponentKind;
+      // Static meshes have no animation clip; drop it when leaving skeletal so the
+      // prop does not linger as a hidden field on a static component.
+      if (node.component === "StaticMeshComponent") delete node.props.animation;
       this.normalizeDefForEditor();
       this.markDirty();
       this.refreshLists();
@@ -1182,8 +1284,18 @@ export class ActorScriptEditor {
     mesh?.addEventListener("change", () => {
       if (mesh.value) node.props.assetId = mesh.value;
       else delete node.props.assetId;
+      // A different mesh may carry different clips; drop a now-stale animation so
+      // it never persists a clip the new skeleton doesn't define.
+      if (node.component === "SkeletalMeshComponent") delete node.props.animation;
       this.markDirty();
       this.render(); // rebuilds tree + viewport + the raw-props view
+    });
+    const animation = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-node-animation]");
+    animation?.addEventListener("change", () => {
+      if (animation.value) node.props.animation = animation.value;
+      else delete node.props.animation;
+      this.markDirty();
+      this.render();
     });
     this.bindColliderDetails(node);
     this.bindLightDetails(node);
@@ -1948,10 +2060,10 @@ export class ActorScriptEditor {
           node.props.isSensor !== true,
       );
       if (!capsule) warnings.push("Character class should have a non-sensor capsule Collider.");
-      const mesh = this.def.components.find((node) => node.component === "MeshRenderer");
-      if (!mesh) warnings.push("Character class has no MeshRenderer.");
+      const mesh = this.def.components.find((node) => isMeshComponentKind(node.component));
+      if (!mesh) warnings.push("Character class has no Skeletal Mesh component.");
       else if (typeof mesh.props.assetId !== "string" || mesh.props.assetId.length === 0) {
-        warnings.push("Character MeshRenderer has no mesh asset.");
+        warnings.push("Character mesh component has no mesh asset.");
       }
     }
     if (
