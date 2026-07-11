@@ -20760,29 +20760,6 @@
         "bytes": 630
       },
       "license": "Unknown"
-    },
-    {
-      "id": "landscape-1-heightmap-1783780999056",
-      "name": "Landscape 1 Heightmap 1783780999056",
-      "assetType": "texture",
-      "category": "Heightmaps",
-      "path": "assets/starter-content/Landscapes/Heightmaps/landscape-1-heightmap-1783780999056.png",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Heightmaps",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 100632
-      },
-      "license": "Unknown"
     }
   ]
 }

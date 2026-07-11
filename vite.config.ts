@@ -170,17 +170,30 @@ async function readDirTree(
 // The /__save-layout payload validator (allowlist) lives in
 // tools/saveValidator.ts so it can be unit-tested headlessly; imported above.
 
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
+// Default cap for structured JSON save bodies. Landscape sidecars carry a full
+// heightfield + per-vertex paint weights, so they use a much larger cap below.
+const JSON_BODY_MAX_BYTES = 256 * 1024;
+
+async function readJsonBody(
+  req: IncomingMessage,
+  maxBytes: number = JSON_BODY_MAX_BYTES,
+): Promise<unknown> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > 256 * 1024) throw new Error("request body too large");
+    if (size > maxBytes) throw new Error("request body too large");
     chunks.push(buffer);
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
 }
+
+// A 257x257 landscape serializes to well over 1 MB (heights + 4 paint layers of
+// per-vertex weights), and the compact payload for even a 129x129 heightmap sits
+// right at the 256 KB default. Give landscape saves generous headroom so imported
+// terrain always persists instead of silently failing to save.
+const LANDSCAPE_BODY_MAX_BYTES = 32 * 1024 * 1024;
 
 // Collects a raw request body (binary uploads) into a Buffer, capped at maxBytes.
 async function readRawBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
@@ -912,7 +925,9 @@ function layoutEditorPlugin(): Plugin {
             return;
           }
           try {
-            const payload = validateSaveLandscapePayload(await readJsonBody(req));
+            const payload = validateSaveLandscapePayload(
+              await readJsonBody(req, LANDSCAPE_BODY_MAX_BYTES),
+            );
             const sidecarPath = resolvePublicPath(payload.path);
             await mkdir(resolve(sidecarPath, ".."), { recursive: true });
             const previous = await readFile(sidecarPath, "utf8").catch(() => null);
