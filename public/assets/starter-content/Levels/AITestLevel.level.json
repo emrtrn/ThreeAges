@@ -1185,7 +1185,8 @@
   ],
   "characters": [],
   "worldSettings": {
-    "staticObjectsCastShadow": true
+    "staticObjectsCastShadow": true,
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
   },
   "skyAtmosphere": {
     "rayleigh": 1,
@@ -1354,9 +1355,9 @@
     {
       "classRef": "assets/starter-content/Actors/TestRange_AlarmButton.actor.json",
       "position": [
-        -0.76,
-        0.07,
-        -5.49
+        -0.74,
+        0.35,
+        -17.31
       ],
       "rotationYDeg": 0,
       "scale": 1

@@ -41,7 +41,7 @@
       "component": "Interaction",
       "props": {
         "action": "Alarm",
-        "prompt": "Alarmi Cal",
+        "prompt": "E - Alarmi Cal",
         "enabled": true,
         "cooldown": 3
       },
@@ -51,7 +51,8 @@
       "id": "behavior",
       "component": "Behavior",
       "props": {
-        "scriptId": "interact"
+        "scriptId": "interact",
+        "inputAction": "interact"
       },
       "parent": "root"
     }
