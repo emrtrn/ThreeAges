@@ -637,7 +637,7 @@ Yeni dev endpoint önerileri:
 
 - [x] `ForgeLandscapeSpline` veri modeli (point/segment, destructive deform, layer paint ve instanced mesh ayarları).
 - [x] Landscape data `splines[]` save/load (allowlist doğrulaması ve engine regresyon testiyle).
-- [ ] Landscape Mode > Splines sekmesi.
+- [x] Landscape Mode > Splines sekmesi (aktif spline seçimi, oluştur/sil; terrain'e tıklayarak bağlı point ekleme).
 - [ ] Control point ekle/sil/taşı.
 - [ ] Segment seçimi ve split/join temel akışı.
 - [ ] Width/falloff ayarları.

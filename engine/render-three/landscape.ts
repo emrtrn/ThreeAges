@@ -44,6 +44,9 @@ export {
   type LandscapeLayerWeights,
   type LandscapeDefaultLayer,
   type LandscapeLayerId,
+  type ForgeLandscapeSpline,
+  type ForgeLandscapeSplinePoint,
+  type ForgeLandscapeSplineSegment,
 } from "@engine/scene/landscape";
 
 /**

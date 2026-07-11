@@ -7,6 +7,7 @@ import type {
   EditableSelection,
   LandscapeEditMode,
   LandscapeLayerView,
+  LandscapeSplineView,
   LandscapePaintTool,
   LandscapeSculptSettings,
   LandscapeSculptTool,
@@ -87,6 +88,9 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   ) => LandscapeSculptSettings;
   fillSelectedLandscapeLayer: (layerId?: string) => void;
   getSelectedLandscapeLayers: () => LandscapeLayerView[];
+  getSelectedLandscapeSplines: () => LandscapeSplineView[];
+  createSelectedLandscapeSpline: () => void;
+  deleteSelectedLandscapeSpline: (splineId?: string | null) => void;
   setSelectedLandscapeLayerMaterial: (layerId: string, materialId: string | null) => void;
   importSelectedLandscapeHeightmap: (file: File, rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
   exportSelectedLandscapeHeightmap: () => { width: number; height: number; pixels: Uint8ClampedArray } | null;
@@ -117,7 +121,7 @@ const LANDSCAPE_SCULPT_TOOLS: readonly LandscapeSculptTool[] = [
 ];
 const LANDSCAPE_PAINT_TOOLS: readonly LandscapePaintTool[] = ["paint", "erase", "smoothWeights"];
 const LANDSCAPE_VIEW_MODES: readonly LandscapeViewMode[] = ["lit", "height", "slope", "layer"];
-const LANDSCAPE_EDIT_MODES: readonly LandscapeEditMode[] = ["sculpt", "paint"];
+const LANDSCAPE_EDIT_MODES: readonly LandscapeEditMode[] = ["sculpt", "paint", "splines"];
 
 export function renderLandscapeDetails(options: SpecialActorDetailsOptions): void {
   const { body, selection, editableAssets } = options;
@@ -125,6 +129,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   const lockedAttr = selection.locked ? "disabled" : "";
   const settings = options.getLandscapeSculptSettings();
   const layers = options.getSelectedLandscapeLayers();
+  const splines = options.getSelectedLandscapeSplines();
   const resolution = options.getSelectedLandscapeResolution();
   const importHeight = options.getSelectedLandscapeImportHeight();
   const materialAssets = editableAssets.filter((asset) => assetType(asset) === "material");
@@ -166,11 +171,23 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           ${LANDSCAPE_EDIT_MODES.map(
             (mode) => `<button type="button" data-landscape-mode="${mode}" class="${
               settings.editMode === mode ? "active" : ""
-            }" ${lockedAttr}>${mode === "sculpt" ? "Sculpt" : "Paint"}</button>`,
+            }" ${lockedAttr}>${mode === "sculpt" ? "Sculpt" : mode === "paint" ? "Paint" : "Splines"}</button>`,
           ).join("")}
         </div>
         ${
-          settings.editMode === "paint"
+          settings.editMode === "splines"
+            ? `<div class="detail-subsection-title">Landscape Splines</div>
+              <div class="detail-hint">Click the terrain to add connected control points to the active spline.</div>
+              <div class="landscape-layer-list">
+                ${splines.map((spline) => `<button type="button" data-landscape-spline="${escapeHtml(spline.id)}" class="${
+                  settings.activeSplineId === spline.id ? "active" : ""
+                }" ${lockedAttr}><span>${escapeHtml(spline.name)}</span><span>${spline.pointCount} pts</span></button>`).join("") || "<div class=\"detail-hint\">No splines yet.</div>"}
+              </div>
+              <div class="landscape-heightmap-actions">
+                <button type="button" class="detail-action-button" data-landscape-spline-create ${lockedAttr}>New Spline</button>
+                <button type="button" class="detail-action-button" data-landscape-spline-delete ${lockedAttr}>Delete Spline</button>
+              </div>`
+            : settings.editMode === "paint"
             ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape paint tool">
               ${LANDSCAPE_PAINT_TOOLS.map(
                 (tool) => `<button type="button" data-landscape-paint-tool="${tool}" class="${
@@ -310,6 +327,23 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       options.setLandscapeSculptSettings({ activeLayerId });
       renderLandscapeDetails(options);
     });
+  });
+
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const activeSplineId = button.dataset.landscapeSpline;
+      if (!activeSplineId) return;
+      options.setLandscapeSculptSettings({ activeSplineId });
+      renderLandscapeDetails(options);
+    });
+  });
+  body.querySelector<HTMLButtonElement>("[data-landscape-spline-create]")?.addEventListener("click", () => {
+    options.createSelectedLandscapeSpline();
+    renderLandscapeDetails(options);
+  });
+  body.querySelector<HTMLButtonElement>("[data-landscape-spline-delete]")?.addEventListener("click", () => {
+    options.deleteSelectedLandscapeSpline(options.getLandscapeSculptSettings().activeSplineId);
+    renderLandscapeDetails(options);
   });
 
   body.querySelector<HTMLSelectElement>("[data-landscape-view]")?.addEventListener(

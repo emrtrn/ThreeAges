@@ -3070,6 +3070,9 @@ export class EditorUi {
       setLandscapeSculptSettings: (patch) => this.app.setLandscapeSculptSettings(patch),
       fillSelectedLandscapeLayer: (layerId) => this.app.fillSelectedLandscapeLayer(layerId),
       getSelectedLandscapeLayers: () => this.app.getSelectedLandscapeLayers(),
+      getSelectedLandscapeSplines: () => this.app.getSelectedLandscapeSplines(),
+      createSelectedLandscapeSpline: () => this.app.createSelectedLandscapeSpline(),
+      deleteSelectedLandscapeSpline: (splineId) => this.app.deleteSelectedLandscapeSpline(splineId),
       setSelectedLandscapeLayerMaterial: (layerId, materialId) =>
         this.app.setSelectedLandscapeLayerMaterial(layerId, materialId),
       importSelectedLandscapeHeightmap: (file, rgba, width, height, heightRange) =>
