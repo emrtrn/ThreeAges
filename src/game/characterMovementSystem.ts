@@ -92,6 +92,13 @@ export interface CharacterMovementSubsystemOptions {
 const DEFAULT_GRAVITY_Y = -9.81;
 const DEFAULT_MAX_STEP_HEIGHT = 0.45;
 const DEFAULT_MAX_STEP_DOWN = 0.5;
+/**
+ * Upper bound on the slope angle used to scale the ground-follow down-probe with
+ * this frame's horizontal travel. Walkable landscape surfaces only exist up to the
+ * physics wall gate (~50°), so clamping here keeps `tan()` bounded and stops a huge
+ * configured slope limit from snapping the pawn down a genuine ledge far below.
+ */
+const GROUND_SNAP_MAX_SLOPE_DEG = 55;
 const ZERO_DELTA: readonly [number, number, number] = [0, 0, 0];
 /** Horizontal knockback damping (per second) and the speed below which it stops. */
 const LAUNCH_HORIZONTAL_DAMPING = 4;
@@ -339,7 +346,7 @@ export class CharacterMovementSubsystem implements Subsystem {
       this.vertical.set(runtime.id, vertical);
     }
     const previousY = vertical.state.y;
-    const ground = this.groundAt(runtime, platformCtx.aabbs);
+    const ground = this.groundAt(runtime, platformCtx.aabbs, planarDistance);
     // Measure the climb from the raw probe targets (not the smoothed floor), so
     // the uphill slowdown sees the true geometry. Airborne or probe-less frames
     // feed a flat sample, decaying the slowdown back toward full speed. A rising
@@ -385,7 +392,13 @@ export class CharacterMovementSubsystem implements Subsystem {
       jump,
     });
     if (!vertical.state.grounded) {
-      const landing = this.landingGround(runtime, previousY, vertical.state.y, platformCtx.aabbs);
+      const landing = this.landingGround(
+        runtime,
+        previousY,
+        vertical.state.y,
+        platformCtx.aabbs,
+        planarDistance,
+      );
       if (landing) {
         vertical.floorY = landing.floorY;
         vertical.state = groundedAt(landing.floorY);
@@ -465,11 +478,19 @@ export class CharacterMovementSubsystem implements Subsystem {
     );
   }
 
-  private groundAt(runtime: CharacterMovementRuntime, platformAabbs: readonly Aabb3[]) {
+  private groundAt(
+    runtime: CharacterMovementRuntime,
+    platformAabbs: readonly Aabb3[],
+    planarDistance: number,
+  ) {
     const blockers = this.groundBlockers(platformAabbs);
     const surfaces = this.physics?.staticSurfaceTriangles() ?? [];
     if (blockers.length === 0 && surfaces.length === 0) return null;
-    return findGroundAt(runtime.transform.position, blockers, this.groundOptions(runtime, surfaces));
+    return findGroundAt(
+      runtime.transform.position,
+      blockers,
+      this.groundOptions(runtime, surfaces, planarDistance),
+    );
   }
 
   private landingGround(
@@ -477,6 +498,7 @@ export class CharacterMovementSubsystem implements Subsystem {
     previousY: number,
     nextY: number,
     platformAabbs: readonly Aabb3[],
+    planarDistance: number,
   ) {
     const blockers = this.groundBlockers(platformAabbs);
     const surfaces = this.physics?.staticSurfaceTriangles() ?? [];
@@ -486,7 +508,7 @@ export class CharacterMovementSubsystem implements Subsystem {
       nextY,
       runtime.transform.position,
       blockers,
-      this.groundOptions(runtime, surfaces),
+      this.groundOptions(runtime, surfaces, planarDistance),
     );
   }
 
@@ -521,7 +543,9 @@ export class CharacterMovementSubsystem implements Subsystem {
   ): readonly [number, number, number] {
     const vertical = this.vertical.get(runtime.id);
     if (vertical && !vertical.state.grounded) return ZERO_DELTA;
-    const ground = this.groundAt(runtime, platformAabbs);
+    // A support check at the current position (no fast descent), so the base
+    // step-down suffices — pass zero planar travel.
+    const ground = this.groundAt(runtime, platformAabbs, 0);
     if (!ground || !ground.blocker) return ZERO_DELTA;
     const state = states.find((candidate) => candidate.aabb === ground.blocker);
     return state ? state.delta : ZERO_DELTA;
@@ -530,14 +554,32 @@ export class CharacterMovementSubsystem implements Subsystem {
   private groundOptions(
     runtime: CharacterMovementRuntime,
     surfaces: ReturnType<NonNullable<PhysicsQuery["staticSurfaceTriangles"]>>,
+    planarDistance: number,
   ) {
     return {
       footprintHalf: this.footprintHalf(runtime),
       maxStepUp: this.maxStepHeight(runtime),
-      maxStepDown: this.maxStepDown(runtime),
+      maxStepDown: this.groundSnapDown(runtime, planarDistance),
       surfaces,
       maxSlopeCos: slopeCosFromDegrees(runtime.movement.maxSlopeAngleDeg),
     };
+  }
+
+  /**
+   * Downward ground-follow distance for this frame. The base `maxStepDown` covers
+   * standing and small steps; on a descending slope the surface drops by up to
+   * `planarDistance * tan(slopeLimit)` in one frame, so a fast (running) move can
+   * fall more than the fixed base below the feet and lose the floor — launching the
+   * pawn off the incline. Scaling the probe by the horizontal travel keeps it glued
+   * to any walkable slope at any speed; the slope angle is clamped
+   * ({@link GROUND_SNAP_MAX_SLOPE_DEG}) so `tan()` stays bounded and the pawn can't
+   * be snapped down a real ledge/cliff far below.
+   */
+  private groundSnapDown(runtime: CharacterMovementRuntime, planarDistance: number): number {
+    const base = this.maxStepDown(runtime);
+    if (!(planarDistance > 0)) return base;
+    const slopeDeg = Math.min(Math.max(runtime.movement.maxSlopeAngleDeg, 0), GROUND_SNAP_MAX_SLOPE_DEG);
+    return base + planarDistance * Math.tan((slopeDeg * Math.PI) / 180);
   }
 
   private hasGroundProbe(): boolean {

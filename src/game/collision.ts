@@ -95,6 +95,13 @@ export interface GroundHit {
   /** The character root/feet Y that rests on this surface. */
   readonly floorY: number;
   readonly blocker: Aabb3 | null;
+  /**
+   * Whether this surface is within the character's slope limit. A steeper surface
+   * still supports the pawn (so it never falls through the terrain) but is flagged
+   * `false` so the caller can deny ascent / slide it downhill. Flat AABB tops are
+   * always walkable.
+   */
+  readonly walkable: boolean;
 }
 
 /** Half-open interval overlap: touching edges (equal) do not count, so a flush slide is allowed. */
@@ -531,18 +538,20 @@ function highestWalkableSurface(
     const top = blocker.max[1];
     if (!acceptsTop(top)) continue;
     if (!blockerTopSupportsRadius(blocker, requiredSupportRadius)) continue;
-    best = betterGroundHit(best, { floorY: top, blocker }, options);
+    best = betterGroundHit(best, { floorY: top, blocker, walkable: true }, options);
   }
   // Slope surfaces (ramps): sampled at the probe centre for their true incline
-  // height, gated on the slope limit. A ramp surface can win over a flat top.
+  // height. A surface steeper than the slope limit still supports the pawn (so it
+  // never falls through the terrain) — it is only flagged non-walkable so the
+  // caller can slide it / deny ascent. A ramp surface can win over a flat top.
   const surfaces = options.surfaces;
   if (surfaces && surfaces.length > 0) {
     const minSlopeCos = options.maxSlopeCos ?? 0;
     for (const surface of surfaces) {
-      if (surface.normalY < minSlopeCos) continue; // too steep to walk → not ground
       const top = sampleTriangleHeight(surface, px, pz);
       if (top === null || !acceptsTop(top)) continue;
-      best = betterGroundHit(best, { floorY: top, blocker: null }, options);
+      const walkable = surface.normalY >= minSlopeCos;
+      best = betterGroundHit(best, { floorY: top, blocker: null, walkable }, options);
     }
   }
   return best;
@@ -565,16 +574,18 @@ function collectWalkableSurfaces(
     const top = blocker.max[1];
     if (!acceptsTop(top)) continue;
     if (!blockerTopSupportsRadius(blocker, requiredSupportRadius)) continue;
-    pushGroundHit(hits, { floorY: top, blocker });
+    pushGroundHit(hits, { floorY: top, blocker, walkable: true });
   }
   const surfaces = options.surfaces;
   if (surfaces && surfaces.length > 0) {
     const minSlopeCos = options.maxSlopeCos ?? 0;
     for (const surface of surfaces) {
+      // Navigation excludes steep surfaces entirely: the AI must never plan a path
+      // over terrain it cannot walk. (Movement keeps them as non-walkable support.)
       if (surface.normalY < minSlopeCos) continue;
       const top = sampleTriangleHeight(surface, px, pz);
       if (top === null || !acceptsTop(top)) continue;
-      pushGroundHit(hits, { floorY: top, blocker: null });
+      pushGroundHit(hits, { floorY: top, blocker: null, walkable: true });
     }
   }
   const requiredHeadroom = Math.max(0, options.requiredHeadroom ?? 0);

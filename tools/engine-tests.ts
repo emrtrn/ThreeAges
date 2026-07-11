@@ -7446,18 +7446,22 @@ check("findGroundAt: a walkable ramp surface supplies the interpolated floor hei
     maxSlopeCos: slopeCosFromDegrees(45), // 26.57° < 45° → walkable
   });
   assert.ok(hit && hit.blocker === null && Math.abs(hit.floorY - 1.5) < 1e-9, `floorY=${hit?.floorY}`);
+  assert.equal(hit?.walkable, true);
 });
 
-check("findGroundAt: a ramp steeper than the slope limit is not walkable ground", () => {
+check("findGroundAt: a ramp steeper than the slope limit still supports the pawn but is not walkable", () => {
   const ramp: GroundTriangle = { a: [0, 0, -1], b: [4, 2, -1], c: [4, 2, 1], normalY: RAMP_NORMAL_Y };
   const hit = findGroundAt([3, 1.5, 0], [], {
     footprintHalf: [0.3, 0.3],
     maxStepUp: 0.45,
     maxStepDown: 0.2,
     surfaces: [ramp],
-    maxSlopeCos: slopeCosFromDegrees(20), // 20° < 26.57° → too steep
+    maxSlopeCos: slopeCosFromDegrees(20), // 20° < 26.57° → too steep to walk
   });
-  assert.equal(hit, null);
+  // Öneri A: the steep surface still returns a floor (no fall-through), flagged
+  // non-walkable so slide/deny-ascent can build on it later.
+  assert.ok(hit && hit.blocker === null && Math.abs(hit.floorY - 1.5) < 1e-9, `floorY=${hit?.floorY}`);
+  assert.equal(hit?.walkable, false);
 });
 
 check("findGroundAt: a flat AABB top still wins over a lower ramp surface", () => {
@@ -12693,6 +12697,69 @@ check("CharacterMovement subsystem walks down a 0.4 ledge without entering falli
   }
   assert.ok(grounded.every(Boolean), "never enters falling on a step-sized drop");
   assert.ok(Math.abs(y) < 1e-9, `eased down onto the lower floor: y=${y}`);
+});
+
+check("CharacterMovement subsystem stays glued to a descending slope while running (scaled ground snap)", () => {
+  const actions = new ActionMap({ KeyW: "move-forward" });
+  // A 40° ramp descending in the forward (-Z) direction, modelled as walkable
+  // surface triangles. y depends only on z (planar ramp): top edge at z=2 → y=0.
+  const SLOPE = (40 * Math.PI) / 180;
+  const tan = Math.tan(SLOPE);
+  const nY = Math.cos(SLOPE);
+  const yAt = (z: number): number => (z - 2) * tan;
+  const rampA: GroundTriangle = { a: [-2, yAt(2), 2], b: [2, yAt(2), 2], c: [2, yAt(-10), -10], normalY: nY };
+  const rampB: GroundTriangle = { a: [-2, yAt(2), 2], b: [2, yAt(-10), -10], c: [-2, yAt(-10), -10], normalY: nY };
+  const physics = {
+    staticBlockerAabbs: () => [],
+    staticSurfaceTriangles: () => [rampA, rampB],
+    colliderHalfExtents: () => [0.3, 0.9, 0.3] as [number, number, number],
+  };
+  const entity: Entity = {
+    id: "actor:runner",
+    components: {
+      Transform: { position: [0, yAt(0), 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [0.6, 1.8, 0.6], isStatic: false, isSensor: false },
+      CharacterMovement: {
+        // Fast enough that one spiked frame (dt=0.1) drops the surface ~0.67 below
+        // the feet — more than the fixed 0.5 base — so the old fixed probe would
+        // lose the floor and launch the pawn off the slope.
+        maxWalkSpeed: 8,
+        capsuleRadius: 0.3,
+        capsuleHalfHeight: 0.9,
+        maxStepHeight: 0.45,
+        maxStepDown: 0.5,
+        maxSlopeAngleDeg: 45,
+        stepSmoothSpeed: 60,
+      },
+    },
+  };
+  let y = yAt(0);
+  let z = 0;
+  const grounded: boolean[] = [];
+  const movement = new CharacterMovementSubsystem(
+    actions,
+    (_id, next) => {
+      y = next.position[1];
+      z = next.position[2];
+    },
+    physics,
+    {
+      getGravityY: () => -10,
+      reportLocomotion: (_id, report) => grounded.push(report.grounded),
+    },
+  );
+  movement.setEntities([entity]);
+  actions.handleDown("KeyW");
+  // Spiked frames (dt clamped to 0.1s), the exact condition that separates walking
+  // (small step, stays grounded) from running (large step, used to launch).
+  for (let frame = 1; frame <= 6; frame += 1) {
+    actions.advance();
+    movement.update({ deltaSeconds: 0.1, elapsedSeconds: frame * 0.1, frame });
+  }
+  assert.ok(grounded.every(Boolean), `never launches off the running descent: ${grounded}`);
+  assert.ok(z < -4, `moved forward down the ramp: z=${z}`);
+  // Followed the incline down rather than staying at the launch height.
+  assert.ok(Math.abs(y - yAt(z)) < 0.15, `hugs the slope surface: y=${y} expected≈${yAt(z)}`);
 });
 
 check("CharacterMovement subsystem still falls off a drop beyond Max Step Down", () => {
