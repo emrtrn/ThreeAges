@@ -1215,19 +1215,6 @@ export function validateLandscapeData(value: unknown): Record<string, unknown> {
       })
     : [];
   if (layers.length > 8) throw new Error("landscape data supports at most 8 layers");
-  let heightmapImport: Record<string, unknown> | undefined;
-  if (input.heightmapImport !== undefined) {
-    if (!input.heightmapImport || typeof input.heightmapImport !== "object" || Array.isArray(input.heightmapImport)) {
-      throw new Error("landscape heightmapImport must be an object");
-    }
-    const imported = input.heightmapImport as Record<string, unknown>;
-    if (typeof imported.source !== "string" || !imported.source.startsWith("assets/starter-content/Landscapes/Heightmaps/") || !imported.source.endsWith(".png") || imported.source.includes("..")) {
-      throw new Error("landscape heightmapImport.source must be a Starter Content PNG path");
-    }
-    const height = validateOptionalNumber(imported.height, "landscape.heightmapImport.height", 0, 1000);
-    if (height === undefined) throw new Error("landscape heightmapImport.height is required");
-    heightmapImport = { source: imported.source, height };
-  }
   const splines = validateLandscapeSplines(input.splines);
 
   return {
@@ -1237,7 +1224,6 @@ export function validateLandscapeData(value: unknown): Record<string, unknown> {
     chunks: { quadsPerChunk: quadsPerChunk ? Math.round(quadsPerChunk) : 32 },
     heights: input.heights.map((height) => Number(Number(height).toFixed(4))),
     layers,
-    ...(heightmapImport ? { heightmapImport } : {}),
     ...(input.splines !== undefined ? { splines } : {}),
   };
 }

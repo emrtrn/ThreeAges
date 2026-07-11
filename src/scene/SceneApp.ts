@@ -753,10 +753,8 @@ export class SceneApp {
   private landscapeObjects: LandscapeObject[] = [];
   /** In-memory sidecar height/layer data for placed Landscape actors, keyed by landscape id. */
   private landscapeData = new Map<string, ForgeLandscapeData>();
-  /** Unit-range height samples from the last imported PNG for each landscape (editor-session only). */
-  private landscapeImportSamples = new Map<string, number[]>();
-  /** The last applied import height for each landscape (editor-session only). */
-  private landscapeImportHeights = new Map<string, number>();
+  /** Last height scale used for a heightmap import, echoed back into the Details input. */
+  private lastLandscapeImportHeight = 20;
   /** Landscape ids whose sidecar has changed since the last successful save. */
   private landscapeDataDirty = new Set<string>();
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
@@ -4775,13 +4773,10 @@ export class SceneApp {
     this.landscapeObjects = [];
     this.landscapeData.clear();
     this.landscapeDataDirty.clear();
-    this.landscapeImportSamples.clear();
-    this.landscapeImportHeights.clear();
     const landscapes = this.layout?.landscapes ?? [];
     for (const actor of landscapes) {
       const data = await this.fetchLandscapeData(actor.dataRef);
       if (ensureLandscapeLayers(data)) this.landscapeDataDirty.add(actor.id);
-      await this.restoreLandscapeHeightmapImport(actor.id, data);
       this.landscapeData.set(actor.id, data);
     }
     landscapes.forEach((actor, index) => {
@@ -4796,31 +4791,6 @@ export class SceneApp {
     landscapes.forEach((_actor, index) => {
       void this.warmLandscapeLayerMaterials(index);
     });
-  }
-
-  /** Restores a persisted Starter Content PNG so Import Height remains editable after reload. */
-  private async restoreLandscapeHeightmapImport(landscapeId: string, data: ForgeLandscapeData): Promise<void> {
-    const imported = data.heightmapImport;
-    if (!imported) return;
-    try {
-      const response = await fetch(`/${imported.source}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const bitmap = await createImageBitmap(await response.blob());
-      const canvas = document.createElement("canvas");
-      canvas.width = bitmap.width;
-      canvas.height = bitmap.height;
-      const context = canvas.getContext("2d", { willReadFrequently: true });
-      if (!context) throw new Error("Unable to read heightmap PNG.");
-      context.drawImage(bitmap, 0, 0);
-      bitmap.close();
-      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-      const samples = resampleLandscapeHeightmap(pixels, canvas.width, canvas.height, data.size, 1);
-      this.landscapeImportSamples.set(landscapeId, samples);
-      this.landscapeImportHeights.set(landscapeId, imported.height);
-      data.heights = samples.map((sample) => Math.round(sample * imported.height * 1_000_000) / 1_000_000);
-    } catch (error) {
-      this.onStatus?.(`Landscape heightmap source could not be restored: ${error instanceof Error ? error.message : String(error)}`, "error");
-    }
   }
 
   /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
@@ -5280,8 +5250,6 @@ export class SceneApp {
     }
     if (removed) {
       this.landscapeData.delete(removed.id);
-      this.landscapeImportSamples.delete(removed.id);
-      this.landscapeImportHeights.delete(removed.id);
     }
     this.refreshLandscapeIndices();
     return removed ? cloneLandscape(removed) : null;
@@ -5624,9 +5592,13 @@ export class SceneApp {
     this.onStatus?.(`Filled Landscape layer: ${layerId}`, "info");
   }
 
-  /** Imports decoded PNG pixels into the selected landscape without changing its grid resolution. */
+  /**
+   * Imports decoded PNG pixels into the selected landscape without changing its
+   * grid resolution. The PNG's luminance is scaled by `heightRange` and baked
+   * straight into the sidecar heights — the source image is not stored, so the
+   * height scale is chosen at import time and re-import is the way to change it.
+   */
   async importSelectedLandscapeHeightmap(
-    file: File,
     rgba: ArrayLike<number>,
     width: number,
     height: number,
@@ -5637,19 +5609,6 @@ export class SceneApp {
     const actor = this.layout?.landscapes?.[index];
     const data = actor ? this.landscapeData.get(actor.id) : null;
     if (!actor || !data) return;
-    const fileName = `${actor.id}-heightmap-${Date.now()}.png`;
-    try {
-      const response = await fetch(
-        `/__import-asset?dir=${encodeURIComponent("assets/starter-content/Landscapes/Heightmaps")}&name=${encodeURIComponent(fileName)}`,
-        { method: "POST", headers: { "Content-Type": "image/png" }, body: file },
-      );
-      const result = (await response.json()) as { ok?: boolean; path?: string; error?: string };
-      if (!response.ok || !result.ok || !result.path) throw new Error(result.error ?? "Heightmap PNG could not be saved.");
-      data.heightmapImport = { source: result.path, height: heightRange };
-    } catch (error) {
-      this.onStatus?.(error instanceof Error ? error.message : "Heightmap PNG could not be saved.", "error");
-      return;
-    }
     let samples: number[];
     try {
       samples = resampleLandscapeHeightmap(rgba, width, height, data.size, 1);
@@ -5657,42 +5616,18 @@ export class SceneApp {
       this.onStatus?.(error instanceof Error ? error.message : "Heightmap import failed.", "error");
       return;
     }
-    this.landscapeImportSamples.set(actor.id, samples);
-    this.landscapeImportHeights.set(actor.id, heightRange);
+    this.lastLandscapeImportHeight = heightRange;
     this.applyImportedLandscapeHeightmap(index, actor.id, samples, heightRange, "Import Landscape Heightmap");
     try {
       await this.saveLandscapeData(actor.id);
     } catch (error) {
-      this.onStatus?.(`Heightmap metadata save failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+      this.onStatus?.(`Heightmap save failed: ${error instanceof Error ? error.message : String(error)}`, "error");
     }
     this.onStatus?.(`Imported ${width} x ${height} heightmap.`, "info");
   }
 
-  /** Reapplies the last PNG imported during this editor session at a new height range. */
-  async setSelectedLandscapeImportHeight(heightRange: number): Promise<void> {
-    if (this.selection?.kind !== "landscape" || !Number.isFinite(heightRange) || heightRange < 0) return;
-    const index = this.selection.index;
-    const actor = this.layout?.landscapes?.[index];
-    const samples = actor ? this.landscapeImportSamples.get(actor.id) : undefined;
-    if (!actor || !samples) {
-      this.onStatus?.("Import a heightmap PNG before changing Import Height.", "error");
-      return;
-    }
-    this.landscapeImportHeights.set(actor.id, heightRange);
-    const data = this.landscapeData.get(actor.id);
-    if (data?.heightmapImport) data.heightmapImport.height = heightRange;
-    this.applyImportedLandscapeHeightmap(index, actor.id, samples, heightRange, "Adjust Landscape Import Height");
-    try {
-      await this.saveLandscapeData(actor.id);
-    } catch (error) {
-      this.onStatus?.(`Heightmap metadata save failed: ${error instanceof Error ? error.message : String(error)}`, "error");
-    }
-  }
-
   getSelectedLandscapeImportHeight(): number {
-    if (this.selection?.kind !== "landscape") return 20;
-    const actor = this.layout?.landscapes?.[this.selection.index];
-    return actor ? this.landscapeImportHeights.get(actor.id) ?? 20 : 20;
+    return this.lastLandscapeImportHeight;
   }
 
   private applyImportedLandscapeHeightmap(
@@ -5763,11 +5698,8 @@ export class SceneApp {
       chunks: { ...data.chunks },
       heights: [...data.heights],
       layers: cloneLandscapeLayers(data.layers),
-      ...(data.heightmapImport ? { heightmapImport: { ...data.heightmapImport } } : {}),
     };
     const after = resampleLandscapeData(before, target);
-    this.landscapeImportSamples.delete(actor.id);
-    this.landscapeImportHeights.delete(actor.id);
     const selection: Selection = { kind: "landscape", index };
     const apply = (snapshot: ForgeLandscapeData): void => {
       const current = this.landscapeData.get(actor.id);

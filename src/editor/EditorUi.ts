@@ -3084,14 +3084,13 @@ export class EditorUi {
         this.app.splitSelectedLandscapeSplineSegment(segmentId),
       setSelectedLandscapeLayerMaterial: (layerId, materialId) =>
         this.app.setSelectedLandscapeLayerMaterial(layerId, materialId),
-      importSelectedLandscapeHeightmap: (file, rgba, width, height, heightRange) =>
-        this.app.importSelectedLandscapeHeightmap(file, rgba, width, height, heightRange),
+      importSelectedLandscapeHeightmap: (rgba, width, height, heightRange) =>
+        this.app.importSelectedLandscapeHeightmap(rgba, width, height, heightRange),
       exportSelectedLandscapeHeightmap: () => this.app.exportSelectedLandscapeHeightmap(),
       getSelectedLandscapeResolution: () => this.app.getSelectedLandscapeResolution(),
       resampleSelectedLandscape: (preset) => this.app.resampleSelectedLandscape(preset),
       setSelectedLandscapeWorldSize: (worldSize) => this.app.setSelectedLandscapeWorldSize(worldSize),
       getSelectedLandscapeImportHeight: () => this.app.getSelectedLandscapeImportHeight(),
-      setSelectedLandscapeImportHeight: (heightRange) => this.app.setSelectedLandscapeImportHeight(heightRange),
       setSelectedWorldWidget: (patch) => this.app.setSelectedWorldWidget(patch),
       isSelectedReflectionCaptureBakeStale: () =>
         this.app.isSelectedReflectionCaptureBakeStale(),

@@ -100,13 +100,12 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   getSelectedLandscapeSplineSegments: () => LandscapeSplineSegmentView[];
   splitSelectedLandscapeSplineSegment: (segmentId?: string | null) => void;
   setSelectedLandscapeLayerMaterial: (layerId: string, materialId: string | null) => void;
-  importSelectedLandscapeHeightmap: (file: File, rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
+  importSelectedLandscapeHeightmap: (rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
   exportSelectedLandscapeHeightmap: () => { width: number; height: number; pixels: Uint8ClampedArray } | null;
   getSelectedLandscapeResolution: () => { verticesX: number; verticesZ: number; worldSize: number } | null;
   resampleSelectedLandscape: (preset: "small" | "medium") => void;
   setSelectedLandscapeWorldSize: (worldSize: number) => void;
   getSelectedLandscapeImportHeight: () => number;
-  setSelectedLandscapeImportHeight: (heightRange: number) => Promise<void>;
   setSelectedWorldWidget: (patch: {
     widget?: string;
     worldPos?: Vec3;
@@ -303,7 +302,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
           <label class="detail-action-button detail-action-button--centered" ${lockedAttr}>Import PNG<input data-landscape-heightmap-import type="file" accept="image/png" hidden ${lockedAttr} /></label>
           <button type="button" class="detail-action-button" data-landscape-heightmap-export>Export PNG</button>
         </div>
-        <div class="detail-hint">PNG is saved into Starter Content. Changing Import Height reapplies it, including after editor reload.</div>
+        <div class="detail-hint">Import Height scales the PNG's brightness into terrain height. The imported terrain is baked into the level; re-import to change the height scale.</div>
       </div>
       ${actorLockSection(selection)}
     `;
@@ -468,7 +467,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       if (!context) throw new Error("Unable to read PNG pixels.");
       context.drawImage(bitmap, 0, 0);
       bitmap.close();
-      await options.importSelectedLandscapeHeightmap(file, context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, heightRange);
+      await options.importSelectedLandscapeHeightmap(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, heightRange);
     } catch {
       // The browser only decodes image/png here; malformed files leave the terrain untouched.
     } finally {
@@ -487,13 +486,6 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     const worldSize = Number((event.currentTarget as HTMLInputElement).value);
     if (!Number.isFinite(worldSize)) return;
     options.setSelectedLandscapeWorldSize(worldSize);
-    renderLandscapeDetails(options);
-  });
-
-  body.querySelector<HTMLInputElement>("[data-landscape-import-range]")?.addEventListener("change", async (event) => {
-    const heightRange = Number((event.currentTarget as HTMLInputElement).value);
-    if (!Number.isFinite(heightRange) || heightRange < 0) return;
-    await options.setSelectedLandscapeImportHeight(heightRange);
     renderLandscapeDetails(options);
   });
 

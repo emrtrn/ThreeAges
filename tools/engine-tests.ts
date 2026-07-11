@@ -17808,15 +17808,19 @@ check("landscape resolution resample preserves world footprint, height shape, an
   }
 });
 
-check("landscape sidecar preserves a Starter Content heightmap import reference", () => {
+check("landscape sidecar drops any legacy heightmap import reference on save", () => {
   const data = createFlatLandscapeData("small");
-  data.heightmapImport = {
-    source: "assets/starter-content/Landscapes/Heightmaps/landscape-1-heightmap.png",
-    height: 50,
+  // Older sidecars carried a `heightmapImport` PNG reference; the validator now
+  // strips it so baked heights are the single source of truth.
+  const legacy = {
+    ...data,
+    heightmapImport: {
+      source: "assets/starter-content/Landscapes/Heightmaps/landscape-1-heightmap.png",
+      height: 50,
+    },
   };
-  const validated = validateLandscapeData(data) as typeof data;
-  assert.deepEqual(validated.heightmapImport, data.heightmapImport);
-  assert.throws(() => validateLandscapeData({ ...data, heightmapImport: { source: "../outside.png", height: 20 } }));
+  const validated = validateLandscapeData(legacy) as Record<string, unknown>;
+  assert.equal("heightmapImport" in validated, false);
 });
 
 check("landscape spline data is allowlisted and rejects broken point links", () => {

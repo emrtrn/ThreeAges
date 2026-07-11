@@ -172,12 +172,6 @@ export interface ForgeLandscapeSpline {
   segments: ForgeLandscapeSplineSegment[];
 }
 
-/** Persistent source metadata for a PNG imported into this landscape. */
-export interface LandscapeHeightmapImport {
-  source: string;
-  height: number;
-}
-
 export const DEFAULT_LANDSCAPE_MATERIAL: ForgeLandscapeMaterialDef = {
   schema: 1,
   type: "landscapeMaterial",
@@ -196,7 +190,6 @@ export interface ForgeLandscapeData {
   heights: number[];
   /** Paint layers (Grass/Dirt/Rock/Snow). Empty in Faz 1 — populated starting Faz 3. */
   layers: LandscapeLayerWeights[];
-  heightmapImport?: LandscapeHeightmapImport;
   /** Faz 6 road/spline authoring data. Its terrain effects are destructive applies. */
   splines?: ForgeLandscapeSpline[];
 }
@@ -429,7 +422,6 @@ export function resampleLandscapeData(
       ...(layer.material ? { material: layer.material } : {}),
       weights: resampleLandscapeGrid(layer.weights, source, target),
     })),
-    ...(data.heightmapImport ? { heightmapImport: { ...data.heightmapImport } } : {}),
     ...(data.splines
       ? {
           splines: data.splines.map((spline) => ({
