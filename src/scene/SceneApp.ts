@@ -10,17 +10,20 @@ import {
   BoxGeometry,
   BufferGeometry,
   DirectionalLight,
+  DoubleSide,
   Float32BufferAttribute,
   Group,
   LineBasicMaterial,
   LineSegments,
   Matrix4,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
   OrthographicCamera,
   Plane,
   Raycaster,
+  RingGeometry,
   SphereGeometry,
   Sprite,
   TextureLoader,
@@ -163,7 +166,9 @@ import {
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
+  updateLandscapeObjectGeometry,
   type ForgeLandscapeData,
+  type LandscapeDirtyBounds,
   type LandscapeObject,
   type LandscapeRenderItem,
 } from "@engine/render-three/landscape";
@@ -486,6 +491,37 @@ export interface TargetPointReference {
   name: string;
 }
 
+export type LandscapeSculptTool = "raise" | "lower" | "smooth" | "flatten";
+
+export interface LandscapeSculptSettings {
+  tool: LandscapeSculptTool;
+  brushSize: number;
+  strength: number;
+  falloff: number;
+  flattenTargetHeight: number;
+}
+
+interface LandscapeSculptStroke {
+  pointerId: number;
+  landscapeIndex: number;
+  landscapeId: string;
+  beforeHeights: number[];
+  changed: boolean;
+  dirty: LandscapeDirtyBounds | null;
+}
+
+function mergeLandscapeDirtyBounds(
+  left: LandscapeDirtyBounds,
+  right: LandscapeDirtyBounds,
+): LandscapeDirtyBounds {
+  return {
+    x0: Math.min(left.x0, right.x0),
+    x1: Math.max(left.x1, right.x1),
+    z0: Math.min(left.z0, right.z0),
+    z1: Math.max(left.z1, right.z1),
+  };
+}
+
 /**
  * Default raw-code -> action bindings for the runtime input map. Game-specific
  * config lives in runtime code, not the engine. Observer-only: these share keys
@@ -622,6 +658,15 @@ export class SceneApp {
   private landscapeData = new Map<string, ForgeLandscapeData>();
   /** Landscape ids whose sidecar has changed since the last successful save. */
   private landscapeDataDirty = new Set<string>();
+  private landscapeSculptSettings: LandscapeSculptSettings = {
+    tool: "raise",
+    brushSize: 6,
+    strength: 0.25,
+    falloff: 2,
+    flattenTargetHeight: 0,
+  };
+  private landscapeSculptStroke: LandscapeSculptStroke | null = null;
+  private landscapeBrushCursor: Mesh | null = null;
   /** Editor markers for AI patrol Target Points, by index. */
   private targetPointObjects: TargetPointObject[] = [];
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
@@ -1027,6 +1072,14 @@ export class SceneApp {
     this.postProcessPipeline = null;
     this.disposeReflectionCaptureBakes();
     this.disposeInstanceProbeMaterials();
+    if (this.landscapeBrushCursor) {
+      this.scene.remove(this.landscapeBrushCursor);
+      this.landscapeBrushCursor.geometry.dispose();
+      const material = this.landscapeBrushCursor.material;
+      if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+      else material.dispose();
+      this.landscapeBrushCursor = null;
+    }
     this.lightOutlineGeometry.dispose();
     this.captureOutlineGeometry.dispose();
     // EngineApp.dispose() is async (subsystems may release async resources);
@@ -1237,6 +1290,24 @@ export class SceneApp {
     if (this.pivotEditMode) this.setPivotEditMode(false);
     this.updateGizmo();
     this.onStatus?.(`Tool: ${tool}`);
+  }
+
+  getLandscapeSculptSettings(): LandscapeSculptSettings {
+    return { ...this.landscapeSculptSettings };
+  }
+
+  setLandscapeSculptSettings(patch: Partial<LandscapeSculptSettings>): LandscapeSculptSettings {
+    const next = { ...this.landscapeSculptSettings, ...patch };
+    this.landscapeSculptSettings = {
+      tool: next.tool,
+      brushSize: clamp(next.brushSize, 0.5, 50),
+      strength: clamp(next.strength, 0.01, 2),
+      falloff: clamp(next.falloff, 0.25, 8),
+      flattenTargetHeight: clamp(next.flattenTargetHeight, -1000, 1000),
+    };
+    this.updateLandscapeBrushCursorScale();
+    this.onStatus?.(`Landscape ${this.landscapeSculptSettings.tool}`, "info");
+    return this.getLandscapeSculptSettings();
   }
 
   getTransformSpace(): TransformSpace {
@@ -1935,7 +2006,9 @@ export class SceneApp {
 
     if (values.position) transform.position = values.position;
     if (values.rotation) writeRotation(transform, values.rotation);
-    if (values.scale) writeScale(transform, values.scale);
+    if (values.scale && this.selection.kind !== "reflectionCapture" && this.selection.kind !== "landscape") {
+      writeScale(transform, values.scale);
+    }
 
     this.refreshSelectionObject(this.selection);
     this.updateSelectionBox();
@@ -1962,7 +2035,9 @@ export class SceneApp {
       if (!transform) continue;
       if (values.position) transform.position = [...values.position];
       if (values.rotation) writeRotation(transform, values.rotation);
-      if (values.scale) writeScale(transform, values.scale);
+      if (values.scale && selection.kind !== "reflectionCapture" && selection.kind !== "landscape") {
+        writeScale(transform, values.scale);
+      }
       this.refreshSelectionObject(selection);
     }
 
@@ -4494,6 +4569,234 @@ export class SceneApp {
     });
   }
 
+  private landscapeLocalHit(clientX: number, clientY: number): {
+    landscapeIndex: number;
+    local: Vector3;
+  } | null {
+    const hit = this.picker.pickLandscapeSurface(clientX, clientY);
+    if (!hit) return null;
+    const object = this.landscapeObjects[hit.index];
+    if (!object) return null;
+    return { landscapeIndex: hit.index, local: object.worldToLocal(hit.point.clone()) };
+  }
+
+  private selectedEditableLandscapeIndex(): number | null {
+    if (this.selection?.kind !== "landscape") return null;
+    if (this.isSelectionLocked(this.selection)) return null;
+    return this.selection.index;
+  }
+
+  private ensureLandscapeBrushCursor(): Mesh {
+    if (this.landscapeBrushCursor) return this.landscapeBrushCursor;
+    const cursor = new Mesh(
+      new RingGeometry(0.96, 1, 96),
+      new MeshBasicMaterial({
+        color: 0xf2d16b,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    cursor.name = "landscape-brush-cursor";
+    cursor.rotation.x = -Math.PI / 2;
+    cursor.renderOrder = 20;
+    cursor.visible = false;
+    this.landscapeBrushCursor = cursor;
+    this.scene.add(cursor);
+    return cursor;
+  }
+
+  private updateLandscapeBrushCursorScale(): void {
+    if (!this.landscapeBrushCursor) return;
+    this.landscapeBrushCursor.scale.setScalar(this.landscapeSculptSettings.brushSize);
+  }
+
+  private updateLandscapeBrushHover(clientX: number, clientY: number): void {
+    const selectedIndex = this.selectedEditableLandscapeIndex();
+    if (selectedIndex === null) {
+      this.clearLandscapeBrushHover();
+      return;
+    }
+    const hit = this.picker.pickLandscapeSurface(clientX, clientY);
+    if (!hit || hit.index !== selectedIndex) {
+      this.clearLandscapeBrushHover();
+      return;
+    }
+    const cursor = this.ensureLandscapeBrushCursor();
+    cursor.position.copy(hit.point);
+    cursor.position.y += 0.03;
+    cursor.visible = true;
+    this.updateLandscapeBrushCursorScale();
+  }
+
+  private clearLandscapeBrushHover(): void {
+    if (this.landscapeBrushCursor) this.landscapeBrushCursor.visible = false;
+  }
+
+  private beginLandscapeSculpt(event: PointerEvent): boolean {
+    const selectedIndex = this.selectedEditableLandscapeIndex();
+    if (selectedIndex === null) return false;
+    const hit = this.landscapeLocalHit(event.clientX, event.clientY);
+    if (!hit || hit.landscapeIndex !== selectedIndex) return false;
+    const actor = this.layout?.landscapes?.[selectedIndex];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return false;
+    this.landscapeSculptStroke = {
+      pointerId: event.pointerId,
+      landscapeIndex: selectedIndex,
+      landscapeId: actor.id,
+      beforeHeights: [...data.heights],
+      changed: false,
+      dirty: null,
+    };
+    this.canvas.setPointerCapture(event.pointerId);
+    this.applyLandscapeSculptDab(selectedIndex, hit.local);
+    return true;
+  }
+
+  private updateLandscapeSculpt(event: PointerEvent): boolean {
+    const stroke = this.landscapeSculptStroke;
+    if (!stroke || stroke.pointerId !== event.pointerId) return false;
+    const hit = this.landscapeLocalHit(event.clientX, event.clientY);
+    if (!hit || hit.landscapeIndex !== stroke.landscapeIndex) return true;
+    this.applyLandscapeSculptDab(stroke.landscapeIndex, hit.local);
+    this.updateLandscapeBrushHover(event.clientX, event.clientY);
+    return true;
+  }
+
+  private endLandscapeSculpt(event: PointerEvent): boolean {
+    const stroke = this.landscapeSculptStroke;
+    if (!stroke || stroke.pointerId !== event.pointerId) return false;
+    this.landscapeSculptStroke = null;
+    try {
+      this.canvas.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may already be gone after pointercancel.
+    }
+    const actor = this.layout?.landscapes?.[stroke.landscapeIndex];
+    const data = actor ? this.landscapeData.get(stroke.landscapeId) : null;
+    if (!actor || !data || !stroke.changed) return true;
+    const before = stroke.beforeHeights;
+    const after = [...data.heights];
+    const dirty = stroke.dirty;
+    const selection: Selection = { kind: "landscape", index: stroke.landscapeIndex };
+    const applyHeights = (heights: number[]): void => {
+      const current = this.landscapeData.get(stroke.landscapeId);
+      if (!current) return;
+      current.heights = [...heights];
+      this.landscapeDataDirty.add(stroke.landscapeId);
+      if (dirty) this.refreshLandscapeGeometry(stroke.landscapeIndex, dirty);
+      this.select(selection);
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: `Landscape ${this.landscapeSculptSettings.tool}`,
+      redo: () => applyHeights(after),
+      undo: () => applyHeights(before),
+    });
+    return true;
+  }
+
+  private refreshLandscapeGeometry(index: number, dirty: LandscapeDirtyBounds): void {
+    const actor = this.layout?.landscapes?.[index];
+    const object = this.landscapeObjects[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !object || !data) return;
+    updateLandscapeObjectGeometry(object, data, dirty);
+  }
+
+  private applyLandscapeSculptDab(index: number, localHit: Vector3): void {
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const stroke = this.landscapeSculptStroke;
+    if (!actor || !data || !stroke) return;
+    const dirty = this.editLandscapeHeights(data, localHit);
+    if (!dirty) return;
+    stroke.changed = true;
+    stroke.dirty = stroke.dirty ? mergeLandscapeDirtyBounds(stroke.dirty, dirty) : dirty;
+    this.landscapeDataDirty.add(actor.id);
+    this.refreshLandscapeGeometry(index, dirty);
+  }
+
+  private editLandscapeHeights(data: ForgeLandscapeData, localHit: Vector3): LandscapeDirtyBounds | null {
+    const { verticesX, verticesZ, spacing, heightScale } = data.size;
+    const radius = this.landscapeSculptSettings.brushSize;
+    const originX = ((verticesX - 1) * spacing) / 2;
+    const originZ = ((verticesZ - 1) * spacing) / 2;
+    const centerX = (localHit.x + originX) / spacing;
+    const centerZ = (localHit.z + originZ) / spacing;
+    const minX = Math.max(0, Math.floor(centerX - radius / spacing));
+    const maxX = Math.min(verticesX - 1, Math.ceil(centerX + radius / spacing));
+    const minZ = Math.max(0, Math.floor(centerZ - radius / spacing));
+    const maxZ = Math.min(verticesZ - 1, Math.ceil(centerZ + radius / spacing));
+    const sourceHeights = [...data.heights];
+    let changed = false;
+
+    for (let z = minZ; z <= maxZ; z += 1) {
+      for (let x = minX; x <= maxX; x += 1) {
+        const worldX = x * spacing - originX;
+        const worldZ = z * spacing - originZ;
+        const distance = Math.hypot(worldX - localHit.x, worldZ - localHit.z);
+        if (distance > radius) continue;
+        const falloff = Math.pow(clamp(1 - distance / radius, 0, 1), this.landscapeSculptSettings.falloff);
+        if (falloff <= 0) continue;
+        const index = z * verticesX + x;
+        const before = data.heights[index] ?? 0;
+        const after = this.nextLandscapeHeight(
+          sourceHeights,
+          verticesX,
+          verticesZ,
+          x,
+          z,
+          before,
+          localHit.y / Math.max(heightScale, 0.0001),
+          falloff,
+        );
+        if (Math.abs(after - before) <= 0.000001) continue;
+        data.heights[index] = Math.round(after * 10_000) / 10_000;
+        changed = true;
+      }
+    }
+
+    return changed ? { x0: minX, x1: maxX, z0: minZ, z1: maxZ } : null;
+  }
+
+  private nextLandscapeHeight(
+    sourceHeights: number[],
+    verticesX: number,
+    verticesZ: number,
+    x: number,
+    z: number,
+    current: number,
+    hitHeight: number,
+    falloff: number,
+  ): number {
+    const amount = this.landscapeSculptSettings.strength * falloff;
+    if (this.landscapeSculptSettings.tool === "raise") return current + amount;
+    if (this.landscapeSculptSettings.tool === "lower") return current - amount;
+    if (this.landscapeSculptSettings.tool === "flatten") {
+      const target = Number.isFinite(this.landscapeSculptSettings.flattenTargetHeight)
+        ? this.landscapeSculptSettings.flattenTargetHeight
+        : hitHeight;
+      return current + (target - current) * clamp(amount, 0, 1);
+    }
+    let total = 0;
+    let count = 0;
+    for (let dz = -1; dz <= 1; dz += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        const sx = x + dx;
+        const sz = z + dz;
+        if (sx < 0 || sx >= verticesX || sz < 0 || sz >= verticesZ) continue;
+        total += sourceHeights[sz * verticesX + sx] ?? 0;
+        count += 1;
+      }
+    }
+    const average = count > 0 ? total / count : current;
+    return current + (average - current) * clamp(amount, 0, 1);
+  }
+
   private insertLandscape(index: number, actor: LayoutLandscape, data: ForgeLandscapeData): void {
     if (!this.layout) return;
     this.layout.landscapes ??= [];
@@ -6173,6 +6476,11 @@ export class SceneApp {
       pickSelection: (clientX, clientY) => this.picker.pickSelection(clientX, clientY),
       toggleSelection: (selection) => this.toggleSelection(selection),
       select: (selection) => this.select(selection),
+      beginLandscapeSculpt: (event) => this.beginLandscapeSculpt(event),
+      updateLandscapeSculpt: (event) => this.updateLandscapeSculpt(event),
+      endLandscapeSculpt: (event) => this.endLandscapeSculpt(event),
+      updateLandscapeBrushHover: (clientX, clientY) => this.updateLandscapeBrushHover(clientX, clientY),
+      clearLandscapeBrushHover: () => this.clearLandscapeBrushHover(),
       isCameraNavigationActive: () => this.cameraController.isNavigating,
       cameraNavigationPointerId: () => this.cameraController.navigationPointerId,
       updateCameraLook: (movementX, movementY) => this.cameraController.updateLook(movementX, movementY),

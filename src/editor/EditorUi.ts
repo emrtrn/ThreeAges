@@ -103,6 +103,7 @@ import {
 import {
   renderAiNavigationVolumeDetails,
   renderBlockingVolumeDetails,
+  renderLandscapeDetails,
   renderTargetPointDetails,
   renderLightDetails,
   renderReflectionCaptureDetails,
@@ -2988,6 +2989,9 @@ export class EditorUi {
       setSelectedAiNavigationVolume: (patch) => this.app.setSelectedAiNavigationVolume(patch),
       setSelectedTargetPoint: (patch) => this.app.setSelectedTargetPoint(patch),
       setSelectedReflectionCapture: (patch) => this.app.setSelectedReflectionCapture(patch),
+      setSelectedLandscape: (patch) => this.app.setSelectedLandscape(patch),
+      getLandscapeSculptSettings: () => this.app.getLandscapeSculptSettings(),
+      setLandscapeSculptSettings: (patch) => this.app.setLandscapeSculptSettings(patch),
       setSelectedWorldWidget: (patch) => this.app.setSelectedWorldWidget(patch),
       isSelectedReflectionCaptureBakeStale: () =>
         this.app.isSelectedReflectionCaptureBakeStale(),
@@ -3079,6 +3083,10 @@ export class EditorUi {
     }
     if (selection.kind === "worldWidget" && selection.worldWidget) {
       renderWorldWidgetDetails(this.specialActorDetailsOptions(selection));
+      return;
+    }
+    if (selection.kind === "landscape") {
+      renderLandscapeDetails(this.specialActorDetailsOptions(selection));
       return;
     }
 

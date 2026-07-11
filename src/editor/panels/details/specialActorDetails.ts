@@ -5,6 +5,8 @@ import type {
   EditableAiNavigationVolume,
   EditableBlockingVolume,
   EditableSelection,
+  LandscapeSculptSettings,
+  LandscapeSculptTool,
   TargetPointReference,
 } from "@/scene/SceneApp";
 import { scaleRow, vectorRow } from "./transformRows";
@@ -74,6 +76,11 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     parallax?: boolean;
     priority?: number;
   }) => void;
+  setSelectedLandscape: (patch: { collision?: boolean }) => void;
+  getLandscapeSculptSettings: () => LandscapeSculptSettings;
+  setLandscapeSculptSettings: (
+    patch: Partial<LandscapeSculptSettings>,
+  ) => LandscapeSculptSettings;
   setSelectedWorldWidget: (patch: {
     widget?: string;
     worldPos?: Vec3;
@@ -86,6 +93,100 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   recaptureSelectedReflectionCapture: () => void;
   recaptureAllReflectionCaptures: () => void;
   rebakeAiNavigation: () => void;
+}
+
+const LANDSCAPE_SCULPT_TOOLS: readonly LandscapeSculptTool[] = [
+  "raise",
+  "lower",
+  "smooth",
+  "flatten",
+];
+
+export function renderLandscapeDetails(options: SpecialActorDetailsOptions): void {
+  const { body, selection } = options;
+  options.setDetailsScale([1, 1, 1]);
+  const lockedAttr = selection.locked ? "disabled" : "";
+  const settings = options.getLandscapeSculptSettings();
+  body.innerHTML = `
+      <div class="detail-heading">
+        <strong>${escapeHtml(selection.label)}</strong>
+        <span>terrain / landscape</span>
+      </div>
+      <label class="detail-row">
+        <span>Name</span>
+        <input data-detail-name type="text" value="${escapeHtml(selection.label)}"
+          placeholder="Landscape" />
+      </label>
+      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
+      <div class="detail-section">
+        <div class="detail-section-title">Landscape Mode</div>
+        <div class="landscape-tool-segment" role="group" aria-label="Landscape sculpt tool">
+          ${LANDSCAPE_SCULPT_TOOLS.map(
+            (tool) => `<button type="button" data-landscape-tool="${tool}" class="${
+              settings.tool === tool ? "active" : ""
+            }" ${lockedAttr}>${formatLandscapeTool(tool)}</button>`,
+          ).join("")}
+        </div>
+        <label class="detail-row">
+          <span>Brush Size</span>
+          <input data-landscape-number="brushSize" type="number" min="0.5" max="50" step="0.5"
+            value="${settings.brushSize}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Strength</span>
+          <input data-landscape-number="strength" type="number" min="0.01" max="2" step="0.01"
+            value="${settings.strength}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Falloff</span>
+          <input data-landscape-number="falloff" type="number" min="0.25" max="8" step="0.25"
+            value="${settings.falloff}" ${lockedAttr} />
+        </label>
+        <label class="detail-row">
+          <span>Flatten Target</span>
+          <input data-landscape-number="flattenTargetHeight" type="number" step="0.1"
+            value="${settings.flattenTargetHeight}" ${lockedAttr} />
+        </label>
+      </div>
+      <div class="detail-section">
+        <div class="detail-section-title">Runtime</div>
+        <label class="detail-toggle">
+          <input type="checkbox" data-landscape-collision ${selection.collision ? "checked" : ""} ${lockedAttr} />
+          <span>Collision</span>
+        </label>
+      </div>
+      ${actorLockSection(selection)}
+    `;
+
+  bindPositionRotation(options);
+  bindNameAndLock(options);
+
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-tool]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const tool = button.dataset.landscapeTool as LandscapeSculptTool | undefined;
+      if (!tool || !LANDSCAPE_SCULPT_TOOLS.includes(tool)) return;
+      options.setLandscapeSculptSettings({ tool });
+      renderLandscapeDetails(options);
+    });
+  });
+
+  body.querySelectorAll<HTMLInputElement>("[data-landscape-number]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.landscapeNumber as keyof LandscapeSculptSettings | undefined;
+      const value = Number(input.value);
+      if (!key || !Number.isFinite(value)) return;
+      options.setLandscapeSculptSettings({ [key]: value } as Partial<LandscapeSculptSettings>);
+      renderLandscapeDetails(options);
+    });
+  });
+
+  body.querySelector<HTMLInputElement>("[data-landscape-collision]")?.addEventListener(
+    "change",
+    (event) => {
+      options.setSelectedLandscape({ collision: (event.currentTarget as HTMLInputElement).checked });
+    },
+  );
 }
 
 export function renderLightDetails(options: SpecialActorDetailsOptions): void {
@@ -891,6 +992,13 @@ function actorLockSection(selection: EditableSelection): string {
           <span>Lock Movement</span>
         </label>
       </div>`;
+}
+
+function formatLandscapeTool(tool: LandscapeSculptTool): string {
+  if (tool === "raise") return "Raise";
+  if (tool === "lower") return "Lower";
+  if (tool === "smooth") return "Smooth";
+  return "Flatten";
 }
 
 function targetPointSelect(

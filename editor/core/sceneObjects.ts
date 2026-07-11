@@ -883,6 +883,12 @@ export function buildEditableSelection(
     return buildWorldWidgetEditableSelection(widget, selection.index, deps);
   }
 
+  if (selection.kind === "landscape") {
+    const actor = layout.landscapes?.[selection.index];
+    if (!actor) return null;
+    return buildLandscapeEditableSelection(actor, selection.index);
+  }
+
   if (selection.kind === "actor") {
     const actor = layout.actors?.[selection.index];
     if (!actor) return null;

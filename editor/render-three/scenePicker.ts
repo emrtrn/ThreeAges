@@ -19,6 +19,11 @@ import type { InstanceSelection, Selection } from "@editor/core/selection";
 import { pickGizmoHandle as pickGizmoHandleFromObjects } from "@editor/gizmos/interaction";
 import type { GizmoHandle } from "@editor/gizmos/handles";
 
+export interface LandscapeSurfaceHit {
+  index: number;
+  point: Vector3;
+}
+
 export interface ScenePickerOptions {
   camera: () => Camera;
   canvas: HTMLCanvasElement;
@@ -215,6 +220,20 @@ export class ScenePicker {
     this.raycaster.setFromCamera(this.pointerNdc, this.getCamera());
     const target = new Vector3();
     return this.raycaster.ray.intersectPlane(plane, target) ? target : null;
+  }
+
+  pickLandscapeSurface(clientX: number, clientY: number): LandscapeSurfaceHit | null {
+    this.setPointerNdc(clientX, clientY);
+    this.raycaster.setFromCamera(this.pointerNdc, this.getCamera());
+    const hits = this.visibleHits(this.raycaster.intersectObjects(this.getPickables(), true));
+    for (const hit of hits) {
+      const landscape = findParentLandscape(hit.object);
+      if (!landscape) continue;
+      const index = Number(landscape.userData.landscapeIndex);
+      if (!Number.isInteger(index)) continue;
+      return { index, point: hit.point.clone() };
+    }
+    return null;
   }
 
   /** Casts straight down from `origin`, ignoring the excluded selection's own

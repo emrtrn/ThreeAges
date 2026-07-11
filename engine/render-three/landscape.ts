@@ -47,6 +47,13 @@ export {
 /** The three.js object backing a Landscape actor: one child mesh per chunk. */
 export type LandscapeObject = Group;
 
+export interface LandscapeDirtyBounds {
+  x0: number;
+  x1: number;
+  z0: number;
+  z1: number;
+}
+
 /** Resolved settings + world transform + sidecar data the binding needs to build a landscape. */
 export interface LandscapeRenderItem extends ResolvedLandscape {
   position: Vec3;
@@ -163,6 +170,7 @@ function buildLandscapeChunkMeshes(data: ForgeLandscapeData, color: string): Mes
       mesh.name = "landscape-chunk";
       mesh.receiveShadow = true;
       mesh.castShadow = false;
+      mesh.userData.landscapeChunk = { x0, x1, z0, z1 } satisfies LandscapeDirtyBounds;
       meshes.push(mesh);
     }
   }
@@ -190,6 +198,35 @@ export function applyLandscapeTransform(object: LandscapeObject, item: Landscape
     "XYZ",
   );
   object.visible = !item.hidden;
+}
+
+function intersectsDirtyBounds(chunk: LandscapeDirtyBounds, dirty: LandscapeDirtyBounds): boolean {
+  return (
+    chunk.x0 <= dirty.x1 &&
+    chunk.x1 >= dirty.x0 &&
+    chunk.z0 <= dirty.z1 &&
+    chunk.z1 >= dirty.z0
+  );
+}
+
+/**
+ * Rebuilds only the chunk geometries that overlap the edited vertex bounds.
+ * Sculpt changes don't alter chunk count/materials, so replacing geometry in
+ * place keeps selection and scene ownership stable while avoiding a full actor
+ * rebuild for every brush dab.
+ */
+export function updateLandscapeObjectGeometry(
+  object: LandscapeObject,
+  data: ForgeLandscapeData,
+  dirty: LandscapeDirtyBounds,
+): void {
+  object.traverse((child) => {
+    if (!(child instanceof Mesh)) return;
+    const chunk = child.userData.landscapeChunk as LandscapeDirtyBounds | undefined;
+    if (!chunk || !intersectsDirtyBounds(chunk, dirty)) return;
+    child.geometry.dispose();
+    child.geometry = buildChunkGeometry(data, chunk.x0, chunk.x1, chunk.z0, chunk.z1);
+  });
 }
 
 /** Frees every chunk's geometry + (shared) material under a landscape group. */

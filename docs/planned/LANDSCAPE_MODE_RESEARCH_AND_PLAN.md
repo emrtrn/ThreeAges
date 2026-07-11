@@ -589,14 +589,14 @@ Yeni dev endpoint önerileri:
 
 ### Faz 2 - Sculpt
 
-- [ ] Landscape Mode toolbar/panel.
-- [ ] Brush cursor.
-- [ ] Raise/Lower.
-- [ ] Smooth.
-- [ ] Flatten.
-- [ ] Dirty chunk update.
-- [ ] Stroke-level undo/redo.
-- [ ] Save/Reload sonrası sculpt korunur.
+- [x] Landscape Mode toolbar/panel (`Details > Landscape Mode`, 2026-07-11).
+- [x] Brush cursor (viewport ring cursor, selected/unlocked Landscape üzerinde).
+- [x] Raise/Lower.
+- [x] Smooth.
+- [x] Flatten.
+- [x] Dirty chunk update (`updateLandscapeObjectGeometry()` dirty vertex bounds ile chunk geometry yeniler).
+- [x] Stroke-level undo/redo.
+- [x] Save/Reload sonrası sculpt korunur (`tests/smoke/landscape-sculpt.spec.ts`, 2026-07-11).
 
 ### Faz 3 - Paint Layers + Landscape Material
 

@@ -19,6 +19,11 @@ export interface EditorInputBindings {
   pickSelection(clientX: number, clientY: number): Selection | null;
   toggleSelection(selection: Selection): void;
   select(selection: Selection | null): void;
+  beginLandscapeSculpt(event: PointerEvent): boolean;
+  updateLandscapeSculpt(event: PointerEvent): boolean;
+  endLandscapeSculpt(event: PointerEvent): boolean;
+  updateLandscapeBrushHover(clientX: number, clientY: number): void;
+  clearLandscapeBrushHover(): void;
 
   isCameraNavigationActive(): boolean;
   cameraNavigationPointerId(): number | null;
@@ -103,6 +108,8 @@ export function bindEditorInputEvents(
       return;
     }
 
+    if (event.button === 0 && bindings.beginLandscapeSculpt(event)) return;
+
     const picked = bindings.pickSelection(event.clientX, event.clientY);
     if (event.ctrlKey || event.shiftKey) {
       if (picked) bindings.toggleSelection(picked);
@@ -126,8 +133,11 @@ export function bindEditorInputEvents(
       return;
     }
 
+    if (bindings.updateLandscapeSculpt(event)) return;
+
     const pointerDrag = bindings.pointerDrag();
     if (!pointerDrag) {
+      bindings.updateLandscapeBrushHover(event.clientX, event.clientY);
       bindings.updateGizmoHover(event.clientX, event.clientY);
       return;
     }
@@ -158,10 +168,16 @@ export function bindEditorInputEvents(
       if (drag) bindings.commitPointerDrag(drag);
       bindings.updateGizmo();
     }
+    if (bindings.endLandscapeSculpt(event)) {
+      bindings.updateGizmo();
+    }
   };
   on(canvas, "pointerup", clearDrag);
   on(canvas, "pointercancel", clearDrag);
-  on(canvas, "pointerleave", () => bindings.clearGizmoHover());
+  on(canvas, "pointerleave", () => {
+    bindings.clearLandscapeBrushHover();
+    bindings.clearGizmoHover();
+  });
   on(canvas, "contextmenu", (event) => event.preventDefault());
 
   onWindow("keydown", (event) => {

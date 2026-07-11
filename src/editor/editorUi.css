@@ -935,6 +935,31 @@ body.editor-mode #debug-stats {
   color: #9aa4a9;
 }
 
+.landscape-tool-segment {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.landscape-tool-segment button {
+  min-width: 0;
+  height: 28px;
+  border: 1px solid #303640;
+  background: #1d222b;
+  color: #cbd2dc;
+  font-size: 12px;
+}
+
+.landscape-tool-segment button:hover:not(:disabled) {
+  background: #29303a;
+}
+
+.landscape-tool-segment button.active {
+  border-color: #d4a94e;
+  background: #3a2f1b;
+  color: #f5d98e;
+}
+
 .detail-subsection-title {
   margin-top: 2px;
   font-size: 11px;
