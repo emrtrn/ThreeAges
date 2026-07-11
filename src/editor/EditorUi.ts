@@ -3077,6 +3077,11 @@ export class EditorUi {
       setSelectedLandscapeSplinePointPosition: (pointId, position) =>
         this.app.setSelectedLandscapeSplinePointPosition(pointId, position),
       deleteSelectedLandscapeSplinePoint: (pointId) => this.app.deleteSelectedLandscapeSplinePoint(pointId),
+      setSelectedLandscapeSplinePointShape: (pointId, patch) =>
+        this.app.setSelectedLandscapeSplinePointShape(pointId, patch),
+      getSelectedLandscapeSplineSegments: () => this.app.getSelectedLandscapeSplineSegments(),
+      splitSelectedLandscapeSplineSegment: (segmentId) =>
+        this.app.splitSelectedLandscapeSplineSegment(segmentId),
       setSelectedLandscapeLayerMaterial: (layerId, materialId) =>
         this.app.setSelectedLandscapeLayerMaterial(layerId, materialId),
       importSelectedLandscapeHeightmap: (file, rgba, width, height, heightRange) =>

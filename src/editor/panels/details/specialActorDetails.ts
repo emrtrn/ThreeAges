@@ -9,6 +9,7 @@ import type {
   LandscapeLayerView,
   LandscapeSplineView,
   LandscapeSplinePointView,
+  LandscapeSplineSegmentView,
   LandscapePaintTool,
   LandscapeSculptSettings,
   LandscapeSculptTool,
@@ -95,6 +96,9 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   getSelectedLandscapeSplinePoints: () => LandscapeSplinePointView[];
   setSelectedLandscapeSplinePointPosition: (pointId: string, position: Vec3) => void;
   deleteSelectedLandscapeSplinePoint: (pointId?: string | null) => void;
+  setSelectedLandscapeSplinePointShape: (pointId: string, patch: { width?: number; falloff?: number }) => void;
+  getSelectedLandscapeSplineSegments: () => LandscapeSplineSegmentView[];
+  splitSelectedLandscapeSplineSegment: (segmentId?: string | null) => void;
   setSelectedLandscapeLayerMaterial: (layerId: string, materialId: string | null) => void;
   importSelectedLandscapeHeightmap: (file: File, rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
   exportSelectedLandscapeHeightmap: () => { width: number; height: number; pixels: Uint8ClampedArray } | null;
@@ -136,6 +140,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   const splines = options.getSelectedLandscapeSplines();
   const splinePoints = options.getSelectedLandscapeSplinePoints();
   const activeSplinePoint = splinePoints.find((point) => point.id === settings.activeSplinePointId) ?? splinePoints.at(-1);
+  const splineSegments = options.getSelectedLandscapeSplineSegments();
   const resolution = options.getSelectedLandscapeResolution();
   const importHeight = options.getSelectedLandscapeImportHeight();
   const materialAssets = editableAssets.filter((asset) => assetType(asset) === "material");
@@ -159,6 +164,9 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       ),
     )
     .join("");
+  const splinePointMarkup = activeSplinePoint
+    ? `<div class="detail-subsection-title">Control Point</div><div class="landscape-layer-list">${splinePoints.map((point) => `<button type="button" data-landscape-spline-point="${escapeHtml(point.id)}" class="${activeSplinePoint.id === point.id ? "active" : ""}" ${lockedAttr}>${escapeHtml(point.id)}</button>`).join("")}</div><div class="detail-vector-row"><span>Location</span>${["x", "y", "z"].map((axis, index) => `<input data-landscape-spline-point-axis="${axis}" type="number" step="0.1" value="${activeSplinePoint.position[index]}" ${lockedAttr}>`).join("")}</div><label class="detail-row"><span>Width</span><input data-landscape-spline-point-shape="width" type="number" min="0.1" step="0.1" value="${activeSplinePoint.width}" ${lockedAttr}></label><label class="detail-row"><span>Falloff</span><input data-landscape-spline-point-shape="falloff" type="number" min="0" step="0.1" value="${activeSplinePoint.falloff}" ${lockedAttr}></label><button type="button" class="detail-action-button" data-landscape-spline-point-delete ${lockedAttr}>Delete Point</button>`
+    : "";
   body.innerHTML = `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
@@ -193,12 +201,10 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
                 <button type="button" class="detail-action-button" data-landscape-spline-create ${lockedAttr}>New Spline</button>
                 <button type="button" class="detail-action-button" data-landscape-spline-delete ${lockedAttr}>Delete Spline</button>
               </div>
-              ${activeSplinePoint ? `<div class="detail-subsection-title">Control Point</div>
-                <div class="landscape-layer-list">${splinePoints.map((point) => `<button type="button" data-landscape-spline-point="${escapeHtml(point.id)}" class="${
-                  activeSplinePoint.id === point.id ? "active" : ""
-                }" ${lockedAttr}>${escapeHtml(point.id)}</button>`).join("")}</div>
-                <div class="detail-vector-row"><span>Location</span>${["x", "y", "z"].map((axis, index) => `<input data-landscape-spline-point-axis="${axis}" type="number" step="0.1" value="${activeSplinePoint.position[index]}" ${lockedAttr}>`).join("")}</div>
-                <button type="button" class="detail-action-button" data-landscape-spline-point-delete ${lockedAttr}>Delete Point</button>` : ""}`
+              ${splinePointMarkup}
+              ${splineSegments.length ? `<div class="detail-subsection-title">Segments</div><div class="landscape-layer-list">${splineSegments.map((segment) => `<button type="button" data-landscape-spline-segment="${escapeHtml(segment.id)}" class="${
+                settings.activeSplineSegmentId === segment.id ? "active" : ""
+              }" ${lockedAttr}>${escapeHtml(segment.startPointId)} → ${escapeHtml(segment.endPointId)}</button>`).join("")}</div><button type="button" class="detail-action-button" data-landscape-spline-segment-split ${lockedAttr}>Split Segment</button>` : ""}`
             : settings.editMode === "paint"
             ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape paint tool">
               ${LANDSCAPE_PAINT_TOOLS.map(
@@ -345,7 +351,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     button.addEventListener("click", () => {
       const activeSplineId = button.dataset.landscapeSpline;
       if (!activeSplineId) return;
-      options.setLandscapeSculptSettings({ activeSplineId, activeSplinePointId: null });
+      options.setLandscapeSculptSettings({ activeSplineId, activeSplinePointId: null, activeSplineSegmentId: null });
       renderLandscapeDetails(options);
     });
   });
@@ -377,8 +383,30 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       renderLandscapeDetails(options);
     });
   });
+  body.querySelectorAll<HTMLInputElement>("[data-landscape-spline-point-shape]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const point = options.getSelectedLandscapeSplinePoints().find((entry) => entry.id === options.getLandscapeSculptSettings().activeSplinePointId);
+      const key = input.dataset.landscapeSplinePointShape as "width" | "falloff" | undefined;
+      const value = Number(input.value);
+      if (!point || !key || !Number.isFinite(value)) return;
+      options.setSelectedLandscapeSplinePointShape(point.id, { [key]: value });
+      renderLandscapeDetails(options);
+    });
+  });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-point-delete]")?.addEventListener("click", () => {
     options.deleteSelectedLandscapeSplinePoint(options.getLandscapeSculptSettings().activeSplinePointId);
+    renderLandscapeDetails(options);
+  });
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-segment]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const activeSplineSegmentId = button.dataset.landscapeSplineSegment;
+      if (!activeSplineSegmentId) return;
+      options.setLandscapeSculptSettings({ activeSplineSegmentId });
+      renderLandscapeDetails(options);
+    });
+  });
+  body.querySelector<HTMLButtonElement>("[data-landscape-spline-segment-split]")?.addEventListener("click", () => {
+    options.splitSelectedLandscapeSplineSegment(options.getLandscapeSculptSettings().activeSplineSegmentId);
     renderLandscapeDetails(options);
   });
 
