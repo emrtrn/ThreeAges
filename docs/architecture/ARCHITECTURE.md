@@ -159,7 +159,10 @@ teardown to the host via an `ActorCommandSink` (`setCollisionEnabled` routes to
 generation and the movement blockers). Runtime visibility/collision/destroy state
 is never written to layout files; opt-in `{ persist: true }` routes it through the
 save-game snapshot
-(`getPersistentStateSnapshot`) only. `Layout Data ≠ Save Game Data`.
+(`getPersistentStateSnapshot`) only. `Layout Data ≠ Save Game Data`. See
+`docs/architecture/SAVE_GAME_CONTRACT.md` for the full envelope contract — what a
+save stores, what it deliberately omits, the opt-in persistent-state pattern, and
+the load → travel → restore sequence.
 
 ### AI runtime / editor boundary
 

@@ -16,7 +16,9 @@ third-person 3D web game**:
 - Game framework: Game Mode / PlayerController / PlayerState / Pawn.
 - Character movement (walk / jump / slopes / step-up-down / moving platforms) and
   a spring-arm follow camera.
-- Level travel between layouts, slot-based save/load, and kill-Z respawn.
+- Level travel between layouts, slot-based save/load
+  ([save-game contract](docs/architecture/SAVE_GAME_CONTRACT.md)), and kill-Z
+  respawn.
 - Boot / loading UX, plus a win/lose + restart game-rules layer.
 
 Other single-player 3D genres are feasible on the same generic core (a free-fly

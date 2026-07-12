@@ -60,7 +60,7 @@ taramasi ayrica onayla istenmeli; sessiz tarama calistirilmemeli.
 | P0 | `[x]` | - | Kapanan behavior-state bulgusunu ve mevcut runtime smoke tabanini sabitle. |
 | P1 | `[x]` | P0 | Runtime browser smoke borcunu kapat. (P1.1-P1.7 tamam) |
 | P2 | `[ ]` | P1 onerilir | `RuntimeSceneApp` kabugunu davranis koruyan modullere bol. |
-| P3 | `[ ]` | P0 | Save-game zarf sozlesmesini yazili hale getir. |
+| P3 | `[x]` | P0 | Save-game zarf sozlesmesini yazili hale getir. (SAVE_GAME_CONTRACT.md) |
 | P4 | `[ ]` | P3 onerilir | AI move-intent ve +z-forward facing varsayimini yol haritasina bagla. |
 | P5 | `[ ]` | P1-P4 | Baslik 4 kararini tekrar degerlendir ve ana analiz kaydini guncelle. |
 
@@ -219,27 +219,32 @@ Kabul kriterleri:
 Amac: Fork tuketicisinin save tasarimini tahminle degil, yazili sozlesmeyle
 yapmasini saglamak. Bu faz Baslik 4 Aksiyon 4'u kapatir.
 
-Onerilen dokuman: `docs/architecture/SAVE_GAME_CONTRACT.md`
+Dokuman: `docs/architecture/SAVE_GAME_CONTRACT.md` (yazildi).
 
 Checklist:
 
-- [ ] **P3.1 - Kaydedilen alanlar:** Current level path, player transform,
-  opt-in persistent script state, slot metadata ve schema version alanlarini
-  acikla.
-- [ ] **P3.2 - Bilerek kaydedilmeyen alanlar:** Layout data, editor state,
-  spawned/destroyed runtime actors, transient behavior latch'leri, UI ephemeral
-  state, physics impulse/velocity gibi alanlari listele.
-- [ ] **P3.3 - Opt-in persistent-state deseni:** Actor Script veya behavior'in
-  hangi kosulda save'e state yazabilecegini ve migration hook'un nasil
-  kullanilacagini ornekle.
-- [ ] **P3.4 - Load/travel sozlesmesi:** Save load'un once kayitli level'a
-  travel ettigini, restore'un scene build sonrasinda uygulandigini yaz.
-- [ ] **P3.5 - Validator gotcha:** Yeni layout/sidecar alanlari icin
-  `tools/saveValidator.ts` allowlist zorunlulugunu hatirlat; save-game runtime
-  state'inin layout'a yazilmayacagini tekrar vurgula.
-- [ ] **P3.6 - Baglanti guncellemeleri:** `README.md`,
-  `docs/architecture/ARCHITECTURE.md` veya fork workflow dokumanindan yeni
-  sozlesmeye link ver.
+- [x] **P3.1 - Kaydedilen alanlar:** Envelope (`schema`/`gameId`/`createdAt`/
+  `updatedAt`/`payload`) + `GameSaveState` payload (`activeLevelPath`, `player`
+  {position + facingYawDeg}, `flags` = opt-in persistent script state) tablo
+  halinde; slot key semasi + schema=1 / migrate-hook durumu aciklandi.
+- [x] **P3.2 - Bilerek kaydedilmeyen alanlar:** Layout/scene geometrisi, editor
+  state, runtime-spawned/destroyed actor'lar (opt-in marker haric), transient
+  behavior latch'leri, UI ephemeral state, physics impulse/velocity, kamera, AI
+  runtime state, VFX/audio/timer listelendi.
+- [x] **P3.3 - Opt-in persistent-state deseni:** `context.state.persist(key,
+  value)` ornegi; reserved hidden/collision/destroyed marker'lari; restore'un
+  transform'dan once uygulandigi; migration'in envelope seviyesinde yapilacagi.
+- [x] **P3.4 - Load/travel sozlesmesi:** `requestSaveGameLoad` -> kayitli level'a
+  travel -> scene build sonrasi `applyPendingSaveRestore` (level eslesmesi
+  sarti) -> flags sonra player transform; portal travel'in pendingRestore'u
+  temizledigi yazildi.
+- [x] **P3.5 - Validator gotcha:** Save payload'inin localStorage-only oldugu ve
+  `tools/saveValidator.ts`'ten gecmedigi; layout allowlist zorunlulugunun
+  authoring'e ait ayri bir konu oldugu; save state'in layout'a yazilmayacagi
+  vurgulandi.
+- [x] **P3.6 - Baglanti guncellemeleri:** `docs/architecture/ARCHITECTURE.md`
+  ("Layout Data ≠ Save Game Data" paragrafi) ve `README.md` (slot-based
+  save/load satiri) sozlesmeye link veriyor.
 
 Kabul kriterleri:
 
