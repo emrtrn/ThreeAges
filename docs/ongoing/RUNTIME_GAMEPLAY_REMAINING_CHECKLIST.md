@@ -200,12 +200,18 @@ korur.
   `pendingSaveRestore`. Shell'de kalan deps callback'leri: `collectCurrentSaveState`
   (game-mode/behavior/entity okur), `applyRestore` (persistent snapshot +
   `applySavedPlayerTransform`), `enqueueLevelTravel`, `clearScreens`, `uiStore`.
-- **Travel (P2.2 — `runtimeTravelCoordinator.ts`, bekliyor):** `travelState`,
-  `requestLevelTravel`, `enqueueLevelTravel`, `runTravel`, `holdLoadingMinimum` ve
-  loading-overlay handoff (`beginLoadingUi`/`finishLoadingUi`/`setLoadingStatus`).
-  `levelTravel.ts` saf state machine olarak kalir. Not: `requestSaveGameLoad`
-  travel'i tetikledigi icin coordinator, save coordinator'in `enqueueLevelTravel`
-  callback'ini besleyecek; iki coordinator arasi tek yon bagimlilik.
+- **Travel (P2.2 — `runtimeTravelCoordinator.ts`, TAMAM):** `travelState`,
+  `requestLevelTravel`, `enqueueLevelTravel`, `runTravel`, `holdLoadingMinimum`
+  coordinator'a tasindi; `levelTravel.ts` saf state machine olarak kaldi.
+  `requestSaveGameLoad` travel'i tetikledigi icin save coordinator'in
+  `enqueueLevelTravel` callback'i artik `travelCoordinator.enqueueLevelTravel`'e
+  gidiyor; iki coordinator arasi tek yon bagimlilik korundu (`clearPendingRestore`
+  deps callback'i ile travel -> save). **Sapma:** loading-overlay handoff
+  (`beginLoadingUi`/`finishLoadingUi`/`setLoadingStatus`) shell'de kaldi — boot
+  lifecycle (`loadActiveProjectScene` + per-faz `setLoadingStatus`) ile paylasimli
+  oldugu icin travel-scope module'e cekmek shell -> coordinator yon kuralini
+  bozardi; coordinator bunlari deps callback (`beginLoadingUi`/`finishLoadingUi`/
+  `showLoadError`) uzerinden cagiriyor.
 - **Spawn (P2.4 — `runtimeActorSpawnCoordinator.ts`, bekliyor):**
   `spawnRuntimeActor`, `nextSpawnedActorEntityId`, `registerActorEntity`,
   `destroyActorEntity` ve `nextRuntimeActorId`/`actorEntityById` id-uretim +
@@ -237,9 +243,16 @@ Checklist:
 - [x] **P2.1 - Remainder map:** `RuntimeSceneApp.ts` icin metot/sorumluluk
   haritasi cikarildi (yukaridaki "P2.1 Remainder Map" bolumu); hangi metotlar
   travel/save/spawn/debug olarak tasinacak deps-interface deseniyle isaretlendi.
-- [ ] **P2.2 - Travel coordinator extraction:** `travelState`,
-  `requestLevelTravel`, queue process ve loading overlay handoff'unu kucuk
-  coordinator'a al. `levelTravel.ts` saf state machine olarak kalmali.
+- [x] **P2.2 - Travel coordinator extraction:** `src/scene/runtimeTravelCoordinator.ts`
+  (`RuntimeTravelCoordinator` + `RuntimeTravelCoordinatorDeps`). `travelState`,
+  `requestLevelTravel`, `enqueueLevelTravel`, `runTravel`, `holdLoadingMinimum`
+  coordinator'a tasindi; `levelTravel.ts` saf state machine olarak kaldi. Scene
+  teardown/build, loading overlay handoff ve pending-restore temizligi shell'de
+  deps callback olarak kaldi; davranis birebir korundu. `RuntimeSceneApp.ts`
+  4784 -> 4724 satir. Dogrulama: `tsc` temiz, `test:engine` 779 checks,
+  `verify:imports` PASS, `runtime-portal` + `runtime-checkpoint` +
+  `runtime-locomotion` browser smoke yesil (travel round-trip + save/pending-restore
+  travel + locomotion kanitli).
 - [x] **P2.3 - Save coordinator extraction:** `src/scene/runtimeSaveCoordinator.ts`
   (`RuntimeSaveCoordinator` + `RuntimeSaveCoordinatorDeps`). `SaveGameStore` ve
   pending-restore latch'ini sahiplenir; quick slot write/load/delete, checkpoint

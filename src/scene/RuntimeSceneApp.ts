@@ -14,13 +14,6 @@ import { AssetLoader } from "./assetLoader";
 import { LoadingOverlay } from "./loadingOverlay";
 import { LoadProgressTracker, formatLoadDetail } from "@engine/loading/loadProgress";
 import { loadRoomLayout } from "./roomLayout";
-import {
-  beginLoading,
-  finishTravel,
-  initialLevelTravelState,
-  requestTravel,
-  type LevelTravelState,
-} from "./levelTravel";
 import { EngineApp } from "@engine/core/EngineApp";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
 import { ActionMap } from "@engine/input/actionMap";
@@ -332,6 +325,7 @@ import {
   type UserSettings,
 } from "@engine/persistence/userSettingsStore";
 import { RuntimeSaveCoordinator } from "./runtimeSaveCoordinator";
+import { RuntimeTravelCoordinator } from "./runtimeTravelCoordinator";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -684,6 +678,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private activeLevelPath: string | null = null;
   /** Owns slot-based save/load: store, pending-restore latch, checkpoint + UI (P2.3). */
   private readonly saveCoordinator: RuntimeSaveCoordinator;
+  /** Owns Level Travel: the travel state machine + async teardown/rebuild loop (P2.2). */
+  private readonly travelCoordinator: RuntimeTravelCoordinator;
   private collisionDefs = new Map<string, AssetCollisionDef>();
   /** Render-mesh triangle data for `complexAsSimple` assets (static trimesh collider). */
   private complexCollisionMeshes = new Map<string, AssetComplexCollisionMesh>();
@@ -776,8 +772,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private activeGameMode: GameModeDefinition | null = null;
   private gravityY = DEFAULT_SCENE_GRAVITY[1];
   private killZ = DEFAULT_SCENE_KILL_Z;
-  /** Level Travel (P2) state machine: idle unless a portal/menu requested travel. */
-  private travelState: LevelTravelState = initialLevelTravelState();
   private readonly pawnRespawnTransforms = new Map<string, TransformComponent>();
   private inputMode: InputMode = "ui";
   /** UMG Lite runtime UI host; null when the layout authors no HUD/pause widget. */
@@ -994,6 +988,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.pointerButtons.attach();
     this.resumeAudioOnFirstGesture();
 
+    this.travelCoordinator = new RuntimeTravelCoordinator({
+      clearPendingRestore: () => this.saveCoordinator.clearPendingRestore(),
+      beginLoadingUi: (status) => this.beginLoadingUi(status),
+      finishLoadingUi: () => this.finishLoadingUi(),
+      showLoadError: (message) =>
+        this.loadingOverlay?.showError(message, () => {
+          if (typeof location !== "undefined") location.reload();
+        }),
+      teardownScene: () => this.teardownScene(),
+      buildScene: (layoutPath, spawnTag) => this.buildScene(layoutPath, spawnTag),
+    });
+
     this.saveCoordinator = new RuntimeSaveCoordinator({
       uiStore: this.uiStore,
       collectSaveState: () => this.collectCurrentSaveState(),
@@ -1001,7 +1007,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.behaviorSubsystem.applyPersistentStateSnapshot(restore.persistentState);
         if (restore.player) this.applySavedPlayerTransform(restore.player);
       },
-      enqueueLevelTravel: (levelPath) => this.enqueueLevelTravel(levelPath),
+      enqueueLevelTravel: (levelPath) => this.travelCoordinator.enqueueLevelTravel(levelPath),
       clearScreens: () => this.uiSubsystem?.clearScreens(),
     });
 
@@ -1033,7 +1039,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         void this.playActorParticleEffect(entityId);
       },
       onLevelTravel: (_entityId, targetLevel, targetSpawn) => {
-        this.requestLevelTravel(targetLevel, targetSpawn);
+        this.travelCoordinator.requestLevelTravel(targetLevel, targetSpawn);
       },
       onCheckpoint: (_entityId, slot) => {
         this.saveCoordinator.writeCheckpointSave(slot);
@@ -2007,27 +2013,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.aiSubsystem.setAssetLibrary({ blackboards, behaviors, stateTrees });
   }
 
-  /**
-   * Requests Level Travel (P2) to another layout, respawning the player at the
-   * `spawnTag` Player Start there (or the default marker). Safe to call from a
-   * behavior tick (a portal trigger) or the menu: the state machine serializes
-   * requests — a second one arriving mid-travel is held (latest wins) and runs
-   * when the current cycle settles — and the teardown is deferred past the frame.
-   */
-  requestLevelTravel(layoutPath: string, spawnTag?: string): void {
-    this.saveCoordinator.clearPendingRestore();
-    this.enqueueLevelTravel(layoutPath, spawnTag);
-  }
-
-  private enqueueLevelTravel(layoutPath: string, spawnTag?: string): void {
-    const request = spawnTag !== undefined ? { layoutPath, spawnTag } : { layoutPath };
-    const { state, begin } = requestTravel(this.travelState, request);
-    this.travelState = state;
-    // `begin` is true only when the machine was idle, i.e. no runTravel loop is
-    // running; a request arriving mid-travel is queued and picked up by the loop.
-    if (begin) void this.runTravel();
-  }
-
   requestSaveGameLoad(payload: unknown): boolean {
     return this.saveCoordinator.requestSaveGameLoad(payload);
   }
@@ -2053,51 +2038,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const ok = this.userSettingsStore?.setLocale(locale) ?? false;
     this.userSettings = this.userSettingsStore?.read() ?? { ...this.userSettings, locale };
     return ok;
-  }
-
-  /**
-   * Drives one or more queued travel cycles: tear the current scene down, load the
-   * target, then process any request that queued up while loading. Yields once
-   * before the first teardown so a travel requested from inside the engine update
-   * (portal contact) doesn't mutate the scene mid-tick; teardown then runs between
-   * frames with the subsystems already emptied, so the loop ticks nothing until
-   * the rebuild re-feeds them.
-   */
-  private async runTravel(): Promise<void> {
-    await Promise.resolve();
-    while (this.travelState.active) {
-      const request = this.travelState.active;
-      // Show the loading overlay for the whole travel (P4.4); a minimum on-screen
-      // time keeps a fast (cached) transition from flashing it for a single frame.
-      this.beginLoadingUi("Loading level");
-      const shownAtMs = typeof performance !== "undefined" ? performance.now() : 0;
-      this.teardownScene();
-      this.travelState = beginLoading(this.travelState);
-      let failed = false;
-      try {
-        await this.buildScene(request.layoutPath, request.spawnTag);
-      } catch (error) {
-        console.error("[runtime] level travel failed:", request.layoutPath, error);
-        failed = true;
-        this.loadingOverlay?.showError("Failed to load the level.", () => {
-          if (typeof location !== "undefined") location.reload();
-        });
-      }
-      this.travelState = finishTravel(this.travelState).state;
-      // Hold + hide only once no further travel is queued (a queued request re-shows
-      // it, so hiding between cycles would flicker); leave the error screen up.
-      if (!this.travelState.active && !failed) {
-        await this.holdLoadingMinimum(shownAtMs);
-        this.finishLoadingUi();
-      }
-    }
-  }
-
-  /** Waits until the loading overlay has been visible for at least `minMs` (anti-flicker). */
-  private async holdLoadingMinimum(shownAtMs: number, minMs = 300): Promise<void> {
-    if (typeof performance === "undefined") return;
-    const remaining = minMs - (performance.now() - shownAtMs);
-    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
   }
 
   /**
@@ -2646,7 +2586,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const layoutPath = hashIndex >= 0 ? spec.slice(0, hashIndex) : spec;
     if (!layoutPath) return false;
     const spawnTag = hashIndex >= 0 ? spec.slice(hashIndex + 1) : "";
-    this.requestLevelTravel(layoutPath, spawnTag || undefined);
+    this.travelCoordinator.requestLevelTravel(layoutPath, spawnTag || undefined);
     return true;
   }
 
