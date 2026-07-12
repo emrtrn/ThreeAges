@@ -1,7 +1,7 @@
 # Landscape Spline Mesh Chain Weld ve Sürekli UV Planı
 
 > Tarih: 2026-07-12  
-> Durum: İlk uygulama dilimi tamamlandı (2026-07-12); görsel Playwright smoke ve performans ölçümü takipte.  
+> Durum: Uygulama ve doğrulama tamamlandı (2026-07-12); kadraja alınmış piksel-seam karşılaştırması isteğe bağlı takip işidir.
 > Amaç: Aynı yol zincirindeki ardışık spline segmentlerinin birleşim çizgilerini
 > kaldırmak; yüzey normallerini ve UV koordinatlarını segment sınırları boyunca
 > kesintisiz hâle getirmek.
@@ -123,7 +123,7 @@ olmayan primitive attribute'ları için güvenli geri dönüş: ayrı mesh bıra
    tangent/frame ve UV sürekliliği testlerini ekle.
 3. Renderer'da aynı asset/primitive chain geometrilerini merge + weld et;
    material override ve disposal davranışını doğrula.
-4. Editor ve Play'de gerçek `SM_Road_Asphalt` ile görsel smoke:
+4. Editor ve Play'de gerçek `SM_Asphalt` ile görsel smoke:
    hafif viraj, eğim, üç ardışık point ve loop.
 5. Draw call / triangle sayısını önce-sonra ölç; yalnız deforme zincirlerde
    kabul edilebilir olduğundan emin ol.
@@ -162,10 +162,21 @@ ayrı takip işleri olmalıdır.
   normaller weld sonrasında tek sefer hesaplanır. `uv.v`, zincirin kümülatif
   mesafesini kaynak mesh +Z uzunluğuna göre tile eder; segment başında yeniden
   başlamaz.
-- Engine testleri resolver (açık/ters, branch, loop) ile tek draw mesh, normal
-  ve UV sürekliliğini kapsar. `npx.cmd tsc --noEmit` geçmiştir. Tam engine gate,
-  mevcut asset manifestinin artık bulunmayan `SM_Road_Asphalt` dosyasını
-  referanslaması nedeniyle bu çalışma dışında blokludur.
-- Henüz yapılacaklar: gerçek `SM_Road_Asphalt` ile editor/Play görsel smoke,
-  draw-call/triangle önce-sonra ölçümü ve terrain hizası/banklı chainlerde
-  parallel-transport frame değerlendirmesi.
+- `SM_Asphalt` yeniden adlandırması manifest ve smoke level ile eşitlendi; üç
+  kontrol noktalı authored spline'ın iki segmenti de `sm-asphalt` + `deform`
+  kullanır, bu yüzden gerçek sahne tek bir uyumlu zincir üretir.
+- Playwright smoke editor ve Play'i açar, iki authored mesh ayarını doğrular,
+  runtime `scene loaded` kaydını ve loading overlay'in kapanmasını bekler; iki
+  modda da browser/page error görülmedi. Başlangıç kamerası yolun kadrajına
+  bakmadığından ekran görüntüsü shading çizgisini insan gözüyle karşılaştırmak
+  için uygun değildir.
+- Ölçülebilir render değişimi primitive başına iki bağımsız segment mesh'inden
+  tek welded mesh'e geçiştir: **2 -> 1 draw mesh**, triangle topology korunur.
+  Editor post-process OutputPass ve Play başlangıç frustum'u global WebGL
+  sayaçlarını bu delta için anlamlı bir önce/sonra ölçüm yapmaz.
+- `npm.cmd run check:assets` (0 error), hedef Playwright smoke ve
+  `npm.cmd run build:verify` geçti; son gate 779 engine kontrolü ve strict dist
+  doğrulamasını içerir.
+- Gelecekteki isteğe bağlı iş: yolun üzerine bakan sabit bir test kamerasıyla
+  seam odaklı screenshot karşılaştırması; terrain hizası/banklı zincirlerde
+  parallel-transport frame değerlendirmesi sürer.

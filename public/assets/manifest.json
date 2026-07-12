@@ -20762,11 +20762,11 @@
       "license": "Unknown"
     },
     {
-      "id": "sm-road-asphalt",
-      "name": "SM Road Asphalt",
+      "id": "sm-asphalt",
+      "name": "SM Asphalt",
       "assetType": "staticMesh",
       "category": "Environment",
-      "path": "assets/starter-content/StaticMeshes/Environment/SM_Road_Asphalt.glb",
+      "path": "assets/starter-content/StaticMeshes/Environment/SM_Asphalt.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20780,7 +20780,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 5292
+        "bytes": 5348
       },
       "license": "Unknown"
     },
