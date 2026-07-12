@@ -171,7 +171,29 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     )
     .join("");
   const splinePointMarkup = activeSplinePoint
-    ? `<div class="detail-subsection-title">Control Point</div><div class="landscape-layer-list">${splinePoints.map((point) => `<button type="button" data-landscape-spline-point="${escapeHtml(point.id)}" class="${activeSplinePoint.id === point.id ? "active" : ""}" ${lockedAttr}>${escapeHtml(point.id)}</button>`).join("")}</div><div class="detail-vector-row"><span>Location</span>${["x", "y", "z"].map((axis, index) => `<input data-landscape-spline-point-axis="${axis}" type="number" step="0.1" value="${activeSplinePoint.position[index]}" ${lockedAttr}>`).join("")}</div><label class="detail-row"><span>Width</span><input data-landscape-spline-point-shape="width" type="number" min="0.1" step="0.1" value="${activeSplinePoint.width}" ${lockedAttr}></label><label class="detail-row"><span>Falloff</span><input data-landscape-spline-point-shape="falloff" type="number" min="0" step="0.1" value="${activeSplinePoint.falloff}" ${lockedAttr}></label><button type="button" class="detail-action-button" data-landscape-spline-point-delete ${lockedAttr}>Delete Point</button>`
+    ? `<div class="detail-subsection-title">Control Point</div>
+      <div class="landscape-layer-list">${splinePoints
+        .map(
+          (point) =>
+            `<button type="button" data-landscape-spline-point="${escapeHtml(point.id)}" class="${
+              activeSplinePoint.id === point.id ? "active" : ""
+            }" ${lockedAttr}>${escapeHtml(point.id)}</button>`,
+        )
+        .join("")}</div>
+      <div class="detail-vector">
+        <span class="detail-vector-label">Location</span>
+        <div class="vector-fields">${["x", "y", "z"]
+          .map(
+            (axis, index) =>
+              `<label class="axis-field axis-${axis}"><span class="axis-tag">${axis.toUpperCase()}</span><input data-landscape-spline-point-axis="${axis}" type="number" step="0.1" value="${Number(
+                (activeSplinePoint.position[index] ?? 0).toFixed(3),
+              )}" ${lockedAttr} /></label>`,
+          )
+          .join("")}</div>
+      </div>
+      <label class="detail-row"><span>Width</span><input data-landscape-spline-point-shape="width" type="number" min="0.1" step="0.1" value="${activeSplinePoint.width}" ${lockedAttr} /></label>
+      <label class="detail-row"><span>Falloff</span><input data-landscape-spline-point-shape="falloff" type="number" min="0" step="0.1" value="${activeSplinePoint.falloff}" ${lockedAttr} /></label>
+      <button type="button" class="detail-action-button" data-landscape-spline-point-delete ${lockedAttr}>Delete Point</button>`
     : "";
   const segmentLayerOptions = layers
     .map((layer) => `<option value="${escapeHtml(layer.id)}" ${activeSegment?.paint.layerId === layer.id ? "selected" : ""}>${escapeHtml(layerDisplayName(layer))}</option>`)

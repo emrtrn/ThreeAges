@@ -671,10 +671,71 @@ Yeni dev endpoint önerileri:
       deform/paint apply, raise/lower gating, paint blend ve mesh-instance dizilim
       testleri; `npm run build:verify` yeşil, 769 test).
 
+### Faz 6.1 - Spline control point gizmo düzenleme (planlandı, henüz yapılmadı)
+
+Şu an control point konumu yalnızca Details'taki sayısal X/Y/Z alanlarından ayarlanıyor
+(alanlar standart transform satırı stiline getirildi). Hedef: seçili bir control
+point'i viewport'ta **move gizmo** ile sürükleyebilmek. Somut adımlar:
+
+1. **Selection kind**: `editor/core/selection.ts` union'ına
+   `{ kind: "landscapeSplinePoint"; landscapeIndex; splineId; pointId }` eklenir;
+   `cloneSelection` / `selectionId` (`landscapeSplinePoint:<lidx>:<splineId>:<pointId>`)
+   / `parseSelectionId` / `selectionsEqual` case'leri eklenir.
+2. **Picking**: overlay küre marker'larının `raycast` devre dışılığı Splines modunda
+   kaldırılır; her marker `userData` ile `{landscapeIndex, splineId, pointId}` taşır.
+   Pointer-down önce marker'ları raycast eder: isabet varsa **nokta seçilir**
+   (yeni nokta eklenmez), yoksa mevcut "terrain'e tıkla → nokta ekle" davranışı sürer.
+3. **Gizmo transform**: SceneApp'in transform capture/apply yolu yeni kind'i işler.
+   Dünya pozisyonu = landscape objesinin `matrixWorld`'ü × local point pozisyonu;
+   move drag'inde dünya deltası tekrar local'e çevrilip `point.position`'a yazılır.
+   Yalnız **translate**; rotate/scale bu sürümde no-op (ileride scale→width eşlemesi).
+4. **Undo + senkron**: drag başında spline snapshot alınır, drag sonunda tek bir
+   `applySelectedLandscapeSplines` komutuyla commit edilir (sayısal taşımayla aynı
+   yol); overlay + spline mesh + Details "Control Point" paneli aktif noktayla
+   senkron kalır.
+5. **Kapsam dışı (bu alt-faz)**: çoklu-nokta marquee seçimi, width/falloff gizmo
+   handle'ı, segment tangent düzenleme.
+
+### Faz 6.2a - Kavisli yollar / otomatik yumuşatma (Catmull-Rom) (planlandı)
+
+Şu an segmentler kontrol noktaları arası **düz polyline**; kavis yapılamaz. Hedef:
+2B çizim araçlarındaki curve hissine yakın, kontrol noktalarından **otomatik olarak
+yumuşak geçen kavisli yollar**. Elle sürüklenen Bezier tanjant handle'ları (gerçek
+pen-tool) **kapsam dışı** — kullanıcı 2026-07-12'de istemedi; yalnız otomatik
+yumuşatma yapılacak.
+
+Yaklaşım: her spline'a bir **`smooth` / "Curved"** bayrağı. Açıkken segmentler
+Catmull-Rom eğrisi olarak değerlendirilir; kapalıyken mevcut düz davranış korunur
+(geriye dönük uyumlu, varsayılan düz).
+
+Somut adımlar:
+
+1. **Veri**: `ForgeLandscapeSpline`'a `smooth?: boolean` (absent = false = düz).
+   Validator allowlist'ine ve `cloneLandscapeSplines`'a eklenir. `arriveTangent`/
+   `leaveTangent` alanları bu sürümde **kullanılmaz** — tanjantlar komşu noktalardan
+   otomatik türetilir (Catmull-Rom), elle handle yok.
+2. **Çekirdek (saf engine, testli)**: `splineToPolyline(spline, segmentsPerCurve)` —
+   `smooth` açıkken her segmenti komşu noktaların Catmull-Rom tanjantlarıyla K
+   alt-noktaya örnekler; width/falloff/height alt-noktalar boyunca interpole edilir.
+   Kapalıyken segment başına tek düz parça döner. Kapalı döngülerde (weld ile) uç
+   noktalar komşu olarak sarmalanır.
+3. **Apply refactor**: `applyLandscapeSplineDeform` / `applyLandscapeSplinePaint`'in
+   `bestCorridorSample`'ı artık ham segmentler yerine `splineToPolyline` çıktısı olan
+   alt-segmentler üzerinde çalışır (corridor mantığı aynı kalır). Böylece deform ve
+   paint kavisi takip eder.
+4. **Mesh**: `computeLandscapeSplineMeshInstances` yay-uzunluğu boyunca örnekler ve
+   her instance'ı **yerel tanjanta** döndürür (düz segment yerine polyline üzerinde).
+5. **Overlay + runtime**: overlay eğriyi çok parçalı çizgiyle çizer; runtime spline
+   mesh yolu aynı polyline'ı kullanır (editor/Play paritesi).
+6. **UX**: Splines sekmesinde aktif spline için "Curved (smooth)" toggle'ı.
+7. **Testler**: `splineToPolyline` düz vs smooth çıktısı; smooth deform'un düz
+   segmentin dışına taşan kavis örneği; kapalı döngüde süreklilik.
+
 ### Sonraki Fazlar
 
 - Edit Layers.
-- Advanced Landscape Splines: gerçek spline mesh deformation, intersection tools.
+- Advanced Landscape Splines: gerçek spline mesh deformation, intersection tools,
+  kavşakta spline mesh çakışma azaltma ("junction'da mesh atla").
 - Visibility holes.
 - LOD / chunk streaming.
 - Water integration.
