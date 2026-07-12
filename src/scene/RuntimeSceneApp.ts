@@ -383,6 +383,8 @@ export interface GameModeDebugSnapshot {
   velocityY: number | null;
   /** Possessed pawn's planar speed this tick (units/s), or null. */
   planarSpeed: number | null;
+  /** Possessed pawn's world position, or null when nothing is possessed. */
+  position: readonly [number, number, number] | null;
   /** Controller yaw in degrees, when the active mode owns control rotation. */
   controlYawDeg: number | null;
   /** Controller pitch in degrees, when the active mode owns control rotation. */
@@ -1662,6 +1664,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const possessed = this.gameModeSession?.playerState.pawnEntityId ?? null;
     const report = possessed ? this.locomotionReports.get(possessed) : undefined;
     const cameraDebug = this.gameModeSession?.getCameraDebug?.();
+    const pawnTransform = possessed
+      ? this.characterMovementSubsystem.transformOf(possessed)
+      : undefined;
     return {
       gameMode: this.activeGameMode?.displayName ?? "—",
       possessed,
@@ -1669,6 +1674,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       grounded: report ? report.grounded : null,
       velocityY: report ? report.velocityY : null,
       planarSpeed: report ? report.planarSpeed : null,
+      position: pawnTransform
+        ? [pawnTransform.position[0], pawnTransform.position[1], pawnTransform.position[2]]
+        : null,
       controlYawDeg: cameraDebug?.controlYawDeg ?? null,
       controlPitchDeg: cameraDebug?.controlPitchDeg ?? null,
       cameraSource: cameraDebug?.cameraSource ?? null,
@@ -4315,15 +4323,35 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /** Loads spline mesh assets (Faz 6) and parents their instanced groups under each landscape. */
   private async buildRuntimeLandscapeSplineMeshes(datas: readonly ForgeLandscapeData[]): Promise<void> {
-    const needed = new Set<string>();
+    const splineAssetIds = new Set<string>();
     for (const data of datas) {
-      for (const assetId of landscapeSplineMeshAssetIds(data)) {
-        if (!this.models.has(assetId)) needed.add(assetId);
-      }
+      for (const assetId of landscapeSplineMeshAssetIds(data)) splineAssetIds.add(assetId);
     }
-    if (needed.size > 0 && this.assetLoader) {
-      const loaded = await this.assetLoader.loadModels([...needed]);
+    if (splineAssetIds.size === 0) return;
+    const missingModels = [...splineAssetIds].filter((assetId) => !this.models.has(assetId));
+    if (missingModels.length > 0 && this.assetLoader) {
+      const loaded = await this.assetLoader.loadModels(missingModels);
       for (const [id, model] of loaded) this.models.set(id, model);
+    }
+    // Spline assets aren't in `layout.instances`, so `loadSceneMaterials` never
+    // loaded their default material slots. An asset whose look comes from a slot
+    // assignment (e.g. an asphalt road with a plain-white GLTF material) would
+    // otherwise render untextured. Load slots + their materials before building.
+    const manifest = this.assetManifest ?? (this.assetLoader ? await this.assetLoader.loadManifest() : null);
+    if (manifest) {
+      await Promise.all(
+        [...splineAssetIds].map(async (assetId) => {
+          if (this.assetMaterialSlots.has(assetId)) return;
+          const asset = manifest.assets.find((entry) => entry.id === assetId);
+          if (!asset) return;
+          const slots = await loadAssetMaterialSlots(assetPath(asset));
+          if (!hasAssignedMaterialSlots(slots)) return;
+          this.assetMaterialSlots.set(assetId, slots);
+          await Promise.all(
+            assignedMaterialSlotIds(slots).map((id) => this.ensureMaterialLoaded(id).catch(() => undefined)),
+          );
+        }),
+      );
     }
     datas.forEach((data, index) => {
       const object = this.landscapeObjects[index];
@@ -4333,6 +4361,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         models: this.models,
         castShadow: this.staticObjectsCastShadow(),
         receiveShadow: this.staticObjectsReceiveShadow(),
+        applyMaterialSlots: (assetId, assetGroup) => {
+          const slots = this.resolveAssetMaterialSlots(assetId);
+          if (slots) {
+            applyMaterialSlotOverrides(assetGroup, slots, (materialId) => this.materialCache.get(materialId));
+          }
+        },
       });
       if (built) object.add(built.group);
     });

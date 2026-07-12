@@ -84,15 +84,33 @@ function prepareSmokeSourceScene(scene) {
     },
   ];
 
+  // Two runtime gameplay sensors on the pawn's forward (-Z) walk line, both off
+  // the origin so the non-moving smokes (runtime-playflow, ai-patrol, editor) never
+  // trip them at boot. The locomotion smoke only nudges the pawn ~1m, so it never
+  // reaches the checkpoint at z=-4; the checkpoint/portal smokes walk into them.
   const triggers = ensureInstanceGroup(copy, "shape:cube");
   triggers.placements = [
     {
-      position: [0, 1, 0],
+      position: [0, 1, -4],
       name: "Smoke Checkpoint",
-      scale: [4, 4, 4],
+      scale: [12, 4, 3],
       sensor: true,
       collisionPreset: "trigger",
       behavior: { script: "checkpoint", params: { slot: "quick" } },
+    },
+    {
+      position: [0, 1, -10],
+      name: "Smoke Portal",
+      scale: [12, 4, 3],
+      sensor: true,
+      collisionPreset: "trigger",
+      behavior: {
+        script: "level-travel",
+        params: {
+          targetLevel: "layouts/__playwright-smoke-target.level.json",
+          targetSpawn: "arrival",
+        },
+      },
     },
   ];
 
@@ -131,6 +149,25 @@ function prepareSmokeTargetScene(scene) {
       rotationYDeg: 0,
       scale: 3,
       scaleLocked: true,
+    },
+  ];
+
+  // Return portal on the arrival scene's forward (-Z) walk line: travelling into it
+  // sends the pawn back to the source smoke level, letting the portal round-trip
+  // smoke prove a second `level-travel` sensor fires in the same session (behavior
+  // registry freshness — the same trigger id can fire again in a new scene visit).
+  const returnPortal = ensureInstanceGroup(copy, "shape:cube");
+  returnPortal.placements = [
+    {
+      position: [0, 1, -6],
+      name: "Smoke Return Portal",
+      scale: [12, 4, 3],
+      sensor: true,
+      collisionPreset: "trigger",
+      behavior: {
+        script: "level-travel",
+        params: { targetLevel: "layouts/__playwright-smoke.level.json" },
+      },
     },
   ];
 

@@ -181,12 +181,16 @@ export function formatGameModeDebug(snapshot: GameModeDebugSnapshot): string[] {
   const num = (value: number | null): string => (value === null ? "—" : value.toFixed(2));
   const stance =
     snapshot.grounded === null ? "" : snapshot.grounded ? " (grounded)" : " (airborne)";
+  const pos = snapshot.position
+    ? `${snapshot.position[0].toFixed(2)} ${snapshot.position[1].toFixed(2)} ${snapshot.position[2].toFixed(2)}`
+    : "—";
   return [
     "game mode",
     `mode: ${snapshot.gameMode}`,
     `possessed: ${snapshot.possessed ?? "none"}`,
     `movement: ${snapshot.movementMode ?? "—"}${stance}`,
     `vel y:${num(snapshot.velocityY)} planar:${num(snapshot.planarSpeed)}`,
+    `pos: ${pos}`,
     `control yaw:${num(snapshot.controlYawDeg)} pitch:${num(snapshot.controlPitchDeg)}`,
     `camera: ${snapshot.cameraSource ?? "â€”"}`,
     `input: ${snapshot.inputMode}`,

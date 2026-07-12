@@ -150,8 +150,17 @@ function playAudioCue(context: Parameters<BehaviorUpdate>[0]): void {
 }
 
 function triggerOverlapBegins(context: Parameters<BehaviorUpdate>[0]): boolean {
-  if (context.event) {
-    return context.event.kind === "overlap" && context.event.phase === "begin";
+  const event = context.event;
+  // An authored `overlap` event binding is authoritative: fire exactly on its
+  // begin phase. Any other contact event (`hit`) is not an overlap-begin.
+  // A `tick` invocation — the shape flat-Behavior fallback still used by legacy
+  // trigger placements — carries a synthetic tick envelope (not `undefined`), so
+  // it must route to contact polling here, or a `behavior: { script: "checkpoint"
+  // | "level-travel" }` placed on a `shape:*` volume can never fire (the player
+  // pawn overlaps the sensor but the tick branch used to short-circuit as "not an
+  // overlap event"). The once-guard in each trigger keeps polling single-shot.
+  if (event && event.kind !== "tick") {
+    return event.kind === "overlap" && event.phase === "begin";
   }
   return (context.physics?.contactsForEntity(context.entityId).length ?? 0) > 0;
 }

@@ -65,6 +65,7 @@ import {
   readSpringArmComponent,
   readTransformComponent,
   INTERACTION_COMPONENT,
+  BEHAVIOR_COMPONENT,
   EVENT_BINDINGS_COMPONENT,
   MESSAGE_BINDINGS_COMPONENT,
   PARTICLE_EMITTER_COMPONENT,
@@ -9442,6 +9443,55 @@ check("level-travel behavior: fires once on overlap begin with the authored targ
   ]);
 });
 
+// Regression: a legacy *flat* `Behavior` trigger (a `shape:*` volume authored via
+// `placement.behavior`, not an EventBindings overlap binding) fires as a per-frame
+// `tick`, not on an overlap event. The subsystem now hands every tick a synthetic
+// `{ kind: "tick" }` envelope, so `triggerOverlapBegins` must route a tick to the
+// physics contact-polling fallback — otherwise the player pawn can stand inside a
+// checkpoint/level-travel sensor and it never fires (the real runtime gap behind
+// the Player Start default pawn: it overlaps the sensor but nothing happened).
+check("checkpoint behavior: a flat tick Behavior fires from physics contact polling", () => {
+  const saves: Array<{ id: string; slot: string }> = [];
+  const registry = createBehaviorRegistry({
+    onCheckpoint: (id, slot) => saves.push({ id, slot }),
+  });
+  const physics = new PhysicsSubsystem();
+  const audio = new AudioSubsystem();
+  const trigger: Entity = {
+    id: "checkpoint:0",
+    components: {
+      Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [2, 2, 2], isStatic: true, isSensor: true },
+      // Flat Behavior (tick), NOT an EventBindings overlap binding.
+      [BEHAVIOR_COMPONENT]: { scriptId: "checkpoint", params: { slot: "quick" } },
+    },
+  };
+  const player: Entity = {
+    id: "player:0",
+    components: {
+      Transform: { position: [5, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false },
+    },
+  };
+  physics.setEntities([trigger, player]);
+  const behavior = new BehaviorSubsystem(registry, new ActionMap({}), () => undefined, physics, audio);
+  behavior.setEntities([trigger, player]);
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  app.registerSubsystem(behavior);
+
+  // Apart: no contact, so the tick fallback saves nothing.
+  app.update(0.016);
+  assert.deepEqual(saves, []);
+
+  // Overlap the sensor: the flat tick behavior polls the live contact and writes
+  // the checkpoint exactly once, even though no overlap *event* is delivered to it.
+  physics.setEntityTransform("player:0", { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] });
+  app.update(0.016);
+  app.update(0.016);
+  assert.deepEqual(saves, [{ id: "checkpoint:0", slot: "quick" }]);
+});
+
 check("level-travel behavior: fresh scene registry lets the same trigger id fire again", () => {
   const travels: Array<{ id: string; level: string }> = [];
   const createRegistry = (): BehaviorRegistry =>
@@ -12063,6 +12113,7 @@ check("formatGameModeDebug renders a possessed pawn's mode + movement state", ()
     grounded: false,
     velocityY: 3.5,
     planarSpeed: 2,
+    position: [1.5, 0.9, -6.25],
     controlYawDeg: -17.2,
     controlPitchDeg: -15,
     cameraSource: "spring arm component",
@@ -12074,6 +12125,7 @@ check("formatGameModeDebug renders a possessed pawn's mode + movement state", ()
     "possessed: actor:0",
     "movement: walking (airborne)",
     "vel y:3.50 planar:2.00",
+    "pos: 1.50 0.90 -6.25",
     "control yaw:-17.20 pitch:-15.00",
     "camera: spring arm component",
     "input: game",
@@ -12088,6 +12140,7 @@ check("formatGameModeDebug shows placeholders when nothing is possessed", () => 
     grounded: null,
     velocityY: null,
     planarSpeed: null,
+    position: null,
     controlYawDeg: null,
     controlPitchDeg: null,
     cameraSource: null,
@@ -12099,6 +12152,7 @@ check("formatGameModeDebug shows placeholders when nothing is possessed", () => 
     "possessed: none",
     "movement: —",
     "vel y:— planar:—",
+    "pos: —",
     "control yaw:— pitch:—",
     "camera: â€”",
     "input: ui",
@@ -15963,6 +16017,7 @@ check("material save payload requires a material path and canonical fields", () 
     metalnessTexture: "tex-stone-metal",
     aoTexture: "tex-stone-ao",
     opacityTexture: "tex-stone-opacity",
+    useBaseColorAlphaForOpacity: false,
     emissiveTexture: "tex-stone-emissive",
     ormTexture: "tex-stone-m",
     uvTiling: { x: 2, y: 3 },
@@ -16177,6 +16232,23 @@ check("forge material mapping creates matching Three material types and fields",
   assert.equal(normalTexture.repeat.y, 4);
   assert.equal(normalTexture.anisotropy, 8);
   textured.dispose();
+
+  const baseColorAlphaCutout = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Base Color Alpha Cutout",
+      baseColorTexture: "foliage",
+      useBaseColorAlphaForOpacity: true,
+      alphaMode: "opaque",
+      alphaTest: 0.42,
+    }),
+    { baseColorTexture: new Texture() },
+  );
+  assert.equal(baseColorAlphaCutout.alphaTest, 0.42);
+  assert.equal(baseColorAlphaCutout.transparent, false);
+  baseColorAlphaCutout.dispose();
 
   const roughnessTexture = new Texture();
   const metalnessTexture = new Texture();
@@ -16458,6 +16530,7 @@ check("content-new resolves to typed stub files and folders", () => {
     metalnessTexture: null,
     aoTexture: null,
     opacityTexture: null,
+    useBaseColorAlphaForOpacity: false,
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
@@ -16492,6 +16565,7 @@ check("content-new resolves to typed stub files and folders", () => {
     metalnessTexture: null,
     aoTexture: null,
     opacityTexture: null,
+    useBaseColorAlphaForOpacity: false,
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
@@ -17942,6 +18016,14 @@ check("computeLandscapeSplineMeshInstances lays instances along the tangent", ()
   assert.equal(instances[0]!.rotation[1], 90); // atan2(dx=20, dz=0)
   assert.equal(instances.every((instance) => instance.assetId === "post"), true);
   assert.deepEqual(landscapeSplineMeshAssetIds({ splines: [spline] }), ["post"]);
+
+  // yawOffset adds to the tangent yaw so a mesh modelled along a non-+Z axis can
+  // be corrected without re-exporting (here 90 + -90 = 0 aligns +X-length mesh).
+  const offsetSpline: ForgeLandscapeSpline = {
+    ...spline,
+    segments: [{ ...spline.segments[0]!, mesh: { enabled: true, assetId: "post", spacing: 5, yawOffset: -90 } }],
+  };
+  assert.equal(computeLandscapeSplineMeshInstances(offsetSpline)[0]!.rotation[1], 0);
 });
 
 check("landscape splines support shared-point branches and closed loops", () => {

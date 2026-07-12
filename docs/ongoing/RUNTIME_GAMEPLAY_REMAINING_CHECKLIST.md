@@ -58,7 +58,7 @@ taramasi ayrica onayla istenmeli; sessiz tarama calistirilmemeli.
 | Faz | Durum | Bagimlilik | Amac |
 | --- | --- | --- | --- |
 | P0 | `[x]` | - | Kapanan behavior-state bulgusunu ve mevcut runtime smoke tabanini sabitle. |
-| P1 | `[ ]` | P0 | Runtime browser smoke borcunu kapat. |
+| P1 | `[~]` | P0 | Runtime browser smoke borcunu kapat. (P1.2-P1.5 tamam; P1.6/P1.7 kismi) |
 | P2 | `[ ]` | P1 onerilir | `RuntimeSceneApp` kabugunu davranis koruyan modullere bol. |
 | P3 | `[ ]` | P0 | Save-game zarf sozlesmesini yazili hale getir. |
 | P4 | `[ ]` | P3 onerilir | AI move-intent ve +z-forward facing varsayimini yol haritasina bagla. |
@@ -100,23 +100,40 @@ akisiyle de kanitlamak. Bu faz Baslik 4'teki Aksiyon 2'yi kapatir.
 
 Checklist:
 
-- [ ] **P1.1 - Fixture haritasi:** Mevcut `__playwright-smoke` layout/menu
-  fixture'larini incele; yuru/zipla, portal sensor, checkpoint sensor ve debug
-  overlay icin tek fixture seti yeterli mi karar ver.
-- [ ] **P1.2 - Yuru/zipla smoke:** Chromium testinde runtime sahnesini ac,
-  klavye input'u ile pawn hareketini ve jump/grounded degisimini gozlenebilir
-  bir runtime sinyalinden dogrula. Test canvas focus/pointer-lock kirilganligina
-  karsi deterministik olmali.
-- [ ] **P1.3 - Portal sensor gidis-gelis:** `travel:` UI mesajini degil, gercek
-  `level-travel` sensor davranisini kullan. Oyuncuyu portal alanina sok, hedef
-  level'in yuklendigini dogrula, geri donus trigger'inin ayni testte ikinci kez
-  calistigini kanitla.
-- [ ] **P1.4 - Checkpoint autosave:** Oyuncuyu checkpoint sensorune sok; ilgili
-  slotun yazildigini, load sonrasi player transform/respawn noktasinin
-  checkpoint'e dondugunu dogrula.
-- [ ] **P1.5 - `?debug` overlay smoke:** `/?debug` veya esdeger route ile
-  runtime'i ac; perf/gameplay/ui/loading/memory readout'larinin mount oldugunu ve
-  konsolda yeni hata olmadigini dogrula.
+- [x] **P1.1 - Fixture haritasi:** `__playwright-smoke` source sahnesine pawn'in
+  ileri (-Z) yuru cizgisi uzerinde iki gameplay sensoru eklendi (checkpoint
+  z=-4, portal z=-10, ikisi de origin disinda; hareketsiz smoke'lari bootta
+  tetiklemez). Target sahnesine geri-donus portali eklendi. Tek fixture seti
+  locomotion + checkpoint + portal round-trip + debug overlay icin yeterli.
+- [x] **P1.2 - Yuru/zipla smoke:** `tests/smoke/runtime-locomotion.spec.ts`.
+  Klavye (`window` uzerinden, pointer-lock gerektirmez) ile pawn'i surer:
+  `?debug` game-mode blogundaki `planar` hizi ve `(grounded)`/`(airborne)`
+  gecisiyle hareket + jump dogrulanir. Deterministik.
+- [x] **P1.3 - Portal sensor gidis-gelis:** `tests/smoke/runtime-portal.spec.ts`.
+  UI mesaji degil, gercek `level-travel` sensoru: pawn portal hacmine yuruyor,
+  target level yukleniyor, arrival sahnesindeki geri-donus portali ayni oturumda
+  kaynagi ikinci kez yukluyor (taze per-scene behavior registry). **Kok neden
+  duzeltildi** (bkz. asagi) — bu yol daha once hic ateslenmiyordu.
+- [x] **P1.4 - Checkpoint autosave:** `tests/smoke/runtime-checkpoint.spec.ts`.
+  Pawn checkpoint sensorune yuruyor, quick slot autosave yaziliyor, quick-load
+  sonrasi pawn checkpoint transform'una respawn ediyor (yeni `?debug`
+  `pos:` readout'u ile dogrulanir).
+- [x] **P1.5 - `?debug` overlay smoke:** locomotion smoke icinde: `/?debug` ile
+  game mode / memory / budget / ui / script messages readout bloklari mount
+  oluyor, konsolda yeni hata yok.
+
+**Kok neden / motor duzeltmesi (P1.3+P1.4'u acan):** Player Start default pawn'i
+(`Script_GameMode` -> `spawnDefaultPawnActor`) fizik govdesine giriyor ve
+transform'u her frame senkronlaniyordu, ama flat `placement.behavior`
+(`checkpoint`/`level-travel`) tetikleyicileri hic atesleneMIYORdu: BehaviorSubsystem
+her tick'e sentetik bir `{ kind: "tick" }` zarfi veriyor, `triggerOverlapBegins`
+(`src/game/behaviors.ts`) ise `if (context.event)` ile bu tick'i "overlap degil"
+diye kisa devre yapip contact-polling fallback'ine hic ulasmiyordu. Fix: tick
+zarfini contact-polling yoluna yonlendir. Regression testi:
+`engine-tests.ts` "flat tick Behavior fires from physics contact polling".
+Ayrica `?debug` game-mode snapshot'ina pawn `position` eklendi (P1.2 + P1.4
+respawn dogrulamasi icin gozlenebilir sinyal).
+
 - [ ] **P1.6 - Actor Runtime API browser borcu (A5.5):** Actor spawn/destroy veya
   script message akisindan biri browser smoke icinde gozlenebilir hale getir;
   archived completed doc ACTOR_RUNTIME_API_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) icindeki acik A5.5 notunu
