@@ -638,10 +638,18 @@ Yeni dev endpoint önerileri:
 - [x] `ForgeLandscapeSpline` veri modeli (point/segment, destructive deform, layer paint ve instanced mesh ayarları).
 - [x] Landscape data `splines[]` save/load (allowlist doğrulaması ve engine regresyon testiyle).
 - [x] Landscape Mode > Splines sekmesi (aktif spline seçimi, oluştur/sil; terrain'e tıklayarak bağlı point ekleme).
-- [x] Control point ekle/sil/taşı (terrain'e tıklayarak ekle; Details'ta seç, sayısal konumla taşı veya sil; silme bağlı segmentleri temizler).
+- [x] Control point ekle/sil/taşı (terrain'e tıklayarak ekle; Details'ta seç, sayısal
+      konumla taşı veya sil; silme bağlı segmentleri temizler). Ekleme aktif "kalem
+      ucu" noktasından uzar; mevcut bir noktaya yakın tıklama **weld** eder (yeni nokta
+      yaratmaz, ikisini birbirine bağlar) → kapalı döngü (ilk noktaya tıkla) ve
+      **çatallaşma** (orta noktayı seç, sonra tıkla) mümkün.
 - [x] Segment seçimi ve split/join temel akışı (Details'ta segment listesi + seçim;
-      "Split Segment" seçili segmenti orta noktadan ikiye böler. Join sonraki faza
-      ertelendi; split "temel akış" için yeterli.)
+      "Split Segment" seçili segmenti orta noktadan ikiye böler. Join = weld-on-click
+      + **Close Loop** düğmesi (son noktayı ilk noktaya bağlar); paylaşılan nokta
+      topolojisi deform/paint/mesh ve validator tarafından destekleniyor, engine
+      regresyon testiyle güvence altında.)
+- [x] Spline viewport overlay'i (control point = küre, segment = çizgi, aktif olan
+      sarı; yalnız seçili landscape + Splines modunda; editor-only, picking dışı).
 - [x] Width/falloff ayarları (control point başına Width/Falloff; corridor genişliği
       segment boyunca iki nokta arasında lineer interpolasyon ile taperlanır).
 - [x] Terrain flatten/raise/lower apply (`applyLandscapeSplineDeform`, saf engine +

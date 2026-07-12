@@ -94,6 +94,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   getSelectedLandscapeSplines: () => LandscapeSplineView[];
   createSelectedLandscapeSpline: () => void;
   deleteSelectedLandscapeSpline: (splineId?: string | null) => void;
+  closeSelectedLandscapeSpline: () => void;
   getSelectedLandscapeSplinePoints: () => LandscapeSplinePointView[];
   setSelectedLandscapeSplinePointPosition: (pointId: string, position: Vec3) => void;
   deleteSelectedLandscapeSplinePoint: (pointId?: string | null) => void;
@@ -221,7 +222,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         ${
           settings.editMode === "splines"
             ? `<div class="detail-subsection-title">Landscape Splines</div>
-              <div class="detail-hint">Click the terrain to add connected control points to the active spline.</div>
+              <div class="detail-hint">Click the terrain to add connected control points. Click near an existing point to weld — close a loop (click the first point) or branch (select a mid point, then click).</div>
               <div class="landscape-layer-list">
                 ${splines.map((spline) => `<button type="button" data-landscape-spline="${escapeHtml(spline.id)}" class="${
                   settings.activeSplineId === spline.id ? "active" : ""
@@ -230,6 +231,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
               <div class="landscape-heightmap-actions">
                 <button type="button" class="detail-action-button" data-landscape-spline-create ${lockedAttr}>New Spline</button>
                 <button type="button" class="detail-action-button" data-landscape-spline-delete ${lockedAttr}>Delete Spline</button>
+                <button type="button" class="detail-action-button" data-landscape-spline-close ${lockedAttr}>Close Loop</button>
               </div>
               ${splinePointMarkup}
               ${splineSegments.length ? `<div class="detail-subsection-title">Segments</div><div class="landscape-layer-list">${splineSegments.map((segment) => `<button type="button" data-landscape-spline-segment="${escapeHtml(segment.id)}" class="${
@@ -391,6 +393,10 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-delete]")?.addEventListener("click", () => {
     options.deleteSelectedLandscapeSpline(options.getLandscapeSculptSettings().activeSplineId);
+    renderLandscapeDetails(options);
+  });
+  body.querySelector<HTMLButtonElement>("[data-landscape-spline-close]")?.addEventListener("click", () => {
+    options.closeSelectedLandscapeSpline();
     renderLandscapeDetails(options);
   });
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-point]").forEach((button) => {

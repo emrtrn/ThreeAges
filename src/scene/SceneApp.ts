@@ -621,6 +621,22 @@ function cloneLandscapeSplines(splines: readonly ForgeLandscapeSpline[]): ForgeL
   }));
 }
 
+/** Collision-free `point-<n>` id for a spline (safe after point deletions). */
+function uniqueSplinePointId(spline: ForgeLandscapeSpline): string {
+  const used = new Set(spline.points.map((point) => point.id));
+  let number = spline.points.length + 1;
+  while (used.has(`point-${number}`)) number += 1;
+  return `point-${number}`;
+}
+
+/** Collision-free `segment-<n>` id for a spline (safe after segment deletions). */
+function uniqueSplineSegmentId(spline: ForgeLandscapeSpline): string {
+  const used = new Set(spline.segments.map((segment) => segment.id));
+  let number = spline.segments.length + 1;
+  while (used.has(`segment-${number}`)) number += 1;
+  return `segment-${number}`;
+}
+
 function mergeLandscapeDirtyBounds(
   left: LandscapeDirtyBounds,
   right: LandscapeDirtyBounds,
@@ -5059,7 +5075,13 @@ export class SceneApp {
     return true;
   }
 
-  /** Splines mode: each left click on the selected terrain appends a connected control point. */
+  /**
+   * Splines mode click. Extends the active spline from its "pen tip" (the active
+   * control point, else the last point): a plain click adds a new connected point,
+   * while a click near an existing point of the same spline welds to it instead of
+   * duplicating — connecting the pen tip to that point. Welding lets a road close
+   * into a loop (click the first point) or branch (select a mid point, then click).
+   */
   private addLandscapeSplinePointAtPointer(event: PointerEvent): boolean {
     const index = this.selectedEditableLandscapeIndex();
     if (index === null) return false;
@@ -5076,23 +5098,68 @@ export class SceneApp {
       spline = { id: `spline-${number}`, name: `Spline ${number}`, points: [], segments: [] };
       before.push(spline);
     }
-    const previous = spline.points.at(-1);
-    const pointId = `point-${spline.points.length + 1}`;
-    spline.points.push({
-      id: pointId,
-      position: [round(hit.local.x), round(hit.local.y), round(hit.local.z)],
-      width: 6,
-      falloff: 3,
-    });
-    if (previous) {
-      spline.segments.push({
-        id: `segment-${spline.segments.length + 1}`,
-        startPointId: previous.id,
-        endPointId: pointId,
-      });
+    const local: Vec3 = [round(hit.local.x), round(hit.local.y), round(hit.local.z)];
+    const from =
+      spline.points.find((point) => point.id === this.landscapeSculptSettings.activeSplinePointId) ??
+      spline.points.at(-1);
+    // Weld radius scales with the terrain footprint so it feels the same at any size.
+    const worldSize = (data.size.verticesX - 1) * data.size.spacing;
+    const weldDist = Math.max(1.5, worldSize * 0.02);
+    const weldTarget = spline.points
+      .filter((point) => point.id !== from?.id)
+      .map((point) => ({ point, distance: Math.hypot(point.position[0] - local[0], point.position[2] - local[2]) }))
+      .filter((entry) => entry.distance <= weldDist)
+      .sort((a, b) => a.distance - b.distance)[0]?.point;
+
+    let activePointId: string;
+    if (weldTarget) {
+      if (from && from.id !== weldTarget.id) this.linkSplineSegment(spline, from.id, weldTarget.id);
+      activePointId = weldTarget.id; // continue authoring from the welded point
+    } else {
+      const pointId = uniqueSplinePointId(spline);
+      spline.points.push({ id: pointId, position: local, width: 6, falloff: 3 });
+      if (from) this.linkSplineSegment(spline, from.id, pointId);
+      activePointId = pointId;
     }
-    this.applySelectedLandscapeSplines(index, actor.id, data.splines ? cloneLandscapeSplines(data.splines) : [], before, "Add Landscape Spline Point", spline.id, pointId);
+    this.applySelectedLandscapeSplines(index, actor.id, data.splines ? cloneLandscapeSplines(data.splines) : [], before, "Add Landscape Spline Point", spline.id, activePointId);
     return true;
+  }
+
+  /** Adds a segment between two points if one doesn't already connect them (either direction). */
+  private linkSplineSegment(spline: ForgeLandscapeSpline, startPointId: string, endPointId: string): void {
+    const exists = spline.segments.some(
+      (segment) =>
+        (segment.startPointId === startPointId && segment.endPointId === endPointId) ||
+        (segment.startPointId === endPointId && segment.endPointId === startPointId),
+    );
+    if (exists) return;
+    spline.segments.push({ id: uniqueSplineSegmentId(spline), startPointId, endPointId });
+  }
+
+  /** Closes the active spline into a loop by linking its last point back to its first. */
+  closeSelectedLandscapeSpline(): void {
+    if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return;
+    const before = cloneLandscapeSplines(data.splines ?? []);
+    const after = cloneLandscapeSplines(before);
+    const spline = after.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId);
+    if (!spline || spline.points.length < 3) {
+      this.onStatus?.("Add at least three control points before closing the loop.", "info");
+      return;
+    }
+    const first = spline.points[0]!;
+    const last = spline.points.at(-1)!;
+    if (first.id === last.id) return;
+    const segmentCountBefore = spline.segments.length;
+    this.linkSplineSegment(spline, last.id, first.id);
+    if (spline.segments.length === segmentCountBefore) {
+      this.onStatus?.("The spline loop is already closed.", "info");
+      return;
+    }
+    this.applySelectedLandscapeSplines(index, actor.id, before, after, "Close Landscape Spline Loop", spline.id, first.id);
   }
 
   private updateLandscapeSculpt(event: PointerEvent): boolean {
@@ -5771,8 +5838,8 @@ export class SceneApp {
     const start = segment ? spline!.points.find((point) => point.id === segment.startPointId) : undefined;
     const end = segment ? spline!.points.find((point) => point.id === segment.endPointId) : undefined;
     if (!spline || !segment || !start || !end) return;
-    const pointId = `point-${spline.points.length + 1}`;
-    const newSegmentId = `segment-${spline.segments.length + 1}`;
+    const pointId = uniqueSplinePointId(spline);
+    const newSegmentId = uniqueSplineSegmentId(spline);
     spline.points.push({ id: pointId, position: [round((start.position[0] + end.position[0]) / 2), round((start.position[1] + end.position[1]) / 2), round((start.position[2] + end.position[2]) / 2)], width: round((start.width + end.width) / 2), falloff: round((start.falloff + end.falloff) / 2) });
     spline.segments.splice(segmentIndex, 1, { ...segment, endPointId: pointId }, { id: newSegmentId, startPointId: pointId, endPointId: end.id });
     this.applySelectedLandscapeSplines(index, actor.id, before, after, "Split Landscape Spline Segment", spline.id, pointId, newSegmentId);

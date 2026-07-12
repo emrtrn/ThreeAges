@@ -17943,6 +17943,45 @@ check("computeLandscapeSplineMeshInstances lays instances along the tangent", ()
   assert.deepEqual(landscapeSplineMeshAssetIds({ splines: [spline] }), ["post"]);
 });
 
+check("landscape splines support shared-point branches and closed loops", () => {
+  const branch: ForgeLandscapeSpline = {
+    id: "hub",
+    points: [
+      { id: "c", position: [0, 1, 0], width: 4, falloff: 2 },
+      { id: "n", position: [0, 1, 10], width: 4, falloff: 2 },
+      { id: "e", position: [10, 1, 0], width: 4, falloff: 2 },
+      { id: "s", position: [0, 1, -10], width: 4, falloff: 2 },
+    ],
+    // Three segments fan out of the shared hub point "c" (a branch/junction).
+    segments: [
+      { id: "s0", startPointId: "c", endPointId: "n", deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } },
+      { id: "s1", startPointId: "c", endPointId: "e", deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } },
+      { id: "s2", startPointId: "c", endPointId: "s", mesh: { enabled: true, assetId: "post", spacing: 5 } },
+    ],
+  };
+  const loop: ForgeLandscapeSpline = {
+    id: "ring",
+    points: [
+      { id: "p0", position: [-8, 1, -8], width: 4, falloff: 2 },
+      { id: "p1", position: [8, 1, -8], width: 4, falloff: 2 },
+      { id: "p2", position: [8, 1, 8], width: 4, falloff: 2 },
+      { id: "p3", position: [-8, 1, 8], width: 4, falloff: 2 },
+    ],
+    segments: [
+      { id: "s0", startPointId: "p0", endPointId: "p1" },
+      { id: "s1", startPointId: "p1", endPointId: "p2" },
+      { id: "s2", startPointId: "p2", endPointId: "p3" },
+      { id: "s3", startPointId: "p3", endPointId: "p0" }, // loop-closing segment
+    ],
+  };
+  const data = createFlatLandscapeData("small");
+  data.splines = [branch, loop];
+  const validated = validateLandscapeData(data) as typeof data;
+  assert.deepEqual(validated.splines, data.splines); // shared points + loop allowlisted
+  assert.equal(applyLandscapeSplineDeform(data, branch).changed, true);
+  assert.ok(computeLandscapeSplineMeshInstances(branch).length > 0);
+});
+
 check("computeLandscapeSplineMeshInstances skips disabled or asset-less mesh segments", () => {
   const spline: ForgeLandscapeSpline = {
     id: "road",

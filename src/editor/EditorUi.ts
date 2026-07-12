@@ -3073,6 +3073,7 @@ export class EditorUi {
       getSelectedLandscapeSplines: () => this.app.getSelectedLandscapeSplines(),
       createSelectedLandscapeSpline: () => this.app.createSelectedLandscapeSpline(),
       deleteSelectedLandscapeSpline: (splineId) => this.app.deleteSelectedLandscapeSpline(splineId),
+      closeSelectedLandscapeSpline: () => this.app.closeSelectedLandscapeSpline(),
       getSelectedLandscapeSplinePoints: () => this.app.getSelectedLandscapeSplinePoints(),
       setSelectedLandscapeSplinePointPosition: (pointId, position) =>
         this.app.setSelectedLandscapeSplinePointPosition(pointId, position),
