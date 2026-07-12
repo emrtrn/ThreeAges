@@ -671,30 +671,43 @@ Yeni dev endpoint önerileri:
       deform/paint apply, raise/lower gating, paint blend ve mesh-instance dizilim
       testleri; `npm run build:verify` yeşil, 769 test).
 
-### Faz 6.1 - Spline control point gizmo düzenleme (planlandı, henüz yapılmadı)
+### Faz 6.1 - Spline control point gizmo düzenleme (TAMAM, 2026-07-12)
 
-Şu an control point konumu yalnızca Details'taki sayısal X/Y/Z alanlarından ayarlanıyor
-(alanlar standart transform satırı stiline getirildi). Hedef: seçili bir control
-point'i viewport'ta **move gizmo** ile sürükleyebilmek. Somut adımlar:
+Seçili bir control point artık viewport'ta **move gizmo** ile sürüklenebiliyor;
+Details'taki sayısal X/Y/Z alanları da (mevcut) yan yana çalışır.
 
-1. **Selection kind**: `editor/core/selection.ts` union'ına
-   `{ kind: "landscapeSplinePoint"; landscapeIndex; splineId; pointId }` eklenir;
-   `cloneSelection` / `selectionId` (`landscapeSplinePoint:<lidx>:<splineId>:<pointId>`)
-   / `parseSelectionId` / `selectionsEqual` case'leri eklenir.
-2. **Picking**: overlay küre marker'larının `raycast` devre dışılığı Splines modunda
-   kaldırılır; her marker `userData` ile `{landscapeIndex, splineId, pointId}` taşır.
-   Pointer-down önce marker'ları raycast eder: isabet varsa **nokta seçilir**
-   (yeni nokta eklenmez), yoksa mevcut "terrain'e tıkla → nokta ekle" davranışı sürer.
-3. **Gizmo transform**: SceneApp'in transform capture/apply yolu yeni kind'i işler.
-   Dünya pozisyonu = landscape objesinin `matrixWorld`'ü × local point pozisyonu;
-   move drag'inde dünya deltası tekrar local'e çevrilip `point.position`'a yazılır.
-   Yalnız **translate**; rotate/scale bu sürümde no-op (ileride scale→width eşlemesi).
-4. **Undo + senkron**: drag başında spline snapshot alınır, drag sonunda tek bir
-   `applySelectedLandscapeSplines` komutuyla commit edilir (sayısal taşımayla aynı
-   yol); overlay + spline mesh + Details "Control Point" paneli aktif noktayla
-   senkron kalır.
-5. **Kapsam dışı (bu alt-faz)**: çoklu-nokta marquee seçimi, width/falloff gizmo
-   handle'ı, segment tangent düzenleme.
+**Uygulama yaklaşımı (kesinleşen karar 2026-07-12):** Ayrı bir `landscapeSplinePoint`
+selection kind'ı yerine, `this.selection` **landscape aktörü olarak kalır** ve gizmo
+mevcut `landscapeSculptSettings.activeSplinePointId` noktasını hedefler. Bu, kod
+tabanındaki ~25 `kind === "landscape"` kapısını, Details dispatch'ini ve selection
+serileştirmesini değiştirmeden aynı UX'i verir (World Widget'ın gizmo-bypass deseniyle
+aynı disiplin). Aşağıdaki adımlar bu yaklaşıma göre gerçekleşti:
+
+1. **Picking**: Overlay küre marker'ları generic raycaster dışında kalır; yeni
+   `pickLandscapeSplinePoint()` her noktanın dünya pozisyonunu viewport'a projekte edip
+   piksel yarıçapıyla en yakını seçer. `addLandscapeSplinePointAtPointer` önce bu marker
+   pick'ini dener: isabet varsa nokta **aktif edilir** (`activeSplineId/activeSplinePointId`
+   set) ve yeni nokta eklenmez; yoksa mevcut "terrain'e tıkla → nokta ekle" davranışı sürer.
+   Marker'lar `userData.splinePoint = { splineId, pointId }` taşır.
+2. **Gizmo transform**: `activeLandscapeSplinePoint()` seçili+kilitsiz landscape'in
+   Splines modundaki aktif noktasını dünya pozisyonuyla çözer. `updateGizmo` bu noktada
+   (aktif tool'dan bağımsız) bir **move** gizmo'su gösterir; `startGizmoDrag` sadece move
+   tool'unda bir spline-point drag'i başlatır (rotate/scale no-op). Dünya pozisyonu =
+   landscape `matrixWorld` × local point; drag'de dünya konumu `objectMatrixInverse` ile
+   tekrar local'e çevrilip `point.position`'a yazılır. Serbest/plane/eksen + snap yolu
+   ortak move-drag matematiğinden gelir (sentetik dünya-uzayı `selected`).
+3. **Undo + senkron**: `startLandscapeSplinePointDrag` drag başında spline snapshot'ı alır;
+   `applyLandscapeSplinePointWorld` sürüş boyunca noktayı canlı yazar (overlay + gizmo +
+   Details senkron, undo kaydı yok); `commitLandscapeSplinePointDrag` bırakışta tek bir
+   `applySelectedLandscapeSplines` komutuyla commit eder (sayısal taşımayla aynı yol,
+   spline-mesh rebuild + autosave dahil).
+4. **Kapsam dışı (bu alt-faz)**: çoklu-nokta marquee seçimi, width/falloff gizmo
+   handle'ı, segment tangent düzenleme. (Ayrı `landscapeSplinePoint` selection kind'ı —
+   ileride marquee çoklu-seçim istenirse — gelecekteki iş olarak açık bırakıldı.)
+
+Doğrulama: `npm run build:verify` yeşil (tsc + vite build + 770 engine test +
+verify:dist --strict). Kullanıcı taraflı tarayıcı smoke'u (gizmo ile gerçek sürükleme)
+önceki fazlardaki gibi kullanıcıya bırakıldı.
 
 ### Faz 6.2a - Kavisli yollar / otomatik yumuşatma (Catmull-Rom) (planlandı)
 

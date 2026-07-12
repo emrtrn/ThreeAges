@@ -553,6 +553,16 @@ export interface LandscapeSplineSegmentView {
   mesh: { enabled: boolean; assetId: string; spacing: number };
 }
 
+/** The spline control point the move gizmo targets (Faz 6.1), with its world anchor. */
+interface LandscapeSplinePointGizmoTarget {
+  index: number;
+  landscapeId: string;
+  object: LandscapeObject;
+  splineId: string;
+  pointId: string;
+  world: Vector3;
+}
+
 /** Config patch for one spline segment's destructive effects (Faz 6 Road Tool). */
 export interface LandscapeSplineSegmentPatch {
   deform?: Partial<{ enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number }>;
@@ -808,6 +818,19 @@ export class SceneApp {
     activeSplineSegmentId: null,
   };
   private landscapeSculptStroke: LandscapeSculptStroke | null = null;
+  /**
+   * Active gizmo-drag of a landscape spline control point (Faz 6.1). While set,
+   * the shared move-gizmo path drives `point.position` (world→local) instead of a
+   * layout transform; `before` is the pre-drag spline snapshot for the undo commit.
+   */
+  private landscapeSplinePointDrag: {
+    index: number;
+    landscapeId: string;
+    splineId: string;
+    pointId: string;
+    before: ForgeLandscapeSpline[];
+    objectMatrixInverse: Matrix4;
+  } | null = null;
   private landscapeBrushCursor: Mesh | null = null;
   /** Editor markers for AI patrol Target Points, by index. */
   private targetPointObjects: TargetPointObject[] = [];
@@ -4890,7 +4913,10 @@ export class SceneApp {
         const marker = new Mesh(markerGeometry, active ? activePointMaterial : pointMaterial);
         marker.position.set(point.position[0], point.position[1] + 0.4, point.position[2]);
         marker.renderOrder = 22;
+        // Picked via screen-space projection ({@link pickLandscapeSplinePoint}), so
+        // stays out of the generic scene raycaster; metadata records what it maps to.
         marker.raycast = () => {};
+        marker.userData.splinePoint = { splineId: spline.id, pointId: point.id };
         overlay.add(marker);
       }
       for (const segment of spline.segments) {
@@ -5076,6 +5102,78 @@ export class SceneApp {
   }
 
   /**
+   * Screen-space pick of a spline control-point marker on the selected landscape
+   * (Faz 6.1). The overlay markers stay out of the generic raycaster, so this
+   * projects each point's world position to the viewport and returns the closest
+   * within a small pixel radius. Returns `null` when nothing is close enough.
+   */
+  private pickLandscapeSplinePoint(
+    clientX: number,
+    clientY: number,
+  ): { splineId: string; pointId: string } | null {
+    if (this.selection?.kind !== "landscape" || this.landscapeSculptSettings.editMode !== "splines") {
+      return null;
+    }
+    const index = this.selection.index;
+    const object = this.landscapeObjects[index];
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!object || !data?.splines?.length) return null;
+    object.updateWorldMatrix(true, false);
+    const camera = this.editorViewportCamera();
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const threshold = 14; // px — matches the on-screen marker footprint.
+    const projected = new Vector3();
+    let best: { splineId: string; pointId: string; dist: number } | null = null;
+    for (const spline of data.splines) {
+      for (const point of spline.points) {
+        projected
+          .set(point.position[0], point.position[1] + 0.4, point.position[2])
+          .applyMatrix4(object.matrixWorld)
+          .project(camera);
+        if (projected.z < -1 || projected.z > 1) continue; // behind camera / clipped
+        const sx = (projected.x * 0.5 + 0.5) * rect.width;
+        const sy = (-projected.y * 0.5 + 0.5) * rect.height;
+        const dist = Math.hypot(sx - px, sy - py);
+        if (dist <= threshold && (!best || dist < best.dist)) {
+          best = { splineId: spline.id, pointId: point.id, dist };
+        }
+      }
+    }
+    return best ? { splineId: best.splineId, pointId: best.pointId } : null;
+  }
+
+  /**
+   * Resolves the spline control point the move gizmo should target: the active
+   * point of the selected, unlocked landscape while in Splines mode (Faz 6.1).
+   * Returns its owning object + world position, or `null` when no point is active.
+   */
+  private activeLandscapeSplinePoint(): LandscapeSplinePointGizmoTarget | null {
+    if (this.selection?.kind !== "landscape" || this.landscapeSculptSettings.editMode !== "splines") {
+      return null;
+    }
+    const { activeSplineId, activeSplinePointId } = this.landscapeSculptSettings;
+    if (!activeSplineId || !activeSplinePointId) return null;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const object = this.landscapeObjects[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || actor.locked || !object || !data) return null;
+    const point = data.splines
+      ?.find((spline) => spline.id === activeSplineId)
+      ?.points.find((entry) => entry.id === activeSplinePointId);
+    if (!point) return null;
+    object.updateWorldMatrix(true, false);
+    const world = new Vector3(point.position[0], point.position[1], point.position[2]).applyMatrix4(
+      object.matrixWorld,
+    );
+    return { index, landscapeId: actor.id, object, splineId: activeSplineId, pointId: activeSplinePointId, world };
+  }
+
+  /**
    * Splines mode click. Extends the active spline from its "pen tip" (the active
    * control point, else the last point): a plain click adds a new connected point,
    * while a click near an existing point of the same spline welds to it instead of
@@ -5085,6 +5183,19 @@ export class SceneApp {
   private addLandscapeSplinePointAtPointer(event: PointerEvent): boolean {
     const index = this.selectedEditableLandscapeIndex();
     if (index === null) return false;
+    // A click on an existing control-point marker selects that point (so the move
+    // gizmo can drag it, Faz 6.1) instead of adding/welding a new one.
+    const marker = this.pickLandscapeSplinePoint(event.clientX, event.clientY);
+    if (marker) {
+      this.setLandscapeSculptSettings({
+        activeSplineId: marker.splineId,
+        activeSplinePointId: marker.pointId,
+        activeSplineSegmentId: null,
+      });
+      this.emitSelectionChanged();
+      this.updateGizmo();
+      return true;
+    }
     const hit = this.landscapeLocalHit(event.clientX, event.clientY);
     const actor = this.layout?.landscapes?.[index];
     const data = actor ? this.landscapeData.get(actor.id) : null;
@@ -7748,6 +7859,12 @@ export class SceneApp {
   }
 
   private commitPointerDrag(drag: GizmoPointerDrag): void {
+    // A spline-point drag (Faz 6.1) commits the whole spline snapshot, not a layout
+    // transform — check it first since its `drag.selection` is the landscape.
+    if (this.landscapeSplinePointDrag) {
+      this.commitLandscapeSplinePointDrag();
+      return;
+    }
     if (drag.selection.kind === "worldWidget") {
       this.commitWorldWidgetMove(drag.selection.index, drag.startTransform.position);
       return;
@@ -7772,6 +7889,14 @@ export class SceneApp {
     if (!this.selection) return;
     if (this.isSelectionLocked(this.selection)) {
       this.onStatus?.("Selected object is locked.", "warning");
+      return;
+    }
+    // Landscape spline control point (Faz 6.1): drag its world position, mapped
+    // back to the point's local space — only the move tool acts on it.
+    const splinePoint = this.activeLandscapeSplinePoint();
+    if (splinePoint) {
+      if (handle.tool !== "move") return;
+      this.startLandscapeSplinePointDrag(handle, event, splinePoint);
       return;
     }
     let linkedTransforms: LinkedMoveStart[] | undefined;
@@ -7819,13 +7944,133 @@ export class SceneApp {
     this.canvas.setPointerCapture(event.pointerId);
   }
 
+  /**
+   * Sets up a move-gizmo drag for a landscape spline control point (Faz 6.1). It
+   * reuses the shared move-drag math with a synthetic world-space base at the
+   * point, and records the pre-drag spline snapshot for the undo commit.
+   */
+  private startLandscapeSplinePointDrag(
+    handle: GizmoHandle,
+    event: PointerEvent,
+    splinePoint: LandscapeSplinePointGizmoTarget,
+  ): void {
+    const landscapeEditable = this.getSelected();
+    if (!landscapeEditable) return;
+    const data = this.landscapeData.get(splinePoint.landscapeId);
+    if (!data) return;
+
+    this.gizmoInteraction.beginDrag(handle);
+    this.updateGizmo();
+
+    const base = splinePoint.world.clone();
+    // The point carries no rotation/scale of its own — drag it in world space.
+    const selected: EditableSelection = {
+      ...landscapeEditable,
+      position: [base.x, base.y, base.z],
+      rotation: [0, 0, 0],
+      scale: [1, 1, 1],
+    };
+    const movePlane = createGizmoMovePlane(handle, base, this.gizmoGroup.quaternion);
+    const planeStartHit = movePlane
+      ? this.picker.clientToPlane(event.clientX, event.clientY, movePlane) ?? base.clone()
+      : undefined;
+    this.landscapeSplinePointDrag = {
+      index: splinePoint.index,
+      landscapeId: splinePoint.landscapeId,
+      splineId: splinePoint.splineId,
+      pointId: splinePoint.pointId,
+      before: cloneLandscapeSplines(data.splines ?? []),
+      objectMatrixInverse: splinePoint.object.matrixWorld.clone().invert(),
+    };
+    this.pointerDrag = createGizmoPointerDrag({
+      handle,
+      selection: { kind: "landscape", index: splinePoint.index },
+      selected,
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      floorHit: this.picker.clientToFloor(event.clientX, event.clientY),
+      freeMoveBasis: this.getScreenSpaceMoveBasis(),
+      linkedTransforms: undefined,
+      descendantTransforms: undefined,
+      movePlane,
+      planeStartHit,
+      pivot: [0, 0, 0],
+      pivotWorld: null,
+      pivotEditing: false,
+    });
+
+    this.canvas.setPointerCapture(event.pointerId);
+  }
+
+  /** Current world position of the point being dragged (Faz 6.1 gizmo base). */
+  private landscapeSplinePointDragWorld(): Vec3 | null {
+    const drag = this.landscapeSplinePointDrag;
+    if (!drag) return null;
+    const object = this.landscapeObjects[drag.index];
+    const point = this.landscapeData
+      .get(drag.landscapeId)
+      ?.splines?.find((spline) => spline.id === drag.splineId)
+      ?.points.find((entry) => entry.id === drag.pointId);
+    if (!object || !point) return null;
+    object.updateWorldMatrix(true, false);
+    const world = new Vector3(point.position[0], point.position[1], point.position[2]).applyMatrix4(
+      object.matrixWorld,
+    );
+    return [world.x, world.y, world.z];
+  }
+
+  /**
+   * Live-writes the dragged spline point's local position from a world point (no
+   * undo entry — {@link commitLandscapeSplinePointDrag} records before/after on
+   * release), keeping the overlay + gizmo in sync.
+   */
+  private applyLandscapeSplinePointWorld(world: Vec3): void {
+    const drag = this.landscapeSplinePointDrag;
+    if (!drag) return;
+    const point = this.landscapeData
+      .get(drag.landscapeId)
+      ?.splines?.find((spline) => spline.id === drag.splineId)
+      ?.points.find((entry) => entry.id === drag.pointId);
+    if (!point) return;
+    const local = new Vector3(...world).applyMatrix4(drag.objectMatrixInverse);
+    point.position = [round(local.x), round(local.y), round(local.z)];
+    this.landscapeDataDirty.add(drag.landscapeId);
+    this.refreshLandscapeSplineOverlay(drag.index);
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  /** Records one undoable command for a gizmo-drag move of a spline control point. */
+  private commitLandscapeSplinePointDrag(): void {
+    const drag = this.landscapeSplinePointDrag;
+    this.landscapeSplinePointDrag = null;
+    if (!drag) return;
+    const data = this.landscapeData.get(drag.landscapeId);
+    if (!data) return;
+    const after = cloneLandscapeSplines(data.splines ?? []);
+    if (JSON.stringify(drag.before) === JSON.stringify(after)) return;
+    this.applySelectedLandscapeSplines(
+      drag.index,
+      drag.landscapeId,
+      drag.before,
+      after,
+      "Move Landscape Spline Point",
+      drag.splineId,
+      drag.pointId,
+    );
+  }
+
   private updateMoveDrag(event: PointerEvent, selected: EditableSelection): void {
     const drag = this.pointerDrag;
     if (!drag || drag.mode !== "move") return;
 
     // When editing the pivot the object stays put, so the unchanged components
     // come from the pivot's start point (startPosition), not the object origin.
-    const base: Vec3 = drag.pivotEdit ? [...drag.startPosition] : [...selected.position];
+    // A spline-point drag (Faz 6.1) tracks the point's own world position instead.
+    const base: Vec3 = drag.pivotEdit
+      ? [...drag.startPosition]
+      : this.landscapeSplinePointDragWorld() ?? [...selected.position];
 
     if (drag.axis === "xyz") {
       const position = freeMoveDragPosition(
@@ -7866,6 +8111,13 @@ export class SceneApp {
   private updateMoveDragPosition(position: Vec3): void {
     if (!this.pointerDrag || this.pointerDrag.mode !== "move") return;
     const drag = this.pointerDrag;
+
+    // A spline control point (Faz 6.1) lives in the landscape sidecar, not the
+    // layout, so it bypasses getMutableTransform / pivot / linked moves entirely.
+    if (this.landscapeSplinePointDrag) {
+      this.applyLandscapeSplinePointWorld(position);
+      return;
+    }
 
     // World widgets store their drag position on the UI anchor world point, not a
     // layout transform, so they bypass getMutableTransform / pivot / linked moves.
@@ -9036,6 +9288,18 @@ export class SceneApp {
       this.selection.kind === "cloud" ||
       this.selection.kind === "post"
     ) {
+      return;
+    }
+
+    // A landscape spline control point (Faz 6.1) shows a world-space move gizmo at
+    // the point regardless of the active tool — it's the only transform for it.
+    const splinePoint = this.activeLandscapeSplinePoint();
+    if (splinePoint) {
+      this.gizmoGroup.visible = true;
+      this.gizmoGroup.position.copy(splinePoint.world);
+      this.gizmoGroup.rotation.set(0, 0, 0);
+      buildGizmoHandles("move", this.gizmoGroup, this.gizmoPickables, this.gizmoInteraction);
+      this.updateGizmoScreenScale();
       return;
     }
 
