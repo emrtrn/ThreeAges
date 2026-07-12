@@ -14,6 +14,7 @@ import type {
   LandscapePaintTool,
   LandscapeSculptSettings,
   LandscapeSculptTool,
+  LandscapeSplineTool,
   TargetPointReference,
 } from "@/scene/SceneApp";
 import { type LandscapeViewMode } from "@engine/render-three/landscape";
@@ -135,6 +136,7 @@ const LANDSCAPE_SCULPT_TOOLS: readonly LandscapeSculptTool[] = [
 const LANDSCAPE_PAINT_TOOLS: readonly LandscapePaintTool[] = ["paint", "erase", "smoothWeights"];
 const LANDSCAPE_VIEW_MODES: readonly LandscapeViewMode[] = ["lit", "height", "slope", "layer"];
 const LANDSCAPE_EDIT_MODES: readonly LandscapeEditMode[] = ["sculpt", "paint", "splines"];
+const LANDSCAPE_SPLINE_TOOLS: readonly LandscapeSplineTool[] = ["draw", "edit"];
 
 export function renderLandscapeDetails(options: SpecialActorDetailsOptions): void {
   const { body, selection, editableAssets } = options;
@@ -246,7 +248,18 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         ${
           settings.editMode === "splines"
             ? `<div class="detail-subsection-title">Landscape Splines</div>
-              <div class="detail-hint">Click the terrain to add connected control points. Click near an existing point to weld — close a loop (click the first point) or branch (select a mid point, then click).</div>
+              <div class="landscape-tool-segment landscape-tool-segment--two" role="group" aria-label="Landscape spline tool">
+                ${LANDSCAPE_SPLINE_TOOLS.map(
+                  (tool) => `<button type="button" data-landscape-spline-tool="${tool}" class="${
+                    settings.splineTool === tool ? "active" : ""
+                  }" ${lockedAttr}>${tool === "draw" ? "Draw" : "Edit Points"}</button>`,
+                ).join("")}
+              </div>
+              <div class="detail-hint">${
+                settings.splineTool === "draw"
+                  ? "Draw: click the terrain to add connected control points. Click near an existing point to weld — close a loop (click the first point), branch (select a mid point, then click), or fork onto another spline's point (the two merge into one)."
+                  : "Edit Points: click a control point to select it, then drag the move gizmo. Switch to Draw to add or connect points."
+              }</div>
               <div class="landscape-layer-list">
                 ${splines.map((spline) => `<button type="button" data-landscape-spline="${escapeHtml(spline.id)}" class="${
                   settings.activeSplineId === spline.id ? "active" : ""
@@ -387,6 +400,15 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const tool = button.dataset.landscapeTool as LandscapeSculptTool | undefined;
       if (!tool || !LANDSCAPE_SCULPT_TOOLS.includes(tool)) return;
       options.setLandscapeSculptSettings({ tool });
+      renderLandscapeDetails(options);
+    });
+  });
+
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-tool]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const splineTool = button.dataset.landscapeSplineTool as LandscapeSplineTool | undefined;
+      if (!splineTool || !LANDSCAPE_SPLINE_TOOLS.includes(splineTool)) return;
+      options.setLandscapeSculptSettings({ splineTool });
       renderLandscapeDetails(options);
     });
   });

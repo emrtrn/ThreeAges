@@ -516,11 +516,19 @@ export interface TargetPointReference {
 export type LandscapeSculptTool = "raise" | "lower" | "smooth" | "flatten";
 export type LandscapeEditMode = "sculpt" | "paint" | "splines";
 export type LandscapePaintTool = "paint" | "erase" | "smoothWeights";
+/**
+ * Splines sub-mode (Faz 6.1). "draw" authors the spline (click terrain to add a
+ * connected point; click an existing marker to weld / close / branch), while
+ * "edit" selects a control point so the move gizmo can drag it. Splitting the
+ * two intents keeps a marker click from being ambiguous.
+ */
+export type LandscapeSplineTool = "draw" | "edit";
 
 export interface LandscapeSculptSettings {
   editMode: LandscapeEditMode;
   tool: LandscapeSculptTool;
   paintTool: LandscapePaintTool;
+  splineTool: LandscapeSplineTool;
   activeLayerId: string;
   viewMode: LandscapeViewMode;
   brushSize: number;
@@ -810,6 +818,7 @@ export class SceneApp {
     editMode: "sculpt",
     tool: "raise",
     paintTool: "paint",
+    splineTool: "draw",
     activeLayerId: LANDSCAPE_DEFAULT_LAYERS[0]!.id,
     viewMode: "lit",
     brushSize: 6,
@@ -1473,6 +1482,8 @@ export class SceneApp {
   setLandscapeSculptSettings(patch: Partial<LandscapeSculptSettings>): LandscapeSculptSettings {
     const previousViewMode = this.landscapeSculptSettings.viewMode;
     const previousLayerId = this.landscapeSculptSettings.activeLayerId;
+    const previousEditMode = this.landscapeSculptSettings.editMode;
+    const previousSplineTool = this.landscapeSculptSettings.splineTool;
     const next = { ...this.landscapeSculptSettings, ...patch };
     const layerIds = new Set<string>(LANDSCAPE_DEFAULT_LAYERS.map((layer) => layer.id));
     this.landscapeSculptSettings = {
@@ -1481,6 +1492,7 @@ export class SceneApp {
       paintTool: ["paint", "erase", "smoothWeights"].includes(next.paintTool)
         ? next.paintTool
         : "paint",
+      splineTool: next.splineTool === "edit" ? "edit" : "draw",
       activeLayerId: layerIds.has(next.activeLayerId)
         ? next.activeLayerId
         : LANDSCAPE_DEFAULT_LAYERS[0]!.id,
@@ -1510,6 +1522,14 @@ export class SceneApp {
         : this.landscapeSculptSettings.tool;
     this.onStatus?.(`Landscape ${mode}`, "info");
     this.refreshAllLandscapeSplineOverlays();
+    if (
+      previousEditMode !== this.landscapeSculptSettings.editMode ||
+      previousSplineTool !== this.landscapeSculptSettings.splineTool
+    ) {
+      // The spline move gizmo only exists in splines + "edit" sub-mode, so refresh
+      // it when either changes — otherwise a stale gizmo lingers after switching.
+      this.updateGizmo();
+    }
     return this.getLandscapeSculptSettings();
   }
 
@@ -5153,7 +5173,13 @@ export class SceneApp {
    * Returns its owning object + world position, or `null` when no point is active.
    */
   private activeLandscapeSplinePoint(): LandscapeSplinePointGizmoTarget | null {
-    if (this.selection?.kind !== "landscape" || this.landscapeSculptSettings.editMode !== "splines") {
+    if (
+      this.selection?.kind !== "landscape" ||
+      this.landscapeSculptSettings.editMode !== "splines" ||
+      this.landscapeSculptSettings.splineTool !== "edit"
+    ) {
+      // The move gizmo only targets a control point in the "edit" sub-mode; in
+      // "draw" mode a marker click welds/closes instead of selecting for drag.
       return null;
     }
     const { activeSplineId, activeSplinePointId } = this.landscapeSculptSettings;
@@ -5184,10 +5210,13 @@ export class SceneApp {
   private addLandscapeSplinePointAtPointer(event: PointerEvent): boolean {
     const index = this.selectedEditableLandscapeIndex();
     if (index === null) return false;
-    // A click on an existing control-point marker selects that point (so the move
-    // gizmo can drag it, Faz 6.1) instead of adding/welding a new one.
-    const marker = this.pickLandscapeSplinePoint(event.clientX, event.clientY);
-    if (marker) {
+    // In the "edit" sub-mode a click selects an existing control-point marker so
+    // the move gizmo can drag it (Faz 6.1); empty terrain does nothing. Authoring
+    // (add / weld / close / branch) lives in the "draw" sub-mode below, so a
+    // marker click there falls through to the weld logic instead of being hijacked.
+    if (this.landscapeSculptSettings.splineTool === "edit") {
+      const marker = this.pickLandscapeSplinePoint(event.clientX, event.clientY);
+      if (!marker) return false;
       this.setLandscapeSculptSettings({
         activeSplineId: marker.splineId,
         activeSplinePointId: marker.pointId,
@@ -5217,23 +5246,44 @@ export class SceneApp {
     // Weld radius scales with the terrain footprint so it feels the same at any size.
     const worldSize = (data.size.verticesX - 1) * data.size.spacing;
     const weldDist = Math.max(1.5, worldSize * 0.02);
-    const weldTarget = spline.points
-      .filter((point) => point.id !== from?.id)
-      .map((point) => ({ point, distance: Math.hypot(point.position[0] - local[0], point.position[2] - local[2]) }))
+    // Search every spline, not just the active one, so a click can weld onto a
+    // point of another spline to fork/join two roads. The nearest point wins
+    // regardless of which spline owns it; `from` (the pen tip) is excluded by
+    // reference so it can't weld to itself.
+    const weldTarget = before
+      .flatMap((entry) =>
+        entry.points
+          .filter((point) => point !== from)
+          .map((point) => ({
+            spline: entry,
+            point,
+            distance: Math.hypot(point.position[0] - local[0], point.position[2] - local[2]),
+          })),
+      )
       .filter((entry) => entry.distance <= weldDist)
-      .sort((a, b) => a.distance - b.distance)[0]?.point;
+      .sort((a, b) => a.distance - b.distance)[0];
 
+    let activeSplineId = spline.id;
     let activePointId: string;
-    if (weldTarget) {
-      if (from && from.id !== weldTarget.id) this.linkSplineSegment(spline, from.id, weldTarget.id);
-      activePointId = weldTarget.id; // continue authoring from the welded point
+    if (weldTarget && weldTarget.spline !== spline) {
+      // Cross-spline weld: fold the active spline into the target so the shared
+      // point becomes a real fork, then connect the pen tip (remapped) to it.
+      const idMap = this.mergeSplineInto(weldTarget.spline, spline);
+      const merged = before.indexOf(spline);
+      if (merged >= 0) before.splice(merged, 1);
+      if (from) this.linkSplineSegment(weldTarget.spline, idMap.get(from.id) ?? from.id, weldTarget.point.id);
+      activeSplineId = weldTarget.spline.id;
+      activePointId = weldTarget.point.id;
+    } else if (weldTarget) {
+      if (from && from.id !== weldTarget.point.id) this.linkSplineSegment(spline, from.id, weldTarget.point.id);
+      activePointId = weldTarget.point.id; // continue authoring from the welded point
     } else {
       const pointId = uniqueSplinePointId(spline);
       spline.points.push({ id: pointId, position: local, width: 6, falloff: 3 });
       if (from) this.linkSplineSegment(spline, from.id, pointId);
       activePointId = pointId;
     }
-    this.applySelectedLandscapeSplines(index, actor.id, data.splines ? cloneLandscapeSplines(data.splines) : [], before, "Add Landscape Spline Point", spline.id, activePointId);
+    this.applySelectedLandscapeSplines(index, actor.id, data.splines ? cloneLandscapeSplines(data.splines) : [], before, "Add Landscape Spline Point", activeSplineId, activePointId);
     return true;
   }
 
@@ -5246,6 +5296,34 @@ export class SceneApp {
     );
     if (exists) return;
     spline.segments.push({ id: uniqueSplineSegmentId(spline), startPointId, endPointId });
+  }
+
+  /**
+   * Folds `source`'s points and segments into `target`, remapping their ids to
+   * stay unique within `target`, and returns the old→new point-id map so the
+   * caller can reconnect the pen tip. This lets a draw-mode weld onto another
+   * spline's point fork/join two roads into one spline with a genuinely shared
+   * branch point (instead of leaving a coincident duplicate).
+   */
+  private mergeSplineInto(
+    target: ForgeLandscapeSpline,
+    source: ForgeLandscapeSpline,
+  ): Map<string, string> {
+    const idMap = new Map<string, string>();
+    for (const point of source.points) {
+      const newId = uniqueSplinePointId(target);
+      idMap.set(point.id, newId);
+      target.points.push({ ...point, id: newId, position: [...point.position] as Vec3 });
+    }
+    for (const segment of source.segments) {
+      target.segments.push({
+        ...segment,
+        id: uniqueSplineSegmentId(target),
+        startPointId: idMap.get(segment.startPointId) ?? segment.startPointId,
+        endPointId: idMap.get(segment.endPointId) ?? segment.endPointId,
+      });
+    }
+    return idMap;
   }
 
   /** Closes the active spline into a loop by linking its last point back to its first. */
