@@ -25,7 +25,9 @@
     "turbidity": 1,
     "mie": 0.002
   },
-  "heightFog": {},
+  "heightFog": {
+    "hidden": true
+  },
   "cloudLayer": {
     "density": 0.4
   },

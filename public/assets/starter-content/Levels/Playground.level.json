@@ -16,9 +16,9 @@
       "placements": [
         {
           "position": [
-            -8.01,
+            -1.04,
             0,
-            -18.21
+            0.29
           ],
           "name": "Player Start",
           "collision": false,
@@ -145,6 +145,19 @@
             1.1,
             1,
             1
+          ]
+        },
+        {
+          "position": [
+            -13.21,
+            0,
+            -13.74
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            5,
+            1,
+            5
           ]
         }
       ]
@@ -523,18 +536,7 @@
       "nextTargetPoint": "target-point-3"
     }
   ],
-  "landscapes": [
-    {
-      "id": "landscape-1",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "dataRef": "landscapes/landscape-1.landscape.json",
-      "name": "Landscape"
-    }
-  ],
+  "landscapes": [],
   "actors": [
     {
       "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",

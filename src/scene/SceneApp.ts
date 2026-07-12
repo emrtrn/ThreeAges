@@ -767,6 +767,8 @@ export class SceneApp {
   private landscapeObjects: LandscapeObject[] = [];
   /** Instanced spline-mesh groups (Faz 6 Road Tool) parented under each landscape, by index. */
   private landscapeSplineMeshGroups: (Group | null)[] = [];
+  /** Editor-only spline control-point/segment overlay, parented under each landscape, by index. */
+  private landscapeSplineOverlays: (Group | null)[] = [];
   /** In-memory sidecar height/layer data for placed Landscape actors, keyed by landscape id. */
   private landscapeData = new Map<string, ForgeLandscapeData>();
   /** Last height scale used for a heightmap import, echoed back into the Details input. */
@@ -1465,6 +1467,7 @@ export class SceneApp {
         ? this.landscapeSculptSettings.paintTool
         : this.landscapeSculptSettings.tool;
     this.onStatus?.(`Landscape ${mode}`, "info");
+    this.refreshAllLandscapeSplineOverlays();
     return this.getLandscapeSculptSettings();
   }
 
@@ -4770,9 +4773,11 @@ export class SceneApp {
     disposeLandscapeObject(previous);
     this.scene.add(object);
     this.landscapeObjects[index] = object;
-    // The rebuilt group drops the previous spline-mesh child; re-attach it.
+    // The rebuilt group drops the previous spline-mesh child + overlay; re-attach.
     this.landscapeSplineMeshGroups[index] = null;
+    this.landscapeSplineOverlays[index] = null;
     void this.rebuildLandscapeSplineMeshes(index);
+    this.refreshLandscapeSplineOverlay(index);
     if (this.selection?.kind === "landscape" && this.selection.index === index) {
       this.updateSelectionBox();
     }
@@ -4817,6 +4822,86 @@ export class SceneApp {
     this.landscapeSplineMeshGroups[index] = built.group;
   }
 
+  private disposeSplineOverlayGroup(group: Group): void {
+    group.removeFromParent();
+    group.traverse((child) => {
+      if (child instanceof Mesh || child instanceof LineSegments) {
+        child.geometry.dispose();
+        const material = child.material;
+        if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+        else material.dispose();
+      }
+    });
+  }
+
+  /**
+   * Rebuilds the editor-only spline overlay for one landscape: control points as
+   * depth-independent markers and segments as lines, with the active point/segment
+   * highlighted. Shown only for the selected landscape while in Splines mode, so
+   * the road being authored is visible in the viewport.
+   */
+  private refreshLandscapeSplineOverlay(index: number): void {
+    const previous = this.landscapeSplineOverlays[index];
+    if (previous) {
+      this.disposeSplineOverlayGroup(previous);
+      this.landscapeSplineOverlays[index] = null;
+    }
+    const object = this.landscapeObjects[index];
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!object || !data) return;
+    const visible =
+      this.landscapeSculptSettings.editMode === "splines" &&
+      this.selection?.kind === "landscape" &&
+      this.selection.index === index;
+    const splines = data.splines ?? [];
+    if (!visible || splines.length === 0) return;
+
+    const settings = this.landscapeSculptSettings;
+    const overlay = new Group();
+    overlay.name = "landscape-spline-overlay";
+    const markerGeometry = new SphereGeometry(0.6, 16, 12);
+    const pointMaterial = new MeshBasicMaterial({ color: 0x35c4ff, depthTest: false, transparent: true, opacity: 0.95 });
+    const activePointMaterial = new MeshBasicMaterial({ color: 0xffd23f, depthTest: false, transparent: true, opacity: 1 });
+    const lineMaterial = new LineBasicMaterial({ color: 0xdfe7ec, depthTest: false, transparent: true, opacity: 0.9 });
+    const activeLineMaterial = new LineBasicMaterial({ color: 0xffd23f, depthTest: false, transparent: true, opacity: 1 });
+
+    for (const spline of splines) {
+      const pointById = new Map(spline.points.map((point) => [point.id, point] as const));
+      const isActiveSpline = spline.id === settings.activeSplineId;
+      for (const point of spline.points) {
+        const active = isActiveSpline && point.id === settings.activeSplinePointId;
+        const marker = new Mesh(markerGeometry, active ? activePointMaterial : pointMaterial);
+        marker.position.set(point.position[0], point.position[1] + 0.4, point.position[2]);
+        marker.renderOrder = 22;
+        marker.raycast = () => {};
+        overlay.add(marker);
+      }
+      for (const segment of spline.segments) {
+        const start = pointById.get(segment.startPointId);
+        const end = pointById.get(segment.endPointId);
+        if (!start || !end) continue;
+        const active = isActiveSpline && segment.id === settings.activeSplineSegmentId;
+        const geometry = new BufferGeometry().setFromPoints([
+          new Vector3(start.position[0], start.position[1] + 0.4, start.position[2]),
+          new Vector3(end.position[0], end.position[1] + 0.4, end.position[2]),
+        ]);
+        const line = new LineSegments(geometry, active ? activeLineMaterial : lineMaterial);
+        line.renderOrder = 21;
+        line.raycast = () => {};
+        overlay.add(line);
+      }
+    }
+    object.add(overlay);
+    this.landscapeSplineOverlays[index] = overlay;
+  }
+
+  /** Refreshes every landscape's spline overlay (selection/mode/data changed). */
+  private refreshAllLandscapeSplineOverlays(): void {
+    const count = this.landscapeObjects.length;
+    for (let index = 0; index < count; index += 1) this.refreshLandscapeSplineOverlay(index);
+  }
+
   /**
    * Rebuilds every landscape mesh from `layout.landscapes` (used on load). Also
    * fetches each landscape's `dataRef` sidecar (public-root-relative), falling
@@ -4830,6 +4915,7 @@ export class SceneApp {
     }
     this.landscapeObjects = [];
     this.landscapeSplineMeshGroups = [];
+    this.landscapeSplineOverlays = [];
     this.landscapeData.clear();
     this.landscapeDataDirty.clear();
     const landscapes = this.layout?.landscapes ?? [];
@@ -4850,6 +4936,7 @@ export class SceneApp {
     landscapes.forEach((_actor, index) => {
       void this.warmLandscapeLayerMaterials(index);
       void this.rebuildLandscapeSplineMeshes(index);
+      this.refreshLandscapeSplineOverlay(index);
     });
   }
 
@@ -5537,7 +5624,7 @@ export class SceneApp {
     this.applyActiveLandscapeSplineHeights(
       (data, spline) => applyLandscapeSplineDeform(data, spline),
       "Apply Spline Terrain Deform",
-      "No spline deform to apply. Enable Deform on a segment first.",
+      "No terrain change: enable Deform on a segment, then set a Target Offset or raise/lower control-point heights (flatten does nothing on already-flat terrain).",
     );
   }
 
@@ -5588,7 +5675,7 @@ export class SceneApp {
     const before = cloneLandscapeLayers(data.layers);
     const result = applyLandscapeSplinePaint(data, spline);
     if (!result.changed || !result.bounds) {
-      this.onStatus?.("No spline paint to apply. Enable Paint on a segment first.", "info");
+      this.onStatus?.("No paint applied: enable Paint on a segment and pick a target Layer with Strength > 0.", "info");
       return;
     }
     const after = cloneLandscapeLayers(data.layers);
@@ -7825,6 +7912,7 @@ export class SceneApp {
   private select(selection: Selection | null): void {
     this.editorSceneController.select(selection);
     this.updateAiNavigationView();
+    this.refreshAllLandscapeSplineOverlays();
   }
 
   private selectMany(selections: Selection[], active: Selection | null): void {
