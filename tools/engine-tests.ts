@@ -9,6 +9,8 @@
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
+import { NodeIO } from "@gltf-transform/core";
+import { KHRMaterialsSpecular } from "@gltf-transform/extensions";
 import {
   BackSide,
   DoubleSide,
@@ -709,6 +711,8 @@ import {
   Fog,
   FogExp2,
   Float32BufferAttribute,
+  Group,
+  Matrix4,
   Mesh,
   NeutralToneMapping,
   NoToneMapping,
@@ -1351,6 +1355,55 @@ check("deformed spline chains weld compatible pieces and keep UV phase continuou
   assert.ok(Math.min(...u) <= 0.001 || Math.min(...v) <= 0.001);
   assert.ok(Math.max(...u) >= 1.999 || Math.max(...v) >= 1.999, "the second piece must continue rather than restart its longitudinal UV");
   assert.ok(mesh.geometry.getAttribute("normal"), "normals are generated after welding");
+});
+
+const asphaltGltfDocument = await new NodeIO().registerExtensions([KHRMaterialsSpecular]).readBinary(
+  new Uint8Array(readFileSync("public/assets/starter-content/StaticMeshes/Environment/SM_Asphalt.glb")),
+);
+
+check("SM_Asphalt chain welds every shared end-ring vertex", () => {
+  const sourceNode = asphaltGltfDocument.getRoot().listNodes().find((node) => node.getMesh());
+  const primitive = sourceNode?.getMesh()?.listPrimitives()[0];
+  const sourcePositions = primitive?.getAttribute("POSITION");
+  const sourceUv = primitive?.getAttribute("TEXCOORD_0");
+  const sourceIndices = primitive?.getIndices();
+  assert.ok(sourceNode && sourcePositions && sourceUv && sourceIndices);
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute(sourcePositions.getArray()!.slice(), 3));
+  geometry.setAttribute("uv", new Float32BufferAttribute(sourceUv.getArray()!.slice(), 2));
+  geometry.setIndex(Array.from(sourceIndices.getArray()!));
+  const root = new Group();
+  const sourceMesh = new Mesh(geometry, new MeshBasicMaterial());
+  sourceMesh.matrix.copy(new Matrix4().fromArray(sourceNode.getMatrix()));
+  sourceMesh.matrixAutoUpdate = false;
+  root.add(sourceMesh);
+  root.updateMatrixWorld(true);
+
+  const data = createFlatLandscapeData("small");
+  data.splines = [{
+    id: "asphalt-chain",
+    points: [
+      { id: "a", position: [0, 0, 0], width: 7, falloff: 0 },
+      { id: "b", position: [0, 0, 14], width: 7, falloff: 0 },
+      { id: "c", position: [14, 0, 14], width: 7, falloff: 0 },
+    ],
+    segments: [
+      { id: "s0", startPointId: "a", endPointId: "b", mesh: { enabled: true, assetId: "asphalt", deform: true } },
+      { id: "s1", startPointId: "b", endPointId: "c", mesh: { enabled: true, assetId: "asphalt", deform: true } },
+    ],
+  }];
+  const built = buildLandscapeSplineMeshGroup({
+    data,
+    models: new Map([["asphalt", { scene: root } as unknown as GLTF]]),
+    castShadow: false,
+    receiveShadow: true,
+  });
+  assert.ok(built);
+  const group = built.group.children.find((child) => child.name === "deformed-asphalt")!;
+  const welded = (group.children[0] as Mesh).geometry.getAttribute("position");
+  // The GLB has 77 unique vertices and seven vertices across each end ring.
+  // Two pieces therefore become 77 + 77 - 7, rather than remaining separate.
+  assert.equal(welded.count, 147);
 });
 
 // colliderBoxFromBounds bakes placement scale into the world-aligned size; for

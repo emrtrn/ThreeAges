@@ -457,7 +457,11 @@ export function deformSplineMeshGeometry(
   if (pathDistanceSpan <= 1e-6 || pathDistanceEnd > pathLengths.total + 1e-4) return null;
   for (let index = 0; index < positions.count; index += 1) {
     source.fromBufferAttribute(positions, index);
-    const sourceT = (source.z - bounds.min.z) / sourceLength;
+    // GLTF node rotations can leave a source end-ring's nominally identical Z
+    // values a few floating-point ulps apart. Snap those values to the exact
+    // path endpoint so every vertex in the ring receives the same chain frame.
+    const rawSourceT = (source.z - bounds.min.z) / sourceLength;
+    const sourceT = rawSourceT <= 1e-5 ? 0 : rawSourceT >= 1 - 1e-5 ? 1 : rawSourceT;
     const pathDistance = pathDistanceStart + Math.min(1, Math.max(0, sourceT)) * pathDistanceSpan;
     const sample = sampleDeformPathAtDistance(path.points, pathLengths.lengths, pathLengths.total, pathDistance);
     if (!sample) continue;
