@@ -83282,9 +83282,9 @@
         {
           "id": "point-4",
           "position": [
-            1.54,
+            0.9,
             2,
-            29.94
+            30.3
           ],
           "width": 6,
           "falloff": 3
@@ -83320,7 +83320,9 @@
             "enabled": true,
             "assetId": "sm-road-asphalt",
             "spacing": 14,
-            "yawOffset": 90
+            "yawOffset": 90,
+            "alignToTerrain": true,
+            "deform": true
           }
         },
         {
@@ -83342,7 +83344,9 @@
             "enabled": true,
             "assetId": "sm-road-asphalt",
             "spacing": 14,
-            "yawOffset": 90
+            "yawOffset": 90,
+            "alignToTerrain": true,
+            "deform": true
           }
         },
         {
@@ -83364,7 +83368,9 @@
             "enabled": true,
             "assetId": "sm-road-asphalt",
             "spacing": 14,
-            "yawOffset": 90
+            "yawOffset": 90,
+            "alignToTerrain": true,
+            "deform": true
           }
         },
         {
@@ -83386,7 +83392,9 @@
             "enabled": true,
             "assetId": "sm-road-asphalt",
             "spacing": 14,
-            "yawOffset": 90
+            "yawOffset": 90,
+            "alignToTerrain": true,
+            "deform": true
           }
         },
         {
@@ -83408,7 +83416,9 @@
             "enabled": true,
             "assetId": "sm-road-asphalt",
             "spacing": 14,
-            "yawOffset": 90
+            "yawOffset": 90,
+            "alignToTerrain": true,
+            "deform": true
           }
         }
       ],

@@ -561,7 +561,7 @@ export interface LandscapeSplineSegmentView {
   endPointId: string;
   deform: { enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number };
   paint: { enabled: boolean; layerId: string; strength: number };
-  mesh: { enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number };
+  mesh: { enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number; deform: boolean };
 }
 
 /** The spline control point the move gizmo targets (Faz 6.1), with its world anchor. */
@@ -578,7 +578,7 @@ interface LandscapeSplinePointGizmoTarget {
 export interface LandscapeSplineSegmentPatch {
   deform?: Partial<{ enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number }>;
   paint?: Partial<{ enabled: boolean; layerId: string; strength: number }>;
-  mesh?: Partial<{ enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number }>;
+  mesh?: Partial<{ enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number; deform: boolean }>;
 }
 
 /**
@@ -5832,6 +5832,7 @@ export class SceneApp {
         fitToLength: segment.mesh?.fitToLength !== false,
         alignToTerrain: segment.mesh?.alignToTerrain ?? false,
         bank: segment.mesh?.bank ?? 0,
+        deform: segment.mesh?.deform ?? false,
       },
     }));
   }
@@ -5886,6 +5887,7 @@ export class SceneApp {
         ...(current.offset ? { offset: current.offset } : {}),
         ...((patch.mesh.alignToTerrain ?? current.alignToTerrain) ? { alignToTerrain: true } : {}),
         ...(bank ? { bank } : {}),
+        ...((patch.mesh.deform ?? current.deform) ? { deform: true } : {}),
         ...(current.collision !== undefined ? { collision: current.collision } : {}),
       };
     }

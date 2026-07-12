@@ -5,6 +5,7 @@ import {
   Color,
   Group,
   Matrix4,
+  Mesh,
   Quaternion,
   SRGBColorSpace,
   Scene,
@@ -14,7 +15,6 @@ import type {
   BufferGeometry,
   DirectionalLight,
   InstancedMesh,
-  Mesh,
   Object3D,
   PerspectiveCamera,
   WebGLRenderer,
@@ -53,6 +53,8 @@ import {
 import { isProceduralAssetId } from "@engine/scene/shapes";
 import {
   computeLandscapeSplineMeshInstances,
+  landscapeHeightAtLocal,
+  splineToPolyline,
   type ForgeLandscapeData,
 } from "@engine/scene/landscape";
 import { createProceduralAssetGltf } from "./shapePrimitives";
@@ -289,6 +291,7 @@ export function buildLandscapeSplineMeshGroup(options: {
   applyMaterialSlots?: (assetId: string, assetGroup: Group) => void;
 }): { group: Group; meshes: InstancedMesh[] } | null {
   const itemsByAsset = new Map<string, InstanceRenderItem[]>();
+  const deformPaths: LandscapeSplineMeshDeformPath[] = [];
   const meshForwardLengths = new Map<string, number>();
   for (const [assetId, gltf] of options.models) {
     gltf.scene.updateMatrixWorld(true);
@@ -297,6 +300,26 @@ export function buildLandscapeSplineMeshGroup(options: {
     if (length > 1e-6) meshForwardLengths.set(assetId, length);
   }
   for (const spline of options.data.splines ?? []) {
+    const subsBySegment = new Map<string, Vec3[]>();
+    for (const sub of splineToPolyline(spline, spline.smooth ? 32 : 1)) {
+      const points = subsBySegment.get(sub.segment.id);
+      if (points) points.push(sub.end.position);
+      else subsBySegment.set(sub.segment.id, [sub.start.position, sub.end.position]);
+    }
+    for (const segment of spline.segments) {
+      const mesh = segment.mesh;
+      const points = subsBySegment.get(segment.id);
+      if (!mesh?.enabled || !mesh.assetId || mesh.deform !== true || !points || points.length < 2) continue;
+      deformPaths.push({
+        assetId: mesh.assetId,
+        points,
+        scale: mesh.scale ?? [1, 1, 1],
+        offset: mesh.offset ?? [0, 0, 0],
+        yawOffset: mesh.yawOffset ?? 0,
+        bank: mesh.bank ?? 0,
+        alignToTerrain: mesh.alignToTerrain === true,
+      });
+    }
     for (const instance of computeLandscapeSplineMeshInstances(spline, { landscape: options.data, meshForwardLengths })) {
       const list = itemsByAsset.get(instance.assetId) ?? [];
       list.push({
@@ -310,7 +333,7 @@ export function buildLandscapeSplineMeshGroup(options: {
       itemsByAsset.set(instance.assetId, list);
     }
   }
-  if (itemsByAsset.size === 0) return null;
+  if (itemsByAsset.size === 0 && deformPaths.length === 0) return null;
 
   const group = new Group();
   group.name = "LandscapeSplineMeshes";
@@ -329,8 +352,150 @@ export function buildLandscapeSplineMeshGroup(options: {
     group.add(built.group);
     meshes.push(...built.meshes);
   }
-  if (meshes.length === 0) return null;
+  const deformedGroups = new Map<string, Group>();
+  for (const path of deformPaths) {
+    const gltf = options.models.get(path.assetId);
+    if (!gltf) continue;
+    let assetGroup = deformedGroups.get(path.assetId);
+    if (!assetGroup) {
+      assetGroup = new Group();
+      assetGroup.name = `deformed-${path.assetId}`;
+      deformedGroups.set(path.assetId, assetGroup);
+      group.add(assetGroup);
+    }
+    gltf.scene.traverse((object) => {
+      if (!(object instanceof Mesh)) return;
+      const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
+      const deformed = deformSplineMeshGeometry(geometry, path, options.data);
+      if (!deformed) return;
+      const mesh = new Mesh(deformed, object.material);
+      mesh.name = `${path.assetId}-${object.name || "mesh"}-deformed`;
+      mesh.castShadow = options.castShadow;
+      mesh.receiveShadow = options.receiveShadow;
+      mesh.userData.assetId = path.assetId;
+      assetGroup!.add(mesh);
+    });
+  }
+  for (const [assetId, assetGroup] of deformedGroups) {
+    if (assetGroup.children.length === 0) {
+      group.remove(assetGroup);
+      continue;
+    }
+    options.applyMaterialSlots?.(assetId, assetGroup);
+  }
+  if (meshes.length === 0 && group.children.length === 0) return null;
   return { group, meshes };
+}
+
+export interface LandscapeSplineMeshDeformPath {
+  assetId: string;
+  points: readonly Vec3[];
+  scale: Vec3;
+  offset: Vec3;
+  yawOffset: number;
+  bank: number;
+  alignToTerrain: boolean;
+}
+
+interface DeformPathSample {
+  position: Vector3;
+  tangent: Vector3;
+}
+
+/**
+ * Bends a static mesh authored along local +Z through a sampled spline path.
+ * UVs remain untouched; normals are recalculated from the deformed surface.
+ */
+export function deformSplineMeshGeometry(
+  geometry: BufferGeometry,
+  path: LandscapeSplineMeshDeformPath,
+  landscape: ForgeLandscapeData,
+): BufferGeometry | null {
+  const positions = geometry.getAttribute("position");
+  if (!positions) return null;
+  geometry.applyMatrix4(new Matrix4().makeRotationY((path.yawOffset * Math.PI) / 180));
+  geometry.computeBoundingBox();
+  const bounds = geometry.boundingBox;
+  if (!bounds) return null;
+  const sourceLength = bounds.max.z - bounds.min.z;
+  const pathLengths = pathSegmentLengths(path.points);
+  if (sourceLength <= 1e-6 || pathLengths.total <= 1e-6) return null;
+
+  const source = new Vector3();
+  const right = new Vector3();
+  const up = new Vector3();
+  for (let index = 0; index < positions.count; index += 1) {
+    source.fromBufferAttribute(positions, index);
+    const sample = sampleDeformPath(path.points, pathLengths.lengths, pathLengths.total, (source.z - bounds.min.z) / sourceLength);
+    if (!sample) continue;
+    const upHint = path.alignToTerrain
+      ? terrainNormalAt(landscape, sample.position.x, sample.position.z)
+      : new Vector3(0, 1, 0);
+    right.crossVectors(upHint, sample.tangent).normalize();
+    if (right.lengthSq() <= 1e-8) right.crossVectors(new Vector3(0, 0, 1), sample.tangent).normalize();
+    up.crossVectors(sample.tangent, right).normalize();
+    if (Math.abs(path.bank) > 1e-6) {
+      const bankRadians = (path.bank * Math.PI) / 180;
+      right.applyAxisAngle(sample.tangent, bankRadians);
+      up.crossVectors(sample.tangent, right).normalize();
+    }
+    const x = source.x * path.scale[0];
+    const y = source.y * path.scale[1];
+    positions.setXYZ(
+      index,
+      sample.position.x + right.x * x + up.x * y + path.offset[0],
+      sample.position.y + right.y * x + up.y * y + path.offset[1],
+      sample.position.z + right.z * x + up.z * y + path.offset[2],
+    );
+  }
+  positions.needsUpdate = true;
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function pathSegmentLengths(points: readonly Vec3[]): { lengths: number[]; total: number } {
+  const lengths: number[] = [];
+  let total = 0;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const a = points[index]!;
+    const b = points[index + 1]!;
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+    lengths.push(length);
+    total += length;
+  }
+  return { lengths, total };
+}
+
+function sampleDeformPath(points: readonly Vec3[], lengths: readonly number[], total: number, t: number): DeformPathSample | null {
+  const distance = Math.min(1, Math.max(0, t)) * total;
+  let consumed = 0;
+  for (let index = 0; index < lengths.length; index += 1) {
+    const length = lengths[index]!;
+    if (distance > consumed + length && index < lengths.length - 1) {
+      consumed += length;
+      continue;
+    }
+    if (length <= 1e-6) continue;
+    const a = points[index]!;
+    const b = points[index + 1]!;
+    const local = (distance - consumed) / length;
+    return {
+      position: new Vector3(a[0], a[1], a[2]).lerp(new Vector3(b[0], b[1], b[2]), local),
+      tangent: new Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]).normalize(),
+    };
+  }
+  return null;
+}
+
+function terrainNormalAt(landscape: ForgeLandscapeData, x: number, z: number): Vector3 {
+  const step = Math.max(landscape.size.spacing, 0.001);
+  return new Vector3(
+    landscapeHeightAtLocal(landscape, x - step, z) - landscapeHeightAtLocal(landscape, x + step, z),
+    2 * step,
+    landscapeHeightAtLocal(landscape, x, z - step) - landscapeHeightAtLocal(landscape, x, z + step),
+  ).normalize();
 }
 
 /**

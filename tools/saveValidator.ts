@@ -1167,6 +1167,10 @@ function validateLandscapeSplines(value: unknown): Record<string, unknown>[] {
         }
         const bank = validateOptionalNumber(mesh.bank, `${segmentPath}.mesh.bank`, -360, 360);
         if (bank !== undefined) meshResult.bank = bank;
+        if (mesh.deform !== undefined) {
+          if (typeof mesh.deform !== "boolean") throw new Error(`${segmentPath}.mesh.deform must be a boolean`);
+          meshResult.deform = mesh.deform;
+        }
         if (mesh.collision !== undefined) {
           if (typeof mesh.collision !== "boolean") throw new Error(`${segmentPath}.mesh.collision must be a boolean`);
           meshResult.collision = mesh.collision;

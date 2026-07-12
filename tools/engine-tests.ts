@@ -433,6 +433,7 @@ import { floorSnapPosition } from "../editor/render-three/floorSnap";
 import { pivotCorrectedPosition } from "../editor/render-three/transformMatrices";
 import {
   applySceneBackgroundAndAmbient,
+  buildLandscapeSplineMeshGroup,
   computeSceneRoomBounds,
   DEFAULT_SCENE_AMBIENT_COLOR,
   DEFAULT_SCENE_AMBIENT_INTENSITY,
@@ -449,6 +450,7 @@ import {
   buildSceneEntities,
   computeModelLocalBounds,
   createSceneCharacterMixer,
+  deformSplineMeshGeometry,
   isSceneSunLight,
   sceneModelAssetIds,
   startSceneRuntime,
@@ -1193,6 +1195,53 @@ check("scene runtime computes local model bounds keyed by asset id", () => {
 
   assert.deepEqual(bounds.get("box")?.min.toArray(), [-1, -1, -1]);
   assert.deepEqual(bounds.get("box")?.max.toArray(), [1, 1, 1]);
+});
+
+check("deformSplineMeshGeometry bends local +Z geometry along the sampled spline path", () => {
+  const geometry = new BoxGeometry(2, 0.2, 10, 2, 1, 8);
+  const landscape = createFlatLandscapeData("small");
+  const deformed = deformSplineMeshGeometry(geometry, {
+    assetId: "road",
+    points: [[0, 0, 0], [0, 0, 10], [10, 0, 10]],
+    scale: [1, 1, 1],
+    offset: [0, 0, 0],
+    yawOffset: 0,
+    bank: 0,
+    alignToTerrain: false,
+  }, landscape);
+  assert.ok(deformed);
+  assert.ok(Math.abs(deformed.boundingBox!.min.z) < 0.001);
+  assert.ok(Math.abs(deformed.boundingBox!.max.x - 10) < 0.001);
+  const positions = deformed.getAttribute("position");
+  assert.ok(Array.from({ length: positions.count }, (_, index) => positions.getX(index)).some((x) => x > 4));
+  assert.ok(deformed.getAttribute("normal"), "deformed geometry should recalculate normals");
+});
+
+check("buildLandscapeSplineMeshGroup uses unique geometry for an opt-in deformed spline", () => {
+  const data = createFlatLandscapeData("small");
+  data.splines = [{
+    id: "curve",
+    smooth: true,
+    points: [
+      { id: "a", position: [0, 0, 0], width: 2, falloff: 1 },
+      { id: "b", position: [0, 0, 10], width: 2, falloff: 1 },
+      { id: "c", position: [10, 0, 10], width: 2, falloff: 1 },
+    ],
+    segments: [
+      { id: "s0", startPointId: "a", endPointId: "b", mesh: { enabled: true, assetId: "road", deform: true } },
+      { id: "s1", startPointId: "b", endPointId: "c" },
+    ],
+  }];
+  const gltf = { scene: new Mesh(new BoxGeometry(2, 0.2, 10, 2, 1, 8)) } as unknown as GLTF;
+  const built = buildLandscapeSplineMeshGroup({
+    data,
+    models: new Map([["road", gltf]]),
+    castShadow: false,
+    receiveShadow: true,
+  });
+  assert.ok(built);
+  assert.equal(built.meshes.length, 0, "deform mode must not also create rigid instances");
+  assert.ok(built.group.children.some((child) => child.name === "deformed-road"));
 });
 
 // colliderBoxFromBounds bakes placement scale into the world-aligned size; for
@@ -18057,7 +18106,7 @@ check("computeLandscapeSplineMeshInstances carries pitch and terrain-normal alig
   assert.ok(up.x < -0.1, `expected terrain-aligned up vector, got ${up.toArray()}`);
   const savedSpline: ForgeLandscapeSpline = {
     ...slope,
-    segments: [{ ...slope.segments[0]!, mesh: { ...slope.segments[0]!.mesh!, fitToLength: false } }],
+    segments: [{ ...slope.segments[0]!, mesh: { ...slope.segments[0]!.mesh!, fitToLength: false, deform: true } }],
   };
   const saved = validateLandscapeData({ ...terrain, splines: [savedSpline] }) as ForgeLandscapeData;
   assert.deepEqual(saved.splines?.[0]?.segments[0]?.mesh, {
@@ -18066,6 +18115,7 @@ check("computeLandscapeSplineMeshInstances carries pitch and terrain-normal alig
     fitToLength: false,
     alignToTerrain: true,
     bank: 10,
+    deform: true,
   });
 });
 

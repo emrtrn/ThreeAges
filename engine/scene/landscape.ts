@@ -169,6 +169,8 @@ export interface ForgeLandscapeSplineSegment {
     alignToTerrain?: boolean;
     /** Roll in degrees around the spline tangent, after terrain/world-up alignment. */
     bank?: number;
+    /** Generates a unique curved geometry instead of rigid fitted instances. */
+    deform?: boolean;
     collision?: boolean;
   };
 }
@@ -361,7 +363,7 @@ export function computeLandscapeSplineMeshInstances(
   const instances: LandscapeSplineMeshInstance[] = [];
   for (const segment of spline.segments) {
     const mesh = segment.mesh;
-    if (!mesh || !mesh.enabled || !mesh.assetId) continue;
+    if (!mesh || !mesh.enabled || !mesh.assetId || mesh.deform === true) continue;
     const subs = subsBySegment.get(segment.id);
     if (!subs || subs.length === 0) continue;
     const offset = mesh.offset ?? [0, 0, 0];

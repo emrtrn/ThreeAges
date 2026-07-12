@@ -1,10 +1,9 @@
 # Landscape Spline Mesh Deformation Araştırması ve Forge Planı
 
-> Uygulama durumu (2026-07-12): Faz 1 tamamlandı ve doğrulandı. Faz 2 gerçek
-> vertex deformasyonu bilinçli olarak ertelendi.
+> Uygulama durumu (2026-07-12): Faz 1 ve opt-in Faz 2 tamamlandı, doğrulandı.
 
 > Tarih: 2026-07-12
-> Durum: Faz 1 uygulandı; Faz 2 gelecek faz planı.
+> Durum: Faz 1 ve opt-in Faz 2 uygulandı.
 > Amaç: Landscape Spline (Road Tool) mesh yerleştirmesini, Unreal'ın
 > **Spline Mesh Component** deformasyonuna yaklaştırmak. Yol parçaları hem
 > spline eğrisi hem terrain eğimi ile birlikte bükülmeli, uç uca eksiksiz
@@ -122,8 +121,12 @@ opsiyonel bank korunur. `fitToLength`, `alignToTerrain` ve `bank` Details UI ve
 save allowlist üzerinden kalıcıdır. Engine testleri fit, pitch, terrain-normal
 ve save round-trip davranışını kapsar.
 
-**Faz 2 — Yaklaşım B (cila).** Faz 1 yeterli değilse veya keskin virajlarda
-fasetlenme rahatsız ederse gerçek deformasyona geç.
+**Faz 2 tamamlanma notu (2026-07-12).** `Deform Mesh Along Curve` seçeneği,
+her kaynak mesh primitive'inin +Z vertexlerini yüksek çözünürlüklü spline
+polyline'ı boyunca yeniden yerleştirir. UV'ler korunur, normaller tekrar
+hesaplanır; terrain normal hizası, bank ve material-slot override'ları aynı
+render yolunda uygulanır. Bu mod opt-in'dir; mevcut spline'lar Faz 1 instanced
+yolunda kalır. Collision için deforme geometri henüz kullanılmaz.
 
 Her iki faz da yalnız **compute + render** katmanını değiştirir; veri modeli
 (`ForgeLandscapeSpline`) büyük ölçüde aynı kalır, sadece birkaç mesh alanı eklenir.
@@ -209,5 +212,6 @@ Her iki faz da yalnız **compute + render** katmanını değiştirir; veri model
 - **Faz 1'i öner:** yönlendirilmiş + fit-to-length + pitch + `alignToTerrain` bağla,
   InstancedMesh'i koru. Görseldeki basamak/boşluk/yatay-kalma hatalarının çoğunu
   kapatır, risk düşük.
-- **Faz 2'yi ertele:** gerçek Hermite deformasyonu, keskin virajda cila gerekirse.
+- **Faz 2 opt-in uygulandı:** sampled spline boyunca unique BufferGeometry üretir;
+  yüksek sayıda deforme segmentte geometry merge performans iyileştirmesi olarak açık kalır.
 - Veri modeli neredeyse sabit; yeni alanlar opsiyonel ve allowlist'e eklenmeli.
