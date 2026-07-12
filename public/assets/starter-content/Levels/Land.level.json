@@ -40,88 +40,11 @@
     },
     {
       "assetId": "floor-400x400",
-      "placements": [
-        {
-          "position": [
-            0,
-            0,
-            -1.5
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "shape:cube",
-      "placements": [
-        {
-          "position": [
-            0,
-            1,
-            -4
-          ],
-          "name": "Smoke Checkpoint",
-          "collisionPreset": "trigger",
-          "sensor": true,
-          "behavior": {
-            "script": "checkpoint",
-            "params": {
-              "slot": "quick"
-            }
-          },
-          "scale": [
-            12,
-            4,
-            3
-          ]
-        },
-        {
-          "position": [
-            0,
-            1,
-            -6
-          ],
-          "name": "Smoke Interact",
-          "collisionPreset": "trigger",
-          "sensor": true,
-          "behavior": {
-            "script": "interact"
-          },
-          "interaction": {
-            "action": "activate",
-            "prompt": "Activate"
-          },
-          "scale": [
-            12,
-            4,
-            2
-          ]
-        },
-        {
-          "position": [
-            0,
-            1,
-            -10
-          ],
-          "name": "Smoke Portal",
-          "collisionPreset": "trigger",
-          "sensor": true,
-          "behavior": {
-            "script": "level-travel",
-            "params": {
-              "targetLevel": "layouts/__playwright-smoke-target.level.json",
-              "targetSpawn": "arrival"
-            }
-          },
-          "scale": [
-            12,
-            4,
-            3
-          ]
-        }
-      ]
+      "placements": []
     }
   ],
   "characters": [],

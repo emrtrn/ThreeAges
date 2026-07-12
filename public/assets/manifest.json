@@ -20829,6 +20829,121 @@
         "bytes": 606
       },
       "license": "Unknown"
+    },
+    {
+      "id": "sm-road-dirty",
+      "name": "SM Road Dirty",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/SM_Road_Dirty.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5200
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "roaddirt-a",
+      "name": "Road Dirt A",
+      "assetType": "texture",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/roadDirt_a.PNG",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 4675347
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "roaddirt-n",
+      "name": "Road Dirt N",
+      "assetType": "texture",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/roadDirt_n.PNG",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 4506115
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "road-dirty-material",
+      "name": "Road Dirty.Material",
+      "assetType": "material",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Road_Dirty.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 643
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "birchtree-1",
+      "name": "Birch Tree 1",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/BirchTree_1.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 96020
+      },
+      "license": "Unknown"
     }
   ]
 }
