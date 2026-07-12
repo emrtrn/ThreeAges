@@ -95,6 +95,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   createSelectedLandscapeSpline: () => void;
   deleteSelectedLandscapeSpline: (splineId?: string | null) => void;
   closeSelectedLandscapeSpline: () => void;
+  setSelectedLandscapeSplineSmooth: (smooth: boolean) => void;
   getSelectedLandscapeSplinePoints: () => LandscapeSplinePointView[];
   setSelectedLandscapeSplinePointPosition: (pointId: string, position: Vec3) => void;
   deleteSelectedLandscapeSplinePoint: (pointId?: string | null) => void;
@@ -142,6 +143,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   const settings = options.getLandscapeSculptSettings();
   const layers = options.getSelectedLandscapeLayers();
   const splines = options.getSelectedLandscapeSplines();
+  const activeSpline = splines.find((spline) => spline.id === settings.activeSplineId);
   const splinePoints = options.getSelectedLandscapeSplinePoints();
   const activeSplinePoint = splinePoints.find((point) => point.id === settings.activeSplinePointId) ?? splinePoints.at(-1);
   const splineSegments = options.getSelectedLandscapeSplineSegments();
@@ -255,6 +257,12 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
                 <button type="button" class="detail-action-button" data-landscape-spline-delete ${lockedAttr}>Delete Spline</button>
                 <button type="button" class="detail-action-button" data-landscape-spline-close ${lockedAttr}>Close Loop</button>
               </div>
+              ${
+                activeSpline
+                  ? `<label class="detail-toggle"><input type="checkbox" data-landscape-spline-smooth ${activeSpline.smooth ? "checked" : ""} ${lockedAttr} /><span>Curved (smooth)</span></label>
+                     <div class="detail-hint">Bends segments into a smooth curve through the control points. Re-apply Deform/Paint after toggling to bake the new shape.</div>`
+                  : ""
+              }
               ${splinePointMarkup}
               ${splineSegments.length ? `<div class="detail-subsection-title">Segments</div><div class="landscape-layer-list">${splineSegments.map((segment) => `<button type="button" data-landscape-spline-segment="${escapeHtml(segment.id)}" class="${
                 settings.activeSplineSegmentId === segment.id ? "active" : ""
@@ -419,6 +427,10 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-close]")?.addEventListener("click", () => {
     options.closeSelectedLandscapeSpline();
+    renderLandscapeDetails(options);
+  });
+  body.querySelector<HTMLInputElement>("[data-landscape-spline-smooth]")?.addEventListener("change", (event) => {
+    options.setSelectedLandscapeSplineSmooth((event.currentTarget as HTMLInputElement).checked);
     renderLandscapeDetails(options);
   });
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-spline-point]").forEach((button) => {

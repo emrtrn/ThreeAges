@@ -178,6 +178,7 @@ import {
   applyLandscapeSplineDeform,
   applyLandscapeSplinePaint,
   landscapeSplineMeshAssetIds,
+  splineToPolyline,
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
@@ -535,6 +536,8 @@ export interface LandscapeSplineView {
   id: string;
   name: string;
   pointCount: number;
+  /** Whether the spline renders as a smooth Catmull-Rom curve (Faz 6.2a). */
+  smooth: boolean;
 }
 
 export interface LandscapeSplinePointView {
@@ -4906,7 +4909,6 @@ export class SceneApp {
     const activeLineMaterial = new LineBasicMaterial({ color: 0xffd23f, depthTest: false, transparent: true, opacity: 1 });
 
     for (const spline of splines) {
-      const pointById = new Map(spline.points.map((point) => [point.id, point] as const));
       const isActiveSpline = spline.id === settings.activeSplineId;
       for (const point of spline.points) {
         const active = isActiveSpline && point.id === settings.activeSplinePointId;
@@ -4919,14 +4921,13 @@ export class SceneApp {
         marker.userData.splinePoint = { splineId: spline.id, pointId: point.id };
         overlay.add(marker);
       }
-      for (const segment of spline.segments) {
-        const start = pointById.get(segment.startPointId);
-        const end = pointById.get(segment.endPointId);
-        if (!start || !end) continue;
-        const active = isActiveSpline && segment.id === settings.activeSplineSegmentId;
+      // Draw the resolved centerline: one line per straight segment, or the
+      // Catmull-Rom sub-segments when the spline is curved (Faz 6.2a).
+      for (const sub of splineToPolyline(spline)) {
+        const active = isActiveSpline && sub.segment.id === settings.activeSplineSegmentId;
         const geometry = new BufferGeometry().setFromPoints([
-          new Vector3(start.position[0], start.position[1] + 0.4, start.position[2]),
-          new Vector3(end.position[0], end.position[1] + 0.4, end.position[2]),
+          new Vector3(sub.start.position[0], sub.start.position[1] + 0.4, sub.start.position[2]),
+          new Vector3(sub.end.position[0], sub.end.position[1] + 0.4, sub.end.position[2]),
         ]);
         const line = new LineSegments(geometry, active ? activeLineMaterial : lineMaterial);
         line.renderOrder = 21;
@@ -5706,6 +5707,7 @@ export class SceneApp {
       id: spline.id,
       name: spline.name ?? spline.id,
       pointCount: spline.points.length,
+      smooth: spline.smooth === true,
     }));
   }
 
@@ -5886,6 +5888,36 @@ export class SceneApp {
     const spline: ForgeLandscapeSpline = { id: `spline-${number}`, name: `Spline ${number}`, points: [], segments: [] };
     const after = [...before, spline];
     this.applySelectedLandscapeSplines(index, actor.id, before, after, "Create Landscape Spline", spline.id);
+  }
+
+  /**
+   * Toggles the active spline's smooth/curved flag (Faz 6.2a). When on, segments
+   * render and apply as a Catmull-Rom curve; off keeps the straight polyline.
+   * Undoable; rebuilds spline meshes so any placed mesh follows the new shape.
+   * Baked deform/paint are not re-run — the user re-applies them if desired.
+   */
+  setSelectedLandscapeSplineSmooth(smooth: boolean): void {
+    if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return;
+    const before = cloneLandscapeSplines(data.splines ?? []);
+    const after = cloneLandscapeSplines(before);
+    const spline = after.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId);
+    if (!spline || (spline.smooth === true) === smooth) return;
+    if (smooth) spline.smooth = true;
+    else delete spline.smooth;
+    this.applySelectedLandscapeSplines(
+      index,
+      actor.id,
+      before,
+      after,
+      smooth ? "Curve Landscape Spline" : "Straighten Landscape Spline",
+      spline.id,
+      this.landscapeSculptSettings.activeSplinePointId,
+      this.landscapeSculptSettings.activeSplineSegmentId,
+    );
   }
 
   deleteSelectedLandscapeSpline(splineId = this.landscapeSculptSettings.activeSplineId): void {

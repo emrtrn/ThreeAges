@@ -1171,6 +1171,7 @@ function validateLandscapeSplines(value: unknown): Record<string, unknown>[] {
     if (typeof spline.name === "string" && spline.name.length > 0) result.name = spline.name;
     if (typeof spline.hidden === "boolean") result.hidden = spline.hidden;
     if (typeof spline.locked === "boolean") result.locked = spline.locked;
+    if (spline.smooth === true) result.smooth = true;
     return result;
   });
 }

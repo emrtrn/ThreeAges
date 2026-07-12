@@ -36,6 +36,7 @@ export {
   applyLandscapeSplineDeform,
   applyLandscapeSplinePaint,
   computeLandscapeSplineMeshInstances,
+  splineToPolyline,
   landscapeSplineMeshAssetIds,
   LANDSCAPE_MIN_VERTICES,
   LANDSCAPE_MAX_VERTICES,

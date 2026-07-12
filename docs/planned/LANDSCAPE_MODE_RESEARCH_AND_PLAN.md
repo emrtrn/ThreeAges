@@ -709,40 +709,46 @@ Doğrulama: `npm run build:verify` yeşil (tsc + vite build + 770 engine test +
 verify:dist --strict). Kullanıcı taraflı tarayıcı smoke'u (gizmo ile gerçek sürükleme)
 önceki fazlardaki gibi kullanıcıya bırakıldı.
 
-### Faz 6.2a - Kavisli yollar / otomatik yumuşatma (Catmull-Rom) (planlandı)
+### Faz 6.2a - Kavisli yollar / otomatik yumuşatma (Catmull-Rom) (TAMAM, 2026-07-12)
 
-Şu an segmentler kontrol noktaları arası **düz polyline**; kavis yapılamaz. Hedef:
-2B çizim araçlarındaki curve hissine yakın, kontrol noktalarından **otomatik olarak
-yumuşak geçen kavisli yollar**. Elle sürüklenen Bezier tanjant handle'ları (gerçek
-pen-tool) **kapsam dışı** — kullanıcı 2026-07-12'de istemedi; yalnız otomatik
-yumuşatma yapılacak.
+Her spline'a bir **`smooth` / "Curved"** bayrağı eklendi. Açıkken segmentler komşu
+noktalardan **otomatik türetilen** Catmull-Rom tanjantlarıyla yumuşak eğri olarak
+değerlendirilir; kapalıyken (varsayılan) mevcut düz polyline davranışı bire bir
+korunur (geriye dönük uyumlu). Elle Bezier tanjant handle'ı yok (kullanıcı kararı,
+kapsam dışı). Gerçekleşen adımlar:
 
-Yaklaşım: her spline'a bir **`smooth` / "Curved"** bayrağı. Açıkken segmentler
-Catmull-Rom eğrisi olarak değerlendirilir; kapalıyken mevcut düz davranış korunur
-(geriye dönük uyumlu, varsayılan düz).
+1. **Veri**: `ForgeLandscapeSpline.smooth?: boolean` (`engine/scene/landscape.ts`);
+   absent/false = düz. `cloneLandscapeSplines` spread yoluyla taşıyor; validator
+   allowlist'inde `smooth === true` korunuyor (`tools/saveValidator.ts`).
+   `arriveTangent`/`leaveTangent` bu modda kullanılmıyor.
+2. **Çekirdek (saf engine, testli)**: `splineToPolyline(spline, subdivisions)` —
+   `smooth` açıkken her segmenti `LANDSCAPE_SPLINE_CURVE_SUBDIVISIONS` (8) alt-noktaya
+   uniform Catmull-Rom ile örnekler; width/falloff/height alt-noktalar boyunca
+   interpole eder. Tanjantlar paylaşılan-nokta komşuluğundan türetilir (kapalı döngüde
+   komşular **sarmalanır**, branch'te deterministik ilk komşu); açık uçlarda yansıtılmış
+   phantom nokta kullanılır. Kapalıyken (düz) segment başına tek `LandscapeSplineSubSegment`
+   döner — 6.2a öncesiyle özdeş.
+3. **Apply refactor**: `bestCorridorSample` artık ham segment yerine önceden bir kez
+   hesaplanan alt-segmentler (`splineToPolyline(...).filter(accept)`) üzerinde çalışır;
+   corridor/taper mantığı aynı. `applyLandscapeSplineDeform` ve `applyLandscapeSplinePaint`
+   böylece kavisi takip eder.
+4. **Mesh**: `computeLandscapeSplineMeshInstances` her mesh segmentinin polyline'ı
+   boyunca **yay-uzunluğuyla** örnekler ve her instance'ı yerel (alt-segment) tanjanta
+   döndürür. Düz durumda çıktı 6.2a öncesiyle bit-bit aynı (regresyon testi korundu).
+5. **Overlay + runtime**: editor overlay eğriyi çok parçalı çizgiyle çizer
+   (`splineToPolyline`); runtime spline-mesh yolu aynı fonksiyondan geçtiği için
+   editor/Play paritesi otomatik. Deform/paint zaten heightfield/weightmap'e destructive
+   bake edildiğinden runtime ek bir şey yapmaz.
+6. **UX**: Splines sekmesinde aktif spline için "Curved (smooth)" toggle'ı
+   (`setSelectedLandscapeSplineSmooth`, undoable; toggle sonrası spline-mesh rebuild
+   olur, baked deform/paint kullanıcı tarafından yeniden Apply'lanır).
+7. **Testler**: `splineToPolyline` düz vs smooth (endpoint pinning, süreklilik, bow);
+   smooth deform'un düz corridor dışına taşması; kapalı döngüde sarmalı tanjant + dışa
+   bombeleşme + `smooth` validator round-trip. `npm run build:verify` yeşil (773 engine
+   test + vite build + verify:dist --strict).
 
-Somut adımlar:
-
-1. **Veri**: `ForgeLandscapeSpline`'a `smooth?: boolean` (absent = false = düz).
-   Validator allowlist'ine ve `cloneLandscapeSplines`'a eklenir. `arriveTangent`/
-   `leaveTangent` alanları bu sürümde **kullanılmaz** — tanjantlar komşu noktalardan
-   otomatik türetilir (Catmull-Rom), elle handle yok.
-2. **Çekirdek (saf engine, testli)**: `splineToPolyline(spline, segmentsPerCurve)` —
-   `smooth` açıkken her segmenti komşu noktaların Catmull-Rom tanjantlarıyla K
-   alt-noktaya örnekler; width/falloff/height alt-noktalar boyunca interpole edilir.
-   Kapalıyken segment başına tek düz parça döner. Kapalı döngülerde (weld ile) uç
-   noktalar komşu olarak sarmalanır.
-3. **Apply refactor**: `applyLandscapeSplineDeform` / `applyLandscapeSplinePaint`'in
-   `bestCorridorSample`'ı artık ham segmentler yerine `splineToPolyline` çıktısı olan
-   alt-segmentler üzerinde çalışır (corridor mantığı aynı kalır). Böylece deform ve
-   paint kavisi takip eder.
-4. **Mesh**: `computeLandscapeSplineMeshInstances` yay-uzunluğu boyunca örnekler ve
-   her instance'ı **yerel tanjanta** döndürür (düz segment yerine polyline üzerinde).
-5. **Overlay + runtime**: overlay eğriyi çok parçalı çizgiyle çizer; runtime spline
-   mesh yolu aynı polyline'ı kullanır (editor/Play paritesi).
-6. **UX**: Splines sekmesinde aktif spline için "Curved (smooth)" toggle'ı.
-7. **Testler**: `splineToPolyline` düz vs smooth çıktısı; smooth deform'un düz
-   segmentin dışına taşan kavis örneği; kapalı döngüde süreklilik.
+Kullanıcı taraflı tarayıcı smoke'u (Curved toggle ile görsel doğrulama) önceki
+fazlardaki gibi kullanıcıya bırakıldı.
 
 ### Sonraki Fazlar
 

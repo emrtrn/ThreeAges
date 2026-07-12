@@ -168,9 +168,38 @@ export interface ForgeLandscapeSpline {
   name?: string;
   hidden?: boolean;
   locked?: boolean;
+  /**
+   * When true (Faz 6.2a) segments are treated as a smooth Catmull-Rom curve auto-
+   * derived from neighbour points; absent/false keeps the straight polyline. No
+   * manual Bezier handles — `arriveTangent`/`leaveTangent` are unused in this mode.
+   */
+  smooth?: boolean;
   points: ForgeLandscapeSplinePoint[];
   segments: ForgeLandscapeSplineSegment[];
 }
+
+/** One resolved sub-point along a (possibly curved) spline segment. */
+export interface LandscapeSplinePolylineSample {
+  /** Landscape-local position (curve point); Y follows the interpolated height. */
+  position: Vec3;
+  width: number;
+  falloff: number;
+}
+
+/**
+ * One straight piece of a spline's resolved centerline. A straight spline yields
+ * one sub-segment per authored segment; a smooth spline yields several per segment
+ * (`LANDSCAPE_SPLINE_CURVE_SUBDIVISIONS`). `segment` is the owning authored segment
+ * so effect config (deform/paint/mesh) still resolves per sub-segment.
+ */
+export interface LandscapeSplineSubSegment {
+  segment: ForgeLandscapeSplineSegment;
+  start: LandscapeSplinePolylineSample;
+  end: LandscapeSplinePolylineSample;
+}
+
+/** Sub-points sampled per curved segment when a spline's `smooth` flag is on. */
+export const LANDSCAPE_SPLINE_CURVE_SUBDIVISIONS = 8;
 
 export const DEFAULT_LANDSCAPE_MATERIAL: ForgeLandscapeMaterialDef = {
   schema: 1,
@@ -204,40 +233,151 @@ export interface LandscapeSplineMeshInstance {
   scale: Vec3;
 }
 
+/** Uniform Catmull-Rom interpolation of four control positions at `u` in [0,1]. */
+function catmullRom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, u: number): Vec3 {
+  const u2 = u * u;
+  const u3 = u2 * u;
+  const axis = (a: number, b: number, c: number, d: number): number =>
+    0.5 * (2 * b + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u2 + (-a + 3 * b - 3 * c + d) * u3);
+  return [
+    axis(p0[0], p1[0], p2[0], p3[0]),
+    axis(p0[1], p1[1], p2[1], p3[1]),
+    axis(p0[2], p1[2], p2[2], p3[2]),
+  ];
+}
+
+/** Mirror a position across `pivot` — the phantom endpoint for open-chain tangents. */
+function reflectPoint(pivot: Vec3, other: Vec3): Vec3 {
+  return [2 * pivot[0] - other[0], 2 * pivot[1] - other[1], 2 * pivot[2] - other[2]];
+}
+
+/**
+ * Resolves a spline's authored segments into straight centerline sub-segments
+ * (Faz 6.2a). A straight spline (`smooth` off) returns one sub-segment per
+ * authored segment — identical to the pre-6.2a behaviour. A smooth spline samples
+ * each segment into `subdivisions` Catmull-Rom pieces whose tangents come from the
+ * neighbouring control points (looked up through the shared-point adjacency, so
+ * closed loops wrap and branches pick a deterministic neighbour); open-chain ends
+ * use a mirrored phantom point. Width/falloff/height interpolate along each piece,
+ * and every sub-segment keeps its owning authored `segment` for effect config.
+ */
+export function splineToPolyline(
+  spline: ForgeLandscapeSpline,
+  subdivisions: number = LANDSCAPE_SPLINE_CURVE_SUBDIVISIONS,
+): LandscapeSplineSubSegment[] {
+  const pointById = new Map(spline.points.map((point) => [point.id, point] as const));
+  const out: LandscapeSplineSubSegment[] = [];
+  const smooth = spline.smooth === true;
+  const steps = smooth ? Math.max(1, Math.floor(subdivisions)) : 1;
+
+  // Undirected adjacency (in segment order) for Catmull-Rom neighbour tangents.
+  const neighbours = new Map<string, string[]>();
+  if (smooth) {
+    const link = (from: string, to: string): void => {
+      const list = neighbours.get(from);
+      if (list) list.push(to);
+      else neighbours.set(from, [to]);
+    };
+    for (const segment of spline.segments) {
+      if (!pointById.has(segment.startPointId) || !pointById.has(segment.endPointId)) continue;
+      link(segment.startPointId, segment.endPointId);
+      link(segment.endPointId, segment.startPointId);
+    }
+  }
+  const neighbourPos = (pointId: string, excludeId: string): Vec3 | null => {
+    for (const candidate of neighbours.get(pointId) ?? []) {
+      if (candidate === excludeId) continue;
+      const point = pointById.get(candidate);
+      if (point) return point.position;
+    }
+    return null;
+  };
+
+  for (const segment of spline.segments) {
+    const p1 = pointById.get(segment.startPointId);
+    const p2 = pointById.get(segment.endPointId);
+    if (!p1 || !p2) continue;
+    if (!smooth) {
+      out.push({
+        segment,
+        start: { position: p1.position, width: p1.width, falloff: p1.falloff },
+        end: { position: p2.position, width: p2.width, falloff: p2.falloff },
+      });
+      continue;
+    }
+    const p0 = neighbourPos(p1.id, p2.id) ?? reflectPoint(p1.position, p2.position);
+    const p3 = neighbourPos(p2.id, p1.id) ?? reflectPoint(p2.position, p1.position);
+    let prev: LandscapeSplinePolylineSample = { position: p1.position, width: p1.width, falloff: p1.falloff };
+    for (let step = 1; step <= steps; step += 1) {
+      const u = step / steps;
+      const sample: LandscapeSplinePolylineSample = {
+        position: catmullRom(p0, p1.position, p2.position, p3, u),
+        width: p1.width + (p2.width - p1.width) * u,
+        falloff: p1.falloff + (p2.falloff - p1.falloff) * u,
+      };
+      out.push({ segment, start: prev, end: sample });
+      prev = sample;
+    }
+  }
+  return out;
+}
+
 /**
  * Distributes static-mesh instances along a spline's mesh-enabled segments at the
- * configured spacing (Faz 6 first version: instanced segment layout, no true mesh
- * deformation). Instances are centered within each spacing step so shared joint
- * points don't double-place. Yaw aligns each instance to the segment tangent.
+ * configured spacing (Faz 6 first version: instanced layout, no true mesh
+ * deformation; Faz 6.2a: follows the smoothed centerline). Instances are centered
+ * within each spacing step so shared joint points don't double-place. Yaw aligns
+ * each instance to the local (sub-)segment tangent.
  */
 export function computeLandscapeSplineMeshInstances(
   spline: ForgeLandscapeSpline,
 ): LandscapeSplineMeshInstance[] {
-  const pointById = new Map(spline.points.map((point) => [point.id, point] as const));
+  const subsBySegment = new Map<string, LandscapeSplineSubSegment[]>();
+  for (const sub of splineToPolyline(spline)) {
+    const list = subsBySegment.get(sub.segment.id);
+    if (list) list.push(sub);
+    else subsBySegment.set(sub.segment.id, [sub]);
+  }
   const instances: LandscapeSplineMeshInstance[] = [];
   for (const segment of spline.segments) {
     const mesh = segment.mesh;
     if (!mesh || !mesh.enabled || !mesh.assetId) continue;
-    const start = pointById.get(segment.startPointId);
-    const end = pointById.get(segment.endPointId);
-    if (!start || !end) continue;
-    const dx = end.position[0] - start.position[0];
-    const dy = end.position[1] - start.position[1];
-    const dz = end.position[2] - start.position[2];
-    const length = Math.hypot(dx, dz);
-    if (length <= 1e-6) continue;
+    const subs = subsBySegment.get(segment.id);
+    if (!subs || subs.length === 0) continue;
+    // Centerline vertices for this segment: first start, then each sub-segment end.
+    const verts: Vec3[] = [subs[0]!.start.position, ...subs.map((sub) => sub.end.position)];
+    const edgeLengths: number[] = [];
+    let total = 0;
+    for (let i = 0; i < verts.length - 1; i += 1) {
+      const len = Math.hypot(verts[i + 1]![0] - verts[i]![0], verts[i + 1]![2] - verts[i]![2]);
+      edgeLengths.push(len);
+      total += len;
+    }
+    if (total <= 1e-6) continue;
     const spacing = Math.max(0.01, mesh.spacing ?? 2);
-    const yawDeg = Number(((Math.atan2(dx, dz) * 180) / Math.PI).toFixed(3));
     const offset = mesh.offset ?? [0, 0, 0];
     const scale = mesh.scale ?? [1, 1, 1];
-    for (let distance = spacing / 2; distance <= length + 1e-6; distance += spacing) {
-      const t = distance / length;
+    for (let distance = spacing / 2; distance <= total + 1e-6; distance += spacing) {
+      let edge = 0;
+      let consumed = 0;
+      while (edge < edgeLengths.length - 1 && consumed + edgeLengths[edge]! < distance) {
+        consumed += edgeLengths[edge]!;
+        edge += 1;
+      }
+      const edgeLength = edgeLengths[edge] || 1e-6;
+      const local = Math.min(1, Math.max(0, (distance - consumed) / edgeLength));
+      const a = verts[edge]!;
+      const b = verts[edge + 1]!;
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const dz = b[2] - a[2];
+      const yawDeg = Number(((Math.atan2(dx, dz) * 180) / Math.PI).toFixed(3));
       instances.push({
         assetId: mesh.assetId,
         position: [
-          Number((start.position[0] + dx * t + offset[0]).toFixed(3)),
-          Number((start.position[1] + dy * t + offset[1]).toFixed(3)),
-          Number((start.position[2] + dz * t + offset[2]).toFixed(3)),
+          Number((a[0] + dx * local + offset[0]).toFixed(3)),
+          Number((a[1] + dy * local + offset[1]).toFixed(3)),
+          Number((a[2] + dz * local + offset[2]).toFixed(3)),
         ],
         rotation: [0, yawDeg, 0],
         scale: [scale[0], scale[1], scale[2]],
@@ -541,11 +681,11 @@ export interface LandscapeSplineApplyResult {
 
 interface SplineCorridorSample {
   influence: number;
-  /** Interpolation parameter along the winning segment (0 at start, 1 at end). */
+  /** Interpolation parameter along the winning sub-segment (0 at start, 1 at end). */
   t: number;
   segment: ForgeLandscapeSplineSegment;
-  start: ForgeLandscapeSplinePoint;
-  end: ForgeLandscapeSplinePoint;
+  start: LandscapeSplinePolylineSample;
+  end: LandscapeSplinePolylineSample;
 }
 
 function landscapeGridOrigin(size: LandscapeSize): { originX: number; originZ: number } {
@@ -564,23 +704,18 @@ function corridorInfluence(distance: number, halfWidth: number, falloff: number)
 }
 
 /**
- * Finds the segment whose corridor most strongly covers a landscape-local X/Z,
- * among the segments passing `accept`. Width/falloff are interpolated along the
- * segment so a spline can taper between control points.
+ * Finds the (sub-)segment whose corridor most strongly covers a landscape-local
+ * X/Z among precomputed sub-segments (see {@link splineToPolyline}, which lets a
+ * smooth spline's corridor follow its curve). Width/falloff interpolate along each
+ * sub-segment so a spline can taper between control points.
  */
 function bestCorridorSample(
-  spline: ForgeLandscapeSpline,
+  subSegments: readonly LandscapeSplineSubSegment[],
   localX: number,
   localZ: number,
-  accept: (segment: ForgeLandscapeSplineSegment) => boolean,
 ): SplineCorridorSample | null {
-  const pointById = new Map(spline.points.map((point) => [point.id, point] as const));
   let best: SplineCorridorSample | null = null;
-  for (const segment of spline.segments) {
-    if (!accept(segment)) continue;
-    const start = pointById.get(segment.startPointId);
-    const end = pointById.get(segment.endPointId);
-    if (!start || !end) continue;
+  for (const { segment, start, end } of subSegments) {
     const ax = start.position[0];
     const az = start.position[2];
     const bx = end.position[0];
@@ -626,6 +761,7 @@ export function applyLandscapeSplineDeform(
   const accept = (segment: ForgeLandscapeSplineSegment): boolean =>
     !!segment.deform && segment.deform.enabled && (segment.deform.flatten || segment.deform.raiseTerrain || segment.deform.lowerTerrain);
   if (!spline.segments.some(accept)) return { changed: false, bounds: null };
+  const subSegments = splineToPolyline(spline).filter((sub) => accept(sub.segment));
 
   let changed = false;
   let bounds: LandscapeSplineApplyBounds | null = null;
@@ -633,7 +769,7 @@ export function applyLandscapeSplineDeform(
     const localZ = z * spacing - originZ;
     for (let x = 0; x < verticesX; x += 1) {
       const localX = x * spacing - originX;
-      const sample = bestCorridorSample(spline, localX, localZ, accept);
+      const sample = bestCorridorSample(subSegments, localX, localZ);
       if (!sample) continue;
       const deform = sample.segment.deform!;
       const targetLocalY =
@@ -673,6 +809,7 @@ export function applyLandscapeSplinePaint(
     segment.paint.strength > 0 &&
     data.layers.some((layer) => layer.id === segment.paint!.layerId);
   if (!spline.segments.some(accept)) return { changed: false, bounds: null };
+  const subSegments = splineToPolyline(spline).filter((sub) => accept(sub.segment));
 
   let changed = false;
   let bounds: LandscapeSplineApplyBounds | null = null;
@@ -680,7 +817,7 @@ export function applyLandscapeSplinePaint(
     const localZ = z * spacing - originZ;
     for (let x = 0; x < verticesX; x += 1) {
       const localX = x * spacing - originX;
-      const sample = bestCorridorSample(spline, localX, localZ, accept);
+      const sample = bestCorridorSample(subSegments, localX, localZ);
       if (!sample) continue;
       const paint = sample.segment.paint!;
       const activeIndex = data.layers.findIndex((entry) => entry.id === paint.layerId);

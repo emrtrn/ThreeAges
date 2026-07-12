@@ -138,6 +138,7 @@ import {
   applyLandscapeSplineDeform,
   applyLandscapeSplinePaint,
   computeLandscapeSplineMeshInstances,
+  splineToPolyline,
   landscapeSplineMeshAssetIds,
   createFlatLandscapeData,
   createLandscapeColliderPrimitive,
@@ -146,7 +147,7 @@ import {
   resampleLandscapeHeightmap,
   resampleLandscapeData,
 } from "../engine/scene/landscape";
-import type { ForgeLandscapeSpline } from "../engine/scene/landscape";
+import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
 import { EngineApp } from "../engine/core/EngineApp";
 import type { Subsystem } from "../engine/core/Subsystem";
 import { AnimationSubsystem } from "../engine/render-three/animationSubsystem";
@@ -17996,6 +17997,85 @@ check("computeLandscapeSplineMeshInstances skips disabled or asset-less mesh seg
   };
   assert.deepEqual(computeLandscapeSplineMeshInstances(spline), []);
   assert.deepEqual(landscapeSplineMeshAssetIds({ splines: [spline] }), []);
+});
+
+function smoothBend(smooth: boolean, deform = false): ForgeLandscapeSpline {
+  return {
+    id: "bend",
+    ...(smooth ? { smooth: true } : {}),
+    points: [
+      { id: "a", position: [-16, 3, 0], width: 1, falloff: 0 },
+      { id: "b", position: [0, 3, 0], width: 1, falloff: 0 },
+      { id: "c", position: [0, 3, 16], width: 1, falloff: 0 },
+    ],
+    segments: [
+      { id: "s0", startPointId: "a", endPointId: "b", ...(deform ? { deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } } : {}) },
+      { id: "s1", startPointId: "b", endPointId: "c", ...(deform ? { deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } } : {}) },
+    ],
+  };
+}
+
+check("splineToPolyline returns straight segments unchanged and samples smooth curves", () => {
+  const straightPoly = splineToPolyline(straightSpline({}));
+  assert.equal(straightPoly.length, 1); // one authored segment → one straight sub-segment
+  assert.deepEqual(straightPoly[0]!.start.position, [-10, 2, 0]);
+  assert.deepEqual(straightPoly[0]!.end.position, [10, 2, 0]);
+
+  const poly = splineToPolyline(smoothBend(true), 8);
+  assert.equal(poly.length, 16); // 2 segments × 8 subdivisions
+  // Endpoints stay pinned to the control points.
+  assert.deepEqual(poly[0]!.start.position, [-16, 3, 0]);
+  assert.deepEqual(poly[7]!.end.position, [0, 3, 0]);
+  // Each sub-segment continues the previous one within the same authored segment.
+  for (let i = 1; i < poly.length; i += 1) {
+    if (poly[i]!.segment.id !== poly[i - 1]!.segment.id) continue;
+    assert.deepEqual(poly[i]!.start.position, poly[i - 1]!.end.position);
+  }
+  // Width/falloff interpolate along the curve (here constant), Y stays finite.
+  assert.ok(poly.every((sub) => Number.isFinite(sub.end.position[1]) && sub.end.width === 1));
+  // At least one interior sub-point bows off the straight A→B chord (z ≠ 0).
+  assert.ok(poly.slice(0, 8).some((sub) => Math.abs(sub.end.position[2]) > 0.2));
+});
+
+check("smooth spline deform bows outside the straight corridor", () => {
+  const straightData = createFlatLandscapeData("small");
+  applyLandscapeSplineDeform(straightData, smoothBend(false, true));
+  const smoothData = createFlatLandscapeData("small");
+  const result = applyLandscapeSplineDeform(smoothData, smoothBend(true, true));
+  assert.equal(result.changed, true);
+  // The curved corridor reaches at least one vertex the straight corridor misses.
+  const spilled = smoothData.heights.some((height, index) => height !== 0 && straightData.heights[index] === 0);
+  assert.ok(spilled, "smooth deform should touch vertices outside the straight corridor");
+});
+
+check("smooth spline follows a closed loop with wrapped tangents", () => {
+  const loop: ForgeLandscapeSpline = {
+    id: "ring",
+    smooth: true,
+    points: [
+      { id: "p0", position: [-8, 1, -8], width: 4, falloff: 2 },
+      { id: "p1", position: [8, 1, -8], width: 4, falloff: 2 },
+      { id: "p2", position: [8, 1, 8], width: 4, falloff: 2 },
+      { id: "p3", position: [-8, 1, 8], width: 4, falloff: 2 },
+    ],
+    segments: [
+      { id: "s0", startPointId: "p0", endPointId: "p1" },
+      { id: "s1", startPointId: "p1", endPointId: "p2" },
+      { id: "s2", startPointId: "p2", endPointId: "p3" },
+      { id: "s3", startPointId: "p3", endPointId: "p0" },
+    ],
+  };
+  const poly = splineToPolyline(loop, 8);
+  assert.equal(poly.length, 32);
+  assert.ok(poly.every((sub) => sub.end.position.every((value) => Number.isFinite(value))));
+  // Loop neighbours wrap around, so the top edge (p0→p1) bows outward past its
+  // straight chord (z = -8). A reflected open-end tangent would not bulge this way.
+  const topEdge = poly.filter((sub) => sub.segment.id === "s0");
+  const midZ = topEdge[Math.floor(topEdge.length / 2)]!.end.position[2];
+  assert.ok(midZ < -8, `expected outward bulge past z=-8, got z=${midZ}`);
+
+  const validated = validateLandscapeData({ ...createFlatLandscapeData("small"), splines: [loop] }) as ForgeLandscapeData;
+  assert.equal(validated.splines?.[0]?.smooth, true); // `smooth` survives the save validator
 });
 
 check("validateLandscape allowlists fields and round-trips through validateLayout", () => {
