@@ -157,6 +157,13 @@ export interface ForgeLandscapeSplineSegment {
     spacing?: number;
     scale?: Vec3;
     offset?: Vec3;
+    /**
+     * Extra yaw (degrees) added to the tangent-aligned rotation. The base yaw
+     * aligns the mesh's local +Z axis to the spline direction; author road/rail
+     * meshes with their length along +Z, or set this to correct a mesh modelled
+     * along another axis (e.g. 90 for a mesh whose length runs along X).
+     */
+    yawOffset?: number;
     alignToTerrain?: boolean;
     collision?: boolean;
   };
@@ -357,6 +364,7 @@ export function computeLandscapeSplineMeshInstances(
     const spacing = Math.max(0.01, mesh.spacing ?? 2);
     const offset = mesh.offset ?? [0, 0, 0];
     const scale = mesh.scale ?? [1, 1, 1];
+    const yawOffset = mesh.yawOffset ?? 0;
     for (let distance = spacing / 2; distance <= total + 1e-6; distance += spacing) {
       let edge = 0;
       let consumed = 0;
@@ -371,7 +379,7 @@ export function computeLandscapeSplineMeshInstances(
       const dx = b[0] - a[0];
       const dy = b[1] - a[1];
       const dz = b[2] - a[2];
-      const yawDeg = Number(((Math.atan2(dx, dz) * 180) / Math.PI).toFixed(3));
+      const yawDeg = Number((((Math.atan2(dx, dz) * 180) / Math.PI) + yawOffset).toFixed(3));
       instances.push({
         assetId: mesh.assetId,
         position: [

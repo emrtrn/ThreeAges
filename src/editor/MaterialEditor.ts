@@ -295,6 +295,7 @@ export class MaterialEditor {
         ${this.textureNumberRow("Roughness Map", "roughnessTexture", "roughness", this.def.roughness, 0, 1, 0.01)}
         ${this.textureNumberRow("Metalness Map", "metalnessTexture", "metalness", this.def.metalness, 0, 1, 0.01)}
         ${this.textureNumberRow("Opacity Map", "opacityTexture", "opacity", this.def.opacity, 0, 1, 0.01)}
+        <label class="me-row" title="Use the alpha channel already stored in Base Color Map instead of a separate opacity texture."><span>Use Base Color Alpha</span><input data-me-field="useBaseColorAlphaForOpacity" type="checkbox" ${this.def.useBaseColorAlphaForOpacity ? "checked" : ""} /></label>
         ${this.textureColorNumberRow("Emissive Map", "emissiveTexture", "emissive", this.def.emissive, "emissiveIntensity", this.def.emissiveIntensity, 0, 20, 0.1)}
         ${this.textureNumberRow("Ambient Occlusion Map", "aoTexture", "aoIntensity", this.def.aoIntensity, 0, 1, 0.01)}
         ${this.vector2Row("UV Tiling", "uvTilingX", "uvTilingY", this.def.uvTiling.x, this.def.uvTiling.y)}
@@ -629,6 +630,10 @@ export class MaterialEditor {
     else if (field === "metalnessTexture") next.metalnessTexture = input.value || null;
     else if (field === "aoTexture") next.aoTexture = input.value || null;
     else if (field === "opacityTexture") next.opacityTexture = input.value || null;
+    else if (field === "useBaseColorAlphaForOpacity") {
+      next.useBaseColorAlphaForOpacity = input instanceof HTMLInputElement && input.checked;
+      if (next.useBaseColorAlphaForOpacity && next.alphaMode === "opaque") next.alphaMode = "mask";
+    }
     else if (field === "emissiveTexture") next.emissiveTexture = input.value || null;
     else if (field === "ormTexture") {
       next.ormTexture = input.value || null;
@@ -657,9 +662,10 @@ export class MaterialEditor {
     this.titleEl.textContent = this.def.name;
     this.syncFieldControls(field, input.value);
     this.markDirty();
-    if (field === "layerBlendEnabled" || field === "layerBlendDriver") this.renderDetails();
+    if (field === "layerBlendEnabled" || field === "layerBlendDriver" || field === "useBaseColorAlphaForOpacity") this.renderDetails();
     await this.updatePreviewMaterial();
     this.warnIfTransparentMaterial(field);
+    this.warnIfBaseColorAlphaOpacity(field);
     this.warnIfSurfaceMapUsesScalar(field);
     this.warnIfLayerBlendMaskUsesWrongTexture(field);
   }
@@ -707,6 +713,17 @@ export class MaterialEditor {
     if (field !== "opacity" && field !== "alphaMode") return;
     if (this.def.alphaMode === "blend" || this.def.opacity < 1) {
       this.setStatus("Transparent materials are supported, but render sorting can still depend on scene order.", "warning");
+    }
+  }
+
+  private warnIfBaseColorAlphaOpacity(field: string): void {
+    if (field !== "useBaseColorAlphaForOpacity" || !this.def.useBaseColorAlphaForOpacity) return;
+    if (!this.def.baseColorTexture) {
+      this.setStatus("Assign a Base Color Map with an alpha channel to use this opacity source.", "warning");
+    } else if (this.def.opacityTexture) {
+      this.setStatus("Base Color alpha and Opacity Map are multiplied. Clear Opacity Map to avoid using an extra texture.", "info");
+    } else {
+      this.setStatus("Base Color Map alpha is now the opacity source. Mask is selected; choose Blend for soft transparency.", "info");
     }
   }
 

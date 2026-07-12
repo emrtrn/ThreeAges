@@ -561,7 +561,7 @@ export interface LandscapeSplineSegmentView {
   endPointId: string;
   deform: { enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number };
   paint: { enabled: boolean; layerId: string; strength: number };
-  mesh: { enabled: boolean; assetId: string; spacing: number };
+  mesh: { enabled: boolean; assetId: string; spacing: number; yawOffset: number };
 }
 
 /** The spline control point the move gizmo targets (Faz 6.1), with its world anchor. */
@@ -578,7 +578,7 @@ interface LandscapeSplinePointGizmoTarget {
 export interface LandscapeSplineSegmentPatch {
   deform?: Partial<{ enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number }>;
   paint?: Partial<{ enabled: boolean; layerId: string; strength: number }>;
-  mesh?: Partial<{ enabled: boolean; assetId: string; spacing: number }>;
+  mesh?: Partial<{ enabled: boolean; assetId: string; spacing: number; yawOffset: number }>;
 }
 
 /**
@@ -4871,6 +4871,12 @@ export class SceneApp {
       models: this.models,
       castShadow: this.staticObjectsCastShadow(),
       receiveShadow: this.staticObjectsReceiveShadow(),
+      applyMaterialSlots: (assetId, assetGroup) => {
+        const slots = this.resolveAssetMaterialSlots(assetId);
+        if (slots) {
+          applyMaterialSlotOverrides(assetGroup, slots, (materialId) => this.materialCache.get(materialId));
+        }
+      },
     });
     if (!built) return;
     built.group.userData.landscapeIndex = index;
@@ -5822,6 +5828,7 @@ export class SceneApp {
         enabled: segment.mesh?.enabled ?? false,
         assetId: segment.mesh?.assetId ?? "",
         spacing: segment.mesh?.spacing ?? 2,
+        yawOffset: segment.mesh?.yawOffset ?? 0,
       },
     }));
   }
@@ -5862,12 +5869,14 @@ export class SceneApp {
     if (patch.mesh) {
       const current = segment.mesh ?? { enabled: false, assetId: "" };
       const assetId = patch.mesh.assetId ?? current.assetId;
+      const yawOffset = round(patch.mesh.yawOffset ?? current.yawOffset ?? 0);
       segment.mesh = {
         enabled: patch.mesh.enabled ?? current.enabled,
         assetId,
         ...(patch.mesh.spacing ?? current.spacing
           ? { spacing: Math.max(0.01, round(patch.mesh.spacing ?? current.spacing ?? 2)) }
           : {}),
+        ...(yawOffset ? { yawOffset } : {}),
         ...(current.scale ? { scale: current.scale } : {}),
         ...(current.offset ? { offset: current.offset } : {}),
         ...(current.alignToTerrain !== undefined ? { alignToTerrain: current.alignToTerrain } : {}),

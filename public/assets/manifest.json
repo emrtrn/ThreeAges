@@ -20760,6 +20760,75 @@
         "bytes": 630
       },
       "license": "Unknown"
+    },
+    {
+      "id": "sm-road-asphalt",
+      "name": "SM Road Asphalt",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/SM_Road_Asphalt.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 5292
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "road-d",
+      "name": "Road D",
+      "assetType": "texture",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/road_d.PNG",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 3622634
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-roadasphalt-material",
+      "name": "M Road Asphalt.Material",
+      "assetType": "material",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/M_RoadAsphalt.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 606
+      },
+      "license": "Unknown"
     }
   ]
 }

@@ -218,6 +218,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.enabled" ${activeSegment.mesh.enabled ? "checked" : ""} ${lockedAttr} /><span>Spline Mesh</span></label>
       <label class="detail-row"><span>Mesh</span><select data-landscape-segment-mesh ${lockedAttr}>${segmentMeshOptions}</select></label>
       <label class="detail-row"><span>Mesh Spacing</span><input data-landscape-segment-number="mesh.spacing" type="number" min="0.01" step="0.1" value="${activeSegment.mesh.spacing}" ${lockedAttr} /></label>
+      <label class="detail-row"><span>Mesh Yaw</span><input data-landscape-segment-number="mesh.yawOffset" type="number" step="15" value="${activeSegment.mesh.yawOffset}" ${lockedAttr} /></label>
+      <div class="detail-hint">Mesh length runs along its local +Z axis; set Mesh Yaw (deg) if the mesh points sideways.</div>
       <div class="landscape-heightmap-actions">
         <button type="button" class="detail-action-button" data-landscape-spline-apply-deform ${lockedAttr}>Apply Deform</button>
         <button type="button" class="detail-action-button" data-landscape-spline-apply-paint ${lockedAttr}>Apply Paint</button>
@@ -526,6 +528,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         | "deform.targetOffset"
         | "paint.strength"
         | "mesh.spacing"
+        | "mesh.yawOffset"
         | undefined;
       const value = Number(input.value);
       if (!segmentId || !key || !Number.isFinite(value)) return;

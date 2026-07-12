@@ -111,6 +111,10 @@ tutkalı shell'lerde ince kalır.
   preview shader compile hatasinda onceki materyali korur. Takip dokumani:
   archived completed doc MATERIAL_EDITOR_ENHANCEMENTS_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md).
 
+  Base Color Map alpha channel can provide opacity without a separate Opacity Map.
+  `Use Base Color Alpha` records that intent and defaults to `Mask`; choose `Blend`
+  for soft transparency.
+
 - *2026-06-23* - **Sound Cue Lite arastirma/plani.** Forge, Unreal Sound Cue
   editorunu birebir kopyalamak yerine Web Audio tabanli dar bir `soundCue`
   asset/editing katmani hedeflemeli: raw `sound` dosyalari ayri kalir, cue

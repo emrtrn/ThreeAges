@@ -54,6 +54,7 @@ export interface ThumbnailMaterialPreview {
   metalness: number;
   aoIntensity: number;
   opacity: number;
+  useBaseColorAlphaForOpacity: boolean;
   alphaMode: ForgeMaterialAlphaMode;
   alphaTest: number;
   side: ForgeMaterialSide;
@@ -270,6 +271,7 @@ function thumbnailPreviewToMaterialDef(preview: ThumbnailMaterialPreview): Forge
     metalness: preview.metalness,
     aoIntensity: preview.aoIntensity,
     opacity: preview.opacity,
+    useBaseColorAlphaForOpacity: preview.useBaseColorAlphaForOpacity,
     alphaMode: preview.alphaMode,
     alphaTest: preview.alphaTest,
     side: preview.side,

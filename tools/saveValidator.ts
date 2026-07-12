@@ -1153,6 +1153,8 @@ function validateLandscapeSplines(value: unknown): Record<string, unknown>[] {
         const spacing = validateOptionalNumber(mesh.spacing, `${segmentPath}.mesh.spacing`, 0.01, 10000);
         const meshResult: Record<string, unknown> = { enabled: mesh.enabled, assetId: mesh.assetId };
         if (spacing !== undefined) meshResult.spacing = spacing;
+        const yawOffset = validateOptionalNumber(mesh.yawOffset, `${segmentPath}.mesh.yawOffset`, -360, 360);
+        if (yawOffset !== undefined) meshResult.yawOffset = yawOffset;
         if (mesh.scale !== undefined) meshResult.scale = validateLandscapeSplineVec3(mesh.scale, `${segmentPath}.mesh.scale`);
         if (mesh.offset !== undefined) meshResult.offset = validateLandscapeSplineVec3(mesh.offset, `${segmentPath}.mesh.offset`);
         if (mesh.alignToTerrain !== undefined) {
@@ -2820,6 +2822,7 @@ export function validateForgeMaterialDef(value: unknown): Record<string, unknown
     metalnessTexture: validateTextureRef(input.metalnessTexture, "material.metalnessTexture"),
     aoTexture: validateTextureRef(input.aoTexture, "material.aoTexture"),
     opacityTexture: validateTextureRef(input.opacityTexture, "material.opacityTexture"),
+    useBaseColorAlphaForOpacity: input.useBaseColorAlphaForOpacity === true,
     emissiveTexture: validateTextureRef(input.emissiveTexture, "material.emissiveTexture"),
     ormTexture,
     uvTiling: validateUvTiling(input.uvTiling, "material.uvTiling"),

@@ -2188,6 +2188,7 @@ export class EditorUi {
       metalness: def.metalness,
       aoIntensity: def.aoIntensity,
       opacity: def.opacity,
+      useBaseColorAlphaForOpacity: def.useBaseColorAlphaForOpacity,
       alphaMode: def.alphaMode,
       alphaTest: def.alphaTest,
       side: def.side,

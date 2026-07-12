@@ -72,6 +72,8 @@ export interface ForgeMaterialDef {
   metalnessTexture: string | null;
   aoTexture: string | null;
   opacityTexture: string | null;
+  /** Uses the alpha channel already packed into Base Color Map when no opacity map is needed. */
+  useBaseColorAlphaForOpacity: boolean;
   emissiveTexture: string | null;
   ormTexture: string | null;
   uvTiling: ForgeMaterialUvTiling;
@@ -123,6 +125,7 @@ export function defaultForgeMaterialDef(
     metalnessTexture: null,
     aoTexture: null,
     opacityTexture: null,
+    useBaseColorAlphaForOpacity: false,
     emissiveTexture: null,
     ormTexture: null,
     uvTiling: { x: 1, y: 1 },
@@ -203,6 +206,7 @@ export function normalizeForgeMaterialDef(value: unknown, fallbackName = "Materi
     metalnessTexture: textureRefOrNull(input.metalnessTexture),
     aoTexture: textureRefOrNull(input.aoTexture),
     opacityTexture: textureRefOrNull(input.opacityTexture),
+    useBaseColorAlphaForOpacity: input.useBaseColorAlphaForOpacity === true,
     emissiveTexture: textureRefOrNull(input.emissiveTexture),
     ormTexture: textureRefOrNull(input.ormTexture) ?? (legacyMaskConsumedByLayerBlend ? null : legacyMaskTexture),
     uvTiling: uvTilingOr(input.uvTiling, { x: 1, y: 1 }),

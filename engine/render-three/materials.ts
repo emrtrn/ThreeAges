@@ -72,12 +72,20 @@ export function createThreeMaterialFromForgeDef(
   textures: ForgeMaterialTextureMaps = {},
   options: ForgeMaterialOptions = {},
 ): ForgeThreeMaterial {
+  // Three.js' standard map shader already multiplies diffuse alpha by `map.a`.
+  // This flag makes that authored intent explicit and provides a safe fallback for
+  // hand-authored JSON: use a cutout rather than silently rendering it opaque.
+  const baseColorAlphaCutout =
+    def.useBaseColorAlphaForOpacity &&
+    !!textures.baseColorTexture &&
+    !textures.opacityTexture &&
+    def.alphaMode === "opaque";
   const shared = {
     name: def.name,
     color: new Color(def.baseColor),
     transparent: def.alphaMode === "blend" || def.opacity < 1,
     opacity: def.opacity,
-    alphaTest: def.alphaMode === "mask" ? def.alphaTest : 0,
+    alphaTest: def.alphaMode === "mask" || baseColorAlphaCutout ? def.alphaTest : 0,
     depthWrite: def.alphaMode !== "blend",
     side: materialSide(def.side),
   };

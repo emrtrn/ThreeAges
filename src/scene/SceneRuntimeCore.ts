@@ -276,6 +276,14 @@ export function buildLandscapeSplineMeshGroup(options: {
   models: ReadonlyMap<string, GLTF>;
   castShadow: boolean;
   receiveShadow: boolean;
+  /**
+   * Applies the asset's default material-slot overrides to its instanced
+   * sub-group. Spline meshes share the raw GLTF material by default, so an asset
+   * whose look comes from a `*.materials.json` slot assignment (e.g. an asphalt
+   * road whose GLTF ships a plain white material) renders untextured unless the
+   * host wires this to its material cache. Invoked once per asset sub-group.
+   */
+  applyMaterialSlots?: (assetId: string, assetGroup: Group) => void;
 }): { group: Group; meshes: InstancedMesh[] } | null {
   const placementsByAsset = new Map<string, LayoutPlacement[]>();
   for (const spline of options.data.splines ?? []) {
@@ -300,6 +308,7 @@ export function buildLandscapeSplineMeshGroup(options: {
       castShadow: options.castShadow,
       receiveShadow: options.receiveShadow,
     });
+    options.applyMaterialSlots?.(assetId, built.group);
     group.add(built.group);
     meshes.push(...built.meshes);
   }
