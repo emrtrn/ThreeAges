@@ -99,6 +99,19 @@ function prepareSmokeSourceScene(scene) {
       behavior: { script: "checkpoint", params: { slot: "quick" } },
     },
     {
+      // Interaction sensor between the checkpoint and the portal: walking into it
+      // emits an "Interaction.Activated" script message, giving the Actor Runtime
+      // API (A6 messaging) smoke an observable script-message flow in the ?debug
+      // "script messages" block — no key press needed (no authored inputAction).
+      position: [0, 1, -6],
+      name: "Smoke Interact",
+      scale: [12, 4, 2],
+      sensor: true,
+      collisionPreset: "trigger",
+      behavior: { script: "interact" },
+      interaction: { action: "activate", prompt: "Activate" },
+    },
+    {
       position: [0, 1, -10],
       name: "Smoke Portal",
       scale: [12, 4, 3],

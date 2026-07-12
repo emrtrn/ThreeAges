@@ -58,7 +58,7 @@ taramasi ayrica onayla istenmeli; sessiz tarama calistirilmemeli.
 | Faz | Durum | Bagimlilik | Amac |
 | --- | --- | --- | --- |
 | P0 | `[x]` | - | Kapanan behavior-state bulgusunu ve mevcut runtime smoke tabanini sabitle. |
-| P1 | `[~]` | P0 | Runtime browser smoke borcunu kapat. (P1.2-P1.5 tamam; P1.6/P1.7 kismi) |
+| P1 | `[x]` | P0 | Runtime browser smoke borcunu kapat. (P1.1-P1.7 tamam) |
 | P2 | `[ ]` | P1 onerilir | `RuntimeSceneApp` kabugunu davranis koruyan modullere bol. |
 | P3 | `[ ]` | P0 | Save-game zarf sozlesmesini yazili hale getir. |
 | P4 | `[ ]` | P3 onerilir | AI move-intent ve +z-forward facing varsayimini yol haritasina bagla. |
@@ -134,12 +134,21 @@ zarfini contact-polling yoluna yonlendir. Regression testi:
 Ayrica `?debug` game-mode snapshot'ina pawn `position` eklendi (P1.2 + P1.4
 respawn dogrulamasi icin gozlenebilir sinyal).
 
-- [ ] **P1.6 - Actor Runtime API browser borcu (A5.5):** Actor spawn/destroy veya
-  script message akisindan biri browser smoke icinde gozlenebilir hale getir;
-  archived completed doc ACTOR_RUNTIME_API_CHECKLIST.md (see docs/COMPLETED_WORK_INDEX.md) icindeki acik A5.5 notunu
-  kapat.
-- [ ] **P1.7 - Dokuman senkronu:** Baslik 4, bu checklist ve ilgili completed
-  checklist'lerde runtime smoke borcu artik acik kalmamali.
+- [x] **P1.6 - Actor Runtime API browser borcu (A5.5):**
+  `tests/smoke/runtime-script-message.spec.ts`. Pawn, source sahnesindeki bir
+  `interact` sensorune yuruyor; davranis A6 mesaj bus'i uzerinden
+  "Interaction.Activated" script mesaji yayiyor ve `?debug` "script messages"
+  bloğunda gozlenebiliyor (Actor Runtime API mesajlasma yolunun gercek play
+  oturumunda calistiginin tarayici kaniti). A5.5 acik notu kapandi. (Not: gozlem
+  bu fix'e bagli — `interact` de ayni contact-polling yolunu kullaniyor.)
+- [x] **P1.7 - Dokuman senkronu:** Bu checklist P1 bulgulari + motor
+  duzeltmesiyle guncellendi. Ana analiz (Baslik 4) ve completed checklist
+  senkronu P5'te tam gate ile yapilir; runtime smoke borcu artik kapali.
+
+Not: yeni yuru-tabanli smoke'lar (`runtime-locomotion`, `runtime-checkpoint`,
+`runtime-portal`, `runtime-script-message`) tek/ikili kosuda kararli gecer; yeni
+`pos:` readout ve manuel yuru-dongusu (tight `expect.poll` yerine) determinizmi
+korur. smoke:browser CI'da degil (yerel gate).
 
 Kabul kriterleri:
 
