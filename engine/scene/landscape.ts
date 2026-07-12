@@ -194,6 +194,70 @@ export interface ForgeLandscapeData {
   splines?: ForgeLandscapeSpline[];
 }
 
+/** One resolved static-mesh instance placed along a spline (landscape-local). */
+export interface LandscapeSplineMeshInstance {
+  assetId: string;
+  /** Landscape-local position (matches the height/point coordinate frame). */
+  position: Vec3;
+  /** Euler degrees; yaw follows the segment tangent, pitch/roll are 0 in Faz 6. */
+  rotation: Vec3;
+  scale: Vec3;
+}
+
+/**
+ * Distributes static-mesh instances along a spline's mesh-enabled segments at the
+ * configured spacing (Faz 6 first version: instanced segment layout, no true mesh
+ * deformation). Instances are centered within each spacing step so shared joint
+ * points don't double-place. Yaw aligns each instance to the segment tangent.
+ */
+export function computeLandscapeSplineMeshInstances(
+  spline: ForgeLandscapeSpline,
+): LandscapeSplineMeshInstance[] {
+  const pointById = new Map(spline.points.map((point) => [point.id, point] as const));
+  const instances: LandscapeSplineMeshInstance[] = [];
+  for (const segment of spline.segments) {
+    const mesh = segment.mesh;
+    if (!mesh || !mesh.enabled || !mesh.assetId) continue;
+    const start = pointById.get(segment.startPointId);
+    const end = pointById.get(segment.endPointId);
+    if (!start || !end) continue;
+    const dx = end.position[0] - start.position[0];
+    const dy = end.position[1] - start.position[1];
+    const dz = end.position[2] - start.position[2];
+    const length = Math.hypot(dx, dz);
+    if (length <= 1e-6) continue;
+    const spacing = Math.max(0.01, mesh.spacing ?? 2);
+    const yawDeg = Number(((Math.atan2(dx, dz) * 180) / Math.PI).toFixed(3));
+    const offset = mesh.offset ?? [0, 0, 0];
+    const scale = mesh.scale ?? [1, 1, 1];
+    for (let distance = spacing / 2; distance <= length + 1e-6; distance += spacing) {
+      const t = distance / length;
+      instances.push({
+        assetId: mesh.assetId,
+        position: [
+          Number((start.position[0] + dx * t + offset[0]).toFixed(3)),
+          Number((start.position[1] + dy * t + offset[1]).toFixed(3)),
+          Number((start.position[2] + dz * t + offset[2]).toFixed(3)),
+        ],
+        rotation: [0, yawDeg, 0],
+        scale: [scale[0], scale[1], scale[2]],
+      });
+    }
+  }
+  return instances;
+}
+
+/** All static-mesh asset ids referenced by a landscape's spline mesh segments. */
+export function landscapeSplineMeshAssetIds(data: Pick<ForgeLandscapeData, "splines">): string[] {
+  const ids = new Set<string>();
+  for (const spline of data.splines ?? []) {
+    for (const segment of spline.segments) {
+      if (segment.mesh?.enabled && segment.mesh.assetId) ids.add(segment.mesh.assetId);
+    }
+  }
+  return [...ids];
+}
+
 export interface LandscapeColliderPrimitive extends ColliderPrimitive {
   shape: "trimesh";
   vertices: Vec3[];
@@ -458,6 +522,191 @@ export function resampleLandscapeData(
 /** Default public-root-relative sidecar path for a landscape id. */
 export function landscapeDataPath(landscapeId: string): string {
   return `landscapes/${landscapeId}.landscape.json`;
+}
+
+// --- Spline apply (Faz 6 Road Tool destructive operations) ------------------
+
+/** Grid-space bounds (inclusive) of the vertices an apply pass touched. */
+export interface LandscapeSplineApplyBounds {
+  x0: number;
+  z0: number;
+  x1: number;
+  z1: number;
+}
+
+export interface LandscapeSplineApplyResult {
+  changed: boolean;
+  bounds: LandscapeSplineApplyBounds | null;
+}
+
+interface SplineCorridorSample {
+  influence: number;
+  /** Interpolation parameter along the winning segment (0 at start, 1 at end). */
+  t: number;
+  segment: ForgeLandscapeSplineSegment;
+  start: ForgeLandscapeSplinePoint;
+  end: ForgeLandscapeSplinePoint;
+}
+
+function landscapeGridOrigin(size: LandscapeSize): { originX: number; originZ: number } {
+  return {
+    originX: ((size.verticesX - 1) * size.spacing) / 2,
+    originZ: ((size.verticesZ - 1) * size.spacing) / 2,
+  };
+}
+
+/** Smoothstep corridor influence: 1 inside `halfWidth`, fading to 0 across `falloff`. */
+function corridorInfluence(distance: number, halfWidth: number, falloff: number): number {
+  if (distance <= halfWidth) return 1;
+  if (falloff <= 0 || distance >= halfWidth + falloff) return 0;
+  const f = 1 - (distance - halfWidth) / falloff;
+  return f * f * (3 - 2 * f);
+}
+
+/**
+ * Finds the segment whose corridor most strongly covers a landscape-local X/Z,
+ * among the segments passing `accept`. Width/falloff are interpolated along the
+ * segment so a spline can taper between control points.
+ */
+function bestCorridorSample(
+  spline: ForgeLandscapeSpline,
+  localX: number,
+  localZ: number,
+  accept: (segment: ForgeLandscapeSplineSegment) => boolean,
+): SplineCorridorSample | null {
+  const pointById = new Map(spline.points.map((point) => [point.id, point] as const));
+  let best: SplineCorridorSample | null = null;
+  for (const segment of spline.segments) {
+    if (!accept(segment)) continue;
+    const start = pointById.get(segment.startPointId);
+    const end = pointById.get(segment.endPointId);
+    if (!start || !end) continue;
+    const ax = start.position[0];
+    const az = start.position[2];
+    const bx = end.position[0];
+    const bz = end.position[2];
+    const dx = bx - ax;
+    const dz = bz - az;
+    const lengthSq = dx * dx + dz * dz;
+    const t = lengthSq <= 1e-9 ? 0 : Math.min(1, Math.max(0, ((localX - ax) * dx + (localZ - az) * dz) / lengthSq));
+    const closestX = ax + dx * t;
+    const closestZ = az + dz * t;
+    const distance = Math.hypot(localX - closestX, localZ - closestZ);
+    const halfWidth = (start.width + (end.width - start.width) * t) / 2;
+    const falloff = start.falloff + (end.falloff - start.falloff) * t;
+    const influence = corridorInfluence(distance, halfWidth, falloff);
+    if (influence <= 0) continue;
+    if (!best || influence > best.influence) best = { influence, t, segment, start, end };
+  }
+  return best;
+}
+
+function expandBounds(bounds: LandscapeSplineApplyBounds | null, x: number, z: number): LandscapeSplineApplyBounds {
+  if (!bounds) return { x0: x, z0: z, x1: x, z1: z };
+  bounds.x0 = Math.min(bounds.x0, x);
+  bounds.z0 = Math.min(bounds.z0, z);
+  bounds.x1 = Math.max(bounds.x1, x);
+  bounds.z1 = Math.max(bounds.z1, z);
+  return bounds;
+}
+
+/**
+ * Destructively deforms the heightfield toward a spline's corridor (Faz 6 Road
+ * Tool). Each deform-enabled segment pulls terrain toward the interpolated
+ * control-point height (plus `targetOffset`); `flatten` moves both ways while
+ * `raiseTerrain`/`lowerTerrain` gate the allowed direction. Mutates `data.heights`.
+ */
+export function applyLandscapeSplineDeform(
+  data: ForgeLandscapeData,
+  spline: ForgeLandscapeSpline,
+): LandscapeSplineApplyResult {
+  const { verticesX, verticesZ, spacing, heightScale } = data.size;
+  const { originX, originZ } = landscapeGridOrigin(data.size);
+  const scale = heightScale === 0 ? 1 : heightScale;
+  const accept = (segment: ForgeLandscapeSplineSegment): boolean =>
+    !!segment.deform && segment.deform.enabled && (segment.deform.flatten || segment.deform.raiseTerrain || segment.deform.lowerTerrain);
+  if (!spline.segments.some(accept)) return { changed: false, bounds: null };
+
+  let changed = false;
+  let bounds: LandscapeSplineApplyBounds | null = null;
+  for (let z = 0; z < verticesZ; z += 1) {
+    const localZ = z * spacing - originZ;
+    for (let x = 0; x < verticesX; x += 1) {
+      const localX = x * spacing - originX;
+      const sample = bestCorridorSample(spline, localX, localZ, accept);
+      if (!sample) continue;
+      const deform = sample.segment.deform!;
+      const targetLocalY =
+        sample.start.position[1] + (sample.end.position[1] - sample.start.position[1]) * sample.t + (deform.targetOffset ?? 0);
+      const targetRaw = targetLocalY / scale;
+      const index = z * verticesX + x;
+      const current = data.heights[index] ?? 0;
+      const delta = targetRaw - current;
+      const allowUp = deform.flatten || deform.raiseTerrain;
+      const allowDown = deform.flatten || deform.lowerTerrain;
+      if ((delta > 0 && !allowUp) || (delta < 0 && !allowDown)) continue;
+      const next = Number((current + delta * sample.influence).toFixed(4));
+      if (next === current) continue;
+      data.heights[index] = next;
+      changed = true;
+      bounds = expandBounds(bounds, x, z);
+    }
+  }
+  return { changed, bounds };
+}
+
+/**
+ * Destructively paints a spline's corridor into landscape paint layers (Faz 6).
+ * Each paint-enabled segment raises its target layer's weight by
+ * `influence * strength`, then the per-vertex weights are renormalized so the
+ * layer set still sums to ~1. Mutates `data.layers`.
+ */
+export function applyLandscapeSplinePaint(
+  data: ForgeLandscapeData,
+  spline: ForgeLandscapeSpline,
+): LandscapeSplineApplyResult {
+  const { verticesX, verticesZ, spacing } = data.size;
+  const { originX, originZ } = landscapeGridOrigin(data.size);
+  const accept = (segment: ForgeLandscapeSplineSegment): boolean =>
+    !!segment.paint &&
+    segment.paint.enabled &&
+    segment.paint.strength > 0 &&
+    data.layers.some((layer) => layer.id === segment.paint!.layerId);
+  if (!spline.segments.some(accept)) return { changed: false, bounds: null };
+
+  let changed = false;
+  let bounds: LandscapeSplineApplyBounds | null = null;
+  for (let z = 0; z < verticesZ; z += 1) {
+    const localZ = z * spacing - originZ;
+    for (let x = 0; x < verticesX; x += 1) {
+      const localX = x * spacing - originX;
+      const sample = bestCorridorSample(spline, localX, localZ, accept);
+      if (!sample) continue;
+      const paint = sample.segment.paint!;
+      const activeIndex = data.layers.findIndex((entry) => entry.id === paint.layerId);
+      const active = data.layers[activeIndex];
+      if (!active) continue;
+      const index = z * verticesX + x;
+      const amount = Math.min(1, sample.influence * paint.strength);
+      const target = Math.min(1, (active.weights[index] ?? 0) + amount);
+      if (target <= (active.weights[index] ?? 0) + 1e-6) continue;
+      const remaining = 1 - target;
+      const otherTotal = data.layers.reduce(
+        (total, layer, layerIndex) => total + (layerIndex === activeIndex ? 0 : layer.weights[index] ?? 0),
+        0,
+      );
+      active.weights[index] = target;
+      for (const [layerIndex, layer] of data.layers.entries()) {
+        if (layerIndex === activeIndex) continue;
+        const value = layer.weights[index] ?? 0;
+        layer.weights[index] = otherTotal > 0 ? (value / otherTotal) * remaining : 0;
+      }
+      normalizeLandscapeLayerWeights(data, index);
+      changed = true;
+      bounds = expandBounds(bounds, x, z);
+    }
+  }
+  return { changed, bounds };
 }
 
 function landscapeHeightAt(data: ForgeLandscapeData, x: number, z: number): number {

@@ -135,6 +135,10 @@ import {
   upVectorFromRotation,
 } from "../engine/scene/transform";
 import {
+  applyLandscapeSplineDeform,
+  applyLandscapeSplinePaint,
+  computeLandscapeSplineMeshInstances,
+  landscapeSplineMeshAssetIds,
   createFlatLandscapeData,
   createLandscapeColliderPrimitive,
   ensureLandscapeLayers,
@@ -142,6 +146,7 @@ import {
   resampleLandscapeHeightmap,
   resampleLandscapeData,
 } from "../engine/scene/landscape";
+import type { ForgeLandscapeSpline } from "../engine/scene/landscape";
 import { EngineApp } from "../engine/core/EngineApp";
 import type { Subsystem } from "../engine/core/Subsystem";
 import { AnimationSubsystem } from "../engine/render-three/animationSubsystem";
@@ -17859,6 +17864,99 @@ check("landscape spline data is allowlisted and rejects broken point links", () 
       splines: [{ ...data.splines![0]!, points: [{ id: "p0", position: [0, 0], width: 1, falloff: 0 }], segments: [] }],
     }),
   );
+});
+
+function straightSpline(overrides: {
+  deform?: ForgeLandscapeSpline["segments"][number]["deform"];
+  paint?: ForgeLandscapeSpline["segments"][number]["paint"];
+}): ForgeLandscapeSpline {
+  return {
+    id: "road",
+    name: "Road",
+    points: [
+      { id: "p0", position: [-10, 2, 0], width: 6, falloff: 0 },
+      { id: "p1", position: [10, 2, 0], width: 6, falloff: 0 },
+    ],
+    segments: [{ id: "s0", startPointId: "p0", endPointId: "p1", ...overrides }],
+  };
+}
+
+check("applyLandscapeSplineDeform flattens terrain toward the spline corridor", () => {
+  const data = createFlatLandscapeData("small"); // 65x65, spacing 1, origin 32
+  const spline = straightSpline({ deform: { enabled: true, raiseTerrain: true, lowerTerrain: true, flatten: true } });
+  const centerIndex = 32 * 65 + 32; // localX 0, localZ 0 — on the centerline
+  const farIndex = 42 * 65 + 32; // localZ +10, outside the 3u corridor
+  const result = applyLandscapeSplineDeform(data, spline);
+  assert.equal(result.changed, true);
+  assert.equal(data.heights[centerIndex], 2);
+  assert.equal(data.heights[farIndex], 0);
+  assert.ok(result.bounds && result.bounds.x0 <= 22 && result.bounds.x1 >= 42);
+});
+
+check("applyLandscapeSplineDeform respects raise/lower direction gating", () => {
+  const data = createFlatLandscapeData("small");
+  const lowIndex = 32 * 65 + 30; // corridor vertex starting below target
+  const highIndex = 32 * 65 + 34; // corridor vertex starting above target
+  data.heights[lowIndex] = 0;
+  data.heights[highIndex] = 5;
+  const spline = straightSpline({ deform: { enabled: true, raiseTerrain: true, lowerTerrain: false, flatten: false } });
+  applyLandscapeSplineDeform(data, spline);
+  assert.equal(data.heights[lowIndex], 2); // raised up to the road height
+  assert.equal(data.heights[highIndex], 5); // lowering is gated off, so kept
+});
+
+check("applyLandscapeSplinePaint blends the target layer along the corridor", () => {
+  const data = createFlatLandscapeData("small");
+  const spline = straightSpline({ paint: { enabled: true, layerId: "dirt", strength: 1 } });
+  const centerIndex = 32 * 65 + 32;
+  const farIndex = 42 * 65 + 32;
+  const dirt = data.layers.find((layer) => layer.id === "dirt")!;
+  const grass = data.layers.find((layer) => layer.id === "grass")!;
+  const result = applyLandscapeSplinePaint(data, spline);
+  assert.equal(result.changed, true);
+  assert.ok(dirt.weights[centerIndex]! > 0.99);
+  assert.ok(grass.weights[centerIndex]! < 0.01);
+  assert.equal(dirt.weights[farIndex], 0); // untouched outside the corridor
+});
+
+check("landscape spline apply is a no-op when no segment enables the effect", () => {
+  const data = createFlatLandscapeData("small");
+  const spline = straightSpline({ deform: { enabled: false, raiseTerrain: true, lowerTerrain: true, flatten: true } });
+  assert.deepEqual(applyLandscapeSplineDeform(data, spline), { changed: false, bounds: null });
+  assert.deepEqual(applyLandscapeSplinePaint(data, straightSpline({})), { changed: false, bounds: null });
+});
+
+check("computeLandscapeSplineMeshInstances lays instances along the tangent", () => {
+  const spline: ForgeLandscapeSpline = {
+    id: "road",
+    points: [
+      { id: "p0", position: [-10, 2, 0], width: 6, falloff: 3 },
+      { id: "p1", position: [10, 2, 0], width: 6, falloff: 3 },
+    ],
+    segments: [{ id: "s0", startPointId: "p0", endPointId: "p1", mesh: { enabled: true, assetId: "post", spacing: 5 } }],
+  };
+  const instances = computeLandscapeSplineMeshInstances(spline);
+  assert.equal(instances.length, 4); // length 20, spacing 5, centered → 2.5/7.5/12.5/17.5
+  assert.deepEqual(instances[0]!.position, [-7.5, 2, 0]);
+  assert.equal(instances[0]!.rotation[1], 90); // atan2(dx=20, dz=0)
+  assert.equal(instances.every((instance) => instance.assetId === "post"), true);
+  assert.deepEqual(landscapeSplineMeshAssetIds({ splines: [spline] }), ["post"]);
+});
+
+check("computeLandscapeSplineMeshInstances skips disabled or asset-less mesh segments", () => {
+  const spline: ForgeLandscapeSpline = {
+    id: "road",
+    points: [
+      { id: "p0", position: [0, 0, 0], width: 6, falloff: 3 },
+      { id: "p1", position: [0, 0, 10], width: 6, falloff: 3 },
+    ],
+    segments: [
+      { id: "s0", startPointId: "p0", endPointId: "p1", mesh: { enabled: false, assetId: "post", spacing: 5 } },
+      { id: "s1", startPointId: "p0", endPointId: "p1", mesh: { enabled: true, assetId: "", spacing: 5 } },
+    ],
+  };
+  assert.deepEqual(computeLandscapeSplineMeshInstances(spline), []);
+  assert.deepEqual(landscapeSplineMeshAssetIds({ splines: [spline] }), []);
 });
 
 check("validateLandscape allowlists fields and round-trips through validateLayout", () => {

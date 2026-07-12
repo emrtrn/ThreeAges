@@ -175,6 +175,9 @@ import {
   landscapeHeightsToGrayscale,
   landscapeSizeForPreset,
   resampleLandscapeData,
+  applyLandscapeSplineDeform,
+  applyLandscapeSplinePaint,
+  landscapeSplineMeshAssetIds,
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
@@ -258,6 +261,7 @@ import {
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   applySceneBackgroundAndAmbient,
+  buildLandscapeSplineMeshGroup,
   buildSceneCharacterObject,
   buildSceneEntities,
   buildSceneInstancedModel,
@@ -544,6 +548,16 @@ export interface LandscapeSplineSegmentView {
   id: string;
   startPointId: string;
   endPointId: string;
+  deform: { enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number };
+  paint: { enabled: boolean; layerId: string; strength: number };
+  mesh: { enabled: boolean; assetId: string; spacing: number };
+}
+
+/** Config patch for one spline segment's destructive effects (Faz 6 Road Tool). */
+export interface LandscapeSplineSegmentPatch {
+  deform?: Partial<{ enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number }>;
+  paint?: Partial<{ enabled: boolean; layerId: string; strength: number }>;
+  mesh?: Partial<{ enabled: boolean; assetId: string; spacing: number }>;
 }
 
 /**
@@ -751,6 +765,8 @@ export class SceneApp {
   private aiNavigationVolumeObjects: AiNavigationVolumeObject[] = [];
   /** Live chunked terrain meshes for placed Landscape actors, by index. */
   private landscapeObjects: LandscapeObject[] = [];
+  /** Instanced spline-mesh groups (Faz 6 Road Tool) parented under each landscape, by index. */
+  private landscapeSplineMeshGroups: (Group | null)[] = [];
   /** In-memory sidecar height/layer data for placed Landscape actors, keyed by landscape id. */
   private landscapeData = new Map<string, ForgeLandscapeData>();
   /** Last height scale used for a heightmap import, echoed back into the Details input. */
@@ -4754,9 +4770,51 @@ export class SceneApp {
     disposeLandscapeObject(previous);
     this.scene.add(object);
     this.landscapeObjects[index] = object;
+    // The rebuilt group drops the previous spline-mesh child; re-attach it.
+    this.landscapeSplineMeshGroups[index] = null;
+    void this.rebuildLandscapeSplineMeshes(index);
     if (this.selection?.kind === "landscape" && this.selection.index === index) {
       this.updateSelectionBox();
     }
+  }
+
+  /**
+   * Rebuilds one landscape's instanced spline meshes (Faz 6). The group is parented
+   * under the landscape object so it inherits the actor transform. Referenced mesh
+   * assets are loaded on demand; shared gltf geometry is never disposed here (only
+   * the group is detached), mirroring `rebuildInstanceGroup`.
+   */
+  private async rebuildLandscapeSplineMeshes(index: number): Promise<void> {
+    const actor = this.layout?.landscapes?.[index];
+    const object = this.landscapeObjects[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const previous = this.landscapeSplineMeshGroups[index];
+    if (previous) {
+      previous.removeFromParent();
+      this.landscapeSplineMeshGroups[index] = null;
+    }
+    if (!actor || !object || !data) return;
+    const assetIds = landscapeSplineMeshAssetIds(data);
+    if (assetIds.length === 0) return;
+    await Promise.all(assetIds.map((assetId) => this.ensureAssetLoaded(assetId)));
+    // The landscape object may have been rebuilt/removed while assets loaded.
+    if (this.landscapeObjects[index] !== object || !object.parent) return;
+    const built = buildLandscapeSplineMeshGroup({
+      data,
+      models: this.models,
+      castShadow: this.staticObjectsCastShadow(),
+      receiveShadow: this.staticObjectsReceiveShadow(),
+    });
+    if (!built) return;
+    built.group.userData.landscapeIndex = index;
+    // Spline meshes are non-authored previews: exclude them from picking so a
+    // click resolves to the landscape/terrain, not a phantom placement.
+    built.group.traverse((child) => {
+      child.userData.landscapeIndex = index;
+      child.raycast = () => {};
+    });
+    object.add(built.group);
+    this.landscapeSplineMeshGroups[index] = built.group;
   }
 
   /**
@@ -4771,6 +4829,7 @@ export class SceneApp {
       disposeLandscapeObject(object);
     }
     this.landscapeObjects = [];
+    this.landscapeSplineMeshGroups = [];
     this.landscapeData.clear();
     this.landscapeDataDirty.clear();
     const landscapes = this.layout?.landscapes ?? [];
@@ -4790,6 +4849,7 @@ export class SceneApp {
     });
     landscapes.forEach((_actor, index) => {
       void this.warmLandscapeLayerMaterials(index);
+      void this.rebuildLandscapeSplineMeshes(index);
     });
   }
 
@@ -5397,7 +5457,157 @@ export class SceneApp {
     if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return [];
     const actor = this.layout?.landscapes?.[this.selection.index];
     const spline = actor ? this.landscapeData.get(actor.id)?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId) : undefined;
-    return (spline?.segments ?? []).map((segment) => ({ id: segment.id, startPointId: segment.startPointId, endPointId: segment.endPointId }));
+    return (spline?.segments ?? []).map((segment) => ({
+      id: segment.id,
+      startPointId: segment.startPointId,
+      endPointId: segment.endPointId,
+      deform: {
+        enabled: segment.deform?.enabled ?? false,
+        raiseTerrain: segment.deform?.raiseTerrain ?? true,
+        lowerTerrain: segment.deform?.lowerTerrain ?? true,
+        flatten: segment.deform?.flatten ?? true,
+        targetOffset: segment.deform?.targetOffset ?? 0,
+      },
+      paint: {
+        enabled: segment.paint?.enabled ?? false,
+        layerId: segment.paint?.layerId ?? LANDSCAPE_DEFAULT_LAYERS[1]!.id,
+        strength: segment.paint?.strength ?? 1,
+      },
+      mesh: {
+        enabled: segment.mesh?.enabled ?? false,
+        assetId: segment.mesh?.assetId ?? "",
+        spacing: segment.mesh?.spacing ?? 2,
+      },
+    }));
+  }
+
+  /** Updates one spline segment's deform/paint/mesh config (undoable). */
+  setSelectedLandscapeSplineSegment(segmentId: string, patch: LandscapeSplineSegmentPatch): void {
+    if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    if (!actor || !data) return;
+    const before = cloneLandscapeSplines(data.splines ?? []);
+    const after = cloneLandscapeSplines(before);
+    const segment = after
+      .find((spline) => spline.id === this.landscapeSculptSettings.activeSplineId)
+      ?.segments.find((entry) => entry.id === segmentId);
+    if (!segment) return;
+    if (patch.deform) {
+      const current = segment.deform ?? { enabled: false, raiseTerrain: true, lowerTerrain: true, flatten: true };
+      segment.deform = {
+        enabled: patch.deform.enabled ?? current.enabled,
+        raiseTerrain: patch.deform.raiseTerrain ?? current.raiseTerrain,
+        lowerTerrain: patch.deform.lowerTerrain ?? current.lowerTerrain,
+        flatten: patch.deform.flatten ?? current.flatten,
+        ...(patch.deform.targetOffset ?? current.targetOffset
+          ? { targetOffset: round(patch.deform.targetOffset ?? current.targetOffset ?? 0) }
+          : {}),
+      };
+    }
+    if (patch.paint) {
+      const current = segment.paint ?? { enabled: false, layerId: LANDSCAPE_DEFAULT_LAYERS[1]!.id, strength: 1 };
+      segment.paint = {
+        enabled: patch.paint.enabled ?? current.enabled,
+        layerId: patch.paint.layerId ?? current.layerId,
+        strength: Math.min(1, Math.max(0, round(patch.paint.strength ?? current.strength))),
+      };
+    }
+    if (patch.mesh) {
+      const current = segment.mesh ?? { enabled: false, assetId: "" };
+      const assetId = patch.mesh.assetId ?? current.assetId;
+      segment.mesh = {
+        enabled: patch.mesh.enabled ?? current.enabled,
+        assetId,
+        ...(patch.mesh.spacing ?? current.spacing
+          ? { spacing: Math.max(0.01, round(patch.mesh.spacing ?? current.spacing ?? 2)) }
+          : {}),
+        ...(current.scale ? { scale: current.scale } : {}),
+        ...(current.offset ? { offset: current.offset } : {}),
+        ...(current.alignToTerrain !== undefined ? { alignToTerrain: current.alignToTerrain } : {}),
+        ...(current.collision !== undefined ? { collision: current.collision } : {}),
+      };
+    }
+    this.applySelectedLandscapeSplines(index, actor.id, before, after, "Edit Landscape Spline Segment", this.landscapeSculptSettings.activeSplineId, this.landscapeSculptSettings.activeSplinePointId, segmentId);
+  }
+
+  /** Destructively bakes the active spline's deform config into the heightfield (undoable). */
+  applySelectedLandscapeSplineDeform(): void {
+    this.applyActiveLandscapeSplineHeights(
+      (data, spline) => applyLandscapeSplineDeform(data, spline),
+      "Apply Spline Terrain Deform",
+      "No spline deform to apply. Enable Deform on a segment first.",
+    );
+  }
+
+  private applyActiveLandscapeSplineHeights(
+    run: (data: ForgeLandscapeData, spline: ForgeLandscapeSpline) => { changed: boolean; bounds: LandscapeDirtyBounds | null },
+    label: string,
+    emptyMessage: string,
+  ): void {
+    if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const spline = data?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId);
+    if (!actor || !data || !spline) return;
+    const before = data.heights.slice();
+    const result = run(data, spline);
+    if (!result.changed || !result.bounds) {
+      this.onStatus?.(emptyMessage, "info");
+      return;
+    }
+    const after = data.heights.slice();
+    data.heights = before.slice();
+    const dirty = result.bounds;
+    const selection: Selection = { kind: "landscape", index };
+    const apply = (heights: readonly number[]): void => {
+      const current = this.landscapeData.get(actor.id);
+      if (!current) return;
+      current.heights = heights.slice();
+      this.landscapeDataDirty.add(actor.id);
+      this.refreshLandscapeGeometry(index, dirty);
+      this.select(selection);
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label, redo: () => apply(after), undo: () => apply(before) });
+    this.onStatus?.("Spline terrain deform applied.", "info");
+  }
+
+  /** Destructively bakes the active spline's paint config into the paint layers (undoable). */
+  applySelectedLandscapeSplinePaint(): void {
+    if (this.selection?.kind !== "landscape" || !this.landscapeSculptSettings.activeSplineId) return;
+    const index = this.selection.index;
+    const actor = this.layout?.landscapes?.[index];
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const spline = data?.splines?.find((entry) => entry.id === this.landscapeSculptSettings.activeSplineId);
+    if (!actor || !data || !spline) return;
+    ensureLandscapeLayers(data);
+    const before = cloneLandscapeLayers(data.layers);
+    const result = applyLandscapeSplinePaint(data, spline);
+    if (!result.changed || !result.bounds) {
+      this.onStatus?.("No spline paint to apply. Enable Paint on a segment first.", "info");
+      return;
+    }
+    const after = cloneLandscapeLayers(data.layers);
+    data.layers = cloneLandscapeLayers(before);
+    const dirty = result.bounds;
+    const selection: Selection = { kind: "landscape", index };
+    const apply = (layers: LandscapeLayerWeights[]): void => {
+      const current = this.landscapeData.get(actor.id);
+      if (!current) return;
+      current.layers = cloneLandscapeLayers(layers);
+      ensureLandscapeLayers(current);
+      this.landscapeDataDirty.add(actor.id);
+      this.refreshLandscapeGeometry(index, dirty);
+      this.select(selection);
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label: "Apply Spline Layer Paint", redo: () => apply(after), undo: () => apply(before) });
+    this.onStatus?.("Spline layer paint applied.", "info");
   }
 
   createSelectedLandscapeSpline(): void {
@@ -5505,6 +5715,7 @@ export class SceneApp {
       data.splines = cloneLandscapeSplines(splines);
       this.landscapeDataDirty.add(landscapeId);
       this.setLandscapeSculptSettings({ activeSplineId, activeSplinePointId, activeSplineSegmentId });
+      void this.rebuildLandscapeSplineMeshes(index);
       this.select(selection);
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();

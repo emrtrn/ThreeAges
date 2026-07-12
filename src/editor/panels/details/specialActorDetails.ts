@@ -10,6 +10,7 @@ import type {
   LandscapeSplineView,
   LandscapeSplinePointView,
   LandscapeSplineSegmentView,
+  LandscapeSplineSegmentPatch,
   LandscapePaintTool,
   LandscapeSculptSettings,
   LandscapeSculptTool,
@@ -99,6 +100,9 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   setSelectedLandscapeSplinePointShape: (pointId: string, patch: { width?: number; falloff?: number }) => void;
   getSelectedLandscapeSplineSegments: () => LandscapeSplineSegmentView[];
   splitSelectedLandscapeSplineSegment: (segmentId?: string | null) => void;
+  setSelectedLandscapeSplineSegment: (segmentId: string, patch: LandscapeSplineSegmentPatch) => void;
+  applySelectedLandscapeSplineDeform: () => void;
+  applySelectedLandscapeSplinePaint: () => void;
   setSelectedLandscapeLayerMaterial: (layerId: string, materialId: string | null) => void;
   importSelectedLandscapeHeightmap: (rgba: ArrayLike<number>, width: number, height: number, heightRange: number) => Promise<void>;
   exportSelectedLandscapeHeightmap: () => { width: number; height: number; pixels: Uint8ClampedArray } | null;
@@ -140,6 +144,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   const splinePoints = options.getSelectedLandscapeSplinePoints();
   const activeSplinePoint = splinePoints.find((point) => point.id === settings.activeSplinePointId) ?? splinePoints.at(-1);
   const splineSegments = options.getSelectedLandscapeSplineSegments();
+  const activeSegment = splineSegments.find((segment) => segment.id === settings.activeSplineSegmentId) ?? splineSegments.at(-1);
+  const meshAssets = editableAssets.filter((asset) => assetType(asset) === "staticMesh");
   const resolution = options.getSelectedLandscapeResolution();
   const importHeight = options.getSelectedLandscapeImportHeight();
   const materialAssets = editableAssets.filter((asset) => assetType(asset) === "material");
@@ -165,6 +171,31 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     .join("");
   const splinePointMarkup = activeSplinePoint
     ? `<div class="detail-subsection-title">Control Point</div><div class="landscape-layer-list">${splinePoints.map((point) => `<button type="button" data-landscape-spline-point="${escapeHtml(point.id)}" class="${activeSplinePoint.id === point.id ? "active" : ""}" ${lockedAttr}>${escapeHtml(point.id)}</button>`).join("")}</div><div class="detail-vector-row"><span>Location</span>${["x", "y", "z"].map((axis, index) => `<input data-landscape-spline-point-axis="${axis}" type="number" step="0.1" value="${activeSplinePoint.position[index]}" ${lockedAttr}>`).join("")}</div><label class="detail-row"><span>Width</span><input data-landscape-spline-point-shape="width" type="number" min="0.1" step="0.1" value="${activeSplinePoint.width}" ${lockedAttr}></label><label class="detail-row"><span>Falloff</span><input data-landscape-spline-point-shape="falloff" type="number" min="0" step="0.1" value="${activeSplinePoint.falloff}" ${lockedAttr}></label><button type="button" class="detail-action-button" data-landscape-spline-point-delete ${lockedAttr}>Delete Point</button>`
+    : "";
+  const segmentLayerOptions = layers
+    .map((layer) => `<option value="${escapeHtml(layer.id)}" ${activeSegment?.paint.layerId === layer.id ? "selected" : ""}>${escapeHtml(layerDisplayName(layer))}</option>`)
+    .join("");
+  const segmentMeshOptions = [`<option value="" ${activeSegment?.mesh.assetId ? "" : "selected"}>None</option>`]
+    .concat(meshAssets.map((asset) => `<option value="${escapeHtml(asset.id)}" ${activeSegment?.mesh.assetId === asset.id ? "selected" : ""}>${escapeHtml(asset.displayName ?? asset.name)}</option>`))
+    .join("");
+  const splineSegmentMarkup = activeSegment
+    ? `<div class="detail-subsection-title">Segment Effects</div>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="deform.enabled" ${activeSegment.deform.enabled ? "checked" : ""} ${lockedAttr} /><span>Deform Terrain</span></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="deform.flatten" ${activeSegment.deform.flatten ? "checked" : ""} ${lockedAttr} /><span>Flatten</span></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="deform.raiseTerrain" ${activeSegment.deform.raiseTerrain ? "checked" : ""} ${lockedAttr} /><span>Raise</span></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="deform.lowerTerrain" ${activeSegment.deform.lowerTerrain ? "checked" : ""} ${lockedAttr} /><span>Lower</span></label>
+      <label class="detail-row"><span>Target Offset</span><input data-landscape-segment-number="deform.targetOffset" type="number" step="0.1" value="${activeSegment.deform.targetOffset}" ${lockedAttr} /></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="paint.enabled" ${activeSegment.paint.enabled ? "checked" : ""} ${lockedAttr} /><span>Paint Layer</span></label>
+      <label class="detail-row"><span>Layer</span><select data-landscape-segment-layer ${lockedAttr}>${segmentLayerOptions}</select></label>
+      <label class="detail-row"><span>Paint Strength</span><input data-landscape-segment-number="paint.strength" type="number" min="0" max="1" step="0.05" value="${activeSegment.paint.strength}" ${lockedAttr} /></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.enabled" ${activeSegment.mesh.enabled ? "checked" : ""} ${lockedAttr} /><span>Spline Mesh</span></label>
+      <label class="detail-row"><span>Mesh</span><select data-landscape-segment-mesh ${lockedAttr}>${segmentMeshOptions}</select></label>
+      <label class="detail-row"><span>Mesh Spacing</span><input data-landscape-segment-number="mesh.spacing" type="number" min="0.01" step="0.1" value="${activeSegment.mesh.spacing}" ${lockedAttr} /></label>
+      <div class="landscape-heightmap-actions">
+        <button type="button" class="detail-action-button" data-landscape-spline-apply-deform ${lockedAttr}>Apply Deform</button>
+        <button type="button" class="detail-action-button" data-landscape-spline-apply-paint ${lockedAttr}>Apply Paint</button>
+      </div>
+      <div class="detail-hint">Apply bakes the whole active spline's enabled effects into the heightfield / paint layers (destructive).</div>`
     : "";
   body.innerHTML = `
       <div class="detail-heading">
@@ -203,7 +234,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
               ${splinePointMarkup}
               ${splineSegments.length ? `<div class="detail-subsection-title">Segments</div><div class="landscape-layer-list">${splineSegments.map((segment) => `<button type="button" data-landscape-spline-segment="${escapeHtml(segment.id)}" class="${
                 settings.activeSplineSegmentId === segment.id ? "active" : ""
-              }" ${lockedAttr}>${escapeHtml(segment.startPointId)} → ${escapeHtml(segment.endPointId)}</button>`).join("")}</div><button type="button" class="detail-action-button" data-landscape-spline-segment-split ${lockedAttr}>Split Segment</button>` : ""}`
+              }" ${lockedAttr}>${escapeHtml(segment.startPointId)} → ${escapeHtml(segment.endPointId)}</button>`).join("")}</div><button type="button" class="detail-action-button" data-landscape-spline-segment-split ${lockedAttr}>Split Segment</button>${splineSegmentMarkup}` : ""}`
             : settings.editMode === "paint"
             ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape paint tool">
               ${LANDSCAPE_PAINT_TOOLS.map(
@@ -406,6 +437,60 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   });
   body.querySelector<HTMLButtonElement>("[data-landscape-spline-segment-split]")?.addEventListener("click", () => {
     options.splitSelectedLandscapeSplineSegment(options.getLandscapeSculptSettings().activeSplineSegmentId);
+    renderLandscapeDetails(options);
+  });
+  const activeSegmentId = (): string | null =>
+    options.getLandscapeSculptSettings().activeSplineSegmentId ??
+    options.getSelectedLandscapeSplineSegments().at(-1)?.id ??
+    null;
+  body.querySelectorAll<HTMLInputElement>("[data-landscape-segment-flag]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const segmentId = activeSegmentId();
+      const key = input.dataset.landscapeSegmentFlag as
+        | `deform.${"enabled" | "flatten" | "raiseTerrain" | "lowerTerrain"}`
+        | `paint.enabled`
+        | `mesh.enabled`
+        | undefined;
+      if (!segmentId || !key) return;
+      const [group, flag] = key.split(".") as [string, string];
+      options.setSelectedLandscapeSplineSegment(segmentId, { [group]: { [flag]: input.checked } } as LandscapeSplineSegmentPatch);
+      renderLandscapeDetails(options);
+    });
+  });
+  body.querySelectorAll<HTMLInputElement>("[data-landscape-segment-number]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const segmentId = activeSegmentId();
+      const key = input.dataset.landscapeSegmentNumber as
+        | "deform.targetOffset"
+        | "paint.strength"
+        | "mesh.spacing"
+        | undefined;
+      const value = Number(input.value);
+      if (!segmentId || !key || !Number.isFinite(value)) return;
+      const [group, flag] = key.split(".") as [string, string];
+      options.setSelectedLandscapeSplineSegment(segmentId, { [group]: { [flag]: value } } as LandscapeSplineSegmentPatch);
+      renderLandscapeDetails(options);
+    });
+  });
+  body.querySelector<HTMLSelectElement>("[data-landscape-segment-layer]")?.addEventListener("change", (event) => {
+    const segmentId = activeSegmentId();
+    const layerId = (event.currentTarget as HTMLSelectElement).value;
+    if (!segmentId || !layerId) return;
+    options.setSelectedLandscapeSplineSegment(segmentId, { paint: { layerId } });
+    renderLandscapeDetails(options);
+  });
+  body.querySelector<HTMLSelectElement>("[data-landscape-segment-mesh]")?.addEventListener("change", (event) => {
+    const segmentId = activeSegmentId();
+    if (!segmentId) return;
+    options.setSelectedLandscapeSplineSegment(segmentId, { mesh: { assetId: (event.currentTarget as HTMLSelectElement).value } });
+    renderLandscapeDetails(options);
+  });
+  body.querySelector<HTMLButtonElement>("[data-landscape-spline-apply-deform]")?.addEventListener("click", () => {
+    options.applySelectedLandscapeSplineDeform();
+    renderLandscapeDetails(options);
+  });
+  body.querySelector<HTMLButtonElement>("[data-landscape-spline-apply-paint]")?.addEventListener("click", () => {
+    options.applySelectedLandscapeSplinePaint();
     renderLandscapeDetails(options);
   });
 

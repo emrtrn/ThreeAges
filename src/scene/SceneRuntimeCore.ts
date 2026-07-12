@@ -3,6 +3,7 @@ import {
   AnimationMixer,
   Box3,
   Color,
+  Group,
   SRGBColorSpace,
   Scene,
   Vector3,
@@ -10,7 +11,6 @@ import {
 import type {
   BufferGeometry,
   DirectionalLight,
-  Group,
   InstancedMesh,
   Mesh,
   Object3D,
@@ -48,6 +48,10 @@ import {
   lightEntity,
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import { isProceduralAssetId } from "@engine/scene/shapes";
+import {
+  computeLandscapeSplineMeshInstances,
+  type ForgeLandscapeData,
+} from "@engine/scene/landscape";
 import { createProceduralAssetGltf } from "./shapePrimitives";
 import type {
   LayoutCharacter,
@@ -258,6 +262,49 @@ export function buildSceneInstancedModel(options: {
     castShadow: options.castShadow,
     receiveShadow: options.receiveShadow,
   });
+}
+
+/**
+ * Builds the instanced static-mesh group for a landscape's spline mesh segments
+ * (Faz 6 Road Tool). Instances are landscape-local, so the returned group is
+ * meant to be added as a child of the landscape object and inherit its transform.
+ * Returns null when the landscape has no placeable spline meshes (or none of the
+ * referenced assets are loaded). Assets absent from `models` are skipped.
+ */
+export function buildLandscapeSplineMeshGroup(options: {
+  data: Pick<ForgeLandscapeData, "splines">;
+  models: ReadonlyMap<string, GLTF>;
+  castShadow: boolean;
+  receiveShadow: boolean;
+}): { group: Group; meshes: InstancedMesh[] } | null {
+  const placementsByAsset = new Map<string, LayoutPlacement[]>();
+  for (const spline of options.data.splines ?? []) {
+    for (const instance of computeLandscapeSplineMeshInstances(spline)) {
+      const list = placementsByAsset.get(instance.assetId) ?? [];
+      list.push({ position: instance.position, rotation: instance.rotation, scale: instance.scale });
+      placementsByAsset.set(instance.assetId, list);
+    }
+  }
+  if (placementsByAsset.size === 0) return null;
+
+  const group = new Group();
+  group.name = "LandscapeSplineMeshes";
+  const meshes: InstancedMesh[] = [];
+  for (const [assetId, placements] of placementsByAsset) {
+    const gltf = options.models.get(assetId);
+    if (!gltf) continue;
+    const built = buildSceneInstancedModel({
+      assetId,
+      gltf,
+      placements,
+      castShadow: options.castShadow,
+      receiveShadow: options.receiveShadow,
+    });
+    group.add(built.group);
+    meshes.push(...built.meshes);
+  }
+  if (meshes.length === 0) return null;
+  return { group, meshes };
 }
 
 /**

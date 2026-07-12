@@ -130,6 +130,7 @@ import { loadActiveProject, projectFileUrl, type ActiveProject } from "@/project
 import {
   applySceneBackgroundAndAmbient,
   applyEditorMatchedPlayLook,
+  buildLandscapeSplineMeshGroup,
   buildSceneCharacterObject,
   buildSceneEntities,
   buildSceneInstancedModel,
@@ -217,6 +218,7 @@ import {
   createLandscapeColliderPrimitive,
   createLandscapeObject,
   disposeLandscapeObject,
+  landscapeSplineMeshAssetIds,
   LANDSCAPE_DEFAULT_LAYERS,
   resolveLandscape,
   type ForgeLandscapeData,
@@ -4293,8 +4295,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private async buildRuntimeLandscapes(): Promise<void> {
     const landscapes = this.layout?.landscapes ?? [];
+    const datas: ForgeLandscapeData[] = [];
     for (const actor of landscapes) {
       const data = await this.fetchLandscapeData(actor.dataRef);
+      datas.push(data);
       const layerTextures = await this.resolveRuntimeLandscapeLayerTextures(data);
       const object = createLandscapeObject(this.landscapeItem(actor, data, layerTextures));
       this.landscapeObjects.push(object);
@@ -4306,6 +4310,32 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.addColliderDebugWire(colliderEntity);
       }
     }
+    await this.buildRuntimeLandscapeSplineMeshes(datas);
+  }
+
+  /** Loads spline mesh assets (Faz 6) and parents their instanced groups under each landscape. */
+  private async buildRuntimeLandscapeSplineMeshes(datas: readonly ForgeLandscapeData[]): Promise<void> {
+    const needed = new Set<string>();
+    for (const data of datas) {
+      for (const assetId of landscapeSplineMeshAssetIds(data)) {
+        if (!this.models.has(assetId)) needed.add(assetId);
+      }
+    }
+    if (needed.size > 0 && this.assetLoader) {
+      const loaded = await this.assetLoader.loadModels([...needed]);
+      for (const [id, model] of loaded) this.models.set(id, model);
+    }
+    datas.forEach((data, index) => {
+      const object = this.landscapeObjects[index];
+      if (!object) return;
+      const built = buildLandscapeSplineMeshGroup({
+        data,
+        models: this.models,
+        castShadow: this.staticObjectsCastShadow(),
+        receiveShadow: this.staticObjectsReceiveShadow(),
+      });
+      if (built) object.add(built.group);
+    });
   }
 
   /**

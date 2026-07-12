@@ -639,13 +639,29 @@ Yeni dev endpoint önerileri:
 - [x] Landscape data `splines[]` save/load (allowlist doğrulaması ve engine regresyon testiyle).
 - [x] Landscape Mode > Splines sekmesi (aktif spline seçimi, oluştur/sil; terrain'e tıklayarak bağlı point ekleme).
 - [x] Control point ekle/sil/taşı (terrain'e tıklayarak ekle; Details'ta seç, sayısal konumla taşı veya sil; silme bağlı segmentleri temizler).
-- [ ] Segment seçimi ve split/join temel akışı.
-- [ ] Width/falloff ayarları.
-- [ ] Terrain flatten/raise/lower apply.
-- [ ] Spline boyunca layer paint apply.
-- [ ] Static mesh segment/instance döşeme.
-- [ ] Save/Reload sonrası spline, deform ve mesh sonuçları korunur.
-- [ ] Engine tests: spline data normalize/validate.
+- [x] Segment seçimi ve split/join temel akışı (Details'ta segment listesi + seçim;
+      "Split Segment" seçili segmenti orta noktadan ikiye böler. Join sonraki faza
+      ertelendi; split "temel akış" için yeterli.)
+- [x] Width/falloff ayarları (control point başına Width/Falloff; corridor genişliği
+      segment boyunca iki nokta arasında lineer interpolasyon ile taperlanır).
+- [x] Terrain flatten/raise/lower apply (`applyLandscapeSplineDeform`, saf engine +
+      testli; segment `deform` config'i + "Apply Deform" ile heightfield'e destructive
+      bake, undoable, dirty-chunk refresh).
+- [x] Spline boyunca layer paint apply (`applyLandscapeSplinePaint`, saf engine +
+      testli; segment `paint` config'i + "Apply Paint" ile hedef layer weight'ini
+      corridor boyunca boyar, ağırlıklar normalize, undoable).
+- [x] Static mesh segment/instance döşeme (`computeLandscapeSplineMeshInstances` saf
+      engine + testli; `buildLandscapeSplineMeshGroup` ile editor + runtime paritesinde
+      landscape'e child instanced grup olarak döşenir. Segment `mesh` config'i:
+      asset + spacing + enable. Faz 6 v1 = tangent'e hizalı instanced dizilim; gerçek
+      mesh deformation ve spline-mesh collision sonraki faza ertelendi.)
+- [x] Save/Reload sonrası spline, deform ve mesh sonuçları korunur (deform/paint
+      heightfield/weightmap'e bake edilip sidecar ile kaydedilir; `splines[]` + mesh
+      config allowlist'ten geçip yüklemede yeniden döşenir. **Kullanıcı taraflı
+      tarayıcı smoke'u henüz yapılmadı**, önceki fazlardaki gibi.)
+- [x] Engine tests: spline data normalize/validate (mevcut allowlist testi + yeni
+      deform/paint apply, raise/lower gating, paint blend ve mesh-instance dizilim
+      testleri; `npm run build:verify` yeşil, 769 test).
 
 ### Sonraki Fazlar
 
