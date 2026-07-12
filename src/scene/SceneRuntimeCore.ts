@@ -20,6 +20,7 @@ import type {
   WebGLRenderer,
 } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
+import { mergeGeometries, mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { applyRootMotionToClip, type RootMotionClipSetting } from "@engine/render-three/rootMotion";
 
 import {
@@ -54,8 +55,9 @@ import { isProceduralAssetId } from "@engine/scene/shapes";
 import {
   computeLandscapeSplineMeshInstances,
   landscapeHeightAtLocal,
-  splineToPolyline,
+  resolveLandscapeSplineMeshChains,
   type ForgeLandscapeData,
+  type LandscapeSplineMeshChain,
 } from "@engine/scene/landscape";
 import { createProceduralAssetGltf } from "./shapePrimitives";
 import type {
@@ -291,7 +293,7 @@ export function buildLandscapeSplineMeshGroup(options: {
   applyMaterialSlots?: (assetId: string, assetGroup: Group) => void;
 }): { group: Group; meshes: InstancedMesh[] } | null {
   const itemsByAsset = new Map<string, InstanceRenderItem[]>();
-  const deformPaths: LandscapeSplineMeshDeformPath[] = [];
+  const deformChains: LandscapeSplineMeshChain[] = [];
   const meshForwardLengths = new Map<string, number>();
   for (const [assetId, gltf] of options.models) {
     gltf.scene.updateMatrixWorld(true);
@@ -300,26 +302,7 @@ export function buildLandscapeSplineMeshGroup(options: {
     if (length > 1e-6) meshForwardLengths.set(assetId, length);
   }
   for (const spline of options.data.splines ?? []) {
-    const subsBySegment = new Map<string, Vec3[]>();
-    for (const sub of splineToPolyline(spline, spline.smooth ? 32 : 1)) {
-      const points = subsBySegment.get(sub.segment.id);
-      if (points) points.push(sub.end.position);
-      else subsBySegment.set(sub.segment.id, [sub.start.position, sub.end.position]);
-    }
-    for (const segment of spline.segments) {
-      const mesh = segment.mesh;
-      const points = subsBySegment.get(segment.id);
-      if (!mesh?.enabled || !mesh.assetId || mesh.deform !== true || !points || points.length < 2) continue;
-      deformPaths.push({
-        assetId: mesh.assetId,
-        points,
-        scale: mesh.scale ?? [1, 1, 1],
-        offset: mesh.offset ?? [0, 0, 0],
-        yawOffset: mesh.yawOffset ?? 0,
-        bank: mesh.bank ?? 0,
-        alignToTerrain: mesh.alignToTerrain === true,
-      });
-    }
+    deformChains.push(...resolveLandscapeSplineMeshChains(spline, spline.smooth ? 32 : 1));
     for (const instance of computeLandscapeSplineMeshInstances(spline, { landscape: options.data, meshForwardLengths })) {
       const list = itemsByAsset.get(instance.assetId) ?? [];
       list.push({
@@ -333,7 +316,7 @@ export function buildLandscapeSplineMeshGroup(options: {
       itemsByAsset.set(instance.assetId, list);
     }
   }
-  if (itemsByAsset.size === 0 && deformPaths.length === 0) return null;
+  if (itemsByAsset.size === 0 && deformChains.length === 0) return null;
 
   const group = new Group();
   group.name = "LandscapeSplineMeshes";
@@ -353,27 +336,49 @@ export function buildLandscapeSplineMeshGroup(options: {
     meshes.push(...built.meshes);
   }
   const deformedGroups = new Map<string, Group>();
-  for (const path of deformPaths) {
-    const gltf = options.models.get(path.assetId);
+  for (const [chainIndex, chain] of deformChains.entries()) {
+    const gltf = options.models.get(chain.assetId);
     if (!gltf) continue;
-    let assetGroup = deformedGroups.get(path.assetId);
+    let assetGroup = deformedGroups.get(chain.assetId);
     if (!assetGroup) {
       assetGroup = new Group();
-      assetGroup.name = `deformed-${path.assetId}`;
-      deformedGroups.set(path.assetId, assetGroup);
+      assetGroup.name = `deformed-${chain.assetId}`;
+      deformedGroups.set(chain.assetId, assetGroup);
       group.add(assetGroup);
     }
+    let primitiveIndex = 0;
     gltf.scene.traverse((object) => {
       if (!(object instanceof Mesh)) return;
-      const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
-      const deformed = deformSplineMeshGeometry(geometry, path, options.data);
-      if (!deformed) return;
+      const geometries: BufferGeometry[] = [];
+      for (const segment of chain.segments) {
+        const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
+        const deformed = deformSplineMeshGeometry(geometry, {
+          ...chain,
+          points: segment.points,
+          distanceStart: segment.distanceStart,
+          totalLength: chain.totalLength,
+          recomputeNormals: false,
+        }, options.data);
+        if (!deformed) continue;
+        // Normals/tangents from the source mesh are invalid after bending. Leave
+        // normals to the welded result; standard materials derive tangents when
+        // needed, avoiding a stale normal-map frame at a chain join.
+        deformed.deleteAttribute("normal");
+        deformed.deleteAttribute("tangent");
+        geometries.push(deformed);
+      }
+      const deformed = mergeAndWeldSplineGeometries(geometries);
+      if (!deformed) {
+        primitiveIndex += 1;
+        return;
+      }
       const mesh = new Mesh(deformed, object.material);
-      mesh.name = `${path.assetId}-${object.name || "mesh"}-deformed`;
+      mesh.name = `${chain.assetId}-${object.name || `primitive-${primitiveIndex}`}-chain-${chainIndex}`;
       mesh.castShadow = options.castShadow;
       mesh.receiveShadow = options.receiveShadow;
-      mesh.userData.assetId = path.assetId;
+      mesh.userData.assetId = chain.assetId;
       assetGroup!.add(mesh);
+      primitiveIndex += 1;
     });
   }
   for (const [assetId, assetGroup] of deformedGroups) {
@@ -395,6 +400,12 @@ export interface LandscapeSplineMeshDeformPath {
   yawOffset: number;
   bank: number;
   alignToTerrain: boolean;
+  /** Distance from the beginning of a welded chain; defaults to zero for one segment. */
+  distanceStart?: number;
+  /** Total welded-chain arc length. Used only for introspection/future frame caching. */
+  totalLength?: number;
+  /** Recalculate normals immediately; false lets the caller weld first. */
+  recomputeNormals?: boolean;
 }
 
 interface DeformPathSample {
@@ -404,7 +415,9 @@ interface DeformPathSample {
 
 /**
  * Bends a static mesh authored along local +Z through a sampled spline path.
- * UVs remain untouched; normals are recalculated from the deformed surface.
+ * Its `uv.v` follows the chain's cumulative arc length, so adjacent pieces use
+ * the same texture phase. Callers building a chain may defer normal generation
+ * until after the pieces have been welded.
  */
 export function deformSplineMeshGeometry(
   geometry: BufferGeometry,
@@ -424,9 +437,13 @@ export function deformSplineMeshGeometry(
   const source = new Vector3();
   const right = new Vector3();
   const up = new Vector3();
+  const uv = geometry.getAttribute("uv");
+  const tileLength = sourceLength;
+  const distanceStart = path.distanceStart ?? 0;
   for (let index = 0; index < positions.count; index += 1) {
     source.fromBufferAttribute(positions, index);
-    const sample = sampleDeformPath(path.points, pathLengths.lengths, pathLengths.total, (source.z - bounds.min.z) / sourceLength);
+    const sourceT = (source.z - bounds.min.z) / sourceLength;
+    const sample = sampleDeformPath(path.points, pathLengths.lengths, pathLengths.total, sourceT);
     if (!sample) continue;
     const upHint = path.alignToTerrain
       ? terrainNormalAt(landscape, sample.position.x, sample.position.z)
@@ -447,12 +464,32 @@ export function deformSplineMeshGeometry(
       sample.position.y + right.y * x + up.y * y + path.offset[1],
       sample.position.z + right.z * x + up.z * y + path.offset[2],
     );
+    if (uv) uv.setY(index, (distanceStart + Math.min(1, Math.max(0, sourceT)) * pathLengths.total) / tileLength);
   }
   positions.needsUpdate = true;
-  geometry.computeVertexNormals();
+  if (uv) uv.needsUpdate = true;
+  if (path.recomputeNormals !== false) geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return geometry;
+}
+
+function mergeAndWeldSplineGeometries(geometries: BufferGeometry[]): BufferGeometry | null {
+  if (geometries.length === 0) return null;
+  const merged = geometries.length === 1 ? geometries[0]! : mergeGeometries(geometries, false);
+  if (!merged) {
+    for (const geometry of geometries) geometry.dispose();
+    return null;
+  }
+  if (geometries.length > 1) {
+    for (const geometry of geometries) geometry.dispose();
+  }
+  const welded = mergeVertices(merged, 1e-5);
+  if (welded !== merged) merged.dispose();
+  welded.computeVertexNormals();
+  welded.computeBoundingBox();
+  welded.computeBoundingSphere();
+  return welded;
 }
 
 function pathSegmentLengths(points: readonly Vec3[]): { lengths: number[]; total: number } {

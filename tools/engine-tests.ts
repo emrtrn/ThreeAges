@@ -141,6 +141,7 @@ import {
   applyLandscapeSplineDeform,
   applyLandscapeSplinePaint,
   computeLandscapeSplineMeshInstances,
+  resolveLandscapeSplineMeshChains,
   splineToPolyline,
   landscapeSplineMeshAssetIds,
   createFlatLandscapeData,
@@ -1242,6 +1243,38 @@ check("buildLandscapeSplineMeshGroup uses unique geometry for an opt-in deformed
   assert.ok(built);
   assert.equal(built.meshes.length, 0, "deform mode must not also create rigid instances");
   assert.ok(built.group.children.some((child) => child.name === "deformed-road"));
+});
+
+check("deformed spline chains weld compatible pieces and keep UV phase continuous", () => {
+  const data = createFlatLandscapeData("small");
+  data.splines = [{
+    id: "road-chain",
+    points: [
+      { id: "a", position: [0, 0, 0], width: 2, falloff: 1 },
+      { id: "b", position: [0, 0, 10], width: 2, falloff: 1 },
+      { id: "c", position: [10, 0, 10], width: 2, falloff: 1 },
+    ],
+    segments: [
+      { id: "s0", startPointId: "a", endPointId: "b", mesh: { enabled: true, assetId: "road", deform: true } },
+      { id: "s1", startPointId: "b", endPointId: "c", mesh: { enabled: true, assetId: "road", deform: true } },
+    ],
+  }];
+  const gltf = { scene: new Mesh(new BoxGeometry(2, 0.2, 10, 2, 1, 8)) } as unknown as GLTF;
+  const built = buildLandscapeSplineMeshGroup({
+    data,
+    models: new Map([["road", gltf]]),
+    castShadow: false,
+    receiveShadow: true,
+  });
+  assert.ok(built);
+  const group = built.group.children.find((child) => child.name === "deformed-road")!;
+  assert.equal(group.children.length, 1, "one primitive over a chain should become one draw mesh");
+  const mesh = group.children[0] as Mesh;
+  const uv = mesh.geometry.getAttribute("uv");
+  const v = Array.from({ length: uv.count }, (_, index) => uv.getY(index));
+  assert.ok(Math.min(...v) <= 0.001);
+  assert.ok(Math.max(...v) >= 1.999, "the second piece must continue rather than restart UV.v");
+  assert.ok(mesh.geometry.getAttribute("normal"), "normals are generated after welding");
 });
 
 // colliderBoxFromBounds bakes placement scale into the world-aligned size; for
@@ -18050,6 +18083,66 @@ check("landscape spline apply is a no-op when no segment enables the effect", ()
   const spline = straightSpline({ deform: { enabled: false, raiseTerrain: true, lowerTerrain: true, flatten: true } });
   assert.deepEqual(applyLandscapeSplineDeform(data, spline), { changed: false, bounds: null });
   assert.deepEqual(applyLandscapeSplinePaint(data, straightSpline({})), { changed: false, bounds: null });
+});
+
+check("resolveLandscapeSplineMeshChains joins reversed compatible segments and stops at branches", () => {
+  const mesh = { enabled: true, assetId: "road", deform: true } as const;
+  const chain: ForgeLandscapeSpline = {
+    id: "chain",
+    points: [
+      { id: "a", position: [0, 0, 0], width: 2, falloff: 1 },
+      { id: "b", position: [0, 0, 10], width: 2, falloff: 1 },
+      { id: "c", position: [0, 0, 20], width: 2, falloff: 1 },
+      { id: "d", position: [10, 0, 20], width: 2, falloff: 1 },
+    ],
+    segments: [
+      { id: "s0", startPointId: "a", endPointId: "b", mesh },
+      { id: "s1", startPointId: "c", endPointId: "b", mesh }, // authored backwards, chain must reverse it
+      { id: "s2", startPointId: "c", endPointId: "d", mesh: { ...mesh, bank: 5 } }, // incompatible setting -> boundary
+    ],
+  };
+  const chains = resolveLandscapeSplineMeshChains(chain);
+  assert.equal(chains.length, 2);
+  assert.deepEqual(chains[0]!.segments.map((segment) => segment.id), ["s0", "s1"]);
+  assert.deepEqual(chains[0]!.points.map((point) => point[2]), [0, 10, 20]);
+  assert.equal(chains[0]!.totalLength, 20);
+  assert.equal(chains[0]!.closed, false);
+
+  const branch: ForgeLandscapeSpline = {
+    id: "branch",
+    points: [
+      { id: "hub", position: [0, 0, 0], width: 2, falloff: 1 },
+      { id: "north", position: [0, 0, 10], width: 2, falloff: 1 },
+      { id: "east", position: [10, 0, 0], width: 2, falloff: 1 },
+      { id: "south", position: [0, 0, -10], width: 2, falloff: 1 },
+    ],
+    segments: [
+      { id: "n", startPointId: "hub", endPointId: "north", mesh },
+      { id: "e", startPointId: "hub", endPointId: "east", mesh },
+      { id: "s", startPointId: "hub", endPointId: "south", mesh },
+    ],
+  };
+  assert.deepEqual(resolveLandscapeSplineMeshChains(branch).map((entry) => entry.segments.length), [1, 1, 1]);
+
+  const loop: ForgeLandscapeSpline = {
+    id: "loop",
+    points: [
+      { id: "p0", position: [0, 0, 0], width: 2, falloff: 1 },
+      { id: "p1", position: [0, 0, 10], width: 2, falloff: 1 },
+      { id: "p2", position: [10, 0, 10], width: 2, falloff: 1 },
+      { id: "p3", position: [10, 0, 0], width: 2, falloff: 1 },
+    ],
+    segments: [
+      { id: "l0", startPointId: "p0", endPointId: "p1", mesh },
+      { id: "l1", startPointId: "p1", endPointId: "p2", mesh },
+      { id: "l2", startPointId: "p2", endPointId: "p3", mesh },
+      { id: "l3", startPointId: "p3", endPointId: "p0", mesh },
+    ],
+  };
+  const loopChains = resolveLandscapeSplineMeshChains(loop);
+  assert.equal(loopChains.length, 1);
+  assert.equal(loopChains[0]!.closed, true);
+  assert.equal(loopChains[0]!.segments.length, 4);
 });
 
 check("computeLandscapeSplineMeshInstances fits each spline piece along its full tangent", () => {

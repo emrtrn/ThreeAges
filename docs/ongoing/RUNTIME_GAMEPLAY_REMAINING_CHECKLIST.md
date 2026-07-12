@@ -184,17 +184,74 @@ Hedef sorumluluk ayrimi:
 - `src/scene/runtimeDebugSnapshot.ts`: `?debug` icin gameplay/ui/loading/memory
   snapshot toparlama, yan etkisiz okuma.
 
+### P2.1 Remainder Map (metot -> hedef modul)
+
+`RuntimeSceneApp.ts` metotlarinin sorumluluk siniflandirmasi. Her extraction
+deps-interface deseni kullanir: coordinator kendi state'ini (store/latch/queue)
+sahiplenir, gameplay-facing capture/apply ve subsystem erisimi shell'de kalip
+callback ile verilir. Bu, scene sinirini editor/game import kurallarini bozmadan
+korur.
+
+- **Save (P2.3 — `runtimeSaveCoordinator.ts`, TAMAM):**
+  `handleUiMessage` (eski `handleSaveGameUiMessage`), `writeSlot`/`loadSlot`/
+  `deleteSlot`, `writeCheckpointSave`, `refreshUiFields`, `setStatus`,
+  `requestSaveGameLoad` (shell wrapper delegasyon), `applyPendingRestore` (eski
+  `applyPendingSaveRestore`). Sahiplenen state: `saveGameStore`,
+  `pendingSaveRestore`. Shell'de kalan deps callback'leri: `collectCurrentSaveState`
+  (game-mode/behavior/entity okur), `applyRestore` (persistent snapshot +
+  `applySavedPlayerTransform`), `enqueueLevelTravel`, `clearScreens`, `uiStore`.
+- **Travel (P2.2 — `runtimeTravelCoordinator.ts`, bekliyor):** `travelState`,
+  `requestLevelTravel`, `enqueueLevelTravel`, `runTravel`, `holdLoadingMinimum` ve
+  loading-overlay handoff (`beginLoadingUi`/`finishLoadingUi`/`setLoadingStatus`).
+  `levelTravel.ts` saf state machine olarak kalir. Not: `requestSaveGameLoad`
+  travel'i tetikledigi icin coordinator, save coordinator'in `enqueueLevelTravel`
+  callback'ini besleyecek; iki coordinator arasi tek yon bagimlilik.
+- **Spawn (P2.4 — `runtimeActorSpawnCoordinator.ts`, bekliyor):**
+  `spawnRuntimeActor`, `nextSpawnedActorEntityId`, `registerActorEntity`,
+  `destroyActorEntity` ve `nextRuntimeActorId`/`actorEntityById` id-uretim +
+  registry. Uyari: scene-build'e derin bagli (`loadActorClass`,
+  `loadActorMeshModels`, `addActorObject`, physics/behavior `addEntity`,
+  autoplay audio/particle) — buyuk deps yuzeyi gerekir; once id/registry cekirdegi,
+  sonra spawn/destroy akisi kademeli tasinabilir.
+- **Debug snapshot (P2.5 — `runtimeDebugSnapshot.ts`, bekliyor):** saf okumalar
+  `getPerfMemorySnapshot`, `getGameModeDebugSnapshot`, `getUiDebugSnapshot` yan
+  etkisiz helper'lara alinabilir. Tek-satir delegasyonlar (`getRenderStats`,
+  `getSubsystemProfileSnapshot`, `getVfxDebugSnapshot`,
+  `getScriptMessageDebugSnapshot`, `getAiDebugSnapshot`) dusuk deger — shell'de
+  kalabilir. Uyari: AI nav debug view kumesi (`getAiNavigationDebugSnapshot`,
+  `aiPerceptionView`, `aiQueryView`, `aiTargetPointRouteView`,
+  `aiAgentClearanceView`, `updateAiNavigationDebugView`) pathfinding helper'lariyla
+  (`aiNavAgentForEntity`, `aiEffectiveClearanceRadius`) paylasimli — saf "debug"
+  degil; AI kumesiyle birlikte degerlendirilmeli, debug modulune zorla cekilmemeli.
+- **Shell'de kalan (kompozisyon/lifecycle/render — coordinator hedefi degil):**
+  `constructor`, `start`, `dispose`, `buildScene`, `teardownScene`,
+  `loadActiveProjectScene`, `handleResize`; tum ortam/render builder'lari
+  (`applyRuntimeSky/Fog/Clouds/Reflection/PostProcess`, `buildRuntime*`,
+  `landscape*`, `addLight`, `addCharacter`, `syncInstanceTransform`); AI
+  pathfinding cekirdegi (`requestAiMove`, `buildAiPath`, `aiMoveIntentForEntity`,
+  nav sampler'lar); UI store guncellemeleri (`updateUiStore`, `updateUiInput`,
+  `openPauseMenu`); `updateAudioListener`, `applyKillZ`, `applyPlayCameraHandoff`.
+
 Checklist:
 
-- [ ] **P2.1 - Remainder map:** `RuntimeSceneApp.ts` icin metot/sorumluluk
-  haritasi cikar; hangi metotlar travel/save/spawn/debug olarak tasinacak
-  dokumana islenir.
+- [x] **P2.1 - Remainder map:** `RuntimeSceneApp.ts` icin metot/sorumluluk
+  haritasi cikarildi (yukaridaki "P2.1 Remainder Map" bolumu); hangi metotlar
+  travel/save/spawn/debug olarak tasinacak deps-interface deseniyle isaretlendi.
 - [ ] **P2.2 - Travel coordinator extraction:** `travelState`,
   `requestLevelTravel`, queue process ve loading overlay handoff'unu kucuk
   coordinator'a al. `levelTravel.ts` saf state machine olarak kalmali.
-- [ ] **P2.3 - Save coordinator extraction:** `SaveGameStore`, quick slot
-  write/load/delete, checkpoint save, UI field refresh ve pending restore
-  uygulamasini bir modulle sinirla.
+- [x] **P2.3 - Save coordinator extraction:** `src/scene/runtimeSaveCoordinator.ts`
+  (`RuntimeSaveCoordinator` + `RuntimeSaveCoordinatorDeps`). `SaveGameStore` ve
+  pending-restore latch'ini sahiplenir; quick slot write/load/delete, checkpoint
+  save, UI field refresh, reserved `save:*` UI mesajlari ve pending-restore
+  uygulamasi buraya tasindi. Gameplay capture/apply (`collectCurrentSaveState`,
+  `applySavedPlayerTransform`) ve level travel shell'de deps callback olarak kaldi;
+  davranis birebir korundu. `RuntimeSceneApp.ts` 4885 -> 4784 satir. Dogrulama:
+  `tsc` temiz, `test:engine` 777 checks, `verify:imports` PASS,
+  `runtime-checkpoint` + `runtime-portal` browser smoke yesil (save autosave +
+  load round-trip + travel/pending-restore kanitli). (`runtime-playflow` bu
+  makinede boot/scene-load 60s zaman asimiyla flaky — main'de de ayni sekilde
+  duser, bu extraction'dan bagimsiz cevresel bir sorun.)
 - [ ] **P2.4 - Runtime actor spawn extraction:** `spawnRuntimeActor`, id uretimi,
   owner/instigator ve live actor registry guncellemelerini kucuk bir modulle
   sinirla.

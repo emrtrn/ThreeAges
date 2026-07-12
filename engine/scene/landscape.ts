@@ -248,11 +248,179 @@ export interface LandscapeSplineMeshInstance {
   scale: Vec3;
 }
 
+/** One authored spline segment, oriented as it appears in a weldable mesh chain. */
+export interface LandscapeSplineMeshChainSegment {
+  id: string;
+  /** Sampled landscape-local centerline, with its direction aligned to the chain. */
+  points: Vec3[];
+  /** Arc length at the beginning of this segment within its chain. */
+  distanceStart: number;
+  /** Arc length at the end of this segment within its chain. */
+  distanceEnd: number;
+}
+
+/**
+ * A non-branching run of compatible `mesh.deform` spline segments. Renderers
+ * may deform each piece and weld the results without bridging a junction.
+ */
+export interface LandscapeSplineMeshChain {
+  assetId: string;
+  scale: Vec3;
+  offset: Vec3;
+  yawOffset: number;
+  bank: number;
+  alignToTerrain: boolean;
+  segments: LandscapeSplineMeshChainSegment[];
+  /** De-duplicated, directionally ordered centerline samples for inspection/debugging. */
+  points: Vec3[];
+  totalLength: number;
+  closed: boolean;
+}
+
 export interface ComputeLandscapeSplineMeshInstancesOptions {
   /** Landscape data used only when a mesh opts into terrain-normal alignment. */
   landscape?: ForgeLandscapeData;
   /** Base-model local +Z lengths, supplied by the render host from loaded bounds. */
   meshForwardLengths?: ReadonlyMap<string, number>;
+}
+
+interface DeformMeshCandidate {
+  segment: ForgeLandscapeSplineSegment;
+  points: Vec3[];
+  compatibilityKey: string;
+}
+
+function meshDeformCompatibilityKey(segment: ForgeLandscapeSplineSegment): string | null {
+  const mesh = segment.mesh;
+  if (!mesh?.enabled || !mesh.assetId || mesh.deform !== true) return null;
+  const vector = (value: Vec3 | undefined, fallback: Vec3): string => (value ?? fallback).join(",");
+  // These values affect vertex positions/frame construction. Keep chains strict
+  // so a visual setting change is always a deliberate chain boundary.
+  return [
+    mesh.assetId,
+    vector(mesh.scale, [1, 1, 1]),
+    vector(mesh.offset, [0, 0, 0]),
+    mesh.yawOffset ?? 0,
+    mesh.bank ?? 0,
+    mesh.alignToTerrain === true,
+  ].join("|");
+}
+
+function splinePathLength(points: readonly Vec3[]): number {
+  let total = 0;
+  for (let index = 1; index < points.length; index += 1) {
+    const a = points[index - 1]!;
+    const b = points[index]!;
+    total += Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+  }
+  return total;
+}
+
+/**
+ * Finds compatible, non-branching `mesh.deform` runs in one spline. Point
+ * degree is calculated from the authored graph, not only eligible mesh edges:
+ * a T/X junction is consequently always a chain boundary even if one branch
+ * happens to use a different material or has deformation disabled.
+ */
+export function resolveLandscapeSplineMeshChains(
+  spline: ForgeLandscapeSpline,
+  subdivisions: number = LANDSCAPE_SPLINE_CURVE_SUBDIVISIONS,
+): LandscapeSplineMeshChain[] {
+  const pointsBySegment = new Map<string, Vec3[]>();
+  for (const sub of splineToPolyline(spline, subdivisions)) {
+    const points = pointsBySegment.get(sub.segment.id);
+    if (points) points.push(sub.end.position);
+    else pointsBySegment.set(sub.segment.id, [sub.start.position, sub.end.position]);
+  }
+  const degree = new Map<string, number>();
+  const addDegree = (id: string): void => {
+    degree.set(id, (degree.get(id) ?? 0) + 1);
+  };
+  for (const segment of spline.segments) {
+    if (!pointsBySegment.has(segment.id)) continue;
+    addDegree(segment.startPointId);
+    addDegree(segment.endPointId);
+  }
+  const candidates: DeformMeshCandidate[] = [];
+  for (const segment of spline.segments) {
+    const compatibilityKey = meshDeformCompatibilityKey(segment);
+    const points = pointsBySegment.get(segment.id);
+    if (!compatibilityKey || !points || points.length < 2 || splinePathLength(points) <= 1e-6) continue;
+    candidates.push({ segment, points, compatibilityKey });
+  }
+  const candidatesByKey = new Map<string, DeformMeshCandidate[]>();
+  for (const candidate of candidates) {
+    const list = candidatesByKey.get(candidate.compatibilityKey);
+    if (list) list.push(candidate);
+    else candidatesByKey.set(candidate.compatibilityKey, [candidate]);
+  }
+
+  const chains: LandscapeSplineMeshChain[] = [];
+  for (const candidatesForKey of candidatesByKey.values()) {
+    const byPoint = new Map<string, DeformMeshCandidate[]>();
+    for (const candidate of candidatesForKey) {
+      for (const pointId of [candidate.segment.startPointId, candidate.segment.endPointId]) {
+        const list = byPoint.get(pointId);
+        if (list) list.push(candidate);
+        else byPoint.set(pointId, [candidate]);
+      }
+    }
+    const unused = new Set(candidatesForKey.map((candidate) => candidate.segment.id));
+    const byId = new Map(candidatesForKey.map((candidate) => [candidate.segment.id, candidate] as const));
+    while (unused.size > 0) {
+      const seed = candidatesForKey.find(
+        (candidate) => unused.has(candidate.segment.id) &&
+          [candidate.segment.startPointId, candidate.segment.endPointId].some((pointId) => (degree.get(pointId) ?? 0) !== 2),
+      ) ?? candidatesForKey.find((candidate) => unused.has(candidate.segment.id))!;
+      const boundaryPoint = [seed.segment.startPointId, seed.segment.endPointId]
+        .find((pointId) => (degree.get(pointId) ?? 0) !== 2);
+      let currentPointId = boundaryPoint ?? seed.segment.startPointId;
+      const chainStartPointId = currentPointId;
+      const chainSegments: LandscapeSplineMeshChainSegment[] = [];
+      const chainPoints: Vec3[] = [];
+      let totalLength = 0;
+      while (true) {
+        const next = (byPoint.get(currentPointId) ?? []).find((candidate) => unused.has(candidate.segment.id));
+        if (!next) break;
+        unused.delete(next.segment.id);
+        const forward = next.segment.startPointId === currentPointId;
+        const oriented = forward ? [...next.points] : [...next.points].reverse();
+        const length = splinePathLength(oriented);
+        chainSegments.push({
+          id: next.segment.id,
+          points: oriented,
+          distanceStart: totalLength,
+          distanceEnd: totalLength + length,
+        });
+        if (chainPoints.length === 0) chainPoints.push(...oriented);
+        else chainPoints.push(...oriented.slice(1));
+        totalLength += length;
+        currentPointId = forward ? next.segment.endPointId : next.segment.startPointId;
+        if ((degree.get(currentPointId) ?? 0) !== 2) break;
+      }
+      if (chainSegments.length === 0) continue;
+      const mesh = byId.get(chainSegments[0]!.id)!.segment.mesh!;
+      const closed = currentPointId === chainStartPointId;
+      if (closed && chainPoints.length > 1) {
+        const first = chainPoints[0]!;
+        const last = chainPoints.at(-1)!;
+        if (first[0] === last[0] && first[1] === last[1] && first[2] === last[2]) chainPoints.pop();
+      }
+      chains.push({
+        assetId: mesh.assetId,
+        scale: mesh.scale ?? [1, 1, 1],
+        offset: mesh.offset ?? [0, 0, 0],
+        yawOffset: mesh.yawOffset ?? 0,
+        bank: mesh.bank ?? 0,
+        alignToTerrain: mesh.alignToTerrain === true,
+        segments: chainSegments,
+        points: chainPoints,
+        totalLength,
+        closed,
+      });
+    }
+  }
+  return chains;
 }
 
 /** Uniform Catmull-Rom interpolation of four control positions at `u` in [0,1]. */

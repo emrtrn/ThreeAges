@@ -318,11 +318,8 @@ import {
   type GamePhase,
 } from "@/game/gameRules";
 import {
-  applySaveState,
   collectSaveState,
-  consumeRestoreForLoadedLevel,
   type GameSaveState,
-  type GameSaveRestoreRequest,
   type SavedPlayerTransform,
 } from "@/game/saveGame";
 import {
@@ -334,12 +331,7 @@ import {
   defaultUserSettings,
   type UserSettings,
 } from "@engine/persistence/userSettingsStore";
-import {
-  buildSaveGameUiFields,
-  emptySaveGameUiSlots,
-  readSaveGameUiCommand,
-  type SaveGameUiSlotId,
-} from "@/game/saveGameUi";
+import { RuntimeSaveCoordinator } from "./runtimeSaveCoordinator";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -690,8 +682,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private assetLoader: AssetLoader | null = null;
   private layout: RoomLayout | null = null;
   private activeLevelPath: string | null = null;
-  private saveGameStore: SaveGameStore<GameSaveState> | null = null;
-  private pendingSaveRestore: GameSaveRestoreRequest | null = null;
+  /** Owns slot-based save/load: store, pending-restore latch, checkpoint + UI (P2.3). */
+  private readonly saveCoordinator: RuntimeSaveCoordinator;
   private collisionDefs = new Map<string, AssetCollisionDef>();
   /** Render-mesh triangle data for `complexAsSimple` assets (static trimesh collider). */
   private complexCollisionMeshes = new Map<string, AssetComplexCollisionMesh>();
@@ -1002,6 +994,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.pointerButtons.attach();
     this.resumeAudioOnFirstGesture();
 
+    this.saveCoordinator = new RuntimeSaveCoordinator({
+      uiStore: this.uiStore,
+      collectSaveState: () => this.collectCurrentSaveState(),
+      applyRestore: (restore) => {
+        this.behaviorSubsystem.applyPersistentStateSnapshot(restore.persistentState);
+        if (restore.player) this.applySavedPlayerTransform(restore.player);
+      },
+      enqueueLevelTravel: (levelPath) => this.enqueueLevelTravel(levelPath),
+      clearScreens: () => this.uiSubsystem?.clearScreens(),
+    });
+
     this.setupLoadingOverlay();
     void this.loadActiveProjectScene();
     this.handleResize();
@@ -1033,7 +1036,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         this.requestLevelTravel(targetLevel, targetSpawn);
       },
       onCheckpoint: (_entityId, slot) => {
-        this.writeCheckpointSave(slot);
+        this.saveCoordinator.writeCheckpointSave(slot);
       },
       // The active Game Mode owns possession: only the pawn it possessed
       // (none, under the default camera mode) is driven by player input.
@@ -1757,7 +1760,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         onLoaded: (id) => this.loadProgress.markLoaded(id),
         onFailed: (id, error) => this.loadProgress.markFailed(id, describeLoadError(error)),
       });
-      this.saveGameStore = createRuntimeSaveGameStore(this.activeProject.manifest.name);
+      this.saveCoordinator.setStore(createRuntimeSaveGameStore(this.activeProject.manifest.name));
       await this.buildScene(this.activeProject.manifest.editor.defaultScene, undefined);
       this.finishLoadingUi();
     } catch (error) {
@@ -1963,7 +1966,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.setLoadingStatus("Starting");
     await this.loadCharacterSkeletons();
     await this.startGameMode();
-    this.applyPendingSaveRestore(layoutPath);
+    this.saveCoordinator.applyPendingRestore(layoutPath);
     await this.setupRuntimeUi();
     await this.setupDialogue();
   }
@@ -2012,7 +2015,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * when the current cycle settles — and the teardown is deferred past the frame.
    */
   requestLevelTravel(layoutPath: string, spawnTag?: string): void {
-    this.pendingSaveRestore = null;
+    this.saveCoordinator.clearPendingRestore();
     this.enqueueLevelTravel(layoutPath, spawnTag);
   }
 
@@ -2026,11 +2029,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   requestSaveGameLoad(payload: unknown): boolean {
-    const restore = applySaveState(payload);
-    if (!restore) return false;
-    this.pendingSaveRestore = restore;
-    this.enqueueLevelTravel(restore.levelPath);
-    return true;
+    return this.saveCoordinator.requestSaveGameLoad(payload);
   }
 
   setUserAudioBusVolume(bus: AudioBusId, volume: number): boolean {
@@ -2368,7 +2367,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Seed bound fields so the initial render shows values (not blanks/zeroes).
     this.uiStore.setField("player.speed", 0);
     this.uiStore.setField("player.speedLabel", "Speed 0.0 m/s");
-    this.refreshSaveGameUiFields();
+    this.saveCoordinator.refreshUiFields();
 
     if (wantsScreenHost) {
       this.uiSubsystem = new RuntimeUiSubsystem(host, {
@@ -2382,7 +2381,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           // `ui-action` script message.
           if (this.handleGameUiMessage(action.message)) return;
           if (this.handleTravelUiMessage(action.message)) return;
-          if (this.handleSaveGameUiMessage(action.message)) return;
+          if (this.saveCoordinator.handleUiMessage(action.message)) return;
           if (this.handleSettingsUiMessage(action.message)) return;
           this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
         },
@@ -2423,7 +2422,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         ...(this.localeRegistry ? { locale: this.localeRegistry } : {}),
         onMessageAction: (action) => {
           if (this.handleTravelUiMessage(action.message)) return;
-          if (this.handleSaveGameUiMessage(action.message)) return;
+          if (this.saveCoordinator.handleUiMessage(action.message)) return;
           if (this.handleSettingsUiMessage(action.message)) return;
           this.behaviorSubsystem.emitScriptMessage("ui-action", "ui", { message: action.message });
         },
@@ -2652,83 +2651,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
-   * Intercepts reserved save-game widget messages:
-   * - `save:write:<slot>`
-   * - `save:load:<slot>`
-   * - `save:delete:<slot>`
+   * Captures the current gameplay state into a save payload (delegated to by the
+   * {@link saveCoordinator}), or null when there is nothing savable yet. Stays in
+   * the shell because it reads the live game-mode/behavior/entity state.
    */
-  private handleSaveGameUiMessage(message: string): boolean {
-    const command = readSaveGameUiCommand(message);
-    if (!command) return false;
-    switch (command.kind) {
-      case "write":
-        this.writeSaveGameSlot(command.slot);
-        return true;
-      case "load":
-        this.loadSaveGameSlot(command.slot);
-        return true;
-      case "delete":
-        this.deleteSaveGameSlot(command.slot);
-        return true;
-    }
-  }
-
-  private writeSaveGameSlot(slot: SaveGameUiSlotId): void {
-    const payload = this.collectCurrentSaveState();
-    if (!this.saveGameStore || !payload) {
-      this.setSaveGameUiStatus(slot, "Save unavailable");
-      return;
-    }
-    const result = this.saveGameStore.writeSlot(slot, payload);
-    this.refreshSaveGameUiFields();
-    if (!result.ok) this.setSaveGameUiStatus(slot, "Save failed");
-    else this.uiStore.flush();
-  }
-
-  private loadSaveGameSlot(slot: SaveGameUiSlotId): void {
-    const envelope = this.saveGameStore?.readSlot(slot) ?? null;
-    if (!envelope) {
-      this.setSaveGameUiStatus(slot, "Empty");
-      return;
-    }
-    if (!this.requestSaveGameLoad(envelope.payload)) {
-      this.setSaveGameUiStatus(slot, "Load failed");
-      return;
-    }
-    this.uiSubsystem?.clearScreens();
-  }
-
-  private deleteSaveGameSlot(slot: SaveGameUiSlotId): void {
-    if (!this.saveGameStore) {
-      this.setSaveGameUiStatus(slot, "Save unavailable");
-      return;
-    }
-    const ok = this.saveGameStore.deleteSlot(slot);
-    this.refreshSaveGameUiFields();
-    if (!ok) this.setSaveGameUiStatus(slot, "Delete failed");
-    else this.uiStore.flush();
-  }
-
-  /**
-   * Writes an autosave from a `checkpoint` behavior into the named slot (P3.6).
-   * Reuses the same serialization path as the manual save menu; failures degrade
-   * to a console warning (crossing a checkpoint must never interrupt play). The
-   * save-game UI fields refresh so an open menu reflects the new autosave.
-   */
-  private writeCheckpointSave(slot: string): void {
-    if (!this.saveGameStore) return;
-    const payload = this.collectCurrentSaveState();
-    if (!payload) return;
-    const result = this.saveGameStore.writeSlot(slot, payload);
-    if (!result.ok) {
-      console.warn("[runtime] checkpoint save failed", slot);
-      return;
-    }
-    console.info("[runtime] checkpoint saved", slot);
-    this.refreshSaveGameUiFields();
-    this.uiStore.flush();
-  }
-
   private collectCurrentSaveState(): GameSaveState | null {
     if (!this.activeLevelPath) return null;
     const pawnId = this.gameModeSession?.playerState.pawnEntityId ?? null;
@@ -2738,25 +2664,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       playerTransform,
       persistentState: this.behaviorSubsystem.getPersistentStateSnapshot(),
     });
-  }
-
-  private refreshSaveGameUiFields(): void {
-    const slots = emptySaveGameUiSlots().map((view) => {
-      const envelope = this.saveGameStore?.readSlot(view.slot) ?? null;
-      return envelope
-        ? {
-            ...view,
-            updatedAt: envelope.updatedAt,
-            levelPath: envelope.payload.activeLevelPath,
-          }
-        : view;
-    });
-    this.uiStore.setFields(buildSaveGameUiFields(slots));
-  }
-
-  private setSaveGameUiStatus(slot: SaveGameUiSlotId, status: string): void {
-    this.uiStore.setField(`save.slots.${slot}.status`, status);
-    this.uiStore.flush();
   }
 
   /**
@@ -3324,14 +3231,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.locomotionReports.delete(entityId);
     this.characterMovementSubsystem.resetEntityTransform(entityId, reset);
     this.syncEntityTransform(entityId, reset);
-  }
-
-  private applyPendingSaveRestore(loadedLevelPath: string): void {
-    const result = consumeRestoreForLoadedLevel(this.pendingSaveRestore, loadedLevelPath);
-    this.pendingSaveRestore = result.pending;
-    if (!result.restore) return;
-    this.behaviorSubsystem.applyPersistentStateSnapshot(result.restore.persistentState);
-    if (result.restore.player) this.applySavedPlayerTransform(result.restore.player);
   }
 
   private applySavedPlayerTransform(player: SavedPlayerTransform): void {
