@@ -18,12 +18,14 @@ import {
   Object3D,
   PerspectiveCamera,
   PointLight,
+  Quaternion,
   Raycaster,
   RepeatWrapping,
   SRGBColorSpace,
   Scene,
   Texture,
   Vector2,
+  Vector3,
   type Material,
 } from "three";
 import { Pass } from "three/examples/jsm/postprocessing/Pass.js";
@@ -18001,7 +18003,7 @@ check("landscape spline apply is a no-op when no segment enables the effect", ()
   assert.deepEqual(applyLandscapeSplinePaint(data, straightSpline({})), { changed: false, bounds: null });
 });
 
-check("computeLandscapeSplineMeshInstances lays instances along the tangent", () => {
+check("computeLandscapeSplineMeshInstances fits each spline piece along its full tangent", () => {
   const spline: ForgeLandscapeSpline = {
     id: "road",
     points: [
@@ -18010,10 +18012,14 @@ check("computeLandscapeSplineMeshInstances lays instances along the tangent", ()
     ],
     segments: [{ id: "s0", startPointId: "p0", endPointId: "p1", mesh: { enabled: true, assetId: "post", spacing: 5 } }],
   };
-  const instances = computeLandscapeSplineMeshInstances(spline);
+  const instances = computeLandscapeSplineMeshInstances(spline, { meshForwardLengths: new Map([["post", 10]]) });
+  /* Legacy spacing-count expectation (superseded by fitted pieces):
   assert.equal(instances.length, 4); // length 20, spacing 5, centered → 2.5/7.5/12.5/17.5
-  assert.deepEqual(instances[0]!.position, [-7.5, 2, 0]);
+  */
+  assert.equal(instances.length, 1);
+  assert.deepEqual(instances[0]!.position, [0, 2, 0]);
   assert.equal(instances[0]!.rotation[1], 90); // atan2(dx=20, dz=0)
+  assert.equal(instances[0]!.scale[2], 2);
   assert.equal(instances.every((instance) => instance.assetId === "post"), true);
   assert.deepEqual(landscapeSplineMeshAssetIds({ splines: [spline] }), ["post"]);
 
@@ -18024,6 +18030,43 @@ check("computeLandscapeSplineMeshInstances lays instances along the tangent", ()
     segments: [{ ...spline.segments[0]!, mesh: { enabled: true, assetId: "post", spacing: 5, yawOffset: -90 } }],
   };
   assert.equal(computeLandscapeSplineMeshInstances(offsetSpline)[0]!.rotation[1], 0);
+});
+
+check("computeLandscapeSplineMeshInstances carries pitch and terrain-normal alignment in its quaternion", () => {
+  const slope: ForgeLandscapeSpline = {
+    id: "slope",
+    points: [
+      { id: "p0", position: [0, 0, -10], width: 4, falloff: 2 },
+      { id: "p1", position: [0, 10, 10], width: 4, falloff: 2 },
+    ],
+    segments: [{ id: "s0", startPointId: "p0", endPointId: "p1", mesh: { enabled: true, assetId: "road", alignToTerrain: true, bank: 10 } }],
+  };
+  const terrain = createFlatLandscapeData("small");
+  // Rise one unit per +X grid step so a terrain-aligned up vector tilts toward -X.
+  terrain.heights = terrain.heights.map((_, index) => index % terrain.size.verticesX);
+  const instance = computeLandscapeSplineMeshInstances(slope, {
+    landscape: terrain,
+    meshForwardLengths: new Map([["road", 10]]),
+  })[0]!;
+  assert.equal(instance.rotation[0], -26.565);
+  assert.equal(instance.scale[2], 2.236068);
+  const orientation = new Quaternion(...instance.orientation);
+  const forward = new Vector3(0, 0, 1).applyQuaternion(orientation);
+  const up = new Vector3(0, 1, 0).applyQuaternion(orientation);
+  assert.ok(forward.y > 0.4, `expected pitched forward vector, got ${forward.toArray()}`);
+  assert.ok(up.x < -0.1, `expected terrain-aligned up vector, got ${up.toArray()}`);
+  const savedSpline: ForgeLandscapeSpline = {
+    ...slope,
+    segments: [{ ...slope.segments[0]!, mesh: { ...slope.segments[0]!.mesh!, fitToLength: false } }],
+  };
+  const saved = validateLandscapeData({ ...terrain, splines: [savedSpline] }) as ForgeLandscapeData;
+  assert.deepEqual(saved.splines?.[0]?.segments[0]?.mesh, {
+    enabled: true,
+    assetId: "road",
+    fitToLength: false,
+    alignToTerrain: true,
+    bank: 10,
+  });
 });
 
 check("landscape splines support shared-point branches and closed loops", () => {

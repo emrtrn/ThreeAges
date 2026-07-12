@@ -17,6 +17,10 @@
           "scale": 3
         }
       ]
+    },
+    {
+      "assetId": "sm-road-asphalt",
+      "placements": []
     }
   ],
   "characters": [],

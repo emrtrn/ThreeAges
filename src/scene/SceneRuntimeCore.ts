@@ -4,6 +4,8 @@ import {
   Box3,
   Color,
   Group,
+  Matrix4,
+  Quaternion,
   SRGBColorSpace,
   Scene,
   Vector3,
@@ -37,6 +39,7 @@ import {
   entityCharacterItem,
   entityInstanceItems,
 } from "@engine/render-three/models";
+import type { InstanceRenderItem } from "@engine/render-three/models";
 import {
   createLightObject as createThreeLightObject,
   entityLightItem,
@@ -272,7 +275,7 @@ export function buildSceneInstancedModel(options: {
  * referenced assets are loaded). Assets absent from `models` are skipped.
  */
 export function buildLandscapeSplineMeshGroup(options: {
-  data: Pick<ForgeLandscapeData, "splines">;
+  data: ForgeLandscapeData;
   models: ReadonlyMap<string, GLTF>;
   castShadow: boolean;
   receiveShadow: boolean;
@@ -285,26 +288,40 @@ export function buildLandscapeSplineMeshGroup(options: {
    */
   applyMaterialSlots?: (assetId: string, assetGroup: Group) => void;
 }): { group: Group; meshes: InstancedMesh[] } | null {
-  const placementsByAsset = new Map<string, LayoutPlacement[]>();
+  const itemsByAsset = new Map<string, InstanceRenderItem[]>();
+  const meshForwardLengths = new Map<string, number>();
+  for (const [assetId, gltf] of options.models) {
+    gltf.scene.updateMatrixWorld(true);
+    const bounds = new Box3().setFromObject(gltf.scene);
+    const length = bounds.max.z - bounds.min.z;
+    if (length > 1e-6) meshForwardLengths.set(assetId, length);
+  }
   for (const spline of options.data.splines ?? []) {
-    for (const instance of computeLandscapeSplineMeshInstances(spline)) {
-      const list = placementsByAsset.get(instance.assetId) ?? [];
-      list.push({ position: instance.position, rotation: instance.rotation, scale: instance.scale });
-      placementsByAsset.set(instance.assetId, list);
+    for (const instance of computeLandscapeSplineMeshInstances(spline, { landscape: options.data, meshForwardLengths })) {
+      const list = itemsByAsset.get(instance.assetId) ?? [];
+      list.push({
+        matrix: new Matrix4().compose(
+          new Vector3(...instance.position),
+          new Quaternion(...instance.orientation),
+          new Vector3(...instance.scale),
+        ),
+        hidden: false,
+      });
+      itemsByAsset.set(instance.assetId, list);
     }
   }
-  if (placementsByAsset.size === 0) return null;
+  if (itemsByAsset.size === 0) return null;
 
   const group = new Group();
   group.name = "LandscapeSplineMeshes";
   const meshes: InstancedMesh[] = [];
-  for (const [assetId, placements] of placementsByAsset) {
+  for (const [assetId, items] of itemsByAsset) {
     const gltf = options.models.get(assetId);
     if (!gltf) continue;
-    const built = buildSceneInstancedModel({
+    const built = createInstancedModelGroup({
       assetId,
       gltf,
-      placements,
+      items,
       castShadow: options.castShadow,
       receiveShadow: options.receiveShadow,
     });

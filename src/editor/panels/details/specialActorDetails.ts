@@ -219,7 +219,10 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       <label class="detail-row"><span>Mesh</span><select data-landscape-segment-mesh ${lockedAttr}>${segmentMeshOptions}</select></label>
       <label class="detail-row"><span>Mesh Spacing</span><input data-landscape-segment-number="mesh.spacing" type="number" min="0.01" step="0.1" value="${activeSegment.mesh.spacing}" ${lockedAttr} /></label>
       <label class="detail-row"><span>Mesh Yaw</span><input data-landscape-segment-number="mesh.yawOffset" type="number" step="15" value="${activeSegment.mesh.yawOffset}" ${lockedAttr} /></label>
-      <div class="detail-hint">Mesh length runs along its local +Z axis; set Mesh Yaw (deg) if the mesh points sideways.</div>
+      <label class="detail-row"><span>Mesh Bank</span><input data-landscape-segment-number="mesh.bank" type="number" step="5" value="${activeSegment.mesh.bank}" ${lockedAttr} /></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.fitToLength" ${activeSegment.mesh.fitToLength ? "checked" : ""} ${lockedAttr} /><span>Fit Mesh To Segment</span></label>
+      <label class="detail-toggle"><input type="checkbox" data-landscape-segment-flag="mesh.alignToTerrain" ${activeSegment.mesh.alignToTerrain ? "checked" : ""} ${lockedAttr} /><span>Align To Terrain</span></label>
+      <div class="detail-hint">Mesh length runs along local +Z. Fit fills each curve piece; Terrain alignment uses the sampled terrain normal.</div>
       <div class="landscape-heightmap-actions">
         <button type="button" class="detail-action-button" data-landscape-spline-apply-deform ${lockedAttr}>Apply Deform</button>
         <button type="button" class="detail-action-button" data-landscape-spline-apply-paint ${lockedAttr}>Apply Paint</button>
@@ -513,7 +516,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const key = input.dataset.landscapeSegmentFlag as
         | `deform.${"enabled" | "flatten" | "raiseTerrain" | "lowerTerrain"}`
         | `paint.enabled`
-        | `mesh.enabled`
+        | `mesh.${"enabled" | "fitToLength" | "alignToTerrain"}`
         | undefined;
       if (!segmentId || !key) return;
       const [group, flag] = key.split(".") as [string, string];
@@ -529,6 +532,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         | "paint.strength"
         | "mesh.spacing"
         | "mesh.yawOffset"
+        | "mesh.bank"
         | undefined;
       const value = Number(input.value);
       if (!segmentId || !key || !Number.isFinite(value)) return;

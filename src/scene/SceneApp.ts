@@ -561,7 +561,7 @@ export interface LandscapeSplineSegmentView {
   endPointId: string;
   deform: { enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number };
   paint: { enabled: boolean; layerId: string; strength: number };
-  mesh: { enabled: boolean; assetId: string; spacing: number; yawOffset: number };
+  mesh: { enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number };
 }
 
 /** The spline control point the move gizmo targets (Faz 6.1), with its world anchor. */
@@ -578,7 +578,7 @@ interface LandscapeSplinePointGizmoTarget {
 export interface LandscapeSplineSegmentPatch {
   deform?: Partial<{ enabled: boolean; raiseTerrain: boolean; lowerTerrain: boolean; flatten: boolean; targetOffset: number }>;
   paint?: Partial<{ enabled: boolean; layerId: string; strength: number }>;
-  mesh?: Partial<{ enabled: boolean; assetId: string; spacing: number; yawOffset: number }>;
+  mesh?: Partial<{ enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number }>;
 }
 
 /**
@@ -5829,6 +5829,9 @@ export class SceneApp {
         assetId: segment.mesh?.assetId ?? "",
         spacing: segment.mesh?.spacing ?? 2,
         yawOffset: segment.mesh?.yawOffset ?? 0,
+        fitToLength: segment.mesh?.fitToLength !== false,
+        alignToTerrain: segment.mesh?.alignToTerrain ?? false,
+        bank: segment.mesh?.bank ?? 0,
       },
     }));
   }
@@ -5870,6 +5873,7 @@ export class SceneApp {
       const current = segment.mesh ?? { enabled: false, assetId: "" };
       const assetId = patch.mesh.assetId ?? current.assetId;
       const yawOffset = round(patch.mesh.yawOffset ?? current.yawOffset ?? 0);
+      const bank = round(patch.mesh.bank ?? current.bank ?? 0);
       segment.mesh = {
         enabled: patch.mesh.enabled ?? current.enabled,
         assetId,
@@ -5877,9 +5881,11 @@ export class SceneApp {
           ? { spacing: Math.max(0.01, round(patch.mesh.spacing ?? current.spacing ?? 2)) }
           : {}),
         ...(yawOffset ? { yawOffset } : {}),
+        ...(patch.mesh.fitToLength === false ? { fitToLength: false } : current.fitToLength === false ? { fitToLength: false } : {}),
         ...(current.scale ? { scale: current.scale } : {}),
         ...(current.offset ? { offset: current.offset } : {}),
-        ...(current.alignToTerrain !== undefined ? { alignToTerrain: current.alignToTerrain } : {}),
+        ...((patch.mesh.alignToTerrain ?? current.alignToTerrain) ? { alignToTerrain: true } : {}),
+        ...(bank ? { bank } : {}),
         ...(current.collision !== undefined ? { collision: current.collision } : {}),
       };
     }

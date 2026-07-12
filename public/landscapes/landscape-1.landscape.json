@@ -83319,7 +83319,8 @@
           "mesh": {
             "enabled": true,
             "assetId": "sm-road-asphalt",
-            "spacing": 7
+            "spacing": 14,
+            "yawOffset": 90
           }
         },
         {
@@ -83340,7 +83341,8 @@
           "mesh": {
             "enabled": true,
             "assetId": "sm-road-asphalt",
-            "spacing": 7
+            "spacing": 14,
+            "yawOffset": 90
           }
         },
         {
@@ -83361,7 +83363,8 @@
           "mesh": {
             "enabled": true,
             "assetId": "sm-road-asphalt",
-            "spacing": 7
+            "spacing": 14,
+            "yawOffset": 90
           }
         },
         {
@@ -83382,7 +83385,8 @@
           "mesh": {
             "enabled": true,
             "assetId": "sm-road-asphalt",
-            "spacing": 7
+            "spacing": 14,
+            "yawOffset": 90
           }
         },
         {
@@ -83403,7 +83407,8 @@
           "mesh": {
             "enabled": true,
             "assetId": "sm-road-asphalt",
-            "spacing": 7
+            "spacing": 14,
+            "yawOffset": 90
           }
         }
       ],

@@ -164,7 +164,11 @@ export interface ForgeLandscapeSplineSegment {
      * along another axis (e.g. 90 for a mesh whose length runs along X).
      */
     yawOffset?: number;
+    /** Stretch the mesh's local +Z length to fill each resolved spline piece. Defaults to true. */
+    fitToLength?: boolean;
     alignToTerrain?: boolean;
+    /** Roll in degrees around the spline tangent, after terrain/world-up alignment. */
+    bank?: number;
     collision?: boolean;
   };
 }
@@ -235,9 +239,18 @@ export interface LandscapeSplineMeshInstance {
   assetId: string;
   /** Landscape-local position (matches the height/point coordinate frame). */
   position: Vec3;
-  /** Euler degrees; yaw follows the segment tangent, pitch/roll are 0 in Faz 6. */
+  /** Euler degrees retained for inspectability and legacy callers. */
   rotation: Vec3;
+  /** Full orientation `[x, y, z, w]`; renderers must prefer this over `rotation`. */
+  orientation: [number, number, number, number];
   scale: Vec3;
+}
+
+export interface ComputeLandscapeSplineMeshInstancesOptions {
+  /** Landscape data used only when a mesh opts into terrain-normal alignment. */
+  landscape?: ForgeLandscapeData;
+  /** Base-model local +Z lengths, supplied by the render host from loaded bounds. */
+  meshForwardLengths?: ReadonlyMap<string, number>;
 }
 
 /** Uniform Catmull-Rom interpolation of four control positions at `u` in [0,1]. */
@@ -330,14 +343,14 @@ export function splineToPolyline(
 }
 
 /**
- * Distributes static-mesh instances along a spline's mesh-enabled segments at the
- * configured spacing (Faz 6 first version: instanced layout, no true mesh
- * deformation; Faz 6.2a: follows the smoothed centerline). Instances are centered
- * within each spacing step so shared joint points don't double-place. Yaw aligns
- * each instance to the local (sub-)segment tangent.
+ * Resolves one instanced static-mesh placement for every straight piece of a
+ * mesh-enabled spline segment. The mesh's local +Z axis follows the full 3D
+ * tangent; with `fitToLength` (the default) its +Z scale fills the piece exactly.
+ * This is intentionally still instanced geometry, not true vertex deformation.
  */
 export function computeLandscapeSplineMeshInstances(
   spline: ForgeLandscapeSpline,
+  options: ComputeLandscapeSplineMeshInstancesOptions = {},
 ): LandscapeSplineMeshInstance[] {
   const subsBySegment = new Map<string, LandscapeSplineSubSegment[]>();
   for (const sub of splineToPolyline(spline)) {
@@ -351,48 +364,117 @@ export function computeLandscapeSplineMeshInstances(
     if (!mesh || !mesh.enabled || !mesh.assetId) continue;
     const subs = subsBySegment.get(segment.id);
     if (!subs || subs.length === 0) continue;
-    // Centerline vertices for this segment: first start, then each sub-segment end.
-    const verts: Vec3[] = [subs[0]!.start.position, ...subs.map((sub) => sub.end.position)];
-    const edgeLengths: number[] = [];
-    let total = 0;
-    for (let i = 0; i < verts.length - 1; i += 1) {
-      const len = Math.hypot(verts[i + 1]![0] - verts[i]![0], verts[i + 1]![2] - verts[i]![2]);
-      edgeLengths.push(len);
-      total += len;
-    }
-    if (total <= 1e-6) continue;
-    const spacing = Math.max(0.01, mesh.spacing ?? 2);
     const offset = mesh.offset ?? [0, 0, 0];
     const scale = mesh.scale ?? [1, 1, 1];
     const yawOffset = mesh.yawOffset ?? 0;
-    for (let distance = spacing / 2; distance <= total + 1e-6; distance += spacing) {
-      let edge = 0;
-      let consumed = 0;
-      while (edge < edgeLengths.length - 1 && consumed + edgeLengths[edge]! < distance) {
-        consumed += edgeLengths[edge]!;
-        edge += 1;
-      }
-      const edgeLength = edgeLengths[edge] || 1e-6;
-      const local = Math.min(1, Math.max(0, (distance - consumed) / edgeLength));
-      const a = verts[edge]!;
-      const b = verts[edge + 1]!;
+    const bank = mesh.bank ?? 0;
+    const forwardLength = options.meshForwardLengths?.get(mesh.assetId);
+    const fitToLength = mesh.fitToLength !== false && !!forwardLength && forwardLength > 1e-6;
+    const spacing = Math.max(0.01, mesh.spacing ?? 2);
+    for (const sub of subs) {
+      const a = sub.start.position;
+      const b = sub.end.position;
       const dx = b[0] - a[0];
       const dy = b[1] - a[1];
       const dz = b[2] - a[2];
-      const yawDeg = Number((((Math.atan2(dx, dz) * 180) / Math.PI) + yawOffset).toFixed(3));
-      instances.push({
-        assetId: mesh.assetId,
-        position: [
-          Number((a[0] + dx * local + offset[0]).toFixed(3)),
-          Number((a[1] + dy * local + offset[1]).toFixed(3)),
-          Number((a[2] + dz * local + offset[2]).toFixed(3)),
-        ],
-        rotation: [0, yawDeg, 0],
-        scale: [scale[0], scale[1], scale[2]],
-      });
+      const length = Math.hypot(dx, dy, dz);
+      if (length <= 1e-6) continue;
+      const pieces = fitToLength ? 1 : Math.max(1, Math.ceil(length / spacing));
+      for (let piece = 0; piece < pieces; piece += 1) {
+        const startT = piece / pieces;
+        const endT = (piece + 1) / pieces;
+        const start: Vec3 = [a[0] + dx * startT, a[1] + dy * startT, a[2] + dz * startT];
+        const end: Vec3 = [a[0] + dx * endT, a[1] + dy * endT, a[2] + dz * endT];
+        const pieceLength = length / pieces;
+        const yawDeg = Number((((Math.atan2(dx, dz) * 180) / Math.PI) + yawOffset).toFixed(3));
+        const pitchDeg = Number(((-Math.atan2(dy, Math.hypot(dx, dz)) * 180) / Math.PI).toFixed(3));
+        const orientation = splineMeshOrientation(
+          [dx / length, dy / length, dz / length],
+          yawOffset,
+          bank,
+          mesh.alignToTerrain === true && options.landscape
+            ? landscapeNormalAtLocal(options.landscape, (start[0] + end[0]) / 2, (start[2] + end[2]) / 2)
+            : [0, 1, 0],
+        );
+        const fitScaleZ = fitToLength ? pieceLength / forwardLength! : 1;
+        instances.push({
+          assetId: mesh.assetId,
+          position: [
+            Number(((start[0] + end[0]) / 2 + offset[0]).toFixed(3)),
+            Number(((start[1] + end[1]) / 2 + offset[1]).toFixed(3)),
+            Number(((start[2] + end[2]) / 2 + offset[2]).toFixed(3)),
+          ],
+          rotation: [pitchDeg, yawDeg, bank],
+          orientation,
+          scale: [scale[0], scale[1], Number((scale[2] * fitScaleZ).toFixed(6))],
+        });
+      }
     }
   }
   return instances;
+}
+
+function cross(a: Vec3, b: Vec3): Vec3 {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
+function normalize(vector: Vec3): Vec3 {
+  const length = Math.hypot(vector[0], vector[1], vector[2]);
+  return length > 1e-6 ? [vector[0] / length, vector[1] / length, vector[2] / length] : [0, 1, 0];
+}
+
+function rotateAroundAxis(vector: Vec3, axis: Vec3, degrees: number): Vec3 {
+  if (Math.abs(degrees) <= 1e-6) return vector;
+  const radians = (degrees * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const dot = vector[0] * axis[0] + vector[1] * axis[1] + vector[2] * axis[2];
+  const perpendicular = cross(axis, vector);
+  return [
+    vector[0] * cosine + perpendicular[0] * sine + axis[0] * dot * (1 - cosine),
+    vector[1] * cosine + perpendicular[1] * sine + axis[1] * dot * (1 - cosine),
+    vector[2] * cosine + perpendicular[2] * sine + axis[2] * dot * (1 - cosine),
+  ];
+}
+
+/** Quaternion from a local frame whose columns are local +X, +Y, and +Z. */
+function quaternionFromBasis(right: Vec3, up: Vec3, forward: Vec3): [number, number, number, number] {
+  const m11 = right[0]; const m12 = up[0]; const m13 = forward[0];
+  const m21 = right[1]; const m22 = up[1]; const m23 = forward[1];
+  const m31 = right[2]; const m32 = up[2]; const m33 = forward[2];
+  const trace = m11 + m22 + m33;
+  let x: number; let y: number; let z: number; let w: number;
+  if (trace > 0) {
+    const s = 0.5 / Math.sqrt(trace + 1);
+    w = 0.25 / s; x = (m32 - m23) * s; y = (m13 - m31) * s; z = (m21 - m12) * s;
+  } else if (m11 > m22 && m11 > m33) {
+    const s = 2 * Math.sqrt(1 + m11 - m22 - m33);
+    w = (m32 - m23) / s; x = 0.25 * s; y = (m12 + m21) / s; z = (m13 + m31) / s;
+  } else if (m22 > m33) {
+    const s = 2 * Math.sqrt(1 + m22 - m11 - m33);
+    w = (m13 - m31) / s; x = (m12 + m21) / s; y = 0.25 * s; z = (m23 + m32) / s;
+  } else {
+    const s = 2 * Math.sqrt(1 + m33 - m11 - m22);
+    w = (m21 - m12) / s; x = (m13 + m31) / s; y = (m23 + m32) / s; z = 0.25 * s;
+  }
+  return [x, y, z, w].map((value) => Number(value.toFixed(8))) as [number, number, number, number];
+}
+
+function splineMeshOrientation(forward: Vec3, yawOffset: number, bank: number, upHint: Vec3): [number, number, number, number] {
+  let alignedForward = normalize(rotateAroundAxis(forward, normalize(upHint), yawOffset));
+  let right = cross(normalize(upHint), alignedForward);
+  if (Math.hypot(...right) <= 1e-6) right = cross([0, 0, 1], alignedForward);
+  right = normalize(right);
+  let up = normalize(cross(alignedForward, right));
+  if (Math.abs(bank) > 1e-6) {
+    right = normalize(rotateAroundAxis(right, alignedForward, bank));
+    up = normalize(cross(alignedForward, right));
+  }
+  return quaternionFromBasis(right, up, alignedForward);
 }
 
 /** All static-mesh asset ids referenced by a landscape's spline mesh segments. */
@@ -859,6 +941,33 @@ function landscapeHeightAt(data: ForgeLandscapeData, x: number, z: number): numb
   const cx = Math.min(Math.max(x, 0), verticesX - 1);
   const cz = Math.min(Math.max(z, 0), verticesZ - 1);
   return data.heights[cz * verticesX + cx] ?? 0;
+}
+
+/** Bilinearly samples terrain height in landscape-local X/Z coordinates. */
+export function landscapeHeightAtLocal(data: ForgeLandscapeData, localX: number, localZ: number): number {
+  const { verticesX, verticesZ, spacing, heightScale } = data.size;
+  const { originX, originZ } = landscapeGridOrigin(data.size);
+  const gridX = Math.min(verticesX - 1, Math.max(0, (localX + originX) / spacing));
+  const gridZ = Math.min(verticesZ - 1, Math.max(0, (localZ + originZ) / spacing));
+  const x0 = Math.floor(gridX);
+  const z0 = Math.floor(gridZ);
+  const x1 = Math.min(verticesX - 1, x0 + 1);
+  const z1 = Math.min(verticesZ - 1, z0 + 1);
+  const tx = gridX - x0;
+  const tz = gridZ - z0;
+  const top = landscapeHeightAt(data, x0, z0) * (1 - tx) + landscapeHeightAt(data, x1, z0) * tx;
+  const bottom = landscapeHeightAt(data, x0, z1) * (1 - tx) + landscapeHeightAt(data, x1, z1) * tx;
+  return (top * (1 - tz) + bottom * tz) * heightScale;
+}
+
+/** Up-facing terrain normal in landscape-local coordinates. */
+function landscapeNormalAtLocal(data: ForgeLandscapeData, localX: number, localZ: number): Vec3 {
+  const step = Math.max(data.size.spacing, 0.001);
+  const left = landscapeHeightAtLocal(data, localX - step, localZ);
+  const right = landscapeHeightAtLocal(data, localX + step, localZ);
+  const down = landscapeHeightAtLocal(data, localX, localZ - step);
+  const up = landscapeHeightAtLocal(data, localX, localZ + step);
+  return normalize([left - right, 2 * step, down - up]);
 }
 
 function landscapePointAabb(points: readonly Vec3[]): { size: Vec3; center: Vec3 } {

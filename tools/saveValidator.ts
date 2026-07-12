@@ -1155,12 +1155,18 @@ function validateLandscapeSplines(value: unknown): Record<string, unknown>[] {
         if (spacing !== undefined) meshResult.spacing = spacing;
         const yawOffset = validateOptionalNumber(mesh.yawOffset, `${segmentPath}.mesh.yawOffset`, -360, 360);
         if (yawOffset !== undefined) meshResult.yawOffset = yawOffset;
+        if (mesh.fitToLength !== undefined) {
+          if (typeof mesh.fitToLength !== "boolean") throw new Error(`${segmentPath}.mesh.fitToLength must be a boolean`);
+          meshResult.fitToLength = mesh.fitToLength;
+        }
         if (mesh.scale !== undefined) meshResult.scale = validateLandscapeSplineVec3(mesh.scale, `${segmentPath}.mesh.scale`);
         if (mesh.offset !== undefined) meshResult.offset = validateLandscapeSplineVec3(mesh.offset, `${segmentPath}.mesh.offset`);
         if (mesh.alignToTerrain !== undefined) {
           if (typeof mesh.alignToTerrain !== "boolean") throw new Error(`${segmentPath}.mesh.alignToTerrain must be a boolean`);
           meshResult.alignToTerrain = mesh.alignToTerrain;
         }
+        const bank = validateOptionalNumber(mesh.bank, `${segmentPath}.mesh.bank`, -360, 360);
+        if (bank !== undefined) meshResult.bank = bank;
         if (mesh.collision !== undefined) {
           if (typeof mesh.collision !== "boolean") throw new Error(`${segmentPath}.mesh.collision must be a boolean`);
           meshResult.collision = mesh.collision;
