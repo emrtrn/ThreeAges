@@ -42,6 +42,14 @@ import {
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
 import { normalizeAssetCollisionDef } from "../src/scene/assetCollisionLoader";
 import {
+  buildGameModeDebugSnapshot,
+  buildPerfMemorySnapshot,
+  buildUiDebugSnapshot,
+} from "../src/scene/runtimeDebugSnapshot";
+import { RuntimeActorSpawnCoordinator } from "../src/scene/runtimeActorSpawnCoordinator";
+import { normalizeActorScriptDef } from "../engine/scene/actorScript";
+import type { ActorSpawnRequest } from "../engine/behavior/behaviorSubsystem";
+import {
   readAIControllerComponent,
   readAudioComponent,
   readBehaviorComponent,
@@ -694,11 +702,13 @@ import {
   Bone,
   Box3,
   BoxGeometry,
+  BufferGeometry,
   Color,
   DirectionalLight,
   Euler,
   Fog,
   FogExp2,
+  Float32BufferAttribute,
   Mesh,
   NeutralToneMapping,
   NoToneMapping,
@@ -1218,6 +1228,71 @@ check("deformSplineMeshGeometry bends local +Z geometry along the sampled spline
   assert.ok(deformed.getAttribute("normal"), "deformed geometry should recalculate normals");
 });
 
+check("deformSplineMeshGeometry continues the UV component that follows the source path", () => {
+  // SM_Asphalt has this effective layout after its GLTF node transform: local
+  // +Z is the road length and `u`, not `v`, moves along that length.
+  const geometry = new BufferGeometry();
+  geometry.setAttribute("position", new Float32BufferAttribute([
+    -1, 0, -5, 1, 0, -5,
+    -1, 0, 5, 1, 0, 5,
+  ], 3));
+  geometry.setAttribute("uv", new Float32BufferAttribute([
+    0, 0, 0, 1,
+    1, 0, 1, 1,
+  ], 2));
+  geometry.setIndex([0, 1, 2, 1, 3, 2]);
+  const deformed = deformSplineMeshGeometry(geometry, {
+    assetId: "asphalt",
+    points: [[0, 0, 0], [0, 0, 10]],
+    scale: [1, 1, 1],
+    offset: [0, 0, 0],
+    yawOffset: 0,
+    bank: 0,
+    alignToTerrain: false,
+    distanceStart: 10,
+  }, createFlatLandscapeData("small"));
+  assert.ok(deformed);
+  const uv = deformed.getAttribute("uv");
+  assert.deepEqual(Array.from({ length: uv.count }, (_, index) => uv.getX(index)), [1, 1, 2, 2]);
+  assert.deepEqual(Array.from({ length: uv.count }, (_, index) => uv.getY(index)), [0, 1, 0, 1]);
+});
+
+check("deformSplineMeshGeometry shares one chain frame at authored segment joins", () => {
+  const strip = (): BufferGeometry => {
+    const geometry = new BufferGeometry();
+    geometry.setAttribute("position", new Float32BufferAttribute([
+      -2, 0, -5, 2, 0, -5,
+      -2, 0, 5, 2, 0, 5,
+    ], 3));
+    geometry.setAttribute("uv", new Float32BufferAttribute([0, 0, 1, 0, 0, 1, 1, 1], 2));
+    geometry.setIndex([0, 1, 2, 1, 3, 2]);
+    return geometry;
+  };
+  const chainPath = [[0, 0, 0], [0, 0, 10], [10, 0, 10]] as const;
+  const basePath = {
+    assetId: "road",
+    points: chainPath,
+    scale: [1, 1, 1] as Vec3,
+    offset: [0, 0, 0] as Vec3,
+    yawOffset: 0,
+    bank: 0,
+    alignToTerrain: false,
+    recomputeNormals: false,
+  };
+  const landscape = createFlatLandscapeData("small");
+  const first = deformSplineMeshGeometry(strip(), { ...basePath, pathDistanceStart: 0, pathDistanceEnd: 10 }, landscape)!;
+  const second = deformSplineMeshGeometry(strip(), { ...basePath, distanceStart: 10, pathDistanceStart: 10, pathDistanceEnd: 20 }, landscape)!;
+  const point = (geometry: BufferGeometry, index: number): number[] => {
+    const positions = geometry.getAttribute("position");
+    return [positions.getX(index), positions.getY(index), positions.getZ(index)].map((value) => Number(value.toFixed(6)));
+  };
+  // First source mesh ends at indices 2/3; second starts at 0/1. Both derive
+  // their tangent/frame from the global chain at distance 10, so weld can
+  // collapse these pairs instead of leaving an outer-edge wedge.
+  assert.deepEqual(point(first, 2), point(second, 0));
+  assert.deepEqual(point(first, 3), point(second, 1));
+});
+
 check("buildLandscapeSplineMeshGroup uses unique geometry for an opt-in deformed spline", () => {
   const data = createFlatLandscapeData("small");
   data.splines = [{
@@ -1271,9 +1346,10 @@ check("deformed spline chains weld compatible pieces and keep UV phase continuou
   assert.equal(group.children.length, 1, "one primitive over a chain should become one draw mesh");
   const mesh = group.children[0] as Mesh;
   const uv = mesh.geometry.getAttribute("uv");
+  const u = Array.from({ length: uv.count }, (_, index) => uv.getX(index));
   const v = Array.from({ length: uv.count }, (_, index) => uv.getY(index));
-  assert.ok(Math.min(...v) <= 0.001);
-  assert.ok(Math.max(...v) >= 1.999, "the second piece must continue rather than restart UV.v");
+  assert.ok(Math.min(...u) <= 0.001 || Math.min(...v) <= 0.001);
+  assert.ok(Math.max(...u) >= 1.999 || Math.max(...v) >= 1.999, "the second piece must continue rather than restart its longitudinal UV");
   assert.ok(mesh.geometry.getAttribute("normal"), "normals are generated after welding");
 });
 
@@ -24204,6 +24280,204 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
   // Montage resolver is pure and safe on empty/absent input.
   assert.deepEqual(catalog.resolveMontageBindings(undefined), []);
   assert.deepEqual(catalog.resolveMontageBindings([]), []);
+});
+
+// Runtime `?debug` snapshot builders (P2.5): pure, side-effect-free, so the
+// null-branching + default-fallback logic is exercised without a live scene.
+check("buildPerfMemorySnapshot passes render memory through and reads the JS heap", () => {
+  const render = { geometries: 3, textures: 4, programs: 2 } as unknown as Parameters<
+    typeof buildPerfMemorySnapshot
+  >[0];
+  const snapshot = buildPerfMemorySnapshot(render);
+  assert.equal(snapshot.render, render);
+  // performance.memory is Chrome-only; under node it is absent → null heap fields.
+  const hasPerfMemory =
+    typeof performance !== "undefined" &&
+    typeof (performance as { memory?: unknown }).memory !== "undefined";
+  if (!hasPerfMemory) {
+    assert.equal(snapshot.jsHeapBytes, null);
+    assert.equal(snapshot.jsHeapLimitBytes, null);
+  }
+});
+
+check("buildGameModeDebugSnapshot nulls pawn fields when nothing is possessed", () => {
+  const snapshot = buildGameModeDebugSnapshot({
+    activeGameModeName: null,
+    possessed: null,
+    inputMode: "ui",
+    cameraDebug: undefined,
+    locomotionReportOf: () => {
+      throw new Error("must not query locomotion when unpossessed");
+    },
+    movementModeOf: () => {
+      throw new Error("must not query movement mode when unpossessed");
+    },
+    positionOf: () => {
+      throw new Error("must not query position when unpossessed");
+    },
+  });
+  assert.equal(snapshot.gameMode, "—");
+  assert.equal(snapshot.possessed, null);
+  assert.equal(snapshot.movementMode, null);
+  assert.equal(snapshot.grounded, null);
+  assert.equal(snapshot.velocityY, null);
+  assert.equal(snapshot.planarSpeed, null);
+  assert.equal(snapshot.position, null);
+  assert.equal(snapshot.controlYawDeg, null);
+  assert.equal(snapshot.inputMode, "ui");
+});
+
+check("buildGameModeDebugSnapshot resolves possessed pawn state via lookups", () => {
+  const snapshot = buildGameModeDebugSnapshot({
+    activeGameModeName: "Platformer",
+    possessed: "pawn:0",
+    inputMode: "game",
+    cameraDebug: { controlYawDeg: 90, controlPitchDeg: -10, cameraSource: "SpringArm" },
+    locomotionReportOf: (id) => {
+      assert.equal(id, "pawn:0");
+      return { grounded: true, velocityY: -1.5, planarSpeed: 4.2 } as unknown as ReturnType<
+        Parameters<typeof buildGameModeDebugSnapshot>[0]["locomotionReportOf"]
+      >;
+    },
+    movementModeOf: () => "walking",
+    positionOf: () => [1, 2, 3],
+  });
+  assert.equal(snapshot.gameMode, "Platformer");
+  assert.equal(snapshot.possessed, "pawn:0");
+  assert.equal(snapshot.movementMode, "walking");
+  assert.equal(snapshot.grounded, true);
+  assert.equal(snapshot.velocityY, -1.5);
+  assert.equal(snapshot.planarSpeed, 4.2);
+  assert.deepEqual(snapshot.position, [1, 2, 3]);
+  assert.equal(snapshot.controlYawDeg, 90);
+  assert.equal(snapshot.controlPitchDeg, -10);
+  assert.equal(snapshot.cameraSource, "SpringArm");
+  assert.equal(snapshot.inputMode, "game");
+});
+
+check("buildUiDebugSnapshot returns empty layers before the UI host boots", () => {
+  const world = { count: 0, visible: 0 };
+  const snapshot = buildUiDebugSnapshot({ host: null, fields: [], locale: null, world });
+  assert.equal(snapshot.hud, null);
+  assert.deepEqual(snapshot.screens, []);
+  assert.deepEqual(snapshot.audit, []);
+  assert.equal(snapshot.locale, null);
+  assert.equal(snapshot.world, world);
+});
+
+check("buildUiDebugSnapshot mirrors the mounted host layers, fields and locale", () => {
+  const fields: Array<[string, string]> = [["player.speed", "4.2"]];
+  const world = { count: 2, visible: 1 };
+  const snapshot = buildUiDebugSnapshot({
+    host: { hud: "HUD_Main", screens: ["Menu_Pause"], audit: ["missing label"] },
+    fields,
+    locale: "en",
+    world,
+  });
+  assert.equal(snapshot.hud, "HUD_Main");
+  assert.deepEqual(snapshot.screens, ["Menu_Pause"]);
+  assert.deepEqual(snapshot.audit, ["missing label"]);
+  assert.equal(snapshot.fields, fields);
+  assert.equal(snapshot.locale, "en");
+  assert.equal(snapshot.world, world);
+});
+
+// Runtime actor spawn coordinator (P2.4): id generation, wiring order and owner
+// attribution, exercised with stub deps (no live scene / subsystems).
+function spawnRequest(overrides: Partial<ActorSpawnRequest> = {}): ActorSpawnRequest {
+  return {
+    sourceEntityId: "pawn:9",
+    classRef: "Actor_Test",
+    transform: { position: [1, 2, 3], rotation: [0, 0, 0], scale: [1, 1, 1] },
+    ...overrides,
+  };
+}
+
+await checkAsync("spawn coordinator drops the spawn silently before a layout loads", async () => {
+  let loaded = false;
+  const coordinator = new RuntimeActorSpawnCoordinator({
+    hasLayout: () => false,
+    hasActorEntity: () => false,
+    loadActorClass: async () => {
+      loaded = true;
+      return normalizeActorScriptDef({});
+    },
+    registerActorEntity: () => assert.fail("must not register when unlaid-out"),
+    loadActorMeshModels: async () => assert.fail("must not load meshes when unlaid-out"),
+    addActorObject: () => assert.fail("must not add object when unlaid-out"),
+    addEntityToPhysics: () => assert.fail("must not add physics when unlaid-out"),
+    addEntityToBehavior: () => assert.fail("must not add behavior when unlaid-out"),
+    playAutoPlayAudio: () => assert.fail("must not play audio when unlaid-out"),
+    playAutoPlayParticle: () => assert.fail("must not play particle when unlaid-out"),
+  });
+  await coordinator.spawnRuntimeActor(spawnRequest());
+  assert.equal(loaded, false);
+});
+
+await checkAsync("spawn coordinator wires the actor in order and attributes its owner", async () => {
+  const order: string[] = [];
+  let registeredId: string | null = null;
+  let behaviorOwner: string | null = null;
+  const coordinator = new RuntimeActorSpawnCoordinator({
+    hasLayout: () => true,
+    hasActorEntity: () => false,
+    loadActorClass: async () => {
+      order.push("loadClass");
+      return normalizeActorScriptDef({});
+    },
+    registerActorEntity: (entity) => {
+      order.push("register");
+      registeredId = entity.id;
+    },
+    loadActorMeshModels: async () => {
+      order.push("loadMeshes");
+    },
+    addActorObject: () => order.push("addObject"),
+    addEntityToPhysics: () => order.push("physics"),
+    addEntityToBehavior: (_entity, owner) => {
+      order.push("behavior");
+      behaviorOwner = owner;
+    },
+    playAutoPlayAudio: () => order.push("audio"),
+    playAutoPlayParticle: () => order.push("particle"),
+  });
+  await coordinator.spawnRuntimeActor(spawnRequest());
+  // First spawned actor gets id `spawned:0` (counter starts at 0).
+  assert.equal(registeredId, "spawned:0");
+  // Owner is attributed back to the spawner (A6 Owner/Instigator).
+  assert.equal(behaviorOwner, "pawn:9");
+  assert.deepEqual(order, [
+    "loadClass",
+    "register",
+    "loadMeshes",
+    "addObject",
+    "physics",
+    "behavior",
+    "audio",
+    "particle",
+  ]);
+});
+
+await checkAsync("spawn coordinator skips an id that is already registered", async () => {
+  const taken = new Set<string>(["spawned:0"]);
+  let registeredId: string | null = null;
+  const coordinator = new RuntimeActorSpawnCoordinator({
+    hasLayout: () => true,
+    hasActorEntity: (entityId) => taken.has(entityId),
+    loadActorClass: async () => normalizeActorScriptDef({}),
+    registerActorEntity: (entity) => {
+      registeredId = entity.id;
+    },
+    loadActorMeshModels: async () => {},
+    addActorObject: () => {},
+    addEntityToPhysics: () => {},
+    addEntityToBehavior: () => {},
+    playAutoPlayAudio: () => {},
+    playAutoPlayParticle: () => {},
+  });
+  await coordinator.spawnRuntimeActor(spawnRequest());
+  // `spawned:0` is taken, so the generator advances to the next free id.
+  assert.equal(registeredId, "spawned:1");
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

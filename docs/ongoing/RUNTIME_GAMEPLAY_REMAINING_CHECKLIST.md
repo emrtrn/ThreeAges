@@ -59,7 +59,7 @@ taramasi ayrica onayla istenmeli; sessiz tarama calistirilmemeli.
 | --- | --- | --- | --- |
 | P0 | `[x]` | - | Kapanan behavior-state bulgusunu ve mevcut runtime smoke tabanini sabitle. |
 | P1 | `[x]` | P0 | Runtime browser smoke borcunu kapat. (P1.1-P1.7 tamam) |
-| P2 | `[ ]` | P1 onerilir | `RuntimeSceneApp` kabugunu davranis koruyan modullere bol. |
+| P2 | `[x]` | P1 onerilir | `RuntimeSceneApp` kabugunu davranis koruyan modullere bol. (P2.1-P2.6 tamam) |
 | P3 | `[x]` | P0 | Save-game zarf sozlesmesini yazili hale getir. (SAVE_GAME_CONTRACT.md) |
 | P4 | `[ ]` | P3 onerilir | AI move-intent ve +z-forward facing varsayimini yol haritasina bagla. |
 | P5 | `[ ]` | P1-P4 | Baslik 4 kararini tekrar degerlendir ve ana analiz kaydini guncelle. |
@@ -212,16 +212,20 @@ korur.
   oldugu icin travel-scope module'e cekmek shell -> coordinator yon kuralini
   bozardi; coordinator bunlari deps callback (`beginLoadingUi`/`finishLoadingUi`/
   `showLoadError`) uzerinden cagiriyor.
-- **Spawn (P2.4 — `runtimeActorSpawnCoordinator.ts`, bekliyor):**
-  `spawnRuntimeActor`, `nextSpawnedActorEntityId`, `registerActorEntity`,
-  `destroyActorEntity` ve `nextRuntimeActorId`/`actorEntityById` id-uretim +
-  registry. Uyari: scene-build'e derin bagli (`loadActorClass`,
-  `loadActorMeshModels`, `addActorObject`, physics/behavior `addEntity`,
-  autoplay audio/particle) — buyuk deps yuzeyi gerekir; once id/registry cekirdegi,
-  sonra spawn/destroy akisi kademeli tasinabilir.
-- **Debug snapshot (P2.5 — `runtimeDebugSnapshot.ts`, bekliyor):** saf okumalar
+- **Spawn (P2.4 — `runtimeActorSpawnCoordinator.ts`, TAMAM):** `nextRuntimeActorId`
+  sayaci + `nextSpawnedActorEntityId` id-uretimi + `spawnRuntimeActor` orkestrasyonu
+  coordinator'a tasindi. **Kapsam karari:** `registerActorEntity`,
+  `destroyActorEntity` ve `actorEntityById`/`actorEntities` koleksiyonlari shell'de
+  KALDI — bunlar scene-build sahipli (her level build'de doluyor, 8+ yerden okunuyor);
+  coordinator'a almak shell -> coordinator yon kuralini ters cevirirdi. destroy saf
+  koleksiyon temizligi, coordinator'in sahiplendigi hicbir state'e dokunmuyor, o yuzden
+  shell'de birakildi (plan zaten "once id/registry cekirdegi, sonra spawn/destroy
+  kademeli" diyordu). Scene-build wiring (`loadActorClass`/`loadActorMeshModels`/
+  `addActorObject`/physics+behavior `addEntity`/autoplay) deps-callback olarak verildi;
+  spawn evaluation-order (index arg vs entityId artimi) birebir korundu.
+- **Debug snapshot (P2.5 — `runtimeDebugSnapshot.ts`, TAMAM):** saf okumalar
   `getPerfMemorySnapshot`, `getGameModeDebugSnapshot`, `getUiDebugSnapshot` yan
-  etkisiz helper'lara alinabilir. Tek-satir delegasyonlar (`getRenderStats`,
+  etkisiz `build*` helper'larina alindi (shell metotlari artik ince delegasyon). Tek-satir delegasyonlar (`getRenderStats`,
   `getSubsystemProfileSnapshot`, `getVfxDebugSnapshot`,
   `getScriptMessageDebugSnapshot`, `getAiDebugSnapshot`) dusuk deger — shell'de
   kalabilir. Uyari: AI nav debug view kumesi (`getAiNavigationDebugSnapshot`,
@@ -265,15 +269,41 @@ Checklist:
   load round-trip + travel/pending-restore kanitli). (`runtime-playflow` bu
   makinede boot/scene-load 60s zaman asimiyla flaky — main'de de ayni sekilde
   duser, bu extraction'dan bagimsiz cevresel bir sorun.)
-- [ ] **P2.4 - Runtime actor spawn extraction:** `spawnRuntimeActor`, id uretimi,
-  owner/instigator ve live actor registry guncellemelerini kucuk bir modulle
-  sinirla.
-- [ ] **P2.5 - Debug snapshot extraction:** `?debug` overlay icin snapshot
-  uretimini yan etkisiz helper'lara al; debug kapaliyken runtime maliyeti
-  artmamali.
-- [ ] **P2.6 - Yeni ozellik kurali:** `docs/architecture/ARCHITECTURE.md` veya
-  uygun workflow dokumanina "runtime ozellikleri once modul/coordinator olarak
-  gelir; kabuga dogrudan buyuk renderer/manager eklenmez" kuralini ekle.
+- [x] **P2.4 - Runtime actor spawn extraction:** `src/scene/runtimeActorSpawnCoordinator.ts`
+  (`RuntimeActorSpawnCoordinator` + `RuntimeActorSpawnCoordinatorDeps`).
+  `nextRuntimeActorId` sayaci + `nextSpawnedActorEntityId` id-uretimi +
+  `spawnRuntimeActor` orkestrasyonu (class yukle -> entity kur -> register ->
+  mesh/render/physics/behavior -> autoplay) + owner/instigator attribution buraya
+  tasindi; teardown `reset()` cagiriyor. Scene-build sahipli registry
+  (`actorEntityById`/`actorEntities`/`registerActorEntity`) ve `destroyActorEntity`
+  bilincli olarak shell'de kaldi (bkz. yukaridaki kapsam karari), deps-callback ile
+  eriliyor. `RuntimeSceneApp.ts` 4710 -> 4685 satir. Dogrulama: `tsc` temiz,
+  `test:engine` 789 checks (+3 yeni: layout yokken sessiz drop, sirali wiring + owner
+  attribution, id-collision skip; stub deps ile canli sahne olmadan), `verify:imports`
+  PASS, `runtime-portal` browser smoke yesil (boot + teardown/reset + travel round-trip).
+- [x] **P2.5 - Debug snapshot extraction:** `src/scene/runtimeDebugSnapshot.ts`
+  (`buildPerfMemorySnapshot` / `buildGameModeDebugSnapshot` / `buildUiDebugSnapshot`).
+  Uc gercek "resolution logic" tasiyan snapshot uretimi (memory heap guard,
+  possessed-pawn null-branching, UI host default-fallback) yan etkisiz saf
+  fonksiyonlara alindi; subsystem erisimi shell'de deps-callback (`locomotionReportOf`/
+  `movementModeOf`/`positionOf` + `host`/`fields`) uzerinde kaldi. Snapshot tipleri
+  `RuntimeSceneApp.ts`'te export kaldi (module type-only import eder — sifir runtime
+  bagimliligi, game bundle genislemez). Tek-satir subsystem delegasyonlari
+  (`getRenderStats`/`getVfxDebugSnapshot`/vs.) ve AI nav debug kumesi bilincli olarak
+  shell'de birakildi. Debug kapaliyken maliyet artmaz (builder'lar yalniz `?debug`
+  formatter'larindan cagriliyor). `RuntimeSceneApp.ts` 4724 -> 4691 satir. Dogrulama:
+  `tsc` temiz, `test:engine` 784 checks (+5 yeni saf-builder testi: heap guard,
+  possessed/unpossessed dallanmasi, UI host boottan once/sonra), `verify:imports`
+  PASS, `runtime-locomotion` smoke yesil (`?debug` game-mode/memory/ui readout'lari
+  yeni builder'lardan geciyor).
+- [x] **P2.6 - Yeni ozellik kurali:** `docs/architecture/ARCHITECTURE.md`
+  Dependency Rules'a "Runtime features come as modules, not shell code" alt basligi
+  eklendi: yeni runtime ozelligi kabuga metot/alan yiginca degil, kendi state'ini
+  sahiplenen kucuk coordinator + deps-callback interface olarak `src/scene/` altinda
+  gelir; saf resolution/assembly logic serbest fonksiyon/modul olur. Precedent olarak
+  `runtimeSaveCoordinator` / `runtimeTravelCoordinator` / `runtimeDebugSnapshot` +
+  `levelTravel` sayildi; shell -> coordinator tek yon ve `RuntimeSceneApp -> editor`
+  yasagi vurgulandi.
 
 Kabul kriterleri:
 

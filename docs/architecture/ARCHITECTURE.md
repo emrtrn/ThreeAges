@@ -164,6 +164,24 @@ save-game snapshot
 save stores, what it deliberately omits, the opt-in persistent-state pattern, and
 the load → travel → restore sequence.
 
+### Runtime features come as modules, not shell code
+
+`RuntimeSceneApp` is the boot/lifecycle/render **composition shell**, not a
+grab-bag for feature logic. A new runtime feature (a save/travel/spawn manager, a
+new subsystem coordinator, a debug readout) is added as its own module under
+`src/scene/` — not as more methods and fields piled onto `RuntimeSceneApp`. The
+established shape is a small **coordinator** that owns its own state (store,
+queue, latch) and reaches back to the shell for subsystem access and shared
+lifecycle through a deliberately small **deps-callback interface**, so the scene
+boundary (`RuntimeSceneApp` must never import `src/editor/*`) holds and the
+dependency direction stays one-way shell → coordinator. Precedents:
+`runtimeSaveCoordinator.ts` (slot save/load + pending-restore),
+`runtimeTravelCoordinator.ts` (level-travel state machine + teardown/rebuild
+loop), and the side-effect-free `runtimeDebugSnapshot.ts` builders. Pure
+resolution/assembly logic (snapshot builders, state machines like `levelTravel.ts`)
+should be a free function or plain module so it is unit-testable without a live
+scene. Do not add a large renderer/manager directly to the shell.
+
 ### AI runtime / editor boundary
 
 AI decision-making (`engine/ai`: `AISubsystem`, `AIController`, `Blackboard`, and

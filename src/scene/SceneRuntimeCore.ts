@@ -346,6 +346,9 @@ export function buildLandscapeSplineMeshGroup(options: {
       deformedGroups.set(chain.assetId, assetGroup);
       group.add(assetGroup);
     }
+    // Closed chains keep their public point list de-duplicated, but the render
+    // sampler needs the closing point to cover the final segment's distance.
+    const chainPath = chain.closed ? [...chain.points, chain.points[0]!] : chain.points;
     let primitiveIndex = 0;
     gltf.scene.traverse((object) => {
       if (!(object instanceof Mesh)) return;
@@ -354,8 +357,10 @@ export function buildLandscapeSplineMeshGroup(options: {
         const geometry = object.geometry.clone().applyMatrix4(object.matrixWorld);
         const deformed = deformSplineMeshGeometry(geometry, {
           ...chain,
-          points: segment.points,
+          points: chainPath,
           distanceStart: segment.distanceStart,
+          pathDistanceStart: segment.distanceStart,
+          pathDistanceEnd: segment.distanceEnd,
           totalLength: chain.totalLength,
           recomputeNormals: false,
         }, options.data);
@@ -402,6 +407,10 @@ export interface LandscapeSplineMeshDeformPath {
   alignToTerrain: boolean;
   /** Distance from the beginning of a welded chain; defaults to zero for one segment. */
   distanceStart?: number;
+  /** Chain distance sampled by the source mesh's local beginning. */
+  pathDistanceStart?: number;
+  /** Chain distance sampled by the source mesh's local end. */
+  pathDistanceEnd?: number;
   /** Total welded-chain arc length. Used only for introspection/future frame caching. */
   totalLength?: number;
   /** Recalculate normals immediately; false lets the caller weld first. */
@@ -415,9 +424,10 @@ interface DeformPathSample {
 
 /**
  * Bends a static mesh authored along local +Z through a sampled spline path.
- * Its `uv.v` follows the chain's cumulative arc length, so adjacent pieces use
- * the same texture phase. Callers building a chain may defer normal generation
- * until after the pieces have been welded.
+ * The UV component that actually follows the source mesh's +Z span follows the
+ * chain's cumulative arc length, while the cross-road component is preserved.
+ * Callers building a chain may defer normal generation until after the pieces
+ * have been welded.
  */
 export function deformSplineMeshGeometry(
   geometry: BufferGeometry,
@@ -438,12 +448,18 @@ export function deformSplineMeshGeometry(
   const right = new Vector3();
   const up = new Vector3();
   const uv = geometry.getAttribute("uv");
+  const longitudinalUv = uv ? resolveLongitudinalSplineUvComponent(geometry, bounds) : null;
   const tileLength = sourceLength;
   const distanceStart = path.distanceStart ?? 0;
+  const pathDistanceStart = path.pathDistanceStart ?? 0;
+  const pathDistanceEnd = path.pathDistanceEnd ?? pathLengths.total;
+  const pathDistanceSpan = pathDistanceEnd - pathDistanceStart;
+  if (pathDistanceSpan <= 1e-6 || pathDistanceEnd > pathLengths.total + 1e-4) return null;
   for (let index = 0; index < positions.count; index += 1) {
     source.fromBufferAttribute(positions, index);
     const sourceT = (source.z - bounds.min.z) / sourceLength;
-    const sample = sampleDeformPath(path.points, pathLengths.lengths, pathLengths.total, sourceT);
+    const pathDistance = pathDistanceStart + Math.min(1, Math.max(0, sourceT)) * pathDistanceSpan;
+    const sample = sampleDeformPathAtDistance(path.points, pathLengths.lengths, pathLengths.total, pathDistance);
     if (!sample) continue;
     const upHint = path.alignToTerrain
       ? terrainNormalAt(landscape, sample.position.x, sample.position.z)
@@ -464,7 +480,11 @@ export function deformSplineMeshGeometry(
       sample.position.y + right.y * x + up.y * y + path.offset[1],
       sample.position.z + right.z * x + up.z * y + path.offset[2],
     );
-    if (uv) uv.setY(index, (distanceStart + Math.min(1, Math.max(0, sourceT)) * pathLengths.total) / tileLength);
+    if (uv && longitudinalUv) {
+      const distanceUv = (distanceStart + Math.min(1, Math.max(0, sourceT)) * pathDistanceSpan) / tileLength;
+      if (longitudinalUv === "u") uv.setX(index, distanceUv);
+      else uv.setY(index, distanceUv);
+    }
   }
   positions.needsUpdate = true;
   if (uv) uv.needsUpdate = true;
@@ -472,6 +492,51 @@ export function deformSplineMeshGeometry(
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return geometry;
+}
+
+/**
+ * Determines whether `u` or `v` progresses along the geometry's deformed +Z
+ * source span. Most road meshes use `v`, but imported meshes can carry a node
+ * rotation that makes the source path run through `u` instead (SM_Asphalt).
+ * A correlation score keeps the render path generic without adding per-asset
+ * authoring metadata for an otherwise standard UV layout.
+ */
+function resolveLongitudinalSplineUvComponent(geometry: BufferGeometry, bounds: Box3): "u" | "v" {
+  const positions = geometry.getAttribute("position");
+  const uv = geometry.getAttribute("uv");
+  if (!positions || !uv || positions.count === 0 || uv.count !== positions.count) return "v";
+  const sourceLength = bounds.max.z - bounds.min.z;
+  if (sourceLength <= 1e-6) return "v";
+  let count = 0;
+  let sumT = 0;
+  let sumU = 0;
+  let sumV = 0;
+  let sumTT = 0;
+  let sumTU = 0;
+  let sumTV = 0;
+  let sumUU = 0;
+  let sumVV = 0;
+  for (let index = 0; index < positions.count; index += 1) {
+    const t = (positions.getZ(index) - bounds.min.z) / sourceLength;
+    const u = uv.getX(index);
+    const v = uv.getY(index);
+    count += 1;
+    sumT += t;
+    sumU += u;
+    sumV += v;
+    sumTT += t * t;
+    sumTU += t * u;
+    sumTV += t * v;
+    sumUU += u * u;
+    sumVV += v * v;
+  }
+  const covariance = (sumXY: number, sumX: number, sumY: number): number => sumXY - (sumX * sumY) / count;
+  const varT = covariance(sumTT, sumT, sumT);
+  const varU = covariance(sumUU, sumU, sumU);
+  const varV = covariance(sumVV, sumV, sumV);
+  const scoreU = varT > 1e-8 && varU > 1e-8 ? Math.abs(covariance(sumTU, sumT, sumU)) / Math.sqrt(varT * varU) : 0;
+  const scoreV = varT > 1e-8 && varV > 1e-8 ? Math.abs(covariance(sumTV, sumT, sumV)) / Math.sqrt(varT * varV) : 0;
+  return scoreU > scoreV ? "u" : "v";
 }
 
 function mergeAndWeldSplineGeometries(geometries: BufferGeometry[]): BufferGeometry | null {
@@ -505,8 +570,13 @@ function pathSegmentLengths(points: readonly Vec3[]): { lengths: number[]; total
   return { lengths, total };
 }
 
-function sampleDeformPath(points: readonly Vec3[], lengths: readonly number[], total: number, t: number): DeformPathSample | null {
-  const distance = Math.min(1, Math.max(0, t)) * total;
+function sampleDeformPathAtDistance(
+  points: readonly Vec3[],
+  lengths: readonly number[],
+  total: number,
+  requestedDistance: number,
+): DeformPathSample | null {
+  const distance = Math.min(total, Math.max(0, requestedDistance));
   let consumed = 0;
   for (let index = 0; index < lengths.length; index += 1) {
     const length = lengths[index]!;

@@ -159,8 +159,9 @@ ayrı takip işleri olmalıdır.
   zincirleri çözer; ters authored segmentleri yönlendirir ve branch noktalarını
   zincir sınırı olarak korur. Kapalı loop çözümlemesi de test kapsamındadır.
 - Render yolu her chain/GLTF primitive çifti için parçaları birleştirip weld eder;
-  normaller weld sonrasında tek sefer hesaplanır. `uv.v`, zincirin kümülatif
-  mesafesini kaynak mesh +Z uzunluğuna göre tile eder; segment başında yeniden
+  normaller weld sonrasında tek sefer hesaplanır. Kaynak mesh'in +Z doğrultusuyla
+  en güçlü korelasyona sahip UV bileşeni (`u` veya `v`), zincirin kümülatif
+  mesafesinden tile edilir; enine UV bileşeni korunur ve segment başında yeniden
   başlamaz.
 - `SM_Asphalt` yeniden adlandırması manifest ve smoke level ile eşitlendi; üç
   kontrol noktalı authored spline'ın iki segmenti de `sm-asphalt` + `deform`
@@ -180,3 +181,29 @@ ayrı takip işleri olmalıdır.
 - Gelecekteki isteğe bağlı iş: yolun üzerine bakan sabit bir test kamerasıyla
   seam odaklı screenshot karşılaştırması; terrain hizası/banklı zincirlerde
   parallel-transport frame değerlendirmesi sürer.
+
+### UV ekseni düzeltmesi (2026-07-12)
+
+- Saha görüntüsü `SM_Asphalt` için deform modunun doku eksenini yanlış seçtiğini
+  gösterdi: GLTF node dönüşümü sonrasında yol +Z boyunca uzanırken, uzunluk UV'si
+  `u` bileşenindedir. Eski kod her asset için `v`yi yazdığı için enine UV de
+  yol boyunca akıyor, çizgi/doku sıkışıyor ve şeritler yanlış yönleniyordu.
+- `deformSplineMeshGeometry` artık source +Z ile `u`/`v` korelasyonunu hesaplar,
+  sadece uzunluk bileşenini kümülatif mesafeye yazar. Bu `SM_Asphalt` için `u`,
+  geleneksel +Z/`v` road meshleri için `v` davranışını korur.
+- Sentetik `u`-boyuna-UV testi eklendi; `npm.cmd run test:engine` 785 kontrolle
+  geçti. Tam TypeScript gate bu sırada devam eden `RuntimeSceneApp` spawn
+  refactor'undaki iki bağımsız hatadan dolayı yeniden çalıştırılamadı.
+
+### Ortak zincir frame düzeltmesi (2026-07-12)
+
+- Weld öncesindeki her parça kendi lokal polyline'ından tangent/frame üretiyordu.
+  Komşu segmentler aynı control pointte bitse bile yolun dış kenarları farklı
+  tangentlerle hesaplandığından üçgen biçimli arazi boşluğu kalabiliyordu.
+- Renderer artık bütün chain'in polyline'ını örnekler; her kaynak mesh yalnızca
+  kendi kümülatif mesafe aralığını kullanır. Ortak sınırdaki iki mesh aynı
+  position, tangent ve UV değerini üretir; `mergeVertices` bu vertexleri gerçek
+  anlamda weld edebilir.
+- Engine testi iki parçanın ortak dış kenar vertexlerinin eşit olduğunu doğrular;
+  `npm.cmd run test:engine` 786 kontrolle geçmiştir. `npm.cmd run build:verify`
+  (TypeScript, engine ve strict dist dahil) geçmiştir.

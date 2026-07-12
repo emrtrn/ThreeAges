@@ -21,7 +21,6 @@ import { DEFAULT_INPUT_BINDINGS } from "@/game/defaultInputBindings";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
 import {
   BehaviorSubsystem,
-  type ActorSpawnRequest,
   type ScriptMessageDebugSnapshot,
 } from "@engine/behavior/behaviorSubsystem";
 import type { ScriptMessagePayload } from "@engine/behavior/scriptMessages";
@@ -265,10 +264,7 @@ import {
   roomLayoutToSceneDocument,
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
-import {
-  actorInstanceToEntity,
-  spawnedActorEntityId,
-} from "@engine/scene/actorInstance";
+import { actorInstanceToEntity } from "@engine/scene/actorInstance";
 import {
   normalizeActorScriptDef,
   readGameModeDefaultPawnClassRef,
@@ -326,6 +322,12 @@ import {
 } from "@engine/persistence/userSettingsStore";
 import { RuntimeSaveCoordinator } from "./runtimeSaveCoordinator";
 import { RuntimeTravelCoordinator } from "./runtimeTravelCoordinator";
+import { RuntimeActorSpawnCoordinator } from "./runtimeActorSpawnCoordinator";
+import {
+  buildGameModeDebugSnapshot,
+  buildPerfMemorySnapshot,
+  buildUiDebugSnapshot,
+} from "./runtimeDebugSnapshot";
 import type { AssetCollisionDef } from "@engine/scene/collision";
 import {
   assetCollisionDefHasCollider,
@@ -680,6 +682,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly saveCoordinator: RuntimeSaveCoordinator;
   /** Owns Level Travel: the travel state machine + async teardown/rebuild loop (P2.2). */
   private readonly travelCoordinator: RuntimeTravelCoordinator;
+  /** Owns runtime actor spawning: the spawn id counter + spawn orchestration (P2.4). */
+  private readonly spawnCoordinator: RuntimeActorSpawnCoordinator;
   private collisionDefs = new Map<string, AssetCollisionDef>();
   /** Render-mesh triangle data for `complexAsSimple` assets (static trimesh collider). */
   private complexCollisionMeshes = new Map<string, AssetComplexCollisionMesh>();
@@ -746,8 +750,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly actorMeshScales = new Map<string, Vec3>();
   /** Resolved `*.actor.json` classes, cached by classRef across instances. */
   private readonly actorClassCache = new Map<string, ActorScriptDef>();
-  /** Runtime-only spawned Actor Script id counter; reset on scene rebuild. */
-  private nextRuntimeActorId = 0;
   private localBounds = new Map<string, Box3>();
   private sun: DirectionalLight | null = null;
   private ambientLight: AmbientLight | null = null;
@@ -951,7 +953,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           launch: (entityId, velocity, launchOptions) =>
             this.characterMovementSubsystem.launch(entityId, velocity, launchOptions),
           spawn: (request) => {
-            void this.spawnRuntimeActor(request);
+            void this.spawnCoordinator.spawnRuntimeActor(request);
           },
         },
         // Velocity source for `world.velocityOf` (A6, Unreal GetVelocity): the
@@ -998,6 +1000,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         }),
       teardownScene: () => this.teardownScene(),
       buildScene: (layoutPath, spawnTag) => this.buildScene(layoutPath, spawnTag),
+    });
+
+    this.spawnCoordinator = new RuntimeActorSpawnCoordinator({
+      hasLayout: () => this.layout !== null,
+      hasActorEntity: (entityId) => this.actorEntityById.has(entityId),
+      loadActorClass: (classRef) => this.loadActorClass(classRef),
+      registerActorEntity: (entity) => this.registerActorEntity(entity),
+      loadActorMeshModels: (entities) => this.loadActorMeshModels(entities),
+      addActorObject: (entity) => this.addActorObject(entity),
+      addEntityToPhysics: (entity) => this.physicsSubsystem.addEntity(entity),
+      addEntityToBehavior: (entity, owner) =>
+        this.behaviorSubsystem.addEntity(entity, { owner }),
+      playAutoPlayAudio: (entity) => this.playAutoPlayAudioEntity(entity),
+      playAutoPlayParticle: (entity) => {
+        void this.playAutoPlayParticleEntity(entity);
+      },
     });
 
     this.saveCoordinator = new RuntimeSaveCoordinator({
@@ -1199,16 +1217,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * `performance.memory` (Chrome-only, guarded) for the `?debug` memory readout.
    */
   getPerfMemorySnapshot(): PerfMemorySnapshot {
-    const perfMemory =
-      typeof performance !== "undefined"
-        ? (performance as { memory?: { usedJSHeapSize?: number; jsHeapSizeLimit?: number } }).memory
-        : undefined;
-    return {
-      render: readSceneRuntimeMemory(this.renderer),
-      jsHeapBytes: typeof perfMemory?.usedJSHeapSize === "number" ? perfMemory.usedJSHeapSize : null,
-      jsHeapLimitBytes:
-        typeof perfMemory?.jsHeapSizeLimit === "number" ? perfMemory.jsHeapSizeLimit : null,
-    };
+    return buildPerfMemorySnapshot(readSceneRuntimeMemory(this.renderer));
   }
 
   getScriptMessageDebugSnapshot(): ScriptMessageDebugSnapshot {
@@ -1670,27 +1679,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * CharacterMovement mode when it is an Actor Script character.
    */
   getGameModeDebugSnapshot(): GameModeDebugSnapshot {
-    const possessed = this.gameModeSession?.playerState.pawnEntityId ?? null;
-    const report = possessed ? this.locomotionReports.get(possessed) : undefined;
-    const cameraDebug = this.gameModeSession?.getCameraDebug?.();
-    const pawnTransform = possessed
-      ? this.characterMovementSubsystem.transformOf(possessed)
-      : undefined;
-    return {
-      gameMode: this.activeGameMode?.displayName ?? "—",
-      possessed,
-      movementMode: this.possessedMovementMode(possessed),
-      grounded: report ? report.grounded : null,
-      velocityY: report ? report.velocityY : null,
-      planarSpeed: report ? report.planarSpeed : null,
-      position: pawnTransform
-        ? [pawnTransform.position[0], pawnTransform.position[1], pawnTransform.position[2]]
-        : null,
-      controlYawDeg: cameraDebug?.controlYawDeg ?? null,
-      controlPitchDeg: cameraDebug?.controlPitchDeg ?? null,
-      cameraSource: cameraDebug?.cameraSource ?? null,
+    return buildGameModeDebugSnapshot({
+      activeGameModeName: this.activeGameMode?.displayName ?? null,
+      possessed: this.gameModeSession?.playerState.pawnEntityId ?? null,
       inputMode: this.inputMode,
-    };
+      cameraDebug: this.gameModeSession?.getCameraDebug?.(),
+      locomotionReportOf: (entityId) => this.locomotionReports.get(entityId),
+      movementModeOf: (entityId) => this.possessedMovementMode(entityId),
+      positionOf: (entityId) => {
+        const transform = this.characterMovementSubsystem.transformOf(entityId);
+        return transform
+          ? [transform.position[0], transform.position[1], transform.position[2]]
+          : null;
+      },
+    });
   }
 
   /**
@@ -1699,15 +1701,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * Returns empty layers before the UI subsystem boots.
    */
   getUiDebugSnapshot(): UiDebugSnapshot {
-    const host = this.uiSubsystem?.getDebugSnapshot() ?? { hud: null, screens: [], audit: [] };
-    return {
-      hud: host.hud,
-      screens: host.screens,
+    return buildUiDebugSnapshot({
+      host: this.uiSubsystem?.getDebugSnapshot() ?? null,
       fields: this.uiStore.snapshot(),
       locale: this.localeRegistry?.activeLocale ?? null,
-      audit: host.audit,
       world: this.worldUiSubsystem?.getDebugSnapshot() ?? { count: 0, visible: 0 },
-    };
+    });
   }
 
   /** Authored CharacterMovement mode of a possessed Actor Script pawn, else null. */
@@ -2157,7 +2156,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.actorMeshScales.clear();
     this.actorEntityById.clear();
     this.actorEntities = [];
-    this.nextRuntimeActorId = 0;
+    this.spawnCoordinator.reset();
 
     // Lights: remove root (+ target) and free the shadow map.
     for (const record of this.lightObjects) {
@@ -3370,44 +3369,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.actorEntities = this.actorEntities.filter((candidate) => candidate.id !== entity.id);
     this.actorEntities.push(entity);
     this.actorEntityById.set(entity.id, entity);
-  }
-
-  private nextSpawnedActorEntityId(): string {
-    let id = spawnedActorEntityId(this.nextRuntimeActorId);
-    this.nextRuntimeActorId += 1;
-    while (this.actorEntityById.has(id)) {
-      id = spawnedActorEntityId(this.nextRuntimeActorId);
-      this.nextRuntimeActorId += 1;
-    }
-    return id;
-  }
-
-  private async spawnRuntimeActor(request: ActorSpawnRequest): Promise<void> {
-    if (!this.layout) return;
-    const def = await this.loadActorClass(request.classRef);
-    const entity = actorInstanceToEntity(
-      def,
-      {
-        classRef: request.classRef,
-        position: [...request.transform.position],
-        rotation: [...request.transform.rotation],
-        scale: [...request.transform.scale],
-      },
-      this.nextRuntimeActorId,
-      {
-        entityId: this.nextSpawnedActorEntityId(),
-        ...(request.params !== undefined ? { params: request.params } : {}),
-      },
-    );
-    this.registerActorEntity(entity);
-    await this.loadActorMeshModels([entity]);
-    this.addActorObject(entity);
-    this.physicsSubsystem.addEntity(entity);
-    // The spawner owns the spawned actor (A6 Owner/Instigator) so the new actor
-    // can attribute itself back to whoever spawned it (e.g. projectile → shooter).
-    this.behaviorSubsystem.addEntity(entity, { owner: request.sourceEntityId });
-    this.playAutoPlayAudioEntity(entity);
-    void this.playAutoPlayParticleEntity(entity);
   }
 
   /**
