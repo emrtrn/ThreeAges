@@ -39,6 +39,7 @@ import {
   importProjectAsset,
   normalizeProjectPath,
   openProjectLevel,
+  reimportProjectAsset,
   renameProjectContent,
   type ContentNewKind,
   type ProjectDirNode,
@@ -341,6 +342,8 @@ export class EditorUi {
   private importInput: HTMLInputElement | null = null;
   /** Folder the next Import upload targets (set when Import is clicked). */
   private importTargetDir = "";
+  /** Existing model selected for the next Reimport upload, if any. */
+  private reimportTarget: BrowserAssetItem | null = null;
 
   constructor(private readonly app: SceneApp) {
     document.body.classList.add("editor-mode");
@@ -1836,6 +1839,11 @@ export class EditorUi {
       const opener = this.assetEditorOpener(item);
       if (opener) {
         items.push({ label: "Open", run: opener });
+      }
+      if (item.type !== "file" && isModelAssetType(item.type)) {
+        items.push({ label: "Reimport...", run: () => this.startReimport(item) });
+      }
+      if (opener || (item.type !== "file" && isModelAssetType(item.type))) {
         items.push({ separator: true });
       }
     }
@@ -2971,8 +2979,7 @@ export class EditorUi {
     const input = document.createElement("input");
     input.type = "file";
     input.multiple = true;
-    input.accept =
-      ".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2,.basis,.hdr,.exr,.mp3,.wav,.ogg,.json";
+    input.accept = ".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2,.basis,.hdr,.exr,.mp3,.wav,.ogg,.json";
     input.style.display = "none";
     input.addEventListener("change", () => void this.handleImportFiles());
     document.body.appendChild(input);
@@ -2982,9 +2989,31 @@ export class EditorUi {
 
   /** Opens the OS file picker; selected files upload into `dir`. */
   private startImport(dir: string): void {
+    this.reimportTarget = null;
     this.importTargetDir = dir;
     const input = this.ensureImportInput();
+    input.multiple = true;
+    input.accept = ".glb,.gltf,.bin,.png,.jpg,.jpeg,.webp,.ktx2,.basis,.hdr,.exr,.mp3,.wav,.ogg,.json";
     input.value = ""; // allow re-selecting the same file twice in a row
+    input.click();
+  }
+
+  /** Opens a model-only picker, then fully reloads to discard GLTF/material caches. */
+  private startReimport(item: BrowserAssetItem): void {
+    if (item.type === "file" || !isModelAssetType(item.type)) return;
+    if (
+      this.app.getHistoryState().canUndo &&
+      !window.confirm(
+        `Reimport "${item.label}"?\nThe editor will reload after replacing the model, so unsaved level changes will be lost.`,
+      )
+    ) {
+      return;
+    }
+    this.reimportTarget = item;
+    const input = this.ensureImportInput();
+    input.multiple = false;
+    input.accept = item.ext.toLowerCase() === "gltf" ? ".gltf" : ".glb";
+    input.value = ""; // allow selecting the same Blender export again
     input.click();
   }
 
@@ -2992,6 +3021,14 @@ export class EditorUi {
   private async handleImportFiles(): Promise<void> {
     const files = Array.from(this.importInput?.files ?? []);
     if (files.length === 0) return;
+    const reimportTarget = this.reimportTarget;
+    this.reimportTarget = null;
+    if (reimportTarget) {
+      const file = files[0];
+      if (!file) return;
+      await this.handleReimportFile(reimportTarget, file);
+      return;
+    }
     const dir = this.importTargetDir;
     let imported = 0;
     const errors: string[] = [];
@@ -3019,6 +3056,19 @@ export class EditorUi {
       }
     }
     await this.refreshAssetTree({ quiet: false });
+  }
+
+  private async handleReimportFile(item: BrowserAssetItem, file: File): Promise<void> {
+    try {
+      await reimportProjectAsset(item.path, file);
+      this.setStatus(`Reimported ${item.label}. Reloading editor...`, "success");
+      window.location.reload();
+    } catch (error) {
+      this.setStatus(
+        `Could not reimport ${item.label}: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
   }
 
   private closeContextMenu = (): void => {
@@ -3107,8 +3157,17 @@ export class EditorUi {
         return;
       }
       await this.refreshAssetTree();
-      const assetId = result.registeredId ?? path;
-      await this.app.addFoliageType(assetId);
+      if (!result.registeredId) {
+        this.setStatus(
+          "Foliage type saved but could not be registered in the manifest.",
+          "warning",
+        );
+        return;
+      }
+      // Register the def we just built directly (id = its manifest id), so painting
+      // works immediately without depending on the SceneApp manifest cache refresh.
+      // The sidecar stores this manifest id, so it re-resolves on reload.
+      await this.app.registerLoadedFoliageType(result.registeredId, body);
       this.setStatus(`Created foliage type ${name}.`, "success");
     } catch (error) {
       this.setStatus(

@@ -10,6 +10,7 @@ import {
   resolveContentNewFile,
   resolveContentRenameTarget,
   resolveImportPath,
+  validateReimportAssetMeta,
   validateContentDeletePayload,
   validateContentNewPayload,
   validateContentRenamePayload,
@@ -250,6 +251,27 @@ async function registerImportedAsset(
   manifest.assets.push(record);
   await writeFile(manifestAbs, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   return record.id;
+}
+
+/** Refreshes the manifest's optional runtime byte count without changing asset identity. */
+async function updateImportedAssetBytes(rel: string, bytes: number): Promise<boolean> {
+  const project = await readProjectManifest();
+  const manifestAbs = resolvePublicPath(project.editor.assetManifest);
+  const manifest = JSON.parse(await readFile(manifestAbs, "utf8")) as {
+    assets?: unknown[];
+  } & Record<string, unknown>;
+  if (!Array.isArray(manifest.assets)) return false;
+
+  const entries = manifest.assets.filter(
+    (entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object",
+  );
+  const asset = entries.find((entry) => entry.path === rel || entry.file === rel);
+  if (!asset || !asset.runtime || typeof asset.runtime !== "object") return false;
+  const runtime = asset.runtime as Record<string, unknown>;
+  if (runtime.bytes === bytes) return false;
+  runtime.bytes = bytes;
+  await writeFile(manifestAbs, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return true;
 }
 
 // Model assets carry editor sidecars that share the file's base name. Renaming or
@@ -712,6 +734,7 @@ const PRIVILEGED_URLS = new Set([
   "/__content-rename",
   "/__content-delete",
   "/__import-asset",
+  "/__reimport-asset",
   "/__new-behavior",
   "/__open-level",
 ]);
@@ -1572,6 +1595,56 @@ function layoutEditorPlugin(): Plugin {
             }
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: rel, bytes: body.length, registeredId }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Content Browser Reimport: replace an existing GLB/GLTF while keeping
+        // its public path and manifest id stable. Existing scene placements can
+        // therefore keep referring to the asset after a Blender export.
+        if (req.url?.split("?")[0] === "/__reimport-asset") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const params = new URL(req.url, "http://localhost").searchParams;
+            const meta = validateReimportAssetMeta({
+              path: params.get("path") ?? "",
+              name: params.get("name") ?? "",
+            });
+            const absPath = resolvePublicPath(meta.path);
+            const existing = await stat(absPath);
+            if (!existing.isFile()) throw new Error(`not a file: ${meta.path}`);
+
+            const body = await readRawBody(req, IMPORT_MAX_BYTES);
+            // Write the complete upload beside the live model before swapping
+            // it in, so a failed upload never leaves a partial GLB in place.
+            const tempPath = `${absPath}.reimport-${process.pid}-${Date.now()}`;
+            try {
+              await writeFile(tempPath, body);
+              await rename(tempPath, absPath);
+            } finally {
+              await unlink(tempPath).catch(() => undefined);
+            }
+
+            // Keep loading-progress metadata honest, but never roll back a
+            // successful reimport if a hand-authored manifest cannot be updated.
+            const manifestUpdated = await updateImportedAssetBytes(meta.path, body.length).catch(
+              () => false,
+            );
+
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: true, path: meta.path, bytes: body.length, manifestUpdated }),
+            );
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");

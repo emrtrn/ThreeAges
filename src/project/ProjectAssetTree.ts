@@ -150,6 +150,33 @@ export async function importProjectAsset(
 }
 
 /**
+ * Replaces an existing GLB/GLTF at its current public-relative path. Unlike
+ * import, this intentionally retains the existing manifest record and asset id
+ * so placed instances do not need to be recreated after a Blender export.
+ */
+export async function reimportProjectAsset(
+  path: string,
+  file: File,
+): Promise<{ path: string; bytes: number }> {
+  const query = `path=${encodeURIComponent(path)}&name=${encodeURIComponent(file.name)}`;
+  const response = await fetch(`/__reimport-asset?${query}`, {
+    method: "POST",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  const data = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    path?: string;
+    bytes?: number;
+    error?: string;
+  } | null;
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error ?? `Reimport failed: ${response.status} ${response.statusText}`);
+  }
+  return { path: data.path ?? path, bytes: data.bytes ?? file.size };
+}
+
+/**
  * Promotes an existing layout JSON to the project's active scene via the
  * localhost-only `/__open-level` endpoint: it rewrites
  * `project.3dgame.json` `editor.defaultScene` to `path`, so the editor loads

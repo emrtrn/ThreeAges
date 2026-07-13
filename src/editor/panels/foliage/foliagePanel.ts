@@ -27,11 +27,11 @@ export interface FoliagePanelOptions {
 }
 
 const TOOLS: { id: FoliageTool; label: string; tip: string }[] = [
-  { id: "select", label: "Select", tip: "Navigate/select (no painting)" },
-  { id: "paint", label: "Paint", tip: "Paint the active foliage type" },
-  { id: "erase", label: "Erase", tip: "Erase any foliage under the brush" },
-  { id: "single", label: "Single", tip: "Place one instance per click" },
-  { id: "remove", label: "Remove", tip: "Erase only the active type" },
+  { id: "select", label: "Select", tip: "Navigate/select — no painting" },
+  { id: "paint", label: "Paint", tip: "Drag to scatter the active foliage type" },
+  { id: "erase", label: "Erase", tip: "Drag to erase EVERY foliage type under the brush" },
+  { id: "single", label: "Single", tip: "Left-click to place ONE instance (no drag)" },
+  { id: "remove", label: "Remove", tip: "Drag to erase ONLY the active type under the brush" },
 ];
 
 function escapeHtml(value: string): string {

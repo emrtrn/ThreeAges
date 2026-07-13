@@ -3659,6 +3659,37 @@ export function resolveImportPath(meta: ImportAssetMeta): string {
   return dir ? `${dir}/${meta.name}` : meta.name;
 }
 
+/** Metadata accepted by the model-only Content Drawer Reimport endpoint. */
+export interface ReimportAssetMeta {
+  /** Existing public-root-relative model path to replace. */
+  path: string;
+  /** Source filename, used only to require a matching model container type. */
+  name: string;
+}
+
+/**
+ * Validates model reimport metadata. Reimport deliberately preserves the
+ * destination path and its manifest id, so it only accepts GLB/GLTF sources
+ * whose extension matches the existing model path.
+ */
+export function validateReimportAssetMeta(input: {
+  path: unknown;
+  name: unknown;
+}): ReimportAssetMeta {
+  if (typeof input.path !== "string") throw new Error("reimport path must be a string");
+  if (input.path.includes("..")) throw new Error("reimport path must not contain ..");
+  const path = input.path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (!path) throw new Error("reimport path must not be empty");
+
+  const name = sanitizeContentName(input.name);
+  const pathExt = path.split(".").at(-1)?.toLowerCase() ?? "";
+  const sourceExt = name.split(".").at(-1)?.toLowerCase() ?? "";
+  if ((pathExt !== "glb" && pathExt !== "gltf") || sourceExt !== pathExt) {
+    throw new Error("reimport source must be a matching .glb or .gltf model");
+  }
+  return { path, name };
+}
+
 export interface ContentRenamePayload {
   /** Existing public-root-relative file path to rename. */
   path: string;

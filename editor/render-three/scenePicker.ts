@@ -287,9 +287,17 @@ export class ScenePicker {
    * surface point + normal, not just the pointer's centre hit.
    */
   raycastFoliageSurfaceDown(worldX: number, worldZ: number): FoliageSurfacePick | null {
-    const ray = new Raycaster(new Vector3(worldX, 1e4, worldZ), new Vector3(0, -1, 0), 0, 2e4);
-    ray.params.Line.threshold = 0;
-    return this.classifyFoliageHits(ray.intersectObjects(this.getPickables(), true));
+    // Reuse the member raycaster (whose layers/params match the scene — a fresh
+    // Raycaster silently missed the landscape) with a straight-down ray from above.
+    const prevNear = this.raycaster.near;
+    const prevFar = this.raycaster.far;
+    this.raycaster.set(new Vector3(worldX, 1e4, worldZ), new Vector3(0, -1, 0));
+    this.raycaster.near = 0;
+    this.raycaster.far = 2e4;
+    const hits = this.raycaster.intersectObjects(this.getPickables(), true);
+    this.raycaster.near = prevNear;
+    this.raycaster.far = prevFar;
+    return this.classifyFoliageHits(hits);
   }
 
   private classifyFoliageHits(intersections: Intersection[]): FoliageSurfacePick | null {

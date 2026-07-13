@@ -198,6 +198,7 @@ import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-th
 import {
   createEmptyFoliageData,
   foliageDataPath,
+  normalizeFoliageType,
   uniqueFoliageGroupId,
   type ForgeFoliageTypeDef,
   type LayoutFoliageData,
@@ -864,6 +865,8 @@ export class SceneApp {
   private foliageBrushCursor: Mesh | null = null;
   /** Pointer id of the in-progress foliage paint/erase stroke, or null. */
   private foliageStrokePointerId: number | null = null;
+  /** World position of the last paint dab, for brush spacing throttle during a drag. */
+  private foliagePaintLastDab: Vec3 | null = null;
   private foliageToolSettings: FoliageToolSettings = {
     tool: "paint",
     activeTypeId: null,
@@ -5234,6 +5237,20 @@ export class SceneApp {
     this.emitFoliageChanged();
   }
 
+  /**
+   * Registers an already-loaded Foliage Type def under its asset id (used right
+   * after the editor creates a new `*.foliagetype.json`, so it works without
+   * waiting for the SceneApp manifest cache to pick up the new asset — the source
+   * of the "created a type but nothing paints / selection resets" bug).
+   */
+  async registerLoadedFoliageType(assetId: string, def: ForgeFoliageTypeDef): Promise<void> {
+    const type = normalizeFoliageType(def);
+    this.foliageTypes.set(assetId, type);
+    if (type.meshAssetId) await this.ensureAssetLoaded(type.meshAssetId);
+    this.foliageToolSettings.activeTypeId = assetId;
+    this.emitFoliageChanged();
+  }
+
   /** Removes a Foliage Type from the list along with all of its painted instances. */
   removeFoliageType(assetId: string): void {
     const removedGroups = this.foliageData.groups.filter((group) => group.foliageTypeId === assetId);
@@ -5333,6 +5350,17 @@ export class SceneApp {
       density: this.foliageToolSettings.paintDensity,
       seed: this.foliageToolSettings.randomSeed,
     };
+    // Brush spacing throttle: during a drag, only lay a new dab once the cursor has
+    // moved ~one brush radius. Without this, every pointermove re-dabs the same spot
+    // and saturates it far past a single click's density; a full-radius step keeps
+    // consecutive dabs overlapping enough for continuous coverage at click density.
+    if (this.foliagePaintLastDab) {
+      const dx = brush.center[0] - this.foliagePaintLastDab[0];
+      const dz = brush.center[2] - this.foliagePaintLastDab[2];
+      const spacing = brush.radius;
+      if (dx * dx + dz * dz < spacing * spacing) return true;
+    }
+    this.foliagePaintLastDab = [brush.center[0], brush.center[1], brush.center[2]];
     const group = this.foliageGroupFor(active.id, target, true);
     if (!group) return false;
     const count = foliageSampleTargetCount(active.type, brush);
@@ -5347,13 +5375,20 @@ export class SceneApp {
       const sampleX = brush.center[0] + Math.cos(angle) * radius;
       const sampleZ = brush.center[2] + Math.sin(angle) * radius;
       const surface = this.picker.raycastFoliageSurfaceDown(sampleX, sampleZ);
-      if (!surface) continue;
-      const sampleTarget = this.foliageTargetAt(surface);
-      if (!sampleTarget || sampleTarget.kind !== target.kind || sampleTarget.id !== target.id) continue;
-      const hit: FoliageSurfaceHit = {
-        position: [surface.point.x, surface.point.y, surface.point.z],
-        normal: [surface.normal.x, surface.normal.y, surface.normal.z],
-      };
+      const sampleTarget = surface ? this.foliageTargetAt(surface) : null;
+      let hit: FoliageSurfaceHit;
+      if (surface && sampleTarget && sampleTarget.kind === target.kind && sampleTarget.id === target.id) {
+        hit = {
+          position: [surface.point.x, surface.point.y, surface.point.z],
+          normal: [surface.normal.x, surface.normal.y, surface.normal.z],
+        };
+      } else if (target.kind === "landscape") {
+        // Fallback for a missed/other-target down-cast on landscape: place on the
+        // cursor-hit plane so the brush always scatters (accurate on flat ground).
+        hit = { position: [sampleX, pick.point.y, sampleZ], normal: [pick.normal.x, pick.normal.y, pick.normal.z] };
+      } else {
+        continue;
+      }
       if (!passesFoliageFilters(active.type, hit)) continue;
       if (foliageOverlaps(hit.position, existing, active.type.radius)) continue;
       const instance = foliageInstanceFromRoll(active.type, rollFoliageInstance(active.type, hit, rng));
@@ -5380,6 +5415,11 @@ export class SceneApp {
     if (!passesFoliageFilters(active.type, hit)) return true;
     const group = this.foliageGroupFor(active.id, target, true);
     if (!group) return false;
+    // Space single placements by the type radius so a drag scatters instances
+    // instead of stacking dozens on the same spot under a held button.
+    if (foliageOverlaps(hit.position, group.instances.map((instance) => instance.position), active.type.radius)) {
+      return true;
+    }
     const rng = makeFoliageRng((this.foliageToolSettings.randomSeed + group.instances.length + 1) >>> 0);
     const instance = foliageInstanceFromRoll(active.type, rollFoliageInstance(active.type, hit, rng));
     group.instances.push(instance);
@@ -5460,7 +5500,11 @@ export class SceneApp {
   /** Pointer-down entry for a foliage tool; returns true when it owns the pointer. */
   beginFoliageStroke(event: PointerEvent): boolean {
     if (!this.foliageModeActive || this.foliageToolSettings.tool === "select") return false;
-    if (!this.applyFoliageActionAt(event.clientX, event.clientY)) return false;
+    // Foliage mode owns the left button for paint/erase/single/remove: consume the
+    // pointer even when a dab places/removes nothing, so it NEVER falls through to
+    // landscape sculpt or scene selection (that was deforming terrain under Paint).
+    this.foliagePaintLastDab = null;
+    this.applyFoliageActionAt(event.clientX, event.clientY);
     this.foliageStrokePointerId = event.pointerId;
     this.canvas.setPointerCapture(event.pointerId);
     return true;
@@ -5469,7 +5513,13 @@ export class SceneApp {
   /** Pointer-move during a foliage stroke (drag paint/erase). */
   updateFoliageStroke(event: PointerEvent): boolean {
     if (this.foliageStrokePointerId !== event.pointerId) return false;
-    this.applyFoliageActionAt(event.clientX, event.clientY);
+    // Keep the brush ring under the cursor while the button is held (pointer is
+    // captured, so the normal hover path doesn't run during a drag).
+    this.updateFoliageBrushHover(event.clientX, event.clientY);
+    // Single places exactly one instance per click — it must not drag-paint.
+    if (this.foliageToolSettings.tool !== "single") {
+      this.applyFoliageActionAt(event.clientX, event.clientY);
+    }
     return true;
   }
 
@@ -5569,6 +5619,11 @@ export class SceneApp {
   }
 
   private updateLandscapeBrushHover(clientX: number, clientY: number): void {
+    // Foliage mode owns the brush cursor; never show the landscape sculpt ring too.
+    if (this.foliageModeActive) {
+      this.clearLandscapeBrushHover();
+      return;
+    }
     const selectedIndex = this.selectedEditableLandscapeIndex();
     if (selectedIndex === null) {
       this.clearLandscapeBrushHover();
@@ -5591,6 +5646,8 @@ export class SceneApp {
   }
 
   private beginLandscapeSculpt(event: PointerEvent): boolean {
+    // Foliage Mode disables terrain sculpting entirely (its brush owns the pointer).
+    if (this.foliageModeActive) return false;
     if (this.landscapeSculptSettings.editMode === "splines") {
       return this.addLandscapeSplinePointAtPointer(event);
     }
