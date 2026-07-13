@@ -126,6 +126,30 @@ import {
   type NavGridBuildRequest,
 } from "../engine/navigation/gridNavigation";
 import type { Vec3 } from "../engine/scene/layout";
+import {
+  createDefaultSplineComponentData,
+  normalizeSplineComponentData,
+  SPLINE_DEFAULT_REPARAM_STEPS,
+  SPLINE_MAX_REPARAM_STEPS,
+  splineSegmentCount,
+  uniqueSplinePointId,
+} from "../engine/scene/spline";
+import {
+  buildSplineCurveCache,
+  evaluateSplineSegment,
+  getSplineDirectionAtDistance,
+  getSplineLocationAtDistance,
+  getSplineTangentAtDistance,
+  sampleSplineAtDistance,
+  SplineCurveCacheStore,
+} from "../engine/scene/splineCurve";
+import {
+  getSplineFrameAtDistance,
+  getSplineRotationAtDistance,
+  getSplineTransformAtDistance,
+  reverseSplineFrame,
+  SPLINE_FRAME_TRANSPORT_DESIGN_NOTE,
+} from "../engine/scene/splineFrame";
 import { resolveNavAgentProfile } from "../engine/navigation/navAgentProfile";
 import {
   freshStuckState,
@@ -19197,6 +19221,323 @@ check("smooth spline follows a closed loop with wrapped tangents", () => {
 
   const validated = validateLandscapeData({ ...createFlatLandscapeData("small"), splines: [loop] }) as ForgeLandscapeData;
   assert.equal(validated.splines?.[0]?.smooth, true); // `smooth` survives the save validator
+});
+
+// --- Generic Spline component data (engine/scene/spline.ts, Faz 1) -----------
+
+check("normalizeSplineComponentData survives garbage input without throwing", () => {
+  for (const garbage of [undefined, null, 42, "spline", [], { points: "nope" }]) {
+    const spline = normalizeSplineComponentData(garbage);
+    assert.equal(spline.schema, 1);
+    assert.equal(spline.closed, false);
+    assert.deepEqual(spline.defaultUp, [0, 1, 0]);
+    assert.equal(spline.reparamStepsPerSegment, SPLINE_DEFAULT_REPARAM_STEPS);
+    assert.deepEqual(spline.points, []);
+  }
+});
+
+check("normalizeSplineComponentData drops invalid points and falls back field-by-field", () => {
+  const spline = normalizeSplineComponentData({
+    schema: 1,
+    closed: "yes", // non-boolean → false
+    defaultUp: [0, 0, 4], // normalized to unit length
+    reparamStepsPerSegment: 999.9, // clamped
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "linear" },
+      { id: "bad-nan", position: [Number.NaN, 0, 0] }, // dropped
+      { id: "bad-shape", position: [1, 2] }, // dropped
+      "not-a-point", // dropped
+      { id: "b", position: [10, 0, 0], pointType: "bogus", roll: Number.POSITIVE_INFINITY, scale: [2, "x"] },
+    ],
+  });
+  assert.equal(spline.points.length, 2);
+  assert.deepEqual(spline.defaultUp, [0, 0, 1]);
+  assert.equal(spline.reparamStepsPerSegment, SPLINE_MAX_REPARAM_STEPS);
+  assert.equal(spline.closed, false);
+  assert.equal(spline.points[0]!.pointType, "linear");
+  const fallback = spline.points[1]!;
+  assert.equal(fallback.pointType, "curveAuto"); // invalid type → default
+  assert.equal(fallback.roll, undefined); // non-finite roll dropped
+  assert.equal(fallback.scale, undefined); // malformed scale dropped
+});
+
+check("normalizeSplineComponentData reassigns missing and duplicate point ids", () => {
+  const spline = normalizeSplineComponentData({
+    points: [
+      { id: "p", position: [0, 0, 0] },
+      { id: "p", position: [1, 0, 0] }, // duplicate → reassigned
+      { position: [2, 0, 0] }, // missing → assigned
+      { id: "  ", position: [3, 0, 0] }, // blank → assigned
+    ],
+  });
+  const ids = spline.points.map((point) => point.id);
+  assert.equal(new Set(ids).size, 4);
+  assert.equal(ids[0], "p");
+  assert.ok(ids.slice(1).every((id) => /^spline-point-\d+$/.test(id)));
+  assert.equal(uniqueSplinePointId(spline.points), "spline-point-4");
+});
+
+check("spline empty, single-point, two-point, and closed-loop segment counts follow", () => {
+  const empty = normalizeSplineComponentData({ points: [] });
+  assert.equal(empty.points.length, 0);
+  const one = normalizeSplineComponentData({ points: [{ id: "only", position: [0, 0, 0] }] });
+  assert.equal(one.points.length, 1);
+  const two = normalizeSplineComponentData({
+    closed: true,
+    points: [
+      { id: "a", position: [0, 0, 0] },
+      { id: "b", position: [1, 0, 0] },
+    ],
+  });
+  assert.equal(two.closed, false); // degenerate closed loop normalized open
+
+  const three = normalizeSplineComponentData({
+    closed: true,
+    points: [
+      { id: "a", position: [0, 0, 0] },
+      { id: "b", position: [1, 0, 0] },
+      { id: "c", position: [0, 0, 1] },
+    ],
+  });
+  assert.equal(three.closed, true);
+
+  assert.equal(splineSegmentCount(0, false), 0);
+  assert.equal(splineSegmentCount(1, false), 0);
+  assert.equal(splineSegmentCount(2, false), 1);
+  assert.equal(splineSegmentCount(2, true), 1); // closed rejected below minimum
+  assert.equal(splineSegmentCount(3, true), 3); // loop adds the seam segment
+});
+
+check("normalizeSplineComponentData preserves custom tangents, metadata, and is pure", () => {
+  const raw = {
+    closed: false,
+    points: [
+      {
+        id: "a",
+        position: [0, 1, 2],
+        pointType: "curveCustom",
+        arriveTangent: [1, 0, 0],
+        leaveTangent: [0, 0, 1],
+        tangentsLinked: false,
+        roll: 45,
+        scale: [2, 0.5],
+        metadata: { lane: 1, kind: "road", live: true, bad: { nested: true } },
+      },
+    ],
+  };
+  const frozen = JSON.stringify(raw);
+  const spline = normalizeSplineComponentData(raw);
+  const point = spline.points[0]!;
+  assert.deepEqual(point.arriveTangent, [1, 0, 0]);
+  assert.deepEqual(point.leaveTangent, [0, 0, 1]);
+  assert.equal(point.tangentsLinked, false);
+  assert.equal(point.roll, 45);
+  assert.deepEqual(point.scale, [2, 0.5]);
+  assert.deepEqual(point.metadata, { lane: 1, kind: "road", live: true }); // nested value filtered
+  assert.equal(JSON.stringify(raw), frozen); // input not mutated
+  // Round-trip: normalizing normalized output is a fixed point.
+  assert.deepEqual(normalizeSplineComponentData(spline), spline);
+});
+
+check("createDefaultSplineComponentData is already normalized", () => {
+  const spline = createDefaultSplineComponentData();
+  assert.deepEqual(normalizeSplineComponentData(spline), spline);
+  assert.equal(spline.points.length, 2);
+  assert.equal(splineSegmentCount(spline.points.length, spline.closed), 1);
+});
+
+check("spline schema migration skeleton: unknown schema still normalizes to current", () => {
+  // Future schemas bump `schema`; until then any value coerces to the current
+  // contract so hand-edited or older files stay loadable.
+  const spline = normalizeSplineComponentData({ schema: 0, points: [{ id: "a", position: [0, 0, 0] }] });
+  assert.equal(spline.schema, 1);
+  assert.equal(spline.points.length, 1);
+});
+
+// --- Generic Spline curve evaluation + arc-length cache (Faz 2) -------------
+
+check("generic spline linear evaluation and distance sampling are exact", () => {
+  const spline = normalizeSplineComponentData({
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "linear" },
+      { id: "b", position: [10, 0, 0], pointType: "linear" },
+    ],
+  });
+  const cache = buildSplineCurveCache(spline);
+  assert.equal(cache.totalLength, 10);
+  assert.deepEqual(evaluateSplineSegment(spline, 0, 0.5).position, [5, 0, 0]);
+  assert.deepEqual(getSplineLocationAtDistance(cache, 5), [5, 0, 0]);
+  assert.deepEqual(getSplineLocationAtDistance(cache, -10), [0, 0, 0]);
+  assert.deepEqual(getSplineLocationAtDistance(cache, 99), [10, 0, 0]);
+  assert.deepEqual(getSplineTangentAtDistance(cache, 5), [10, 0, 0]);
+  assert.deepEqual(getSplineDirectionAtDistance(cache, 5), [1, 0, 0]);
+});
+
+check("generic spline evaluates cubic Hermite custom and auto tangents", () => {
+  const custom = normalizeSplineComponentData({
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "curveCustom", leaveTangent: [0, 10, 0] },
+      { id: "b", position: [10, 0, 0], pointType: "curveCustom", arriveTangent: [0, -10, 0] },
+    ],
+  });
+  const midpoint = evaluateSplineSegment(custom, 0, 0.5);
+  assert.deepEqual(midpoint.position, [5, 2.5, 0]);
+  assert.ok(midpoint.direction[1] < 0.01 && midpoint.direction[0] > 0.99);
+
+  const auto = normalizeSplineComponentData({
+    points: [
+      { id: "a", position: [0, 0, 0] },
+      { id: "b", position: [5, 0, 5] },
+      { id: "c", position: [10, 0, 0] },
+    ],
+  });
+  assert.ok(evaluateSplineSegment(auto, 0, 0.5).position[2] > 2.5);
+});
+
+check("generic spline arc-length cache is deterministic and maps curved distances", () => {
+  const spline = normalizeSplineComponentData({
+    reparamStepsPerSegment: 32,
+    points: [
+      { id: "a", position: [0, 0, 0] },
+      { id: "b", position: [5, 0, 5] },
+      { id: "c", position: [10, 0, 0] },
+    ],
+  });
+  const first = buildSplineCurveCache(spline);
+  const second = buildSplineCurveCache(spline);
+  assert.deepEqual(second, first);
+  assert.ok(first.totalLength > 10 && first.totalLength < 20);
+  const half = sampleSplineAtDistance(first, first.totalLength / 2);
+  assert.ok(Math.abs(half.position[0] - 5) < 0.15);
+  assert.ok(Math.abs(Math.hypot(...half.direction) - 1) < 1e-9);
+});
+
+check("generic spline closed loops wrap at the seam and open splines clamp", () => {
+  const closed = buildSplineCurveCache({
+    closed: true,
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "linear" },
+      { id: "b", position: [10, 0, 0], pointType: "linear" },
+      { id: "c", position: [10, 0, 10], pointType: "linear" },
+    ],
+  });
+  assert.deepEqual(getSplineLocationAtDistance(closed, 0), getSplineLocationAtDistance(closed, closed.totalLength));
+  assert.deepEqual(getSplineLocationAtDistance(closed, 2), getSplineLocationAtDistance(closed, closed.totalLength + 2));
+  assert.deepEqual(getSplineLocationAtDistance(closed, -2), getSplineLocationAtDistance(closed, closed.totalLength - 2));
+});
+
+check("generic spline cache store invalidates once per changed source version", () => {
+  const authored = {
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "linear" },
+      { id: "b", position: [4, 0, 0], pointType: "linear" },
+    ],
+  };
+  const store = new SplineCurveCacheStore();
+  const cache = store.get(authored);
+  for (let index = 0; index < 1000; index += 1) assert.equal(store.get(authored), cache);
+  authored.points[1]!.position[0] = 8;
+  const changed = store.get(authored);
+  assert.notEqual(changed, cache);
+  assert.equal(changed.totalLength, 8);
+});
+
+check("generic spline zero-length segments sample safely", () => {
+  const cache = buildSplineCurveCache({
+    points: [
+      { id: "a", position: [1, 2, 3], pointType: "linear" },
+      { id: "b", position: [1, 2, 3], pointType: "linear" },
+    ],
+  });
+  const sample = sampleSplineAtDistance(cache, 99);
+  assert.deepEqual(sample.position, [1, 2, 3]);
+  assert.deepEqual(sample.direction, [1, 0, 0]);
+  assert.ok(sample.tangent.every(Number.isFinite));
+});
+
+// --- Generic Spline frames, rotations, and transforms (Faz 3) --------------
+
+check("generic spline horizontal frame maps local +X/+Y/+Z to right/up/forward", () => {
+  const cache = buildSplineCurveCache({
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "linear" },
+      { id: "b", position: [0, 0, 10], pointType: "linear" },
+    ],
+  });
+  const frame = getSplineFrameAtDistance(cache, 5);
+  assert.deepEqual(frame.tangent, [0, 0, 1]);
+  assert.deepEqual(frame.normal, [0, 1, 0]);
+  assert.deepEqual(frame.binormal, [1, 0, 0]);
+  assert.deepEqual(frame.rotation, [0, 0, 0, 1]);
+  assert.ok(SPLINE_FRAME_TRANSPORT_DESIGN_NOTE.includes("parallel transport"));
+});
+
+check("generic spline vertical frame uses a finite parallel-axis fallback", () => {
+  const cache = buildSplineCurveCache({
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "linear" },
+      { id: "b", position: [0, 10, 0], pointType: "linear" },
+    ],
+  });
+  const frame = getSplineFrameAtDistance(cache, 5);
+  assert.deepEqual(frame.tangent, [0, 1, 0]);
+  assert.ok(frame.normal.every(Number.isFinite));
+  assert.ok(frame.binormal.every(Number.isFinite));
+  assert.ok(frame.rotation.every(Number.isFinite));
+  assert.ok(Math.abs(frame.normal[0] * frame.tangent[0] + frame.normal[1] * frame.tangent[1] + frame.normal[2] * frame.tangent[2]) < 1e-9);
+});
+
+check("generic spline interpolates point roll and cross-section scale", () => {
+  const cache = buildSplineCurveCache({
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "linear", roll: 0, scale: [1, 2] },
+      { id: "b", position: [0, 0, 10], pointType: "linear", roll: 90, scale: [3, 4] },
+    ],
+  });
+  const frame = getSplineFrameAtDistance(cache, 5);
+  assert.equal(frame.roll, 45);
+  assert.deepEqual(frame.scale, [2, 3]);
+  assert.ok(Math.abs(frame.normal[0] + Math.SQRT1_2) < 1e-9);
+  assert.ok(Math.abs(frame.binormal[1] - Math.SQRT1_2) < 1e-9);
+});
+
+check("generic spline world transform applies actor position, rotation, and non-uniform scale", () => {
+  const cache = buildSplineCurveCache({
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "linear" },
+      { id: "b", position: [2, 0, 0], pointType: "linear" },
+    ],
+  });
+  const local = getSplineTransformAtDistance(cache, 2);
+  const world = getSplineTransformAtDistance(cache, 2, "world", {
+    position: [10, 0, 0], rotation: [0, 90, 0], scale: [2, 1, 3],
+  });
+  assert.deepEqual(local.position, [2, 0, 0]);
+  assert.deepEqual(world.position, [10, 0, -4]);
+  assert.deepEqual(world.frame.tangent, [0, 0, -1]);
+  assert.ok(getSplineRotationAtDistance(cache, 2, "world", { rotation: [0, 90, 0] }).every(Number.isFinite));
+});
+
+check("generic spline reverse frame turns forward and right axes while preserving up", () => {
+  const cache = buildSplineCurveCache({ points: [{ id: "a", position: [0, 0, 0] }, { id: "b", position: [0, 0, 2] }] });
+  const frame = getSplineFrameAtDistance(cache, 1);
+  const reversed = reverseSplineFrame(frame);
+  assert.deepEqual(reversed.tangent, [0, 0, -1]);
+  assert.deepEqual(reversed.normal, [0, 1, 0]);
+  assert.deepEqual(reversed.binormal, [-1, 0, 0]);
+});
+
+check("generic spline closed-loop seam interpolates roll through its final segment", () => {
+  const cache = buildSplineCurveCache({
+    closed: true,
+    points: [
+      { id: "a", position: [0, 0, 0], pointType: "linear", roll: 0 },
+      { id: "b", position: [10, 0, 0], pointType: "linear", roll: 30 },
+      { id: "c", position: [10, 0, 10], pointType: "linear", roll: 90 },
+    ],
+  });
+  const seam = cache.segments[2]!;
+  assert.equal(getSplineFrameAtDistance(cache, seam.startDistance + seam.length / 2).roll, 45);
 });
 
 check("validateLandscape allowlists fields and round-trips through validateLayout", () => {

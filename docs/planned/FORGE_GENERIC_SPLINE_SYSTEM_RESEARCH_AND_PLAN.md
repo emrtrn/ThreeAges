@@ -1,9 +1,146 @@
 # Forge Generic Spline System — Araştırma ve Üretim Planı
 
 > Tarih: 2026-07-13  
-> Durum: Gelecek çalışma planı. Kod uygulanmadı.  
-> Bağlı çalışma: `LANDSCAPE_MODE_RESEARCH_AND_PLAN.md`  
+> Durum: Faz 0–3 tamamlandı; Faz 4 (scene actor, save/load ve debug render) sırada.
+> Bağlı çalışma: Landscape Spline **implement edilmiş durumda** — plan dokümanı
+> (`LANDSCAPE_MODE_RESEARCH_AND_PLAN.md`) tamamlanıp silindi
+> (`docs/COMPLETED_WORK_INDEX.md`, geçmişi git'te). Güncel referans kodun kendisidir:
+> `engine/scene/landscape.ts` ve `engine/render-three/landscape.ts`.
 > Amaç: Forge içinde Unreal Engine Blueprint Spline yaklaşımına benzer, Landscape'ten bağımsız, level içinde düzenlenebilir ve runtime tarafından sorgulanabilir bir **Spline Actor / Spline Component sistemi** geliştirmek.
+
+---
+
+## 0. Repo inceleme notları — 2026-07-13
+
+Bu doküman yazıldıktan sonra yapılan ön-inceleme, aşağıdaki repo gerçeklerini
+tespit etti. Faz 0 çalışması bu notların üstüne devam etmelidir; plandaki genel
+öneriler ile çelişen her yerde **bu bölüm geçerlidir**.
+
+### 0.1 Landscape Spline zaten var
+
+- Veri modeli: `engine/scene/landscape.ts` — `ForgeLandscapeSpline`,
+  `ForgeLandscapeSplinePoint` (per-point `width`/`falloff` ve **hâlihazırda
+  `arriveTangent`/`leaveTangent` alanları var**), `ForgeLandscapeSplineSegment`.
+- Eğri matematiği: uniform **Catmull-Rom** (`splineToPolyline`,
+  `LANDSCAPE_SPLINE_CURVE_SUBDIVISIONS = 8`, `smooth` bayrağı). Catmull-Rom,
+  cubic Hermite'in tangent'ları komşulardan türetilen özel hali olduğundan bu
+  plandaki Hermite çekirdeği (`curveAuto` ≈ Catmull-Rom) ile uyumludur; Faz 11
+  adapter'ı gerçekçidir.
+- Mesh üretimi: `engine/render-three/landscape.ts` —
+  `deformSplineMeshGeometry` (spline boyunca geometry bükme),
+  `buildLandscapeSplineMeshGroup`, `computeLandscapeSplineMeshInstances`
+  (rigid segment/instance yerleşimi) **çalışır durumda**. Faz 8–9 için birebir
+  precedent; generic sistemin bunları kopyalamak yerine hangi kısımları
+  `engine/spline` çekirdeğine çekeceği Faz 0'da belirlenmelidir.
+- Kalıcılık: landscape verisi layout içinde değil `*.landscape.json` sidecar'da
+  (`LayoutLandscape.dataRef`), `tools/saveValidator.ts` →
+  `validateLandscapeData` → `validateLandscapeSplines` ile doğrulanıyor.
+- Smoke test: `tests/smoke/landscape-spline-chain.spec.ts`.
+
+### 0.2 Layout ve save-validator entegrasyonu (kritik)
+
+- Layout actor deseni: `engine/scene/layout.ts` içindeki `RoomLayout`, her actor
+  türünü ayrı tiplenmiş array olarak taşır (`lights`, `blockingVolumes`,
+  `targetPoints`, `landscapes`, …). Generic Spline de aynı deseni izlemelidir:
+  `splines?: LayoutSplineActor[]` + ortak alanlar (`id`, `name?`, `hidden?`,
+  `locked?`, `groupId?`, `nodeId?`, `parentId?`, `position`, `rotation?`).
+- **Allowlist tuzağı:** `/__save-layout`, `tools/saveValidator.ts` üzerinden
+  yazar. Yeni `splines` array'i ve `LayoutSplineActor`'ın her alanı için orada
+  bir `validateSplineActor` (ve nested spline/generator validation) eklenmezse
+  veri **save sırasında sessizce düşer**. Bu, Faz 4'ün ilk maddesi olmalıdır
+  (bkz. CLAUDE.md "Save-validator allowlist gotcha").
+
+### 0.3 Adlandırma ve dosya düzeni düzeltmeleri
+
+- Repo **camelCase düz dosya** kullanır (`engine/scene/targetPoint.ts`,
+  `engine/render-three/foliage.ts`); §6'daki kebab-case iç içe klasör önerisi
+  (`spline-types.ts`, `core/`) **uygulanmamalıdır**. Gerçekçi hedef:
+  `engine/spline/` altında az sayıda camelCase dosya (`splineTypes.ts`,
+  `splineCurve.ts`, `splineFrames.ts`, …) veya mevcut desene tam uyum için
+  `engine/scene/spline.ts` + `engine/render-three/spline.ts` ayrımı.
+- Editor bölünmesi: extracted editor modülleri top-level `editor/` altında
+  (`core`, `gizmos`, `input`, `render-three`, `scene`); panel/UI kodu
+  `src/editor/panels/*` altında (ör. `src/editor/panels/foliage/`). §6'daki
+  `editor/spline/` listesi bu iki katmana dağıtılmalıdır.
+- Unit testler ayrı `*.test.ts` dosyaları değildir: `npm run test:engine`,
+  `tools/engine-tests.ts` içindeki `check(...)` bloklarını çalıştırır. §22.1'in
+  core/frame/generator testleri oraya eklenmelidir. §22.2'deki
+  `tests/smoke/spline-*.spec.ts` önerisi mevcut Playwright düzeniyle uyumludur.
+
+### 0.4 Mevcut, örtüşen altyapılar (Faz 0'da incelenecek)
+
+- `LayoutTargetPoint` (`engine/scene/targetPoint.ts`) — AI patrol rota
+  authoring'i zaten var (`tests/smoke/ai-patrol.spec.ts`). Path Follower,
+  target-point patrol ile ilişkisini (yan yana mı, ortak API mi) Faz 6'da
+  netleştirmelidir.
+- `LayoutMovingPlatform` behavior'ı — mevcut hareketli platform verisi.
+- Foliage chunk-based instancing (`engine/scene/landscapeFoliage.ts`,
+  `engine/render-three/foliage.ts`) — Faz 7 Instance Placement Generator'ın
+  render yolu için birincil reuse adayı.
+- Details panel özel actor entegrasyonu:
+  `src/editor/panels/details/specialActorDetails.ts`.
+
+### 0.5 Entegrasyon haritası — yeni bir actor türü nasıl eklenir (Faz 0 çıktısı, 2026-07-13)
+
+`TargetPoint` (en yeni/en basit özel actor) iz sürülerek çıkarılan zincir; Generic
+Spline Actor aynı deseni izleyecek:
+
+1. **Tip:** `engine/scene/layout.ts` — `LayoutXxx` interface + `RoomLayout`'a
+   opsiyonel array (`splines?: LayoutSplineActor[]`).
+2. **Engine yardımcıları:** `engine/scene/<actor>.ts` deseni
+   (ör. `engine/scene/targetPoint.ts`): `resolveXxx()` defaults +
+   `uniqueXxxId()` / `uniqueXxxName()`. Spline için ek olarak eğri çekirdeği
+   ayrı dosya(lar)da tutulur (`engine/scene/spline.ts` veya `engine/spline/`).
+3. **Save allowlist:** `tools/saveValidator.ts` — `validateXxx` fonksiyonu +
+   `validateRoomLayoutPayload` gövdesine array kablolaması (bkz. §0.2).
+4. **Selection:** `editor/core/selection.ts` — `Selection` union'ına
+   `{ kind: "spline"; index: number }` + `cloneSelection` / `selectionId` /
+   `parseSelectionId` / `selectionsEqual` dallarına ekleme.
+5. **Editor sahne entegrasyonu:** `src/scene/SceneApp.ts` —
+   `private xxxObjects[]` render helper listesi; `addXxx` / `removeXxx` /
+   `setXxx(index, patch)` metodları, hepsi
+   `executeCommand({ label, redo, undo })` (undo/redo deseni) +
+   `emitSceneObjectsChanged()` + `scheduleAutoSave()`;
+   `rebuildXxxObject(index)` / `refreshXxxObject(index)` görsel güncelleme.
+6. **Editor UI:** `src/editor/EditorUi.ts` —
+   `bindSpecialActorButton("[data-add-spline]", "spline", ...)` Add Actor
+   girişi; Details render'ı `src/editor/panels/details/specialActorDetails.ts`
+   içine `renderSplineDetails(...)`.
+7. **Transform gizmo:** `editor/gizmos/*` (builder/handles/interaction/
+   transformDrag) — mevcut selection üzerinden çalışır; spline **point** editi
+   için Faz 5'te aynı gizmo altyapısının point'e bağlanması gerekir.
+8. **Runtime:** `src/scene/RuntimeSceneApp.ts` layout'tan okur; runtime
+   registry precedent'i `engine/ai/targetPoints.ts`
+   (`createTargetPointIndex` + `targetPointEntriesFromLayout`) — spline
+   registry (`getSplineById`/`getSplinesByTag`) aynı desende
+   `engine/` altında kurulmalı.
+9. **Layout load/normalize:** `src/scene/roomLayout.ts` → `loadRoomLayout()` →
+   `normalizeLoadedRoomLayout()` (legacy migration noktası).
+10. **Asset yükleme / instancing:** `engine/render-three/gltfModelLoader.ts`,
+    `models.ts` (InstancedMesh kullanımı), `engine/render-three/foliage.ts`
+    (chunk-based instancing), manifest: `engine/assets/manifest.ts`.
+11. **Testler:** unit → `tools/engine-tests.ts` (`check(...)`);
+    smoke → `tests/smoke/spline-*.spec.ts` (Playwright,
+    `landscape-spline-chain.spec.ts` örnek).
+
+### 0.6 Faz 1'de değişecek/oluşacak dosyalar (2026-07-13)
+
+Faz 1 yalnızca core veri modeli + validation + unit test kapsar; editor/scene
+dosyalarına dokunulmaz:
+
+- **Yeni:** `engine/scene/spline.ts` — `ForgeSplinePoint`,
+  `ForgeSplineComponentData`, normalize/resolve/validate yardımcıları,
+  `uniqueSplinePointId`. (Eğri matematiği Faz 2'de ayrı dosyaya —
+  `engine/scene/splineCurve.ts` — eklenir; Faz 1 sadece veri sözleşmesi.)
+- **Değişecek:** `tools/engine-tests.ts` — normalize/validation `check(...)`
+  testleri.
+- **Bilinçli olarak Faz 1 dışı:** `engine/scene/layout.ts` +
+  `tools/saveValidator.ts` (`LayoutSplineActor` kablolaması Faz 4'te,
+  scene entegrasyonuyla birlikte yapılır ki layout'a ölü alan girmesin).
+
+Karar notları: geniş component/ECS refactor **gerekmiyor** (actor-first desen
+bütün mevcut özel actor'larla tutarlı); spline verisi layout içinde inline
+taşınabilir (landscape'in `dataRef` sidecar'ı yalnızca büyük veri için).
 
 ---
 
@@ -267,7 +404,11 @@ editor/spline/
 └─ spline-editor-commands.ts
 ```
 
-> Gerçek klasör adları repo incelemesinden sonra mevcut Forge desenlerine uyarlanmalıdır. Sırf bu belgeye uymak için geniş klasör refactor'u yapılmamalıdır.
+> **2026-07-13 düzeltmesi:** Yukarıdaki ağaç kavramsal katmanları gösterir;
+> dosya adları ve düzen repo desenine uyarlanmalıdır (bkz. §0.3): camelCase düz
+> dosyalar, kebab-case değil; unit testler `tools/engine-tests.ts` içinde;
+> editor kodu top-level `editor/` + `src/editor/panels/*` ayrımına dağıtılır.
+> Sırf bu belgeye uymak için geniş klasör refactor'u yapılmamalıdır.
 
 ---
 
@@ -275,7 +416,16 @@ editor/spline/
 
 ### 7.1 Level actor modeli
 
-İlk sürümde spline verisi küçük olduğu için layout içinde tutulabilir.
+İlk sürümde spline verisi küçük olduğu için layout içinde tutulabilir
+(`RoomLayout.splines?: LayoutSplineActor[]`; landscape'in `dataRef` sidecar
+deseni yalnızca veri büyürse gerekir).
+
+> **Save-validator zorunluluğu (2026-07-13):** `RoomLayout`'a eklenen `splines`
+> array'i ve bu tipin her alanı `tools/saveValidator.ts` allowlist'ine
+> (`validateSplineActor` benzeri yeni fonksiyonlar) eklenmek zorundadır; aksi
+> halde alanlar Save Layout sırasında sessizce düşer. Nested
+> `ForgeSplineComponentData`, `ForgeSplinePoint` ve her generator def alanı da
+> aynı kurala tabidir. Bkz. §0.2 ve CLAUDE.md.
 
 ```ts
 interface LayoutSplineActor {
@@ -1236,6 +1386,10 @@ Debug görünüm shipping runtime'da varsayılan kapalı olmalıdır.
 
 ### 22.1 Unit testler
 
+> **2026-07-13:** Bu testler ayrı `*.test.ts` dosyaları olarak değil,
+> `tools/engine-tests.ts` içine `check(...)` blokları olarak eklenir ve
+> `npm run test:engine` ile çalışır (bkz. §0.3).
+
 Spline core:
 
 - Linear interpolation.
@@ -1359,25 +1513,25 @@ Kod yazmadan önce Generic Spline sisteminin bağlanacağı gerçek Forge dosyal
 
 ### Kontrol listesi
 
-- [ ] `LANDSCAPE_MODE_RESEARCH_AND_PLAN.md` içindeki Landscape Spline kapsamını ve güncel implementation durumunu oku.
-- [ ] Level/layout actor serialization tiplerini bul.
-- [ ] Actor create/delete/duplicate akışını bul.
-- [ ] Editor selection state'i bul.
-- [ ] Transform gizmo implementation'ını bul.
-- [ ] Undo/Redo command pattern'ini bul.
-- [ ] Scene render object registry veya adapter yolunu bul.
-- [ ] Runtime scene load ve entity registry yolunu bul.
-- [ ] Static mesh asset loader'ı bul.
-- [ ] Instanced mesh kullanım örneklerini bul.
-- [ ] Geometry clone/deform utility'lerini ara.
-- [ ] Collision generation ve resource dispose desenlerini bul.
-- [ ] Existing path, rail, camera route veya waypoint sistemi varsa incele.
-- [ ] Landscape Spline için yazılmış curve math kodu varsa tespit et.
-- [ ] Reuse edilecek ve edilmeyecek modülleri belgeye yaz.
-- [ ] `Spline Actor` için gerçek layout entegrasyon noktasını belirle.
-- [ ] Faz 1'de değişecek dosyaların listesini yaz.
-- [ ] Geniş component/ECS refactor'u gerekip gerekmediğini değerlendir.
-- [ ] MVP'de actor-first yaklaşımını doğrula.
+- [x] Landscape Spline kapsamını ve güncel implementation durumunu oku. *(2026-07-13: plan dokümanı tamamlanıp silindi; güncel durum §0.1'de — `engine/scene/landscape.ts` + `engine/render-three/landscape.ts` incelendi.)*
+- [x] Level/layout actor serialization tiplerini bul. *(2026-07-13: `engine/scene/layout.ts`, `RoomLayout` tiplenmiş array deseni; bkz. §0.5-1.)*
+- [x] Actor create/delete/duplicate akışını bul. *(2026-07-13: `src/scene/SceneApp.ts` `addTargetPoint`/`removeTargetPoint` deseni; bkz. §0.5-5.)*
+- [x] Editor selection state'i bul. *(2026-07-13: `editor/core/selection.ts` `Selection` union + `selectionStore.ts`; bkz. §0.5-4.)*
+- [x] Transform gizmo implementation'ını bul. *(2026-07-13: `editor/gizmos/` — builder/handles/interaction/transformDrag; bkz. §0.5-7.)*
+- [x] Undo/Redo command pattern'ini bul. *(2026-07-13: `SceneApp.executeCommand({label, redo, undo})` + `editor/core/history.ts`; bkz. §0.5-5.)*
+- [x] Scene render object registry veya adapter yolunu bul. *(2026-07-13: SceneApp içi `xxxObjects[]` + `rebuild/refreshXxxObject`; bkz. §0.5-5.)*
+- [x] Runtime scene load ve entity registry yolunu bul. *(2026-07-13: `src/scene/RuntimeSceneApp.ts` + registry precedent `engine/ai/targetPoints.ts`; bkz. §0.5-8/9.)*
+- [x] Static mesh asset loader'ı bul. *(2026-07-13: `engine/render-three/gltfModelLoader.ts` + `engine/assets/manifest.ts`; bkz. §0.5-10.)*
+- [x] Instanced mesh kullanım örneklerini bul. *(2026-07-13: `engine/render-three/foliage.ts` chunk instancing, `models.ts`, `picking.ts`; bkz. §0.5-10.)*
+- [x] Geometry clone/deform utility'lerini ara. *(2026-07-13: `engine/render-three/landscape.ts` `deformSplineMeshGeometry`; bkz. §0.1.)*
+- [x] Collision generation ve resource dispose desenlerini bul. *(2026-07-13: landscape collision `engine/scene/collision.ts` + `LayoutLandscape.collision` deseni; dispose deseni SceneApp object listelerinde. Derin inceleme Faz 9 collision prototipi öncesine ertelendi.)*
+- [x] Existing path, rail, camera route veya waypoint sistemi varsa incele. *(2026-07-13: `LayoutTargetPoint` patrol rotaları (`engine/ai/targetPoints.ts`) ve `LayoutMovingPlatform` behavior'ı; Path Follower ile ilişki kararı Faz 6'ya not edildi — bkz. §0.4.)*
+- [x] Landscape Spline için yazılmış curve math kodu varsa tespit et. *(2026-07-13: var — Catmull-Rom `splineToPolyline` + deform/instance üretimi; bkz. §0.1.)*
+- [x] Reuse edilecek ve edilmeyecek modülleri belgeye yaz. *(2026-07-13: bkz. §0.1 ve §0.4.)*
+- [x] `Spline Actor` için gerçek layout entegrasyon noktasını belirle. *(2026-07-13: `RoomLayout.splines?: LayoutSplineActor[]`; bkz. §0.2 ve §0.5.)*
+- [x] Faz 1'de değişecek dosyaların listesini yaz. *(2026-07-13: bkz. §0.6.)*
+- [x] Geniş component/ECS refactor'u gerekip gerekmediğini değerlendir. *(2026-07-13: gerekmiyor — actor-first desen mevcut bütün özel actor'larla tutarlı; bkz. §0.6.)*
+- [x] MVP'de actor-first yaklaşımını doğrula. *(2026-07-13: doğrulandı; bkz. §0.6.)*
 
 ### Çıkış kriteri
 
@@ -1396,22 +1550,22 @@ Renderer ve editor'den bağımsız spline veri sözleşmesini oluşturmak.
 
 ### Kontrol listesi
 
-- [ ] `ForgeSplinePoint` tipini ekle.
-- [ ] `ForgeSplineComponentData` tipini ekle.
-- [ ] Schema version alanını ekle.
-- [ ] `linear`, `curveAuto`, `curveCustom` point type'larını ekle.
-- [ ] Closed loop alanını ekle.
-- [ ] Default up alanını ekle.
-- [ ] Roll ve scale alanlarını ekle.
-- [ ] Custom tangent alanlarını ekle.
-- [ ] Point ID normalization ekle.
-- [ ] Duplicate ID düzeltme veya validation davranışını ekle.
-- [ ] Vec3 finite validation ekle.
-- [ ] Invalid point type fallback ekle.
-- [ ] Reparam step clamp ekle.
-- [ ] Boş, tek point ve iki point spline testlerini ekle.
-- [ ] Closed-loop minimum point davranışını test et.
-- [ ] Schema migration test iskeleti ekle.
+- [x] `ForgeSplinePoint` tipini ekle. (`engine/scene/spline.ts`)
+- [x] `ForgeSplineComponentData` tipini ekle.
+- [x] Schema version alanını ekle.
+- [x] `linear`, `curveAuto`, `curveCustom` point type'larını ekle.
+- [x] Closed loop alanını ekle.
+- [x] Default up alanını ekle.
+- [x] Roll ve scale alanlarını ekle.
+- [x] Custom tangent alanlarını ekle.
+- [x] Point ID normalization ekle.
+- [x] Duplicate ID düzeltme veya validation davranışını ekle.
+- [x] Vec3 finite validation ekle.
+- [x] Invalid point type fallback ekle.
+- [x] Reparam step clamp ekle.
+- [x] Boş, tek point ve iki point spline testlerini ekle.
+- [x] Closed-loop minimum point davranışını test et.
+- [x] Schema migration test iskeleti ekle.
 
 ### Kabul kriterleri
 
@@ -1430,25 +1584,25 @@ Linear ve smooth spline'ı mesafe tabanlı sorgulayabilen matematik çekirdeğin
 
 ### Kontrol listesi
 
-- [ ] Linear segment evaluation ekle.
-- [ ] Cubic Hermite segment evaluation ekle.
-- [ ] Curve position fonksiyonunu ekle.
-- [ ] Analitik veya güvenli tangent evaluation ekle.
-- [ ] Auto tangent hesaplama ekle.
-- [ ] Closed-loop komşuluk desteği ekle.
-- [ ] Segment count utility ekle.
-- [ ] Arc-length sample table üret.
-- [ ] Total length hesapla.
-- [ ] Distance-to-segment/t binary search ekle.
-- [ ] Clamp davranışı ekle.
-- [ ] Closed-loop wrap davranışı ekle.
-- [ ] `getLocationAtDistance` ekle.
-- [ ] `getDirectionAtDistance` ekle.
-- [ ] `getTangentAtDistance` ekle.
-- [ ] Length approximation epsilon testleri ekle.
-- [ ] Cache invalidation/version modeli ekle.
-- [ ] Sıfır uzunluklu segment testleri ekle.
-- [ ] Determinism testleri ekle.
+- [x] Linear segment evaluation ekle. (`engine/scene/splineCurve.ts`)
+- [x] Cubic Hermite segment evaluation ekle.
+- [x] Curve position fonksiyonunu ekle.
+- [x] Analitik veya güvenli tangent evaluation ekle.
+- [x] Auto tangent hesaplama ekle.
+- [x] Closed-loop komşuluk desteği ekle.
+- [x] Segment count utility ekle.
+- [x] Arc-length sample table üret.
+- [x] Total length hesapla.
+- [x] Distance-to-segment/t binary search ekle.
+- [x] Clamp davranışı ekle.
+- [x] Closed-loop wrap davranışı ekle.
+- [x] `getLocationAtDistance` ekle.
+- [x] `getDirectionAtDistance` ekle.
+- [x] `getTangentAtDistance` ekle.
+- [x] Length approximation epsilon testleri ekle.
+- [x] Cache invalidation/version modeli ekle.
+- [x] Sıfır uzunluklu segment testleri ekle.
+- [x] Determinism testleri ekle.
 
 ### Kabul kriterleri
 
@@ -1467,20 +1621,20 @@ Actor movement ve mesh generation için kararlı orientation frame üretmek.
 
 ### Kontrol listesi
 
-- [ ] Local frame veri tipini ekle.
-- [ ] Tangent + default up ile normal/binormal üret.
-- [ ] Parallel axis fallback ekle.
-- [ ] Quaternion rotation üret.
-- [ ] Point roll interpolation ekle.
-- [ ] Point scale interpolation ekle.
-- [ ] `getRotationAtDistance` ekle.
-- [ ] `getTransformAtDistance` ekle.
-- [ ] Local/world space dönüşümü ekle.
-- [ ] Actor transform ve scale etkisini test et.
-- [ ] Dikey spline orientation testi ekle.
-- [ ] Ters yönde orientation yardımcı fonksiyonu ekle.
-- [ ] Closed-loop seam roll testi ekle.
-- [ ] Parallel transport frame için tasarım notu ekle.
+- [x] Local frame veri tipini ekle. (`engine/scene/splineFrame.ts`)
+- [x] Tangent + default up ile normal/binormal üret.
+- [x] Parallel axis fallback ekle.
+- [x] Quaternion rotation üret.
+- [x] Point roll interpolation ekle.
+- [x] Point scale interpolation ekle.
+- [x] `getRotationAtDistance` ekle.
+- [x] `getTransformAtDistance` ekle.
+- [x] Local/world space dönüşümü ekle.
+- [x] Actor transform ve scale etkisini test et.
+- [x] Dikey spline orientation testi ekle.
+- [x] Ters yönde orientation yardımcı fonksiyonu ekle.
+- [x] Closed-loop seam roll testi ekle.
+- [x] Parallel transport frame için tasarım notu ekle.
 
 ### Kabul kriterleri
 
@@ -1498,8 +1652,9 @@ Spline verisini level-owned bağımsız actor olarak scene'e eklemek.
 
 ### Kontrol listesi
 
-- [ ] `LayoutSplineActor` veya repo eşdeğeri tipi ekle.
+- [ ] `LayoutSplineActor` veya repo eşdeğeri tipi ekle (`engine/scene/layout.ts`, `RoomLayout.splines`).
 - [ ] Layout normalize/validate akışına spline actor ekle.
+- [ ] **`tools/saveValidator.ts` allowlist'ine `splines` array'ini ve bütün alanlarını ekle; Save Layout round-trip'te hiçbir alanın düşmediğini test et (bkz. §0.2).**
 - [ ] Add Actor > Spline komutunu ekle.
 - [ ] Varsayılan iki veya üç point'li spline oluştur.
 - [ ] Actor transform desteğini ekle.
@@ -1963,9 +2118,10 @@ Codex'in belirsizlik yaşamaması için ilk implementation'da aşağıdaki karar
 
 ```text
 FORGE_GENERIC_SPLINE_SYSTEM_RESEARCH_AND_PLAN.md dosyasını ana çalışma planı olarak kullan.
-Önce LANDSCAPE_MODE_RESEARCH_AND_PLAN.md dosyasındaki güncel Landscape Spline kapsamını,
-sonra Forge'un mevcut level/layout serialization, actor creation, editor selection,
-transform gizmo, undo/redo, runtime scene load, static mesh asset ve instancing yollarını incele.
+Önce bu dokümanın §0 "Repo inceleme notları" bölümünü ve mevcut Landscape Spline kodunu
+(engine/scene/landscape.ts, engine/render-three/landscape.ts) incele; sonra Forge'un
+mevcut level/layout serialization, actor creation, editor selection, transform gizmo,
+undo/redo, runtime scene load, static mesh asset ve instancing yollarını incele.
 
 Yalnızca Faz 0 üzerinde çalış. Henüz Spline Editor, mesh deformation, Path Follower veya
 generator kodu yazma. Generic Spline ile Landscape Spline veri sahipliğini birleştirme.
