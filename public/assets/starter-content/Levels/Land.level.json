@@ -5,18 +5,7 @@
   "instances": [
     {
       "assetId": "shape-cube",
-      "placements": [
-        {
-          "position": [
-            0,
-            0,
-            0
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "sm-asphalt",
@@ -24,19 +13,7 @@
     },
     {
       "assetId": "marker:playerStart",
-      "placements": [
-        {
-          "position": [
-            0,
-            0,
-            0
-          ],
-          "name": "Player Start",
-          "collision": false,
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "floor-400x400",
@@ -71,7 +48,7 @@
   "heightFog": {
     "hidden": true,
     "color": "#b8daff",
-    "density": 0.1
+    "density": 0.01
   },
   "cloudLayer": {
     "density": 0.4
@@ -82,6 +59,11 @@
       "threshold": 1,
       "intensity": 1,
       "radius": 1
+    },
+    "dof": {
+      "focusDistance": 10,
+      "aperture": 1,
+      "maxBlur": 0.2
     }
   },
   "lights": [

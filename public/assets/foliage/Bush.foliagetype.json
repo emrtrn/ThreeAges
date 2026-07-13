@@ -21,6 +21,8 @@
   "zOffsetMax": 0,
   "slopeMin": 0,
   "slopeMax": 90,
+  "heightMin": 0,
+  "heightMax": 10,
   "castShadow": true,
   "receiveShadow": true,
   "collision": false,

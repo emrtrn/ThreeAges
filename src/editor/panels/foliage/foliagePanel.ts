@@ -100,6 +100,10 @@ function scaleRow(label: string, axisAttr: string, vec: readonly number[]): stri
     </div>`;
 }
 
+// Persisted across the panel's frequent innerHTML re-renders (a native <details>
+// would otherwise collapse every time an edit re-renders the panel).
+let foliageAdvancedOpen = false;
+
 function renderTypeDetails(
   type: ForgeFoliageTypeDef | null,
   meshAssets: FoliageAssetOption[],
@@ -134,17 +138,20 @@ function renderTypeDetails(
       ${scaleRow("Scale Max", "data-foliage-type-scale-max", type.scaleMax)}
       ${boolField("Random Yaw", "data-foliage-type-bool=\"randomYaw\"", type.randomYaw)}
       ${boolField("Align to Normal", "data-foliage-type-bool=\"alignToNormal\"", type.alignToNormal)}
-      ${numField("Z Offset Min", "data-foliage-type-num=\"zOffsetMin\"", type.zOffsetMin, "0.05")}
-      ${numField("Z Offset Max", "data-foliage-type-num=\"zOffsetMax\"", type.zOffsetMax, "0.05")}
-      ${numField("Slope Min°", "data-foliage-type-num=\"slopeMin\"", type.slopeMin, "1", "0")}
-      ${numField("Slope Max°", "data-foliage-type-num=\"slopeMax\"", type.slopeMax, "1", "0")}
-      ${optField("Height Min", "data-foliage-type-opt=\"heightMin\"", type.heightMin)}
-      ${optField("Height Max", "data-foliage-type-opt=\"heightMax\"", type.heightMax)}
       ${boolField("Cast Shadow", "data-foliage-type-bool=\"castShadow\"", type.castShadow)}
       ${boolField("Receive Shadow", "data-foliage-type-bool=\"receiveShadow\"", type.receiveShadow)}
       ${boolField("Collision", "data-foliage-type-bool=\"collision\"", type.collision)}
-      ${numField("Cull Start", "data-foliage-type-num=\"cullStart\"", type.cullStart, "1", "0")}
-      ${numField("Cull End", "data-foliage-type-num=\"cullEnd\"", type.cullEnd, "1", "0")}
+      <details class="foliage-advanced" ${foliageAdvancedOpen ? "open" : ""}>
+        <summary>Advanced — placement filters</summary>
+        ${numField("Z Offset Min", "data-foliage-type-num=\"zOffsetMin\"", type.zOffsetMin, "0.05")}
+        ${numField("Z Offset Max", "data-foliage-type-num=\"zOffsetMax\"", type.zOffsetMax, "0.05")}
+        ${numField("Slope Min°", "data-foliage-type-num=\"slopeMin\"", type.slopeMin, "1", "0")}
+        ${numField("Slope Max°", "data-foliage-type-num=\"slopeMax\"", type.slopeMax, "1", "0")}
+        ${optField("Height Min", "data-foliage-type-opt=\"heightMin\"", type.heightMin)}
+        ${optField("Height Max", "data-foliage-type-opt=\"heightMax\"", type.heightMax)}
+        ${numField("Cull Start", "data-foliage-type-num=\"cullStart\"", type.cullStart, "1", "0")}
+        ${numField("Cull End", "data-foliage-type-num=\"cullEnd\"", type.cullEnd, "1", "0")}
+      </details>
       <div class="detail-hint">Scale/rotation changes apply to new paint.</div>
     </div>`;
 }
@@ -395,6 +402,11 @@ function bindInputs(options: FoliagePanelOptions): void {
 function bindTypeDetails(options: FoliagePanelOptions): void {
   const { body, activeType } = options;
   if (!activeType) return;
+
+  const advanced = body.querySelector<HTMLDetailsElement>(".foliage-advanced");
+  advanced?.addEventListener("toggle", () => {
+    foliageAdvancedOpen = advanced.open;
+  });
 
   body.querySelector<HTMLSelectElement>("[data-foliage-type-mesh]")?.addEventListener("change", (event) => {
     const id = (event.target as HTMLSelectElement).value;

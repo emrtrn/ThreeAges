@@ -4598,3 +4598,17 @@ body.editor-mode #debug-stats {
   gap: 4px;
 }
 .foliage-scale-inputs input { min-width: 0; width: 100%; }
+.foliage-advanced {
+  margin-top: 6px;
+  border-top: 1px solid #262c34;
+  padding-top: 4px;
+}
+.foliage-advanced > summary {
+  cursor: pointer;
+  color: #9aa4a9;
+  font-size: 11px;
+  padding: 2px 0;
+  user-select: none;
+  list-style-position: inside;
+}
+.foliage-advanced > summary:hover { color: #cbd2dc; }
