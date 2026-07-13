@@ -18,8 +18,11 @@ test("editor exposes generic Spline Actor point editing controls", async ({ page
 
   await details.locator("[data-spline-point-add]").click();
   await expect(pointButtons).toHaveCount(initialCount + 1);
-  await details.locator("[data-spline-point-type]").selectOption("linear");
-  await expect(details.locator("[data-spline-point-type]")).toHaveValue("linear");
+  await details.locator("[data-spline-point-type]").selectOption("curveCustom");
+  await expect(details.locator("[data-spline-point-type]")).toHaveValue("curveCustom");
+  await expect(details.locator("[data-spline-tangents-linked]")).toBeChecked();
+  await details.locator("[data-spline-tangents-linked]").uncheck();
+  await expect(details.locator("[data-spline-tangents-linked]")).not.toBeChecked();
   await details.locator("[data-spline-split]").first().click();
   await expect(pointButtons).toHaveCount(initialCount + 2);
 

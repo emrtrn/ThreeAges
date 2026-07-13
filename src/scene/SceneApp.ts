@@ -657,6 +657,7 @@ export interface SplinePointView {
   id: string;
   position: Vec3;
   pointType: ForgeSplinePoint["pointType"];
+  tangentsLinked: boolean;
 }
 
 export interface LandscapeSplineSegmentView {
@@ -682,10 +683,13 @@ interface LandscapeSplinePointGizmoTarget {
 interface SplinePointGizmoTarget {
   index: number;
   pointId: string;
+  handle: "point" | "arrive" | "leave";
   actor: LayoutSplineActor;
   world: Vector3;
   worldMatrix: Matrix4;
 }
+
+type SplineTangentHandle = Exclude<SplinePointGizmoTarget["handle"], "point">;
 
 /** Config patch for one spline segment's destructive effects (Faz 6 Road Tool). */
 export interface LandscapeSplineSegmentPatch {
@@ -994,8 +998,9 @@ export class SceneApp {
   /** Contextual, editor-only point markers for the currently selected generic spline. */
   private splinePointOverlay: Group | null = null;
   private activeSplinePointId: string | null = null;
+  private activeSplineTangent: SplineTangentHandle | null = null;
   /** Live generic-spline point drag; one snapshot becomes one undo command on release. */
-  private splinePointDrag: { index: number; pointId: string; before: LayoutSplineActor; worldMatrixInverse: Matrix4 } | null = null;
+  private splinePointDrag: { index: number; pointId: string; handle: SplinePointGizmoTarget["handle"]; before: LayoutSplineActor; worldMatrixInverse: Matrix4 } | null = null;
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
   private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
   /** Billboard icons (clickable handles) for placed Sphere Reflection Capture actors, by index. */
@@ -4661,16 +4666,45 @@ export class SceneApp {
     return transform.matrix.clone();
   }
 
+  /** Default Hermite tangent used when switching a point into Curve Custom mode. */
+  private autoSplinePointTangent(actor: LayoutSplineActor, index: number): Vec3 {
+    const points = actor.spline.points;
+    const point = points[index];
+    if (!point || points.length < 2) return [1, 0, 0];
+    const subtract = (left: Vec3, right: Vec3): Vec3 => [left[0] - right[0], left[1] - right[1], left[2] - right[2]];
+    if (actor.spline.closed) {
+      const previous = points[(index - 1 + points.length) % points.length]!.position;
+      const next = points[(index + 1) % points.length]!.position;
+      const direction = subtract(next, previous);
+      return [direction[0] * 0.5, direction[1] * 0.5, direction[2] * 0.5];
+    }
+    if (index === 0) return subtract(points[1]!.position, point.position);
+    if (index === points.length - 1) return subtract(point.position, points[index - 1]!.position);
+    const direction = subtract(points[index + 1]!.position, points[index - 1]!.position);
+    return [direction[0] * 0.5, direction[1] * 0.5, direction[2] * 0.5];
+  }
+
+  private splinePointTangents(actor: LayoutSplineActor, pointId: string): { arrive: Vec3; leave: Vec3 } | null {
+    const index = actor.spline.points.findIndex((point) => point.id === pointId);
+    const point = actor.spline.points[index];
+    if (!point || point.pointType !== "curveCustom") return null;
+    const fallback = this.autoSplinePointTangent(actor, index);
+    return {
+      arrive: point.arriveTangent ? [...point.arriveTangent] : fallback,
+      leave: point.leaveTangent ? [...point.leaveTangent] : fallback,
+    };
+  }
+
   private clearSplinePointOverlay(): void {
     const overlay = this.splinePointOverlay;
     this.splinePointOverlay = null;
     if (!overlay) return;
     this.scene.remove(overlay);
-    for (const marker of overlay.children) {
-      const mesh = marker as Mesh<SphereGeometry, MeshBasicMaterial>;
-      mesh.geometry?.dispose();
-      mesh.material?.dispose();
-    }
+    overlay.traverse((child) => {
+      const drawable = child as Mesh<BufferGeometry, MeshBasicMaterial | LineBasicMaterial>;
+      drawable.geometry?.dispose();
+      drawable.material?.dispose();
+    });
   }
 
   /** Rebuilds lightweight point markers only while a generic Spline Actor is selected. */
@@ -4699,12 +4733,36 @@ export class SceneApp {
       marker.raycast = () => {};
       overlay.add(marker);
     }
+    const activePoint = this.activeSplinePointId
+      ? actor.spline.points.find((point) => point.id === this.activeSplinePointId)
+      : null;
+    const tangents = activePoint ? this.splinePointTangents(actor, activePoint.id) : null;
+    if (activePoint && tangents) {
+      const position = activePoint.position;
+      const arriveHandle: Vec3 = [position[0] - tangents.arrive[0], position[1] - tangents.arrive[1], position[2] - tangents.arrive[2]];
+      const leaveHandle: Vec3 = [position[0] + tangents.leave[0], position[1] + tangents.leave[1], position[2] + tangents.leave[2]];
+      const lineGeometry = new BufferGeometry();
+      lineGeometry.setAttribute("position", new Float32BufferAttribute([...arriveHandle, ...position, ...leaveHandle], 3));
+      const line = new LineSegments(lineGeometry, new LineBasicMaterial({ color: 0xff9f43, depthTest: false, depthWrite: false }));
+      line.renderOrder = 29;
+      overlay.add(line);
+      for (const [handle, handlePosition] of [["arrive", arriveHandle], ["leave", leaveHandle]] as const) {
+        const marker = new Mesh(
+          new SphereGeometry(0.12, 10, 8),
+          new MeshBasicMaterial({ color: this.activeSplineTangent === handle ? 0xffffff : 0xff9f43, depthTest: false, depthWrite: false }),
+        );
+        marker.position.set(...handlePosition);
+        marker.renderOrder = 31;
+        marker.raycast = () => {};
+        overlay.add(marker);
+      }
+    }
     this.splinePointOverlay = overlay;
     this.scene.add(overlay);
   }
 
   /** Screen-space marker hit-test keeps spline points out of normal actor picking. */
-  private pickSplinePoint(clientX: number, clientY: number): string | null {
+  private pickSplinePoint(clientX: number, clientY: number): { pointId: string; handle: SplinePointGizmoTarget["handle"] } | null {
     if (this.selection?.kind !== "spline") return null;
     const actor = this.layout?.splines?.[this.selection.index];
     if (!actor || actor.hidden || actor.locked) return null;
@@ -4714,17 +4772,25 @@ export class SceneApp {
     const camera = this.editorViewportCamera();
     const pointer = new Vector3(clientX - rect.left, clientY - rect.top, 0);
     const projected = new Vector3();
-    let best: { id: string; distance: number } | null = null;
-    for (const point of actor.spline.points) {
-      projected.set(...point.position).applyMatrix4(matrix).project(camera);
-      if (projected.z < -1 || projected.z > 1) continue;
+    const best: { value: { pointId: string; handle: SplinePointGizmoTarget["handle"]; distance: number } | null } = { value: null };
+    const consider = (pointId: string, handle: SplinePointGizmoTarget["handle"], position: Vec3): void => {
+      projected.set(...position).applyMatrix4(matrix).project(camera);
+      if (projected.z < -1 || projected.z > 1) return;
       const distance = Math.hypot(
         (projected.x * 0.5 + 0.5) * rect.width - pointer.x,
         (-projected.y * 0.5 + 0.5) * rect.height - pointer.y,
       );
-      if (distance <= 14 && (!best || distance < best.distance)) best = { id: point.id, distance };
+      if (distance <= 14 && (!best.value || distance < best.value.distance)) best.value = { pointId, handle, distance };
+    };
+    for (const point of actor.spline.points) {
+      consider(point.id, "point", point.position);
+      const tangents = point.id === this.activeSplinePointId ? this.splinePointTangents(actor, point.id) : null;
+      if (tangents) {
+        consider(point.id, "arrive", [point.position[0] - tangents.arrive[0], point.position[1] - tangents.arrive[1], point.position[2] - tangents.arrive[2]]);
+        consider(point.id, "leave", [point.position[0] + tangents.leave[0], point.position[1] + tangents.leave[1], point.position[2] + tangents.leave[2]]);
+      }
     }
-    return best?.id ?? null;
+    return best.value ? { pointId: best.value.pointId, handle: best.value.handle } : null;
   }
 
   private activeSplinePoint(): SplinePointGizmoTarget | null {
@@ -4737,10 +4803,21 @@ export class SceneApp {
     return {
       index: this.selection.index,
       pointId: point.id,
+      handle: this.activeSplineTangent ?? "point",
       actor,
-      world: new Vector3(...point.position).applyMatrix4(worldMatrix),
+      world: new Vector3(...this.splinePointHandlePosition(actor, point.id, this.activeSplineTangent ?? "point")).applyMatrix4(worldMatrix),
       worldMatrix,
     };
+  }
+
+  private splinePointHandlePosition(actor: LayoutSplineActor, pointId: string, handle: SplinePointGizmoTarget["handle"]): Vec3 {
+    const point = actor.spline.points.find((entry) => entry.id === pointId);
+    if (!point || handle === "point") return point ? [...point.position] : [0, 0, 0];
+    const tangents = this.splinePointTangents(actor, pointId);
+    const tangent = tangents?.[handle] ?? [0, 0, 0];
+    return handle === "arrive"
+      ? [point.position[0] - tangent[0], point.position[1] - tangent[1], point.position[2] - tangent[2]]
+      : [point.position[0] + tangent[0], point.position[1] + tangent[1], point.position[2] + tangent[2]];
   }
 
   private buildSplines(): void {
@@ -4849,6 +4926,7 @@ export class SceneApp {
       id: point.id,
       position: [...point.position],
       pointType: point.pointType,
+      tangentsLinked: point.tangentsLinked ?? true,
     }));
   }
 
@@ -4860,6 +4938,7 @@ export class SceneApp {
     if (this.selection?.kind !== "spline") return;
     const points = this.layout?.splines?.[this.selection.index]?.spline.points ?? [];
     this.activeSplinePointId = points.some((point) => point.id === pointId) ? pointId : null;
+    this.activeSplineTangent = null;
     this.refreshSplinePointOverlay();
     this.updateGizmo();
     this.emitSelectionChanged();
@@ -4920,8 +4999,30 @@ export class SceneApp {
     const point = after.spline.points.find((entry) => entry.id === pointId);
     if (!point) return;
     if (patch.position) point.position = [...patch.position];
-    if (patch.pointType) point.pointType = patch.pointType;
+    if (patch.pointType) {
+      point.pointType = patch.pointType;
+      if (patch.pointType === "curveCustom") {
+        const tangent = this.autoSplinePointTangent(after, after.spline.points.indexOf(point));
+        point.arriveTangent ??= [...tangent];
+        point.leaveTangent ??= [...tangent];
+        point.tangentsLinked ??= true;
+      }
+    }
     this.applySelectedSplineSnapshot(actor, after, "Edit Spline Point", point.id);
+  }
+
+  setSelectedSplinePointTangentsLinked(pointId: string, linked: boolean): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    const point = after.spline.points.find((entry) => entry.id === pointId);
+    if (!point || point.pointType !== "curveCustom") return;
+    const tangent = this.autoSplinePointTangent(after, after.spline.points.indexOf(point));
+    point.arriveTangent ??= [...tangent];
+    point.leaveTangent ??= [...tangent];
+    point.tangentsLinked = linked;
+    this.applySelectedSplineSnapshot(actor, after, linked ? "Link Spline Tangents" : "Break Spline Tangents", point.id);
   }
 
   private applySelectedSplineSnapshot(before: LayoutSplineActor, after: LayoutSplineActor, label: string, activePointId: string | null): void {
@@ -4931,6 +5032,7 @@ export class SceneApp {
       if (!this.layout?.splines?.[index]) return;
       this.layout.splines[index] = cloneSplineActor(value);
       this.activeSplinePointId = activePointId;
+      this.activeSplineTangent = null;
       this.refreshSpline(index);
       this.updateGizmo();
       this.emitSelectionChanged();
@@ -9440,9 +9542,10 @@ export class SceneApp {
       beginAltCameraDrag: (event) => this.cameraController.beginAltDrag(event),
       beginCameraNavigation: (event) => this.cameraController.beginNavigation(event),
       pickSelection: (clientX, clientY) => {
-        const pointId = this.pickSplinePoint(clientX, clientY);
-        if (pointId && this.selection?.kind === "spline") {
-          this.activeSplinePointId = pointId;
+        const hit = this.pickSplinePoint(clientX, clientY);
+        if (hit && this.selection?.kind === "spline") {
+          this.activeSplinePointId = hit.pointId;
+          this.activeSplineTangent = hit.handle === "point" ? null : hit.handle;
           this.refreshSplinePointOverlay();
           this.updateGizmo();
           return { kind: "spline", index: this.selection.index };
@@ -9694,6 +9797,7 @@ export class SceneApp {
     this.splinePointDrag = {
       index: splinePoint.index,
       pointId: splinePoint.pointId,
+      handle: splinePoint.handle,
       before: cloneSplineActor(splinePoint.actor),
       worldMatrixInverse: splinePoint.worldMatrix.clone().invert(),
     };
@@ -9722,7 +9826,7 @@ export class SceneApp {
     const actor = drag ? this.layout?.splines?.[drag.index] : null;
     const point = actor?.spline.points.find((entry) => entry.id === drag?.pointId);
     if (!drag || !actor || !point) return null;
-    const world = new Vector3(...point.position).applyMatrix4(this.splineActorWorldMatrix(actor));
+    const world = new Vector3(...this.splinePointHandlePosition(actor, point.id, drag.handle)).applyMatrix4(this.splineActorWorldMatrix(actor));
     return [world.x, world.y, world.z];
   }
 
@@ -9732,7 +9836,19 @@ export class SceneApp {
     const point = actor?.spline.points.find((entry) => entry.id === drag?.pointId);
     if (!drag || !point) return;
     const local = new Vector3(...world).applyMatrix4(drag.worldMatrixInverse);
-    point.position = [round(local.x), round(local.y), round(local.z)];
+    if (drag.handle === "point") {
+      point.position = [round(local.x), round(local.y), round(local.z)];
+    } else {
+      const tangent: Vec3 = drag.handle === "arrive"
+        ? [point.position[0] - local.x, point.position[1] - local.y, point.position[2] - local.z]
+        : [local.x - point.position[0], local.y - point.position[1], local.z - point.position[2]];
+      if (drag.handle === "arrive") point.arriveTangent = tangent;
+      else point.leaveTangent = tangent;
+      if (point.tangentsLinked) {
+        if (drag.handle === "arrive") point.leaveTangent = [...tangent];
+        else point.arriveTangent = [...tangent];
+      }
+    }
     this.refreshSpline(drag.index);
     this.updateGizmo();
     this.emitSelectionChanged();
@@ -9748,6 +9864,7 @@ export class SceneApp {
       if (!this.layout?.splines?.[index]) return;
       this.layout.splines[index] = cloneSplineActor(value);
       this.activeSplinePointId = drag.pointId;
+      this.activeSplineTangent = drag.handle === "point" ? null : drag.handle;
       this.refreshSpline(index);
       this.updateGizmo();
       this.emitSelectionChanged();

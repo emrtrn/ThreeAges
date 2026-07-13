@@ -368,7 +368,6 @@
     "staticObjectsCastShadow": true,
     "backgroundColor": "#ffffff",
     "killZ": -10,
-    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"
@@ -468,74 +467,7 @@
       "clearancePadding": 0.1
     }
   ],
-  "targetPoints": [
-    {
-      "id": "target-point-3",
-      "position": [
-        -1.75,
-        3.16,
-        -7.79
-      ],
-      "name": "Target Point 1",
-      "scale": 1,
-      "nextTargetPoint": "target-point-4",
-      "startPoint": true
-    },
-    {
-      "id": "target-point-4",
-      "position": [
-        -9.47,
-        0.83,
-        0.92
-      ],
-      "name": "Target Point 2",
-      "nextTargetPoint": "target-point-1",
-      "acceptanceRadius": 0.1
-    },
-    {
-      "id": "target-point-1",
-      "position": [
-        -9.52,
-        1.62,
-        -3.14
-      ],
-      "name": "Target Point 3",
-      "nextTargetPoint": "target-point-5",
-      "acceptanceRadius": 0.1
-    },
-    {
-      "id": "target-point-5",
-      "position": [
-        -5.28,
-        2.42,
-        -3.16
-      ],
-      "name": "Target Point 4",
-      "nextTargetPoint": "target-point-2",
-      "acceptanceRadius": 0.1
-    },
-    {
-      "id": "target-point-2",
-      "position": [
-        -5.29,
-        3.22,
-        -7.48
-      ],
-      "name": "Target Point 5",
-      "nextTargetPoint": "target-point-6"
-    },
-    {
-      "id": "target-point-6",
-      "position": [
-        -1.02,
-        3.18,
-        -4.86
-      ],
-      "name": "Target Point 6",
-      "scale": 1,
-      "nextTargetPoint": "target-point-3"
-    }
-  ],
+  "targetPoints": [],
   "splines": [
     {
       "id": "spline-1",
@@ -612,14 +544,15 @@
   "landscapes": [],
   "actors": [
     {
-      "classRef": "assets/starter-content/Actors/TestRange_Guard.actor.json",
+      "classRef": "assets/starter-content/Script/AI_Character.actor.json",
       "position": [
-        5.1,
-        0.35,
-        2.85
+        2.35,
+        0,
+        -5.67
       ],
+      "scaleLocked": true,
       "rotationYDeg": 0,
-      "scale": 1
+      "scale": 0.4
     }
   ]
 }

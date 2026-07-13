@@ -3366,6 +3366,8 @@ export class EditorUi {
       deleteSelectedSplinePoint: (pointId) => this.app.deleteSelectedSplinePoint(pointId),
       splitSelectedSplineSegment: (segmentIndex) => this.app.splitSelectedSplineSegment(segmentIndex),
       setSelectedSplinePoint: (pointId, patch) => this.app.setSelectedSplinePoint(pointId, patch),
+      setSelectedSplinePointTangentsLinked: (pointId, linked) =>
+        this.app.setSelectedSplinePointTangentsLinked(pointId, linked),
       setSelectedReflectionCapture: (patch) => this.app.setSelectedReflectionCapture(patch),
       setSelectedLandscape: (patch) => this.app.setSelectedLandscape(patch),
       getLandscapeSculptSettings: () => this.app.getLandscapeSculptSettings(),

@@ -1697,18 +1697,18 @@ Control point ve tangent'ları doğrudan viewport içinde düzenlemek.
 - [x] Segment split komutunu ekle.
 - [x] Closed loop toggle komutunu ekle. (Faz 4 Details kontrolü)
 - [x] Linear/Curve Auto/Curve Custom point type UI ekle.
-- [ ] Custom tangent handle render et.
-- [ ] Tangent handle drag ekle.
-- [ ] Linked/broken tangent davranışı ekle.
-- [ ] Multi-select point move destekleniyorsa ekle; değilse sonraki faz notu yaz.
-- [ ] Drag işlemini tek undo command yap.
-- [ ] Add/Delete/Split için undo/redo ekle.
-- [ ] Locked actor edit koruması ekle.
-- [ ] Degenerate segment warning göster.
+- [x] Custom tangent handle render et.
+- [x] Tangent handle drag ekle.
+- [x] Linked/broken tangent davranışı ekle.
+- [x] Multi-select point move destekleniyorsa ekle; değilse sonraki faz notu yaz. (MVP'de desteklenmiyor; Faz 5 sonrasına not edildi.)
+- [x] Drag işlemini tek undo command yap.
+- [x] Add/Delete/Split için undo/redo ekle.
+- [x] Locked actor edit koruması ekle.
+- [x] Degenerate segment warning göster.
 - [ ] Point index/id debug seçeneği ekle.
-- [ ] Spline detail panelini ekle.
-- [ ] Selected point detail panelini ekle.
-- [ ] Editor smoke testleri ekle.
+- [x] Spline detail panelini ekle.
+- [x] Selected point detail panelini ekle.
+- [x] Editor smoke testleri ekle.
 
 ### Kabul kriterleri
 

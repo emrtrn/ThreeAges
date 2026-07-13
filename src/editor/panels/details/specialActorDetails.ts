@@ -77,13 +77,14 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     color?: string;
   }) => void;
   setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number }) => void;
-  getSelectedSplinePoints: () => Array<{ id: string; position: Vec3; pointType: "linear" | "curveAuto" | "curveCustom" }>;
+  getSelectedSplinePoints: () => Array<{ id: string; position: Vec3; pointType: "linear" | "curveAuto" | "curveCustom"; tangentsLinked: boolean }>;
   getActiveSplinePointId: () => string | null;
   selectSplinePoint: (pointId: string | null) => void;
   addSelectedSplinePoint: () => void;
   deleteSelectedSplinePoint: (pointId?: string | null) => void;
   splitSelectedSplineSegment: (segmentIndex?: number) => void;
   setSelectedSplinePoint: (pointId: string, patch: { position?: Vec3; pointType?: "linear" | "curveAuto" | "curveCustom" }) => void;
+  setSelectedSplinePointTangentsLinked: (pointId: string, linked: boolean) => void;
   setSelectedReflectionCapture: (patch: {
     radius?: number;
     intensity?: number;
@@ -1245,16 +1246,24 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     { length: points.length >= 2 ? (spline.closed ? points.length : points.length - 1) : 0 },
     (_, index) => `<button type="button" data-spline-split="${index}" ${locked}>Split ${index + 1}</button>`,
   ).join("");
+  const segmentCount = points.length >= 2 ? (spline.closed ? points.length : points.length - 1) : 0;
+  const hasDegenerateSegment = Array.from({ length: segmentCount }, (_, index) => {
+    const start = points[index]!.position;
+    const end = points[(index + 1) % points.length]!.position;
+    return Math.hypot(start[0] - end[0], start[1] - end[1], start[2] - end[2]) < 1e-4;
+  }).some(Boolean);
   const pointEditor = activePoint
     ? `<div class="detail-subsection-title">Control Point</div>
       <div class="detail-button-row">${pointButtons}</div>
       <label class="detail-row"><span>Type</span><select data-spline-point-type ${locked}>${["linear", "curveAuto", "curveCustom"].map((type) => `<option value="${type}" ${activePoint.pointType === type ? "selected" : ""}>${type === "curveAuto" ? "Curve Auto" : type === "curveCustom" ? "Curve Custom" : "Linear"}</option>`).join("")}</select></label>
       <div class="detail-vector"><span class="detail-vector-label">Position</span><div class="vector-fields">${activePoint.position.map((value, index) => axisField(`splinePoint${index}`, ["X", "Y", "Z"][index]!, index, value, 0.05, "pr", selection.locked).replace(`data-axis=\"${index}\"`, `data-spline-point-axis=\"${index}\"`)).join("")}</div></div>
+      ${activePoint.pointType === "curveCustom" ? `<label class="detail-row"><span>Linked Tangents</span><input type="checkbox" data-spline-tangents-linked ${activePoint.tangentsLinked ? "checked" : ""} ${locked}></label><div class="detail-readonly">Drag the orange handles in the viewport.</div>` : ""}
       <div class="detail-button-row"><button type="button" data-spline-point-delete ${locked}>Delete Point</button>${splitButtons}</div>`
     : "<div class=\"detail-readonly\">No control points.</div>";
   body.innerHTML = `
     <section class="details-section"><h3>Spline</h3>
       <div class="detail-readonly">${spline.pointCount} control points · ${spline.closed ? "Closed" : "Open"}</div>
+      ${hasDegenerateSegment ? "<div class=\"detail-readonly\">Warning: a segment has coincident control points; move or delete one point.</div>" : ""}
       <label class="detail-row"><span>Closed Loop</span><input type="checkbox" data-spline-closed ${spline.closed ? "checked" : ""} ${locked}></label>
       <label class="detail-row"><span>Debug Visible</span><input type="checkbox" data-spline-debug-visible ${spline.debugVisible ? "checked" : ""} ${locked}></label>
       <label class="detail-row"><span>Debug Color</span><input type="color" data-spline-debug-color value="${spline.debugColor}" ${locked}></label>
@@ -1276,6 +1285,9 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
   body.querySelector<HTMLSelectElement>("[data-spline-point-type]")?.addEventListener("change", (event) => {
     if (!activePoint) return;
     options.setSelectedSplinePoint(activePoint.id, { pointType: (event.currentTarget as HTMLSelectElement).value as "linear" | "curveAuto" | "curveCustom" });
+  });
+  body.querySelector<HTMLInputElement>("[data-spline-tangents-linked]")?.addEventListener("change", (event) => {
+    if (activePoint) options.setSelectedSplinePointTangentsLinked(activePoint.id, (event.currentTarget as HTMLInputElement).checked);
   });
   body.querySelectorAll<HTMLInputElement>("[data-spline-point-axis]").forEach((input) => input.addEventListener("change", () => {
     if (!activePoint) return;
