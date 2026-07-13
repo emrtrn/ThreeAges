@@ -218,6 +218,8 @@ import {
   type LandscapeObject,
   type LandscapeRenderItem,
 } from "@engine/render-three/landscape";
+import { FoliageRenderBinding } from "@engine/render-three/foliage";
+import { loadFoliageData, loadFoliageTypesForData } from "./foliageLoader";
 import {
   createReflectiveSurfaceObject,
   disposeReflectiveSurfaceObject,
@@ -718,6 +720,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private blockingVolumeObjects: BlockingVolumeObject[] = [];
   /** Textured reflective-surface meshes built from `layout.reflectiveSurfaces`. */
   private reflectiveSurfaceObjects: ReflectiveSurfaceObject[] = [];
+  /** InstancedMesh foliage batches painted onto the level (Foliage Mode). */
+  private foliageBinding: FoliageRenderBinding | null = null;
   /** Chunked terrain meshes built from `layout.landscapes`. */
   private landscapeObjects: LandscapeObject[] = [];
   /** Base-color textures loaded for landscape paint-layer splatting; disposed on scene rebuild. */
@@ -1912,6 +1916,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.buildRuntimeReflectiveSurfaces();
     this.buildRuntimeBlockingVolumes();
     await this.buildRuntimeLandscapes();
+    await this.buildRuntimeFoliage();
 
     const bytes = await this.assetLoader.totalBytesForGroups(this.layout.loadGroups);
     const materialStats = collectMaterialStats(this.models);
@@ -2140,6 +2145,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.landscapeLayerTextures = [];
     this.landscapeColliderEntities = [];
     this.landscapeColliderObjects.clear();
+    if (this.foliageBinding) {
+      this.foliageBinding.dispose();
+      this.foliageBinding = null;
+    }
 
     // Characters + actor host objects: clones over cached GLTFs, so remove only.
     for (const object of this.characterObjects) this.scene.remove(object);
@@ -4119,6 +4128,41 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
     }
     await this.buildRuntimeLandscapeSplineMeshes(datas);
+  }
+
+  /**
+   * Loads the level foliage sidecar + its referenced Foliage Types, ensures their
+   * static-mesh assets are resident, and builds the InstancedMesh batches for Play.
+   * Foliage is decorative-only in Faz 1 (no collision emitted), so this runs purely
+   * for the visual and never touches the physics scene document.
+   */
+  private async buildRuntimeFoliage(): Promise<void> {
+    if (!this.activeLevelPath) return;
+    const data = await loadFoliageData(this.activeLevelPath);
+    if (data.groups.length === 0) return;
+    const manifest =
+      this.assetManifest ?? (this.assetLoader ? await this.assetLoader.loadManifest() : null);
+    if (!manifest) return;
+    const types = await loadFoliageTypesForData(data, manifest);
+    if (types.size === 0) return;
+    const meshIds = new Set<string>();
+    for (const type of types.values()) if (type.meshAssetId) meshIds.add(type.meshAssetId);
+    const missingModels = [...meshIds].filter((assetId) => !this.models.has(assetId));
+    if (missingModels.length > 0 && this.assetLoader) {
+      const loaded = await this.assetLoader.loadModels(missingModels);
+      for (const [id, model] of loaded) this.models.set(id, model);
+    }
+    const binding = new FoliageRenderBinding();
+    this.scene.add(binding.root);
+    binding.rebuild(data, {
+      getType: (id) => types.get(id) ?? null,
+      getModel: (assetId) => this.models.get(assetId) ?? null,
+      applyMaterialSlots: (assetId, group) => {
+        const slots = this.assetMaterialSlots.get(assetId);
+        if (slots) applyMaterialSlotOverrides(group, slots, (materialId) => this.materialCache.get(materialId));
+      },
+    });
+    this.foliageBinding = binding;
   }
 
   /** Loads spline mesh assets (Faz 6) and parents their instanced groups under each landscape. */

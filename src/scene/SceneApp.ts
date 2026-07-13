@@ -71,6 +71,7 @@ import { slopeCosFromDegrees } from "@/game/slopeSurface";
 import type { PlayCameraPose } from "@/play/cameraHandoff";
 import {
   assetPath,
+  assetRecordById,
   assetType,
   isModelAssetType,
   type AssetManifest,
@@ -193,6 +194,27 @@ import {
   type LandscapeRenderItem,
   type LandscapeViewMode,
 } from "@engine/render-three/landscape";
+import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-three/foliage";
+import {
+  createEmptyFoliageData,
+  foliageDataPath,
+  uniqueFoliageGroupId,
+  type ForgeFoliageTypeDef,
+  type LayoutFoliageData,
+  type LayoutFoliageGroup,
+} from "@engine/scene/foliage";
+import {
+  eraseFoliageInRadius,
+  foliageOverlaps,
+  foliageSampleTargetCount,
+  makeFoliageRng,
+  passesFoliageFilters,
+  rollFoliageInstance,
+  type FoliageBrush,
+  type FoliageSurfaceHit,
+} from "@engine/scene/foliagePaint";
+import { loadFoliageData, loadFoliageTypeByPath, loadFoliageTypesForData } from "./foliageLoader";
+import type { FoliageSurfacePick } from "@editor/render-three/scenePicker";
 import {
   applyReflectiveSurfaceTransform,
   createReflectiveSurfaceObject,
@@ -548,6 +570,34 @@ export interface LandscapeSplineView {
   smooth: boolean;
 }
 
+/** Foliage Mode tool set (Faz 1). Lasso/Fill/Reapply are Faz 2. */
+export type FoliageTool = "select" | "paint" | "erase" | "single" | "remove";
+
+/** Which target surfaces the foliage brush is allowed to paint onto (Faz 1 filters). */
+export interface FoliageTargetFilters {
+  landscape: boolean;
+  staticMesh: boolean;
+}
+
+export interface FoliageToolSettings {
+  tool: FoliageTool;
+  /** Asset id of the active Foliage Type, or null when none is selected. */
+  activeTypeId: string | null;
+  brushSize: number;
+  paintDensity: number;
+  eraseDensity: number;
+  randomSeed: number;
+  filters: FoliageTargetFilters;
+}
+
+/** A Foliage Type row surfaced to the editor panel (asset id + resolved def). */
+export interface FoliageTypeView {
+  id: string;
+  name: string;
+  meshAssetId: string;
+  instanceCount: number;
+}
+
 export interface LandscapeSplinePointView {
   id: string;
   position: Vec3;
@@ -800,6 +850,29 @@ export class SceneApp {
   private blockingVolumeObjects: BlockingVolumeObject[] = [];
   /** Editor box volumes limiting AI grid navigation, by index. */
   private aiNavigationVolumeObjects: AiNavigationVolumeObject[] = [];
+  /** InstancedMesh foliage batches painted onto the level (Foliage Mode). */
+  private foliageBinding: FoliageRenderBinding | null = null;
+  /** In-memory level foliage sidecar (`<layout>.foliage.json`). */
+  private foliageData: LayoutFoliageData = createEmptyFoliageData();
+  /** Resolved Foliage Types referenced by the sidecar, keyed by asset id. */
+  private foliageTypes = new Map<string, ForgeFoliageTypeDef>();
+  /** True when the foliage sidecar has unsaved changes. */
+  private foliageDataDirty = false;
+  /** Whether Foliage Mode is the active editor mode (its brush owns pointer input). */
+  private foliageModeActive = false;
+  /** Ring cursor showing the foliage brush footprint on hover. */
+  private foliageBrushCursor: Mesh | null = null;
+  /** Pointer id of the in-progress foliage paint/erase stroke, or null. */
+  private foliageStrokePointerId: number | null = null;
+  private foliageToolSettings: FoliageToolSettings = {
+    tool: "paint",
+    activeTypeId: null,
+    brushSize: 4,
+    paintDensity: 0.5,
+    eraseDensity: 1,
+    randomSeed: 1,
+    filters: { landscape: true, staticMesh: true },
+  };
   /** Live chunked terrain meshes for placed Landscape actors, by index. */
   private landscapeObjects: LandscapeObject[] = [];
   /** Instanced spline-mesh groups (Faz 6 Road Tool) parented under each landscape, by index. */
@@ -2799,6 +2872,7 @@ export class SceneApp {
     for (const id of this.landscapeDataDirty) {
       await this.saveLandscapeData(id);
     }
+    await this.saveFoliageData();
     this.onStatus?.(`Saved ${result.path ?? "layout"}.`, "success");
   }
 
@@ -2870,6 +2944,7 @@ export class SceneApp {
     this.buildAiNavigationVolumes();
     this.buildTargetPoints();
     await this.buildLandscapes();
+    await this.buildFoliage();
     this.buildWorldWidgetMarkers();
     this.emitSceneObjectsChanged();
     this.emitWorldSettingsChanged();
@@ -5007,6 +5082,419 @@ export class SceneApp {
       void this.rebuildLandscapeSplineMeshes(index);
       this.refreshLandscapeSplineOverlay(index);
     });
+  }
+
+  // --- Foliage Mode (Faz 1: manual Static Mesh foliage paint) ---------------
+
+  /** Public-relative path of the level whose foliage sidecar is authored. */
+  private foliageScenePath(): string {
+    return this.activeProject?.manifest.editor.defaultScene ?? "";
+  }
+
+  private foliageResolver(): {
+    getType: (id: string) => ForgeFoliageTypeDef | null;
+    getModel: (assetId: string) => GLTF | null;
+    applyMaterialSlots: (assetId: string, group: Group) => void;
+  } {
+    return {
+      getType: (id) => this.foliageTypes.get(id) ?? null,
+      getModel: (assetId) => this.models.get(assetId) ?? null,
+      applyMaterialSlots: (assetId, group) => {
+        const slots = this.resolveAssetMaterialSlots(assetId);
+        if (slots) {
+          applyMaterialSlotOverrides(group, slots, (materialId) => this.materialCache.get(materialId));
+        }
+      },
+    };
+  }
+
+  /** Foliage batches are decorative, not paint surfaces — keep them out of picking. */
+  private disableFoliagePicking(): void {
+    this.foliageBinding?.root.traverse((child) => {
+      child.raycast = () => {};
+    });
+  }
+
+  private async ensureFoliageMeshesLoaded(): Promise<void> {
+    const ids = new Set<string>();
+    for (const type of this.foliageTypes.values()) {
+      if (type.meshAssetId) ids.add(type.meshAssetId);
+    }
+    await Promise.all([...ids].map((id) => this.ensureAssetLoaded(id)));
+  }
+
+  /**
+   * Loads the level foliage sidecar + its referenced Foliage Types, ensures their
+   * meshes are resident, and builds the InstancedMesh batches (used on scene load).
+   */
+  private async buildFoliage(): Promise<void> {
+    if (this.foliageBinding) {
+      this.foliageBinding.dispose();
+      this.foliageBinding = null;
+    }
+    this.foliageTypes.clear();
+    this.foliageData = await loadFoliageData(this.foliageScenePath());
+    this.foliageDataDirty = false;
+    const manifest = this.manifest ?? (await this.assetLoader?.loadManifest()) ?? null;
+    if (manifest) {
+      this.foliageTypes = await loadFoliageTypesForData(this.foliageData, manifest);
+    }
+    await this.ensureFoliageMeshesLoaded();
+    const binding = new FoliageRenderBinding();
+    this.scene.add(binding.root);
+    binding.rebuild(this.foliageData, this.foliageResolver());
+    this.foliageBinding = binding;
+    this.disableFoliagePicking();
+    // Default the active type to the first referenced type (if any) for convenience.
+    if (!this.foliageToolSettings.activeTypeId) {
+      const first = this.foliageTypes.keys().next().value;
+      if (first) this.foliageToolSettings.activeTypeId = first;
+    }
+    this.emitFoliageChanged();
+  }
+
+  /** Rebuilds a single group's batch and re-suppresses picking on the new meshes. */
+  private rebuildFoliageGroupObject(group: LayoutFoliageGroup): void {
+    this.foliageBinding?.rebuildGroup(group, this.foliageResolver());
+    this.disableFoliagePicking();
+  }
+
+  private emitFoliageChanged(): void {
+    this.onFoliageChanged?.();
+  }
+
+  /** Subscriber (EditorUi) notified whenever foliage data/types/tool state changes. */
+  onFoliageChanged: (() => void) | undefined;
+
+  isFoliageModeActive(): boolean {
+    return this.foliageModeActive;
+  }
+
+  setFoliageModeActive(active: boolean): void {
+    if (this.foliageModeActive === active) return;
+    this.foliageModeActive = active;
+    this.emitFoliageChanged();
+  }
+
+  getFoliageToolSettings(): FoliageToolSettings {
+    return { ...this.foliageToolSettings, filters: { ...this.foliageToolSettings.filters } };
+  }
+
+  setFoliageToolSettings(patch: Partial<FoliageToolSettings>): FoliageToolSettings {
+    const next = { ...this.foliageToolSettings, ...patch };
+    this.foliageToolSettings = {
+      tool: (["select", "paint", "erase", "single", "remove"] as const).includes(next.tool)
+        ? next.tool
+        : "paint",
+      activeTypeId: next.activeTypeId ?? null,
+      brushSize: Math.max(0.1, next.brushSize),
+      paintDensity: Math.max(0, next.paintDensity),
+      eraseDensity: Math.max(0, next.eraseDensity),
+      randomSeed: Math.max(0, Math.floor(next.randomSeed)) || 1,
+      filters: patch.filters ? { ...patch.filters } : { ...this.foliageToolSettings.filters },
+    };
+    this.emitFoliageChanged();
+    return this.getFoliageToolSettings();
+  }
+
+  getFoliageTypeViews(): FoliageTypeView[] {
+    const counts = new Map<string, number>();
+    for (const group of this.foliageData.groups) {
+      counts.set(group.foliageTypeId, (counts.get(group.foliageTypeId) ?? 0) + group.instances.length);
+    }
+    return [...this.foliageTypes.entries()].map(([id, type]) => ({
+      id,
+      name: type.name,
+      meshAssetId: type.meshAssetId,
+      instanceCount: counts.get(id) ?? 0,
+    }));
+  }
+
+  /** Adds a Foliage Type asset (by asset id) to the active type list and loads its mesh. */
+  async addFoliageType(assetId: string): Promise<void> {
+    if (this.foliageTypes.has(assetId)) {
+      this.foliageToolSettings.activeTypeId = assetId;
+      this.emitFoliageChanged();
+      return;
+    }
+    const manifest = this.manifest ?? (await this.assetLoader?.loadManifest()) ?? null;
+    const record = manifest ? assetRecordById(manifest, assetId) : null;
+    if (!record) {
+      this.onStatus?.(`Foliage type asset not found: ${assetId}`, "warning");
+      return;
+    }
+    const type = await loadFoliageTypeByPath(assetPath(record));
+    if (!type) {
+      this.onStatus?.(`Failed to load foliage type: ${assetId}`, "warning");
+      return;
+    }
+    this.foliageTypes.set(assetId, type);
+    if (type.meshAssetId) await this.ensureAssetLoaded(type.meshAssetId);
+    this.foliageToolSettings.activeTypeId = assetId;
+    this.emitFoliageChanged();
+  }
+
+  /** Removes a Foliage Type from the list along with all of its painted instances. */
+  removeFoliageType(assetId: string): void {
+    const removedGroups = this.foliageData.groups.filter((group) => group.foliageTypeId === assetId);
+    if (removedGroups.length > 0) {
+      for (const group of removedGroups) this.foliageBinding?.removeGroup(group.id);
+      this.foliageData.groups = this.foliageData.groups.filter(
+        (group) => group.foliageTypeId !== assetId,
+      );
+      this.foliageDataDirty = true;
+    }
+    this.foliageTypes.delete(assetId);
+    if (this.foliageToolSettings.activeTypeId === assetId) {
+      this.foliageToolSettings.activeTypeId = this.foliageTypes.keys().next().value ?? null;
+    }
+    this.emitFoliageChanged();
+  }
+
+  private foliageActiveType(): { id: string; type: ForgeFoliageTypeDef } | null {
+    const id = this.foliageToolSettings.activeTypeId;
+    if (!id) return null;
+    const type = this.foliageTypes.get(id);
+    return type ? { id, type } : null;
+  }
+
+  /** Classifies a pointer hit against the active target filters. */
+  private foliageTargetAt(
+    pick: FoliageSurfacePick,
+  ): { kind: "landscape" | "staticMesh"; id: string } | null {
+    const filters = this.foliageToolSettings.filters;
+    if (pick.landscapeIndex !== null) {
+      if (!filters.landscape) return null;
+      const actor = this.layout?.landscapes?.[pick.landscapeIndex];
+      return actor ? { kind: "landscape", id: actor.id } : null;
+    }
+    if (pick.staticMeshAssetId) {
+      if (!filters.staticMesh) return null;
+      return { kind: "staticMesh", id: pick.staticMeshAssetId };
+    }
+    return null;
+  }
+
+  private foliageGroupFor(
+    typeId: string,
+    target: { kind: "landscape" | "staticMesh"; id: string },
+    create: boolean,
+  ): LayoutFoliageGroup | null {
+    let group = this.foliageData.groups.find(
+      (entry) =>
+        entry.foliageTypeId === typeId &&
+        entry.target.kind === target.kind &&
+        entry.target.id === target.id,
+    );
+    if (!group && create) {
+      group = {
+        id: uniqueFoliageGroupId(this.foliageData.groups),
+        foliageTypeId: typeId,
+        target: { kind: target.kind, id: target.id },
+        instances: [],
+      };
+      this.foliageData.groups.push(group);
+    }
+    return group ?? null;
+  }
+
+  /**
+   * Applies one foliage tool action at a pointer position. Returns true when it
+   * consumed the pointer (so the caller suppresses camera/selection handling).
+   * The EditorUi wires this to pointer-down and drag while a foliage tool is live.
+   */
+  applyFoliageActionAt(clientX: number, clientY: number): boolean {
+    if (!this.foliageModeActive) return false;
+    const tool = this.foliageToolSettings.tool;
+    if (tool === "select") return false;
+    const pick = this.picker.pickFoliageSurface(clientX, clientY);
+    if (!pick) return false;
+    if (tool === "erase") return this.applyFoliageErase(pick);
+    if (tool === "remove") return this.applyFoliageErase(pick, this.foliageToolSettings.activeTypeId);
+    const active = this.foliageActiveType();
+    if (!active) {
+      this.onStatus?.("Select a Foliage Type first.", "warning");
+      return false;
+    }
+    const target = this.foliageTargetAt(pick);
+    if (!target) return false;
+    if (tool === "single") return this.applyFoliageSingle(active, target, pick);
+    return this.applyFoliagePaint(active, target, pick);
+  }
+
+  private applyFoliagePaint(
+    active: { id: string; type: ForgeFoliageTypeDef },
+    target: { kind: "landscape" | "staticMesh"; id: string },
+    pick: FoliageSurfacePick,
+  ): boolean {
+    const brush: FoliageBrush = {
+      center: [pick.point.x, pick.point.y, pick.point.z],
+      radius: this.foliageToolSettings.brushSize,
+      density: this.foliageToolSettings.paintDensity,
+      seed: this.foliageToolSettings.randomSeed,
+    };
+    const group = this.foliageGroupFor(active.id, target, true);
+    if (!group) return false;
+    const count = foliageSampleTargetCount(active.type, brush);
+    // Vary the dab seed so a held drag doesn't stamp the same pattern repeatedly,
+    // while staying seeded off Random Seed for broad reproducibility.
+    const rng = makeFoliageRng((brush.seed * 2654435761 + this.foliageData.groups.length + count) >>> 0);
+    const existing: Vec3[] = group.instances.map((instance) => [...instance.position] as Vec3);
+    let added = 0;
+    for (let i = 0; i < count; i += 1) {
+      const radius = brush.radius * Math.sqrt(rng());
+      const angle = rng() * Math.PI * 2;
+      const sampleX = brush.center[0] + Math.cos(angle) * radius;
+      const sampleZ = brush.center[2] + Math.sin(angle) * radius;
+      const surface = this.picker.raycastFoliageSurfaceDown(sampleX, sampleZ);
+      if (!surface) continue;
+      const sampleTarget = this.foliageTargetAt(surface);
+      if (!sampleTarget || sampleTarget.kind !== target.kind || sampleTarget.id !== target.id) continue;
+      const hit: FoliageSurfaceHit = {
+        position: [surface.point.x, surface.point.y, surface.point.z],
+        normal: [surface.normal.x, surface.normal.y, surface.normal.z],
+      };
+      if (!passesFoliageFilters(active.type, hit)) continue;
+      if (foliageOverlaps(hit.position, existing, active.type.radius)) continue;
+      const instance = foliageInstanceFromRoll(active.type, rollFoliageInstance(active.type, hit, rng));
+      group.instances.push(instance);
+      existing.push([...instance.position] as Vec3);
+      added += 1;
+    }
+    if (added === 0) return true;
+    this.foliageDataDirty = true;
+    this.rebuildFoliageGroupObject(group);
+    this.emitFoliageChanged();
+    return true;
+  }
+
+  private applyFoliageSingle(
+    active: { id: string; type: ForgeFoliageTypeDef },
+    target: { kind: "landscape" | "staticMesh"; id: string },
+    pick: FoliageSurfacePick,
+  ): boolean {
+    const hit: FoliageSurfaceHit = {
+      position: [pick.point.x, pick.point.y, pick.point.z],
+      normal: [pick.normal.x, pick.normal.y, pick.normal.z],
+    };
+    if (!passesFoliageFilters(active.type, hit)) return true;
+    const group = this.foliageGroupFor(active.id, target, true);
+    if (!group) return false;
+    const rng = makeFoliageRng((this.foliageToolSettings.randomSeed + group.instances.length + 1) >>> 0);
+    const instance = foliageInstanceFromRoll(active.type, rollFoliageInstance(active.type, hit, rng));
+    group.instances.push(instance);
+    this.foliageDataDirty = true;
+    this.rebuildFoliageGroupObject(group);
+    this.emitFoliageChanged();
+    return true;
+  }
+
+  /** Erases instances under the brush; when `onlyTypeId` is set, only that type. */
+  private applyFoliageErase(pick: FoliageSurfacePick, onlyTypeId?: string | null): boolean {
+    const center: Vec3 = [pick.point.x, pick.point.y, pick.point.z];
+    const radius = this.foliageToolSettings.brushSize;
+    let changed = false;
+    for (const group of this.foliageData.groups) {
+      if (onlyTypeId && group.foliageTypeId !== onlyTypeId) continue;
+      const { kept, removed } = eraseFoliageInRadius(group.instances, center, radius);
+      if (removed > 0) {
+        group.instances = kept;
+        this.rebuildFoliageGroupObject(group);
+        changed = true;
+      }
+    }
+    if (!changed) return true;
+    // Drop groups emptied by the erase so the sidecar stays tidy.
+    this.foliageData.groups = this.foliageData.groups.filter((group) => {
+      if (group.instances.length > 0) return true;
+      this.foliageBinding?.removeGroup(group.id);
+      return false;
+    });
+    this.foliageDataDirty = true;
+    this.emitFoliageChanged();
+    return true;
+  }
+
+  private ensureFoliageBrushCursor(): Mesh {
+    if (this.foliageBrushCursor) return this.foliageBrushCursor;
+    const cursor = new Mesh(
+      new RingGeometry(0.96, 1, 96),
+      new MeshBasicMaterial({
+        color: 0x7fd77f,
+        transparent: true,
+        opacity: 0.85,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    cursor.name = "foliage-brush-cursor";
+    cursor.rotation.x = -Math.PI / 2;
+    cursor.renderOrder = 20;
+    cursor.visible = false;
+    this.foliageBrushCursor = cursor;
+    this.scene.add(cursor);
+    return cursor;
+  }
+
+  updateFoliageBrushHover(clientX: number, clientY: number): void {
+    if (!this.foliageModeActive || this.foliageToolSettings.tool === "select") {
+      this.clearFoliageBrushHover();
+      return;
+    }
+    const pick = this.picker.pickFoliageSurface(clientX, clientY);
+    if (!pick) {
+      this.clearFoliageBrushHover();
+      return;
+    }
+    const cursor = this.ensureFoliageBrushCursor();
+    cursor.position.copy(pick.point);
+    cursor.position.y += 0.03;
+    cursor.scale.setScalar(this.foliageToolSettings.brushSize);
+    cursor.visible = true;
+  }
+
+  clearFoliageBrushHover(): void {
+    if (this.foliageBrushCursor) this.foliageBrushCursor.visible = false;
+  }
+
+  /** Pointer-down entry for a foliage tool; returns true when it owns the pointer. */
+  beginFoliageStroke(event: PointerEvent): boolean {
+    if (!this.foliageModeActive || this.foliageToolSettings.tool === "select") return false;
+    if (!this.applyFoliageActionAt(event.clientX, event.clientY)) return false;
+    this.foliageStrokePointerId = event.pointerId;
+    this.canvas.setPointerCapture(event.pointerId);
+    return true;
+  }
+
+  /** Pointer-move during a foliage stroke (drag paint/erase). */
+  updateFoliageStroke(event: PointerEvent): boolean {
+    if (this.foliageStrokePointerId !== event.pointerId) return false;
+    this.applyFoliageActionAt(event.clientX, event.clientY);
+    return true;
+  }
+
+  endFoliageStroke(event: PointerEvent): boolean {
+    if (this.foliageStrokePointerId !== event.pointerId) return false;
+    this.foliageStrokePointerId = null;
+    try {
+      this.canvas.releasePointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture may already be released (pointercancel); ignore.
+    }
+    return true;
+  }
+
+  /** Saves the foliage sidecar via the dev endpoint when it has unsaved changes. */
+  private async saveFoliageData(): Promise<void> {
+    if (!this.foliageDataDirty) return;
+    const path = foliageDataPath(this.foliageScenePath());
+    const response = await fetch("/__save-foliage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, foliage: this.foliageData }),
+    });
+    if (!response.ok) throw new Error(`Foliage save failed: HTTP ${response.status}`);
+    this.foliageDataDirty = false;
   }
 
   /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
@@ -7920,6 +8408,11 @@ export class SceneApp {
       endLandscapeSculpt: (event) => this.endLandscapeSculpt(event),
       updateLandscapeBrushHover: (clientX, clientY) => this.updateLandscapeBrushHover(clientX, clientY),
       clearLandscapeBrushHover: () => this.clearLandscapeBrushHover(),
+      beginFoliageStroke: (event) => this.beginFoliageStroke(event),
+      updateFoliageStroke: (event) => this.updateFoliageStroke(event),
+      endFoliageStroke: (event) => this.endFoliageStroke(event),
+      updateFoliageBrushHover: (clientX, clientY) => this.updateFoliageBrushHover(clientX, clientY),
+      clearFoliageBrushHover: () => this.clearFoliageBrushHover(),
       isCameraNavigationActive: () => this.cameraController.isNavigating,
       cameraNavigationPointerId: () => this.cameraController.navigationPointerId,
       updateCameraLook: (movementX, movementY) => this.cameraController.updateLook(movementX, movementY),

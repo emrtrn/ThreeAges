@@ -20923,11 +20923,11 @@
       "license": "Unknown"
     },
     {
-      "id": "birchtree-1",
-      "name": "Birch Tree 1",
+      "id": "commontree",
+      "name": "Common Tree",
       "assetType": "staticMesh",
       "category": "Environment",
-      "path": "assets/starter-content/StaticMeshes/Environment/BirchTree_1.glb",
+      "path": "assets/starter-content/StaticMeshes/Environment/CommonTree.glb",
       "tags": [],
       "placeable": true,
       "placement": {
@@ -20941,7 +20941,30 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 96020
+        "bytes": 8890620
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "commonbush",
+      "name": "Common Bush",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/CommonBush.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 149368
       },
       "license": "Unknown"
     }

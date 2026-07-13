@@ -28,6 +28,8 @@ import {
   validateSaveUvwPayload,
   validateSaveSoundCuePayload,
   validateSaveEffectPayload,
+  validateSaveFoliagePayload,
+  validateSaveFoliageTypePayload,
   validateSaveDialogueVoicePayload,
   validateSaveDialogueLinePayload,
   validateSaveAiBlackboardPayload,
@@ -696,6 +698,8 @@ const PRIVILEGED_URLS = new Set([
   "/__save-landscape",
   "/__save-soundcue",
   "/__save-effect",
+  "/__save-foliage",
+  "/__save-foliage-type",
   "/__save-dialogue-voice",
   "/__save-dialogue-line",
   "/__save-blackboard",
@@ -1053,6 +1057,76 @@ function layoutEditorPlugin(): Plugin {
             const previous = await readFile(filePath, "utf8").catch(() => null);
             const next = `${JSON.stringify(payload.effect, null, 2)}\n`;
             await writeFile(filePath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Foliage Type editor save: writes a `<name>.foliagetype.json` asset and
+        // registers it in the manifest so it appears in Foliage Mode's type list.
+        // Validated/normalized server-side (validateSaveFoliageTypePayload).
+        if (req.url === "/__save-foliage-type") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveFoliageTypePayload(await readJsonBody(req));
+            const filePath = resolvePublicPath(payload.path);
+            await mkdir(resolve(filePath, ".."), { recursive: true });
+            const previous = await readFile(filePath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.foliageType, null, 2)}\n`;
+            await writeFile(filePath, next, "utf8");
+            let registeredId: string | null = null;
+            try {
+              registeredId = await registerImportedAsset(
+                payload.path,
+                Buffer.byteLength(next, "utf8"),
+                inferImportedAssetTypeFromContent(payload.path, next),
+              );
+            } catch {
+              registeredId = null;
+            }
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: true, path: payload.path, changed: previous !== next, registeredId }),
+            );
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Foliage Mode save: writes a `<layout>.foliage.json` instance sidecar
+        // (can hold thousands of instances, so it uses the larger landscape body
+        // cap). Validated/normalized server-side (validateSaveFoliagePayload).
+        if (req.url === "/__save-foliage") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveFoliagePayload(
+              await readJsonBody(req, LANDSCAPE_BODY_MAX_BYTES),
+            );
+            const sidecarPath = resolvePublicPath(payload.path);
+            await mkdir(resolve(sidecarPath, ".."), { recursive: true });
+            const previous = await readFile(sidecarPath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.foliage, null, 2)}\n`;
+            await writeFile(sidecarPath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
           } catch (error) {

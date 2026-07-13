@@ -524,7 +524,32 @@ import {
   validateSaveAiStateTreePayload,
   validateEffectAsset,
   validateSaveEffectPayload,
+  validateFoliageTypeAsset,
+  validateSaveFoliageTypePayload,
+  validateFoliageData,
+  validateSaveFoliagePayload,
 } from "./saveValidator";
+import {
+  normalizeFoliageType,
+  normalizeFoliageData,
+  createFoliageType,
+  foliageDataPath,
+  uniqueFoliageGroupId,
+} from "../engine/scene/foliage";
+import {
+  makeFoliageRng,
+  surfaceSlopeDegrees,
+  foliageSampleTargetCount,
+  passesFoliageFilters,
+  foliageOverlaps,
+  rollFoliageInstance,
+  eraseFoliageInRadius,
+} from "../engine/scene/foliagePaint";
+import {
+  FoliageRenderBinding,
+  foliageInstanceFromRoll,
+  foliageInstanceItems,
+} from "../engine/render-three/foliage";
 import {
   defaultActorScriptDef,
   normalizeActorScriptDef,
@@ -15192,6 +15217,300 @@ check("validateSaveEffectPayload requires a .effect.json path", () => {
   assert.throws(() =>
     validateSaveEffectPayload({ path: "../escape.effect.json", effect: {} }),
   );
+});
+
+// ─── Foliage Mode (Faz 1) ────────────────────────────────────────────────────
+
+check("normalizeFoliageType fills defaults for a bare body", () => {
+  const type = normalizeFoliageType({ schema: 1, type: "foliageType", name: "Grass", meshAssetId: "mesh-1" });
+  assert.equal(type.name, "Grass");
+  assert.equal(type.meshAssetId, "mesh-1");
+  assert.equal(type.radius, 0.5);
+  assert.equal(type.density, 1);
+  assert.deepEqual(type.scaleMin, [1, 1, 1]);
+  assert.deepEqual(type.scaleMax, [1, 1, 1]);
+  assert.equal(type.randomYaw, true);
+  assert.equal(type.alignToNormal, true);
+  assert.equal(type.collision, false);
+  assert.equal(type.slopeMin, 0);
+  assert.equal(type.slopeMax, 90);
+  // Unbounded height limits stay absent so the file round-trips clean.
+  assert.equal("heightMin" in type, false);
+  assert.equal("heightMax" in type, false);
+});
+
+check("normalizeFoliageType guards ranges, clamps, and drops junk", () => {
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "",
+    meshAssetId: "m",
+    radius: -5,
+    density: -1,
+    // inverted ranges must be re-ordered so sampling never inverts
+    scaleMin: [2, 2, 2],
+    scaleMax: [1, 1, 1],
+    slopeMin: 70,
+    slopeMax: 20,
+    zOffsetMin: 3,
+    zOffsetMax: -3,
+    heightMin: 4,
+    heightMax: 10,
+    cullStart: -2,
+    junk: "dropped",
+  });
+  assert.equal(type.name, "Foliage Type");
+  assert.ok(type.radius > 0);
+  assert.equal(type.density, 0);
+  assert.deepEqual(type.scaleMin, [2, 2, 2]);
+  assert.deepEqual(type.scaleMax, [2, 2, 2]);
+  assert.equal(type.slopeMin, 20);
+  assert.equal(type.slopeMax, 70);
+  assert.equal(type.zOffsetMin, -3);
+  assert.equal(type.zOffsetMax, 3);
+  assert.equal(type.heightMin, 4);
+  assert.equal(type.heightMax, 10);
+  assert.equal(type.cullStart, 0);
+  assert.equal((type as Record<string, unknown>).junk, undefined);
+});
+
+check("createFoliageType produces a valid, save-clean asset", () => {
+  const type = createFoliageType("Rock", "rock-mesh");
+  const canonical = validateFoliageTypeAsset(type);
+  assert.equal(canonical.name, "Rock");
+  assert.equal(canonical.meshAssetId, "rock-mesh");
+  assert.equal(canonical.schema, 1);
+  assert.equal(canonical.type, "foliageType");
+});
+
+check("validateSaveFoliageTypePayload requires a .foliagetype.json path", () => {
+  const ok = validateSaveFoliageTypePayload({
+    path: "assets/foliage/Grass.foliagetype.json",
+    foliageType: { schema: 1, type: "foliageType", name: "Grass", meshAssetId: "m" },
+  });
+  assert.equal(ok.path, "assets/foliage/Grass.foliagetype.json");
+  assert.throws(() => validateSaveFoliageTypePayload({ path: "assets/x.json", foliageType: {} }));
+  assert.throws(() =>
+    validateSaveFoliageTypePayload({ path: "../escape.foliagetype.json", foliageType: {} }),
+  );
+});
+
+check("normalizeFoliageData keeps valid groups, drops malformed instances", () => {
+  const data = normalizeFoliageData({
+    schema: 1,
+    type: "foliage",
+    groups: [
+      {
+        id: "g1",
+        foliageTypeId: "type-1",
+        target: { kind: "landscape", id: "landscape-1" },
+        instances: [
+          { position: [0, 0, 0], rotation: [0, 45, 0], scale: [1, 1, 1] },
+          { position: [1, 0, 1] }, // rotation/scale defaulted
+          { rotation: [0, 0, 0] }, // no position -> dropped
+          "junk", // dropped
+        ],
+      },
+      // group with no foliageTypeId -> dropped
+      { id: "g2", target: { kind: "staticMesh", id: "x" }, instances: [] },
+    ],
+  });
+  assert.equal(data.groups.length, 1);
+  const group = data.groups[0]!;
+  assert.equal(group.id, "g1");
+  assert.equal(group.foliageTypeId, "type-1");
+  assert.equal(group.target.kind, "landscape");
+  assert.equal(group.instances.length, 2);
+  assert.deepEqual(group.instances[1]!.rotation, [0, 0, 0]);
+  assert.deepEqual(group.instances[1]!.scale, [1, 1, 1]);
+});
+
+check("normalizeFoliageData re-ids duplicate/blank group ids", () => {
+  const data = normalizeFoliageData({
+    schema: 1,
+    type: "foliage",
+    groups: [
+      { id: "dup", foliageTypeId: "t", target: { kind: "staticMesh", id: "a" }, instances: [] },
+      { id: "dup", foliageTypeId: "t", target: { kind: "staticMesh", id: "b" }, instances: [] },
+      { foliageTypeId: "t", target: { kind: "staticMesh", id: "c" }, instances: [] },
+    ],
+  });
+  const ids = new Set(data.groups.map((g) => g.id));
+  assert.equal(ids.size, 3);
+});
+
+check("validateSaveFoliagePayload requires a .foliage.json path", () => {
+  const ok = validateSaveFoliagePayload({
+    path: "layouts/playground.foliage.json",
+    foliage: { schema: 1, type: "foliage", groups: [] },
+  });
+  assert.equal(ok.path, "layouts/playground.foliage.json");
+  assert.throws(() => validateSaveFoliagePayload({ path: "layouts/x.json", foliage: {} }));
+  assert.throws(() =>
+    validateSaveFoliagePayload({ path: "../escape.foliage.json", foliage: {} }),
+  );
+  // A .foliagetype.json path must NOT satisfy the sidecar endpoint.
+  assert.throws(() =>
+    validateSaveFoliagePayload({ path: "assets/Grass.foliagetype.json", foliage: {} }),
+  );
+});
+
+check("foliageDataPath derives a sibling sidecar path", () => {
+  assert.equal(foliageDataPath("layouts/playground.json"), "layouts/playground.foliage.json");
+  assert.equal(
+    foliageDataPath("assets/Levels/Land.level.json"),
+    "assets/Levels/Land.foliage.json",
+  );
+  assert.equal(foliageDataPath("/layouts/foo.layout.json"), "layouts/foo.foliage.json");
+});
+
+check("uniqueFoliageGroupId avoids collisions", () => {
+  const groups = [
+    { id: "foliage-group-1", foliageTypeId: "t", target: { kind: "staticMesh" as const, id: "a" }, instances: [] },
+  ];
+  assert.equal(uniqueFoliageGroupId(groups), "foliage-group-2");
+  assert.equal(uniqueFoliageGroupId([]), "foliage-group-1");
+});
+
+check("validateFoliageData rejects a wrong envelope", () => {
+  assert.throws(() => validateFoliageData({ schema: 2, type: "foliage", groups: [] }));
+  assert.throws(() => validateFoliageData({ schema: 1, type: "nope", groups: [] }));
+});
+
+check("makeFoliageRng is deterministic per seed", () => {
+  const a = makeFoliageRng(42);
+  const b = makeFoliageRng(42);
+  const c = makeFoliageRng(43);
+  const seqA = [a(), a(), a()];
+  const seqB = [b(), b(), b()];
+  assert.deepEqual(seqA, seqB);
+  assert.notDeepEqual(seqA, [c(), c(), c()]);
+  for (const v of seqA) assert.ok(v >= 0 && v < 1);
+});
+
+check("surfaceSlopeDegrees reads slope from the normal", () => {
+  assert.ok(Math.abs(surfaceSlopeDegrees([0, 1, 0])) < 1e-6);
+  assert.ok(Math.abs(surfaceSlopeDegrees([1, 0, 0]) - 90) < 1e-6);
+  assert.ok(Math.abs(surfaceSlopeDegrees([0, Math.SQRT1_2, Math.SQRT1_2]) - 45) < 1e-6);
+});
+
+check("passesFoliageFilters gates slope and world height", () => {
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "t",
+    meshAssetId: "m",
+    slopeMin: 0,
+    slopeMax: 30,
+    heightMin: 0,
+    heightMax: 10,
+  });
+  assert.equal(passesFoliageFilters(type, { position: [0, 5, 0], normal: [0, 1, 0] }), true);
+  // too steep
+  assert.equal(passesFoliageFilters(type, { position: [0, 5, 0], normal: [1, 0, 0] }), false);
+  // below height window
+  assert.equal(passesFoliageFilters(type, { position: [0, -1, 0], normal: [0, 1, 0] }), false);
+  // above height window
+  assert.equal(passesFoliageFilters(type, { position: [0, 11, 0], normal: [0, 1, 0] }), false);
+});
+
+check("foliageSampleTargetCount scales with area and density", () => {
+  const type = normalizeFoliageType({ schema: 1, type: "foliageType", name: "t", meshAssetId: "m", density: 1 });
+  const small = foliageSampleTargetCount(type, { center: [0, 0, 0], radius: 1, density: 1, seed: 1 });
+  const big = foliageSampleTargetCount(type, { center: [0, 0, 0], radius: 4, density: 1, seed: 1 });
+  assert.ok(big > small);
+  assert.ok(small >= 1);
+});
+
+check("foliageOverlaps rejects points inside the spacing radius", () => {
+  const existing: [number, number, number][] = [[0, 0, 0]];
+  assert.equal(foliageOverlaps([0.2, 0, 0.2], existing, 0.5), true);
+  assert.equal(foliageOverlaps([2, 0, 2], existing, 0.5), false);
+  // vertical distance is ignored (horizontal spacing only)
+  assert.equal(foliageOverlaps([0, 100, 0], existing, 0.5), true);
+});
+
+check("rollFoliageInstance samples within scale range and respects randomYaw", () => {
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "t",
+    meshAssetId: "m",
+    scaleMin: [1, 1, 1],
+    scaleMax: [2, 2, 2],
+    randomYaw: false,
+  });
+  const rng = makeFoliageRng(7);
+  const roll = rollFoliageInstance(type, { position: [1, 2, 3], normal: [0, 1, 0] }, rng);
+  assert.ok(roll.scale.every((s) => s >= 1 - 1e-6 && s <= 2 + 1e-6));
+  assert.equal(roll.yawDeg, 0);
+  assert.deepEqual(roll.position, [1, 2, 3]);
+});
+
+check("eraseFoliageInRadius keeps far instances and counts removals", () => {
+  const instances = [
+    { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] },
+    { position: [5, 0, 5] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] },
+  ];
+  const result = eraseFoliageInRadius(instances, [0, 0, 0], 1);
+  assert.equal(result.removed, 1);
+  assert.equal(result.kept.length, 1);
+  assert.deepEqual(result.kept[0]!.position, [5, 0, 5]);
+});
+
+check("foliageInstanceFromRoll aligns to normal and offsets along up", () => {
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "t",
+    meshAssetId: "m",
+    alignToNormal: true,
+  });
+  const roll = {
+    position: [0, 0, 0] as [number, number, number],
+    normal: [0, 1, 0] as [number, number, number],
+    yawDeg: 0,
+    scale: [1, 1, 1] as [number, number, number],
+    zOffset: 2,
+    seed: 123,
+  };
+  const instance = foliageInstanceFromRoll(type, roll);
+  // Flat up-normal + zOffset 2 => raised straight up, no tilt.
+  assert.ok(Math.abs(instance.position[1] - 2) < 1e-6);
+  assert.ok(instance.rotation.every((r) => Math.abs(r) < 1e-6));
+  assert.equal(instance.seed, 123);
+  assert.deepEqual(instance.normal, [0, 1, 0]);
+});
+
+check("foliageInstanceItems composes one matrix per instance", () => {
+  const items = foliageInstanceItems({
+    id: "g",
+    foliageTypeId: "t",
+    target: { kind: "staticMesh", id: "x" },
+    instances: [
+      { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      { position: [1, 1, 1], rotation: [0, 90, 0], scale: [2, 2, 2] },
+    ],
+  });
+  assert.equal(items.length, 2);
+  assert.equal(items[0]!.hidden, false);
+});
+
+check("FoliageRenderBinding tracks groups without a model resolver", () => {
+  const binding = new FoliageRenderBinding();
+  const resolver = { getType: () => null, getModel: () => null };
+  binding.rebuild(
+    {
+      schema: 1,
+      type: "foliage",
+      groups: [{ id: "g1", foliageTypeId: "t", target: { kind: "staticMesh", id: "x" }, instances: [] }],
+    },
+    resolver,
+  );
+  // No type/model resolves, so nothing is drawn, but rebuild is a safe no-op.
+  assert.equal(binding.allMeshes().length, 0);
+  binding.clear();
+  assert.equal(binding.root.children.length, 0);
 });
 
 check("every starter preset body is a valid, save-clean schema-2 effect", () => {

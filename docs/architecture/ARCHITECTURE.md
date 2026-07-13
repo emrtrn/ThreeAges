@@ -196,7 +196,10 @@ logic in the editor shell. Engine-level AI code carries no DOM / Three.js /
 editor imports (its render/debug visualizers live in a separate layer), and AI
 runtime state (blackboard values, active node, perception, paths) is never
 written back to layout files — it is a debug-inspect / save-game concern only.
-See `docs/planned/AI_SYSTEM_RESEARCH_AND_PLAN.md`.
+The completed AI plan is in `C:\Users\emret\Documents\Forge-Archive`; its
+in-repo record is `docs/COMPLETED_WORK_INDEX.md`. For the active skeletal-facing
+constraint and activation criteria, see
+`docs/planned/SKELETAL_FACING_OVERRIDE_BACKLOG.md`.
 
 ## Project Manifest
 

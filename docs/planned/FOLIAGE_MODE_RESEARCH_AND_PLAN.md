@@ -432,22 +432,34 @@ Alınacak fikirler:
 - [x] Unreal Foliage Mode ana parçalarını araştır.
 - [x] Forge'da Foliage'i ayrı ana editor mode olarak konumlandır.
 - [x] Landscape/Mesh Paint/Placement sınırlarını ayır.
-- [ ] Kullanıcıyla Faz 1 sınırlarını onayla.
+- [x] Kullanıcıyla Faz 1 sınırlarını onayla. (2026-07-13: tüm önerilen
+  defaultlar onaylandı — ayrı `*.foliage` type asset, Static Mesh + Landscape
+  target, layout-bazlı sidecar, chunk'sız InstancedMesh.)
 
 ### Faz 1 - Manual Static Mesh Foliage Paint
 
-- [ ] `ForgeFoliageTypeDef` schema + normalize/validate.
-- [ ] `LayoutFoliageData` sidecar schema + normalize/validate.
-- [ ] `/__save-foliage` endpoint.
-- [ ] Content Browser'dan mesh'i Foliage Type listesine ekleme.
-- [ ] Foliage Mode paneli.
-- [ ] Paint / Erase / Single / Select / Remove tools.
-- [ ] Static Mesh target raycast.
-- [ ] Landscape target raycast, Landscape sistemi varsa.
-- [ ] InstancedMesh foliage render batches.
-- [ ] Save/Reload.
-- [ ] Runtime Play render.
-- [ ] Engine tests.
+> Durum: 2026-07-13 itibarıyla kod tarafı TAMAM, `build:verify` + `verify:imports`
+> yeşil, 810 engine check geçiyor. Kalan: kullanıcı editor smoke'u.
+> Not: Foliage Type asset uzantısı çakışmayı önlemek için `*.foliagetype.json`
+> oldu (level sidecar `<layout>.foliage.json` olarak kaldı).
+
+- [x] `ForgeFoliageTypeDef` schema + normalize/validate. (`engine/scene/foliage.ts`)
+- [x] `LayoutFoliageData` sidecar schema + normalize/validate. (`engine/scene/foliage.ts`)
+- [x] `/__save-foliage` + `/__save-foliage-type` endpoint'leri (validator allowlist
+  `tools/saveValidator.ts`).
+- [x] Content Browser'dan mesh'i Foliage Type listesine ekleme. (Foliage paneli:
+  "New Type From Mesh" + mevcut type asset ekleme.)
+- [x] Foliage Mode paneli. (Inspector'da "Foliage" sekmesi =
+  `src/editor/panels/foliage/foliagePanel.ts`; sekme aktifken mode açık.)
+- [x] Paint / Erase / Single / Select / Remove tools. (Select = normal seçim;
+  instance seçim overlay Faz 2.)
+- [x] Static Mesh target raycast. (`ScenePicker.pickFoliageSurface` + down-cast)
+- [x] Landscape target raycast. (aynı picker; Landscape zaten hazır.)
+- [x] InstancedMesh foliage render batches. (`engine/render-three/foliage.ts`)
+- [x] Save/Reload. (`saveLayout` → `/__save-foliage`; `buildFoliage` yükler.)
+- [x] Runtime Play render. (`RuntimeSceneApp.buildRuntimeFoliage`)
+- [x] Engine tests. (foliage normalizer + paint core + render binding + validator.)
+- [ ] Kullanıcı editor smoke'u (paint/erase/single/save/reload/Play elle test).
 
 ### Faz 2 - Editing ve Quality Tools
 

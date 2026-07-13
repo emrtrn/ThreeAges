@@ -4466,3 +4466,75 @@ body.editor-mode #debug-stats {
 .ste-status[data-tone="error"]   { color: #ff8a8a; }
 .ste-status[data-tone="warning"] { color: #f0c070; }
 .ste-status[data-tone="info"]    { color: #7abde8; }
+
+/* --- Foliage Mode panel --- */
+.foliage-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+}
+.foliage-tool {
+  min-width: 0;
+  height: 28px;
+  border: 1px solid #303640;
+  background: #1d222b;
+  color: #cbd2dc;
+  font-size: 12px;
+  cursor: pointer;
+}
+.foliage-tool:hover:not(:disabled) { background: #29303a; }
+.foliage-tool.active {
+  border-color: #6fbf73;
+  background: #1e3320;
+  color: #b6efb8;
+}
+.foliage-type-list {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.foliage-type-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 1px solid #303640;
+  background: #1d222b;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.foliage-type-row.active {
+  border-color: #6fbf73;
+  background: #1e3320;
+}
+.foliage-type-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foliage-type-count {
+  font-variant-numeric: tabular-nums;
+  color: #9aa4a9;
+  font-size: 11px;
+}
+.foliage-type-remove {
+  border: none;
+  background: transparent;
+  color: #9aa4a9;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.foliage-type-remove:hover { color: #ff8a8a; }
+.foliage-add-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+}
+.foliage-create {
+  width: 100%;
+  height: 28px;
+  border: 1px solid #6fbf73;
+  background: #1e3320;
+  color: #b6efb8;
+  font-size: 12px;
+  cursor: pointer;
+}
+.foliage-create:disabled { opacity: 0.5; cursor: default; }

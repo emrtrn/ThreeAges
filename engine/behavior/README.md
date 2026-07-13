@@ -16,7 +16,8 @@ decision-making — goal selection, blackboard memory, Behavior Trees, perceptio
 path following — lives in `engine/ai` (`AISubsystem`, one `AIController` per
 possessed pawn). AI reaches game actions through this folder's `ScriptMessageBus`
 (`emitScriptMessage` / `subscribeScriptMessage`); there is no separate AI bus. See
-`engine/ai/README.md` and `docs/planned/AI_SYSTEM_RESEARCH_AND_PLAN.md`.
+`engine/ai/README.md`; the completed AI plan is indexed by
+`docs/COMPLETED_WORK_INDEX.md`.
 
 Rules:
 

@@ -120,6 +120,8 @@ import {
   type EnvironmentDetailsOptions,
 } from "./panels/details/environmentDetails";
 import { renderWorldSettingsPanel } from "./panels/world/worldSettingsPanel";
+import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
+import { createFoliageType } from "@engine/scene/foliage";
 import { renderOutlinerPanel } from "./panels/outliner/outlinerPanel";
 import {
   CONTENT_FILTER_ALL,
@@ -135,7 +137,7 @@ import {
   type ContentTypeFilter,
 } from "./panels/content/contentPanel";
 
-type InspectorTab = "details" | "world";
+type InspectorTab = "details" | "world" | "foliage";
 
 /** Typed assets the Content Browser context menu can create (besides folders). */
 const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> = [
@@ -286,6 +288,8 @@ export class EditorUi {
   private outlinerList: HTMLDivElement;
   private detailsBody: HTMLDivElement;
   private worldSettingsBody: HTMLDivElement;
+  private foliageBody!: HTMLDivElement;
+  private inspectorTab: InspectorTab = "details";
   private statusText: HTMLElement;
   private undoButton: HTMLButtonElement;
   private redoButton: HTMLButtonElement;
@@ -523,12 +527,22 @@ export class EditorUi {
             role="tab"
             aria-selected="false"
           >World Settings</button>
+          <button
+            type="button"
+            class="inspector-tab"
+            data-inspector-tab="foliage"
+            role="tab"
+            aria-selected="false"
+          >Foliage</button>
         </div>
         <div class="inspector-pane" data-inspector-pane="details">
           <div class="details-body" data-details-body></div>
         </div>
         <div class="inspector-pane" data-inspector-pane="world" hidden>
           <div class="details-body world-settings-body" data-world-settings-body></div>
+        </div>
+        <div class="inspector-pane" data-inspector-pane="foliage" hidden>
+          <div class="details-body foliage-body" data-foliage-body></div>
         </div>
       </aside>
       <section class="editor-content-drawer" data-content-drawer aria-hidden="true">
@@ -605,6 +619,7 @@ export class EditorUi {
     this.outlinerList = requireElement(this.root, "[data-outliner-list]");
     this.detailsBody = requireElement(this.root, "[data-details-body]");
     this.worldSettingsBody = requireElement(this.root, "[data-world-settings-body]");
+    this.foliageBody = requireElement(this.root, "[data-foliage-body]");
     this.statusText = requireElement(this.root, "[data-status]");
     this.undoButton = requireElement(this.root, '[data-action="undo"]');
     this.redoButton = requireElement(this.root, '[data-action="redo"]');
@@ -624,6 +639,9 @@ export class EditorUi {
     this.app.onSceneObjectsChanged = (objects) => this.renderOutliner(objects);
     this.app.onHistoryChanged = (state) => this.renderHistory(state);
     this.app.onWorldSettingsChanged = (settings) => this.renderWorldSettings(settings);
+    this.app.onFoliageChanged = () => {
+      if (this.inspectorTab === "foliage") this.renderFoliage();
+    };
     this.app.onPivotEditModeChanged = () => this.renderDetails(this.selected);
     this.app.onStatus = (message, tone) => this.setStatus(message, tone);
 
@@ -977,7 +995,7 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         const tab = button.dataset.inspectorTab;
-        if (tab === "details" || tab === "world") this.setInspectorTab(tab);
+        if (tab === "details" || tab === "world" || tab === "foliage") this.setInspectorTab(tab);
       });
     });
 
@@ -3022,6 +3040,7 @@ export class EditorUi {
   }
 
   private setInspectorTab(tab: InspectorTab): void {
+    this.inspectorTab = tab;
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
       const active = button.dataset.inspectorTab === tab;
       button.classList.toggle("active", active);
@@ -3031,6 +3050,72 @@ export class EditorUi {
       pane.hidden = pane.dataset.inspectorPane !== tab;
     });
     if (tab === "world") this.renderWorldSettings(this.worldSettings ?? this.app.getWorldSettings());
+    // The Foliage tab IS the mode switch: its brush owns pointer input only while
+    // the tab is active, so leaving the tab restores normal selection/gizmo input.
+    this.app.setFoliageModeActive(tab === "foliage");
+    if (tab === "foliage") this.renderFoliage();
+  }
+
+  private renderFoliage(): void {
+    const foliageTypeIds = new Set(this.app.getFoliageTypeViews().map((type) => type.id));
+    const availableTypeAssets = this.editableAssets
+      .filter((asset) => asset.assetType === "foliageType" && !foliageTypeIds.has(asset.id))
+      .map((asset) => ({ id: asset.id, name: asset.displayName ?? asset.id }));
+    const staticMeshAssets = this.editableAssets
+      .filter((asset) => asset.assetType === "staticMesh")
+      .map((asset) => ({ id: asset.id, name: asset.displayName ?? asset.id }));
+    renderFoliagePanel({
+      body: this.foliageBody,
+      settings: this.app.getFoliageToolSettings(),
+      types: this.app.getFoliageTypeViews(),
+      availableTypeAssets,
+      staticMeshAssets,
+      apply: (patch) => {
+        this.app.setFoliageToolSettings(patch);
+      },
+      setActiveType: (id) => {
+        this.app.setFoliageToolSettings({ activeTypeId: id });
+      },
+      addType: (assetId) => {
+        void this.app.addFoliageType(assetId);
+      },
+      removeType: (assetId) => this.app.removeFoliageType(assetId),
+      createType: (name, meshAssetId) => {
+        void this.createFoliageTypeAsset(name, meshAssetId);
+      },
+    });
+  }
+
+  /** Writes a new `*.foliagetype.json` asset then adds it to the active foliage list. */
+  private async createFoliageTypeAsset(name: string, meshAssetId: string): Promise<void> {
+    const safeName = name.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "Foliage";
+    const path = `assets/foliage/${safeName}.foliagetype.json`;
+    const body = createFoliageType(name, meshAssetId);
+    try {
+      const response = await fetch("/__save-foliage-type", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, foliageType: body }),
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        registeredId?: string | null;
+      };
+      if (!response.ok || !result.ok) {
+        this.setStatus(result.error ?? `Foliage type save failed: HTTP ${response.status}`, "error");
+        return;
+      }
+      await this.refreshAssetTree();
+      const assetId = result.registeredId ?? path;
+      await this.app.addFoliageType(assetId);
+      this.setStatus(`Created foliage type ${name}.`, "success");
+    } catch (error) {
+      this.setStatus(
+        `Foliage type save endpoint unreachable: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
   }
 
   private renderWorldSettings(settings: EditorWorldSettings): void {

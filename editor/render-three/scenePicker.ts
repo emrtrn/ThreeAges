@@ -1,4 +1,4 @@
-import { Plane, Raycaster, Vector2, Vector3 } from "three";
+import { InstancedMesh, Matrix3, Matrix4, Plane, Raycaster, Vector2, Vector3 } from "three";
 import type { Camera, Intersection, Object3D, OrthographicCamera, PerspectiveCamera } from "three";
 
 import {
@@ -22,6 +22,17 @@ import type { GizmoHandle } from "@editor/gizmos/handles";
 export interface LandscapeSurfaceHit {
   index: number;
   point: Vector3;
+}
+
+/** A Foliage Mode brush hit: world point + surface normal + classified target. */
+export interface FoliageSurfacePick {
+  point: Vector3;
+  /** Unit world-space surface normal (world up when the face has no normal). */
+  normal: Vector3;
+  /** Landscape index when the hit landed on a Landscape actor, else null. */
+  landscapeIndex: number | null;
+  /** Static-mesh asset id when the hit landed on a placed instance, else null. */
+  staticMeshAssetId: string | null;
 }
 
 export interface ScenePickerOptions {
@@ -256,6 +267,68 @@ export class ScenePicker {
       return { index, point: hit.point.clone() };
     }
     return null;
+  }
+
+  /**
+   * Resolves the cursor to a Foliage Mode brush hit: the nearest solid surface
+   * that is a Landscape or a placed static-mesh instance, with the world-space
+   * surface normal (instance matrix folded in for instanced meshes). Returns null
+   * when the cursor is over empty space or a non-paintable surface.
+   */
+  pickFoliageSurface(clientX: number, clientY: number): FoliageSurfacePick | null {
+    this.setPointerNdc(clientX, clientY);
+    this.raycaster.setFromCamera(this.pointerNdc, this.getCamera());
+    return this.classifyFoliageHits(this.raycaster.intersectObjects(this.getPickables(), true));
+  }
+
+  /**
+   * Samples the paintable surface directly below a world X/Z (foliage brush disk
+   * samples): casts straight down from high above so every sample gets its own
+   * surface point + normal, not just the pointer's centre hit.
+   */
+  raycastFoliageSurfaceDown(worldX: number, worldZ: number): FoliageSurfacePick | null {
+    const ray = new Raycaster(new Vector3(worldX, 1e4, worldZ), new Vector3(0, -1, 0), 0, 2e4);
+    ray.params.Line.threshold = 0;
+    return this.classifyFoliageHits(ray.intersectObjects(this.getPickables(), true));
+  }
+
+  private classifyFoliageHits(intersections: Intersection[]): FoliageSurfacePick | null {
+    for (const hit of this.visibleHits(intersections)) {
+      const landscape = findParentLandscape(hit.object);
+      if (landscape) {
+        const index = Number(landscape.userData.landscapeIndex);
+        return {
+          point: hit.point.clone(),
+          normal: this.worldFaceNormal(hit),
+          landscapeIndex: Number.isInteger(index) ? index : null,
+          staticMeshAssetId: null,
+        };
+      }
+      const instanced = findParentInstancedMesh(hit.object);
+      if (instanced) {
+        const assetId = String(instanced.userData.assetId ?? "");
+        return {
+          point: hit.point.clone(),
+          normal: this.worldFaceNormal(hit),
+          landscapeIndex: null,
+          staticMeshAssetId: assetId.length > 0 ? assetId : null,
+        };
+      }
+    }
+    return null;
+  }
+
+  /** World-space normal of a hit face, folding in the per-instance matrix for instanced meshes. */
+  private worldFaceNormal(hit: Intersection): Vector3 {
+    if (!hit.face) return new Vector3(0, 1, 0);
+    const matrix = new Matrix4().copy(hit.object.matrixWorld);
+    if (hit.object instanceof InstancedMesh && typeof hit.instanceId === "number") {
+      const instanceMatrix = new Matrix4();
+      hit.object.getMatrixAt(hit.instanceId, instanceMatrix);
+      matrix.multiply(instanceMatrix);
+    }
+    const normal = hit.face.normal.clone().applyMatrix3(new Matrix3().getNormalMatrix(matrix)).normalize();
+    return normal.lengthSq() > 1e-8 ? normal : new Vector3(0, 1, 0);
   }
 
   /** Casts straight down from `origin`, ignoring the excluded selection's own

@@ -31,6 +31,7 @@ import {
   type AssetType,
 } from "../engine/assets/manifest";
 import { isBrushShape } from "../engine/scene/blockingVolume";
+import { normalizeFoliageType, normalizeFoliageData } from "../engine/scene/foliage";
 import {
   defaultForgeMaterialDef,
   isForgeMaterialPreset,
@@ -3100,6 +3101,77 @@ export function validateSaveEffectPayload(value: unknown): {
   };
 }
 
+// ─── Foliage (Foliage Mode Faz 1 saves) ──────────────────────────────────────
+//
+// Two allowlist surfaces, both reusing engine/scene/foliage normalizers as the
+// single source of field shape (like the effect validator above): a
+// `*.foliagetype.json` Foliage Type asset, and a `<layout>.foliage.json` level
+// instance sidecar. Any new ForgeFoliageTypeDef / LayoutFoliageData field must be
+// added to the matching normalize* in engine/scene/foliage.ts (which these reuse)
+// or it is silently dropped on save (see the CLAUDE.md save-validator gotcha).
+
+/** Validates + canonicalizes a `*.foliagetype.json` Foliage Type asset body. */
+export function validateFoliageTypeAsset(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("foliageType must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.schema !== 1) throw new Error("foliageType.schema must be 1");
+  if (input.type !== "foliageType") throw new Error('foliageType.type must be "foliageType"');
+  return normalizeFoliageType(input) as unknown as Record<string, unknown>;
+}
+
+export function validateSaveFoliageTypePayload(value: unknown): {
+  path: string;
+  foliageType: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("foliageType payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".foliagetype.json")) {
+    throw new Error("foliageType payload path must end with .foliagetype.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("foliageType payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    foliageType: validateFoliageTypeAsset(input.foliageType),
+  };
+}
+
+/** Validates + canonicalizes a `<layout>.foliage.json` level foliage sidecar body. */
+export function validateFoliageData(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("foliage data must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.schema !== 1) throw new Error("foliage.schema must be 1");
+  if (input.type !== "foliage") throw new Error('foliage.type must be "foliage"');
+  return normalizeFoliageData(input) as unknown as Record<string, unknown>;
+}
+
+export function validateSaveFoliagePayload(value: unknown): {
+  path: string;
+  foliage: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("foliage payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".foliage.json")) {
+    throw new Error("foliage payload path must end with .foliage.json");
+  }
+  if (input.path.includes("..")) {
+    throw new Error("foliage payload path must not contain ..");
+  }
+  return {
+    path: input.path,
+    foliage: validateFoliageData(input.foliage),
+  };
+}
+
 // ─── Dialogue & Voice (D2 editor save) ───────────────────────────────────────
 //
 // Allowlist for `*.dialoguevoice.json` / `*.dialogue.json` editor saves. Mirrors
@@ -3688,6 +3760,7 @@ const ASSET_TYPE_CATEGORY: Record<AssetType, string> = {
   stateTree: "AI",
   animation: "animation",
   effect: "effect",
+  foliageType: "foliage",
   prefab: "prefab",
   ui: "UI",
   level: "level",

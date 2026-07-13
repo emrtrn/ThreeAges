@@ -24,6 +24,11 @@ export interface EditorInputBindings {
   endLandscapeSculpt(event: PointerEvent): boolean;
   updateLandscapeBrushHover(clientX: number, clientY: number): void;
   clearLandscapeBrushHover(): void;
+  beginFoliageStroke(event: PointerEvent): boolean;
+  updateFoliageStroke(event: PointerEvent): boolean;
+  endFoliageStroke(event: PointerEvent): boolean;
+  updateFoliageBrushHover(clientX: number, clientY: number): void;
+  clearFoliageBrushHover(): void;
 
   isCameraNavigationActive(): boolean;
   cameraNavigationPointerId(): number | null;
@@ -108,6 +113,7 @@ export function bindEditorInputEvents(
       return;
     }
 
+    if (event.button === 0 && bindings.beginFoliageStroke(event)) return;
     if (event.button === 0 && bindings.beginLandscapeSculpt(event)) return;
 
     const picked = bindings.pickSelection(event.clientX, event.clientY);
@@ -133,10 +139,12 @@ export function bindEditorInputEvents(
       return;
     }
 
+    if (bindings.updateFoliageStroke(event)) return;
     if (bindings.updateLandscapeSculpt(event)) return;
 
     const pointerDrag = bindings.pointerDrag();
     if (!pointerDrag) {
+      bindings.updateFoliageBrushHover(event.clientX, event.clientY);
       bindings.updateLandscapeBrushHover(event.clientX, event.clientY);
       bindings.updateGizmoHover(event.clientX, event.clientY);
       return;
@@ -168,6 +176,9 @@ export function bindEditorInputEvents(
       if (drag) bindings.commitPointerDrag(drag);
       bindings.updateGizmo();
     }
+    if (bindings.endFoliageStroke(event)) {
+      bindings.updateGizmo();
+    }
     if (bindings.endLandscapeSculpt(event)) {
       bindings.updateGizmo();
     }
@@ -175,6 +186,7 @@ export function bindEditorInputEvents(
   on(canvas, "pointerup", clearDrag);
   on(canvas, "pointercancel", clearDrag);
   on(canvas, "pointerleave", () => {
+    bindings.clearFoliageBrushHover();
     bindings.clearLandscapeBrushHover();
     bindings.clearGizmoHover();
   });

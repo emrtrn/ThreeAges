@@ -2,7 +2,8 @@
 
 Generic, DOM-free AI decision layer for the engine spine (Unreal-inspired
 AIController / Blackboard / Behavior Tree, adapted to Forge — see
-`docs/planned/AI_SYSTEM_RESEARCH_AND_PLAN.md`).
+`docs/COMPLETED_WORK_INDEX.md`; the completed plan is in
+`C:\Users\emret\Documents\Forge-Archive`).
 
 Current files:
 

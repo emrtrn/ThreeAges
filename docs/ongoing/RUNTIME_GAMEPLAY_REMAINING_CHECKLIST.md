@@ -61,8 +61,8 @@ taramasi ayrica onayla istenmeli; sessiz tarama calistirilmemeli.
 | P1 | `[x]` | P0 | Runtime browser smoke borcunu kapat. (P1.1-P1.7 tamam) |
 | P2 | `[x]` | P1 onerilir | `RuntimeSceneApp` kabugunu davranis koruyan modullere bol. (P2.1-P2.6 tamam) |
 | P3 | `[x]` | P0 | Save-game zarf sozlesmesini yazili hale getir. (SAVE_GAME_CONTRACT.md) |
-| P4 | `[ ]` | P3 onerilir | AI move-intent ve +z-forward facing varsayimini yol haritasina bagla. |
-| P5 | `[ ]` | P1-P4 | Baslik 4 kararini tekrar degerlendir ve ana analiz kaydini guncelle. |
+| P4 | `[x]` | P3 onerilir | AI move-intent kanitini ve +z-forward facing backlog'unu guncel dokumanlara bagla. |
+| P5 | `[~]` | P1-P4 | Baslik 4 kararini tekrar degerlendir ve ana analiz kaydini guncelle. |
 
 Onerilen akis: **P1 -> P3 -> P2 -> P4 -> P5**. P2 buyuk refactor riski tasidigi
 icin once browser smoke kapsamini guclendirmek daha dogru sinirdir.
@@ -361,24 +361,29 @@ runtime yeterliligini bloklayan yeni AI implementasyonu degildir.
 
 Checklist:
 
-- [ ] **P4.1 - AI plan baglantisi:** `docs/planned/AI_SYSTEM_RESEARCH_AND_PLAN.md`
-  icinde AI/NPC hareketinin move-intent refactor'una bagli oldugunu netlestir.
-- [ ] **P4.2 - Facing varsayimi:** `+z-forward` mesh varsayimini kabul edilmis
-  mevcut sinir olarak yaz; ters bakan asset icin gelecek cozumun skeleton sidecar
-  facing override'i oldugunu not et.
-- [ ] **P4.3 - Validator onkosulu:** Skeleton sidecar'a yeni facing alanlari
-  eklenecekse `tools/saveValidator.ts` ve
-  `src/scene/assetSkeletonLoader.ts` validate/loader sozlesmesinin birlikte
-  guncellenecegini belirt.
-- [ ] **P4.4 - Tetikleyici kriterleri:** Hangi durumda bu backlog'un aktif ise
-  donusecegini yaz: NPC locomotion baslamasi, ters-forward skeletal asset'in
-  ilk gercek oyun forkunda kullanilmasi, veya animator-authored facing metadata
-  ihtiyaci.
+- [x] **P4.1 - AI plan baglantisi:** Eski AI plani tamamlanip
+  `C:\Users\emret\Documents\Forge-Archive` altina tasindi (in-repo kayit:
+  `docs/COMPLETED_WORK_INDEX.md`). Move-intent on kosulu planlanmakla kalmadi:
+  `CharacterMovementSubsystemOptions.getMoveIntent(...)` ve
+  `RuntimeSceneApp.aiMoveIntentForEntity(...)` ile AI path-following sonucunu
+  ayni CharacterMovement hattina verir.
+- [x] **P4.2 - Facing varsayimi:** `+z-forward` mesh varsayimi ve ters bakan
+  asset icin gelecek skeleton-sidecar override siniri aktif
+  `docs/planned/SKELETAL_FACING_OVERRIDE_BACKLOG.md` dokumaninda yazildi.
+- [x] **P4.3 - Validator onkosulu:** Backlog, skeleton sidecar'a alan
+  eklendiginde `tools/saveValidator.ts` ile
+  `src/scene/assetSkeletonLoader.ts` validate/loader sozlesmesinin ayni dilimde
+  birlikte guncellenecegini ve testlenecegini aciklar.
+- [x] **P4.4 - Tetikleyici kriterleri:** Backlog'un aktif implementasyona
+  donus kriterleri yazildi: ilk gercek oyun forkunda ters-forward skeletal
+  asset, animator-authored facing metadata veya `+z`'ye donusturmeden import
+  gereksinimi.
 
 Kabul kriterleri:
 
-- AI/facing sinirlari Baslik 4'te bilincli backlog olarak kalir; runtime
-  yeterlilik kararini bloklayan belirsizlik olmaktan cikar.
+- AI move-intent uygulanmis; kalan facing siniri
+  `SKELETAL_FACING_OVERRIDE_BACKLOG.md` altinda bilincli backlog olarak kalir ve
+  runtime yeterlilik kararini bloklayan belirsizlik olmaktan cikar.
 
 ---
 
@@ -389,9 +394,14 @@ yeniden degerlendirmek.
 
 Checklist:
 
-- [ ] **P5.1 - Full gate:** Pratikse su komutlari ayni son dilimde calistir:
+- [~] **P5.1 - Full gate:** Pratikse su komutlari ayni son dilimde calistir:
   `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
   `npm.cmd run build:verify`, `npm.cmd run smoke:browser`.
+  Ilk deneme (2026-07-13) `npx.cmd tsc --noEmit` asamasinda, aktif Foliage Mode
+  calisma-agaci degisikliklerinde `AssetType`e eklenen `foliageType` icin
+  `tools/saveValidator.ts` `ASSET_TYPE_CATEGORY` eslemesinin eksik olmasi
+  nedeniyle durdu. Bu checklist dilimiyle ilgisiz olan degisiklik tamamlaninca
+  tum gate yeniden calistirilacak.
 - [ ] **P5.2 - Ana analiz guncellemesi:** `FORGE_YETERLILIK_ANALIZI.md` Baslik
   4 durum/kanit/eksikler/karar/aksiyonlar alanlarini yeni kanitlarla guncelle.
 - [ ] **P5.3 - Kanit ve Aksiyon Kaydi:** Ana dokumanin tablo sonuna kapanis

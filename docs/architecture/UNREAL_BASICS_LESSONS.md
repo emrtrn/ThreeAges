@@ -11,11 +11,12 @@
 > `docs/IMPROVEMENT_CHECKLIST.md` (5 cleanup maddesi) tamamlandı ve kaldırıldı;
 > geçmişi git'te.
 >
-> **AI sistemi** ayrı bir fazlı plan olarak yürütülür:
-> `docs/planned/AI_SYSTEM_RESEARCH_AND_PLAN.md` (AIController + Blackboard +
-> Behavior Tree + Perception + EQS + Smart Objects). Faz 1 (Blackboard, AIController,
-> AISubsystem, `AIController` component, `?debug` snapshot) uygulandı ve gate yeşil;
-> `engine/ai/*` runtime katmanı editör shell'e karar mantığı taşımaz.
+> **AI sistemi** tamamlanmıştır; ayrıntılı plan
+> `C:\Users\emret\Documents\Forge-Archive\AI_SYSTEM_RESEARCH_AND_PLAN.md`
+> altındadır (in-repo kayıt: `docs/COMPLETED_WORK_INDEX.md`). AI runtime katmanı
+> (`engine/ai/*`) editör shell'e karar mantığı taşımaz. Aktif kalan
+> skeletal-facing istisna backlog'u:
+> `docs/planned/SKELETAL_FACING_OVERRIDE_BACKLOG.md`.
 
 ---
 
