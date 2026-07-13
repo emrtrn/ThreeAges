@@ -308,6 +308,7 @@ export interface EditableSelection {
     debugVisible: boolean;
     debugColor: string;
     debugResolution: number;
+    showPointIds: boolean;
   };
   /** Resolved Post Process settings; present only when `kind === "post"`. */
   post?: EditablePostProcess;

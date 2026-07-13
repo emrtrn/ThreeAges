@@ -9,6 +9,7 @@ import {
   Box3,
   BoxGeometry,
   BufferGeometry,
+  CanvasTexture,
   DirectionalLight,
   DoubleSide,
   Float32BufferAttribute,
@@ -26,6 +27,7 @@ import {
   RingGeometry,
   SphereGeometry,
   Sprite,
+  SpriteMaterial,
   TextureLoader,
   Vector3,
 } from "three";
@@ -290,6 +292,7 @@ import {
 import {
   cloneSplineActor,
   createDefaultSplineActor,
+  resolveSplineActorDebug,
 } from "@engine/scene/splineActor";
 import {
   uniqueSplinePointId as uniqueGenericSplinePointId,
@@ -4701,9 +4704,10 @@ export class SceneApp {
     if (!overlay) return;
     this.scene.remove(overlay);
     overlay.traverse((child) => {
-      const drawable = child as Mesh<BufferGeometry, MeshBasicMaterial | LineBasicMaterial>;
+      const drawable = child as Mesh<BufferGeometry, MeshBasicMaterial | LineBasicMaterial | SpriteMaterial>;
       drawable.geometry?.dispose();
       drawable.material?.dispose();
+      if (drawable.material instanceof SpriteMaterial) drawable.material.map?.dispose();
     });
   }
 
@@ -4732,6 +4736,11 @@ export class SceneApp {
       marker.renderOrder = 30;
       marker.raycast = () => {};
       overlay.add(marker);
+      if (resolveSplineActorDebug(actor).showPointIds) {
+        const label = this.createSplinePointLabel(`${actor.spline.points.indexOf(point) + 1}: ${point.id}`);
+        label.position.set(point.position[0], point.position[1] + 0.35, point.position[2]);
+        overlay.add(label);
+      }
     }
     const activePoint = this.activeSplinePointId
       ? actor.spline.points.find((point) => point.id === this.activeSplinePointId)
@@ -4759,6 +4768,22 @@ export class SceneApp {
     }
     this.splinePointOverlay = overlay;
     this.scene.add(overlay);
+  }
+
+  private createSplinePointLabel(text: string): Sprite {
+    const canvas = document.createElement("canvas");
+    canvas.width = 256;
+    canvas.height = 48;
+    const context = canvas.getContext("2d")!;
+    context.font = "bold 24px sans-serif";
+    context.fillStyle = "rgba(8, 18, 30, 0.82)";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = "#ffffff";
+    context.fillText(text, 8, 32);
+    const sprite = new Sprite(new SpriteMaterial({ map: new CanvasTexture(canvas), depthTest: false, depthWrite: false }));
+    sprite.scale.set(1.9, 0.36, 1);
+    sprite.renderOrder = 32;
+    return sprite;
   }
 
   /** Screen-space marker hit-test keeps spline points out of normal actor picking. */
@@ -5042,7 +5067,7 @@ export class SceneApp {
     this.executeCommand({ label, redo: () => apply(after), undo: () => apply(before) });
   }
 
-  setSelectedSpline(patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number }): void {
+  setSelectedSpline(patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number; showPointIds?: boolean }): void {
     if (this.selection?.kind !== "spline") return;
     const index = this.selection.index;
     const actor = this.layout?.splines?.[index];
@@ -5050,11 +5075,12 @@ export class SceneApp {
     const before = cloneSplineActor(actor);
     const after = cloneSplineActor(actor);
     if (patch.closed !== undefined) after.spline.closed = patch.closed && after.spline.points.length >= 3;
-    if (patch.debugVisible !== undefined || patch.debugColor !== undefined || patch.debugResolution !== undefined) {
+    if (patch.debugVisible !== undefined || patch.debugColor !== undefined || patch.debugResolution !== undefined || patch.showPointIds !== undefined) {
       after.debug = { ...after.debug };
       if (patch.debugVisible !== undefined) after.debug.visible = patch.debugVisible;
       if (patch.debugColor !== undefined) after.debug.color = patch.debugColor;
       if (patch.debugResolution !== undefined) after.debug.resolution = Math.min(128, Math.max(2, Math.floor(patch.debugResolution)));
+      if (patch.showPointIds !== undefined) after.debug.showPointIds = patch.showPointIds;
     }
     const apply = (value: LayoutSplineActor): void => {
       if (!this.layout?.splines?.[index]) return;

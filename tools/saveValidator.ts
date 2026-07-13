@@ -1507,11 +1507,23 @@ export function validateSplineActor(value: unknown): Record<string, unknown> {
       ? input.scale.map((axis) => validateScaleValue(axis, "spline actor scale component"))
       : validateScaleValue(input.scale, "spline actor scale");
   }
+  if (input.runtime !== undefined) {
+    if (!input.runtime || typeof input.runtime !== "object" || Array.isArray(input.runtime)) throw new Error("invalid spline actor runtime");
+    const runtimeInput = input.runtime as Record<string, unknown>;
+    if (runtimeInput.tags !== undefined) {
+      if (!Array.isArray(runtimeInput.tags) || runtimeInput.tags.some((tag) => typeof tag !== "string")) {
+        throw new Error("invalid spline actor runtime tags");
+      }
+      const tags = [...new Set(runtimeInput.tags.map((tag) => tag.trim()).filter(Boolean))];
+      if (tags.length > 0) actor.runtime = { tags };
+    }
+  }
   if (input.debug !== undefined) {
     if (!input.debug || typeof input.debug !== "object" || Array.isArray(input.debug)) throw new Error("invalid spline actor debug");
     const debugInput = input.debug as Record<string, unknown>;
     const debug: Record<string, unknown> = {};
     if (debugInput.visible === true) debug.visible = true;
+    if (debugInput.showPointIds === true) debug.showPointIds = true;
     if (typeof debugInput.color === "string" && /^#[0-9a-fA-F]{6}$/.test(debugInput.color)) debug.color = debugInput.color;
     if (debugInput.resolution !== undefined) {
       if (typeof debugInput.resolution !== "number" || !Number.isFinite(debugInput.resolution)) {

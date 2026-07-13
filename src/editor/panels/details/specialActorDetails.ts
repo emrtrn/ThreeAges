@@ -76,7 +76,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     patrolTag?: string;
     color?: string;
   }) => void;
-  setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number }) => void;
+  setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number; showPointIds?: boolean }) => void;
   getSelectedSplinePoints: () => Array<{ id: string; position: Vec3; pointType: "linear" | "curveAuto" | "curveCustom"; tangentsLinked: boolean }>;
   getActiveSplinePointId: () => string | null;
   selectSplinePoint: (pointId: string | null) => void;
@@ -1266,6 +1266,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
       ${hasDegenerateSegment ? "<div class=\"detail-readonly\">Warning: a segment has coincident control points; move or delete one point.</div>" : ""}
       <label class="detail-row"><span>Closed Loop</span><input type="checkbox" data-spline-closed ${spline.closed ? "checked" : ""} ${locked}></label>
       <label class="detail-row"><span>Debug Visible</span><input type="checkbox" data-spline-debug-visible ${spline.debugVisible ? "checked" : ""} ${locked}></label>
+      <label class="detail-row"><span>Show Point IDs</span><input type="checkbox" data-spline-show-point-ids ${spline.showPointIds ? "checked" : ""} ${locked}></label>
       <label class="detail-row"><span>Debug Color</span><input type="color" data-spline-debug-color value="${spline.debugColor}" ${locked}></label>
       <label class="detail-row"><span>Line Resolution</span><input type="number" min="2" max="128" step="1" data-spline-debug-resolution value="${spline.debugResolution}" ${locked}></label>
       <div class="detail-button-row"><button type="button" data-spline-point-add ${locked}>Add Point</button></div>
@@ -1273,6 +1274,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     </section>`;
   body.querySelector<HTMLInputElement>("[data-spline-closed]")?.addEventListener("change", (event) => options.setSelectedSpline({ closed: (event.currentTarget as HTMLInputElement).checked }));
   body.querySelector<HTMLInputElement>("[data-spline-debug-visible]")?.addEventListener("change", (event) => options.setSelectedSpline({ debugVisible: (event.currentTarget as HTMLInputElement).checked }));
+  body.querySelector<HTMLInputElement>("[data-spline-show-point-ids]")?.addEventListener("change", (event) => options.setSelectedSpline({ showPointIds: (event.currentTarget as HTMLInputElement).checked }));
   body.querySelector<HTMLInputElement>("[data-spline-debug-color]")?.addEventListener("change", (event) => options.setSelectedSpline({ debugColor: (event.currentTarget as HTMLInputElement).value }));
   body.querySelector<HTMLInputElement>("[data-spline-debug-resolution]")?.addEventListener("change", (event) => {
     const value = Number((event.currentTarget as HTMLInputElement).value);

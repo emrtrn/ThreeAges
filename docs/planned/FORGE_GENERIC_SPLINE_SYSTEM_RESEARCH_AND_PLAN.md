@@ -1705,7 +1705,7 @@ Control point ve tangent'ları doğrudan viewport içinde düzenlemek.
 - [x] Add/Delete/Split için undo/redo ekle.
 - [x] Locked actor edit koruması ekle.
 - [x] Degenerate segment warning göster.
-- [ ] Point index/id debug seçeneği ekle.
+- [x] Point index/id debug seçeneği ekle.
 - [x] Spline detail panelini ekle.
 - [x] Selected point detail panelini ekle.
 - [x] Editor smoke testleri ekle.
@@ -1727,13 +1727,13 @@ Spline'ı oyun sistemlerinin kullanabileceği runtime path haline getirmek.
 
 ### Kontrol listesi
 
-- [ ] `SplineQuery` public interface'i ekle.
-- [ ] Runtime spline registry ekle.
-- [ ] ID ile spline bulma ekle.
-- [ ] Tag ile spline bulma ekle.
-- [ ] Length query ekle.
-- [ ] Location/direction/tangent/rotation/transform query'lerini aç.
-- [ ] Closest-distance-to-point yaklaşımını ekle.
+- [x] `SplineQuery` public interface'i ekle.
+- [x] Runtime spline registry ekle.
+- [x] ID ile spline bulma ekle.
+- [x] Tag ile spline bulma ekle.
+- [x] Length query ekle.
+- [x] Location/direction/tangent/rotation/transform query'lerini aç.
+- [x] Closest-distance-to-point yaklaşımını ekle.
 - [ ] Path Follower component/system ekle.
 - [ ] Speed world-unit/second yap.
 - [ ] Clamp wrap mode ekle.

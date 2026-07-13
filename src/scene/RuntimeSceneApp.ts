@@ -244,7 +244,7 @@ import {
 } from "@engine/render-three/spline";
 import { aiNavigationVolumeAabb } from "@engine/render-three/aiNavigationVolume";
 import { readRotation, readScale } from "@engine/scene/transform";
-import { createSplineRegistry, type SplineRegistry } from "@engine/scene/splineRegistry";
+import { createSplineRegistry, type SplineQuery, type SplineRegistry } from "@engine/scene/splineRegistry";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   collectMaterialStats,
@@ -1250,6 +1250,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Snapshots the AI subsystem (active controllers + blackboards) for `?debug`. */
   getAiDebugSnapshot(): AiDebugSnapshot {
     return this.aiSubsystem.getDebugSnapshot();
+  }
+
+  /** Public runtime spline facade for game systems; never exposes mutable layout data. */
+  getSplineById(id: string | null | undefined): SplineQuery | null {
+    return this.splineRegistry.getSplineById(id);
+  }
+
+  getSplinesByTag(tag: string | null | undefined): readonly SplineQuery[] {
+    return this.splineRegistry.getSplinesByTag(tag);
   }
 
   /** Snapshots AI path following (waypoints, stuck recovery) for `?debug`. */

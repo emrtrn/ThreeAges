@@ -8,6 +8,7 @@ export interface ResolvedSplineActorDebug {
   visible: boolean;
   color: string;
   resolution: number;
+  showPointIds: boolean;
 }
 
 export function resolveSplineActorDebug(actor: LayoutSplineActor | null | undefined): ResolvedSplineActorDebug {
@@ -18,6 +19,7 @@ export function resolveSplineActorDebug(actor: LayoutSplineActor | null | undefi
       ? debug.color
       : SPLINE_ACTOR_DEFAULT_COLOR,
     resolution: clampInteger(debug?.resolution, 2, 128, SPLINE_ACTOR_DEFAULT_RESOLUTION),
+    showPointIds: debug?.showPointIds ?? false,
   };
 }
 
@@ -39,6 +41,7 @@ export function normalizeSplineActor(actor: LayoutSplineActor): LayoutSplineActo
   };
   if (actor.rotation) normalized.rotation = [...actor.rotation];
   if (actor.scale !== undefined) normalized.scale = Array.isArray(actor.scale) ? [...actor.scale] : actor.scale;
+  if (actor.runtime?.tags?.length) normalized.runtime = { tags: [...new Set(actor.runtime.tags.filter((tag) => typeof tag === "string" && tag.length > 0))] };
   if (actor.debug) normalized.debug = { ...resolveSplineActorDebug(actor) };
   return normalized;
 }

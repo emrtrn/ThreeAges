@@ -15,6 +15,8 @@ test("editor exposes generic Spline Actor point editing controls", async ({ page
   const pointButtons = details.locator("[data-spline-point]");
   const initialCount = await pointButtons.count();
   expect(initialCount).toBeGreaterThanOrEqual(2);
+  await details.locator("[data-spline-show-point-ids]").check();
+  await expect(details.locator("[data-spline-show-point-ids]")).toBeChecked();
 
   await details.locator("[data-spline-point-add]").click();
   await expect(pointButtons).toHaveCount(initialCount + 1);

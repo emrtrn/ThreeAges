@@ -805,11 +805,16 @@ export interface LayoutSplineActor {
   rotation?: Vec3;
   scale?: number | Vec3;
   spline: import("./spline").ForgeSplineComponentData;
+  /** Runtime query grouping. Kept separate from the editor-only debug presentation. */
+  runtime?: {
+    tags?: string[];
+  };
   /** Editor-only sampled-line presentation; no gameplay effect. */
   debug?: {
     visible?: boolean;
     color?: string;
     resolution?: number;
+    showPointIds?: boolean;
   };
 }
 

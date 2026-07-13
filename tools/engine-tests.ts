@@ -19564,7 +19564,7 @@ check("generic spline actor defaults and unique helpers create a normalized two-
   assert.equal(first.spline.points.length, 2);
   assert.equal(uniqueSplineActorId(actors), "spline-2");
   assert.equal(uniqueSplineActorName("Spline", actors), "Spline 2");
-  assert.deepEqual(resolveSplineActorDebug(first), { visible: true, color: "#4fd1ff", resolution: 16 });
+  assert.deepEqual(resolveSplineActorDebug(first), { visible: true, color: "#4fd1ff", resolution: 16, showPointIds: false });
 });
 
 check("generic spline actor save allowlist round-trips all authored component fields", () => {
@@ -19577,7 +19577,8 @@ check("generic spline actor save allowlist round-trips all authored component fi
         { id: "b", position: [4, 0, 0], pointType: "linear", arriveTangent: [-1, 0, 0], tangentsLinked: false },
       ],
     },
-    debug: { visible: true, color: "#ff00aa", resolution: 99, ignored: "dropped" },
+    runtime: { tags: ["camera", "rail", "camera"] },
+    debug: { visible: true, color: "#ff00aa", resolution: 99, showPointIds: true, ignored: "dropped" },
     runtimeState: "dropped",
   });
   assert.equal(actor.id, "spline-1");
@@ -19586,7 +19587,8 @@ check("generic spline actor save allowlist round-trips all authored component fi
     { id: "a", position: [0, 0, 0], pointType: "curveCustom", leaveTangent: [1, 0, 0], roll: 5, scale: [1, 2], metadata: { lane: 2 } },
     { id: "b", position: [4, 0, 0], pointType: "linear", arriveTangent: [-1, 0, 0], tangentsLinked: false },
   ]);
-  assert.deepEqual(actor.debug, { visible: true, color: "#ff00aa", resolution: 99 });
+  assert.deepEqual(actor.debug, { visible: true, color: "#ff00aa", resolution: 99, showPointIds: true });
+  assert.deepEqual(actor.runtime, { tags: ["camera", "rail"] });
   const layout = validateLayout({ schema: 1, name: "Spline Save", loadGroups: [], instances: [], characters: [], splines: [actor] });
   assert.deepEqual(layout.splines, [actor]);
   assert.throws(() => validateSplineActor({ id: "bad", position: [0, 0, 0] }));
@@ -19624,6 +19626,26 @@ check("generic spline runtime registry normalizes snapshots and ignores duplicat
   assert.notEqual(entry.actor, first);
   assert.equal(registry.get("missing"), null);
   assert.equal(registry.get(null), null);
+});
+
+check("generic spline runtime query API resolves IDs, tags, cached world samples, and closest distance", () => {
+  const actor = createDefaultSplineActor();
+  actor.id = "camera-rail";
+  actor.position = [2, 0, 3];
+  actor.runtime = { tags: ["camera", "rail", "camera"] };
+  const registry = createSplineRegistry([actor]);
+  const query = registry.getSplineById("camera-rail");
+  assert.ok(query);
+  assert.equal(query.getLength(), 4);
+  assert.equal(query.isClosed(), false);
+  assert.deepEqual(query.getLocationAtDistance(2), [4, 0, 3]);
+  assert.deepEqual(query.getDirectionAtDistance(2), [1, 0, 0]);
+  assert.deepEqual(query.getTangentAtDistance(2), [4, 0, 0]);
+  assert.equal(query.getClosestDistanceToPoint([5, 0, 4]), 3);
+  assert.equal(query.getPointCount(), 2);
+  assert.equal(query.getPoint(0)?.id, "spline-point-1");
+  assert.equal(registry.getSplinesByTag("camera")[0]?.id, "camera-rail");
+  assert.equal(registry.getSplinesByTag("missing").length, 0);
 });
 
 check("validateLandscape allowlists fields and round-trips through validateLayout", () => {

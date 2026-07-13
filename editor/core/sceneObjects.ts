@@ -426,7 +426,7 @@ function buildSplineEditableSelection(actor: LayoutSplineActor, index: number): 
     label: actor.name ?? "Spline", position: [...actor.position], rotation: readRotation(actor), scale: readScale(actor),
     pivot: [0, 0, 0], scaleLocked: actor.scaleLocked ?? false, locked: actor.locked ?? false,
     castShadow: false, collision: false, simulatePhysics: false, physics: {}, metadata: {},
-    spline: { id: actor.id, closed: actor.spline.closed, pointCount: actor.spline.points.length, debugVisible: debug.visible, debugColor: debug.color, debugResolution: debug.resolution },
+    spline: { id: actor.id, closed: actor.spline.closed, pointCount: actor.spline.points.length, debugVisible: debug.visible, debugColor: debug.color, debugResolution: debug.resolution, showPointIds: debug.showPointIds },
   };
 }
 
