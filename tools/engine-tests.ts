@@ -158,6 +158,11 @@ import {
   reverseSplineFrame,
   SPLINE_FRAME_TRANSPORT_DESIGN_NOTE,
 } from "../engine/scene/splineFrame";
+import {
+  generateSplineInstancePlacements,
+  normalizeSplineGenerators,
+  splineGeneratedInstanceHash,
+} from "../engine/scene/splineGenerator";
 import { resolveNavAgentProfile } from "../engine/navigation/navAgentProfile";
 import {
   freshStuckState,
@@ -19677,6 +19682,41 @@ check("generic spline actor save allowlist round-trips all authored component fi
   const layout = validateLayout({ schema: 1, name: "Spline Save", loadGroups: [], instances: [], characters: [], splines: [actor] });
   assert.deepEqual(layout.splines, [actor]);
   assert.throws(() => validateSplineActor({ id: "bad", position: [0, 0, 0] }));
+});
+
+check("generic spline instance generator is deterministic, honors offsets, and avoids closed-loop seam duplicates", () => {
+  const actor = createDefaultSplineActor();
+  actor.id = "fence-line";
+  actor.spline.points[1]!.position = [10, 0, 0];
+  const generators = normalizeSplineGenerators([{
+    id: "posts",
+    type: "instances",
+    meshAsset: "models/post.glb",
+    spacing: 3,
+    startOffset: 1,
+    endOffset: 1,
+    includeEndPoint: true,
+    lateralOffset: 2,
+    verticalOffset: 0.5,
+    seed: 42,
+    random: { positionJitter: [0.1, 0, 0.1], rotationJitter: [0, 5, 0], scaleMin: 0.8, scaleMax: 1.2 },
+  }]);
+  const generator = generators[0]!;
+  actor.generators = generators;
+  const first = generateSplineInstancePlacements(actor, generator);
+  const second = generateSplineInstancePlacements(actor, generator);
+  assert.deepEqual(first, second);
+  assert.equal(first.length, 4);
+  assert.equal(first[0]?.distance, 1);
+  assert.equal(first.at(-1)?.distance, 9);
+  assert.equal(splineGeneratedInstanceHash(first), splineGeneratedInstanceHash(second));
+  assert.deepEqual(validateSplineActor(actor).generators, generators);
+
+  actor.spline.closed = true;
+  actor.spline.points.push({ id: "corner", position: [10, 0, 10], pointType: "linear" });
+  const loop = generateSplineInstancePlacements(actor, { ...generator, spacing: 5, startOffset: 0, endOffset: 0 });
+  const seamEntries = loop.filter((entry) => Math.abs(entry.distance) < 1e-6);
+  assert.equal(seamEntries.length, 1);
 });
 
 check("generic spline debug renderer samples world space, honors visibility, and disposes", () => {

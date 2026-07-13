@@ -61,6 +61,7 @@ import {
 import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
 import { normalizeSplineComponentData } from "../engine/scene/spline";
+import { normalizeSplineGenerators } from "../engine/scene/splineGenerator";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -1549,6 +1550,12 @@ export function validateSplineActor(value: unknown): Record<string, unknown> {
       const tags = [...new Set(runtimeInput.tags.map((tag) => tag.trim()).filter(Boolean))];
       if (tags.length > 0) actor.runtime = { tags };
     }
+  }
+  if (input.generators !== undefined) {
+    if (!Array.isArray(input.generators)) throw new Error("invalid spline actor generators");
+    const generators = normalizeSplineGenerators(input.generators);
+    if (generators.length !== input.generators.length) throw new Error("invalid spline actor generator");
+    actor.generators = generators;
   }
   if (input.debug !== undefined) {
     if (!input.debug || typeof input.debug !== "object" || Array.isArray(input.debug)) throw new Error("invalid spline actor debug");

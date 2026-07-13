@@ -808,6 +808,8 @@ export interface LayoutSplineActor {
   rotation?: Vec3;
   scale?: number | Vec3;
   spline: import("./spline").ForgeSplineComponentData;
+  /** Optional procedural outputs authored on the spline, never individual actors. */
+  generators?: import("./splineGenerator").ForgeSplineGeneratorDef[];
   /** Runtime query grouping. Kept separate from the editor-only debug presentation. */
   runtime?: {
     tags?: string[];

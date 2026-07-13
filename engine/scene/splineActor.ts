@@ -1,5 +1,6 @@
 import type { LayoutSplineActor } from "./layout";
 import { createDefaultSplineComponentData, normalizeSplineComponentData } from "./spline";
+import { normalizeSplineGenerators } from "./splineGenerator";
 
 export const SPLINE_ACTOR_DEFAULT_COLOR = "#4fd1ff";
 export const SPLINE_ACTOR_DEFAULT_RESOLUTION = 16;
@@ -41,6 +42,8 @@ export function normalizeSplineActor(actor: LayoutSplineActor): LayoutSplineActo
   };
   if (actor.rotation) normalized.rotation = [...actor.rotation];
   if (actor.scale !== undefined) normalized.scale = Array.isArray(actor.scale) ? [...actor.scale] : actor.scale;
+  const generators = normalizeSplineGenerators(actor.generators);
+  if (generators.length > 0) normalized.generators = generators;
   if (actor.runtime?.tags?.length) normalized.runtime = { tags: [...new Set(actor.runtime.tags.filter((tag) => typeof tag === "string" && tag.length > 0))] };
   if (actor.debug) normalized.debug = { ...resolveSplineActorDebug(actor) };
   return normalized;
