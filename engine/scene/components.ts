@@ -19,6 +19,7 @@ export const PARTICLE_EMITTER_COMPONENT = "ParticleEmitter";
 export const INTERACTION_COMPONENT = "Interaction";
 export const CHARACTER_MOVEMENT_COMPONENT = "CharacterMovement";
 export const MOVING_PLATFORM_COMPONENT = "MovingPlatform";
+export const SPLINE_PATH_FOLLOWER_COMPONENT = "SplinePathFollower";
 export const CAMERA_COMPONENT = "Camera";
 export const SPRING_ARM_COMPONENT = "SpringArm";
 export const MESSAGE_BINDINGS_COMPONENT = "MessageBindings";
@@ -270,6 +271,24 @@ export interface MovingPlatformComponent {
   speed: number;
   /** Initial position along the segment, 0..1 (0 = start). */
   startPhase: number;
+}
+
+/** Runtime movement consumer for a level-owned Generic Spline Actor. */
+export interface SplinePathFollowerComponent {
+  splineId: string;
+  /** Constant travel speed in world units per second. */
+  speed: number;
+  startDistance: number;
+  wrapMode: "clamp" | "loop" | "pingPong";
+  reverse: boolean;
+  orientToSpline: boolean;
+  /** Forge XYZ Euler offset, applied after spline orientation. */
+  orientationOffset: Vec3;
+  /** World-space offset applied after the spline sample. */
+  positionOffset: Vec3;
+  applyPitch: boolean;
+  applyRoll: boolean;
+  enabled: boolean;
 }
 
 export interface AudioComponent {
@@ -830,6 +849,26 @@ export function readMovingPlatformComponent(entity: Entity): MovingPlatformCompo
   const speed = Math.max(0, readFiniteNumber(data.speed, 0, undefined));
   const startPhase = Math.min(Math.max(readFiniteNumber(data.startPhase, 0, undefined), 0), 1);
   return { offset, speed, startPhase };
+}
+
+/** Reads a tolerant path-follower component; malformed data simply does not move. */
+export function readSplinePathFollowerComponent(entity: Entity): SplinePathFollowerComponent | undefined {
+  const data = entity.components[SPLINE_PATH_FOLLOWER_COMPONENT];
+  if (!data || typeof data.splineId !== "string" || data.splineId.length === 0) return undefined;
+  const wrapMode = data.wrapMode === "loop" || data.wrapMode === "pingPong" ? data.wrapMode : "clamp";
+  return {
+    splineId: data.splineId,
+    speed: Math.max(0, readFiniteNumber(data.speed, 0, undefined)),
+    startDistance: readFiniteNumber(data.startDistance, 0, undefined),
+    wrapMode,
+    reverse: data.reverse === true,
+    orientToSpline: data.orientToSpline !== false,
+    orientationOffset: readVec3(data.orientationOffset) ?? [0, 0, 0],
+    positionOffset: readVec3(data.positionOffset) ?? [0, 0, 0],
+    applyPitch: data.applyPitch !== false,
+    applyRoll: data.applyRoll !== false,
+    enabled: data.enabled !== false,
+  };
 }
 
 /**

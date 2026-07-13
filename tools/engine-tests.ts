@@ -68,6 +68,7 @@ import {
   readSkeletalMeshComponent,
   readMetadataComponent,
   readMovingPlatformComponent,
+  readSplinePathFollowerComponent,
   readParticleEmitterComponent,
   readScriptActorComponent,
   readScriptDispatchersComponent,
@@ -88,6 +89,12 @@ import {
   AI_CONTROLLER_COMPONENT,
   SMART_OBJECT_COMPONENT,
 } from "../engine/scene/components";
+import {
+  advanceSplinePathFollower,
+  sampleSplinePathFollower,
+  splinePathFollowerDistance,
+  SplinePathFollowerSubsystem,
+} from "../engine/scene/splinePathFollower";
 import { resolveCharacterCapsule } from "../engine/scene/capsule";
 import {
   Blackboard,
@@ -19646,6 +19653,78 @@ check("generic spline runtime query API resolves IDs, tags, cached world samples
   assert.equal(query.getPoint(0)?.id, "spline-point-1");
   assert.equal(registry.getSplinesByTag("camera")[0]?.id, "camera-rail");
   assert.equal(registry.getSplinesByTag("missing").length, 0);
+});
+
+check("generic spline path follower keeps world-unit speed stable across delta times and supports all wrap modes", () => {
+  const actor = createDefaultSplineActor();
+  actor.id = "patrol-rail";
+  actor.spline.points[1]!.position = [10, 0, 0];
+  const query = createSplineRegistry([actor]).getSplineById("patrol-rail");
+  assert.ok(query);
+  const component = {
+    splineId: "patrol-rail",
+    speed: 2,
+    startDistance: 0,
+    wrapMode: "clamp" as const,
+    reverse: false,
+    orientToSpline: true,
+    orientationOffset: [0, 15, 0] as [number, number, number],
+    positionOffset: [0, 0, 0] as [number, number, number],
+    applyPitch: true,
+    applyRoll: true,
+    enabled: true,
+  };
+  let thirtyFps = { distance: 0 };
+  for (let index = 0; index < 30; index += 1) thirtyFps = advanceSplinePathFollower(thirtyFps, component, 1 / 30);
+  let oneTwentyFps = { distance: 0 };
+  for (let index = 0; index < 120; index += 1) oneTwentyFps = advanceSplinePathFollower(oneTwentyFps, component, 1 / 120);
+  assert.ok(Math.abs(thirtyFps.distance - 2) < 1e-8);
+  assert.ok(Math.abs(oneTwentyFps.distance - 2) < 1e-8);
+  assert.deepEqual(sampleSplinePathFollower(query, thirtyFps, component).position, [2, 0, 0]);
+  assert.equal(sampleSplinePathFollower(query, thirtyFps, component).rotation[1], 105);
+  assert.equal(splinePathFollowerDistance(13, 10, "clamp"), 10);
+  assert.equal(splinePathFollowerDistance(13, 10, "loop"), 3);
+  assert.equal(splinePathFollowerDistance(13, 10, "pingPong"), 7);
+  assert.equal(splinePathFollowerDistance(-3, 10, "pingPong"), 3);
+  assert.equal(splinePathFollowerDistance(10, 10, "loop"), 0, "closed-loop seam stays end-exclusive");
+});
+
+check("generic spline path follower subsystem syncs transforms and safely reports missing splines", () => {
+  const actor = createDefaultSplineActor();
+  actor.id = "camera-rail";
+  actor.spline.points[1]!.position = [0, 0, 8];
+  const registry = createSplineRegistry([actor]);
+  const synced: Array<{ id: string; position: number[]; rotation: number[] }> = [];
+  const follower = new SplinePathFollowerSubsystem(
+    () => registry,
+    (id, transform) => synced.push({ id, position: [...transform.position], rotation: [...transform.rotation] }),
+  );
+  const entity = {
+    id: "camera",
+    components: {
+      Transform: { position: [9, 9, 9], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      SplinePathFollower: {
+        splineId: "camera-rail", speed: 4, startDistance: 1, wrapMode: "loop", reverse: false,
+        orientToSpline: true, orientationOffset: [0, 0, 0], positionOffset: [0, 0, 0], applyPitch: true, applyRoll: true, enabled: true,
+      },
+    },
+  };
+  assert.deepEqual(readSplinePathFollowerComponent(entity), {
+    splineId: "camera-rail", speed: 4, startDistance: 1, wrapMode: "loop", reverse: false,
+    orientToSpline: true, orientationOffset: [0, 0, 0], positionOffset: [0, 0, 0], applyPitch: true, applyRoll: true, enabled: true,
+  });
+  follower.setEntities([entity]);
+  follower.update({ deltaSeconds: 0.5, elapsedSeconds: 0.5, frame: 1 });
+  assert.deepEqual(synced[0]?.position, [0, 0, 3]);
+  assert.equal(follower.followers()[0]?.missingSpline, false);
+
+  const missingFollower = new SplinePathFollowerSubsystem(() => createSplineRegistry());
+  missingFollower.setEntities([{ ...entity, id: "missing", components: {
+    ...entity.components,
+    SplinePathFollower: { ...entity.components.SplinePathFollower, splineId: "gone" },
+  } }]);
+  missingFollower.update({ deltaSeconds: 1, elapsedSeconds: 1, frame: 1 });
+  assert.equal(missingFollower.followers()[0]?.missingSpline, true);
 });
 
 check("validateLandscape allowlists fields and round-trips through validateLayout", () => {

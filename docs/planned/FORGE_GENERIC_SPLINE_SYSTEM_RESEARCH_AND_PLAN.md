@@ -1,7 +1,7 @@
 # Forge Generic Spline System — Araştırma ve Üretim Planı
 
 > Tarih: 2026-07-13  
-> Durum: Faz 0–3 tamamlandı; Faz 4 (scene actor, save/load ve debug render) sırada.
+> Durum: Faz 0–5 tamamlandı; Faz 6 Path Follower çekirdeği ve runtime entegrasyonu tamamlandı. Faz 6 için örnek patrol/camera rail test sahnesi sırada.
 > Bağlı çalışma: Landscape Spline **implement edilmiş durumda** — plan dokümanı
 > (`LANDSCAPE_MODE_RESEARCH_AND_PLAN.md`) tamamlanıp silindi
 > (`docs/COMPLETED_WORK_INDEX.md`, geçmişi git'te). Güncel referans kodun kendisidir:
@@ -1734,17 +1734,17 @@ Spline'ı oyun sistemlerinin kullanabileceği runtime path haline getirmek.
 - [x] Length query ekle.
 - [x] Location/direction/tangent/rotation/transform query'lerini aç.
 - [x] Closest-distance-to-point yaklaşımını ekle.
-- [ ] Path Follower component/system ekle.
-- [ ] Speed world-unit/second yap.
-- [ ] Clamp wrap mode ekle.
-- [ ] Loop wrap mode ekle.
-- [ ] Ping-pong wrap mode ekle.
-- [ ] Reverse direction ekle.
-- [ ] Orientation offset ekle.
-- [ ] Apply pitch/roll seçeneklerini ekle.
-- [ ] Missing spline fallback davranışını ekle.
-- [ ] Closed-loop seam hareket testini ekle.
-- [ ] Farklı delta-time fixture testini ekle.
+- [x] Path Follower component/system ekle. (`SplinePathFollower` entity component + runtime subsystem)
+- [x] Speed world-unit/second yap.
+- [x] Clamp wrap mode ekle.
+- [x] Loop wrap mode ekle.
+- [x] Ping-pong wrap mode ekle.
+- [x] Reverse direction ekle.
+- [x] Orientation offset ekle.
+- [x] Apply pitch/roll seçeneklerini ekle.
+- [x] Missing spline fallback davranışını ekle. (entity transformu değişmeden kalır, debug state raporlar)
+- [x] Closed-loop seam hareket testini ekle.
+- [x] Farklı delta-time fixture testini ekle.
 - [ ] Örnek patrol/camera rail test sahnesi oluştur.
 
 ### Kabul kriterleri

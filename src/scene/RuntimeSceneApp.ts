@@ -37,6 +37,7 @@ import {
 import { normalizeAiStateTreeAsset, type AiStateTreeAsset } from "@engine/ai/stateTreeAsset";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
+import { SplinePathFollowerSubsystem } from "@engine/scene/splinePathFollower";
 import { resolveCharacterCapsule } from "@engine/scene/capsule";
 import {
   findGridPath,
@@ -569,6 +570,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly inputSubsystem = new InputSubsystem(this.inputActions);
   private readonly physicsSubsystem = new PhysicsSubsystem({ backend: "rapier" });
   private readonly movingPlatformSubsystem: MovingPlatformSubsystem;
+  private readonly splinePathFollowerSubsystem: SplinePathFollowerSubsystem;
   private readonly characterMovementSubsystem: CharacterMovementSubsystem;
   /** Owns every AIController possessing an NPC pawn (decision tick lands in Faz 2). */
   private readonly aiSubsystem = new AISubsystem({
@@ -904,6 +906,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
     this.applyUserAudioSettings(this.userSettings);
     this.movingPlatformSubsystem = new MovingPlatformSubsystem(this.syncEntityTransform);
+    this.splinePathFollowerSubsystem = new SplinePathFollowerSubsystem(
+      () => this.splineRegistry,
+      this.syncEntityTransform,
+    );
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
       this.syncEntityTransform,
@@ -931,6 +937,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // The platform subsystem must tick before character movement so a rider is
     // carried by the same frame's platform delta (no one-frame lag).
     this.engineApp.registerSubsystem(this.movingPlatformSubsystem);
+    this.engineApp.registerSubsystem(this.splinePathFollowerSubsystem);
     // AI decisions tick before character movement so an agent's move-intent (Faz 3)
     // is consumed by the same frame's movement resolve. In Faz 1 the subsystem
     // holds controllers + blackboards only and does no per-frame work.
@@ -1983,6 +1990,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       sceneDocument,
       physics: this.physicsSubsystem,
       movingPlatform: this.movingPlatformSubsystem,
+      splinePathFollower: this.splinePathFollowerSubsystem,
       characterMovement: this.characterMovementSubsystem,
       ai: this.aiSubsystem,
       behavior: this.behaviorSubsystem,
@@ -2119,6 +2127,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.animationSubsystem.clear();
     this.physicsSubsystem.setEntities([]);
     this.movingPlatformSubsystem.clear();
+    this.splinePathFollowerSubsystem.clear();
     this.characterMovementSubsystem.clear();
     this.aiPathFollowing.clear();
     this.navGridCache.clear();
