@@ -292,6 +292,11 @@ import {
   createDefaultSplineActor,
 } from "@engine/scene/splineActor";
 import {
+  uniqueSplinePointId as uniqueGenericSplinePointId,
+  type ForgeSplinePoint,
+} from "@engine/scene/spline";
+import { evaluateSplineSegment } from "@engine/scene/splineCurve";
+import {
   applyProbeEnvMapToObject,
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -647,6 +652,13 @@ export interface LandscapeSplinePointView {
   falloff: number;
 }
 
+/** A generic Spline Actor control point as surfaced by the contextual Details panel. */
+export interface SplinePointView {
+  id: string;
+  position: Vec3;
+  pointType: ForgeSplinePoint["pointType"];
+}
+
 export interface LandscapeSplineSegmentView {
   id: string;
   startPointId: string;
@@ -664,6 +676,15 @@ interface LandscapeSplinePointGizmoTarget {
   splineId: string;
   pointId: string;
   world: Vector3;
+}
+
+/** The selected generic-spline point, with a world anchor for the shared move gizmo. */
+interface SplinePointGizmoTarget {
+  index: number;
+  pointId: string;
+  actor: LayoutSplineActor;
+  world: Vector3;
+  worldMatrix: Matrix4;
 }
 
 /** Config patch for one spline segment's destructive effects (Faz 6 Road Tool). */
@@ -970,6 +991,11 @@ export class SceneApp {
   private targetPointObjects: TargetPointObject[] = [];
   /** Editor sampled-line helpers for placed generic Spline actors, by index. */
   private splineObjects: SplineObject[] = [];
+  /** Contextual, editor-only point markers for the currently selected generic spline. */
+  private splinePointOverlay: Group | null = null;
+  private activeSplinePointId: string | null = null;
+  /** Live generic-spline point drag; one snapshot becomes one undo command on release. */
+  private splinePointDrag: { index: number; pointId: string; before: LayoutSplineActor; worldMatrixInverse: Matrix4 } | null = null;
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
   private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
   /** Billboard icons (clickable handles) for placed Sphere Reflection Capture actors, by index. */
@@ -1380,6 +1406,7 @@ export class SceneApp {
       disposeSplineObject(object);
     }
     this.splineObjects = [];
+    this.clearSplinePointOverlay();
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     this.disposeReflectionCaptureBakes();
@@ -4625,7 +4652,99 @@ export class SceneApp {
 
   // --- Generic Spline actors ------------------------------------------------
 
+  private splineActorWorldMatrix(actor: LayoutSplineActor): Matrix4 {
+    const transform = new Object3D();
+    transform.position.set(...actor.position);
+    applyEulerDegrees(transform, readRotation(actor));
+    transform.scale.set(...readScale(actor));
+    transform.updateMatrix();
+    return transform.matrix.clone();
+  }
+
+  private clearSplinePointOverlay(): void {
+    const overlay = this.splinePointOverlay;
+    this.splinePointOverlay = null;
+    if (!overlay) return;
+    this.scene.remove(overlay);
+    for (const marker of overlay.children) {
+      const mesh = marker as Mesh<SphereGeometry, MeshBasicMaterial>;
+      mesh.geometry?.dispose();
+      mesh.material?.dispose();
+    }
+  }
+
+  /** Rebuilds lightweight point markers only while a generic Spline Actor is selected. */
+  private refreshSplinePointOverlay(): void {
+    this.clearSplinePointOverlay();
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.hidden) return;
+    const overlay = new Group();
+    overlay.name = "spline-point-overlay";
+    overlay.matrixAutoUpdate = false;
+    overlay.matrix.copy(this.splineActorWorldMatrix(actor));
+    overlay.matrixWorldNeedsUpdate = true;
+    const markerGeometry = new SphereGeometry(0.16, 12, 8);
+    for (const point of actor.spline.points) {
+      const marker = new Mesh(
+        markerGeometry.clone(),
+        new MeshBasicMaterial({
+          color: point.id === this.activeSplinePointId ? 0xffd166 : 0x4fd1ff,
+          depthTest: false,
+          depthWrite: false,
+        }),
+      );
+      marker.position.set(...point.position);
+      marker.renderOrder = 30;
+      marker.raycast = () => {};
+      overlay.add(marker);
+    }
+    this.splinePointOverlay = overlay;
+    this.scene.add(overlay);
+  }
+
+  /** Screen-space marker hit-test keeps spline points out of normal actor picking. */
+  private pickSplinePoint(clientX: number, clientY: number): string | null {
+    if (this.selection?.kind !== "spline") return null;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.hidden || actor.locked) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const matrix = this.splineActorWorldMatrix(actor);
+    const camera = this.editorViewportCamera();
+    const pointer = new Vector3(clientX - rect.left, clientY - rect.top, 0);
+    const projected = new Vector3();
+    let best: { id: string; distance: number } | null = null;
+    for (const point of actor.spline.points) {
+      projected.set(...point.position).applyMatrix4(matrix).project(camera);
+      if (projected.z < -1 || projected.z > 1) continue;
+      const distance = Math.hypot(
+        (projected.x * 0.5 + 0.5) * rect.width - pointer.x,
+        (-projected.y * 0.5 + 0.5) * rect.height - pointer.y,
+      );
+      if (distance <= 14 && (!best || distance < best.distance)) best = { id: point.id, distance };
+    }
+    return best?.id ?? null;
+  }
+
+  private activeSplinePoint(): SplinePointGizmoTarget | null {
+    if (this.selection?.kind !== "spline" || !this.activeSplinePointId) return null;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return null;
+    const point = actor.spline.points.find((entry) => entry.id === this.activeSplinePointId);
+    if (!point) return null;
+    const worldMatrix = this.splineActorWorldMatrix(actor);
+    return {
+      index: this.selection.index,
+      pointId: point.id,
+      actor,
+      world: new Vector3(...point.position).applyMatrix4(worldMatrix),
+      worldMatrix,
+    };
+  }
+
   private buildSplines(): void {
+    this.clearSplinePointOverlay();
     for (const object of this.splineObjects) {
       this.scene.remove(object);
       disposeSplineObject(object);
@@ -4721,6 +4840,104 @@ export class SceneApp {
     const actor = this.layout?.splines?.[index];
     const object = this.splineObjects[index];
     if (actor && object) updateSplineObject(object, actor);
+    this.refreshSplinePointOverlay();
+  }
+
+  getSelectedSplinePoints(): SplinePointView[] {
+    if (this.selection?.kind !== "spline") return [];
+    return (this.layout?.splines?.[this.selection.index]?.spline.points ?? []).map((point) => ({
+      id: point.id,
+      position: [...point.position],
+      pointType: point.pointType,
+    }));
+  }
+
+  getActiveSplinePointId(): string | null {
+    return this.activeSplinePointId;
+  }
+
+  selectSplinePoint(pointId: string | null): void {
+    if (this.selection?.kind !== "spline") return;
+    const points = this.layout?.splines?.[this.selection.index]?.spline.points ?? [];
+    this.activeSplinePointId = points.some((point) => point.id === pointId) ? pointId : null;
+    this.refreshSplinePointOverlay();
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  addSelectedSplinePoint(): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    const last = after.spline.points.at(-1);
+    const beforeLast = after.spline.points.at(-2);
+    const offset: Vec3 = last && beforeLast
+      ? [last.position[0] - beforeLast.position[0], last.position[1] - beforeLast.position[1], last.position[2] - beforeLast.position[2]]
+      : [4, 0, 0];
+    const position: Vec3 = last
+      ? [last.position[0] + offset[0], last.position[1] + offset[1], last.position[2] + offset[2]]
+      : [0, 0, 0];
+    const point: ForgeSplinePoint = { id: uniqueGenericSplinePointId(after.spline.points), position, pointType: "curveAuto" };
+    after.spline.points.push(point);
+    this.applySelectedSplineSnapshot(actor, after, "Add Spline Point", point.id);
+  }
+
+  deleteSelectedSplinePoint(pointId = this.activeSplinePointId): void {
+    if (this.selection?.kind !== "spline" || !pointId) return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked || actor.spline.points.length <= 2) return;
+    const after = cloneSplineActor(actor);
+    const index = after.spline.points.findIndex((point) => point.id === pointId);
+    if (index < 0) return;
+    after.spline.points.splice(index, 1);
+    if (after.spline.points.length < 3) after.spline.closed = false;
+    this.applySelectedSplineSnapshot(actor, after, "Delete Spline Point", after.spline.points[Math.max(0, index - 1)]?.id ?? null);
+  }
+
+  splitSelectedSplineSegment(segmentIndex?: number): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked || actor.spline.points.length < 2) return;
+    const after = cloneSplineActor(actor);
+    const segmentCount = after.spline.closed ? after.spline.points.length : after.spline.points.length - 1;
+    const index = Math.min(Math.max(0, segmentIndex ?? 0), segmentCount - 1);
+    const sample = evaluateSplineSegment(after.spline, index, 0.5);
+    const point: ForgeSplinePoint = {
+      id: uniqueGenericSplinePointId(after.spline.points),
+      position: [...sample.position],
+      pointType: "curveAuto",
+    };
+    after.spline.points.splice(index + 1, 0, point);
+    this.applySelectedSplineSnapshot(actor, after, "Split Spline Segment", point.id);
+  }
+
+  setSelectedSplinePoint(pointId: string, patch: { position?: Vec3; pointType?: ForgeSplinePoint["pointType"] }): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    const point = after.spline.points.find((entry) => entry.id === pointId);
+    if (!point) return;
+    if (patch.position) point.position = [...patch.position];
+    if (patch.pointType) point.pointType = patch.pointType;
+    this.applySelectedSplineSnapshot(actor, after, "Edit Spline Point", point.id);
+  }
+
+  private applySelectedSplineSnapshot(before: LayoutSplineActor, after: LayoutSplineActor, label: string, activePointId: string | null): void {
+    if (this.selection?.kind !== "spline") return;
+    const index = this.selection.index;
+    const apply = (value: LayoutSplineActor): void => {
+      if (!this.layout?.splines?.[index]) return;
+      this.layout.splines[index] = cloneSplineActor(value);
+      this.activeSplinePointId = activePointId;
+      this.refreshSpline(index);
+      this.updateGizmo();
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label, redo: () => apply(after), undo: () => apply(before) });
   }
 
   setSelectedSpline(patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number }): void {
@@ -9222,7 +9439,16 @@ export class SceneApp {
       startGizmoDrag: (handle, event) => this.startGizmoDrag(handle, event),
       beginAltCameraDrag: (event) => this.cameraController.beginAltDrag(event),
       beginCameraNavigation: (event) => this.cameraController.beginNavigation(event),
-      pickSelection: (clientX, clientY) => this.picker.pickSelection(clientX, clientY),
+      pickSelection: (clientX, clientY) => {
+        const pointId = this.pickSplinePoint(clientX, clientY);
+        if (pointId && this.selection?.kind === "spline") {
+          this.activeSplinePointId = pointId;
+          this.refreshSplinePointOverlay();
+          this.updateGizmo();
+          return { kind: "spline", index: this.selection.index };
+        }
+        return this.picker.pickSelection(clientX, clientY);
+      },
       toggleSelection: (selection) => this.toggleSelection(selection),
       select: (selection) => this.select(selection),
       beginLandscapeSculpt: (event) => this.beginLandscapeSculpt(event),
@@ -9307,6 +9533,10 @@ export class SceneApp {
       this.commitLandscapeSplinePointDrag();
       return;
     }
+    if (this.splinePointDrag) {
+      this.commitSplinePointDrag();
+      return;
+    }
     if (drag.selection.kind === "worldWidget") {
       this.commitWorldWidgetMove(drag.selection.index, drag.startTransform.position);
       return;
@@ -9339,6 +9569,12 @@ export class SceneApp {
     if (splinePoint) {
       if (handle.tool !== "move") return;
       this.startLandscapeSplinePointDrag(handle, event, splinePoint);
+      return;
+    }
+    const genericSplinePoint = this.activeSplinePoint();
+    if (genericSplinePoint) {
+      if (handle.tool !== "move") return;
+      this.startSplinePointDrag(handle, event, genericSplinePoint);
       return;
     }
     let linkedTransforms: LinkedMoveStart[] | undefined;
@@ -9445,6 +9681,82 @@ export class SceneApp {
     this.canvas.setPointerCapture(event.pointerId);
   }
 
+  private startSplinePointDrag(handle: GizmoHandle, event: PointerEvent, splinePoint: SplinePointGizmoTarget): void {
+    const selected = this.getSelected();
+    if (!selected) return;
+    this.gizmoInteraction.beginDrag(handle);
+    this.updateGizmo();
+    const base = splinePoint.world.clone();
+    const movePlane = createGizmoMovePlane(handle, base, this.gizmoGroup.quaternion);
+    const planeStartHit = movePlane
+      ? this.picker.clientToPlane(event.clientX, event.clientY, movePlane) ?? base.clone()
+      : undefined;
+    this.splinePointDrag = {
+      index: splinePoint.index,
+      pointId: splinePoint.pointId,
+      before: cloneSplineActor(splinePoint.actor),
+      worldMatrixInverse: splinePoint.worldMatrix.clone().invert(),
+    };
+    this.pointerDrag = createGizmoPointerDrag({
+      handle,
+      selection: { kind: "spline", index: splinePoint.index },
+      selected: { ...selected, position: [base.x, base.y, base.z], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      floorHit: this.picker.clientToFloor(event.clientX, event.clientY),
+      freeMoveBasis: this.getScreenSpaceMoveBasis(),
+      linkedTransforms: undefined,
+      descendantTransforms: undefined,
+      movePlane,
+      planeStartHit,
+      pivot: [0, 0, 0],
+      pivotWorld: null,
+      pivotEditing: false,
+    });
+    this.canvas.setPointerCapture(event.pointerId);
+  }
+
+  private splinePointDragWorld(): Vec3 | null {
+    const drag = this.splinePointDrag;
+    const actor = drag ? this.layout?.splines?.[drag.index] : null;
+    const point = actor?.spline.points.find((entry) => entry.id === drag?.pointId);
+    if (!drag || !actor || !point) return null;
+    const world = new Vector3(...point.position).applyMatrix4(this.splineActorWorldMatrix(actor));
+    return [world.x, world.y, world.z];
+  }
+
+  private applySplinePointWorld(world: Vec3): void {
+    const drag = this.splinePointDrag;
+    const actor = drag ? this.layout?.splines?.[drag.index] : null;
+    const point = actor?.spline.points.find((entry) => entry.id === drag?.pointId);
+    if (!drag || !point) return;
+    const local = new Vector3(...world).applyMatrix4(drag.worldMatrixInverse);
+    point.position = [round(local.x), round(local.y), round(local.z)];
+    this.refreshSpline(drag.index);
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  private commitSplinePointDrag(): void {
+    const drag = this.splinePointDrag;
+    this.splinePointDrag = null;
+    const after = drag ? this.layout?.splines?.[drag.index] : null;
+    if (!drag || !after || JSON.stringify(drag.before) === JSON.stringify(after)) return;
+    const index = drag.index;
+    const apply = (value: LayoutSplineActor): void => {
+      if (!this.layout?.splines?.[index]) return;
+      this.layout.splines[index] = cloneSplineActor(value);
+      this.activeSplinePointId = drag.pointId;
+      this.refreshSpline(index);
+      this.updateGizmo();
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label: "Move Spline Point", redo: () => apply(after), undo: () => apply(drag.before) });
+  }
+
   /** Current world position of the point being dragged (Faz 6.1 gizmo base). */
   private landscapeSplinePointDragWorld(): Vec3 | null {
     const drag = this.landscapeSplinePointDrag;
@@ -9512,7 +9824,7 @@ export class SceneApp {
     // A spline-point drag (Faz 6.1) tracks the point's own world position instead.
     const base: Vec3 = drag.pivotEdit
       ? [...drag.startPosition]
-      : this.landscapeSplinePointDragWorld() ?? [...selected.position];
+      : this.landscapeSplinePointDragWorld() ?? this.splinePointDragWorld() ?? [...selected.position];
 
     if (drag.axis === "xyz") {
       const position = freeMoveDragPosition(
@@ -9558,6 +9870,10 @@ export class SceneApp {
     // layout, so it bypasses getMutableTransform / pivot / linked moves entirely.
     if (this.landscapeSplinePointDrag) {
       this.applyLandscapeSplinePointWorld(position);
+      return;
+    }
+    if (this.splinePointDrag) {
+      this.applySplinePointWorld(position);
       return;
     }
 
@@ -10733,6 +11049,7 @@ export class SceneApp {
 
   private updateGizmo(): void {
     clearGizmoGroup(this.gizmoGroup, this.gizmoPickables);
+    this.refreshSplinePointOverlay();
     if (!this.selection) return;
     // The Sky Atmosphere, Height Fog, Cloud Layer and Post Process are scene-wide
     // environment singletons with no transform, so they never show a move gizmo.
@@ -10751,6 +11068,16 @@ export class SceneApp {
     if (splinePoint) {
       this.gizmoGroup.visible = true;
       this.gizmoGroup.position.copy(splinePoint.world);
+      this.gizmoGroup.rotation.set(0, 0, 0);
+      buildGizmoHandles("move", this.gizmoGroup, this.gizmoPickables, this.gizmoInteraction);
+      this.updateGizmoScreenScale();
+      return;
+    }
+
+    const genericSplinePoint = this.activeSplinePoint();
+    if (genericSplinePoint) {
+      this.gizmoGroup.visible = true;
+      this.gizmoGroup.position.copy(genericSplinePoint.world);
       this.gizmoGroup.rotation.set(0, 0, 0);
       buildGizmoHandles("move", this.gizmoGroup, this.gizmoPickables, this.gizmoInteraction);
       this.updateGizmoScreenScale();

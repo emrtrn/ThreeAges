@@ -546,7 +546,7 @@
       ],
       "spline": {
         "schema": 1,
-        "closed": false,
+        "closed": true,
         "defaultUp": [
           0,
           1,
@@ -557,24 +557,56 @@
           {
             "id": "spline-point-1",
             "position": [
+              -0.8,
               0,
-              0,
-              0
+              -0.34
             ],
             "pointType": "curveAuto"
           },
           {
             "id": "spline-point-2",
             "position": [
-              4,
+              4.17,
               0,
-              0
+              -1.06
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              6.24,
+              0,
+              2.89
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              2.18,
+              0,
+              6.85
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-5",
+            "position": [
+              -1.83,
+              0,
+              4.55
             ],
             "pointType": "curveAuto"
           }
         ]
       },
-      "name": "Spline"
+      "name": "Spline",
+      "debug": {
+        "visible": true,
+        "color": "#4fd1ff",
+        "resolution": 16
+      }
     }
   ],
   "landscapes": [],

@@ -1688,15 +1688,15 @@ Control point ve tangent'ları doğrudan viewport içinde düzenlemek.
 
 ### Kontrol listesi
 
-- [ ] Spline Actor seçildiğinde contextual edit aracını göster.
-- [ ] Control point picking ekle.
-- [ ] Seçili point görselini ekle.
-- [ ] Point transform gizmo bağlantısını ekle.
-- [ ] Point add komutunu ekle.
-- [ ] Point delete komutunu ekle.
-- [ ] Segment split komutunu ekle.
-- [ ] Closed loop toggle komutunu ekle.
-- [ ] Linear/Curve Auto/Curve Custom point type UI ekle.
+- [x] Spline Actor seçildiğinde contextual edit aracını göster. (selected actor için point overlay + Details panel)
+- [x] Control point picking ekle. (screen-space marker picking)
+- [x] Seçili point görselini ekle.
+- [x] Point transform gizmo bağlantısını ekle. (world/local dönüşümü, tek undo command)
+- [x] Point add komutunu ekle.
+- [x] Point delete komutunu ekle.
+- [x] Segment split komutunu ekle.
+- [x] Closed loop toggle komutunu ekle. (Faz 4 Details kontrolü)
+- [x] Linear/Curve Auto/Curve Custom point type UI ekle.
 - [ ] Custom tangent handle render et.
 - [ ] Tangent handle drag ekle.
 - [ ] Linked/broken tangent davranışı ekle.

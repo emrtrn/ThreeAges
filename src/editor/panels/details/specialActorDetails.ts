@@ -18,7 +18,7 @@ import type {
   TargetPointReference,
 } from "@/scene/SceneApp";
 import { type LandscapeViewMode } from "@engine/render-three/landscape";
-import { scaleRow, vectorRow } from "./transformRows";
+import { axisField, scaleRow, vectorRow } from "./transformRows";
 
 type CaptureNumericKey = "radius" | "intensity" | "resolution" | "near" | "far" | "priority";
 type SurfaceNumericKey =
@@ -77,6 +77,13 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     color?: string;
   }) => void;
   setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number }) => void;
+  getSelectedSplinePoints: () => Array<{ id: string; position: Vec3; pointType: "linear" | "curveAuto" | "curveCustom" }>;
+  getActiveSplinePointId: () => string | null;
+  selectSplinePoint: (pointId: string | null) => void;
+  addSelectedSplinePoint: () => void;
+  deleteSelectedSplinePoint: (pointId?: string | null) => void;
+  splitSelectedSplineSegment: (segmentIndex?: number) => void;
+  setSelectedSplinePoint: (pointId: string, patch: { position?: Vec3; pointType?: "linear" | "curveAuto" | "curveCustom" }) => void;
   setSelectedReflectionCapture: (patch: {
     radius?: number;
     intensity?: number;
@@ -1229,6 +1236,22 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
   if (!spline) return;
   options.setDetailsScale([...selection.scale]);
   const locked = selection.locked ? "disabled" : "";
+  const points = options.getSelectedSplinePoints();
+  const activePoint = points.find((point) => point.id === options.getActiveSplinePointId()) ?? points[0];
+  const pointButtons = points
+    .map((point, index) => `<button type="button" data-spline-point="${escapeHtml(point.id)}" ${locked}>${index + 1}: ${escapeHtml(point.id)}</button>`)
+    .join("");
+  const splitButtons = Array.from(
+    { length: points.length >= 2 ? (spline.closed ? points.length : points.length - 1) : 0 },
+    (_, index) => `<button type="button" data-spline-split="${index}" ${locked}>Split ${index + 1}</button>`,
+  ).join("");
+  const pointEditor = activePoint
+    ? `<div class="detail-subsection-title">Control Point</div>
+      <div class="detail-button-row">${pointButtons}</div>
+      <label class="detail-row"><span>Type</span><select data-spline-point-type ${locked}>${["linear", "curveAuto", "curveCustom"].map((type) => `<option value="${type}" ${activePoint.pointType === type ? "selected" : ""}>${type === "curveAuto" ? "Curve Auto" : type === "curveCustom" ? "Curve Custom" : "Linear"}</option>`).join("")}</select></label>
+      <div class="detail-vector"><span class="detail-vector-label">Position</span><div class="vector-fields">${activePoint.position.map((value, index) => axisField(`splinePoint${index}`, ["X", "Y", "Z"][index]!, index, value, 0.05, "pr", selection.locked).replace(`data-axis=\"${index}\"`, `data-spline-point-axis=\"${index}\"`)).join("")}</div></div>
+      <div class="detail-button-row"><button type="button" data-spline-point-delete ${locked}>Delete Point</button>${splitButtons}</div>`
+    : "<div class=\"detail-readonly\">No control points.</div>";
   body.innerHTML = `
     <section class="details-section"><h3>Spline</h3>
       <div class="detail-readonly">${spline.pointCount} control points · ${spline.closed ? "Closed" : "Open"}</div>
@@ -1236,6 +1259,8 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
       <label class="detail-row"><span>Debug Visible</span><input type="checkbox" data-spline-debug-visible ${spline.debugVisible ? "checked" : ""} ${locked}></label>
       <label class="detail-row"><span>Debug Color</span><input type="color" data-spline-debug-color value="${spline.debugColor}" ${locked}></label>
       <label class="detail-row"><span>Line Resolution</span><input type="number" min="2" max="128" step="1" data-spline-debug-resolution value="${spline.debugResolution}" ${locked}></label>
+      <div class="detail-button-row"><button type="button" data-spline-point-add ${locked}>Add Point</button></div>
+      ${pointEditor}
     </section>`;
   body.querySelector<HTMLInputElement>("[data-spline-closed]")?.addEventListener("change", (event) => options.setSelectedSpline({ closed: (event.currentTarget as HTMLInputElement).checked }));
   body.querySelector<HTMLInputElement>("[data-spline-debug-visible]")?.addEventListener("change", (event) => options.setSelectedSpline({ debugVisible: (event.currentTarget as HTMLInputElement).checked }));
@@ -1244,6 +1269,23 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     const value = Number((event.currentTarget as HTMLInputElement).value);
     if (Number.isFinite(value)) options.setSelectedSpline({ debugResolution: value });
   });
+  body.querySelector<HTMLButtonElement>("[data-spline-point-add]")?.addEventListener("click", () => options.addSelectedSplinePoint());
+  body.querySelectorAll<HTMLButtonElement>("[data-spline-point]").forEach((button) => button.addEventListener("click", () => options.selectSplinePoint(button.dataset.splinePoint ?? null)));
+  body.querySelector<HTMLButtonElement>("[data-spline-point-delete]")?.addEventListener("click", () => options.deleteSelectedSplinePoint(activePoint?.id));
+  body.querySelectorAll<HTMLButtonElement>("[data-spline-split]").forEach((button) => button.addEventListener("click", () => options.splitSelectedSplineSegment(Number(button.dataset.splineSplit))));
+  body.querySelector<HTMLSelectElement>("[data-spline-point-type]")?.addEventListener("change", (event) => {
+    if (!activePoint) return;
+    options.setSelectedSplinePoint(activePoint.id, { pointType: (event.currentTarget as HTMLSelectElement).value as "linear" | "curveAuto" | "curveCustom" });
+  });
+  body.querySelectorAll<HTMLInputElement>("[data-spline-point-axis]").forEach((input) => input.addEventListener("change", () => {
+    if (!activePoint) return;
+    const axis = Number(input.dataset.splinePointAxis);
+    const value = Number(input.value);
+    if (!Number.isInteger(axis) || axis < 0 || axis > 2 || !Number.isFinite(value)) return;
+    const position: Vec3 = [...activePoint.position];
+    position[axis] = value;
+    options.setSelectedSplinePoint(activePoint.id, { position });
+  }));
 }
 
 export function renderWorldWidgetDetails(options: SpecialActorDetailsOptions): void {
