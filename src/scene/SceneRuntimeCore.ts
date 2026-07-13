@@ -288,6 +288,8 @@ export function buildSceneInstancedModel(options: {
 export function buildSplineInstanceGeneratorGroup(options: {
   actor: LayoutSplineActor;
   mode: "editor" | "runtime";
+  /** Editor pointer drags can use a bounded frame cache; runtime is always full quality. */
+  deformQuality?: "preview" | "full";
   models: ReadonlyMap<string, GLTF>;
   castShadow: boolean;
   receiveShadow: boolean;
@@ -361,7 +363,9 @@ export function buildSplineInstanceGeneratorGroup(options: {
     const built = buildSplineDeformMeshGroup({
       actor: options.actor,
       gltf,
-      definition: generator,
+      definition: options.deformQuality === "preview"
+        ? { ...generator, sampleSteps: Math.min(generator.sampleSteps, 4) }
+        : generator,
       castShadow: options.castShadow,
       receiveShadow: options.receiveShadow,
     });
@@ -372,6 +376,7 @@ export function buildSplineInstanceGeneratorGroup(options: {
     options.applyMaterialSlots?.(generator.meshAsset, built.group);
     group.add(built.group);
   }
+  group.userData.splineWarnings = warnings;
   return { group: group.children.length > 0 ? group : null, meshes, instanceCount, triangleCount, missingAssetIds, warnings };
 }
 

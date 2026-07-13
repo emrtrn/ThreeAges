@@ -19808,6 +19808,7 @@ check("generic spline deform mesh normalizes axes, saves, and bends generated ge
   assert.equal(definition?.type, "deformMesh");
   if (!definition || definition.type !== "deformMesh") throw new Error("deform generator normalization failed");
   assert.deepEqual(resolveSplineDeformMeshGenerator({ ...definition, upAxis: "z" }).upAxis, "y");
+  assert.ok(splineDeformMeshWarnings({ ...definition, upAxis: "z" }).some((warning) => warning.includes("safe up-axis fallback")));
   assert.deepEqual(splineDeformMeshWarnings({ ...definition, sampleSteps: 64 }), ["High deform sample count can make interactive rebuilds expensive."]);
   actor.generators = [definition];
   assert.deepEqual(validateSplineActor(actor).generators, [definition]);
@@ -19833,6 +19834,60 @@ check("generic spline deform mesh normalizes axes, saves, and bends generated ge
   mesh?.geometry.computeBoundingBox();
   assert.ok((mesh?.geometry.boundingBox?.max.z ?? 0) - (mesh?.geometry.boundingBox?.min.z ?? 0) > 9.9);
   assert.notEqual(mesh?.geometry, (source.children[0] as Mesh).geometry, "deformed output owns a disposable geometry clone");
+  const tiledV = mesh?.geometry.getAttribute("uv");
+  assert.equal(Math.max(...Array.from({ length: tiledV?.count ?? 0 }, (_, index) => tiledV!.getY(index))), 5, "tile-by-distance writes the travelled spline distance into UVs");
+
+  const preview = buildSplineInstanceGeneratorGroup({
+    actor,
+    mode: "editor",
+    deformQuality: "preview",
+    models: new Map([["road-strip", { scene: source } as unknown as GLTF]]),
+    castShadow: true,
+    receiveShadow: true,
+  });
+  let previewSteps: number | undefined;
+  preview?.group?.traverse((child) => {
+    if (child instanceof Group && child.userData.splineGeneratorId === "road") previewSteps = child.userData.splineSampleSteps;
+  });
+  assert.equal(previewSteps, 4, "drag preview caps deformation samples without changing saved data");
+});
+
+check("generic spline deform mesh supports pipe axes and preserves a smooth closed-loop seam", () => {
+  const actor = createDefaultSplineActor();
+  actor.spline.points[1]!.position = [8, 0, 0];
+  actor.spline.points.push({ id: "corner", position: [8, 0, 8], pointType: "curveAuto" });
+  actor.spline.points.forEach((point) => { point.pointType = "curveAuto"; });
+  actor.spline.closed = true;
+  actor.generators = [{ id: "pipe", type: "deformMesh", meshAsset: "pipe", forwardAxis: "y", upAxis: "z", uvMode: "stretch" }];
+  const sourceGeometry = new BufferGeometry();
+  sourceGeometry.setAttribute("position", new Float32BufferAttribute([
+    -0.2, 0, 0, 0.2, 0, 0,
+    -0.2, 6, 0, 0.2, 6, 0,
+  ], 3));
+  sourceGeometry.setAttribute("uv", new Float32BufferAttribute([0, 0, 1, 0, 0, 1, 1, 1], 2));
+  sourceGeometry.setIndex([0, 1, 2, 1, 3, 2]);
+  const source = new Group();
+  source.add(new Mesh(sourceGeometry, new MeshBasicMaterial()));
+  const built = buildSplineInstanceGeneratorGroup({
+    actor,
+    mode: "runtime",
+    models: new Map([["pipe", { scene: source } as unknown as GLTF]]),
+    castShadow: true,
+    receiveShadow: true,
+  });
+  let mesh: Mesh | undefined;
+  built?.group?.traverse((child) => {
+    if (child instanceof Mesh && child.userData.splineGeneratedGeometry) mesh = child;
+  });
+  assert.ok(mesh);
+  const positions = mesh!.geometry.getAttribute("position");
+  const seamDistance = (a: number, b: number) => Math.hypot(
+    positions.getX(a) - positions.getX(b),
+    positions.getY(a) - positions.getY(b),
+    positions.getZ(a) - positions.getZ(b),
+  );
+  assert.ok(seamDistance(0, 2) < 1e-5 && seamDistance(1, 3) < 1e-5, "closed loop source ends meet at the generated seam");
+  assert.deepEqual(Array.from({ length: 4 }, (_, index) => positions.getY(index)).map((value) => Number.isFinite(value)), [true, true, true, true]);
 });
 
 check("generic spline debug renderer samples world space, honors visibility, and disposes", () => {

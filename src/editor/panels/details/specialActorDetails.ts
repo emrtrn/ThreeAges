@@ -79,7 +79,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   }) => void;
   setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugResolution?: number; showPointIds?: boolean }) => void;
   getSelectedSplineGenerators: () => ForgeSplineGeneratorDef[];
-  getSelectedSplineGeneratorDiagnostics: () => Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null; warnings: string[] }>;
+  getSelectedSplineGeneratorDiagnostics: () => Array<{ generatorId: string; instanceCount: number; triangleCount: number; rebuildMs: number | null; preview: boolean; missingAssetId: string | null; warnings: string[] }>;
   addSelectedSplineInstanceGenerator: () => void;
   addSelectedSplineRigidSegmentGenerator: () => void;
   addSelectedSplineDeformMeshGenerator: () => void;
@@ -1298,7 +1298,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
         const axisOptions = (selected: SplineMeshAxis | undefined) => axes.map((axis) => `<option value="${axis}" ${axis === selected ? "selected" : ""}>${axis.toUpperCase()}</option>`).join("");
         return `<div class="detail-subsection spline-generator" data-spline-generator-card="${escapeHtml(generator.id)}">
           <div class="detail-subsection-title">Deformed Mesh · ${escapeHtml(generator.id)}</div>
-          <div class="detail-readonly">${diagnostic?.instanceCount ?? 0} continuous mesh${diagnostic?.missingAssetId ? ` · Missing mesh: ${escapeHtml(diagnostic.missingAssetId)}` : ""}</div>
+          <div class="detail-readonly">${diagnostic?.instanceCount ?? 0} continuous mesh · ${diagnostic?.triangleCount ?? 0} triangles${diagnostic?.rebuildMs !== null && diagnostic?.rebuildMs !== undefined ? ` · ${diagnostic.rebuildMs.toFixed(1)} ms${diagnostic.preview ? " preview" : ""}` : ""}${diagnostic?.missingAssetId ? ` · Missing mesh: ${escapeHtml(diagnostic.missingAssetId)}` : ""}</div>
           ${warningMarkup}
           <label class="detail-row"><span>Mesh</span><select data-spline-deform-mesh="${escapeHtml(generator.id)}" ${locked}><option value="">Choose mesh…</option>${meshOptions.replace(`value="${escapeHtml(generator.meshAsset)}"`, `value="${escapeHtml(generator.meshAsset)}" selected`)}</select></label>
           <label class="detail-row"><span>Forward Axis</span><select data-spline-deform-axis="forwardAxis" data-spline-generator-id="${escapeHtml(generator.id)}" ${locked}>${axisOptions(generator.forwardAxis ?? "z")}</select></label>

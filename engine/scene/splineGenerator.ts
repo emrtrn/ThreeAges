@@ -259,7 +259,7 @@ export function normalizeSplineDeformMeshGenerator(
     if (typeof value[key] === "boolean") output[key] = value[key];
   }
   if (isSplineMeshAxis(value.forwardAxis)) output.forwardAxis = value.forwardAxis;
-  if (isSplineMeshAxis(value.upAxis) && !sameMeshAxis(value.upAxis, output.forwardAxis ?? "z")) output.upAxis = value.upAxis;
+  if (isSplineMeshAxis(value.upAxis)) output.upAxis = value.upAxis;
   if (isFiniteNumber(value.sampleSteps)) output.sampleSteps = Math.round(clamp(value.sampleSteps, 2, 128));
   if (value.uvMode === "stretch" || value.uvMode === "tileByDistance") output.uvMode = value.uvMode;
   if (isFiniteNumber(value.uvTileLength)) output.uvTileLength = clamp(value.uvTileLength, MIN_SPACING, MAX_OFFSET);
@@ -380,7 +380,9 @@ export function createDefaultSplineDeformMeshGenerator(
 export function splineDeformMeshWarnings(definition: ForgeSplineDeformMeshGeneratorDef): string[] {
   const generator = resolveSplineDeformMeshGenerator(definition);
   const warnings: string[] = [];
-  if (sameMeshAxis(generator.forwardAxis, generator.upAxis)) warnings.push("Forward and up axes must use different dimensions.");
+  if (definition.upAxis && sameMeshAxis(definition.forwardAxis ?? "z", definition.upAxis)) {
+    warnings.push("Forward and up axes use the same dimension; +Y is used as the safe up-axis fallback.");
+  }
   if (generator.sampleSteps >= 64) warnings.push("High deform sample count can make interactive rebuilds expensive.");
   return warnings;
 }

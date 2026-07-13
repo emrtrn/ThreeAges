@@ -1023,6 +1023,8 @@ export class SceneApp {
   private splineGeneratedGroups: (Group | null)[] = [];
   /** Coalesces high-frequency control-point drags into one generated-preview rebuild. */
   private splineGeneratorPreviewTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  /** Latest generated-mesh diagnostics, kept outside the persisted spline data. */
+  private splineGeneratorBuildStats = new Map<number, { triangleCount: number; rebuildMs: number; preview: boolean; warnings: string[] }>();
   /** Contextual, editor-only point markers for the currently selected generic spline. */
   private splinePointOverlay: Group | null = null;
   private activeSplinePointId: string | null = null;
@@ -4892,6 +4894,7 @@ export class SceneApp {
   private insertSpline(index: number, actor: LayoutSplineActor): void {
     if (!this.layout) return;
     this.clearSplineGeneratorPreviewTimers();
+    this.splineGeneratorBuildStats.clear();
     this.layout.splines ??= [];
     const insertionIndex = clampIndex(index, this.layout.splines.length);
     const snapshot = cloneSplineActor(actor);
@@ -4914,6 +4917,7 @@ export class SceneApp {
   private removeSplineAt(index: number): LayoutSplineActor | null {
     if (!this.layout?.splines) return null;
     this.clearSplineGeneratorPreviewTimers();
+    this.splineGeneratorBuildStats.clear();
     const [removed] = this.layout.splines.splice(index, 1);
     const [object] = this.splineObjects.splice(index, 1);
     if (object) {
@@ -4973,17 +4977,18 @@ export class SceneApp {
   }
 
   /** Rebuilds an actor's sampled debug line after a future point/details edit. */
-  refreshSpline(index: number): void {
+  refreshSpline(index: number, generationQuality: "preview" | "full" = "full"): void {
     const actor = this.layout?.splines?.[index];
     const object = this.splineObjects[index];
     if (actor && object) updateSplineObject(object, actor);
-    this.scheduleSplineGeneratedPreviewRebuild(index);
+    this.scheduleSplineGeneratedPreviewRebuild(index, generationQuality);
     this.refreshSplinePointOverlay();
   }
 
   private clearSplineGeneratedGroups(): void {
     for (const group of this.splineGeneratedGroups) if (group) disposeSplineGeneratedGroup(group);
     this.splineGeneratedGroups = [];
+    this.splineGeneratorBuildStats.clear();
   }
 
   private clearSplineGeneratorPreviewTimers(): void {
@@ -4992,25 +4997,32 @@ export class SceneApp {
   }
 
   /** Keep line/point feedback immediate while avoiding InstancedMesh rebuilds on every drag event. */
-  private scheduleSplineGeneratedPreviewRebuild(index: number): void {
+  private scheduleSplineGeneratedPreviewRebuild(index: number, quality: "preview" | "full" = "full"): void {
     const previous = this.splineGeneratorPreviewTimers.get(index);
     if (previous) clearTimeout(previous);
     this.splineGeneratorPreviewTimers.set(index, setTimeout(() => {
       this.splineGeneratorPreviewTimers.delete(index);
-      this.rebuildSplineGeneratedGroup(index);
+      this.rebuildSplineGeneratedGroup(index, quality);
     }, 80));
   }
 
-  /** Rebuilds only this spline's generated InstancedMesh preview. Shared GLTF resources stay owned by the model cache. */
-  private rebuildSplineGeneratedGroup(index: number): void {
+  /** Rebuilds only this spline's generated preview. Full quality is committed after point drags. */
+  private rebuildSplineGeneratedGroup(index: number, quality: "preview" | "full" = "full"): void {
+    if (quality === "full") {
+      const pending = this.splineGeneratorPreviewTimers.get(index);
+      if (pending) clearTimeout(pending);
+      this.splineGeneratorPreviewTimers.delete(index);
+    }
     const previous = this.splineGeneratedGroups[index];
     if (previous) disposeSplineGeneratedGroup(previous);
     this.splineGeneratedGroups[index] = null;
     const actor = this.layout?.splines?.[index];
     if (!actor) return;
+    const startedAt = performance.now();
     const built = buildSplineInstanceGeneratorGroup({
       actor,
       mode: "editor",
+      deformQuality: quality,
       models: this.models,
       castShadow: this.staticObjectsCastShadow(),
       receiveShadow: this.staticObjectsReceiveShadow(),
@@ -5019,7 +5031,16 @@ export class SceneApp {
         if (slots) applyMaterialSlotOverrides(group, slots, (materialId) => this.materialCache.get(materialId));
       },
     });
-    if (!built) return;
+    if (!built) {
+      this.splineGeneratorBuildStats.set(index, { triangleCount: 0, rebuildMs: performance.now() - startedAt, preview: quality === "preview", warnings: [] });
+      return;
+    }
+    this.splineGeneratorBuildStats.set(index, {
+      triangleCount: built.triangleCount,
+      rebuildMs: performance.now() - startedAt,
+      preview: quality === "preview",
+      warnings: built.warnings,
+    });
     if (built.missingAssetIds.length > 0) {
       this.onStatus?.(`Spline generator mesh missing: ${built.missingAssetIds.join(", ")}`, "warning");
     }
@@ -5139,10 +5160,13 @@ export class SceneApp {
     return normalizeSplineGenerators(this.layout?.splines?.[this.selection.index]?.generators);
   }
 
-  getSelectedSplineGeneratorDiagnostics(): Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null; warnings: string[] }> {
+  getSelectedSplineGeneratorDiagnostics(): Array<{ generatorId: string; instanceCount: number; triangleCount: number; rebuildMs: number | null; preview: boolean; missingAssetId: string | null; warnings: string[] }> {
     if (this.selection?.kind !== "spline") return [];
     const actor = this.layout?.splines?.[this.selection.index];
     if (!actor) return [];
+    const index = this.selection.index;
+    const build = this.splineGeneratorBuildStats.get(index);
+    const group = this.splineGeneratedGroups[index];
     return normalizeSplineGenerators(actor.generators).map((generator) => ({
       generatorId: generator.id,
       instanceCount: generator.type === "instances"
@@ -5150,10 +5174,15 @@ export class SceneApp {
         : generator.type === "rigidSegments"
           ? generateSplineRigidSegmentPlacements(actor, generator).length
           : 1,
+      triangleCount: generator.type === "deformMesh"
+        ? splineGeneratedTriangleCount(group, generator.id)
+        : 0,
+      rebuildMs: build?.rebuildMs ?? null,
+      preview: build?.preview ?? false,
       missingAssetId: generator.meshAsset && !this.models.has(generator.meshAsset) ? generator.meshAsset : null,
       warnings: generator.type === "rigidSegments"
         ? splineRigidSegmentWarnings(actor, generator)
-        : generator.type === "deformMesh" ? splineDeformMeshWarnings(generator) : [],
+        : generator.type === "deformMesh" ? [...splineDeformMeshWarnings(generator), ...(build?.warnings ?? [])] : [],
     }));
   }
 
@@ -10113,7 +10142,7 @@ export class SceneApp {
         else point.arriveTangent = [...tangent];
       }
     }
-    this.refreshSpline(drag.index);
+    this.refreshSpline(drag.index, "preview");
     this.updateGizmo();
     this.emitSelectionChanged();
   }
@@ -10136,6 +10165,7 @@ export class SceneApp {
       this.scheduleAutoSave();
     };
     this.executeCommand({ label: "Move Spline Point", redo: () => apply(after), undo: () => apply(drag.before) });
+    this.rebuildSplineGeneratedGroup(index, "full");
   }
 
   /** Current world position of the point being dragged (Faz 6.1 gizmo base). */
@@ -11796,6 +11826,18 @@ export class SceneApp {
       this.cameraController.syncAnglesFromCurrentView();
     }
   };
+}
+
+function splineGeneratedTriangleCount(group: Group | null | undefined, generatorId: string): number {
+  if (!group) return 0;
+  let triangles = 0;
+  group.traverse((object) => {
+    if (object instanceof Group && object.userData.splineGeneratorId === generatorId) {
+      const count = object.userData.splineTriangleCount;
+      if (typeof count === "number" && Number.isFinite(count)) triangles += count;
+    }
+  });
+  return triangles;
 }
 
 /**

@@ -59,6 +59,7 @@ export function buildSplineDeformMeshGroup(options: {
   group.userData.splineGeneratorId = generator.id;
   group.userData.splineGenerated = true;
   group.userData.splineGeneratedGeometry = true;
+  group.userData.splineSampleSteps = generator.sampleSteps;
   group.visible = !(options.actor.hidden ?? false);
   let triangleCount = 0;
   let missingUvs = false;

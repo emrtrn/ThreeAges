@@ -1934,15 +1934,15 @@ Yol, boru, kablo ve şerit meshlerini spline segmentlerine göre bükmek.
 - [x] UV tile-by-distance mode ekle.
 - [x] Sample steps ayarını ekle.
 - [ ] Dirty segment rebuild ekle.
-- [ ] Drag sırasında düşük kalite preview ekle.
-- [ ] Commit sonrası full-quality rebuild ekle.
-- [ ] Missing/invalid mesh axis warning ekle.
-- [ ] Generated triangle diagnostic ekle.
+- [x] Drag sırasında düşük kalite preview ekle. *(2026-07-13: point drag deform sample sayısını en çok 4'e indirir.)*
+- [x] Commit sonrası full-quality rebuild ekle.
+- [x] Missing/invalid mesh axis warning ekle.
+- [x] Generated triangle diagnostic ekle. *(2026-07-13: Details paneli triangle sayısı, rebuild süresi ve preview durumunu gösterir.)*
 - [x] Generated geometry disposal ekle.
 - [ ] Opsiyonel static trimesh collision prototipi ekle.
 - [x] Road strip test asset'i ile doğrula. *(2026-07-13: engine testindeki indexed road-strip fixture.)*
-- [ ] Pipe/cable test asset'i ile doğrula.
-- [ ] Closed-loop seam UV ve geometry testini ekle.
+- [x] Pipe/cable test asset'i ile doğrula. *(2026-07-13: +Y-forward pipe fixture ve axis dönüşüm testi.)*
+- [x] Closed-loop seam UV ve geometry testini ekle. *(2026-07-13: kapalı auto-curve üzerinde source uç-ring'leri seam'de birleşir; UV tile-by-distance doğrulanır.)*
 
 ### Kabul kriterleri
 
