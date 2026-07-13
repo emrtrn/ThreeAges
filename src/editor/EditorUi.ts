@@ -3271,6 +3271,7 @@ export class EditorUi {
         const activeId = this.app.getFoliageToolSettings().activeTypeId;
         if (activeId) void this.app.updateFoliageType(activeId, patch);
       },
+      reapply: () => this.app.reapplyFoliage(),
     });
   }
 

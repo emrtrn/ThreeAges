@@ -33,6 +33,8 @@ export interface FoliagePanelOptions {
   createType(name: string, meshAssetId: string): void;
   /** Persists a field edit to the active Foliage Type asset. */
   updateType(patch: Partial<ForgeFoliageTypeDef>): void;
+  /** Re-rolls scale/rotation of existing instances from current type settings. */
+  reapply(): void;
   deselectAll(): void;
   selectInvalid(): void;
   reattachSelected(): void;
@@ -107,6 +109,7 @@ let foliageAdvancedOpen = false;
 function renderTypeDetails(
   type: ForgeFoliageTypeDef | null,
   meshAssets: FoliageAssetOption[],
+  selectionCount: number,
 ): string {
   if (!type) {
     return `
@@ -153,6 +156,9 @@ function renderTypeDetails(
         ${numField("Cull End", "data-foliage-type-num=\"cullEnd\"", type.cullEnd, "1", "0")}
       </details>
       <div class="detail-hint">Scale/rotation changes apply to new paint.</div>
+      <button type="button" class="foliage-reapply" data-foliage-reapply title="Re-roll scale + rotation of existing instances from the current type settings (position kept)">
+        ${selectionCount > 0 ? `Reapply to Selection (${selectionCount})` : "Reapply to Type"}
+      </button>
     </div>`;
 }
 
@@ -304,7 +310,7 @@ function renderHtml(options: FoliagePanelOptions): string {
         <button type="button" data-foliage-add ${availableOptions ? "" : "disabled"}>Add</button>
       </div>
     </div>
-    ${renderTypeDetails(options.activeType, options.staticMeshAssets)}
+    ${renderTypeDetails(options.activeType, options.staticMeshAssets, options.selectionCount)}
     <div class="detail-section">
       <div class="detail-section-title">New Type From Mesh</div>
       <label class="detail-row">
@@ -407,6 +413,10 @@ function bindTypeDetails(options: FoliagePanelOptions): void {
   advanced?.addEventListener("toggle", () => {
     foliageAdvancedOpen = advanced.open;
   });
+
+  body
+    .querySelector<HTMLButtonElement>("[data-foliage-reapply]")
+    ?.addEventListener("click", () => options.reapply());
 
   body.querySelector<HTMLSelectElement>("[data-foliage-type-mesh]")?.addEventListener("change", (event) => {
     const id = (event.target as HTMLSelectElement).value;

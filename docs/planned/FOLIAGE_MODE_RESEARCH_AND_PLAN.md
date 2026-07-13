@@ -485,7 +485,13 @@ Alınacak fikirler:
   yüzeye down-cast edilir, paint core'un slope/height/overlap kabulünü yeniden
   kullanır. Örnek sayısı 20k ile sınırlı — spacing cap'e sığacak şekilde genişler.
   Fill/Single tek-atış: drag'de tekrarlamaz, brush ring gizli.)
-- [ ] Reapply.
+- [x] Reapply. (`SceneApp.reapplyFoliage` + saf `reapplyFoliageInstance` render
+  helper: mevcut instance'ların scale + yaw'unu ve normal-hizalama eğimini tipin
+  GÜNCEL ayarlarından, kaydedilmiş seed'den deterministik yeniden yuvarlar. Seçim
+  varsa ona, yoksa aktif tipin tüm instance'larına uygular. Konum korunur —
+  zOffset değişimi repaint gerektirir (kaydedilmiş position offset'i zaten bake
+  ettiği ve yüzey taban noktası saklanmadığı için). Panelde Type Details altında
+  "Reapply to Type / Reapply to Selection" butonu.)
 - [x] Invalid selection. (`SceneApp.selectInvalidFoliage`: altında zemin yok /
   büyük dikey boşluk / slope-height filtresi geçmiyor.)
 - [x] Deselect all. (`SceneApp.deselectAllFoliage` + Escape.)
@@ -512,10 +518,12 @@ Alınacak fikirler:
 > aracı tamamlandı — panelde "Fill" tool'u, tıklanan target'ın tüm footprint'ini
 > doldurur. 2026-07-13: Type Details editörü tamamlandı — aktif tipin alanları
 > panelden düzenlenip `*.foliagetype.json`'a kaydediliyor (scale/rotation aralıkları
-> ile çeşitlilik artık UI'dan ayarlanabilir); bu Reapply'ı da anlamlı hale getiren
-> önkoşuldu (kod tarafı; kullanıcı editor smoke'u bekliyor). `build:verify` +
-> `verify:imports` yeşil, 821 engine check geçiyor. Kalan: Reapply, cull fade,
-> chunking.
+> ile çeşitlilik artık UI'dan ayarlanabilir); filtreler (zOffset/slope/height/cull)
+> katlanabilir "Advanced" bölümüne alındı. 2026-07-13: Reapply tamamlandı — Type
+> Details editörüyle değiştirilen scale/rotation ayarları mevcut instance'lara
+> deterministik yeniden yuvarlanarak uygulanıyor (seçim veya tüm aktif tip; kod
+> tarafı; kullanıcı editor smoke'u bekliyor). `build:verify` + `verify:imports`
+> yeşil, 823 engine check geçiyor. Kalan: cull fade, chunking.
 
 ### Faz 3 - Landscape Grass / Layer-driven Scatter
 

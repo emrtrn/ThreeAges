@@ -197,6 +197,7 @@ import {
 import {
   FoliageRenderBinding,
   foliageInstanceFromRoll,
+  reapplyFoliageInstance,
   reattachFoliageInstance,
   type FoliageSelectionEntry,
 } from "@engine/render-three/foliage";
@@ -5786,6 +5787,63 @@ export class SceneApp {
     }
     this.foliageDataDirty = true;
     this.refreshFoliageSelectionOverlay();
+    this.emitFoliageChanged();
+  }
+
+  /**
+   * Reapply: re-rolls scale + rotation of existing instances from their type's
+   * CURRENT settings (deterministic per stored seed). Acts on the instance selection
+   * when there is one; otherwise on every instance of the active type. Position is
+   * preserved — Z-offset changes need a repaint (see {@link reapplyFoliageInstance}).
+   */
+  reapplyFoliage(): void {
+    const active = this.foliageActiveType();
+    const useSelection = !this.foliageSelection.isEmpty();
+    if (!useSelection && !active) {
+      this.onStatus?.("Select a Foliage Type (or some instances) to reapply.", "warning");
+      return;
+    }
+    const groupsById = new Map(this.foliageData.groups.map((group) => [group.id, group]));
+    const touched = new Set<string>();
+    let count = 0;
+    if (useSelection) {
+      this.foliageSelection.forEach((groupId, indices) => {
+        const group = groupsById.get(groupId);
+        if (!group) return;
+        const type = this.foliageTypes.get(group.foliageTypeId);
+        if (!type) return;
+        for (const index of indices) {
+          const instance = group.instances[index];
+          if (!instance) continue;
+          group.instances[index] = reapplyFoliageInstance(type, instance);
+          count += 1;
+        }
+        touched.add(groupId);
+      });
+    } else if (active) {
+      for (const group of this.foliageData.groups) {
+        if (group.foliageTypeId !== active.id || group.instances.length === 0) continue;
+        group.instances = group.instances.map((instance) =>
+          reapplyFoliageInstance(active.type, instance),
+        );
+        touched.add(group.id);
+        count += group.instances.length;
+      }
+    }
+    if (count === 0) {
+      this.onStatus?.("No foliage instances to reapply.", "info");
+      return;
+    }
+    for (const groupId of touched) {
+      const group = groupsById.get(groupId);
+      if (group) this.rebuildFoliageGroupObject(group);
+    }
+    this.foliageDataDirty = true;
+    this.refreshFoliageSelectionOverlay();
+    this.onStatus?.(
+      `Reapplied ${count} foliage instance${count === 1 ? "" : "s"}.`,
+      "success",
+    );
     this.emitFoliageChanged();
   }
 

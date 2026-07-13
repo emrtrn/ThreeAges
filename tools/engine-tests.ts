@@ -553,6 +553,7 @@ import {
   foliageInstanceFromRoll,
   foliageInstanceItems,
   reattachFoliageInstance,
+  reapplyFoliageInstance,
   geometryTriangleCount,
 } from "../engine/render-three/foliage";
 import {
@@ -15656,6 +15657,59 @@ check("foliageFillSamplePoints is deterministic for a seed and thins with lower 
   assert.deepEqual(a, b);
   const sparse = foliageFillSamplePoints(area, 1, 0.25, makeFoliageRng(99));
   assert.ok(sparse.length < a.length, "lower density keeps fewer points");
+});
+
+check("reapplyFoliageInstance re-rolls scale/yaw deterministically and keeps position", () => {
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "t",
+    meshAssetId: "m",
+    scaleMin: [1, 1, 1],
+    scaleMax: [3, 3, 3],
+    randomYaw: true,
+    alignToNormal: false,
+  });
+  const instance = {
+    position: [4, 2, -6] as [number, number, number],
+    rotation: [0, 10, 0] as [number, number, number],
+    scale: [1, 1, 1] as [number, number, number],
+    normal: [0, 1, 0] as [number, number, number],
+    seed: 123456,
+  };
+  const a = reapplyFoliageInstance(type, instance);
+  const b = reapplyFoliageInstance(type, instance);
+  // Deterministic for a given seed.
+  assert.deepEqual(a.scale, b.scale);
+  assert.deepEqual(a.rotation, b.rotation);
+  // Position + seed are preserved; scale now lands inside the (new) range.
+  assert.deepEqual(a.position, [4, 2, -6]);
+  assert.equal(a.seed, 123456);
+  for (const s of a.scale) assert.ok(s >= 1 - 1e-9 && s <= 3 + 1e-9, "scale within range");
+  // randomYaw on flat ground with no alignment → pure Y rotation.
+  assert.ok(Math.abs(a.rotation[0]) < 1e-6 && Math.abs(a.rotation[2]) < 1e-6);
+});
+
+check("reapplyFoliageInstance respects randomYaw off and normal alignment", () => {
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "t",
+    meshAssetId: "m",
+    scaleMin: [2, 2, 2],
+    scaleMax: [2, 2, 2],
+    randomYaw: false,
+    alignToNormal: true,
+  });
+  // A tilted surface normal → alignment produces non-zero pitch/roll; fixed scale.
+  const next = reapplyFoliageInstance(type, {
+    position: [0, 0, 0],
+    rotation: [0, 45, 0],
+    scale: [1, 1, 1],
+    normal: [0.5, 0.7, 0],
+  });
+  assert.deepEqual(next.scale, [2, 2, 2]);
+  assert.ok(Math.abs(next.rotation[0]) + Math.abs(next.rotation[2]) > 1e-3, "tilts to the surface normal");
 });
 
 check("geometryTriangleCount reads indexed, non-indexed, and empty geometry", () => {

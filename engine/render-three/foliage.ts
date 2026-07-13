@@ -22,10 +22,27 @@ import type {
   LayoutFoliageInstance,
 } from "@engine/scene/foliage";
 import type { FoliageInstanceRoll } from "@engine/scene/foliagePaint";
+import { makeFoliageRng } from "@engine/scene/foliagePaint";
 import { composeTransformMatrix } from "./transforms";
 import { createInstancedModelGroup, type InstanceRenderItem } from "./models";
 
 const WORLD_UP = new Vector3(0, 1, 0);
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
+}
+
+/**
+ * Deterministic fallback seed for an instance painted before per-instance seeds were
+ * stored — hashes its world position so a Reapply is still reproducible.
+ */
+function stableSeedFromPosition(position: Vec3): number {
+  let hash = 2166136261;
+  for (const component of position) {
+    hash = Math.imul(hash ^ (Math.round(component * 1000) | 0), 16777619);
+  }
+  return hash >>> 0;
+}
 
 /** Triangle count of one geometry (indexed or not); 0 when it has no positions. */
 export function geometryTriangleCount(geometry: BufferGeometry): number {
@@ -121,6 +138,45 @@ export function reattachFoliageInstance(
   } else if (instance.normal) {
     next.normal = [...instance.normal] as Vec3;
   }
+  return next;
+}
+
+/**
+ * Reapply: re-rolls an instance's scale + yaw and re-derives its normal-alignment
+ * tilt from the foliage type's CURRENT settings, deterministically from the stored
+ * per-instance seed. Position is preserved (Z-offset is not re-applied — the stored
+ * position already bakes the original offset and the surface base point isn't kept,
+ * so a repaint is needed to change offset). Mirrors Unreal's Reapply on the
+ * scale/rotation parameters. Lives in the render layer for three's quaternion math.
+ */
+export function reapplyFoliageInstance(
+  type: ForgeFoliageTypeDef,
+  instance: LayoutFoliageInstance,
+): LayoutFoliageInstance {
+  const seed = instance.seed ?? stableSeedFromPosition(instance.position);
+  const rng = makeFoliageRng(seed >>> 0);
+  const scale: Vec3 = [
+    lerp(type.scaleMin[0], type.scaleMax[0], rng()),
+    lerp(type.scaleMin[1], type.scaleMax[1], rng()),
+    lerp(type.scaleMin[2], type.scaleMax[2], rng()),
+  ];
+  const yawDeg = type.randomYaw ? rng() * 360 : 0;
+  const up = type.alignToNormal ? normalOrUp(instance.normal) : WORLD_UP.clone();
+  const align = new Quaternion().setFromUnitVectors(WORLD_UP, up);
+  const yaw = new Quaternion().setFromAxisAngle(WORLD_UP, MathUtils.degToRad(yawDeg));
+  const orientation = align.multiply(yaw);
+  const euler = new Euler().setFromQuaternion(orientation, "XYZ");
+  const next: LayoutFoliageInstance = {
+    position: [...instance.position] as Vec3,
+    rotation: [
+      MathUtils.radToDeg(euler.x),
+      MathUtils.radToDeg(euler.y),
+      MathUtils.radToDeg(euler.z),
+    ] as Vec3,
+    scale,
+  };
+  if (instance.normal) next.normal = [...instance.normal] as Vec3;
+  if (instance.seed !== undefined) next.seed = instance.seed;
   return next;
 }
 
