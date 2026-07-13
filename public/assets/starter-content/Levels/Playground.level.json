@@ -610,10 +610,11 @@
       "scale": 0.4,
       "patrolRoute": {
         "source": "spline",
-        "splineId": "spline-2",
+        "splineId": "spline-1",
         "entry": "nearest",
         "wrapMode": "loop",
         "speed": 2.4,
+        "acceptanceRadius": 0.55,
         "lookAheadDistance": 1.2
       }
     }

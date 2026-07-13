@@ -165,7 +165,9 @@ import {
   generateSplineInstancePlacements,
   generateSplineRigidSegmentPlacements,
   normalizeSplineGenerators,
+  resolveSplineDeformMeshGenerator,
   splineGeneratedInstanceHash,
+  splineDeformMeshWarnings,
   splineRigidSegmentWarnings,
 } from "../engine/scene/splineGenerator";
 import { resolveNavAgentProfile } from "../engine/navigation/navAgentProfile";
@@ -19792,6 +19794,45 @@ check("generic spline rigid segments fit panels, close loops, add optional joint
   assert.ok(splineRigidSegmentWarnings(actor, fixed).some((warning) => warning.includes("Sharp")));
   actor.generators = [fixed];
   assert.deepEqual(validateSplineActor(actor).generators, [fixed]);
+});
+
+check("generic spline deform mesh normalizes axes, saves, and bends generated geometry", () => {
+  const actor = createDefaultSplineActor();
+  actor.id = "road-strip";
+  actor.spline.points[1]!.position = [0, 0, 10];
+  actor.spline.points.forEach((point) => { point.pointType = "linear"; });
+  const [definition] = normalizeSplineGenerators([{
+    id: "road", type: "deformMesh", meshAsset: "road-strip", forwardAxis: "z", upAxis: "y",
+    sampleSteps: 24, uvMode: "tileByDistance", uvTileLength: 2, lateralOffset: 0.5,
+  }]);
+  assert.equal(definition?.type, "deformMesh");
+  if (!definition || definition.type !== "deformMesh") throw new Error("deform generator normalization failed");
+  assert.deepEqual(resolveSplineDeformMeshGenerator({ ...definition, upAxis: "z" }).upAxis, "y");
+  assert.deepEqual(splineDeformMeshWarnings({ ...definition, sampleSteps: 64 }), ["High deform sample count can make interactive rebuilds expensive."]);
+  actor.generators = [definition];
+  assert.deepEqual(validateSplineActor(actor).generators, [definition]);
+
+  const source = new Group();
+  source.add(new Mesh(new BoxGeometry(2, 0.2, 10, 2, 1, 8), new MeshBasicMaterial()));
+  const built = buildSplineInstanceGeneratorGroup({
+    actor,
+    mode: "editor",
+    models: new Map([["road-strip", { scene: source } as unknown as GLTF]]),
+    castShadow: true,
+    receiveShadow: true,
+  });
+  assert.ok(built?.group);
+  assert.equal(built?.instanceCount, 0);
+  assert.ok((built?.triangleCount ?? 0) > 0);
+  let generated: Group | undefined;
+  built?.group?.traverse((child) => {
+    if (child instanceof Group && child.userData.splineGeneratedGeometry) generated = child;
+  });
+  assert.ok(generated);
+  const mesh = generated?.children.find((child) => child instanceof Mesh) as Mesh | undefined;
+  mesh?.geometry.computeBoundingBox();
+  assert.ok((mesh?.geometry.boundingBox?.max.z ?? 0) - (mesh?.geometry.boundingBox?.min.z ?? 0) > 9.9);
+  assert.notEqual(mesh?.geometry, (source.children[0] as Mesh).geometry, "deformed output owns a disposable geometry clone");
 });
 
 check("generic spline debug renderer samples world space, honors visibility, and disposes", () => {

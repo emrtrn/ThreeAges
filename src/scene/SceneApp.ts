@@ -301,11 +301,14 @@ import {
 import {
   createDefaultSplineInstanceGenerator,
   createDefaultSplineRigidSegmentGenerator,
+  createDefaultSplineDeformMeshGenerator,
   generateSplineInstancePlacements,
   generateSplineRigidSegmentPlacements,
   normalizeSplineGenerators,
+  splineDeformMeshWarnings,
   splineRigidSegmentWarnings,
   type ForgeSplineGeneratorDef,
+  type ForgeSplineDeformMeshGeneratorDef,
   type ForgeSplineInstanceGeneratorDef,
   type ForgeSplineRigidSegmentGeneratorDef,
 } from "@engine/scene/splineGenerator";
@@ -334,6 +337,7 @@ import {
   applySceneBackgroundAndAmbient,
   buildLandscapeSplineMeshGroup,
   buildSplineInstanceGeneratorGroup,
+  disposeSplineGeneratedGroup,
   buildSceneCharacterObject,
   buildSceneEntities,
   buildSceneInstancedModel,
@@ -4917,7 +4921,7 @@ export class SceneApp {
       disposeSplineObject(object);
     }
     const [generated] = this.splineGeneratedGroups.splice(index, 1);
-    generated?.removeFromParent();
+    if (generated) disposeSplineGeneratedGroup(generated);
     this.refreshSplineIndices();
     return removed ? cloneSplineActor(removed) : null;
   }
@@ -4978,7 +4982,7 @@ export class SceneApp {
   }
 
   private clearSplineGeneratedGroups(): void {
-    for (const group of this.splineGeneratedGroups) group?.removeFromParent();
+    for (const group of this.splineGeneratedGroups) if (group) disposeSplineGeneratedGroup(group);
     this.splineGeneratedGroups = [];
   }
 
@@ -5000,7 +5004,7 @@ export class SceneApp {
   /** Rebuilds only this spline's generated InstancedMesh preview. Shared GLTF resources stay owned by the model cache. */
   private rebuildSplineGeneratedGroup(index: number): void {
     const previous = this.splineGeneratedGroups[index];
-    if (previous) previous.removeFromParent();
+    if (previous) disposeSplineGeneratedGroup(previous);
     this.splineGeneratedGroups[index] = null;
     const actor = this.layout?.splines?.[index];
     if (!actor) return;
@@ -5143,9 +5147,13 @@ export class SceneApp {
       generatorId: generator.id,
       instanceCount: generator.type === "instances"
         ? generateSplineInstancePlacements(actor, generator).length
-        : generateSplineRigidSegmentPlacements(actor, generator).length,
+        : generator.type === "rigidSegments"
+          ? generateSplineRigidSegmentPlacements(actor, generator).length
+          : 1,
       missingAssetId: generator.meshAsset && !this.models.has(generator.meshAsset) ? generator.meshAsset : null,
-      warnings: generator.type === "rigidSegments" ? splineRigidSegmentWarnings(actor, generator) : [],
+      warnings: generator.type === "rigidSegments"
+        ? splineRigidSegmentWarnings(actor, generator)
+        : generator.type === "deformMesh" ? splineDeformMeshWarnings(generator) : [],
     }));
   }
 
@@ -5165,6 +5173,15 @@ export class SceneApp {
     const after = cloneSplineActor(actor);
     after.generators = [...(after.generators ?? []), createDefaultSplineRigidSegmentGenerator(after.generators ?? [])];
     this.applySelectedSplineGeneratorSnapshot(actor, after, "Add Spline Rigid Segment Generator");
+  }
+
+  addSelectedSplineDeformMeshGenerator(): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    after.generators = [...(after.generators ?? []), createDefaultSplineDeformMeshGenerator(after.generators ?? [])];
+    this.applySelectedSplineGeneratorSnapshot(actor, after, "Add Spline Deform Mesh Generator");
   }
 
   removeSelectedSplineGenerator(generatorId: string): void {
@@ -5203,6 +5220,20 @@ export class SceneApp {
     const next = { ...previous, ...patch, id: previous.id, type: "rigidSegments" as const };
     after.generators[index] = normalizeSplineGenerators([next])[0]!;
     this.applySelectedSplineGeneratorSnapshot(actor, after, "Edit Spline Rigid Segment Generator");
+  }
+
+  setSelectedSplineDeformMeshGenerator(generatorId: string, patch: Partial<ForgeSplineDeformMeshGeneratorDef>): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    const index = after.generators?.findIndex((generator) => generator.id === generatorId) ?? -1;
+    if (index < 0 || !after.generators) return;
+    const previous = after.generators[index];
+    if (!previous || previous.type !== "deformMesh") return;
+    const next = { ...previous, ...patch, id: previous.id, type: "deformMesh" as const };
+    after.generators[index] = normalizeSplineGenerators([next])[0]!;
+    this.applySelectedSplineGeneratorSnapshot(actor, after, "Edit Spline Deform Mesh Generator");
   }
 
   private applySelectedSplineGeneratorSnapshot(before: LayoutSplineActor, after: LayoutSplineActor, label: string): void {

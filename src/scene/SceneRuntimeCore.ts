@@ -73,7 +73,9 @@ import {
   generateSplineRigidSegmentPlacements,
   resolveSplineInstanceGenerator,
   resolveSplineRigidSegmentGenerator,
+  resolveSplineDeformMeshGenerator,
 } from "@engine/scene/splineGenerator";
+import { buildSplineDeformMeshGroup } from "@engine/render-three/splineDeformMesh";
 import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 
@@ -290,9 +292,10 @@ export function buildSplineInstanceGeneratorGroup(options: {
   castShadow: boolean;
   receiveShadow: boolean;
   applyMaterialSlots?: (assetId: string, assetGroup: Group) => void;
-}): { group: Group | null; meshes: InstancedMesh[]; instanceCount: number; missingAssetIds: string[] } | null {
+}): { group: Group | null; meshes: InstancedMesh[]; instanceCount: number; triangleCount: number; missingAssetIds: string[]; warnings: string[] } | null {
   const itemsByAsset = new Map<string, InstanceRenderItem[]>();
   for (const definition of options.actor.generators ?? []) {
+    if (definition.type === "deformMesh") continue;
     const generated = definition.type === "instances" ? (() => {
       const generator = resolveSplineInstanceGenerator(definition);
       if (!generator.enabled || !generator.meshAsset) return [];
@@ -317,14 +320,15 @@ export function buildSplineInstanceGeneratorGroup(options: {
       itemsByAsset.set(instance.assetId, items);
     }
   }
-  if (itemsByAsset.size === 0) return null;
   const group = new Group();
   group.name = `SplineGeneratedInstances:${options.actor.id}`;
   group.userData.splineActorId = options.actor.id;
   group.userData.splineGenerated = true;
   const meshes: InstancedMesh[] = [];
   let instanceCount = 0;
+  let triangleCount = 0;
   const missingAssetIds: string[] = [];
+  const warnings: string[] = [];
   for (const [assetId, items] of itemsByAsset) {
     const gltf = options.models.get(assetId);
     instanceCount += items.length;
@@ -344,7 +348,42 @@ export function buildSplineInstanceGeneratorGroup(options: {
     group.add(built.group);
     meshes.push(...built.meshes);
   }
-  return { group: meshes.length > 0 ? group : null, meshes, instanceCount, missingAssetIds };
+  for (const definition of options.actor.generators ?? []) {
+    if (definition.type !== "deformMesh") continue;
+    const generator = resolveSplineDeformMeshGenerator(definition);
+    if (!generator.enabled || !generator.meshAsset) continue;
+    if (options.mode === "editor" ? !generator.previewEnabled : !generator.runtimeEnabled) continue;
+    const gltf = options.models.get(generator.meshAsset);
+    if (!gltf) {
+      missingAssetIds.push(generator.meshAsset);
+      continue;
+    }
+    const built = buildSplineDeformMeshGroup({
+      actor: options.actor,
+      gltf,
+      definition: generator,
+      castShadow: options.castShadow,
+      receiveShadow: options.receiveShadow,
+    });
+    triangleCount += built.triangleCount;
+    warnings.push(...built.warnings);
+    if (!built.group) continue;
+    built.group.traverse((child) => { child.raycast = () => {}; });
+    options.applyMaterialSlots?.(generator.meshAsset, built.group);
+    group.add(built.group);
+  }
+  return { group: group.children.length > 0 ? group : null, meshes, instanceCount, triangleCount, missingAssetIds, warnings };
+}
+
+/** Releases only geometry/materials created by deformed spline generators. */
+export function disposeSplineGeneratedGroup(group: Group): void {
+  group.traverse((child) => {
+    if (!(child instanceof Mesh) || !child.userData.splineGeneratedGeometry) return;
+    child.geometry.dispose();
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.forEach((material) => material.dispose());
+  });
+  group.removeFromParent();
 }
 
 /**
@@ -890,10 +929,13 @@ export function sceneModelAssetIds(layout: RoomLayout | null): string[] {
       if (generator.type === "instances") {
         const resolved = resolveSplineInstanceGenerator(generator);
         if (resolved.enabled && resolved.meshAsset && !isProceduralAssetId(resolved.meshAsset)) ids.add(resolved.meshAsset);
-      } else {
+      } else if (generator.type === "rigidSegments") {
         const resolved = resolveSplineRigidSegmentGenerator(generator);
         if (resolved.enabled && resolved.meshAsset && !isProceduralAssetId(resolved.meshAsset)) ids.add(resolved.meshAsset);
         if (resolved.enabled && resolved.placePostsAtJoints && resolved.jointMeshAsset && !isProceduralAssetId(resolved.jointMeshAsset)) ids.add(resolved.jointMeshAsset);
+      } else {
+        const resolved = resolveSplineDeformMeshGenerator(generator);
+        if (resolved.enabled && resolved.meshAsset && !isProceduralAssetId(resolved.meshAsset)) ids.add(resolved.meshAsset);
       }
     }
   }

@@ -56,7 +56,29 @@ export interface ForgeSplineRigidSegmentGeneratorDef extends ForgeSplineGenerato
   jointMeshAsset?: string;
 }
 
-export type ForgeSplineGeneratorDef = ForgeSplineInstanceGeneratorDef | ForgeSplineRigidSegmentGeneratorDef;
+/** Signed local mesh axes accepted by the deform-mesh generator. */
+export type SplineMeshAxis = "x" | "y" | "z" | "-x" | "-y" | "-z";
+
+/**
+ * Bends one source mesh continuously along the owning spline. The source mesh
+ * is normalized from its declared forward axis, so an authored road, pipe or
+ * cable can use any conventional local orientation.
+ */
+export interface ForgeSplineDeformMeshGeneratorDef extends ForgeSplineGeneratorBase {
+  type: "deformMesh";
+  meshAsset: string;
+  forwardAxis?: SplineMeshAxis;
+  upAxis?: SplineMeshAxis;
+  sampleSteps?: number;
+  uvMode?: "stretch" | "tileByDistance";
+  uvTileLength?: number;
+  lateralOffset?: number;
+  verticalOffset?: number;
+  /** Cross-section scale (right, up); spline point scale is applied afterwards. */
+  crossSectionScale?: [number, number];
+}
+
+export type ForgeSplineGeneratorDef = ForgeSplineInstanceGeneratorDef | ForgeSplineRigidSegmentGeneratorDef | ForgeSplineDeformMeshGeneratorDef;
 export type ForgeSplineGeneratorType = ForgeSplineGeneratorDef["type"];
 
 /** Extensible registry boundary for subsequent generator types (rigid/deform/custom). */
@@ -116,6 +138,20 @@ export interface ResolvedSplineRigidSegmentGeneratorDef extends Omit<ForgeSpline
   scale: Vec3;
   gap: number;
   placePostsAtJoints: boolean;
+}
+
+export interface ResolvedSplineDeformMeshGeneratorDef extends Omit<ForgeSplineDeformMeshGeneratorDef, "enabled" | "previewEnabled" | "runtimeEnabled" | "forwardAxis" | "upAxis" | "sampleSteps" | "uvMode" | "uvTileLength" | "lateralOffset" | "verticalOffset" | "crossSectionScale"> {
+  enabled: boolean;
+  previewEnabled: boolean;
+  runtimeEnabled: boolean;
+  forwardAxis: SplineMeshAxis;
+  upAxis: SplineMeshAxis;
+  sampleSteps: number;
+  uvMode: "stretch" | "tileByDistance";
+  uvTileLength: number;
+  lateralOffset: number;
+  verticalOffset: number;
+  crossSectionScale: [number, number];
 }
 
 export interface SplineGeneratedInstance {
@@ -208,10 +244,39 @@ export function normalizeSplineRigidSegmentGenerator(
   return output;
 }
 
+export function normalizeSplineDeformMeshGenerator(
+  value: unknown,
+  usedIds: ReadonlySet<string> = new Set(),
+): ForgeSplineDeformMeshGeneratorDef | null {
+  if (!isRecord(value) || value.type !== "deformMesh") return null;
+  const id = uniqueGeneratorId(typeof value.id === "string" ? value.id.trim() : "", usedIds);
+  const output: ForgeSplineDeformMeshGeneratorDef = {
+    id,
+    type: "deformMesh",
+    meshAsset: typeof value.meshAsset === "string" ? value.meshAsset.trim() : "",
+  };
+  for (const key of ["enabled", "previewEnabled", "runtimeEnabled"] as const) {
+    if (typeof value[key] === "boolean") output[key] = value[key];
+  }
+  if (isSplineMeshAxis(value.forwardAxis)) output.forwardAxis = value.forwardAxis;
+  if (isSplineMeshAxis(value.upAxis) && !sameMeshAxis(value.upAxis, output.forwardAxis ?? "z")) output.upAxis = value.upAxis;
+  if (isFiniteNumber(value.sampleSteps)) output.sampleSteps = Math.round(clamp(value.sampleSteps, 2, 128));
+  if (value.uvMode === "stretch" || value.uvMode === "tileByDistance") output.uvMode = value.uvMode;
+  if (isFiniteNumber(value.uvTileLength)) output.uvTileLength = clamp(value.uvTileLength, MIN_SPACING, MAX_OFFSET);
+  for (const key of ["lateralOffset", "verticalOffset"] as const) {
+    if (isFiniteNumber(value[key])) output[key] = clamp(value[key], -MAX_OFFSET, MAX_OFFSET);
+  }
+  if (Array.isArray(value.crossSectionScale) && value.crossSectionScale.length === 2 && value.crossSectionScale.every(isFiniteNumber)) {
+    output.crossSectionScale = [clamp(value.crossSectionScale[0]!, 0.001, 1000), clamp(value.crossSectionScale[1]!, 0.001, 1000)];
+  }
+  return output;
+}
+
 /** Built-in registration is deliberately small; later phases append new handlers here. */
 export const DEFAULT_SPLINE_GENERATOR_REGISTRY = new SplineGeneratorRegistry();
 DEFAULT_SPLINE_GENERATOR_REGISTRY.register({ type: "instances", normalize: normalizeSplineGenerator });
 DEFAULT_SPLINE_GENERATOR_REGISTRY.register({ type: "rigidSegments", normalize: normalizeSplineRigidSegmentGenerator });
+DEFAULT_SPLINE_GENERATOR_REGISTRY.register({ type: "deformMesh", normalize: normalizeSplineDeformMeshGenerator });
 
 export function resolveSplineInstanceGenerator(
   value: ForgeSplineInstanceGeneratorDef,
@@ -279,6 +344,45 @@ export function createDefaultSplineRigidSegmentGenerator(
 ): ForgeSplineRigidSegmentGeneratorDef {
   const ids = new Set(existing.map((generator) => generator.id));
   return { id: uniqueGeneratorId("rigid-segments", ids), type: "rigidSegments", meshAsset: "", segmentLength: 2 };
+}
+
+export function resolveSplineDeformMeshGenerator(
+  value: ForgeSplineDeformMeshGeneratorDef,
+): ResolvedSplineDeformMeshGeneratorDef {
+  const normalized = normalizeSplineDeformMeshGenerator(value);
+  const generator = normalized && normalized.type === "deformMesh" ? normalized : createDefaultSplineDeformMeshGenerator();
+  const forwardAxis = generator.forwardAxis ?? "z";
+  const upAxis = generator.upAxis && !sameMeshAxis(generator.upAxis, forwardAxis) ? generator.upAxis : "y";
+  return {
+    ...generator,
+    enabled: generator.enabled ?? true,
+    previewEnabled: generator.previewEnabled ?? true,
+    runtimeEnabled: generator.runtimeEnabled ?? true,
+    forwardAxis,
+    upAxis,
+    sampleSteps: generator.sampleSteps ?? 16,
+    uvMode: generator.uvMode ?? "stretch",
+    uvTileLength: generator.uvTileLength ?? 1,
+    lateralOffset: generator.lateralOffset ?? 0,
+    verticalOffset: generator.verticalOffset ?? 0,
+    crossSectionScale: generator.crossSectionScale ?? [1, 1],
+  };
+}
+
+export function createDefaultSplineDeformMeshGenerator(
+  existing: readonly ForgeSplineGeneratorDef[] = [],
+): ForgeSplineDeformMeshGeneratorDef {
+  const ids = new Set(existing.map((generator) => generator.id));
+  return { id: uniqueGeneratorId("deform-mesh", ids), type: "deformMesh", meshAsset: "" };
+}
+
+/** Presentation-only warnings; they are safe to show in editor and runtime diagnostics. */
+export function splineDeformMeshWarnings(definition: ForgeSplineDeformMeshGeneratorDef): string[] {
+  const generator = resolveSplineDeformMeshGenerator(definition);
+  const warnings: string[] = [];
+  if (sameMeshAxis(generator.forwardAxis, generator.upAxis)) warnings.push("Forward and up axes must use different dimensions.");
+  if (generator.sampleSteps >= 64) warnings.push("High deform sample count can make interactive rebuilds expensive.");
+  return warnings;
 }
 
 /**
@@ -560,6 +664,14 @@ function positiveNumber(value: unknown, fallback: number): number {
 function positiveVec3(value: unknown): Vec3 | null {
   const vector = finiteVec3(value);
   return vector && vector.every((entry) => entry > 0) ? vector : null;
+}
+
+function isSplineMeshAxis(value: unknown): value is SplineMeshAxis {
+  return value === "x" || value === "y" || value === "z" || value === "-x" || value === "-y" || value === "-z";
+}
+
+function sameMeshAxis(a: SplineMeshAxis, b: SplineMeshAxis): boolean {
+  return a.replace("-", "") === b.replace("-", "");
 }
 
 function finiteVec3(value: unknown): Vec3 | null {

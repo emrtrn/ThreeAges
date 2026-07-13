@@ -128,6 +128,7 @@ import {
   applyEditorMatchedPlayLook,
   buildLandscapeSplineMeshGroup,
   buildSplineInstanceGeneratorGroup,
+  disposeSplineGeneratedGroup,
   buildSceneCharacterObject,
   buildSceneEntities,
   buildSceneInstancedModel,
@@ -1229,7 +1230,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeSplineObject(spline);
     }
     this.splineDebugObjects = [];
-    for (const group of this.splineGeneratedGroups) this.scene.remove(group);
+    for (const group of this.splineGeneratedGroups) disposeSplineGeneratedGroup(group);
     this.splineGeneratedGroups = [];
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);
@@ -2203,7 +2204,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeSplineObject(spline);
     }
     this.splineDebugObjects = [];
-    for (const group of this.splineGeneratedGroups) this.scene.remove(group);
+    for (const group of this.splineGeneratedGroups) disposeSplineGeneratedGroup(group);
     this.splineGeneratedGroups = [];
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);

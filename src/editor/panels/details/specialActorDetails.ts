@@ -1,6 +1,6 @@
 import { assetType, isModelAssetType, type EditableAsset } from "@engine/assets/manifest";
 import type { BrushShape, LayoutLightActor, Vec3 } from "@engine/scene/layout";
-import type { ForgeSplineGeneratorDef, ForgeSplineInstanceGeneratorDef, ForgeSplineRigidSegmentGeneratorDef } from "@engine/scene/splineGenerator";
+import type { ForgeSplineDeformMeshGeneratorDef, ForgeSplineGeneratorDef, ForgeSplineInstanceGeneratorDef, ForgeSplineRigidSegmentGeneratorDef, SplineMeshAxis } from "@engine/scene/splineGenerator";
 import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
 import type {
   EditableAiNavigationVolume,
@@ -82,9 +82,11 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   getSelectedSplineGeneratorDiagnostics: () => Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null; warnings: string[] }>;
   addSelectedSplineInstanceGenerator: () => void;
   addSelectedSplineRigidSegmentGenerator: () => void;
+  addSelectedSplineDeformMeshGenerator: () => void;
   removeSelectedSplineGenerator: (generatorId: string) => void;
   setSelectedSplineInstanceGenerator: (generatorId: string, patch: Partial<ForgeSplineInstanceGeneratorDef>) => void;
   setSelectedSplineRigidSegmentGenerator: (generatorId: string, patch: Partial<ForgeSplineRigidSegmentGeneratorDef>) => void;
+  setSelectedSplineDeformMeshGenerator: (generatorId: string, patch: Partial<ForgeSplineDeformMeshGeneratorDef>) => void;
   getSelectedSplinePoints: () => Array<{ id: string; position: Vec3; pointType: "linear" | "curveAuto" | "curveCustom"; tangentsLinked: boolean }>;
   getActiveSplinePointId: () => string | null;
   selectSplinePoint: (pointId: string | null) => void;
@@ -1291,6 +1293,27 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
           <div class="detail-button-row"><button type="button" data-spline-generator-remove="${escapeHtml(generator.id)}" ${locked}>Remove Generator</button></div>
         </div>`;
       }
+      if (generator.type === "deformMesh") {
+        const axes: SplineMeshAxis[] = ["x", "y", "z", "-x", "-y", "-z"];
+        const axisOptions = (selected: SplineMeshAxis | undefined) => axes.map((axis) => `<option value="${axis}" ${axis === selected ? "selected" : ""}>${axis.toUpperCase()}</option>`).join("");
+        return `<div class="detail-subsection spline-generator" data-spline-generator-card="${escapeHtml(generator.id)}">
+          <div class="detail-subsection-title">Deformed Mesh · ${escapeHtml(generator.id)}</div>
+          <div class="detail-readonly">${diagnostic?.instanceCount ?? 0} continuous mesh${diagnostic?.missingAssetId ? ` · Missing mesh: ${escapeHtml(diagnostic.missingAssetId)}` : ""}</div>
+          ${warningMarkup}
+          <label class="detail-row"><span>Mesh</span><select data-spline-deform-mesh="${escapeHtml(generator.id)}" ${locked}><option value="">Choose mesh…</option>${meshOptions.replace(`value="${escapeHtml(generator.meshAsset)}"`, `value="${escapeHtml(generator.meshAsset)}" selected`)}</select></label>
+          <label class="detail-row"><span>Forward Axis</span><select data-spline-deform-axis="forwardAxis" data-spline-generator-id="${escapeHtml(generator.id)}" ${locked}>${axisOptions(generator.forwardAxis ?? "z")}</select></label>
+          <label class="detail-row"><span>Up Axis</span><select data-spline-deform-axis="upAxis" data-spline-generator-id="${escapeHtml(generator.id)}" ${locked}>${axisOptions(generator.upAxis ?? "y")}</select></label>
+          <label class="detail-row"><span>Sample Steps</span><input type="number" min="2" max="128" step="1" data-spline-deform-number="sampleSteps" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.sampleSteps ?? 16}" ${locked}></label>
+          <label class="detail-row"><span>UV Mode</span><select data-spline-deform-uv="${escapeHtml(generator.id)}" ${locked}><option value="stretch" ${(generator.uvMode ?? "stretch") === "stretch" ? "selected" : ""}>Stretch</option><option value="tileByDistance" ${generator.uvMode === "tileByDistance" ? "selected" : ""}>Tile by distance</option></select></label>
+          <label class="detail-row"><span>UV Tile Length</span><input type="number" min="0.01" step="0.1" data-spline-deform-number="uvTileLength" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.uvTileLength ?? 1}" ${locked}></label>
+          <label class="detail-row"><span>Lateral Offset</span><input type="number" step="0.1" data-spline-deform-number="lateralOffset" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.lateralOffset ?? 0}" ${locked}></label>
+          <label class="detail-row"><span>Vertical Offset</span><input type="number" step="0.1" data-spline-deform-number="verticalOffset" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.verticalOffset ?? 0}" ${locked}></label>
+          <label class="detail-row"><span>Enabled</span><input type="checkbox" data-spline-deform-flag="enabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.enabled !== false ? "checked" : ""} ${locked}></label>
+          <label class="detail-row"><span>Editor Preview</span><input type="checkbox" data-spline-deform-flag="previewEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.previewEnabled !== false ? "checked" : ""} ${locked}></label>
+          <label class="detail-row"><span>Runtime Enabled</span><input type="checkbox" data-spline-deform-flag="runtimeEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.runtimeEnabled !== false ? "checked" : ""} ${locked}></label>
+          <div class="detail-button-row"><button type="button" data-spline-generator-remove="${escapeHtml(generator.id)}" ${locked}>Remove Generator</button></div>
+        </div>`;
+      }
       const random = generator.random ?? {};
       return `<div class="detail-subsection spline-generator" data-spline-generator-card="${escapeHtml(generator.id)}">
         <div class="detail-subsection-title">Instances · ${escapeHtml(generator.id)}</div>
@@ -1333,7 +1356,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
       </div>
       <div class="spline-details__section"><div class="spline-details__section-heading"><span>Generators</span><small>Procedural content along this path</small></div>
       ${generatorMarkup}
-      <div class="spline-generator-actions"><button type="button" class="spline-action-primary" data-spline-generator-add ${locked}>+ Instance generator</button><button type="button" data-spline-rigid-generator-add ${locked}>+ Rigid segments</button></div>
+      <div class="spline-generator-actions"><button type="button" class="spline-action-primary" data-spline-generator-add ${locked}>+ Instance generator</button><button type="button" data-spline-rigid-generator-add ${locked}>+ Rigid segments</button><button type="button" data-spline-deform-generator-add ${locked}>+ Deformed mesh</button></div>
       </div>
       <div class="spline-details__section"><div class="spline-details__section-heading"><span>Control points</span><small>Select, shape and split the path</small></div>
       <div class="spline-point-toolbar"><div class="spline-point-list">${pointButtons}</div><button type="button" class="spline-action-primary spline-icon-button" data-spline-point-add aria-label="Add control point" title="Add control point" ${locked}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button></div>
@@ -1348,6 +1371,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
   });
   body.querySelector<HTMLButtonElement>("[data-spline-generator-add]")?.addEventListener("click", () => options.addSelectedSplineInstanceGenerator());
   body.querySelector<HTMLButtonElement>("[data-spline-rigid-generator-add]")?.addEventListener("click", () => options.addSelectedSplineRigidSegmentGenerator());
+  body.querySelector<HTMLButtonElement>("[data-spline-deform-generator-add]")?.addEventListener("click", () => options.addSelectedSplineDeformMeshGenerator());
   body.querySelectorAll<HTMLButtonElement>("[data-spline-generator-remove]").forEach((button) => button.addEventListener("click", () => options.removeSelectedSplineGenerator(button.dataset.splineGeneratorRemove ?? "")));
   body.querySelectorAll<HTMLSelectElement>("[data-spline-generator-mesh]").forEach((input) => input.addEventListener("change", () => {
     options.setSelectedSplineInstanceGenerator(input.dataset.splineGeneratorMesh ?? "", { meshAsset: input.value });
@@ -1373,6 +1397,25 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     const key = input.dataset.splineGeneratorRandom;
     if (!Number.isFinite(value) || (key !== "scaleMin" && key !== "scaleMax")) return;
     options.setSelectedSplineInstanceGenerator(id, { random: { [key]: value } });
+  }));
+  body.querySelectorAll<HTMLSelectElement>("[data-spline-deform-mesh]").forEach((input) => input.addEventListener("change", () => options.setSelectedSplineDeformMeshGenerator(input.dataset.splineDeformMesh ?? "", { meshAsset: input.value })));
+  body.querySelectorAll<HTMLSelectElement>("[data-spline-deform-axis]").forEach((input) => input.addEventListener("change", () => {
+    const key = input.dataset.splineDeformAxis;
+    const value = input.value as SplineMeshAxis;
+    if (key === "forwardAxis" || key === "upAxis") options.setSelectedSplineDeformMeshGenerator(input.dataset.splineGeneratorId ?? "", { [key]: value } as Partial<ForgeSplineDeformMeshGeneratorDef>);
+  }));
+  body.querySelectorAll<HTMLSelectElement>("[data-spline-deform-uv]").forEach((input) => input.addEventListener("change", () => {
+    if (input.value === "stretch" || input.value === "tileByDistance") options.setSelectedSplineDeformMeshGenerator(input.dataset.splineDeformUv ?? "", { uvMode: input.value });
+  }));
+  body.querySelectorAll<HTMLInputElement>("[data-spline-deform-number]").forEach((input) => input.addEventListener("change", () => {
+    const key = input.dataset.splineDeformNumber;
+    const value = Number(input.value);
+    if (!Number.isFinite(value) || !key) return;
+    if (key === "sampleSteps" || key === "uvTileLength" || key === "lateralOffset" || key === "verticalOffset") options.setSelectedSplineDeformMeshGenerator(input.dataset.splineGeneratorId ?? "", { [key]: value } as Partial<ForgeSplineDeformMeshGeneratorDef>);
+  }));
+  body.querySelectorAll<HTMLInputElement>("[data-spline-deform-flag]").forEach((input) => input.addEventListener("change", () => {
+    const key = input.dataset.splineDeformFlag;
+    if (key === "enabled" || key === "previewEnabled" || key === "runtimeEnabled") options.setSelectedSplineDeformMeshGenerator(input.dataset.splineGeneratorId ?? "", { [key]: input.checked } as Partial<ForgeSplineDeformMeshGeneratorDef>);
   }));
   body.querySelectorAll<HTMLSelectElement>("[data-spline-rigid-mesh]").forEach((input) => input.addEventListener("change", () => {
     options.setSelectedSplineRigidSegmentGenerator(input.dataset.splineRigidMesh ?? "", { meshAsset: input.value });

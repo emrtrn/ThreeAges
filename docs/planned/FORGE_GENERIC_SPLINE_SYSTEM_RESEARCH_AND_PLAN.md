@@ -1919,28 +1919,28 @@ Yol, boru, kablo ve şerit meshlerini spline segmentlerine göre bükmek.
 
 ### Kontrol listesi
 
-- [ ] `deformMesh` schema ekle.
-- [ ] Source mesh preprocessing cache ekle.
-- [ ] Forward axis seçimini ekle.
-- [ ] Up axis seçimini ekle.
+- [x] `deformMesh` schema ekle. *(2026-07-13: `ForgeSplineDeformMeshGeneratorDef`, normalize/resolve ve save allowlist zinciri.)*
+- [x] Source mesh preprocessing cache ekle. *(2026-07-13: GLTF başına geometry template `WeakMap` cache.)*
+- [x] Forward axis seçimini ekle.
+- [x] Up axis seçimini ekle.
 - [ ] Segment bazlı geometry generation ekle.
-- [ ] Source forward coordinate normalization ekle.
-- [ ] Spline frame üzerinden vertex deformation ekle.
-- [ ] Roll ve scale uygulamasını ekle.
-- [ ] Lateral/vertical offset ekle.
-- [ ] Index buffer üretimini doğrula.
-- [ ] Normal transformation veya recompute ekle.
-- [ ] UV stretch mode ekle.
-- [ ] UV tile-by-distance mode ekle.
-- [ ] Sample steps ayarını ekle.
+- [x] Source forward coordinate normalization ekle.
+- [x] Spline frame üzerinden vertex deformation ekle.
+- [x] Roll ve scale uygulamasını ekle.
+- [x] Lateral/vertical offset ekle.
+- [x] Index buffer üretimini doğrula. *(2026-07-13: source index buffer clone ile korunuyor.)*
+- [x] Normal transformation veya recompute ekle. *(2026-07-13: generated geometry normal'leri yeniden hesaplanıyor.)*
+- [x] UV stretch mode ekle.
+- [x] UV tile-by-distance mode ekle.
+- [x] Sample steps ayarını ekle.
 - [ ] Dirty segment rebuild ekle.
 - [ ] Drag sırasında düşük kalite preview ekle.
 - [ ] Commit sonrası full-quality rebuild ekle.
 - [ ] Missing/invalid mesh axis warning ekle.
 - [ ] Generated triangle diagnostic ekle.
-- [ ] Generated geometry disposal ekle.
+- [x] Generated geometry disposal ekle.
 - [ ] Opsiyonel static trimesh collision prototipi ekle.
-- [ ] Road strip test asset'i ile doğrula.
+- [x] Road strip test asset'i ile doğrula. *(2026-07-13: engine testindeki indexed road-strip fixture.)*
 - [ ] Pipe/cable test asset'i ile doğrula.
 - [ ] Closed-loop seam UV ve geometry testini ekle.
 
