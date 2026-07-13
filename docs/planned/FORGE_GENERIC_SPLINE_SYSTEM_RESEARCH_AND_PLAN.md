@@ -1843,28 +1843,28 @@ asset'leri davranışını değiştirmemelidir.
 
 ### Kontrol listesi
 
-- [ ] Generator base type ve registry ekle.
-- [ ] `instances` generator schema ekle.
-- [ ] Mesh asset picker ekle.
-- [ ] Distance spacing ekle.
-- [ ] Start/end offset ekle.
-- [ ] Align-to-spline ekle.
-- [ ] Lateral ve vertical offset ekle.
-- [ ] Rotation offset ekle.
-- [ ] Static scale ekle.
-- [ ] Seeded position/rotation/scale jitter ekle.
-- [ ] Closed-loop duplicate önleme ekle.
-- [ ] Control-point placement mode ekle.
-- [ ] Instanced render yolunu kullan.
-- [ ] Source mesh missing handling ekle.
-- [ ] Generator enable/disable ekle.
-- [ ] Editor preview toggle ekle.
-- [ ] Runtime enabled toggle ekle.
-- [ ] Instance count diagnostic ekle.
-- [ ] Point drag preview debounce ekle.
-- [ ] Save/Reload testini ekle.
-- [ ] Deterministic transform hash testi ekle.
-- [ ] Resource disposal testini ekle.
+- [x] Generator base type ve registry ekle.
+- [x] `instances` generator schema ekle.
+- [x] Mesh asset picker ekle.
+- [x] Distance spacing ekle.
+- [x] Start/end offset ekle.
+- [x] Align-to-spline ekle.
+- [x] Lateral ve vertical offset ekle.
+- [x] Rotation offset ekle.
+- [x] Static scale ekle.
+- [x] Seeded position/rotation/scale jitter ekle.
+- [x] Closed-loop duplicate önleme ekle.
+- [x] Control-point placement mode ekle.
+- [x] Instanced render yolunu kullan.
+- [x] Source mesh missing handling ekle.
+- [x] Generator enable/disable ekle.
+- [x] Editor preview toggle ekle.
+- [x] Runtime enabled toggle ekle.
+- [x] Instance count diagnostic ekle.
+- [x] Point drag preview debounce ekle.
+- [x] Save/Reload testini ekle.
+- [x] Deterministic transform hash testi ekle.
+- [x] Resource disposal testini ekle.
 
 ### Kabul kriterleri
 

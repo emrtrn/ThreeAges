@@ -4102,6 +4102,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         },
       });
       if (!built) continue;
+      if (built.missingAssetIds.length > 0) {
+        console.warn("[runtime] spline generator mesh asset missing; skipping:", built.missingAssetIds);
+      }
+      if (!built.group) continue;
       this.splineGeneratedGroups.push(built.group);
       this.scene.add(built.group);
     }

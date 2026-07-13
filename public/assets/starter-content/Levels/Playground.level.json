@@ -592,7 +592,8 @@
         -150,
         0
       ],
-      "scale": 1
+      "scale": 1,
+      "generators": []
     }
   ],
   "landscapes": [],

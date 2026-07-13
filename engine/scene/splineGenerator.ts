@@ -39,6 +39,30 @@ export interface ForgeSplineInstanceGeneratorDef extends ForgeSplineGeneratorBas
 }
 
 export type ForgeSplineGeneratorDef = ForgeSplineInstanceGeneratorDef;
+export type ForgeSplineGeneratorType = ForgeSplineGeneratorDef["type"];
+
+/** Extensible registry boundary for subsequent generator types (rigid/deform/custom). */
+export interface ForgeSplineGeneratorHandler {
+  type: ForgeSplineGeneratorType;
+  normalize: (value: unknown, usedIds: ReadonlySet<string>) => ForgeSplineGeneratorDef | null;
+}
+
+export class SplineGeneratorRegistry {
+  private readonly handlers = new Map<ForgeSplineGeneratorType, ForgeSplineGeneratorHandler>();
+
+  register(handler: ForgeSplineGeneratorHandler): void {
+    this.handlers.set(handler.type, handler);
+  }
+
+  types(): ForgeSplineGeneratorType[] {
+    return [...this.handlers.keys()];
+  }
+
+  normalize(value: unknown, usedIds: ReadonlySet<string> = new Set()): ForgeSplineGeneratorDef | null {
+    if (!isRecord(value) || typeof value.type !== "string") return null;
+    return this.handlers.get(value.type as ForgeSplineGeneratorType)?.normalize(value, usedIds) ?? null;
+  }
+}
 export interface ResolvedSplineInstanceGeneratorDef extends Omit<ForgeSplineInstanceGeneratorDef, "random" | "rotationOffset" | "scale" | "startOffset" | "endOffset" | "enabled" | "previewEnabled" | "runtimeEnabled" | "alignToSpline" | "applyPitch" | "applyRoll" | "lateralOffset" | "verticalOffset" | "seed" | "placementMode" | "includeEndPoint" | "collision"> {
   enabled: boolean;
   previewEnabled: boolean;
@@ -84,7 +108,7 @@ export function normalizeSplineGenerators(value: unknown): ForgeSplineGeneratorD
   const used = new Set<string>();
   const result: ForgeSplineGeneratorDef[] = [];
   for (const raw of value) {
-    const generator = normalizeSplineGenerator(raw, used);
+    const generator = DEFAULT_SPLINE_GENERATOR_REGISTRY.normalize(raw, used);
     if (!generator) continue;
     used.add(generator.id);
     result.push(generator);
@@ -128,6 +152,10 @@ export function normalizeSplineGenerator(
   }
   return output;
 }
+
+/** Built-in registration is deliberately small; later phases append new handlers here. */
+export const DEFAULT_SPLINE_GENERATOR_REGISTRY = new SplineGeneratorRegistry();
+DEFAULT_SPLINE_GENERATOR_REGISTRY.register({ type: "instances", normalize: normalizeSplineGenerator });
 
 export function resolveSplineInstanceGenerator(
   value: ForgeSplineInstanceGeneratorDef,

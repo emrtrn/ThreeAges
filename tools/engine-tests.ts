@@ -13,7 +13,10 @@ import { NodeIO } from "@gltf-transform/core";
 import { KHRMaterialsSpecular } from "@gltf-transform/extensions";
 import {
   BackSide,
+  BoxGeometry,
   DoubleSide,
+  Group,
+  Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
   NoColorSpace,
@@ -482,6 +485,7 @@ import { pivotCorrectedPosition } from "../editor/render-three/transformMatrices
 import {
   applySceneBackgroundAndAmbient,
   buildLandscapeSplineMeshGroup,
+  buildSplineInstanceGeneratorGroup,
   computeSceneRoomBounds,
   DEFAULT_SCENE_AMBIENT_COLOR,
   DEFAULT_SCENE_AMBIENT_INTENSITY,
@@ -1133,6 +1137,39 @@ check("sceneModelAssetIds includes authored assets and excludes procedural shape
     "fence-post",
     "floor-full",
   ]);
+});
+
+check("spline instance generator uses shared InstancedMesh resources and reports missing source meshes", () => {
+  const actor = createDefaultSplineActor();
+  actor.spline.points[1]!.position = [4, 0, 0];
+  actor.generators = [{ id: "posts", type: "instances", meshAsset: "post", spacing: 2, includeEndPoint: true }];
+  const source = new Group();
+  const sourceMesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+  source.add(sourceMesh);
+  const gltf = { scene: source } as unknown as GLTF;
+  const built = buildSplineInstanceGeneratorGroup({
+    actor,
+    mode: "editor",
+    models: new Map([["post", gltf]]),
+    castShadow: true,
+    receiveShadow: true,
+  });
+  assert.ok(built?.group);
+  assert.equal(built?.instanceCount, 3);
+  assert.equal(built?.meshes.length, 1);
+  assert.equal(built?.meshes[0]?.geometry, sourceMesh.geometry, "generated groups reuse cached source geometry");
+  built?.group?.removeFromParent();
+  assert.equal(sourceMesh.geometry.getAttribute("position")?.count, 24, "detaching generated output never disposes source geometry");
+
+  const missing = buildSplineInstanceGeneratorGroup({
+    actor,
+    mode: "runtime",
+    models: new Map(),
+    castShadow: true,
+    receiveShadow: true,
+  });
+  assert.equal(missing?.group, null);
+  assert.deepEqual(missing?.missingAssetIds, ["post"]);
 });
 
 check("scene runtime room bounds unions placements and honors asset filters", () => {

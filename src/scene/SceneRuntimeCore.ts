@@ -288,7 +288,7 @@ export function buildSplineInstanceGeneratorGroup(options: {
   castShadow: boolean;
   receiveShadow: boolean;
   applyMaterialSlots?: (assetId: string, assetGroup: Group) => void;
-}): { group: Group; meshes: InstancedMesh[]; instanceCount: number } | null {
+}): { group: Group | null; meshes: InstancedMesh[]; instanceCount: number; missingAssetIds: string[] } | null {
   const itemsByAsset = new Map<string, InstanceRenderItem[]>();
   for (const definition of options.actor.generators ?? []) {
     const generator = resolveSplineInstanceGenerator(definition);
@@ -314,9 +314,14 @@ export function buildSplineInstanceGeneratorGroup(options: {
   group.userData.splineGenerated = true;
   const meshes: InstancedMesh[] = [];
   let instanceCount = 0;
+  const missingAssetIds: string[] = [];
   for (const [assetId, items] of itemsByAsset) {
     const gltf = options.models.get(assetId);
-    if (!gltf) continue;
+    instanceCount += items.length;
+    if (!gltf) {
+      missingAssetIds.push(assetId);
+      continue;
+    }
     const built = createInstancedModelGroup({
       assetId,
       gltf,
@@ -328,9 +333,8 @@ export function buildSplineInstanceGeneratorGroup(options: {
     options.applyMaterialSlots?.(assetId, built.group);
     group.add(built.group);
     meshes.push(...built.meshes);
-    instanceCount += items.length;
   }
-  return meshes.length > 0 ? { group, meshes, instanceCount } : null;
+  return { group: meshes.length > 0 ? group : null, meshes, instanceCount, missingAssetIds };
 }
 
 /**

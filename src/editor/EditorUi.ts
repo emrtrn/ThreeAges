@@ -3437,6 +3437,7 @@ export class EditorUi {
       setSelectedTargetPoint: (patch) => this.app.setSelectedTargetPoint(patch),
       setSelectedSpline: (patch) => this.app.setSelectedSpline(patch),
       getSelectedSplineGenerators: () => this.app.getSelectedSplineGenerators(),
+      getSelectedSplineGeneratorDiagnostics: () => this.app.getSelectedSplineGeneratorDiagnostics(),
       addSelectedSplineInstanceGenerator: () => this.app.addSelectedSplineInstanceGenerator(),
       removeSelectedSplineGenerator: (generatorId) => this.app.removeSelectedSplineGenerator(generatorId),
       setSelectedSplineInstanceGenerator: (generatorId, patch) =>

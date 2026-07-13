@@ -300,6 +300,7 @@ import {
 } from "@engine/scene/spline";
 import {
   createDefaultSplineInstanceGenerator,
+  generateSplineInstancePlacements,
   normalizeSplineGenerators,
   type ForgeSplineInstanceGeneratorDef,
 } from "@engine/scene/splineGenerator";
@@ -1011,6 +1012,8 @@ export class SceneApp {
   private splineObjects: SplineObject[] = [];
   /** Non-pickable InstancedMesh outputs owned by generic spline generators, by index. */
   private splineGeneratedGroups: (Group | null)[] = [];
+  /** Coalesces high-frequency control-point drags into one generated-preview rebuild. */
+  private splineGeneratorPreviewTimers = new Map<number, ReturnType<typeof setTimeout>>();
   /** Contextual, editor-only point markers for the currently selected generic spline. */
   private splinePointOverlay: Group | null = null;
   private activeSplinePointId: string | null = null;
@@ -1428,6 +1431,7 @@ export class SceneApp {
     }
     this.splineObjects = [];
     this.clearSplineGeneratedGroups();
+    this.clearSplineGeneratorPreviewTimers();
     this.clearSplinePointOverlay();
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
@@ -4878,6 +4882,7 @@ export class SceneApp {
 
   private insertSpline(index: number, actor: LayoutSplineActor): void {
     if (!this.layout) return;
+    this.clearSplineGeneratorPreviewTimers();
     this.layout.splines ??= [];
     const insertionIndex = clampIndex(index, this.layout.splines.length);
     const snapshot = cloneSplineActor(actor);
@@ -4899,6 +4904,7 @@ export class SceneApp {
 
   private removeSplineAt(index: number): LayoutSplineActor | null {
     if (!this.layout?.splines) return null;
+    this.clearSplineGeneratorPreviewTimers();
     const [removed] = this.layout.splines.splice(index, 1);
     const [object] = this.splineObjects.splice(index, 1);
     if (object) {
@@ -4962,13 +4968,28 @@ export class SceneApp {
     const actor = this.layout?.splines?.[index];
     const object = this.splineObjects[index];
     if (actor && object) updateSplineObject(object, actor);
-    this.rebuildSplineGeneratedGroup(index);
+    this.scheduleSplineGeneratedPreviewRebuild(index);
     this.refreshSplinePointOverlay();
   }
 
   private clearSplineGeneratedGroups(): void {
     for (const group of this.splineGeneratedGroups) group?.removeFromParent();
     this.splineGeneratedGroups = [];
+  }
+
+  private clearSplineGeneratorPreviewTimers(): void {
+    for (const timer of this.splineGeneratorPreviewTimers.values()) clearTimeout(timer);
+    this.splineGeneratorPreviewTimers.clear();
+  }
+
+  /** Keep line/point feedback immediate while avoiding InstancedMesh rebuilds on every drag event. */
+  private scheduleSplineGeneratedPreviewRebuild(index: number): void {
+    const previous = this.splineGeneratorPreviewTimers.get(index);
+    if (previous) clearTimeout(previous);
+    this.splineGeneratorPreviewTimers.set(index, setTimeout(() => {
+      this.splineGeneratorPreviewTimers.delete(index);
+      this.rebuildSplineGeneratedGroup(index);
+    }, 80));
   }
 
   /** Rebuilds only this spline's generated InstancedMesh preview. Shared GLTF resources stay owned by the model cache. */
@@ -4990,6 +5011,10 @@ export class SceneApp {
       },
     });
     if (!built) return;
+    if (built.missingAssetIds.length > 0) {
+      this.onStatus?.(`Spline generator mesh missing: ${built.missingAssetIds.join(", ")}`, "warning");
+    }
+    if (!built.group) return;
     built.group.userData.splineIndex = index;
     this.scene.add(built.group);
     this.splineGeneratedGroups[index] = built.group;
@@ -5103,6 +5128,17 @@ export class SceneApp {
   getSelectedSplineGenerators(): ForgeSplineInstanceGeneratorDef[] {
     if (this.selection?.kind !== "spline") return [];
     return normalizeSplineGenerators(this.layout?.splines?.[this.selection.index]?.generators);
+  }
+
+  getSelectedSplineGeneratorDiagnostics(): Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null }> {
+    if (this.selection?.kind !== "spline") return [];
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor) return [];
+    return normalizeSplineGenerators(actor.generators).map((generator) => ({
+      generatorId: generator.id,
+      instanceCount: generateSplineInstancePlacements(actor, generator).length,
+      missingAssetId: generator.meshAsset && !this.models.has(generator.meshAsset) ? generator.meshAsset : null,
+    }));
   }
 
   addSelectedSplineInstanceGenerator(): void {

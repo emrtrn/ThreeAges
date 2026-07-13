@@ -79,6 +79,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   }) => void;
   setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number; showPointIds?: boolean }) => void;
   getSelectedSplineGenerators: () => ForgeSplineInstanceGeneratorDef[];
+  getSelectedSplineGeneratorDiagnostics: () => Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null }>;
   addSelectedSplineInstanceGenerator: () => void;
   removeSelectedSplineGenerator: (generatorId: string) => void;
   setSelectedSplineInstanceGenerator: (generatorId: string, patch: Partial<ForgeSplineInstanceGeneratorDef>) => void;
@@ -1262,12 +1263,15 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     .map((asset) => `<option value="${escapeHtml(asset.id)}">${escapeHtml(asset.displayName ?? asset.name)}</option>`)
     .join("");
   const generators = options.getSelectedSplineGenerators();
+  const generatorDiagnostics = new Map(options.getSelectedSplineGeneratorDiagnostics().map((entry) => [entry.generatorId, entry]));
   const generatorMarkup = generators.length === 0
     ? "<div class=\"detail-readonly\">No instance generators yet.</div>"
     : generators.map((generator) => {
       const random = generator.random ?? {};
+      const diagnostic = generatorDiagnostics.get(generator.id);
       return `<div class="detail-subsection spline-generator" data-spline-generator-card="${escapeHtml(generator.id)}">
         <div class="detail-subsection-title">Instances · ${escapeHtml(generator.id)}</div>
+        <div class="detail-readonly">${diagnostic?.instanceCount ?? 0} generated instances${diagnostic?.missingAssetId ? ` · Missing mesh: ${escapeHtml(diagnostic.missingAssetId)}` : ""}</div>
         <label class="detail-row"><span>Mesh</span><select data-spline-generator-mesh="${escapeHtml(generator.id)}" ${locked}><option value="">Choose mesh…</option>${meshOptions.replace(`value="${escapeHtml(generator.meshAsset)}"`, `value="${escapeHtml(generator.meshAsset)}" selected`)}</select></label>
         <label class="detail-row"><span>Enabled</span><input type="checkbox" data-spline-generator-flag="enabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.enabled !== false ? "checked" : ""} ${locked}></label>
         <label class="detail-row"><span>Editor Preview</span><input type="checkbox" data-spline-generator-flag="previewEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.previewEnabled !== false ? "checked" : ""} ${locked}></label>
