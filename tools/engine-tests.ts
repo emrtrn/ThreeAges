@@ -525,6 +525,7 @@ import {
   validateBlockingVolume,
   validateAiNavigationVolume,
   validateTargetPoint,
+  validateSplineActor,
   validateLandscape,
   validateLandscapeData,
   validateSaveLandscapePayload,
@@ -716,6 +717,18 @@ import {
   uniqueTargetPointId,
   uniqueTargetPointName,
 } from "../engine/render-three/targetPoint";
+import {
+  createSplineObject,
+  disposeSplineObject,
+  splineDebugWorldPolyline,
+} from "../engine/render-three/spline";
+import {
+  createDefaultSplineActor,
+  resolveSplineActorDebug,
+  uniqueSplineActorId,
+  uniqueSplineActorName,
+} from "../engine/scene/splineActor";
+import { createSplineRegistry } from "../engine/scene/splineRegistry";
 import {
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -19538,6 +19551,79 @@ check("generic spline closed-loop seam interpolates roll through its final segme
   });
   const seam = cache.segments[2]!;
   assert.equal(getSplineFrameAtDistance(cache, seam.startDistance + seam.length / 2).roll, 45);
+});
+
+// --- Generic Spline Actor persistence + debug renderer (Faz 4) -------------
+
+check("generic spline actor defaults and unique helpers create a normalized two-point actor", () => {
+  const first = createDefaultSplineActor();
+  const actors = [first];
+  const second = createDefaultSplineActor(actors);
+  assert.equal(first.id, "spline-1");
+  assert.equal(second.id, "spline-2");
+  assert.equal(first.spline.points.length, 2);
+  assert.equal(uniqueSplineActorId(actors), "spline-2");
+  assert.equal(uniqueSplineActorName("Spline", actors), "Spline 2");
+  assert.deepEqual(resolveSplineActorDebug(first), { visible: true, color: "#4fd1ff", resolution: 16 });
+});
+
+check("generic spline actor save allowlist round-trips all authored component fields", () => {
+  const actor = validateSplineActor({
+    id: "spline-1", name: "Rail", position: [1.2345, 2, 3], rotation: [0, 45, 0], scale: [2, 1, 3], locked: true,
+    spline: {
+      schema: 1, closed: false, defaultUp: [0, 1, 0], reparamStepsPerSegment: 12,
+      points: [
+        { id: "a", position: [0, 0, 0], pointType: "curveCustom", leaveTangent: [1, 0, 0], roll: 5, scale: [1, 2], metadata: { lane: 2 } },
+        { id: "b", position: [4, 0, 0], pointType: "linear", arriveTangent: [-1, 0, 0], tangentsLinked: false },
+      ],
+    },
+    debug: { visible: true, color: "#ff00aa", resolution: 99, ignored: "dropped" },
+    runtimeState: "dropped",
+  });
+  assert.equal(actor.id, "spline-1");
+  assert.deepEqual(actor.position, [1.234, 2, 3]);
+  assert.deepEqual((actor.spline as { points: unknown[] }).points, [
+    { id: "a", position: [0, 0, 0], pointType: "curveCustom", leaveTangent: [1, 0, 0], roll: 5, scale: [1, 2], metadata: { lane: 2 } },
+    { id: "b", position: [4, 0, 0], pointType: "linear", arriveTangent: [-1, 0, 0], tangentsLinked: false },
+  ]);
+  assert.deepEqual(actor.debug, { visible: true, color: "#ff00aa", resolution: 99 });
+  const layout = validateLayout({ schema: 1, name: "Spline Save", loadGroups: [], instances: [], characters: [], splines: [actor] });
+  assert.deepEqual(layout.splines, [actor]);
+  assert.throws(() => validateSplineActor({ id: "bad", position: [0, 0, 0] }));
+});
+
+check("generic spline debug renderer samples world space, honors visibility, and disposes", () => {
+  const actor = createDefaultSplineActor();
+  actor.position = [5, 0, 0];
+  actor.rotation = [0, 90, 0];
+  actor.debug = { resolution: 4, color: "#00ff00" };
+  const polyline = splineDebugWorldPolyline(actor);
+  assert.equal(polyline.length, 5);
+  assert.deepEqual(polyline[0], [5, 0, 0]);
+  assert.deepEqual(polyline.at(-1), [5, 0, -4]);
+  const object = createSplineObject(actor);
+  assert.equal(object.visible, true);
+  assert.ok(object.getObjectByName("spline-debug-line"));
+  disposeSplineObject(object);
+  assert.equal(object.children.length, 0);
+  actor.hidden = true;
+  assert.equal(createSplineObject(actor).visible, false);
+});
+
+check("generic spline runtime registry normalizes snapshots and ignores duplicate ids", () => {
+  const first = createDefaultSplineActor();
+  first.id = "rail";
+  first.spline.points[1]!.position = [8, 0, 0];
+  const duplicate = createDefaultSplineActor([first]);
+  duplicate.id = "rail";
+  const registry = createSplineRegistry([first, duplicate]);
+  assert.equal(registry.all().length, 1);
+  const entry = registry.get("rail");
+  assert.ok(entry);
+  assert.equal(entry.curve.totalLength, 8);
+  assert.notEqual(entry.actor, first);
+  assert.equal(registry.get("missing"), null);
+  assert.equal(registry.get(null), null);
 });
 
 check("validateLandscape allowlists fields and round-trips through validateLayout", () => {

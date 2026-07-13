@@ -12,6 +12,7 @@ import {
   findParentReflectionCapture,
   findParentReflectionPlane,
   findParentReflectiveSurface,
+  findParentSpline,
   findParentTargetPoint,
   findParentWorldWidget,
 } from "@engine/render-three/picking";
@@ -208,6 +209,12 @@ export class ScenePicker {
     if (targetPoint) {
       const index = Number(targetPoint.userData.targetPointIndex);
       if (Number.isInteger(index)) return { kind: "targetPoint", index };
+    }
+
+    const spline = findParentSpline(hit.object);
+    if (spline) {
+      const index = Number(spline.userData.splineIndex);
+      if (Number.isInteger(index)) return { kind: "spline", index };
     }
 
     const worldWidget = findParentWorldWidget(hit.object);
@@ -423,6 +430,10 @@ export class ScenePicker {
     if (selection.kind === "targetPoint") {
       const point = findParentTargetPoint(hit.object);
       return point ? Number(point.userData.targetPointIndex) === selection.index : false;
+    }
+    if (selection.kind === "spline") {
+      const spline = findParentSpline(hit.object);
+      return spline ? Number(spline.userData.splineIndex) === selection.index : false;
     }
     if (selection.kind === "worldWidget") {
       const widget = findParentWorldWidget(hit.object);

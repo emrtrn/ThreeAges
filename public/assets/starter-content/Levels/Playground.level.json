@@ -536,6 +536,47 @@
       "nextTargetPoint": "target-point-3"
     }
   ],
+  "splines": [
+    {
+      "id": "spline-1",
+      "position": [
+        -1.59,
+        0,
+        -1.9
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              4,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "Spline"
+    }
+  ],
   "landscapes": [],
   "actors": [
     {

@@ -789,6 +789,31 @@ export interface LayoutTargetPoint {
 }
 
 /**
+ * Placed, level-owned generic spline actor. Its points are actor-local; the
+ * regular actor transform moves the complete spline in world space.
+ */
+export interface LayoutSplineActor {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  scaleLocked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  position: Vec3;
+  rotation?: Vec3;
+  scale?: number | Vec3;
+  spline: import("./spline").ForgeSplineComponentData;
+  /** Editor-only sampled-line presentation; no gameplay effect. */
+  debug?: {
+    visible?: boolean;
+    color?: string;
+    resolution?: number;
+  };
+}
+
+/**
  * Placed Landscape actor (à la Unreal's Landscape): a level-owned heightfield
  * terrain. Faz 1 models only the placed actor + a reference to its height/layer
  * sidecar data (`dataRef`); sculpt/paint tools are later phases. Unlike the other
@@ -844,6 +869,8 @@ export interface RoomLayout {
   aiNavigationVolumes?: LayoutAiNavigationVolume[];
   /** Placed Target Points for AI patrol route authoring. */
   targetPoints?: LayoutTargetPoint[];
+  /** Placed generic spline actors (independent from Landscape Splines). */
+  splines?: LayoutSplineActor[];
   /** Placed Landscape (heightfield terrain) actors. Faz 1 UX keeps this to one entry. */
   landscapes?: LayoutLandscape[];
   instances: LayoutModelInstances[];

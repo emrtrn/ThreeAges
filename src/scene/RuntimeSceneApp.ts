@@ -237,8 +237,14 @@ import {
   type BlockingVolumeObject,
   type BlockingVolumeRenderItem,
 } from "@engine/render-three/blockingVolume";
+import {
+  createSplineObject,
+  disposeSplineObject,
+  type SplineObject,
+} from "@engine/render-three/spline";
 import { aiNavigationVolumeAabb } from "@engine/render-three/aiNavigationVolume";
 import { readRotation, readScale } from "@engine/scene/transform";
+import { createSplineRegistry, type SplineRegistry } from "@engine/scene/splineRegistry";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   collectMaterialStats,
@@ -702,6 +708,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * this set keeps the collected slot collapsed every frame instead.
    */
   private readonly collectedInstances = new Set<string>();
+  /** Level-owned splines, indexed once for gameplay queries without render coupling. */
+  private splineRegistry: SplineRegistry = createSplineRegistry();
+  /** Optional `?debug` sampled-line views; regular Play never creates these resources. */
+  private splineDebugObjects: SplineObject[] = [];
   /** Asset manifest (with `.assets`), cached once the scene begins loading. */
   private assetManifest: AssetManifest | null = null;
   private readonly textureLoader = new TextureLoader();
@@ -1191,6 +1201,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeBlockingVolumeObject(volume);
     }
     this.blockingVolumeObjects = [];
+    for (const spline of this.splineDebugObjects) {
+      this.scene.remove(spline);
+      disposeSplineObject(spline);
+    }
+    this.splineDebugObjects = [];
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);
       disposeLandscapeObject(object);
@@ -1919,6 +1934,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.buildRuntimeReflectionPlanes();
     this.buildRuntimeReflectiveSurfaces();
     this.buildRuntimeBlockingVolumes();
+    this.buildRuntimeSplines();
     await this.buildRuntimeLandscapes();
     await this.buildRuntimeFoliage();
 
@@ -2101,6 +2117,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.aiCharacterAnimators.clear();
     this.aiSubsystem.setEntities([]);
     this.behaviorSubsystem.setEntities([]);
+    this.splineRegistry = createSplineRegistry();
 
     // Particle effects: stop live instances (definition cache + pool stay warm
     // for the rebuild, which re-spawns the same project's effects).
@@ -2140,6 +2157,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeBlockingVolumeObject(volume);
     }
     this.blockingVolumeObjects = [];
+    for (const spline of this.splineDebugObjects) {
+      this.scene.remove(spline);
+      disposeSplineObject(spline);
+    }
+    this.splineDebugObjects = [];
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);
       disposeLandscapeObject(object);
@@ -4014,6 +4036,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.blockingVolumeObjects.push(object);
       this.scene.add(object);
     });
+  }
+
+  /**
+   * Prepares every authored spline for gameplay. Its sampled line is intentionally
+   * limited to `?debug`: debug presentation remains editor-only by default and
+   * normal Play pays no render-resource cost for spline authoring helpers.
+   */
+  private buildRuntimeSplines(): void {
+    this.splineRegistry = createSplineRegistry(this.layout?.splines);
+    if (!this.debug) return;
+    for (const entry of this.splineRegistry.all()) {
+      const object = createSplineObject(entry.actor);
+      this.splineDebugObjects.push(object);
+      this.scene.add(object);
+    }
   }
 
   /** Resolved settings + world transform + sidecar data for a landscape layout actor. */

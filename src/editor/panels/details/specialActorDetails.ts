@@ -76,6 +76,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     patrolTag?: string;
     color?: string;
   }) => void;
+  setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number }) => void;
   setSelectedReflectionCapture: (patch: {
     radius?: number;
     intensity?: number;
@@ -1220,6 +1221,29 @@ export function renderTargetPointDetails(options: SpecialActorDetailsOptions): v
         color: (event.currentTarget as HTMLInputElement).value,
       });
     });
+}
+
+export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
+  const { body, selection } = options;
+  const spline = selection.spline;
+  if (!spline) return;
+  options.setDetailsScale([...selection.scale]);
+  const locked = selection.locked ? "disabled" : "";
+  body.innerHTML = `
+    <section class="details-section"><h3>Spline</h3>
+      <div class="detail-readonly">${spline.pointCount} control points · ${spline.closed ? "Closed" : "Open"}</div>
+      <label class="detail-row"><span>Closed Loop</span><input type="checkbox" data-spline-closed ${spline.closed ? "checked" : ""} ${locked}></label>
+      <label class="detail-row"><span>Debug Visible</span><input type="checkbox" data-spline-debug-visible ${spline.debugVisible ? "checked" : ""} ${locked}></label>
+      <label class="detail-row"><span>Debug Color</span><input type="color" data-spline-debug-color value="${spline.debugColor}" ${locked}></label>
+      <label class="detail-row"><span>Line Resolution</span><input type="number" min="2" max="128" step="1" data-spline-debug-resolution value="${spline.debugResolution}" ${locked}></label>
+    </section>`;
+  body.querySelector<HTMLInputElement>("[data-spline-closed]")?.addEventListener("change", (event) => options.setSelectedSpline({ closed: (event.currentTarget as HTMLInputElement).checked }));
+  body.querySelector<HTMLInputElement>("[data-spline-debug-visible]")?.addEventListener("change", (event) => options.setSelectedSpline({ debugVisible: (event.currentTarget as HTMLInputElement).checked }));
+  body.querySelector<HTMLInputElement>("[data-spline-debug-color]")?.addEventListener("change", (event) => options.setSelectedSpline({ debugColor: (event.currentTarget as HTMLInputElement).value }));
+  body.querySelector<HTMLInputElement>("[data-spline-debug-resolution]")?.addEventListener("change", (event) => {
+    const value = Number((event.currentTarget as HTMLInputElement).value);
+    if (Number.isFinite(value)) options.setSelectedSpline({ debugResolution: value });
+  });
 }
 
 export function renderWorldWidgetDetails(options: SpecialActorDetailsOptions): void {

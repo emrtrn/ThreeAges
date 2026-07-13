@@ -282,6 +282,16 @@ import {
   type TargetPointRenderItem,
 } from "@engine/render-three/targetPoint";
 import {
+  createSplineObject,
+  disposeSplineObject,
+  updateSplineObject,
+  type SplineObject,
+} from "@engine/render-three/spline";
+import {
+  cloneSplineActor,
+  createDefaultSplineActor,
+} from "@engine/scene/splineActor";
+import {
   applyProbeEnvMapToObject,
   applySphereReflectionCaptureTransform,
   assignProbeEnvMapMaterial,
@@ -384,6 +394,7 @@ import type {
   LayoutReflectiveSurface,
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
+  LayoutSplineActor,
   LayoutTargetPoint,
   LayoutWorldSettings,
   MetadataValue,
@@ -957,6 +968,8 @@ export class SceneApp {
   private landscapeBrushCursor: Mesh | null = null;
   /** Editor markers for AI patrol Target Points, by index. */
   private targetPointObjects: TargetPointObject[] = [];
+  /** Editor sampled-line helpers for placed generic Spline actors, by index. */
+  private splineObjects: SplineObject[] = [];
   /** Editor wireframe-sphere helpers for placed Sphere Reflection Capture actors, by index. */
   private reflectionCaptureObjects: SphereReflectionCaptureObject[] = [];
   /** Billboard icons (clickable handles) for placed Sphere Reflection Capture actors, by index. */
@@ -1202,6 +1215,7 @@ export class SceneApp {
         objects.push(...this.worldWidgetIcons);
         objects.push(...this.aiNavigationVolumeObjects);
         objects.push(...this.targetPointObjects);
+        objects.push(...this.splineObjects);
         objects.push(...this.landscapeObjects);
         return objects;
       },
@@ -1361,6 +1375,11 @@ export class SceneApp {
       disposeTargetPointObject(object);
     }
     this.targetPointObjects = [];
+    for (const object of this.splineObjects) {
+      this.scene.remove(object);
+      disposeSplineObject(object);
+    }
+    this.splineObjects = [];
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
     this.disposeReflectionCaptureBakes();
@@ -2443,6 +2462,10 @@ export class SceneApp {
       this.removeTargetPoint(this.selection.index);
       return;
     }
+    if (this.selection?.kind === "spline" && this.editorSceneController.selectedCount <= 1) {
+      this.removeSpline(this.selection.index);
+      return;
+    }
     if (
       this.selection?.kind === "worldWidget" &&
       this.editorSceneController.selectedCount <= 1
@@ -2885,6 +2908,9 @@ export class SceneApp {
       case "targetPoint":
         this.addTargetPoint([x, round(hit.y), z]);
         break;
+      case "spline":
+        this.addSpline([x, round(hit.y), z]);
+        break;
       case "worldWidget":
         // Float the billboard a little above the surface so it reads clearly.
         this.addWorldWidget(assetId, [x, round(hit.y + 1), z]);
@@ -2982,6 +3008,7 @@ export class SceneApp {
     this.buildBlockingVolumes();
     this.buildAiNavigationVolumes();
     this.buildTargetPoints();
+    this.buildSplines();
     await this.buildLandscapes();
     await this.buildFoliage();
     this.buildWorldWidgetMarkers();
@@ -3443,6 +3470,10 @@ export class SceneApp {
 
     if (selection.kind === "targetPoint") {
       this.refreshTargetPointObject(selection.index);
+      return;
+    }
+    if (selection.kind === "spline") {
+      this.refreshSpline(selection.index);
       return;
     }
 
@@ -4591,6 +4622,130 @@ export class SceneApp {
   }
 
   // --- Target Point actors --------------------------------------------------
+
+  // --- Generic Spline actors ------------------------------------------------
+
+  private buildSplines(): void {
+    for (const object of this.splineObjects) {
+      this.scene.remove(object);
+      disposeSplineObject(object);
+    }
+    this.splineObjects = [];
+    for (const actor of this.layout?.splines ?? []) {
+      const object = createSplineObject(actor);
+      object.userData.splineIndex = this.splineObjects.length;
+      this.splineObjects.push(object);
+      this.scene.add(object);
+    }
+  }
+
+  private insertSpline(index: number, actor: LayoutSplineActor): void {
+    if (!this.layout) return;
+    this.layout.splines ??= [];
+    const insertionIndex = clampIndex(index, this.layout.splines.length);
+    const snapshot = cloneSplineActor(actor);
+    this.layout.splines.splice(insertionIndex, 0, snapshot);
+    const object = createSplineObject(snapshot);
+    object.userData.splineIndex = insertionIndex;
+    this.splineObjects.splice(insertionIndex, 0, object);
+    this.scene.add(object);
+    this.refreshSplineIndices();
+  }
+
+  private refreshSplineIndices(): void {
+    this.splineObjects.forEach((object, index) => {
+      object.userData.splineIndex = index;
+    });
+  }
+
+  private removeSplineAt(index: number): LayoutSplineActor | null {
+    if (!this.layout?.splines) return null;
+    const [removed] = this.layout.splines.splice(index, 1);
+    const [object] = this.splineObjects.splice(index, 1);
+    if (object) {
+      this.scene.remove(object);
+      disposeSplineObject(object);
+    }
+    this.refreshSplineIndices();
+    return removed ? cloneSplineActor(removed) : null;
+  }
+
+  /** Adds a level-owned generic Spline Actor with its default two control points. */
+  addSpline(position: Vec3 = [0, 0, 0]): void {
+    if (!this.layout) return;
+    const actor = createDefaultSplineActor(this.layout.splines ?? []);
+    actor.position = [...position];
+    const index = (this.layout.splines ?? []).length;
+    this.executeCommand({
+      label: "Add Spline",
+      redo: () => {
+        this.insertSpline(index, actor);
+        this.select({ kind: "spline", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.removeSplineAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+    this.onStatus?.("Added Spline.", "info");
+  }
+
+  /** Deletes a generic Spline Actor by index (undoable; selection UI follows next slice). */
+  removeSpline(index: number): void {
+    const actor = this.layout?.splines?.[index];
+    if (!actor) return;
+    const snapshot = cloneSplineActor(actor);
+    this.executeCommand({
+      label: "Delete Spline",
+      redo: () => {
+        this.removeSplineAt(index);
+        this.select(null);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        this.insertSpline(index, snapshot);
+        this.select({ kind: "spline", index });
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
+  }
+
+  /** Rebuilds an actor's sampled debug line after a future point/details edit. */
+  refreshSpline(index: number): void {
+    const actor = this.layout?.splines?.[index];
+    const object = this.splineObjects[index];
+    if (actor && object) updateSplineObject(object, actor);
+  }
+
+  setSelectedSpline(patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number }): void {
+    if (this.selection?.kind !== "spline") return;
+    const index = this.selection.index;
+    const actor = this.layout?.splines?.[index];
+    if (!actor) return;
+    const before = cloneSplineActor(actor);
+    const after = cloneSplineActor(actor);
+    if (patch.closed !== undefined) after.spline.closed = patch.closed && after.spline.points.length >= 3;
+    if (patch.debugVisible !== undefined || patch.debugColor !== undefined || patch.debugResolution !== undefined) {
+      after.debug = { ...after.debug };
+      if (patch.debugVisible !== undefined) after.debug.visible = patch.debugVisible;
+      if (patch.debugColor !== undefined) after.debug.color = patch.debugColor;
+      if (patch.debugResolution !== undefined) after.debug.resolution = Math.min(128, Math.max(2, Math.floor(patch.debugResolution)));
+    }
+    const apply = (value: LayoutSplineActor): void => {
+      if (!this.layout?.splines?.[index]) return;
+      this.layout.splines[index] = cloneSplineActor(value);
+      this.refreshSpline(index);
+      this.emitSelectionChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label: "Edit Spline", redo: () => apply(after), undo: () => apply(before) });
+  }
 
   private targetPointItem(point: LayoutTargetPoint): TargetPointRenderItem {
     return {
@@ -9668,6 +9823,10 @@ export class SceneApp {
       if (!options.includeHidden && point.hidden) return;
       selections.push({ kind: "targetPoint", index });
     });
+    this.layout.splines?.forEach((actor, index) => {
+      if (!options.includeHidden && actor.hidden) return;
+      selections.push({ kind: "spline", index });
+    });
     this.layout.landscapes?.forEach((actor, index) => {
       if (!options.includeHidden && actor.hidden) return;
       selections.push({ kind: "landscape", index });
@@ -9710,6 +9869,9 @@ export class SceneApp {
     if (selection.kind === "targetPoint") {
       return resolveTargetPoint(this.layout?.targetPoints?.[selection.index] ?? null).name;
     }
+    if (selection.kind === "spline") {
+      return this.layout?.splines?.[selection.index]?.name ?? "Spline";
+    }
     if (selection.kind === "landscape") {
       return resolveLandscape(this.layout?.landscapes?.[selection.index] ?? null).name;
     }
@@ -9737,6 +9899,7 @@ export class SceneApp {
       selection.kind === "reflectionCapture" ||
       selection.kind === "aiNavigationVolume" ||
       selection.kind === "targetPoint" ||
+      selection.kind === "spline" ||
       selection.kind === "landscape"
     ) {
       return [0, 0, 0];
@@ -9802,6 +9965,10 @@ export class SceneApp {
     }
     if (selection.kind === "targetPoint") {
       const object = this.targetPointObjects[selection.index];
+      return object ? new Box3().setFromObject(object) : null;
+    }
+    if (selection.kind === "spline") {
+      const object = this.splineObjects[selection.index];
       return object ? new Box3().setFromObject(object) : null;
     }
     if (selection.kind === "worldWidget") {
@@ -10649,6 +10816,7 @@ export class SceneApp {
     | LayoutBlockingVolume
     | LayoutAiNavigationVolume
     | LayoutTargetPoint
+    | LayoutSplineActor
     | LayoutLandscape
     | null {
     if (!this.layout) return null;
@@ -10676,6 +10844,7 @@ export class SceneApp {
     if (selection.kind === "targetPoint") {
       return this.layout.targetPoints?.[selection.index] ?? null;
     }
+    if (selection.kind === "spline") return this.layout.splines?.[selection.index] ?? null;
     if (selection.kind === "landscape") {
       return this.layout.landscapes?.[selection.index] ?? null;
     }
@@ -10892,6 +11061,7 @@ export class SceneApp {
     if (selection.kind === "targetPoint") {
       return Boolean(this.layout.targetPoints?.[selection.index]);
     }
+    if (selection.kind === "spline") return Boolean(this.layout.splines?.[selection.index]);
     if (selection.kind === "landscape") {
       return Boolean(this.layout.landscapes?.[selection.index]);
     }

@@ -106,6 +106,7 @@ import {
   renderAiNavigationVolumeDetails,
   renderBlockingVolumeDetails,
   renderLandscapeDetails,
+  renderSplineDetails,
   renderTargetPointDetails,
   renderLightDetails,
   renderReflectionCaptureDetails,
@@ -439,6 +440,7 @@ export class EditorUi {
                 <div class="add-actor-submenu">
                   <button type="button" data-add-player-start>Player Start</button>
                   <button type="button" data-add-target-point>Target Point</button>
+                  <button type="button" data-add-spline>Spline</button>
                 </div>
               </div>
             </div>
@@ -982,6 +984,9 @@ export class EditorUi {
     this.bindSpecialActorButton("[data-add-target-point]", "targetPoint", "Target Point", () =>
       this.app.addTargetPoint(),
     );
+
+    // Generic level-owned spline actor. Point editing is added in Faz 5.
+    this.bindSpecialActorButton("[data-add-spline]", "spline", "Spline", () => this.app.addSpline());
 
     // Post Process is a transform-less singleton environment actor.
     this.root
@@ -3353,6 +3358,7 @@ export class EditorUi {
       setSelectedBlockingVolume: (patch) => this.app.setSelectedBlockingVolume(patch),
       setSelectedAiNavigationVolume: (patch) => this.app.setSelectedAiNavigationVolume(patch),
       setSelectedTargetPoint: (patch) => this.app.setSelectedTargetPoint(patch),
+      setSelectedSpline: (patch) => this.app.setSelectedSpline(patch),
       setSelectedReflectionCapture: (patch) => this.app.setSelectedReflectionCapture(patch),
       setSelectedLandscape: (patch) => this.app.setSelectedLandscape(patch),
       getLandscapeSculptSettings: () => this.app.getLandscapeSculptSettings(),
@@ -3469,6 +3475,10 @@ export class EditorUi {
     }
     if (selection.kind === "targetPoint" && selection.targetPoint) {
       renderTargetPointDetails(this.specialActorDetailsOptions(selection));
+      return;
+    }
+    if (selection.kind === "spline" && selection.spline) {
+      renderSplineDetails(this.specialActorDetailsOptions(selection));
       return;
     }
     if (selection.kind === "reflectionCapture" && selection.reflectionCapture) {

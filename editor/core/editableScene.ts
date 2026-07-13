@@ -300,6 +300,15 @@ export interface EditableSelection {
   aiNavigationVolume?: EditableAiNavigationVolume;
   /** Resolved Target Point settings; present only when `kind === "targetPoint"`. */
   targetPoint?: EditableTargetPoint;
+  /** Generic Spline actor presentation settings; points remain authored in local space. */
+  spline?: {
+    id: string;
+    closed: boolean;
+    pointCount: number;
+    debugVisible: boolean;
+    debugColor: string;
+    debugResolution: number;
+  };
   /** Resolved Post Process settings; present only when `kind === "post"`. */
   post?: EditablePostProcess;
   /** Resolved world-space UI widget settings; present only when `kind === "worldWidget"`. */

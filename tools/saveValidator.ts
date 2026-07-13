@@ -60,6 +60,7 @@ import {
 } from "../engine/ai/behaviorAsset";
 import { normalizeAiQueryAsset } from "../engine/ai/queryAsset";
 import { normalizeAiStateTreeAsset } from "../engine/ai/stateTreeAsset";
+import { normalizeSplineComponentData } from "../engine/scene/spline";
 
 /** The editor snap/grid settings the save endpoint persists into the manifest. */
 export interface EditorSettingsPatch {
@@ -1457,6 +1458,72 @@ export function validateTargetPoint(value: unknown): Record<string, unknown> {
   return point;
 }
 
+/** Allowlist validator for a placed generic Spline Actor and its inline component data. */
+export function validateSplineActor(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("spline actor must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.id !== "string" || input.id.length === 0) throw new Error("spline actor id must be a string");
+  if (!isNumberTuple(input.position)) throw new Error("invalid spline actor position");
+  if (!input.spline || typeof input.spline !== "object" || Array.isArray(input.spline)) {
+    throw new Error("spline actor spline must be an object");
+  }
+  const spline = normalizeSplineComponentData(input.spline);
+  const actor: Record<string, unknown> = {
+    id: input.id,
+    position: input.position.map((number) => Number(number.toFixed(3))),
+    spline: {
+      schema: spline.schema,
+      closed: spline.closed,
+      defaultUp: spline.defaultUp.map((axis) => Number(axis.toFixed(6))),
+      reparamStepsPerSegment: spline.reparamStepsPerSegment,
+      points: spline.points.map((point) => {
+        const output: Record<string, unknown> = {
+          id: point.id,
+          position: point.position.map((axis) => Number(axis.toFixed(3))),
+          pointType: point.pointType,
+        };
+        if (point.arriveTangent) output.arriveTangent = point.arriveTangent.map((axis) => Number(axis.toFixed(3)));
+        if (point.leaveTangent) output.leaveTangent = point.leaveTangent.map((axis) => Number(axis.toFixed(3)));
+        if (point.tangentsLinked !== undefined) output.tangentsLinked = point.tangentsLinked;
+        if (point.roll !== undefined) output.roll = Number(point.roll.toFixed(3));
+        if (point.scale) output.scale = point.scale.map((axis) => Number(axis.toFixed(3)));
+        if (point.metadata) output.metadata = { ...point.metadata };
+        return output;
+      }),
+    },
+  };
+  for (const key of ["name", "groupId", "nodeId", "parentId"] as const) {
+    if (typeof input[key] === "string") actor[key] = input[key];
+  }
+  if (input.hidden === true) actor.hidden = true;
+  if (input.locked === true) actor.locked = true;
+  if (input.scaleLocked === true) actor.scaleLocked = true;
+  if (input.rotation !== undefined) {
+    if (!isNumberTuple(input.rotation)) throw new Error("invalid spline actor rotation");
+    actor.rotation = input.rotation.map((axis) => validateRotationDeg(axis, "spline actor rotation component"));
+  }
+  if (input.scale !== undefined) {
+    actor.scale = isNumberTuple(input.scale)
+      ? input.scale.map((axis) => validateScaleValue(axis, "spline actor scale component"))
+      : validateScaleValue(input.scale, "spline actor scale");
+  }
+  if (input.debug !== undefined) {
+    if (!input.debug || typeof input.debug !== "object" || Array.isArray(input.debug)) throw new Error("invalid spline actor debug");
+    const debugInput = input.debug as Record<string, unknown>;
+    const debug: Record<string, unknown> = {};
+    if (debugInput.visible === true) debug.visible = true;
+    if (typeof debugInput.color === "string" && /^#[0-9a-fA-F]{6}$/.test(debugInput.color)) debug.color = debugInput.color;
+    if (debugInput.resolution !== undefined) {
+      if (typeof debugInput.resolution !== "number" || !Number.isFinite(debugInput.resolution)) {
+        throw new Error("invalid spline actor debug resolution");
+      }
+      debug.resolution = Math.min(128, Math.max(2, Math.floor(debugInput.resolution)));
+    }
+    if (Object.keys(debug).length > 0) actor.debug = debug;
+  }
+  return actor;
+}
+
 /**
  * Allowlist validator for the singleton Sky Atmosphere actor. Every field that
  * survives a save is copied explicitly; omitted/out-of-range values are dropped
@@ -1849,6 +1916,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("targetPoints must be an array");
         })();
+  const splines = layout.splines === undefined
+    ? null
+    : Array.isArray(layout.splines)
+      ? layout.splines.map(validateSplineActor)
+      : (() => {
+          throw new Error("splines must be an array");
+        })();
   const landscapes = layout.landscapes === undefined
     ? null
     : Array.isArray(layout.landscapes)
@@ -1938,6 +2012,7 @@ export function validateLayout(value: unknown): unknown {
   if (blockingVolumes) output.blockingVolumes = blockingVolumes;
   if (aiNavigationVolumes) output.aiNavigationVolumes = aiNavigationVolumes;
   if (targetPoints) output.targetPoints = targetPoints;
+  if (splines) output.splines = splines;
   if (landscapes) output.landscapes = landscapes;
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;

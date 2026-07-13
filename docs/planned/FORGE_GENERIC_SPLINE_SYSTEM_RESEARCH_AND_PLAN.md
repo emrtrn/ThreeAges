@@ -1650,23 +1650,26 @@ Actor movement ve mesh generation için kararlı orientation frame üretmek.
 
 Spline verisini level-owned bağımsız actor olarak scene'e eklemek.
 
+> İlerleme (2026-07-13): editor actor/persistence/debug render ve Play runtime
+> registry foundation tamamlandı. Viewport point edit aracı Faz 5'in sonraki dilimidir.
+
 ### Kontrol listesi
 
-- [ ] `LayoutSplineActor` veya repo eşdeğeri tipi ekle (`engine/scene/layout.ts`, `RoomLayout.splines`).
-- [ ] Layout normalize/validate akışına spline actor ekle.
-- [ ] **`tools/saveValidator.ts` allowlist'ine `splines` array'ini ve bütün alanlarını ekle; Save Layout round-trip'te hiçbir alanın düşmediğini test et (bkz. §0.2).**
-- [ ] Add Actor > Spline komutunu ekle.
-- [ ] Varsayılan iki veya üç point'li spline oluştur.
-- [ ] Actor transform desteğini ekle.
-- [ ] Scene adapter/runtime object oluştur.
-- [ ] Spline sampled debug line render et.
-- [ ] Debug line resolution ayarını ekle.
-- [ ] Actor hidden/locked davranışını uygula.
-- [ ] Actor duplicate davranışını test et.
-- [ ] Actor delete sırasında resources dispose et.
-- [ ] Save/Reload sonrası points ve settings korunmasını test et.
-- [ ] Play/runtime tarafında spline registry oluştur.
-- [ ] Runtime debug görünürlüğünü opsiyonel yap.
+- [x] `LayoutSplineActor` veya repo eşdeğeri tipi ekle (`engine/scene/layout.ts`, `RoomLayout.splines`).
+- [x] Layout normalize/validate akışına spline actor ekle.
+- [x] **`tools/saveValidator.ts` allowlist'ine `splines` array'ini ve bütün alanlarını ekle; Save Layout round-trip'te hiçbir alanın düşmediğini test et (bkz. §0.2).**
+- [x] Add Actor > Spline komutunu ekle.
+- [x] Varsayılan iki veya üç point'li spline oluştur.
+- [x] Actor transform desteğini ekle. (debug renderer local spline'ı actor transformuyla world space'e örnekler)
+- [x] Scene adapter/runtime object oluştur. (Play `SplineRegistry`; `?debug` sampled-line adapter'ı)
+- [x] Spline sampled debug line render et. (`engine/render-three/spline.ts`)
+- [x] Debug line resolution ayarını ekle.
+- [x] Actor hidden/locked davranışını uygula. (renderer `hidden`'ı uygular; `locked` edit tool entegrasyonunda korunacak)
+- [ ] Actor duplicate davranışını test et. (runtime registry duplicate id'leri deterministik olarak atlar; editor duplicate akışı ayrıca doğrulanacak)
+- [x] Actor delete sırasında resources dispose et. (`disposeSplineObject`)
+- [x] Save/Reload sonrası points ve settings korunmasını test et. (save allowlist round-trip engine testi)
+- [x] Play/runtime tarafında spline registry oluştur.
+- [x] Runtime debug görünürlüğünü opsiyonel yap. (`?debug`)
 
 ### Kabul kriterleri
 

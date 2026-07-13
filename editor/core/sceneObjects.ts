@@ -9,6 +9,7 @@ import { resolveSphereReflectionCapture } from "@engine/scene/reflectionCapture"
 import { resolveBlockingVolume } from "@engine/scene/blockingVolume";
 import { resolveAiNavigationVolume } from "@engine/scene/aiNavigationVolume";
 import { resolveTargetPoint } from "@engine/scene/targetPoint";
+import { resolveSplineActorDebug } from "@engine/scene/splineActor";
 import { resolvePostProcess } from "@engine/scene/postProcess";
 import { readPivot, readRotation, readScale } from "@engine/scene/transform";
 import type {
@@ -26,6 +27,7 @@ import type {
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
   LayoutTargetPoint,
+  LayoutSplineActor,
   RoomLayout,
 } from "@engine/scene/layout";
 import type { WorldUiWidget } from "@engine/ui/uiWorldWidget";
@@ -417,6 +419,17 @@ function buildTargetPointEditableSelection(
   };
 }
 
+function buildSplineEditableSelection(actor: LayoutSplineActor, index: number): EditableSelection {
+  const debug = resolveSplineActorDebug(actor);
+  return {
+    id: selectionId({ kind: "spline", index }), kind: "spline", assetId: "spline", category: "visual-effects",
+    label: actor.name ?? "Spline", position: [...actor.position], rotation: readRotation(actor), scale: readScale(actor),
+    pivot: [0, 0, 0], scaleLocked: actor.scaleLocked ?? false, locked: actor.locked ?? false,
+    castShadow: false, collision: false, simulatePhysics: false, physics: {}, metadata: {},
+    spline: { id: actor.id, closed: actor.spline.closed, pointCount: actor.spline.points.length, debugVisible: debug.visible, debugColor: debug.color, debugResolution: debug.resolution },
+  };
+}
+
 /**
  * Builds the Details/Outliner view-model for a placed world-space UI widget. Its
  * anchor world point rides in the shared `position` transform field (so the
@@ -715,6 +728,14 @@ export function buildSceneObjects(
       parentId: point.parentId,
     });
   });
+  layout.splines?.forEach((actor, index) => {
+    const selection: Selection = { kind: "spline", index };
+    objects.push({
+      ...buildSplineEditableSelection(actor, index), selected: deps.isSelected(selection),
+      hidden: actor.hidden ?? false, locked: actor.locked ?? false,
+      groupId: actor.groupId, nodeId: actor.nodeId, parentId: actor.parentId,
+    });
+  });
 
   layout.landscapes?.forEach((actor, index) => {
     const selection: Selection = { kind: "landscape", index };
@@ -875,6 +896,10 @@ export function buildEditableSelection(
     const point = layout.targetPoints?.[selection.index];
     if (!point) return null;
     return buildTargetPointEditableSelection(point, selection.index);
+  }
+  if (selection.kind === "spline") {
+    const actor = layout.splines?.[selection.index];
+    return actor ? buildSplineEditableSelection(actor, selection.index) : null;
   }
 
   if (selection.kind === "worldWidget") {
