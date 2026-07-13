@@ -64,9 +64,14 @@ import type {
   LayoutCharacter,
   LayoutLightActor,
   LayoutPlacement,
+  LayoutSplineActor,
   RoomLayout,
   Vec3,
 } from "@engine/scene/layout";
+import {
+  generateSplineInstancePlacements,
+  resolveSplineInstanceGenerator,
+} from "@engine/scene/splineGenerator";
 import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 
@@ -269,6 +274,63 @@ export function buildSceneInstancedModel(options: {
     castShadow: options.castShadow,
     receiveShadow: options.receiveShadow,
   });
+}
+
+/**
+ * Builds all enabled Instance Placement Generator outputs for one generic spline.
+ * Output is deliberately one non-pickable group: generated meshes remain a
+ * property of the spline actor, not thousands of editor-selectable actors.
+ */
+export function buildSplineInstanceGeneratorGroup(options: {
+  actor: LayoutSplineActor;
+  mode: "editor" | "runtime";
+  models: ReadonlyMap<string, GLTF>;
+  castShadow: boolean;
+  receiveShadow: boolean;
+  applyMaterialSlots?: (assetId: string, assetGroup: Group) => void;
+}): { group: Group; meshes: InstancedMesh[]; instanceCount: number } | null {
+  const itemsByAsset = new Map<string, InstanceRenderItem[]>();
+  for (const definition of options.actor.generators ?? []) {
+    const generator = resolveSplineInstanceGenerator(definition);
+    if (!generator.enabled || !generator.meshAsset) continue;
+    if (options.mode === "editor" ? !generator.previewEnabled : !generator.runtimeEnabled) continue;
+    for (const instance of generateSplineInstancePlacements(options.actor, generator)) {
+      const items = itemsByAsset.get(instance.assetId) ?? [];
+      items.push({
+        matrix: new Matrix4().compose(
+          new Vector3(...instance.position),
+          new Quaternion(...instance.rotation),
+          new Vector3(...instance.scale),
+        ),
+        hidden: options.actor.hidden ?? false,
+      });
+      itemsByAsset.set(instance.assetId, items);
+    }
+  }
+  if (itemsByAsset.size === 0) return null;
+  const group = new Group();
+  group.name = `SplineGeneratedInstances:${options.actor.id}`;
+  group.userData.splineActorId = options.actor.id;
+  group.userData.splineGenerated = true;
+  const meshes: InstancedMesh[] = [];
+  let instanceCount = 0;
+  for (const [assetId, items] of itemsByAsset) {
+    const gltf = options.models.get(assetId);
+    if (!gltf) continue;
+    const built = createInstancedModelGroup({
+      assetId,
+      gltf,
+      items,
+      castShadow: options.castShadow,
+      receiveShadow: options.receiveShadow,
+    });
+    built.group.traverse((child) => { child.raycast = () => {}; });
+    options.applyMaterialSlots?.(assetId, built.group);
+    group.add(built.group);
+    meshes.push(...built.meshes);
+    instanceCount += items.length;
+  }
+  return meshes.length > 0 ? { group, meshes, instanceCount } : null;
 }
 
 /**
@@ -808,6 +870,12 @@ export function sceneModelAssetIds(layout: RoomLayout | null): string[] {
   }
   for (const character of layout?.characters ?? []) {
     ids.add(character.assetId);
+  }
+  for (const spline of layout?.splines ?? []) {
+    for (const generator of spline.generators ?? []) {
+      const resolved = resolveSplineInstanceGenerator(generator);
+      if (resolved.enabled && resolved.meshAsset && !isProceduralAssetId(resolved.meshAsset)) ids.add(resolved.meshAsset);
+    }
   }
   return [...ids];
 }

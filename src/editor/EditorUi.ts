@@ -3436,6 +3436,11 @@ export class EditorUi {
       setSelectedAiNavigationVolume: (patch) => this.app.setSelectedAiNavigationVolume(patch),
       setSelectedTargetPoint: (patch) => this.app.setSelectedTargetPoint(patch),
       setSelectedSpline: (patch) => this.app.setSelectedSpline(patch),
+      getSelectedSplineGenerators: () => this.app.getSelectedSplineGenerators(),
+      addSelectedSplineInstanceGenerator: () => this.app.addSelectedSplineInstanceGenerator(),
+      removeSelectedSplineGenerator: (generatorId) => this.app.removeSelectedSplineGenerator(generatorId),
+      setSelectedSplineInstanceGenerator: (generatorId, patch) =>
+        this.app.setSelectedSplineInstanceGenerator(generatorId, patch),
       getSelectedSplinePoints: () => this.app.getSelectedSplinePoints(),
       getActiveSplinePointId: () => this.app.getActiveSplinePointId(),
       selectSplinePoint: (pointId) => this.app.selectSplinePoint(pointId),

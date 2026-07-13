@@ -1,5 +1,6 @@
-import { assetType, type EditableAsset } from "@engine/assets/manifest";
+import { assetType, isModelAssetType, type EditableAsset } from "@engine/assets/manifest";
 import type { BrushShape, LayoutLightActor, Vec3 } from "@engine/scene/layout";
+import type { ForgeSplineInstanceGeneratorDef } from "@engine/scene/splineGenerator";
 import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
 import type {
   EditableAiNavigationVolume,
@@ -77,6 +78,10 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     color?: string;
   }) => void;
   setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number; showPointIds?: boolean }) => void;
+  getSelectedSplineGenerators: () => ForgeSplineInstanceGeneratorDef[];
+  addSelectedSplineInstanceGenerator: () => void;
+  removeSelectedSplineGenerator: (generatorId: string) => void;
+  setSelectedSplineInstanceGenerator: (generatorId: string, patch: Partial<ForgeSplineInstanceGeneratorDef>) => void;
   getSelectedSplinePoints: () => Array<{ id: string; position: Vec3; pointType: "linear" | "curveAuto" | "curveCustom"; tangentsLinked: boolean }>;
   getActiveSplinePointId: () => string | null;
   selectSplinePoint: (pointId: string | null) => void;
@@ -1252,6 +1257,34 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     const end = points[(index + 1) % points.length]!.position;
     return Math.hypot(start[0] - end[0], start[1] - end[1], start[2] - end[2]) < 1e-4;
   }).some(Boolean);
+  const meshOptions = options.editableAssets
+    .filter((asset) => isModelAssetType(assetType(asset)))
+    .map((asset) => `<option value="${escapeHtml(asset.id)}">${escapeHtml(asset.displayName ?? asset.name)}</option>`)
+    .join("");
+  const generators = options.getSelectedSplineGenerators();
+  const generatorMarkup = generators.length === 0
+    ? "<div class=\"detail-readonly\">No instance generators yet.</div>"
+    : generators.map((generator) => {
+      const random = generator.random ?? {};
+      return `<div class="detail-subsection spline-generator" data-spline-generator-card="${escapeHtml(generator.id)}">
+        <div class="detail-subsection-title">Instances · ${escapeHtml(generator.id)}</div>
+        <label class="detail-row"><span>Mesh</span><select data-spline-generator-mesh="${escapeHtml(generator.id)}" ${locked}><option value="">Choose mesh…</option>${meshOptions.replace(`value="${escapeHtml(generator.meshAsset)}"`, `value="${escapeHtml(generator.meshAsset)}" selected`)}</select></label>
+        <label class="detail-row"><span>Enabled</span><input type="checkbox" data-spline-generator-flag="enabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.enabled !== false ? "checked" : ""} ${locked}></label>
+        <label class="detail-row"><span>Editor Preview</span><input type="checkbox" data-spline-generator-flag="previewEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.previewEnabled !== false ? "checked" : ""} ${locked}></label>
+        <label class="detail-row"><span>Runtime Enabled</span><input type="checkbox" data-spline-generator-flag="runtimeEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.runtimeEnabled !== false ? "checked" : ""} ${locked}></label>
+        <label class="detail-row"><span>Point Placement</span><input type="checkbox" data-spline-generator-flag="placementMode" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.placementMode === "point" ? "checked" : ""} ${locked}></label>
+        <label class="detail-row"><span>Align to Spline</span><input type="checkbox" data-spline-generator-flag="alignToSpline" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.alignToSpline !== false ? "checked" : ""} ${locked}></label>
+        <label class="detail-row"><span>Spacing</span><input type="number" min="0.01" step="0.1" data-spline-generator-number="spacing" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.spacing}" ${locked}></label>
+        <label class="detail-row"><span>Start Offset</span><input type="number" step="0.1" data-spline-generator-number="startOffset" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.startOffset ?? 0}" ${locked}></label>
+        <label class="detail-row"><span>End Offset</span><input type="number" step="0.1" data-spline-generator-number="endOffset" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.endOffset ?? 0}" ${locked}></label>
+        <label class="detail-row"><span>Lateral Offset</span><input type="number" step="0.1" data-spline-generator-number="lateralOffset" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.lateralOffset ?? 0}" ${locked}></label>
+        <label class="detail-row"><span>Vertical Offset</span><input type="number" step="0.1" data-spline-generator-number="verticalOffset" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.verticalOffset ?? 0}" ${locked}></label>
+        <label class="detail-row"><span>Seed</span><input type="number" step="1" data-spline-generator-number="seed" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.seed ?? 0}" ${locked}></label>
+        <label class="detail-row"><span>Scale Min</span><input type="number" min="0.001" step="0.05" data-spline-generator-random="scaleMin" data-spline-generator-id="${escapeHtml(generator.id)}" value="${random.scaleMin ?? 1}" ${locked}></label>
+        <label class="detail-row"><span>Scale Max</span><input type="number" min="0.001" step="0.05" data-spline-generator-random="scaleMax" data-spline-generator-id="${escapeHtml(generator.id)}" value="${random.scaleMax ?? 1}" ${locked}></label>
+        <div class="detail-button-row"><button type="button" data-spline-generator-remove="${escapeHtml(generator.id)}" ${locked}>Remove Generator</button></div>
+      </div>`;
+    }).join("");
   const pointEditor = activePoint
     ? `<div class="detail-subsection-title">Control Point</div>
       <div class="detail-button-row">${pointButtons}</div>
@@ -1269,6 +1302,9 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
       <label class="detail-row"><span>Show Point IDs</span><input type="checkbox" data-spline-show-point-ids ${spline.showPointIds ? "checked" : ""} ${locked}></label>
       <label class="detail-row"><span>Debug Color</span><input type="color" data-spline-debug-color value="${spline.debugColor}" ${locked}></label>
       <label class="detail-row"><span>Line Resolution</span><input type="number" min="2" max="128" step="1" data-spline-debug-resolution value="${spline.debugResolution}" ${locked}></label>
+      <div class="detail-subsection-title">Instance Placement</div>
+      ${generatorMarkup}
+      <div class="detail-button-row"><button type="button" data-spline-generator-add ${locked}>Add Instance Generator</button></div>
       <div class="detail-button-row"><button type="button" data-spline-point-add ${locked}>Add Point</button></div>
       ${pointEditor}
     </section>`;
@@ -1280,6 +1316,33 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     const value = Number((event.currentTarget as HTMLInputElement).value);
     if (Number.isFinite(value)) options.setSelectedSpline({ debugResolution: value });
   });
+  body.querySelector<HTMLButtonElement>("[data-spline-generator-add]")?.addEventListener("click", () => options.addSelectedSplineInstanceGenerator());
+  body.querySelectorAll<HTMLButtonElement>("[data-spline-generator-remove]").forEach((button) => button.addEventListener("click", () => options.removeSelectedSplineGenerator(button.dataset.splineGeneratorRemove ?? "")));
+  body.querySelectorAll<HTMLSelectElement>("[data-spline-generator-mesh]").forEach((input) => input.addEventListener("change", () => {
+    options.setSelectedSplineInstanceGenerator(input.dataset.splineGeneratorMesh ?? "", { meshAsset: input.value });
+  }));
+  body.querySelectorAll<HTMLInputElement>("[data-spline-generator-flag]").forEach((input) => input.addEventListener("change", () => {
+    const id = input.dataset.splineGeneratorId ?? "";
+    const key = input.dataset.splineGeneratorFlag;
+    if (key === "placementMode") options.setSelectedSplineInstanceGenerator(id, { placementMode: input.checked ? "point" : "distance" });
+    else if (key === "enabled" || key === "previewEnabled" || key === "runtimeEnabled" || key === "alignToSpline") {
+      options.setSelectedSplineInstanceGenerator(id, { [key]: input.checked } as Partial<ForgeSplineInstanceGeneratorDef>);
+    }
+  }));
+  body.querySelectorAll<HTMLInputElement>("[data-spline-generator-number]").forEach((input) => input.addEventListener("change", () => {
+    const value = Number(input.value);
+    const id = input.dataset.splineGeneratorId ?? "";
+    const key = input.dataset.splineGeneratorNumber;
+    if (!Number.isFinite(value) || !key) return;
+    options.setSelectedSplineInstanceGenerator(id, { [key]: value } as Partial<ForgeSplineInstanceGeneratorDef>);
+  }));
+  body.querySelectorAll<HTMLInputElement>("[data-spline-generator-random]").forEach((input) => input.addEventListener("change", () => {
+    const value = Number(input.value);
+    const id = input.dataset.splineGeneratorId ?? "";
+    const key = input.dataset.splineGeneratorRandom;
+    if (!Number.isFinite(value) || (key !== "scaleMin" && key !== "scaleMax")) return;
+    options.setSelectedSplineInstanceGenerator(id, { random: { [key]: value } });
+  }));
   body.querySelector<HTMLButtonElement>("[data-spline-point-add]")?.addEventListener("click", () => options.addSelectedSplinePoint());
   body.querySelectorAll<HTMLButtonElement>("[data-spline-point]").forEach((button) => button.addEventListener("click", () => options.selectSplinePoint(button.dataset.splinePoint ?? null)));
   body.querySelector<HTMLButtonElement>("[data-spline-point-delete]")?.addEventListener("click", () => options.deleteSelectedSplinePoint(activePoint?.id));

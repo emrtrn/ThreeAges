@@ -127,6 +127,7 @@ import {
   applySceneBackgroundAndAmbient,
   applyEditorMatchedPlayLook,
   buildLandscapeSplineMeshGroup,
+  buildSplineInstanceGeneratorGroup,
   buildSceneCharacterObject,
   buildSceneEntities,
   buildSceneInstancedModel,
@@ -719,6 +720,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private splineRegistry: SplineRegistry = createSplineRegistry();
   /** Optional `?debug` sampled-line views; regular Play never creates these resources. */
   private splineDebugObjects: SplineObject[] = [];
+  /** Runtime InstancedMesh outputs authored by generic spline generators. */
+  private splineGeneratedGroups: Group[] = [];
   /** Asset manifest (with `.assets`), cached once the scene begins loading. */
   private assetManifest: AssetManifest | null = null;
   private readonly textureLoader = new TextureLoader();
@@ -1226,6 +1229,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeSplineObject(spline);
     }
     this.splineDebugObjects = [];
+    for (const group of this.splineGeneratedGroups) this.scene.remove(group);
+    this.splineGeneratedGroups = [];
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);
       disposeLandscapeObject(object);
@@ -2198,6 +2203,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       disposeSplineObject(spline);
     }
     this.splineDebugObjects = [];
+    for (const group of this.splineGeneratedGroups) this.scene.remove(group);
+    this.splineGeneratedGroups = [];
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);
       disposeLandscapeObject(object);
@@ -4082,6 +4089,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private buildRuntimeSplines(): void {
     this.splineRegistry = createSplineRegistry(this.layout?.splines);
     this.aiSubsystem.configure({ splineRegistry: this.splineRegistry });
+    for (const actor of this.layout?.splines ?? []) {
+      const built = buildSplineInstanceGeneratorGroup({
+        actor,
+        mode: "runtime",
+        models: this.models,
+        castShadow: this.staticObjectsCastShadow(),
+        receiveShadow: this.staticObjectsReceiveShadow(),
+        applyMaterialSlots: (assetId, group) => {
+          const slots = this.resolveAssetMaterialSlots(assetId);
+          if (slots) applyMaterialSlotOverrides(group, slots, (materialId) => this.materialCache.get(materialId));
+        },
+      });
+      if (!built) continue;
+      this.splineGeneratedGroups.push(built.group);
+      this.scene.add(built.group);
+    }
     if (!this.debug) return;
     for (const entry of this.splineRegistry.all()) {
       const object = createSplineObject(entry.actor);

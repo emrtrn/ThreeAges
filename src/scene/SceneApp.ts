@@ -298,6 +298,11 @@ import {
   uniqueSplinePointId as uniqueGenericSplinePointId,
   type ForgeSplinePoint,
 } from "@engine/scene/spline";
+import {
+  createDefaultSplineInstanceGenerator,
+  normalizeSplineGenerators,
+  type ForgeSplineInstanceGeneratorDef,
+} from "@engine/scene/splineGenerator";
 import { evaluateSplineSegment } from "@engine/scene/splineCurve";
 import {
   applyProbeEnvMapToObject,
@@ -322,6 +327,7 @@ import type { Sky } from "three/examples/jsm/objects/Sky.js";
 import {
   applySceneBackgroundAndAmbient,
   buildLandscapeSplineMeshGroup,
+  buildSplineInstanceGeneratorGroup,
   buildSceneCharacterObject,
   buildSceneEntities,
   buildSceneInstancedModel,
@@ -1003,6 +1009,8 @@ export class SceneApp {
   private targetPointObjects: TargetPointObject[] = [];
   /** Editor sampled-line helpers for placed generic Spline actors, by index. */
   private splineObjects: SplineObject[] = [];
+  /** Non-pickable InstancedMesh outputs owned by generic spline generators, by index. */
+  private splineGeneratedGroups: (Group | null)[] = [];
   /** Contextual, editor-only point markers for the currently selected generic spline. */
   private splinePointOverlay: Group | null = null;
   private activeSplinePointId: string | null = null;
@@ -1419,6 +1427,7 @@ export class SceneApp {
       disposeSplineObject(object);
     }
     this.splineObjects = [];
+    this.clearSplineGeneratedGroups();
     this.clearSplinePointOverlay();
     this.postProcessPipeline?.dispose();
     this.postProcessPipeline = null;
@@ -4857,12 +4866,14 @@ export class SceneApp {
       disposeSplineObject(object);
     }
     this.splineObjects = [];
+    this.clearSplineGeneratedGroups();
     for (const actor of this.layout?.splines ?? []) {
       const object = createSplineObject(actor);
       object.userData.splineIndex = this.splineObjects.length;
       this.splineObjects.push(object);
       this.scene.add(object);
     }
+    for (let index = 0; index < this.splineObjects.length; index += 1) this.rebuildSplineGeneratedGroup(index);
   }
 
   private insertSpline(index: number, actor: LayoutSplineActor): void {
@@ -4874,7 +4885,9 @@ export class SceneApp {
     const object = createSplineObject(snapshot);
     object.userData.splineIndex = insertionIndex;
     this.splineObjects.splice(insertionIndex, 0, object);
+    this.splineGeneratedGroups.splice(insertionIndex, 0, null);
     this.scene.add(object);
+    this.rebuildSplineGeneratedGroup(insertionIndex);
     this.refreshSplineIndices();
   }
 
@@ -4892,6 +4905,8 @@ export class SceneApp {
       this.scene.remove(object);
       disposeSplineObject(object);
     }
+    const [generated] = this.splineGeneratedGroups.splice(index, 1);
+    generated?.removeFromParent();
     this.refreshSplineIndices();
     return removed ? cloneSplineActor(removed) : null;
   }
@@ -4947,7 +4962,37 @@ export class SceneApp {
     const actor = this.layout?.splines?.[index];
     const object = this.splineObjects[index];
     if (actor && object) updateSplineObject(object, actor);
+    this.rebuildSplineGeneratedGroup(index);
     this.refreshSplinePointOverlay();
+  }
+
+  private clearSplineGeneratedGroups(): void {
+    for (const group of this.splineGeneratedGroups) group?.removeFromParent();
+    this.splineGeneratedGroups = [];
+  }
+
+  /** Rebuilds only this spline's generated InstancedMesh preview. Shared GLTF resources stay owned by the model cache. */
+  private rebuildSplineGeneratedGroup(index: number): void {
+    const previous = this.splineGeneratedGroups[index];
+    if (previous) previous.removeFromParent();
+    this.splineGeneratedGroups[index] = null;
+    const actor = this.layout?.splines?.[index];
+    if (!actor) return;
+    const built = buildSplineInstanceGeneratorGroup({
+      actor,
+      mode: "editor",
+      models: this.models,
+      castShadow: this.staticObjectsCastShadow(),
+      receiveShadow: this.staticObjectsReceiveShadow(),
+      applyMaterialSlots: (assetId, group) => {
+        const slots = this.resolveAssetMaterialSlots(assetId);
+        if (slots) applyMaterialSlotOverrides(group, slots, (materialId) => this.materialCache.get(materialId));
+      },
+    });
+    if (!built) return;
+    built.group.userData.splineIndex = index;
+    this.scene.add(built.group);
+    this.splineGeneratedGroups[index] = built.group;
   }
 
   getSelectedSplinePoints(): SplinePointView[] {
@@ -5053,6 +5098,57 @@ export class SceneApp {
     point.leaveTangent ??= [...tangent];
     point.tangentsLinked = linked;
     this.applySelectedSplineSnapshot(actor, after, linked ? "Link Spline Tangents" : "Break Spline Tangents", point.id);
+  }
+
+  getSelectedSplineGenerators(): ForgeSplineInstanceGeneratorDef[] {
+    if (this.selection?.kind !== "spline") return [];
+    return normalizeSplineGenerators(this.layout?.splines?.[this.selection.index]?.generators);
+  }
+
+  addSelectedSplineInstanceGenerator(): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    after.generators = [...(after.generators ?? []), createDefaultSplineInstanceGenerator(after.generators ?? [])];
+    this.applySelectedSplineGeneratorSnapshot(actor, after, "Add Spline Instance Generator");
+  }
+
+  removeSelectedSplineGenerator(generatorId: string): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    after.generators = (after.generators ?? []).filter((generator) => generator.id !== generatorId);
+    this.applySelectedSplineGeneratorSnapshot(actor, after, "Remove Spline Instance Generator");
+  }
+
+  setSelectedSplineInstanceGenerator(generatorId: string, patch: Partial<ForgeSplineInstanceGeneratorDef>): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    const index = after.generators?.findIndex((generator) => generator.id === generatorId) ?? -1;
+    if (index < 0 || !after.generators) return;
+    const previous = after.generators[index]!;
+    const next = { ...previous, ...patch, id: previous.id, type: "instances" as const };
+    if (patch.random) next.random = { ...previous.random, ...patch.random };
+    after.generators[index] = normalizeSplineGenerators([next])[0]!;
+    this.applySelectedSplineGeneratorSnapshot(actor, after, "Edit Spline Instance Generator");
+  }
+
+  private applySelectedSplineGeneratorSnapshot(before: LayoutSplineActor, after: LayoutSplineActor, label: string): void {
+    if (this.selection?.kind !== "spline") return;
+    const index = this.selection.index;
+    const apply = (value: LayoutSplineActor): void => {
+      if (!this.layout?.splines?.[index]) return;
+      this.layout.splines[index] = cloneSplineActor(value);
+      this.refreshSpline(index);
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label, redo: () => apply(after), undo: () => apply(before) });
   }
 
   private applySelectedSplineSnapshot(before: LayoutSplineActor, after: LayoutSplineActor, label: string, activePointId: string | null): void {

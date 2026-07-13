@@ -1123,10 +1123,14 @@ check("sceneModelAssetIds includes authored assets and excludes procedural shape
     characters: [{ assetId: "character-a", position: [0, 0, 1] }],
     lights: [],
   };
+  const spline = createDefaultSplineActor();
+  spline.generators = [{ id: "posts", type: "instances", meshAsset: "fence-post", spacing: 2 }];
+  modelLayout.splines = [spline];
 
   assert.deepEqual(sceneModelAssetIds(modelLayout).sort(), [
     "bed-single",
     "character-a",
+    "fence-post",
     "floor-full",
   ]);
 });
