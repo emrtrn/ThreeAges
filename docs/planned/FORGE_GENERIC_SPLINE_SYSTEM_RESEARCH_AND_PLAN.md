@@ -1809,10 +1809,10 @@ asset'leri davranışını değiştirmemelidir.
   yaparak AI'yi CharacterMovement ile takip ettir.
 - [x] Spline patrol hızını CharacterMovement locomotion raporuna bağla; Walk /
   Run animasyonları gerçek hıza uygun oynasın.
-- [ ] Closed spline için loop, açık spline için clamp/ping-pong davranışlarını
+- [x] Closed spline için loop, açık spline için clamp/ping-pong davranışlarını
   uygula.
-- [ ] Target Point ve spline aynı sahnede bulunurken açık kaynak seçiminin
-  deterministik olduğunu test et.
+- [x] Target Point ve spline aynı sahnede bulunurken açık kaynak seçiminin
+  deterministik olduğunu test et. (`source` seçimi ve Target Point tag scope engine testiyle doğrulandı.)
 - [x] Aynı AI entity'sinde `SplinePathFollower` ve AI spline patrol'un transform
   sahipliği çakışmasını doğrula ve engelle. (`SplinePathFollowerSubsystem`, AI spline route seçildiğinde kinematik follower'ı atlar.)
 - [x] Level-owned spline ID'leri için actor asset'ten bağımsız per-instance

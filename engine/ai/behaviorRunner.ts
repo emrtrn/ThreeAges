@@ -718,7 +718,7 @@ function requestSplineMove(
   });
 }
 
-function advanceSplinePatrolDistance(
+export function advanceSplinePatrolDistance(
   distance: number,
   direction: 1 | -1,
   amount: number,
@@ -734,9 +734,11 @@ function advanceSplinePatrolDistance(
     const clamped = Math.max(0, Math.min(length, next));
     return { distance: clamped, direction, atBoundary: clamped === 0 || clamped === length };
   }
-  if (next > length) return { distance: length - (next - length), direction: -1, atBoundary: false };
-  if (next < 0) return { distance: -next, direction: 1, atBoundary: false };
-  return { distance: next, direction, atBoundary: false };
+  const phase = direction === 1 ? distance : length * 2 - distance;
+  const cycle = ((phase + amount) % (length * 2) + length * 2) % (length * 2);
+  return cycle <= length
+    ? { distance: cycle, direction: 1, atBoundary: false }
+    : { distance: length * 2 - cycle, direction: -1, atBoundary: false };
 }
 
 function resolvePatrolStart(context: AiTaskContext, index: TargetPointIndex): TargetPointEntry | null {

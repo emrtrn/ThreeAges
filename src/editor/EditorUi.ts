@@ -786,8 +786,15 @@ export class EditorUi {
           <option value="nearest" ${route?.entry !== "start" ? "selected" : ""}>Nearest Point</option>
           <option value="start" ${route?.entry === "start" ? "selected" : ""}>Spline Start</option>
         </select></label>
+        <label class="detail-row"><span>Target Point Tag</span><input data-actor-patrol-target-tag type="text" value="${escapeHtml(route?.targetPointTag ?? "")}" placeholder="Any route" ${source === "targetPoints" ? "" : "disabled"} ${disabled} /></label>
         <label class="detail-row"><span>Speed</span><input data-actor-patrol-speed type="number" step="0.1" min="0" value="${route?.speed ?? 2.4}" ${disabled} /></label>
+        <label class="detail-row"><span>Acceptance</span><input data-actor-patrol-acceptance type="number" step="0.05" min="0" value="${route?.acceptanceRadius ?? 0.55}" ${disabled} /></label>
         <label class="detail-row"><span>Look Ahead</span><input data-actor-patrol-lookahead type="number" step="0.1" min="0.1" value="${route?.lookAheadDistance ?? 1.2}" ${source === "spline" ? "" : "disabled"} ${disabled} /></label>
+        <label class="detail-row"><span>Wrap</span><select data-actor-patrol-wrap ${source === "spline" ? "" : "disabled"} ${disabled}>
+          <option value="loop" ${route?.wrapMode !== "pingPong" && route?.wrapMode !== "clamp" ? "selected" : ""}>Loop</option>
+          <option value="pingPong" ${route?.wrapMode === "pingPong" ? "selected" : ""}>Ping-Pong</option>
+          <option value="clamp" ${route?.wrapMode === "clamp" ? "selected" : ""}>Clamp</option>
+        </select></label>
       </div>`;
   }
 
@@ -797,17 +804,22 @@ export class EditorUi {
     const spline = this.detailsBody.querySelector<HTMLSelectElement>("[data-actor-patrol-spline]");
     const entry = this.detailsBody.querySelector<HTMLSelectElement>("[data-actor-patrol-entry]");
     const speed = this.detailsBody.querySelector<HTMLInputElement>("[data-actor-patrol-speed]");
+    const acceptance = this.detailsBody.querySelector<HTMLInputElement>("[data-actor-patrol-acceptance]");
     const lookAhead = this.detailsBody.querySelector<HTMLInputElement>("[data-actor-patrol-lookahead]");
+    const targetTag = this.detailsBody.querySelector<HTMLInputElement>("[data-actor-patrol-target-tag]");
+    const wrap = this.detailsBody.querySelector<HTMLSelectElement>("[data-actor-patrol-wrap]");
     const commit = (): void => {
       const sourceValue = source?.value === "spline" ? "spline" : "targetPoints";
       const next: AiPatrolRoute = {
         source: sourceValue,
         entry: entry?.value === "start" ? "start" : "nearest",
         speed: Math.max(0, Number(speed?.value) || 0),
+        acceptanceRadius: Math.max(0, Number(acceptance?.value) || 0),
         lookAheadDistance: Math.max(0.1, Number(lookAhead?.value) || 1.2),
-        wrapMode: "loop",
+        wrapMode: wrap?.value === "pingPong" || wrap?.value === "clamp" ? wrap.value : "loop",
       };
       if (sourceValue === "spline" && spline?.value) next.splineId = spline.value;
+      if (sourceValue === "targetPoints" && targetTag?.value.trim()) next.targetPointTag = targetTag.value.trim();
       this.app.setSelectedActorPatrolRoute(next);
       this.renderDetails(this.selected);
     };
@@ -815,7 +827,10 @@ export class EditorUi {
     spline?.addEventListener("change", commit);
     entry?.addEventListener("change", commit);
     speed?.addEventListener("change", commit);
+    acceptance?.addEventListener("change", commit);
     lookAhead?.addEventListener("change", commit);
+    targetTag?.addEventListener("change", commit);
+    wrap?.addEventListener("change", commit);
   }
 
   /**

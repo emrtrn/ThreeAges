@@ -118,6 +118,7 @@ import {
 } from "../engine/ai/targetPoints";
 import {
   AiBehaviorRunner,
+  advanceSplinePatrolDistance,
   createDefaultAiServiceRegistry,
   createDefaultAiTaskRegistry,
 } from "../engine/ai/behaviorRunner";
@@ -24001,6 +24002,43 @@ check("forge.moveAlongPatrolRoute approaches the nearest spline point before fol
     speed: 2.4,
     acceptanceRadius: 0.55,
   });
+});
+
+check("AI spline patrol wrap modes advance deterministically at route boundaries", () => {
+  assert.deepEqual(advanceSplinePatrolDistance(9, 1, 3, 10, "loop"), {
+    distance: 2,
+    direction: 1,
+    atBoundary: false,
+  });
+  assert.deepEqual(advanceSplinePatrolDistance(9, 1, 3, 10, "pingPong"), {
+    distance: 8,
+    direction: -1,
+    atBoundary: false,
+  });
+  assert.deepEqual(advanceSplinePatrolDistance(9, 1, 3, 10, "clamp"), {
+    distance: 10,
+    direction: 1,
+    atBoundary: true,
+  });
+});
+
+check("forge.moveAlongPatrolRoute uses Target Point source explicitly when configured", () => {
+  const controller = new AIController("ai:guard", "guard", new Blackboard([{ key: "currentPatrolTarget", kind: "string", default: null }]), {
+    patrolRoute: { source: "targetPoints", targetPointTag: "guard", entry: "nearest", lookAheadDistance: 1.2, wrapMode: "loop" },
+  });
+  const asset = normalizeAiBehaviorTreeAsset({ schema: 1, type: "behaviorTree", root: { kind: "task", task: "forge.moveAlongPatrolRoute" } });
+  const targetPoints = createTargetPointIndex([
+    { id: "guard-a", name: "Guard A", position: [2, 0, 4], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.6, speedOverride: null, patrolTag: "guard" },
+    { id: "other", name: "Other", position: [8, 0, 4], nextTargetPoint: null, waitTime: 0, acceptanceRadius: 0.6, speedOverride: null, patrolTag: "other" },
+  ]);
+  const requests: Vec3[] = [];
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    targetPoints,
+    moveTo: (request) => (requests.push([...request.position]), "running"),
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
+  assert.deepEqual(requests, [[2, 0, 4]]);
 });
 
 check("forge.moveToPatrolTarget can advance the route after arrival", () => {
