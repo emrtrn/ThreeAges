@@ -3246,6 +3246,7 @@ export class EditorUi {
       settings: this.app.getFoliageToolSettings(),
       types: this.app.getFoliageTypeViews(),
       selectionCount: this.app.getFoliageSelectionCount(),
+      resourceUsage: this.app.getFoliageResourceUsage(),
       availableTypeAssets,
       staticMeshAssets,
       apply: (patch) => {

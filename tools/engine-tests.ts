@@ -536,6 +536,7 @@ import {
   createFoliageType,
   foliageDataPath,
   uniqueFoliageGroupId,
+  computeFoliageResourceUsage,
 } from "../engine/scene/foliage";
 import {
   makeFoliageRng,
@@ -551,6 +552,7 @@ import {
   foliageInstanceFromRoll,
   foliageInstanceItems,
   reattachFoliageInstance,
+  geometryTriangleCount,
 } from "../engine/render-three/foliage";
 import {
   FoliageSelection,
@@ -15605,6 +15607,60 @@ check("reattachFoliageInstance only moves position when the type ignores normals
   assert.deepEqual(next.position, [0, 1, 0]);
   assert.deepEqual(next.rotation, [0, 12, 0]);
   assert.deepEqual(next.scale, [2, 2, 2]);
+});
+
+check("geometryTriangleCount reads indexed, non-indexed, and empty geometry", () => {
+  const indexed = new BufferGeometry();
+  indexed.setAttribute("position", new Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 0], 3));
+  indexed.setIndex([0, 1, 2, 2, 1, 3]);
+  assert.equal(geometryTriangleCount(indexed), 2);
+  const soup = new BufferGeometry();
+  soup.setAttribute("position", new Float32BufferAttribute([0, 0, 0, 1, 0, 0, 0, 1, 0], 3));
+  assert.equal(geometryTriangleCount(soup), 1);
+  assert.equal(geometryTriangleCount(new BufferGeometry()), 0);
+});
+
+check("computeFoliageResourceUsage aggregates per type and totals from live stats", () => {
+  const inst = (n: number) => Array.from({ length: n }, () => ({
+    position: [0, 0, 0] as [number, number, number],
+    rotation: [0, 0, 0] as [number, number, number],
+    scale: [1, 1, 1] as [number, number, number],
+  }));
+  const data = {
+    schema: 1 as const,
+    type: "foliage" as const,
+    groups: [
+      { id: "g1", foliageTypeId: "grass", target: { kind: "staticMesh" as const, id: "a" }, instances: inst(10) },
+      { id: "g2", foliageTypeId: "grass", target: { kind: "landscape" as const, id: "L" }, instances: inst(5) },
+      { id: "g3", foliageTypeId: "rock", target: { kind: "staticMesh" as const, id: "b" }, instances: inst(2) },
+      // No live batch (mesh not loaded): instances count, but zero tris/draws.
+      { id: "g4", foliageTypeId: "tree", target: { kind: "staticMesh" as const, id: "c" }, instances: inst(3) },
+    ],
+  };
+  const stats: Record<string, { trianglesPerInstance: number; drawCalls: number }> = {
+    g1: { trianglesPerInstance: 4, drawCalls: 1 },
+    g2: { trianglesPerInstance: 4, drawCalls: 1 },
+    g3: { trianglesPerInstance: 100, drawCalls: 2 },
+  };
+  const usage = computeFoliageResourceUsage(
+    data,
+    (id) => ({ grass: "Grass", rock: "Rock", tree: "Tree" }[id] ?? id),
+    (id) => stats[id] ?? null,
+  );
+  assert.equal(usage.totalInstances, 20);
+  // grass: (10+5)*4 = 60, rock: 2*100 = 200, tree: 0 → 260
+  assert.equal(usage.totalTriangles, 260);
+  assert.equal(usage.totalDrawCalls, 4);
+  // Sorted by instance count desc: grass(15), tree(3), rock(2).
+  assert.deepEqual(usage.types.map((t) => t.name), ["Grass", "Tree", "Rock"]);
+  const grass = usage.types.find((t) => t.typeId === "grass")!;
+  assert.equal(grass.instances, 15);
+  assert.equal(grass.triangles, 60);
+  assert.equal(grass.drawCalls, 2);
+  const tree = usage.types.find((t) => t.typeId === "tree")!;
+  assert.equal(tree.instances, 3);
+  assert.equal(tree.triangles, 0);
+  assert.equal(tree.drawCalls, 0);
 });
 
 check("every starter preset body is a valid, save-clean schema-2 effect", () => {

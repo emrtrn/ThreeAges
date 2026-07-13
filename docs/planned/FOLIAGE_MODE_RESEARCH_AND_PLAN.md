@@ -485,14 +485,19 @@ Alınacak fikirler:
 - [x] Deselect all. (`SceneApp.deselectAllFoliage` + Escape.)
 - [x] Reattach / snap to ground. (`reattachFoliageInstance` render helper:
   scale + yaw korunur, alignToNormal'da yeni normale eğim.)
-- [ ] Foliage group resource usage. (Panelde seçim sayısı okunuyor; tam kaynak
-  raporu — instance/triangle/draw — hâlâ açık.)
+- [x] Foliage group resource usage. (Panelde "Resource Usage" bölümü: tip başına
+  ve toplam instance / triangle / draw-call. Triangle + draw cost canlı
+  `InstancedMesh` batch'lerinden okunur — `FoliageRenderBinding.groupRenderStat` +
+  saf `computeFoliageResourceUsage` (`engine/scene/foliage.ts`).)
 - [ ] Cull start/end fade.
 - [ ] Chunk/grid render batches.
 
-> Kalan Faz 2 maddeleri (Fill, Reapply, resource usage raporu, cull fade,
-> chunking) sonraki dilimlerde. Select + Remove Selected de bu dilimde geldi
-> (Delete kısayolu + panel "Remove Selected").
+> Kalan Faz 2 maddeleri (Fill, Reapply, cull fade, chunking) sonraki dilimlerde.
+> Select + Remove Selected de bu dilimde geldi (Delete kısayolu + panel "Remove
+> Selected"). 2026-07-13: resource usage raporu tamamlandı — panelde "Resource
+> Usage" bölümü (tip başına + toplam instance/triangle/draw), `build:verify` +
+> `verify:imports` yeşil, 818 engine check geçiyor. Kalan: Fill, Reapply, cull
+> fade, chunking.
 
 ### Faz 3 - Landscape Grass / Layer-driven Scatter
 

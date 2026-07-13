@@ -4565,3 +4565,29 @@ body.editor-mode #debug-stats {
   color: #ff9c9c;
 }
 .foliage-selection-actions .foliage-remove-selected:hover:not(:disabled) { background: #331d1d; }
+.foliage-usage-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+.foliage-usage-row .foliage-usage-stat {
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.foliage-usage-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.foliage-usage-head {
+  color: #9aa4a9;
+  border-bottom: 1px solid #262c34;
+  padding-bottom: 3px;
+}
+.foliage-usage-total {
+  color: #cbd2dc;
+  border-top: 1px solid #262c34;
+  margin-top: 2px;
+  padding-top: 4px;
+  font-weight: 600;
+}

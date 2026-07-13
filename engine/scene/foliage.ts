@@ -290,3 +290,76 @@ export function foliageDataPath(scenePath: string): string {
   const base = normalized.replace(/(\.level|\.layout)?\.json$/i, "");
   return `${base}.foliage.json`;
 }
+
+// --- Resource usage report (Faz 2 panel readout) ----------------------------
+
+/** Live render cost of one foliage group's batch (supplied by the render layer). */
+export interface FoliageGroupRenderStat {
+  /** Triangles drawn for a SINGLE instance (summed over the mesh's sub-batches). */
+  trianglesPerInstance: number;
+  /** InstancedMesh draw calls this group contributes. */
+  drawCalls: number;
+}
+
+/** Aggregated foliage cost for one Foliage Type (all its groups combined). */
+export interface FoliageTypeUsage {
+  typeId: string;
+  name: string;
+  instances: number;
+  triangles: number;
+  drawCalls: number;
+}
+
+/** Whole-level foliage resource report shown in the Foliage panel. */
+export interface FoliageResourceUsage {
+  totalInstances: number;
+  totalTriangles: number;
+  totalDrawCalls: number;
+  /** Per-type breakdown, heaviest (most instances) first. */
+  types: FoliageTypeUsage[];
+}
+
+/**
+ * Aggregates a level's foliage into a per-type resource report. Pure and
+ * three-agnostic: the caller supplies the type display name and each group's live
+ * render stat (triangles-per-instance + draw calls from the InstancedMesh batches),
+ * so this stays unit-testable without a renderer. Groups with no live batch (mesh
+ * not loaded) still count their instances but contribute zero triangles/draw calls.
+ */
+export function computeFoliageResourceUsage(
+  data: LayoutFoliageData,
+  typeName: (typeId: string) => string,
+  groupStat: (groupId: string) => FoliageGroupRenderStat | null,
+): FoliageResourceUsage {
+  const byType = new Map<string, FoliageTypeUsage>();
+  let totalInstances = 0;
+  let totalTriangles = 0;
+  let totalDrawCalls = 0;
+  for (const group of data.groups) {
+    const instances = group.instances.length;
+    const stat = groupStat(group.id);
+    const triangles = stat ? instances * stat.trianglesPerInstance : 0;
+    const drawCalls = stat ? stat.drawCalls : 0;
+    totalInstances += instances;
+    totalTriangles += triangles;
+    totalDrawCalls += drawCalls;
+    let entry = byType.get(group.foliageTypeId);
+    if (!entry) {
+      entry = {
+        typeId: group.foliageTypeId,
+        name: typeName(group.foliageTypeId),
+        instances: 0,
+        triangles: 0,
+        drawCalls: 0,
+      };
+      byType.set(group.foliageTypeId, entry);
+    }
+    entry.instances += instances;
+    entry.triangles += triangles;
+    entry.drawCalls += drawCalls;
+  }
+  const types = [...byType.values()].sort(
+    (a, b) => b.instances - a.instances || a.name.localeCompare(b.name),
+  );
+  return { totalInstances, totalTriangles, totalDrawCalls, types };
+}

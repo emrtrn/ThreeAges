@@ -201,10 +201,12 @@ import {
   type FoliageSelectionEntry,
 } from "@engine/render-three/foliage";
 import {
+  computeFoliageResourceUsage,
   createEmptyFoliageData,
   foliageDataPath,
   normalizeFoliageType,
   uniqueFoliageGroupId,
+  type FoliageResourceUsage,
   type ForgeFoliageTypeDef,
   type LayoutFoliageData,
   type LayoutFoliageGroup,
@@ -5497,6 +5499,19 @@ export class SceneApp {
   /** Number of currently-selected foliage instances (panel resource readout). */
   getFoliageSelectionCount(): number {
     return this.foliageSelection.size();
+  }
+
+  /**
+   * Per-type foliage resource report (instances / triangles / draw calls) for the
+   * panel's Resource Usage section. Triangle + draw-call cost is read from the live
+   * InstancedMesh batches, so it reflects exactly what the viewport draws.
+   */
+  getFoliageResourceUsage(): FoliageResourceUsage {
+    return computeFoliageResourceUsage(
+      this.foliageData,
+      (typeId) => this.foliageTypes.get(typeId)?.name ?? typeId,
+      (groupId) => this.foliageBinding?.groupRenderStat(groupId) ?? null,
+    );
   }
 
   /** Select tool: click-picks a single instance (shift/ctrl toggles; empty clears). */

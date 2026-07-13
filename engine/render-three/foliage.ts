@@ -1,6 +1,7 @@
 import {
   Box3,
   BoxGeometry,
+  type BufferGeometry,
   Euler,
   Group,
   InstancedMesh,
@@ -14,6 +15,7 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import type { Vec3 } from "@engine/scene/layout";
 import type {
+  FoliageGroupRenderStat,
   ForgeFoliageTypeDef,
   LayoutFoliageData,
   LayoutFoliageGroup,
@@ -24,6 +26,14 @@ import { composeTransformMatrix } from "./transforms";
 import { createInstancedModelGroup, type InstanceRenderItem } from "./models";
 
 const WORLD_UP = new Vector3(0, 1, 0);
+
+/** Triangle count of one geometry (indexed or not); 0 when it has no positions. */
+export function geometryTriangleCount(geometry: BufferGeometry): number {
+  const index = geometry.getIndex();
+  if (index) return Math.floor(index.count / 3);
+  const position = geometry.getAttribute("position");
+  return position ? Math.floor(position.count / 3) : 0;
+}
 
 /**
  * Resolves a paint roll ({@link FoliageInstanceRoll}) into a saved
@@ -195,6 +205,19 @@ export class FoliageRenderBinding {
     const meshes: InstancedMesh[] = [];
     for (const object of this.objects.values()) meshes.push(...object.meshes);
     return meshes;
+  }
+
+  /**
+   * Live render stat for one group's batch (triangles-per-instance + draw calls),
+   * or null when the group has no built batch (mesh not loaded / no instances).
+   * Feeds {@link computeFoliageResourceUsage} for the panel's resource readout.
+   */
+  groupRenderStat(groupId: string): FoliageGroupRenderStat | null {
+    const object = this.objects.get(groupId);
+    if (!object || object.meshes.length === 0) return null;
+    let trianglesPerInstance = 0;
+    for (const mesh of object.meshes) trianglesPerInstance += geometryTriangleCount(mesh.geometry);
+    return { trianglesPerInstance, drawCalls: object.meshes.length };
   }
 
   /** Rebuilds every group from scratch (load, or a bulk change). */

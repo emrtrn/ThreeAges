@@ -1,3 +1,4 @@
+import type { FoliageResourceUsage } from "@engine/scene/foliage";
 import type {
   FoliageTargetFilters,
   FoliageTool,
@@ -17,6 +18,8 @@ export interface FoliagePanelOptions {
   types: FoliageTypeView[];
   /** Number of foliage instances currently selected (Select/Lasso). */
   selectionCount: number;
+  /** Per-type instance / triangle / draw-call cost of the level's foliage. */
+  resourceUsage: FoliageResourceUsage;
   /** `foliageType` assets in the project not yet added to the active list. */
   availableTypeAssets: FoliageAssetOption[];
   /** Static-mesh assets, for the "new foliage type from mesh" flow. */
@@ -47,6 +50,49 @@ function escapeHtml(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+/** Compact integer formatting: 1500 → "1.5k", 2_400_000 → "2.4M". */
+function formatCount(value: number): string {
+  if (value < 1000) return String(value);
+  if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`;
+  return `${(value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0)}M`;
+}
+
+function renderResourceUsage(usage: FoliageResourceUsage): string {
+  const typeRows =
+    usage.types.length === 0
+      ? `<div class="detail-hint">No foliage painted yet.</div>`
+      : usage.types
+          .map(
+            (type) => `
+        <div class="foliage-usage-row" title="${escapeHtml(type.name)}: ${type.instances} instances, ${
+          type.triangles
+        } triangles, ${type.drawCalls} draw call${type.drawCalls === 1 ? "" : "s"}">
+          <span class="foliage-usage-name">${escapeHtml(type.name)}</span>
+          <span class="foliage-usage-stat">${formatCount(type.instances)}</span>
+          <span class="foliage-usage-stat">${formatCount(type.triangles)}</span>
+          <span class="foliage-usage-stat">${formatCount(type.drawCalls)}</span>
+        </div>`,
+          )
+          .join("");
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Resource Usage</div>
+      <div class="foliage-usage-row foliage-usage-head">
+        <span class="foliage-usage-name">Type</span>
+        <span class="foliage-usage-stat">Inst</span>
+        <span class="foliage-usage-stat">Tris</span>
+        <span class="foliage-usage-stat">Draws</span>
+      </div>
+      ${typeRows}
+      <div class="foliage-usage-row foliage-usage-total">
+        <span class="foliage-usage-name">Total</span>
+        <span class="foliage-usage-stat">${formatCount(usage.totalInstances)}</span>
+        <span class="foliage-usage-stat">${formatCount(usage.totalTriangles)}</span>
+        <span class="foliage-usage-stat">${formatCount(usage.totalDrawCalls)}</span>
+      </div>
+    </div>`;
 }
 
 export function renderFoliagePanel(options: FoliagePanelOptions): void {
@@ -150,6 +196,7 @@ function renderHtml(options: FoliagePanelOptions): string {
         }>Remove Selected</button>
       </div>
     </div>
+    ${renderResourceUsage(options.resourceUsage)}
     <div class="detail-section">
       <div class="detail-section-title">Foliage Types</div>
       <div class="foliage-type-list">${typeRows}</div>
