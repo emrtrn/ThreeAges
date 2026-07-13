@@ -1817,8 +1817,10 @@ asset'leri davranışını değiştirmemelidir.
   sahipliği çakışmasını doğrula ve engelle. (`SplinePathFollowerSubsystem`, AI spline route seçildiğinde kinematik follower'ı atlar.)
 - [x] Level-owned spline ID'leri için actor asset'ten bağımsız per-instance
   route/component override serialization ve editor akışını tasarla/uygula. (`LayoutActorInstance.patrolRoute` yalnızca AI patrol için dar kapsamlı override'dır.)
-- [ ] Save/Reload, missing spline, closed-loop seam, 30/120 FPS ve browser
-  runtime regression testlerini ekle.
+- [x] Save/Reload, missing spline, closed-loop seam, 30/120 FPS ve browser
+  runtime regression testlerini ekle. (`patrolRoute` save/clone round-trip, missing
+  spline hareket isteği üretmeme + debug uyarısı, kapalı rota seam, CharacterMovement
+  30/120 FPS hızı ve Playground browser smoke kapsamındadır.)
 
 ### Kabul kriterleri
 

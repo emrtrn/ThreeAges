@@ -18464,13 +18464,23 @@ check("cloneActorInstance deep-copies fields and shares no references", () => {
     groupId: "g1",
     nodeId: "n1",
     parentId: "n0",
+    patrolRoute: {
+      source: "spline" as const,
+      splineId: "route-1",
+      entry: "nearest" as const,
+      lookAheadDistance: 1.2,
+      wrapMode: "loop" as const,
+    },
   };
   const clone = cloneActorInstance(original);
   assert.deepEqual(clone, original);
   clone.position[0] = 99;
   (clone.rotation as number[])[1] = 0;
+  assert.ok(clone.patrolRoute);
+  clone.patrolRoute.splineId = "route-2";
   assert.equal(original.position[0], 1, "position array must be copied");
   assert.equal(original.rotation[1], 90, "rotation array must be copied");
+  assert.equal(original.patrolRoute.splineId, "route-1", "patrol route must be copied");
 });
 
 check("validateActorInstance allowlists classRef + transform and rejects bad refs", () => {
@@ -18504,11 +18514,24 @@ check("validateLayout round-trips an actors[] array", () => {
     instances: [],
     characters: [],
     actors: [
-      { classRef: "blueprints/DoorBP.actor.json", position: [1, 0, 1], name: "Door A" },
+      {
+        classRef: "blueprints/DoorBP.actor.json",
+        position: [1, 0, 1],
+        name: "Door A",
+        patrolRoute: {
+          source: "spline",
+          splineId: "level-patrol",
+          entry: "nearest",
+          speed: 2.4,
+          lookAheadDistance: 1.2,
+          wrapMode: "loop",
+        },
+      },
     ],
   }) as RoomLayout;
   assert.equal(layout.actors?.length, 1);
   assert.equal(layout.actors?.[0]?.classRef, "blueprints/DoorBP.actor.json");
+  assert.equal(layout.actors?.[0]?.patrolRoute?.splineId, "level-patrol");
   // Idempotent: validating the output again yields the same shape.
   assert.deepEqual(validateLayout(layout), layout);
 });
@@ -24004,6 +24027,53 @@ check("forge.moveAlongPatrolRoute approaches the nearest spline point before fol
   });
 });
 
+check("AI spline patrol move speed stays stable at 30 and 120 FPS through CharacterMovement", () => {
+  const runForOneSecond = (fps: number): { positionX: number; planarSpeed: number | undefined } => {
+    const actions = new ActionMap({});
+    const entity: Entity = {
+      id: "guard",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        CharacterMovement: {
+          maxWalkSpeed: 4,
+          sprintMultiplier: 1,
+          jumpSpeed: 5,
+          gravityScale: 1,
+          orientRotationToMovement: true,
+        },
+      },
+    };
+    const splineLookAheadMove = { position: [100, 0, 0] as Vec3, speed: 2.4 };
+    let lastReport: LocomotionInput | undefined;
+    const movement = new CharacterMovementSubsystem(actions, () => undefined, undefined, {
+      isPlayerControlled: () => false,
+      getMoveIntent: (_entityId, transform) => ({
+        direction: [
+          splineLookAheadMove.position[0] - transform.position[0],
+          splineLookAheadMove.position[2] - transform.position[2],
+        ],
+        speed: splineLookAheadMove.speed,
+      }),
+      reportLocomotion: (_entityId, report) => { lastReport = report; },
+    });
+    movement.setEntities([entity]);
+    for (let frame = 1; frame <= fps; frame += 1) {
+      movement.update({ deltaSeconds: 1 / fps, elapsedSeconds: frame / fps, frame });
+    }
+    return {
+      positionX: movement.transformOf("guard")?.position[0] ?? 0,
+      planarSpeed: lastReport?.planarSpeed,
+    };
+  };
+
+  const thirtyFps = runForOneSecond(30);
+  const oneTwentyFps = runForOneSecond(120);
+  assert.ok(Math.abs(thirtyFps.positionX - 2.4) < 1e-8);
+  assert.ok(Math.abs(oneTwentyFps.positionX - 2.4) < 1e-8);
+  assert.equal(thirtyFps.planarSpeed, 2.4);
+  assert.equal(oneTwentyFps.planarSpeed, 2.4);
+});
+
 check("AI spline patrol wrap modes advance deterministically at route boundaries", () => {
   assert.deepEqual(advanceSplinePatrolDistance(9, 1, 3, 10, "loop"), {
     distance: 2,
@@ -24020,6 +24090,55 @@ check("AI spline patrol wrap modes advance deterministically at route boundaries
     direction: 1,
     atBoundary: true,
   });
+
+  const rail = createDefaultSplineActor();
+  rail.id = "closed-patrol-rail";
+  const [firstPoint, secondPoint] = rail.spline.points;
+  assert.ok(firstPoint && secondPoint);
+  rail.spline.points = [
+    { ...firstPoint, position: [0, 0, 0] },
+    { ...secondPoint, position: [10, 0, 0] },
+    { ...secondPoint, id: "closed-patrol-point-3", position: [10, 0, 10] },
+    { ...secondPoint, id: "closed-patrol-point-4", position: [0, 0, 10] },
+  ];
+  rail.spline.closed = true;
+  const query = createSplineRegistry([rail]).getSplineById(rail.id);
+  assert.ok(query);
+  const length = query.getLength();
+  const before = query.getLocationAtDistance(length - 0.01, "world");
+  const afterDistance = advanceSplinePatrolDistance(length - 0.01, 1, 0.02, length, "loop").distance;
+  const after = query.getLocationAtDistance(afterDistance, "world");
+  assert.ok(Math.hypot(before[0] - after[0], before[1] - after[1], before[2] - after[2]) < 0.03,
+    "closed-loop seam must remain spatially continuous");
+});
+
+check("AI spline patrol reports a missing spline without requesting movement", () => {
+  const controller = new AIController("ai:guard", "guard", new Blackboard(), {
+    patrolRoute: {
+      source: "spline",
+      splineId: "removed-rail",
+      entry: "nearest",
+      lookAheadDistance: 1.2,
+      wrapMode: "loop",
+    },
+  });
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.moveAlongPatrolRoute" },
+  });
+  let requests = 0;
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    splineRegistry: createSplineRegistry(),
+    world: { entityPosition: () => [0, 0, 0] },
+    moveTo: () => {
+      requests += 1;
+      return "running";
+    },
+  });
+  assert.equal(runner.tick({ deltaSeconds: 1 / 60, elapsedSeconds: 1 / 60, frame: 1 }), "failure");
+  assert.equal(requests, 0);
 });
 
 check("forge.moveAlongPatrolRoute uses Target Point source explicitly when configured", () => {
@@ -25332,6 +25451,35 @@ check("formatAiDebug renders controller count, goal + blackboard size, tagging d
   assert.deepEqual(lines, ["ai", "controllers: 1", "  enemy-1 goal:patrol bb:3"]);
   const off = formatAiDebug({ enabled: false, controllerCount: 0, controllers: [] });
   assert.deepEqual(off, ["ai", "controllers: 0 (off)"]);
+});
+
+check("formatAiDebug exposes a missing spline patrol route", () => {
+  const lines = formatAiDebug({
+    enabled: true,
+    controllerCount: 1,
+    controllers: [{
+      controllerId: "ai:enemy-1",
+      pawnEntityId: "enemy-1",
+      goal: "patrol",
+      behaviorTreeAsset: null,
+      behavior: null,
+      patrolRoute: {
+        source: "spline",
+        splineId: "removed-rail",
+        entry: "nearest",
+        lookAheadDistance: 1.2,
+        wrapMode: "loop",
+      },
+      patrolSplineMissing: true,
+      blackboard: { keyCount: 0, entries: [] },
+    }],
+  });
+  assert.deepEqual(lines, [
+    "ai",
+    "controllers: 1",
+    "  patrol enemy-1: spline:removed-rail (missing)",
+    "  enemy-1 goal:patrol bb:0",
+  ]);
 });
 
 check("formatAiDebug includes behavior runner status when present", () => {

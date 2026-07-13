@@ -247,6 +247,13 @@ export function formatAiDebug(snapshot: AiDebugSnapshot, topN = 4): string[] {
     if (controller.query) {
       lines.push(`  query ${controller.pawnEntityId}: ${formatAiQueryDebug(controller.query)}`);
     }
+    const patrol = controller.patrolRoute;
+    if (patrol) {
+      const source = patrol.source === "spline"
+        ? `spline:${patrol.splineId ?? "unset"}${controller.patrolSplineMissing ? " (missing)" : ""}`
+        : `targetPoints${patrol.targetPointTag ? `:${patrol.targetPointTag}` : ""}`;
+      lines.push(`  patrol ${controller.pawnEntityId}: ${source}`);
+    }
     const knownPositions = formatAiKnownPositions(controller.blackboard.entries);
     if (knownPositions.length > 0) {
       lines.push(`  known ${controller.pawnEntityId}: ${knownPositions.join(" ")}`);

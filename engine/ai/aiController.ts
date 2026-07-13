@@ -62,6 +62,8 @@ export interface AIControllerDebugSnapshot {
   readonly query?: AiQueryDebugSnapshot;
   /** Authored perception settings, echoed into debug for visualizers only. */
   readonly perceptionConfig?: AIPerceptionConfig;
+  /** Authored patrol source, echoed into debug so route selection is inspectable. */
+  readonly patrolRoute?: AiPatrolRoute;
   /** World-space pawn position, when the host can resolve it. */
   readonly position?: Vec3;
   /** World-space pawn forward vector, when the host can resolve it. */
@@ -149,6 +151,7 @@ export class AIController {
       perception: this.perceived,
       ...(this.lastQuery ? { query: this.lastQuery } : {}),
       ...(this.perceptionConfig ? { perceptionConfig: this.perceptionConfig } : {}),
+      patrolRoute: { ...this.patrolRoute },
       blackboard: this.blackboard.getDebugSnapshot(),
     };
   }

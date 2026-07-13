@@ -61,7 +61,13 @@ export interface AiDebugSnapshot {
   /** False while the host has the subsystem gated off (editor edit mode). */
   readonly enabled: boolean;
   readonly controllerCount: number;
-  readonly controllers: readonly AIControllerDebugSnapshot[];
+  readonly controllers: readonly AiControllerSubsystemDebugSnapshot[];
+}
+
+/** Runtime-only patrol diagnostics appended by the AI subsystem. */
+export interface AiControllerSubsystemDebugSnapshot extends AIControllerDebugSnapshot {
+  /** The selected spline is unavailable to the runtime spline registry. */
+  readonly patrolSplineMissing?: boolean;
 }
 
 export interface AiAssetLibrary {
@@ -316,7 +322,14 @@ export class AISubsystem implements Subsystem {
             : entry?.kind === "stateTree"
               ? { stateTree: entry.runner.getDebugSnapshot() }
               : null;
-        const snapshot = controller.getDebugSnapshot(runnerDebug);
+        const controllerSnapshot = controller.getDebugSnapshot(runnerDebug);
+        const patrolSplineMissing =
+          controllerSnapshot.patrolRoute?.source === "spline" &&
+          (!controllerSnapshot.patrolRoute.splineId ||
+            !this.splineRegistry?.getSplineById(controllerSnapshot.patrolRoute.splineId));
+        const snapshot: AiControllerSubsystemDebugSnapshot = patrolSplineMissing
+          ? { ...controllerSnapshot, patrolSplineMissing: true }
+          : controllerSnapshot;
         const entity = this.entities.find((candidate) => candidate.id === pawnEntityId);
         const transform = entity ? readTransformComponent(entity) : undefined;
         if (!transform) return snapshot;
