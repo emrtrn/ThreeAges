@@ -438,8 +438,8 @@ Alınacak fikirler:
 
 ### Faz 1 - Manual Static Mesh Foliage Paint
 
-> Durum: 2026-07-13 itibarıyla kod tarafı TAMAM, `build:verify` + `verify:imports`
-> yeşil, 810 engine check geçiyor. Kalan: kullanıcı editor smoke'u.
+> Durum: 2026-07-13 itibarıyla **Faz 1 TAMAMLANDI** — kod + kullanıcı editor smoke
+> onaylandı; `build:verify` + `verify:imports` yeşil, 810 engine check geçiyor.
 > Not: Foliage Type asset uzantısı çakışmayı önlemek için `*.foliagetype.json`
 > oldu (level sidecar `<layout>.foliage.json` olarak kaldı).
 
@@ -459,19 +459,40 @@ Alınacak fikirler:
 - [x] Save/Reload. (`saveLayout` → `/__save-foliage`; `buildFoliage` yükler.)
 - [x] Runtime Play render. (`RuntimeSceneApp.buildRuntimeFoliage`)
 - [x] Engine tests. (foliage normalizer + paint core + render binding + validator.)
-- [ ] Kullanıcı editor smoke'u (paint/erase/single/save/reload/Play elle test).
+- [x] Kullanıcı editor smoke'u (paint/erase/single/save/reload/Play elle test).
+  (2026-07-13: kullanıcı editörde onayladı. Smoke sırasında düzeltilenler: Foliage
+  modu pointer sahiplenme → landscape sculpt sızıntısı, yeni tür kayıt/aktif-tür
+  bug'ı, Paint down-cast member-raycaster + fallback, Single tek-tık, sürüklemede
+  fırça takibi, paint spacing throttle.)
 
 ### Faz 2 - Editing ve Quality Tools
 
-- [ ] Lasso select.
+> Durum: 2026-07-13 itibarıyla **seçim altyapısı dilimi TAMAM** (kod tarafı;
+> kullanıcı editor smoke'u bekliyor). `build:verify` + `verify:imports` yeşil,
+> 816 engine check geçiyor. Instance-level seçim keystone parçası kuruldu:
+> ayrı `FoliageSelection` modeli (`engine/scene/foliageSelection.ts`), wireframe
+> kafes overlay (`FoliageRenderBinding.setSelection`), `ScenePicker.pickFoliageInstance`
+> (batch raycast, decorative-noop'u bypass eder). Lasso = Unreal'daki gibi
+> fırça-tabanlı seçim (polygon değil); mevcut stroke altyapısını yeniden kullanır.
+> Panelde "Selection" bölümü + Escape/Delete kısayolları eklendi.
+
+- [x] Lasso select. (Fırça-tabanlı; Ctrl/Alt ile çıkarma.
+  `SceneApp.applyFoliageLassoAt`.)
 - [ ] Fill.
 - [ ] Reapply.
-- [ ] Invalid selection.
-- [ ] Deselect all.
-- [ ] Reattach / snap to ground.
-- [ ] Foliage group resource usage.
+- [x] Invalid selection. (`SceneApp.selectInvalidFoliage`: altında zemin yok /
+  büyük dikey boşluk / slope-height filtresi geçmiyor.)
+- [x] Deselect all. (`SceneApp.deselectAllFoliage` + Escape.)
+- [x] Reattach / snap to ground. (`reattachFoliageInstance` render helper:
+  scale + yaw korunur, alignToNormal'da yeni normale eğim.)
+- [ ] Foliage group resource usage. (Panelde seçim sayısı okunuyor; tam kaynak
+  raporu — instance/triangle/draw — hâlâ açık.)
 - [ ] Cull start/end fade.
 - [ ] Chunk/grid render batches.
+
+> Kalan Faz 2 maddeleri (Fill, Reapply, resource usage raporu, cull fade,
+> chunking) sonraki dilimlerde. Select + Remove Selected de bu dilimde geldi
+> (Delete kısayolu + panel "Remove Selected").
 
 ### Faz 3 - Landscape Grass / Layer-driven Scatter
 

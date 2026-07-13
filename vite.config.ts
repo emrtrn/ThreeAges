@@ -1,6 +1,6 @@
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
-import { mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
@@ -14,6 +14,7 @@ import {
   validateContentDeletePayload,
   validateContentNewPayload,
   validateContentRenamePayload,
+  validateContentTransferPayload,
   validateImportAssetMeta,
   validateNewBehaviorPayload,
   resolveBehaviorStub,
@@ -311,6 +312,60 @@ async function deleteModelSidecars(path: string): Promise<void> {
   }
 }
 
+/** Copies model sidecars alongside a copied GLB/GLTF without overwriting any target file. */
+async function copyModelSidecars(from: string, to: string): Promise<void> {
+  const fromBase = stripLastExt(from);
+  const toBase = stripLastExt(to);
+  for (const suffix of MODEL_SIDECAR_SUFFIXES) {
+    const fromAbs = resolvePublicPath(`${fromBase}${suffix}`);
+    if (!(await pathExists(fromAbs))) continue;
+    await copyFile(fromAbs, resolvePublicPath(`${toBase}${suffix}`));
+  }
+}
+
+function contentParentDir(path: string): string {
+  const slash = path.lastIndexOf("/");
+  return slash >= 0 ? path.slice(0, slash) : "";
+}
+
+function contentFileBaseAndExtension(path: string): { base: string; extension: string } {
+  const fileName = path.split("/").at(-1) ?? path;
+  const dot = fileName.indexOf(".");
+  return dot >= 0
+    ? { base: fileName.slice(0, dot), extension: fileName.slice(dot) }
+    : { base: fileName, extension: "" };
+}
+
+function contentCopyDestination(source: string, destinationDir: string, copyNumber: number): string {
+  const { base, extension } = contentFileBaseAndExtension(source);
+  const suffix = copyNumber === 1 ? " Copy" : ` Copy ${copyNumber}`;
+  return `${destinationDir}/${base}${suffix}${extension}`;
+}
+
+async function transferTargetConflicts(source: string, target: string): Promise<boolean> {
+  if (await pathExists(resolvePublicPath(target))) return true;
+  if (!MODEL_EXTS.has(extname(source).toLowerCase())) return false;
+  const sourceBase = stripLastExt(source);
+  const targetBase = stripLastExt(target);
+  for (const suffix of MODEL_SIDECAR_SUFFIXES) {
+    if (
+      (await pathExists(resolvePublicPath(`${sourceBase}${suffix}`))) &&
+      (await pathExists(resolvePublicPath(`${targetBase}${suffix}`)))
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function findAvailableContentCopyDestination(source: string, destinationDir: string): Promise<string> {
+  for (let copyNumber = 1; copyNumber <= 1000; copyNumber += 1) {
+    const target = contentCopyDestination(source, destinationDir, copyNumber);
+    if (!(await transferTargetConflicts(source, target))) return target;
+  }
+  throw new Error("unable to find an available copy name");
+}
+
 /**
  * Repoints the manifest entry whose `path`/`file` matches `from` to `to`,
  * refreshing its display name. The asset id is kept stable so existing layout
@@ -336,6 +391,44 @@ async function renameManifestEntry(from: string, to: string, name: string): Prom
   }
   if (changed) await writeFile(manifestAbs, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   return changed;
+}
+
+/**
+ * Clones a registered asset's manifest record for a file copy. The clone gets a
+ * unique id, while its authored metadata (placement, collision, tags, runtime)
+ * stays intact. Unregistered source files deliberately remain unregistered.
+ */
+async function copyManifestEntry(from: string, to: string): Promise<string | null> {
+  const project = await readProjectManifest();
+  const manifestAbs = resolvePublicPath(project.editor.assetManifest);
+  const manifest = JSON.parse(await readFile(manifestAbs, "utf8")) as {
+    assets?: unknown[];
+  } & Record<string, unknown>;
+  if (!Array.isArray(manifest.assets)) return null;
+  const source = manifest.assets.find((asset): asset is Record<string, unknown> => {
+    if (!asset || typeof asset !== "object") return false;
+    const record = asset as Record<string, unknown>;
+    return record.path === from || record.file === from;
+  });
+  if (!source) return null;
+
+  const copied = structuredClone(source);
+  if (copied.path === from) copied.path = to;
+  if (copied.file === from) copied.file = to;
+  const existingIds = new Set(
+    manifest.assets
+      .map((asset) => (asset && typeof asset === "object" ? (asset as Record<string, unknown>).id : null))
+      .filter((id): id is string => typeof id === "string"),
+  );
+  const sourceId = typeof copied.id === "string" && copied.id ? copied.id : "asset";
+  let id = `${sourceId}-copy`;
+  for (let number = 2; existingIds.has(id); number += 1) id = `${sourceId}-copy-${number}`;
+  copied.id = id;
+  const sourceName = typeof source.name === "string" && source.name ? source.name : contentFileBaseAndExtension(from).base;
+  copied.name = `${sourceName} Copy`;
+  manifest.assets.push(copied);
+  await writeFile(manifestAbs, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  return id;
 }
 
 /** Drops the manifest entry referencing `path`. Returns true when one was removed. */
@@ -542,6 +635,54 @@ async function rewriteJsonPathReferences(fromFolder: string, toFolder: string): 
   return changedFiles;
 }
 
+function replaceJsonExactPath(value: unknown, from: string, to: string): { value: unknown; changed: boolean } {
+  if (typeof value === "string") {
+    return value === from ? { value: to, changed: true } : { value, changed: false };
+  }
+  if (Array.isArray(value)) {
+    let changed = false;
+    const next = value.map((item) => {
+      const result = replaceJsonExactPath(item, from, to);
+      changed ||= result.changed;
+      return result.value;
+    });
+    return { value: next, changed };
+  }
+  if (value && typeof value === "object") {
+    let changed = false;
+    const next: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) {
+      const result = replaceJsonExactPath(child, from, to);
+      changed ||= result.changed;
+      next[key] = result.value;
+    }
+    return { value: next, changed };
+  }
+  return { value, changed: false };
+}
+
+/** Keeps exact file-path references valid after a Cut/Paste move. */
+async function rewriteJsonExactPathReferences(from: string, to: string): Promise<number> {
+  const files = await listFilesRecursive(PUBLIC_DIR, "");
+  let changedFiles = 0;
+  for (const rel of files.filter((file) => file.toLowerCase().endsWith(".json"))) {
+    const abs = resolvePublicPath(rel);
+    const raw = await readFile(abs, "utf8").catch(() => null);
+    if (!raw) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      continue;
+    }
+    const result = replaceJsonExactPath(parsed, from, to);
+    if (!result.changed) continue;
+    await writeFile(abs, `${JSON.stringify(result.value, null, 2)}\n`, "utf8");
+    changedFiles += 1;
+  }
+  return changedFiles;
+}
+
 function cleanDeletedAssetReferences(
   layout: Record<string, unknown>,
   removedIds: Set<string>,
@@ -733,6 +874,7 @@ const PRIVILEGED_URLS = new Set([
   "/__content-new",
   "/__content-rename",
   "/__content-delete",
+  "/__content-transfer",
   "/__import-asset",
   "/__reimport-asset",
   "/__new-behavior",
@@ -1540,6 +1682,108 @@ function layoutEditorPlugin(): Plugin {
               removedAssets,
               cleanedLayouts,
             }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Content Browser Cut/Copy/Paste: transfers one file to an existing
+        // public-scoped folder. Folder copying is deliberately deferred because
+        // it needs recursive manifest-id and internal-reference remapping.
+        if (req.url === "/__content-transfer") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateContentTransferPayload(await readJsonBody(req));
+            const sourceAbs = resolvePublicPath(payload.source);
+            const sourceStat = await stat(sourceAbs).catch(() => null);
+            if (!sourceStat) throw new Error(`not found: ${payload.source}`);
+            if (!sourceStat.isFile()) throw new Error("folder transfer is not available in Content Browser V1");
+
+            const destinationAbs = resolvePublicPath(payload.destinationDir);
+            const destinationStat = await stat(destinationAbs).catch(() => null);
+            if (!destinationStat?.isDirectory()) {
+              throw new Error(`destination folder not found: ${payload.destinationDir}`);
+            }
+
+            const sourceParent = contentParentDir(payload.source);
+            if (payload.operation === "move" && sourceParent === payload.destinationDir) {
+              throw new Error("source is already in the target folder");
+            }
+            if (
+              payload.operation === "move" &&
+              extname(payload.source).toLowerCase() === ".gltf"
+            ) {
+              throw new Error("moving .gltf files is not available in Content Browser V1");
+            }
+
+            const project = await readProjectManifest();
+            if (
+              payload.operation === "move" &&
+              normalizePublicRelativePath(project.editor.defaultScene) === payload.source
+            ) {
+              throw new Error("cannot move the active level; set another level as default first");
+            }
+
+            const fileName = payload.source.split("/").at(-1) ?? payload.source;
+            const target =
+              payload.operation === "copy"
+                ? await findAvailableContentCopyDestination(payload.source, payload.destinationDir)
+                : `${payload.destinationDir}/${fileName}`;
+            if (payload.operation === "move" && (await transferTargetConflicts(payload.source, target))) {
+              throw new Error(`already exists: ${target}`);
+            }
+
+            if (payload.operation === "move") {
+              await rename(sourceAbs, resolvePublicPath(target));
+              if (MODEL_EXTS.has(extname(payload.source).toLowerCase())) {
+                await moveModelSidecars(payload.source, target);
+              }
+              const registered = await renameManifestEntry(
+                payload.source,
+                target,
+                contentFileBaseAndExtension(target).base,
+              ).catch(() => false);
+              await rewriteJsonExactPathReferences(payload.source, target).catch(() => 0);
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(JSON.stringify({ ok: true, path: target, registered, registeredId: null }));
+              return;
+            }
+
+            let copied = false;
+            try {
+              await copyFile(sourceAbs, resolvePublicPath(target));
+              copied = true;
+              if (MODEL_EXTS.has(extname(payload.source).toLowerCase())) {
+                await copyModelSidecars(payload.source, target);
+              }
+              const registeredId = await copyManifestEntry(payload.source, target);
+              res.setHeader("Content-Type", "application/json; charset=utf-8");
+              res.end(
+                JSON.stringify({
+                  ok: true,
+                  path: target,
+                  registered: registeredId !== null,
+                  registeredId,
+                }),
+              );
+            } catch (error) {
+              if (copied) {
+                await unlink(resolvePublicPath(target)).catch(() => undefined);
+                if (MODEL_EXTS.has(extname(payload.source).toLowerCase())) {
+                  await deleteModelSidecars(target).catch(() => undefined);
+                }
+              }
+              throw error;
+            }
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");

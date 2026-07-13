@@ -52,6 +52,8 @@ export interface ContentPanelOptions {
   missingManifestAssetCount: number;
   selectedAssetId: string | null;
   selectedContentFolderPath: string | null;
+  /** File currently marked for Cut in the editor-only Content Browser clipboard. */
+  cutContentPath: string | null;
   isActiveLevel: (item: BrowserAssetItem) => boolean;
   getEmptyDragImage: () => HTMLImageElement;
   setSelectedAsset: (assetId: string | null) => void;
@@ -195,6 +197,7 @@ function createAssetCard(options: ContentPanelOptions, item: BrowserAssetItem): 
   card.classList.toggle("is-unregistered", !item.editable);
   card.classList.toggle("has-issues", issues.length > 0);
   card.classList.toggle("is-active-level", activeLevel);
+  card.classList.toggle("is-cut", item.path === options.cutContentPath);
   card.classList.toggle(
     "is-selected",
     Boolean(item.editable && item.editable.id === options.selectedAssetId),

@@ -194,7 +194,12 @@ import {
   type LandscapeRenderItem,
   type LandscapeViewMode,
 } from "@engine/render-three/landscape";
-import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-three/foliage";
+import {
+  FoliageRenderBinding,
+  foliageInstanceFromRoll,
+  reattachFoliageInstance,
+  type FoliageSelectionEntry,
+} from "@engine/render-three/foliage";
 import {
   createEmptyFoliageData,
   foliageDataPath,
@@ -204,6 +209,11 @@ import {
   type LayoutFoliageData,
   type LayoutFoliageGroup,
 } from "@engine/scene/foliage";
+import {
+  FoliageSelection,
+  foliageIndicesInRadius,
+  removeFoliageIndices,
+} from "@engine/scene/foliageSelection";
 import {
   eraseFoliageInRadius,
   foliageOverlaps,
@@ -571,8 +581,8 @@ export interface LandscapeSplineView {
   smooth: boolean;
 }
 
-/** Foliage Mode tool set (Faz 1). Lasso/Fill/Reapply are Faz 2. */
-export type FoliageTool = "select" | "paint" | "erase" | "single" | "remove";
+/** Foliage Mode tool set. `select`/`lasso` drive instance selection (Faz 2). */
+export type FoliageTool = "select" | "lasso" | "paint" | "erase" | "single" | "remove";
 
 /** Which target surfaces the foliage brush is allowed to paint onto (Faz 1 filters). */
 export interface FoliageTargetFilters {
@@ -867,6 +877,8 @@ export class SceneApp {
   private foliageStrokePointerId: number | null = null;
   /** World position of the last paint dab, for brush spacing throttle during a drag. */
   private foliagePaintLastDab: Vec3 | null = null;
+  /** Selected foliage instances (Faz 2 select/lasso/invalid/reattach/remove tools). */
+  private readonly foliageSelection = new FoliageSelection();
   private foliageToolSettings: FoliageToolSettings = {
     tool: "paint",
     activeTypeId: null,
@@ -5136,6 +5148,7 @@ export class SceneApp {
       this.foliageBinding = null;
     }
     this.foliageTypes.clear();
+    this.foliageSelection.clear();
     this.foliageData = await loadFoliageData(this.foliageScenePath());
     this.foliageDataDirty = false;
     const manifest = this.manifest ?? (await this.assetLoader?.loadManifest()) ?? null;
@@ -5176,6 +5189,11 @@ export class SceneApp {
   setFoliageModeActive(active: boolean): void {
     if (this.foliageModeActive === active) return;
     this.foliageModeActive = active;
+    // Leaving Foliage Mode drops the instance selection + its cage overlay.
+    if (!active && !this.foliageSelection.isEmpty()) {
+      this.foliageSelection.clear();
+      this.refreshFoliageSelectionOverlay();
+    }
     this.emitFoliageChanged();
   }
 
@@ -5186,7 +5204,7 @@ export class SceneApp {
   setFoliageToolSettings(patch: Partial<FoliageToolSettings>): FoliageToolSettings {
     const next = { ...this.foliageToolSettings, ...patch };
     this.foliageToolSettings = {
-      tool: (["select", "paint", "erase", "single", "remove"] as const).includes(next.tool)
+      tool: (["select", "lasso", "paint", "erase", "single", "remove"] as const).includes(next.tool)
         ? next.tool
         : "paint",
       activeTypeId: next.activeTypeId ?? null,
@@ -5450,9 +5468,203 @@ export class SceneApp {
       this.foliageBinding?.removeGroup(group.id);
       return false;
     });
+    // Erase re-indexes kept instances, so any instance selection is now stale.
+    this.clearFoliageSelection();
     this.foliageDataDirty = true;
     this.emitFoliageChanged();
     return true;
+  }
+
+  // --- Foliage instance selection (Faz 2: select / lasso / invalid / reattach / remove) ---
+
+  /** Rebuilds the selection cage overlay from the current instance selection. */
+  private refreshFoliageSelectionOverlay(): void {
+    if (!this.foliageBinding) return;
+    const entries: FoliageSelectionEntry[] = [];
+    this.foliageSelection.forEach((groupId, indices) => {
+      entries.push({ groupId, indices: [...indices] });
+    });
+    this.foliageBinding.setSelection(this.foliageData, entries, this.foliageResolver());
+  }
+
+  /** Clears the instance selection and its overlay (no-op when already empty). */
+  private clearFoliageSelection(): void {
+    if (this.foliageSelection.isEmpty()) return;
+    this.foliageSelection.clear();
+    this.refreshFoliageSelectionOverlay();
+  }
+
+  /** Number of currently-selected foliage instances (panel resource readout). */
+  getFoliageSelectionCount(): number {
+    return this.foliageSelection.size();
+  }
+
+  /** Select tool: click-picks a single instance (shift/ctrl toggles; empty clears). */
+  private applyFoliageSelectClick(clientX: number, clientY: number, additive: boolean): void {
+    const meshes = this.foliageBinding?.allMeshes() ?? [];
+    const hit = this.picker.pickFoliageInstance(clientX, clientY, meshes);
+    if (!hit) {
+      if (!additive) this.clearFoliageSelection();
+      this.emitFoliageChanged();
+      return;
+    }
+    if (additive) {
+      this.foliageSelection.toggle(hit.groupId, hit.index);
+    } else {
+      this.foliageSelection.clear();
+      this.foliageSelection.add(hit.groupId, hit.index);
+    }
+    this.refreshFoliageSelectionOverlay();
+    this.emitFoliageChanged();
+  }
+
+  /** Lasso tool: brush-drag over instances to add them (Ctrl/Alt subtracts). */
+  private applyFoliageLassoAt(clientX: number, clientY: number, subtract: boolean): boolean {
+    const pick = this.picker.pickFoliageSurface(clientX, clientY);
+    if (!pick) return true;
+    const center: Vec3 = [pick.point.x, pick.point.y, pick.point.z];
+    const radius = this.foliageToolSettings.brushSize;
+    let changed = false;
+    for (const group of this.foliageData.groups) {
+      for (const index of foliageIndicesInRadius(group.instances, center, radius)) {
+        if (subtract) {
+          if (this.foliageSelection.has(group.id, index)) {
+            this.foliageSelection.remove(group.id, index);
+            changed = true;
+          }
+        } else if (!this.foliageSelection.has(group.id, index)) {
+          this.foliageSelection.add(group.id, index);
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      this.refreshFoliageSelectionOverlay();
+      this.emitFoliageChanged();
+    }
+    return true;
+  }
+
+  /** Deselect All action (panel button + Escape while foliage mode). */
+  deselectAllFoliage(): void {
+    if (this.foliageSelection.isEmpty()) return;
+    this.clearFoliageSelection();
+    this.emitFoliageChanged();
+  }
+
+  /**
+   * Select Invalid: selects instances that no longer sit on valid ground — nothing
+   * solid beneath them, a large vertical gap to the surface below, or a surface that
+   * now fails the type's slope/height filters (e.g. after a landscape sculpt).
+   */
+  selectInvalidFoliage(): void {
+    this.foliageSelection.clear();
+    for (const group of this.foliageData.groups) {
+      const type = this.foliageTypes.get(group.foliageTypeId) ?? null;
+      const tolerance =
+        0.5 + (type ? Math.max(Math.abs(type.zOffsetMin), Math.abs(type.zOffsetMax)) : 0);
+      group.instances.forEach((instance, index) => {
+        const surface = this.picker.raycastFoliageSurfaceDown(instance.position[0], instance.position[2]);
+        let invalid = false;
+        if (!surface) {
+          invalid = true;
+        } else if (Math.abs(surface.point.y - instance.position[1]) > tolerance) {
+          invalid = true;
+        } else if (
+          type &&
+          !passesFoliageFilters(type, {
+            position: [surface.point.x, surface.point.y, surface.point.z],
+            normal: [surface.normal.x, surface.normal.y, surface.normal.z],
+          })
+        ) {
+          invalid = true;
+        }
+        if (invalid) this.foliageSelection.add(group.id, index);
+      });
+    }
+    const count = this.foliageSelection.size();
+    this.refreshFoliageSelectionOverlay();
+    this.onStatus?.(
+      count > 0
+        ? `Selected ${count} invalid foliage instance${count === 1 ? "" : "s"}.`
+        : "No invalid foliage found.",
+      count > 0 ? "info" : "success",
+    );
+    this.emitFoliageChanged();
+  }
+
+  /**
+   * Reattach / snap to ground: re-seats every selected instance onto the surface
+   * directly below it, preserving scale + painted yaw (and re-tilting to the new
+   * normal when the type aligns to it). Positions are re-indexed in place, so the
+   * selection survives.
+   */
+  reattachSelectedFoliage(): void {
+    if (this.foliageSelection.isEmpty()) return;
+    const groupsById = new Map(this.foliageData.groups.map((group) => [group.id, group]));
+    const touched = new Set<string>();
+    this.foliageSelection.forEach((groupId, indices) => {
+      const group = groupsById.get(groupId);
+      if (!group) return;
+      const type = this.foliageTypes.get(group.foliageTypeId) ?? null;
+      if (!type) return;
+      for (const index of indices) {
+        const instance = group.instances[index];
+        if (!instance) continue;
+        const surface = this.picker.raycastFoliageSurfaceDown(instance.position[0], instance.position[2]);
+        if (!surface) continue;
+        group.instances[index] = reattachFoliageInstance(instance, type, {
+          position: [surface.point.x, surface.point.y, surface.point.z],
+          normal: [surface.normal.x, surface.normal.y, surface.normal.z],
+        });
+        touched.add(groupId);
+      }
+    });
+    if (touched.size === 0) {
+      this.onStatus?.("No ground found under the selected foliage.", "warning");
+      return;
+    }
+    for (const groupId of touched) {
+      const group = groupsById.get(groupId);
+      if (group) this.rebuildFoliageGroupObject(group);
+    }
+    this.foliageDataDirty = true;
+    this.refreshFoliageSelectionOverlay();
+    this.emitFoliageChanged();
+  }
+
+  /** Removes every selected instance, drops emptied groups, and clears the selection. */
+  removeSelectedFoliage(): void {
+    if (this.foliageSelection.isEmpty()) return;
+    const groupsById = new Map(this.foliageData.groups.map((group) => [group.id, group]));
+    const affected = new Set(this.foliageSelection.groupIds());
+    let changed = false;
+    this.foliageSelection.forEach((groupId, indices) => {
+      const group = groupsById.get(groupId);
+      if (!group) return;
+      const kept = removeFoliageIndices(group.instances, indices);
+      if (kept.length !== group.instances.length) {
+        group.instances = kept;
+        changed = true;
+      }
+    });
+    if (!changed) {
+      this.clearFoliageSelection();
+      this.emitFoliageChanged();
+      return;
+    }
+    this.foliageData.groups = this.foliageData.groups.filter((group) => {
+      if (group.instances.length > 0) return true;
+      this.foliageBinding?.removeGroup(group.id);
+      return false;
+    });
+    for (const group of this.foliageData.groups) {
+      if (affected.has(group.id)) this.rebuildFoliageGroupObject(group);
+    }
+    this.foliageSelection.clear();
+    this.foliageDataDirty = true;
+    this.refreshFoliageSelectionOverlay();
+    this.emitFoliageChanged();
   }
 
   private ensureFoliageBrushCursor(): Mesh {
@@ -5499,25 +5711,39 @@ export class SceneApp {
 
   /** Pointer-down entry for a foliage tool; returns true when it owns the pointer. */
   beginFoliageStroke(event: PointerEvent): boolean {
-    if (!this.foliageModeActive || this.foliageToolSettings.tool === "select") return false;
-    // Foliage mode owns the left button for paint/erase/single/remove: consume the
-    // pointer even when a dab places/removes nothing, so it NEVER falls through to
+    if (!this.foliageModeActive) return false;
+    const tool = this.foliageToolSettings.tool;
+    // Select is a click-pick (no drag/capture): resolve it and consume the pointer
+    // so it never falls through to normal scene selection under the foliage batches.
+    if (tool === "select") {
+      this.applyFoliageSelectClick(event.clientX, event.clientY, event.shiftKey || event.ctrlKey);
+      return true;
+    }
+    // Foliage mode owns the left button for paint/erase/single/remove/lasso: consume
+    // the pointer even when a dab places/selects nothing, so it NEVER falls through to
     // landscape sculpt or scene selection (that was deforming terrain under Paint).
     this.foliagePaintLastDab = null;
-    this.applyFoliageActionAt(event.clientX, event.clientY);
+    if (tool === "lasso") {
+      this.applyFoliageLassoAt(event.clientX, event.clientY, event.ctrlKey || event.altKey);
+    } else {
+      this.applyFoliageActionAt(event.clientX, event.clientY);
+    }
     this.foliageStrokePointerId = event.pointerId;
     this.canvas.setPointerCapture(event.pointerId);
     return true;
   }
 
-  /** Pointer-move during a foliage stroke (drag paint/erase). */
+  /** Pointer-move during a foliage stroke (drag paint/erase/lasso). */
   updateFoliageStroke(event: PointerEvent): boolean {
     if (this.foliageStrokePointerId !== event.pointerId) return false;
     // Keep the brush ring under the cursor while the button is held (pointer is
     // captured, so the normal hover path doesn't run during a drag).
     this.updateFoliageBrushHover(event.clientX, event.clientY);
-    // Single places exactly one instance per click — it must not drag-paint.
-    if (this.foliageToolSettings.tool !== "single") {
+    const tool = this.foliageToolSettings.tool;
+    if (tool === "lasso") {
+      this.applyFoliageLassoAt(event.clientX, event.clientY, event.ctrlKey || event.altKey);
+    } else if (tool !== "single") {
+      // Single places exactly one instance per click — it must not drag-paint.
       this.applyFoliageActionAt(event.clientX, event.clientY);
     }
     return true;

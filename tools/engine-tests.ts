@@ -485,6 +485,7 @@ import {
   validateContentDeletePayload,
   validateContentNewPayload,
   validateContentRenamePayload,
+  validateContentTransferPayload,
   validateImportAssetMeta,
   validateActorInstance,
   validateLayout,
@@ -549,7 +550,13 @@ import {
   FoliageRenderBinding,
   foliageInstanceFromRoll,
   foliageInstanceItems,
+  reattachFoliageInstance,
 } from "../engine/render-three/foliage";
+import {
+  FoliageSelection,
+  foliageIndicesInRadius,
+  removeFoliageIndices,
+} from "../engine/scene/foliageSelection";
 import {
   defaultActorScriptDef,
   normalizeActorScriptDef,
@@ -1382,8 +1389,11 @@ check("deformed spline chains weld compatible pieces and keep UV phase continuou
   assert.ok(mesh.geometry.getAttribute("normal"), "normals are generated after welding");
 });
 
+// SM_Asphalt.glb is a small deterministic weld fixture (77 unique verts, 7 per
+// end ring). It was retired from public content in favor of SM_Road_Asphalt.glb
+// but kept here under tools/fixtures/ so this weld-topology test stays stable.
 const asphaltGltfDocument = await new NodeIO().registerExtensions([KHRMaterialsSpecular]).readBinary(
-  new Uint8Array(readFileSync("public/assets/starter-content/StaticMeshes/Environment/SM_Asphalt.glb")),
+  new Uint8Array(readFileSync("tools/fixtures/SM_Asphalt.glb")),
 );
 
 check("SM_Asphalt chain welds every shared end-ring vertex", () => {
@@ -15513,6 +15523,90 @@ check("FoliageRenderBinding tracks groups without a model resolver", () => {
   assert.equal(binding.root.children.length, 0);
 });
 
+check("FoliageSelection tracks, toggles, and prunes emptied groups", () => {
+  const selection = new FoliageSelection();
+  assert.equal(selection.isEmpty(), true);
+  selection.add("g1", 0);
+  selection.add("g1", 2);
+  selection.add("g2", 5);
+  assert.equal(selection.size(), 3);
+  assert.equal(selection.has("g1", 2), true);
+  assert.deepEqual(selection.indices("g1").sort((a, b) => a - b), [0, 2]);
+  assert.deepEqual(selection.groupIds().sort(), ["g1", "g2"]);
+  // toggle removes an existing index, add re-adds
+  selection.toggle("g1", 0);
+  assert.equal(selection.has("g1", 0), false);
+  // emptying a group drops it from groupIds
+  selection.remove("g2", 5);
+  assert.deepEqual(selection.groupIds(), ["g1"]);
+  selection.clearGroup("g1");
+  assert.equal(selection.isEmpty(), true);
+});
+
+check("foliageIndicesInRadius finds instances by horizontal distance only", () => {
+  const instances = [
+    { position: [0, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] },
+    { position: [0.4, 50, 0.3] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] },
+    { position: [10, 0, 0] as [number, number, number], rotation: [0, 0, 0] as [number, number, number], scale: [1, 1, 1] as [number, number, number] },
+  ];
+  // Vertical distance is ignored — index 1 is within the disk despite y = 50.
+  assert.deepEqual(foliageIndicesInRadius(instances, [0, 0, 0], 1), [0, 1]);
+  assert.deepEqual(foliageIndicesInRadius(instances, [10, 0, 0], 0.5), [2]);
+});
+
+check("removeFoliageIndices drops the selected indices, keeps the rest in order", () => {
+  const instances = [0, 1, 2, 3].map((n) => ({
+    position: [n, 0, 0] as [number, number, number],
+    rotation: [0, 0, 0] as [number, number, number],
+    scale: [1, 1, 1] as [number, number, number],
+  }));
+  const kept = removeFoliageIndices(instances, new Set([1, 3]));
+  assert.deepEqual(kept.map((i) => i.position[0]), [0, 2]);
+});
+
+check("reattachFoliageInstance snaps to the surface and preserves yaw when aligning", () => {
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "t",
+    meshAssetId: "m",
+    alignToNormal: true,
+  });
+  // A yaw-only instance on flat ground, reattached to a new (still flat) height.
+  const instance = {
+    position: [1, 5, 2] as [number, number, number],
+    rotation: [0, 40, 0] as [number, number, number],
+    scale: [1, 1, 1] as [number, number, number],
+    normal: [0, 1, 0] as [number, number, number],
+  };
+  const next = reattachFoliageInstance(instance, type, { position: [1, 0, 2], normal: [0, 1, 0] });
+  assert.ok(Math.abs(next.position[1] - 0) < 1e-6);
+  // Flat→flat keeps the painted yaw untouched.
+  assert.ok(Math.abs(next.rotation[1] - 40) < 1e-4);
+  assert.ok(Math.abs(next.rotation[0]) < 1e-4 && Math.abs(next.rotation[2]) < 1e-4);
+  assert.deepEqual(next.scale, [1, 1, 1]);
+});
+
+check("reattachFoliageInstance only moves position when the type ignores normals", () => {
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "t",
+    meshAssetId: "m",
+    alignToNormal: false,
+  });
+  const instance = {
+    position: [0, 9, 0] as [number, number, number],
+    rotation: [0, 12, 0] as [number, number, number],
+    scale: [2, 2, 2] as [number, number, number],
+  };
+  // Even a tilted surface leaves rotation alone when alignToNormal is off.
+  const next = reattachFoliageInstance(instance, type, { position: [0, 1, 0], normal: [0.5, 0.8, 0] });
+  assert.deepEqual(next.position, [0, 1, 0]);
+  assert.deepEqual(next.rotation, [0, 12, 0]);
+  assert.deepEqual(next.scale, [2, 2, 2]);
+});
+
 check("every starter preset body is a valid, save-clean schema-2 effect", () => {
   for (const preset of PARTICLE_EFFECT_PRESETS) {
     const body = buildParticleEffectPresetBody(preset, `FX_${preset}`);
@@ -17345,6 +17439,34 @@ check("content-delete validates payload and normalizes the path", () => {
   assert.throws(() => validateContentDeletePayload({ path: "" }));
   assert.throws(() => validateContentDeletePayload({ path: "../escape.glb" }));
   assert.throws(() => validateContentDeletePayload({ path: 42 }));
+});
+
+check("content-transfer validates copy/move paths and rejects traversal", () => {
+  assert.deepEqual(
+    validateContentTransferPayload({
+      source: "/assets/props/chair.glb/",
+      destinationDir: "assets/archive/",
+      operation: "copy",
+    }),
+    { source: "assets/props/chair.glb", destinationDir: "assets/archive", operation: "copy" },
+  );
+  assert.equal(
+    validateContentTransferPayload({
+      source: "assets/props/chair.glb",
+      destinationDir: "assets/archive",
+      operation: "move",
+    }).operation,
+    "move",
+  );
+  assert.throws(() =>
+    validateContentTransferPayload({ source: "../secret.glb", destinationDir: "assets", operation: "copy" }),
+  );
+  assert.throws(() =>
+    validateContentTransferPayload({ source: "assets/a.glb", destinationDir: "../escape", operation: "copy" }),
+  );
+  assert.throws(() =>
+    validateContentTransferPayload({ source: "assets/a.glb", destinationDir: "assets", operation: "delete" }),
+  );
 });
 
 check("normalizeActorScriptDef coerces malformed/legacy data to a valid class", () => {

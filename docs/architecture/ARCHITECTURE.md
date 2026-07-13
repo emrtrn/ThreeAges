@@ -74,7 +74,7 @@ Kept dev middleware:
   `/__new-behavior`, `/__save-material-slots`, `/__save-skeleton`,
   `/__save-material`, `/__save-ui`, `/__save-soundcue`, `/__save-effect`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
-  `/__content-new`, `/__content-rename`, `/__content-delete`,
+  `/__content-new`, `/__content-rename`, `/__content-delete`, `/__content-transfer`,
   `/__import-asset`, and `/__open-level`. These are Vite dev-server only; they
   are not production runtime APIs.
 
@@ -199,7 +199,7 @@ written back to layout files — it is a debug-inspect / save-game concern only.
 The completed AI plan is in `C:\Users\emret\Documents\Forge-Archive`; its
 in-repo record is `docs/COMPLETED_WORK_INDEX.md`. For the active skeletal-facing
 constraint and activation criteria, see
-`docs/planned/SKELETAL_FACING_OVERRIDE_BACKLOG.md`.
+`docs/backlog/SKELETAL_FACING_OVERRIDE_BACKLOG.md`.
 
 ## Project Manifest
 

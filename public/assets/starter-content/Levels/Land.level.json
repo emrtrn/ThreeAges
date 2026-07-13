@@ -48,17 +48,11 @@
     },
     {
       "assetId": "sm-road-asphalt",
-      "placements": [
-        {
-          "position": [
-            -20.68,
-            0,
-            -10.98
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
+    },
+    {
+      "assetId": "sm-road-dirty",
+      "placements": []
     }
   ],
   "characters": [],

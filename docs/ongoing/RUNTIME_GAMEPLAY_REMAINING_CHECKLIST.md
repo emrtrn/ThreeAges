@@ -369,7 +369,7 @@ Checklist:
   ayni CharacterMovement hattina verir.
 - [x] **P4.2 - Facing varsayimi:** `+z-forward` mesh varsayimi ve ters bakan
   asset icin gelecek skeleton-sidecar override siniri aktif
-  `docs/planned/SKELETAL_FACING_OVERRIDE_BACKLOG.md` dokumaninda yazildi.
+  `docs/backlog/SKELETAL_FACING_OVERRIDE_BACKLOG.md` dokumaninda yazildi.
 - [x] **P4.3 - Validator onkosulu:** Backlog, skeleton sidecar'a alan
   eklendiginde `tools/saveValidator.ts` ile
   `src/scene/assetSkeletonLoader.ts` validate/loader sozlesmesinin ayni dilimde

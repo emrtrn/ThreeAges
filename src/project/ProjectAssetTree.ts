@@ -279,3 +279,37 @@ export async function deleteProjectContent(
     cleanedLayouts: data.cleanedLayouts ?? 0,
   };
 }
+
+export type ContentTransferOperation = "copy" | "move";
+
+/**
+ * Copies or moves one Content Browser file into an existing project folder.
+ * Copy creates a distinct manifest identity when the source is registered;
+ * move preserves the source identity so placed instances keep resolving.
+ */
+export async function transferProjectContent(
+  source: string,
+  destinationDir: string,
+  operation: ContentTransferOperation,
+): Promise<{ path: string; registered: boolean; registeredId: string | null }> {
+  const response = await fetch("/__content-transfer", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source, destinationDir, operation }),
+  });
+  const data = (await response.json().catch(() => null)) as {
+    ok?: boolean;
+    path?: string;
+    registered?: boolean;
+    registeredId?: string | null;
+    error?: string;
+  } | null;
+  if (!response.ok || !data?.ok) {
+    throw new Error(data?.error ?? `Content ${operation} failed: ${response.status} ${response.statusText}`);
+  }
+  return {
+    path: data.path ?? "",
+    registered: Boolean(data.registered),
+    registeredId: data.registeredId ?? null,
+  };
+}

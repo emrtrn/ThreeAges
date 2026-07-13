@@ -1,4 +1,15 @@
-import { Euler, Group, MathUtils, Quaternion, Vector3, type InstancedMesh } from "three";
+import {
+  Box3,
+  BoxGeometry,
+  Euler,
+  Group,
+  InstancedMesh,
+  MathUtils,
+  Matrix4,
+  MeshBasicMaterial,
+  Quaternion,
+  Vector3,
+} from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import type { Vec3 } from "@engine/scene/layout";
@@ -49,6 +60,60 @@ export function foliageInstanceFromRoll(
   return instance;
 }
 
+/** A resolved surface point for reattach/snap: world position + unit normal. */
+export interface FoliageReattachSurface {
+  position: Vec3;
+  normal: Vec3;
+}
+
+function normalOrUp(normal: Vec3 | undefined): Vector3 {
+  const v = normal ? new Vector3(normal[0], normal[1], normal[2]) : WORLD_UP.clone();
+  if (v.lengthSq() < 1e-8) return WORLD_UP.clone();
+  return v.normalize();
+}
+
+/**
+ * Reattach/snap: moves an instance onto a freshly-sampled surface point, preserving
+ * its scale and yaw. When the type aligns to the surface normal, the tilt is
+ * re-derived from the delta between the old and new normals (so painted yaw is kept
+ * while the instance re-seats flush to the new ground); otherwise only the position
+ * moves. Lives in the render layer because it depends on three's quaternion math.
+ */
+export function reattachFoliageInstance(
+  instance: LayoutFoliageInstance,
+  type: ForgeFoliageTypeDef,
+  surface: FoliageReattachSurface,
+): LayoutFoliageInstance {
+  const next: LayoutFoliageInstance = {
+    position: [...surface.position] as Vec3,
+    rotation: [...instance.rotation] as Vec3,
+    scale: [...instance.scale] as Vec3,
+  };
+  if (instance.seed !== undefined) next.seed = instance.seed;
+  if (type.alignToNormal) {
+    const oldAlign = new Quaternion().setFromUnitVectors(WORLD_UP, normalOrUp(instance.normal));
+    const newAlign = new Quaternion().setFromUnitVectors(WORLD_UP, normalOrUp(surface.normal));
+    const delta = newAlign.multiply(oldAlign.invert());
+    const oldEuler = new Euler(
+      MathUtils.degToRad(instance.rotation[0]),
+      MathUtils.degToRad(instance.rotation[1]),
+      MathUtils.degToRad(instance.rotation[2]),
+      "XYZ",
+    );
+    const oldQuat = new Quaternion().setFromEuler(oldEuler);
+    const nextEuler = new Euler().setFromQuaternion(delta.multiply(oldQuat), "XYZ");
+    next.rotation = [
+      MathUtils.radToDeg(nextEuler.x),
+      MathUtils.radToDeg(nextEuler.y),
+      MathUtils.radToDeg(nextEuler.z),
+    ] as Vec3;
+    next.normal = [...surface.normal] as Vec3;
+  } else if (instance.normal) {
+    next.normal = [...instance.normal] as Vec3;
+  }
+  return next;
+}
+
 /**
  * Foliage render binding: turns the level foliage sidecar ({@link LayoutFoliageData})
  * into `InstancedMesh` batches, one per foliage group (Faz 1: no grid chunking —
@@ -89,6 +154,24 @@ interface FoliageGroupObject {
   meshes: InstancedMesh[];
 }
 
+/** One group's selected instance indices (Foliage Mode selection overlay input). */
+export interface FoliageSelectionEntry {
+  groupId: string;
+  indices: readonly number[];
+}
+
+// Shared wireframe cage geometry/material for the selection overlay — a unit box
+// re-sized per instance to the foliage mesh's bounding box. Depth-tested off so the
+// cage reads through the foliage it wraps.
+const SELECTION_BOX_GEOMETRY = new BoxGeometry(1, 1, 1);
+const SELECTION_BOX_MATERIAL = new MeshBasicMaterial({
+  color: 0xffcf40,
+  wireframe: true,
+  transparent: true,
+  opacity: 0.9,
+  depthTest: false,
+});
+
 function disposeGroupObject(object: FoliageGroupObject): void {
   object.group.removeFromParent();
   for (const mesh of object.meshes) mesh.dispose();
@@ -98,6 +181,10 @@ export class FoliageRenderBinding {
   /** Scene-space container; add this once to the scene root. */
   readonly root = new Group();
   private readonly objects = new Map<string, FoliageGroupObject>();
+  /** Editor-only selection cage overlay (null when nothing is selected). */
+  private selectionMesh: InstancedMesh | null = null;
+  /** Foliage mesh bounding boxes, keyed by mesh asset id (selection cage sizing). */
+  private readonly boxCache = new Map<string, Box3>();
 
   constructor() {
     this.root.name = "Foliage";
@@ -136,6 +223,8 @@ export class FoliageRenderBinding {
       receiveShadow: type.receiveShadow,
     });
     built.group.name = `foliage-${group.id}`;
+    // Tag the batch so the editor picker can map an instance hit back to its group.
+    built.group.userData.foliageGroupId = group.id;
     resolver.applyMaterialSlots?.(type.meshAssetId, built.group);
     this.root.add(built.group);
     this.objects.set(group.id, { group: built.group, meshes: built.meshes });
@@ -149,10 +238,80 @@ export class FoliageRenderBinding {
     this.objects.delete(groupId);
   }
 
+  /**
+   * Rebuilds the selection cage overlay: a wireframe box per selected instance,
+   * sized to its foliage mesh's bounding box and placed at the instance transform.
+   * Editor-only; the runtime never calls this.
+   */
+  setSelection(
+    data: LayoutFoliageData | null,
+    entries: readonly FoliageSelectionEntry[],
+    resolver: FoliageRenderResolver,
+  ): void {
+    if (this.selectionMesh) {
+      this.selectionMesh.removeFromParent();
+      this.selectionMesh.dispose();
+      this.selectionMesh = null;
+    }
+    if (!data || entries.length === 0) return;
+    const groupsById = new Map(data.groups.map((group) => [group.id, group]));
+    const matrices: Matrix4[] = [];
+    const size = new Vector3();
+    const center = new Vector3();
+    const identity = new Quaternion();
+    for (const entry of entries) {
+      const group = groupsById.get(entry.groupId);
+      if (!group) continue;
+      const type = resolver.getType(group.foliageTypeId);
+      if (!type) continue;
+      const box = this.meshBox(type.meshAssetId, resolver);
+      if (!box) continue;
+      box.getSize(size);
+      box.getCenter(center);
+      // Pad flat axes so a plane/decal mesh still shows a visible cage.
+      const local = new Matrix4().compose(
+        center,
+        identity,
+        new Vector3(Math.max(size.x, 0.05), Math.max(size.y, 0.05), Math.max(size.z, 0.05)),
+      );
+      for (const index of entry.indices) {
+        const instance = group.instances[index];
+        if (!instance) continue;
+        const world = composeTransformMatrix(instance.position, instance.rotation, instance.scale);
+        matrices.push(world.clone().multiply(local));
+      }
+    }
+    if (matrices.length === 0) return;
+    const mesh = new InstancedMesh(SELECTION_BOX_GEOMETRY, SELECTION_BOX_MATERIAL, matrices.length);
+    mesh.name = "foliage-selection";
+    mesh.renderOrder = 30;
+    mesh.raycast = () => {};
+    for (let i = 0; i < matrices.length; i += 1) mesh.setMatrixAt(i, matrices[i]!);
+    mesh.instanceMatrix.needsUpdate = true;
+    this.root.add(mesh);
+    this.selectionMesh = mesh;
+  }
+
+  private meshBox(meshAssetId: string, resolver: FoliageRenderResolver): Box3 | null {
+    const cached = this.boxCache.get(meshAssetId);
+    if (cached) return cached;
+    const gltf = resolver.getModel(meshAssetId);
+    if (!gltf) return null;
+    const box = new Box3().setFromObject(gltf.scene);
+    if (box.isEmpty()) return null;
+    this.boxCache.set(meshAssetId, box);
+    return box;
+  }
+
   /** Removes and disposes every batch (scene teardown / layout swap). */
   clear(): void {
     for (const object of this.objects.values()) disposeGroupObject(object);
     this.objects.clear();
+    if (this.selectionMesh) {
+      this.selectionMesh.removeFromParent();
+      this.selectionMesh.dispose();
+      this.selectionMesh = null;
+    }
   }
 
   dispose(): void {

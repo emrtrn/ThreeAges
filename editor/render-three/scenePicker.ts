@@ -300,6 +300,35 @@ export class ScenePicker {
     return this.classifyFoliageHits(hits);
   }
 
+  /**
+   * Raycasts the pointer against the given foliage InstancedMesh batches and
+   * returns the nearest hit's group id + instance index. Foliage batches keep
+   * their scene-wide raycast suppressed (they are decorative, not paint surfaces),
+   * so this calls the InstancedMesh raycast directly on the passed meshes — used
+   * only by Foliage Mode's Select tool. Returns null when no instance is under the
+   * cursor.
+   */
+  pickFoliageInstance(
+    clientX: number,
+    clientY: number,
+    meshes: readonly InstancedMesh[],
+  ): { groupId: string; index: number } | null {
+    if (meshes.length === 0) return null;
+    this.setPointerNdc(clientX, clientY);
+    this.raycaster.setFromCamera(this.pointerNdc, this.getCamera());
+    const hits: Intersection[] = [];
+    for (const mesh of meshes) {
+      InstancedMesh.prototype.raycast.call(mesh, this.raycaster, hits);
+    }
+    hits.sort((a, b) => a.distance - b.distance);
+    for (const hit of this.visibleHits(hits)) {
+      if (hit.instanceId == null) continue;
+      const groupId = foliageGroupIdOf(hit.object);
+      if (groupId) return { groupId, index: hit.instanceId };
+    }
+    return null;
+  }
+
   private classifyFoliageHits(intersections: Intersection[]): FoliageSurfacePick | null {
     for (const hit of this.visibleHits(intersections)) {
       const landscape = findParentLandscape(hit.object);
@@ -485,6 +514,17 @@ function isVisibleInHierarchy(object: Object3D): boolean {
     current = current.parent;
   }
   return true;
+}
+
+/** Walks up to the foliage batch group tagged with its group id (Foliage Mode selection). */
+function foliageGroupIdOf(object: Object3D): string | null {
+  let current: Object3D | null = object;
+  while (current) {
+    const groupId = current.userData.foliageGroupId;
+    if (typeof groupId === "string" && groupId.length > 0) return groupId;
+    current = current.parent;
+  }
+  return null;
 }
 
 function findParentMaterialOverride(object: Object3D): InstanceSelection | null {

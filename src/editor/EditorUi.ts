@@ -41,6 +41,7 @@ import {
   openProjectLevel,
   reimportProjectAsset,
   renameProjectContent,
+  transferProjectContent,
   type ContentNewKind,
   type ProjectDirNode,
 } from "@/project/ProjectAssetTree";
@@ -159,6 +160,9 @@ const CONTENT_NEW_AI_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string 
   { kind: "aiQuery", label: "AI Query (EQS)" },
   { kind: "stateTree", label: "AI State Tree" },
 ];
+
+/** Project-scoped browser storage key prefix for Content Drawer navigation state. */
+const CONTENT_DRAWER_LAST_FOLDER_STORAGE_PREFIX = "forge.editor.content-drawer.last-folder.v1:";
 
 const MATERIAL_PRESET_LABELS: Record<ForgeMaterialPreset, string> = {
   standard: "Standard Surface",
@@ -313,6 +317,8 @@ export class EditorUi {
   private selectedAssetId: string | null = null;
   /** Content Browser folder card highlighted as selected. */
   private selectedContentFolderPath: string | null = null;
+  /** One-file editor clipboard; Cut remains in memory until a successful paste. */
+  private contentClipboard: { path: string; label: string; operation: "copy" | "move" } | null = null;
   /** Last asset-grid summary status, restored when the selection is cleared. */
   private contentListStatus = "";
   /** Cached 1x1 transparent image used to suppress the native drag thumbnail. */
@@ -1132,6 +1138,21 @@ export class EditorUi {
       return;
     }
 
+    // Foliage Mode owns Escape/Delete for its instance selection (which is separate
+    // from the scene selection); let every other shortcut fall through.
+    if (this.app.isFoliageModeActive()) {
+      if (event.code === "Escape") {
+        event.preventDefault();
+        this.app.deselectAllFoliage();
+        return;
+      }
+      if (event.code === "Delete" || event.code === "Backspace") {
+        event.preventDefault();
+        this.app.removeSelectedFoliage();
+        return;
+      }
+    }
+
     if (event.code === "Escape") {
       event.preventDefault();
       this.app.clearSelection();
@@ -1220,7 +1241,7 @@ export class EditorUi {
       this.projectInfo = projectInfo;
       this.metadataSchema = this.app.getMetadataSchema();
       this.editableAssets = assets;
-      this.selectedFolder = normalizeProjectPath(projectInfo.assetRoot);
+      this.selectedFolder = this.readLastContentFolder() ?? normalizeProjectPath(projectInfo.assetRoot);
       projectName.textContent = formatActiveLevelName(projectInfo.manifest.editor.defaultScene);
       projectName.title = `Active level: ${projectInfo.manifest.editor.defaultScene}`;
       this.contentRootLabel.textContent = this.selectedFolder;
@@ -1392,7 +1413,7 @@ export class EditorUi {
       parentDir === root || findProjectDir(this.assetTreeRoot.children ?? [], parentDir)
         ? parentDir
         : root;
-    this.selectedFolder = folder;
+    this.setSelectedContentFolderPath(folder);
     // Expand every ancestor so the folder is visible in the tree.
     const segments = folder.split("/");
     for (let i = 1; i < segments.length; i += 1) {
@@ -1443,6 +1464,7 @@ export class EditorUi {
         this.selectedFolder = tree.root;
       }
       this.ensureVisibleSelectedFolder();
+      this.saveLastContentFolder();
       this.contentRootLabel.textContent = `${this.projectInfo.rootName} / ${tree.root}`;
       this.contentStatus.textContent = `${this.visibleProjectFiles().length} files`;
       this.renderFolderTree();
@@ -1524,7 +1546,7 @@ export class EditorUi {
       <span class="folder-name">${escapeHtml(node.name)}</span>
     `;
     button.addEventListener("click", () => {
-      this.selectedFolder = node.path;
+      this.setSelectedContentFolderPath(node.path);
       if (hasChildDirs) {
         if (isCollapsed) {
           this.collapsedFolderPaths.delete(node.path);
@@ -1569,6 +1591,7 @@ export class EditorUi {
         missingManifestAssetCount: 0,
         selectedAssetId: this.selectedAssetId,
         selectedContentFolderPath: this.selectedContentFolderPath,
+        cutContentPath: this.contentClipboard?.operation === "move" ? this.contentClipboard.path : null,
         isActiveLevel: (item) => this.isActiveLevel(item),
         getEmptyDragImage: () => this.getEmptyDragImage(),
         setSelectedAsset: (assetId) => this.setSelectedAsset(assetId),
@@ -1625,6 +1648,7 @@ export class EditorUi {
       missingManifestAssetCount: this.countMissingManifestAssetFiles(),
       selectedAssetId: this.selectedAssetId,
       selectedContentFolderPath: this.selectedContentFolderPath,
+      cutContentPath: this.contentClipboard?.operation === "move" ? this.contentClipboard.path : null,
       isActiveLevel: (item) => this.isActiveLevel(item),
       getEmptyDragImage: () => this.getEmptyDragImage(),
       setSelectedAsset: (assetId) => this.setSelectedAsset(assetId),
@@ -1804,7 +1828,7 @@ export class EditorUi {
   }
 
   private navigateToContentFolder(path: string): void {
-    this.selectedFolder = path;
+    this.setSelectedContentFolderPath(path);
     const segments = path.split("/");
     for (let i = 1; i < segments.length; i += 1) {
       this.collapsedFolderPaths.delete(segments.slice(0, i).join("/"));
@@ -1812,6 +1836,40 @@ export class EditorUi {
     this.clearContentSelection();
     this.renderFolderTree();
     this.renderContentAssets();
+  }
+
+  /** Stores the selected folder after project-tree validation, without persisting other Drawer UI state. */
+  private setSelectedContentFolderPath(path: string): void {
+    this.selectedFolder = normalizeProjectPath(path);
+    this.saveLastContentFolder();
+  }
+
+  private contentDrawerLastFolderStorageKey(): string | null {
+    if (!this.projectInfo) return null;
+    const projectIdentity = `${this.projectInfo.rootName}:${normalizeProjectPath(this.projectInfo.assetRoot)}`;
+    return `${CONTENT_DRAWER_LAST_FOLDER_STORAGE_PREFIX}${encodeURIComponent(projectIdentity)}`;
+  }
+
+  private readLastContentFolder(): string | null {
+    const key = this.contentDrawerLastFolderStorageKey();
+    if (!key) return null;
+    try {
+      const saved = window.localStorage.getItem(key);
+      return saved ? normalizeProjectPath(saved) : null;
+    } catch {
+      // Private browsing or blocked storage should leave the Drawer fully usable.
+      return null;
+    }
+  }
+
+  private saveLastContentFolder(): void {
+    const key = this.contentDrawerLastFolderStorageKey();
+    if (!key || !this.selectedFolder) return;
+    try {
+      window.localStorage.setItem(key, this.selectedFolder);
+    } catch {
+      // Persistence is an enhancement; do not surface storage availability as an editor error.
+    }
   }
 
   /** Drops the Content Browser asset selection and restores the grid summary. */
@@ -1854,6 +1912,12 @@ export class EditorUi {
       enabled: !activeLevel,
       run: () => void this.renameContentAsset(item),
     });
+    items.push({
+      label: "Cut",
+      enabled: !activeLevel,
+      run: () => this.setContentClipboard(item, "move"),
+    });
+    items.push({ label: "Copy", run: () => this.setContentClipboard(item, "copy") });
     items.push({ label: "Copy Path", run: () => void this.copyContentAssetPath(item) });
     items.push({ separator: true });
     items.push({
@@ -1869,6 +1933,12 @@ export class EditorUi {
   private openContentFolderContextMenu(event: MouseEvent, item: BrowserFolderItem): void {
     const items: ContextMenuItem[] = [
       { label: "Open", run: () => this.navigateToContentFolder(item.path) },
+      { separator: true },
+      {
+        label: "Paste",
+        enabled: this.contentClipboard !== null,
+        run: () => void this.pasteContent(item.path),
+      },
       { separator: true },
       { label: "New Folder", run: () => void this.createContent("folder", item.path) },
       { label: "Import...", run: () => this.startImport(item.path) },
@@ -1965,6 +2035,9 @@ export class EditorUi {
     if (!trimmed || trimmed === currentBase) return;
     try {
       const result = await renameProjectContent(item.path, trimmed);
+      if (this.contentClipboard?.path === item.path) {
+        this.contentClipboard = { ...this.contentClipboard, path: result.path, label: trimmed };
+      }
       this.setStatus(`Renamed to ${result.path}`, "success");
       if (result.registered) {
         try {
@@ -1991,6 +2064,7 @@ export class EditorUi {
     if (!window.confirm(`Delete "${item.label}"? This cannot be undone.`)) return;
     try {
       const result = await deleteProjectContent(item.path);
+      if (this.contentClipboard?.path === item.path) this.clearContentClipboard();
       if (item.editable && this.selectedAssetId === item.editable.id) {
         this.setSelectedAsset(null);
       }
@@ -2017,7 +2091,9 @@ export class EditorUi {
     if (!trimmed || trimmed === currentBase) return;
     try {
       const result = await renameProjectContent(item.path, trimmed);
-      this.selectedFolder = replaceContentPathPrefix(this.selectedFolder, item.path, result.path);
+      this.setSelectedContentFolderPath(
+        replaceContentPathPrefix(this.selectedFolder, item.path, result.path),
+      );
       if (this.selectedContentFolderPath) {
         this.selectedContentFolderPath = replaceContentPathPrefix(
           this.selectedContentFolderPath,
@@ -2055,7 +2131,7 @@ export class EditorUi {
       const parent = parentContentPath(item.path) ?? this.assetTreeRoot?.path ?? "";
       const result = await deleteProjectContent(item.path);
       if (isSameOrDescendantContentPath(this.selectedFolder, item.path)) {
-        this.selectedFolder = parent;
+        this.setSelectedContentFolderPath(parent);
       }
       if (
         this.selectedContentFolderPath &&
@@ -2100,6 +2176,51 @@ export class EditorUi {
       this.setStatus(`Copied ${item.path}`, "success");
     } catch {
       this.setStatus(`Path: ${item.path}`, "info");
+    }
+  }
+
+  /** Copies a file operation into the editor-only Content Browser clipboard. */
+  private setContentClipboard(item: BrowserAssetItem, operation: "copy" | "move"): void {
+    this.contentClipboard = { path: item.path, label: item.label, operation };
+    this.renderContentAssets();
+    this.setStatus(
+      `${operation === "move" ? "Cut" : "Copied"} ${item.label}. Select a folder and choose Paste.`,
+      "info",
+    );
+  }
+
+  private clearContentClipboard(): void {
+    if (!this.contentClipboard) return;
+    this.contentClipboard = null;
+    this.renderContentAssets();
+  }
+
+  /** Pastes the in-editor file clipboard into an existing Content Browser folder. */
+  private async pasteContent(destinationDir: string): Promise<void> {
+    const clipboard = this.contentClipboard;
+    if (!clipboard) {
+      this.setStatus("Content clipboard is empty.", "warning");
+      return;
+    }
+    try {
+      const result = await transferProjectContent(clipboard.path, destinationDir, clipboard.operation);
+      if (result.registered) {
+        try {
+          this.editableAssets = await this.app.reloadEditableAssets();
+        } catch {
+          // The tree refresh still reflects the completed file operation.
+        }
+      }
+      this.setSelectedContentFolderPath(destinationDir);
+      await this.refreshAssetTree({ quiet: false });
+      if (result.registeredId) this.setSelectedAsset(result.registeredId);
+      if (clipboard.operation === "move") this.clearContentClipboard();
+      this.setStatus(
+        `${clipboard.operation === "move" ? "Moved" : "Copied"} ${clipboard.label} to ${result.path}`,
+        "success",
+      );
+    } catch (error) {
+      this.setStatus(error instanceof Error ? error.message : String(error), "error");
     }
   }
 
@@ -2711,6 +2832,12 @@ export class EditorUi {
   /** Right-click menu for the Content Browser: New Folder / Import / typed assets. */
   private openContentContextMenu(event: MouseEvent, dir: string): void {
     const items: ContextMenuItem[] = [
+      {
+        label: "Paste",
+        enabled: this.contentClipboard !== null,
+        run: () => void this.pasteContent(dir),
+      },
+      { separator: true },
       { label: "New Folder", run: () => void this.createContent("folder", dir) },
       { separator: true },
       { label: "Import...", run: () => this.startImport(dir) },
@@ -3118,6 +3245,7 @@ export class EditorUi {
       body: this.foliageBody,
       settings: this.app.getFoliageToolSettings(),
       types: this.app.getFoliageTypeViews(),
+      selectionCount: this.app.getFoliageSelectionCount(),
       availableTypeAssets,
       staticMeshAssets,
       apply: (patch) => {
@@ -3133,6 +3261,10 @@ export class EditorUi {
       createType: (name, meshAssetId) => {
         void this.createFoliageTypeAsset(name, meshAssetId);
       },
+      deselectAll: () => this.app.deselectAllFoliage(),
+      selectInvalid: () => this.app.selectInvalidFoliage(),
+      reattachSelected: () => this.app.reattachSelectedFoliage(),
+      removeSelected: () => this.app.removeSelectedFoliage(),
     });
   }
 

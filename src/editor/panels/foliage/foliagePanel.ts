@@ -15,6 +15,8 @@ export interface FoliagePanelOptions {
   body: HTMLElement;
   settings: FoliageToolSettings;
   types: FoliageTypeView[];
+  /** Number of foliage instances currently selected (Select/Lasso). */
+  selectionCount: number;
   /** `foliageType` assets in the project not yet added to the active list. */
   availableTypeAssets: FoliageAssetOption[];
   /** Static-mesh assets, for the "new foliage type from mesh" flow. */
@@ -24,10 +26,15 @@ export interface FoliagePanelOptions {
   addType(assetId: string): void;
   removeType(assetId: string): void;
   createType(name: string, meshAssetId: string): void;
+  deselectAll(): void;
+  selectInvalid(): void;
+  reattachSelected(): void;
+  removeSelected(): void;
 }
 
 const TOOLS: { id: FoliageTool; label: string; tip: string }[] = [
-  { id: "select", label: "Select", tip: "Navigate/select — no painting" },
+  { id: "select", label: "Select", tip: "Click an instance to select it (Shift/Ctrl toggles)" },
+  { id: "lasso", label: "Lasso", tip: "Drag the brush over instances to select them (Ctrl/Alt subtracts)" },
   { id: "paint", label: "Paint", tip: "Drag to scatter the active foliage type" },
   { id: "erase", label: "Erase", tip: "Drag to erase EVERY foliage type under the brush" },
   { id: "single", label: "Single", tip: "Left-click to place ONE instance (no drag)" },
@@ -124,6 +131,26 @@ function renderHtml(options: FoliagePanelOptions): string {
       </label>
     </div>
     <div class="detail-section">
+      <div class="detail-section-title">Selection</div>
+      <div class="detail-hint">${
+        options.selectionCount > 0
+          ? `${options.selectionCount} instance${options.selectionCount === 1 ? "" : "s"} selected`
+          : "No instances selected. Use Select or Lasso."
+      }</div>
+      <div class="foliage-selection-actions">
+        <button type="button" data-foliage-select-invalid title="Select instances with no valid ground below">Select Invalid</button>
+        <button type="button" data-foliage-deselect ${
+          options.selectionCount > 0 ? "" : "disabled"
+        }>Deselect All</button>
+        <button type="button" data-foliage-reattach ${
+          options.selectionCount > 0 ? "" : "disabled"
+        } title="Snap selected instances to the ground below">Snap to Ground</button>
+        <button type="button" class="foliage-remove-selected" data-foliage-remove-selected ${
+          options.selectionCount > 0 ? "" : "disabled"
+        }>Remove Selected</button>
+      </div>
+    </div>
+    <div class="detail-section">
       <div class="detail-section-title">Foliage Types</div>
       <div class="foliage-type-list">${typeRows}</div>
       <div class="foliage-add-row">
@@ -197,6 +224,19 @@ function bindInputs(options: FoliagePanelOptions): void {
       options.apply({ filters });
     });
   });
+
+  body
+    .querySelector<HTMLButtonElement>("[data-foliage-select-invalid]")
+    ?.addEventListener("click", () => options.selectInvalid());
+  body
+    .querySelector<HTMLButtonElement>("[data-foliage-deselect]")
+    ?.addEventListener("click", () => options.deselectAll());
+  body
+    .querySelector<HTMLButtonElement>("[data-foliage-reattach]")
+    ?.addEventListener("click", () => options.reattachSelected());
+  body
+    .querySelector<HTMLButtonElement>("[data-foliage-remove-selected]")
+    ?.addEventListener("click", () => options.removeSelected());
 
   const addSelect = body.querySelector<HTMLSelectElement>("[data-foliage-add-select]");
   body.querySelector<HTMLButtonElement>("[data-foliage-add]")?.addEventListener("click", () => {

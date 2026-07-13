@@ -1442,6 +1442,11 @@ body.editor-mode #debug-stats {
   opacity: 0.82;
 }
 
+/* A Cut file remains available until Paste succeeds, but is visibly pending a move. */
+.editor-shell .asset-card.is-cut {
+  opacity: 0.5;
+}
+
 .editor-shell .asset-card.has-issues {
   border-color: rgba(245, 158, 44, 0.52);
 }
@@ -4538,3 +4543,25 @@ body.editor-mode #debug-stats {
   cursor: pointer;
 }
 .foliage-create:disabled { opacity: 0.5; cursor: default; }
+.foliage-selection-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 6px;
+}
+.foliage-selection-actions button {
+  min-width: 0;
+  height: 28px;
+  border: 1px solid #303640;
+  background: #1d222b;
+  color: #cbd2dc;
+  font-size: 12px;
+  cursor: pointer;
+}
+.foliage-selection-actions button:hover:not(:disabled) { background: #29303a; }
+.foliage-selection-actions button:disabled { opacity: 0.5; cursor: default; }
+.foliage-selection-actions .foliage-remove-selected:not(:disabled) {
+  border-color: #7a3030;
+  color: #ff9c9c;
+}
+.foliage-selection-actions .foliage-remove-selected:hover:not(:disabled) { background: #331d1d; }

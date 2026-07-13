@@ -16,7 +16,7 @@
 > altındadır (in-repo kayıt: `docs/COMPLETED_WORK_INDEX.md`). AI runtime katmanı
 > (`engine/ai/*`) editör shell'e karar mantığı taşımaz. Aktif kalan
 > skeletal-facing istisna backlog'u:
-> `docs/planned/SKELETAL_FACING_OVERRIDE_BACKLOG.md`.
+> `docs/backlog/SKELETAL_FACING_OVERRIDE_BACKLOG.md`.
 
 ---
 

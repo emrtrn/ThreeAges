@@ -3755,6 +3755,41 @@ export function validateContentDeletePayload(value: unknown): ContentDeletePaylo
   return { path };
 }
 
+/** Operation performed by the Content Browser's in-editor file clipboard. */
+export type ContentTransferOperation = "copy" | "move";
+
+export interface ContentTransferPayload {
+  /** Existing public-relative file path. Folder transfer is intentionally deferred. */
+  source: string;
+  /** Existing public-relative folder that receives the file. */
+  destinationDir: string;
+  operation: ContentTransferOperation;
+}
+
+/**
+ * Validates a Content Browser copy/move request. The middleware separately
+ * verifies that source/destination exist and are a file/directory respectively.
+ */
+export function validateContentTransferPayload(value: unknown): ContentTransferPayload {
+  if (!value || typeof value !== "object") throw new Error("content transfer payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.source !== "string") throw new Error("content transfer source must be a string");
+  if (typeof input.destinationDir !== "string") {
+    throw new Error("content transfer destinationDir must be a string");
+  }
+  if (input.source.includes("..") || input.destinationDir.includes("..")) {
+    throw new Error("content transfer paths must not contain ..");
+  }
+  if (input.operation !== "copy" && input.operation !== "move") {
+    throw new Error("content transfer operation must be copy or move");
+  }
+  const source = input.source.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  const destinationDir = input.destinationDir.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+  if (!source) throw new Error("content transfer source must not be empty");
+  if (!destinationDir) throw new Error("content transfer destinationDir must not be empty");
+  return { source, destinationDir, operation: input.operation };
+}
+
 export interface OpenLevelPayload {
   /** Public-root-relative path of the level/layout JSON to make the active scene. */
   path: string;
