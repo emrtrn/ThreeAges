@@ -51,23 +51,7 @@
           }
         },
         {
-          "task": "forge.setPatrolTarget",
-          "params": {
-            "key": "currentPatrolTarget",
-            "positionKey": "patrolTargetPosition",
-            "mode": "nearest"
-          }
-        },
-        {
-          "task": "forge.moveToPatrolTarget",
-          "params": {
-            "key": "currentPatrolTarget",
-            "positionKey": "patrolTargetPosition",
-            "speed": 2.4,
-            "acceptanceRadius": 1.2,
-            "advanceOnSuccess": true,
-            "mode": "loop"
-          }
+          "task": "forge.moveAlongPatrolRoute"
         }
       ],
       "transitions": [

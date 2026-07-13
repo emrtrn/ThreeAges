@@ -472,6 +472,34 @@ export interface AINavAgentConfig {
   clearancePadding?: number;
 }
 
+/** Explicit patrol-route source for an AI-controlled character. */
+export type AiPatrolRouteSource = "targetPoints" | "spline";
+export type AiSplinePatrolEntry = "nearest" | "start";
+export type AiSplinePatrolWrapMode = "loop" | "pingPong" | "clamp";
+
+/**
+ * Patrol authoring stays on the AIController rather than the Spline Actor: one
+ * level can contain Target Points and many splines, while every AI explicitly
+ * chooses its own route source. Spline movement remains CharacterMovement-owned.
+ */
+export interface AiPatrolRoute {
+  source: AiPatrolRouteSource;
+  splineId?: string;
+  targetPointTag?: string;
+  entry: AiSplinePatrolEntry;
+  speed?: number;
+  acceptanceRadius?: number;
+  lookAheadDistance: number;
+  wrapMode: AiSplinePatrolWrapMode;
+}
+
+export const DEFAULT_AI_PATROL_ROUTE: Readonly<AiPatrolRoute> = {
+  source: "targetPoints",
+  entry: "nearest",
+  lookAheadDistance: 1.2,
+  wrapMode: "loop",
+};
+
 /**
  * Marks an entity as an AI-controlled pawn (Unreal: a Pawn with an `AIControllerClass`).
  * The AISubsystem derives one AIController per entity carrying this component. In
@@ -492,6 +520,8 @@ export interface AIControllerComponent {
   blackboard?: string;
   perception?: AIPerceptionConfig;
   navAgent?: AINavAgentConfig;
+  /** Selected patrol source. Absent preserves legacy Target Point patrol behavior. */
+  patrolRoute?: AiPatrolRoute;
   /** Inline blackboard key schema, used to build the runtime memory in Faz 1. */
   blackboardKeys?: BlackboardKeyDef[];
 }
@@ -1129,9 +1159,37 @@ export function readAIControllerComponent(entity: Entity): AIControllerComponent
   if (perception) component.perception = perception;
   const navAgent = readNavAgentConfig(data.navAgent);
   if (navAgent) component.navAgent = navAgent;
+  const patrolRoute = readAiPatrolRoute(data.patrolRoute);
+  if (patrolRoute) component.patrolRoute = patrolRoute;
   const blackboardKeys = normalizeBlackboardKeys(data.blackboardKeys);
   if (blackboardKeys.length > 0) component.blackboardKeys = blackboardKeys;
   return component;
+}
+
+function readAiPatrolRoute(value: SceneJsonValue | undefined): AiPatrolRoute | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const data = value as Record<string, SceneJsonValue>;
+  const source: AiPatrolRouteSource = data.source === "spline" ? "spline" : "targetPoints";
+  const route: AiPatrolRoute = {
+    source,
+    entry: data.entry === "start" ? "start" : "nearest",
+    lookAheadDistance: readFiniteNumber(data.lookAheadDistance, DEFAULT_AI_PATROL_ROUTE.lookAheadDistance, 0),
+    wrapMode:
+      data.wrapMode === "pingPong" || data.wrapMode === "clamp" ? data.wrapMode : "loop",
+  };
+  if (typeof data.splineId === "string" && data.splineId.length > 0) route.splineId = data.splineId;
+  if (typeof data.targetPointTag === "string" && data.targetPointTag.length > 0) {
+    route.targetPointTag = data.targetPointTag;
+  }
+  const speed = readOptionalNonNegativeFiniteNumber(data.speed);
+  if (speed !== undefined) route.speed = speed;
+  const acceptanceRadius = readOptionalNonNegativeFiniteNumber(data.acceptanceRadius);
+  if (acceptanceRadius !== undefined) route.acceptanceRadius = acceptanceRadius;
+  return route;
+}
+
+function readOptionalNonNegativeFiniteNumber(value: SceneJsonValue | undefined): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
 const LIGHT_TYPES: readonly SceneLightType[] = ["directional", "point", "spot"];

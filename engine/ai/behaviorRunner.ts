@@ -23,6 +23,7 @@ import { aiQueryParams } from "./queryAsset";
 import type { AiQueryResult } from "./queryRunner";
 import type { SmartObjectRuntime } from "./smartObjects";
 import type { TargetPointEntry, TargetPointIndex } from "./targetPoints";
+import type { SplineQuery, SplineRegistry } from "../scene/splineRegistry";
 
 export type AiTaskHandler = (context: AiTaskContext) => AiBehaviorStatus;
 export type AiServiceHandler = (context: AiServiceContext) => void;
@@ -66,6 +67,7 @@ export interface AiBehaviorRunnerOptions {
   readonly smartObjects?: SmartObjectRuntime;
   readonly world?: AiWorldQuery;
   readonly targetPoints?: TargetPointIndex;
+  readonly splineRegistry?: SplineRegistry;
 }
 
 export interface AiTaskContext {
@@ -80,6 +82,7 @@ export interface AiTaskContext {
   readonly smartObjects?: SmartObjectRuntime;
   readonly world?: AiWorldQuery;
   readonly targetPoints?: TargetPointIndex;
+  readonly splineRegistry?: SplineRegistry;
 }
 
 export interface AiServiceContext extends AiTaskContext {
@@ -138,6 +141,7 @@ export function createDefaultAiTaskRegistry(): AiTaskRegistry {
     ["forge.moveToPatrolTarget", moveToPatrolTargetTask],
     ["forge.waitAtPatrolTarget", waitAtPatrolTargetTask],
     ["forge.advancePatrolTarget", advancePatrolTargetTask],
+    ["forge.moveAlongPatrolRoute", moveAlongPatrolRouteTask],
     ["forge.startConversation", startConversationTask],
     ["forge.runQueryToBlackboard", runQueryToBlackboardTask],
     ["forge.claimSmartObject", claimSmartObjectTask],
@@ -287,6 +291,7 @@ export class AiBehaviorRunner {
       ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
       ...(this.options.world ? { world: this.options.world } : {}),
       ...(this.options.targetPoints ? { targetPoints: this.options.targetPoints } : {}),
+      ...(this.options.splineRegistry ? { splineRegistry: this.options.splineRegistry } : {}),
     });
     if (status !== "running" && memory.get(PRESERVE_TASK_MEMORY) !== true) memory.clear();
     return this.record(path, status);
@@ -362,6 +367,7 @@ export class AiBehaviorRunner {
         ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
         ...(this.options.world ? { world: this.options.world } : {}),
         ...(this.options.targetPoints ? { targetPoints: this.options.targetPoints } : {}),
+        ...(this.options.splineRegistry ? { splineRegistry: this.options.splineRegistry } : {}),
       });
     }
   }
@@ -617,6 +623,120 @@ function advancePatrolTarget(context: AiTaskContext): AiBehaviorStatus {
       return first ? commit(first) : "failure";
     }
   }
+}
+
+interface SplinePatrolTaskMemory {
+  readonly splineId: string;
+  phase: "approach" | "follow";
+  distance: number;
+  direction: 1 | -1;
+}
+
+/**
+ * Unified patrol consumer for AIController.patrolRoute. Target Point patrol
+ * keeps the existing index semantics; spline patrol first walks to a stable
+ * entry sample, then requests short look-ahead targets through normal AI nav /
+ * CharacterMovement. It never writes the pawn transform directly.
+ */
+function moveAlongPatrolRouteTask(context: AiTaskContext): AiBehaviorStatus {
+  const route = context.controller.patrolRoute;
+  if (route.source !== "spline") return moveAlongTargetPointRoute(context);
+  if (!context.moveTo || !context.world || !context.splineRegistry || !route.splineId) return "failure";
+  const query = context.splineRegistry.getSplineById(route.splineId);
+  const pawnPosition = context.world.entityPosition(context.controller.pawnEntityId);
+  if (!query || !pawnPosition || !(query.getLength() > 1e-6)) return "failure";
+
+  let state = context.memory.get("splinePatrol") as SplinePatrolTaskMemory | undefined;
+  if (!state || state.splineId !== query.id) {
+    state = {
+      splineId: query.id,
+      phase: "approach",
+      distance: route.entry === "start" ? 0 : query.getClosestDistanceToPoint(pawnPosition, "world"),
+      direction: 1,
+    };
+    context.memory.set("splinePatrol", state);
+  }
+
+  const speed = route.speed;
+  const acceptanceRadius = route.acceptanceRadius ?? 0.55;
+  if (state.phase === "approach") {
+    const status = requestSplineMove(context, query, state.distance, speed, acceptanceRadius);
+    if (status !== "success") return status;
+    state.phase = "follow";
+    context.memory.set("splinePatrol", state);
+    return "running";
+  }
+
+  const next = advanceSplinePatrolDistance(
+    state.distance,
+    state.direction,
+    Math.max(0.1, route.lookAheadDistance),
+    query.getLength(),
+    route.wrapMode,
+  );
+  const status = requestSplineMove(context, query, next.distance, speed, acceptanceRadius);
+  if (status !== "success") return status;
+  state.distance = next.distance;
+  state.direction = next.direction;
+  context.memory.set("splinePatrol", state);
+  // A clamped route is complete only once the pawn actually reaches its endpoint.
+  return route.wrapMode === "clamp" && next.atBoundary ? "success" : "running";
+}
+
+function moveAlongTargetPointRoute(context: AiTaskContext): AiBehaviorStatus {
+  const index = context.targetPoints;
+  if (!index || !context.moveTo) return "failure";
+  const route = context.controller.patrolRoute;
+  const key = DEFAULT_PATROL_KEY;
+  let entry = index.get(context.blackboard.getString(key));
+  if (!entry) {
+    entry = index.start(route.targetPointTag) ?? index.first(route.targetPointTag);
+    if (!entry || !context.blackboard.set(key, entry.id)) return "failure";
+  }
+  const status = context.moveTo({
+    controller: context.controller,
+    position: entry.position,
+    ...(route.speed !== undefined ? { speed: route.speed } : {}),
+    ...(route.acceptanceRadius !== undefined ? { acceptanceRadius: route.acceptanceRadius } : {}),
+  });
+  return status === "success" ? advancePatrolTarget(context) : status;
+}
+
+function requestSplineMove(
+  context: AiTaskContext,
+  query: SplineQuery,
+  distance: number,
+  speed: number | undefined,
+  acceptanceRadius: number,
+): AiBehaviorStatus {
+  if (!context.moveTo) return "failure";
+  return context.moveTo({
+    controller: context.controller,
+    position: query.getLocationAtDistance(distance, "world"),
+    ...(speed !== undefined ? { speed } : {}),
+    acceptanceRadius,
+  });
+}
+
+function advanceSplinePatrolDistance(
+  distance: number,
+  direction: 1 | -1,
+  amount: number,
+  length: number,
+  wrapMode: "loop" | "pingPong" | "clamp",
+): { distance: number; direction: 1 | -1; atBoundary: boolean } {
+  if (wrapMode === "loop") {
+    const next = distance + amount * direction;
+    return { distance: ((next % length) + length) % length, direction, atBoundary: false };
+  }
+  const next = distance + amount * direction;
+  if (wrapMode === "clamp") {
+    const clamped = Math.max(0, Math.min(length, next));
+    return { distance: clamped, direction, atBoundary: clamped === 0 || clamped === length };
+  }
+  if (next > length) return { distance: length - (next - length), direction: -1, atBoundary: false };
+  if (next < 0) return { distance: -next, direction: 1, atBoundary: false };
+  return { distance: next, direction, atBoundary: false };
 }
 
 function resolvePatrolStart(context: AiTaskContext, index: TargetPointIndex): TargetPointEntry | null {

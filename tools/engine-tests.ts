@@ -23926,6 +23926,59 @@ check("forge.moveToPatrolTarget uses authored speed/acceptance and fails safely 
   assert.deepEqual(requests, [{ position: [7, 0, 3], speed: 3.5, acceptanceRadius: 0.9 }]);
 });
 
+check("forge.moveAlongPatrolRoute approaches the nearest spline point before following look-ahead targets", () => {
+  const actor = createDefaultSplineActor();
+  actor.id = "patrol-rail";
+  actor.spline.points[0]!.position = [0, 0, 0];
+  actor.spline.points[1]!.position = [10, 0, 0];
+  const registry = createSplineRegistry([actor]);
+  const controller = new AIController("ai:guard", "guard", new Blackboard(), {
+    patrolRoute: {
+      source: "spline",
+      splineId: "patrol-rail",
+      entry: "nearest",
+      speed: 2.4,
+      acceptanceRadius: 0.55,
+      lookAheadDistance: 1.5,
+      wrapMode: "loop",
+    },
+  });
+  const asset = normalizeAiBehaviorTreeAsset({
+    schema: 1,
+    type: "behaviorTree",
+    root: { kind: "task", task: "forge.moveAlongPatrolRoute" },
+  });
+  const requests: Array<{ position: [number, number, number]; speed?: number; acceptanceRadius?: number }> = [];
+  let result: "running" | "success" = "running";
+  const runner = new AiBehaviorRunner(controller, asset, {
+    taskRegistry: createDefaultAiTaskRegistry(),
+    splineRegistry: registry,
+    world: { entityPosition: () => [4, 0, 3] },
+    moveTo: (request) => {
+      requests.push({
+        position: [request.position[0], request.position[1], request.position[2]],
+        ...(request.speed !== undefined ? { speed: request.speed } : {}),
+        ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
+      });
+      return result;
+    },
+  });
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
+  assert.ok(Math.abs((requests[0]?.position[0] ?? 0) - 4) < 1e-8);
+  assert.deepEqual({ speed: requests[0]?.speed, acceptanceRadius: requests[0]?.acceptanceRadius }, {
+    speed: 2.4,
+    acceptanceRadius: 0.55,
+  });
+  result = "success";
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.032, frame: 2 }), "running");
+  assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.048, frame: 3 }), "running");
+  assert.ok(Math.abs((requests[2]?.position[0] ?? 0) - 5.5) < 1e-8);
+  assert.deepEqual({ speed: requests[2]?.speed, acceptanceRadius: requests[2]?.acceptanceRadius }, {
+    speed: 2.4,
+    acceptanceRadius: 0.55,
+  });
+});
+
 check("forge.moveToPatrolTarget can advance the route after arrival", () => {
   const bb = new Blackboard([
     { key: "currentPatrolTarget", kind: "string", default: null },
@@ -24464,6 +24517,15 @@ check("readAIControllerComponent parses props and marks empty components", () =>
           targetLostGraceSeconds: 0.2,
         },
         navAgent: { radius: 0.35, height: 1.8, maxSpeed: 3.2 },
+        patrolRoute: {
+          source: "spline",
+          splineId: "patrol-rail",
+          entry: "start",
+          speed: 2.4,
+          acceptanceRadius: 0.55,
+          lookAheadDistance: 1.2,
+          wrapMode: "pingPong",
+        },
         blackboardKeys: [
           { key: "target", kind: "entity", default: null },
           { key: "hasLineOfSight", kind: "boolean", default: false },
@@ -24478,6 +24540,15 @@ check("readAIControllerComponent parses props and marks empty components", () =>
   assert.equal(component?.perception?.nearSightRadius, 2.5);
   assert.equal(component?.perception?.targetLostGraceSeconds, 0.2);
   assert.equal(component?.navAgent?.maxSpeed, 3.2);
+  assert.deepEqual(component?.patrolRoute, {
+    source: "spline",
+    splineId: "patrol-rail",
+    entry: "start",
+    speed: 2.4,
+    acceptanceRadius: 0.55,
+    lookAheadDistance: 1.2,
+    wrapMode: "pingPong",
+  });
   assert.equal(component?.blackboardKeys?.length, 2);
   // Presence alone (empty props) still marks the entity as AI-controlled.
   const empty = readAIControllerComponent({

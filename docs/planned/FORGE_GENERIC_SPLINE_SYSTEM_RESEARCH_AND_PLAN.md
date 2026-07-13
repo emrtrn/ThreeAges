@@ -1,7 +1,7 @@
 # Forge Generic Spline System — Araştırma ve Üretim Planı
 
 > Tarih: 2026-07-13  
-> Durum: Faz 0–5 tamamlandı; Faz 6 Path Follower çekirdeği ve runtime entegrasyonu tamamlandı. Faz 6 için örnek patrol/camera rail test sahnesi sırada.
+> Durum: Faz 0–6 tamamlandı; Faz 6B, AI'nin mevcut Generic Spline Actor'ü patrol rotası olarak kullanmasını planlar.
 > Bağlı çalışma: Landscape Spline **implement edilmiş durumda** — plan dokümanı
 > (`LANDSCAPE_MODE_RESEARCH_AND_PLAN.md`) tamamlanıp silindi
 > (`docs/COMPLETED_WORK_INDEX.md`, geçmişi git'te). Güncel referans kodun kendisidir:
@@ -1745,7 +1745,7 @@ Spline'ı oyun sistemlerinin kullanabileceği runtime path haline getirmek.
 - [x] Missing spline fallback davranışını ekle. (entity transformu değişmeden kalır, debug state raporlar)
 - [x] Closed-loop seam hareket testini ekle.
 - [x] Farklı delta-time fixture testini ekle.
-- [ ] Örnek patrol/camera rail test sahnesi oluştur.
+- [x] Örnek patrol/camera rail test sahnesi oluştur. (`Playground`: kapalı `spline-1` üzerinde `AI_Character` Path Follower smoke testi)
 
 ### Kabul kriterleri
 
@@ -1753,6 +1753,83 @@ Spline'ı oyun sistemlerinin kullanabileceği runtime path haline getirmek.
 - 30 FPS ve 120 FPS simülasyonunda aynı sürede yaklaşık aynı mesafeyi alır.
 - Loop ve ping-pong davranışı görünür sıçrama üretmez.
 - Runtime query'ler serialized veriye doğrudan bağımlı değildir.
+
+---
+
+## Faz 6B — AI Spline Patrol Route
+
+### Hedef
+
+Yeni bir spline actor türü oluşturmadan, mevcut **Generic Spline Actor**'ü
+AI karakterlerin seçilebilir patrol rota kaynağı haline getirmek. AI, doğrudan
+spline üzerine teleport edilmez: bulunduğu konumdan spline'ın en yakın noktasına
+CharacterMovement/Nav üzerinden yürür; ardından spline boyunca hareket eder.
+
+### Mimari kararı
+
+- `SplinePathFollower`, kamera rail'i, hareketli platform ve kinematik actor
+  gibi doğrudan transform sahibi tüketiciler için kalır.
+- AI spline patrol, `SplinePathFollower` ile aynı entity'de birlikte
+  kullanılmaz. AI'nin hareket sahibi `CharacterMovement` ve navigation akışı
+  olmaya devam eder; böylece çarpışma, gerçek hız ve locomotion animasyonu
+  korunur.
+- Target Point ve spline iki ayrı actor türü olarak kalır. Seçim, AI'nin
+  patrol route ayarında açıkça yapılır; otomatik öncelik veya sahnede ilk
+  bulunan kaynağa düşme yapılmaz.
+
+Önerilen veri sözleşmesi:
+
+```ts
+interface AiPatrolRoute {
+  source: "targetPoints" | "spline";
+  splineId?: string;
+  targetPointTag?: string;
+  entry?: "nearest" | "start";
+  speed?: number;
+  acceptanceRadius?: number;
+  lookAheadDistance?: number;
+  wrapMode?: "loop" | "pingPong" | "clamp";
+}
+```
+
+Varsayılan `source: "targetPoints"` olmalıdır; mevcut target-point patrol
+asset'leri davranışını değiştirmemelidir.
+
+### Kontrol listesi
+
+- [x] AI Controller / StateTree için `AiPatrolRoute` veri sözleşmesini ekle. (`AIController.patrolRoute` + `forge.moveAlongPatrolRoute`)
+- [x] Editor'da Target Points / Spline rota kaynağı seçicisini ekle. (Actor Script Editor > AIController > Patrol Route)
+- [ ] Spline seçildiğinde spline actor referans picker'ını ve geçersiz/missing
+  spline uyarısını ekle.
+- [x] `entry: "nearest"` için `SplineQuery.getClosestDistanceToPoint(...)`
+  ile en yakın spline mesafesini bul.
+- [x] AI'yi bu giriş noktasına Nav/CharacterMovement üzerinden yürüt; giriş
+  kabul yarıçapını uygula.
+- [x] Girişten sonra spline üzerindeki look-ahead örneğini hareket hedefi
+  yaparak AI'yi CharacterMovement ile takip ettir.
+- [x] Spline patrol hızını CharacterMovement locomotion raporuna bağla; Walk /
+  Run animasyonları gerçek hıza uygun oynasın.
+- [ ] Closed spline için loop, açık spline için clamp/ping-pong davranışlarını
+  uygula.
+- [ ] Target Point ve spline aynı sahnede bulunurken açık kaynak seçiminin
+  deterministik olduğunu test et.
+- [x] Aynı AI entity'sinde `SplinePathFollower` ve AI spline patrol'un transform
+  sahipliği çakışmasını doğrula ve engelle. (`SplinePathFollowerSubsystem`, AI spline route seçildiğinde kinematik follower'ı atlar.)
+- [ ] Level-owned spline ID'leri için actor asset'ten bağımsız per-instance
+  route/component override serialization ve editor akışını tasarla/uygula.
+- [ ] Save/Reload, missing spline, closed-loop seam, 30/120 FPS ve browser
+  runtime regression testlerini ekle.
+
+### Kabul kriterleri
+
+- AI, oyuna başladığında spline'a anlık yerleşmez; en yakın uygun giriş
+  noktasına yürür.
+- AI spline boyunca görünür yürüyüş/koşu animasyonuyla, tanımlı hıza uygun
+  ilerler.
+- Aynı level'da Target Point ve birden çok spline varken her AI hangi rota
+  kaynağını kullanacağını açık ayardan seçer.
+- Mevcut target-point patrol davranışı geriye uyumlu kalır.
+- Generic Spline Actor veri modeli veya actor türü çoğaltılmaz.
 
 ---
 
@@ -1982,7 +2059,7 @@ Sistemi gerçek Forge projelerinde güvenilir kullanılabilir hale getirmek.
 Kapsam:
 
 ```text
-Faz 0–6
+Faz 0–6B
 ```
 
 Sonuç:
@@ -1992,6 +2069,7 @@ Sonuç:
 - Save/Reload.
 - Runtime query.
 - Path Follower.
+- AI için seçilebilir spline patrol route.
 
 Bu milestone tek başına değerlidir ve generator'lardan önce tamamlanmalıdır.
 

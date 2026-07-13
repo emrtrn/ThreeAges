@@ -4081,6 +4081,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    */
   private buildRuntimeSplines(): void {
     this.splineRegistry = createSplineRegistry(this.layout?.splines);
+    this.aiSubsystem.configure({ splineRegistry: this.splineRegistry });
     if (!this.debug) return;
     for (const entry of this.splineRegistry.all()) {
       const object = createSplineObject(entry.actor);

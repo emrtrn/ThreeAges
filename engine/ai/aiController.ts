@@ -20,7 +20,11 @@ import type { AiBehaviorRunnerDebugSnapshot } from "./behaviorRunner";
 import type { AiStateTreeRunnerDebugSnapshot } from "./stateTreeRunner";
 import type { AiQueryDebugSnapshot, AiQueryResult } from "./queryRunner";
 import { aiQueryDebugSnapshot } from "./queryRunner";
-import type { AIPerceptionConfig } from "../scene/components";
+import {
+  DEFAULT_AI_PATROL_ROUTE,
+  type AiPatrolRoute,
+  type AIPerceptionConfig,
+} from "../scene/components";
 import type { EntityId } from "../scene/entity";
 import type { PerceivedStimulus } from "../perception/perception";
 import type { Vec3 } from "../scene/layout";
@@ -37,6 +41,8 @@ export interface AIControllerOptions {
   readonly blackboardAsset?: string;
   /** Authored perception tuning copied from the AIController component. */
   readonly perception?: AIPerceptionConfig;
+  /** Explicit Target Point or Generic Spline patrol source. */
+  readonly patrolRoute?: AiPatrolRoute;
 }
 
 /** Debug view of one controller for the `?debug` overlay / editor inspector. */
@@ -72,6 +78,7 @@ export class AIController {
   readonly stateTreeAsset: string | null;
   readonly blackboardAsset: string | null;
   readonly perceptionConfig: AIPerceptionConfig | null;
+  readonly patrolRoute: AiPatrolRoute;
 
   private currentGoal: string | null = null;
   private perceived: PerceivedStimulus[] = [];
@@ -90,6 +97,7 @@ export class AIController {
     this.stateTreeAsset = options.stateTreeAsset ?? null;
     this.blackboardAsset = options.blackboardAsset ?? null;
     this.perceptionConfig = options.perception ?? null;
+    this.patrolRoute = { ...(options.patrolRoute ?? DEFAULT_AI_PATROL_ROUTE) };
   }
 
   /** Current high-level goal label, or null when idle. */

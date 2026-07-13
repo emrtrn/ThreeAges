@@ -41,6 +41,7 @@ import type { AiQueryAsset } from "./queryAsset";
 import { runAiQuery } from "./queryRunner";
 import { SmartObjectReservationStore } from "./smartObjects";
 import { createTargetPointIndex, type TargetPointEntry, type TargetPointIndex } from "./targetPoints";
+import type { SplineRegistry } from "../scene/splineRegistry";
 import {
   AiBehaviorRunner,
   createDefaultAiServiceRegistry,
@@ -86,6 +87,8 @@ export interface AISubsystemOptions {
   readonly moveTo?: (request: AiMoveRequest) => "success" | "failure" | "running";
   readonly blockers?: () => readonly PerceptionAabb[];
   readonly perceptionSourceFilter?: (entity: Entity) => boolean;
+  /** Runtime Generic Spline facade consumed by spline patrol tasks. */
+  readonly splineRegistry?: SplineRegistry;
 }
 
 export interface AiScriptStimulusInput {
@@ -112,6 +115,7 @@ export class AISubsystem implements Subsystem {
   private moveTo: ((request: AiMoveRequest) => "success" | "failure" | "running") | undefined;
   private blockers: (() => readonly PerceptionAabb[]) | undefined;
   private perceptionSourceFilter: ((entity: Entity) => boolean) | undefined;
+  private splineRegistry: SplineRegistry | undefined;
   private entities: readonly Entity[] = [];
   private pendingNoises: NoiseStimulus[] = [];
   private pendingScriptStimuli: ScriptStimulus[] = [];
@@ -140,6 +144,7 @@ export class AISubsystem implements Subsystem {
     this.moveTo = options.moveTo;
     this.blockers = options.blockers;
     this.perceptionSourceFilter = options.perceptionSourceFilter;
+    this.splineRegistry = options.splineRegistry;
   }
 
   configure(options: AISubsystemOptions): void {
@@ -149,6 +154,7 @@ export class AISubsystem implements Subsystem {
     if (options.moveTo) this.moveTo = options.moveTo;
     if (options.blockers) this.blockers = options.blockers;
     if (options.perceptionSourceFilter) this.perceptionSourceFilter = options.perceptionSourceFilter;
+    if (options.splineRegistry) this.splineRegistry = options.splineRegistry;
   }
 
   setAssetLibrary(library: AiAssetLibrary): void {
@@ -204,6 +210,7 @@ export class AISubsystem implements Subsystem {
         ...(component.stateTree ? { stateTreeAsset: component.stateTree } : {}),
         ...(blackboardRef ? { blackboardAsset: blackboardRef } : {}),
         ...(component.perception ? { perception: component.perception } : {}),
+        ...(component.patrolRoute ? { patrolRoute: component.patrolRoute } : {}),
       };
       this.controllers.set(entity.id, new AIController(`ai:${entity.id}`, entity.id, blackboard, options));
     }
@@ -482,6 +489,7 @@ export class AISubsystem implements Subsystem {
       ...(this.moveTo ? { moveTo: this.moveTo } : {}),
       smartObjects: this.smartObjects,
       targetPoints: this.targetPointsProxy,
+      ...(this.splineRegistry ? { splineRegistry: this.splineRegistry } : {}),
       world: {
         entityPosition: (entityId) => this.positionForEntity(entityId),
       },

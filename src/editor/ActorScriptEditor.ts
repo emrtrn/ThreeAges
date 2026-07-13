@@ -968,6 +968,8 @@ export class ActorScriptEditor {
     );
     const perception = readObjectProp(node.props.perception);
     const navAgent = readObjectProp(node.props.navAgent);
+    const patrolRoute = readObjectProp(node.props.patrolRoute);
+    const patrolSource = patrolRoute.source === "spline" ? "spline" : "targetPoints";
     const perceptionField = (key: string, label: string, fallback: number, attrs: string): string => `
       <label class="as-field">
         <span>${label}</span>
@@ -984,6 +986,31 @@ export class ActorScriptEditor {
           fallback,
         )}" ${attrs} />
       </label>`;
+    const patrolNumberField = (key: string, label: string, fallback: number, attrs: string): string => `
+      <label class="as-field">
+        <span>${label}</span>
+        <input type="number" data-as-ai-patrol-num="${key}" value="${readNumberProp(
+          patrolRoute[key],
+          fallback,
+        )}" ${attrs} />
+      </label>`;
+    const splineFields = patrolSource === "spline"
+      ? `<label class="as-field"><span>Spline ID</span><input type="text" data-as-ai-patrol-spline value="${escapeHtml(
+          typeof patrolRoute.splineId === "string" ? patrolRoute.splineId : "",
+        )}" placeholder="Level spline ID" /></label>
+        <label class="as-field"><span>Entry</span><select data-as-ai-patrol-entry>
+          <option value="nearest" ${patrolRoute.entry !== "start" ? "selected" : ""}>Nearest Point</option>
+          <option value="start" ${patrolRoute.entry === "start" ? "selected" : ""}>Spline Start</option>
+        </select></label>
+        ${patrolNumberField("lookAheadDistance", "Look Ahead", 1.2, 'step="0.1" min="0.1"')}
+        <label class="as-field"><span>Wrap</span><select data-as-ai-patrol-wrap>
+          <option value="loop" ${patrolRoute.wrapMode !== "pingPong" && patrolRoute.wrapMode !== "clamp" ? "selected" : ""}>Loop</option>
+          <option value="pingPong" ${patrolRoute.wrapMode === "pingPong" ? "selected" : ""}>Ping-Pong</option>
+          <option value="clamp" ${patrolRoute.wrapMode === "clamp" ? "selected" : ""}>Clamp</option>
+        </select></label>`
+      : `<label class="as-field"><span>Target Point Tag</span><input type="text" data-as-ai-patrol-tag value="${escapeHtml(
+          typeof patrolRoute.targetPointTag === "string" ? patrolRoute.targetPointTag : "",
+        )}" placeholder="Any route" /></label>`;
     return `${behaviorTree}${stateTree}${blackboard}
       <div class="as-section-label">Perception</div>
       ${perceptionField("sightRadius", "Sight Radius", 18, 'step="0.5" min="0"')}
@@ -995,7 +1022,15 @@ export class ActorScriptEditor {
       ${navField("radius", "Agent Radius", 0.35, 'step="0.05" min="0"')}
       ${navField("height", "Agent Height", 1.8, 'step="0.1" min="0"')}
       ${navField("maxSpeed", "Max Speed", 3.2, 'step="0.1" min="0"')}
-      ${navField("clearancePadding", "Clearance Padding", 0.1, 'step="0.05" min="0"')}`;
+      ${navField("clearancePadding", "Clearance Padding", 0.1, 'step="0.05" min="0"')}
+      <div class="as-section-label">Patrol Route</div>
+      <label class="as-field"><span>Source</span><select data-as-ai-patrol-source>
+        <option value="targetPoints" ${patrolSource === "targetPoints" ? "selected" : ""}>Target Points</option>
+        <option value="spline" ${patrolSource === "spline" ? "selected" : ""}>Generic Spline</option>
+      </select></label>
+      ${splineFields}
+      ${patrolNumberField("speed", "Patrol Speed", 2.4, 'step="0.1" min="0"')}
+      ${patrolNumberField("acceptanceRadius", "Acceptance Radius", 0.55, 'step="0.05" min="0"')}`;
   }
 
   /** A `<select>` of asset paths (value = path, label = name) with a none/unknown fallback. */
@@ -1405,6 +1440,60 @@ export class ActorScriptEditor {
     };
     bindNested("data-as-ai-perception-num", "perception");
     bindNested("data-as-ai-nav-num", "navAgent");
+    const patrolRoute = (): Record<string, SceneJsonValue> => readObjectProp(node.props.patrolRoute);
+    const commitPatrolRoute = (route: Record<string, SceneJsonValue>): void => {
+      node.props.patrolRoute = route;
+      this.markDirty();
+    };
+    const patrolSource = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-ai-patrol-source]");
+    patrolSource?.addEventListener("change", () => {
+      const route = patrolRoute();
+      route.source = patrolSource.value === "spline" ? "spline" : "targetPoints";
+      commitPatrolRoute(route);
+      this.renderDetails();
+    });
+    const patrolText = (selector: string, key: string): void => {
+      const input = this.detailsHost.querySelector<HTMLInputElement>(selector);
+      input?.addEventListener("change", () => {
+        const route = patrolRoute();
+        if (input.value.trim()) route[key] = input.value.trim();
+        else delete route[key];
+        commitPatrolRoute(route);
+        this.renderDetails();
+      });
+    };
+    patrolText("[data-as-ai-patrol-spline]", "splineId");
+    patrolText("[data-as-ai-patrol-tag]", "targetPointTag");
+    const patrolEntry = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-ai-patrol-entry]");
+    patrolEntry?.addEventListener("change", () => {
+      const route = patrolRoute();
+      route.entry = patrolEntry.value === "start" ? "start" : "nearest";
+      commitPatrolRoute(route);
+      this.renderDetails();
+    });
+    const patrolWrap = this.detailsHost.querySelector<HTMLSelectElement>("[data-as-ai-patrol-wrap]");
+    patrolWrap?.addEventListener("change", () => {
+      const route = patrolRoute();
+      route.wrapMode = patrolWrap.value === "pingPong" || patrolWrap.value === "clamp" ? patrolWrap.value : "loop";
+      commitPatrolRoute(route);
+      this.renderDetails();
+    });
+    this.detailsHost.querySelectorAll<HTMLInputElement>("[data-as-ai-patrol-num]").forEach((input) => {
+      const key = input.dataset.asAiPatrolNum;
+      if (!key) return;
+      const apply = (): void => {
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || value < 0) return;
+        const route = patrolRoute();
+        route[key] = value;
+        commitPatrolRoute(route);
+      };
+      input.addEventListener("input", apply);
+      input.addEventListener("change", () => {
+        apply();
+        this.renderDetails();
+      });
+    });
   }
 
   /**

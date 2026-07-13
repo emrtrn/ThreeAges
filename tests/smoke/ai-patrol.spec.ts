@@ -47,25 +47,15 @@ test("runtime AI spline smoke: travel to the Playground route, agent follows the
   await waitForConsoleText(page, consoleMessages, SMOKE_PATROL_SCENE_NAME);
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
 
-  // The AI actor remains a live controller while its actor component follows the
-  // Generic Spline. The old Target Point patrol is intentionally absent here.
+  // The AI remains a live controller and follows spline look-ahead targets through
+  // navigation/CharacterMovement. It must not fall back to the kinematic follower.
   await expect(page.locator("#debug-stats")).toContainText(/controllers: [1-9]/, {
     timeout: 30_000,
   });
-  await expect(page.locator("#debug-stats")).toContainText("spline followers (1)", {
+  await expect(page.locator("#debug-stats")).toContainText("ai nav (1)", {
     timeout: 30_000,
   });
-  await expect(page.locator("#debug-stats")).toContainText("actor:0: spline-1", {
-    timeout: 30_000,
-  });
-
-  const followerDistance = async (): Promise<number> => {
-    const text = await page.locator("#debug-stats").textContent();
-    const match = text?.match(/actor:0: spline-1 d:([0-9.]+)/);
-    return match ? Number(match[1]) : Number.NaN;
-  };
-  const initialDistance = await followerDistance();
-  await expect.poll(followerDistance, { timeout: 10_000 }).toBeGreaterThan(initialDistance + 0.5);
+  await expect(page.locator("#debug-stats")).not.toContainText("spline followers (1)");
 
   expect(pageErrors).toEqual([]);
 });

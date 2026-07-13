@@ -9,6 +9,7 @@
 import type { EngineUpdateContext, Subsystem } from "../core/Subsystem";
 import type { Entity, EntityId } from "./entity";
 import {
+  readAIControllerComponent,
   readSplinePathFollowerComponent,
   readTransformComponent,
   type SplinePathFollowerComponent,
@@ -114,6 +115,9 @@ export class SplinePathFollowerSubsystem implements Subsystem {
       const component = readSplinePathFollowerComponent(entity);
       const transform = readTransformComponent(entity);
       if (!component || !transform) continue;
+      // AI spline patrol owns movement through navigation + CharacterMovement;
+      // a direct follower here would overwrite that result after every frame.
+      if (readAIControllerComponent(entity)?.patrolRoute?.source === "spline") continue;
       this.runtimes.push({
         entityId: entity.id,
         component,

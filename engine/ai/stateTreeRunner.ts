@@ -30,6 +30,7 @@ import {
 import type { AiQueryResult } from "./queryRunner";
 import type { SmartObjectRuntime } from "./smartObjects";
 import type { TargetPointIndex } from "./targetPoints";
+import type { SplineRegistry } from "../scene/splineRegistry";
 import type {
   AiStateDef,
   AiStateTaskDef,
@@ -46,6 +47,7 @@ export interface AiStateTreeRunnerOptions {
   readonly smartObjects?: SmartObjectRuntime;
   readonly world?: AiWorldQuery;
   readonly targetPoints?: TargetPointIndex;
+  readonly splineRegistry?: SplineRegistry;
 }
 
 export interface AiStateTreeTransitionRecord {
@@ -326,6 +328,7 @@ export class AiStateTreeRunner {
       ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
       ...(this.options.world ? { world: this.options.world } : {}),
       ...(this.options.targetPoints ? { targetPoints: this.options.targetPoints } : {}),
+      ...(this.options.splineRegistry ? { splineRegistry: this.options.splineRegistry } : {}),
     });
     if (status !== "running" && memory.get(PRESERVE_TASK_MEMORY) !== true) memory.clear();
     return status;
@@ -358,6 +361,7 @@ export class AiStateTreeRunner {
         ...(this.options.smartObjects ? { smartObjects: this.options.smartObjects } : {}),
         ...(this.options.world ? { world: this.options.world } : {}),
         ...(this.options.targetPoints ? { targetPoints: this.options.targetPoints } : {}),
+        ...(this.options.splineRegistry ? { splineRegistry: this.options.splineRegistry } : {}),
       });
     }
   }
