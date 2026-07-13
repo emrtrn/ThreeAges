@@ -77,7 +77,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     patrolTag?: string;
     color?: string;
   }) => void;
-  setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number; showPointIds?: boolean }) => void;
+  setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugResolution?: number; showPointIds?: boolean }) => void;
   getSelectedSplineGenerators: () => ForgeSplineGeneratorDef[];
   getSelectedSplineGeneratorDiagnostics: () => Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null; warnings: string[] }>;
   addSelectedSplineInstanceGenerator: () => void;
@@ -1329,20 +1329,19 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
           <label class="spline-toggle"><input type="checkbox" data-spline-debug-visible ${spline.debugVisible ? "checked" : ""} ${locked}><span><strong>Show path</strong><small>Display in the viewport</small></span></label>
           <label class="spline-toggle"><input type="checkbox" data-spline-show-point-ids ${spline.showPointIds ? "checked" : ""} ${locked}><span><strong>Point labels</strong><small>Show point IDs in the viewport</small></span></label>
         </div>
-        <div class="spline-debug-controls"><label><span>Path color</span><input type="color" data-spline-debug-color value="${spline.debugColor}" ${locked}></label><label><span>Preview detail</span><input type="number" min="2" max="128" step="1" data-spline-debug-resolution value="${spline.debugResolution}" ${locked}></label></div>
+        <div class="spline-debug-controls"><label><span>Preview detail</span><input type="number" min="2" max="128" step="1" data-spline-debug-resolution value="${spline.debugResolution}" ${locked}></label></div>
       </div>
       <div class="spline-details__section"><div class="spline-details__section-heading"><span>Generators</span><small>Procedural content along this path</small></div>
       ${generatorMarkup}
       <div class="spline-generator-actions"><button type="button" class="spline-action-primary" data-spline-generator-add ${locked}>+ Instance generator</button><button type="button" data-spline-rigid-generator-add ${locked}>+ Rigid segments</button></div>
       </div>
       <div class="spline-details__section"><div class="spline-details__section-heading"><span>Control points</span><small>Select, shape and split the path</small></div>
-      <div class="spline-point-toolbar"><div class="spline-point-list">${pointButtons}</div><button type="button" class="spline-action-primary" data-spline-point-add ${locked}>+ Add point</button></div>
+      <div class="spline-point-toolbar"><div class="spline-point-list">${pointButtons}</div><button type="button" class="spline-action-primary spline-icon-button" data-spline-point-add aria-label="Add control point" title="Add control point" ${locked}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg></button></div>
       ${pointEditor}</div>
     </section>`;
   body.querySelector<HTMLInputElement>("[data-spline-closed]")?.addEventListener("change", (event) => options.setSelectedSpline({ closed: (event.currentTarget as HTMLInputElement).checked }));
   body.querySelector<HTMLInputElement>("[data-spline-debug-visible]")?.addEventListener("change", (event) => options.setSelectedSpline({ debugVisible: (event.currentTarget as HTMLInputElement).checked }));
   body.querySelector<HTMLInputElement>("[data-spline-show-point-ids]")?.addEventListener("change", (event) => options.setSelectedSpline({ showPointIds: (event.currentTarget as HTMLInputElement).checked }));
-  body.querySelector<HTMLInputElement>("[data-spline-debug-color]")?.addEventListener("change", (event) => options.setSelectedSpline({ debugColor: (event.currentTarget as HTMLInputElement).value }));
   body.querySelector<HTMLInputElement>("[data-spline-debug-resolution]")?.addEventListener("change", (event) => {
     const value = Number((event.currentTarget as HTMLInputElement).value);
     if (Number.isFinite(value)) options.setSelectedSpline({ debugResolution: value });

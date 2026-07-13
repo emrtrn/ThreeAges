@@ -2,7 +2,8 @@ import type { LayoutSplineActor } from "./layout";
 import { createDefaultSplineComponentData, normalizeSplineComponentData } from "./spline";
 import { normalizeSplineGenerators } from "./splineGenerator";
 
-export const SPLINE_ACTOR_DEFAULT_COLOR = "#4fd1ff";
+/** Spline authoring paths use one neutral presentation color in every level. */
+export const SPLINE_ACTOR_DEFAULT_COLOR = "#ffffff";
 export const SPLINE_ACTOR_DEFAULT_RESOLUTION = 16;
 
 export interface ResolvedSplineActorDebug {
@@ -16,9 +17,7 @@ export function resolveSplineActorDebug(actor: LayoutSplineActor | null | undefi
   const debug = actor?.debug;
   return {
     visible: debug?.visible ?? true,
-    color: typeof debug?.color === "string" && /^#[0-9a-f]{6}$/i.test(debug.color)
-      ? debug.color
-      : SPLINE_ACTOR_DEFAULT_COLOR,
+    color: SPLINE_ACTOR_DEFAULT_COLOR,
     resolution: clampInteger(debug?.resolution, 2, 128, SPLINE_ACTOR_DEFAULT_RESOLUTION),
     showPointIds: debug?.showPointIds ?? false,
   };

@@ -5236,7 +5236,7 @@ export class SceneApp {
     this.executeCommand({ label, redo: () => apply(after), undo: () => apply(before) });
   }
 
-  setSelectedSpline(patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number; showPointIds?: boolean }): void {
+  setSelectedSpline(patch: { closed?: boolean; debugVisible?: boolean; debugResolution?: number; showPointIds?: boolean }): void {
     if (this.selection?.kind !== "spline") return;
     const index = this.selection.index;
     const actor = this.layout?.splines?.[index];
@@ -5244,10 +5244,9 @@ export class SceneApp {
     const before = cloneSplineActor(actor);
     const after = cloneSplineActor(actor);
     if (patch.closed !== undefined) after.spline.closed = patch.closed && after.spline.points.length >= 3;
-    if (patch.debugVisible !== undefined || patch.debugColor !== undefined || patch.debugResolution !== undefined || patch.showPointIds !== undefined) {
+    if (patch.debugVisible !== undefined || patch.debugResolution !== undefined || patch.showPointIds !== undefined) {
       after.debug = { ...after.debug };
       if (patch.debugVisible !== undefined) after.debug.visible = patch.debugVisible;
-      if (patch.debugColor !== undefined) after.debug.color = patch.debugColor;
       if (patch.debugResolution !== undefined) after.debug.resolution = Math.min(128, Math.max(2, Math.floor(patch.debugResolution)));
       if (patch.showPointIds !== undefined) after.debug.showPointIds = patch.showPointIds;
     }

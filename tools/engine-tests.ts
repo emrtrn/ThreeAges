@@ -19697,7 +19697,7 @@ check("generic spline actor defaults and unique helpers create a normalized two-
   assert.equal(first.spline.points.length, 2);
   assert.equal(uniqueSplineActorId(actors), "spline-2");
   assert.equal(uniqueSplineActorName("Spline", actors), "Spline 2");
-  assert.deepEqual(resolveSplineActorDebug(first), { visible: true, color: "#4fd1ff", resolution: 16, showPointIds: false });
+  assert.deepEqual(resolveSplineActorDebug(first), { visible: true, color: "#ffffff", resolution: 16, showPointIds: false });
 });
 
 check("generic spline actor save allowlist round-trips all authored component fields", () => {

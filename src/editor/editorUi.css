@@ -1200,6 +1200,10 @@ body.editor-mode #debug-stats {
   gap: 7px;
 }
 
+.spline-debug-controls {
+  grid-template-columns: 1fr;
+}
+
 .spline-debug-controls label {
   display: grid;
   gap: 4px;
@@ -1259,6 +1263,23 @@ body.editor-mode #debug-stats {
 .spline-point-toolbar .spline-action-primary:hover:not(:disabled) {
   border-color: #53a8da;
   background: #1b6c9c;
+}
+
+.spline-point-toolbar > .spline-icon-button {
+  display: grid;
+  flex: 0 0 30px;
+  width: 30px;
+  padding: 0;
+  place-items: center;
+}
+
+.spline-icon-button svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.8;
 }
 
 .spline-generator {
