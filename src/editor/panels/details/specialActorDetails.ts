@@ -1,6 +1,6 @@
 import { assetType, isModelAssetType, type EditableAsset } from "@engine/assets/manifest";
 import type { BrushShape, LayoutLightActor, Vec3 } from "@engine/scene/layout";
-import type { ForgeSplineInstanceGeneratorDef } from "@engine/scene/splineGenerator";
+import type { ForgeSplineGeneratorDef, ForgeSplineInstanceGeneratorDef, ForgeSplineRigidSegmentGeneratorDef } from "@engine/scene/splineGenerator";
 import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
 import type {
   EditableAiNavigationVolume,
@@ -78,11 +78,13 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     color?: string;
   }) => void;
   setSelectedSpline: (patch: { closed?: boolean; debugVisible?: boolean; debugColor?: string; debugResolution?: number; showPointIds?: boolean }) => void;
-  getSelectedSplineGenerators: () => ForgeSplineInstanceGeneratorDef[];
-  getSelectedSplineGeneratorDiagnostics: () => Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null }>;
+  getSelectedSplineGenerators: () => ForgeSplineGeneratorDef[];
+  getSelectedSplineGeneratorDiagnostics: () => Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null; warnings: string[] }>;
   addSelectedSplineInstanceGenerator: () => void;
+  addSelectedSplineRigidSegmentGenerator: () => void;
   removeSelectedSplineGenerator: (generatorId: string) => void;
   setSelectedSplineInstanceGenerator: (generatorId: string, patch: Partial<ForgeSplineInstanceGeneratorDef>) => void;
+  setSelectedSplineRigidSegmentGenerator: (generatorId: string, patch: Partial<ForgeSplineRigidSegmentGeneratorDef>) => void;
   getSelectedSplinePoints: () => Array<{ id: string; position: Vec3; pointType: "linear" | "curveAuto" | "curveCustom"; tangentsLinked: boolean }>;
   getActiveSplinePointId: () => string | null;
   selectSplinePoint: (pointId: string | null) => void;
@@ -1246,7 +1248,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
   const points = options.getSelectedSplinePoints();
   const activePoint = points.find((point) => point.id === options.getActiveSplinePointId()) ?? points[0];
   const pointButtons = points
-    .map((point, index) => `<button type="button" data-spline-point="${escapeHtml(point.id)}" ${locked}>${index + 1}: ${escapeHtml(point.id)}</button>`)
+    .map((point, index) => `<button type="button" class="${activePoint?.id === point.id ? "active" : ""}" data-spline-point="${escapeHtml(point.id)}" ${locked}><span>${index + 1}</span>${escapeHtml(point.id)}</button>`)
     .join("");
   const splitButtons = Array.from(
     { length: points.length >= 2 ? (spline.closed ? points.length : points.length - 1) : 0 },
@@ -1265,10 +1267,31 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
   const generators = options.getSelectedSplineGenerators();
   const generatorDiagnostics = new Map(options.getSelectedSplineGeneratorDiagnostics().map((entry) => [entry.generatorId, entry]));
   const generatorMarkup = generators.length === 0
-    ? "<div class=\"detail-readonly\">No instance generators yet.</div>"
+    ? "<div class=\"spline-generator-empty\"><strong>No generators yet</strong><span>Add instances for repeated props, or rigid segments for fences, rails and walls.</span></div>"
     : generators.map((generator) => {
-      const random = generator.random ?? {};
       const diagnostic = generatorDiagnostics.get(generator.id);
+      const warningMarkup = diagnostic?.warnings.map((warning) => `<div class="detail-readonly">Warning: ${escapeHtml(warning)}</div>`).join("") ?? "";
+      if (generator.type === "rigidSegments") {
+        return `<div class="detail-subsection spline-generator" data-spline-generator-card="${escapeHtml(generator.id)}">
+          <div class="detail-subsection-title">Rigid Segments Â· ${escapeHtml(generator.id)}</div>
+          <div class="detail-readonly">${diagnostic?.instanceCount ?? 0} generated meshes${diagnostic?.missingAssetId ? ` Â· Missing mesh: ${escapeHtml(diagnostic.missingAssetId)}` : ""}</div>
+          ${warningMarkup}
+          <label class="detail-row"><span>Panel Mesh</span><select data-spline-rigid-mesh="${escapeHtml(generator.id)}" ${locked}><option value="">Choose meshâ€¦</option>${meshOptions.replace(`value="${escapeHtml(generator.meshAsset)}"`, `value="${escapeHtml(generator.meshAsset)}" selected`)}</select></label>
+          <label class="detail-row"><span>Fit Mode</span><select data-spline-rigid-fit="${escapeHtml(generator.id)}" ${locked}>${["fixed", "stretchLast", "distribute"].map((mode) => `<option value="${mode}" ${(generator.fitMode ?? "fixed") === mode ? "selected" : ""}>${mode === "stretchLast" ? "Stretch Last" : mode === "distribute" ? "Distribute" : "Fixed"}</option>`).join("")}</select></label>
+          <label class="detail-row"><span>Segment Length</span><input type="number" min="0.01" step="0.1" data-spline-rigid-number="segmentLength" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.segmentLength}" ${locked}></label>
+          <label class="detail-row"><span>Gap</span><input type="number" min="0" step="0.05" data-spline-rigid-number="gap" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.gap ?? 0}" ${locked}></label>
+          <label class="detail-row"><span>Mesh Yaw</span><input type="number" step="15" data-spline-rigid-number="yaw" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.rotationOffset?.[1] ?? 0}" ${locked}></label>
+          <label class="detail-row"><span>Enabled</span><input type="checkbox" data-spline-rigid-flag="enabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.enabled !== false ? "checked" : ""} ${locked}></label>
+          <label class="detail-row"><span>Editor Preview</span><input type="checkbox" data-spline-rigid-flag="previewEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.previewEnabled !== false ? "checked" : ""} ${locked}></label>
+          <label class="detail-row"><span>Runtime Enabled</span><input type="checkbox" data-spline-rigid-flag="runtimeEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.runtimeEnabled !== false ? "checked" : ""} ${locked}></label>
+          <label class="detail-row"><span>Align to Spline</span><input type="checkbox" data-spline-rigid-flag="alignToSpline" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.alignToSpline !== false ? "checked" : ""} ${locked}></label>
+          <label class="detail-row"><span>Posts at Joints</span><input type="checkbox" data-spline-rigid-flag="placePostsAtJoints" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.placePostsAtJoints ? "checked" : ""} ${locked}></label>
+          <label class="detail-row"><span>Joint Post Mesh</span><select data-spline-rigid-joint-mesh="${escapeHtml(generator.id)}" ${locked}><option value="">None</option>${meshOptions.replace(`value="${escapeHtml(generator.jointMeshAsset ?? "")}"`, `value="${escapeHtml(generator.jointMeshAsset ?? "")}" selected`)}</select></label>
+          <div class="detail-readonly">Fixed leaves an end gap; Stretch Last scales only the final +Z panel; Distribute spaces the nominal panels uniformly.</div>
+          <div class="detail-button-row"><button type="button" data-spline-generator-remove="${escapeHtml(generator.id)}" ${locked}>Remove Generator</button></div>
+        </div>`;
+      }
+      const random = generator.random ?? {};
       return `<div class="detail-subsection spline-generator" data-spline-generator-card="${escapeHtml(generator.id)}">
         <div class="detail-subsection-title">Instances · ${escapeHtml(generator.id)}</div>
         <div class="detail-readonly">${diagnostic?.instanceCount ?? 0} generated instances${diagnostic?.missingAssetId ? ` · Missing mesh: ${escapeHtml(diagnostic.missingAssetId)}` : ""}</div>
@@ -1290,27 +1313,31 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
       </div>`;
     }).join("");
   const pointEditor = activePoint
-    ? `<div class="detail-subsection-title">Control Point</div>
-      <div class="detail-button-row">${pointButtons}</div>
-      <label class="detail-row"><span>Type</span><select data-spline-point-type ${locked}>${["linear", "curveAuto", "curveCustom"].map((type) => `<option value="${type}" ${activePoint.pointType === type ? "selected" : ""}>${type === "curveAuto" ? "Curve Auto" : type === "curveCustom" ? "Curve Custom" : "Linear"}</option>`).join("")}</select></label>
+    ? `<div class="spline-point-editor">
+      <div class="spline-point-editor__heading"><div><span>Selected point</span><strong>${escapeHtml(activePoint.id)}</strong></div><label class="detail-row"><span>Type</span><select data-spline-point-type ${locked}>${["linear", "curveAuto", "curveCustom"].map((type) => `<option value="${type}" ${activePoint.pointType === type ? "selected" : ""}>${type === "curveAuto" ? "Curve Auto" : type === "curveCustom" ? "Curve Custom" : "Linear"}</option>`).join("")}</select></label></div>
       <div class="detail-vector"><span class="detail-vector-label">Position</span><div class="vector-fields">${activePoint.position.map((value, index) => axisField(`splinePoint${index}`, ["X", "Y", "Z"][index]!, index, value, 0.05, "pr", selection.locked).replace(`data-axis=\"${index}\"`, `data-spline-point-axis=\"${index}\"`)).join("")}</div></div>
       ${activePoint.pointType === "curveCustom" ? `<label class="detail-row"><span>Linked Tangents</span><input type="checkbox" data-spline-tangents-linked ${activePoint.tangentsLinked ? "checked" : ""} ${locked}></label><div class="detail-readonly">Drag the orange handles in the viewport.</div>` : ""}
-      <div class="detail-button-row"><button type="button" data-spline-point-delete ${locked}>Delete Point</button>${splitButtons}</div>`
-    : "<div class=\"detail-readonly\">No control points.</div>";
+      <div class="detail-button-row spline-point-editor__actions"><button type="button" data-spline-point-delete ${locked}>Delete Point</button>${splitButtons}</div>
+      </div>`
+    : "<div class=\"spline-generator-empty\"><strong>No control points</strong><span>Add a point to begin shaping this spline.</span></div>";
   body.innerHTML = `
-    <section class="details-section"><h3>Spline</h3>
-      <div class="detail-readonly">${spline.pointCount} control points · ${spline.closed ? "Closed" : "Open"}</div>
+    <section class="details-section spline-details"><div class="spline-details__header"><div><h3>Spline</h3><span>${spline.pointCount} control points</span></div><span class="spline-status ${spline.closed ? "is-closed" : ""}">${spline.closed ? "Closed loop" : "Open path"}</span></div>
       ${hasDegenerateSegment ? "<div class=\"detail-readonly\">Warning: a segment has coincident control points; move or delete one point.</div>" : ""}
-      <label class="detail-row"><span>Closed Loop</span><input type="checkbox" data-spline-closed ${spline.closed ? "checked" : ""} ${locked}></label>
-      <label class="detail-row"><span>Debug Visible</span><input type="checkbox" data-spline-debug-visible ${spline.debugVisible ? "checked" : ""} ${locked}></label>
-      <label class="detail-row"><span>Show Point IDs</span><input type="checkbox" data-spline-show-point-ids ${spline.showPointIds ? "checked" : ""} ${locked}></label>
-      <label class="detail-row"><span>Debug Color</span><input type="color" data-spline-debug-color value="${spline.debugColor}" ${locked}></label>
-      <label class="detail-row"><span>Line Resolution</span><input type="number" min="2" max="128" step="1" data-spline-debug-resolution value="${spline.debugResolution}" ${locked}></label>
-      <div class="detail-subsection-title">Instance Placement</div>
+      <div class="spline-details__section"><div class="spline-details__section-heading"><span>Path settings</span><small>Shape and editor display</small></div>
+        <div class="spline-toggle-grid">
+          <label class="spline-toggle"><input type="checkbox" data-spline-closed ${spline.closed ? "checked" : ""} ${locked}><span><strong>Closed loop</strong><small>Connect last point to first</small></span></label>
+          <label class="spline-toggle"><input type="checkbox" data-spline-debug-visible ${spline.debugVisible ? "checked" : ""} ${locked}><span><strong>Show path</strong><small>Display in the viewport</small></span></label>
+          <label class="spline-toggle"><input type="checkbox" data-spline-show-point-ids ${spline.showPointIds ? "checked" : ""} ${locked}><span><strong>Point labels</strong><small>Show point IDs in the viewport</small></span></label>
+        </div>
+        <div class="spline-debug-controls"><label><span>Path color</span><input type="color" data-spline-debug-color value="${spline.debugColor}" ${locked}></label><label><span>Preview detail</span><input type="number" min="2" max="128" step="1" data-spline-debug-resolution value="${spline.debugResolution}" ${locked}></label></div>
+      </div>
+      <div class="spline-details__section"><div class="spline-details__section-heading"><span>Generators</span><small>Procedural content along this path</small></div>
       ${generatorMarkup}
-      <div class="detail-button-row"><button type="button" data-spline-generator-add ${locked}>Add Instance Generator</button></div>
-      <div class="detail-button-row"><button type="button" data-spline-point-add ${locked}>Add Point</button></div>
-      ${pointEditor}
+      <div class="spline-generator-actions"><button type="button" class="spline-action-primary" data-spline-generator-add ${locked}>+ Instance generator</button><button type="button" data-spline-rigid-generator-add ${locked}>+ Rigid segments</button></div>
+      </div>
+      <div class="spline-details__section"><div class="spline-details__section-heading"><span>Control points</span><small>Select, shape and split the path</small></div>
+      <div class="spline-point-toolbar"><div class="spline-point-list">${pointButtons}</div><button type="button" class="spline-action-primary" data-spline-point-add ${locked}>+ Add point</button></div>
+      ${pointEditor}</div>
     </section>`;
   body.querySelector<HTMLInputElement>("[data-spline-closed]")?.addEventListener("change", (event) => options.setSelectedSpline({ closed: (event.currentTarget as HTMLInputElement).checked }));
   body.querySelector<HTMLInputElement>("[data-spline-debug-visible]")?.addEventListener("change", (event) => options.setSelectedSpline({ debugVisible: (event.currentTarget as HTMLInputElement).checked }));
@@ -1321,6 +1348,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     if (Number.isFinite(value)) options.setSelectedSpline({ debugResolution: value });
   });
   body.querySelector<HTMLButtonElement>("[data-spline-generator-add]")?.addEventListener("click", () => options.addSelectedSplineInstanceGenerator());
+  body.querySelector<HTMLButtonElement>("[data-spline-rigid-generator-add]")?.addEventListener("click", () => options.addSelectedSplineRigidSegmentGenerator());
   body.querySelectorAll<HTMLButtonElement>("[data-spline-generator-remove]").forEach((button) => button.addEventListener("click", () => options.removeSelectedSplineGenerator(button.dataset.splineGeneratorRemove ?? "")));
   body.querySelectorAll<HTMLSelectElement>("[data-spline-generator-mesh]").forEach((input) => input.addEventListener("change", () => {
     options.setSelectedSplineInstanceGenerator(input.dataset.splineGeneratorMesh ?? "", { meshAsset: input.value });
@@ -1346,6 +1374,30 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     const key = input.dataset.splineGeneratorRandom;
     if (!Number.isFinite(value) || (key !== "scaleMin" && key !== "scaleMax")) return;
     options.setSelectedSplineInstanceGenerator(id, { random: { [key]: value } });
+  }));
+  body.querySelectorAll<HTMLSelectElement>("[data-spline-rigid-mesh]").forEach((input) => input.addEventListener("change", () => {
+    options.setSelectedSplineRigidSegmentGenerator(input.dataset.splineRigidMesh ?? "", { meshAsset: input.value });
+  }));
+  body.querySelectorAll<HTMLSelectElement>("[data-spline-rigid-joint-mesh]").forEach((input) => input.addEventListener("change", () => {
+    options.setSelectedSplineRigidSegmentGenerator(input.dataset.splineRigidJointMesh ?? "", { jointMeshAsset: input.value });
+  }));
+  body.querySelectorAll<HTMLSelectElement>("[data-spline-rigid-fit]").forEach((input) => input.addEventListener("change", () => {
+    const fitMode = input.value;
+    if (fitMode === "fixed" || fitMode === "stretchLast" || fitMode === "distribute") options.setSelectedSplineRigidSegmentGenerator(input.dataset.splineRigidFit ?? "", { fitMode });
+  }));
+  body.querySelectorAll<HTMLInputElement>("[data-spline-rigid-flag]").forEach((input) => input.addEventListener("change", () => {
+    const key = input.dataset.splineRigidFlag;
+    if (key === "enabled" || key === "previewEnabled" || key === "runtimeEnabled" || key === "alignToSpline" || key === "placePostsAtJoints") {
+      options.setSelectedSplineRigidSegmentGenerator(input.dataset.splineGeneratorId ?? "", { [key]: input.checked } as Partial<ForgeSplineRigidSegmentGeneratorDef>);
+    }
+  }));
+  body.querySelectorAll<HTMLInputElement>("[data-spline-rigid-number]").forEach((input) => input.addEventListener("change", () => {
+    const value = Number(input.value);
+    const key = input.dataset.splineRigidNumber;
+    if (!Number.isFinite(value) || !key) return;
+    const id = input.dataset.splineGeneratorId ?? "";
+    if (key === "yaw") options.setSelectedSplineRigidSegmentGenerator(id, { rotationOffset: [0, value, 0] });
+    else if (key === "segmentLength" || key === "gap") options.setSelectedSplineRigidSegmentGenerator(id, { [key]: value } as Partial<ForgeSplineRigidSegmentGeneratorDef>);
   }));
   body.querySelector<HTMLButtonElement>("[data-spline-point-add]")?.addEventListener("click", () => options.addSelectedSplinePoint());
   body.querySelectorAll<HTMLButtonElement>("[data-spline-point]").forEach((button) => button.addEventListener("click", () => options.selectSplinePoint(button.dataset.splinePoint ?? null)));

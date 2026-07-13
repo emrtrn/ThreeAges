@@ -1883,21 +1883,25 @@ asset'leri davranışını değiştirmemelidir.
 
 ### Kontrol listesi
 
-- [ ] `rigidSegments` schema ekle.
-- [ ] Segment length ayarı ekle.
-- [ ] Fixed fit mode ekle.
-- [ ] Mesh orientation offset ekle.
-- [ ] Gap ayarı ekle.
-- [ ] Segment center transform hesapla.
-- [ ] Segment direction alignment ekle.
-- [ ] Closed-loop segment yerleşimini ekle.
-- [ ] Joint post opsiyonunu ekle.
-- [ ] Joint mesh asset picker ekle.
-- [ ] Distribute veya stretch-last için karar notu yaz.
-- [ ] Instancing uygunsa kullan.
-- [ ] Kısa spline davranışını test et.
-- [ ] Keskin dönüşlerde warning ekle.
-- [ ] Save/Reload ve runtime parity testi ekle.
+- [x] `rigidSegments` schema ekle.
+- [x] Segment length ayarı ekle.
+- [x] Fixed fit mode ekle.
+- [x] Mesh orientation offset ekle.
+- [x] Gap ayarı ekle.
+- [x] Segment center transform hesapla.
+- [x] Segment direction alignment ekle.
+- [x] Closed-loop segment yerleşimini ekle.
+- [x] Joint post opsiyonunu ekle.
+- [x] Joint mesh asset picker ekle.
+- [x] Distribute veya stretch-last için karar notu yaz.
+- [x] Instancing uygunsa kullan.
+- [x] Kısa spline davranışını test et.
+- [x] Keskin dönüşlerde warning ekle.
+- [x] Save/Reload ve runtime parity testi ekle.
+
+### Uygulama notu (2026-07-13)
+
+`fixed`, eksik son paneli üretmeyip uçta boşluk bırakır; `stretchLast`, yalnızca son panelin mesh +Z ölçeğini kalan arc-length'e göre değiştirir; `distribute`, nominal panel sayısını koruyarak merkezlerini spline boyunca eşit dağıtır. Üçü de ortak instanced render yolunu kullanır. Kapalı spline'larda panel merkezleri seam'e yazılmaz; opsiyonel joint post'lar her benzersiz control point'e bir kez eklenir.
 
 ### Kabul kriterleri
 

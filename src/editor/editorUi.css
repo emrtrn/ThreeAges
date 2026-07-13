@@ -1079,6 +1079,304 @@ body.editor-mode #debug-stats {
   color: #9aa4a9;
 }
 
+/* Generic spline authoring: promote the main decisions, then keep the dense
+   generator fields inside clear cards instead of a single unstructured list. */
+.spline-details {
+  gap: 14px;
+}
+
+.spline-details__header,
+.spline-details__section-heading,
+.spline-point-toolbar,
+.spline-point-editor__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.spline-details__header {
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.spline-details__header h3 {
+  margin: 0;
+}
+
+.spline-details__header > div,
+.spline-details__section-heading,
+.spline-point-editor__heading > div,
+.spline-toggle > span,
+.spline-generator-empty {
+  display: grid;
+  gap: 2px;
+}
+
+.spline-details__header > div > span,
+.spline-details__section-heading small,
+.spline-toggle small,
+.spline-generator-empty span,
+.spline-point-editor__heading span {
+  color: #8e9aa2;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.spline-status {
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border: 1px solid rgba(125, 185, 218, 0.38);
+  border-radius: 999px;
+  color: #b8ddf4;
+  background: rgba(54, 108, 136, 0.18);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.spline-status.is-closed {
+  border-color: rgba(110, 203, 140, 0.4);
+  color: #b9edc7;
+  background: rgba(51, 122, 72, 0.18);
+}
+
+.spline-details__section {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(42, 49, 59, 0.72), rgba(28, 33, 40, 0.72));
+}
+
+.spline-details__section-heading > span {
+  color: #e0e8ed;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.spline-toggle-grid {
+  display: grid;
+  gap: 5px;
+}
+
+.spline-toggle {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  gap: 9px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  background: rgba(13, 17, 21, 0.6);
+  cursor: pointer;
+}
+
+.spline-toggle:hover:not(:has(input:disabled)) {
+  border-color: rgba(111, 186, 224, 0.42);
+  background: rgba(43, 63, 76, 0.54);
+}
+
+.spline-toggle input,
+.spline-generator .detail-row input[type="checkbox"],
+.spline-point-editor .detail-row input[type="checkbox"] {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2d9bed;
+}
+
+.spline-toggle strong {
+  color: #e6edf1;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.spline-debug-controls,
+.spline-generator-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.spline-debug-controls label {
+  display: grid;
+  gap: 4px;
+  color: #aeb9bf;
+  font-size: 11px;
+}
+
+.spline-debug-controls input {
+  width: 100%;
+  height: 30px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  background: #101316;
+  color: #fff;
+}
+
+.spline-debug-controls input[type="color"] {
+  padding: 3px;
+}
+
+.spline-generator-empty {
+  padding: 10px;
+  border: 1px dashed rgba(137, 159, 170, 0.34);
+  border-radius: 6px;
+  color: #cbd5da;
+  background: rgba(12, 15, 19, 0.35);
+  font-size: 12px;
+}
+
+.spline-generator-actions button,
+.spline-point-toolbar > button {
+  min-width: 0;
+  height: 30px;
+  border: 1px solid #3d4a56;
+  border-radius: 6px;
+  background: #252d36;
+  color: #dce7ed;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.spline-generator-actions button:hover:not(:disabled),
+.spline-point-toolbar > button:hover:not(:disabled) {
+  border-color: #5f8ca7;
+  background: #303d49;
+}
+
+.spline-generator-actions .spline-action-primary,
+.spline-point-toolbar .spline-action-primary {
+  border-color: #277bac;
+  background: #15577f;
+  color: #edf8ff;
+}
+
+.spline-generator-actions .spline-action-primary:hover:not(:disabled),
+.spline-point-toolbar .spline-action-primary:hover:not(:disabled) {
+  border-color: #53a8da;
+  background: #1b6c9c;
+}
+
+.spline-generator {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+  border: 1px solid rgba(115, 169, 199, 0.26);
+  border-radius: 7px;
+  background: rgba(13, 18, 23, 0.42);
+}
+
+.spline-generator .detail-subsection-title {
+  margin: 0;
+  color: #d7e4eb;
+}
+
+.spline-generator .detail-row,
+.spline-point-editor .detail-row {
+  grid-template-columns: 116px minmax(0, 1fr);
+}
+
+.spline-generator .detail-row input[type="checkbox"],
+.spline-point-editor .detail-row input[type="checkbox"] {
+  justify-self: start;
+}
+
+.spline-generator .detail-button-row,
+.spline-point-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.spline-generator .detail-button-row button,
+.spline-point-editor__actions button {
+  min-height: 28px;
+  border: 1px solid #3d4a56;
+  border-radius: 5px;
+  background: #242b33;
+  color: #d2dde3;
+}
+
+.spline-point-toolbar {
+  align-items: flex-start;
+}
+
+.spline-point-list {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-width: 0;
+}
+
+.spline-point-list button {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 28px;
+  gap: 6px;
+  padding: 4px 7px;
+  border: 1px solid #38434d;
+  border-radius: 5px;
+  background: #202831;
+  color: #c9d5db;
+  font-size: 11px;
+}
+
+.spline-point-list button span {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  color: #96a7b0;
+  background: #11171c;
+  font-size: 10px;
+}
+
+.spline-point-list button.active {
+  border-color: #3a9ed7;
+  background: #164968;
+  color: #f1faff;
+}
+
+.spline-point-list button.active span {
+  color: #fff;
+  background: #2285bd;
+}
+
+.spline-point-editor {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid rgba(67, 152, 203, 0.34);
+  border-radius: 7px;
+  background: rgba(17, 35, 46, 0.55);
+}
+
+.spline-point-editor__heading > div > strong {
+  overflow: hidden;
+  max-width: 145px;
+  color: #e7f4fb;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.spline-point-editor__heading .detail-row {
+  grid-template-columns: auto 132px;
+  gap: 6px;
+  flex: 0 1 190px;
+}
+
+.spline-point-editor__heading .detail-row span {
+  font-size: 11px;
+}
+
 /* Full-width action button inside a detail section (e.g. Recapture from Sky). */
 .editor-shell .detail-button {
   width: 100%;

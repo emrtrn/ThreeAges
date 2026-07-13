@@ -28,5 +28,12 @@ test("editor exposes generic Spline Actor point editing controls", async ({ page
   await details.locator("[data-spline-split]").first().click();
   await expect(pointButtons).toHaveCount(initialCount + 2);
 
+  await details.locator("[data-spline-rigid-generator-add]").click();
+  const rigidCard = details.locator('[data-spline-generator-card="rigid-segments"]');
+  await expect(rigidCard).toBeVisible();
+  await expect(details.getByText("Path settings")).toBeVisible();
+  await expect(details.getByText("Control points", { exact: true })).toBeVisible();
+  await expect(rigidCard.locator('[data-spline-rigid-number="segmentLength"]')).toHaveValue("2");
+
   expect(pageErrors).toEqual([]);
 });

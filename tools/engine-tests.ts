@@ -163,8 +163,10 @@ import {
 } from "../engine/scene/splineFrame";
 import {
   generateSplineInstancePlacements,
+  generateSplineRigidSegmentPlacements,
   normalizeSplineGenerators,
   splineGeneratedInstanceHash,
+  splineRigidSegmentWarnings,
 } from "../engine/scene/splineGenerator";
 import { resolveNavAgentProfile } from "../engine/navigation/navAgentProfile";
 import {
@@ -19758,6 +19760,38 @@ check("generic spline instance generator is deterministic, honors offsets, and a
   const loop = generateSplineInstancePlacements(actor, { ...generator, spacing: 5, startOffset: 0, endOffset: 0 });
   const seamEntries = loop.filter((entry) => Math.abs(entry.distance) < 1e-6);
   assert.equal(seamEntries.length, 1);
+});
+
+check("generic spline rigid segments fit panels, close loops, add optional joint posts, and save", () => {
+  const actor = createDefaultSplineActor();
+  actor.id = "fence-panels";
+  actor.spline.points[1]!.position = [10, 0, 0];
+  actor.spline.points.forEach((point) => { point.pointType = "linear"; });
+  const [fixed, stretchLast, distribute] = normalizeSplineGenerators([
+    { id: "fixed", type: "rigidSegments", meshAsset: "models/panel.glb", segmentLength: 3, gap: 1 },
+    { id: "stretch", type: "rigidSegments", meshAsset: "models/panel.glb", segmentLength: 3, gap: 1, fitMode: "stretchLast" },
+    { id: "distribute", type: "rigidSegments", meshAsset: "models/panel.glb", segmentLength: 3, gap: 1, fitMode: "distribute", placePostsAtJoints: true, jointMeshAsset: "models/post.glb" },
+  ]);
+  assert.equal(fixed?.type, "rigidSegments");
+  assert.equal(stretchLast?.type, "rigidSegments");
+  assert.equal(distribute?.type, "rigidSegments");
+  if (!fixed || !stretchLast || !distribute || fixed.type !== "rigidSegments" || stretchLast.type !== "rigidSegments" || distribute.type !== "rigidSegments") throw new Error("rigid generator normalization failed");
+  assert.deepEqual(generateSplineRigidSegmentPlacements(actor, fixed).map((entry) => entry.distance), [1.5, 5.5]);
+  const stretched = generateSplineRigidSegmentPlacements(actor, stretchLast);
+  assert.equal(stretched.length, 3);
+  assert.equal(stretched.at(-1)?.distance, 9);
+  assert.ok(Math.abs((stretched.at(-1)?.scale[2] ?? 0) - 2 / 3) < 1e-8);
+  const distributed = generateSplineRigidSegmentPlacements(actor, distribute);
+  assert.equal(distributed.length, 5, "three panels plus two open-spline joint posts");
+  assert.deepEqual(distributed.filter((entry) => entry.assetId === "models/post.glb").map((entry) => entry.distance), [0, 10]);
+  actor.spline.points.push({ id: "corner", position: [10, 0, 10], pointType: "linear" });
+  actor.spline.closed = true;
+  const loop = generateSplineRigidSegmentPlacements(actor, fixed);
+  assert.ok(loop.every((entry) => entry.distance >= 0));
+  assert.equal(loop.filter((entry) => entry.distance === 0).length, 0, "panel centers never duplicate the closed-loop seam");
+  assert.ok(splineRigidSegmentWarnings(actor, fixed).some((warning) => warning.includes("Sharp")));
+  actor.generators = [fixed];
+  assert.deepEqual(validateSplineActor(actor).generators, [fixed]);
 });
 
 check("generic spline debug renderer samples world space, honors visibility, and disposes", () => {

@@ -3439,9 +3439,12 @@ export class EditorUi {
       getSelectedSplineGenerators: () => this.app.getSelectedSplineGenerators(),
       getSelectedSplineGeneratorDiagnostics: () => this.app.getSelectedSplineGeneratorDiagnostics(),
       addSelectedSplineInstanceGenerator: () => this.app.addSelectedSplineInstanceGenerator(),
+      addSelectedSplineRigidSegmentGenerator: () => this.app.addSelectedSplineRigidSegmentGenerator(),
       removeSelectedSplineGenerator: (generatorId) => this.app.removeSelectedSplineGenerator(generatorId),
       setSelectedSplineInstanceGenerator: (generatorId, patch) =>
         this.app.setSelectedSplineInstanceGenerator(generatorId, patch),
+      setSelectedSplineRigidSegmentGenerator: (generatorId, patch) =>
+        this.app.setSelectedSplineRigidSegmentGenerator(generatorId, patch),
       getSelectedSplinePoints: () => this.app.getSelectedSplinePoints(),
       getActiveSplinePointId: () => this.app.getActiveSplinePointId(),
       selectSplinePoint: (pointId) => this.app.selectSplinePoint(pointId),

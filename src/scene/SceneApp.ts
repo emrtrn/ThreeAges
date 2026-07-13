@@ -300,9 +300,14 @@ import {
 } from "@engine/scene/spline";
 import {
   createDefaultSplineInstanceGenerator,
+  createDefaultSplineRigidSegmentGenerator,
   generateSplineInstancePlacements,
+  generateSplineRigidSegmentPlacements,
   normalizeSplineGenerators,
+  splineRigidSegmentWarnings,
+  type ForgeSplineGeneratorDef,
   type ForgeSplineInstanceGeneratorDef,
+  type ForgeSplineRigidSegmentGeneratorDef,
 } from "@engine/scene/splineGenerator";
 import { evaluateSplineSegment } from "@engine/scene/splineCurve";
 import {
@@ -5125,19 +5130,22 @@ export class SceneApp {
     this.applySelectedSplineSnapshot(actor, after, linked ? "Link Spline Tangents" : "Break Spline Tangents", point.id);
   }
 
-  getSelectedSplineGenerators(): ForgeSplineInstanceGeneratorDef[] {
+  getSelectedSplineGenerators(): ForgeSplineGeneratorDef[] {
     if (this.selection?.kind !== "spline") return [];
     return normalizeSplineGenerators(this.layout?.splines?.[this.selection.index]?.generators);
   }
 
-  getSelectedSplineGeneratorDiagnostics(): Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null }> {
+  getSelectedSplineGeneratorDiagnostics(): Array<{ generatorId: string; instanceCount: number; missingAssetId: string | null; warnings: string[] }> {
     if (this.selection?.kind !== "spline") return [];
     const actor = this.layout?.splines?.[this.selection.index];
     if (!actor) return [];
     return normalizeSplineGenerators(actor.generators).map((generator) => ({
       generatorId: generator.id,
-      instanceCount: generateSplineInstancePlacements(actor, generator).length,
+      instanceCount: generator.type === "instances"
+        ? generateSplineInstancePlacements(actor, generator).length
+        : generateSplineRigidSegmentPlacements(actor, generator).length,
       missingAssetId: generator.meshAsset && !this.models.has(generator.meshAsset) ? generator.meshAsset : null,
+      warnings: generator.type === "rigidSegments" ? splineRigidSegmentWarnings(actor, generator) : [],
     }));
   }
 
@@ -5148,6 +5156,15 @@ export class SceneApp {
     const after = cloneSplineActor(actor);
     after.generators = [...(after.generators ?? []), createDefaultSplineInstanceGenerator(after.generators ?? [])];
     this.applySelectedSplineGeneratorSnapshot(actor, after, "Add Spline Instance Generator");
+  }
+
+  addSelectedSplineRigidSegmentGenerator(): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    after.generators = [...(after.generators ?? []), createDefaultSplineRigidSegmentGenerator(after.generators ?? [])];
+    this.applySelectedSplineGeneratorSnapshot(actor, after, "Add Spline Rigid Segment Generator");
   }
 
   removeSelectedSplineGenerator(generatorId: string): void {
@@ -5167,10 +5184,25 @@ export class SceneApp {
     const index = after.generators?.findIndex((generator) => generator.id === generatorId) ?? -1;
     if (index < 0 || !after.generators) return;
     const previous = after.generators[index]!;
+    if (previous.type !== "instances") return;
     const next = { ...previous, ...patch, id: previous.id, type: "instances" as const };
     if (patch.random) next.random = { ...previous.random, ...patch.random };
     after.generators[index] = normalizeSplineGenerators([next])[0]!;
     this.applySelectedSplineGeneratorSnapshot(actor, after, "Edit Spline Instance Generator");
+  }
+
+  setSelectedSplineRigidSegmentGenerator(generatorId: string, patch: Partial<ForgeSplineRigidSegmentGeneratorDef>): void {
+    if (this.selection?.kind !== "spline") return;
+    const actor = this.layout?.splines?.[this.selection.index];
+    if (!actor || actor.locked) return;
+    const after = cloneSplineActor(actor);
+    const index = after.generators?.findIndex((generator) => generator.id === generatorId) ?? -1;
+    if (index < 0 || !after.generators) return;
+    const previous = after.generators[index];
+    if (!previous || previous.type !== "rigidSegments") return;
+    const next = { ...previous, ...patch, id: previous.id, type: "rigidSegments" as const };
+    after.generators[index] = normalizeSplineGenerators([next])[0]!;
+    this.applySelectedSplineGeneratorSnapshot(actor, after, "Edit Spline Rigid Segment Generator");
   }
 
   private applySelectedSplineGeneratorSnapshot(before: LayoutSplineActor, after: LayoutSplineActor, label: string): void {

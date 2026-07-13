@@ -70,7 +70,9 @@ import type {
 } from "@engine/scene/layout";
 import {
   generateSplineInstancePlacements,
+  generateSplineRigidSegmentPlacements,
   resolveSplineInstanceGenerator,
+  resolveSplineRigidSegmentGenerator,
 } from "@engine/scene/splineGenerator";
 import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
@@ -277,7 +279,7 @@ export function buildSceneInstancedModel(options: {
 }
 
 /**
- * Builds all enabled Instance Placement Generator outputs for one generic spline.
+ * Builds all enabled instanced generator outputs for one generic spline.
  * Output is deliberately one non-pickable group: generated meshes remain a
  * property of the spline actor, not thousands of editor-selectable actors.
  */
@@ -291,10 +293,18 @@ export function buildSplineInstanceGeneratorGroup(options: {
 }): { group: Group | null; meshes: InstancedMesh[]; instanceCount: number; missingAssetIds: string[] } | null {
   const itemsByAsset = new Map<string, InstanceRenderItem[]>();
   for (const definition of options.actor.generators ?? []) {
-    const generator = resolveSplineInstanceGenerator(definition);
-    if (!generator.enabled || !generator.meshAsset) continue;
-    if (options.mode === "editor" ? !generator.previewEnabled : !generator.runtimeEnabled) continue;
-    for (const instance of generateSplineInstancePlacements(options.actor, generator)) {
+    const generated = definition.type === "instances" ? (() => {
+      const generator = resolveSplineInstanceGenerator(definition);
+      if (!generator.enabled || !generator.meshAsset) return [];
+      if (options.mode === "editor" ? !generator.previewEnabled : !generator.runtimeEnabled) return [];
+      return generateSplineInstancePlacements(options.actor, generator);
+    })() : (() => {
+      const generator = resolveSplineRigidSegmentGenerator(definition);
+      if (!generator.enabled || !generator.meshAsset) return [];
+      if (options.mode === "editor" ? !generator.previewEnabled : !generator.runtimeEnabled) return [];
+      return generateSplineRigidSegmentPlacements(options.actor, generator);
+    })();
+    for (const instance of generated) {
       const items = itemsByAsset.get(instance.assetId) ?? [];
       items.push({
         matrix: new Matrix4().compose(
@@ -877,8 +887,14 @@ export function sceneModelAssetIds(layout: RoomLayout | null): string[] {
   }
   for (const spline of layout?.splines ?? []) {
     for (const generator of spline.generators ?? []) {
-      const resolved = resolveSplineInstanceGenerator(generator);
-      if (resolved.enabled && resolved.meshAsset && !isProceduralAssetId(resolved.meshAsset)) ids.add(resolved.meshAsset);
+      if (generator.type === "instances") {
+        const resolved = resolveSplineInstanceGenerator(generator);
+        if (resolved.enabled && resolved.meshAsset && !isProceduralAssetId(resolved.meshAsset)) ids.add(resolved.meshAsset);
+      } else {
+        const resolved = resolveSplineRigidSegmentGenerator(generator);
+        if (resolved.enabled && resolved.meshAsset && !isProceduralAssetId(resolved.meshAsset)) ids.add(resolved.meshAsset);
+        if (resolved.enabled && resolved.placePostsAtJoints && resolved.jointMeshAsset && !isProceduralAssetId(resolved.jointMeshAsset)) ids.add(resolved.jointMeshAsset);
+      }
     }
   }
   return [...ids];

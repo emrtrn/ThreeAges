@@ -1,5 +1,5 @@
 import type { LayoutSplineActor, Vec3 } from "./layout";
-import { buildSplineCurveCache } from "./splineCurve";
+import { buildSplineCurveCache, evaluateSplineSegment } from "./splineCurve";
 import { getSplineTransformAtDistance, type Quat } from "./splineFrame";
 
 /** Generator data shared by editor previews and runtime rendering (Faz 7). */
@@ -38,7 +38,25 @@ export interface ForgeSplineInstanceGeneratorDef extends ForgeSplineGeneratorBas
   collision?: boolean;
 }
 
-export type ForgeSplineGeneratorDef = ForgeSplineInstanceGeneratorDef;
+/**
+ * Repeats a rigid, +Z-authored modular mesh along the spline. Unlike the
+ * instance generator this preserves a panel's straight geometry; fit modes
+ * only change the final panel scale/spacing, never bend it around corners.
+ */
+export interface ForgeSplineRigidSegmentGeneratorDef extends ForgeSplineGeneratorBase {
+  type: "rigidSegments";
+  meshAsset: string;
+  segmentLength: number;
+  fitMode?: "fixed" | "stretchLast" | "distribute";
+  alignToSpline?: boolean;
+  rotationOffset?: Vec3;
+  scale?: Vec3;
+  gap?: number;
+  placePostsAtJoints?: boolean;
+  jointMeshAsset?: string;
+}
+
+export type ForgeSplineGeneratorDef = ForgeSplineInstanceGeneratorDef | ForgeSplineRigidSegmentGeneratorDef;
 export type ForgeSplineGeneratorType = ForgeSplineGeneratorDef["type"];
 
 /** Extensible registry boundary for subsequent generator types (rigid/deform/custom). */
@@ -86,6 +104,18 @@ export interface ResolvedSplineInstanceGeneratorDef extends Omit<ForgeSplineInst
     scaleMin: number;
     scaleMax: number;
   };
+}
+
+export interface ResolvedSplineRigidSegmentGeneratorDef extends Omit<ForgeSplineRigidSegmentGeneratorDef, "enabled" | "previewEnabled" | "runtimeEnabled" | "fitMode" | "alignToSpline" | "rotationOffset" | "scale" | "gap" | "placePostsAtJoints"> {
+  enabled: boolean;
+  previewEnabled: boolean;
+  runtimeEnabled: boolean;
+  fitMode: "fixed" | "stretchLast" | "distribute";
+  alignToSpline: boolean;
+  rotationOffset: Vec3;
+  scale: Vec3;
+  gap: number;
+  placePostsAtJoints: boolean;
 }
 
 export interface SplineGeneratedInstance {
@@ -153,9 +183,35 @@ export function normalizeSplineGenerator(
   return output;
 }
 
+export function normalizeSplineRigidSegmentGenerator(
+  value: unknown,
+  usedIds: ReadonlySet<string> = new Set(),
+): ForgeSplineRigidSegmentGeneratorDef | null {
+  if (!isRecord(value) || value.type !== "rigidSegments") return null;
+  const id = uniqueGeneratorId(typeof value.id === "string" ? value.id.trim() : "", usedIds);
+  const output: ForgeSplineRigidSegmentGeneratorDef = {
+    id,
+    type: "rigidSegments",
+    meshAsset: typeof value.meshAsset === "string" ? value.meshAsset.trim() : "",
+    segmentLength: positiveNumber(value.segmentLength, 1),
+  };
+  for (const key of ["enabled", "previewEnabled", "runtimeEnabled", "alignToSpline", "placePostsAtJoints"] as const) {
+    if (typeof value[key] === "boolean") output[key] = value[key];
+  }
+  if (value.fitMode === "fixed" || value.fitMode === "stretchLast" || value.fitMode === "distribute") output.fitMode = value.fitMode;
+  const rotationOffset = finiteVec3(value.rotationOffset);
+  if (rotationOffset) output.rotationOffset = rotationOffset;
+  const scale = positiveVec3(value.scale);
+  if (scale) output.scale = scale;
+  if (isFiniteNumber(value.gap)) output.gap = clamp(value.gap, 0, MAX_OFFSET);
+  if (typeof value.jointMeshAsset === "string") output.jointMeshAsset = value.jointMeshAsset.trim();
+  return output;
+}
+
 /** Built-in registration is deliberately small; later phases append new handlers here. */
 export const DEFAULT_SPLINE_GENERATOR_REGISTRY = new SplineGeneratorRegistry();
 DEFAULT_SPLINE_GENERATOR_REGISTRY.register({ type: "instances", normalize: normalizeSplineGenerator });
+DEFAULT_SPLINE_GENERATOR_REGISTRY.register({ type: "rigidSegments", normalize: normalizeSplineRigidSegmentGenerator });
 
 export function resolveSplineInstanceGenerator(
   value: ForgeSplineInstanceGeneratorDef,
@@ -197,6 +253,32 @@ export function createDefaultSplineInstanceGenerator(
 ): ForgeSplineInstanceGeneratorDef {
   const ids = new Set(existing.map((generator) => generator.id));
   return { id: uniqueGeneratorId("instances", ids), type: "instances", meshAsset: "", spacing: 2 };
+}
+
+export function resolveSplineRigidSegmentGenerator(
+  value: ForgeSplineRigidSegmentGeneratorDef,
+): ResolvedSplineRigidSegmentGeneratorDef {
+  const normalized = normalizeSplineRigidSegmentGenerator(value);
+  const generator = normalized && normalized.type === "rigidSegments" ? normalized : createDefaultSplineRigidSegmentGenerator();
+  return {
+    ...generator,
+    enabled: generator.enabled ?? true,
+    previewEnabled: generator.previewEnabled ?? true,
+    runtimeEnabled: generator.runtimeEnabled ?? true,
+    fitMode: generator.fitMode ?? "fixed",
+    alignToSpline: generator.alignToSpline ?? true,
+    rotationOffset: generator.rotationOffset ?? [0, 0, 0],
+    scale: generator.scale ?? [1, 1, 1],
+    gap: generator.gap ?? 0,
+    placePostsAtJoints: generator.placePostsAtJoints ?? false,
+  };
+}
+
+export function createDefaultSplineRigidSegmentGenerator(
+  existing: readonly ForgeSplineGeneratorDef[] = [],
+): ForgeSplineRigidSegmentGeneratorDef {
+  const ids = new Set(existing.map((generator) => generator.id));
+  return { id: uniqueGeneratorId("rigid-segments", ids), type: "rigidSegments", meshAsset: "", segmentLength: 2 };
 }
 
 /**
@@ -246,6 +328,61 @@ export function generateSplineInstancePlacements(
   });
 }
 
+/**
+ * Generates straight modular panel transforms. Meshes are authored along local
+ * +Z; stretchLast scales only that forward axis. `distribute` retains the
+ * nominal panel size and spreads the count uniformly across the available arc.
+ */
+export function generateSplineRigidSegmentPlacements(
+  actor: LayoutSplineActor,
+  definition: ForgeSplineRigidSegmentGeneratorDef,
+): SplineGeneratedInstance[] {
+  const generator = resolveSplineRigidSegmentGenerator(definition);
+  if (!generator.enabled || !generator.meshAsset) return [];
+  const cache = buildSplineCurveCache(actor.spline);
+  if (cache.totalLength <= 1e-8 || cache.segments.length === 0) return [];
+  const spans = rigidSegmentSpans(cache.totalLength, cache.spline.closed, generator);
+  const placements = spans.map((span) => rigidPlacement(actor, cache, generator, span.distance, span.length));
+  if (!generator.placePostsAtJoints || !generator.jointMeshAsset) return placements;
+  const jointDistances = cache.segments.map((segment) => segment.startDistance);
+  if (!cache.spline.closed) jointDistances.push(cache.totalLength);
+  for (const distance of jointDistances) {
+    const transform = getSplineTransformAtDistance(cache, distance, "world", actor);
+    placements.push({
+      generatorId: generator.id,
+      assetId: generator.jointMeshAsset,
+      distance,
+      position: transform.position,
+      rotation: multiplyQuat(generator.alignToSpline ? transform.rotation : [0, 0, 0, 1], quatFromEulerDegrees(generator.rotationOffset)),
+      scale: [...generator.scale],
+    });
+  }
+  return placements.slice(0, SPLINE_GENERATOR_MAX_INSTANCES);
+}
+
+/** Warnings are presentation-only so they never change persisted generator data. */
+export function splineRigidSegmentWarnings(
+  actor: LayoutSplineActor,
+  definition: ForgeSplineRigidSegmentGeneratorDef,
+): string[] {
+  const generator = resolveSplineRigidSegmentGenerator(definition);
+  const cache = buildSplineCurveCache(actor.spline);
+  if (cache.totalLength > 1e-8 && cache.totalLength < generator.segmentLength) {
+    return ["Spline is shorter than one rigid segment; fixed fit produces no panel."];
+  }
+  const warnings: string[] = [];
+  for (let index = 1; index < cache.segments.length; index += 1) {
+    const previous = evaluateSplineSegment(cache.spline, index - 1, 1).direction;
+    const next = evaluateSplineSegment(cache.spline, index, 0).direction;
+    const dot = clamp(previous[0] * next[0] + previous[1] * next[1] + previous[2] * next[2], -1, 1);
+    if (Math.acos(dot) * 180 / Math.PI >= 60) {
+      warnings.push("Sharp spline turn detected; rigid panels may leave a visible joint gap.");
+      break;
+    }
+  }
+  return warnings;
+}
+
 /** Stable compact fingerprint for regression tests and rebuild diagnostics. */
 export function splineGeneratedInstanceHash(instances: readonly SplineGeneratedInstance[]): string {
   let hash = 2166136261;
@@ -270,6 +407,48 @@ function distancePlacements(totalLength: number, closed: boolean, generator: Res
     distances.push(end);
   }
   return distances;
+}
+
+function rigidSegmentSpans(
+  totalLength: number,
+  closed: boolean,
+  generator: ResolvedSplineRigidSegmentGeneratorDef,
+): Array<{ distance: number; length: number }> {
+  const advance = generator.segmentLength + generator.gap;
+  if (advance <= 1e-8) return [];
+  if (generator.fitMode === "distribute") {
+    const count = Math.max(1, Math.round(totalLength / advance));
+    const step = totalLength / count;
+    return Array.from({ length: count }, (_, index) => ({ distance: step * (index + 0.5), length: Math.min(generator.segmentLength, step) }));
+  }
+  const spans: Array<{ distance: number; length: number }> = [];
+  for (let start = 0; start + generator.segmentLength <= totalLength + 1e-8 && spans.length < SPLINE_GENERATOR_MAX_INSTANCES; start += advance) {
+    spans.push({ distance: start + generator.segmentLength / 2, length: generator.segmentLength });
+  }
+  if (!closed && generator.fitMode === "stretchLast") {
+    const start = spans.length === 0 ? 0 : spans.at(-1)!.distance + generator.segmentLength / 2 + generator.gap;
+    const remaining = totalLength - start;
+    if (remaining > 1e-6) spans.push({ distance: start + remaining / 2, length: remaining });
+  }
+  return spans;
+}
+
+function rigidPlacement(
+  actor: LayoutSplineActor,
+  cache: ReturnType<typeof buildSplineCurveCache>,
+  generator: ResolvedSplineRigidSegmentGeneratorDef,
+  distance: number,
+  length: number,
+): SplineGeneratedInstance {
+  const transform = getSplineTransformAtDistance(cache, distance, "world", actor);
+  return {
+    generatorId: generator.id,
+    assetId: generator.meshAsset,
+    distance,
+    position: transform.position,
+    rotation: multiplyQuat(generator.alignToSpline ? transform.rotation : [0, 0, 0, 1], quatFromEulerDegrees(generator.rotationOffset)),
+    scale: [generator.scale[0] * transform.frame.scale[0], generator.scale[1] * transform.frame.scale[1], generator.scale[2] * (length / generator.segmentLength)],
+  };
 }
 
 function filteredFrameRotation(rotation: Quat, frame: { tangent: Vec3; normal: Vec3 }, generator: ResolvedSplineInstanceGeneratorDef): Quat {
