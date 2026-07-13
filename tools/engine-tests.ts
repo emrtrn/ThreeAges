@@ -546,6 +546,7 @@ import {
   foliageOverlaps,
   rollFoliageInstance,
   eraseFoliageInRadius,
+  foliageFillSamplePoints,
 } from "../engine/scene/foliagePaint";
 import {
   FoliageRenderBinding,
@@ -15607,6 +15608,33 @@ check("reattachFoliageInstance only moves position when the type ignores normals
   assert.deepEqual(next.position, [0, 1, 0]);
   assert.deepEqual(next.rotation, [0, 12, 0]);
   assert.deepEqual(next.scale, [2, 2, 2]);
+});
+
+check("foliageFillSamplePoints grids a footprint, jitters within cells, and thins by density", () => {
+  const area = { minX: 0, maxX: 4, minZ: 0, maxZ: 4 };
+  // Full density (keep = 1): 2x2 cells at spacing 2 → one point per cell, all kept.
+  const full = foliageFillSamplePoints(area, 2, 1, makeFoliageRng(7));
+  assert.equal(full.length, 4);
+  for (const [x, z] of full) {
+    assert.ok(x >= area.minX && x <= area.maxX, "x inside footprint");
+    assert.ok(z >= area.minZ && z <= area.maxZ, "z inside footprint");
+  }
+  // Each point lands in a distinct cell (jitter never leaves its cell).
+  const cells = new Set(full.map(([x, z]) => `${Math.floor(x / 2)},${Math.floor(z / 2)}`));
+  assert.equal(cells.size, 4);
+  // Zero density keeps nothing; a degenerate/zero-area footprint yields nothing.
+  assert.equal(foliageFillSamplePoints(area, 2, 0, makeFoliageRng(7)).length, 0);
+  assert.equal(foliageFillSamplePoints({ minX: 0, maxX: 0, minZ: 0, maxZ: 4 }, 2, 1, makeFoliageRng(7)).length, 0);
+  assert.equal(foliageFillSamplePoints(area, 0, 1, makeFoliageRng(7)).length, 0);
+});
+
+check("foliageFillSamplePoints is deterministic for a seed and thins with lower density", () => {
+  const area = { minX: 0, maxX: 20, minZ: 0, maxZ: 20 };
+  const a = foliageFillSamplePoints(area, 1, 1, makeFoliageRng(99));
+  const b = foliageFillSamplePoints(area, 1, 1, makeFoliageRng(99));
+  assert.deepEqual(a, b);
+  const sparse = foliageFillSamplePoints(area, 1, 0.25, makeFoliageRng(99));
+  assert.ok(sparse.length < a.length, "lower density keeps fewer points");
 });
 
 check("geometryTriangleCount reads indexed, non-indexed, and empty geometry", () => {

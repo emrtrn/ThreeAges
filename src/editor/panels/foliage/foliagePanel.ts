@@ -41,6 +41,7 @@ const TOOLS: { id: FoliageTool; label: string; tip: string }[] = [
   { id: "paint", label: "Paint", tip: "Drag to scatter the active foliage type" },
   { id: "erase", label: "Erase", tip: "Drag to erase EVERY foliage type under the brush" },
   { id: "single", label: "Single", tip: "Left-click to place ONE instance (no drag)" },
+  { id: "fill", label: "Fill", tip: "Click a surface to fill its whole footprint with the active type" },
   { id: "remove", label: "Remove", tip: "Drag to erase ONLY the active type under the brush" },
 ];
 

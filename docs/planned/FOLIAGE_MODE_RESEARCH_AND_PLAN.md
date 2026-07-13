@@ -52,7 +52,7 @@ boyamak için kullanılır. Temel parçalar:
 | Fill | Seçili hedef yüzeyi foliage ile doldurur. | Faz 2. |
 | Filters | Landscape, Static Mesh, Foliage, BSP, translucent hedefleri sınırlar. | Faz 1: Landscape + Static Mesh. Diğerleri sonra. |
 | Culling / Scalability | Mesafeye göre gizleme ve density scale. | Faz 1 basit cull, scalability sonra. |
-| Procedural Foliage | Orman simülasyonu / seed spread. | Faz 4. |
+| Procedural Foliage | Orman simülasyonu / seed spread. | Kapsam dışı. Web projeleri için büyük alan simülasyonu hedeflenmiyor. |
 | Landscape Grass | Landscape material/layer bağlantılı otomatik grass üretimi. | Faz 3, Landscape entegrasyonu. |
 
 ## Forge mevcut durum
@@ -408,7 +408,8 @@ integration hook olarak kalır.
 ## Procedural Foliage
 
 Unreal Procedural Foliage Tool orman benzeri alanlar için seed/simulation tabanlıdır.
-Forge için Faz 4 veya sonrası olmalı.
+Forge için kapsam dışıdır. Web projelerinde büyük alan orman simülasyonu yerine
+manuel foliage paint ve Landscape layer-driven scatter yeterlidir.
 
 Alınacak fikirler:
 
@@ -478,7 +479,12 @@ Alınacak fikirler:
 
 - [x] Lasso select. (Fırça-tabanlı; Ctrl/Alt ile çıkarma.
   `SceneApp.applyFoliageLassoAt`.)
-- [ ] Fill.
+- [x] Fill. (`SceneApp.applyFoliageFill`: tıklanan target'ın tüm world-XZ
+  footprint'ini aktif tiple doldurur — landscape veya bir static-mesh asset'in tüm
+  yerleşimleri. Saf `foliageFillSamplePoints` grid+jitter üretir, her nokta gerçek
+  yüzeye down-cast edilir, paint core'un slope/height/overlap kabulünü yeniden
+  kullanır. Örnek sayısı 20k ile sınırlı — spacing cap'e sığacak şekilde genişler.
+  Fill/Single tek-atış: drag'de tekrarlamaz, brush ring gizli.)
 - [ ] Reapply.
 - [x] Invalid selection. (`SceneApp.selectInvalidFoliage`: altında zemin yok /
   büyük dikey boşluk / slope-height filtresi geçmiyor.)
@@ -492,12 +498,14 @@ Alınacak fikirler:
 - [ ] Cull start/end fade.
 - [ ] Chunk/grid render batches.
 
-> Kalan Faz 2 maddeleri (Fill, Reapply, cull fade, chunking) sonraki dilimlerde.
+> Kalan Faz 2 maddeleri (Reapply, cull fade, chunking) sonraki dilimlerde.
 > Select + Remove Selected de bu dilimde geldi (Delete kısayolu + panel "Remove
 > Selected"). 2026-07-13: resource usage raporu tamamlandı — panelde "Resource
-> Usage" bölümü (tip başına + toplam instance/triangle/draw), `build:verify` +
-> `verify:imports` yeşil, 818 engine check geçiyor. Kalan: Fill, Reapply, cull
-> fade, chunking.
+> Usage" bölümü (tip başına + toplam instance/triangle/draw). 2026-07-13: Fill
+> aracı tamamlandı — panelde "Fill" tool'u, tıklanan target'ın tüm footprint'ini
+> doldurur (kod tarafı; kullanıcı editor smoke'u bekliyor). `build:verify` +
+> `verify:imports` yeşil, 820 engine check geçiyor. Kalan: Reapply, cull fade,
+> chunking.
 
 ### Faz 3 - Landscape Grass / Layer-driven Scatter
 
@@ -508,7 +516,11 @@ Alınacak fikirler:
 - [ ] Dirty landscape chunk rebuild.
 - [ ] Rule save/load.
 
-### Faz 4 - Procedural Foliage Spawner
+### Faz 4 - Procedural Foliage Spawner (Kapsam dışı)
+
+> Karar (2026-07-13): Bu faz uygulanmayacak. Büyük alan/orman simülasyonu web
+> projelerinin hedefi dışında kalır; manuel foliage ve Faz 3 landscape
+> layer-driven scatter tercih edilir.
 
 - [ ] Procedural spawner actor/data.
 - [ ] Seed + tile area.
@@ -547,7 +559,8 @@ Dokümana göre önerilen varsayılanlar:
 - Foliage instance'ları normal placement listesine yazılmasın.
 - Collision default false olsun.
 - Landscape Grass / layer-driven scatter Faz 3'e kalsın.
-- Procedural Foliage Faz 4'e kalsın.
+- Procedural Foliage kapsam dışı olsun; manuel foliage ve Landscape Grass
+  layer-driven scatter yeterli kabul edilsin.
 
 Kullanıcı onayı gerekenler:
 
@@ -574,6 +587,7 @@ Forge için Foliage Mode yapılmalı ve ana editor mode olarak konumlandırılma
 5. InstancedMesh render batches.
 6. Runtime görünürlük.
 
-Landscape Grass, Procedural Foliage ve Actor Foliage sonraki fazlara ayrılmalı.
+Landscape Grass ve Actor Foliage sonraki fazlara ayrılmalı; Procedural Foliage
+kapsam dışıdır.
 Bu sıra sistemi uygulanabilir tutar ve Landscape / Mesh Paint / normal Placement
 sınırlarını temiz bırakır.

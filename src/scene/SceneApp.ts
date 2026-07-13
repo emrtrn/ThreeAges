@@ -218,12 +218,14 @@ import {
 } from "@engine/scene/foliageSelection";
 import {
   eraseFoliageInRadius,
+  foliageFillSamplePoints,
   foliageOverlaps,
   foliageSampleTargetCount,
   makeFoliageRng,
   passesFoliageFilters,
   rollFoliageInstance,
   type FoliageBrush,
+  type FoliageFillArea,
   type FoliageSurfaceHit,
 } from "@engine/scene/foliagePaint";
 import { loadFoliageData, loadFoliageTypeByPath, loadFoliageTypesForData } from "./foliageLoader";
@@ -584,7 +586,7 @@ export interface LandscapeSplineView {
 }
 
 /** Foliage Mode tool set. `select`/`lasso` drive instance selection (Faz 2). */
-export type FoliageTool = "select" | "lasso" | "paint" | "erase" | "single" | "remove";
+export type FoliageTool = "select" | "lasso" | "paint" | "erase" | "single" | "fill" | "remove";
 
 /** Which target surfaces the foliage brush is allowed to paint onto (Faz 1 filters). */
 export interface FoliageTargetFilters {
@@ -5206,7 +5208,7 @@ export class SceneApp {
   setFoliageToolSettings(patch: Partial<FoliageToolSettings>): FoliageToolSettings {
     const next = { ...this.foliageToolSettings, ...patch };
     this.foliageToolSettings = {
-      tool: (["select", "lasso", "paint", "erase", "single", "remove"] as const).includes(next.tool)
+      tool: (["select", "lasso", "paint", "erase", "single", "fill", "remove"] as const).includes(next.tool)
         ? next.tool
         : "paint",
       activeTypeId: next.activeTypeId ?? null,
@@ -5356,6 +5358,7 @@ export class SceneApp {
     const target = this.foliageTargetAt(pick);
     if (!target) return false;
     if (tool === "single") return this.applyFoliageSingle(active, target, pick);
+    if (tool === "fill") return this.applyFoliageFill(active, target);
     return this.applyFoliagePaint(active, target, pick);
   }
 
@@ -5447,6 +5450,87 @@ export class SceneApp {
     this.rebuildFoliageGroupObject(group);
     this.emitFoliageChanged();
     return true;
+  }
+
+  /**
+   * Fill: scatters the active foliage type across the ENTIRE clicked target's
+   * footprint (a landscape, or all placements of a static-mesh asset) in one action,
+   * grid-sampling its world-XZ bounds and down-casting each point onto the real
+   * surface. Reuses the paint core's slope/height/overlap acceptance, so a fill
+   * honours the same type rules as a brush dab. The sample count is capped so a huge
+   * target stays responsive — the grid spacing widens to fit the cap.
+   */
+  private applyFoliageFill(
+    active: { id: string; type: ForgeFoliageTypeDef },
+    target: { kind: "landscape" | "staticMesh"; id: string },
+  ): boolean {
+    const area = this.foliageTargetArea(target);
+    if (!area) {
+      this.onStatus?.("Could not resolve the fill target bounds.", "warning");
+      return false;
+    }
+    const width = area.maxX - area.minX;
+    const depth = area.maxZ - area.minZ;
+    // Grid at the type radius (the densest packing the overlap test allows), widening
+    // the spacing when the target is large enough to blow past the sample cap.
+    const MAX_FILL_SAMPLES = 20000;
+    const baseSpacing = Math.max(active.type.radius, 0.05);
+    const capSpacing = Math.sqrt(Math.max((width * depth) / MAX_FILL_SAMPLES, 0));
+    const spacing = Math.max(baseSpacing, capSpacing);
+    const rng = makeFoliageRng((this.foliageToolSettings.randomSeed * 40503 + 1) >>> 0);
+    const points = foliageFillSamplePoints(area, spacing, this.foliageToolSettings.paintDensity, rng);
+    const group = this.foliageGroupFor(active.id, target, true);
+    if (!group) return false;
+    const existing: Vec3[] = group.instances.map((instance) => [...instance.position] as Vec3);
+    let added = 0;
+    for (const [sampleX, sampleZ] of points) {
+      const surface = this.picker.raycastFoliageSurfaceDown(sampleX, sampleZ);
+      const sampleTarget = surface ? this.foliageTargetAt(surface) : null;
+      if (
+        !surface ||
+        !sampleTarget ||
+        sampleTarget.kind !== target.kind ||
+        sampleTarget.id !== target.id
+      ) {
+        continue;
+      }
+      const hit: FoliageSurfaceHit = {
+        position: [surface.point.x, surface.point.y, surface.point.z],
+        normal: [surface.normal.x, surface.normal.y, surface.normal.z],
+      };
+      if (!passesFoliageFilters(active.type, hit)) continue;
+      if (foliageOverlaps(hit.position, existing, active.type.radius)) continue;
+      const instance = foliageInstanceFromRoll(active.type, rollFoliageInstance(active.type, hit, rng));
+      group.instances.push(instance);
+      existing.push([...instance.position] as Vec3);
+      added += 1;
+    }
+    if (added === 0) {
+      this.onStatus?.("Fill added no foliage — filters or spacing rejected every sample.", "info");
+      return true;
+    }
+    this.foliageDataDirty = true;
+    this.rebuildFoliageGroupObject(group);
+    this.onStatus?.(`Filled ${added} foliage instance${added === 1 ? "" : "s"}.`, "success");
+    this.emitFoliageChanged();
+    return true;
+  }
+
+  /** World-XZ footprint of a fill target, or null when its scene object isn't resolved. */
+  private foliageTargetArea(
+    target: { kind: "landscape" | "staticMesh"; id: string },
+  ): FoliageFillArea | null {
+    let object: Object3D | null = null;
+    if (target.kind === "landscape") {
+      const index = this.layout?.landscapes?.findIndex((actor) => actor.id === target.id) ?? -1;
+      object = index >= 0 ? (this.landscapeObjects[index] ?? null) : null;
+    } else {
+      object = this.instanceGroups.get(target.id) ?? null;
+    }
+    if (!object) return null;
+    const box = new Box3().setFromObject(object);
+    if (box.isEmpty()) return null;
+    return { minX: box.min.x, maxX: box.max.x, minZ: box.min.z, maxZ: box.max.z };
   }
 
   /** Erases instances under the brush; when `onlyTypeId` is set, only that type. */
@@ -5704,7 +5788,10 @@ export class SceneApp {
   }
 
   updateFoliageBrushHover(clientX: number, clientY: number): void {
-    if (!this.foliageModeActive || this.foliageToolSettings.tool === "select") {
+    const tool = this.foliageToolSettings.tool;
+    // Select is a click-pick and Fill covers a whole target — neither uses the brush
+    // disk, so the radius ring would be misleading; hide it for both.
+    if (!this.foliageModeActive || tool === "select" || tool === "fill") {
       this.clearFoliageBrushHover();
       return;
     }
@@ -5757,8 +5844,8 @@ export class SceneApp {
     const tool = this.foliageToolSettings.tool;
     if (tool === "lasso") {
       this.applyFoliageLassoAt(event.clientX, event.clientY, event.ctrlKey || event.altKey);
-    } else if (tool !== "single") {
-      // Single places exactly one instance per click — it must not drag-paint.
+    } else if (tool !== "single" && tool !== "fill") {
+      // Single/Fill act exactly once per click — they must not drag-repeat.
       this.applyFoliageActionAt(event.clientX, event.clientY);
     }
     return true;

@@ -130,6 +130,49 @@ export function rollFoliageInstance(
   };
 }
 
+/** Axis-aligned world-XZ footprint of a Fill target (a landscape or a static mesh). */
+export interface FoliageFillArea {
+  minX: number;
+  maxX: number;
+  minZ: number;
+  maxZ: number;
+}
+
+/**
+ * Grid-scatters candidate XZ points across a Fill target's footprint: one jittered
+ * point per `spacing`-sized cell, thinned by `density` (`0..1` keep probability).
+ * Deterministic for a given `rng` (one keep-roll per cell, then two jitter draws
+ * when kept), so Fill is reproducible and unit-testable without a renderer. The
+ * caller down-casts each point onto the real surface and applies slope/height/
+ * overlap rejection — this only decides WHERE to try, matching the paint core's
+ * split between sampling and acceptance.
+ */
+export function foliageFillSamplePoints(
+  area: FoliageFillArea,
+  spacing: number,
+  density: number,
+  rng: () => number,
+): Array<[number, number]> {
+  const points: Array<[number, number]> = [];
+  const width = area.maxX - area.minX;
+  const depth = area.maxZ - area.minZ;
+  if (spacing <= 0 || width <= 0 || depth <= 0) return points;
+  const keep = clamp(density, 0, 1);
+  const cols = Math.max(1, Math.ceil(width / spacing));
+  const rows = Math.max(1, Math.ceil(depth / spacing));
+  const cellW = width / cols;
+  const cellD = depth / rows;
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      if (rng() > keep) continue;
+      const x = area.minX + (c + rng()) * cellW;
+      const z = area.minZ + (r + rng()) * cellD;
+      points.push([x, z]);
+    }
+  }
+  return points;
+}
+
 /**
  * Splits a group's instances by an erase brush: instances whose horizontal
  * distance to `center` is within `radius` are removed. Returns the survivors and
