@@ -36,6 +36,8 @@ export function buildSplineDeformMeshGroup(options: {
   actor: LayoutSplineActor;
   gltf: GLTF;
   definition: ForgeSplineDeformMeshGeneratorDef;
+  /** When supplied, build one independently disposable spline segment chunk. */
+  segmentIndex?: number;
   castShadow: boolean;
   receiveShadow: boolean;
 }): { group: Group | null; triangleCount: number; warnings: string[] } {
@@ -52,14 +54,22 @@ export function buildSplineDeformMeshGroup(options: {
     return { group: null, triangleCount: 0, warnings: [`Mesh has no usable ${generator.forwardAxis} forward length.`] };
   }
 
-  const samples = buildFrameSamples(options.actor, cache, generator.sampleSteps);
+  const segment = options.segmentIndex === undefined ? undefined : cache.segments[options.segmentIndex];
+  if (options.segmentIndex !== undefined && !segment) {
+    return { group: null, triangleCount: 0, warnings: [`Spline segment ${options.segmentIndex} no longer exists.`] };
+  }
+  const samples = buildFrameSamples(options.actor, cache, generator.sampleSteps, segment && {
+    startDistance: segment.startDistance,
+    length: segment.length,
+  });
   const group = new Group();
-  group.name = `SplineDeformMesh:${options.actor.id}:${generator.id}`;
+  group.name = `SplineDeformMesh:${options.actor.id}:${generator.id}${segment ? `:segment-${options.segmentIndex}` : ""}`;
   group.userData.splineActorId = options.actor.id;
   group.userData.splineGeneratorId = generator.id;
   group.userData.splineGenerated = true;
   group.userData.splineGeneratedGeometry = true;
   group.userData.splineSampleSteps = generator.sampleSteps;
+  group.userData.splineSegmentIndex = options.segmentIndex;
   group.visible = !(options.actor.hidden ?? false);
   let triangleCount = 0;
   let missingUvs = false;
@@ -92,6 +102,38 @@ export function disposeSplineDeformMeshGroup(group: Group): void {
   group.removeFromParent();
 }
 
+/**
+ * Extracts generated world-space triangles for the optional static physics
+ * bridge. The render mesh is the single source of deformation truth, avoiding
+ * a second, subtly different CPU curve implementation for collision.
+ */
+export function splineDeformMeshColliderPrimitive(group: Group): { vertices: Vec3[]; indices: number[]; size: Vec3 } | null {
+  const vertices: Vec3[] = [];
+  const indices: number[] = [];
+  let min: Vec3 = [Infinity, Infinity, Infinity];
+  let max: Vec3 = [-Infinity, -Infinity, -Infinity];
+  group.traverse((child) => {
+    if (!(child instanceof Mesh) || !child.userData.splineGeneratedGeometry) return;
+    const position = child.geometry.getAttribute("position");
+    if (!position) return;
+    const offset = vertices.length;
+    for (let index = 0; index < position.count; index += 1) {
+      const vertex: Vec3 = [position.getX(index), position.getY(index), position.getZ(index)];
+      vertices.push(vertex);
+      min = [Math.min(min[0], vertex[0]), Math.min(min[1], vertex[1]), Math.min(min[2], vertex[2])];
+      max = [Math.max(max[0], vertex[0]), Math.max(max[1], vertex[1]), Math.max(max[2], vertex[2])];
+    }
+    const sourceIndices = child.geometry.index;
+    if (sourceIndices) {
+      for (let index = 0; index < sourceIndices.count; index += 1) indices.push(offset + sourceIndices.getX(index));
+    } else {
+      for (let index = 0; index < position.count; index += 1) indices.push(offset + index);
+    }
+  });
+  if (vertices.length === 0 || indices.length < 3) return null;
+  return { vertices, indices, size: [max[0] - min[0], max[1] - min[1], max[2] - min[2]] };
+}
+
 function sourceTemplates(gltf: GLTF): SourceMeshTemplate[] {
   const cached = sourceTemplateCache.get(gltf);
   if (cached) return cached;
@@ -121,12 +163,18 @@ function sourceForwardBounds(templates: readonly SourceMeshTemplate[], axis: Spl
   return Number.isFinite(min) && Number.isFinite(max) ? { min, length: max - min } : null;
 }
 
-function buildFrameSamples(actor: LayoutSplineActor, cache: SplineCurveCache, steps: number): FrameSample[] {
-  const length = cache.totalLength;
-  const segmentCount = cache.segments.length;
+function buildFrameSamples(
+  actor: LayoutSplineActor,
+  cache: SplineCurveCache,
+  steps: number,
+  range?: { startDistance: number; length: number },
+): FrameSample[] {
+  const startDistance = range?.startDistance ?? 0;
+  const length = range?.length ?? cache.totalLength;
+  const segmentCount = range ? 1 : cache.segments.length;
   const count = Math.max(2, segmentCount * Math.max(2, steps) + 1);
   return Array.from({ length: count }, (_, index) => {
-    const distance = length * (index / (count - 1));
+    const distance = startDistance + length * (index / (count - 1));
     return { distance, frame: getSplineTransformAtDistance(cache, distance, "world", actor).frame };
   });
 }
@@ -141,14 +189,15 @@ function deformGeometry(
   const position = geometry.getAttribute("position");
   const uv = geometry.getAttribute("uv") ?? new BufferAttribute(new Float32Array(position.count * 2), 2);
   if (!geometry.getAttribute("uv")) geometry.setAttribute("uv", uv);
-  const totalLength = samples.at(-1)!.distance;
+  const startDistance = samples[0]!.distance;
+  const length = samples.at(-1)!.distance - startDistance;
   for (let index = 0; index < position.count; index += 1) {
     const x = position.getX(index), y = position.getY(index), z = position.getZ(index);
     const forward = axisComponent(x, y, z, generator.forwardAxis);
     const up = axisComponent(x, y, z, generator.upAxis);
     const right = axisComponent(x, y, z, rightAxis(generator.forwardAxis, generator.upAxis));
     const fraction = Math.min(1, Math.max(0, (forward - bounds.min) / bounds.length));
-    const distance = fraction * totalLength;
+    const distance = startDistance + fraction * length;
     const frame = frameAt(samples, distance);
     const lateral = right * generator.crossSectionScale[0] * frame.scale[0] + generator.lateralOffset;
     const vertical = up * generator.crossSectionScale[1] * frame.scale[1] + generator.verticalOffset;

@@ -170,6 +170,7 @@ import {
   splineDeformMeshWarnings,
   splineRigidSegmentWarnings,
 } from "../engine/scene/splineGenerator";
+import { splineDeformMeshColliderPrimitive } from "../engine/render-three/splineDeformMesh";
 import { resolveNavAgentProfile } from "../engine/navigation/navAgentProfile";
 import {
   freshStuckState,
@@ -19800,13 +19801,15 @@ check("generic spline deform mesh normalizes axes, saves, and bends generated ge
   const actor = createDefaultSplineActor();
   actor.id = "road-strip";
   actor.spline.points[1]!.position = [0, 0, 10];
+  actor.spline.points.push({ id: "road-end", position: [0, 0, 20], pointType: "linear" });
   actor.spline.points.forEach((point) => { point.pointType = "linear"; });
   const [definition] = normalizeSplineGenerators([{
     id: "road", type: "deformMesh", meshAsset: "road-strip", forwardAxis: "z", upAxis: "y",
-    sampleSteps: 24, uvMode: "tileByDistance", uvTileLength: 2, lateralOffset: 0.5,
+    sampleSteps: 24, geometryMode: "segments", collisionEnabled: true, uvMode: "tileByDistance", uvTileLength: 2, lateralOffset: 0.5,
   }]);
   assert.equal(definition?.type, "deformMesh");
   if (!definition || definition.type !== "deformMesh") throw new Error("deform generator normalization failed");
+  assert.equal(definition.collisionEnabled, true, "opt-in static collision survives spline generator normalization");
   assert.deepEqual(resolveSplineDeformMeshGenerator({ ...definition, upAxis: "z" }).upAxis, "y");
   assert.ok(splineDeformMeshWarnings({ ...definition, upAxis: "z" }).some((warning) => warning.includes("safe up-axis fallback")));
   assert.deepEqual(splineDeformMeshWarnings({ ...definition, sampleSteps: 64 }), ["High deform sample count can make interactive rebuilds expensive."]);
@@ -19830,12 +19833,13 @@ check("generic spline deform mesh normalizes axes, saves, and bends generated ge
     if (child instanceof Group && child.userData.splineGeneratedGeometry) generated = child;
   });
   assert.ok(generated);
+  assert.equal(built?.group?.children.filter((child) => child instanceof Group && child.userData.splineGeneratorId === "road").length, 2, "segment mode creates independently disposable geometry chunks");
   const mesh = generated?.children.find((child) => child instanceof Mesh) as Mesh | undefined;
   mesh?.geometry.computeBoundingBox();
   assert.ok((mesh?.geometry.boundingBox?.max.z ?? 0) - (mesh?.geometry.boundingBox?.min.z ?? 0) > 9.9);
   assert.notEqual(mesh?.geometry, (source.children[0] as Mesh).geometry, "deformed output owns a disposable geometry clone");
   const tiledV = mesh?.geometry.getAttribute("uv");
-  assert.equal(Math.max(...Array.from({ length: tiledV?.count ?? 0 }, (_, index) => tiledV!.getY(index))), 5, "tile-by-distance writes the travelled spline distance into UVs");
+  assert.equal(Math.max(...Array.from({ length: tiledV?.count ?? 0 }, (_, index) => tiledV!.getY(index))), 10, "tile-by-distance keeps global travelled distance across segment chunks");
 
   const preview = buildSplineInstanceGeneratorGroup({
     actor,
@@ -19858,7 +19862,7 @@ check("generic spline deform mesh supports pipe axes and preserves a smooth clos
   actor.spline.points.push({ id: "corner", position: [8, 0, 8], pointType: "curveAuto" });
   actor.spline.points.forEach((point) => { point.pointType = "curveAuto"; });
   actor.spline.closed = true;
-  actor.generators = [{ id: "pipe", type: "deformMesh", meshAsset: "pipe", forwardAxis: "y", upAxis: "z", uvMode: "stretch" }];
+  actor.generators = [{ id: "pipe", type: "deformMesh", meshAsset: "pipe", forwardAxis: "y", upAxis: "z", geometryMode: "whole", uvMode: "stretch" }];
   const sourceGeometry = new BufferGeometry();
   sourceGeometry.setAttribute("position", new Float32BufferAttribute([
     -0.2, 0, 0, 0.2, 0, 0,
@@ -19888,6 +19892,8 @@ check("generic spline deform mesh supports pipe axes and preserves a smooth clos
   );
   assert.ok(seamDistance(0, 2) < 1e-5 && seamDistance(1, 3) < 1e-5, "closed loop source ends meet at the generated seam");
   assert.deepEqual(Array.from({ length: 4 }, (_, index) => positions.getY(index)).map((value) => Number.isFinite(value)), [true, true, true, true]);
+  const collider = splineDeformMeshColliderPrimitive(built!.group!);
+  assert.ok(collider && collider.indices.length >= 3 && collider.vertices.length >= 3, "generated mesh can supply an opt-in static trimesh collider");
 });
 
 check("generic spline debug renderer samples world space, honors visibility, and disposes", () => {

@@ -1303,6 +1303,8 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
           <label class="detail-row"><span>Mesh</span><select data-spline-deform-mesh="${escapeHtml(generator.id)}" ${locked}><option value="">Choose mesh…</option>${meshOptions.replace(`value="${escapeHtml(generator.meshAsset)}"`, `value="${escapeHtml(generator.meshAsset)}" selected`)}</select></label>
           <label class="detail-row"><span>Forward Axis</span><select data-spline-deform-axis="forwardAxis" data-spline-generator-id="${escapeHtml(generator.id)}" ${locked}>${axisOptions(generator.forwardAxis ?? "z")}</select></label>
           <label class="detail-row"><span>Up Axis</span><select data-spline-deform-axis="upAxis" data-spline-generator-id="${escapeHtml(generator.id)}" ${locked}>${axisOptions(generator.upAxis ?? "y")}</select></label>
+          <label class="detail-row"><span>Geometry</span><select data-spline-deform-geometry="${escapeHtml(generator.id)}" ${locked}><option value="segments" ${(generator.geometryMode ?? "segments") === "segments" ? "selected" : ""}>Per segment chunks</option><option value="whole" ${generator.geometryMode === "whole" ? "selected" : ""}>One whole mesh</option></select></label>
+          <div class="detail-hint">Segment chunks make point drags rebuild only the nearby geometry; whole mesh preserves a continuous source asset.</div>
           <label class="detail-row"><span>Sample Steps</span><input type="number" min="2" max="128" step="1" data-spline-deform-number="sampleSteps" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.sampleSteps ?? 16}" ${locked}></label>
           <label class="detail-row"><span>UV Mode</span><select data-spline-deform-uv="${escapeHtml(generator.id)}" ${locked}><option value="stretch" ${(generator.uvMode ?? "stretch") === "stretch" ? "selected" : ""}>Stretch</option><option value="tileByDistance" ${generator.uvMode === "tileByDistance" ? "selected" : ""}>Tile by distance</option></select></label>
           <label class="detail-row"><span>UV Tile Length</span><input type="number" min="0.01" step="0.1" data-spline-deform-number="uvTileLength" data-spline-generator-id="${escapeHtml(generator.id)}" value="${generator.uvTileLength ?? 1}" ${locked}></label>
@@ -1311,6 +1313,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
           <label class="detail-row"><span>Enabled</span><input type="checkbox" data-spline-deform-flag="enabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.enabled !== false ? "checked" : ""} ${locked}></label>
           <label class="detail-row"><span>Editor Preview</span><input type="checkbox" data-spline-deform-flag="previewEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.previewEnabled !== false ? "checked" : ""} ${locked}></label>
           <label class="detail-row"><span>Runtime Enabled</span><input type="checkbox" data-spline-deform-flag="runtimeEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.runtimeEnabled !== false ? "checked" : ""} ${locked}></label>
+          <label class="detail-row"><span>Static Mesh Collision</span><input type="checkbox" data-spline-deform-flag="collisionEnabled" data-spline-generator-id="${escapeHtml(generator.id)}" ${generator.collisionEnabled ? "checked" : ""} ${locked}></label>
           <div class="detail-button-row"><button type="button" data-spline-generator-remove="${escapeHtml(generator.id)}" ${locked}>Remove Generator</button></div>
         </div>`;
       }
@@ -1407,6 +1410,9 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
   body.querySelectorAll<HTMLSelectElement>("[data-spline-deform-uv]").forEach((input) => input.addEventListener("change", () => {
     if (input.value === "stretch" || input.value === "tileByDistance") options.setSelectedSplineDeformMeshGenerator(input.dataset.splineDeformUv ?? "", { uvMode: input.value });
   }));
+  body.querySelectorAll<HTMLSelectElement>("[data-spline-deform-geometry]").forEach((input) => input.addEventListener("change", () => {
+    if (input.value === "whole" || input.value === "segments") options.setSelectedSplineDeformMeshGenerator(input.dataset.splineDeformGeometry ?? "", { geometryMode: input.value });
+  }));
   body.querySelectorAll<HTMLInputElement>("[data-spline-deform-number]").forEach((input) => input.addEventListener("change", () => {
     const key = input.dataset.splineDeformNumber;
     const value = Number(input.value);
@@ -1415,7 +1421,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
   }));
   body.querySelectorAll<HTMLInputElement>("[data-spline-deform-flag]").forEach((input) => input.addEventListener("change", () => {
     const key = input.dataset.splineDeformFlag;
-    if (key === "enabled" || key === "previewEnabled" || key === "runtimeEnabled") options.setSelectedSplineDeformMeshGenerator(input.dataset.splineGeneratorId ?? "", { [key]: input.checked } as Partial<ForgeSplineDeformMeshGeneratorDef>);
+    if (key === "enabled" || key === "previewEnabled" || key === "runtimeEnabled" || key === "collisionEnabled") options.setSelectedSplineDeformMeshGenerator(input.dataset.splineGeneratorId ?? "", { [key]: input.checked } as Partial<ForgeSplineDeformMeshGeneratorDef>);
   }));
   body.querySelectorAll<HTMLSelectElement>("[data-spline-rigid-mesh]").forEach((input) => input.addEventListener("change", () => {
     options.setSelectedSplineRigidSegmentGenerator(input.dataset.splineRigidMesh ?? "", { meshAsset: input.value });

@@ -305,6 +305,7 @@ import {
   generateSplineInstancePlacements,
   generateSplineRigidSegmentPlacements,
   normalizeSplineGenerators,
+  resolveSplineDeformMeshGenerator,
   splineDeformMeshWarnings,
   splineRigidSegmentWarnings,
   type ForgeSplineGeneratorDef,
@@ -312,6 +313,8 @@ import {
   type ForgeSplineInstanceGeneratorDef,
   type ForgeSplineRigidSegmentGeneratorDef,
 } from "@engine/scene/splineGenerator";
+import { buildSplineCurveCache } from "@engine/scene/splineCurve";
+import { buildSplineDeformMeshGroup } from "@engine/render-three/splineDeformMesh";
 import { evaluateSplineSegment } from "@engine/scene/splineCurve";
 import {
   applyProbeEnvMapToObject,
@@ -1023,6 +1026,8 @@ export class SceneApp {
   private splineGeneratedGroups: (Group | null)[] = [];
   /** Coalesces high-frequency control-point drags into one generated-preview rebuild. */
   private splineGeneratorPreviewTimers = new Map<number, ReturnType<typeof setTimeout>>();
+  /** Segments touched during a pointer drag; merged until the coalesced preview rebuild runs. */
+  private splineGeneratorDirtySegments = new Map<number, Set<number>>();
   /** Latest generated-mesh diagnostics, kept outside the persisted spline data. */
   private splineGeneratorBuildStats = new Map<number, { triangleCount: number; rebuildMs: number; preview: boolean; warnings: string[] }>();
   /** Contextual, editor-only point markers for the currently selected generic spline. */
@@ -4977,11 +4982,11 @@ export class SceneApp {
   }
 
   /** Rebuilds an actor's sampled debug line after a future point/details edit. */
-  refreshSpline(index: number, generationQuality: "preview" | "full" = "full"): void {
+  refreshSpline(index: number, generationQuality: "preview" | "full" = "full", dirtySegments?: readonly number[]): void {
     const actor = this.layout?.splines?.[index];
     const object = this.splineObjects[index];
     if (actor && object) updateSplineObject(object, actor);
-    this.scheduleSplineGeneratedPreviewRebuild(index, generationQuality);
+    this.scheduleSplineGeneratedPreviewRebuild(index, generationQuality, dirtySegments);
     this.refreshSplinePointOverlay();
   }
 
@@ -4994,14 +4999,23 @@ export class SceneApp {
   private clearSplineGeneratorPreviewTimers(): void {
     for (const timer of this.splineGeneratorPreviewTimers.values()) clearTimeout(timer);
     this.splineGeneratorPreviewTimers.clear();
+    this.splineGeneratorDirtySegments.clear();
   }
 
   /** Keep line/point feedback immediate while avoiding InstancedMesh rebuilds on every drag event. */
-  private scheduleSplineGeneratedPreviewRebuild(index: number, quality: "preview" | "full" = "full"): void {
+  private scheduleSplineGeneratedPreviewRebuild(index: number, quality: "preview" | "full" = "full", dirtySegments?: readonly number[]): void {
+    if (quality === "preview" && dirtySegments?.length) {
+      const pending = this.splineGeneratorDirtySegments.get(index) ?? new Set<number>();
+      dirtySegments.forEach((segment) => pending.add(segment));
+      this.splineGeneratorDirtySegments.set(index, pending);
+    }
     const previous = this.splineGeneratorPreviewTimers.get(index);
     if (previous) clearTimeout(previous);
     this.splineGeneratorPreviewTimers.set(index, setTimeout(() => {
       this.splineGeneratorPreviewTimers.delete(index);
+      const dirty = this.splineGeneratorDirtySegments.get(index);
+      this.splineGeneratorDirtySegments.delete(index);
+      if (quality === "preview" && dirty?.size && this.rebuildSplineGeneratedDirtySegments(index, dirty)) return;
       this.rebuildSplineGeneratedGroup(index, quality);
     }, 80));
   }
@@ -5012,6 +5026,7 @@ export class SceneApp {
       const pending = this.splineGeneratorPreviewTimers.get(index);
       if (pending) clearTimeout(pending);
       this.splineGeneratorPreviewTimers.delete(index);
+      this.splineGeneratorDirtySegments.delete(index);
     }
     const previous = this.splineGeneratedGroups[index];
     if (previous) disposeSplineGeneratedGroup(previous);
@@ -5048,6 +5063,51 @@ export class SceneApp {
     built.group.userData.splineIndex = index;
     this.scene.add(built.group);
     this.splineGeneratedGroups[index] = built.group;
+  }
+
+  /** Replaces only mesh chunks adjacent to a moved point. Other generator types retain full rebuild semantics. */
+  private rebuildSplineGeneratedDirtySegments(index: number, dirtySegments: ReadonlySet<number>): boolean {
+    const actor = this.layout?.splines?.[index];
+    const outer = this.splineGeneratedGroups[index];
+    if (!actor || !outer) return false;
+    const generators = normalizeSplineGenerators(actor.generators);
+    const deformGenerators = generators.filter((definition) => definition.type === "deformMesh").map(resolveSplineDeformMeshGenerator)
+      .filter((definition) => definition.enabled && definition.previewEnabled && definition.geometryMode === "segments" && Boolean(definition.meshAsset));
+    if (deformGenerators.length === 0 || generators.some((definition) => definition.type !== "deformMesh" && definition.enabled && definition.previewEnabled)) return false;
+    const cache = buildSplineCurveCache(actor.spline);
+    const segmentIndices = [...dirtySegments].filter((segmentIndex) => cache.segments.some((segment) => segment.index === segmentIndex));
+    if (segmentIndices.length === 0) return false;
+    const startedAt = performance.now();
+    const warnings: string[] = [];
+    for (const generator of deformGenerators) {
+      const gltf = this.models.get(generator.meshAsset);
+      if (!gltf) return false;
+      for (const segmentIndex of segmentIndices) {
+        const old = outer.children.find((child) => child.userData.splineGeneratorId === generator.id && child.userData.splineSegmentIndex === segmentIndex);
+        if (old instanceof Group) disposeSplineGeneratedGroup(old);
+        const built = buildSplineDeformMeshGroup({
+          actor,
+          gltf,
+          definition: { ...generator, sampleSteps: Math.min(generator.sampleSteps, 4) },
+          segmentIndex,
+          castShadow: this.staticObjectsCastShadow(),
+          receiveShadow: this.staticObjectsReceiveShadow(),
+        });
+        warnings.push(...built.warnings);
+        if (!built.group) continue;
+        built.group.traverse((child) => { child.raycast = () => {}; });
+        const slots = this.resolveAssetMaterialSlots(generator.meshAsset);
+        if (slots) applyMaterialSlotOverrides(built.group, slots, (materialId) => this.materialCache.get(materialId));
+        outer.add(built.group);
+      }
+    }
+    this.splineGeneratorBuildStats.set(index, {
+      triangleCount: splineGeneratedTriangleCount(outer),
+      rebuildMs: performance.now() - startedAt,
+      preview: true,
+      warnings,
+    });
+    return true;
   }
 
   getSelectedSplinePoints(): SplinePointView[] {
@@ -10142,7 +10202,7 @@ export class SceneApp {
         else point.arriveTangent = [...tangent];
       }
     }
-    this.refreshSpline(drag.index, "preview");
+    this.refreshSpline(drag.index, "preview", splineDirtySegmentsForPoint(actor!, drag.pointId));
     this.updateGizmo();
     this.emitSelectionChanged();
   }
@@ -11828,16 +11888,31 @@ export class SceneApp {
   };
 }
 
-function splineGeneratedTriangleCount(group: Group | null | undefined, generatorId: string): number {
+function splineGeneratedTriangleCount(group: Group | null | undefined, generatorId?: string): number {
   if (!group) return 0;
   let triangles = 0;
   group.traverse((object) => {
-    if (object instanceof Group && object.userData.splineGeneratorId === generatorId) {
+    if (object instanceof Group && (generatorId === undefined || object.userData.splineGeneratorId === generatorId)) {
       const count = object.userData.splineTriangleCount;
       if (typeof count === "number" && Number.isFinite(count)) triangles += count;
     }
   });
   return triangles;
+}
+
+/** A moved control point changes its incoming/outgoing spans plus one neighbour on each side for curve tangents. */
+function splineDirtySegmentsForPoint(actor: LayoutSplineActor, pointId: string): number[] {
+  const pointIndex = actor.spline.points.findIndex((point) => point.id === pointId);
+  const cache = buildSplineCurveCache(actor.spline);
+  if (pointIndex < 0) return cache.segments.map((segment) => segment.index);
+  const count = cache.segments.length;
+  const result = new Set<number>();
+  for (const offset of [-2, -1, 0, 1]) {
+    const candidate = pointIndex + offset;
+    if (actor.spline.closed) result.add((candidate % count + count) % count);
+    else if (candidate >= 0 && candidate < count) result.add(candidate);
+  }
+  return [...result];
 }
 
 /**

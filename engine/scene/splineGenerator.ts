@@ -70,6 +70,10 @@ export interface ForgeSplineDeformMeshGeneratorDef extends ForgeSplineGeneratorB
   forwardAxis?: SplineMeshAxis;
   upAxis?: SplineMeshAxis;
   sampleSteps?: number;
+  /** Segment chunks permit incremental editor rebuilds for long splines. */
+  geometryMode?: "whole" | "segments";
+  /** Opt-in static trimesh collision for this generated runtime mesh. */
+  collisionEnabled?: boolean;
   uvMode?: "stretch" | "tileByDistance";
   uvTileLength?: number;
   lateralOffset?: number;
@@ -140,13 +144,15 @@ export interface ResolvedSplineRigidSegmentGeneratorDef extends Omit<ForgeSpline
   placePostsAtJoints: boolean;
 }
 
-export interface ResolvedSplineDeformMeshGeneratorDef extends Omit<ForgeSplineDeformMeshGeneratorDef, "enabled" | "previewEnabled" | "runtimeEnabled" | "forwardAxis" | "upAxis" | "sampleSteps" | "uvMode" | "uvTileLength" | "lateralOffset" | "verticalOffset" | "crossSectionScale"> {
+export interface ResolvedSplineDeformMeshGeneratorDef extends Omit<ForgeSplineDeformMeshGeneratorDef, "enabled" | "previewEnabled" | "runtimeEnabled" | "forwardAxis" | "upAxis" | "sampleSteps" | "geometryMode" | "collisionEnabled" | "uvMode" | "uvTileLength" | "lateralOffset" | "verticalOffset" | "crossSectionScale"> {
   enabled: boolean;
   previewEnabled: boolean;
   runtimeEnabled: boolean;
   forwardAxis: SplineMeshAxis;
   upAxis: SplineMeshAxis;
   sampleSteps: number;
+  geometryMode: "whole" | "segments";
+  collisionEnabled: boolean;
   uvMode: "stretch" | "tileByDistance";
   uvTileLength: number;
   lateralOffset: number;
@@ -255,12 +261,13 @@ export function normalizeSplineDeformMeshGenerator(
     type: "deformMesh",
     meshAsset: typeof value.meshAsset === "string" ? value.meshAsset.trim() : "",
   };
-  for (const key of ["enabled", "previewEnabled", "runtimeEnabled"] as const) {
+  for (const key of ["enabled", "previewEnabled", "runtimeEnabled", "collisionEnabled"] as const) {
     if (typeof value[key] === "boolean") output[key] = value[key];
   }
   if (isSplineMeshAxis(value.forwardAxis)) output.forwardAxis = value.forwardAxis;
   if (isSplineMeshAxis(value.upAxis)) output.upAxis = value.upAxis;
   if (isFiniteNumber(value.sampleSteps)) output.sampleSteps = Math.round(clamp(value.sampleSteps, 2, 128));
+  if (value.geometryMode === "whole" || value.geometryMode === "segments") output.geometryMode = value.geometryMode;
   if (value.uvMode === "stretch" || value.uvMode === "tileByDistance") output.uvMode = value.uvMode;
   if (isFiniteNumber(value.uvTileLength)) output.uvTileLength = clamp(value.uvTileLength, MIN_SPACING, MAX_OFFSET);
   for (const key of ["lateralOffset", "verticalOffset"] as const) {
@@ -361,6 +368,8 @@ export function resolveSplineDeformMeshGenerator(
     forwardAxis,
     upAxis,
     sampleSteps: generator.sampleSteps ?? 16,
+    geometryMode: generator.geometryMode ?? "segments",
+    collisionEnabled: generator.collisionEnabled ?? false,
     uvMode: generator.uvMode ?? "stretch",
     uvTileLength: generator.uvTileLength ?? 1,
     lateralOffset: generator.lateralOffset ?? 0,

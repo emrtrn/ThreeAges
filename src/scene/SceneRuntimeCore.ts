@@ -76,6 +76,7 @@ import {
   resolveSplineDeformMeshGenerator,
 } from "@engine/scene/splineGenerator";
 import { buildSplineDeformMeshGroup } from "@engine/render-three/splineDeformMesh";
+import { buildSplineCurveCache } from "@engine/scene/splineCurve";
 import type { Entity } from "@engine/scene/entity";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 
@@ -360,21 +361,28 @@ export function buildSplineInstanceGeneratorGroup(options: {
       missingAssetIds.push(generator.meshAsset);
       continue;
     }
-    const built = buildSplineDeformMeshGroup({
-      actor: options.actor,
-      gltf,
-      definition: options.deformQuality === "preview"
-        ? { ...generator, sampleSteps: Math.min(generator.sampleSteps, 4) }
-        : generator,
-      castShadow: options.castShadow,
-      receiveShadow: options.receiveShadow,
-    });
-    triangleCount += built.triangleCount;
-    warnings.push(...built.warnings);
-    if (!built.group) continue;
-    built.group.traverse((child) => { child.raycast = () => {}; });
-    options.applyMaterialSlots?.(generator.meshAsset, built.group);
-    group.add(built.group);
+    const deformDefinition = options.deformQuality === "preview"
+      ? { ...generator, sampleSteps: Math.min(generator.sampleSteps, 4) }
+      : generator;
+    const segmentIndices = generator.geometryMode === "segments"
+      ? buildSplineCurveCache(options.actor.spline).segments.map((segment) => segment.index)
+      : [undefined];
+    for (const segmentIndex of segmentIndices) {
+      const built = buildSplineDeformMeshGroup({
+        actor: options.actor,
+        gltf,
+        definition: deformDefinition,
+        ...(segmentIndex === undefined ? {} : { segmentIndex }),
+        castShadow: options.castShadow,
+        receiveShadow: options.receiveShadow,
+      });
+      triangleCount += built.triangleCount;
+      warnings.push(...built.warnings);
+      if (!built.group) continue;
+      built.group.traverse((child) => { child.raycast = () => {}; });
+      options.applyMaterialSlots?.(generator.meshAsset, built.group);
+      group.add(built.group);
+    }
   }
   group.userData.splineWarnings = warnings;
   return { group: group.children.length > 0 ? group : null, meshes, instanceCount, triangleCount, missingAssetIds, warnings };

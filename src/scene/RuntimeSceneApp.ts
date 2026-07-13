@@ -248,6 +248,8 @@ import {
   disposeSplineObject,
   type SplineObject,
 } from "@engine/render-three/spline";
+import { splineDeformMeshColliderPrimitive } from "@engine/render-three/splineDeformMesh";
+import { normalizeSplineGenerators, resolveSplineDeformMeshGenerator } from "@engine/scene/splineGenerator";
 import { aiNavigationVolumeAabb } from "@engine/render-three/aiNavigationVolume";
 import { readRotation, readScale } from "@engine/scene/transform";
 import { createSplineRegistry, type SplineQuery, type SplineRegistry } from "@engine/scene/splineRegistry";
@@ -268,6 +270,7 @@ import type {
   LayoutCharacter,
   LayoutLightActor,
   LayoutPlacement,
+  LayoutSplineActor,
   LayoutBlockingVolume,
   LayoutLandscape,
   LayoutReflectionPlane,
@@ -723,6 +726,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private splineDebugObjects: SplineObject[] = [];
   /** Runtime InstancedMesh outputs authored by generic spline generators. */
   private splineGeneratedGroups: Group[] = [];
+  /** Static physics entities emitted by opt-in spline deform-mesh collision. */
+  private splineColliderEntities: Entity[] = [];
   /** Asset manifest (with `.assets`), cached once the scene begins loading. */
   private assetManifest: AssetManifest | null = null;
   private readonly textureLoader = new TextureLoader();
@@ -1232,6 +1237,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.splineDebugObjects = [];
     for (const group of this.splineGeneratedGroups) disposeSplineGeneratedGroup(group);
     this.splineGeneratedGroups = [];
+    this.splineColliderEntities = [];
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);
       disposeLandscapeObject(object);
@@ -2008,6 +2014,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         ...baseDocument.entities,
         ...this.actorEntities,
         ...this.landscapeColliderEntities,
+        ...this.splineColliderEntities,
       ],
     };
     await startSceneRuntime({
@@ -2206,6 +2213,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.splineDebugObjects = [];
     for (const group of this.splineGeneratedGroups) disposeSplineGeneratedGroup(group);
     this.splineGeneratedGroups = [];
+    this.splineColliderEntities = [];
     for (const object of this.landscapeObjects) {
       this.scene.remove(object);
       disposeLandscapeObject(object);
@@ -4109,6 +4117,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (!built.group) continue;
       this.splineGeneratedGroups.push(built.group);
       this.scene.add(built.group);
+      this.splineColliderEntities.push(...this.splineDeformColliderEntities(actor, built.group));
     }
     if (!this.debug) return;
     for (const entry of this.splineRegistry.all()) {
@@ -4116,6 +4125,50 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.splineDebugObjects.push(object);
       this.scene.add(object);
     }
+  }
+
+  /** Emits one static trimesh body per opted-in deform generator, combining its segment chunks. */
+  private splineDeformColliderEntities(actor: LayoutSplineActor, generated: Group): Entity[] {
+    const result: Entity[] = [];
+    for (const definition of normalizeSplineGenerators(actor.generators)) {
+      if (definition.type !== "deformMesh") continue;
+      const generator = resolveSplineDeformMeshGenerator(definition);
+      if (!generator.enabled || !generator.runtimeEnabled || !generator.collisionEnabled) continue;
+      const chunks = generated.children.filter((child) => child instanceof Group && child.userData.splineGeneratorId === generator.id) as Group[];
+      const vertices: Vec3[] = [];
+      const indices: number[] = [];
+      for (const chunk of chunks) {
+        const primitive = splineDeformMeshColliderPrimitive(chunk);
+        if (!primitive) continue;
+        const offset = vertices.length;
+        vertices.push(...primitive.vertices);
+        indices.push(...primitive.indices.map((entry) => entry + offset));
+      }
+      if (indices.length < 3) continue;
+      const min: Vec3 = [Infinity, Infinity, Infinity];
+      const max: Vec3 = [-Infinity, -Infinity, -Infinity];
+      for (const vertex of vertices) {
+        min[0] = Math.min(min[0], vertex[0]); min[1] = Math.min(min[1], vertex[1]); min[2] = Math.min(min[2], vertex[2]);
+        max[0] = Math.max(max[0], vertex[0]); max[1] = Math.max(max[1], vertex[1]); max[2] = Math.max(max[2], vertex[2]);
+      }
+      const size: Vec3 = [max[0] - min[0], max[1] - min[1], max[2] - min[2]];
+      const collider: ColliderComponent = {
+        shape: "box",
+        size,
+        isStatic: true,
+        isSensor: false,
+        primitives: [{ shape: "trimesh", size, vertices, indices }],
+      };
+      result.push({
+        id: `spline:${actor.id}:${generator.id}`,
+        name: `${actor.name} ${generator.id} Collider`,
+        components: {
+          [TRANSFORM_COMPONENT]: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          [COLLIDER_COMPONENT]: collider as unknown as EntityComponentData,
+        },
+      });
+    }
+    return result;
   }
 
   /** Resolved settings + world transform + sidecar data for a landscape layout actor. */

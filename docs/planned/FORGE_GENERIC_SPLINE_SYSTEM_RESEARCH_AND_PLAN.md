@@ -1923,7 +1923,7 @@ Yol, boru, kablo ve şerit meshlerini spline segmentlerine göre bükmek.
 - [x] Source mesh preprocessing cache ekle. *(2026-07-13: GLTF başına geometry template `WeakMap` cache.)*
 - [x] Forward axis seçimini ekle.
 - [x] Up axis seçimini ekle.
-- [ ] Segment bazlı geometry generation ekle.
+- [x] Segment bazlı geometry generation ekle. *(2026-07-13: varsayılan `segments` modu her spline span'ını ayrı, dispose edilebilir deform geometry chunk'ı olarak üretir; `whole` modu kapalı sürekli meshler için korunur.)*
 - [x] Source forward coordinate normalization ekle.
 - [x] Spline frame üzerinden vertex deformation ekle.
 - [x] Roll ve scale uygulamasını ekle.
@@ -1933,13 +1933,13 @@ Yol, boru, kablo ve şerit meshlerini spline segmentlerine göre bükmek.
 - [x] UV stretch mode ekle.
 - [x] UV tile-by-distance mode ekle.
 - [x] Sample steps ayarını ekle.
-- [ ] Dirty segment rebuild ekle.
+- [x] Dirty segment rebuild ekle. *(2026-07-13: point drag komşu span'ları biriktirir ve segment-mod deform generator'larda yalnız bu preview chunk'larını yeniler; başka generator tiplerinde güvenli tam rebuild'e döner.)*
 - [x] Drag sırasında düşük kalite preview ekle. *(2026-07-13: point drag deform sample sayısını en çok 4'e indirir.)*
 - [x] Commit sonrası full-quality rebuild ekle.
 - [x] Missing/invalid mesh axis warning ekle.
 - [x] Generated triangle diagnostic ekle. *(2026-07-13: Details paneli triangle sayısı, rebuild süresi ve preview durumunu gösterir.)*
 - [x] Generated geometry disposal ekle.
-- [ ] Opsiyonel static trimesh collision prototipi ekle.
+- [x] Opsiyonel static trimesh collision prototipi ekle. *(2026-07-13: Deformed Mesh Details'teki `Static Mesh Collision` opt-in'i, runtime'da render edilmiş deform geometry'den statik trimesh Collider entity üretir.)*
 - [x] Road strip test asset'i ile doğrula. *(2026-07-13: engine testindeki indexed road-strip fixture.)*
 - [x] Pipe/cable test asset'i ile doğrula. *(2026-07-13: +Y-forward pipe fixture ve axis dönüşüm testi.)*
 - [x] Closed-loop seam UV ve geometry testini ekle. *(2026-07-13: kapalı auto-curve üzerinde source uç-ring'leri seam'de birleşir; UV tile-by-distance doğrulanır.)*
