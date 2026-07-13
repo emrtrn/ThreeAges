@@ -537,6 +537,7 @@ import {
   foliageDataPath,
   uniqueFoliageGroupId,
   computeFoliageResourceUsage,
+  chunkFoliageInstances,
 } from "../engine/scene/foliage";
 import {
   makeFoliageRng,
@@ -15546,6 +15547,73 @@ check("FoliageRenderBinding tracks groups without a model resolver", () => {
   assert.equal(binding.allMeshes().length, 0);
   binding.clear();
   assert.equal(binding.root.children.length, 0);
+});
+
+check("chunkFoliageInstances buckets by world-XZ cell, keeping original indices", () => {
+  const at = (x: number, z: number) => ({
+    position: [x, 0, z] as [number, number, number],
+    rotation: [0, 0, 0] as [number, number, number],
+    scale: [1, 1, 1] as [number, number, number],
+  });
+  const instances = [at(1, 1), at(2, 2), at(20, 1), at(1, 20)];
+  const buckets = chunkFoliageInstances(instances, 16);
+  // (1,1)+(2,2) → cell 0,0 ; (20,1) → cell 1,0 ; (1,20) → cell 0,1
+  assert.equal(buckets.length, 3);
+  const byCell = new Map(buckets.map((b) => [`${b.chunkX},${b.chunkZ}`, b.indices]));
+  assert.deepEqual(byCell.get("0,0"), [0, 1]);
+  assert.deepEqual(byCell.get("1,0"), [2]);
+  assert.deepEqual(byCell.get("0,1"), [3]);
+  // Stable order: chunkZ then chunkX.
+  assert.deepEqual(buckets.map((b) => `${b.chunkX},${b.chunkZ}`), ["0,0", "1,0", "0,1"]);
+  // A non-positive chunk size falls back to the default (still partitions).
+  assert.ok(chunkFoliageInstances(instances, 0).length >= 1);
+});
+
+check("FoliageRenderBinding builds one batch per chunk and distance-culls far ones", () => {
+  // Minimal single-mesh GLTF (a unit box = 12 triangles).
+  const scene = new Group();
+  scene.add(new Mesh(new BoxGeometry(1, 1, 1)));
+  const gltf = { scene } as unknown as GLTF;
+  const type = normalizeFoliageType({
+    schema: 1,
+    type: "foliageType",
+    name: "t",
+    meshAssetId: "m",
+    cullEnd: 50,
+  });
+  const resolver = { getType: () => type, getModel: () => gltf };
+  const binding = new FoliageRenderBinding();
+  const data = normalizeFoliageData({
+    schema: 1,
+    type: "foliage",
+    groups: [
+      {
+        id: "g",
+        foliageTypeId: "t",
+        target: { kind: "staticMesh", id: "x" },
+        instances: [
+          { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+          { position: [100, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        ],
+      },
+    ],
+  });
+  binding.rebuild(data, resolver);
+  // Two instances a chunk apart → one InstancedMesh batch per chunk.
+  assert.equal(binding.allMeshes().length, 2);
+  const stat = binding.groupRenderStat("g");
+  assert.ok(stat);
+  assert.equal(stat!.drawCalls, 2);
+  assert.equal(stat!.trianglesPerInstance, 12);
+  // Camera at the origin: near chunk stays, far chunk (x=100, cullEnd=50) is hidden.
+  binding.updateCulling(new Vector3(0, 0, 0));
+  const meshes = binding.allMeshes();
+  assert.ok(meshes.some((m) => m.parent?.visible === false), "far chunk culled");
+  assert.ok(meshes.some((m) => m.parent?.visible === true), "near chunk kept");
+  // Pull the camera far away → every chunk beyond cullEnd is hidden.
+  binding.updateCulling(new Vector3(1000, 0, 0));
+  assert.ok(binding.allMeshes().every((m) => m.parent?.visible === false), "all culled when distant");
+  binding.dispose();
 });
 
 check("FoliageSelection tracks, toggles, and prunes emptied groups", () => {

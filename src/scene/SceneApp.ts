@@ -1301,6 +1301,7 @@ export class SceneApp {
         followCameraWithClouds(this.cloudObject, this.camera);
         advanceCloudTime(this.cloudObject, deltaSeconds);
       }
+      this.foliageBinding?.updateCulling(this.editorViewportCamera().position);
 
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaSeconds);
       else this.renderer.render(this.scene, this.editorViewportCamera());

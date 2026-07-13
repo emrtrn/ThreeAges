@@ -14,12 +14,14 @@ import {
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 import type { Vec3 } from "@engine/scene/layout";
-import type {
-  FoliageGroupRenderStat,
-  ForgeFoliageTypeDef,
-  LayoutFoliageData,
-  LayoutFoliageGroup,
-  LayoutFoliageInstance,
+import {
+  FOLIAGE_CHUNK_SIZE,
+  chunkFoliageInstances,
+  type FoliageGroupRenderStat,
+  type ForgeFoliageTypeDef,
+  type LayoutFoliageData,
+  type LayoutFoliageGroup,
+  type LayoutFoliageInstance,
 } from "@engine/scene/foliage";
 import type { FoliageInstanceRoll } from "@engine/scene/foliagePaint";
 import { makeFoliageRng } from "@engine/scene/foliagePaint";
@@ -215,9 +217,25 @@ export function foliageInstanceItems(group: LayoutFoliageGroup): InstanceRenderI
   }));
 }
 
-interface FoliageGroupObject {
+/** One render chunk of a group: its InstancedMesh batch + cull bounds. */
+interface FoliageChunkObject {
+  /** Sub-group holding this chunk's InstancedMeshes (tagged for picking). */
   group: Group;
   meshes: InstancedMesh[];
+  /** World center of the chunk's instances (distance-cull anchor). */
+  center: Vector3;
+  /** Bounding radius (instances + mesh extent) so cull uses the nearest point. */
+  radius: number;
+}
+
+/** A group's render state: its chunk batches + the type's distance-cull window. */
+interface FoliageGroupObject {
+  /** Per-group container under the binding root; holds every chunk sub-group. */
+  root: Group;
+  chunks: FoliageChunkObject[];
+  /** Type cull window (`cullEnd <= 0` disables distance culling for this group). */
+  cullStart: number;
+  cullEnd: number;
 }
 
 /** One group's selected instance indices (Foliage Mode selection overlay input). */
@@ -239,8 +257,38 @@ const SELECTION_BOX_MATERIAL = new MeshBasicMaterial({
 });
 
 function disposeGroupObject(object: FoliageGroupObject): void {
-  object.group.removeFromParent();
-  for (const mesh of object.meshes) mesh.dispose();
+  object.root.removeFromParent();
+  for (const chunk of object.chunks) {
+    for (const mesh of chunk.meshes) mesh.dispose();
+  }
+}
+
+/** Builds a chunk render object, deriving its instance center + distance-cull radius. */
+function chunkObject(
+  group: Group,
+  meshes: InstancedMesh[],
+  indices: readonly number[],
+  instances: readonly LayoutFoliageInstance[],
+  meshRadius: number,
+): FoliageChunkObject {
+  const center = new Vector3();
+  for (const index of indices) {
+    const position = instances[index]!.position;
+    center.x += position[0];
+    center.y += position[1];
+    center.z += position[2];
+  }
+  center.multiplyScalar(1 / Math.max(indices.length, 1));
+  let maxDistSq = 0;
+  for (const index of indices) {
+    const position = instances[index]!.position;
+    const dx = position[0] - center.x;
+    const dy = position[1] - center.y;
+    const dz = position[2] - center.z;
+    const distSq = dx * dx + dy * dy + dz * dz;
+    if (distSq > maxDistSq) maxDistSq = distSq;
+  }
+  return { group, meshes, center, radius: Math.sqrt(maxDistSq) + meshRadius };
 }
 
 export class FoliageRenderBinding {
@@ -256,24 +304,52 @@ export class FoliageRenderBinding {
     this.root.name = "Foliage";
   }
 
-  /** All InstancedMeshes currently drawn (for picking/statistics). */
+  /** All InstancedMeshes currently drawn across every chunk (picking/statistics). */
   allMeshes(): InstancedMesh[] {
     const meshes: InstancedMesh[] = [];
-    for (const object of this.objects.values()) meshes.push(...object.meshes);
+    for (const object of this.objects.values()) {
+      for (const chunk of object.chunks) meshes.push(...chunk.meshes);
+    }
     return meshes;
   }
 
   /**
-   * Live render stat for one group's batch (triangles-per-instance + draw calls),
-   * or null when the group has no built batch (mesh not loaded / no instances).
+   * Live render stat for one group (triangles-per-instance + total draw calls across
+   * its chunks), or null when the group has no built batch (mesh not loaded / empty).
    * Feeds {@link computeFoliageResourceUsage} for the panel's resource readout.
    */
   groupRenderStat(groupId: string): FoliageGroupRenderStat | null {
     const object = this.objects.get(groupId);
-    if (!object || object.meshes.length === 0) return null;
+    if (!object || object.chunks.length === 0) return null;
+    let drawCalls = 0;
+    for (const chunk of object.chunks) drawCalls += chunk.meshes.length;
+    // Every chunk instances the same GLTF, so per-instance triangles are read once.
     let trianglesPerInstance = 0;
-    for (const mesh of object.meshes) trianglesPerInstance += geometryTriangleCount(mesh.geometry);
-    return { trianglesPerInstance, drawCalls: object.meshes.length };
+    for (const mesh of object.chunks[0]!.meshes) {
+      trianglesPerInstance += geometryTriangleCount(mesh.geometry);
+    }
+    return { trianglesPerInstance, drawCalls };
+  }
+
+  /**
+   * Distance culling: hides whole chunks farther than their type's `cullEnd` from the
+   * camera (nearest-point test via the chunk bounding radius). Cheap enough to run
+   * every frame; a no-op for types with `cullEnd <= 0`. Per-chunk frustum culling is
+   * handled by three itself (each chunk mesh gets a tight bounding sphere at build).
+   */
+  updateCulling(cameraPosition: Vector3): void {
+    for (const object of this.objects.values()) {
+      if (object.cullEnd <= 0) {
+        for (const chunk of object.chunks) {
+          if (!chunk.group.visible) chunk.group.visible = true;
+        }
+        continue;
+      }
+      for (const chunk of object.chunks) {
+        const distance = cameraPosition.distanceTo(chunk.center) - chunk.radius;
+        chunk.group.visible = distance <= object.cullEnd;
+      }
+    }
   }
 
   /** Rebuilds every group from scratch (load, or a bulk change). */
@@ -285,36 +361,72 @@ export class FoliageRenderBinding {
     for (const group of data?.groups ?? []) this.rebuildGroup(group, resolver);
   }
 
-  /** Rebuilds a single group's batch in place (paint/erase/type-change dirty path). */
+  /** Rebuilds a single group's chunk batches in place (paint/erase/type-change path). */
   rebuildGroup(group: LayoutFoliageGroup, resolver: FoliageRenderResolver): void {
     this.removeGroup(group.id);
     const type = resolver.getType(group.foliageTypeId);
     if (!type || !type.meshAssetId) return;
     const gltf = resolver.getModel(type.meshAssetId);
     if (!gltf) return;
-    const items = foliageInstanceItems(group);
-    if (items.length === 0) return;
-    const built = createInstancedModelGroup({
-      assetId: type.meshAssetId,
-      gltf,
-      items,
-      castShadow: type.castShadow,
-      receiveShadow: type.receiveShadow,
+    if (group.instances.length === 0) return;
+    const meshRadius = this.meshBoundingRadius(type.meshAssetId, resolver);
+    const root = new Group();
+    root.name = `foliage-${group.id}`;
+    const chunks: FoliageChunkObject[] = [];
+    for (const bucket of chunkFoliageInstances(group.instances, FOLIAGE_CHUNK_SIZE)) {
+      const items: InstanceRenderItem[] = bucket.indices.map((index) => {
+        const instance = group.instances[index]!;
+        return {
+          matrix: composeTransformMatrix(instance.position, instance.rotation, instance.scale),
+          hidden: false,
+        };
+      });
+      const built = createInstancedModelGroup({
+        assetId: type.meshAssetId,
+        gltf,
+        items,
+        castShadow: type.castShadow,
+        receiveShadow: type.receiveShadow,
+      });
+      built.group.name = `foliage-${group.id}-${bucket.chunkX}_${bucket.chunkZ}`;
+      // Tag the chunk so the picker maps a chunk-local hit back to the group index.
+      built.group.userData.foliageGroupId = group.id;
+      built.group.userData.foliageIndexMap = bucket.indices;
+      // Re-enable per-chunk frustum culling (the shared instanced builder disables it
+      // for scattered placements) and give each batch a tight bounding sphere.
+      for (const mesh of built.meshes) {
+        mesh.frustumCulled = true;
+        mesh.computeBoundingSphere();
+      }
+      resolver.applyMaterialSlots?.(type.meshAssetId, built.group);
+      root.add(built.group);
+      chunks.push(chunkObject(built.group, built.meshes, bucket.indices, group.instances, meshRadius));
+    }
+    if (chunks.length === 0) return;
+    this.root.add(root);
+    this.objects.set(group.id, {
+      root,
+      chunks,
+      cullStart: type.cullStart,
+      cullEnd: type.cullEnd,
     });
-    built.group.name = `foliage-${group.id}`;
-    // Tag the batch so the editor picker can map an instance hit back to its group.
-    built.group.userData.foliageGroupId = group.id;
-    resolver.applyMaterialSlots?.(type.meshAssetId, built.group);
-    this.root.add(built.group);
-    this.objects.set(group.id, { group: built.group, meshes: built.meshes });
   }
 
-  /** Removes and disposes a single group's batch, if present. */
+  /** Removes and disposes a single group's chunk batches, if present. */
   removeGroup(groupId: string): void {
     const existing = this.objects.get(groupId);
     if (!existing) return;
     disposeGroupObject(existing);
     this.objects.delete(groupId);
+  }
+
+  /** Bounding-sphere radius of a mesh asset (cull margin), 0 when not loaded. */
+  private meshBoundingRadius(meshAssetId: string, resolver: FoliageRenderResolver): number {
+    const box = this.meshBox(meshAssetId, resolver);
+    if (!box) return 0;
+    const size = new Vector3();
+    box.getSize(size);
+    return size.length() / 2;
   }
 
   /**

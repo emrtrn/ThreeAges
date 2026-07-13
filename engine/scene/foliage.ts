@@ -291,6 +291,47 @@ export function foliageDataPath(scenePath: string): string {
   return `${base}.foliage.json`;
 }
 
+// --- Render chunking (Faz 2: per-chunk frustum + distance culling) ----------
+
+/** Default world-XZ size of a foliage render chunk, in world units. */
+export const FOLIAGE_CHUNK_SIZE = 16;
+
+/** One world-XZ grid cell of a group's instances (indices into `group.instances`). */
+export interface FoliageChunkBucket {
+  chunkX: number;
+  chunkZ: number;
+  /** Indices into the owning group's `instances` array that fall in this cell. */
+  indices: number[];
+}
+
+/**
+ * Partitions a group's instances into world-XZ grid buckets of `chunkSize`, so the
+ * renderer can build one InstancedMesh batch per bucket — giving each chunk its own
+ * (tight) bounding sphere for frustum culling plus a center for distance culling.
+ * Pure + testable: buckets come back in a stable order (chunkZ then chunkX), each
+ * carrying its original instance indices so picking can map a chunk-local hit back
+ * to the group index.
+ */
+export function chunkFoliageInstances(
+  instances: readonly LayoutFoliageInstance[],
+  chunkSize: number,
+): FoliageChunkBucket[] {
+  const size = chunkSize > 0 ? chunkSize : FOLIAGE_CHUNK_SIZE;
+  const buckets = new Map<string, FoliageChunkBucket>();
+  instances.forEach((instance, index) => {
+    const chunkX = Math.floor(instance.position[0] / size);
+    const chunkZ = Math.floor(instance.position[2] / size);
+    const key = `${chunkX},${chunkZ}`;
+    let bucket = buckets.get(key);
+    if (!bucket) {
+      bucket = { chunkX, chunkZ, indices: [] };
+      buckets.set(key, bucket);
+    }
+    bucket.indices.push(index);
+  });
+  return [...buckets.values()].sort((a, b) => a.chunkZ - b.chunkZ || a.chunkX - b.chunkX);
+}
+
 // --- Resource usage report (Faz 2 panel readout) ----------------------------
 
 /** Live render cost of one foliage group's batch (supplied by the render layer). */

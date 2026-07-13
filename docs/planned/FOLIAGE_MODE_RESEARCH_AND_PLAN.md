@@ -468,9 +468,14 @@ Alınacak fikirler:
 
 ### Faz 2 - Editing ve Quality Tools
 
-> Durum: 2026-07-13 itibarıyla **seçim altyapısı dilimi TAMAM** (kod tarafı;
-> kullanıcı editor smoke'u bekliyor). `build:verify` + `verify:imports` yeşil,
-> 816 engine check geçiyor. Instance-level seçim keystone parçası kuruldu:
+> Durum: 2026-07-13 itibarıyla **Faz 2 TAMAMLANDI** (kod tarafı; kullanıcı editor
+> smoke'ları Fill/Reapply/resource/Type Details için onaylandı, chunking + cull
+> için bekliyor). `build:verify` + `verify:imports` yeşil, 825 engine check geçiyor.
+> Tüm maddeler işaretli: Lasso, Fill, Reapply, Invalid, Deselect, Reattach,
+> resource usage, Type Details editörü, cull (chunk-seviyesi mesafe culling),
+> chunk/grid batches. Not: per-instance yumuşak shader fade bilinçli olarak sonraki
+> faza bırakıldı (dokümanın kendi ertelemesiyle uyumlu). Instance-level seçim
+> keystone parçası kuruldu:
 > ayrı `FoliageSelection` modeli (`engine/scene/foliageSelection.ts`), wireframe
 > kafes overlay (`FoliageRenderBinding.setSelection`), `ScenePicker.pickFoliageInstance`
 > (batch raycast, decorative-noop'u bypass eder). Lasso = Unreal'daki gibi
@@ -508,10 +513,20 @@ Alınacak fikirler:
   asset'ine kaydeder. Şema değişmedi — scale/yaw çeşitliliği zaten motor tarafından
   destekleniyordu, sadece düzenleme UI'ı eksikti. Not: scale/rotation değişimi YENİ
   paint'e uygulanır; mevcut instance'lara yansıması Reapply'ı bekliyor.)
-- [ ] Cull start/end fade.
-- [ ] Chunk/grid render batches.
+- [x] Cull start/end fade. (`FoliageRenderBinding.updateCulling`: mesafe-tabanlı
+  chunk culling — tipin `cullEnd`'inden uzaktaki chunk'ları kamera pozisyonuna göre
+  gizler, chunk bounding-radius ile nearest-point testi. Her frame SceneApp +
+  RuntimeSceneApp loop'unda çağrılır; `cullEnd <= 0` için no-op. Not: sert
+  chunk-seviyesi cull; per-instance yumuşak shader fade (`cullStart` fade başı)
+  sonraki faz polish'i olarak bırakıldı — dokümanın kendi ertelemesiyle uyumlu.)
+- [x] Chunk/grid render batches. (`chunkFoliageInstances` saf partition: grup
+  instance'larını world-XZ grid hücrelerine böler (`FOLIAGE_CHUNK_SIZE = 16`),
+  `FoliageRenderBinding` hücre başına InstancedMesh batch kurar. Kazanç: her chunk'a
+  sıkı bounding-sphere → three'nin per-chunk frustum culling'i etkin (foliage batch'ler
+  için `frustumCulled` yeniden açıldı) + mesafe culling anchor'ı. Picking chunk-local
+  instance-id'yi `userData.foliageIndexMap` ile grup-global index'e çevirir
+  (`ScenePicker.foliageGlobalIndexOf`).)
 
-> Kalan Faz 2 maddeleri (Reapply, cull fade, chunking) sonraki dilimlerde.
 > Select + Remove Selected de bu dilimde geldi (Delete kısayolu + panel "Remove
 > Selected"). 2026-07-13: resource usage raporu tamamlandı — panelde "Resource
 > Usage" bölümü (tip başına + toplam instance/triangle/draw). 2026-07-13: Fill
@@ -521,9 +536,13 @@ Alınacak fikirler:
 > ile çeşitlilik artık UI'dan ayarlanabilir); filtreler (zOffset/slope/height/cull)
 > katlanabilir "Advanced" bölümüne alındı. 2026-07-13: Reapply tamamlandı — Type
 > Details editörüyle değiştirilen scale/rotation ayarları mevcut instance'lara
-> deterministik yeniden yuvarlanarak uygulanıyor (seçim veya tüm aktif tip; kod
-> tarafı; kullanıcı editor smoke'u bekliyor). `build:verify` + `verify:imports`
-> yeşil, 823 engine check geçiyor. Kalan: cull fade, chunking.
+> deterministik yeniden yuvarlanarak uygulanıyor (seçim veya tüm aktif tip).
+> 2026-07-13: chunking + cull tamamlandı — grup instance'ları world-XZ grid
+> hücrelerine bölünüp hücre başına InstancedMesh olarak çizilir (per-chunk frustum
+> culling) ve `cullEnd`'den uzak chunk'lar her frame gizlenir (kod tarafı; kullanıcı
+> editor smoke'u bekliyor). **Faz 2 kod olarak tamamlandı.** `build:verify` +
+> `verify:imports` yeşil, 825 engine check geçiyor. Per-instance yumuşak shader fade
+> sonraki faza bırakıldı.
 
 ### Faz 3 - Landscape Grass / Layer-driven Scatter
 

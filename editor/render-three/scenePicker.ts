@@ -324,7 +324,7 @@ export class ScenePicker {
     for (const hit of this.visibleHits(hits)) {
       if (hit.instanceId == null) continue;
       const groupId = foliageGroupIdOf(hit.object);
-      if (groupId) return { groupId, index: hit.instanceId };
+      if (groupId) return { groupId, index: foliageGlobalIndexOf(hit.object, hit.instanceId) };
     }
     return null;
   }
@@ -525,6 +525,25 @@ function foliageGroupIdOf(object: Object3D): string | null {
     current = current.parent;
   }
   return null;
+}
+
+/**
+ * Maps a chunk-local InstancedMesh instance id back to its group-global instance
+ * index via the chunk's `foliageIndexMap` tag (render chunking splits a group into
+ * per-cell batches, so a mesh's local id is not the group index). Falls back to the
+ * local id when no map is present (unchunked/legacy batches).
+ */
+function foliageGlobalIndexOf(object: Object3D, localId: number): number {
+  let current: Object3D | null = object;
+  while (current) {
+    const map = current.userData.foliageIndexMap;
+    if (Array.isArray(map)) {
+      const global = map[localId];
+      return typeof global === "number" ? global : localId;
+    }
+    current = current.parent;
+  }
+  return localId;
 }
 
 function findParentMaterialOverride(object: Object3D): InstanceSelection | null {

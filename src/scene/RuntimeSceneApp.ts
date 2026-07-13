@@ -1126,6 +1126,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         followCameraWithClouds(this.cloudObject, this.camera);
         advanceCloudTime(this.cloudObject, deltaMs / 1000);
       }
+      this.foliageBinding?.updateCulling(this.camera.position);
       if (this.debug) this.updateAiNavigationDebugView();
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaMs / 1000);
       else this.renderer.render(this.scene, this.camera);
