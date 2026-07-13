@@ -536,9 +536,11 @@ import {
   createFoliageType,
   foliageDataPath,
   uniqueFoliageGroupId,
+  uniqueLandscapeFoliageRuleId,
   computeFoliageResourceUsage,
   chunkFoliageInstances,
 } from "../engine/scene/foliage";
+import { generateLandscapeFoliageSamples } from "../engine/scene/landscapeFoliage";
 import {
   makeFoliageRng,
   surfaceSlopeDegrees,
@@ -15373,6 +15375,60 @@ check("normalizeFoliageData re-ids duplicate/blank group ids", () => {
   });
   const ids = new Set(data.groups.map((g) => g.id));
   assert.equal(ids.size, 3);
+});
+
+check("normalizeFoliageData keeps canonical Landscape foliage rules without generated instances", () => {
+  const data = normalizeFoliageData({
+    schema: 1,
+    type: "foliage",
+    groups: [],
+    landscapeRules: [
+      { id: "rule", landscapeId: "landscape-1", layerId: "grass", foliageTypeId: "grass-type", density: 99, minWeight: -1, seed: 4.8 },
+      { id: "rule", landscapeId: "landscape-1", layerId: "", foliageTypeId: "bad" },
+    ],
+  });
+  assert.equal(data.groups.length, 0);
+  assert.equal(data.landscapeRules?.length, 1);
+  assert.deepEqual(data.landscapeRules?.[0], {
+    id: "rule",
+    landscapeId: "landscape-1",
+    layerId: "grass",
+    foliageTypeId: "grass-type",
+    density: 10,
+    minWeight: 0,
+    seed: 4,
+  });
+  assert.equal(uniqueLandscapeFoliageRuleId(data.landscapeRules ?? []), "landscape-foliage-rule-1");
+});
+
+check("Landscape foliage samples are deterministic and respect the painted layer mask", () => {
+  const landscape = createFlatLandscapeData("small");
+  const grass = landscape.layers.find((layer) => layer.id === "grass")!;
+  // Keep the left half painted and the right half clear.
+  for (let z = 0; z < landscape.size.verticesZ; z += 1) {
+    for (let x = 0; x < landscape.size.verticesX; x += 1) {
+      grass.weights[z * landscape.size.verticesX + x] = x < landscape.size.verticesX / 2 ? 1 : 0;
+    }
+  }
+  const rule = {
+    id: "rule-1",
+    landscapeId: "landscape-1",
+    layerId: "grass",
+    foliageTypeId: "grass-type",
+    density: 0.1,
+    minWeight: 0.5,
+    seed: 42,
+  };
+  const input = { id: "landscape-1", position: [10, 2, 0] as Vec3, data: landscape };
+  const first = generateLandscapeFoliageSamples(rule, input);
+  const second = generateLandscapeFoliageSamples(rule, input);
+  assert.ok(first.length > 0);
+  assert.deepEqual(first, second);
+  // World X is actor position + local X; samples must stay in the painted left half.
+  // Bilinear mask sampling permits the half-weight boundary cell, but never the
+  // unpainted right-hand terrain beyond that one-unit blend edge.
+  assert.ok(first.every((sample) => sample.position[0] < 10.5));
+  assert.ok(first.every((sample) => Math.abs(sample.position[1] - 2) < 1e-6));
 });
 
 check("validateSaveFoliagePayload requires a .foliage.json path", () => {

@@ -218,7 +218,10 @@ import {
   type LandscapeObject,
   type LandscapeRenderItem,
 } from "@engine/render-three/landscape";
-import { FoliageRenderBinding } from "@engine/render-three/foliage";
+import { FoliageRenderBinding, foliageInstanceFromRoll } from "@engine/render-three/foliage";
+import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
+import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint";
+import type { LayoutFoliageData, LayoutFoliageGroup } from "@engine/scene/foliage";
 import { loadFoliageData, loadFoliageTypesForData } from "./foliageLoader";
 import {
   createReflectiveSurfaceObject,
@@ -4140,7 +4143,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeFoliage(): Promise<void> {
     if (!this.activeLevelPath) return;
     const data = await loadFoliageData(this.activeLevelPath);
-    if (data.groups.length === 0) return;
+    if (data.groups.length === 0 && (data.landscapeRules?.length ?? 0) === 0) return;
     const manifest =
       this.assetManifest ?? (this.assetLoader ? await this.assetLoader.loadManifest() : null);
     if (!manifest) return;
@@ -4155,7 +4158,31 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     const binding = new FoliageRenderBinding();
     this.scene.add(binding.root);
-    binding.rebuild(data, {
+    const generated: LayoutFoliageGroup[] = [];
+    for (const rule of data.landscapeRules ?? []) {
+      const actor = (this.layout?.landscapes ?? []).find((entry) => entry.id === rule.landscapeId);
+      const type = types.get(rule.foliageTypeId);
+      if (!actor || !type) continue;
+      const landscape = await this.fetchLandscapeData(actor.dataRef);
+      const instances = generateLandscapeFoliageSamples(rule, {
+        id: actor.id,
+        position: [...actor.position],
+        rotation: readRotation(actor),
+        data: landscape,
+      }).map((sample) =>
+        foliageInstanceFromRoll(type, rollFoliageInstance(type, sample, makeFoliageRng(sample.seed))),
+      );
+      if (instances.length > 0) {
+        generated.push({
+          id: `generated-${rule.id}`,
+          foliageTypeId: rule.foliageTypeId,
+          target: { kind: "landscape", id: rule.landscapeId },
+          instances,
+        });
+      }
+    }
+    const renderData: LayoutFoliageData = { schema: 1, type: "foliage", groups: [...data.groups, ...generated] };
+    binding.rebuild(renderData, {
       getType: (id) => types.get(id) ?? null,
       getModel: (assetId) => this.models.get(assetId) ?? null,
       applyMaterialSlots: (assetId, group) => {

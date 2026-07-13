@@ -206,12 +206,15 @@ import {
   createEmptyFoliageData,
   foliageDataPath,
   normalizeFoliageType,
+  uniqueLandscapeFoliageRuleId,
   uniqueFoliageGroupId,
   type FoliageResourceUsage,
   type ForgeFoliageTypeDef,
+  type LandscapeFoliageRule,
   type LayoutFoliageData,
   type LayoutFoliageGroup,
 } from "@engine/scene/foliage";
+import { generateLandscapeFoliageSamples } from "@engine/scene/landscapeFoliage";
 import {
   FoliageSelection,
   foliageIndicesInRadius,
@@ -614,6 +617,18 @@ export interface FoliageTypeView {
   instanceCount: number;
 }
 
+export interface LandscapeFoliageLandscapeView {
+  id: string;
+  name: string;
+  layers: Array<{ id: string; name: string }>;
+}
+
+export interface LandscapeFoliageRuleView extends LandscapeFoliageRule {
+  landscapeName: string;
+  layerName: string;
+  foliageTypeName: string;
+}
+
 export interface LandscapeSplinePointView {
   id: string;
   position: Vec3;
@@ -874,6 +889,9 @@ export class SceneApp {
   private foliageTypes = new Map<string, ForgeFoliageTypeDef>();
   /** True when the foliage sidecar has unsaved changes. */
   private foliageDataDirty = false;
+  /** Terrain ids whose generated foliage batches are waiting for a debounced rebuild. */
+  private readonly dirtyGeneratedFoliageLandscapes = new Set<string>();
+  private generatedFoliageRebuildTimer: number | null = null;
   /** Whether Foliage Mode is the active editor mode (its brush owns pointer input). */
   private foliageModeActive = false;
   /** Ring cursor showing the foliage brush footprint on hover. */
@@ -5164,7 +5182,7 @@ export class SceneApp {
     await this.ensureFoliageMeshesLoaded();
     const binding = new FoliageRenderBinding();
     this.scene.add(binding.root);
-    binding.rebuild(this.foliageData, this.foliageResolver());
+    binding.rebuild(this.foliageRenderData(), this.foliageResolver());
     this.foliageBinding = binding;
     this.disableFoliagePicking();
     // Default the active type to the first referenced type (if any) for convenience.
@@ -5178,6 +5196,64 @@ export class SceneApp {
   /** Rebuilds a single group's batch and re-suppresses picking on the new meshes. */
   private rebuildFoliageGroupObject(group: LayoutFoliageGroup): void {
     this.foliageBinding?.rebuildGroup(group, this.foliageResolver());
+    this.disableFoliagePicking();
+  }
+
+  /** Generated foliage is transient render data; only its rules live in the sidecar. */
+  private generatedFoliageGroup(rule: LandscapeFoliageRule): LayoutFoliageGroup | null {
+    const actor = (this.layout?.landscapes ?? []).find((entry) => entry.id === rule.landscapeId);
+    const data = actor ? this.landscapeData.get(actor.id) : null;
+    const type = this.foliageTypes.get(rule.foliageTypeId);
+    if (!actor || !data || !type) return null;
+    const instances = generateLandscapeFoliageSamples(rule, {
+      id: actor.id,
+      position: [...actor.position],
+      rotation: readRotation(actor),
+      data,
+    }).map((sample) =>
+      foliageInstanceFromRoll(type, rollFoliageInstance(type, sample, makeFoliageRng(sample.seed))),
+    );
+    return {
+      id: `generated-${rule.id}`,
+      foliageTypeId: rule.foliageTypeId,
+      target: { kind: "landscape", id: rule.landscapeId },
+      instances,
+    };
+  }
+
+  private foliageRenderData(): LayoutFoliageData {
+    const generated = (this.foliageData.landscapeRules ?? [])
+      .map((rule) => this.generatedFoliageGroup(rule))
+      .filter((group): group is LayoutFoliageGroup => group !== null);
+    return { schema: 1, type: "foliage", groups: [...this.foliageData.groups, ...generated] };
+  }
+
+  /** Rebuilds only the generated rule groups affected by a terrain change. */
+  private rebuildGeneratedFoliageForLandscape(landscapeId: string): void {
+    for (const rule of this.foliageData.landscapeRules ?? []) {
+      if (rule.landscapeId !== landscapeId) continue;
+      const group = this.generatedFoliageGroup(rule);
+      if (group && group.instances.length > 0) this.foliageBinding?.rebuildGroup(group, this.foliageResolver());
+      else this.foliageBinding?.removeGroup(`generated-${rule.id}`);
+    }
+    this.disableFoliagePicking();
+  }
+
+  /** Coalesces a paint/sculpt stroke into one rebuild of its affected generated batches. */
+  private scheduleLandscapeFoliageRebuild(landscapeId: string): void {
+    if (!(this.foliageData.landscapeRules ?? []).some((rule) => rule.landscapeId === landscapeId)) return;
+    this.dirtyGeneratedFoliageLandscapes.add(landscapeId);
+    if (this.generatedFoliageRebuildTimer !== null) window.clearTimeout(this.generatedFoliageRebuildTimer);
+    this.generatedFoliageRebuildTimer = window.setTimeout(() => {
+      this.generatedFoliageRebuildTimer = null;
+      for (const id of this.dirtyGeneratedFoliageLandscapes) this.rebuildGeneratedFoliageForLandscape(id);
+      this.dirtyGeneratedFoliageLandscapes.clear();
+      this.emitFoliageChanged();
+    }, 120);
+  }
+
+  private rebuildAllGeneratedFoliage(): void {
+    this.foliageBinding?.rebuild(this.foliageRenderData(), this.foliageResolver());
     this.disableFoliagePicking();
   }
 
@@ -5237,6 +5313,32 @@ export class SceneApp {
     }));
   }
 
+  getLandscapeFoliageLandscapeViews(): LandscapeFoliageLandscapeView[] {
+    return (this.layout?.landscapes ?? []).map((actor) => {
+      const data = this.landscapeData.get(actor.id);
+      if (data) ensureLandscapeLayers(data);
+      const layers = data?.layers ?? LANDSCAPE_DEFAULT_LAYERS.map((layer) => ({ id: layer.id, name: layer.name }));
+      return {
+        id: actor.id,
+        name: actor.name ?? actor.id,
+        layers: layers.map((layer) => ({ id: layer.id, name: layer.name })),
+      };
+    });
+  }
+
+  getLandscapeFoliageRuleViews(): LandscapeFoliageRuleView[] {
+    const landscapes = new Map(this.getLandscapeFoliageLandscapeViews().map((entry) => [entry.id, entry]));
+    return (this.foliageData.landscapeRules ?? []).map((rule) => {
+      const landscape = landscapes.get(rule.landscapeId);
+      return {
+        ...rule,
+        landscapeName: landscape?.name ?? rule.landscapeId,
+        layerName: landscape?.layers.find((layer) => layer.id === rule.layerId)?.name ?? rule.layerId,
+        foliageTypeName: this.foliageTypes.get(rule.foliageTypeId)?.name ?? rule.foliageTypeId,
+      };
+    });
+  }
+
   /** The active foliage type's resolved def (a copy), or null when none is selected. */
   getActiveFoliageTypeDef(): ForgeFoliageTypeDef | null {
     const active = this.foliageActiveType();
@@ -5264,6 +5366,9 @@ export class SceneApp {
     }
     for (const group of this.foliageData.groups) {
       if (group.foliageTypeId === typeId) this.rebuildFoliageGroupObject(group);
+    }
+    if ((this.foliageData.landscapeRules ?? []).some((rule) => rule.foliageTypeId === typeId)) {
+      this.rebuildAllGeneratedFoliage();
     }
     this.emitFoliageChanged();
     await this.saveFoliageTypeAsset(typeId, next);
@@ -5343,10 +5448,70 @@ export class SceneApp {
       this.foliageDataDirty = true;
     }
     this.foliageTypes.delete(assetId);
+    const removedRuleIds = (this.foliageData.landscapeRules ?? [])
+      .filter((rule) => rule.foliageTypeId === assetId)
+      .map((rule) => rule.id);
+    const beforeRuleCount = this.foliageData.landscapeRules?.length ?? 0;
+    this.foliageData.landscapeRules = (this.foliageData.landscapeRules ?? []).filter(
+      (rule) => rule.foliageTypeId !== assetId,
+    );
+    if (this.foliageData.landscapeRules.length !== beforeRuleCount) {
+      for (const ruleId of removedRuleIds) this.foliageBinding?.removeGroup(`generated-${ruleId}`);
+      this.foliageDataDirty = true;
+    }
     if (this.foliageToolSettings.activeTypeId === assetId) {
       this.foliageToolSettings.activeTypeId = this.foliageTypes.keys().next().value ?? null;
     }
     this.emitFoliageChanged();
+  }
+
+  /** Adds a persisted Landscape layer rule; its generated instances are never saved. */
+  addLandscapeFoliageRule(input: Omit<LandscapeFoliageRule, "id">): void {
+    const rules = this.foliageData.landscapeRules ?? [];
+    const rule: LandscapeFoliageRule = {
+      id: uniqueLandscapeFoliageRuleId(rules),
+      landscapeId: input.landscapeId,
+      layerId: input.layerId,
+      foliageTypeId: input.foliageTypeId,
+      density: Math.max(0, Math.min(10, input.density)),
+      minWeight: Math.max(0, Math.min(1, input.minWeight)),
+      seed: Math.max(0, Math.floor(input.seed)) >>> 0,
+    };
+    this.foliageData.landscapeRules = [...rules, rule];
+    this.foliageDataDirty = true;
+    this.rebuildAllGeneratedFoliage();
+    this.emitFoliageChanged();
+    this.scheduleAutoSave();
+  }
+
+  updateLandscapeFoliageRule(id: string, patch: Partial<Omit<LandscapeFoliageRule, "id">>): void {
+    const rules = this.foliageData.landscapeRules ?? [];
+    const index = rules.findIndex((rule) => rule.id === id);
+    if (index < 0) return;
+    const current = rules[index]!;
+    const next: LandscapeFoliageRule = {
+      ...current,
+      ...patch,
+      density: Math.max(0, Math.min(10, patch.density ?? current.density)),
+      minWeight: Math.max(0, Math.min(1, patch.minWeight ?? current.minWeight)),
+      seed: Math.max(0, Math.floor(patch.seed ?? current.seed)) >>> 0,
+    };
+    this.foliageData.landscapeRules = rules.map((rule) => (rule.id === id ? next : rule));
+    this.foliageDataDirty = true;
+    this.rebuildAllGeneratedFoliage();
+    this.emitFoliageChanged();
+    this.scheduleAutoSave();
+  }
+
+  removeLandscapeFoliageRule(id: string): void {
+    const rules = this.foliageData.landscapeRules ?? [];
+    const next = rules.filter((rule) => rule.id !== id);
+    if (next.length === rules.length) return;
+    this.foliageData.landscapeRules = next;
+    this.foliageDataDirty = true;
+    this.foliageBinding?.removeGroup(`generated-${id}`);
+    this.emitFoliageChanged();
+    this.scheduleAutoSave();
   }
 
   private foliageActiveType(): { id: string; type: ForgeFoliageTypeDef } | null {
@@ -5651,7 +5816,7 @@ export class SceneApp {
    */
   getFoliageResourceUsage(): FoliageResourceUsage {
     return computeFoliageResourceUsage(
-      this.foliageData,
+      this.foliageRenderData(),
       (typeId) => this.foliageTypes.get(typeId)?.name ?? typeId,
       (groupId) => this.foliageBinding?.groupRenderStat(groupId) ?? null,
     );
@@ -6412,6 +6577,7 @@ export class SceneApp {
       this.landscapeSculptSettings.activeLayerId,
       this.resolveLandscapeLayerColors(data),
     );
+    this.scheduleLandscapeFoliageRebuild(actor.id);
   }
 
   private landscapeFullDirtyBounds(data: ForgeLandscapeData): LandscapeDirtyBounds {

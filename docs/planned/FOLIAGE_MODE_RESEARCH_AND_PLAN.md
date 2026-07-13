@@ -546,12 +546,21 @@ Alınacak fikirler:
 
 ### Faz 3 - Landscape Grass / Layer-driven Scatter
 
-- [ ] Landscape layer mask filter.
-- [ ] Landscape foliage rule modeli.
-- [ ] Deterministic generated foliage.
-- [ ] Manual vs generated foliage ayrımı.
-- [ ] Dirty landscape chunk rebuild.
-- [ ] Rule save/load.
+> Durum: 2026-07-13 itibarıyla **Faz 3 TAMAMLANDI** — Foliage panelindeki
+> `Generated Foliage` bölümü Landscape layer → foliage type kuralı oluşturur;
+> instance'lar kaydedilmez, rule + seed + Landscape sidecar'dan editor ve Play'de
+> deterministik yeniden üretilir. `tsc` + 827 engine check geçiyor.
+
+- [x] Landscape layer mask filter. (Bilinear weightmap örneklemesi + `minWeight`.)
+- [x] Landscape foliage rule modeli. (`LandscapeFoliageRule`.)
+- [x] Deterministic generated foliage. (Seed'li jittered grid + type roll.)
+- [x] Manual vs generated foliage ayrımı. (Sadece manual `groups` kaydedilir;
+  generated gruplar runtime/editor render verisidir.)
+- [x] Dirty landscape chunk rebuild. (Landscape sculpt/paint sonrası 120 ms debounce
+  ile yalnızca etkilenen landscape kurallarının chunked InstancedMesh batch'leri
+  yeniden kurulur.)
+- [x] Rule save/load. (`<layout>.foliage.json` `landscapeRules`; normalizer + save
+  validator aynı canonical modeli kullanır.)
 
 ### Faz 4 - Procedural Foliage Spawner (Kapsam dışı)
 

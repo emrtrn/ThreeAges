@@ -1,9 +1,11 @@
-import type { FoliageResourceUsage, ForgeFoliageTypeDef } from "@engine/scene/foliage";
+import type { FoliageResourceUsage, ForgeFoliageTypeDef, LandscapeFoliageRule } from "@engine/scene/foliage";
 import type {
   FoliageTargetFilters,
   FoliageTool,
   FoliageToolSettings,
   FoliageTypeView,
+  LandscapeFoliageLandscapeView,
+  LandscapeFoliageRuleView,
 } from "@/scene/SceneApp";
 
 /** A pickable asset row (id + display name) for the type dropdowns. */
@@ -16,6 +18,8 @@ export interface FoliagePanelOptions {
   body: HTMLElement;
   settings: FoliageToolSettings;
   types: FoliageTypeView[];
+  landscapeOptions: LandscapeFoliageLandscapeView[];
+  landscapeRules: LandscapeFoliageRuleView[];
   /** Number of foliage instances currently selected (Select/Lasso). */
   selectionCount: number;
   /** Per-type instance / triangle / draw-call cost of the level's foliage. */
@@ -39,6 +43,9 @@ export interface FoliagePanelOptions {
   selectInvalid(): void;
   reattachSelected(): void;
   removeSelected(): void;
+  addLandscapeRule(rule: Omit<LandscapeFoliageRule, "id">): void;
+  updateLandscapeRule(id: string, patch: Partial<Omit<LandscapeFoliageRule, "id">>): void;
+  removeLandscapeRule(id: string): void;
 }
 
 const TOOLS: { id: FoliageTool; label: string; tip: string }[] = [
@@ -198,6 +205,50 @@ function renderResourceUsage(usage: FoliageResourceUsage): string {
     </div>`;
 }
 
+function selectOptions(options: Array<{ id: string; name: string }>, selected: string): string {
+  return options
+    .map((option) => `<option value="${escapeHtml(option.id)}" ${option.id === selected ? "selected" : ""}>${escapeHtml(option.name)}</option>`)
+    .join("");
+}
+
+function renderGeneratedRules(options: FoliagePanelOptions): string {
+  const landscapes = options.landscapeOptions;
+  const types = options.types.map((type) => ({ id: type.id, name: type.name }));
+  const canAdd = landscapes.length > 0 && types.length > 0;
+  const landscapeOptions = selectOptions(landscapes, landscapes[0]?.id ?? "");
+  const typeOptions = selectOptions(types, types[0]?.id ?? "");
+  const rows = options.landscapeRules.length === 0
+    ? `<div class="detail-hint">No generated rules. Add a Landscape layer mapping below.</div>`
+    : options.landscapeRules.map((rule) => {
+      const landscape = landscapes.find((entry) => entry.id === rule.landscapeId);
+      const layers = landscape?.layers ?? [];
+      return `
+        <div class="detail-section foliage-generated-rule" data-landscape-rule="${escapeHtml(rule.id)}">
+          <div class="detail-section-title">${escapeHtml(rule.landscapeName)} / ${escapeHtml(rule.layerName)}</div>
+          <label class="detail-row"><span>Landscape</span><select data-rule-landscape>${selectOptions(landscapes, rule.landscapeId)}</select></label>
+          <label class="detail-row"><span>Layer</span><select data-rule-layer>${selectOptions(layers, rule.layerId)}</select></label>
+          <label class="detail-row"><span>Foliage Type</span><select data-rule-type>${selectOptions(types, rule.foliageTypeId)}</select></label>
+          <label class="detail-row"><span>Density</span><input type="number" min="0" max="10" step="0.05" value="${rule.density}" data-rule-density /></label>
+          <label class="detail-row"><span>Min Weight</span><input type="number" min="0" max="1" step="0.05" value="${rule.minWeight}" data-rule-min-weight /></label>
+          <label class="detail-row"><span>Seed</span><input type="number" min="0" step="1" value="${rule.seed}" data-rule-seed /></label>
+          <button type="button" class="foliage-type-remove" data-rule-remove>Remove Rule</button>
+        </div>`;
+    }).join("");
+  const defaultLayers = landscapes[0]?.layers ?? [];
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Generated Foliage</div>
+      <div class="detail-hint">Landscape layer weights generate foliage deterministically. Generated instances are not saved individually.</div>
+      ${rows}
+      <div class="foliage-generated-add">
+        <label class="detail-row"><span>Landscape</span><select data-rule-new-landscape ${canAdd ? "" : "disabled"}>${landscapeOptions}</select></label>
+        <label class="detail-row"><span>Layer</span><select data-rule-new-layer ${canAdd ? "" : "disabled"}>${selectOptions(defaultLayers, defaultLayers[0]?.id ?? "")}</select></label>
+        <label class="detail-row"><span>Foliage Type</span><select data-rule-new-type ${canAdd ? "" : "disabled"}>${typeOptions}</select></label>
+        <button type="button" data-rule-add ${canAdd ? "" : "disabled"}>Add Generated Rule</button>
+      </div>
+    </div>`;
+}
+
 export function renderFoliagePanel(options: FoliagePanelOptions): void {
   options.body.innerHTML = renderHtml(options);
   bindInputs(options);
@@ -300,6 +351,7 @@ function renderHtml(options: FoliagePanelOptions): string {
       </div>
     </div>
     ${renderResourceUsage(options.resourceUsage)}
+    ${renderGeneratedRules(options)}
     <div class="detail-section">
       <div class="detail-section-title">Foliage Types</div>
       <div class="foliage-type-list">${typeRows}</div>
@@ -403,6 +455,55 @@ function bindInputs(options: FoliagePanelOptions): void {
   });
 
   bindTypeDetails(options);
+  bindGeneratedRules(options);
+}
+
+function bindGeneratedRules(options: FoliagePanelOptions): void {
+  const { body } = options;
+  const landscapes = options.landscapeOptions;
+  const layersFor = (landscapeId: string): Array<{ id: string; name: string }> =>
+    landscapes.find((entry) => entry.id === landscapeId)?.layers ?? [];
+  const setLayerOptions = (select: HTMLSelectElement, landscapeId: string): void => {
+    const layers = layersFor(landscapeId);
+    select.innerHTML = selectOptions(layers, layers[0]?.id ?? "");
+  };
+  body.querySelectorAll<HTMLElement>("[data-landscape-rule]").forEach((row) => {
+    const id = row.dataset.landscapeRule;
+    if (!id) return;
+    const landscape = row.querySelector<HTMLSelectElement>("[data-rule-landscape]");
+    const layer = row.querySelector<HTMLSelectElement>("[data-rule-layer]");
+    const type = row.querySelector<HTMLSelectElement>("[data-rule-type]");
+    const density = row.querySelector<HTMLInputElement>("[data-rule-density]");
+    const minWeight = row.querySelector<HTMLInputElement>("[data-rule-min-weight]");
+    const seed = row.querySelector<HTMLInputElement>("[data-rule-seed]");
+    landscape?.addEventListener("change", () => {
+      if (layer) setLayerOptions(layer, landscape.value);
+      options.updateLandscapeRule(id, { landscapeId: landscape.value, layerId: layer?.value ?? "" });
+    });
+    layer?.addEventListener("change", () => options.updateLandscapeRule(id, { layerId: layer.value }));
+    type?.addEventListener("change", () => options.updateLandscapeRule(id, { foliageTypeId: type.value }));
+    density?.addEventListener("change", () => options.updateLandscapeRule(id, { density: Number(density.value) }));
+    minWeight?.addEventListener("change", () => options.updateLandscapeRule(id, { minWeight: Number(minWeight.value) }));
+    seed?.addEventListener("change", () => options.updateLandscapeRule(id, { seed: Number(seed.value) }));
+    row.querySelector<HTMLButtonElement>("[data-rule-remove]")?.addEventListener("click", () => options.removeLandscapeRule(id));
+  });
+  const newLandscape = body.querySelector<HTMLSelectElement>("[data-rule-new-landscape]");
+  const newLayer = body.querySelector<HTMLSelectElement>("[data-rule-new-layer]");
+  newLandscape?.addEventListener("change", () => {
+    if (newLayer) setLayerOptions(newLayer, newLandscape.value);
+  });
+  body.querySelector<HTMLButtonElement>("[data-rule-add]")?.addEventListener("click", () => {
+    const foliageTypeId = body.querySelector<HTMLSelectElement>("[data-rule-new-type]")?.value ?? "";
+    if (!newLandscape?.value || !newLayer?.value || !foliageTypeId) return;
+    options.addLandscapeRule({
+      landscapeId: newLandscape.value,
+      layerId: newLayer.value,
+      foliageTypeId,
+      density: 0.25,
+      minWeight: 0.5,
+      seed: 1,
+    });
+  });
 }
 
 function bindTypeDetails(options: FoliagePanelOptions): void {

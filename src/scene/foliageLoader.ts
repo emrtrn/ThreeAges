@@ -50,7 +50,10 @@ export async function loadFoliageTypesForData(
   data: LayoutFoliageData,
   manifest: AssetManifest,
 ): Promise<Map<string, ForgeFoliageTypeDef>> {
-  const ids = new Set(data.groups.map((group) => group.foliageTypeId));
+  const ids = new Set([
+    ...data.groups.map((group) => group.foliageTypeId),
+    ...(data.landscapeRules ?? []).map((rule) => rule.foliageTypeId),
+  ]);
   const map = new Map<string, ForgeFoliageTypeDef>();
   await Promise.all(
     [...ids].map(async (id) => {

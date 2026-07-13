@@ -3245,6 +3245,8 @@ export class EditorUi {
       body: this.foliageBody,
       settings: this.app.getFoliageToolSettings(),
       types: this.app.getFoliageTypeViews(),
+      landscapeOptions: this.app.getLandscapeFoliageLandscapeViews(),
+      landscapeRules: this.app.getLandscapeFoliageRuleViews(),
       selectionCount: this.app.getFoliageSelectionCount(),
       resourceUsage: this.app.getFoliageResourceUsage(),
       availableTypeAssets,
@@ -3272,6 +3274,9 @@ export class EditorUi {
         if (activeId) void this.app.updateFoliageType(activeId, patch);
       },
       reapply: () => this.app.reapplyFoliage(),
+      addLandscapeRule: (rule) => this.app.addLandscapeFoliageRule(rule),
+      updateLandscapeRule: (id, patch) => this.app.updateLandscapeFoliageRule(id, patch),
+      removeLandscapeRule: (id) => this.app.removeLandscapeFoliageRule(id),
     });
   }
 

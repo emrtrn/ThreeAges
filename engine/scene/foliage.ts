@@ -201,16 +201,33 @@ export interface LayoutFoliageGroup {
   instances: LayoutFoliageInstance[];
 }
 
+/** A persisted rule that generates foliage from one Landscape paint layer. */
+export interface LandscapeFoliageRule {
+  id: string;
+  landscapeId: string;
+  layerId: string;
+  foliageTypeId: string;
+  /** Candidate instances per square world unit; zero disables the rule. */
+  density: number;
+  /** Minimum bilinearly sampled Landscape layer weight required to spawn. */
+  minWeight: number;
+  /** Stable seed; generated instances are rebuilt from this instead of saved. */
+  seed: number;
+}
+
 export interface LayoutFoliageData {
   schema: 1;
   type: "foliage";
+  /** Hand-painted foliage only. Generated foliage is rebuilt from `landscapeRules`. */
   groups: LayoutFoliageGroup[];
+  /** Faz 3 Landscape layer → foliage mappings. Omitted by legacy sidecars. */
+  landscapeRules?: LandscapeFoliageRule[];
 }
 
 export const FOLIAGE_TARGET_KINDS: readonly FoliageTargetKind[] = ["landscape", "staticMesh"];
 
 export function createEmptyFoliageData(): LayoutFoliageData {
-  return { schema: 1, type: "foliage", groups: [] };
+  return { schema: 1, type: "foliage", groups: [], landscapeRules: [] };
 }
 
 function normalizeFoliageInstance(raw: unknown): LayoutFoliageInstance | null {
@@ -236,6 +253,26 @@ function normalizeFoliageTarget(raw: unknown): LayoutFoliageTarget {
     ? (source.kind as FoliageTargetKind)
     : "staticMesh";
   return { kind, id: readString(source.id, "") };
+}
+
+function normalizeLandscapeFoliageRule(raw: unknown, existing: readonly LandscapeFoliageRule[]): LandscapeFoliageRule | null {
+  if (!raw || typeof raw !== "object") return null;
+  const source = raw as Partial<LandscapeFoliageRule>;
+  const landscapeId = readString(source.landscapeId, "");
+  const layerId = readString(source.layerId, "");
+  const foliageTypeId = readString(source.foliageTypeId, "");
+  if (!landscapeId || !layerId || !foliageTypeId) return null;
+  let id = readString(source.id, "");
+  if (!id || existing.some((rule) => rule.id === id)) id = uniqueLandscapeFoliageRuleId(existing);
+  return {
+    id,
+    landscapeId,
+    layerId,
+    foliageTypeId,
+    density: clampRange(finiteNumber(source.density, 0.25), 0, 10),
+    minWeight: clampRange(finiteNumber(source.minWeight, 0.5), 0, 1),
+    seed: Math.floor(clampRange(finiteNumber(source.seed, 1), 0, 0xffffffff)) >>> 0,
+  };
 }
 
 /**
@@ -269,7 +306,13 @@ export function normalizeFoliageData(raw: unknown): LayoutFoliageData {
       instances,
     });
   }
-  return { schema: 1, type: "foliage", groups: normalizedGroups };
+  const rawRules = Array.isArray(source.landscapeRules) ? source.landscapeRules : [];
+  const landscapeRules: LandscapeFoliageRule[] = [];
+  for (const rawRule of rawRules) {
+    const rule = normalizeLandscapeFoliageRule(rawRule, landscapeRules);
+    if (rule) landscapeRules.push(rule);
+  }
+  return { schema: 1, type: "foliage", groups: normalizedGroups, landscapeRules };
 }
 
 /** A stable, collision-free id for a new foliage group (`foliage-group-<n>`). */
@@ -278,6 +321,14 @@ export function uniqueFoliageGroupId(groups: readonly LayoutFoliageGroup[]): str
   let index = 1;
   while (existing.has(`foliage-group-${index}`)) index += 1;
   return `foliage-group-${index}`;
+}
+
+/** A stable, collision-free id for a Landscape layer foliage rule. */
+export function uniqueLandscapeFoliageRuleId(rules: readonly LandscapeFoliageRule[]): string {
+  const existing = new Set(rules.map((rule) => rule.id));
+  let index = 1;
+  while (existing.has(`landscape-foliage-rule-${index}`)) index += 1;
+  return `landscape-foliage-rule-${index}`;
 }
 
 /**
