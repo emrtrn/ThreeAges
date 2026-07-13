@@ -6,9 +6,9 @@
   "radius": 0.5,
   "density": 1,
   "scaleMin": [
-    1,
-    1,
-    1
+    0.8,
+    0.8,
+    0.8
   ],
   "scaleMax": [
     1,

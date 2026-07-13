@@ -5235,6 +5235,63 @@ export class SceneApp {
     }));
   }
 
+  /** The active foliage type's resolved def (a copy), or null when none is selected. */
+  getActiveFoliageTypeDef(): ForgeFoliageTypeDef | null {
+    const active = this.foliageActiveType();
+    if (!active) return null;
+    return {
+      ...active.type,
+      scaleMin: [...active.type.scaleMin],
+      scaleMax: [...active.type.scaleMax],
+    };
+  }
+
+  /**
+   * Edits an existing Foliage Type's fields (Type Details panel): merges the patch,
+   * re-normalizes, updates the in-memory type, rebuilds its batches (so shadow/mesh
+   * changes show immediately — scale/rotation changes only affect NEW paints until a
+   * Reapply), and persists the change back to its `*.foliagetype.json` asset.
+   */
+  async updateFoliageType(typeId: string, patch: Partial<ForgeFoliageTypeDef>): Promise<void> {
+    const current = this.foliageTypes.get(typeId);
+    if (!current) return;
+    const next = normalizeFoliageType({ ...current, ...patch });
+    this.foliageTypes.set(typeId, next);
+    if (next.meshAssetId && next.meshAssetId !== current.meshAssetId) {
+      await this.ensureAssetLoaded(next.meshAssetId);
+    }
+    for (const group of this.foliageData.groups) {
+      if (group.foliageTypeId === typeId) this.rebuildFoliageGroupObject(group);
+    }
+    this.emitFoliageChanged();
+    await this.saveFoliageTypeAsset(typeId, next);
+  }
+
+  /** Persists a Foliage Type def back to its manifest asset via the dev endpoint. */
+  private async saveFoliageTypeAsset(assetId: string, def: ForgeFoliageTypeDef): Promise<void> {
+    const manifest = this.manifest ?? (await this.assetLoader?.loadManifest()) ?? null;
+    const record = manifest ? assetRecordById(manifest, assetId) : null;
+    if (!record) {
+      this.onStatus?.(`Foliage type asset not found for save: ${assetId}`, "warning");
+      return;
+    }
+    try {
+      const response = await fetch("/__save-foliage-type", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: assetPath(record), foliageType: def }),
+      });
+      if (!response.ok) {
+        this.onStatus?.(`Foliage type save failed: HTTP ${response.status}`, "warning");
+      }
+    } catch (error) {
+      this.onStatus?.(
+        `Foliage type save endpoint unreachable: ${error instanceof Error ? error.message : String(error)}`,
+        "warning",
+      );
+    }
+  }
+
   /** Adds a Foliage Type asset (by asset id) to the active type list and loads its mesh. */
   async addFoliageType(assetId: string): Promise<void> {
     if (this.foliageTypes.has(assetId)) {

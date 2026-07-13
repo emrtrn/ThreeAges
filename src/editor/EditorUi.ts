@@ -3249,6 +3249,7 @@ export class EditorUi {
       resourceUsage: this.app.getFoliageResourceUsage(),
       availableTypeAssets,
       staticMeshAssets,
+      activeType: this.app.getActiveFoliageTypeDef(),
       apply: (patch) => {
         this.app.setFoliageToolSettings(patch);
       },
@@ -3266,6 +3267,10 @@ export class EditorUi {
       selectInvalid: () => this.app.selectInvalidFoliage(),
       reattachSelected: () => this.app.reattachSelectedFoliage(),
       removeSelected: () => this.app.removeSelectedFoliage(),
+      updateType: (patch) => {
+        const activeId = this.app.getFoliageToolSettings().activeTypeId;
+        if (activeId) void this.app.updateFoliageType(activeId, patch);
+      },
     });
   }
 

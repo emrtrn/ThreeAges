@@ -44,7 +44,7 @@ boyamak için kullanılır. Temel parçalar:
 | Unreal parçası | Ne yapar | Forge kararı |
 | --- | --- | --- |
 | Static Mesh Foliage | Mesh instancing ile yoğun foliage render eder. | Faz 1'e al. Ana hedef. |
-| Actor Foliage | Blueprint/native actor instance yerleştirir. | Ertele. Yüksek yoğunlukta pahalı. |
+| Actor Foliage | Blueprint/native actor instance yerleştirir. | Kapsam dışı. Yüksek yoğunlukta pahalı; Forge InstancedMesh foliage kullanır. |
 | Foliage Type | Mesh, density, radius, scale, alignment, culling gibi ayarları taşır. | Faz 1'e al, sade schema ile. |
 | Paint / Erase / Single | Brush ile foliage ekleme/silme veya tek instance koyma. | Faz 1'e al. |
 | Select / Lasso / Remove | Foliage instance seçimi ve silme. | Faz 1 sade seçim, Lasso Faz 2. |
@@ -495,6 +495,13 @@ Alınacak fikirler:
   ve toplam instance / triangle / draw-call. Triangle + draw cost canlı
   `InstancedMesh` batch'lerinden okunur — `FoliageRenderBinding.groupRenderStat` +
   saf `computeFoliageResourceUsage` (`engine/scene/foliage.ts`).)
+- [x] Type Details editörü. (Panelde "Type Details" bölümü aktif tipin tüm
+  alanlarını düzenler: mesh, radius, density, scale min/max (per-axis), randomYaw,
+  alignToNormal, zOffset, slope, height, shadow, collision, cull. `SceneApp.updateFoliageType`
+  merge+normalize eder, tipin batch'lerini rebuild eder ve `*.foliagetype.json`
+  asset'ine kaydeder. Şema değişmedi — scale/yaw çeşitliliği zaten motor tarafından
+  destekleniyordu, sadece düzenleme UI'ı eksikti. Not: scale/rotation değişimi YENİ
+  paint'e uygulanır; mevcut instance'lara yansıması Reapply'ı bekliyor.)
 - [ ] Cull start/end fade.
 - [ ] Chunk/grid render batches.
 
@@ -503,8 +510,11 @@ Alınacak fikirler:
 > Selected"). 2026-07-13: resource usage raporu tamamlandı — panelde "Resource
 > Usage" bölümü (tip başına + toplam instance/triangle/draw). 2026-07-13: Fill
 > aracı tamamlandı — panelde "Fill" tool'u, tıklanan target'ın tüm footprint'ini
-> doldurur (kod tarafı; kullanıcı editor smoke'u bekliyor). `build:verify` +
-> `verify:imports` yeşil, 820 engine check geçiyor. Kalan: Reapply, cull fade,
+> doldurur. 2026-07-13: Type Details editörü tamamlandı — aktif tipin alanları
+> panelden düzenlenip `*.foliagetype.json`'a kaydediliyor (scale/rotation aralıkları
+> ile çeşitlilik artık UI'dan ayarlanabilir); bu Reapply'ı da anlamlı hale getiren
+> önkoşuldu (kod tarafı; kullanıcı editor smoke'u bekliyor). `build:verify` +
+> `verify:imports` yeşil, 821 engine check geçiyor. Kalan: Reapply, cull fade,
 > chunking.
 
 ### Faz 3 - Landscape Grass / Layer-driven Scatter
@@ -529,7 +539,12 @@ Alınacak fikirler:
 - [ ] Simulate/regenerate.
 - [ ] Generated foliage cache.
 
-### Faz 5 - Actor Foliage
+### Faz 5 - Actor Foliage (Kapsam dışı)
+
+> Karar (2026-07-13): Bu faz uygulanmayacak. Actor tabanlı foliage, web
+> projelerindeki CPU/bellek maliyetine göre gereksizdir. Etkileşimli özel
+> nesneler normal placement/actor sistemiyle yerleştirilir; yoğun foliage ise
+> InstancedMesh olarak kalır.
 
 - [ ] Actor class foliage type.
 - [ ] Low-density actor spawn.
@@ -555,7 +570,8 @@ Dokümana göre önerilen varsayılanlar:
 
 - Foliage ayrı ana editor mode olsun.
 - Faz 1 sadece Static Mesh Foliage olsun.
-- Actor Foliage ertelensin.
+- Actor Foliage kapsam dışı olsun. Etkileşimli özel nesneler normal placement
+  sistemiyle yönetilsin.
 - Foliage instance'ları normal placement listesine yazılmasın.
 - Collision default false olsun.
 - Landscape Grass / layer-driven scatter Faz 3'e kalsın.
@@ -587,7 +603,7 @@ Forge için Foliage Mode yapılmalı ve ana editor mode olarak konumlandırılma
 5. InstancedMesh render batches.
 6. Runtime görünürlük.
 
-Landscape Grass ve Actor Foliage sonraki fazlara ayrılmalı; Procedural Foliage
-kapsam dışıdır.
+Landscape Grass Faz 3'e ayrılsın; Procedural Foliage ve Actor Foliage kapsam
+dışıdır.
 Bu sıra sistemi uygulanabilir tutar ve Landscape / Mesh Paint / normal Placement
 sınırlarını temiz bırakır.

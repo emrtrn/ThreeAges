@@ -15296,6 +15296,27 @@ check("createFoliageType produces a valid, save-clean asset", () => {
   assert.equal(canonical.type, "foliageType");
 });
 
+check("normalizeFoliageType merges a Type Details patch, preserving untouched fields", () => {
+  const base = createFoliageType("Grass", "mesh-1");
+  // The Type Details editor sends `{ ...current, ...patch }` through normalize.
+  const edited = normalizeFoliageType({ ...base, scaleMin: [0.8, 0.8, 0.8], scaleMax: [1.5, 2, 1.5], randomYaw: false });
+  assert.deepEqual(edited.scaleMin, [0.8, 0.8, 0.8]);
+  assert.deepEqual(edited.scaleMax, [1.5, 2, 1.5]);
+  assert.equal(edited.randomYaw, false);
+  // Untouched fields survive the merge.
+  assert.equal(edited.meshAssetId, "mesh-1");
+  assert.equal(edited.name, "Grass");
+  assert.equal(edited.alignToNormal, true);
+  // An inverted scale patch is re-ordered so max >= min per axis (no negative range).
+  const inverted = normalizeFoliageType({ ...base, scaleMin: [2, 2, 2], scaleMax: [1, 1, 1] });
+  assert.deepEqual(inverted.scaleMax, [2, 2, 2]);
+  // Setting then clearing an optional height limit drops it (undefined = no limit).
+  const withHeight = normalizeFoliageType({ ...base, heightMin: 5 });
+  assert.equal(withHeight.heightMin, 5);
+  const cleared = normalizeFoliageType({ ...withHeight, heightMin: undefined });
+  assert.equal(cleared.heightMin, undefined);
+});
+
 check("validateSaveFoliageTypePayload requires a .foliagetype.json path", () => {
   const ok = validateSaveFoliageTypePayload({
     path: "assets/foliage/Grass.foliagetype.json",

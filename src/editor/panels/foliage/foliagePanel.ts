@@ -1,4 +1,4 @@
-import type { FoliageResourceUsage } from "@engine/scene/foliage";
+import type { FoliageResourceUsage, ForgeFoliageTypeDef } from "@engine/scene/foliage";
 import type {
   FoliageTargetFilters,
   FoliageTool,
@@ -24,11 +24,15 @@ export interface FoliagePanelOptions {
   availableTypeAssets: FoliageAssetOption[];
   /** Static-mesh assets, for the "new foliage type from mesh" flow. */
   staticMeshAssets: FoliageAssetOption[];
+  /** Resolved def of the active type (Type Details editor), or null when none. */
+  activeType: ForgeFoliageTypeDef | null;
   apply(patch: Partial<FoliageToolSettings>): void;
   setActiveType(id: string): void;
   addType(assetId: string): void;
   removeType(assetId: string): void;
   createType(name: string, meshAssetId: string): void;
+  /** Persists a field edit to the active Foliage Type asset. */
+  updateType(patch: Partial<ForgeFoliageTypeDef>): void;
   deselectAll(): void;
   selectInvalid(): void;
   reattachSelected(): void;
@@ -58,6 +62,91 @@ function formatCount(value: number): string {
   if (value < 1000) return String(value);
   if (value < 1_000_000) return `${(value / 1000).toFixed(value < 10_000 ? 1 : 0)}k`;
   return `${(value / 1_000_000).toFixed(value < 10_000_000 ? 1 : 0)}M`;
+}
+
+function numField(label: string, attr: string, value: number, step = "0.1", min?: string): string {
+  return `
+    <label class="detail-row">
+      <span>${label}</span>
+      <input type="number" step="${step}"${min !== undefined ? ` min="${min}"` : ""} value="${value}" ${attr} />
+    </label>`;
+}
+
+function optField(label: string, attr: string, value: number | undefined): string {
+  return `
+    <label class="detail-row">
+      <span>${label}</span>
+      <input type="number" step="0.5" placeholder="none" value="${
+        value === undefined ? "" : value
+      }" ${attr} />
+    </label>`;
+}
+
+function boolField(label: string, attr: string, value: boolean): string {
+  return `
+    <label class="detail-row detail-toggle">
+      <span>${label}</span>
+      <input type="checkbox" ${value ? "checked" : ""} ${attr} />
+    </label>`;
+}
+
+function scaleRow(label: string, axisAttr: string, vec: readonly number[]): string {
+  const cell = (axis: number): string =>
+    `<input type="number" step="0.05" min="0.001" value="${vec[axis]}" ${axisAttr}="${axis}" />`;
+  return `
+    <div class="detail-row foliage-scale-row">
+      <span>${label}</span>
+      <div class="foliage-scale-inputs">${cell(0)}${cell(1)}${cell(2)}</div>
+    </div>`;
+}
+
+function renderTypeDetails(
+  type: ForgeFoliageTypeDef | null,
+  meshAssets: FoliageAssetOption[],
+): string {
+  if (!type) {
+    return `
+    <div class="detail-section">
+      <div class="detail-section-title">Type Details</div>
+      <div class="detail-hint">Select a foliage type to edit its placement rules.</div>
+    </div>`;
+  }
+  const meshOptions = meshAssets
+    .map(
+      (asset) =>
+        `<option value="${escapeHtml(asset.id)}" ${
+          asset.id === type.meshAssetId ? "selected" : ""
+        }>${escapeHtml(asset.name)}</option>`,
+    )
+    .join("");
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Type Details</div>
+      <label class="detail-row">
+        <span>Mesh</span>
+        <select data-foliage-type-mesh>${
+          meshOptions || `<option value="${escapeHtml(type.meshAssetId)}">(current)</option>`
+        }</select>
+      </label>
+      ${numField("Radius", "data-foliage-type-num=\"radius\"", type.radius, "0.05", "0.001")}
+      ${numField("Density", "data-foliage-type-num=\"density\"", type.density, "0.1", "0")}
+      ${scaleRow("Scale Min", "data-foliage-type-scale-min", type.scaleMin)}
+      ${scaleRow("Scale Max", "data-foliage-type-scale-max", type.scaleMax)}
+      ${boolField("Random Yaw", "data-foliage-type-bool=\"randomYaw\"", type.randomYaw)}
+      ${boolField("Align to Normal", "data-foliage-type-bool=\"alignToNormal\"", type.alignToNormal)}
+      ${numField("Z Offset Min", "data-foliage-type-num=\"zOffsetMin\"", type.zOffsetMin, "0.05")}
+      ${numField("Z Offset Max", "data-foliage-type-num=\"zOffsetMax\"", type.zOffsetMax, "0.05")}
+      ${numField("Slope Min°", "data-foliage-type-num=\"slopeMin\"", type.slopeMin, "1", "0")}
+      ${numField("Slope Max°", "data-foliage-type-num=\"slopeMax\"", type.slopeMax, "1", "0")}
+      ${optField("Height Min", "data-foliage-type-opt=\"heightMin\"", type.heightMin)}
+      ${optField("Height Max", "data-foliage-type-opt=\"heightMax\"", type.heightMax)}
+      ${boolField("Cast Shadow", "data-foliage-type-bool=\"castShadow\"", type.castShadow)}
+      ${boolField("Receive Shadow", "data-foliage-type-bool=\"receiveShadow\"", type.receiveShadow)}
+      ${boolField("Collision", "data-foliage-type-bool=\"collision\"", type.collision)}
+      ${numField("Cull Start", "data-foliage-type-num=\"cullStart\"", type.cullStart, "1", "0")}
+      ${numField("Cull End", "data-foliage-type-num=\"cullEnd\"", type.cullEnd, "1", "0")}
+      <div class="detail-hint">Scale/rotation changes apply to new paint.</div>
+    </div>`;
 }
 
 function renderResourceUsage(usage: FoliageResourceUsage): string {
@@ -208,6 +297,7 @@ function renderHtml(options: FoliagePanelOptions): string {
         <button type="button" data-foliage-add ${availableOptions ? "" : "disabled"}>Add</button>
       </div>
     </div>
+    ${renderTypeDetails(options.activeType, options.staticMeshAssets)}
     <div class="detail-section">
       <div class="detail-section-title">New Type From Mesh</div>
       <label class="detail-row">
@@ -298,4 +388,63 @@ function bindInputs(options: FoliagePanelOptions): void {
     const name = (nameInput?.value ?? "").trim() || "Foliage Type";
     if (mesh) options.createType(name, mesh);
   });
+
+  bindTypeDetails(options);
+}
+
+function bindTypeDetails(options: FoliagePanelOptions): void {
+  const { body, activeType } = options;
+  if (!activeType) return;
+
+  body.querySelector<HTMLSelectElement>("[data-foliage-type-mesh]")?.addEventListener("change", (event) => {
+    const id = (event.target as HTMLSelectElement).value;
+    if (id) options.updateType({ meshAssetId: id });
+  });
+
+  body.querySelectorAll<HTMLInputElement>("[data-foliage-type-num]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.foliageTypeNum as keyof ForgeFoliageTypeDef;
+      const value = Number(input.value);
+      if (Number.isFinite(value)) options.updateType({ [key]: value } as Partial<ForgeFoliageTypeDef>);
+    });
+  });
+
+  body.querySelectorAll<HTMLInputElement>("[data-foliage-type-bool]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.foliageTypeBool as keyof ForgeFoliageTypeDef;
+      options.updateType({ [key]: input.checked } as Partial<ForgeFoliageTypeDef>);
+    });
+  });
+
+  body.querySelectorAll<HTMLInputElement>("[data-foliage-type-opt]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.foliageTypeOpt as "heightMin" | "heightMax";
+      const raw = input.value.trim();
+      if (raw === "") {
+        options.updateType({ [key]: undefined } as Partial<ForgeFoliageTypeDef>);
+        return;
+      }
+      const value = Number(raw);
+      if (Number.isFinite(value)) options.updateType({ [key]: value } as Partial<ForgeFoliageTypeDef>);
+    });
+  });
+
+  const bindScale = (
+    datasetKey: "foliageTypeScaleMin" | "foliageTypeScaleMax",
+    base: readonly number[],
+    key: "scaleMin" | "scaleMax",
+  ): void => {
+    body.querySelectorAll<HTMLInputElement>(`[data-${key === "scaleMin" ? "foliage-type-scale-min" : "foliage-type-scale-max"}]`).forEach((input) => {
+      input.addEventListener("change", () => {
+        const axis = Number(input.dataset[datasetKey]);
+        const value = Number(input.value);
+        if (!Number.isFinite(value) || axis < 0 || axis > 2) return;
+        const vec = [...base] as [number, number, number];
+        vec[axis] = value;
+        options.updateType({ [key]: vec } as Partial<ForgeFoliageTypeDef>);
+      });
+    });
+  };
+  bindScale("foliageTypeScaleMin", activeType.scaleMin, "scaleMin");
+  bindScale("foliageTypeScaleMax", activeType.scaleMax, "scaleMax");
 }
