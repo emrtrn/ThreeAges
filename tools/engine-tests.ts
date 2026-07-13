@@ -1894,6 +1894,36 @@ check("normalizeActorScriptDef round-trips legacy MeshRenderer nodes without bre
   assert.equal(mesh?.props.assetId, "old");
 });
 
+check("Actor Script preserves SplinePathFollower components for runtime entities", () => {
+  const def = normalizeActorScriptDef({
+    name: "Spline Patrol",
+    parentClass: "character",
+    components: [
+      { id: "root", component: "Transform", props: {} },
+      {
+        id: "splineFollower",
+        parent: "root",
+        component: "SplinePathFollower",
+        props: { splineId: "rail", speed: 2.4, wrapMode: "loop" },
+      },
+    ],
+  });
+  const entity = actorInstanceToEntity(def, { classRef: "SplinePatrol.actor.json", position: [0, 0, 0] }, 0);
+  assert.deepEqual(readSplinePathFollowerComponent(entity), {
+    splineId: "rail",
+    speed: 2.4,
+    startDistance: 0,
+    wrapMode: "loop",
+    reverse: false,
+    orientToSpline: true,
+    orientationOffset: [0, 0, 0],
+    positionOffset: [0, 0, 0],
+    applyPitch: true,
+    applyRoll: true,
+    enabled: true,
+  });
+});
+
 check("actorInstanceToEntity bakes placement scale into the flattened capsule collider", () => {
   const def = normalizeActorScriptDef({
     name: "Mech",

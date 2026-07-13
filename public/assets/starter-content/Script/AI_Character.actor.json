@@ -80,6 +80,24 @@
         "stateTree": "assets/starter-content/AI/Boss_Phase_Demo.stateTree.json"
       },
       "parent": "root"
+    },
+    {
+      "id": "splinePathFollower",
+      "component": "SplinePathFollower",
+      "props": {
+        "splineId": "spline-1",
+        "speed": 2.4,
+        "startDistance": 0,
+        "wrapMode": "loop",
+        "reverse": false,
+        "orientToSpline": true,
+        "orientationOffset": [0, 0, 0],
+        "positionOffset": [0, 0, 0],
+        "applyPitch": true,
+        "applyRoll": true,
+        "enabled": true
+      },
+      "parent": "root"
     }
   ],
   "interfaces": [],

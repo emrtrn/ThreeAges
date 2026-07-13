@@ -49,6 +49,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       aiDebugText(app) +
       aiInspectorText(app) +
       aiNavDebugText(app) +
+      splinePathFollowerDebugText(app) +
       uiDebugText(app) +
       scriptMessageDebugText(app);
     accumMs = 0;
@@ -396,6 +397,18 @@ function aiNavDebugText(app: RuntimeStatsApp): string {
   const snapshot = app.getAiNavigationDebugSnapshot?.();
   if (!snapshot || snapshot.followers.length === 0) return "";
   return `\n${formatAiNavDebug(snapshot).join("\n")}`;
+}
+
+/** Generic Spline follower block, or "" when the runtime has none. */
+function splinePathFollowerDebugText(app: RuntimeStatsApp): string {
+  const followers = app.getSplinePathFollowerDebugSnapshot?.() ?? [];
+  if (followers.length === 0) return "";
+  const lines = [`spline followers (${followers.length})`];
+  for (const follower of followers.slice(0, 4)) {
+    const missing = follower.missingSpline ? " missing" : "";
+    lines.push(`  ${follower.entityId}: ${follower.splineId} d:${follower.distance.toFixed(2)}${missing}`);
+  }
+  return `\n${lines.join("\n")}`;
 }
 
 /**

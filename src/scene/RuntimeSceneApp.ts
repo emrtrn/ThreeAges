@@ -37,7 +37,10 @@ import {
 import { normalizeAiStateTreeAsset, type AiStateTreeAsset } from "@engine/ai/stateTreeAsset";
 import { PhysicsSubsystem } from "@engine/physics/physicsSubsystem";
 import { MovingPlatformSubsystem } from "@engine/physics/movingPlatformSubsystem";
-import { SplinePathFollowerSubsystem } from "@engine/scene/splinePathFollower";
+import {
+  SplinePathFollowerSubsystem,
+  type SplinePathFollowerDebugState,
+} from "@engine/scene/splinePathFollower";
 import { resolveCharacterCapsule } from "@engine/scene/capsule";
 import {
   findGridPath,
@@ -513,6 +516,8 @@ export interface RuntimeStatsApp {
   getAiDebugSnapshot?(): AiDebugSnapshot;
   /** Optional: AI path-following (waypoints, replans, stalls) for the `?debug` overlay. */
   getAiNavigationDebugSnapshot?(): AiNavigationDebugSnapshot;
+  /** Optional: runtime Generic Spline followers for the `?debug` overlay. */
+  getSplinePathFollowerDebugSnapshot?(): readonly SplinePathFollowerDebugState[];
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
@@ -906,10 +911,6 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
     this.applyUserAudioSettings(this.userSettings);
     this.movingPlatformSubsystem = new MovingPlatformSubsystem(this.syncEntityTransform);
-    this.splinePathFollowerSubsystem = new SplinePathFollowerSubsystem(
-      () => this.splineRegistry,
-      this.syncEntityTransform,
-    );
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
       this.syncEntityTransform,
@@ -930,6 +931,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         platforms: this.movingPlatformSubsystem,
       },
     );
+    // A SplinePathFollower is an explicit kinematic route owner. It runs after
+    // character/AI movement and resets that subsystem's local copy, so an AI
+    // controller cannot overwrite its spline sample on the following frame.
+    this.splinePathFollowerSubsystem = new SplinePathFollowerSubsystem(
+      () => this.splineRegistry,
+      (entityId, transform) => {
+        this.characterMovementSubsystem.resetEntityTransform(entityId, transform);
+        this.syncEntityTransform(entityId, transform);
+      },
+    );
 
     this.engineApp.registerSubsystem(this.animationSubsystem);
     this.engineApp.registerSubsystem(this.inputSubsystem);
@@ -937,12 +948,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // The platform subsystem must tick before character movement so a rider is
     // carried by the same frame's platform delta (no one-frame lag).
     this.engineApp.registerSubsystem(this.movingPlatformSubsystem);
-    this.engineApp.registerSubsystem(this.splinePathFollowerSubsystem);
     // AI decisions tick before character movement so an agent's move-intent (Faz 3)
     // is consumed by the same frame's movement resolve. In Faz 1 the subsystem
     // holds controllers + blackboards only and does no per-frame work.
     this.engineApp.registerSubsystem(this.aiSubsystem);
     this.engineApp.registerSubsystem(this.characterMovementSubsystem);
+    // Explicit spline movement is applied last so it wins over optional AI/nav
+    // move intents on the same actor.
+    this.engineApp.registerSubsystem(this.splinePathFollowerSubsystem);
     this.physicsSubsystem.setTransformSink(this.applyEntityTransformToRender);
     this.behaviorSubsystem = new BehaviorSubsystem(
       this.createSceneBehaviorRegistry(),
@@ -1266,6 +1279,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   getSplinesByTag(tag: string | null | undefined): readonly SplineQuery[] {
     return this.splineRegistry.getSplinesByTag(tag);
+  }
+
+  /** Snapshots Generic Spline-driven entities for `?debug` and browser smoke checks. */
+  getSplinePathFollowerDebugSnapshot(): readonly SplinePathFollowerDebugState[] {
+    return this.splinePathFollowerSubsystem.followers();
   }
 
   /** Snapshots AI path following (waypoints, stuck recovery) for `?debug`. */

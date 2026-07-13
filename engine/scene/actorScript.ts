@@ -131,6 +131,7 @@ export const ACTOR_COMPONENT_KINDS = [
   "Interaction",
   "Behavior",
   "CharacterMovement",
+  "SplinePathFollower",
   "SpringArm",
   "Camera",
   "AIController",

@@ -109,6 +109,7 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   Interaction: "☞",
   Behavior: "⚙",
   CharacterMovement: "CM",
+  SplinePathFollower: "SP",
   SmartObject: "SO",
   SpringArm: "⌐",
   Camera: "🎥",
