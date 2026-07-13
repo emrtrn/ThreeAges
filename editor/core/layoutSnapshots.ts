@@ -195,6 +195,7 @@ export function cloneActorInstance(actor: LayoutActorInstance): LayoutActorInsta
   if (actor.rotation !== undefined) clone.rotation = [...actor.rotation];
   if (actor.scale !== undefined) clone.scale = cloneScale(actor.scale);
   if (actor.scaleLocked !== undefined) clone.scaleLocked = actor.scaleLocked;
+  if (actor.patrolRoute !== undefined) clone.patrolRoute = { ...actor.patrolRoute };
   return clone;
 }
 

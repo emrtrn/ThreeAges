@@ -77,15 +77,6 @@
           "maxSpeed": 3.2,
           "clearancePadding": 0.1
         },
-        "patrolRoute": {
-          "source": "spline",
-          "splineId": "spline-1",
-          "entry": "nearest",
-          "speed": 2.4,
-          "acceptanceRadius": 0.55,
-          "lookAheadDistance": 1.2,
-          "wrapMode": "loop"
-        },
         "stateTree": "assets/starter-content/AI/Boss_Phase_Demo.stateTree.json"
       },
       "parent": "root"

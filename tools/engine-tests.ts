@@ -1924,6 +1924,28 @@ check("Actor Script preserves SplinePathFollower components for runtime entities
   });
 });
 
+check("actor instance patrolRoute overrides the reusable AIController class route", () => {
+  const def = normalizeActorScriptDef({
+    name: "AI Patrol",
+    parentClass: "character",
+    components: [{ id: "ai", parent: "root", component: "AIController", props: {} }],
+  });
+  const entity = actorInstanceToEntity(def, {
+    classRef: "AI_Patrol.actor.json",
+    position: [0, 0, 0],
+    patrolRoute: {
+      source: "spline",
+      splineId: "level-rail",
+      entry: "nearest",
+      speed: 2.4,
+      acceptanceRadius: 0.55,
+      lookAheadDistance: 1.2,
+      wrapMode: "loop",
+    },
+  }, 0);
+  assert.equal(readAIControllerComponent(entity)?.patrolRoute?.splineId, "level-rail");
+});
+
 check("actorInstanceToEntity bakes placement scale into the flattened capsule collider", () => {
   const def = normalizeActorScriptDef({
     name: "Mech",
@@ -18457,6 +18479,7 @@ check("validateActorInstance allowlists classRef + transform and rejects bad ref
     name: "Door",
     rotation: [0, 45, 0],
     scale: 1.5,
+    patrolRoute: { source: "spline", splineId: "route-1", entry: "nearest", speed: 2.4 },
     sensor: true, // not an instance field â†’ dropped
   });
   assert.equal(actor.classRef, "blueprints/DoorBP.actor.json");
@@ -18464,6 +18487,7 @@ check("validateActorInstance allowlists classRef + transform and rejects bad ref
   assert.equal(actor.name, "Door");
   assert.deepEqual(actor.rotation, [0, 45, 0]);
   assert.equal(actor.scale, 1.5);
+  assert.deepEqual(actor.patrolRoute, { source: "spline", splineId: "route-1", entry: "nearest", speed: 2.4 });
   assert.equal("sensor" in actor, false);
 
   assert.throws(() => validateActorInstance({ classRef: "DoorBP.json", position: [0, 0, 0] }));

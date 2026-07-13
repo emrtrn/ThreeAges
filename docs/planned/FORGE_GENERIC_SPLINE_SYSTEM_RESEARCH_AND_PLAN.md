@@ -1799,8 +1799,8 @@ asset'leri davranışını değiştirmemelidir.
 
 - [x] AI Controller / StateTree için `AiPatrolRoute` veri sözleşmesini ekle. (`AIController.patrolRoute` + `forge.moveAlongPatrolRoute`)
 - [x] Editor'da Target Points / Spline rota kaynağı seçicisini ekle. (Actor Script Editor > AIController > Patrol Route)
-- [ ] Spline seçildiğinde spline actor referans picker'ını ve geçersiz/missing
-  spline uyarısını ekle.
+- [x] Spline seçildiğinde spline actor referans picker'ını ve geçersiz/missing
+  spline uyarısını ekle. (Actor instance Details > AI Patrol Route; missing ID korunur ve işaretlenir.)
 - [x] `entry: "nearest"` için `SplineQuery.getClosestDistanceToPoint(...)`
   ile en yakın spline mesafesini bul.
 - [x] AI'yi bu giriş noktasına Nav/CharacterMovement üzerinden yürüt; giriş
@@ -1815,8 +1815,8 @@ asset'leri davranışını değiştirmemelidir.
   deterministik olduğunu test et.
 - [x] Aynı AI entity'sinde `SplinePathFollower` ve AI spline patrol'un transform
   sahipliği çakışmasını doğrula ve engelle. (`SplinePathFollowerSubsystem`, AI spline route seçildiğinde kinematik follower'ı atlar.)
-- [ ] Level-owned spline ID'leri için actor asset'ten bağımsız per-instance
-  route/component override serialization ve editor akışını tasarla/uygula.
+- [x] Level-owned spline ID'leri için actor asset'ten bağımsız per-instance
+  route/component override serialization ve editor akışını tasarla/uygula. (`LayoutActorInstance.patrolRoute` yalnızca AI patrol için dar kapsamlı override'dır.)
 - [ ] Save/Reload, missing spline, closed-loop seam, 30/120 FPS ve browser
   runtime regression testlerini ekle.
 

@@ -176,6 +176,15 @@ export function actorInstanceToEntity(
         : { ...node.props };
   }
 
+  // Generic Spline ids are level-owned. Keep a reusable Actor Script's default
+  // patrol route intact unless this particular placement explicitly overrides it.
+  if (instance.patrolRoute && components.AIController) {
+    components.AIController = {
+      ...components.AIController,
+      patrolRoute: { ...instance.patrolRoute },
+    };
+  }
+
   if (!components[BEHAVIOR_COMPONENT]) {
     const behavior = selectBehaviorData(def);
     if (behavior) {

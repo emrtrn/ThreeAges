@@ -207,8 +207,9 @@ export interface LayoutModelInstances {
  * world transform + hierarchy/flags. The runtime resolves the class and spawns
  * its component template + event bindings (see `engine/scene/actorInstance.ts`).
  *
- * Sınıf ≠ Instance: the class is authored once and placed many times. Per-instance
- * variable/component `overrides` are a deferred phase (kept off the type for now).
+ * Sınıf ≠ Instance: the class is authored once and placed many times. A narrow
+ * level-owned AI patrol override is supported because spline ids belong to the
+ * level, not to a reusable Actor Script class.
  */
 export interface LayoutActorInstance {
   /** Path to the `*.actor.json` class-asset, relative to the public root. */
@@ -230,6 +231,8 @@ export interface LayoutActorInstance {
   scale?: number | Vec3;
   /** Editor hint: keep scale axes proportional when editing. */
   scaleLocked?: boolean;
+  /** Optional level-owned override merged into this actor's AIController at spawn. */
+  patrolRoute?: AiPatrolRoute;
 }
 
 export interface LayoutCharacter {
@@ -885,3 +888,4 @@ export interface RoomLayout {
   /** World-space UI widgets (screen-projected DOM billboards; see `engine/ui/uiWorldWidget.ts`). */
   worldWidgets?: WorldUiWidget[];
 }
+import type { AiPatrolRoute } from "./components";

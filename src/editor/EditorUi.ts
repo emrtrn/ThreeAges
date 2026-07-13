@@ -21,6 +21,7 @@ import type {
   SceneApp,
 } from "@/scene/SceneApp";
 import type { MetadataSchema } from "@engine/scene/metadataSchema";
+import type { AiPatrolRoute } from "@engine/scene/components";
 import {
   AMBIENT_SOUND_ASSET_ID,
   isShapePrimitiveType,
@@ -754,6 +755,67 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLButtonElement>("[data-view-mode]").forEach((button) => {
       button.classList.toggle("active", button.dataset.viewMode === state.mode);
     });
+  }
+
+  private renderActorPatrolRouteSection(selection: EditableSelection): string {
+    if (selection.kind !== "actor") return "";
+    const route = this.app.getSelectedActorPatrolRoute();
+    const source = route?.source ?? "targetPoints";
+    const splines = this.app.getSplineReferences();
+    const selectedSpline = route?.splineId ?? "";
+    const splineOptions = [
+      `<option value="" ${selectedSpline ? "" : "selected"}>— select spline —</option>`,
+      ...splines.map(
+        (spline) =>
+          `<option value="${escapeHtml(spline.id)}" ${spline.id === selectedSpline ? "selected" : ""}>${escapeHtml(spline.name)} (${escapeHtml(spline.id)})</option>`,
+      ),
+      ...(selectedSpline && !splines.some((spline) => spline.id === selectedSpline)
+        ? [`<option value="${escapeHtml(selectedSpline)}" selected>${escapeHtml(selectedSpline)} (missing)</option>`]
+        : []),
+    ].join("");
+    const disabled = selection.locked ? "disabled" : "";
+    return `
+      <div class="detail-section">
+        <div class="detail-section-title">AI Patrol Route <small>instance override</small></div>
+        <label class="detail-row"><span>Source</span><select data-actor-patrol-source ${disabled}>
+          <option value="targetPoints" ${source === "targetPoints" ? "selected" : ""}>Target Points</option>
+          <option value="spline" ${source === "spline" ? "selected" : ""}>Generic Spline</option>
+        </select></label>
+        <label class="detail-row"><span>Spline</span><select data-actor-patrol-spline ${source === "spline" ? "" : "disabled"} ${disabled}>${splineOptions}</select></label>
+        <label class="detail-row"><span>Entry</span><select data-actor-patrol-entry ${source === "spline" ? "" : "disabled"} ${disabled}>
+          <option value="nearest" ${route?.entry !== "start" ? "selected" : ""}>Nearest Point</option>
+          <option value="start" ${route?.entry === "start" ? "selected" : ""}>Spline Start</option>
+        </select></label>
+        <label class="detail-row"><span>Speed</span><input data-actor-patrol-speed type="number" step="0.1" min="0" value="${route?.speed ?? 2.4}" ${disabled} /></label>
+        <label class="detail-row"><span>Look Ahead</span><input data-actor-patrol-lookahead type="number" step="0.1" min="0.1" value="${route?.lookAheadDistance ?? 1.2}" ${source === "spline" ? "" : "disabled"} ${disabled} /></label>
+      </div>`;
+  }
+
+  private bindActorPatrolRouteInputs(selection: EditableSelection): void {
+    if (selection.kind !== "actor" || selection.locked) return;
+    const source = this.detailsBody.querySelector<HTMLSelectElement>("[data-actor-patrol-source]");
+    const spline = this.detailsBody.querySelector<HTMLSelectElement>("[data-actor-patrol-spline]");
+    const entry = this.detailsBody.querySelector<HTMLSelectElement>("[data-actor-patrol-entry]");
+    const speed = this.detailsBody.querySelector<HTMLInputElement>("[data-actor-patrol-speed]");
+    const lookAhead = this.detailsBody.querySelector<HTMLInputElement>("[data-actor-patrol-lookahead]");
+    const commit = (): void => {
+      const sourceValue = source?.value === "spline" ? "spline" : "targetPoints";
+      const next: AiPatrolRoute = {
+        source: sourceValue,
+        entry: entry?.value === "start" ? "start" : "nearest",
+        speed: Math.max(0, Number(speed?.value) || 0),
+        lookAheadDistance: Math.max(0.1, Number(lookAhead?.value) || 1.2),
+        wrapMode: "loop",
+      };
+      if (sourceValue === "spline" && spline?.value) next.splineId = spline.value;
+      this.app.setSelectedActorPatrolRoute(next);
+      this.renderDetails(this.selected);
+    };
+    source?.addEventListener("change", commit);
+    spline?.addEventListener("change", commit);
+    entry?.addEventListener("change", commit);
+    speed?.addEventListener("change", commit);
+    lookAhead?.addEventListener("change", commit);
   }
 
   /**
@@ -3517,7 +3579,8 @@ export class EditorUi {
           locked: selection.locked,
           complexAsSimple: this.app.assetCollisionComplexity(selection.assetId) === "complexAsSimple",
         }),
-        components: renderComponentsSection(selection, this.editableAssets),
+        components:
+          renderComponentsSection(selection, this.editableAssets) + this.renderActorPatrolRouteSection(selection),
         metadata: renderMetadataSections(selection, this.metadataSchema),
       },
     });
@@ -3568,6 +3631,7 @@ export class EditorUi {
           setSelectionInteraction: (interaction) => this.app.setSelectionInteraction(interaction),
           setSelectionMovingPlatform: (platform) => this.app.setSelectionMovingPlatform(platform),
         }),
+      bindActorPatrolRouteInputs: () => this.bindActorPatrolRouteInputs(selection),
       bindMetadataInputs: () =>
         bindMetadataInputs({
           body: this.detailsBody,

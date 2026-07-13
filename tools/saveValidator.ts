@@ -536,7 +536,39 @@ export function validateActorInstance(value: unknown): Record<string, unknown> {
       ? entry.scale.map((axis) => validateScaleValue(axis, "actor scale component"))
       : validateScaleValue(entry.scale, "actor scale");
   }
+  if (entry.patrolRoute !== undefined) actor.patrolRoute = validateActorPatrolRoute(entry.patrolRoute);
   return actor;
+}
+
+function validateActorPatrolRoute(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("actor patrolRoute must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const source = input.source === "spline" ? "spline" : input.source === "targetPoints" ? "targetPoints" : null;
+  if (!source) throw new Error("actor patrolRoute source must be targetPoints or spline");
+  const route: Record<string, unknown> = { source };
+  if (typeof input.splineId === "string" && input.splineId.length > 0) route.splineId = input.splineId;
+  if (typeof input.targetPointTag === "string" && input.targetPointTag.length > 0) {
+    route.targetPointTag = input.targetPointTag;
+  }
+  if (input.entry !== undefined) {
+    if (input.entry !== "nearest" && input.entry !== "start") throw new Error("invalid actor patrolRoute entry");
+    route.entry = input.entry;
+  }
+  if (input.wrapMode !== undefined) {
+    if (input.wrapMode !== "loop" && input.wrapMode !== "pingPong" && input.wrapMode !== "clamp") {
+      throw new Error("invalid actor patrolRoute wrapMode");
+    }
+    route.wrapMode = input.wrapMode;
+  }
+  for (const key of ["speed", "acceptanceRadius", "lookAheadDistance"] as const) {
+    if (input[key] === undefined) continue;
+    const number = requireFiniteNumber(input[key], `actor patrolRoute ${key}`);
+    if (number < 0) throw new Error(`actor patrolRoute ${key} must be non-negative`);
+    route[key] = number;
+  }
+  return route;
 }
 
 function validateHexColor(value: unknown, label: string): string {

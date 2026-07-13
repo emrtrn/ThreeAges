@@ -41,6 +41,7 @@ export interface InstanceDetailsBindOptions {
   setSelectionAnimation: (clip: string | undefined) => void;
   bindPhysicsInputs: () => void;
   bindComponentsInputs: () => void;
+  bindActorPatrolRouteInputs: () => void;
   bindMetadataInputs: () => void;
 }
 
@@ -146,6 +147,7 @@ export function bindInstanceDetails({
   setSelectionAnimation,
   bindPhysicsInputs,
   bindComponentsInputs,
+  bindActorPatrolRouteInputs,
   bindMetadataInputs,
 }: InstanceDetailsBindOptions): void {
   body.querySelectorAll<HTMLInputElement>('input[data-detail="pr"]').forEach((input) => {
@@ -231,6 +233,7 @@ export function bindInstanceDetails({
 
   bindPhysicsInputs();
   bindComponentsInputs();
+  bindActorPatrolRouteInputs();
   bindMetadataInputs();
 }
 

@@ -445,7 +445,7 @@ import {
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import type { SceneDocument } from "@engine/scene/sceneDocument";
 import { readRenderableMeshComponent } from "@engine/scene/components";
-import type { TransformComponent } from "@engine/scene/components";
+import type { AiPatrolRoute, TransformComponent } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
 import { createCharacterSceneObject, entityCharacterItem } from "@engine/render-three/models";
 import { actorInstanceToEntity } from "@engine/scene/actorInstance";
@@ -569,6 +569,11 @@ export interface EditableTransformSnapshot {
 }
 
 export interface TargetPointReference {
+  id: string;
+  name: string;
+}
+
+export interface SplineReference {
   id: string;
   name: string;
 }
@@ -5334,6 +5339,45 @@ export class SceneApp {
       id: point.id,
       name: resolveTargetPoint(point).name,
     }));
+  }
+
+  getSplineReferences(): SplineReference[] {
+    return (this.layout?.splines ?? []).map((spline) => ({
+      id: spline.id,
+      name: spline.name ?? spline.id,
+    }));
+  }
+
+  getSelectedActorPatrolRoute(): AiPatrolRoute | undefined {
+    if (!this.selection || this.selection.kind !== "actor") return undefined;
+    const route = this.layout?.actors?.[this.selection.index]?.patrolRoute;
+    return route ? { ...route } : undefined;
+  }
+
+  setSelectedActorPatrolRoute(route: AiPatrolRoute | undefined): void {
+    if (!this.layout || !this.selection || this.selection.kind !== "actor") return;
+    const index = this.selection.index;
+    const actor = this.layout.actors?.[index];
+    if (!actor || actor.locked) return;
+    const before = cloneActorInstance(actor);
+    const after = cloneActorInstance(actor);
+    if (route) after.patrolRoute = { ...route };
+    else delete after.patrolRoute;
+    this.executeCommand({
+      label: "Edit AI Patrol Route",
+      redo: () => {
+        if (!this.layout?.actors) return;
+        this.layout.actors[index] = cloneActorInstance(after);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+      undo: () => {
+        if (!this.layout?.actors) return;
+        this.layout.actors[index] = cloneActorInstance(before);
+        this.emitSceneObjectsChanged();
+        this.scheduleAutoSave();
+      },
+    });
   }
 
   // --- Landscape (heightfield terrain) actors --------------------------------
