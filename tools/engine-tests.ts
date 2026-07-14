@@ -230,7 +230,16 @@ import { InputSubsystem } from "../engine/input/inputSubsystem";
 import { BehaviorSubsystem } from "../engine/behavior/behaviorSubsystem";
 import type { BehaviorRegistry } from "../engine/behavior/behaviorSubsystem";
 import { ScriptMessageBus } from "../engine/behavior/scriptMessages";
-import { PhysicsSubsystem } from "../engine/physics/physicsSubsystem";
+import {
+  isOutsideDynamicActiveArea,
+  PhysicsSubsystem,
+} from "../engine/physics/physicsSubsystem";
+import {
+  applyLodBias,
+  biasedLodDistance,
+  createLodTemplate,
+  normalizeLodBias,
+} from "../engine/render-three/distanceLod";
 import { rotatedBoxAabb, rotatedBoxFootprintXZ } from "../engine/physics/rotatedBox";
 import {
   initialElapsed,
@@ -5071,6 +5080,32 @@ check("behavior event bindings dispatch overlap and hit begin/end edges", () => 
   ]);
 });
 
+check("dynamic physics active area classifies bodies outside its finite radius", () => {
+  assert.equal(isOutsideDynamicActiveArea([10, 0, 0], [0, 0, 0], 10), false);
+  assert.equal(isOutsideDynamicActiveArea([10.01, 0, 0], [0, 0, 0], 10), true);
+  assert.equal(isOutsideDynamicActiveArea([0, 0, 11], [0, 0, 0], 10), true);
+  assert.equal(isOutsideDynamicActiveArea([0, 0, 0], [0, 0, 0], 0), false);
+  assert.equal(isOutsideDynamicActiveArea([Number.NaN, 0, 0], [0, 0, 0], 10), false);
+});
+
+check("LOD templates preserve authored distances while quality bias retunes them", () => {
+  assert.equal(normalizeLodBias(undefined), 1);
+  assert.equal(normalizeLodBias(0), 1);
+  assert.equal(biasedLodDistance(40, 0.5), 20);
+  const template = createLodTemplate([
+    { distance: 40, object: new Group() },
+    { distance: 0, object: new Group() },
+    { distance: 100, object: new Group() },
+  ], 0.5);
+  assert.deepEqual(template.levels.map((level) => level.distance), [0, 20, 50]);
+
+  const root = new Group();
+  root.add(template);
+  assert.equal(applyLodBias(root, 0.25), 1);
+  assert.deepEqual(template.levels.map((level) => level.distance), [0, 10, 25]);
+  assert.equal(applyLodBias(new Group(), 0.25), 0);
+});
+
 check("physics subsystem reports deterministic placeholder contacts", () => {
   const physics = new PhysicsSubsystem();
   physics.setEntities([
@@ -5315,6 +5350,59 @@ await checkAsync("rapier simulatePhysics body falls under configured gravity", a
     const last = synced.at(-1) ?? assert.fail("synced");
     assert.ok(last.position[1] < 5);
     assert.ok(Math.abs(last.rotation[1] - 30) < 1e-3, `rotationY=${last.rotation[1]}`);
+    await app.dispose();
+  } finally {
+    console.warn = warn;
+  }
+});
+
+await checkAsync("rapier active area suspends distant dynamics and resumes them near focus", async () => {
+  const physics = new PhysicsSubsystem({ backend: "rapier" });
+  physics.setGravity([0, -10, 0]);
+  let focus: [number, number, number] = [0, 0, 0];
+  const synced: TransformComponent[] = [];
+  physics.setTransformSink((_entityId, transform) => {
+    synced.push({
+      position: [...transform.position],
+      rotation: [...transform.rotation],
+      scale: [...transform.scale],
+    });
+  });
+  physics.setDynamicActiveArea({ activeDistance: 10, focusPosition: () => focus });
+  physics.setEntities([
+    {
+      id: "distant-crate",
+      components: {
+        Transform: { position: [100, 5, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1, 1, 1],
+          isStatic: false,
+          isSensor: false,
+          simulatePhysics: true,
+        },
+      },
+    },
+  ]);
+
+  const app = new EngineApp();
+  app.registerSubsystem(physics);
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (String(args[0] ?? "").includes("deprecated parameters for the initialization function")) {
+      return;
+    }
+    warn(...args);
+  };
+  try {
+    await app.init();
+    for (let frame = 0; frame < 12; frame += 1) app.update(1 / 60);
+    assert.equal(synced.length, 0, "distant dynamic body should not synchronize while suspended");
+
+    focus = [100, 5, 0];
+    for (let frame = 0; frame < 12; frame += 1) app.update(1 / 60);
+    const last = synced.at(-1) ?? assert.fail("resumed dynamic body should synchronize");
+    assert.ok(last.position[1] < 5, `resumed body should fall, y=${last.position[1]}`);
     await app.dispose();
   } finally {
     console.warn = warn;

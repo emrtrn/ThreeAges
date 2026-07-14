@@ -16,6 +16,7 @@ import { LoadProgressTracker, formatLoadDetail } from "@engine/loading/loadProgr
 import { loadRoomLayout } from "./roomLayout";
 import { EngineApp } from "@engine/core/EngineApp";
 import { AnimationSubsystem } from "@engine/render-three/animationSubsystem";
+import { applyLodBias } from "@engine/render-three/distanceLod";
 import { ActionMap } from "@engine/input/actionMap";
 import { DEFAULT_INPUT_BINDINGS } from "@/game/defaultInputBindings";
 import { InputSubsystem } from "@engine/input/inputSubsystem";
@@ -1409,6 +1410,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.animationSubsystem.setDistanceUpdateSettings(
       extensions.farAnimationUpdateHz !== undefined ? { farUpdateHz: extensions.farAnimationUpdateHz } : {},
     );
+    this.physicsSubsystem.setDynamicActiveArea(
+      extensions.physicsActiveDistance !== undefined
+        ? {
+            activeDistance: extensions.physicsActiveDistance,
+            focusPosition: () => this.qualityFocusPosition(),
+          }
+        : {},
+    );
+    applyLodBias(this.scene, extensions.lodBias);
   }
 
   getQualityExtensions(): Readonly<QualityExtensions> {
@@ -2276,6 +2286,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // at the seeded profile during build). Runs on every scene build so Level
     // Travel keeps the player's chosen quality.
     this.applyQualitySettings(this.qualitySettings);
+    // LOD templates are fork-authored alternatives; apply the current optional
+    // quality bias after this level's scene graph has been fully assembled.
+    applyLodBias(this.scene, this.qualityExtensions.lodBias);
     this.refreshGraphicsUiFields();
     await this.setupDialogue();
     await this.warmRuntimeShaders();

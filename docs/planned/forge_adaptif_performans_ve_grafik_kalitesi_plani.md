@@ -1243,9 +1243,29 @@ ihtiyaç kanıtlandıkça (profiler verisiyle) çekilir — hepsi önkoşul değ
       InstancedMesh batch'lerine dönüştürür; sadece material/probe override
       isteyen placement'lar render-parity için clone fallback kullanır. Editor
       ve runtime aynı çekirdek builder'ı kullanır.)
-- [ ] LOD şablonları + `lodBias` (three `LOD` düğümü veya mesafe kademesi)
-- [ ] Uzak nesneler için billboard / impostor değerlendirmesi
-- [ ] Fizik gövdeleri için aktif alan sınırı → NPC yoğun fork'lar için
+- [x] ~~LOD şablonları + `lodBias` (three `LOD` düğümü veya mesafe kademesi)~~
+      (`createLodTemplate`: fork'un authored alternatif mesh'lerinden Three
+      `LOD` oluşturur; `applyLodBias` kaynak mesafeleri saklayarak
+      `QualityExtensions.lodBias` ile geçişleri yeniden ölçekler. `lodBias < 1`
+      düşük detaya daha erken geçer. Runtime hazır sahne graph'ına ve sonradan
+      kurulan level graph'ına uygular; template otomatik olarak sahte/değişken
+      düşük-poly mesh üretmez.)
+- [x] ~~Uzak nesneler için billboard / impostor değerlendirmesi~~ — genel bir
+      template impostor'u **şimdilik alınmadı**: statik prop'larda
+      `InstancedMesh` + frustum/distance cull, foliage'da chunk cull zaten
+      mevcut; otomatik billboard ise PBR normal/roughness, alpha, gölge ve
+      reflection-capture parity'sini bozar. Bir fork gerçekten gerekli kılarsa
+      yalnızca uygun asset'ler için color+normal atlas, cutover distance ve
+      collision'sız proxy tanımlayan authored sidecar ile eklenmelidir; o zaman
+      renderer bu sidecar'ı opt-in olarak tüketir.
+- [x] ~~Fizik gövdeleri için aktif alan sınırı → NPC yoğun fork'lar için~~
+      (`PhysicsSubsystem.setDynamicActiveArea`: fork
+      `QualityExtensions.physicsActiveDistance` verdiğinde yalnızca
+      `simulatePhysics` Rapier gövdeleri focus'tan uzakta uyur; statik
+      collider'lar ve kinematic karakterler etkilenmez. Gövde yeniden etkin
+      alana girince doğrusal/açısal hızı geri yüklenir. Extension verilmezse
+      önceki davranış aynen sürer; uzak gövdeler contact ve transform
+      taramalarından da çıkar.)
 - [~] Spawn sistemlerini frame'lere yayma + object pool (spawn'lı fork'larda) —
       **frame budget hazır:** `RuntimeActorSpawnCoordinator` request'leri kuyruğa
       alır ve runtime frame'inde varsayılan en çok 4 tanesini başlatır (fork

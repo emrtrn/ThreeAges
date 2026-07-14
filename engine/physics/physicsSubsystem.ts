@@ -48,6 +48,14 @@ export interface PhysicsSubsystemOptions {
   backend?: PhysicsBackend;
 }
 
+/** Optional Phase 7 policy for dynamically simulated bodies in large worlds. */
+export interface DynamicPhysicsActiveAreaSettings {
+  /** Runtime-owned focus point, normally the possessed pawn. */
+  focusPosition?: () => readonly [number, number, number] | null;
+  /** Dynamic bodies farther than this distance are suspended until focus returns. */
+  activeDistance?: number;
+}
+
 interface PhysicsBody {
   id: EntityId;
   transform: TransformComponent;
@@ -86,6 +94,11 @@ interface RapierBodyRecord {
   isSensor: boolean;
 }
 
+interface SuspendedDynamicBody {
+  linearVelocity: Vec3;
+  angularVelocity: Vec3;
+}
+
 /** A spawned ragdoll's live Rapier bodies, keyed by their desc name. */
 interface RagdollGroupRecord {
   id: number;
@@ -116,6 +129,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private rapierModule: RapierModule | null = null;
   private rapierWorld: RapierWorld | null = null;
   private rapierBodies = new Map<EntityId, RapierBodyRecord>();
+  /** Far dynamic bodies deliberately put to sleep by the optional active-area policy. */
+  private suspendedDynamicBodies = new Map<EntityId, SuspendedDynamicBody>();
+  private dynamicActiveArea: DynamicPhysicsActiveAreaSettings = {};
   private rapierColliderToEntity = new Map<number, EntityId>();
   private ragdollGroups = new Map<number, RagdollGroupRecord>();
   private nextRagdollId = 1;
@@ -166,6 +182,16 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.transformSink = sink;
   }
 
+  /**
+   * Configures the optional runtime-only active area for *dynamic* Rapier bodies.
+   * Empty/invalid settings immediately restore every body the policy suspended;
+   * static colliders and kinematic character bodies are never affected.
+   */
+  setDynamicActiveArea(settings: DynamicPhysicsActiveAreaSettings): void {
+    this.dynamicActiveArea = { ...settings };
+    if (!this.hasDynamicActiveArea()) this.resumeSuspendedDynamicBodies();
+  }
+
   setEntities(entities: readonly Entity[]): void {
     const bodies: PhysicsBody[] = [];
     for (const entity of entities) {
@@ -175,6 +201,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.bodies = bodies;
     this.contacts = [];
     this.collisionDisabled.clear();
+    this.suspendedDynamicBodies.clear();
     this.staticBlockerCache = null;
     this.staticSurfaceCache = null;
     this.staticSurfaceSpatialIndex = null;
@@ -253,6 +280,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       (contact) => contact.a !== entityId && contact.b !== entityId,
     );
     this.collisionDisabled.delete(entityId);
+    this.suspendedDynamicBodies.delete(entityId);
     const record = this.rapierBodies.get(entityId);
     if (record) {
       for (const collider of record.colliders) this.rapierColliderToEntity.delete(collider.handle);
@@ -594,6 +622,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (this.rapierWorld) {
       const deltaSeconds = Math.max(0, Math.min(_context.deltaSeconds, 1 / 20));
       if (deltaSeconds > 0) this.rapierWorld.timestep = deltaSeconds;
+      this.updateDynamicActiveArea();
       this.rapierWorld.step();
       this.updateRapierContacts();
       this.syncRapierDynamicTransforms();
@@ -649,6 +678,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.bodies = [];
     this.contacts = [];
     this.collisionDisabled.clear();
+    this.suspendedDynamicBodies.clear();
   }
 
   dispose(): void {
@@ -656,6 +686,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.rapierWorld?.free();
     this.rapierWorld = null;
     this.rapierBodies.clear();
+    this.suspendedDynamicBodies.clear();
     this.rapierColliderToEntity.clear();
     this.ragdollGroups.clear();
   }
@@ -666,6 +697,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.rapierWorld?.free();
     this.rapierWorld = new RAPIER.World(vectorFromVec3(this.gravity));
     this.rapierBodies.clear();
+    this.suspendedDynamicBodies.clear();
     this.rapierColliderToEntity.clear();
     // Ragdoll bodies belonged to the freed world; their handles are now invalid.
     this.ragdollGroups.clear();
@@ -704,6 +736,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     const contacts: PhysicsContact[] = [];
     const seen = new Set<string>();
     for (const record of this.rapierBodies.values()) {
+      if (this.suspendedDynamicBodies.has(record.id)) continue;
       for (const collider of record.colliders) {
         this.rapierWorld.contactPairsWith(collider, (other) => {
           this.addRapierContact(contacts, seen, record, other);
@@ -717,6 +750,101 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.contacts = this.reportableContacts(contacts);
   }
 
+  private hasDynamicActiveArea(): boolean {
+    const { activeDistance, focusPosition } = this.dynamicActiveArea;
+    return (
+      typeof activeDistance === "number" &&
+      Number.isFinite(activeDistance) &&
+      activeDistance > 0 &&
+      focusPosition !== undefined
+    );
+  }
+
+  private updateDynamicActiveArea(): void {
+    if (!this.hasDynamicActiveArea()) {
+      this.resumeSuspendedDynamicBodies();
+      return;
+    }
+
+    const focus = this.dynamicActiveArea.focusPosition?.() ?? null;
+    if (!focus) {
+      this.resumeSuspendedDynamicBodies();
+      return;
+    }
+
+    const activeDistance = this.dynamicActiveArea.activeDistance;
+    if (activeDistance === undefined) return;
+
+    for (const [entityId, rapier] of this.rapierBodies) {
+      const body = this.bodies.find((candidate) => candidate.id === entityId);
+      if (!body?.collider.simulatePhysics) continue;
+
+      const translation = rapier.body.translation();
+      const outsideActiveArea = isOutsideDynamicActiveArea(
+        [translation.x, translation.y, translation.z],
+        focus,
+        activeDistance,
+      );
+      const suspended = this.suspendedDynamicBodies.get(entityId);
+
+      if (outsideActiveArea && !suspended) {
+        const linearVelocity = rapier.body.linvel();
+        const angularVelocity = rapier.body.angvel();
+        this.suspendedDynamicBodies.set(entityId, {
+          linearVelocity: [linearVelocity.x, linearVelocity.y, linearVelocity.z],
+          angularVelocity: [angularVelocity.x, angularVelocity.y, angularVelocity.z],
+        });
+        rapier.body.setLinvel({ x: 0, y: 0, z: 0 }, false);
+        rapier.body.setAngvel({ x: 0, y: 0, z: 0 }, false);
+        rapier.body.sleep();
+      } else if (!outsideActiveArea && suspended) {
+        rapier.body.setLinvel(
+          {
+            x: suspended.linearVelocity[0],
+            y: suspended.linearVelocity[1],
+            z: suspended.linearVelocity[2],
+          },
+          true,
+        );
+        rapier.body.setAngvel(
+          {
+            x: suspended.angularVelocity[0],
+            y: suspended.angularVelocity[1],
+            z: suspended.angularVelocity[2],
+          },
+          true,
+        );
+        rapier.body.wakeUp();
+        this.suspendedDynamicBodies.delete(entityId);
+      }
+    }
+  }
+
+  private resumeSuspendedDynamicBodies(): void {
+    for (const [entityId, suspended] of this.suspendedDynamicBodies) {
+      const rapier = this.rapierBodies.get(entityId);
+      if (!rapier) continue;
+      rapier.body.setLinvel(
+        {
+          x: suspended.linearVelocity[0],
+          y: suspended.linearVelocity[1],
+          z: suspended.linearVelocity[2],
+        },
+        true,
+      );
+      rapier.body.setAngvel(
+        {
+          x: suspended.angularVelocity[0],
+          y: suspended.angularVelocity[1],
+          z: suspended.angularVelocity[2],
+        },
+        true,
+      );
+      rapier.body.wakeUp();
+    }
+    this.suspendedDynamicBodies.clear();
+  }
+
   private addAabbSensorContacts(contacts: PhysicsContact[], seen: Set<string>): void {
     for (let i = 0; i < this.bodies.length; i += 1) {
       for (let j = i + 1; j < this.bodies.length; j += 1) {
@@ -726,6 +854,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
         if (!a.collider.isSensor && !b.collider.isSensor) continue;
         if (a.collider.isStatic && b.collider.isStatic) continue;
         if (this.collisionDisabled.has(a.id) || this.collisionDisabled.has(b.id)) continue;
+        if (this.suspendedDynamicBodies.has(a.id) || this.suspendedDynamicBodies.has(b.id)) continue;
         if (!interactionGroupsInteract(a.collider.collisionGroups, b.collider.collisionGroups)) {
           continue;
         }
@@ -747,6 +876,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     for (const [entityId, rapier] of this.rapierBodies.entries()) {
       const body = this.bodies.find((candidate) => candidate.id === entityId);
       if (!body?.collider.simulatePhysics) continue;
+      if (this.suspendedDynamicBodies.has(entityId)) continue;
       const translation = rapier.body.translation();
       const rotation = eulerDegreesFromQuaternion(rapier.body.rotation());
       const transform: TransformComponent = {
@@ -769,6 +899,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     if (!bId || bId === a.id) return;
     const b = this.rapierBodies.get(bId);
     if (!b) return;
+    if (this.suspendedDynamicBodies.has(a.id) || this.suspendedDynamicBodies.has(b.id)) return;
     const [left, right] = a.id < b.id ? [a, b] : [b, a];
     const key = contactKey(left.id, right.id);
     if (seen.has(key)) return;
@@ -783,6 +914,26 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 
 function contactKey(a: EntityId, b: EntityId): string {
   return a < b ? `${a}\n${b}` : `${b}\n${a}`;
+}
+
+/** Pure distance check used by the optional dynamic-physics active-area policy. */
+export function isOutsideDynamicActiveArea(
+  position: readonly [number, number, number],
+  focus: readonly [number, number, number],
+  activeDistance: number,
+): boolean {
+  if (
+    !Number.isFinite(activeDistance) ||
+    activeDistance <= 0 ||
+    !position.every(Number.isFinite) ||
+    !focus.every(Number.isFinite)
+  ) {
+    return false;
+  }
+  const dx = position[0] - focus[0];
+  const dy = position[1] - focus[1];
+  const dz = position[2] - focus[2];
+  return dx * dx + dy * dy + dz * dz > activeDistance * activeDistance;
 }
 
 function bodyAabb(body: PhysicsBody): Aabb {
