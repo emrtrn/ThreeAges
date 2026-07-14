@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "mapType": null,
+  "mapType": "box",
   "position": [
     0,
     0,
@@ -12,8 +12,8 @@
     0
   ],
   "scale": [
+    2.6115,
     1,
-    1,
-    1
+    2.407
   ]
 }

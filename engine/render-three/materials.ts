@@ -304,6 +304,13 @@ function patchLayerBlendShader(
     layerBlendMaskMap: Texture | null;
   },
 ): void {
+  // Three.js enables `vColor` through material.vertexColors, then its stock
+  // <color_fragment> multiplies diffuseColor by that value. Mesh Paint needs
+  // the varying as a mask only: applying that stock tint made a red R-channel
+  // stroke visibly red even after Color View was turned off.
+  const colorFragment = blend.driver === "vertexColor"
+    ? "// forge-layer-blend: vColor is sampled as a mask; do not tint the base material."
+    : "#include <color_fragment>";
   shader.uniforms.forgeLayerColor = { value: new Color(blend.layer1.baseColor) };
   shader.uniforms.forgeLayerRoughness = { value: blend.layer1.roughness };
   shader.uniforms.forgeLayerMetalness = { value: blend.layer1.metalness };
@@ -433,6 +440,7 @@ float forgeLayerBlendFactor( float forgeLayerMaskSample, float forgeLayerVertexC
   return clamp(pow(clamp(value, 0.0, 1.0), forgeLayerContrast), 0.0, 1.0);
 }`,
     )
+    .replace("#include <color_fragment>", colorFragment)
     .replace(
       "#include <map_fragment>",
       `#include <map_fragment>

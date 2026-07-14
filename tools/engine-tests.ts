@@ -18519,7 +18519,7 @@ check("forge material mapping creates matching Three material types and fields",
     uniforms: {},
     vertexShader: "#include <common>\nvoid main(){\n#include <worldpos_vertex>\n}",
     fragmentShader:
-      "#include <common>\nvoid main(){\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <alphamap_fragment>\n#include <emissivemap_fragment>\n#include <aomap_fragment>\n#include <normal_fragment_maps>\n}",
+      "#include <common>\nvoid main(){\n#include <color_fragment>\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <alphamap_fragment>\n#include <emissivemap_fragment>\n#include <aomap_fragment>\n#include <normal_fragment_maps>\n}",
   } as Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
   layerBlend.onBeforeCompile(shader, null!);
   assert.ok("forgeLayerMap" in shader.uniforms);
@@ -18584,7 +18584,7 @@ check("forge material mapping creates matching Three material types and fields",
     uniforms: {},
     vertexShader: "#include <common>\nvoid main(){\n#include <worldpos_vertex>\n}",
     fragmentShader:
-      "#include <common>\nvoid main(){\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <alphamap_fragment>\n#include <emissivemap_fragment>\n#include <aomap_fragment>\n#include <normal_fragment_maps>\n}",
+      "#include <common>\nvoid main(){\n#include <color_fragment>\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <alphamap_fragment>\n#include <emissivemap_fragment>\n#include <aomap_fragment>\n#include <normal_fragment_maps>\n}",
   } as Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
   vertexColorBlend.onBeforeCompile(vertexColorShader, null!);
   assert.equal((vertexColorShader.uniforms.forgeLayerDriver as { value: number }).value, 4);
@@ -18592,6 +18592,8 @@ check("forge material mapping creates matching Three material types and fields",
   assert.equal((vertexColorShader.uniforms.forgeLayerInvertVertexColor as { value: number }).value, 1);
   assert.match(vertexColorShader.fragmentShader, /forgeLayerVertexColorSample/);
   assert.match(vertexColorShader.fragmentShader, /#if defined\( USE_COLOR_ALPHA \)/);
+  assert.match(vertexColorShader.fragmentShader, /vColor is sampled as a mask/);
+  assert.doesNotMatch(vertexColorShader.fragmentShader, /#include <color_fragment>/);
   vertexColorBlend.dispose();
 
   const basic = createThreeMaterialFromForgeDef(

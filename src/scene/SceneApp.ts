@@ -991,7 +991,12 @@ export class SceneApp {
   private meshPaintModeActive = false;
   private meshPaintBrushCursor: Mesh | null = null;
   private meshPaintStrokePointerId: number | null = null;
-  private meshPaintFlowPointer: { clientX: number; clientY: number; pointerId: number } | null = null;
+  private meshPaintFlowPointer: {
+    clientX: number;
+    clientY: number;
+    pointerId: number;
+    erase: boolean;
+  } | null = null;
   /** In-editor, non-persistent source paint for Copy/Paste between placements. */
   private meshPaintClipboard: LayoutMeshPaintPlacement[] = [];
   /** Original materials temporarily replaced by the selected-placement Color View. */
@@ -7530,9 +7535,10 @@ export class SceneApp {
       pointerId: event.pointerId,
       clientX: event.clientX,
       clientY: event.clientY,
+      erase: event.shiftKey,
     };
     this.canvas.setPointerCapture(event.pointerId);
-    this.applyMeshPaintDab(hit);
+    this.applyMeshPaintDab(hit, 1, event.shiftKey);
     return true;
   }
 
@@ -7542,11 +7548,12 @@ export class SceneApp {
       pointerId: event.pointerId,
       clientX: event.clientX,
       clientY: event.clientY,
+      erase: event.shiftKey,
     };
     const selection = this.selectedMeshPaintInstance();
     if (!selection) return true;
     const hit = this.picker.pickMeshPaintSurface(event.clientX, event.clientY, selection);
-    if (hit) this.applyMeshPaintDab(hit);
+    if (hit) this.applyMeshPaintDab(hit, 1, event.shiftKey);
     this.updateMeshPaintBrushHover(event.clientX, event.clientY);
     return true;
   }
@@ -7572,10 +7579,18 @@ export class SceneApp {
     if (!hit) return;
     // A frame-rate independent continuous paint rate; one means a firm brush,
     // while zero leaves ordinary pointer dabs unchanged.
-    this.applyMeshPaintDab(hit, Math.min(1, deltaSeconds * this.meshPaintToolSettings.flow * 8));
+    this.applyMeshPaintDab(
+      hit,
+      Math.min(1, deltaSeconds * this.meshPaintToolSettings.flow * 8),
+      pointer.erase,
+    );
   }
 
-  private applyMeshPaintDab(hit: MeshPaintSurfacePick, strengthMultiplier = 1): void {
+  private applyMeshPaintDab(
+    hit: MeshPaintSurfacePick,
+    strengthMultiplier = 1,
+    forceErase = false,
+  ): void {
     if (
       this.meshPaintToolSettings.ignoreBackfaces &&
       hit.normal.dot(this.editorViewportCamera().position.clone().sub(hit.point)) <= 0
@@ -7588,7 +7603,7 @@ export class SceneApp {
     const geometry = this.ensureMeshPaintGeometry(hit.object);
     const existing = geometry.getAttribute("color");
     const local = hit.object.worldToLocal(hit.point.clone());
-    const color = this.meshPaintToolSettings.tool === "erase"
+    const color = forceErase || this.meshPaintToolSettings.tool === "erase"
       ? ([0, 0, 0, 0] as const)
       : this.meshPaintToolSettings.color;
     const result = paintMeshVertexColors(

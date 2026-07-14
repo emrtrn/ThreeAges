@@ -3346,7 +3346,7 @@ export class EditorUi {
     this.meshPaintBody.innerHTML = `
       <div class="detail-section">
         <div class="detail-section-title">Vertex Color / Weights</div>
-        <div class="detail-hint">Select a static-mesh placement, then paint in the viewport. R/G/B/A channels are also the Vertex Weights workflow; data is stored per placement in the level sidecar.</div>
+        <div class="detail-hint">Select a static-mesh placement, then paint in the viewport. Hold Shift while left-dragging to erase without changing tools. R/G/B/A channels are also the Vertex Weights workflow; data is stored per placement in the level sidecar.</div>
         <label class="detail-row"><span>Tool</span>
           <select data-mesh-paint-tool><option value="paint" ${settings.tool === "paint" ? "selected" : ""}>Paint</option><option value="erase" ${settings.tool === "erase" ? "selected" : ""}>Erase</option></select>
         </label>
