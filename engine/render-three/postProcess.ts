@@ -333,6 +333,16 @@ export class PostProcessPipeline {
     this.composer.setSize(width, height);
   }
 
+  /**
+   * Syncs the composer's internal render-target scale to the renderer's pixel
+   * ratio. The composer caches its own `_pixelRatio` at construction, so a
+   * runtime pixel-ratio change (e.g. a quality render-scale step) must be pushed
+   * here or the post-process targets keep the stale resolution.
+   */
+  setPixelRatio(pixelRatio: number): void {
+    this.composer.setPixelRatio(pixelRatio);
+  }
+
   dispose(): void {
     for (const pass of this.effectPasses) pass.dispose();
     for (const pass of this.injectedPasses) pass.dispose();

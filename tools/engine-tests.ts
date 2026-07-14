@@ -323,6 +323,7 @@ import {
   QUALITY_LEVELS,
   QUALITY_PROFILES,
   applyQualityToPostProcess,
+  effectiveDevicePixelRatio,
   resolveQualitySettings,
 } from "../engine/perf/qualityProfiles";
 import {
@@ -14617,6 +14618,20 @@ check("quality profiles: resolve returns fresh copies and layers custom over a b
   const fromLow = resolveQualitySettings("custom", { bloomAllowed: true }, "low");
   assert.equal(fromLow.shadowsEnabled, false); // low's shadows stay off
   assert.equal(fromLow.bloomAllowed, true);
+});
+
+check("quality profiles: effective pixel ratio caps the DPR then folds in render scale", () => {
+  // Ultra (cap 2, scale 1) equals min(dpr, 2) — the renderer's MAX_PIXEL_RATIO,
+  // so applying Ultra is a no-op regardless of device DPR.
+  assert.equal(effectiveDevicePixelRatio(3, QUALITY_PROFILES.ultra), 2);
+  assert.equal(effectiveDevicePixelRatio(1, QUALITY_PROFILES.ultra), 1);
+  // Low: cap 1, scale 0.7 → min(dpr, 1) * 0.7.
+  assert.ok(Math.abs(effectiveDevicePixelRatio(3, QUALITY_PROFILES.low) - 0.7) < 1e-9);
+  // Medium: cap 1.5, scale 0.85 → on a 2x display, 1.5 * 0.85.
+  assert.ok(Math.abs(effectiveDevicePixelRatio(2, QUALITY_PROFILES.medium) - 1.275) < 1e-9);
+  // Bad DPR falls back to 1; a zero cap falls back to the DPR (never zero out).
+  assert.ok(effectiveDevicePixelRatio(Number.NaN, QUALITY_PROFILES.ultra) > 0);
+  assert.ok(effectiveDevicePixelRatio(0, QUALITY_PROFILES.low) > 0);
 });
 
 check("quality profiles: post-process merge only gates off, never re-authors (Principle #2)", () => {

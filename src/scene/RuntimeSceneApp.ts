@@ -160,6 +160,7 @@ import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import { FrameMetricsMonitor, type FrameMetrics } from "@engine/perf/frameMetrics";
 import {
   applyQualityToPostProcess,
+  effectiveDevicePixelRatio,
   resolveQualitySettings,
   type QualitySettings,
 } from "@engine/perf/qualityProfiles";
@@ -1299,15 +1300,32 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /**
    * Central quality applier (Faz 2). Sets the active profile and re-resolves the
    * runtime accordingly, without ever writing layout/authored data (Principle
-   * #2). Today it drives the post-process chain (GTAO / DoF / bloom / SMAA gate
-   * off through {@link applyQualityToPostProcess}); render-scale, shadow,
-   * particle-density and foliage-cull knobs land in follow-up Faz 2 slices as
-   * each subsystem grows its runtime setter. Runtime-only: the editor SceneApp
-   * never calls this, so the editor viewport is unaffected.
+   * #2). Today it drives render scale + pixel-ratio cap and the post-process
+   * chain (GTAO / DoF / bloom / SMAA gate off through
+   * {@link applyQualityToPostProcess}); shadow, particle-density and
+   * foliage-cull knobs land in follow-up Faz 2 slices as each subsystem grows
+   * its runtime setter. Runtime-only: the editor SceneApp never calls this, so
+   * the editor viewport is unaffected.
+   *
+   * Resolution is applied before the post-process rebuild so a freshly created
+   * composer inherits the scaled pixel ratio from the renderer at construction.
    */
   applyQualitySettings(settings: QualitySettings): void {
     this.qualitySettings = settings;
+    this.applyRuntimeResolution();
     this.applyRuntimePostProcess();
+  }
+
+  /**
+   * Applies the active profile's render scale + pixel-ratio cap by folding both
+   * into the renderer's pixel ratio (drawing-buffer scale; CSS size unchanged),
+   * then syncs the post-process composer's cached ratio so its targets match.
+   */
+  private applyRuntimeResolution(): void {
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio : 1;
+    const ratio = effectiveDevicePixelRatio(dpr, this.qualitySettings);
+    this.renderer.setPixelRatio(ratio);
+    this.postProcessPipeline?.setPixelRatio(ratio);
   }
 
   /** Per-subsystem tick timing for the `?debug` overlay, or null when profiling is off. */

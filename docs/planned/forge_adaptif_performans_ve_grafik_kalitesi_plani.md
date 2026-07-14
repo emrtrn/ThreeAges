@@ -963,9 +963,14 @@ texture limiti — bu fazın DIŞINDA; bkz. §11 ve Faz 7.)
       İlke #2 birleşme: yalnız kapatır, null→null) + testler (2 check)
 - [x] ~~Ultra / High / Medium / Low template profillerini tanımla; `Custom` durumu~~
       (`QUALITY_PROFILES` + `QUALITY_LEVELS` ladder; `Custom` = base + partial override)
-- [ ] Uygulayıcı adapter (src/scene): render scale — renderer + composer
-      boyutunu birlikte ölçekle (`setSize`/`setPixelRatio` etkileşimine dikkat)
-- [ ] Pixel ratio üst sınırını `MAX_PIXEL_RATIO` sabitinden profile taşı
+- [x] ~~Uygulayıcı adapter (src/scene): render scale~~ — pure
+      `effectiveDevicePixelRatio(dpr, quality)` = `min(dpr, cap) * renderScale`
+      (render scale pixel ratio'ya katlanır, CSS boyutu korunur);
+      `RuntimeSceneApp.applyRuntimeResolution` renderer + composer'ı senkron
+      ölçekler. `PostProcessPipeline.setPixelRatio` composer'ın cache'li
+      `_pixelRatio`'sunu günceller (stale render-target'ları önler).
+- [x] ~~Pixel ratio üst sınırını `MAX_PIXEL_RATIO` sabitinden profile taşı~~
+      (`maxPixelRatio` profil alanı; Ultra cap 2 = eski sabit, apply no-op)
 - [ ] Gölgeleri bağla: `renderer.shadowMap.enabled` + `lights.ts`'teki 2048
       sabit mapSize'ı profile bağla (mapSize değişiminde
       `light.shadow.map.dispose()` + null'lama gerekir) + shadow camera

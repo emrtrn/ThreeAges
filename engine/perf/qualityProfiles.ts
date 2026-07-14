@@ -168,6 +168,28 @@ export function resolveQualitySettings(
 }
 
 /**
+ * Effective renderer pixel ratio for a quality profile: the device ratio capped
+ * by {@link QualitySettings.maxPixelRatio}, then scaled by
+ * {@link QualitySettings.renderScale}. Folding render scale into the pixel ratio
+ * is the standard three.js knob — it shrinks the drawing buffer while the CSS
+ * canvas size (and layout) stay put. The result is never zero (guards a bad DPR
+ * or a zero scale).
+ *
+ * On Ultra (scale 1, cap 2) this equals `min(dpr, 2)` — identical to the
+ * `MAX_PIXEL_RATIO` value the renderer boots with, so applying Ultra is a no-op.
+ */
+export function effectiveDevicePixelRatio(
+  devicePixelRatio: number,
+  quality: QualitySettings,
+): number {
+  const dpr = Number.isFinite(devicePixelRatio) && devicePixelRatio > 0 ? devicePixelRatio : 1;
+  const cap = quality.maxPixelRatio > 0 ? quality.maxPixelRatio : dpr;
+  const capped = Math.min(dpr, cap);
+  const scaled = capped * quality.renderScale;
+  return scaled > 0 ? scaled : capped;
+}
+
+/**
  * Merges quality gates onto authored post-process (Principle #2): returns a new
  * {@link ResolvedPostProcess} whose bloom / DoF / GTAO / SMAA are on **only when
  * the author enabled them AND the quality profile allows them**. Every other
