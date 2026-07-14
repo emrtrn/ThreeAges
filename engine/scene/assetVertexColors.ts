@@ -14,6 +14,8 @@ export interface AssetVertexColorMesh {
   vertexCount: number;
   /** RGBA floats, one item per vertex, in the range 0..1. */
   colors: number[];
+  /** Original local-space vertex positions, retained for reimport repair. */
+  positions?: number[];
 }
 
 export interface AssetVertexColorsDef {
@@ -78,7 +80,18 @@ function normalizeAssetVertexColorMesh(raw: unknown): AssetVertexColorMesh | nul
     if (!Number.isFinite(value)) return null;
     colors.push(clampUnit(value));
   }
-  return { meshName, primitiveIndex, vertexCount, colors };
+  const positions = normalizePositions(input.positions, vertexCount);
+  return { meshName, primitiveIndex, vertexCount, colors, ...(positions ? { positions } : {}) };
+}
+
+function normalizePositions(value: unknown, vertexCount: number): number[] | null {
+  if (!Array.isArray(value) || value.length !== vertexCount * 3) return null;
+  const positions: number[] = [];
+  for (const entry of value) {
+    if (!Number.isFinite(entry)) return null;
+    positions.push(entry);
+  }
+  return positions;
 }
 
 function validIndex(value: unknown): number | null {

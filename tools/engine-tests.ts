@@ -662,6 +662,7 @@ import {
   meshPaintDataPath,
   normalizeMeshPaintData,
   paintMeshVertexColors,
+  repairMeshPaintTopology,
   removeMeshPaintPlacement,
   upsertMeshPaintPlacement,
 } from "../engine/scene/meshPaint";
@@ -16600,6 +16601,18 @@ check("mesh paint brush and fill respect radial falloff and channel masks", () =
   assert.deepEqual([...stroke.colors], [1, 0, 0, 1, 0.5, 0, 0, 0.5, 0, 0, 0, 0]);
   const filled = fillMeshVertexColors(3, stroke.colors, [0, 0.75, 0, 0], ["g"]);
   assert.deepEqual([...filled], [1, 0.75, 0, 1, 0.5, 0.75, 0, 0.5, 0, 0.75, 0, 0]);
+});
+
+check("mesh paint topology repair transfers nearest saved vertex colours", () => {
+  const repair = repairMeshPaintTopology({
+    vertexCount: 2,
+    positions: [0, 0, 0, 4, 0, 0],
+    colors: [1, 0, 0, 1, 0, 0, 1, 0.5],
+  }, [0.2, 0, 0, 3.7, 0, 0, 2, 0, 0]);
+  assert.ok(repair);
+  assert.deepEqual(repair.colors, [1, 0, 0, 1, 0, 0, 1, 0.5, 1, 0, 0, 1]);
+  assert.deepEqual(repair.positions, [0.2, 0, 0, 3.7, 0, 0, 2, 0, 0]);
+  assert.equal(repairMeshPaintTopology({ vertexCount: 1, colors: [1, 1, 1, 1] }, [0, 0, 0]), null);
 });
 
 check("mesh paint save validation enforces a sidecar envelope and path", () => {

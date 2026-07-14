@@ -240,6 +240,7 @@ import {
   fillMeshVertexColors,
   meshPaintDataPath,
   paintMeshVertexColors,
+  repairMeshPaintTopology,
   removeMeshPaintPlacement,
   upsertMeshPaintPlacement,
   type MeshPaintChannel,
@@ -7171,6 +7172,7 @@ export class SceneApp {
         target,
         vertexCount: position.count,
         colors: Array.from(colors),
+        positions: Array.from(position.array as ArrayLike<number>),
       });
       changed += 1;
     }
@@ -7197,6 +7199,7 @@ export class SceneApp {
       target: { ...entry.target },
       vertexCount: entry.vertexCount,
       colors: [...entry.colors],
+      ...(entry.positions ? { positions: [...entry.positions] } : {}),
     }));
     this.onStatus?.(`Copied ${copied.length} mesh primitive${copied.length === 1 ? "" : "s"}.`, "success");
     this.onMeshPaintChanged?.();
@@ -7228,6 +7231,7 @@ export class SceneApp {
         target: { ...target.target },
         vertexCount: source.vertexCount,
         colors: [...source.colors],
+        ...(target.positions ? { positions: [...target.positions] } : {}),
       });
       pasted += 1;
     }
@@ -7273,6 +7277,7 @@ export class SceneApp {
           primitiveIndex: entry.target.primitiveIndex,
           vertexCount: entry.vertexCount,
           colors: entry.colors,
+          ...(entry.positions ? { positions: entry.positions } : {}),
         });
       }
       const result = await saveAssetVertexColors(modelPath, vertexColors);
@@ -7319,6 +7324,7 @@ export class SceneApp {
           target: target.target,
           vertexCount: defaults.vertexCount,
           colors: [...defaults.colors],
+          ...(target.positions ? { positions: [...target.positions] } : {}),
         });
         applied += 1;
       }
@@ -7336,6 +7342,62 @@ export class SceneApp {
         "error",
       );
     }
+  }
+
+  /** Repairs a selected placement after reimport by nearest old local-space vertex. */
+  fixSelectedMeshPaintTopology(): void {
+    const selection = this.selectedMeshPaintInstance();
+    const gltf = selection ? this.models.get(selection.assetId) : undefined;
+    if (!selection || !gltf) {
+      this.onStatus?.("Select a loaded painted placement before using Fix Mesh Paint.", "warning");
+      return;
+    }
+    const existing = this.meshPaintData.placements.filter(
+      (entry) => entry.target.assetId === selection.assetId && entry.target.placementIndex === selection.placementIndex,
+    );
+    if (existing.length === 0) {
+      this.onStatus?.("Selected placement has no Mesh Paint data to repair.", "warning");
+      return;
+    }
+    const targetPrimitives = meshPaintPlacementsFromModel(selection, gltf);
+    let repaired = 0;
+    let skipped = 0;
+    for (const source of existing) {
+      const target = targetPrimitives.find(
+        (entry) =>
+          entry.target.meshName === source.target.meshName &&
+          entry.target.primitiveIndex === source.target.primitiveIndex,
+      );
+      if (!target?.positions) {
+        skipped += 1;
+        continue;
+      }
+      const repair = repairMeshPaintTopology(source, target.positions);
+      if (!repair) {
+        skipped += 1;
+        continue;
+      }
+      this.meshPaintData = upsertMeshPaintPlacement(this.meshPaintData, {
+        target: target.target,
+        vertexCount: target.vertexCount,
+        colors: repair.colors,
+        positions: repair.positions,
+      });
+      repaired += 1;
+    }
+    if (repaired === 0) {
+      this.onStatus?.("Mesh Paint repair needs saved source positions and a compatible primitive. Repaint legacy sidecars once before a future reimport.", "warning");
+      return;
+    }
+    this.meshPaintDataDirty = true;
+    this.rebuildInstanceGroup(selection.assetId);
+    this.onStatus?.(
+      skipped > 0
+        ? `Repaired ${repaired} mesh primitive${repaired === 1 ? "" : "s"}; skipped ${skipped} incompatible primitive${skipped === 1 ? "" : "s"}.`
+        : `Repaired ${repaired} mesh primitive${repaired === 1 ? "" : "s"}.`,
+      skipped > 0 ? "warning" : "success",
+    );
+    this.onMeshPaintChanged?.();
   }
 
   /** Removes paint data from the selected placement and returns it to shared instancing. */
@@ -7547,6 +7609,7 @@ export class SceneApp {
       target,
       vertexCount: position.count,
       colors: Array.from(result.colors),
+      positions: Array.from(position.array as ArrayLike<number>),
     });
     this.meshPaintDataDirty = true;
   }
@@ -12494,6 +12557,7 @@ function meshPaintPlacementsFromModel(
       },
       vertexCount: position.count,
       colors: initialMeshPaintColors(child.geometry, position.count),
+      positions: Array.from(position.array as ArrayLike<number>),
     });
   });
   return placements;

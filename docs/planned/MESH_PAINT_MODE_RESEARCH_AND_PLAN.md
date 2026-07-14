@@ -1,7 +1,7 @@
 # Mesh Paint Mode Araştırması ve Forge Planı
 
 > Tarih: 2026-06-23
-> Uygulama guncellemesi (2026-07-14): Faz 2 Copy/Paste, `To Mesh` ve `To Instances` tamamlandi. Static Mesh Editor inspect yuzeyi ve topology fix araclari siradaki acik maddelerdir.
+> Uygulama guncellemesi (2026-07-14): Faz 2 Copy/Paste, `To Mesh`, `To Instances`, Static Mesh Editor vertex-color inspect/fill/remove yuzeyi ve nearest-vertex topology fix akisi tamamlandi.
 > Durum: Faz 1 Vertex Color / Vertex Weights dikey kesiti tamamlandı. Aynı RGBA channel-mask authoring yüzeyi Vertex Weights için de kullanılır; Faz 2 aktarım araçları sıradaki kapsamdır.
 > Amaç: Unreal Engine Mesh Paint Mode'un kapsamını araştırmak, Forge'da **level
 > viewport üzerinden mesh paint authoring** sistemini planlamak ve materyallerin
@@ -395,8 +395,8 @@ Faz 1 kabulü:
 - [x] Placement paint verisini başka placement'lara Copy/Paste et. _(Mesh name, primitive index ve vertex count uyumluluğu zorunludur.)_
 - [x] `To Mesh` ile instance paint'i asset-level `*.vertexcolors.json` sidecar'a aktar. _(Kaynak GLB degistirilmez; Content Drawer dosya tasima/kopyalama/silme akisi sidecar'i modelle birlikte isler.)_
 - [x] `To Instances` ile asset-level default'u seçili instance'lara uygula. _(Yalnızca mesh name, primitive index ve vertex count uyumluysa placement sidecar'ına kopyalanır.)_
-- [ ] Static Mesh Editor'a vertex color inspect/remove/fill paneli ekle.
-- [ ] Reimport/topology değişiminde paint fix/transfer stratejisini ekle.
+- [x] Static Mesh Editor'a vertex color inspect/remove/fill paneli ekle. _(Asset sidecar primitive listesi, RGBA fill ve source GLB'yi degistirmeyen remove akisi.)_
+- [x] Reimport/topology değişiminde paint fix/transfer stratejisini ekle. _(Yeni boyama sidecar'lari eski local vertex konumlarini saklar; Mesh Paint ve Static Mesh Editor nearest-vertex aktarim yapar. Konum kaydi olmayan legacy sidecar guvenli bicimde uyarilir.)_
 
 ### Faz 3 - Texture Color karşılığı
 

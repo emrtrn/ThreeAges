@@ -2235,7 +2235,9 @@ body.editor-mode #debug-stats {
 }
 .sm-row > span { color: #c4ccd1; font-size: 12px; }
 .sm-row select,
-.sm-row input[type="text"] {
+.sm-row input[type="text"],
+.sm-row input[type="number"],
+.sm-row input[type="color"] {
   height: 26px;
   padding: 0 6px;
   border-radius: 4px;

@@ -3381,6 +3381,7 @@ export class EditorUi {
         <button type="button" data-mesh-paint-paste ${this.app.hasMeshPaintClipboard() ? "" : "disabled"}>Paste to Selected Mesh</button>
         <button type="button" data-mesh-paint-to-mesh>To Mesh</button>
         <button type="button" data-mesh-paint-to-instances>To Instances</button>
+        <button type="button" data-mesh-paint-fix>Fix Mesh Paint</button>
       </div>`;
 
     const numberPatch = (selector: string, key: "brushSize" | "strength" | "falloff" | "flow"): void => {
@@ -3445,6 +3446,9 @@ export class EditorUi {
     });
     this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-to-instances]")?.addEventListener("click", () => {
       void this.app.applyAssetVertexColorsToSelectedMeshPaint();
+    });
+    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-fix]")?.addEventListener("click", () => {
+      this.app.fixSelectedMeshPaintTopology();
     });
   }
 

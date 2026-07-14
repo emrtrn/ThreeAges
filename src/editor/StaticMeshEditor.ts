@@ -11,6 +11,7 @@
 import {
   Box3,
   BoxGeometry,
+  Float32BufferAttribute,
   BufferGeometry,
   CapsuleGeometry,
   ConeGeometry,
@@ -74,9 +75,17 @@ import {
   type AssetMaterialElement,
   type AssetMaterialSlotsDef,
 } from "@/editor/assetMaterialSlotsStore";
+import {
+  createEmptyAssetVertexColors,
+  loadAssetVertexColors,
+  saveAssetVertexColors,
+  upsertAssetVertexColorMesh,
+  type AssetVertexColorsDef,
+} from "@/editor/assetVertexColorsStore";
 import type { AssetManifest, AssetRecord } from "@engine/assets/manifest";
 import { loadForgeMaterial } from "@/scene/materialAssets";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
+import { repairMeshPaintTopology } from "@engine/scene/meshPaint";
 
 export interface StaticMeshEditorOptions {
   /** Public-relative path to the model file (e.g. `assets/props/chair.glb`). */
@@ -199,9 +208,12 @@ export class StaticMeshEditor {
   private collision: AssetCollisionDef = defaultAssetCollisionDef();
   private uvw: AssetUvwDef = defaultAssetUvw();
   private materialSlots: AssetMaterialSlotsDef = defaultAssetMaterialSlots();
+  private vertexColors: AssetVertexColorsDef = createEmptyAssetVertexColors();
+  private vertexColorFill: [number, number, number, number] = [1, 1, 1, 1];
   private materialElements: AssetMaterialElement[] = [{ slotIndex: 0, label: "Element 0", sourceMaterialName: "Element 0" }];
   private previewMaterials = new Map<string, MeshBasicMaterial | MeshStandardMaterial>();
   private readonly originalMeshMaterials = new Map<Mesh, Mesh["material"]>();
+  private readonly originalMeshColors = new Map<Mesh, ReturnType<BufferGeometry["getAttribute"]> | null>();
   private modelBounds = new Box3();
   private selectedPrimitive = -1;
   private activeTarget: ActiveTarget = null;
@@ -234,7 +246,7 @@ export class StaticMeshEditor {
             <strong data-sm-title></strong>
           </span>
           <div class="sm-editor-header-actions">
-            <button type="button" class="sm-editor-save" data-sm-save title="Save collision, material slots, and UVW map (Ctrl+S)">Save</button>
+            <button type="button" class="sm-editor-save" data-sm-save title="Save collision, material slots, UVW map, and vertex colors (Ctrl+S)">Save</button>
             <button type="button" class="sm-editor-close" data-sm-close title="Close (Esc)">✕</button>
           </div>
         </header>
@@ -282,6 +294,7 @@ export class StaticMeshEditor {
     void this.loadCollision();
     void this.loadUvw();
     void this.loadMaterialSlots();
+    void this.loadVertexColors();
   }
 
   // --- scene setup -------------------------------------------------------
@@ -401,6 +414,8 @@ export class StaticMeshEditor {
       model.traverse((object) => {
         if (object instanceof Mesh && !this.originalMeshMaterials.has(object)) {
           this.originalMeshMaterials.set(object, object.material);
+          const colors = object.geometry.getAttribute("color");
+          this.originalMeshColors.set(object, colors ? colors.clone() : null);
         }
       });
       this.materialElements = collectAssetMaterialElements(model);
@@ -414,6 +429,7 @@ export class StaticMeshEditor {
       this.spherical.radius = this.modelRadius * 2.6;
       this.updateCamera();
       this.applyCurrentUvw();
+      this.applyAssetVertexColorPreview();
       this.rebuildUvwOverlay();
       if (assignedMaterialSlotIds(this.materialSlots).length > 0) {
         void this.applyPreviewMaterials({ dirty: false, status: false });
@@ -446,6 +462,154 @@ export class StaticMeshEditor {
     if (assignedMaterialSlotIds(this.materialSlots).length > 0) {
       await this.applyPreviewMaterials({ dirty: false, status: false });
     }
+  }
+
+  private async loadVertexColors(): Promise<void> {
+    this.vertexColors = await loadAssetVertexColors(this.options.modelPath);
+    if (this.disposed) return;
+    this.applyAssetVertexColorPreview();
+    this.renderDetails();
+  }
+
+  /** Lists render primitives with the same name/index identity used by the sidecar. */
+  private assetVertexColorTargets(): Array<{
+    mesh: Mesh;
+    meshName: string;
+    primitiveIndex: number;
+    vertexCount: number;
+    positions: number[];
+  }> {
+    const primitiveIndexByMeshName = new Map<string, number>();
+    const targets: Array<{
+      mesh: Mesh;
+      meshName: string;
+      primitiveIndex: number;
+      vertexCount: number;
+      positions: number[];
+    }> = [];
+    this.modelGroup.traverse((object) => {
+      if (!(object instanceof Mesh)) return;
+      const position = object.geometry.getAttribute("position");
+      if (!position) return;
+      const meshName = object.name || "__unnamed_mesh";
+      const primitiveIndex = primitiveIndexByMeshName.get(meshName) ?? 0;
+      primitiveIndexByMeshName.set(meshName, primitiveIndex + 1);
+      targets.push({
+        mesh: object,
+        meshName,
+        primitiveIndex,
+        vertexCount: position.count,
+        positions: Array.from(position.array as ArrayLike<number>),
+      });
+    });
+    return targets;
+  }
+
+  /** Applies the asset sidecar to this editor-only model without touching the GLB. */
+  private applyAssetVertexColorPreview(): void {
+    for (const target of this.assetVertexColorTargets()) {
+      const defaults = this.vertexColors.meshes.find(
+        (entry) =>
+          entry.meshName === target.meshName &&
+          entry.primitiveIndex === target.primitiveIndex &&
+          entry.vertexCount === target.vertexCount,
+      );
+      const original = this.originalMeshColors.get(target.mesh);
+      if (!defaults && original === undefined) continue;
+      if (defaults) {
+        target.mesh.geometry.setAttribute("color", new Float32BufferAttribute(defaults.colors, 4));
+      } else if (original) {
+        target.mesh.geometry.setAttribute("color", original.clone());
+      } else {
+        target.mesh.geometry.deleteAttribute("color");
+      }
+      const color = target.mesh.geometry.getAttribute("color");
+      if (color) color.needsUpdate = true;
+    }
+  }
+
+  private fillAssetVertexColors(): void {
+    const targets = this.assetVertexColorTargets();
+    if (targets.length === 0) {
+      this.setStatus("Model geometry is not ready for vertex-color fill.", "warning");
+      return;
+    }
+    let next = createEmptyAssetVertexColors();
+    for (const target of targets) {
+      const colors = new Array<number>(target.vertexCount * 4);
+      for (let vertex = 0; vertex < target.vertexCount; vertex += 1) {
+        const offset = vertex * 4;
+        colors[offset] = this.vertexColorFill[0];
+        colors[offset + 1] = this.vertexColorFill[1];
+        colors[offset + 2] = this.vertexColorFill[2];
+        colors[offset + 3] = this.vertexColorFill[3];
+      }
+      next = upsertAssetVertexColorMesh(next, {
+        meshName: target.meshName,
+        primitiveIndex: target.primitiveIndex,
+        vertexCount: target.vertexCount,
+        colors,
+        positions: target.positions,
+      });
+    }
+    this.vertexColors = next;
+    this.applyAssetVertexColorPreview();
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(`Filled ${targets.length} mesh primitive${targets.length === 1 ? "" : "s"} with asset vertex colors.`);
+  }
+
+  private removeAssetVertexColors(): void {
+    if (this.vertexColors.meshes.length === 0) return;
+    this.vertexColors = createEmptyAssetVertexColors();
+    this.applyAssetVertexColorPreview();
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus("Removed asset vertex-color defaults.");
+  }
+
+  /** Repairs asset defaults after a model reimport without mutating the GLB. */
+  private fixAssetVertexColorsTopology(): void {
+    if (this.vertexColors.meshes.length === 0) {
+      this.setStatus("This asset has no vertex-color defaults to repair.", "warning");
+      return;
+    }
+    const targets = this.assetVertexColorTargets();
+    let next = this.vertexColors;
+    let repaired = 0;
+    let skipped = 0;
+    for (const source of this.vertexColors.meshes) {
+      const target = targets.find(
+        (entry) => entry.meshName === source.meshName && entry.primitiveIndex === source.primitiveIndex,
+      );
+      const repair = target ? repairMeshPaintTopology(source, target.positions) : null;
+      if (!target || !repair) {
+        skipped += 1;
+        continue;
+      }
+      next = upsertAssetVertexColorMesh(next, {
+        meshName: target.meshName,
+        primitiveIndex: target.primitiveIndex,
+        vertexCount: target.vertexCount,
+        colors: repair.colors,
+        positions: repair.positions,
+      });
+      repaired += 1;
+    }
+    if (repaired === 0) {
+      this.setStatus("Vertex-color repair needs saved source positions and a compatible primitive. Refill legacy sidecars once before a future reimport.", "warning");
+      return;
+    }
+    this.vertexColors = next;
+    this.applyAssetVertexColorPreview();
+    this.markDirty();
+    this.renderDetails();
+    this.setStatus(
+      skipped > 0
+        ? `Repaired ${repaired} asset vertex-color default${repaired === 1 ? "" : "s"}; skipped ${skipped}.`
+        : `Repaired ${repaired} asset vertex-color default${repaired === 1 ? "" : "s"}.`,
+      skipped > 0 ? "warning" : "info",
+    );
   }
 
   // --- toolbar -----------------------------------------------------------
@@ -1128,12 +1292,36 @@ export class StaticMeshEditor {
         </label>`;
       })
       .join("");
+    const vertexColorRows = this.vertexColors.meshes.length
+      ? this.vertexColors.meshes
+          .map(
+            (entry) => `
+        <div class="sm-prim-row">
+          <span class="sm-prim-kind">${escapeHtml(entry.meshName)} · P${entry.primitiveIndex}</span>
+          <small>${entry.vertexCount.toLocaleString()} vertices · RGBA</small>
+        </div>`,
+          )
+          .join("")
+      : `<div class="sm-empty">No asset vertex-color defaults. Use Mesh Paint &gt; To Mesh, or fill this asset here.</div>`;
+    const fillHex = rgbHex(this.vertexColorFill);
 
     this.detailsHost.innerHTML = `
       <div class="sm-details-heading">Details</div>
       <div class="sm-section">
         <div class="sm-section-title">Materials</div>
         ${materialRows}
+      </div>
+      <div class="sm-section">
+        <div class="sm-section-title">Vertex Colors <span class="sm-count">${this.vertexColors.meshes.length}</span></div>
+        <div class="sm-hint">Asset defaults are stored beside the model and do not rewrite the source GLB. Placement-specific Mesh Paint remains independent.</div>
+        <div class="sm-prim-list">${vertexColorRows}</div>
+        <label class="sm-row"><span>Fill Color</span><input type="color" value="#${fillHex}" data-sm-vertex-color /></label>
+        <label class="sm-row"><span>Fill Alpha</span><input type="number" min="0" max="1" step="0.05" value="${this.vertexColorFill[3]}" data-sm-vertex-alpha /></label>
+        <div class="sm-prim-list">
+          <button type="button" data-sm-vertex-fill>Fill Asset Colors</button>
+          <button type="button" data-sm-vertex-fix ${this.vertexColors.meshes.length > 0 ? "" : "disabled"}>Fix After Reimport</button>
+          <button type="button" data-sm-vertex-remove ${this.vertexColors.meshes.length > 0 ? "" : "disabled"}>Remove Asset Colors</button>
+        </div>
       </div>
       <div class="sm-section">
         <div class="sm-section-title">UVW Map</div>
@@ -1191,6 +1379,27 @@ export class StaticMeshEditor {
         const value = (event.target as HTMLSelectElement).value;
         void this.applyPreviewMaterial(slotIndex, value, { dirty: true, status: true });
       });
+    });
+    this.detailsHost.querySelector<HTMLInputElement>("[data-sm-vertex-color]")?.addEventListener("change", (event) => {
+      const [r, g, b] = hexRgb((event.currentTarget as HTMLInputElement).value);
+      this.vertexColorFill = [r, g, b, this.vertexColorFill[3]];
+    });
+    this.detailsHost.querySelector<HTMLInputElement>("[data-sm-vertex-alpha]")?.addEventListener("change", (event) => {
+      this.vertexColorFill = [
+        this.vertexColorFill[0],
+        this.vertexColorFill[1],
+        this.vertexColorFill[2],
+        clampUnit(Number((event.currentTarget as HTMLInputElement).value)),
+      ];
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-sm-vertex-fill]")?.addEventListener("click", () => {
+      this.fillAssetVertexColors();
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-sm-vertex-fix]")?.addEventListener("click", () => {
+      this.fixAssetVertexColorsTopology();
+    });
+    this.detailsHost.querySelector<HTMLButtonElement>("[data-sm-vertex-remove]")?.addEventListener("click", () => {
+      this.removeAssetVertexColors();
     });
     this.detailsHost
       .querySelector<HTMLSelectElement>('[data-sm-field="preset"]')
@@ -1397,16 +1606,17 @@ export class StaticMeshEditor {
 
   private async save(): Promise<void> {
     try {
-      const [collisionResult, materialResult, uvwResult] = await Promise.all([
+      const [collisionResult, materialResult, uvwResult, vertexColorResult] = await Promise.all([
         saveAssetCollision(this.options.modelPath, this.collision),
         saveAssetMaterialSlots(this.options.modelPath, this.materialSlots),
         saveAssetUvw(this.options.modelPath, this.uvw),
+        saveAssetVertexColors(this.options.modelPath, this.vertexColors),
       ]);
       this.overlay.querySelector<HTMLButtonElement>("[data-sm-save]")?.classList.remove("is-dirty");
-      const changed = collisionResult.changed || materialResult.changed || uvwResult.changed;
+      const changed = collisionResult.changed || materialResult.changed || uvwResult.changed || vertexColorResult.changed;
       this.setStatus(
         changed
-          ? `Saved ${collisionResult.path}, ${materialResult.path}, and ${uvwResult.path}`
+          ? `Saved ${collisionResult.path}, ${materialResult.path}, ${uvwResult.path}, and ${vertexColorResult.path}`
           : "No changes to save.",
       );
       if (this.options.assetId) {
@@ -1876,6 +2086,27 @@ function round(value: number): number {
 
 function roundDeg(value: number): number {
   return Number(value.toFixed(2));
+}
+
+function clampUnit(value: number): number {
+  return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+}
+
+function rgbHex(color: readonly [number, number, number, number]): string {
+  return color
+    .slice(0, 3)
+    .map((value) => Math.round(clampUnit(value) * 255).toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function hexRgb(value: string): [number, number, number] {
+  const hex = value.replace(/^#/, "");
+  if (!/^[0-9a-f]{6}$/i.test(hex)) return [1, 1, 1];
+  return [
+    Number.parseInt(hex.slice(0, 2), 16) / 255,
+    Number.parseInt(hex.slice(2, 4), 16) / 255,
+    Number.parseInt(hex.slice(4, 6), 16) / 255,
+  ];
 }
 
 function degToRad(deg: number): number {

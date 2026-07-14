@@ -24,6 +24,8 @@ export interface LayoutMeshPaintPlacement {
   vertexCount: number;
   /** RGBA floats, one item per vertex, in the range 0..1. */
   colors: number[];
+  /** Original local-space vertex positions, retained for reimport repair. */
+  positions?: number[];
 }
 
 export interface LayoutMeshPaintData {
@@ -44,6 +46,11 @@ export interface MeshPaintBrush {
 export interface MeshPaintStrokeResult {
   colors: Float32Array;
   changedVertices: number;
+}
+
+export interface MeshPaintTopologyRepair {
+  colors: number[];
+  positions: number[];
 }
 
 export function createEmptyMeshPaintData(): LayoutMeshPaintData {
@@ -200,7 +207,67 @@ function normalizeMeshPaintPlacement(raw: unknown): LayoutMeshPaintPlacement | n
     if (!Number.isFinite(value)) return null;
     colors.push(finiteClamp(value, 0, 1));
   }
-  return { target: { assetId, placementIndex, meshName, primitiveIndex }, vertexCount, colors };
+  const positions = normalizePositions(source.positions, vertexCount);
+  return {
+    target: { assetId, placementIndex, meshName, primitiveIndex },
+    vertexCount,
+    colors,
+    ...(positions ? { positions } : {}),
+  };
+}
+
+/**
+ * Transfers RGBA data from an old primitive to a reimported primitive by its
+ * nearest old local-space vertex. Old sidecars without positions cannot be
+ * repaired safely and return null instead of guessing from colour order alone.
+ */
+export function repairMeshPaintTopology(
+  source: Pick<LayoutMeshPaintPlacement, "vertexCount" | "colors" | "positions">,
+  targetPositions: ArrayLike<number>,
+): MeshPaintTopologyRepair | null {
+  const sourcePositions = normalizePositions(source.positions, source.vertexCount);
+  const targetCount = Math.floor(targetPositions.length / 3);
+  if (!sourcePositions || targetCount <= 0 || targetPositions.length !== targetCount * 3) return null;
+  if (source.colors.length !== source.vertexCount * 4) return null;
+  // A deliberately bounded V1 nearest-neighbour transfer. Larger meshes need a
+  // spatial index / barycentric pass rather than a UI-blocking quadratic scan.
+  if (source.vertexCount * targetCount > 10_000_000) return null;
+  const colors = new Array<number>(targetCount * 4);
+  for (let target = 0; target < targetCount; target += 1) {
+    const tx = targetPositions[target * 3]!;
+    const ty = targetPositions[target * 3 + 1]!;
+    const tz = targetPositions[target * 3 + 2]!;
+    if (!Number.isFinite(tx) || !Number.isFinite(ty) || !Number.isFinite(tz)) return null;
+    let nearest = 0;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (let candidate = 0; candidate < source.vertexCount; candidate += 1) {
+      const dx = sourcePositions[candidate * 3]! - tx;
+      const dy = sourcePositions[candidate * 3 + 1]! - ty;
+      const dz = sourcePositions[candidate * 3 + 2]! - tz;
+      const distance = dx * dx + dy * dy + dz * dz;
+      if (distance < nearestDistance) {
+        nearest = candidate;
+        nearestDistance = distance;
+      }
+    }
+    const sourceOffset = nearest * 4;
+    const targetOffset = target * 4;
+    colors[targetOffset] = finiteClamp(source.colors[sourceOffset], 0, 1);
+    colors[targetOffset + 1] = finiteClamp(source.colors[sourceOffset + 1], 0, 1);
+    colors[targetOffset + 2] = finiteClamp(source.colors[sourceOffset + 2], 0, 1);
+    colors[targetOffset + 3] = finiteClamp(source.colors[sourceOffset + 3], 0, 1);
+  }
+  return { colors, positions: Array.from(targetPositions) };
+}
+
+function normalizePositions(value: unknown, vertexCount: number): number[] | null {
+  if (!Array.isArray(value) || value.length !== vertexCount * 3) return null;
+  const positions: number[] = [];
+  for (const entry of value) {
+    if (!Number.isFinite(entry)) return null;
+    positions.push(entry);
+  }
+  return positions;
 }
 
 function colorBuffer(vertexCount: number, existing: ArrayLike<number> | null | undefined): Float32Array {
