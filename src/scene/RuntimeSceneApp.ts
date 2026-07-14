@@ -178,6 +178,10 @@ import {
   classifyBottleneck,
   type BottleneckResult,
 } from "@engine/perf/bottleneckClassifier";
+import {
+  AdaptiveQualityController,
+  type AdaptiveChangeRecord,
+} from "@engine/perf/adaptiveQuality";
 import { evaluatePerfBudget } from "@engine/perf/perfBudget";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { attachActorLight } from "@engine/render-three/lights";
@@ -457,6 +461,18 @@ export interface PerfMemorySnapshot {
   jsHeapLimitBytes: number | null;
 }
 
+/**
+ * Adaptive quality state for the `?debug` overlay (Faz 6, §13): the player's
+ * chosen profile, whether adaptive is on, how many transient reduction rungs are
+ * currently layered over the base, and the most recent automatic change + age.
+ */
+export interface AdaptiveDebugSnapshot {
+  qualityLevel: QualityLevel;
+  adaptiveEnabled: boolean;
+  reductionDepth: number;
+  lastChange: { record: AdaptiveChangeRecord; ageSeconds: number } | null;
+}
+
 interface RuntimeAiPathFollowing {
   goal: Vec3;
   speed?: number;
@@ -507,6 +523,12 @@ const STARTUP_CALIBRATION_SECONDS = 12;
  * classification (§7.3): ~1 s at 60 FPS — small, since the classifier reads
  * seconds-scale trends, not per-frame detail. */
 const ADAPTIVE_PROFILER_WINDOW_FRAMES = 60;
+
+/** How often the adaptive controller is ticked (Faz 6). It reasons over
+ * seconds-scale trends, so ~2×/s is ample and keeps the per-frame cost off the
+ * hot path — the frame-time `metrics()` percentile sort runs only on this cadence
+ * (accumulated delta is passed through, so cooldown/stable timers stay accurate). */
+const ADAPTIVE_TICK_INTERVAL_SECONDS = 0.5;
 
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
@@ -565,6 +587,8 @@ export interface RuntimeStatsApp {
   getSubsystemProfileSnapshot?(): SubsystemProfileSnapshot | null;
   /** Optional: live bottleneck classification (Faz 5) for the `?debug` overlay. */
   getBottleneckSnapshot?(): BottleneckResult | null;
+  /** Optional: adaptive quality state (Faz 6) for the `?debug` overlay quality/last lines. */
+  getAdaptiveDebugSnapshot?(): AdaptiveDebugSnapshot;
   /** Optional: GPU/JS memory counters for the `?debug` memory readout. */
   getPerfMemorySnapshot?(): PerfMemorySnapshot;
   /** Optional: live VFX runtime counts (active instances / alive particles / pool). */
@@ -743,6 +767,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * to the pre-quality-layer runtime until a profile is applied (Principle #2:
    * this only ever gates authored effects down, never writes layout data). */
   private qualitySettings: QualitySettings = resolveQualitySettings("ultra");
+  /** Adaptive quality controller (Faz 6). Owns the player's profile as its base
+   * ceiling and layers transient runtime reductions over it (never persisted,
+   * never above the ceiling). Constructed once the profile is resolved in the
+   * constructor; the frame loop ticks it via {@link tickAdaptiveQuality}. */
+  private adaptiveController!: AdaptiveQualityController;
+  /** Seconds accumulated toward the next adaptive controller tick (Faz 6). */
+  private adaptiveTickAccumulator = 0;
   /** Active-gameplay seconds accumulated toward the one-time startup measurement
    * calibration (Faz 4). `null` once calibration is done or not pending, so the
    * update tick does nothing after the single pass. */
@@ -982,6 +1013,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // first-gameplay measurement pass. A manual choice or a prior calibration
     // both suppress this — measurement decides, but the player always wins.
     this.runStartupHintCalibration();
+    // The adaptive controller's base ceiling is the resolved profile above; it
+    // only ever reduces below it and restores back up to it (plan §17.3).
+    this.adaptiveController = new AdaptiveQualityController(this.qualitySettings);
     this.movingPlatformSubsystem = new MovingPlatformSubsystem(this.syncEntityTransform);
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
@@ -1230,6 +1264,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.gameModeSession?.beforeEngineUpdate?.(deltaMs / 1000);
       this.engineApp.update(deltaMs / 1000);
       this.tickStartupCalibration(deltaMs / 1000);
+      this.tickAdaptiveQuality(deltaMs / 1000);
       this.applyKillZ();
       // Consume the `menu` edge after input advances, before the Game Mode reads
       // input, so opening a screen suppresses this frame's camera/movement.
@@ -1370,6 +1405,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.applyRuntimeShadowQuality();
     this.vfxSubsystem.setGlobalDensity(settings.particleDensity);
     this.applyRuntimePostProcess();
+  }
+
+  /**
+   * Applies a new player-chosen or calibrated **base profile** (Faz 6): resets the
+   * adaptive controller's ceiling to this profile — dropping any transient runtime
+   * reductions — then drives the renderer. Distinct from {@link applyQualitySettings},
+   * which the adaptive controller uses to push its own reduced settings *without*
+   * moving the base.
+   */
+  private applyQualityProfile(base: QualitySettings): void {
+    this.adaptiveController?.setBase(base);
+    this.applyQualitySettings(base);
   }
 
   /**
@@ -2336,7 +2383,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.userSettings = { ...this.userSettings, graphics };
     const ok = this.userSettingsStore?.setGraphics(graphics) ?? false;
     if (reapplyQuality) {
-      this.applyQualitySettings(
+      this.applyQualityProfile(
         resolveQualitySettings(graphics.selectedQualityLevel, graphics.customSettings),
       );
     }
@@ -2373,6 +2420,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.userSettings = { ...this.userSettings, graphics };
       this.userSettingsStore?.setGraphics(graphics);
       this.qualitySettings = resolveQualitySettings(hint.level);
+      // Keep the adaptive ceiling in sync when the hint moves the profile (the
+      // controller is absent on the constructor's first call — seeded right after).
+      this.adaptiveController?.setBase(this.qualitySettings);
     }
     // Arm the measurement pass; the update loop counts active-gameplay seconds.
     this.startupCalibrationElapsed = 0;
@@ -2426,11 +2476,78 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.userSettings = { ...this.userSettings, graphics };
     this.userSettingsStore?.setGraphics(graphics);
     if (result.changed) {
-      this.applyQualitySettings(resolveQualitySettings(result.level));
+      this.applyQualityProfile(resolveQualitySettings(result.level));
       this.refreshGraphicsUiFields(
         `Auto quality ${result.direction === "up" ? "raised" : "lowered"} to ${qualityLevelLabel(result.level)}.`,
       );
     }
+  }
+
+  /**
+   * Ticks the adaptive quality controller (Faz 6): feeds it the settled frame-time
+   * window and lets it step quality down under sustained load or back up once
+   * stable, applying at most one ladder rung per decision. Held back until the
+   * one-time startup measurement is done (so the two don't fight over the profile)
+   * and gated on the player's toggle + fine-tune permission, and on active
+   * gameplay (light menu frames must not skew the raise timer, plan §17.3). A
+   * change drives the reduced/raised settings into the renderer and surfaces a
+   * subtle status line (plan §5.3) — the persisted profile is never touched.
+   */
+  private tickAdaptiveQuality(deltaSeconds: number): void {
+    if (this.startupCalibrationElapsed !== null) return;
+    // Batch to a seconds-scale cadence: the controller reads trends, and this
+    // keeps the frame-time percentile sort off the per-frame hot path.
+    this.adaptiveTickAccumulator += deltaSeconds;
+    if (this.adaptiveTickAccumulator < ADAPTIVE_TICK_INTERVAL_SECONDS) return;
+    const dt = this.adaptiveTickAccumulator;
+    this.adaptiveTickAccumulator = 0;
+    const g = this.userSettings.graphics;
+    const active =
+      g.adaptiveOptimizationEnabled &&
+      (!g.manuallySelected || g.allowAdaptiveFineTuning) &&
+      this.inputMode === "game";
+    const update = this.adaptiveController.update({
+      metrics: this.frameMetrics.metrics(),
+      preferences: g,
+      deltaSeconds: dt,
+      active,
+      classify: () => this.classifyLiveBottleneck(),
+    });
+    if (update.kind === "none" || !update.settings) return;
+    this.applyQualitySettings(update.settings);
+    if (update.change) this.refreshGraphicsUiFields(update.change.message);
+  }
+
+  /** Live bottleneck verdict for the adaptive controller, with a safe `unknown`
+   * fallback before the frame-time window has samples (plan §8, §9.3). */
+  private classifyLiveBottleneck(): BottleneckResult {
+    return this.getBottleneckSnapshot() ?? { type: "unknown", confidence: 0.2, evidence: ["no signal"] };
+  }
+
+  /**
+   * Reverts the most recent automatic adaptive change (plan §17.3 one-click undo):
+   * restores the last-reduced rung and drives the raised settings, returning true
+   * when something was undone. Exposed for a settings-screen "undo" affordance.
+   */
+  revertLastAdaptiveChange(): boolean {
+    const update = this.adaptiveController?.revertLastChange();
+    if (!update || !update.settings) return false;
+    this.applyQualitySettings(update.settings);
+    if (update.change) this.refreshGraphicsUiFields(update.change.message);
+    return true;
+  }
+
+  /** Adaptive quality state for the `?debug` overlay `quality:` + `last:` lines
+   * (§13): the player's profile, whether adaptive is on, how many transient rungs
+   * are currently layered, and the most recent automatic change (+ its age). */
+  getAdaptiveDebugSnapshot(): AdaptiveDebugSnapshot {
+    const g = this.userSettings.graphics;
+    return {
+      qualityLevel: g.selectedQualityLevel,
+      adaptiveEnabled: g.adaptiveOptimizationEnabled,
+      reductionDepth: this.adaptiveController?.reductionDepth ?? 0,
+      lastChange: this.adaptiveController?.getLastChange() ?? null,
+    };
   }
 
   /**

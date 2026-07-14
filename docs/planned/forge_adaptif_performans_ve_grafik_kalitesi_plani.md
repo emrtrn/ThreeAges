@@ -1154,22 +1154,49 @@ Kaliteyi kararlı, küçük adımlarla otomatik değiştirmek.
 
 ### Yapılacaklar
 
-- [ ] `engine/perf/adaptiveQuality.ts` — pure karar çekirdeği (§12
-      `decideAdaptiveStep`) + deterministik testler (pencere/cooldown/
-      hysteresis senaryoları sahte metriklerle)
-- [ ] Subsystem sarmalayıcı: `EngineApp.registerSubsystem` ile kaydolur,
-      yalnız runtime'da (editörde asla)
-- [ ] 5 saniyelik bozulma algılama penceresi
-- [ ] 30–60 saniyelik stabil performans penceresi
-- [ ] Ayar değişimi sonrası cooldown
-- [ ] Hysteresis mantığı (düşürme hızlı, artırma temkinli)
-- [ ] GPU azaltma sırasını uygula (§10.1 — MVP basamakları)
-- [ ] CPU azaltma sırasını uygula (§10.2 — en pahalı subsystem hedefli)
-- [ ] Tek seferde yalnızca bir ayar basamağı değiştir
-- [ ] Oyuncunun manuel profil sınırlarına saygı göster
-      (`allowFineTuning` yalnız izin verilen aralıkta)
-- [ ] Son yapılan otomatik değişikliği kayıt altına al (overlay + geri alma)
-- [ ] Oyuncuya gerekirse sade bildirim göster (§5.3)
+- [x] ~~`engine/perf/adaptiveQuality.ts` — pure karar çekirdeği (§12
+      `decideAdaptiveStep`)~~ + deterministik testler (6 check: `classifyFrameLoad`
+      eşikleri, `decideAdaptiveStep` disable/cooldown/pencere/hysteresis,
+      `selectReductionRung` + `effectiveQualitySettings` fold/floor,
+      `AdaptiveQualityController` düşür/cooldown/artır, taban tavanı aşmama +
+      `setBase`/`revertLastChange`, `formatAdaptiveChange`)
+- [x] ~~Yalnız runtime, editörde asla~~: **Subsystem `registerSubsystem` yerine**
+      runtime frame loop'unda doğrudan tick (`RuntimeSceneApp.tickAdaptiveQuality`,
+      `tickStartupCalibration` deseniyle aynı). Editör SceneApp bu loop'u/metodu
+      taşımaz → aynı garanti, daha az bağlama. `AdaptiveQualityController` state'i
+      (applied stack, cooldown, stable timer) sınıfın içinde; DOM/three yok
+- [x] ~~5 saniyelik bozulma algılama penceresi~~ (`decideAdaptiveStep` degraded +
+      `metrics.sampleWindowSeconds >= 5`)
+- [x] ~~30–60 saniyelik stabil performans penceresi~~ (`STABLE_WINDOW_SECONDS = 45`;
+      controller `stableDuration`'ı canlı biriktirir, `active` düşünce sıfırlar)
+- [x] ~~Ayar değişimi sonrası cooldown~~ (reduce 15sn / increase 20sn; taban
+      floor'da bile cooldown kurulur → her frame yeniden sınıflandırma yok)
+- [x] ~~Hysteresis mantığı~~ (`DEGRADE_MULTIPLIER 1.25` hızlı düşüş,
+      `RESTORE_MULTIPLIER 0.9` + 45sn temkinli artış; arada nötr bant = hiçbir şey)
+- [x] ~~GPU azaltma sırasını uygula (§10.1)~~ (`REDUCTION_LADDER` en-az-görünür→
+      görünür: GTAO→DoF→partikül→bloom yarım→bloom off→shadow map→shadow distance→
+      SMAA→foliage→render scale→pixel ratio; her rung `canApply` floor'da durur)
+- [x] ~~CPU azaltma sırasını uygula (§10.2)~~ (`preferredFamilies`: cpu/draw-call
+      → obje-sayısı düğmeleri (particle, foliage) önce, tükenince genel adım)
+- [x] ~~Tek seferde yalnızca bir ayar basamağı değiştir~~ (`applyReduction`/
+      `applyIncrease` tek rung push/pop; effective = base'den fold ile yeniden türetilir)
+- [x] ~~Oyuncunun manuel profil sınırlarına saygı göster~~ (`active` kapısı:
+      `adaptiveOptimizationEnabled && (!manuallySelected || allowAdaptiveFineTuning)
+      && inputMode === "game"`; taban = seçili profil, adaptif yalnız altına iner
+      ve tavana kadar geri çıkar, asla üstüne çıkamaz — §17.3)
+- [x] ~~Son yapılan otomatik değişikliği kayıt altına al (overlay + geri alma)~~
+      (`getLastChange` + `?debug` overlay `quality:`/`last:` satırları
+      `formatAdaptiveQuality`/`formatAdaptiveChange`; `revertLastAdaptiveChange`
+      tek çağrıyla son düşürmeyi geri alır — §17.3)
+- [x] ~~Oyuncuya gerekirse sade bildirim göster (§5.3)~~ (rung mesajı mevcut
+      `graphics.status` ViewModel alanına yazılır — ayarlar ekranında sade tek satır,
+      agresif pop-up yok; ayrık in-HUD toast opsiyonel genişletme)
+
+Faz 5'ten devreden opsiyonel köprüler (MVP için zorunlu **değil**, §16): canlı
+`recentAssetActivity`/`memoryPressure` besleme ve fallback render-scale probe hâlâ
+ertelenmiş — adaptif kontrolcü pasif gpu/cpu sinyalleriyle çalışır (§8.1, §8.2).
+`classifyLiveBottleneck` bu bayrakları geçmez; sınıflandırıcı girdileri hazır,
+sadece canlı besleme bağlanmadı.
 
 ### Çıkış kriteri
 
@@ -1257,13 +1284,13 @@ Farklı cihaz sınıflarında oyun hedef performansa yaklaşır; sistem gereksiz
 İlk sürüm için en yüksek değer sağlayacak sıra:
 
 ```text
-1. Faz 1 — Frame-time ölçümü (kalanı; altyapının çoğu mevcut)
-2. Faz 2 — Merkezi kalite profilleri (çekirdek düğmeler)
-3. Faz 3 — Oyuncu grafik ayarları (UI framework + UserSettingsStore)
-4. Faz 6 — Basit adaptif kontrol
-5. Faz 5 — Darboğaz sınıflandırma (pasif sinyaller önce)
+1. Faz 1 — Frame-time ölçümü (kalanı; altyapının çoğu mevcut)   ✓ (çekirdek)
+2. Faz 2 — Merkezi kalite profilleri (çekirdek düğmeler)        ✓
+3. Faz 3 — Oyuncu grafik ayarları (UI framework + UserSettingsStore) ✓ (MVP)
+4. Faz 6 — Basit adaptif kontrol                                ✓
+5. Faz 5 — Darboğaz sınıflandırma (pasif sinyaller önce)        ✓
 6. Faz 7 — İçerik sistemlerinin kaliteye bağlanması (dilim dilim, veriye göre)
-7. Faz 4 — Donanım ipuçları ve başlangıç kalibrasyonu
+7. Faz 4 — Donanım ipuçları ve başlangıç kalibrasyonu           ✓
 8. Faz 8 — Geniş cihaz test matrisi
 ```
 
@@ -1288,16 +1315,16 @@ Forge için ilk uygulanabilir sürüm aşağıdaki kapsamla başlanabilir:
 - [x] ~~Ultra / High / Medium / Low profil sistemi (çekirdek alanlar, §11)~~
       (`qualityProfiles.ts` + `RuntimeSceneApp.applyQualitySettings`: render scale/
       pixel ratio, shadows, post-process gate + bloom yarım-res, partikül, foliage)
-- [ ] Adaptif optimizasyon toggle'ı
-- [ ] Manuel profil seçimi
-- [ ] `UserSettingsStore.graphics` ile ayar kaydı
-- [ ] 5 saniye süren performans düşüşünde tek adım kalite azaltma
-- [ ] 45 saniye stabil performansta tek adım kalite artırma
-- [ ] Teşhis: pasif sinyaller (frame vs. subsystem CPU toplamı — profiler mevcut)
-- [ ] GPU şüphesinde sıra: GTAO → DoF → Bloom → shadow map → SMAA →
-      partikül → render scale
-- [ ] CPU şüphesinde: partikül yoğunluğu + profil adımı (NPC/AI düğmeleri
-      Faz 7 mekanizmalarını bekler)
+- [x] ~~Adaptif optimizasyon toggle'ı~~ (Faz 3 — `setGraphicsAdaptive`)
+- [x] ~~Manuel profil seçimi~~ (Faz 3 — `setGraphicsQualityLevel`)
+- [x] ~~`UserSettingsStore.graphics` ile ayar kaydı~~ (Faz 3)
+- [x] ~~5 saniye süren performans düşüşünde tek adım kalite azaltma~~ (Faz 6)
+- [x] ~~45 saniye stabil performansta tek adım kalite artırma~~ (Faz 6)
+- [x] ~~Teşhis: pasif sinyaller (frame vs. subsystem CPU toplamı — profiler mevcut)~~ (Faz 5)
+- [x] ~~GPU şüphesinde sıra: GTAO → DoF → Bloom → shadow map → SMAA →
+      partikül → render scale~~ (Faz 6 `REDUCTION_LADDER`)
+- [x] ~~CPU şüphesinde: partikül yoğunluğu + profil adımı~~ (Faz 6
+      `preferredFamilies` — NPC/AI düğmeleri Faz 7 mekanizmalarını bekler)
 
 MVP aşamasında kesin GPU/CPU teşhisi ve render-scale probe'u zorunlu değildir.
 Öncelik, **ölçülebilir, kararlı ve oyuncu kontrolünü koruyan** bir sistem

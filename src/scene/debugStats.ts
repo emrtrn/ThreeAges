@@ -14,6 +14,7 @@ import {
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import type { FrameMetrics } from "@engine/perf/frameMetrics";
 import type { BottleneckResult } from "@engine/perf/bottleneckClassifier";
+import { formatAdaptiveChange } from "@engine/perf/adaptiveQuality";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import type {
@@ -45,6 +46,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       `${triangles} tris` +
       frameMetricsText(app) +
       bottleneckText(app) +
+      adaptiveText(app) +
       subsystemTimingText(app) +
       memoryText(app) +
       budgetText(app, drawCalls, triangles) +
@@ -96,6 +98,34 @@ function bottleneckText(app: RuntimeStatsApp): string {
 export function formatBottleneck(result: BottleneckResult): string[] {
   const head = `bottleneck: ${result.type} (conf ${result.confidence.toFixed(2)})`;
   return result.evidence.length > 0 ? [head, `  ${result.evidence[0]}`] : [head];
+}
+
+/** The adaptive quality block (profile + adaptive state + last change), or "". */
+function adaptiveText(app: RuntimeStatsApp): string {
+  const snapshot = app.getAdaptiveDebugSnapshot?.();
+  if (!snapshot) return "";
+  return `\n${formatAdaptiveQuality(snapshot).join("\n")}`;
+}
+
+/**
+ * Formats the adaptive quality state into overlay lines (pure, DOM-free for unit
+ * tests): a `quality:` line with the player's profile, the adaptive on/off state
+ * and the live reduction depth, plus a `last:` line describing the most recent
+ * automatic change and its age (plan §13).
+ */
+export function formatAdaptiveQuality(snapshot: {
+  qualityLevel: string;
+  adaptiveEnabled: boolean;
+  reductionDepth: number;
+  lastChange: { record: Parameters<typeof formatAdaptiveChange>[0]; ageSeconds: number } | null;
+}): string[] {
+  const mode = snapshot.adaptiveEnabled ? "adaptive on" : "adaptive off";
+  const depth = snapshot.reductionDepth > 0 ? ` -${snapshot.reductionDepth}` : "";
+  const lines = [`quality: ${snapshot.qualityLevel} (${mode})${depth}`];
+  if (snapshot.lastChange) {
+    lines.push(formatAdaptiveChange(snapshot.lastChange.record, snapshot.lastChange.ageSeconds));
+  }
+  return lines;
 }
 
 /** The subsystem-timing block, or "" when profiling is off / no samples yet. */
