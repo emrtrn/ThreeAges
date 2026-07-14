@@ -46,6 +46,10 @@ export interface AiMessageEmitInput {
 export interface AiMoveRequest {
   readonly controller: AIController;
   readonly position: Vec3;
+  /** Optional preferred movement direction, e.g. the tangent of a spline patrol. */
+  readonly preferredDirection?: Vec3;
+  /** Keeps a looping locomotion clip alive while a multi-segment route advances. */
+  readonly preserveLocomotionOnSuccess?: boolean;
   readonly speed?: number;
   readonly acceptanceRadius?: number;
 }
@@ -713,6 +717,8 @@ function requestSplineMove(
   return context.moveTo({
     controller: context.controller,
     position: query.getLocationAtDistance(distance, "world"),
+    preferredDirection: query.getDirectionAtDistance(distance, "world"),
+    preserveLocomotionOnSuccess: true,
     ...(speed !== undefined ? { speed } : {}),
     acceptanceRadius,
   });

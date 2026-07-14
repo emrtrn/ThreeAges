@@ -25537,7 +25537,7 @@ check("forge.moveAlongPatrolRoute approaches the nearest spline point before fol
     type: "behaviorTree",
     root: { kind: "task", task: "forge.moveAlongPatrolRoute" },
   });
-  const requests: Array<{ position: [number, number, number]; speed?: number; acceptanceRadius?: number }> = [];
+  const requests: Array<{ position: [number, number, number]; preferredDirection?: [number, number, number]; preserveLocomotionOnSuccess?: boolean; speed?: number; acceptanceRadius?: number }> = [];
   let result: "running" | "success" = "running";
   const runner = new AiBehaviorRunner(controller, asset, {
     taskRegistry: createDefaultAiTaskRegistry(),
@@ -25546,6 +25546,10 @@ check("forge.moveAlongPatrolRoute approaches the nearest spline point before fol
     moveTo: (request) => {
       requests.push({
         position: [request.position[0], request.position[1], request.position[2]],
+        ...(request.preferredDirection
+          ? { preferredDirection: [request.preferredDirection[0], request.preferredDirection[1], request.preferredDirection[2]] as [number, number, number] }
+          : {}),
+        ...(request.preserveLocomotionOnSuccess === true ? { preserveLocomotionOnSuccess: true } : {}),
         ...(request.speed !== undefined ? { speed: request.speed } : {}),
         ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
       });
@@ -25554,6 +25558,8 @@ check("forge.moveAlongPatrolRoute approaches the nearest spline point before fol
   });
   assert.equal(runner.tick({ deltaSeconds: 0.016, elapsedSeconds: 0.016, frame: 1 }), "running");
   assert.ok(Math.abs((requests[0]?.position[0] ?? 0) - 4) < 1e-8);
+  assert.ok((requests[0]?.preferredDirection?.[0] ?? 0) > 0.99, "spline tangent is forwarded");
+  assert.equal(requests[0]?.preserveLocomotionOnSuccess, true);
   assert.deepEqual({ speed: requests[0]?.speed, acceptanceRadius: requests[0]?.acceptanceRadius }, {
     speed: 2.4,
     acceptanceRadius: 0.55,

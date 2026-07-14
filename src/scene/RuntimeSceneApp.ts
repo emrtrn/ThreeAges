@@ -483,6 +483,8 @@ export interface AdaptiveDebugSnapshot {
 
 interface RuntimeAiPathFollowing {
   goal: Vec3;
+  /** Spline tangent supplied by patrol authoring; nav heading remains authoritative near blockers. */
+  preferredDirection?: Vec3;
   speed?: number;
   acceptanceRadius?: number;
   state: PathFollowingState;
@@ -550,6 +552,10 @@ const AI_NAV_MIN_TOP_SUPPORT_RADIUS = 0.15;
 const AI_INTERMEDIATE_WAYPOINT_ACCEPTANCE = Math.min(AI_NAV_CELL_SIZE * 0.35, 0.2);
 /** How strongly agent-separation steering blends into the desired path direction. */
 const AI_SEPARATION_WEIGHT = 0.75;
+/** Spline patrols stay on their authored rail; nearby actors may nudge, not redirect, them. */
+const AI_SPLINE_SEPARATION_WEIGHT = 0.25;
+/** Spline tangent influence when a nav path points broadly in the same direction. */
+const AI_SPLINE_TANGENT_STEERING_WEIGHT = 0.35;
 /** Stuck recoveries (replans) per goal before the move fails outright. */
 const AI_MAX_STUCK_REPLANS = 2;
 /**
@@ -1692,7 +1698,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const acceptanceRadius = request.acceptanceRadius ?? AI_MOVE_ACCEPTANCE_RADIUS;
     if (distance3d(transform.position, request.position) <= acceptanceRadius) {
       this.aiPathFollowing.delete(entityId);
-      this.reportAiIdleLocomotion(entityId);
+      if (request.preserveLocomotionOnSuccess !== true) this.reportAiIdleLocomotion(entityId);
       return "success";
     }
     const existing = this.aiPathFollowing.get(entityId);
@@ -1701,6 +1707,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (path.status === "failure" || path.points.length < 2) {
         this.aiPathFollowing.set(entityId, {
           goal: [...request.position],
+          ...(request.preferredDirection ? { preferredDirection: [...request.preferredDirection] } : {}),
           ...(request.speed !== undefined ? { speed: request.speed } : {}),
           ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
           state: { path: [], waypointIndex: 0, status: "failure" },
@@ -1711,6 +1718,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       }
       this.aiPathFollowing.set(entityId, {
         goal: [...request.position],
+        ...(request.preferredDirection ? { preferredDirection: [...request.preferredDirection] } : {}),
         ...(request.speed !== undefined ? { speed: request.speed } : {}),
         ...(request.acceptanceRadius !== undefined ? { acceptanceRadius: request.acceptanceRadius } : {}),
         state: { path: path.points, waypointIndex: 1, status: "following" },
@@ -1732,6 +1740,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       } else {
         existing.acceptanceRadius = request.acceptanceRadius;
       }
+    }
+    if (request.preferredDirection) {
+      existing.preferredDirection = [...request.preferredDirection];
+    } else {
+      delete existing.preferredDirection;
     }
     // A memoized failure (unreachable goal or exhausted stuck recovery) keeps
     // failing this goal until the task asks for a different one — replanning
@@ -1929,13 +1942,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.aiNavAgentForEntity(entityId).radius,
       this.aiSeparationNeighbors(entityId),
     );
-    const direction: [number, number] =
-      length > 0
-        ? [
-            dx / length + separation[0] * AI_SEPARATION_WEIGHT,
-            dz / length + separation[1] * AI_SEPARATION_WEIGHT,
-          ]
-        : [separation[0], separation[1]];
+    const pathDirection: [number, number] = length > 0 ? [dx / length, dz / length] : [0, 0];
+    const steered = blendAiPathDirection(pathDirection, follow.preferredDirection);
+    const separationWeight = follow.preferredDirection
+      ? AI_SPLINE_SEPARATION_WEIGHT
+      : AI_SEPARATION_WEIGHT;
+    const direction: [number, number] = [
+      steered[0] + separation[0] * separationWeight,
+      steered[1] + separation[1] * separationWeight,
+    ];
     return {
       direction,
       ...(follow.speed !== undefined ? { speed: follow.speed } : {}),
@@ -5577,6 +5592,32 @@ function distance3d(a: readonly [number, number, number], b: readonly [number, n
 
 function samePoint3d(a: readonly [number, number, number], b: readonly [number, number, number]): boolean {
   return distance3d(a, b) <= 1e-6;
+}
+
+/**
+ * Keeps navigation authoritative while smoothing clear spline patrol stretches.
+ * A tangent pointing backward or sideways is ignored so this cannot pull an
+ * agent through a nav corner or obstacle.
+ */
+function blendAiPathDirection(
+  pathDirection: readonly [number, number],
+  preferredDirection: Vec3 | undefined,
+): [number, number] {
+  const pathLength = Math.hypot(pathDirection[0], pathDirection[1]);
+  if (!(pathLength > 1e-6) || !preferredDirection) return [pathDirection[0], pathDirection[1]];
+  const tangentLength = Math.hypot(preferredDirection[0], preferredDirection[2]);
+  if (!(tangentLength > 1e-6)) return [pathDirection[0], pathDirection[1]];
+  const pathX = pathDirection[0] / pathLength;
+  const pathZ = pathDirection[1] / pathLength;
+  const tangentX = preferredDirection[0] / tangentLength;
+  const tangentZ = preferredDirection[2] / tangentLength;
+  const alignment = pathX * tangentX + pathZ * tangentZ;
+  if (!(alignment > 0)) return [pathX, pathZ];
+  const weight = AI_SPLINE_TANGENT_STEERING_WEIGHT * alignment;
+  const blendedX = pathX * (1 - weight) + tangentX * weight;
+  const blendedZ = pathZ * (1 - weight) + tangentZ * weight;
+  const blendedLength = Math.hypot(blendedX, blendedZ);
+  return blendedLength > 1e-6 ? [blendedX / blendedLength, blendedZ / blendedLength] : [pathX, pathZ];
 }
 
 /** Human-readable label for a quality level (settings-screen status text). */

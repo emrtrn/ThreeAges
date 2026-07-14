@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "name": "__playwright-smoke",
+  "name": "playground",
   "loadGroups": [],
   "instances": [
     {
@@ -9,82 +9,16 @@
     },
     {
       "assetId": "shape:cube",
-      "placements": [
-        {
-          "position": [
-            0,
-            1,
-            -4
-          ],
-          "name": "Smoke Checkpoint",
-          "scale": [
-            12,
-            4,
-            3
-          ],
-          "sensor": true,
-          "collisionPreset": "trigger",
-          "behavior": {
-            "script": "checkpoint",
-            "params": {
-              "slot": "quick"
-            }
-          }
-        },
-        {
-          "position": [
-            0,
-            1,
-            -6
-          ],
-          "name": "Smoke Interact",
-          "scale": [
-            12,
-            4,
-            2
-          ],
-          "sensor": true,
-          "collisionPreset": "trigger",
-          "behavior": {
-            "script": "interact"
-          },
-          "interaction": {
-            "action": "activate",
-            "prompt": "Activate"
-          }
-        },
-        {
-          "position": [
-            0,
-            1,
-            -10
-          ],
-          "name": "Smoke Portal",
-          "scale": [
-            12,
-            4,
-            3
-          ],
-          "sensor": true,
-          "collisionPreset": "trigger",
-          "behavior": {
-            "script": "level-travel",
-            "params": {
-              "targetLevel": "layouts/__playwright-smoke-target.level.json",
-              "targetSpawn": "arrival"
-            }
-          }
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "marker:playerStart",
       "placements": [
         {
           "position": [
+            -1.04,
             0,
-            0,
-            0
+            0.29
           ],
           "name": "Player Start",
           "collision": false,
@@ -194,13 +128,37 @@
       "placements": [
         {
           "position": [
+            -4.28,
+            3.18,
+            -4.29
+          ],
+          "navigationRole": "walkable",
+          "materialSlot": "white-material",
+          "groupId": "group-mrerp2ou-3ka",
+          "rotationYDeg": 0,
+          "rotation": [
             0,
+            90,
+            0
+          ],
+          "scale": [
+            1.1,
+            1,
+            1
+          ]
+        },
+        {
+          "position": [
+            -13.21,
             0,
-            -1.5
+            -13.74
           ],
           "rotationYDeg": 0,
-          "scale": 3,
-          "scaleLocked": true
+          "scale": [
+            5,
+            1,
+            5
+          ]
         }
       ]
     },
@@ -403,6 +361,10 @@
     {
       "assetId": "wall-400x200",
       "placements": []
+    },
+    {
+      "assetId": "highpolyplane",
+      "placements": []
     }
   ],
   "characters": [],
@@ -412,8 +374,7 @@
     "killZ": -10,
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
-    "locale": "en",
-    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
+    "locale": "en"
   },
   "skyAtmosphere": {
     "rayleigh": 1,
@@ -459,6 +420,7 @@
       "maxBlur": 1
     },
     "ao": {
+      "enabled": true,
       "radius": 1,
       "intensity": 1
     },
@@ -491,86 +453,33 @@
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "aiNavigationVolumes": [],
+  "aiNavigationVolumes": [
+    {
+      "id": "ai-navigation-volume-1",
+      "position": [
+        -2.73,
+        2.44,
+        -3.1
+      ],
+      "name": "AI Navigation Volume",
+      "scale": 1,
+      "size": [
+        20,
+        5,
+        20
+      ],
+      "agentRadius": 0.1,
+      "clearancePadding": 0.1
+    }
+  ],
   "targetPoints": [],
   "splines": [
     {
       "id": "spline-1",
       "position": [
-        -1.59,
+        3.98,
         0,
-        -1.9
-      ],
-      "spline": {
-        "schema": 1,
-        "closed": true,
-        "defaultUp": [
-          0,
-          1,
-          0
-        ],
-        "reparamStepsPerSegment": 8,
-        "points": [
-          {
-            "id": "spline-point-1",
-            "position": [
-              -0.8,
-              0,
-              -0.34
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-2",
-            "position": [
-              4.17,
-              0,
-              -1.06
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-3",
-            "position": [
-              6.24,
-              0,
-              2.89
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-4",
-            "position": [
-              2.18,
-              0,
-              6.85
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-5",
-            "position": [
-              -1.83,
-              0,
-              4.55
-            ],
-            "pointType": "curveAuto"
-          }
-        ]
-      },
-      "name": "Spline",
-      "debug": {
-        "visible": true,
-        "color": "#ffffff",
-        "resolution": 32
-      }
-    },
-    {
-      "id": "spline-2",
-      "position": [
-        0.07,
-        0,
-        1.57
+        -9.99
       ],
       "spline": {
         "schema": 1,
@@ -594,33 +503,171 @@
           {
             "id": "spline-point-2",
             "position": [
-              6.46,
+              4,
               0,
-              -0.96
+              0
             ],
             "pointType": "curveAuto"
           },
           {
             "id": "spline-point-3",
             "position": [
-              10.54,
+              8,
               0,
-              2.32
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              12,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-5",
+            "position": [
+              14,
+              0,
+              1.53
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-6",
+            "position": [
+              14.52,
+              0,
+              4.5
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-7",
+            "position": [
+              14.47,
+              0,
+              15
             ],
             "pointType": "curveAuto"
           }
         ]
       },
-      "name": "Spline 2",
+      "name": "Spline",
       "rotation": [
         0,
-        -150,
+        -90,
         0
       ],
-      "scale": 1,
-      "generators": []
+      "scale": 1
+    },
+    {
+      "id": "spline-2",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "spline-point-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-4",
+            "position": [
+              2,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-2",
+            "position": [
+              4,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              8,
+              0,
+              0
+            ],
+            "pointType": "curveCustom",
+            "arriveTangent": [
+              4,
+              0,
+              0
+            ],
+            "leaveTangent": [
+              4,
+              0,
+              0
+            ],
+            "tangentsLinked": false
+          }
+        ]
+      },
+      "name": "Spline 2",
+      "generators": [
+        {
+          "id": "rigid-segments",
+          "type": "rigidSegments",
+          "meshAsset": "",
+          "segmentLength": 2
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "showPointIds": true,
+        "color": "#ffffff",
+        "resolution": 16
+      }
     }
   ],
   "landscapes": [],
-  "actors": []
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Script/AI_Character.actor.json",
+      "position": [
+        4.06,
+        0,
+        -12.47
+      ],
+      "scaleLocked": true,
+      "rotationYDeg": 0,
+      "scale": 0.4,
+      "patrolRoute": {
+        "source": "spline",
+        "splineId": "spline-1",
+        "entry": "nearest",
+        "wrapMode": "loop",
+        "speed": 2.4,
+        "acceptanceRadius": 0.55,
+        "lookAheadDistance": 1.2
+      }
+    }
+  ]
 }

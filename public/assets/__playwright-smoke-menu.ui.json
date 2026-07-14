@@ -338,17 +338,6 @@
                 }
               },
               {
-                "id": "graphics",
-                "widget": "Button",
-                "props": {
-                  "text": "Graphics",
-                  "onClick": {
-                    "type": "message",
-                    "message": "settings:open:graphics"
-                  }
-                }
-              },
-              {
                 "id": "resume",
                 "widget": "Button",
                 "props": {

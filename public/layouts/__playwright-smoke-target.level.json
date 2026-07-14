@@ -362,6 +362,10 @@
     {
       "assetId": "wall-400x200",
       "placements": []
+    },
+    {
+      "assetId": "highpolyplane",
+      "placements": []
     }
   ],
   "characters": [],
@@ -418,6 +422,7 @@
       "maxBlur": 1
     },
     "ao": {
+      "enabled": true,
       "radius": 1,
       "intensity": 1
     },
@@ -541,61 +546,6 @@
         "color": "#ffffff",
         "resolution": 32
       }
-    },
-    {
-      "id": "spline-2",
-      "position": [
-        0.07,
-        0,
-        1.57
-      ],
-      "spline": {
-        "schema": 1,
-        "closed": false,
-        "defaultUp": [
-          0,
-          1,
-          0
-        ],
-        "reparamStepsPerSegment": 8,
-        "points": [
-          {
-            "id": "spline-point-1",
-            "position": [
-              0,
-              0,
-              0
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-2",
-            "position": [
-              6.46,
-              0,
-              -0.96
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-3",
-            "position": [
-              10.54,
-              0,
-              2.32
-            ],
-            "pointType": "curveAuto"
-          }
-        ]
-      },
-      "name": "Spline 2",
-      "rotation": [
-        0,
-        -150,
-        0
-      ],
-      "scale": 1,
-      "generators": []
     }
   ],
   "landscapes": [],

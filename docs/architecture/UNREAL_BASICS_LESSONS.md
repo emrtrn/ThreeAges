@@ -175,6 +175,16 @@ tutkalı shell'lerde ince kalır.
   daha sert arcade davranisi icin Z yukseltilebilir, 0 ise hedefe donusu
   durdurur.
 
+- *2026-07-14* - **AI spline devriyesi turning karari.** AI path-following
+  istegi spline ornek noktasinin teget yonunu da tasir. Runtime, teget ve nav
+  yolu ayni genel yone bakiyorsa bunlari harmanlar; engel veya keskin nav
+  kosesinde nav yonu baskin kalir. Bu yaklasim AI'yi yerinde Idle'a dusurmeden
+  surekli ilerletir; ara hedefe varis da Walk→Idle→Walk klip reseti uretmeden
+  bir sonraki spline adimina gecer. Spline devriyesinde local avoidance etkisi
+  daha dusuktur; yakin karakterler rotayi sert bicimde saptirmak yerine hafifce
+  iter. Playground baseline patrol, oyuncuyu ilk frame'de chase durumuna
+  sokmamak icin daha kisa sight radius kullanir.
+
 - *2026-07-07* - **Character capsule source of truth karari.** Forge
   `parentClass:"character"` icin fiziksel govde olcusunu `CharacterMovement`
   icinde ikinci kez tutmaz. Tek kaynak required non-sensor capsule `Collider`

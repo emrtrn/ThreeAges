@@ -37,6 +37,22 @@ görünmeyen öğeler için kullanıcıyla netleşen kararlar:
 - **Content Drawer alt durum satırı:** Kaldırılır; yerine grid üstünde
   "N items" sayacı, mesajlar ana status bar'a akar.
 
+## Kesinleşen Kararlar (2026-07-14, ek)
+
+- **World Settings sekmeden çıkar → hamburger menüye taşınır:** World Settings
+  seçime değil level'e bağlı bir ayar yüzeyi; Details sekme şeridinde durması
+  kavramsal olarak yanlış (Unreal'de de ayrı pencere). Inspector tab strip'ten
+  (`data-inspector-tab="world"`) kaldırılır; kalan sekmeler Details / Mesh Paint
+  / Foliage. Yerine hamburger menüde "World Settings" satırı, mevcut
+  `renderWorldSettingsPanel` gövdesini yeniden kullanan **hamburger altına
+  tutturulmuş bir popover panel** açar (küçük dropdown menü değil — panel çok
+  alanlı). Ayrı bir çark ikonu tercih edilmedi: Content Drawer'ın kendi çark
+  (ayarlar) menüsüyle çakışırdı.
+- **Hamburger menü kapsamı (karar):** Save Layout, Open Level, World Settings
+  (popover), Docs — hepsi bugün mevcut eylemler. **New Level / Save As bu
+  plandan hariç** (yeni level-dosyası oluşturma/kopyalama akışı + saveValidator
+  dokunuşu gerektiren ayrı iş; ertelendi).
+
 ## İlkeler
 
 1. **İşlevsel regresyon yok.** Mevcut davranış (kısayollar, sürükle-bırak,
@@ -70,7 +86,7 @@ görünmeyen öğeler için kullanıcıyla netleşen kararlar:
 | Materials: küre önizleme + dropdown + araç ikonları | Materials bölümü var; `ThumbnailRenderer` mevcut | Satıra küre thumbnail entegrasyonu |
 | Placement: Snap to Floor / Snap to Wall / Lock Movement | Snap to Floor var (`instanceDetails`); kilit outliner'da | "Placement" bölümü olarak toplama; Snap to Wall **yeni özellik** |
 | AI Navigation / Collision bölümleri | Var (`navigationDetails`, `collisionDetails`) | Sadece restyle |
-| Sekmeler: Details / World Settings / Foliage | Var (+ Mesh Paint) | Sadece restyle — **Mesh Paint sekmesi kalır** (taslak eksiksiz özellik listesi değil) |
+| Sekmeler: Details / World Settings / Foliage | Var (+ Mesh Paint) | **World Settings sekmeden çıkar → hamburger popover'a taşınır** (karar); kalan Details / Mesh Paint / Foliage restyle — **Mesh Paint sekmesi kalır** |
 | Content Drawer: +Add, Import, Save All, geri/ileri, breadcrumb, filtre, ayarlar, görünüm | Ağaç, arama, thumbnail'lı kartlar, context menü, Import var | Üst araç çubuğu düzeni, geri/ileri gezinme geçmişi, Favorites, "N items" sayacı, kart tip etiketi |
 | Durum çubuğu: Ready · No Errors · N Unsaved Changes | "Ready" + ton var (`editor-status`) | Hata sayacı ve kirli-durum (unsaved) rozeti **yeni** |
 
@@ -101,8 +117,10 @@ Görsel dilin tek kaynağı. DOM yapısına dokunmaz; sonraki tüm fazlar bunu t
 - [ ] Sol küme: Forge logosu + "Forge · `level-adı`" ikincil metni (karar:
       level adı markada kalır; Faz 7 sonrası kirli durumda yıldız) +
       hamburger menü butonu. Hamburger minimal başlar: Save Layout, Open
-      Level, Docs bağlantısı gibi mevcut eylemlerin menü karşılığı (yeni
-      özellik icat edilmez).
+      Level, **World Settings** (popover panel açar — karar), Docs bağlantısı
+      gibi mevcut eylemlerin menü karşılığı (New Level / Save As kapsam dışı,
+      karar). World Settings satırı `renderWorldSettingsPanel` gövdesini
+      hamburger altına tutturulmuş bir popover'da render eder.
 - [ ] Save/Undo/Redo/**Delete** ikon kümesi restyle — Delete kalır (karar).
 - [ ] Add Actor'ı birincil (mavi) buton yap; araç grubu
       (seç/taşı/döndür/ölçekle + **World/Local 5. ikon**, karar) segmentli
@@ -171,7 +189,10 @@ Görsel dilin tek kaynağı. DOM yapısına dokunmaz; sonraki tüm fazlar bunu t
       Lock Movement checkbox'ı outliner'daki `locked` bayrağına bağlanır.
 - [ ] AI Navigation, Collision, Physics, metadata bölümleri yeni bölüm
       görseline geçirilir (davranış aynı).
-- [ ] Sekme şeridi (Details / World Settings / Mesh Paint / Foliage) restyle.
+- [ ] Sekme şeridi restyle: **World Settings sekmesi kaldırılır** (karar —
+      hamburger popover'a taşındı); kalan sekmeler Details / Mesh Paint /
+      Foliage. `data-inspector-tab="world"` kaldırılırken smoke/testid
+      referansları aynı turda güncellenir.
 - [ ] Doğrulama: Details transform smoke adımı + undo/redo; save-validator
       etkilenmez (yeni layout alanı yok — Snap to Wall yalnız transform yazar).
 
