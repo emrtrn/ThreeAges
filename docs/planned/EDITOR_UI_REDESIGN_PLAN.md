@@ -293,6 +293,9 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
       sarı klasör ikonları kullanır; seçili klasör referanstaki mavi vurguyla görünür.
 - [x] Filter assets: popover açık durumu ve uygulanmış filtre durumu ayrıldı;
       dışarı tıklama/Drawer kapanışı popover'ı kapatır ve toggle takılı kalmaz.
+- [x] Kapalı Drawer hizası: Content Drawer, masaüstünde 6px aşağı taşınarak
+      gizlenir; status bar'daki Content Drawer girişi aynı sol/alt boşlukla
+      panelin üst kenarına hizalanır ve ince panel şeridi görünmez.
 - [~] Doğrulama: content browser smoke + sürükle-bırak yerleştirme + context
       menüler regresyonsuz. `content-drawer-redesign.spec.ts` toolbar, breadcrumb,
       gezinme geçmişi ve görünüm boyutu sözleşmesini ekler; hedefli Playwright

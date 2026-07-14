@@ -6234,7 +6234,9 @@ body.editor-mode #debug-stats {
   }
 
   .editor-status {
+    left: var(--editor-gap);
     right: calc(var(--editor-details-width) + (var(--editor-gap) * 2));
+    bottom: var(--editor-gap);
     height: var(--editor-status-height);
     border: 1px solid #2a333b;
     border-radius: 4px;
@@ -6251,6 +6253,7 @@ body.editor-mode #debug-stats {
     border-radius: 4px;
     background: linear-gradient(180deg, #171e24 0%, #11171c 100%);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32);
+    transform: translateY(calc(100% + var(--editor-gap)));
   }
 
   .editor-shell.content-drawer-tall { --content-drawer-height: clamp(360px, 58vh, 680px); }
