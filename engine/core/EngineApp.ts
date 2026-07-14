@@ -14,13 +14,18 @@ export class EngineApp {
   }
 
   /**
-   * Turns on per-subsystem tick timing (idempotent). Only the `?debug` runtime
-   * calls this, so the production update loop never times anything. `now` is
-   * injectable for deterministic tests; it defaults to the registry clock.
+   * Turns on per-subsystem tick timing (idempotent). The `?debug` runtime enables
+   * it for the overlay; the adaptive quality controller also enables it (with a
+   * smaller window) so its bottleneck classifier has a passive CPU signal even
+   * without `?debug` (plan §7.3) — the profiler is cheap (a few adds per record).
+   * `now` is injectable for deterministic tests; it defaults to the registry
+   * clock. `windowFrames` overrides the rolling-window size on first enable.
    */
-  enableProfiling(now?: () => number): SubsystemProfiler {
+  enableProfiling(now?: () => number, windowFrames?: number): SubsystemProfiler {
     if (!this.profiler) {
-      this.profiler = new SubsystemProfiler();
+      this.profiler = windowFrames === undefined
+        ? new SubsystemProfiler()
+        : new SubsystemProfiler(windowFrames);
       this.subsystems.setProfiler(this.profiler, now);
     }
     return this.profiler;

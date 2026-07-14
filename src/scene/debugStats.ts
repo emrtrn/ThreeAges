@@ -13,6 +13,7 @@ import {
 } from "@engine/perf/perfBudget";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import type { FrameMetrics } from "@engine/perf/frameMetrics";
+import type { BottleneckResult } from "@engine/perf/bottleneckClassifier";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import type {
@@ -43,6 +44,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       `${drawCalls} draw calls\n` +
       `${triangles} tris` +
       frameMetricsText(app) +
+      bottleneckText(app) +
       subsystemTimingText(app) +
       memoryText(app) +
       budgetText(app, drawCalls, triangles) +
@@ -77,6 +79,23 @@ export function formatFrameMetrics(metrics: FrameMetrics): string[] {
     `frame ${metrics.averageFrameTimeMs.toFixed(1)}ms ` +
       `p95 ${metrics.p95FrameTimeMs.toFixed(1)} spikes ${metrics.spikeCount}`,
   ];
+}
+
+/** The bottleneck diagnosis line, or "" when the app exposes none / no samples. */
+function bottleneckText(app: RuntimeStatsApp): string {
+  const result = app.getBottleneckSnapshot?.();
+  if (!result) return "";
+  return `\n${formatBottleneck(result).join("\n")}`;
+}
+
+/**
+ * Formats a {@link BottleneckResult} into overlay lines (pure, DOM-free for unit
+ * tests): a `bottleneck: <type> (conf X.XX)` header plus the top evidence item,
+ * so the overlay answers "it got slow — but why?" (plan §8, §13).
+ */
+export function formatBottleneck(result: BottleneckResult): string[] {
+  const head = `bottleneck: ${result.type} (conf ${result.confidence.toFixed(2)})`;
+  return result.evidence.length > 0 ? [head, `  ${result.evidence[0]}`] : [head];
 }
 
 /** The subsystem-timing block, or "" when profiling is off / no samples yet. */

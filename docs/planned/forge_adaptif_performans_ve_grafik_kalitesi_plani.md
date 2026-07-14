@@ -1107,20 +1107,37 @@ Sistemin hangi kalite ayarını neden değiştireceğini belirlemesi.
 
 ### Yapılacaklar
 
-- [ ] `engine/perf/bottleneckClassifier.ts` — pure sınıflandırıcı; girdi:
-      FrameMetrics + SubsystemProfileSnapshot + perf budget durumu + testler
-- [ ] Pasif kural setini uygula (§8.1): CPU toplamı yüksek → CPU (en pahalı
-      subsystem işaretlenir); CPU düşük + frame yüksek → GPU
-- [ ] Adaptif mod açıkken SubsystemProfiler'ı `?debug` olmadan da etkinleştir
-      (§7.3 — küçük pencereyle)
-- [ ] Draw call yoğunluğu kurallarını tanımla (perfBudget aşımı sinyali)
-- [ ] Asset yükleme / shader warm-up spike algılamasını ekle (spike anlarını
-      yükleme olaylarıyla ilişkilendir)
-- [ ] Fallback render-scale karşılaştırma testini ekle (nadir, kısa, sonucu
-      cache'li — §8.2)
-- [ ] Her teşhis için confidence score + kanıt listesi üret
-- [ ] Belirsiz durumda güvenli, küçük genel kalite azaltma kuralını ekle
-- [ ] Geliştirici overlay'inde karar nedenini göster (§13 `last:` satırı)
+- [x] ~~`engine/perf/bottleneckClassifier.ts` — pure sınıflandırıcı~~; girdi:
+      `FrameMetrics` + `SubsystemProfileSnapshot` + perf budget rows +
+      `targetFrameTimeMs` (+ opsiyonel `recentAssetActivity`/`memoryPressure`/
+      `gpuProbe`) → `BottleneckResult` (type + confidence + evidence +
+      `suspectSubsystemId`). Karar sırası §9.3 ağacını izler + testler (2 check)
+- [x] ~~Pasif kural setini uygula (§8.1)~~: CPU toplamı frame'in ≥%60'ını
+      açıklıyorsa → CPU (en pahalı subsystem `suspectSubsystemId`'de işaretlenir);
+      CPU payı ≤%35 + frame bütçe üstü → GPU/compositor
+- [x] ~~Adaptif mod açıkken SubsystemProfiler'ı `?debug` olmadan da etkinleştir~~
+      (`EngineApp.enableProfiling(now?, windowFrames?)`; `RuntimeSceneApp` debug
+      yoksa `graphics.adaptiveOptimizationEnabled` iken küçük pencereyle —
+      `ADAPTIVE_PROFILER_WINDOW_FRAMES = 60` — açar)
+- [x] ~~Draw call yoğunluğu kurallarını tanımla~~ (perfBudget `drawCalls` satırı
+      `over` iken ve CPU payı frame'i açıklamıyorken → `draw-call`; probe zayıf
+      iyileşme verirse confidence yükselir)
+- [~] Asset yükleme / shader warm-up spike algılaması — **sınıflandırıcı hazır**:
+      ortalama iyi + P95 hitchy deseni `transient-spike`; `recentAssetActivity`
+      ile `asset-loading`, `memoryPressure` ile `memory-pressure`. **Kalan (Faz
+      6):** bu bayrakları canlı yükleme/spawn olaylarıyla besleyen köprü
+- [~] Fallback render-scale karşılaştırma testi — **sınıflandırıcı `GpuProbeResult`
+      girdisini tüketir** (belirsiz CPU payında probe GPU'ya çevirir; §8.2).
+      **Kalan (Faz 6):** renderer'da canlı probe çalıştırma + cache'leme
+- [x] ~~Her teşhis için confidence score + kanıt listesi üret~~ (`confidence` 0–1,
+      `evidence: string[]`; her dalın kendi kanıtı)
+- [~] Belirsiz durumda güvenli, küçük genel kalite azaltma — sınıflandırıcı
+      `unknown` + düşük confidence döndürür (sinyal hazır); asıl "küçük genel
+      adım" **eylemi Faz 6 kontrolcüsüne** ait
+- [x] ~~Geliştirici overlay'inde karar nedenini göster~~ (`RuntimeSceneApp.getBottleneckSnapshot`
+      canlı pasif sinyallerden sınıflandırır; `debugStats.formatBottleneck` →
+      `bottleneck: <type> (conf X.XX)` + en güçlü kanıt satırı. §13 `last:` kalite
+      kararı satırı Faz 6'da bu teşhisle birleşir)
 
 ### Çıkış kriteri
 

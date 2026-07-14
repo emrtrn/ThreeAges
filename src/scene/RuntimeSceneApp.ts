@@ -174,6 +174,11 @@ import {
   type ConcreteQualityLevel,
   type HardwareHintInputs,
 } from "@engine/perf/hardwareHints";
+import {
+  classifyBottleneck,
+  type BottleneckResult,
+} from "@engine/perf/bottleneckClassifier";
+import { evaluatePerfBudget } from "@engine/perf/perfBudget";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { attachActorLight } from "@engine/render-three/lights";
 import {
@@ -498,6 +503,11 @@ export interface AiNavigationDebugSnapshot {
  * warm-up spikes, short enough to settle the profile early. */
 const STARTUP_CALIBRATION_SECONDS = 12;
 
+/** Rolling-window size (frames) for the profiler when it runs only for adaptive
+ * classification (§7.3): ~1 s at 60 FPS — small, since the classifier reads
+ * seconds-scale trends, not per-frame detail. */
+const ADAPTIVE_PROFILER_WINDOW_FRAMES = 60;
+
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
 const AI_NAV_GRID_SAFETY_MARGIN = AI_NAV_CELL_SIZE * 0.5;
@@ -553,6 +563,8 @@ export interface RuntimeStatsApp {
   getFrameMetricsSnapshot?(): FrameMetrics;
   /** Optional: per-subsystem tick timing when `?debug` profiling is on, else null. */
   getSubsystemProfileSnapshot?(): SubsystemProfileSnapshot | null;
+  /** Optional: live bottleneck classification (Faz 5) for the `?debug` overlay. */
+  getBottleneckSnapshot?(): BottleneckResult | null;
   /** Optional: GPU/JS memory counters for the `?debug` memory readout. */
   getPerfMemorySnapshot?(): PerfMemorySnapshot;
   /** Optional: live VFX runtime counts (active instances / alive particles / pool). */
@@ -1077,9 +1089,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.engineApp.registerSubsystem(this.audioSubsystem);
     this.engineApp.registerSubsystem(this.dialogueSubsystem);
     this.engineApp.registerSubsystem(this.vfxSubsystem);
-    // Per-subsystem tick timing (P5.1) is `?debug`-only: enabling it wraps each
-    // subsystem update in a clock read; production keeps the un-timed loop.
+    // Per-subsystem tick timing (P5.1): `?debug` enables it for the overlay; the
+    // adaptive controller also needs it as the bottleneck classifier's passive CPU
+    // signal (§7.3), then with a smaller window since it reads seconds-scale trends.
+    // Enabling wraps each subsystem update in a clock read; production without
+    // either keeps the un-timed loop.
     if (this.debug) this.engineApp.enableProfiling();
+    else if (this.userSettings.graphics.adaptiveOptimizationEnabled) {
+      this.engineApp.enableProfiling(undefined, ADAPTIVE_PROFILER_WINDOW_FRAMES);
+    }
     this.keyboardInput.attach();
     this.gamepadInput.attach();
     this.attachTouchControls(canvas);
@@ -1369,6 +1387,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Per-subsystem tick timing for the `?debug` overlay, or null when profiling is off. */
   getSubsystemProfileSnapshot(): SubsystemProfileSnapshot | null {
     return this.engineApp.getProfileSnapshot();
+  }
+
+  /**
+   * Classifies the current bottleneck (Faz 5) from live passive signals — frame
+   * metrics, the CPU subsystem profile (when profiling is on) and the perf budget
+   * — for the `?debug` overlay and, later, the adaptive controller (Faz 6). Pure
+   * reasoning lives in {@link classifyBottleneck}; this only gathers the inputs.
+   * Returns null until the frame-time window has samples. The rare render-scale
+   * probe and the load-activity correlation are Faz 6 inputs, so they are omitted
+   * here (the classifier stays on passive signals).
+   */
+  getBottleneckSnapshot(): BottleneckResult | null {
+    const metrics = this.frameMetrics.metrics();
+    if (metrics.sampleCount === 0) return null;
+    const { drawCalls, triangles } = this.getRenderStats();
+    const memory = readSceneRuntimeMemory(this.renderer);
+    return classifyBottleneck({
+      metrics,
+      subsystems: this.engineApp.getProfileSnapshot(),
+      budget: evaluatePerfBudget({ drawCalls, triangles, textures: memory.textures }),
+      targetFrameTimeMs: this.userSettings.graphics.targetFrameRate === 30 ? 33.3 : 16.7,
+    });
   }
 
   /** Live VFX runtime counts for the `?debug` overlay (active/alive/pool/cache). */
