@@ -22,7 +22,10 @@ export function renderMaterialSection(
         <div class="detail-section-title">Materials</div>
         <label class="detail-row">
           <span>Element 0</span>
-          <select data-material-slot ${selection.locked ? "disabled" : ""}>${options}</select>
+          <span class="detail-material-slot">
+            <span class="detail-material-thumbnail" data-material-thumbnail aria-hidden="true">M</span>
+            <select data-material-slot ${selection.locked ? "disabled" : ""}>${options}</select>
+          </span>
         </label>
       </div>
     `;

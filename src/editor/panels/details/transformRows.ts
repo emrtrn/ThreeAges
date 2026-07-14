@@ -87,11 +87,11 @@ export function pivotRow(
     </div>
     <div class="detail-actions-row">
       <button type="button" data-pivot-preset="reset" ${off}
-        title="Pivot at the model origin">Reset</button>
+        title="Pivot at the model origin">Reset Pivot</button>
       <button type="button" data-pivot-preset="center" ${off}
-        title="Pivot at the bounds centre">Center</button>
+        title="Pivot at the bounds centre">Center Pivot</button>
       <button type="button" data-pivot-preset="base" ${off}
-        title="Pivot at the bottom centre (e.g. a hinge resting on the floor)">Base</button>
+        title="Pivot at the bottom centre (e.g. a hinge resting on the floor)">Use Base</button>
     </div>
   `;
 }

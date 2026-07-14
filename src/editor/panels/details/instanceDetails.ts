@@ -71,7 +71,7 @@ export function renderInstanceDetails({
   return `
       <div class="detail-heading">
         <strong>${escapeHtml(selection.label)}</strong>
-        <span>${selection.kind} / ${escapeHtml(selection.assetId)}</span>
+        <span>${selection.kind === "instance" ? "Instance" : selection.kind} / ${escapeHtml(selection.assetId)}</span>
       </div>
       <label class="detail-row">
         <span>Name</span>
@@ -84,12 +84,11 @@ export function renderInstanceDetails({
           selection.category ? escapeHtml(selection.category) : "â€”"
         }</span>
       </div>
-      ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
-      ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
-      ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
-      ${isAmbientSound ? "" : pivotRow(selection.pivot, selection.locked, pivotEditActive)}
-      ${isAmbientSound ? "" : sections.material}
-      <div class="detail-section">
+      <div class="detail-section" data-detail-section="transform">
+        <div class="detail-section-title">Transform</div>
+        ${vectorRow("Location", "p", selection.position, 0.1, selection.locked)}
+        ${vectorRow("Rotation", "r", selection.rotation, 1, selection.locked)}
+        ${scaleRow(selection.scale, selection.scaleLocked, selection.locked)}
         <div class="detail-actions-row">
           <button type="button" data-detail-action="reset" ${lockedAttr}
             title="Reset rotation to 0 and scale to 1">Reset</button>
@@ -99,6 +98,15 @@ export function renderInstanceDetails({
             title="Paste the copied transform">Paste</button>
         </div>
       </div>
+      ${
+        isAmbientSound
+          ? ""
+          : `<div class="detail-section" data-detail-section="pivot">
+        <div class="detail-section-title">Pivot</div>
+        ${pivotRow(selection.pivot, selection.locked, pivotEditActive)}
+      </div>`
+      }
+      ${isAmbientSound ? "" : sections.material}
       ${
         isAmbientSound
           ? ""

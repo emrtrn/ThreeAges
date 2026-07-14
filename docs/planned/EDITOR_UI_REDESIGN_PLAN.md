@@ -209,35 +209,38 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
 
 ### Faz 4 — Details Paneli
 
-- [ ] Aktör başlığı: tip ikonu + ad + sağda tip rozeti ("Static Mesh",
+- [x] Aktör başlığı: tip ikonu + ad + sağda tip rozeti ("Static Mesh",
       "Light" …) + alt satır "Instance / `assetId`".
-- [ ] Katlanabilir bölümler: `detail-section` başlığına chevron + tıklayınca
+- [x] Katlanabilir bölümler: `detail-section` başlığına chevron + tıklayınca
       katlama; katlanma durumu bölüm anahtarıyla `localStorage`'da kalıcı;
       "Advanced" varsayılan katlı.
-- [ ] Bölüm başlığına kebab (⋮) menü çengeli: ilk sürümde "Reset to default"
+- [x] Bölüm başlığına kebab (⋮) menü çengeli: ilk sürümde "Reset to default"
       / "Collapse all" gibi düşük maliyetli eylemler; boş kalacaksa kebab'ı
       sadece uygun bölümlere koy.
-- [ ] Transform satırları: X/Y/Z etiketleri renkli kutucuk (kırmızı/yeşil/
+- [x] Transform satırları: X/Y/Z etiketleri renkli kutucuk (kırmızı/yeşil/
       mavi token'ları), alan odak/hover durumları.
-- [ ] Scale satırına uniform-kilit (zincir) toggle'ı: kilitliyken bir eksene
+- [x] Scale satırına uniform-kilit (zincir) toggle'ı: kilitliyken bir eksene
       girilen değer oranı koruyarak üçüne uygulanır (undo tek komut).
-- [ ] Pivot bölümü: sayısal XYZ + "Reset Pivot / Center Pivot / Use Base"
+- [x] Pivot bölümü: sayısal XYZ + "Reset Pivot / Center Pivot / Use Base"
       buton üçlüsü (mevcut pivot preset'leri bu adlandırmaya bağlanır).
-- [ ] Materials: slot satırına küre thumbnail (`ThumbnailRenderer` ile,
+- [x] Materials: slot satırına küre thumbnail (`ThumbnailRenderer` ile,
       Content Browser'daki malzeme önizlemesiyle aynı yoldan) + mevcut
       dropdown/eylemler.
-- [ ] "Placement" bölümü: mevcut Snap to Floor buraya taşınır; **Snap to
+- [x] "Placement" bölümü: mevcut Snap to Floor buraya taşınır; **Snap to
       Wall eklenir** (seçimin yönüne göre en yakın duvara/dikey yüzeye
       raycast — Snap to Floor'un yatay eşleniği, tek undo komutu);
       Lock Movement checkbox'ı outliner'daki `locked` bayrağına bağlanır.
-- [ ] AI Navigation, Collision, Physics, metadata bölümleri yeni bölüm
+- [x] AI Navigation, Collision, Physics, metadata bölümleri yeni bölüm
       görseline geçirilir (davranış aynı).
-- [ ] Sekme şeridi restyle: **World Settings sekmesi kaldırılır** (karar —
+- [x] Sekme şeridi restyle: **World Settings sekmesi kaldırılır** (karar —
       hamburger popover'a taşındı); kalan sekmeler Details / Mesh Paint /
       Foliage. `data-inspector-tab="world"` kaldırılırken smoke/testid
       referansları aynı turda güncellenir.
-- [ ] Doğrulama: Details transform smoke adımı + undo/redo; save-validator
+- [~] Doğrulama: Details transform smoke adımı + undo/redo; save-validator
       etkilenmez (yeni layout alanı yok — Snap to Wall yalnız transform yazar).
+      `details-panel.spec.ts` başlık/katlanma/pivot/material DOM sözleşmesini ekler;
+      hedefli Playwright çalışması mevcut dev-server ortamında ilk Outliner satırı
+      üretilmeden 30 sn zaman aşımına uğradı. `npx tsc --noEmit` ✅.
 
 ### Faz 5 — Content Drawer
 

@@ -3933,58 +3933,72 @@ export class EditorUi {
     }
     if (selection.kind === "light") {
       renderLightDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "sky" && selection.sky) {
       renderSkyDetails(this.environmentDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "fog" && selection.fog) {
       renderFogDetails(this.environmentDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "cloud" && selection.cloud) {
       renderCloudDetails(this.environmentDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "post" && selection.post) {
       renderPostDetails(this.environmentDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "reflectionPlane") {
       renderReflectionPlaneDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "reflectiveSurface" && selection.reflectiveSurface) {
       renderReflectiveSurfaceDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "blockingVolume" && selection.blockingVolume) {
       renderBlockingVolumeDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "aiNavigationVolume" && selection.aiNavigationVolume) {
       renderAiNavigationVolumeDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "targetPoint" && selection.targetPoint) {
       renderTargetPointDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "spline" && selection.spline) {
       renderSplineDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "reflectionCapture" && selection.reflectionCapture) {
       renderReflectionCaptureDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "worldWidget" && selection.worldWidget) {
       renderWorldWidgetDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
     if (selection.kind === "landscape") {
       renderLandscapeDetails(this.specialActorDetailsOptions(selection));
+      this.finalizeDetailsRender(selection);
       return;
     }
 
@@ -4064,6 +4078,177 @@ export class EditorUi {
             this.app.setSelectionMetadata(key, value, label),
         }),
     });
+    this.finalizeDetailsRender(selection);
+  }
+
+  /** Applies the shared Phase 4 Details chrome after a concrete panel has rendered. */
+  private finalizeDetailsRender(selection: EditableSelection): void {
+    this.decorateDetailsHeader(selection);
+    this.decorateDetailSections(selection);
+    if (selection.kind === "instance") void this.renderDetailsMaterialThumbnail(selection);
+  }
+
+  private decorateDetailsHeader(selection: EditableSelection): void {
+    const heading = this.detailsBody.querySelector<HTMLElement>(".detail-heading");
+    if (!heading) return;
+    const label = heading.querySelector("strong")?.textContent?.trim() || selection.label;
+    const summary = heading.querySelector("span")?.textContent?.trim() || selection.assetId;
+    const icon = ACTOR_TYPE_ICONS[this.detailsActorIcon(selection)];
+    heading.classList.add("detail-heading--actor");
+    heading.replaceChildren();
+    const iconElement = document.createElement("span");
+    iconElement.className = "detail-heading-icon";
+    iconElement.setAttribute("aria-hidden", "true");
+    iconElement.innerHTML = icon;
+    const copy = document.createElement("span");
+    copy.className = "detail-heading-copy";
+    const title = document.createElement("strong");
+    title.textContent = label;
+    const meta = document.createElement("span");
+    meta.className = "detail-heading-meta";
+    meta.textContent = summary;
+    copy.append(title, meta);
+    const chip = document.createElement("span");
+    chip.className = "forge-chip detail-heading-chip";
+    chip.textContent = this.detailsActorTypeLabel(selection);
+    heading.append(iconElement, copy, chip);
+  }
+
+  private detailsActorIcon(selection: EditableSelection): ActorTypeIcon {
+    switch (selection.kind) {
+      case "instance": return "mesh";
+      case "character": return "character";
+      case "light": return "light";
+      case "sky":
+      case "fog": return "atmosphere";
+      case "cloud": return "cloud";
+      case "post": return "postprocess";
+      case "reflectionPlane":
+      case "reflectionCapture":
+      case "reflectiveSurface": return "reflection";
+      case "blockingVolume":
+      case "aiNavigationVolume": return "volume";
+      case "landscape": return "terrain";
+      case "worldWidget": return "widget";
+      case "targetPoint":
+      case "spline":
+      case "actor": return "gameplay";
+      default: return "generic";
+    }
+  }
+
+  private detailsActorTypeLabel(selection: EditableSelection): string {
+    switch (selection.kind) {
+      case "instance": return "Static Mesh";
+      case "character": return "Character";
+      case "light": return "Light";
+      case "sky": return "Sky";
+      case "fog": return "Fog";
+      case "cloud": return "Cloud";
+      case "post": return "Post Process";
+      case "reflectionPlane": return "Reflection Plane";
+      case "reflectionCapture": return "Reflection Capture";
+      case "reflectiveSurface": return "Reflective Surface";
+      case "blockingVolume": return "Blocking Volume";
+      case "aiNavigationVolume": return "AI Navigation Volume";
+      case "targetPoint": return "Target Point";
+      case "spline": return "Spline";
+      case "landscape": return "Landscape";
+      case "worldWidget": return "World Widget";
+      case "actor": return "Actor";
+      default: return "Actor";
+    }
+  }
+
+  private decorateDetailSections(selection: EditableSelection): void {
+    this.detailsBody.querySelectorAll<HTMLElement>(".detail-section").forEach((section, index) => {
+      const title = section.querySelector<HTMLElement>(":scope > .detail-section-title");
+      if (!title || section.dataset.detailsDecorated === "true") return;
+      const label = title.textContent?.trim() || `Section ${index + 1}`;
+      const key = this.detailSectionStorageKey(selection, section.dataset.detailSection ?? label);
+      const collapsed = this.readDetailSectionCollapsed(key, label);
+      const body = document.createElement("div");
+      body.className = "detail-section-body";
+      for (const child of [...section.childNodes]) if (child !== title) body.append(child);
+      const heading = document.createElement("div");
+      heading.className = "detail-section-heading";
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "detail-section-toggle";
+      toggle.innerHTML = `<span class="detail-section-chevron" aria-hidden="true">${UI_ICONS.chevronDown}</span><span>${escapeHtml(label)}</span>`;
+      const menu = document.createElement("button");
+      menu.type = "button";
+      menu.className = "forge-kebab detail-section-menu";
+      menu.title = `${label} options`;
+      menu.setAttribute("aria-label", `${label} options`);
+      menu.innerHTML = UI_ICONS.kebab;
+      heading.append(toggle, menu);
+      title.replaceWith(heading);
+      section.append(body);
+      section.dataset.detailsDecorated = "true";
+      const setCollapsed = (next: boolean): void => this.setDetailSectionCollapsed(section, toggle, key, next);
+      setCollapsed(collapsed);
+      toggle.addEventListener("click", () => setCollapsed(!section.classList.contains("collapsed")));
+      menu.addEventListener("click", (event) => {
+        this.openContextMenu(event, [
+          { label: "Collapse All", run: () => this.setAllDetailSectionsCollapsed(selection, true) },
+          { label: "Expand All", run: () => this.setAllDetailSectionsCollapsed(selection, false) },
+        ]);
+      });
+    });
+  }
+
+  private detailSectionStorageKey(selection: EditableSelection, section: string): string {
+    return `forge.editor.details.section.${selection.kind}.${selection.assetId}.${section.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  }
+
+  private readDetailSectionCollapsed(key: string, label: string): boolean {
+    try {
+      const saved = window.localStorage.getItem(key);
+      return saved === null ? /^advanced\b/i.test(label) : saved === "collapsed";
+    } catch {
+      return /^advanced\b/i.test(label);
+    }
+  }
+
+  private setDetailSectionCollapsed(section: HTMLElement, toggle: HTMLButtonElement, key: string, collapsed: boolean): void {
+    section.classList.toggle("collapsed", collapsed);
+    toggle.setAttribute("aria-expanded", String(!collapsed));
+    try {
+      window.localStorage.setItem(key, collapsed ? "collapsed" : "expanded");
+    } catch {
+      // Storage can be disabled without affecting Details interactions.
+    }
+  }
+
+  private setAllDetailSectionsCollapsed(selection: EditableSelection, collapsed: boolean): void {
+    this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-details-decorated]").forEach((section) => {
+      const label = section.querySelector(".detail-section-toggle span:last-child")?.textContent?.trim() || "section";
+      const toggle = section.querySelector<HTMLButtonElement>(".detail-section-toggle");
+      if (toggle) this.setDetailSectionCollapsed(section, toggle, this.detailSectionStorageKey(selection, section.dataset.detailSection ?? label), collapsed);
+    });
+  }
+
+  private async renderDetailsMaterialThumbnail(selection: EditableSelection): Promise<void> {
+    const thumb = this.detailsBody.querySelector<HTMLElement>("[data-material-thumbnail]");
+    if (!thumb) return;
+    if (!selection.materialSlot) {
+      thumb.textContent = "M";
+      thumb.title = "No material assigned";
+      return;
+    }
+    try {
+      const preview = await this.resolveMaterialPreviewById(selection.materialSlot);
+      if (!preview || !thumb.isConnected) return;
+      const imageUrl = await this.thumbnailRenderer.renderMaterial(selection.materialSlot, preview);
+      if (!thumb.isConnected) return;
+      const image = document.createElement("img");
+      image.alt = "";
+      image.src = imageUrl;
+      thumb.replaceChildren(image);
+    } catch {
+      if (thumb.isConnected) thumb.title = "Material preview unavailable";
+    }
   }
 
   /**
