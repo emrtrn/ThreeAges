@@ -1300,9 +1300,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /**
    * Central quality applier (Faz 2). Sets the active profile and re-resolves the
    * runtime accordingly, without ever writing layout/authored data (Principle
-   * #2). Today it drives render scale + pixel-ratio cap and the post-process
-   * chain (GTAO / DoF / bloom / SMAA gate off through
-   * {@link applyQualityToPostProcess}); shadow, particle-density and
+   * #2). Today it drives render scale + pixel-ratio cap, shadows (toggle / map
+   * size / coverage) and the post-process chain (GTAO / DoF / bloom / SMAA gate
+   * off through {@link applyQualityToPostProcess}); particle-density and
    * foliage-cull knobs land in follow-up Faz 2 slices as each subsystem grows
    * its runtime setter. Runtime-only: the editor SceneApp never calls this, so
    * the editor viewport is unaffected.
@@ -1313,6 +1313,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   applyQualitySettings(settings: QualitySettings): void {
     this.qualitySettings = settings;
     this.applyRuntimeResolution();
+    this.applyRuntimeShadowQuality();
     this.applyRuntimePostProcess();
   }
 
@@ -4610,7 +4611,35 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   private fitSunShadowToScene(): void {
-    fitDirectionalShadowToBounds(this.sun, this.getRoomBounds());
+    fitDirectionalShadowToBounds(
+      this.sun,
+      this.getRoomBounds(),
+      this.qualitySettings.shadowDistanceScale,
+    );
+  }
+
+  /**
+   * Applies the active profile's shadow knobs (Faz 2): the master toggle
+   * (`renderer.shadowMap.enabled`), the shadow-map resolution on every
+   * shadow-casting light (disposing the old map so three rebuilds it at the new
+   * size), and the coverage scale via {@link fitSunShadowToScene}. On Ultra
+   * (enabled, 2048, scale 1) this is a no-op, so default runtime shadows are
+   * unchanged.
+   */
+  private applyRuntimeShadowQuality(): void {
+    const quality = this.qualitySettings;
+    this.renderer.shadowMap.enabled = quality.shadowsEnabled;
+    for (const record of this.lightObjects) {
+      const light = record.light;
+      if (!light.castShadow) continue;
+      if (light.shadow.mapSize.width !== quality.shadowMapSize) {
+        light.shadow.mapSize.set(quality.shadowMapSize, quality.shadowMapSize);
+        // Drop the cached render target so three regenerates it at the new size.
+        light.shadow.map?.dispose();
+        light.shadow.map = null;
+      }
+    }
+    this.fitSunShadowToScene();
   }
 
   private getRoomBounds(): Box3 | null {

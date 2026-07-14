@@ -971,10 +971,12 @@ texture limiti — bu fazın DIŞINDA; bkz. §11 ve Faz 7.)
       `_pixelRatio`'sunu günceller (stale render-target'ları önler).
 - [x] ~~Pixel ratio üst sınırını `MAX_PIXEL_RATIO` sabitinden profile taşı~~
       (`maxPixelRatio` profil alanı; Ultra cap 2 = eski sabit, apply no-op)
-- [ ] Gölgeleri bağla: `renderer.shadowMap.enabled` + `lights.ts`'teki 2048
-      sabit mapSize'ı profile bağla (mapSize değişiminde
-      `light.shadow.map.dispose()` + null'lama gerekir) + shadow camera
-      boyutuna `shadowDistanceScale`
+- [x] ~~Gölgeleri bağla~~: `RuntimeSceneApp.applyRuntimeShadowQuality`
+      `renderer.shadowMap.enabled` (master toggle) + her shadow-casting light'ın
+      `shadow.mapSize` (değişimde `shadow.map.dispose()` + null → three yeniden
+      üretir) + `fitDirectionalShadowToBounds`'a `distanceScale` param (yalnız
+      ortho extent'i kısar, `far`/derinlik dokunulmaz → clipping yok). Ultra
+      (enabled/2048/1.0) no-op.
 - [~] AO (GTAO) / DoF / Bloom / SMAA gate'lerini bağla: **gate kısmı bağlandı** —
       `RuntimeSceneApp.applyRuntimePostProcess` authored `ResolvedPostProcess`'i
       `applyQualityToPostProcess` ile geçirip mevcut `setEffectPasses` rebuild'ini

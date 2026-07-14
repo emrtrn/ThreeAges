@@ -217,10 +217,16 @@ export function computeSceneRoomBounds(
 export function fitDirectionalShadowToBounds(
   sun: DirectionalLight | null,
   room: Box3 | null,
+  distanceScale = 1,
 ): void {
   if (!sun || !room || room.isEmpty()) return;
+  // Quality shrinks the orthographic ground coverage (distant objects fall out of
+  // the shadow frustum) so the fixed-resolution shadow map concentrates nearer.
+  // Only the extent scales — the depth range (`far`) is left intact so shrinking
+  // coverage never clips the light's shadow depth.
+  const scale = distanceScale > 0 ? distanceScale : 1;
   const size = room.getSize(new Vector3());
-  const half = Math.max(size.x, size.z) * 0.6 + 1;
+  const half = (Math.max(size.x, size.z) * 0.6 + 1) * scale;
   const cam = sun.shadow.camera;
   cam.left = -half;
   cam.right = half;

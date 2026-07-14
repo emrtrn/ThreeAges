@@ -1252,6 +1252,24 @@ check("scene runtime fits directional shadows from room bounds", () => {
   assert.equal(sun.shadow.camera.top, 7);
   assert.equal(sun.shadow.camera.bottom, -7);
   assert.equal(sun.shadow.camera.far, 34);
+
+  // Quality shadowDistanceScale shrinks the coverage extent only; far is intact
+  // (never clip shadow depth). scale 0.5 → half 3.5, far still 34.
+  fitDirectionalShadowToBounds(
+    sun,
+    new Box3(new Vector3(-5, 0, -2), new Vector3(5, 4, 2)),
+    0.5,
+  );
+  assert.equal(sun.shadow.camera.right, 3.5);
+  assert.equal(sun.shadow.camera.top, 3.5);
+  assert.equal(sun.shadow.camera.far, 34);
+  // A non-positive scale falls back to 1 (no shrink).
+  fitDirectionalShadowToBounds(
+    sun,
+    new Box3(new Vector3(-5, 0, -2), new Vector3(5, 4, 2)),
+    0,
+  );
+  assert.equal(sun.shadow.camera.right, 7);
 });
 
 check("scene runtime applies background and ambient light lifecycle", () => {
