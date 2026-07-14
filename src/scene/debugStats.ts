@@ -12,6 +12,7 @@ import {
   type BudgetMetric,
 } from "@engine/perf/perfBudget";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
+import type { FrameMetrics } from "@engine/perf/frameMetrics";
 import type { VfxDebugSnapshot } from "@engine/render-three/vfxSubsystem";
 import type { AiDebugSnapshot } from "@engine/ai/aiSubsystem";
 import type {
@@ -41,6 +42,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       `${fps.toFixed(0)} fps\n` +
       `${drawCalls} draw calls\n` +
       `${triangles} tris` +
+      frameMetricsText(app) +
       subsystemTimingText(app) +
       memoryText(app) +
       budgetText(app, drawCalls, triangles) +
@@ -55,6 +57,26 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
     accumMs = 0;
     frames = 0;
   };
+}
+
+/** The frame-time block, or "" when the app exposes no snapshot / no samples yet. */
+function frameMetricsText(app: RuntimeStatsApp): string {
+  const metrics = app.getFrameMetricsSnapshot?.();
+  if (!metrics || metrics.sampleCount === 0) return "";
+  return `\n${formatFrameMetrics(metrics).join("\n")}`;
+}
+
+/**
+ * Formats {@link FrameMetrics} into an overlay line (pure, DOM-free for unit
+ * tests): windowed average frame time, P95 and the spike count over the window.
+ * Average + P95 together read "smooth on average, but does it hitch?" — the
+ * reason frame time (not FPS) drives the adaptive quality controller.
+ */
+export function formatFrameMetrics(metrics: FrameMetrics): string[] {
+  return [
+    `frame ${metrics.averageFrameTimeMs.toFixed(1)}ms ` +
+      `p95 ${metrics.p95FrameTimeMs.toFixed(1)} spikes ${metrics.spikeCount}`,
+  ];
 }
 
 /** The subsystem-timing block, or "" when profiling is off / no samples yet. */

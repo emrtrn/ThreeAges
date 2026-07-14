@@ -924,15 +924,18 @@ frame-time istatistiği ve overlay'e eklenen birkaç satırdır.
 - [x] ~~Debug overlay oluştur~~ (mevcut: `src/scene/debugStats.ts`)
 - [x] ~~`renderer.info` metriklerini topla~~ (mevcut: `readRenderStats` / `readRenderMemory`)
 - [x] ~~Alt sistem sürelerini ölç~~ (mevcut: `SubsystemProfiler`, `?debug`)
-- [ ] `engine/perf/frameMetrics.ts` — pure frame-time aggregator (ham rAF
-      delta'sı, 1/5/30 sn pencereler, ortalama, P95, spike sayaçları,
-      yenileme hızı tahmini) + `tools/engine-tests.ts` testleri
-- [ ] `RuntimeSceneApp` frame loop'una bağla: **clamp'ten önceki ham delta**
-      beslenir; `visibilitychange`'de pencereler sıfırlanır (§3.1)
-- [ ] Production'da da açık, ucuz çalıştığını doğrula (yalnız subsystem
-      profiler `?debug`'a bağlı kalır)
+- [x] ~~`engine/perf/frameMetrics.ts` — pure frame-time aggregator~~ (ham rAF
+      delta'sı, zaman-sınırlı pencere, ortalama, P95 nearest-rank, spike
+      sayaçları 33/50/100ms, düşük-percentile yenileme tahmini) +
+      `tools/engine-tests.ts` testleri (5 check)
+- [x] ~~`RuntimeSceneApp` frame loop'una bağla~~: **clamp'ten önceki ham delta**
+      beslenir; `visibilitychange`'de pencereler sıfırlanır + catch-up frame'i
+      atlanır (§3.1). Getter `getFrameMetricsSnapshot()` (5sn pencere).
+- [x] ~~Production'da da açık, ucuz çalıştığını doğrula~~ (monitor her zaman açık;
+      `record` O(1) ring-write, O(n) sort yalnız nadir `metrics()` çağrısında;
+      subsystem profiler `?debug`'a bağlı kalır)
 - [ ] Composer aktifken doğru draw-call toplamı: `info.autoReset` stratejisi (§3.1)
-- [ ] Overlay'e frame avg / P95 / spike satırını ekle (pure `format*` deseni)
+- [x] ~~Overlay'e frame avg / P95 / spike satırını ekle~~ (pure `formatFrameMetrics`)
 - [ ] Aktif partikül / AI sayaçları overlay'de zaten var; fizik gövdesi ve
       ışık sayaçlarını ekle (§7.4)
 - [ ] Ölçüm penceresini JSON olarak konsola export edilebilir hâle getir
@@ -1215,7 +1218,7 @@ genel küçük adım) — fazlar birbirini bloke etmez.
 
 Forge için ilk uygulanabilir sürüm aşağıdaki kapsamla başlanabilir:
 
-- [ ] Frame time / P95 / spike ölçümü (`frameMetrics.ts` + overlay satırı)
+- [x] ~~Frame time / P95 / spike ölçümü~~ (`frameMetrics.ts` + overlay satırı)
 - [x] ~~Draw call / triangle / texture debug overlay'i~~ (mevcut)
 - [ ] Ultra / High / Medium / Low profil sistemi (çekirdek alanlar, §11)
 - [ ] Adaptif optimizasyon toggle'ı

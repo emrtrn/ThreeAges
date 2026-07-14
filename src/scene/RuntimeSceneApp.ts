@@ -157,6 +157,7 @@ import {
 } from "./SceneRuntimeCore";
 import type { RenderMemoryStats } from "@engine/render-three/renderer";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
+import { FrameMetricsMonitor, type FrameMetrics } from "@engine/perf/frameMetrics";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { attachActorLight } from "@engine/render-three/lights";
 import {
@@ -527,6 +528,8 @@ export interface RuntimeStatsApp {
   getGameModeDebugSnapshot?(): GameModeDebugSnapshot;
   /** Optional: present on the runtime app, absent on the editor SceneApp. */
   getUiDebugSnapshot?(): UiDebugSnapshot;
+  /** Optional: windowed frame-time stats (avg / P95 / spikes) — always on in runtime. */
+  getFrameMetricsSnapshot?(): FrameMetrics;
   /** Optional: per-subsystem tick timing when `?debug` profiling is on, else null. */
   getSubsystemProfileSnapshot?(): SubsystemProfileSnapshot | null;
   /** Optional: GPU/JS memory counters for the `?debug` memory readout. */
@@ -697,6 +700,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly behaviorSubsystem: BehaviorSubsystem;
   private frameHandle = 0;
   private lastTime = 0;
+  /** Frame-time telemetry (avg / P95 / spikes) — stays on in production for the
+   * adaptive quality controller; fed the raw pre-clamp rAF delta (plan §3.1). */
+  private readonly frameMetrics = new FrameMetricsMonitor();
+  /** Skips one frame-time sample after the tab regains focus (drops the rAF
+   * catch-up delta so a visibility change is not miscounted as a spike). */
+  private skipFrameMetricSample = false;
   private activeProject: ActiveProject | null = null;
   private assetLoader: AssetLoader | null = null;
   private layout: RoomLayout | null = null;
@@ -1144,9 +1153,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   start(): void {
     this.lastTime = performance.now();
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    }
     const loop = (now: number) => {
       this.frameHandle = requestAnimationFrame(loop);
-      const deltaMs = Math.min(now - this.lastTime, 100);
+      const rawDeltaMs = now - this.lastTime;
+      // Frame-time stats see the RAW delta so >100 ms hitches stay visible; the
+      // simulation still runs on the clamped delta for stability (plan §3.1).
+      if (this.skipFrameMetricSample) this.skipFrameMetricSample = false;
+      else this.frameMetrics.record(rawDeltaMs);
+      const deltaMs = Math.min(rawDeltaMs, 100);
       this.lastTime = now;
       // Gamepad is poll-only: feed it before the input subsystem advances.
       this.gamepadInput.poll();
@@ -1180,6 +1197,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   dispose(): void {
     cancelAnimationFrame(this.frameHandle);
     window.removeEventListener("resize", this.handleResize);
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", this.handleVisibilityChange);
+    }
     this.uiSubsystem?.dispose();
     this.uiSubsystem = null;
     this.worldUiSubsystem?.dispose();
@@ -1255,6 +1275,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   getRenderStats(): { drawCalls: number; triangles: number } {
     return readSceneRuntimeStats(this.renderer);
+  }
+
+  /** Windowed frame-time stats (avg / P95 / spikes) over the 5 s decision window. */
+  getFrameMetricsSnapshot(): FrameMetrics {
+    return this.frameMetrics.metrics();
   }
 
   /** Per-subsystem tick timing for the `?debug` overlay, or null when profiling is off. */
@@ -4711,6 +4736,18 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     if (resetView) this.cameraViewTouched = false;
     this.postProcessPipeline?.setSize(window.innerWidth, window.innerHeight);
+  };
+
+  /**
+   * On regaining focus, rAF resumes after a long gap: discard the frame-time
+   * windows and skip the next (catch-up) sample so a tab switch is not counted
+   * as a spike (plan §3.1).
+   */
+  private handleVisibilityChange = (): void => {
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      this.frameMetrics.reset();
+      this.skipFrameMetricSample = true;
+    }
   };
 }
 
