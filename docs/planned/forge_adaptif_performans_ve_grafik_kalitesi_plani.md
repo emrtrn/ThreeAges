@@ -1231,16 +1231,27 @@ ihtiyaç kanıtlandıkça (profiler verisiyle) çekilir — hepsi önkoşul değ
       verilirse uzak mixer
       biriken delta ile güncellenir, yakına dönünce hemen normal tick'e döner.
       Editör hiçbir zaman bu extension'ı uygulamaz.)
-- [ ] Chunk bazlı sahne aktivasyonu (foliage Faz 2 chunking işiyle ortak
-      altyapı — önce foliage'da kanıtla, sonra genelle)
-- [ ] Statik tekrar eden prop'larda `InstancedMesh` / mesh merge stratejisi
-      (foliage zaten instanced; statik placement'lara genelleme)
+- [x] ~~Chunk bazlı sahne aktivasyonu (foliage Faz 2 chunking işiyle ortak
+      altyapı — önce foliage'da kanıtla, sonra genelle)~~ (`FoliageRenderBinding`
+      world-XZ `FOLIAGE_CHUNK_SIZE=16` bucket'larıyla ayrı InstancedMesh batch'i
+      üretir; her chunk tight bounding sphere ile frustum cull edilir ve kamera
+      uzaklığına göre görünmez olur. Runtime kalite `foliageCullDistanceScale`
+      authored `cullEnd` değerini geçici olarak çarpar; engine testi kapsar.)
+- [x] ~~Statik tekrar eden prop'larda `InstancedMesh` / mesh merge stratejisi
+      (foliage zaten instanced; statik placement'lara genelleme)~~
+      (`buildSceneInstancedModel` her asset'in placement'larını paylaşılan
+      InstancedMesh batch'lerine dönüştürür; sadece material/probe override
+      isteyen placement'lar render-parity için clone fallback kullanır. Editor
+      ve runtime aynı çekirdek builder'ı kullanır.)
 - [ ] LOD şablonları + `lodBias` (three `LOD` düğümü veya mesafe kademesi)
 - [ ] Uzak nesneler için billboard / impostor değerlendirmesi
 - [ ] Fizik gövdeleri için aktif alan sınırı → NPC yoğun fork'lar için
 - [ ] Spawn sistemlerini frame'lere yayma + object pool (spawn'lı fork'larda)
-- [ ] Shader warm-up / preload aşaması (spike sınıfını kökten azaltır;
-      `renderer.compileAsync` — boot/loading UX'ine eklenir)
+- [x] ~~Shader warm-up / preload aşaması (spike sınıfını kökten azaltır;
+      `renderer.compileAsync` — boot/loading UX'ine eklenir)~~
+      (`RuntimeSceneApp.warmRuntimeShaders`: kalite ayarları ve bütün runtime
+      scene graph kurulduktan sonra loading overlay altında `compileAsync` bekler;
+      sürücü/browser hatasında warning verip normal boot'a devam eder.)
 - [x] ~~Partikül sistemine yoğunluk çarpanı ekle~~ (Faz 2'ye alındı — çekirdek)
 
 ### Çıkış kriteri

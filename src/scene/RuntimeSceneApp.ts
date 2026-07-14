@@ -2275,6 +2275,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.applyQualitySettings(this.qualitySettings);
     this.refreshGraphicsUiFields();
     await this.setupDialogue();
+    await this.warmRuntimeShaders();
+  }
+
+  /**
+   * Compiles the visible scene's material programs while the loading overlay is
+   * still present, moving first-use shader work out of active gameplay.  The
+   * renderer's compile pass is a best-effort preload: browser/driver failures
+   * must not turn an otherwise valid level boot into a black screen.
+   */
+  private async warmRuntimeShaders(): Promise<void> {
+    this.setLoadingStatus("Warming shaders");
+    try {
+      await this.renderer.compileAsync(this.scene, this.camera);
+    } catch (error) {
+      console.warn("[runtime] shader warm-up failed; continuing without preload:", describeLoadError(error));
+    }
   }
 
   private async loadAiAssets(): Promise<void> {
