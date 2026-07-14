@@ -1961,20 +1961,38 @@ Forge ve oyun modüllerinin spline kullanan özel üreticiler yazabilmesini sağ
 
 ### Kontrol listesi
 
-- [ ] Typed generator plugin interface ekle.
-- [ ] Generator registry lifecycle belirle.
-- [ ] Validation hook ekle.
-- [ ] Build/dispose hook ekle.
+- [x] Typed generator plugin interface ekle. *(2026-07-14: `ForgeSplinePluginGeneratorDef` ve `ForgeSplineGeneratorHandler`; plugin type'ları `plugin:` prefix'i kullanır.)*
+- [x] Generator registry lifecycle belirle. *(2026-07-14: `SplineGeneratorRegistry.register()` çakışan type'ı reddeder ve game module unload için disposer döndürür.)*
+- [x] Validation hook ekle. *(2026-07-14: registry normalizer'ı plugin schema'sını doğrular; yüklü olmayan geçerli `plugin:*` kayıtları güvenli settings kopyasıyla korunur.)*
+- [x] Build/dispose hook ekle. *(2026-07-14: registry handler'ı isteğe bağlı `build`/`dispose` hook'ları alır; `buildSplineInstanceGeneratorGroup` game registry'sini kabul eder ve rebuild/dispose sırasında hook disposal'ını çağırır.)*
 - [ ] Editor panel schema veya custom inspector hook kararı ver.
-- [ ] Generator output ownership kurallarını yaz.
-- [ ] Generator'ın layout'u doğrudan mutate etmesini engelle.
-- [ ] Deterministic seed utility'yi public yap.
-- [ ] Custom generator test fixture ekle.
-- [ ] Example `roadDecorations` generator yaz.
-- [ ] Runtime script API node/function listesi ekle.
-- [ ] Spline reference property picker ekle.
-- [ ] Missing plugin type fallback UI ekle.
-- [ ] Plugin version/migration yaklaşımını belgeye yaz.
+- [x] Generator output ownership kurallarını yaz. *(2026-07-14: hook output'u yalnızca spline actor'ın non-pickable generated group'una eklenir; hook dispose'u group serbest bırakılırken çağrılır.)*
+- [x] Generator'ın layout'u doğrudan mutate etmesini engelle. *(2026-07-14: build hook'a authoritative layout yerine clone edilmiş actor snapshot verilir; engine test kötü niyetli mutation'ın source layout'a geçmediğini doğrular.)*
+- [x] Deterministic seed utility'yi public yap. *(2026-07-14: `splineGeneratorSeed` + `SplineGeneratorRandom`.)*
+- [x] Custom generator test fixture ekle. *(2026-07-14: engine test, kayıt/yükten çıkarma, determinism ve missing-plugin save round-trip'i kapsar.)*
+- [x] Example `roadDecorations` generator yaz. *(2026-07-14: `engine/scene/splineRoadDecorations.ts`; aynı distance/frame instance query yolunu kullanır.)*
+- [x] Runtime script API node/function listesi ekle. *(Aşağıdaki mevcut script surface envanteri; yeni arbitrary-eval API eklenmedi.)*
+- [x] Spline reference property picker ekle. *(Mevcut level-instance AI Patrol Route Details picker, `SceneApp.getSplineReferences()` üzerinden level spline'larını ve missing reference fallback'ini sunar; Actor Script class editori level-owned ID listesi göstermez.)*
+- [x] Missing plugin type fallback UI ekle. *(2026-07-14: Details panel plugin yoksa output üretmediğini, sürümü ve ayarların korunduğunu gösterir.)*
+- [x] Plugin version/migration yaklaşımını belgeye yaz. *(Aşağıdaki implementation contract.)*
+
+### Implementation contract — 2026-07-14
+
+- Game module kendi `SplineGeneratorRegistry` örneğini sahiplenir; `register()` dönüşündeki disposer module unload/reload sırasında çağrılır. Registry handler'ı normalize eder; generated Three.js group ve kaynakların build/dispose sorumluluğu game module'de kalır.
+- Plugin config yalnızca `plugin:<gameType>`, `pluginVersion` ve JSON-safe `settings` altında serialize edilir. Handler, eski `pluginVersion` verisini normalize ederek yeni config'e migrate eder. Yeni bir plugin type'ı, çekirdek generator union'ını değiştirmeden kendi registry'sine eklenir.
+- Core, plugin generator'a layout command API veya mutable save callback vermez. Plugin yalnızca normalize edilmiş config ve spline query sonuçlarıyla generated output üretir; output spline actor'a aittir, tek tek level actor'ları değildir.
+- Plugin yüklenmemişse Forge kaydı `Missing plugin` kartında salt-okunur gösterir, build'i atlar ve settings'i save/reload sırasında korur. Bu fallback, farklı game fork'larının aynı layout'u veri kaybı olmadan açabilmesini sağlar.
+
+### Runtime script surface — 2026-07-14
+
+| Surface | Kullanım |
+| --- | --- |
+| `SplinePathFollower` component | `splineId`, speed ve wrap mode ile bir actor'ı distance-based spline üzerinde yürütür. |
+| `SplineRegistry.getSplineById` / `getSplinesByTag` | Game TypeScript'inin level-owned spline query bulma yüzeyidir. |
+| `SplineQuery.getLength`, `getLocationAtDistance`, `getTransformAtDistance`, `findClosestDistance` | Script/generator'ın konum, yön ve en yakın mesafe sorgularıdır. |
+| `forge.moveAlongPatrolRoute` | AI Behavior Tree görevi; `AIController.patrolRoute.source = "spline"` ile nav-aware spline patrol çalıştırır. |
+
+Bu yüzey TypeScript registry ve component sözleşmesiyle sınırlıdır; layout veya save state'i doğrudan mutate eden arbitrary script API bu fazda yoktur.
 
 ### Kabul kriterleri
 

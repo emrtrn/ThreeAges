@@ -5073,7 +5073,7 @@ export class SceneApp {
     const generators = normalizeSplineGenerators(actor.generators);
     const deformGenerators = generators.filter((definition) => definition.type === "deformMesh").map(resolveSplineDeformMeshGenerator)
       .filter((definition) => definition.enabled && definition.previewEnabled && definition.geometryMode === "segments" && Boolean(definition.meshAsset));
-    if (deformGenerators.length === 0 || generators.some((definition) => definition.type !== "deformMesh" && definition.enabled && definition.previewEnabled)) return false;
+    if (deformGenerators.length === 0 || generators.some((definition) => (definition.type === "instances" || definition.type === "rigidSegments") && definition.enabled && definition.previewEnabled)) return false;
     const cache = buildSplineCurveCache(actor.spline);
     const segmentIndices = [...dirtySegments].filter((segmentIndex) => cache.segments.some((segment) => segment.index === segmentIndex));
     if (segmentIndices.length === 0) return false;
@@ -5239,7 +5239,7 @@ export class SceneApp {
         : 0,
       rebuildMs: build?.rebuildMs ?? null,
       preview: build?.preview ?? false,
-      missingAssetId: generator.meshAsset && !this.models.has(generator.meshAsset) ? generator.meshAsset : null,
+      missingAssetId: (generator.type === "instances" || generator.type === "rigidSegments" || generator.type === "deformMesh") && generator.meshAsset && !this.models.has(generator.meshAsset) ? generator.meshAsset : null,
       warnings: generator.type === "rigidSegments"
         ? splineRigidSegmentWarnings(actor, generator)
         : generator.type === "deformMesh" ? [...splineDeformMeshWarnings(generator), ...(build?.warnings ?? [])] : [],

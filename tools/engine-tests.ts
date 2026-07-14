@@ -165,11 +165,18 @@ import {
   generateSplineInstancePlacements,
   generateSplineRigidSegmentPlacements,
   normalizeSplineGenerators,
+  SplineGeneratorRegistry,
+  splineGeneratorSeed,
+  SplineGeneratorRandom,
   resolveSplineDeformMeshGenerator,
   splineGeneratedInstanceHash,
   splineDeformMeshWarnings,
   splineRigidSegmentWarnings,
 } from "../engine/scene/splineGenerator";
+import {
+  buildRoadDecorationInstances,
+  registerRoadDecorationsGenerator,
+} from "../engine/scene/splineRoadDecorations";
 import { splineDeformMeshColliderPrimitive } from "../engine/render-three/splineDeformMesh";
 import { resolveNavAgentProfile } from "../engine/navigation/navAgentProfile";
 import {
@@ -491,6 +498,7 @@ import {
   applySceneBackgroundAndAmbient,
   buildLandscapeSplineMeshGroup,
   buildSplineInstanceGeneratorGroup,
+  disposeSplineGeneratedGroup,
   computeSceneRoomBounds,
   DEFAULT_SCENE_AMBIENT_COLOR,
   DEFAULT_SCENE_AMBIENT_INTENSITY,
@@ -19795,6 +19803,58 @@ check("generic spline rigid segments fit panels, close loops, add optional joint
   assert.ok(splineRigidSegmentWarnings(actor, fixed).some((warning) => warning.includes("Sharp")));
   actor.generators = [fixed];
   assert.deepEqual(validateSplineActor(actor).generators, [fixed]);
+});
+
+check("spline generator plugins validate deterministically and missing plugins preserve level data", () => {
+  const registry = new SplineGeneratorRegistry();
+  const dispose = registerRoadDecorationsGenerator(registry);
+  const [road] = normalizeSplineGenerators([{
+    id: "road-lamps", type: "plugin:roadDecorations", pluginVersion: 2,
+    settings: { meshAsset: "models/lamp.glb", spacing: 4, lateralOffset: 1, seed: 12, ignored: "dropped" },
+  }], registry);
+  assert.equal(road?.type, "plugin:roadDecorations");
+  assert.deepEqual(road?.settings, { meshAsset: "models/lamp.glb", spacing: 4, lateralOffset: 1, seed: 12 });
+  const actor = createDefaultSplineActor();
+  actor.spline.points[1]!.position = [10, 0, 0];
+  if (!road || !road.type.startsWith("plugin:")) throw new Error("plugin normalization failed");
+  const placements = buildRoadDecorationInstances(actor, road);
+  assert.deepEqual(placements, buildRoadDecorationInstances(actor, road));
+  assert.equal(placements.length, 3);
+  assert.equal(splineGeneratorSeed(12, "road-lamps", 2), splineGeneratorSeed(12, "road-lamps", 2));
+  assert.equal(new SplineGeneratorRandom(7).next(), new SplineGeneratorRandom(7).next());
+  dispose();
+  const [missing] = normalizeSplineGenerators([{ id: "road-lamps", type: "plugin:roadDecorations", pluginVersion: 2, settings: { meshAsset: "models/lamp.glb", nested: { keep: true } } }]);
+  assert.deepEqual(missing, { id: "road-lamps", type: "plugin:roadDecorations", pluginVersion: 2, settings: { meshAsset: "models/lamp.glb", nested: { keep: true } } });
+  actor.generators = missing ? [missing] : [];
+  assert.deepEqual(validateSplineActor(actor).generators, actor.generators, "missing plugin output survives save validation");
+});
+
+check("spline plugin build and dispose hooks receive a snapshot and own only generated output", () => {
+  const registry = new SplineGeneratorRegistry();
+  let disposed = 0;
+  registry.register({
+    type: "plugin:fixture",
+    normalize: () => ({ id: "fixture", type: "plugin:fixture", settings: { meshAsset: "fixture-mesh" } }),
+    build: (context) => {
+      // A malicious cast changes only the clone passed to the plugin, never the layout authority.
+      (context.actor as { spline: { points: Array<{ position: [number, number, number] }> } }).spline.points[0]!.position[0] = 999;
+      return [{ generatorId: context.definition.id, assetId: "fixture-mesh", distance: 0, position: [0, 0, 0], rotation: [0, 0, 0, 1], scale: [1, 1, 1] }];
+    },
+    dispose: () => { disposed += 1; },
+  });
+  const actor = createDefaultSplineActor();
+  actor.generators = normalizeSplineGenerators([{ id: "fixture", type: "plugin:fixture" }], registry);
+  const source = new Group();
+  source.add(new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial()));
+  const built = buildSplineInstanceGeneratorGroup({
+    actor, mode: "editor", generatorRegistry: registry,
+    models: new Map([["fixture-mesh", { scene: source } as unknown as GLTF]]), castShadow: false, receiveShadow: false,
+  });
+  assert.equal(built?.instanceCount, 1);
+  assert.equal(actor.spline.points[0]!.position[0], 0, "plugin cannot mutate the authoritative layout actor");
+  assert.ok(built?.group);
+  disposeSplineGeneratedGroup(built!.group!);
+  assert.equal(disposed, 1);
 });
 
 check("generic spline deform mesh normalizes axes, saves, and bends generated geometry", () => {

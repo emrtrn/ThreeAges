@@ -1273,6 +1273,14 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
     : generators.map((generator) => {
       const diagnostic = generatorDiagnostics.get(generator.id);
       const warningMarkup = diagnostic?.warnings.map((warning) => `<div class="detail-readonly">Warning: ${escapeHtml(warning)}</div>`).join("") ?? "";
+      if (generator.type !== "instances" && generator.type !== "rigidSegments" && generator.type !== "deformMesh") {
+        return `<div class="detail-subsection spline-generator" data-spline-generator-card="${escapeHtml(generator.id)}">
+          <div class="detail-subsection-title">Missing plugin · ${escapeHtml(generator.type)}</div>
+          <div class="detail-readonly">This generator is retained for save compatibility but its game plugin is not loaded, so Forge will not build an output.</div>
+          <div class="detail-readonly">Version: ${generator.pluginVersion ?? 1} · Settings are preserved unchanged.</div>
+          <div class="detail-button-row"><button type="button" data-spline-generator-remove="${escapeHtml(generator.id)}" ${locked}>Remove Generator</button></div>
+        </div>`;
+      }
       if (generator.type === "rigidSegments") {
         return `<div class="detail-subsection spline-generator" data-spline-generator-card="${escapeHtml(generator.id)}">
           <div class="detail-subsection-title">Rigid Segments Â· ${escapeHtml(generator.id)}</div>

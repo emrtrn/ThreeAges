@@ -82,29 +82,70 @@ export interface ForgeSplineDeformMeshGeneratorDef extends ForgeSplineGeneratorB
   crossSectionScale?: [number, number];
 }
 
-export type ForgeSplineGeneratorDef = ForgeSplineInstanceGeneratorDef | ForgeSplineRigidSegmentGeneratorDef | ForgeSplineDeformMeshGeneratorDef;
+/**
+ * Serialized placeholder for a game/plugin generator.  The engine deliberately
+ * retains a valid unknown plugin definition instead of dropping it on load:
+ * an editor without that game module can still save the level without data loss.
+ */
+export interface ForgeSplinePluginGeneratorDef extends ForgeSplineGeneratorBase {
+  type: `plugin:${string}`;
+  pluginVersion?: number;
+  settings?: Record<string, unknown>;
+}
+
+export type ForgeSplineBuiltInGeneratorDef = ForgeSplineInstanceGeneratorDef | ForgeSplineRigidSegmentGeneratorDef | ForgeSplineDeformMeshGeneratorDef;
+export type ForgeSplineGeneratorDef = ForgeSplineBuiltInGeneratorDef | ForgeSplinePluginGeneratorDef;
 export type ForgeSplineGeneratorType = ForgeSplineGeneratorDef["type"];
 
 /** Extensible registry boundary for subsequent generator types (rigid/deform/custom). */
 export interface ForgeSplineGeneratorHandler {
-  type: ForgeSplineGeneratorType;
+  type: string;
   normalize: (value: unknown, usedIds: ReadonlySet<string>) => ForgeSplineGeneratorDef | null;
+  /**
+   * Optional game-owned output builder. It receives snapshots only: generator
+   * code cannot mutate the authoritative layout through this contract.
+   */
+  build?: (context: SplineGeneratorBuildContext) => readonly SplineGeneratedInstance[];
+  /** Called when the generated group is released or rebuilt. */
+  dispose?: (context: SplineGeneratorBuildContext) => void;
+}
+
+export interface SplineGeneratorBuildContext {
+  readonly actor: Readonly<LayoutSplineActor>;
+  readonly definition: Readonly<ForgeSplinePluginGeneratorDef>;
+  readonly mode: "editor" | "runtime";
 }
 
 export class SplineGeneratorRegistry {
-  private readonly handlers = new Map<ForgeSplineGeneratorType, ForgeSplineGeneratorHandler>();
+  private readonly handlers = new Map<string, ForgeSplineGeneratorHandler>();
 
-  register(handler: ForgeSplineGeneratorHandler): void {
+  /** Registers one game-owned type and returns its lifecycle disposer. */
+  register(handler: ForgeSplineGeneratorHandler): () => void {
+    if (this.handlers.has(handler.type)) throw new Error(`Spline generator type already registered: ${handler.type}`);
     this.handlers.set(handler.type, handler);
+    return () => { if (this.handlers.get(handler.type) === handler) this.handlers.delete(handler.type); };
   }
 
-  types(): ForgeSplineGeneratorType[] {
+  types(): string[] {
     return [...this.handlers.keys()];
   }
 
   normalize(value: unknown, usedIds: ReadonlySet<string> = new Set()): ForgeSplineGeneratorDef | null {
     if (!isRecord(value) || typeof value.type !== "string") return null;
-    return this.handlers.get(value.type as ForgeSplineGeneratorType)?.normalize(value, usedIds) ?? null;
+    const handler = this.handlers.get(value.type);
+    return handler?.normalize(value, usedIds) ?? normalizeMissingSplinePluginGenerator(value, usedIds);
+  }
+
+  build(context: SplineGeneratorBuildContext): readonly SplineGeneratedInstance[] {
+    const handler = this.handlers.get(context.definition.type);
+    if (!handler?.build || context.definition.enabled === false) return [];
+    if (context.mode === "editor" && context.definition.previewEnabled === false) return [];
+    if (context.mode === "runtime" && context.definition.runtimeEnabled === false) return [];
+    return handler.build(context);
+  }
+
+  dispose(context: SplineGeneratorBuildContext): void {
+    this.handlers.get(context.definition.type)?.dispose?.(context);
   }
 }
 export interface ResolvedSplineInstanceGeneratorDef extends Omit<ForgeSplineInstanceGeneratorDef, "random" | "rotationOffset" | "scale" | "startOffset" | "endOffset" | "enabled" | "previewEnabled" | "runtimeEnabled" | "alignToSpline" | "applyPitch" | "applyRoll" | "lateralOffset" | "verticalOffset" | "seed" | "placementMode" | "includeEndPoint" | "collision"> {
@@ -175,17 +216,57 @@ const MIN_SPACING = 0.01;
 const MAX_OFFSET = 100000;
 
 /** Normalizes untrusted generator JSON without mutating the source layout. */
-export function normalizeSplineGenerators(value: unknown): ForgeSplineGeneratorDef[] {
+export function normalizeSplineGenerators(
+  value: unknown,
+  registry: SplineGeneratorRegistry = DEFAULT_SPLINE_GENERATOR_REGISTRY,
+): ForgeSplineGeneratorDef[] {
   if (!Array.isArray(value)) return [];
   const used = new Set<string>();
   const result: ForgeSplineGeneratorDef[] = [];
   for (const raw of value) {
-    const generator = DEFAULT_SPLINE_GENERATOR_REGISTRY.normalize(raw, used);
+    const generator = registry.normalize(raw, used);
     if (!generator) continue;
     used.add(generator.id);
     result.push(generator);
   }
   return result;
+}
+
+function normalizeMissingSplinePluginGenerator(
+  value: Record<string, unknown>,
+  usedIds: ReadonlySet<string>,
+): ForgeSplinePluginGeneratorDef | null {
+  if (typeof value.type !== "string" || !value.type.startsWith("plugin:")) return null;
+  const name = value.type.slice("plugin:".length).trim();
+  if (!name || name.length > 128) return null;
+  const output: ForgeSplinePluginGeneratorDef = {
+    id: uniqueGeneratorId(typeof value.id === "string" ? value.id.trim() : "plugin", usedIds),
+    type: `plugin:${name}`,
+  };
+  for (const key of ["enabled", "previewEnabled", "runtimeEnabled"] as const) {
+    if (typeof value[key] === "boolean") output[key] = value[key];
+  }
+  if (isFiniteNumber(value.pluginVersion)) output.pluginVersion = Math.max(1, Math.floor(value.pluginVersion));
+  const settings = jsonRecord(value.settings);
+  if (settings) output.settings = settings;
+  return output;
+}
+
+/** Stable public seed derivation for plugin generators; never use Math.random in a generator. */
+export function splineGeneratorSeed(seed: number, generatorId: string, itemIndex: number): number {
+  return hashSeed(seed, generatorId, itemIndex);
+}
+
+/** Public deterministic PRNG for plugin build code. */
+export class SplineGeneratorRandom {
+  constructor(private state: number) {}
+  next(): number {
+    this.state = (this.state + 0x6d2b79f5) | 0;
+    let value = this.state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  }
 }
 
 export function normalizeSplineGenerator(
@@ -414,7 +495,7 @@ export function generateSplineInstancePlacements(
   return distances.slice(0, SPLINE_GENERATOR_MAX_INSTANCES).map((distance, index) => {
     const transform = getSplineTransformAtDistance(cache, distance, "world", actor);
     const frame = transform.frame;
-    const random = new SeededRandom(hashSeed(generator.seed, generator.id, index));
+    const random = new SplineGeneratorRandom(splineGeneratorSeed(generator.seed, generator.id, index));
     const jitter = generator.random.positionJitter;
     const position: Vec3 = [
       transform.position[0] + frame.binormal[0] * (generator.lateralOffset + signed(random) * jitter[0]) + frame.normal[0] * (generator.verticalOffset + signed(random) * jitter[1]) + frame.tangent[0] * signed(random) * jitter[2],
@@ -635,7 +716,7 @@ function normalize(value: Vec3, fallback: Vec3): Vec3 {
   return length > 1e-8 ? [value[0] / length, value[1] / length, value[2] / length] : fallback;
 }
 
-function signed(random: SeededRandom): number {
+function signed(random: SplineGeneratorRandom): number {
   return random.next() * 2 - 1;
 }
 
@@ -647,17 +728,6 @@ function hashSeed(seed: number, id: string, index: number): number {
   let hash = (seed | 0) ^ index;
   for (let offset = 0; offset < id.length; offset += 1) hash = Math.imul(hash ^ id.charCodeAt(offset), 16777619);
   return hash >>> 0;
-}
-
-class SeededRandom {
-  constructor(private state: number) {}
-  next(): number {
-    this.state = (this.state + 0x6d2b79f5) | 0;
-    let value = this.state;
-    value = Math.imul(value ^ (value >>> 15), value | 1);
-    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
-    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
-  }
 }
 
 function uniqueGeneratorId(requested: string, usedIds: ReadonlySet<string>): string {
@@ -697,6 +767,24 @@ function isFiniteNumber(value: unknown): value is number {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function jsonRecord(value: unknown, depth = 0): Record<string, unknown> | null {
+  if (!isRecord(value) || depth > 5) return null;
+  const result: Record<string, unknown> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (key.length > 128) continue;
+    const safe = jsonValue(entry, depth + 1);
+    if (safe !== undefined) result[key] = safe;
+  }
+  return result;
+}
+
+function jsonValue(value: unknown, depth: number): unknown {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (Array.isArray(value)) return value.length <= 256 ? value.map((entry) => jsonValue(entry, depth + 1)).filter((entry) => entry !== undefined) : undefined;
+  return jsonRecord(value, depth);
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

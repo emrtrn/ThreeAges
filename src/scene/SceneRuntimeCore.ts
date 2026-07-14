@@ -69,12 +69,16 @@ import type {
   Vec3,
 } from "@engine/scene/layout";
 import {
+  DEFAULT_SPLINE_GENERATOR_REGISTRY,
   generateSplineInstancePlacements,
   generateSplineRigidSegmentPlacements,
   resolveSplineInstanceGenerator,
   resolveSplineRigidSegmentGenerator,
   resolveSplineDeformMeshGenerator,
+  type SplineGeneratorBuildContext,
+  type SplineGeneratorRegistry,
 } from "@engine/scene/splineGenerator";
+import { cloneSplineActor } from "@engine/scene/splineActor";
 import { buildSplineDeformMeshGroup } from "@engine/render-three/splineDeformMesh";
 import { buildSplineCurveCache } from "@engine/scene/splineCurve";
 import type { Entity } from "@engine/scene/entity";
@@ -295,21 +299,32 @@ export function buildSplineInstanceGeneratorGroup(options: {
   castShadow: boolean;
   receiveShadow: boolean;
   applyMaterialSlots?: (assetId: string, assetGroup: Group) => void;
+  /** Game composition may supply plugin handlers; core built-ins remain registry-free. */
+  generatorRegistry?: SplineGeneratorRegistry;
 }): { group: Group | null; meshes: InstancedMesh[]; instanceCount: number; triangleCount: number; missingAssetIds: string[]; warnings: string[] } | null {
   const itemsByAsset = new Map<string, InstanceRenderItem[]>();
+  const pluginDisposals: Array<() => void> = [];
+  const generatorRegistry = options.generatorRegistry ?? DEFAULT_SPLINE_GENERATOR_REGISTRY;
   for (const definition of options.actor.generators ?? []) {
-    if (definition.type === "deformMesh") continue;
+    const pluginDefinition = definition.type !== "instances" && definition.type !== "rigidSegments" && definition.type !== "deformMesh"
+      ? { ...definition }
+      : null;
+    if (pluginDefinition?.settings) pluginDefinition.settings = { ...pluginDefinition.settings };
+    const pluginContext: SplineGeneratorBuildContext | null = pluginDefinition
+      ? { actor: cloneSplineActor(options.actor), definition: pluginDefinition, mode: options.mode }
+      : null;
     const generated = definition.type === "instances" ? (() => {
       const generator = resolveSplineInstanceGenerator(definition);
       if (!generator.enabled || !generator.meshAsset) return [];
       if (options.mode === "editor" ? !generator.previewEnabled : !generator.runtimeEnabled) return [];
       return generateSplineInstancePlacements(options.actor, generator);
-    })() : (() => {
+    })() : definition.type === "rigidSegments" ? (() => {
       const generator = resolveSplineRigidSegmentGenerator(definition);
       if (!generator.enabled || !generator.meshAsset) return [];
       if (options.mode === "editor" ? !generator.previewEnabled : !generator.runtimeEnabled) return [];
       return generateSplineRigidSegmentPlacements(options.actor, generator);
-    })();
+    })() : pluginContext ? generatorRegistry.build(pluginContext) : [];
+    if (pluginContext) pluginDisposals.push(() => generatorRegistry.dispose(pluginContext));
     for (const instance of generated) {
       const items = itemsByAsset.get(instance.assetId) ?? [];
       items.push({
@@ -327,6 +342,7 @@ export function buildSplineInstanceGeneratorGroup(options: {
   group.name = `SplineGeneratedInstances:${options.actor.id}`;
   group.userData.splineActorId = options.actor.id;
   group.userData.splineGenerated = true;
+  group.userData.splinePluginDisposals = pluginDisposals;
   const meshes: InstancedMesh[] = [];
   let instanceCount = 0;
   let triangleCount = 0;
@@ -390,6 +406,9 @@ export function buildSplineInstanceGeneratorGroup(options: {
 
 /** Releases only geometry/materials created by deformed spline generators. */
 export function disposeSplineGeneratedGroup(group: Group): void {
+  const pluginDisposals = group.userData.splinePluginDisposals as Array<() => void> | undefined;
+  for (const dispose of pluginDisposals ?? []) dispose();
+  delete group.userData.splinePluginDisposals;
   group.traverse((child) => {
     if (!(child instanceof Mesh) || !child.userData.splineGeneratedGeometry) return;
     child.geometry.dispose();
@@ -946,7 +965,7 @@ export function sceneModelAssetIds(layout: RoomLayout | null): string[] {
         const resolved = resolveSplineRigidSegmentGenerator(generator);
         if (resolved.enabled && resolved.meshAsset && !isProceduralAssetId(resolved.meshAsset)) ids.add(resolved.meshAsset);
         if (resolved.enabled && resolved.placePostsAtJoints && resolved.jointMeshAsset && !isProceduralAssetId(resolved.jointMeshAsset)) ids.add(resolved.jointMeshAsset);
-      } else {
+      } else if (generator.type === "deformMesh") {
         const resolved = resolveSplineDeformMeshGenerator(generator);
         if (resolved.enabled && resolved.meshAsset && !isProceduralAssetId(resolved.meshAsset)) ids.add(resolved.meshAsset);
       }
