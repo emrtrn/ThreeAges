@@ -27421,6 +27421,69 @@ await checkAsync("spawn coordinator skips an id that is already registered", asy
   assert.equal(registeredId, "spawned:1");
 });
 
+await checkAsync("spawn coordinator frame-budget queues requests and cancels old-level work", async () => {
+  const registered: string[] = [];
+  const settleAsyncSpawn = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  let classLoads = 0;
+  let resolveFirstClass: ((def: ReturnType<typeof normalizeActorScriptDef>) => void) | null = null;
+  const firstClass = new Promise<ReturnType<typeof normalizeActorScriptDef>>((resolve) => {
+    resolveFirstClass = resolve;
+  });
+  const coordinator = new RuntimeActorSpawnCoordinator({
+    hasLayout: () => true,
+    hasActorEntity: () => false,
+    loadActorClass: async () => {
+      classLoads += 1;
+      return classLoads === 1 ? firstClass : normalizeActorScriptDef({});
+    },
+    registerActorEntity: (entity) => registered.push(entity.id),
+    loadActorMeshModels: async () => {},
+    addActorObject: () => {},
+    addEntityToPhysics: () => {},
+    addEntityToBehavior: () => {},
+    playAutoPlayAudio: () => {},
+    playAutoPlayParticle: () => {},
+  }, { maxSpawnsPerFrame: 1 });
+
+  coordinator.enqueueRuntimeActor(spawnRequest());
+  coordinator.enqueueRuntimeActor(spawnRequest());
+  coordinator.advance();
+  assert.equal(classLoads, 1);
+  assert.equal(coordinator.pendingCount(), 1);
+  resolveFirstClass?.(normalizeActorScriptDef({}));
+  await settleAsyncSpawn();
+  assert.deepEqual(registered, ["spawned:0"]);
+
+  coordinator.advance();
+  await settleAsyncSpawn();
+  assert.equal(classLoads, 2);
+  assert.deepEqual(registered, ["spawned:0", "spawned:1"]);
+
+  // A level teardown invalidates an async request after its class load resolves.
+  let resolveStaleClass: ((def: ReturnType<typeof normalizeActorScriptDef>) => void) | null = null;
+  const staleClass = new Promise<ReturnType<typeof normalizeActorScriptDef>>((resolve) => {
+    resolveStaleClass = resolve;
+  });
+  const staleCoordinator = new RuntimeActorSpawnCoordinator({
+    hasLayout: () => true,
+    hasActorEntity: () => false,
+    loadActorClass: async () => staleClass,
+    registerActorEntity: (entity) => registered.push(`stale:${entity.id}`),
+    loadActorMeshModels: async () => {},
+    addActorObject: () => {},
+    addEntityToPhysics: () => {},
+    addEntityToBehavior: () => {},
+    playAutoPlayAudio: () => {},
+    playAutoPlayParticle: () => {},
+  });
+  staleCoordinator.enqueueRuntimeActor(spawnRequest());
+  staleCoordinator.advance();
+  staleCoordinator.reset();
+  resolveStaleClass?.(normalizeActorScriptDef({}));
+  await settleAsyncSpawn();
+  assert.deepEqual(registered, ["spawned:0", "spawned:1"]);
+});
+
 console.log(`[engine-tests] ${checks} checks passed`);
 
 function minimalGlbJson(json: unknown): Uint8Array {

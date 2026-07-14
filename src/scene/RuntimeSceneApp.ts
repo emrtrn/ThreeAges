@@ -602,6 +602,8 @@ export interface RuntimeSceneAppOptions {
   readonly debug?: boolean;
   /** Optional fork-owned Phase 7 content-quality settings (never authored layout data). */
   readonly qualityExtensions?: QualityExtensions;
+  /** Optional fork override for asynchronous runtime-actor spawn dispatch. */
+  readonly spawnBudgetPerFrame?: number;
 }
 
 /** Mounts the dialogue subtitle overlay into `#ui-overlay`, or null when absent. */
@@ -1103,7 +1105,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           launch: (entityId, velocity, launchOptions) =>
             this.characterMovementSubsystem.launch(entityId, velocity, launchOptions),
           spawn: (request) => {
-            void this.spawnCoordinator.spawnRuntimeActor(request);
+            this.spawnCoordinator.enqueueRuntimeActor(request);
           },
         },
         // Velocity source for `world.velocityOf` (A6, Unreal GetVelocity): the
@@ -1172,7 +1174,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       playAutoPlayParticle: (entity) => {
         void this.playAutoPlayParticleEntity(entity);
       },
-    });
+    }, options.spawnBudgetPerFrame !== undefined ? { maxSpawnsPerFrame: options.spawnBudgetPerFrame } : {});
 
     this.saveCoordinator = new RuntimeSaveCoordinator({
       uiStore: this.uiStore,
@@ -1270,6 +1272,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.gamepadInput.poll();
       this.gameModeSession?.beforeEngineUpdate?.(deltaMs / 1000);
       this.engineApp.update(deltaMs / 1000);
+      this.spawnCoordinator.advance();
       this.tickStartupCalibration(deltaMs / 1000);
       this.tickAdaptiveQuality(deltaMs / 1000);
       this.applyKillZ();

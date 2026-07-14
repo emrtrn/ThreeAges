@@ -39,6 +39,14 @@ export interface RuntimeActorSpawnCoordinatorDeps {
   playAutoPlayParticle(entity: Entity): void;
 }
 
+export interface RuntimeActorSpawnCoordinatorOptions {
+  /** Maximum queued spawn requests whose construction may begin in one frame. */
+  maxSpawnsPerFrame?: number;
+}
+
+/** Conservative template default; spawn-heavy forks may provide their own budget. */
+export const DEFAULT_RUNTIME_SPAWN_BUDGET_PER_FRAME = 4;
+
 /**
  * Owns runtime actor spawning (A6) extracted from {@link RuntimeSceneApp} (P2.4):
  * the monotonic runtime-spawn id counter, spawned-entity id generation and the
@@ -56,12 +64,46 @@ export interface RuntimeActorSpawnCoordinatorDeps {
  */
 export class RuntimeActorSpawnCoordinator {
   private nextRuntimeActorId = 0;
+  private readonly queuedRequests: ActorSpawnRequest[] = [];
+  private readonly maxSpawnsPerFrame: number;
+  /** Invalidates any in-flight async spawn when level teardown begins. */
+  private generation = 0;
 
-  constructor(private readonly deps: RuntimeActorSpawnCoordinatorDeps) {}
+  constructor(
+    private readonly deps: RuntimeActorSpawnCoordinatorDeps,
+    options: RuntimeActorSpawnCoordinatorOptions = {},
+  ) {
+    this.maxSpawnsPerFrame = positiveIntegerOrDefault(
+      options.maxSpawnsPerFrame,
+      DEFAULT_RUNTIME_SPAWN_BUDGET_PER_FRAME,
+    );
+  }
 
   /** Resets the spawn id counter on scene teardown (ids restart per level build). */
   reset(): void {
     this.nextRuntimeActorId = 0;
+    this.queuedRequests.length = 0;
+    this.generation += 1;
+  }
+
+  /** Queues a request for the next frame-budgeted spawn pass. */
+  enqueueRuntimeActor(request: ActorSpawnRequest): void {
+    if (!this.deps.hasLayout()) return;
+    this.queuedRequests.push(cloneSpawnRequest(request));
+  }
+
+  /** Starts at most the configured number of queued spawn constructions this frame. */
+  advance(): void {
+    const generation = this.generation;
+    for (let index = 0; index < this.maxSpawnsPerFrame; index += 1) {
+      const request = this.queuedRequests.shift();
+      if (!request) return;
+      void this.spawnRuntimeActorForGeneration(request, generation);
+    }
+  }
+
+  pendingCount(): number {
+    return this.queuedRequests.length;
   }
 
   /**
@@ -72,8 +114,16 @@ export class RuntimeActorSpawnCoordinator {
    * shooter). Dropped silently before a layout is loaded.
    */
   async spawnRuntimeActor(request: ActorSpawnRequest): Promise<void> {
+    await this.spawnRuntimeActorForGeneration(request, this.generation);
+  }
+
+  private async spawnRuntimeActorForGeneration(
+    request: ActorSpawnRequest,
+    generation: number,
+  ): Promise<void> {
     if (!this.deps.hasLayout()) return;
     const def = await this.deps.loadActorClass(request.classRef);
+    if (generation !== this.generation || !this.deps.hasLayout()) return;
     const entity = actorInstanceToEntity(
       def,
       {
@@ -90,6 +140,7 @@ export class RuntimeActorSpawnCoordinator {
     );
     this.deps.registerActorEntity(entity);
     await this.deps.loadActorMeshModels([entity]);
+    if (generation !== this.generation || !this.deps.hasLayout()) return;
     this.deps.addActorObject(entity);
     this.deps.addEntityToPhysics(entity);
     this.deps.addEntityToBehavior(entity, request.sourceEntityId);
@@ -107,4 +158,22 @@ export class RuntimeActorSpawnCoordinator {
     }
     return id;
   }
+}
+
+function positiveIntegerOrDefault(value: number | undefined, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 1
+    ? Math.floor(value)
+    : fallback;
+}
+
+function cloneSpawnRequest(request: ActorSpawnRequest): ActorSpawnRequest {
+  return {
+    ...request,
+    transform: {
+      position: [...request.transform.position],
+      rotation: [...request.transform.rotation],
+      scale: [...request.transform.scale],
+    },
+    ...(request.params !== undefined ? { params: { ...request.params } } : {}),
+  };
 }

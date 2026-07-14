@@ -1246,7 +1246,13 @@ ihtiyaç kanıtlandıkça (profiler verisiyle) çekilir — hepsi önkoşul değ
 - [ ] LOD şablonları + `lodBias` (three `LOD` düğümü veya mesafe kademesi)
 - [ ] Uzak nesneler için billboard / impostor değerlendirmesi
 - [ ] Fizik gövdeleri için aktif alan sınırı → NPC yoğun fork'lar için
-- [ ] Spawn sistemlerini frame'lere yayma + object pool (spawn'lı fork'larda)
+- [~] Spawn sistemlerini frame'lere yayma + object pool (spawn'lı fork'larda) —
+      **frame budget hazır:** `RuntimeActorSpawnCoordinator` request'leri kuyruğa
+      alır ve runtime frame'inde varsayılan en çok 4 tanesini başlatır (fork
+      `RuntimeSceneApp.spawnBudgetPerFrame` ile değiştirir); teardown kuyruktaki
+      ve in-flight eski-level spawn'larını geçersiz kılar. **Kalan:** actor
+      reset/recycle yaşam döngüsü olmadan güvenli object pool kurulamaz; spawn'lı
+      fork kendi reset sözleşmesini getirdiğinde eklenir.
 - [x] ~~Shader warm-up / preload aşaması (spike sınıfını kökten azaltır;
       `renderer.compileAsync` — boot/loading UX'ine eklenir)~~
       (`RuntimeSceneApp.warmRuntimeShaders`: kalite ayarları ve bütün runtime
