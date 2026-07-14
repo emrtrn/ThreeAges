@@ -236,11 +236,16 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
       hamburger popover'a taşındı); kalan sekmeler Details / Mesh Paint /
       Foliage. `data-inspector-tab="world"` kaldırılırken smoke/testid
       referansları aynı turda güncellenir.
+- [x] Referans görsel düzeltmesi: panel 410px sabit inspector genişliğine,
+      mavi aktif-tab alt çizgisine, kompakt actor başlığına ve koyu kart tabanlı
+      section yüzeylerine geçirildi; coordinate alanları X/Y/Z vurgu çizgileri,
+      görünür kebab eylemleri ve yoğun Unreal-benzeri spacing ile yeniden düzenlendi.
 - [~] Doğrulama: Details transform smoke adımı + undo/redo; save-validator
       etkilenmez (yeni layout alanı yok — Snap to Wall yalnız transform yazar).
       `details-panel.spec.ts` başlık/katlanma/pivot/material DOM sözleşmesini ekler;
       hedefli Playwright çalışması mevcut dev-server ortamında ilk Outliner satırı
-      üretilmeden 30 sn zaman aşımına uğradı. `npx tsc --noEmit` ✅.
+      üretilmeden 30 sn zaman aşımına uğradı. `npx tsc --noEmit` ✅;
+      `npm.cmd run build:verify` ✅.
 
 ### Faz 5 — Content Drawer
 

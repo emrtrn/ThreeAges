@@ -142,7 +142,7 @@ body.editor-mode #debug-stats {
   /* Pull the Camera/View/Show/Play cluster left by the Details panel width
      (see .editor-details) so it sits above the viewport, ending at the Details
      panel's left edge instead of on top of the panel. */
-  margin-right: 360px;
+  margin-right: 410px;
 }
 
 /* Thin vertical rule separating toolbar clusters. */
@@ -693,7 +693,9 @@ body.editor-mode #debug-stats {
 .editor-details {
   right: 0;
   bottom: 28px;
-  width: 360px;
+  width: 410px;
+  padding: 0;
+  background: #111820;
   border-left-style: solid;
   border-left-width: 1px;
 }
@@ -778,35 +780,50 @@ body.editor-mode #debug-stats {
 .inspector-tabs {
   display: flex;
   align-items: end;
-  gap: 4px;
-  margin: -4px -6px 10px;
+  gap: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 10px;
   border-bottom: 1px solid var(--forge-border);
+  background: #121922;
 }
 
 .editor-shell .inspector-tab {
-  height: 32px;
-  border-color: transparent;
-  border-bottom: none;
-  border-radius: 6px 6px 0 0;
+  position: relative;
+  height: 44px;
+  border: 0;
+  border-radius: 0;
   background: transparent;
-  color: #b8c1c6;
-  padding: 0 10px;
+  color: #98a4b2;
+  padding: 0 12px;
+  font-size: 12px;
 }
 
 .editor-shell .inspector-tab:hover {
-  background: rgba(255, 255, 255, 0.06);
+  color: #e8edf2;
+  background: transparent;
 }
 
 .editor-shell .inspector-tab.active {
-  color: #ffffff;
-  border-color: var(--forge-border);
-  background: rgba(12, 14, 16, 0.72);
+  color: #f5f8fb;
+  background: transparent;
+}
+
+.editor-shell .inspector-tab.active::after {
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 2px;
+  content: "";
+  border-radius: 2px 2px 0 0;
+  background: var(--forge-accent);
 }
 
 .inspector-pane {
-  height: calc(100% - 42px);
+  height: calc(100% - 44px);
   overflow: auto;
-  padding-right: 2px;
+  padding: 10px 9px 18px;
 }
 
 .outliner-list {
@@ -1338,6 +1355,251 @@ body.editor-mode #debug-stats {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: #9aa4a9;
+}
+
+/* Details inspector redesign: dense, card-based surfaces matching the reference
+   editor shell. These rules intentionally sit after the general form rules so
+   special-actor panels inherit the same visual hierarchy without changing their
+   authoring semantics. */
+.editor-details .details-body {
+  gap: 9px;
+}
+
+.editor-details .detail-heading {
+  margin: -10px -9px 1px;
+  padding: 12px 12px 11px;
+  border-bottom: 1px solid #27313c;
+  background: linear-gradient(180deg, #151d27 0%, #121923 100%);
+}
+
+.editor-details .detail-heading--actor {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.editor-details .detail-heading-icon {
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 0;
+  color: #c7d2dd;
+  background: transparent;
+}
+
+.editor-details .detail-heading-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.editor-details .detail-heading-copy {
+  gap: 3px;
+}
+
+.editor-details .detail-heading-copy strong {
+  color: #f2f6fa;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.editor-details .detail-heading-copy .detail-heading-meta {
+  color: #98a6b3;
+  font-size: 12px;
+}
+
+.editor-details .detail-heading-chip {
+  align-self: center;
+  padding: 3px 8px;
+  border: 1px solid #364250;
+  border-radius: 5px;
+  color: #c9d4de;
+  background: #18212c;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.editor-details .detail-row,
+.editor-details .detail-vector {
+  grid-template-columns: 66px minmax(0, 1fr);
+  gap: 9px;
+}
+
+.editor-details .detail-row > span,
+.editor-details .detail-vector-label {
+  color: #b7c2cc;
+  font-size: 12px;
+}
+
+.editor-details .detail-row input,
+.editor-details .detail-row select {
+  height: 29px;
+  border-color: #2e3a47;
+  border-radius: 4px;
+  background: #0d131a;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.editor-details .detail-row input:hover,
+.editor-details .detail-row select:hover,
+.editor-details .axis-field:hover {
+  border-color: #465568;
+}
+
+.editor-details .detail-row input:focus,
+.editor-details .detail-row select:focus,
+.editor-details .axis-field:focus-within {
+  border-color: var(--forge-accent);
+  box-shadow: 0 0 0 1px rgba(47, 135, 255, 0.25);
+  outline: none;
+}
+
+.editor-details .detail-section {
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #2a3541;
+  border-radius: 5px;
+  background: #141c25;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.018);
+}
+
+.editor-details .detail-section-heading {
+  min-height: 34px;
+  padding: 0 5px 0 8px;
+  border-bottom: 1px solid #26323e;
+  background: #18212c;
+}
+
+.editor-details .detail-section.collapsed .detail-section-heading {
+  border-bottom: 0;
+}
+
+.editor-details .detail-section-toggle {
+  gap: 7px;
+  color: #e1e7ed;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.editor-details .detail-section-toggle:hover {
+  color: #ffffff;
+}
+
+.editor-details .detail-section-chevron {
+  width: 15px;
+  height: 15px;
+  color: #c3ced8;
+}
+
+.editor-details .detail-section-chevron svg {
+  width: 13px;
+  height: 13px;
+}
+
+.editor-details .detail-section-menu {
+  visibility: visible;
+  width: 25px;
+  height: 25px;
+  color: #c1cbd4;
+}
+
+.editor-details .detail-section-menu:hover {
+  color: #ffffff;
+  background: #263544;
+}
+
+.editor-details .detail-section-body {
+  display: grid;
+  gap: 9px;
+  padding: 9px;
+}
+
+.editor-details .detail-section.collapsed .detail-section-body {
+  display: none;
+}
+
+.editor-details .vector-fields {
+  gap: 5px;
+}
+
+.editor-details .axis-field {
+  height: 28px;
+  border-color: #2d3945;
+  border-radius: 4px;
+  background: #0d131a;
+}
+
+.editor-details .axis-field .axis-tag {
+  flex-basis: 19px;
+  border-right: 1px solid currentColor;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.editor-details .axis-field.axis-x .axis-tag { color: #ed554d; }
+.editor-details .axis-field.axis-y .axis-tag { color: #4cce73; }
+.editor-details .axis-field.axis-z .axis-tag { color: #4f9cff; }
+
+.editor-details .axis-field input {
+  padding: 0 6px;
+  color: #e8eef4;
+  font-size: 12px;
+}
+
+.editor-details .scale-lock {
+  width: 24px;
+  height: 24px;
+  border-color: #3a4857;
+  border-radius: 4px;
+  background: #101720;
+}
+
+.editor-details .scale-lock.on {
+  color: #d7e4f1;
+  border-color: #4f83be;
+  background: #1b3148;
+}
+
+.editor-details .detail-actions-row {
+  gap: 7px;
+}
+
+.editor-details .detail-actions-row button,
+.editor-details .detail-action-button {
+  min-height: 29px;
+  border-color: #34414d;
+  border-radius: 4px;
+  color: #d8e0e7;
+  background: #1b2530;
+  font-size: 12px;
+}
+
+.editor-details .detail-actions-row button:hover:not(:disabled),
+.editor-details .detail-action-button:hover:not(:disabled) {
+  border-color: #4c5e70;
+  background: #263340;
+}
+
+.editor-details .detail-toggle {
+  min-height: 24px;
+  color: #c7d0d9;
+  font-size: 12px;
+}
+
+.editor-details .detail-material-slot {
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 7px;
+}
+
+.editor-details .detail-material-thumbnail {
+  width: 38px;
+  height: 38px;
+  border-color: #3b4855;
+  border-radius: 5px;
+  background: #0d131a;
 }
 
 .landscape-tool-segment {
