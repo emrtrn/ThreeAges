@@ -361,6 +361,10 @@
     {
       "assetId": "wall-400x200",
       "placements": []
+    },
+    {
+      "assetId": "highpolyplane",
+      "placements": []
     }
   ],
   "characters": [],

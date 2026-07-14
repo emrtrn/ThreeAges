@@ -640,6 +640,8 @@ import {
   validateSaveFoliageTypePayload,
   validateFoliageData,
   validateSaveFoliagePayload,
+  validateMeshPaintData,
+  validateSaveMeshPaintPayload,
 } from "./saveValidator";
 import {
   normalizeFoliageType,
@@ -651,6 +653,16 @@ import {
   computeFoliageResourceUsage,
   chunkFoliageInstances,
 } from "../engine/scene/foliage";
+import {
+  createEmptyMeshPaintData,
+  fillMeshVertexColors,
+  findMeshPaintPlacement,
+  meshPaintDataPath,
+  normalizeMeshPaintData,
+  paintMeshVertexColors,
+  removeMeshPaintPlacement,
+  upsertMeshPaintPlacement,
+} from "../engine/scene/meshPaint";
 import { generateLandscapeFoliageSamples } from "../engine/scene/landscapeFoliage";
 import {
   makeFoliageRng,
@@ -16541,6 +16553,66 @@ check("foliageDataPath derives a sibling sidecar path", () => {
     "assets/Levels/Land.foliage.json",
   );
   assert.equal(foliageDataPath("/layouts/foo.layout.json"), "layouts/foo.foliage.json");
+});
+
+check("mesh paint sidecar normalizes placement-scoped RGBA arrays", () => {
+  const target = { assetId: "rock", placementIndex: 2, meshName: "Rock", primitiveIndex: 0 };
+  const data = normalizeMeshPaintData({
+    schema: 1,
+    type: "meshPaint",
+    placements: [
+      { target, vertexCount: 2, colors: [0, 0.5, 1, 1, 2, -1, 0.25, 0.75] },
+      // Duplicate target and malformed topology data are ignored.
+      { target, vertexCount: 1, colors: [1, 1, 1, 1] },
+      { target: { ...target, primitiveIndex: 1 }, vertexCount: 2, colors: [0, 1] },
+    ],
+  });
+  assert.equal(data.placements.length, 1);
+  assert.deepEqual(data.placements[0]?.colors, [0, 0.5, 1, 1, 1, 0, 0.25, 0.75]);
+  assert.equal(meshPaintDataPath("/layouts/Playground.level.json"), "layouts/Playground.meshpaint.json");
+  const updated = upsertMeshPaintPlacement(data, {
+    target,
+    vertexCount: 1,
+    colors: [0.25, 0.5, 0.75, 1],
+  });
+  assert.equal(updated.placements.length, 1);
+  assert.equal(findMeshPaintPlacement(updated, target)?.vertexCount, 1);
+  assert.deepEqual(removeMeshPaintPlacement(updated, "rock", 2), createEmptyMeshPaintData());
+});
+
+check("mesh paint brush and fill respect radial falloff and channel masks", () => {
+  const positions = [0, 0, 0, 1, 0, 0, 3, 0, 0];
+  const stroke = paintMeshVertexColors(positions, null, [0, 0, 0], {
+    radius: 2,
+    strength: 1,
+    falloff: 1,
+    color: [1, 0.5, 0.25, 1],
+    channels: ["r", "a"],
+  });
+  assert.equal(stroke.changedVertices, 2);
+  assert.deepEqual([...stroke.colors], [1, 0, 0, 1, 0.5, 0, 0, 0.5, 0, 0, 0, 0]);
+  const filled = fillMeshVertexColors(3, stroke.colors, [0, 0.75, 0, 0], ["g"]);
+  assert.deepEqual([...filled], [1, 0.75, 0, 1, 0.5, 0.75, 0, 0.5, 0, 0.75, 0, 0]);
+});
+
+check("mesh paint save validation enforces a sidecar envelope and path", () => {
+  const payload = validateSaveMeshPaintPayload({
+    path: "layouts/playground.meshpaint.json",
+    meshPaint: {
+      schema: 1,
+      type: "meshPaint",
+      placements: [{
+        target: { assetId: "rock", placementIndex: 0, meshName: "Rock", primitiveIndex: 0 },
+        vertexCount: 1,
+        colors: [1, 0, 0, 1],
+      }],
+    },
+  });
+  assert.equal(payload.path, "layouts/playground.meshpaint.json");
+  assert.equal((payload.meshPaint.placements as unknown[]).length, 1);
+  assert.throws(() => validateMeshPaintData({ schema: 2, type: "meshPaint", placements: [] }));
+  assert.throws(() => validateSaveMeshPaintPayload({ path: "../bad.meshpaint.json", meshPaint: {} }));
+  assert.throws(() => validateSaveMeshPaintPayload({ path: "layouts/bad.json", meshPaint: {} }));
 });
 
 check("uniqueFoliageGroupId avoids collisions", () => {

@@ -32,6 +32,7 @@ import {
 } from "../engine/assets/manifest";
 import { isBrushShape } from "../engine/scene/blockingVolume";
 import { normalizeFoliageType, normalizeFoliageData } from "../engine/scene/foliage";
+import { normalizeMeshPaintData } from "../engine/scene/meshPaint";
 import {
   defaultForgeMaterialDef,
   isForgeMaterialPreset,
@@ -3308,6 +3309,32 @@ export function validateSaveFoliagePayload(value: unknown): {
     path: input.path,
     foliage: validateFoliageData(input.foliage),
   };
+}
+
+// ─── Mesh Paint (placement vertex-color sidecars) ───────────────────────────
+
+/** Validates + canonicalizes one `<layout>.meshpaint.json` paint sidecar. */
+export function validateMeshPaintData(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("meshPaint data must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.schema !== 1) throw new Error("meshPaint.schema must be 1");
+  if (input.type !== "meshPaint") throw new Error('meshPaint.type must be "meshPaint"');
+  return normalizeMeshPaintData(input) as unknown as Record<string, unknown>;
+}
+
+export function validateSaveMeshPaintPayload(value: unknown): {
+  path: string;
+  meshPaint: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") throw new Error("meshPaint payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".meshpaint.json")) {
+    throw new Error("meshPaint payload path must end with .meshpaint.json");
+  }
+  if (input.path.includes("..")) throw new Error("meshPaint payload path must not contain ..");
+  return { path: input.path, meshPaint: validateMeshPaintData(input.meshPaint) };
 }
 
 // ─── Dialogue & Voice (D2 editor save) ───────────────────────────────────────

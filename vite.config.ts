@@ -31,6 +31,7 @@ import {
   validateSaveSoundCuePayload,
   validateSaveEffectPayload,
   validateSaveFoliagePayload,
+  validateSaveMeshPaintPayload,
   validateSaveFoliageTypePayload,
   validateSaveDialogueVoicePayload,
   validateSaveDialogueLinePayload,
@@ -1291,6 +1292,36 @@ function layoutEditorPlugin(): Plugin {
             await mkdir(resolve(sidecarPath, ".."), { recursive: true });
             const previous = await readFile(sidecarPath, "utf8").catch(() => null);
             const next = `${JSON.stringify(payload.foliage, null, 2)}\n`;
+            await writeFile(sidecarPath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Mesh Paint stores placement-scoped RGBA vertex arrays beside the
+        // level, never mutating the source GLB. The validator rejects partial
+        // arrays/topology mismatches before data reaches disk.
+        if (req.url === "/__save-meshpaint") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveMeshPaintPayload(
+              await readJsonBody(req, LANDSCAPE_BODY_MAX_BYTES),
+            );
+            const sidecarPath = resolvePublicPath(payload.path);
+            await mkdir(resolve(sidecarPath, ".."), { recursive: true });
+            const previous = await readFile(sidecarPath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.meshPaint, null, 2)}\n`;
             await writeFile(sidecarPath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));

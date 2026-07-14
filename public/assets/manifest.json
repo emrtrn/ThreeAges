@@ -20903,6 +20903,52 @@
         "bytes": 429
       },
       "license": "Unknown"
+    },
+    {
+      "id": "highpolyplane",
+      "name": "Highpoly Plane",
+      "assetType": "staticMesh",
+      "category": "Shapes",
+      "path": "assets/starter-content/StaticMeshes/Shapes/HighpolyPlane.glb",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Shapes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 118660
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "meshpaint-level",
+      "name": "Mesh Paint.Level",
+      "assetType": "level",
+      "category": "Levels",
+      "path": "assets/starter-content/Levels/MeshPaint.level.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 100
+      },
+      "license": "Unknown"
     }
   ]
 }
