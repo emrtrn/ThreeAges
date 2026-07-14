@@ -3344,16 +3344,28 @@ export class EditorUi {
     const checked = (channel: string): string => settings.channels.includes(channel as "r" | "g" | "b" | "a") ? "checked" : "";
     this.meshPaintBody.innerHTML = `
       <div class="detail-section">
-        <div class="detail-section-title">Vertex Colors</div>
-        <div class="detail-hint">Select a static-mesh placement, then paint in the viewport. Data is stored per placement in the level sidecar.</div>
+        <div class="detail-section-title">Vertex Color / Weights</div>
+        <div class="detail-hint">Select a static-mesh placement, then paint in the viewport. R/G/B/A channels are also the Vertex Weights workflow; data is stored per placement in the level sidecar.</div>
         <label class="detail-row"><span>Tool</span>
           <select data-mesh-paint-tool><option value="paint" ${settings.tool === "paint" ? "selected" : ""}>Paint</option><option value="erase" ${settings.tool === "erase" ? "selected" : ""}>Erase</option></select>
+        </label>
+        <label class="detail-row"><span>Color View</span>
+          <select data-mesh-paint-color-view>
+            <option value="off" ${settings.colorView === "off" ? "selected" : ""}>Off</option>
+            <option value="rgb" ${settings.colorView === "rgb" ? "selected" : ""}>RGB</option>
+            <option value="alpha" ${settings.colorView === "alpha" ? "selected" : ""}>Alpha</option>
+            <option value="r" ${settings.colorView === "r" ? "selected" : ""}>Red</option>
+            <option value="g" ${settings.colorView === "g" ? "selected" : ""}>Green</option>
+            <option value="b" ${settings.colorView === "b" ? "selected" : ""}>Blue</option>
+          </select>
         </label>
         <label class="detail-row"><span>Color</span><input type="color" value="#${rgb}" data-mesh-paint-color /></label>
         <label class="detail-row"><span>Alpha</span><input type="number" min="0" max="1" step="0.05" value="${settings.color[3]}" data-mesh-paint-alpha /></label>
         <label class="detail-row"><span>Brush Size</span><input type="number" min="0.01" step="0.1" value="${settings.brushSize}" data-mesh-paint-size /></label>
         <label class="detail-row"><span>Strength</span><input type="number" min="0" max="1" step="0.05" value="${settings.strength}" data-mesh-paint-strength /></label>
         <label class="detail-row"><span>Falloff</span><input type="number" min="0.01" max="32" step="0.1" value="${settings.falloff}" data-mesh-paint-falloff /></label>
+        <label class="detail-row"><span>Flow</span><input type="number" min="0" max="1" step="0.05" value="${settings.flow}" data-mesh-paint-flow /></label>
+        <label class="detail-row detail-toggle"><span>Ignore Backfaces</span><input type="checkbox" ${settings.ignoreBackfaces ? "checked" : ""} data-mesh-paint-ignore-backfaces /></label>
         <div class="detail-row"><span>Channels</span><span>
           <label><input type="checkbox" value="r" ${checked("r")} data-mesh-paint-channel />R</label>
           <label><input type="checkbox" value="g" ${checked("g")} data-mesh-paint-channel />G</label>
@@ -3362,15 +3374,27 @@ export class EditorUi {
         </span></div>
         <button type="button" data-mesh-paint-fill>Fill Selected Channels</button>
         <button type="button" data-mesh-paint-clear>Clear Selected Mesh</button>
+        <div class="detail-section-title">Transfer</div>
+        <div class="detail-hint">Copy painted primitives, select a compatible placement, then paste.</div>
+        <button type="button" data-mesh-paint-copy>Copy Selected Mesh</button>
+        <button type="button" data-mesh-paint-paste ${this.app.hasMeshPaintClipboard() ? "" : "disabled"}>Paste to Selected Mesh</button>
       </div>`;
 
-    const numberPatch = (selector: string, key: "brushSize" | "strength" | "falloff"): void => {
+    const numberPatch = (selector: string, key: "brushSize" | "strength" | "falloff" | "flow"): void => {
       this.meshPaintBody.querySelector<HTMLInputElement>(selector)?.addEventListener("change", (event) => {
         this.app.setMeshPaintToolSettings({ [key]: Number((event.currentTarget as HTMLInputElement).value) });
       });
     };
     this.meshPaintBody.querySelector<HTMLSelectElement>("[data-mesh-paint-tool]")?.addEventListener("change", (event) => {
       this.app.setMeshPaintToolSettings({ tool: (event.currentTarget as HTMLSelectElement).value === "erase" ? "erase" : "paint" });
+    });
+    this.meshPaintBody.querySelector<HTMLSelectElement>("[data-mesh-paint-color-view]")?.addEventListener("change", (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value;
+      this.app.setMeshPaintToolSettings({
+        colorView: ["off", "rgb", "alpha", "r", "g", "b"].includes(value)
+          ? value as "off" | "rgb" | "alpha" | "r" | "g" | "b"
+          : "off",
+      });
     });
     this.meshPaintBody.querySelector<HTMLInputElement>("[data-mesh-paint-color]")?.addEventListener("change", (event) => {
       const hex = (event.currentTarget as HTMLInputElement).value.slice(1);
@@ -3397,11 +3421,21 @@ export class EditorUi {
     numberPatch("[data-mesh-paint-size]", "brushSize");
     numberPatch("[data-mesh-paint-strength]", "strength");
     numberPatch("[data-mesh-paint-falloff]", "falloff");
+    numberPatch("[data-mesh-paint-flow]", "flow");
+    this.meshPaintBody.querySelector<HTMLInputElement>("[data-mesh-paint-ignore-backfaces]")?.addEventListener("change", (event) => {
+      this.app.setMeshPaintToolSettings({ ignoreBackfaces: (event.currentTarget as HTMLInputElement).checked });
+    });
     this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-fill]")?.addEventListener("click", () => {
       this.app.fillSelectedMeshPaint();
     });
     this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-clear]")?.addEventListener("click", () => {
       this.app.clearSelectedMeshPaint();
+    });
+    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-copy]")?.addEventListener("click", () => {
+      this.app.copySelectedMeshPaint();
+    });
+    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-paste]")?.addEventListener("click", () => {
+      this.app.pasteSelectedMeshPaint();
     });
   }
 

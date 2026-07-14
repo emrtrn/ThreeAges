@@ -1,7 +1,7 @@
 # Mesh Paint Mode Araştırması ve Forge Planı
 
 > Tarih: 2026-06-23
-> Durum: Faz 1 devam ediyor. Material Vertex Color, placement sidecar ve Scene Editor Vertex Color authoring uygulandı; Color View, flow/back-face seçenekleri ve runtime gösterimi eksik.
+> Durum: Faz 1 Vertex Color / Vertex Weights dikey kesiti tamamlandı. Aynı RGBA channel-mask authoring yüzeyi Vertex Weights için de kullanılır; Faz 2 aktarım araçları sıradaki kapsamdır.
 > Amaç: Unreal Engine Mesh Paint Mode'un kapsamını araştırmak, Forge'da **level
 > viewport üzerinden mesh paint authoring** sistemini planlamak ve materyallerin
 > bu boyanmış veriyi nasıl destekleyeceğini netleştirmek. Boyama aracı Material
@@ -382,16 +382,16 @@ Faz 1 kabulü:
 - [x] Layer Blend shader patch içinde `vColor` desteği ekle.
 - [x] Scene/Level Editor içine Mesh Paint Mode switch'i ekle.
 - [x] Select / Paint / Fill / Save / Remove araçlarını ekle.
-- [ ] Brush cursor, size, strength, falloff, flow ve back-face ignore ayarlarını ekle. _(Surface-normal brush cursor ile size/strength/falloff hazır; flow ve back-face ignore açık.)_
-- [ ] Color View Mode: Off, RGB, Alpha, Red, Green, Blue.
+- [x] Brush cursor, size, strength, falloff, flow ve back-face ignore ayarlarını ekle.
+- [x] Color View Mode: Off, RGB, Alpha, Red, Green, Blue.
 - [x] CPU vertex paint prototype ile placement geometry clone/update akışını ekle.
 - [x] Save/reload için `*.meshpaint.json` sidecar desteği ekle.
-- [ ] Runtime Play tarafında painted vertex color sonucunu göster.
+- [x] Runtime Play tarafında painted vertex color sonucunu göster.
 - [x] Engine testleri ve `npm run build:verify` gate'i ekle.
 
 ### Faz 2 - Copy/Paste ve asset-level aktarım
 
-- [ ] Placement paint verisini başka placement'lara Copy/Paste et.
+- [x] Placement paint verisini başka placement'lara Copy/Paste et. _(Mesh name, primitive index ve vertex count uyumluluğu zorunludur.)_
 - [ ] `To Mesh` ile instance paint'i asset-level `*.vertexcolors.json` sidecar'a aktar.
 - [ ] `To Instances` ile asset-level default'u seçili instance'lara uygula.
 - [ ] Static Mesh Editor'a vertex color inspect/remove/fill paneli ekle.

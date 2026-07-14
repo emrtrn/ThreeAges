@@ -258,6 +258,12 @@ import { makeFoliageRng, rollFoliageInstance } from "@engine/scene/foliagePaint"
 import type { LayoutFoliageData, LayoutFoliageGroup } from "@engine/scene/foliage";
 import { loadFoliageData, loadFoliageTypesForData } from "./foliageLoader";
 import {
+  createEmptyMeshPaintData,
+  type LayoutMeshPaintData,
+  type LayoutMeshPaintPlacement,
+} from "@engine/scene/meshPaint";
+import { loadMeshPaintData } from "./meshPaintLoader";
+import {
   createReflectiveSurfaceObject,
   disposeReflectiveSurfaceObject,
   resolveReflectiveSurface,
@@ -791,6 +797,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private assetLoader: AssetLoader | null = null;
   private layout: RoomLayout | null = null;
   private activeLevelPath: string | null = null;
+  /** Placement-scoped vertex colors authored in Scene Editor's Mesh Paint Mode. */
+  private meshPaintData: LayoutMeshPaintData = createEmptyMeshPaintData();
   /** Owns slot-based save/load: store, pending-restore latch, checkpoint + UI (P2.3). */
   private readonly saveCoordinator: RuntimeSaveCoordinator;
   /** Owns Level Travel: the travel state machine + async teardown/rebuild loop (P2.2). */
@@ -2154,6 +2162,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!this.assetLoader || !this.activeProject) return;
     this.behaviorSubsystem.setRegistry(this.createSceneBehaviorRegistry());
     this.layout = await loadRoomLayout(layoutPath);
+    this.meshPaintData = await loadMeshPaintData(layoutPath);
     this.activeLevelPath = layoutPath;
     const worldSettings = resolveSceneWorldSettings(this.layout);
     this.gravityY = worldSettings.gravity[1];
@@ -2727,7 +2736,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Instanced statics: remove each group (their override clones are children,
     // so they leave with it) and dispose only the InstancedMesh instance buffers
     // — the underlying geometry/material is the shared cached GLTF's.
-    for (const group of this.instanceGroups.values()) this.scene.remove(group);
+    for (const group of this.instanceGroups.values()) {
+      disposeMeshPaintCloneGeometries(group);
+      this.scene.remove(group);
+    }
     for (const meshes of this.instanceMeshes.values()) {
       for (const mesh of meshes) mesh.dispose();
     }
@@ -4380,7 +4392,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     // Placements with a material override and/or a reflection-capture probe envMap
     // are hidden in the instanced mesh and rendered as a separate clone (clone-
     // fallback), matching the editor so Play renders identically.
-    const decisions = placements.map((placement) => {
+    const decisions = placements.map((placement, placementIndex) => {
+      const meshPaint = this.meshPaintData.placements.filter(
+        (entry) => entry.target.assetId === assetId && entry.target.placementIndex === placementIndex,
+      );
       const materialSlot = placement.materialSlot;
       const materialSlots = materialSlot ? undefined : this.resolveAssetMaterialSlots(assetId);
       const overrideMaterial = materialSlot && this.materialCache.has(materialSlot)
@@ -4394,7 +4409,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         overrideMaterial,
         materialSlots,
         bake,
-        asClone: Boolean(overrideMaterial) || hasAssignedMaterialSlots(materialSlots) || Boolean(bake),
+        meshPaint,
+        asClone:
+          Boolean(overrideMaterial) ||
+          hasAssignedMaterialSlots(materialSlots) ||
+          Boolean(bake) ||
+          meshPaint.length > 0,
       };
     });
     const instancedPlacements = decisions.map((decision) =>
@@ -4418,6 +4438,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         decision.materialSlots,
         decision.bake,
         clonedMaterials,
+        decision.meshPaint,
       );
       group.add(object);
       this.instanceOverrideObjects.set(overrideObjectKey(assetId, placementIndex), object);
@@ -4449,6 +4470,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     materialSlots: AssetMaterialSlotsDef | undefined,
     bake: SphereReflectionCaptureBake | null,
     clonedMaterials: Material[],
+    meshPaint: readonly LayoutMeshPaintPlacement[] = [],
   ): Object3D {
     const object = gltf.scene.clone(true);
     object.name = `${assetId}-clone-${placementIndex}`;
@@ -4457,8 +4479,21 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     object.visible = !(placement.hidden ?? false);
     object.userData.assetId = assetId;
     object.userData.placementIndex = placementIndex;
+    const primitiveIndexByMeshName = new Map<string, number>();
     object.traverse((child) => {
       if (!isRenderableMesh(child)) return;
+      const meshName = child.name || "__unnamed_mesh";
+      const primitiveIndex = primitiveIndexByMeshName.get(meshName) ?? 0;
+      primitiveIndexByMeshName.set(meshName, primitiveIndex + 1);
+      const paint = meshPaint.find(
+        (entry) => entry.target.meshName === meshName && entry.target.primitiveIndex === primitiveIndex,
+      );
+      if (paint && child.geometry.getAttribute("position")?.count === paint.vertexCount) {
+        const geometry = child.geometry.clone();
+        geometry.setAttribute("color", new Float32BufferAttribute(paint.colors, 4));
+        geometry.userData.forgeMeshPaintClone = true;
+        child.geometry = geometry;
+      }
       const applyBake = (source: Material): Material => {
         const base = overrideMaterial ?? source;
         return bake
@@ -4580,7 +4615,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     for (const instance of this.layout.instances) {
       if (isMarkerAssetId(instance.assetId)) continue;
       const previous = this.instanceGroups.get(instance.assetId);
-      if (previous) this.scene.remove(previous);
+      if (previous) {
+        disposeMeshPaintCloneGeometries(previous);
+        this.scene.remove(previous);
+      }
       this.scene.add(this.createInstancedModel(instance.assetId, instance.placements));
     }
     const globalEnv = this.scene.environment;
@@ -5504,6 +5542,14 @@ function parseCharacterEntityIndex(entityId: string): number | null {
 
 /** Zero-scale matrix that collapses an InstancedMesh slot to a point (invisible). */
 const COLLAPSED_INSTANCE_MATRIX = new Matrix4().makeScale(0, 0, 0);
+
+/** Frees per-placement clone geometry while leaving cached GLTF geometry untouched. */
+function disposeMeshPaintCloneGeometries(root: Object3D): void {
+  root.traverse((child) => {
+    if (!isRenderableMesh(child) || child.geometry.userData.forgeMeshPaintClone !== true) return;
+    child.geometry.dispose();
+  });
+}
 
 function parseInstanceEntityId(entityId: string): { assetId: string; placementIndex: number } | null {
   if (!entityId.startsWith("instance:")) return null;

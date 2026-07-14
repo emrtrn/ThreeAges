@@ -16,9 +16,27 @@
           "scale": 1
         }
       ]
+    },
+    {
+      "assetId": "shape-cube",
+      "placements": [
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "materialSlot": "gray-material",
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [],
+  "worldSettings": {
+    "staticObjectsCastShadow": true
+  },
   "skyAtmosphere": {
     "rayleigh": 1,
     "turbidity": 1,

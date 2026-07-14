@@ -668,12 +668,18 @@ export interface FoliageToolSettings {
 /** Vertex-color authoring state for Scene Editor's Mesh Paint Mode. */
 export interface MeshPaintToolSettings {
   tool: "paint" | "erase";
+  colorView: MeshPaintColorView;
   color: [number, number, number, number];
   channels: MeshPaintChannel[];
   brushSize: number;
   strength: number;
   falloff: number;
+  /** Continuous paint rate while the pointer is held (0 disables it). */
+  flow: number;
+  ignoreBackfaces: boolean;
 }
+
+export type MeshPaintColorView = "off" | "rgb" | "alpha" | "r" | "g" | "b";
 
 /** A Foliage Type row surfaced to the editor panel (asset id + resolved def). */
 export interface FoliageTypeView {
@@ -979,13 +985,22 @@ export class SceneApp {
   private meshPaintModeActive = false;
   private meshPaintBrushCursor: Mesh | null = null;
   private meshPaintStrokePointerId: number | null = null;
+  private meshPaintFlowPointer: { clientX: number; clientY: number; pointerId: number } | null = null;
+  /** In-editor, non-persistent source paint for Copy/Paste between placements. */
+  private meshPaintClipboard: LayoutMeshPaintPlacement[] = [];
+  /** Original materials temporarily replaced by the selected-placement Color View. */
+  private readonly meshPaintColorViewOriginalMaterials = new Map<Mesh, Material | Material[]>();
+  private readonly meshPaintColorViewPreviewMaterials = new Set<MeshBasicMaterial>();
   private meshPaintToolSettings: MeshPaintToolSettings = {
     tool: "paint",
+    colorView: "off",
     color: [1, 0, 0, 1],
     channels: ["r", "g", "b", "a"],
     brushSize: 1,
     strength: 0.75,
     falloff: 1,
+    flow: 0,
+    ignoreBackfaces: true,
   };
   /** Resolved Foliage Types referenced by the sidecar, keyed by asset id. */
   private foliageTypes = new Map<string, ForgeFoliageTypeDef>();
@@ -1432,6 +1447,7 @@ export class SceneApp {
       this.engineApp.update(deltaSeconds);
 
       this.cameraController.update(deltaSeconds);
+      this.updateMeshPaintFlow(deltaSeconds);
       this.updateGizmoScreenScale();
       if (this.skyObject) followCameraWithSky(this.skyObject, this.camera);
       if (this.cloudObject) {
@@ -1492,6 +1508,15 @@ export class SceneApp {
     this.postProcessPipeline = null;
     this.disposeReflectionCaptureBakes();
     this.disposeInstanceProbeMaterials();
+    this.clearMeshPaintColorView();
+    if (this.meshPaintBrushCursor) {
+      this.scene.remove(this.meshPaintBrushCursor);
+      this.meshPaintBrushCursor.geometry.dispose();
+      const material = this.meshPaintBrushCursor.material;
+      if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+      else material.dispose();
+      this.meshPaintBrushCursor = null;
+    }
     if (this.landscapeBrushCursor) {
       this.scene.remove(this.landscapeBrushCursor);
       this.landscapeBrushCursor.geometry.dispose();
@@ -3527,6 +3552,8 @@ export class SceneApp {
 
   private rebuildInstanceGroup(assetId: string): void {
     if (!this.layout) return;
+    // Preview materials belong to clone meshes that are about to be discarded.
+    this.clearMeshPaintColorView();
     const previous = this.instanceGroups.get(assetId);
     if (previous) {
       previous.traverse((child) => {
@@ -3544,6 +3571,7 @@ export class SceneApp {
     const instance = this.layout.instances.find((entry) => entry.assetId === assetId);
     if (!instance) return;
     this.scene.add(this.createInstancedModel(assetId, instance.placements));
+    this.applyMeshPaintColorView();
   }
 
   private insertInstancePlacement(
@@ -7069,7 +7097,13 @@ export class SceneApp {
   setMeshPaintModeActive(active: boolean): void {
     if (this.meshPaintModeActive === active) return;
     this.meshPaintModeActive = active;
-    if (!active) this.clearMeshPaintBrushHover();
+    if (!active) {
+      this.meshPaintFlowPointer = null;
+      this.clearMeshPaintBrushHover();
+      this.clearMeshPaintColorView();
+    } else {
+      this.applyMeshPaintColorView();
+    }
     this.onMeshPaintChanged?.();
   }
 
@@ -7088,6 +7122,7 @@ export class SceneApp {
     );
     this.meshPaintToolSettings = {
       tool: next.tool === "erase" ? "erase" : "paint",
+      colorView: isMeshPaintColorView(next.colorView) ? next.colorView : "off",
       color: [
         clampUnit(next.color?.[0]),
         clampUnit(next.color?.[1]),
@@ -7098,7 +7133,10 @@ export class SceneApp {
       brushSize: Math.max(0.01, Number.isFinite(next.brushSize) ? next.brushSize : 1),
       strength: clampUnit(next.strength),
       falloff: Math.min(32, Math.max(0.01, Number.isFinite(next.falloff) ? next.falloff : 1)),
+      flow: clampUnit(next.flow),
+      ignoreBackfaces: next.ignoreBackfaces !== false,
     };
+    this.applyMeshPaintColorView();
     this.onMeshPaintChanged?.();
     return this.getMeshPaintToolSettings();
   }
@@ -7136,6 +7174,70 @@ export class SceneApp {
       this.onStatus?.(`Filled ${changed} mesh primitive${changed === 1 ? "" : "s"}.`, "success");
       this.onMeshPaintChanged?.();
     }
+  }
+
+  copySelectedMeshPaint(): void {
+    const selection = this.selectedMeshPaintInstance();
+    if (!selection) return;
+    const copied = this.meshPaintData.placements.filter(
+      (entry) =>
+        entry.target.assetId === selection.assetId &&
+        entry.target.placementIndex === selection.placementIndex,
+    );
+    if (copied.length === 0) {
+      this.onStatus?.("Selected placement has no Mesh Paint data to copy.", "warning");
+      return;
+    }
+    this.meshPaintClipboard = copied.map((entry) => ({
+      target: { ...entry.target },
+      vertexCount: entry.vertexCount,
+      colors: [...entry.colors],
+    }));
+    this.onStatus?.(`Copied ${copied.length} mesh primitive${copied.length === 1 ? "" : "s"}.`, "success");
+    this.onMeshPaintChanged?.();
+  }
+
+  /** Pastes compatible primitive colors onto the selected placement. */
+  pasteSelectedMeshPaint(): void {
+    const selection = this.selectedMeshPaintInstance();
+    if (!selection || this.meshPaintClipboard.length === 0) {
+      this.onStatus?.("Copy Mesh Paint data before pasting.", "warning");
+      return;
+    }
+    if (!this.ensureMeshPaintPlacementData(selection)) return;
+    const targets = this.meshPaintData.placements.filter(
+      (entry) =>
+        entry.target.assetId === selection.assetId &&
+        entry.target.placementIndex === selection.placementIndex,
+    );
+    let pasted = 0;
+    for (const source of this.meshPaintClipboard) {
+      const target = targets.find(
+        (entry) =>
+          entry.target.meshName === source.target.meshName &&
+          entry.target.primitiveIndex === source.target.primitiveIndex &&
+          entry.vertexCount === source.vertexCount,
+      );
+      if (!target) continue;
+      this.meshPaintData = upsertMeshPaintPlacement(this.meshPaintData, {
+        target: { ...target.target },
+        vertexCount: source.vertexCount,
+        colors: [...source.colors],
+      });
+      pasted += 1;
+    }
+    if (pasted === 0) {
+      this.onStatus?.("Paste skipped: selected placement topology is incompatible.", "warning");
+      return;
+    }
+    this.meshPaintDataDirty = true;
+    this.rebuildInstanceGroup(selection.assetId);
+    this.onStatus?.(`Pasted ${pasted} mesh primitive${pasted === 1 ? "" : "s"}.`, "success");
+    this.onMeshPaintChanged?.();
+  }
+
+  hasMeshPaintClipboard(): boolean {
+    return this.meshPaintClipboard.length > 0;
   }
 
   /** Removes paint data from the selected placement and returns it to shared instancing. */
@@ -7191,6 +7293,28 @@ export class SceneApp {
     return meshes;
   }
 
+  /** Restores the authored materials after a Color View change, selection change, or mode exit. */
+  private clearMeshPaintColorView(): void {
+    for (const [mesh, material] of this.meshPaintColorViewOriginalMaterials) mesh.material = material;
+    this.meshPaintColorViewOriginalMaterials.clear();
+    for (const material of this.meshPaintColorViewPreviewMaterials) material.dispose();
+    this.meshPaintColorViewPreviewMaterials.clear();
+  }
+
+  /** Applies a temporary unlit RGBA/channel preview only to the selected painted placement. */
+  private applyMeshPaintColorView(): void {
+    this.clearMeshPaintColorView();
+    if (!this.meshPaintModeActive || this.meshPaintToolSettings.colorView === "off") return;
+    const selection = this.selectedMeshPaintInstance();
+    if (!selection) return;
+    for (const mesh of this.meshPaintObjects(selection)) {
+      this.meshPaintColorViewOriginalMaterials.set(mesh, mesh.material);
+      const material = createMeshPaintColorViewMaterial(this.meshPaintToolSettings.colorView);
+      this.meshPaintColorViewPreviewMaterials.add(material);
+      mesh.material = material;
+    }
+  }
+
   private ensureMeshPaintGeometry(object: Mesh): BufferGeometry {
     if (object.geometry.userData.forgeMeshPaintClone === true) return object.geometry;
     const geometry = object.geometry.clone();
@@ -7242,6 +7366,11 @@ export class SceneApp {
     const hit = this.picker.pickMeshPaintSurface(event.clientX, event.clientY, selection);
     if (!hit) return false;
     this.meshPaintStrokePointerId = event.pointerId;
+    this.meshPaintFlowPointer = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
     this.canvas.setPointerCapture(event.pointerId);
     this.applyMeshPaintDab(hit);
     return true;
@@ -7249,6 +7378,11 @@ export class SceneApp {
 
   updateMeshPaintStroke(event: PointerEvent): boolean {
     if (this.meshPaintStrokePointerId !== event.pointerId) return false;
+    this.meshPaintFlowPointer = {
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+    };
     const selection = this.selectedMeshPaintInstance();
     if (!selection) return true;
     const hit = this.picker.pickMeshPaintSurface(event.clientX, event.clientY, selection);
@@ -7260,6 +7394,7 @@ export class SceneApp {
   endMeshPaintStroke(event: PointerEvent): boolean {
     if (this.meshPaintStrokePointerId !== event.pointerId) return false;
     this.meshPaintStrokePointerId = null;
+    this.meshPaintFlowPointer = null;
     try {
       this.canvas.releasePointerCapture(event.pointerId);
     } catch {
@@ -7268,7 +7403,25 @@ export class SceneApp {
     return true;
   }
 
-  private applyMeshPaintDab(hit: MeshPaintSurfacePick): void {
+  private updateMeshPaintFlow(deltaSeconds: number): void {
+    const pointer = this.meshPaintFlowPointer;
+    if (!pointer || !this.meshPaintModeActive || this.meshPaintToolSettings.flow <= 0) return;
+    const selection = this.selectedMeshPaintInstance();
+    if (!selection || this.meshPaintStrokePointerId !== pointer.pointerId) return;
+    const hit = this.picker.pickMeshPaintSurface(pointer.clientX, pointer.clientY, selection);
+    if (!hit) return;
+    // A frame-rate independent continuous paint rate; one means a firm brush,
+    // while zero leaves ordinary pointer dabs unchanged.
+    this.applyMeshPaintDab(hit, Math.min(1, deltaSeconds * this.meshPaintToolSettings.flow * 8));
+  }
+
+  private applyMeshPaintDab(hit: MeshPaintSurfacePick, strengthMultiplier = 1): void {
+    if (
+      this.meshPaintToolSettings.ignoreBackfaces &&
+      hit.normal.dot(this.editorViewportCamera().position.clone().sub(hit.point)) <= 0
+    ) {
+      return;
+    }
     const target = meshPaintTargetFromObject(hit.object);
     const position = hit.object.geometry.getAttribute("position");
     if (!target || !position) return;
@@ -7284,7 +7437,7 @@ export class SceneApp {
       [local.x, local.y, local.z],
       {
         radius: this.meshPaintToolSettings.brushSize,
-        strength: this.meshPaintToolSettings.strength,
+        strength: this.meshPaintToolSettings.strength * strengthMultiplier,
         falloff: this.meshPaintToolSettings.falloff,
         channels: this.meshPaintToolSettings.channels,
         color,
@@ -12111,6 +12264,7 @@ export class SceneApp {
   }
 
   private emitSelectionChanged(): void {
+    this.applyMeshPaintColorView();
     this.onSelectionChanged?.(this.getSelected());
     this.emitSceneObjectsChanged();
   }
@@ -12303,6 +12457,32 @@ function normalizedAttributeComponent(
 
 function clampUnit(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
+}
+
+function isMeshPaintColorView(value: unknown): value is MeshPaintColorView {
+  return value === "off" || value === "rgb" || value === "alpha" || value === "r" || value === "g" || value === "b";
+}
+
+/** An editor-only material for inspecting the selected placement's color attribute. */
+function createMeshPaintColorViewMaterial(view: Exclude<MeshPaintColorView, "off">): MeshBasicMaterial {
+  const expression = view === "rgb"
+    ? "vColor.rgb"
+    : view === "alpha"
+      ? "vec3(vColor.a)"
+      : view === "r"
+        ? "vec3(vColor.r)"
+        : view === "g"
+          ? "vec3(vColor.g)"
+          : "vec3(vColor.b)";
+  const material = new MeshBasicMaterial({ color: 0xffffff, vertexColors: true, toneMapped: false });
+  material.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <color_fragment>",
+      `#include <color_fragment>\n  diffuseColor.rgb = ${expression};`,
+    );
+  };
+  material.customProgramCacheKey = () => `forge-mesh-paint-color-view:${view}`;
+  return material;
 }
 
 function splineGeneratedTriangleCount(group: Group | null | undefined, generatorId?: string): number {
