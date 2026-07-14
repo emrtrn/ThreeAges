@@ -4767,6 +4767,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         camera: this.camera,
         width: window.innerWidth,
         height: window.innerHeight,
+        bloomResolutionScale: this.qualitySettings.bloomResolutionScale,
       }),
     );
     this.postProcessPipeline.setAntialiasPass(

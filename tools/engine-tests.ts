@@ -715,6 +715,7 @@ import {
   PostProcessPipeline,
   postProcessToneMappingExposure,
   resolvePostProcess,
+  scaledBloomResolution,
   POST_PROCESS_DEFAULTS,
 } from "../engine/render-three/postProcess";
 import {
@@ -21887,7 +21888,7 @@ check("createPostProcessEffectPasses follows enabled-set ordering", () => {
     [
       "ForgeGtaoPass",
       "BokehPass",
-      "UnrealBloomPass",
+      "ScaledBloomPass", // quality-aware UnrealBloomPass subclass
       "ShaderPass",
       "ShaderPass",
       "ShaderPass",
@@ -21895,6 +21896,16 @@ check("createPostProcessEffectPasses follows enabled-set ordering", () => {
     ],
   );
   passes.forEach((pass) => pass.dispose());
+});
+
+check("scaledBloomResolution scales the bloom target and guards bad input", () => {
+  assert.deepEqual(scaledBloomResolution(1920, 1080, 1), [1920, 1080]);
+  assert.deepEqual(scaledBloomResolution(1920, 1080, 0.5), [960, 540]);
+  assert.deepEqual(scaledBloomResolution(1280, 720, 0.5), [640, 360]);
+  // Bad scale falls back to full size; tiny inputs floor to 1 (never zero).
+  assert.deepEqual(scaledBloomResolution(800, 600, 0), [800, 600]);
+  assert.deepEqual(scaledBloomResolution(800, 600, Number.NaN), [800, 600]);
+  assert.deepEqual(scaledBloomResolution(1, 1, 0.1), [1, 1]);
 });
 
 check("createPostProcessAntialiasPass creates SMAA only when enabled", () => {

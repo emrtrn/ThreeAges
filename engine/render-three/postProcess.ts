@@ -172,9 +172,57 @@ function hasColorGrading(resolved: ResolvedPostProcess): boolean {
   );
 }
 
+/**
+ * Bloom render-target size for a resolution scale (quality knob): `1` keeps the
+ * composer size, `0.5` halves it (quarter the bloom pixels). Floors to 1 and
+ * falls back to full size on bad input. Pure so it is unit-tested without a GL
+ * context.
+ */
+export function scaledBloomResolution(
+  width: number,
+  height: number,
+  scale: number,
+): [number, number] {
+  const s = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  return [Math.max(1, Math.round(width * s)), Math.max(1, Math.round(height * s))];
+}
+
+/**
+ * UnrealBloomPass that renders at a fraction of the composer resolution. The
+ * composer re-drives `setSize` with its (pixel-ratio-multiplied) size on every
+ * resize, so the scale must be re-applied there — a smaller constructor
+ * resolution alone would be overwritten on the first composer resize.
+ */
+class ScaledBloomPass extends UnrealBloomPass {
+  private readonly resolutionScale: number;
+
+  constructor(
+    resolution: Vector2,
+    strength: number,
+    radius: number,
+    threshold: number,
+    resolutionScale: number,
+  ) {
+    super(resolution, strength, radius, threshold);
+    this.resolutionScale = resolutionScale > 0 ? resolutionScale : 1;
+  }
+
+  override setSize(width: number, height: number): void {
+    const [w, h] = scaledBloomResolution(width, height, this.resolutionScale);
+    super.setSize(w, h);
+  }
+}
+
 export function createPostProcessEffectPasses(
   resolved: ResolvedPostProcess | null,
-  context: { scene: Scene; camera: Camera; width: number; height: number },
+  context: {
+    scene: Scene;
+    camera: Camera;
+    width: number;
+    height: number;
+    /** Quality bloom render-scale (1 = full, 0.5 = half); defaults to full. */
+    bloomResolutionScale?: number;
+  },
 ): Pass[] {
   if (!resolved || resolved.hidden) return [];
   const { width, height } = context;
@@ -201,12 +249,15 @@ export function createPostProcessEffectPasses(
     passes.push(bokehPass);
   }
   if (resolved.bloom.enabled) {
+    const bloomScale = context.bloomResolutionScale ?? 1;
+    const [bloomW, bloomH] = scaledBloomResolution(width, height, bloomScale);
     passes.push(
-      new UnrealBloomPass(
-        new Vector2(width, height),
+      new ScaledBloomPass(
+        new Vector2(bloomW, bloomH),
         resolved.bloom.intensity * BLOOM_INTENSITY_SCALE,
         resolved.bloom.radius,
         resolved.bloom.threshold,
+        bloomScale,
       ),
     );
   }

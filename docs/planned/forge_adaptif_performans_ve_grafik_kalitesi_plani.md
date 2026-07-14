@@ -977,12 +977,13 @@ texture limiti — bu fazın DIŞINDA; bkz. §11 ve Faz 7.)
       üretir) + `fitDirectionalShadowToBounds`'a `distanceScale` param (yalnız
       ortho extent'i kısar, `far`/derinlik dokunulmaz → clipping yok). Ultra
       (enabled/2048/1.0) no-op.
-- [~] AO (GTAO) / DoF / Bloom / SMAA gate'lerini bağla: **gate kısmı bağlandı** —
-      `RuntimeSceneApp.applyRuntimePostProcess` authored `ResolvedPostProcess`'i
-      `applyQualityToPostProcess` ile geçirip mevcut `setEffectPasses` rebuild'ini
-      kullanıyor; merkezi giriş `applyQualitySettings()` (default Ultra = davranış
-      aynı). **Kalan:** Bloom yarım çözünürlük (`bloomResolutionScale` →
-      `UnrealBloomPass` boyutu, `createPostProcessEffectPasses` param'ı)
+- [x] ~~AO (GTAO) / DoF / Bloom / SMAA gate'lerini bağla~~ +
+      **Bloom yarım çözünürlük**: `RuntimeSceneApp.applyRuntimePostProcess`
+      authored `ResolvedPostProcess`'i `applyQualityToPostProcess` ile geçirip
+      `setEffectPasses` rebuild'ini kullanıyor (merkezi giriş `applyQualitySettings()`,
+      default Ultra = davranış aynı). Bloom: `ScaledBloomPass` (UnrealBloomPass alt
+      sınıfı) `setSize`'ı `scaledBloomResolution` ile ölçekler → composer resize'ı
+      full-res'e döndürmez; `bloomResolutionScale` context param'ıyla geçilir.
 - [x] ~~Partikül yoğunluğunu bağla~~: `VfxSubsystem.setGlobalDensity` (live +
       pooled + future instance'lara `ParticleEffect.setDensityScale`);
       `applyQualitySettings` çağırır. Density spawn-rate'i ölçekler → alive count
@@ -1234,7 +1235,9 @@ Forge için ilk uygulanabilir sürüm aşağıdaki kapsamla başlanabilir:
 
 - [x] ~~Frame time / P95 / spike ölçümü~~ (`frameMetrics.ts` + overlay satırı)
 - [x] ~~Draw call / triangle / texture debug overlay'i~~ (mevcut)
-- [ ] Ultra / High / Medium / Low profil sistemi (çekirdek alanlar, §11)
+- [x] ~~Ultra / High / Medium / Low profil sistemi (çekirdek alanlar, §11)~~
+      (`qualityProfiles.ts` + `RuntimeSceneApp.applyQualitySettings`: render scale/
+      pixel ratio, shadows, post-process gate + bloom yarım-res, partikül, foliage)
 - [ ] Adaptif optimizasyon toggle'ı
 - [ ] Manuel profil seçimi
 - [ ] `UserSettingsStore.graphics` ile ayar kaydı
