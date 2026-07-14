@@ -24,7 +24,6 @@ import type { MetadataSchema } from "@engine/scene/metadataSchema";
 import type { AiPatrolRoute } from "@engine/scene/components";
 import {
   AMBIENT_SOUND_ASSET_ID,
-  isShapePrimitiveType,
   PLAYER_START_ASSET_ID,
   shapeAssetId,
   type ShapePrimitiveType,
@@ -125,7 +124,7 @@ import {
 } from "./panels/details/environmentDetails";
 import { renderWorldSettingsPanel } from "./panels/world/worldSettingsPanel";
 import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
-import { UI_ICONS } from "./editorIcons";
+import { UI_ICONS, ACTOR_TYPE_ICONS, type ActorTypeIcon } from "./editorIcons";
 import { createFoliageType } from "@engine/scene/foliage";
 import { renderOutlinerPanel } from "./panels/outliner/outlinerPanel";
 import {
@@ -270,6 +269,49 @@ const VIEW_MODE_LABELS: Record<ViewMode, string> = {
 const MENU_CHEVRON =
   '<svg class="menu-chevron" viewBox="0 0 12 12" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5L6 7.5 9 4.5"/></svg>';
 
+/**
+ * Add Actor flyout categories in display order, each with a type icon
+ * (EDITOR_UI_REDESIGN_PLAN Faz 2). Entries carry a matching `category` label so
+ * the markup can be generated from one source shared by the categories, the
+ * "Recently Used" list, and the flat search results.
+ */
+const ADD_ACTOR_CATEGORIES: readonly { label: string; icon: ActorTypeIcon }[] = [
+  { label: "Lights", icon: "light" },
+  { label: "Shapes", icon: "mesh" },
+  { label: "Volumes", icon: "volume" },
+  { label: "Visual Effects", icon: "reflection" },
+  { label: "Terrain", icon: "terrain" },
+  { label: "Sounds", icon: "sound" },
+  { label: "UI", icon: "widget" },
+  { label: "Gameplay", icon: "gameplay" },
+];
+
+/** localStorage key + cap for the Add Actor "Recently Used" list. */
+const RECENT_ACTORS_STORAGE_KEY = "forge.editor.recentActors";
+const RECENT_ACTORS_MAX = 5;
+
+/**
+ * One placeable actor in the Add Actor flyout. A single descriptor drives the
+ * category submenu button, the Recently Used row, and the search result row, so
+ * drag payloads / click actions stay identical across all three surfaces.
+ */
+interface AddActorEntry {
+  /** Stable id (also the Recently Used / search key). */
+  key: string;
+  label: string;
+  /** Matches an `ADD_ACTOR_CATEGORIES` label. */
+  category: string;
+  icon: ActorTypeIcon;
+  /** Extra button attribute markup (preserves the cube `data-testid`). */
+  attr?: string;
+  /** Drag-to-place payload; omitted for click-only singleton actors. */
+  drag?: { mime: string; payload: () => string; beginPreview?: () => void };
+  /** Runs on click. */
+  onClick: () => void;
+  /** True when a plain click also creates the actor (specials + singletons). */
+  clickPlaces: boolean;
+}
+
 function formatActiveLevelName(path: string | undefined): string {
   const fileName = normalizeProjectPath(path ?? "").split("/").filter(Boolean).at(-1) ?? "";
   const levelName = fileName
@@ -356,11 +398,17 @@ export class EditorUi {
   private importTargetDir = "";
   /** Existing model selected for the next Reimport upload, if any. */
   private reimportTarget: BrowserAssetItem | null = null;
+  /** All placeable Add Actor entries, built once (drives menu + search + recent). */
+  private readonly addActorEntries: AddActorEntry[];
+  /** Most-recently-used Add Actor keys (persisted to localStorage). */
+  private recentActorKeys: string[] = [];
 
   constructor(private readonly app: SceneApp) {
     document.body.classList.add("editor-mode");
     // Preload the transparent drag image so setDragImage works on the first drag.
     this.getEmptyDragImage();
+    this.addActorEntries = this.buildAddActorEntries();
+    this.loadRecentActors();
 
     this.root = document.createElement("div");
     this.root.id = "editor-ui";
@@ -389,71 +437,7 @@ export class EditorUi {
           <span class="topbar-divider"></span>
           <div class="add-actor-menu">
             <button type="button" class="topbar-menu-button primary" data-add-actor-button data-testid="add-actor-button" title="Add actor">+ Add Actor${MENU_CHEVRON}</button>
-            <div class="add-actor-popover" data-add-actor-popover>
-              <div class="add-actor-category">
-                <button type="button" class="add-actor-category-label">Lights</button>
-                <div class="add-actor-submenu">
-                  <button type="button" data-add-actor="directional">Directional Light</button>
-                  <button type="button" data-add-actor="point">Point Light</button>
-                  <button type="button" data-add-actor="spot">Spot Light</button>
-                </div>
-              </div>
-              <div class="add-actor-category">
-                <button type="button" class="add-actor-category-label">Shapes</button>
-                <div class="add-actor-submenu">
-                  <button type="button" data-add-shape="cube" data-testid="add-shape-cube">Cube</button>
-                  <button type="button" data-add-shape="sphere">Sphere</button>
-                  <button type="button" data-add-shape="cylinder">Cylinder</button>
-                  <button type="button" data-add-shape="cone">Cone</button>
-                  <button type="button" data-add-shape="plane">Plane</button>
-                </div>
-              </div>
-              <div class="add-actor-category">
-                <button type="button" class="add-actor-category-label">Volumes</button>
-                <div class="add-actor-submenu">
-                  <button type="button" data-add-blocking-volume>Blocking Volume</button>
-                  <button type="button" data-add-ai-navigation-volume>AI Navigation Volume</button>
-                </div>
-              </div>
-              <div class="add-actor-category">
-                <button type="button" class="add-actor-category-label">Visual Effects</button>
-                <div class="add-actor-submenu">
-                  <button type="button" data-add-sky-atmosphere>Sky Atmosphere</button>
-                  <button type="button" data-add-height-fog>Exponential Height Fog</button>
-                  <button type="button" data-add-cloud-layer>Cloud Layer</button>
-                  <button type="button" data-add-reflection-plane>Mirror Plane</button>
-                  <button type="button" data-add-reflective-surface>Reflective Surface</button>
-                  <button type="button" data-add-reflection-capture>Sphere Reflection Capture</button>
-                  <button type="button" data-add-post-process>Post Process</button>
-                </div>
-              </div>
-              <div class="add-actor-category">
-                <button type="button" class="add-actor-category-label">Terrain</button>
-                <div class="add-actor-submenu">
-                  <button type="button" data-add-landscape>Landscape</button>
-                </div>
-              </div>
-              <div class="add-actor-category">
-                <button type="button" class="add-actor-category-label">Sounds</button>
-                <div class="add-actor-submenu">
-                  <button type="button" data-add-ambient-sound>Ambient Sound</button>
-                </div>
-              </div>
-              <div class="add-actor-category">
-                <button type="button" class="add-actor-category-label">UI</button>
-                <div class="add-actor-submenu">
-                  <button type="button" data-add-world-widget>World Widget</button>
-                </div>
-              </div>
-              <div class="add-actor-category">
-                <button type="button" class="add-actor-category-label">Gameplay</button>
-                <div class="add-actor-submenu">
-                  <button type="button" data-add-player-start>Player Start</button>
-                  <button type="button" data-add-target-point>Target Point</button>
-                  <button type="button" data-add-spline>Spline</button>
-                </div>
-              </div>
-            </div>
+            <div class="add-actor-popover" data-add-actor-popover>${this.buildAddActorMenuMarkup()}</div>
           </div>
           <div class="editor-tools" data-tools></div>
           <div class="editor-snaps">
@@ -943,174 +927,7 @@ export class EditorUi {
     this.bindViewMenus();
     this.bindMenuHoverIntent();
 
-    this.root.querySelectorAll<HTMLButtonElement>("[data-add-actor]").forEach((button) => {
-      const type = button.dataset.addActor;
-      if (type === "directional" || type === "point" || type === "spot") {
-        button.draggable = true;
-        button.addEventListener("dragstart", (event) => {
-          event.dataTransfer?.setData("application/x-forge-light-actor", type);
-          event.dataTransfer!.effectAllowed = "copy";
-          event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
-          this.app.beginLightDragPreview(type);
-          this.setStatus(`Dragging ${formatLightTypeLabel(type)} - drop in the viewport to place.`);
-        });
-        button.addEventListener("dragend", () => {
-          this.app.endAssetDragPreview();
-        });
-      }
-      button.addEventListener("click", () => {
-        this.setStatus("Drag the actor into the viewport to place it.", "info");
-      });
-    });
-
-    this.root.querySelectorAll<HTMLButtonElement>("[data-add-shape]").forEach((button) => {
-      const type = button.dataset.addShape;
-      if (isShapePrimitiveType(type)) {
-        const assetId = shapeAssetId(type);
-        button.draggable = true;
-        button.addEventListener("dragstart", (event) => {
-          event.dataTransfer?.setData("application/x-3dgamedev-asset", assetId);
-          event.dataTransfer!.effectAllowed = "copy";
-          event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
-          this.app.beginAssetDragPreview(assetId);
-          this.setStatus(`Dragging ${formatShapeTypeLabel(type)} - drop in the viewport to place.`);
-        });
-        button.addEventListener("dragend", () => {
-          this.app.endAssetDragPreview();
-        });
-      }
-      button.addEventListener("click", () => {
-        this.setStatus("Drag the actor into the viewport to place it.", "info");
-      });
-    });
-
-    const playerStartButton = this.root.querySelector<HTMLButtonElement>("[data-add-player-start]");
-    if (playerStartButton) {
-      playerStartButton.draggable = true;
-      playerStartButton.addEventListener("dragstart", (event) => {
-        event.dataTransfer?.setData("application/x-3dgamedev-asset", PLAYER_START_ASSET_ID);
-        event.dataTransfer!.effectAllowed = "copy";
-        event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
-        this.app.beginAssetDragPreview(PLAYER_START_ASSET_ID);
-        this.setStatus("Dragging Player Start - drop in the viewport to place.");
-      });
-      playerStartButton.addEventListener("dragend", () => {
-        this.app.endAssetDragPreview();
-      });
-      playerStartButton.addEventListener("click", () => {
-        this.setStatus("Drag the actor into the viewport to place it.", "info");
-      });
-    }
-
-    const ambientSoundButton = this.root.querySelector<HTMLButtonElement>("[data-add-ambient-sound]");
-    if (ambientSoundButton) {
-      ambientSoundButton.draggable = true;
-      ambientSoundButton.addEventListener("dragstart", (event) => {
-        event.dataTransfer?.setData("application/x-3dgamedev-asset", AMBIENT_SOUND_ASSET_ID);
-        event.dataTransfer!.effectAllowed = "copy";
-        event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
-        this.app.beginAssetDragPreview(AMBIENT_SOUND_ASSET_ID);
-        this.setStatus("Dragging Ambient Sound - drop in the viewport to place.");
-      });
-      ambientSoundButton.addEventListener("dragend", () => {
-        this.app.endAssetDragPreview();
-      });
-      ambientSoundButton.addEventListener("click", () => {
-        this.setStatus("Drag the actor into the viewport to place it.", "info");
-      });
-    }
-
-    // Sky Atmosphere is a transform-less singleton environment actor: click to add
-    // (or select the existing one) rather than drag-to-place.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-sky-atmosphere]")
-      ?.addEventListener("click", () => {
-        this.app.addSkyAtmosphere();
-      });
-
-    // Height Fog is a transform-less singleton environment actor: click to add
-    // (or select the existing one) rather than drag-to-place.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-height-fog]")
-      ?.addEventListener("click", () => {
-        this.app.addHeightFog();
-      });
-
-    // Cloud Layer is a transform-less singleton environment actor: click to add
-    // (or select the existing one) rather than drag-to-place.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-cloud-layer]")
-      ?.addEventListener("click", () => {
-        this.app.addCloudLayer();
-      });
-
-    // Reflection Plane (Planar mirror) is a placed actor with a transform.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-reflection-plane]")
-      ?.addEventListener("click", () => {
-        this.app.addReflectionPlane();
-      });
-
-    // Reflective Surface (textured glossy planar reflection) is a placed actor.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-reflective-surface]")
-      ?.addEventListener("click", () => {
-        this.app.addReflectiveSurface();
-      });
-
-    // Sphere Reflection Capture (probe) is a placed actor with a transform.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-reflection-capture]")
-      ?.addEventListener("click", () => {
-        this.app.addReflectionCapture();
-      });
-
-    // Landscape (heightfield terrain) is a level-owned singleton actor created at the origin.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-landscape]")
-      ?.addEventListener("click", () => {
-        this.app.addLandscape();
-      });
-
-    // Blocking Volume (parametric blockout brush) is a placed actor with a transform.
-    // Draggable: drop in the viewport to place at the cursor; click still adds one.
-    this.bindSpecialActorButton("[data-add-blocking-volume]", "blockingVolume", "Blocking Volume", () =>
-      this.app.addBlockingVolume(),
-    );
-
-    // AI Navigation Volume (NavMesh Bounds Volume-style pathfinding bounds).
-    this.bindSpecialActorButton(
-      "[data-add-ai-navigation-volume]",
-      "aiNavigationVolume",
-      "AI Navigation Volume",
-      () => this.app.addAiNavigationVolume(),
-    );
-
-    // Target Point (Unreal-style AI patrol route marker).
-    this.bindSpecialActorButton("[data-add-target-point]", "targetPoint", "Target Point", () =>
-      this.app.addTargetPoint(),
-    );
-
-    // Generic level-owned spline actor. Point editing is added in Faz 5.
-    this.bindSpecialActorButton("[data-add-spline]", "spline", "Spline", () => this.app.addSpline());
-
-    // Post Process is a transform-less singleton environment actor.
-    this.root
-      .querySelector<HTMLButtonElement>("[data-add-post-process]")
-      ?.addEventListener("click", () => {
-        this.app.addPostProcess();
-      });
-
-    // World Widget is a placed world-space UI billboard (anchor + Details fields).
-    // The widget asset id is resolved here (the manifest lives in the editor UI)
-    // and rides the drag payload as `worldWidget:<assetId>`.
-    this.bindSpecialActorButton(
-      "[data-add-world-widget]",
-      "worldWidget",
-      "World Widget",
-      () => this.app.addWorldWidget(this.firstUiWidgetAssetId()),
-      () => `worldWidget:${this.firstUiWidgetAssetId()}`,
-    );
+    this.bindAddActorMenu();
 
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -1900,32 +1717,348 @@ export class EditorUi {
   }
 
   /**
-   * Wires an Add-Actor button for a "special" (non-asset, non-light) actor:
-   * click still adds one at the default spot, and dragging the button drops it
-   * into the viewport at the cursor via the `x-forge-special-actor` channel. The
-   * drag payload defaults to `kind`; `payload` overrides it (world widget encodes
-   * its resolved asset id). No ghost preview — the actor appears on drop.
+   * The full Add Actor catalog (EDITOR_UI_REDESIGN_PLAN Faz 2). One descriptor
+   * per placeable actor drives three surfaces — the category submenu, the
+   * Recently Used list, and the flat search results — so their drag payloads and
+   * click actions can never drift apart. Drag channels mirror the runtime drop
+   * handlers: lights (`x-forge-light-actor`), assets (`x-3dgamedev-asset`),
+   * special actors (`x-forge-special-actor`); click-only singletons omit `drag`.
    */
-  private bindSpecialActorButton(
-    selector: string,
-    kind: string,
-    label: string,
-    onClick: () => void,
-    payload: () => string = () => kind,
-  ): void {
-    const button = this.root.querySelector<HTMLButtonElement>(selector);
-    if (!button) return;
-    button.draggable = true;
-    button.addEventListener("dragstart", (event) => {
-      event.dataTransfer?.setData("application/x-forge-special-actor", payload());
-      event.dataTransfer!.effectAllowed = "copy";
-      event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
-      this.setStatus(`Dragging ${label} - drop in the viewport to place.`);
+  private buildAddActorEntries(): AddActorEntry[] {
+    // Draggable assets/lights hint on click (they only place on drop); specials
+    // and singletons create on click as well.
+    const dragHintClick = (): void =>
+      this.setStatus("Drag the actor into the viewport to place it.", "info");
+    const entries: AddActorEntry[] = [];
+
+    (["directional", "point", "spot"] as const).forEach((type) => {
+      entries.push({
+        key: `light:${type}`,
+        label: formatLightTypeLabel(type),
+        category: "Lights",
+        icon: "light",
+        attr: `data-add-actor="${type}"`,
+        drag: {
+          mime: "application/x-forge-light-actor",
+          payload: () => type,
+          beginPreview: () => this.app.beginLightDragPreview(type),
+        },
+        onClick: dragHintClick,
+        clickPlaces: false,
+      });
     });
-    button.addEventListener("dragend", () => {
-      this.app.endAssetDragPreview();
+
+    (["cube", "sphere", "cylinder", "cone", "plane"] as const).forEach((type) => {
+      const assetId = shapeAssetId(type);
+      entries.push({
+        key: `shape:${type}`,
+        label: formatShapeTypeLabel(type),
+        category: "Shapes",
+        icon: "mesh",
+        attr:
+          `data-add-shape="${type}"` +
+          (type === "cube" ? ' data-testid="add-shape-cube"' : ""),
+        drag: {
+          mime: "application/x-3dgamedev-asset",
+          payload: () => assetId,
+          beginPreview: () => this.app.beginAssetDragPreview(assetId),
+        },
+        onClick: dragHintClick,
+        clickPlaces: false,
+      });
     });
-    button.addEventListener("click", onClick);
+
+    const special = (
+      key: string,
+      label: string,
+      category: string,
+      icon: ActorTypeIcon,
+      onClick: () => void,
+      payload: () => string = () => key,
+    ): void => {
+      entries.push({
+        key,
+        label,
+        category,
+        icon,
+        drag: { mime: "application/x-forge-special-actor", payload },
+        onClick,
+        clickPlaces: true,
+      });
+    };
+    const singleton = (
+      key: string,
+      label: string,
+      category: string,
+      icon: ActorTypeIcon,
+      onClick: () => void,
+    ): void => {
+      entries.push({ key, label, category, icon, onClick, clickPlaces: true });
+    };
+
+    special("blockingVolume", "Blocking Volume", "Volumes", "volume", () =>
+      this.app.addBlockingVolume(),
+    );
+    special("aiNavigationVolume", "AI Navigation Volume", "Volumes", "volume", () =>
+      this.app.addAiNavigationVolume(),
+    );
+
+    singleton("skyAtmosphere", "Sky Atmosphere", "Visual Effects", "atmosphere", () =>
+      this.app.addSkyAtmosphere(),
+    );
+    singleton("heightFog", "Exponential Height Fog", "Visual Effects", "cloud", () =>
+      this.app.addHeightFog(),
+    );
+    singleton("cloudLayer", "Cloud Layer", "Visual Effects", "cloud", () =>
+      this.app.addCloudLayer(),
+    );
+    singleton("reflectionPlane", "Mirror Plane", "Visual Effects", "reflection", () =>
+      this.app.addReflectionPlane(),
+    );
+    singleton("reflectiveSurface", "Reflective Surface", "Visual Effects", "reflection", () =>
+      this.app.addReflectiveSurface(),
+    );
+    singleton(
+      "reflectionCapture",
+      "Sphere Reflection Capture",
+      "Visual Effects",
+      "reflection",
+      () => this.app.addReflectionCapture(),
+    );
+    singleton("postProcess", "Post Process", "Visual Effects", "postprocess", () =>
+      this.app.addPostProcess(),
+    );
+
+    singleton("landscape", "Landscape", "Terrain", "terrain", () => this.app.addLandscape());
+
+    entries.push({
+      key: "ambientSound",
+      label: "Ambient Sound",
+      category: "Sounds",
+      icon: "sound",
+      drag: {
+        mime: "application/x-3dgamedev-asset",
+        payload: () => AMBIENT_SOUND_ASSET_ID,
+        beginPreview: () => this.app.beginAssetDragPreview(AMBIENT_SOUND_ASSET_ID),
+      },
+      onClick: dragHintClick,
+      clickPlaces: false,
+    });
+
+    special(
+      "worldWidget",
+      "World Widget",
+      "UI",
+      "widget",
+      () => this.app.addWorldWidget(this.firstUiWidgetAssetId()),
+      () => `worldWidget:${this.firstUiWidgetAssetId()}`,
+    );
+
+    entries.push({
+      key: "playerStart",
+      label: "Player Start",
+      category: "Gameplay",
+      icon: "character",
+      drag: {
+        mime: "application/x-3dgamedev-asset",
+        payload: () => PLAYER_START_ASSET_ID,
+        beginPreview: () => this.app.beginAssetDragPreview(PLAYER_START_ASSET_ID),
+      },
+      onClick: dragHintClick,
+      clickPlaces: false,
+    });
+    special("targetPoint", "Target Point", "Gameplay", "gameplay", () =>
+      this.app.addTargetPoint(),
+    );
+    special("spline", "Spline", "Gameplay", "gameplay", () => this.app.addSpline());
+
+    return entries;
+  }
+
+  /** Markup for the Add Actor popover body: search row, Recently Used slot,
+   *  category submenus, and the flat search-results slot. */
+  private buildAddActorMenuMarkup(): string {
+    const categories = ADD_ACTOR_CATEGORIES.map((cat) => {
+      const rows = this.addActorEntries
+        .filter((entry) => entry.category === cat.label)
+        .map((entry) => this.addActorItemMarkup(entry, { includeAttr: true }))
+        .join("");
+      return (
+        `<div class="add-actor-category">` +
+        `<button type="button" class="add-actor-category-label">${ACTOR_TYPE_ICONS[cat.icon]}<span>${cat.label}</span></button>` +
+        `<div class="add-actor-submenu">${rows}</div></div>`
+      );
+    }).join("");
+    return (
+      `<div class="add-actor-search-row">${UI_ICONS.search}` +
+      `<input type="text" class="add-actor-search" data-add-search placeholder="Search actors" aria-label="Search actors" />` +
+      `</div>` +
+      `<div class="add-actor-recent" data-add-recent hidden></div>` +
+      `<div class="add-actor-categories" data-add-categories>${categories}</div>` +
+      `<div class="add-actor-results" data-add-results hidden></div>`
+    );
+  }
+
+  /**
+   * One flyout / list button for an Add Actor entry. `showCategory` appends the
+   * category as a dim hint (search results). `includeAttr` emits `entry.attr`
+   * (the cube `data-testid` + legacy hooks) — only the canonical category row
+   * sets it, so the Recently Used / search copies never duplicate a testid.
+   */
+  private addActorItemMarkup(
+    entry: AddActorEntry,
+    options: { showCategory?: boolean; includeAttr?: boolean } = {},
+  ): string {
+    const cat = options.showCategory
+      ? `<span class="add-actor-item-cat">${escapeHtml(entry.category)}</span>`
+      : "";
+    const attr = options.includeAttr && entry.attr ? ` ${entry.attr}` : "";
+    return (
+      `<button type="button" class="add-actor-item" data-add-key="${escapeHtml(entry.key)}"${attr}>` +
+      `${ACTOR_TYPE_ICONS[entry.icon]}<span class="add-actor-item-label">${escapeHtml(entry.label)}</span>${cat}</button>`
+    );
+  }
+
+  /** Wires the static category buttons, the search field, and the initial
+   *  Recently Used list. Dynamic rows (recent / search) are bound on render. */
+  private bindAddActorMenu(): void {
+    const byKey = new Map(this.addActorEntries.map((entry) => [entry.key, entry]));
+    this.root
+      .querySelectorAll<HTMLElement>("[data-add-categories]")
+      .forEach((container) => {
+        container.querySelectorAll<HTMLButtonElement>(".add-actor-item").forEach((button) => {
+          const entry = byKey.get(button.dataset.addKey ?? "");
+          if (entry) this.bindAddActorEntry(button, entry);
+        });
+      });
+
+    const search = this.root.querySelector<HTMLInputElement>("[data-add-search]");
+    if (search) {
+      search.addEventListener("input", () => this.renderAddActorSearchResults(search.value));
+      // Enter on a single match places it (mouse-free convenience).
+      search.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        const first = this.root.querySelector<HTMLButtonElement>(
+          "[data-add-results] .add-actor-item",
+        );
+        first?.click();
+      });
+    }
+
+    this.renderRecentActors();
+  }
+
+  /** Attaches the drag payload + click behavior for one Add Actor entry to a
+   *  freshly rendered button (category, Recently Used, or search result). */
+  private bindAddActorEntry(button: HTMLButtonElement, entry: AddActorEntry): void {
+    if (entry.drag) {
+      const drag = entry.drag;
+      button.draggable = true;
+      button.addEventListener("dragstart", (event) => {
+        event.dataTransfer?.setData(drag.mime, drag.payload());
+        event.dataTransfer!.effectAllowed = "copy";
+        event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
+        drag.beginPreview?.();
+        this.setStatus(`Dragging ${entry.label} - drop in the viewport to place.`);
+        this.recordRecentActor(entry.key);
+      });
+      button.addEventListener("dragend", () => {
+        this.app.endAssetDragPreview();
+      });
+    }
+    button.addEventListener("click", () => {
+      entry.onClick();
+      if (entry.clickPlaces) this.recordRecentActor(entry.key);
+    });
+  }
+
+  /** Reads the persisted Recently Used keys, dropping any that no longer map to
+   *  a known entry (catalog changes across template versions). */
+  private loadRecentActors(): void {
+    try {
+      const raw = window.localStorage.getItem(RECENT_ACTORS_STORAGE_KEY);
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(parsed)) return;
+      const valid = new Set(this.addActorEntries.map((entry) => entry.key));
+      this.recentActorKeys = parsed
+        .filter((key): key is string => typeof key === "string" && valid.has(key))
+        .slice(0, RECENT_ACTORS_MAX);
+    } catch {
+      // Blocked/private storage should leave the flyout fully usable.
+      this.recentActorKeys = [];
+    }
+  }
+
+  /** Moves an entry to the front of the Recently Used list, persists, re-renders. */
+  private recordRecentActor(key: string): void {
+    this.recentActorKeys = [key, ...this.recentActorKeys.filter((k) => k !== key)].slice(
+      0,
+      RECENT_ACTORS_MAX,
+    );
+    try {
+      window.localStorage.setItem(RECENT_ACTORS_STORAGE_KEY, JSON.stringify(this.recentActorKeys));
+    } catch {
+      // Persistence is an enhancement; ignore storage failures.
+    }
+    this.renderRecentActors();
+  }
+
+  /** Renders the Recently Used row (hidden when empty or while searching). */
+  private renderRecentActors(): void {
+    const container = this.root.querySelector<HTMLElement>("[data-add-recent]");
+    if (!container) return;
+    // Don't fight the search view for the slot: it hides recent while active.
+    const searching =
+      (this.root.querySelector<HTMLInputElement>("[data-add-search]")?.value ?? "").trim() !== "";
+    const byKey = new Map(this.addActorEntries.map((entry) => [entry.key, entry]));
+    const entries = this.recentActorKeys
+      .map((key) => byKey.get(key))
+      .filter((entry): entry is AddActorEntry => Boolean(entry));
+    if (searching || entries.length === 0) {
+      container.hidden = true;
+      container.innerHTML = "";
+      return;
+    }
+    container.hidden = false;
+    container.innerHTML =
+      `<div class="add-actor-section-title">Recently Used</div>` +
+      entries.map((entry) => this.addActorItemMarkup(entry)).join("");
+    container.querySelectorAll<HTMLButtonElement>(".add-actor-item").forEach((button) => {
+      const entry = byKey.get(button.dataset.addKey ?? "");
+      if (entry) this.bindAddActorEntry(button, entry);
+    });
+  }
+
+  /** Renders the flat, filtered search results; empty query restores the
+   *  categories + Recently Used view. */
+  private renderAddActorSearchResults(query: string): void {
+    const results = this.root.querySelector<HTMLElement>("[data-add-results]");
+    const categories = this.root.querySelector<HTMLElement>("[data-add-categories]");
+    if (!results || !categories) return;
+    const q = query.trim().toLowerCase();
+    if (q === "") {
+      results.hidden = true;
+      results.innerHTML = "";
+      categories.hidden = false;
+      this.renderRecentActors();
+      return;
+    }
+    categories.hidden = true;
+    this.renderRecentActors(); // hides the recent slot while searching
+    const byKey = new Map(this.addActorEntries.map((entry) => [entry.key, entry]));
+    const matches = this.addActorEntries.filter(
+      (entry) =>
+        entry.label.toLowerCase().includes(q) || entry.category.toLowerCase().includes(q),
+    );
+    results.hidden = false;
+    results.innerHTML =
+      matches.length === 0
+        ? `<div class="add-actor-empty">No actors match “${escapeHtml(query.trim())}”</div>`
+        : matches.map((entry) => this.addActorItemMarkup(entry, { showCategory: true })).join("");
+    results.querySelectorAll<HTMLButtonElement>(".add-actor-item").forEach((button) => {
+      const entry = byKey.get(button.dataset.addKey ?? "");
+      if (entry) this.bindAddActorEntry(button, entry);
+    });
   }
 
   /** Highlight a single Content Browser asset card without re-rendering the

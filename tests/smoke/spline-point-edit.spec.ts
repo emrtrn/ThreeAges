@@ -10,7 +10,7 @@ test("editor exposes generic Spline Actor point editing controls", async ({ page
   const details = page.locator('[data-inspector-pane="details"]');
   await page.getByTestId("add-actor-button").hover();
   await page.getByRole("button", { name: "Gameplay" }).hover();
-  await page.locator("[data-add-spline]").click();
+  await page.locator('[data-add-categories] [data-add-key="spline"]').click();
   await expect(details.getByRole("heading", { name: "Spline" })).toBeVisible();
   const pointButtons = details.locator("[data-spline-point]");
   const initialCount = await pointButtons.count();

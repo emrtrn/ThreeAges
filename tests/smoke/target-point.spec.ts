@@ -15,12 +15,15 @@ test("editor Target Point smoke: add, inspect, edit, save, reload", async ({ pag
   await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 30_000 });
 
   const rowCountBefore = await page.getByTestId("outliner-row").count();
+  // Scope to the category submenu: adding an actor now records it in the Add
+  // Actor "Recently Used" list, so a bare role/name query would match twice.
+  const categories = page.locator("[data-add-categories]");
   await page.getByTestId("add-actor-button").hover();
   await page.getByRole("button", { name: /^Gameplay/ }).hover();
-  await page.getByRole("button", { name: "Target Point" }).click();
+  await categories.getByRole("button", { name: "Target Point" }).click();
   await page.getByTestId("add-actor-button").hover();
   await page.getByRole("button", { name: /^Gameplay/ }).hover();
-  await page.getByRole("button", { name: "Target Point" }).click();
+  await categories.getByRole("button", { name: "Target Point" }).click();
 
   await expect(page.getByTestId("outliner-row")).toHaveCount(rowCountBefore + 2);
   await expect(page.getByTestId("outliner-row").filter({ hasText: "Target Point" }).first()).toBeVisible();

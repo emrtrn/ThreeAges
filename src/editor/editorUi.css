@@ -393,12 +393,12 @@ body.editor-mode #debug-stats {
 .editor-shell .add-actor-category > .add-actor-category-label {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
 }
 
 .add-actor-category > .add-actor-category-label::after {
   content: "›";
+  margin-left: auto;
   color: #9aa4a9;
   font-weight: 700;
 }
@@ -428,6 +428,90 @@ body.editor-mode #debug-stats {
 .add-actor-category:hover > .add-actor-submenu {
   display: grid;
   gap: 4px;
+}
+
+/* Faz 2: search field, Recently Used, flat search results, icon rows. */
+.add-actor-search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  margin-bottom: 2px;
+  border: 1px solid var(--forge-border-mid);
+  border-radius: 5px;
+  background: var(--forge-bg-0, rgba(0, 0, 0, 0.25));
+  color: #9aa4a9;
+}
+
+.add-actor-search-row svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.editor-shell input.add-actor-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: var(--forge-text, #e6e9eb);
+  font-size: 12px;
+}
+
+.editor-shell input.add-actor-search:focus {
+  outline: none;
+}
+
+.add-actor-recent,
+.add-actor-results {
+  display: grid;
+  gap: 4px;
+}
+
+.add-actor-results {
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+/* Icon + label rows shared by category submenus, Recently Used, search. */
+.editor-shell .add-actor-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.add-actor-item > svg,
+.add-actor-category-label > svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: #9aa4a9;
+}
+
+.add-actor-item-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.add-actor-item-cat {
+  flex: 0 0 auto;
+  margin-left: auto;
+  padding-left: 8px;
+  color: #7c868c;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.add-actor-empty {
+  padding: 8px 10px;
+  color: #9aa4a9;
+  font-size: 12px;
 }
 
 /* Camera + View Mode + Show hover menus (all mirror the Add Actor reveal). */

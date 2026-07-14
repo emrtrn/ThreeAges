@@ -152,18 +152,40 @@ Görsel dilin tek kaynağı. DOM yapısına dokunmaz; sonraki tüm fazlar bunu t
 
 ### Faz 2 — Add Actor Flyout
 
-- [ ] Flyout üstüne arama alanı: yazınca kategori listesi yerine düz
-      filtrelenmiş sonuç listesi (tüm `data-add-*` girdileri tek indekste).
-- [ ] "Recently Used" bölümü: son N (örn. 3–5) eklenen aktör tipi,
-      `localStorage` kalıcılığı.
-- [ ] Kategori satırlarına ikon + sağa hizalı chevron; alt menü açılış
-      davranışı (hover/tık) mevcut haliyle korunur.
-- [ ] Aktör satırlarına tip ikonları.
-- [ ] **Sürükle-bırak korunur:** bugün flyout girdileri viewport'a
-      sürüklenebilir (`draggable` + dragstart); arama sonuçları ve Recently
-      Used satırları da aynı drag davranışını almalı.
-- [ ] Doğrulama: `add-shape-cube` smoke akışı + klavye ile menü gezinme
-      bozulmadı.
+Tek kaynak: tüm placeable aktörler artık `buildAddActorEntries()` içindeki
+`AddActorEntry[]` deskriptör listesinden geliyor (key/label/category/icon/drag
+payload/onClick). Aynı liste üç yüzeyi besliyor — kategori alt menüleri,
+Recently Used ve düz arama sonuçları — böylece drag payload'ları ve tıklama
+eylemleri asla ayrışmıyor. Eski dağınık bağlama blokları (`[data-add-actor]`,
+`[data-add-shape]`, player-start/ambient-sound blokları, singleton click'leri,
+`bindSpecialActorButton`) tek `bindAddActorMenu()` + `bindAddActorEntry()` ile
+değiştirildi; `data-add-*` fonksiyonel attribute'ları yerini `data-add-key`'e
+bıraktı (`data-testid="add-shape-cube"` korundu).
+
+- [x] Flyout üstüne arama alanı (`[data-add-search]`): yazınca kategoriler
+      gizlenip düz filtrelenmiş sonuç listesi (`[data-add-results]`) gösterilir
+      (label + kategori üzerinden filtre); boş sorguda kategoriler + Recently
+      Used geri gelir. Enter tek/ilk eşleşmeyi yerleştirir.
+- [x] "Recently Used" bölümü (`[data-add-recent]`): son 5 kullanılan aktör,
+      `localStorage` (`forge.editor.recentActors`) kalıcılığı; drag'de ve
+      click-yerleştiren aktörlerde kaydedilir, arama sırasında gizlenir,
+      bilinmeyen key'ler yüklemede elenir.
+- [x] Kategori satırlarına ikon (`ACTOR_TYPE_ICONS`) + sağa hizalı chevron
+      (`::after` + `margin-left:auto`); hover alt menü davranışı korundu.
+- [x] Aktör satırlarına tip ikonları (kategori + Recently Used + arama ortak
+      `addActorItemMarkup`).
+- [x] **Sürükle-bırak korunur:** `bindAddActorEntry` her satıra (kategori,
+      Recently Used, arama sonucu) aynı dragstart/dragend + payload'ı bağlar;
+      light (`x-forge-light-actor`), asset (`x-3dgamedev-asset`), special
+      (`x-forge-special-actor`) kanalları ve status mesajları bire bir korundu.
+- [~] Doğrulama: `npx tsc --noEmit` ✅ + `test:engine` 908 ✅ + `build:verify`
+      (verify:dist --strict dahil) ✅. `smoke:browser`: editor-authoring'in
+      Add Actor→cube drag→transform→undo×2→redo×2 adımları (19–68) geçti; test
+      yalnız sonraki `editor-save` tıklamasında global 150s bütçesini aştı
+      (Faz 1'de belgelenen dev-server yavaşlığı, değişiklikten bağımsız).
+      Recently Used artık aynı label'ı iki kez üretebildiği için
+      `target-point` ve `spline-point-edit` smoke'ları kategori kapsamına
+      (`[data-add-categories]` / `[data-add-key="spline"]`) alındı.
 
 ### Faz 3 — Scene Outliner
 
