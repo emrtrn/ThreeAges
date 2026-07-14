@@ -1,5 +1,6 @@
 import type { ColliderPrimitive } from "./components";
 import type { LayoutLandscape, Vec3 } from "./layout";
+import { evaluateLandscapeSplineSegment } from "./landscapeSplineAdapter";
 
 /**
  * Render-agnostic Landscape model: resolved settings + defaults, the sidecar
@@ -424,22 +425,8 @@ export function resolveLandscapeSplineMeshChains(
 }
 
 /** Uniform Catmull-Rom interpolation of four control positions at `u` in [0,1]. */
-function catmullRom(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, u: number): Vec3 {
-  const u2 = u * u;
-  const u3 = u2 * u;
-  const axis = (a: number, b: number, c: number, d: number): number =>
-    0.5 * (2 * b + (-a + c) * u + (2 * a - 5 * b + 4 * c - d) * u2 + (-a + 3 * b - 3 * c + d) * u3);
-  return [
-    axis(p0[0], p1[0], p2[0], p3[0]),
-    axis(p0[1], p1[1], p2[1], p3[1]),
-    axis(p0[2], p1[2], p2[2], p3[2]),
-  ];
-}
 
 /** Mirror a position across `pivot` — the phantom endpoint for open-chain tangents. */
-function reflectPoint(pivot: Vec3, other: Vec3): Vec3 {
-  return [2 * pivot[0] - other[0], 2 * pivot[1] - other[1], 2 * pivot[2] - other[2]];
-}
 
 /**
  * Resolves a spline's authored segments into straight centerline sub-segments
@@ -460,29 +447,6 @@ export function splineToPolyline(
   const smooth = spline.smooth === true;
   const steps = smooth ? Math.max(1, Math.floor(subdivisions)) : 1;
 
-  // Undirected adjacency (in segment order) for Catmull-Rom neighbour tangents.
-  const neighbours = new Map<string, string[]>();
-  if (smooth) {
-    const link = (from: string, to: string): void => {
-      const list = neighbours.get(from);
-      if (list) list.push(to);
-      else neighbours.set(from, [to]);
-    };
-    for (const segment of spline.segments) {
-      if (!pointById.has(segment.startPointId) || !pointById.has(segment.endPointId)) continue;
-      link(segment.startPointId, segment.endPointId);
-      link(segment.endPointId, segment.startPointId);
-    }
-  }
-  const neighbourPos = (pointId: string, excludeId: string): Vec3 | null => {
-    for (const candidate of neighbours.get(pointId) ?? []) {
-      if (candidate === excludeId) continue;
-      const point = pointById.get(candidate);
-      if (point) return point.position;
-    }
-    return null;
-  };
-
   for (const segment of spline.segments) {
     const p1 = pointById.get(segment.startPointId);
     const p2 = pointById.get(segment.endPointId);
@@ -495,13 +459,11 @@ export function splineToPolyline(
       });
       continue;
     }
-    const p0 = neighbourPos(p1.id, p2.id) ?? reflectPoint(p1.position, p2.position);
-    const p3 = neighbourPos(p2.id, p1.id) ?? reflectPoint(p2.position, p1.position);
     let prev: LandscapeSplinePolylineSample = { position: p1.position, width: p1.width, falloff: p1.falloff };
     for (let step = 1; step <= steps; step += 1) {
       const u = step / steps;
       const sample: LandscapeSplinePolylineSample = {
-        position: catmullRom(p0, p1.position, p2.position, p3, u),
+        position: evaluateLandscapeSplineSegment(spline, segment, u) ?? p2.position,
         width: p1.width + (p2.width - p1.width) * u,
         falloff: p1.falloff + (p2.falloff - p1.falloff) * u,
       };

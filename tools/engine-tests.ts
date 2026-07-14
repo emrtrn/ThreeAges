@@ -214,6 +214,10 @@ import {
   resampleLandscapeData,
 } from "../engine/scene/landscape";
 import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
+import {
+  evaluateLandscapeSplineSegment,
+  landscapeSplineSegmentComponent,
+} from "../engine/scene/landscapeSplineAdapter";
 import { EngineApp } from "../engine/core/EngineApp";
 import type { Subsystem } from "../engine/core/Subsystem";
 import { AnimationSubsystem } from "../engine/render-three/animationSubsystem";
@@ -19337,6 +19341,26 @@ check("splineToPolyline returns straight segments unchanged and samples smooth c
   assert.ok(poly.every((sub) => Number.isFinite(sub.end.position[1]) && sub.end.width === 1));
   // At least one interior sub-point bows off the straight A→B chord (z ≠ 0).
   assert.ok(poly.slice(0, 8).some((sub) => Math.abs(sub.end.position[2]) > 0.2));
+});
+
+check("Landscape spline adapter delegates linear and smooth centerline math to Generic Spline core", () => {
+  const linear = straightSpline({});
+  const linearComponent = landscapeSplineSegmentComponent(linear, linear.segments[0]!);
+  assert.equal(linearComponent?.points[0]?.pointType, "linear");
+  assert.deepEqual(evaluateLandscapeSplineSegment(linear, linear.segments[0]!, 0.25), [-5, 2, 0]);
+
+  const smooth = smoothBend(true);
+  const polyline = splineToPolyline(smooth, 8);
+  for (let index = 0; index < polyline.length; index += 1) {
+    const sub = polyline[index]!;
+    const u = (index % 8 + 1) / 8;
+    const sample = evaluateLandscapeSplineSegment(smooth, sub.segment, u);
+    assert.ok(sample);
+    assert.ok(Math.hypot(sample![0] - sub.end.position[0], sample![1] - sub.end.position[1], sample![2] - sub.end.position[2]) < 1e-8);
+  }
+  const component = landscapeSplineSegmentComponent(smooth, smooth.segments[0]!);
+  assert.equal(component?.points[0]?.pointType, "curveCustom");
+  assert.deepEqual(component?.points.map((point) => point.position), [smooth.points[0]!.position, smooth.points[1]!.position]);
 });
 
 check("smooth spline deform bows outside the straight corridor", () => {

@@ -1965,7 +1965,7 @@ Forge ve oyun modüllerinin spline kullanan özel üreticiler yazabilmesini sağ
 - [x] Generator registry lifecycle belirle. *(2026-07-14: `SplineGeneratorRegistry.register()` çakışan type'ı reddeder ve game module unload için disposer döndürür.)*
 - [x] Validation hook ekle. *(2026-07-14: registry normalizer'ı plugin schema'sını doğrular; yüklü olmayan geçerli `plugin:*` kayıtları güvenli settings kopyasıyla korunur.)*
 - [x] Build/dispose hook ekle. *(2026-07-14: registry handler'ı isteğe bağlı `build`/`dispose` hook'ları alır; `buildSplineInstanceGeneratorGroup` game registry'sini kabul eder ve rebuild/dispose sırasında hook disposal'ını çağırır.)*
-- [ ] Editor panel schema veya custom inspector hook kararı ver.
+- [x] Editor panel schema veya custom inspector hook kararı ver. *(2026-07-14: Faz 10'da generic schema renderer veya core custom-inspector hook eklenmemesine karar verildi. Core Details paneli yalnızca built-in generator UI'si ve missing-plugin fallback'i taşır; game'e özgü inspector gerektiğinde game catalog/composition root üzerinden, ayrı bir sonraki fazda enjekte edilir.)*
 - [x] Generator output ownership kurallarını yaz. *(2026-07-14: hook output'u yalnızca spline actor'ın non-pickable generated group'una eklenir; hook dispose'u group serbest bırakılırken çağrılır.)*
 - [x] Generator'ın layout'u doğrudan mutate etmesini engelle. *(2026-07-14: build hook'a authoritative layout yerine clone edilmiş actor snapshot verilir; engine test kötü niyetli mutation'ın source layout'a geçmediğini doğrular.)*
 - [x] Deterministic seed utility'yi public yap. *(2026-07-14: `splineGeneratorSeed` + `SplineGeneratorRandom`.)*
@@ -1982,6 +1982,8 @@ Forge ve oyun modüllerinin spline kullanan özel üreticiler yazabilmesini sağ
 - Plugin config yalnızca `plugin:<gameType>`, `pluginVersion` ve JSON-safe `settings` altında serialize edilir. Handler, eski `pluginVersion` verisini normalize ederek yeni config'e migrate eder. Yeni bir plugin type'ı, çekirdek generator union'ını değiştirmeden kendi registry'sine eklenir.
 - Core, plugin generator'a layout command API veya mutable save callback vermez. Plugin yalnızca normalize edilmiş config ve spline query sonuçlarıyla generated output üretir; output spline actor'a aittir, tek tek level actor'ları değildir.
 - Plugin yüklenmemişse Forge kaydı `Missing plugin` kartında salt-okunur gösterir, build'i atlar ve settings'i save/reload sırasında korur. Bu fallback, farklı game fork'larının aynı layout'u veri kaybı olmadan açabilmesini sağlar.
+
+Plugin settings için core tarafında otomatik form renderer yoktur. JSON schema'yı core'a yerleştirmek game'e özgü validation/UI bağımlılıklarını generic editor'e taşırdı; bunun yerine game catalog'a bağlı opt-in inspector injection, ihtiyaç oluştuğunda ayrı bir contract olarak tasarlanacaktır. Plugin mevcut değilken her zaman güvenli salt-okunur fallback uygulanır.
 
 ### Runtime script surface — 2026-07-14
 
@@ -2010,19 +2012,19 @@ Generic spline çekirdeğini Landscape Spline sistemiyle kontrollü şekilde pay
 
 ### Kontrol listesi
 
-- [ ] Mevcut Landscape Spline data modelini yeniden incele.
-- [ ] Generic core'a adapter yazılabilecek alanları belirle.
-- [ ] Landscape point verisini `SplineCurve` input'una dönüştüren adapter ekle.
-- [ ] Terrain corridor sampler'ın generic query API kullanmasını sağla.
-- [ ] Landscape width/falloff davranışını Landscape tarafında tut.
-- [ ] Landscape deform ve paint kodunu generic generator registry'ye taşımama kararını koru.
-- [ ] Generic Spline Actor'dan Landscape modifier oluşturma UX'ini ayrıca değerlendir.
-- [ ] Gerekirse `Convert To Landscape Spline` komutu tasarla.
-- [ ] Gerekirse `Create Generic Spline Copy` komutu tasarla.
-- [ ] Conversion'ın destructive veya linked olup olmayacağına karar ver.
-- [ ] İlk sürümde linked live-reference yerine kopya dönüşümünü tercih et.
+- [x] Mevcut Landscape Spline data modelini yeniden incele. *(2026-07-14: point/segment graph'ı, `smooth` Catmull-Rom davranışı ve `splineToPolyline` tüketicileri doğrulandı.)*
+- [x] Generic core'a adapter yazılabilecek alanları belirle. *(2026-07-14: segment centerline position/tangent yalnızca ortak curve katmanına uygundur; width/falloff ve effect config Landscape-owned kalır.)*
+- [x] Landscape point verisini `SplineCurve` input'una dönüştüren adapter ekle. *(2026-07-14: `landscapeSplineSegmentComponent()` her directed segmenti linear veya Catmull-Rom'a eşdeğer custom-Hermite generic component'e çevirir.)*
+- [x] Terrain corridor sampler'ın generic query API kullanmasını sağla. *(2026-07-14: `splineToPolyline()` smooth centerline sample'larını `evaluateLandscapeSplineSegment()` üzerinden Generic Spline evaluator'ından alır; deform ve paint bu mevcut polyline tüketicisini kullanır.)*
+- [x] Landscape width/falloff davranışını Landscape tarafında tut. *(2026-07-14: adapter yalnızca pozisyon/tangent taşır; corridor width/falloff interpolation'ı `splineToPolyline` içinde kalır.)*
+- [x] Landscape deform ve paint kodunu generic generator registry'ye taşımama kararını koru. *(2026-07-14: Landscape effect segment config ve sidecar data'da kalır; generic plugin registry çağrılmaz.)*
+- [x] Generic Spline Actor'dan Landscape modifier oluşturma UX'ini ayrıca değerlendir. *(2026-07-14: önerilmedi. Generic actor tek ordered path iken Landscape spline branch içerebilen directed segment graph'ı ve terrain-only effect authority'si taşır.)*
+- [x] Gerekirse `Convert To Landscape Spline` komutu tasarla. *(2026-07-14: ilk sürüm için tasarlanmadı; otomatik dönüşüm branch topology ile deform/paint/width/falloff semantics'ini sessizce kaybedebilir.)*
+- [x] Gerekirse `Create Generic Spline Copy` komutu tasarla. *(2026-07-14: ilk sürüm için tasarlanmadı. İleride yalnızca doğrulanmış unbranched path için explicit, preview'lu copy command ayrı tasarlanabilir.)*
+- [x] Conversion'ın destructive veya linked olup olmayacağına karar ver. *(2026-07-14: linked live-reference reddedildi; iki sistemin ownership'i ayrı kalır. Olası gelecekteki command non-destructive copy olur.)*
+- [x] İlk sürümde linked live-reference yerine kopya dönüşümünü tercih et. *(2026-07-14: karar kayda geçti; ancak kayıp riski yüzünden bu fazda copy UI/command eklenmedi.)*
 - [ ] Landscape save/reload regression testlerini çalıştır.
-- [ ] Generic spline testlerini yeniden çalıştır.
+- [x] Generic spline testlerini yeniden çalıştır. *(2026-07-14: `npm run test:engine` içinde generic spline ve adapter testleri geçti; toplam 869 check.)*
 
 ### Kabul kriterleri
 

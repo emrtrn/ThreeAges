@@ -536,8 +536,8 @@
       "name": "Spline",
       "debug": {
         "visible": true,
-        "color": "#4fd1ff",
-        "resolution": 16
+        "color": "#ffffff",
+        "resolution": 32
       }
     },
     {
