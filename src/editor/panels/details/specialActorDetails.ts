@@ -2,6 +2,7 @@ import { assetType, isModelAssetType, type EditableAsset } from "@engine/assets/
 import type { BrushShape, LayoutLightActor, Vec3 } from "@engine/scene/layout";
 import type { ForgeSplineDeformMeshGeneratorDef, ForgeSplineGeneratorDef, ForgeSplineInstanceGeneratorDef, ForgeSplineRigidSegmentGeneratorDef, SplineMeshAxis } from "@engine/scene/splineGenerator";
 import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
+import { splinePerformanceWarnings } from "@engine/scene/splineDiagnostics";
 import type {
   EditableAiNavigationVolume,
   EditableBlockingVolume,
@@ -1346,6 +1347,22 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
         <div class="detail-button-row"><button type="button" data-spline-generator-remove="${escapeHtml(generator.id)}" ${locked}>Remove Generator</button></div>
       </div>`;
     }).join("");
+  const performanceWarnings = splinePerformanceWarnings({
+    pointCount: spline.pointCount,
+    generatedInstanceCount: generators.reduce((sum, generator) =>
+      generator.type === "instances" || generator.type === "rigidSegments"
+        ? sum + (generatorDiagnostics.get(generator.id)?.instanceCount ?? 0)
+        : sum, 0),
+    deformSegmentCount: generators.reduce((max, generator) =>
+      generator.type === "deformMesh" && (generator.geometryMode ?? "segments") !== "whole"
+        ? Math.max(max, segmentCount)
+        : max, 0),
+    maxDeformSampleSteps: generators.reduce((max, generator) =>
+      generator.type === "deformMesh" ? Math.max(max, generator.sampleSteps ?? 16) : max, 0),
+  });
+  const performanceWarningMarkup = performanceWarnings
+    .map((warning) => `<div class="detail-readonly">Warning: ${escapeHtml(warning)}</div>`)
+    .join("");
   const pointEditor = activePoint
     ? `<div class="spline-point-editor">
       <div class="spline-point-editor__heading"><div><span>Selected point</span><strong>${escapeHtml(activePoint.id)}</strong></div><label class="detail-row"><span>Type</span><select data-spline-point-type ${locked}>${["linear", "curveAuto", "curveCustom"].map((type) => `<option value="${type}" ${activePoint.pointType === type ? "selected" : ""}>${type === "curveAuto" ? "Curve Auto" : type === "curveCustom" ? "Curve Custom" : "Linear"}</option>`).join("")}</select></label></div>
@@ -1357,6 +1374,7 @@ export function renderSplineDetails(options: SpecialActorDetailsOptions): void {
   body.innerHTML = `
     <section class="details-section spline-details"><div class="spline-details__header"><div><h3>Spline</h3><span>${spline.pointCount} control points</span></div><span class="spline-status ${spline.closed ? "is-closed" : ""}">${spline.closed ? "Closed loop" : "Open path"}</span></div>
       ${hasDegenerateSegment ? "<div class=\"detail-readonly\">Warning: a segment has coincident control points; move or delete one point.</div>" : ""}
+      ${performanceWarningMarkup}
       <div class="spline-details__section"><div class="spline-details__section-heading"><span>Path settings</span><small>Shape and editor display</small></div>
         <div class="spline-toggle-grid">
           <label class="spline-toggle"><input type="checkbox" data-spline-closed ${spline.closed ? "checked" : ""} ${locked}><span><strong>Closed loop</strong><small>Connect last point to first</small></span></label>

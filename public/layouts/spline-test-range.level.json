@@ -1,0 +1,1098 @@
+{
+  "schema": 1,
+  "name": "Spline System Test Range",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "floor-400x400",
+      "placements": [
+        {
+          "position": [
+            65,
+            0,
+            8
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 60
+        }
+      ]
+    },
+    {
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            -4,
+            0,
+            6
+          ],
+          "name": "Player Start",
+          "rotationYDeg": 90,
+          "scale": 1
+        }
+      ]
+    }
+  ],
+  "characters": [],
+  "worldSettings": {
+    "staticObjectsCastShadow": true,
+    "backgroundColor": "#20242c",
+    "killZ": -20
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        40,
+        20,
+        -20
+      ],
+      "name": "Sun",
+      "rotation": [
+        -45,
+        -30,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 4,
+      "castShadow": true
+    }
+  ],
+  "splines": [
+    {
+      "id": "area-a-linear-fence",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "a-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "a-2",
+            "position": [
+              0,
+              0,
+              12
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "A · Linear Path + Rigid Fence",
+      "runtime": {
+        "tags": [
+          "patrol",
+          "rail"
+        ]
+      },
+      "generators": [
+        {
+          "id": "fence",
+          "type": "rigidSegments",
+          "meshAsset": "shape-cube",
+          "segmentLength": 2,
+          "alignToSpline": true,
+          "fitMode": "fixed",
+          "scale": [
+            0.12,
+            1.2,
+            1
+          ],
+          "gap": 0.2
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#7fd0ff",
+        "resolution": 24
+      }
+    },
+    {
+      "id": "area-b-curve-decor",
+      "position": [
+        16,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 12,
+        "points": [
+          {
+            "id": "b-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "b-2",
+            "position": [
+              4,
+              0,
+              6
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "b-3",
+            "position": [
+              -2,
+              0,
+              12
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "b-4",
+            "position": [
+              3,
+              0,
+              18
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "B · Curved Path + Decoration Instances",
+      "generators": [
+        {
+          "id": "bushes",
+          "type": "instances",
+          "meshAsset": "commonbush",
+          "spacing": 2.5,
+          "alignToSpline": true,
+          "applyPitch": false,
+          "lateralOffset": 1.5,
+          "seed": 7,
+          "random": {
+            "positionJitter": [
+              0.3,
+              0,
+              0.3
+            ],
+            "rotationJitter": [
+              0,
+              40,
+              0
+            ],
+            "scaleMin": 0.7,
+            "scaleMax": 1.3
+          }
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#8fe08f",
+        "resolution": 32
+      }
+    },
+    {
+      "id": "area-c-loop-lamps",
+      "position": [
+        32,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": true,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 12,
+        "points": [
+          {
+            "id": "c-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "c-2",
+            "position": [
+              8,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "c-3",
+            "position": [
+              8,
+              0,
+              8
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "c-4",
+            "position": [
+              0,
+              0,
+              8
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "C · Closed Loop + Point Lamps",
+      "generators": [
+        {
+          "id": "lamps",
+          "type": "instances",
+          "meshAsset": "pillar-50x500",
+          "spacing": 2,
+          "alignToSpline": false,
+          "scale": [
+            0.4,
+            0.4,
+            0.4
+          ],
+          "placementMode": "point"
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#ffd27f",
+        "resolution": 24
+      }
+    },
+    {
+      "id": "area-d-fence-posts",
+      "position": [
+        48,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "d-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "d-2",
+            "position": [
+              0,
+              0,
+              10
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "D · Rigid Fence + Joint Posts",
+      "generators": [
+        {
+          "id": "panels",
+          "type": "rigidSegments",
+          "meshAsset": "shape-cube",
+          "segmentLength": 2,
+          "alignToSpline": true,
+          "placePostsAtJoints": true,
+          "fitMode": "fixed",
+          "scale": [
+            0.12,
+            1,
+            0.9
+          ],
+          "gap": 0.4,
+          "jointMeshAsset": "shape-cylinder"
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#c79bff",
+        "resolution": 24
+      }
+    },
+    {
+      "id": "area-e-trees",
+      "position": [
+        64,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 12,
+        "points": [
+          {
+            "id": "e-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "e-2",
+            "position": [
+              6,
+              0,
+              10
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "e-3",
+            "position": [
+              0,
+              0,
+              20
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "E · Roadside Trees (seeded jitter)",
+      "generators": [
+        {
+          "id": "trees",
+          "type": "instances",
+          "meshAsset": "commontree",
+          "spacing": 4,
+          "alignToSpline": false,
+          "lateralOffset": 2.5,
+          "seed": 21,
+          "random": {
+            "rotationJitter": [
+              0,
+              180,
+              0
+            ],
+            "scaleMin": 0.8,
+            "scaleMax": 1.4
+          }
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#6fbf6f",
+        "resolution": 24
+      }
+    },
+    {
+      "id": "area-f-road",
+      "position": [
+        80,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 12,
+        "points": [
+          {
+            "id": "f-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "f-2",
+            "position": [
+              6,
+              0,
+              8
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "f-3",
+            "position": [
+              0,
+              0,
+              16
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "f-4",
+            "position": [
+              6,
+              0,
+              24
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "F · Road Strip (deformed mesh)",
+      "runtime": {
+        "tags": [
+          "road"
+        ]
+      },
+      "generators": [
+        {
+          "id": "asphalt",
+          "type": "deformMesh",
+          "meshAsset": "sm-road-asphalt",
+          "forwardAxis": "z",
+          "upAxis": "y",
+          "sampleSteps": 16,
+          "geometryMode": "segments",
+          "uvMode": "tileByDistance",
+          "uvTileLength": 4,
+          "crossSectionScale": [
+            1,
+            1
+          ]
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#bfbfbf",
+        "resolution": 32
+      }
+    },
+    {
+      "id": "area-g-pipe",
+      "position": [
+        100,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 16,
+        "points": [
+          {
+            "id": "g-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "curveAuto",
+            "roll": 0
+          },
+          {
+            "id": "g-2",
+            "position": [
+              4,
+              2,
+              4
+            ],
+            "pointType": "curveAuto",
+            "roll": 45
+          },
+          {
+            "id": "g-3",
+            "position": [
+              8,
+              0,
+              8
+            ],
+            "pointType": "curveAuto",
+            "roll": 90
+          },
+          {
+            "id": "g-4",
+            "position": [
+              12,
+              3,
+              12
+            ],
+            "pointType": "curveAuto",
+            "roll": 180
+          }
+        ]
+      },
+      "name": "G · Pipe (roll + vertical)",
+      "generators": [
+        {
+          "id": "tube",
+          "type": "deformMesh",
+          "meshAsset": "shape-tube",
+          "forwardAxis": "z",
+          "upAxis": "y",
+          "sampleSteps": 20,
+          "geometryMode": "segments",
+          "uvMode": "stretch",
+          "crossSectionScale": [
+            0.5,
+            0.5
+          ]
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#ff9f7f",
+        "resolution": 32
+      }
+    },
+    {
+      "id": "area-h-stress",
+      "position": [
+        130,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 6,
+        "points": [
+          {
+            "id": "s-1",
+            "position": [
+              0,
+              0,
+              0
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-2",
+            "position": [
+              6,
+              0,
+              4.517
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-3",
+            "position": [
+              12,
+              0,
+              7.456
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-4",
+            "position": [
+              18,
+              0,
+              7.791
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-5",
+            "position": [
+              24,
+              0,
+              5.404
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-6",
+            "position": [
+              30,
+              0,
+              1.129
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-7",
+            "position": [
+              36,
+              0,
+              -3.54
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-8",
+            "position": [
+              42,
+              0,
+              -6.973
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-9",
+            "position": [
+              48,
+              0,
+              -7.969
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-10",
+            "position": [
+              54,
+              0,
+              -6.182
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-11",
+            "position": [
+              60,
+              0,
+              -2.235
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-12",
+            "position": [
+              66,
+              0,
+              2.492
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-13",
+            "position": [
+              72,
+              0,
+              6.349
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-14",
+            "position": [
+              78,
+              0,
+              7.988
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-15",
+            "position": [
+              84,
+              0,
+              6.837
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-16",
+            "position": [
+              90,
+              0,
+              3.297
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-17",
+            "position": [
+              96,
+              0,
+              -1.395
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-18",
+            "position": [
+              102,
+              0,
+              -5.599
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-19",
+            "position": [
+              108,
+              0,
+              -7.847
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-20",
+            "position": [
+              114,
+              0,
+              -7.355
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-21",
+            "position": [
+              120,
+              0,
+              -4.293
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-22",
+            "position": [
+              126,
+              0,
+              0.269
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-23",
+            "position": [
+              132,
+              0,
+              4.737
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-24",
+            "position": [
+              138,
+              0,
+              7.55
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-25",
+            "position": [
+              144,
+              0,
+              7.725
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-26",
+            "position": [
+              150,
+              0,
+              5.202
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-27",
+            "position": [
+              156,
+              0,
+              0.862
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-28",
+            "position": [
+              162,
+              0,
+              -3.779
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-29",
+            "position": [
+              168,
+              0,
+              -7.101
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-30",
+            "position": [
+              174,
+              0,
+              -7.941
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-31",
+            "position": [
+              180,
+              0,
+              -6.008
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-32",
+            "position": [
+              186,
+              0,
+              -1.976
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-33",
+            "position": [
+              192,
+              0,
+              2.747
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-34",
+            "position": [
+              198,
+              0,
+              6.509
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-35",
+            "position": [
+              204,
+              0,
+              7.998
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-36",
+            "position": [
+              210,
+              0,
+              6.693
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-37",
+            "position": [
+              216,
+              0,
+              3.05
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-38",
+            "position": [
+              222,
+              0,
+              -1.659
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-39",
+            "position": [
+              228,
+              0,
+              -5.788
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-40",
+            "position": [
+              234,
+              0,
+              -7.895
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-41",
+            "position": [
+              240,
+              0,
+              -7.245
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-42",
+            "position": [
+              246,
+              0,
+              -4.063
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-43",
+            "position": [
+              252,
+              0,
+              0.538
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-44",
+            "position": [
+              258,
+              0,
+              4.951
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-45",
+            "position": [
+              264,
+              0,
+              7.634
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-46",
+            "position": [
+              270,
+              0,
+              7.651
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-47",
+            "position": [
+              276,
+              0,
+              4.995
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-48",
+            "position": [
+              282,
+              0,
+              0.594
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-49",
+            "position": [
+              288,
+              0,
+              -4.014
+            ],
+            "pointType": "curveAuto"
+          },
+          {
+            "id": "s-50",
+            "position": [
+              294,
+              0,
+              -7.22
+            ],
+            "pointType": "curveAuto"
+          }
+        ]
+      },
+      "name": "H · Stress Serpentine (~200 instances)",
+      "generators": [
+        {
+          "id": "scatter",
+          "type": "instances",
+          "meshAsset": "commonbush",
+          "spacing": 1.5,
+          "alignToSpline": false,
+          "seed": 1,
+          "random": {
+            "positionJitter": [
+              0.5,
+              0,
+              0.5
+            ],
+            "rotationJitter": [
+              0,
+              180,
+              0
+            ],
+            "scaleMin": 0.6,
+            "scaleMax": 1.2
+          }
+        }
+      ],
+      "debug": {
+        "visible": true,
+        "color": "#ff7f9f",
+        "resolution": 8
+      }
+    }
+  ],
+  "actors": []
+}

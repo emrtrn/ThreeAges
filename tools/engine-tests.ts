@@ -177,7 +177,11 @@ import {
   buildRoadDecorationInstances,
   registerRoadDecorationsGenerator,
 } from "../engine/scene/splineRoadDecorations";
-import { splineDeformMeshColliderPrimitive } from "../engine/render-three/splineDeformMesh";
+import {
+  buildSplineDeformMeshGroup,
+  disposeSplineDeformMeshGroup,
+  splineDeformMeshColliderPrimitive,
+} from "../engine/render-three/splineDeformMesh";
 import { resolveNavAgentProfile } from "../engine/navigation/navAgentProfile";
 import {
   freshStuckState,
@@ -758,10 +762,18 @@ import {
 } from "../engine/render-three/spline";
 import {
   createDefaultSplineActor,
+  normalizeSplineActor,
   resolveSplineActorDebug,
   uniqueSplineActorId,
   uniqueSplineActorName,
 } from "../engine/scene/splineActor";
+import {
+  splinePerformanceWarnings,
+  SPLINE_WARN_POINT_COUNT,
+  SPLINE_WARN_GENERATED_INSTANCES,
+  SPLINE_WARN_DEFORM_SEGMENTS,
+  SPLINE_WARN_SAMPLE_STEPS,
+} from "../engine/scene/splineDiagnostics";
 import { createSplineRegistry } from "../engine/scene/splineRegistry";
 import {
   applySphereReflectionCaptureTransform,
@@ -19978,6 +19990,134 @@ check("generic spline deform mesh supports pipe axes and preserves a smooth clos
   assert.deepEqual(Array.from({ length: 4 }, (_, index) => positions.getY(index)).map((value) => Number.isFinite(value)), [true, true, true, true]);
   const collider = splineDeformMeshColliderPrimitive(built!.group!);
   assert.ok(collider && collider.indices.length >= 3 && collider.vertices.length >= 3, "generated mesh can supply an opt-in static trimesh collider");
+});
+
+check("spline normalizers survive fuzzed and adversarial data without throwing (Faz 12 §20)", () => {
+  const adversarial: unknown[] = [
+    undefined, null, 42, "spline", [], {}, true,
+    { points: "not-an-array" },
+    { points: [null, 1, "x", {}, [0, 0, 0], { position: [0, 0] }, { position: [Number.NaN, 0, 0] }, { position: [Number.POSITIVE_INFINITY, 0, 0] }] },
+    { closed: true, points: [{ id: "solo", position: [0, 0, 0] }] },
+    { reparamStepsPerSegment: -5, defaultUp: [0, 0, 0], points: [{ position: [0, 0, 0], pointType: "bogus" }] },
+    { points: [{ id: "dup", position: [0, 0, 0] }, { id: "dup", position: [1, 0, 0] }, { id: "dup", position: [2, 0, 0] }] },
+    { points: [{ position: [0, 0, 0], roll: Number.NaN, scale: [Number.POSITIVE_INFINITY, 1], metadata: { a: Number.NaN, b: () => 1, c: "ok", d: 3 } }] },
+  ];
+  const assertValid = (value: unknown) => {
+    const data = normalizeSplineComponentData(value);
+    assert.equal(data.schema, 1);
+    assert.ok(Array.isArray(data.points));
+    assert.equal(new Set(data.points.map((point) => point.id)).size, data.points.length, "point ids are unique");
+    assert.ok(data.reparamStepsPerSegment >= 1 && data.reparamStepsPerSegment <= SPLINE_MAX_REPARAM_STEPS);
+    assert.ok(data.defaultUp.every((entry) => Number.isFinite(entry)));
+    if (data.closed) assert.ok(data.points.length >= 3, "a closed loop keeps at least three points");
+    for (const point of data.points) {
+      assert.ok(point.position.every((entry) => Number.isFinite(entry)), "point positions stay finite");
+      assert.ok(["linear", "curveAuto", "curveCustom"].includes(point.pointType));
+      if (point.roll !== undefined) assert.ok(Number.isFinite(point.roll));
+      if (point.scale) assert.ok(point.scale.every((entry) => Number.isFinite(entry)));
+    }
+    const generators = normalizeSplineGenerators(value);
+    assert.ok(Array.isArray(generators));
+    assert.equal(new Set(generators.map((generator) => generator.id)).size, generators.length, "generator ids are unique");
+    const actor = normalizeSplineActor({ id: "fuzz", position: [0, 0, 0], spline: value as never, generators: value as never });
+    assert.ok(actor.spline.points.every((point) => point.position.every((entry) => Number.isFinite(entry))));
+    assert.deepEqual(normalizeSplineActor(actor), actor, "normalization is idempotent");
+  };
+  adversarial.forEach(assertValid);
+
+  const random = new SplineGeneratorRandom(0xc0ffee);
+  const keys = ["id", "position", "pointType", "type", "meshAsset", "spacing", "segmentLength", "sampleSteps", "points", "closed", "defaultUp", "reparamStepsPerSegment", "seed", "scale", "roll", "metadata", "settings", "random", "forwardAxis", "upAxis"];
+  const randomValue = (depth: number): unknown => {
+    const roll = random.next();
+    if (depth > 3 || roll < 0.35) {
+      const leaves: unknown[] = [0, 1, -1, 3.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, "instances", "deformMesh", "plugin:x", "", true, false, null];
+      return leaves[Math.floor(random.next() * leaves.length)];
+    }
+    if (roll < 0.6) return Array.from({ length: Math.floor(random.next() * 5) }, () => randomValue(depth + 1));
+    const record: Record<string, unknown> = {};
+    for (const key of keys) if (random.next() < 0.4) record[key] = randomValue(depth + 1);
+    return record;
+  };
+  for (let iteration = 0; iteration < 300; iteration += 1) assertValid(randomValue(0));
+});
+
+check("spline schema migration fills defaults and upgrades legacy point/generator shapes (Faz 12)", () => {
+  const migrated = normalizeSplineComponentData({
+    closed: true,
+    points: [{ position: [0, 0, 0] }, { position: [4, 0, 0] }, { position: [4, 0, 4] }],
+  });
+  assert.equal(migrated.schema, 1);
+  assert.equal(migrated.reparamStepsPerSegment, SPLINE_DEFAULT_REPARAM_STEPS, "legacy data without reparam steps gets the default");
+  assert.deepEqual(migrated.defaultUp, [0, 1, 0]);
+  assert.ok(migrated.points.every((point) => point.pointType === "curveAuto"), "missing point types migrate to the default");
+  assert.equal(new Set(migrated.points.map((point) => point.id)).size, 3, "missing ids are backfilled uniquely");
+  assert.equal(migrated.closed, true);
+
+  const clamped = normalizeSplineComponentData({ reparamStepsPerSegment: 9999, closed: true, points: [{ id: "solo", position: [0, 0, 0] }] });
+  assert.equal(clamped.reparamStepsPerSegment, SPLINE_MAX_REPARAM_STEPS, "out-of-range reparam steps clamp to the maximum");
+  assert.equal(clamped.closed, false, "a single-point closed loop downgrades to an open path");
+
+  const generators = normalizeSplineGenerators([
+    { id: "posts", type: "instances", meshAsset: "post", spacing: 2 },
+    { id: "posts", type: "rigidSegments", meshAsset: "panel", segmentLength: 3 },
+  ]);
+  assert.equal(generators.length, 2);
+  assert.notEqual(generators[0]!.id, generators[1]!.id, "duplicate generator ids are uniquified on migration");
+
+  const actor = normalizeSplineActor({ id: "rail", position: [0, 0, 0], spline: migrated, generators });
+  assert.deepEqual(normalizeSplineActor(actor), actor, "an already-migrated actor is stable under re-normalization");
+});
+
+check("deformed spline mesh disposes generated geometry and materials without touching the source (Faz 12 §19.5)", () => {
+  const actor = createDefaultSplineActor();
+  actor.spline.points[1]!.position = [0, 0, 10];
+  actor.spline.points.forEach((point) => { point.pointType = "linear"; });
+  const definition = { id: "road", type: "deformMesh" as const, meshAsset: "road", forwardAxis: "z" as const, upAxis: "y" as const };
+  const sourceGeometry = new BoxGeometry(2, 0.2, 10, 2, 1, 8);
+  const sourceMaterial = new MeshBasicMaterial();
+  const sourcePositionCount = sourceGeometry.getAttribute("position").count;
+  const gltf = { scene: (() => { const group = new Group(); group.add(new Mesh(sourceGeometry, sourceMaterial)); return group; })() } as unknown as GLTF;
+
+  const parent = new Group();
+  let disposedGeometries = 0;
+  let disposedMaterials = 0;
+  const build = () => {
+    const { group } = buildSplineDeformMeshGroup({ actor, gltf, definition, castShadow: false, receiveShadow: false });
+    assert.ok(group, "deform build produces a generated group");
+    parent.add(group!);
+    group!.traverse((child) => {
+      if (!(child instanceof Mesh)) return;
+      assert.notEqual(child.geometry, sourceGeometry, "generated geometry is a disposable clone");
+      child.geometry.addEventListener("dispose", () => { disposedGeometries += 1; });
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      materials.forEach((material) => {
+        assert.notEqual(material, sourceMaterial, "generated material is a disposable clone");
+        material.addEventListener("dispose", () => { disposedMaterials += 1; });
+      });
+    });
+    return group!;
+  };
+
+  const first = build();
+  disposeSplineDeformMeshGroup(first);
+  assert.ok(disposedGeometries >= 1, "disposal frees the generated geometry");
+  assert.ok(disposedMaterials >= 1, "disposal frees the generated material clone");
+  assert.equal(first.parent, null, "a disposed group detaches from the scene graph");
+
+  for (let cycle = 0; cycle < 5; cycle += 1) disposeSplineDeformMeshGroup(build());
+  assert.equal(sourceGeometry.getAttribute("position").count, sourcePositionCount, "the shared source geometry survives repeated edit/rebuild cycles");
+});
+
+check("spline performance warnings fire only at the §19.4 thresholds (Faz 12)", () => {
+  assert.deepEqual(splinePerformanceWarnings({ pointCount: 3 }), []);
+  assert.deepEqual(splinePerformanceWarnings({ pointCount: SPLINE_WARN_POINT_COUNT - 1 }), []);
+  assert.equal(splinePerformanceWarnings({ pointCount: SPLINE_WARN_POINT_COUNT }).length, 1);
+  assert.ok(splinePerformanceWarnings({ pointCount: SPLINE_WARN_POINT_COUNT }).every((warning) => warning.includes("control points")));
+  assert.equal(splinePerformanceWarnings({ pointCount: 2, generatedInstanceCount: SPLINE_WARN_GENERATED_INSTANCES }).length, 1);
+  assert.equal(splinePerformanceWarnings({ pointCount: 2, deformSegmentCount: SPLINE_WARN_DEFORM_SEGMENTS }).length, 1);
+  assert.equal(splinePerformanceWarnings({ pointCount: 2, maxDeformSampleSteps: SPLINE_WARN_SAMPLE_STEPS }).length, 1);
+  assert.deepEqual(splinePerformanceWarnings({ pointCount: Number.NaN, generatedInstanceCount: Number.POSITIVE_INFINITY, deformSegmentCount: undefined }), [], "non-finite metrics never warn");
+  assert.equal(splinePerformanceWarnings({ pointCount: 2000, generatedInstanceCount: 10000, deformSegmentCount: 600, maxDeformSampleSteps: 128 }).length, 4, "all four thresholds report together");
 });
 
 check("generic spline debug renderer samples world space, honors visibility, and disposes", () => {
