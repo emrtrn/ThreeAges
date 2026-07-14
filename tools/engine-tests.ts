@@ -323,7 +323,9 @@ import {
   QUALITY_LEVELS,
   QUALITY_PROFILES,
   applyQualityToPostProcess,
+  defaultGraphicsPreferences,
   effectiveDevicePixelRatio,
+  normalizeGraphicsPreferences,
   resolveQualitySettings,
 } from "../engine/perf/qualityProfiles";
 import {
@@ -14183,6 +14185,7 @@ check("user settings store: round-trips locale and normalized audio bus volumes"
   assert.deepEqual(store.read(), {
     locale: "tr",
     audio: { busVolumes: { music: 0.35, sfx: 0 } },
+    graphics: defaultGraphicsPreferences(),
   });
   const raw = JSON.parse(storage.getItem(store.storageKey()) ?? "{}") as {
     schema?: number;
@@ -14227,6 +14230,7 @@ check("user settings normalization drops unknown buses and applies stored audio 
   assert.deepEqual(normalized, {
     locale: "tr",
     audio: { busVolumes: { master: 0.8 } },
+    graphics: defaultGraphicsPreferences(),
   });
 
   const audio = new AudioSubsystem();
@@ -14242,6 +14246,102 @@ check("user settings normalization drops unknown buses and applies stored audio 
   registry.setActiveLocale("en"); // worldSettings.locale
   if (normalized.locale) registry.setActiveLocale(normalized.locale); // user override
   assert.equal(registry.activeLocale, "tr");
+});
+
+check("graphics preferences: defaults are adaptive-on / 60fps / medium", () => {
+  const defaults = defaultGraphicsPreferences();
+  assert.deepEqual(defaults, {
+    adaptiveOptimizationEnabled: true,
+    targetFrameRate: 60,
+    selectedQualityLevel: "medium",
+    allowAdaptiveFineTuning: true,
+  });
+  // A junk value normalizes to a fresh default (never crashes).
+  assert.deepEqual(normalizeGraphicsPreferences(null), defaults);
+  assert.deepEqual(normalizeGraphicsPreferences("nope"), defaults);
+});
+
+check("graphics preferences: normalization validates each field and gates customSettings on level", () => {
+  // Valid overrides survive.
+  assert.deepEqual(
+    normalizeGraphicsPreferences({
+      adaptiveOptimizationEnabled: false,
+      targetFrameRate: 30,
+      selectedQualityLevel: "low",
+      allowAdaptiveFineTuning: false,
+    }),
+    {
+      adaptiveOptimizationEnabled: false,
+      targetFrameRate: 30,
+      selectedQualityLevel: "low",
+      allowAdaptiveFineTuning: false,
+    },
+  );
+
+  // Bad enum / fps values fall back to defaults field-by-field.
+  const patched = normalizeGraphicsPreferences({
+    targetFrameRate: 144,
+    selectedQualityLevel: "insane",
+  });
+  assert.equal(patched.targetFrameRate, 60);
+  assert.equal(patched.selectedQualityLevel, "medium");
+
+  // customSettings is dropped on a concrete profile...
+  const concrete = normalizeGraphicsPreferences({
+    selectedQualityLevel: "high",
+    customSettings: { renderScale: 0.5 },
+  });
+  assert.equal(concrete.customSettings, undefined);
+
+  // ...but whitelisted and kept on "custom" (unknown keys + bad types dropped).
+  const custom = normalizeGraphicsPreferences({
+    selectedQualityLevel: "custom",
+    customSettings: {
+      renderScale: 0.5,
+      shadowMapSize: 1024,
+      bloomResolutionScale: 0.5,
+      aoAllowed: true,
+      shadowMapSizeBogus: 99,
+      maxPixelRatio: "nope",
+      unknownKey: 1,
+    },
+  });
+  assert.deepEqual(custom.customSettings, {
+    renderScale: 0.5,
+    shadowMapSize: 1024,
+    bloomResolutionScale: 0.5,
+    aoAllowed: true,
+  });
+
+  // An empty custom override collapses to undefined (no stale empty object).
+  const emptyCustom = normalizeGraphicsPreferences({
+    selectedQualityLevel: "custom",
+    customSettings: { bogus: 1 },
+  });
+  assert.equal(emptyCustom.customSettings, undefined);
+});
+
+check("user settings store: round-trips graphics preferences alongside audio + locale", () => {
+  const storage = createMemoryStorageAdapter();
+  const store = new UserSettingsStore({ storage });
+  assert.deepEqual(store.read().graphics, defaultGraphicsPreferences());
+
+  assert.equal(
+    store.setGraphics({
+      adaptiveOptimizationEnabled: false,
+      targetFrameRate: 30,
+      selectedQualityLevel: "low",
+      allowAdaptiveFineTuning: false,
+    }),
+    true,
+  );
+  // Setting graphics leaves audio + locale untouched.
+  assert.equal(store.setLocale("tr"), true);
+  const read = store.read();
+  assert.equal(read.locale, "tr");
+  assert.equal(read.graphics.selectedQualityLevel, "low");
+  assert.equal(read.graphics.adaptiveOptimizationEnabled, false);
+  assert.equal(read.graphics.targetFrameRate, 30);
 });
 
 check("save-game UI commands and ViewModel fields stay slot-scoped", () => {

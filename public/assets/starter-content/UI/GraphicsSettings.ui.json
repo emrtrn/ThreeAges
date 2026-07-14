@@ -1,12 +1,12 @@
 {
   "schema": 1,
   "type": "ui",
-  "name": "Playwright Smoke Menu",
+  "name": "Graphics Settings",
   "preview": {
     "width": 1280,
     "height": 720
   },
-  "initialFocus": "resume",
+  "initialFocus": "back",
   "transition": {
     "enter": "fade",
     "exit": "fade",
@@ -28,7 +28,7 @@
         "props": {
           "width": 560,
           "padding": 20,
-          "gap": 12,
+          "gap": 14,
           "background": "rgba(16, 19, 26, 0.92)",
           "radius": 6
         },
@@ -37,13 +37,13 @@
             "id": "title",
             "widget": "Text",
             "props": {
-              "text": "Save / Load",
+              "text": "Graphics",
               "fontSize": 24,
               "fontWeight": "700"
             }
           },
           {
-            "id": "slot-quick",
+            "id": "quality-group",
             "widget": "Stack",
             "props": {
               "direction": "column",
@@ -54,39 +54,17 @@
             },
             "children": [
               {
-                "id": "quick-label",
+                "id": "quality-label",
                 "widget": "Text",
                 "props": {
                   "text": {
-                    "bind": "save.slots.quick.label"
+                    "bind": "graphics.qualityLabel"
                   },
                   "fontWeight": "700"
                 }
               },
               {
-                "id": "quick-status",
-                "widget": "Text",
-                "props": {
-                  "text": {
-                    "bind": "save.slots.quick.status"
-                  },
-                  "fontSize": 13,
-                  "color": "#d7deea"
-                }
-              },
-              {
-                "id": "quick-level",
-                "widget": "Text",
-                "props": {
-                  "text": {
-                    "bind": "save.slots.quick.level"
-                  },
-                  "fontSize": 12,
-                  "color": "#aab4c4"
-                }
-              },
-              {
-                "id": "quick-actions",
+                "id": "quality-actions",
                 "widget": "Stack",
                 "props": {
                   "direction": "row",
@@ -94,35 +72,46 @@
                 },
                 "children": [
                   {
-                    "id": "quick-save",
+                    "id": "quality-ultra",
                     "widget": "Button",
                     "props": {
-                      "text": "Save",
+                      "text": "Ultra",
                       "onClick": {
                         "type": "message",
-                        "message": "save:write:quick"
+                        "message": "settings:graphics:quality:ultra"
                       }
                     }
                   },
                   {
-                    "id": "quick-load",
+                    "id": "quality-high",
                     "widget": "Button",
                     "props": {
-                      "text": "Load",
+                      "text": "High",
                       "onClick": {
                         "type": "message",
-                        "message": "save:load:quick"
+                        "message": "settings:graphics:quality:high"
                       }
                     }
                   },
                   {
-                    "id": "quick-delete",
+                    "id": "quality-medium",
                     "widget": "Button",
                     "props": {
-                      "text": "Delete",
+                      "text": "Medium",
                       "onClick": {
                         "type": "message",
-                        "message": "save:delete:quick"
+                        "message": "settings:graphics:quality:medium"
+                      }
+                    }
+                  },
+                  {
+                    "id": "quality-low",
+                    "widget": "Button",
+                    "props": {
+                      "text": "Low",
+                      "onClick": {
+                        "type": "message",
+                        "message": "settings:graphics:quality:low"
                       }
                     }
                   }
@@ -131,7 +120,7 @@
             ]
           },
           {
-            "id": "slot-1",
+            "id": "adaptive-group",
             "widget": "Stack",
             "props": {
               "direction": "column",
@@ -142,39 +131,17 @@
             },
             "children": [
               {
-                "id": "slot-1-label",
+                "id": "adaptive-label",
                 "widget": "Text",
                 "props": {
                   "text": {
-                    "bind": "save.slots.slot-1.label"
+                    "bind": "graphics.adaptiveLabel"
                   },
                   "fontWeight": "700"
                 }
               },
               {
-                "id": "slot-1-status",
-                "widget": "Text",
-                "props": {
-                  "text": {
-                    "bind": "save.slots.slot-1.status"
-                  },
-                  "fontSize": 13,
-                  "color": "#d7deea"
-                }
-              },
-              {
-                "id": "slot-1-level",
-                "widget": "Text",
-                "props": {
-                  "text": {
-                    "bind": "save.slots.slot-1.level"
-                  },
-                  "fontSize": 12,
-                  "color": "#aab4c4"
-                }
-              },
-              {
-                "id": "slot-1-actions",
+                "id": "adaptive-actions",
                 "widget": "Stack",
                 "props": {
                   "direction": "row",
@@ -182,35 +149,24 @@
                 },
                 "children": [
                   {
-                    "id": "slot-1-save",
+                    "id": "adaptive-on",
                     "widget": "Button",
                     "props": {
-                      "text": "Save",
+                      "text": "On",
                       "onClick": {
                         "type": "message",
-                        "message": "save:write:slot-1"
+                        "message": "settings:graphics:adaptive:on"
                       }
                     }
                   },
                   {
-                    "id": "slot-1-load",
+                    "id": "adaptive-off",
                     "widget": "Button",
                     "props": {
-                      "text": "Load",
+                      "text": "Off",
                       "onClick": {
                         "type": "message",
-                        "message": "save:load:slot-1"
-                      }
-                    }
-                  },
-                  {
-                    "id": "slot-1-delete",
-                    "widget": "Button",
-                    "props": {
-                      "text": "Delete",
-                      "onClick": {
-                        "type": "message",
-                        "message": "save:delete:slot-1"
+                        "message": "settings:graphics:adaptive:off"
                       }
                     }
                   }
@@ -219,7 +175,7 @@
             ]
           },
           {
-            "id": "slot-2",
+            "id": "targetfps-group",
             "widget": "Stack",
             "props": {
               "direction": "column",
@@ -230,39 +186,17 @@
             },
             "children": [
               {
-                "id": "slot-2-label",
+                "id": "targetfps-label",
                 "widget": "Text",
                 "props": {
                   "text": {
-                    "bind": "save.slots.slot-2.label"
+                    "bind": "graphics.targetFpsLabel"
                   },
                   "fontWeight": "700"
                 }
               },
               {
-                "id": "slot-2-status",
-                "widget": "Text",
-                "props": {
-                  "text": {
-                    "bind": "save.slots.slot-2.status"
-                  },
-                  "fontSize": 13,
-                  "color": "#d7deea"
-                }
-              },
-              {
-                "id": "slot-2-level",
-                "widget": "Text",
-                "props": {
-                  "text": {
-                    "bind": "save.slots.slot-2.level"
-                  },
-                  "fontSize": 12,
-                  "color": "#aab4c4"
-                }
-              },
-              {
-                "id": "slot-2-actions",
+                "id": "targetfps-actions",
                 "widget": "Stack",
                 "props": {
                   "direction": "row",
@@ -270,41 +204,41 @@
                 },
                 "children": [
                   {
-                    "id": "slot-2-save",
+                    "id": "targetfps-60",
                     "widget": "Button",
                     "props": {
-                      "text": "Save",
+                      "text": "60 FPS",
                       "onClick": {
                         "type": "message",
-                        "message": "save:write:slot-2"
+                        "message": "settings:graphics:targetfps:60"
                       }
                     }
                   },
                   {
-                    "id": "slot-2-load",
+                    "id": "targetfps-30",
                     "widget": "Button",
                     "props": {
-                      "text": "Load",
+                      "text": "30 FPS",
                       "onClick": {
                         "type": "message",
-                        "message": "save:load:slot-2"
-                      }
-                    }
-                  },
-                  {
-                    "id": "slot-2-delete",
-                    "widget": "Button",
-                    "props": {
-                      "text": "Delete",
-                      "onClick": {
-                        "type": "message",
-                        "message": "save:delete:slot-2"
+                        "message": "settings:graphics:targetfps:30"
                       }
                     }
                   }
                 ]
               }
             ]
+          },
+          {
+            "id": "status",
+            "widget": "Text",
+            "props": {
+              "text": {
+                "bind": "graphics.status"
+              },
+              "fontSize": 13,
+              "color": "#aab4c4"
+            }
           },
           {
             "id": "footer",
@@ -316,43 +250,21 @@
             },
             "children": [
               {
-                "id": "smoke-patrol",
+                "id": "reset",
                 "widget": "Button",
                 "props": {
-                  "text": "Patrol",
+                  "text": "Restore Defaults",
                   "onClick": {
                     "type": "message",
-                    "message": "travel:layouts/__playwright-smoke-patrol.level.json"
+                    "message": "settings:graphics:reset"
                   }
                 }
               },
               {
-                "id": "smoke-travel",
+                "id": "back",
                 "widget": "Button",
                 "props": {
-                  "text": "Travel",
-                  "onClick": {
-                    "type": "message",
-                    "message": "travel:layouts/__playwright-smoke-target.level.json#arrival"
-                  }
-                }
-              },
-              {
-                "id": "graphics",
-                "widget": "Button",
-                "props": {
-                  "text": "Graphics",
-                  "onClick": {
-                    "type": "message",
-                    "message": "settings:open:graphics"
-                  }
-                }
-              },
-              {
-                "id": "resume",
-                "widget": "Button",
-                "props": {
-                  "text": "Resume",
+                  "text": "Back",
                   "onClick": {
                     "type": "back"
                   }

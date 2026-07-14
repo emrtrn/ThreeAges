@@ -11,6 +11,11 @@ import {
   type AudioBusId,
   type BusMixSnapshot,
 } from "../audio/audioBus";
+import {
+  defaultGraphicsPreferences,
+  normalizeGraphicsPreferences,
+  type GraphicsPreferences,
+} from "../perf/qualityProfiles";
 import type { PersistenceLogger, StorageAdapter } from "./saveGameStore";
 
 export interface UserSettings {
@@ -18,6 +23,8 @@ export interface UserSettings {
     readonly busVolumes: BusMixSnapshot;
   };
   readonly locale: string | null;
+  /** Player graphics preferences (chosen profile, adaptive toggle, FPS target). */
+  readonly graphics: GraphicsPreferences;
 }
 
 export interface UserSettingsEnvelope {
@@ -46,7 +53,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function defaultUserSettings(): UserSettings {
-  return { audio: { busVolumes: {} }, locale: null };
+  return { audio: { busVolumes: {} }, locale: null, graphics: defaultGraphicsPreferences() };
 }
 
 export function normalizeUserSettings(value: unknown): UserSettings {
@@ -59,7 +66,11 @@ export function normalizeUserSettings(value: unknown): UserSettings {
     if (typeof raw === "number" && Number.isFinite(raw)) busVolumes[id] = normalizeBusVolume(raw);
   }
   const locale = typeof value.locale === "string" && value.locale.length > 0 ? value.locale : null;
-  return { audio: { busVolumes }, locale };
+  // `graphics` was added after the audio/locale fields; a record written before it
+  // (or a corrupt one) normalizes to the default preferences — no schema bump, so
+  // existing audio/locale records keep loading (same forward-compatible pattern).
+  const graphics = normalizeGraphicsPreferences(value.graphics);
+  return { audio: { busVolumes }, locale, graphics };
 }
 
 function parseEnvelope(raw: string): UserSettingsEnvelope | null {
@@ -130,11 +141,17 @@ export class UserSettingsStore {
     return this.write({
       audio: patch.audio ?? current.audio,
       locale: patch.locale !== undefined ? patch.locale : current.locale,
+      graphics: patch.graphics ?? current.graphics,
     });
   }
 
   setLocale(locale: string | null): boolean {
     return this.update({ locale });
+  }
+
+  /** Persists the player's graphics preferences (chosen profile, adaptive, FPS). */
+  setGraphics(graphics: GraphicsPreferences): boolean {
+    return this.update({ graphics });
   }
 
   setAudioBusVolume(bus: AudioBusId, volume: number): boolean {

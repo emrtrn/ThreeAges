@@ -160,8 +160,12 @@ import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import { FrameMetricsMonitor, type FrameMetrics } from "@engine/perf/frameMetrics";
 import {
   applyQualityToPostProcess,
+  defaultGraphicsPreferences,
   effectiveDevicePixelRatio,
+  isQualityLevel,
   resolveQualitySettings,
+  type GraphicsPreferences,
+  type QualityLevel,
   type QualitySettings,
 } from "@engine/perf/qualityProfiles";
 import type { LightObjectRecord } from "@engine/render-three/lights";
@@ -938,6 +942,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.userSettingsStore = createRuntimeUserSettingsStore();
     this.userSettings = this.userSettingsStore?.read() ?? defaultUserSettings();
     this.applyUserAudioSettings(this.userSettings);
+    // Seed the active quality profile from the persisted graphics preference so the
+    // first scene build resolves post-process at the player's chosen profile (the
+    // remaining knobs — shadows, resolution, particle density — are applied once
+    // the scene's lights + composer exist; see applyQualitySettings at build end).
+    this.qualitySettings = resolveQualitySettings(
+      this.userSettings.graphics.selectedQualityLevel,
+      this.userSettings.graphics.customSettings,
+    );
     this.movingPlatformSubsystem = new MovingPlatformSubsystem(this.syncEntityTransform);
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
@@ -2122,6 +2134,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     await this.startGameMode();
     this.saveCoordinator.applyPendingRestore(layoutPath);
     await this.setupRuntimeUi();
+    // Apply the persisted graphics profile now that the scene's lights + composer
+    // exist (shadows, render scale, particle density; post-process already resolved
+    // at the seeded profile during build). Runs on every scene build so Level
+    // Travel keeps the player's chosen quality.
+    this.applyQualitySettings(this.qualitySettings);
+    this.refreshGraphicsUiFields();
     await this.setupDialogue();
   }
 
@@ -2186,6 +2204,92 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const ok = this.userSettingsStore?.setLocale(locale) ?? false;
     this.userSettings = this.userSettingsStore?.read() ?? { ...this.userSettings, locale };
     return ok;
+  }
+
+  /**
+   * Selects a graphics quality profile (Ultra/High/Medium/Low/Custom): persists the
+   * preference, re-resolves + applies the profile to the live renderer, and refreshes
+   * the settings-screen fields with a status line (plan §5.3 — no aggressive popup).
+   */
+  setGraphicsQualityLevel(level: QualityLevel): boolean {
+    return this.applyAndPersistGraphics(
+      { ...this.userSettings.graphics, selectedQualityLevel: level },
+      `Quality set to ${qualityLevelLabel(level)}.`,
+      true,
+    );
+  }
+
+  /**
+   * Toggles adaptive optimization. This only records the player's intent — the
+   * adaptive controller (Faz 6) reads it — so the live quality profile is not
+   * re-applied (nothing about the resolved settings changes).
+   */
+  setGraphicsAdaptive(enabled: boolean): boolean {
+    return this.applyAndPersistGraphics(
+      { ...this.userSettings.graphics, adaptiveOptimizationEnabled: enabled },
+      enabled ? "Adaptive optimization on." : "Adaptive optimization off. Manual profile active.",
+      false,
+    );
+  }
+
+  /** Sets the adaptive frame-time target (30 or 60 FPS); intent-only, like adaptive. */
+  setGraphicsTargetFrameRate(fps: 30 | 60): boolean {
+    return this.applyAndPersistGraphics(
+      { ...this.userSettings.graphics, targetFrameRate: fps },
+      `Target frame rate ${fps} FPS.`,
+      false,
+    );
+  }
+
+  /** Restores the template default graphics preferences and re-applies them. */
+  resetGraphicsPreferences(): boolean {
+    return this.applyAndPersistGraphics(
+      defaultGraphicsPreferences(),
+      "Graphics settings restored to defaults.",
+      true,
+    );
+  }
+
+  /** Current player graphics preferences (chosen profile, adaptive, FPS target). */
+  getGraphicsPreferences(): GraphicsPreferences {
+    return this.userSettings.graphics;
+  }
+
+  /**
+   * Persists new graphics preferences, optionally re-applies the resolved quality
+   * profile to the live renderer (only when the profile itself changed), and
+   * refreshes the settings-screen ViewModel fields + status message.
+   */
+  private applyAndPersistGraphics(
+    graphics: GraphicsPreferences,
+    status: string,
+    reapplyQuality: boolean,
+  ): boolean {
+    this.userSettings = { ...this.userSettings, graphics };
+    const ok = this.userSettingsStore?.setGraphics(graphics) ?? false;
+    if (reapplyQuality) {
+      this.applyQualitySettings(
+        resolveQualitySettings(graphics.selectedQualityLevel, graphics.customSettings),
+      );
+    }
+    this.refreshGraphicsUiFields(status);
+    return ok;
+  }
+
+  /**
+   * Mirrors the current graphics preferences into the UI ViewModel so the graphics
+   * settings screen shows the active profile / adaptive state / FPS target, plus an
+   * optional one-line status message.
+   */
+  private refreshGraphicsUiFields(status?: string): void {
+    const g = this.userSettings.graphics;
+    this.uiStore.setField("graphics.quality", g.selectedQualityLevel);
+    this.uiStore.setField("graphics.qualityLabel", `Quality: ${qualityLevelLabel(g.selectedQualityLevel)}`);
+    this.uiStore.setField("graphics.adaptive", g.adaptiveOptimizationEnabled);
+    this.uiStore.setField("graphics.adaptiveLabel", `Adaptive: ${g.adaptiveOptimizationEnabled ? "On" : "Off"}`);
+    this.uiStore.setField("graphics.targetFps", g.targetFrameRate);
+    this.uiStore.setField("graphics.targetFpsLabel", `Target: ${g.targetFrameRate} FPS`);
+    if (status !== undefined) this.uiStore.setField("graphics.status", status);
   }
 
   /**
@@ -2770,10 +2874,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /**
    * Intercepts reserved user-settings widget messages:
+   * - `settings:open:graphics` — pushes the graphics settings screen
+   * - `settings:graphics:quality:<level>` / `:adaptive:<on|off>` / `:targetfps:<30|60>` / `:reset`
    * - `settings:locale:<locale>`
    * - `settings:audio:<bus>:<volume>`
    */
   private handleSettingsUiMessage(message: string): boolean {
+    if (message === "settings:open:graphics") {
+      const def = this.uiDefs.get("graphics-settings");
+      if (def) this.uiSubsystem?.pushScreen(def);
+      return true;
+    }
+    if (message.startsWith("settings:graphics:")) {
+      return this.handleGraphicsSettingsMessage(message.slice("settings:graphics:".length));
+    }
     if (message.startsWith("settings:locale:")) {
       const locale = message.slice("settings:locale:".length).trim();
       return locale.length > 0 ? this.setUserLocale(locale) : false;
@@ -2786,6 +2900,26 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!Number.isFinite(volume)) return false;
     this.setUserAudioBusVolume(bus, volume);
     return true;
+  }
+
+  /** Routes a `settings:graphics:<spec>` widget message to the graphics setters. */
+  private handleGraphicsSettingsMessage(spec: string): boolean {
+    if (spec === "reset") return this.resetGraphicsPreferences();
+    if (spec.startsWith("quality:")) {
+      const level = spec.slice("quality:".length);
+      return isQualityLevel(level) ? this.setGraphicsQualityLevel(level) : false;
+    }
+    if (spec.startsWith("adaptive:")) {
+      const value = spec.slice("adaptive:".length);
+      if (value !== "on" && value !== "off") return false;
+      return this.setGraphicsAdaptive(value === "on");
+    }
+    if (spec.startsWith("targetfps:")) {
+      const fps = Number(spec.slice("targetfps:".length));
+      if (fps !== 30 && fps !== 60) return false;
+      return this.setGraphicsTargetFrameRate(fps);
+    }
+    return false;
   }
 
   /**
@@ -5010,6 +5144,11 @@ function distance3d(a: readonly [number, number, number], b: readonly [number, n
 
 function samePoint3d(a: readonly [number, number, number], b: readonly [number, number, number]): boolean {
   return distance3d(a, b) <= 1e-6;
+}
+
+/** Human-readable label for a quality level (settings-screen status text). */
+function qualityLevelLabel(level: QualityLevel): string {
+  return level.charAt(0).toUpperCase() + level.slice(1);
 }
 
 function createRuntimeUserSettingsStore(): UserSettingsStore | null {

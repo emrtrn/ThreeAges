@@ -46,7 +46,6 @@
     "mie": 0.002
   },
   "heightFog": {
-    "hidden": true,
     "color": "#b8daff",
     "density": 0.01
   },
@@ -54,6 +53,7 @@
     "density": 0.4
   },
   "postProcess": {
+    "antialias": "smaa",
     "bloom": {
       "enabled": true,
       "threshold": 1,
@@ -61,9 +61,15 @@
       "radius": 1
     },
     "dof": {
+      "enabled": true,
       "focusDistance": 10,
       "aperture": 1,
-      "maxBlur": 0.2
+      "maxBlur": 0.1
+    },
+    "ao": {
+      "enabled": true,
+      "radius": 1,
+      "intensity": 1
     }
   },
   "lights": [

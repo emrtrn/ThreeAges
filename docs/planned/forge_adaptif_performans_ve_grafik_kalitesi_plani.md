@@ -1016,21 +1016,37 @@ Oyuncuya hem sade seçim hem de kontrol imkânı vermek — mevcut UI framework'
 
 ### Yapılacaklar
 
-- [ ] `UserSettings`'e `graphics: GraphicsPreferences` alanı ekle
-      (`userSettingsStore.ts` — schema bump, normalize, eski kayıt için
-      varsayılanlar; audio/locale deseniyle aynı) + testler
-- [ ] Grafik ayarları ekranını `.ui.json` + ViewModel ile oluştur
-      (UiWidgetEditor'da düzenlenebilir olması bonus)
-- [ ] Ultra / High / Medium / Low seçenekleri
-- [ ] Adaptif optimizasyon toggle'ı
-- [ ] 30 FPS / 60 FPS hedef seçimi
-- [ ] Seçili profil bilgisini göster
-- [ ] Gelişmiş ayar değişince `Custom` durumuna geç
-- [ ] "Varsayılana dön" aksiyonu
-- [ ] Oyuncunun son tercihlerini oyun açılışında yükle ve uygula
-- [ ] Ayar uygulandığında kısa durum mesajı göster (§5.3 — agresif pop-up yok)
-- [ ] Gelişmiş ayarlar ilk sürümde kapalı / açılır bölüm; `Custom` akışı
-      isterse bu dilimin sonuna ertelenebilir (MVP profil + toggle ile tamam)
+- [x] ~~`UserSettings`'e `graphics: GraphicsPreferences` alanı ekle~~
+      (`GraphicsPreferences` + `defaultGraphicsPreferences`/`normalizeGraphicsPreferences`
+      `qualityProfiles.ts`'te; `userSettingsStore.ts`'e `graphics` alanı + `setGraphics`.
+      **Schema bump yerine defensive normalize** kullanıldı — audio/locale gerçek
+      deseni; şema `1` kalır, eski kayıt varsayılana normalize olur, kayıp yok) +
+      testler (3 check)
+- [x] ~~Grafik ayarları ekranını `.ui.json` + ViewModel ile oluştur~~
+      (`assets/starter-content/UI/GraphicsSettings.ui.json`, manifest id `graphics-settings`;
+      pause menüsüne "Graphics" butonu → `settings:open:graphics` ekranı push eder.
+      Widget seti Checkbox/Slider taşımadığından ekran Button + bound Text ile kuruldu)
+- [x] ~~Ultra / High / Medium / Low seçenekleri~~ (`settings:graphics:quality:<level>`
+      → `setGraphicsQualityLevel` → `resolveQualitySettings` + `applyQualitySettings`)
+- [x] ~~Adaptif optimizasyon toggle'ı~~ (`settings:graphics:adaptive:<on|off>`; yalnız
+      tercihi kaydeder — canlı profil yeniden uygulanmaz, Faz 6 kontrolcüsü okur)
+- [x] ~~30 FPS / 60 FPS hedef seçimi~~ (`settings:graphics:targetfps:<30|60>`; intent-only)
+- [x] ~~Seçili profil bilgisini göster~~ (`graphics.qualityLabel`/`adaptiveLabel`/
+      `targetFpsLabel` ViewModel alanları `refreshGraphicsUiFields` ile beslenir)
+- [~] Gelişmiş ayar değişince `Custom` durumuna geç — mekanizma hazır
+      (`GraphicsPreferences.customSettings` + `resolveQualitySettings("custom", …)`
+      + `normalizeGraphicsPreferences` whitelist'i), ama gelişmiş slider UI'ı
+      **ertelendi** (aşağıdaki son madde; Slider/Checkbox widget'ı henüz yok)
+- [x] ~~"Varsayılana dön" aksiyonu~~ (`settings:graphics:reset` → `resetGraphicsPreferences`)
+- [x] ~~Oyuncunun son tercihlerini oyun açılışında yükle ve uygula~~ (constructor'da
+      profil `qualitySettings`'e seed edilir; her `buildScene` sonunda
+      `applyQualitySettings` — boot + Level Travel'da profil korunur)
+- [x] ~~Ayar uygulandığında kısa durum mesajı göster~~ (§5.3 — `graphics.status`
+      ViewModel alanı, ekranda sade tek satır; agresif pop-up yok)
+- [~] Gelişmiş ayarlar ilk sürümde kapalı / açılır bölüm — **ertelendi**: MVP
+      profil + adaptif toggle + FPS + reset ile çıkış kriteri karşılandı. Per-ayar
+      slider'lar (`Custom` akışı) yeni bir UI widget seti (Slider/Checkbox)
+      gerektirir; genişletme olarak bırakıldı
 
 ### Çıkış kriteri
 

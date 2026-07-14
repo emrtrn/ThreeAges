@@ -2288,29 +2288,6 @@
       "license": "Unknown"
     },
     {
-      "id": "testlevel",
-      "name": "AITestLevel",
-      "assetType": "level",
-      "category": "Levels",
-      "path": "assets/starter-content/Levels/AITestLevel.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Levels",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 100
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "playground",
       "name": "Playground",
       "assetType": "level",
@@ -2516,6 +2493,34 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 3954
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "graphics-settings",
+      "name": "Graphics Settings",
+      "assetType": "ui",
+      "category": "UI",
+      "path": "assets/starter-content/UI/GraphicsSettings.ui.json",
+      "tags": [
+        "starter",
+        "ui",
+        "menu",
+        "graphics"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 7842
       },
       "license": "Unknown"
     },

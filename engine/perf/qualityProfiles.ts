@@ -145,6 +145,120 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
   },
 };
 
+/** Player-facing graphics preferences persisted in {@link UserSettings.graphics}.
+ *
+ * These are the player's *intent* (the profile they chose, whether adaptive
+ * tuning may run, their FPS target) — not the adaptive controller's transient
+ * runtime overrides, which are never persisted. When `selectedQualityLevel` is
+ * `"custom"`, `customSettings` layers over the base (Faz 7 advanced sliders). */
+export interface GraphicsPreferences {
+  /** Whether the adaptive quality controller (Faz 6) may fine-tune at runtime. */
+  adaptiveOptimizationEnabled: boolean;
+  /** Frame-time budget target the adaptive controller aims for. */
+  targetFrameRate: 30 | 60;
+  /** The player's chosen profile (or `"custom"` for hand-tuned settings). */
+  selectedQualityLevel: QualityLevel;
+  /** When a manual profile is selected, whether adaptive may still nudge within it. */
+  allowAdaptiveFineTuning: boolean;
+  /** Partial overrides layered onto the base when `selectedQualityLevel` is `"custom"`. */
+  customSettings?: Partial<QualitySettings>;
+}
+
+/** The two supported frame-time targets (60 = smooth, 30 = weak-device floor). */
+export const TARGET_FRAME_RATES = [30, 60] as const;
+
+/** Every valid {@link QualityLevel}, for menu enumeration + normalization. */
+export const QUALITY_LEVEL_VALUES: readonly QualityLevel[] = [...QUALITY_LEVELS, "custom"];
+
+/** Narrow guard: a valid {@link QualityLevel} string. */
+export function isQualityLevel(value: unknown): value is QualityLevel {
+  return typeof value === "string" && (QUALITY_LEVEL_VALUES as readonly string[]).includes(value);
+}
+
+/**
+ * Template default preferences for a fresh player: adaptive on, 60 FPS target,
+ * Medium profile (the plan §5.2 "auto" starting point). A fork may ship a
+ * different default by writing its own {@link GraphicsPreferences}.
+ */
+export function defaultGraphicsPreferences(): GraphicsPreferences {
+  return {
+    adaptiveOptimizationEnabled: true,
+    targetFrameRate: 60,
+    selectedQualityLevel: "medium",
+    allowAdaptiveFineTuning: true,
+  };
+}
+
+/**
+ * Normalizes an unknown persisted value into valid {@link GraphicsPreferences},
+ * falling back to {@link defaultGraphicsPreferences} field-by-field (the defensive
+ * store pattern — an old or partial record never crashes, it just fills gaps).
+ * `customSettings` is dropped unless the level is `"custom"` (a stale override
+ * on a concrete profile would be misleading), and only known numeric/boolean
+ * quality keys survive the whitelist.
+ */
+export function normalizeGraphicsPreferences(value: unknown): GraphicsPreferences {
+  const defaults = defaultGraphicsPreferences();
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return defaults;
+  const raw = value as Record<string, unknown>;
+  const level = isQualityLevel(raw.selectedQualityLevel)
+    ? raw.selectedQualityLevel
+    : defaults.selectedQualityLevel;
+  const target = raw.targetFrameRate === 30 || raw.targetFrameRate === 60
+    ? raw.targetFrameRate
+    : defaults.targetFrameRate;
+  const prefs: GraphicsPreferences = {
+    adaptiveOptimizationEnabled:
+      typeof raw.adaptiveOptimizationEnabled === "boolean"
+        ? raw.adaptiveOptimizationEnabled
+        : defaults.adaptiveOptimizationEnabled,
+    targetFrameRate: target,
+    selectedQualityLevel: level,
+    allowAdaptiveFineTuning:
+      typeof raw.allowAdaptiveFineTuning === "boolean"
+        ? raw.allowAdaptiveFineTuning
+        : defaults.allowAdaptiveFineTuning,
+  };
+  if (level === "custom") {
+    const custom = normalizeCustomSettings(raw.customSettings);
+    if (custom) prefs.customSettings = custom;
+  }
+  return prefs;
+}
+
+/** Whitelisted shallow copy of the {@link QualitySettings} keys a custom override
+ * may carry. Unknown keys and wrong types are dropped; returns null when empty. */
+function normalizeCustomSettings(value: unknown): Partial<QualitySettings> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const out: Partial<QualitySettings> = {};
+  const num = (k: keyof QualitySettings): void => {
+    const v = raw[k];
+    if (typeof v === "number" && Number.isFinite(v)) (out[k] as number) = v;
+  };
+  const bool = (k: keyof QualitySettings): void => {
+    const v = raw[k];
+    if (typeof v === "boolean") (out[k] as boolean) = v;
+  };
+  num("renderScale");
+  num("maxPixelRatio");
+  bool("aoAllowed");
+  bool("dofAllowed");
+  bool("bloomAllowed");
+  if (raw.bloomResolutionScale === 1 || raw.bloomResolutionScale === 0.5) {
+    out.bloomResolutionScale = raw.bloomResolutionScale;
+  }
+  bool("smaaAllowed");
+  bool("shadowsEnabled");
+  if (raw.shadowMapSize === 256 || raw.shadowMapSize === 512 || raw.shadowMapSize === 1024 || raw.shadowMapSize === 2048) {
+    out.shadowMapSize = raw.shadowMapSize;
+  }
+  num("shadowDistanceScale");
+  num("particleDensity");
+  num("foliageCullDistanceScale");
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 /** Fallback base for `custom` when no explicit base level is supplied. */
 const DEFAULT_CUSTOM_BASE: Exclude<QualityLevel, "custom"> = "medium";
 
