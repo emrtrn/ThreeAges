@@ -47,10 +47,9 @@ async function main(): Promise<void> {
     setGameEditorCatalog(GAME_EDITOR_CATALOG);
     const app = new SceneApp(canvas, { enabled: true, scriptMessageTraceLimit });
     app.setLayoutSaver(saveLayoutViaDevEndpoint);
+    // EditorUi owns the perf overlay in editor mode: it exposes a Show > Stats
+    // toggle and defaults the overlay on when the URL carried ?debug.
     new EditorUi(app);
-    if (params.has("debug")) {
-      attachDebugStats(app, requireElement("debug-stats"));
-    }
     app.start();
     return;
   }

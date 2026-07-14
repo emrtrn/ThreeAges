@@ -37,6 +37,35 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* In editor mode the canvas is a first-class work surface rather than a
+   fullscreen backdrop beneath the HTML panels. */
+@media (min-width: 761px) {
+  body.editor-mode {
+    background: #0b1014;
+  }
+
+  body.editor-mode #game-canvas {
+    top: 58px;
+    right: 422px;
+    bottom: 40px;
+    left: 312px;
+    width: auto;
+    height: auto;
+    border: 1px solid #303a43;
+    border-radius: 4px;
+    background: #111820;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.32);
+  }
+
+  body.editor-mode:has(.editor-shell.content-drawer-open) #game-canvas {
+    bottom: calc(46px + clamp(232px, 34vh, 420px));
+  }
+
+  body.editor-mode:has(.editor-shell.content-drawer-open.content-drawer-tall) #game-canvas {
+    bottom: calc(46px + clamp(360px, 58vh, 680px));
+  }
+}
+
 /*
  * UI layer: HTML/CSS overlay above the canvas (no engine GUI — engine
  * decision §4). The root is click-through; interactive widgets opt back

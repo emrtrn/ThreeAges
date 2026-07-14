@@ -95,6 +95,11 @@ görünmeyen öğeler için kullanıcıyla netleşen kararlar:
 
 ### Faz 0 — Tasarım Token'ları ve İkon Altyapısı (temel)
 
+- [x] Desktop çalışma zemini: koyu gri shell üzerinde küçük fillet'li, ince açık
+      çerçeveli toolbar/panel kartları; viewport da Outliner ve Details arasında
+      bağımsız bir çalışma paneli olarak çerçevelenir. Content Drawer açıkken
+      viewport alt panele kadar kısalır.
+
 Görsel dilin tek kaynağı. DOM yapısına dokunmaz; sonraki tüm fazlar bunu tüketir.
 
 - [x] `editorUi.css` başına CSS custom property token seti (`:root`): yüzey
@@ -241,6 +246,9 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
       spacing ile yeniden düzenlendi.
 - [x] Details kaydırma yüzeyi: görünür scrollbar/gutter gizlenir; mouse tekeri
       ve trackpad kaydırması korunur.
+- [x] Editor kaydırma yüzeyleri: Scene Outliner, Content Drawer, Mesh Paint ve
+      Foliage'da görünür scrollbar/gutter gizlenir; mouse tekeri ve trackpad
+      kaydırması korunur.
 - [~] Doğrulama: Details transform smoke adımı + undo/redo; save-validator
       etkilenmez (yeni layout alanı yok — Snap to Wall yalnız transform yazar).
       `details-panel.spec.ts` başlık/katlanma/pivot/material DOM sözleşmesini ekler;

@@ -46,6 +46,7 @@ import {
   type ProjectDirNode,
 } from "@/project/ProjectAssetTree";
 import { projectFileUrl } from "@/project/ProjectSystem";
+import { attachDebugStats } from "@/scene/debugStats";
 import { loadAssetMaterialSlots } from "@/scene/assetMaterialSlotsLoader";
 import {
   getGameEditorCatalog,
@@ -326,6 +327,10 @@ function formatActiveLevelName(path: string | undefined): string {
 }
 
 export class EditorUi {
+  /** Whether the `#debug-stats` perf overlay is currently shown (Show > Stats). */
+  private statsVisible = false;
+  /** The debug overlay attaches lazily on first show so it costs nothing until used. */
+  private statsAttached = false;
   private root: HTMLDivElement;
   private contentList: HTMLDivElement;
   private contentDrawer: HTMLElement;
@@ -516,6 +521,7 @@ export class EditorUi {
             <div class="topbar-popover" data-show-popover>
               <button type="button" data-show-flag="collision">Collision</button>
               <button type="button" data-show-flag="ai-navigation">AI Navigation</button>
+              <button type="button" data-show-flag="stats">Stats (FPS)</button>
             </div>
           </div>
           <div class="editor-play-split">
@@ -861,6 +867,24 @@ export class EditorUi {
   }
 
   /**
+   * Shows or hides the `#debug-stats` perf overlay (FPS / draw calls / …).
+   * The overlay is a plain HTML element the runtime writes to via `onFrame`;
+   * we attach that writer lazily on first show so an editor session that never
+   * opens the overlay pays nothing for it. Hiding leaves the writer attached but
+   * `attachDebugStats` short-circuits while the element is not displayed.
+   */
+  private setStatsVisible(on: boolean): void {
+    const element = document.getElementById("debug-stats");
+    if (!element) return;
+    if (on && !this.statsAttached) {
+      attachDebugStats(this.app, element);
+      this.statsAttached = true;
+    }
+    element.hidden = !on;
+    this.statsVisible = on;
+  }
+
+  /**
    * Wires one Show-flag toggle button: reflects the current runtime state as the
    * green `active` style and flips it on click (mirrors the Camera / View Mode
    * option buttons, so all three topbar menus behave identically).
@@ -940,6 +964,11 @@ export class EditorUi {
     this.bindShowFlag("ai-navigation", () => this.app.getShowAiNavigation(), (on) =>
       this.app.setShowAiNavigation(on),
     );
+    // The perf overlay (FPS / draw calls / …) is a DOM element, not a runtime
+    // flag, so its get/set drive visibility of #debug-stats. Default on when the
+    // URL carried ?debug, preserving that launch flag's meaning.
+    this.setStatsVisible(new URLSearchParams(location.search).has("debug"));
+    this.bindShowFlag("stats", () => this.statsVisible, (on) => this.setStatsVisible(on));
     this.root.querySelector('[data-action="save"]')?.addEventListener("click", () => {
       void this.save();
     });

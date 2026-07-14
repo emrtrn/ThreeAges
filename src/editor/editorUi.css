@@ -844,12 +844,31 @@ body.editor-mode #debug-stats {
   display: none;
 }
 
+/* Editor panels retain wheel/trackpad scrolling without sacrificing horizontal
+   space to native scrollbar gutters. */
+.editor-outliner .outliner-list,
+.editor-content-drawer .folder-tree,
+.editor-content-drawer .content-list,
+.editor-details .inspector-pane[data-inspector-pane="meshPaint"],
+.editor-details .inspector-pane[data-inspector-pane="foliage"] {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.editor-outliner .outliner-list::-webkit-scrollbar,
+.editor-content-drawer .folder-tree::-webkit-scrollbar,
+.editor-content-drawer .content-list::-webkit-scrollbar,
+.editor-details .inspector-pane[data-inspector-pane="meshPaint"]::-webkit-scrollbar,
+.editor-details .inspector-pane[data-inspector-pane="foliage"]::-webkit-scrollbar {
+  display: none;
+}
+
 .outliner-list {
   display: grid;
   gap: 0;
   max-height: calc(100% - 98px);
   overflow: auto;
-  padding-right: 2px;
+  padding-right: 0;
 }
 
 .outliner-summary {
@@ -2583,7 +2602,7 @@ body.editor-mode #debug-stats {
   gap: 8px;
   overflow: auto;
   align-content: start;
-  padding-right: 2px;
+  padding-right: 0;
 }
 
 .editor-content-drawer[data-content-view="small"] .content-list {
@@ -6145,4 +6164,85 @@ body.editor-mode #debug-stats {
 .editor-shell .editor-play-split .editor-play-more .menu-chevron {
   color: currentColor;
   opacity: 0.9;
+}
+
+/* Desktop shell: every major authoring surface sits on the dark workbench as
+   a subtly raised panel. The canvas follows the same geometry in style.css. */
+@media (min-width: 761px) {
+  .editor-shell {
+    --editor-gap: 6px;
+    --editor-topbar-height: 44px;
+    --editor-status-height: 28px;
+    --editor-outliner-width: 300px;
+    --editor-details-width: 410px;
+    --content-drawer-height: clamp(232px, 34vh, 420px);
+  }
+
+  .editor-topbar {
+    inset: var(--editor-gap) var(--editor-gap) auto;
+    height: var(--editor-topbar-height);
+    grid-template-columns: var(--editor-outliner-width) minmax(0, 1fr);
+    border: 1px solid #2d3740;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #171e24 0%, #12181e 100%);
+    box-shadow: 0 5px 13px rgba(0, 0, 0, 0.26);
+  }
+
+  .editor-lead { border-right: 1px solid rgba(255, 255, 255, 0.055); }
+  .editor-workbar { padding: 0 14px; }
+  .editor-workbar > .editor-view-controls { margin-right: var(--editor-details-width); }
+
+  .editor-panel {
+    top: calc(var(--editor-gap) + var(--editor-topbar-height) + var(--editor-gap));
+    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 2));
+    border: 1px solid #2d3740;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #171e24 0%, #12181e 100%);
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
+  }
+
+  .editor-outliner {
+    left: var(--editor-gap);
+    width: var(--editor-outliner-width);
+    border-right-width: 1px;
+  }
+
+  .editor-details {
+    right: var(--editor-gap);
+    width: var(--editor-details-width);
+    border-left-width: 1px;
+    background: linear-gradient(180deg, #171e24 0%, #111820 100%);
+  }
+
+  .editor-status {
+    inset: auto var(--editor-gap) var(--editor-gap);
+    height: var(--editor-status-height);
+    border: 1px solid #2a333b;
+    border-radius: 4px;
+    background: #11171c;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
+  }
+
+  .editor-content-drawer {
+    left: var(--editor-gap);
+    right: calc(var(--editor-details-width) + (var(--editor-gap) * 2));
+    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 2));
+    height: var(--content-drawer-height);
+    border: 1px solid #2d3740;
+    border-radius: 4px;
+    background: linear-gradient(180deg, #171e24 0%, #11171c 100%);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32);
+  }
+
+  .editor-shell.content-drawer-tall { --content-drawer-height: clamp(360px, 58vh, 680px); }
+
+  .editor-shell.content-drawer-open .editor-outliner {
+    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 3) + var(--content-drawer-height));
+  }
+
+  .inspector-tabs,
+  .content-drawer-top { background: rgba(10, 15, 19, 0.44); }
+
+  .editor-details .detail-section,
+  .editor-content-drawer .asset-card { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02); }
 }

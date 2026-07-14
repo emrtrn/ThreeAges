@@ -38,6 +38,15 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
     frames += 1;
     if (accumMs < UPDATE_INTERVAL_MS) return;
 
+    // Skip the per-interval snapshot/format work while the overlay is hidden
+    // (editor Show > Stats toggled off): `hidden`/`display:none` yields a null
+    // offsetParent. Reset the accumulator so the next show starts a fresh window.
+    if (element.offsetParent === null) {
+      accumMs = 0;
+      frames = 0;
+      return;
+    }
+
     const fps = (frames * 1000) / accumMs;
     const { drawCalls, triangles } = app.getRenderStats();
     element.textContent =
