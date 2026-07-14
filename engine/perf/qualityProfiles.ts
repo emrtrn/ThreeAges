@@ -160,6 +160,17 @@ export interface GraphicsPreferences {
   selectedQualityLevel: QualityLevel;
   /** When a manual profile is selected, whether adaptive may still nudge within it. */
   allowAdaptiveFineTuning: boolean;
+  /**
+   * True once the player explicitly picked a profile in the settings menu. Startup
+   * auto-calibration (Faz 4) and adaptive overrides must respect this as the
+   * player's deliberate choice: a manual selection always beats auto-calibration.
+   */
+  manuallySelected: boolean;
+  /**
+   * True once the one-time first-gameplay measurement calibration (Faz 4) has run.
+   * Prevents re-calibrating every session — the measured profile is remembered.
+   */
+  startupCalibrated: boolean;
   /** Partial overrides layered onto the base when `selectedQualityLevel` is `"custom"`. */
   customSettings?: Partial<QualitySettings>;
 }
@@ -186,6 +197,8 @@ export function defaultGraphicsPreferences(): GraphicsPreferences {
     targetFrameRate: 60,
     selectedQualityLevel: "medium",
     allowAdaptiveFineTuning: true,
+    manuallySelected: false,
+    startupCalibrated: false,
   };
 }
 
@@ -218,6 +231,14 @@ export function normalizeGraphicsPreferences(value: unknown): GraphicsPreference
       typeof raw.allowAdaptiveFineTuning === "boolean"
         ? raw.allowAdaptiveFineTuning
         : defaults.allowAdaptiveFineTuning,
+    manuallySelected:
+      typeof raw.manuallySelected === "boolean"
+        ? raw.manuallySelected
+        : defaults.manuallySelected,
+    startupCalibrated:
+      typeof raw.startupCalibrated === "boolean"
+        ? raw.startupCalibrated
+        : defaults.startupCalibrated,
   };
   if (level === "custom") {
     const custom = normalizeCustomSettings(raw.customSettings);

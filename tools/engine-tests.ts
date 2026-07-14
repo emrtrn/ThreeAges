@@ -318,7 +318,7 @@ import {
   formatByteSize,
   isOverBudget,
 } from "../engine/perf/perfBudget";
-import { FrameMetricsMonitor } from "../engine/perf/frameMetrics";
+import { FrameMetricsMonitor, type FrameMetrics } from "../engine/perf/frameMetrics";
 import {
   QUALITY_LEVELS,
   QUALITY_PROFILES,
@@ -328,6 +328,11 @@ import {
   normalizeGraphicsPreferences,
   resolveQualitySettings,
 } from "../engine/perf/qualityProfiles";
+import {
+  calibrateFromMeasurement,
+  stepQualityLevel,
+  suggestStartingQualityLevel,
+} from "../engine/perf/hardwareHints";
 import {
   computeGltfGeometry,
   computeGltfTextures,
@@ -14255,6 +14260,8 @@ check("graphics preferences: defaults are adaptive-on / 60fps / medium", () => {
     targetFrameRate: 60,
     selectedQualityLevel: "medium",
     allowAdaptiveFineTuning: true,
+    manuallySelected: false,
+    startupCalibrated: false,
   });
   // A junk value normalizes to a fresh default (never crashes).
   assert.deepEqual(normalizeGraphicsPreferences(null), defaults);
@@ -14269,12 +14276,16 @@ check("graphics preferences: normalization validates each field and gates custom
       targetFrameRate: 30,
       selectedQualityLevel: "low",
       allowAdaptiveFineTuning: false,
+      manuallySelected: true,
+      startupCalibrated: true,
     }),
     {
       adaptiveOptimizationEnabled: false,
       targetFrameRate: 30,
       selectedQualityLevel: "low",
       allowAdaptiveFineTuning: false,
+      manuallySelected: true,
+      startupCalibrated: true,
     },
   );
 
@@ -14285,6 +14296,12 @@ check("graphics preferences: normalization validates each field and gates custom
   });
   assert.equal(patched.targetFrameRate, 60);
   assert.equal(patched.selectedQualityLevel, "medium");
+  // The calibration flags default to false when absent or wrongly typed.
+  assert.equal(patched.manuallySelected, false);
+  assert.equal(patched.startupCalibrated, false);
+  const badFlags = normalizeGraphicsPreferences({ manuallySelected: "yes", startupCalibrated: 1 });
+  assert.equal(badFlags.manuallySelected, false);
+  assert.equal(badFlags.startupCalibrated, false);
 
   // customSettings is dropped on a concrete profile...
   const concrete = normalizeGraphicsPreferences({
@@ -14332,6 +14349,8 @@ check("user settings store: round-trips graphics preferences alongside audio + l
       targetFrameRate: 30,
       selectedQualityLevel: "low",
       allowAdaptiveFineTuning: false,
+      manuallySelected: true,
+      startupCalibrated: true,
     }),
     true,
   );
@@ -14342,6 +14361,8 @@ check("user settings store: round-trips graphics preferences alongside audio + l
   assert.equal(read.graphics.selectedQualityLevel, "low");
   assert.equal(read.graphics.adaptiveOptimizationEnabled, false);
   assert.equal(read.graphics.targetFrameRate, 30);
+  assert.equal(read.graphics.manuallySelected, true);
+  assert.equal(read.graphics.startupCalibrated, true);
 });
 
 check("save-game UI commands and ViewModel fields stay slot-scoped", () => {
@@ -14782,6 +14803,121 @@ check("quality profiles: post-process merge only gates off, never re-authors (Pr
   assert.equal(allowMax.dof.enabled, false);
   assert.equal(allowMax.bloom.enabled, false);
   assert.equal(allowMax.antialias, "none");
+});
+
+check("hardware hints: no signals default to Medium; strong/weak devices split apart", () => {
+  // No hints at all → neutral Medium, zero confidence (plan §4).
+  const blank = suggestStartingQualityLevel({});
+  assert.equal(blank.level, "medium");
+  assert.equal(blank.confidence, 0);
+
+  // A gaming desktop lands on Ultra.
+  const desktop = suggestStartingQualityLevel({
+    hardwareConcurrency: 16,
+    deviceMemoryGb: 8,
+    webglRenderer: "ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0, D3D11)",
+    isTouch: false,
+  });
+  assert.equal(desktop.level, "ultra");
+  assert.ok(desktop.confidence > 0);
+
+  // A mid laptop (8 cores, integrated Iris) lands around High.
+  const laptop = suggestStartingQualityLevel({
+    hardwareConcurrency: 8,
+    deviceMemoryGb: 8,
+    webglRenderer: "ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11, D3D11)",
+  });
+  assert.equal(laptop.level, "high");
+
+  // A phone (touch + Mali) drops to Low.
+  const phone = suggestStartingQualityLevel({
+    hardwareConcurrency: 8,
+    isTouch: true,
+    webglRenderer: "Mali-G78",
+  });
+  assert.equal(phone.level, "low");
+
+  // A software renderer is decisive → Low, higher confidence.
+  const software = suggestStartingQualityLevel({
+    hardwareConcurrency: 16,
+    webglRenderer: "Google SwiftShader",
+  });
+  assert.equal(software.level, "low");
+  assert.ok(software.confidence >= 0.7);
+});
+
+check("quality ladder: stepQualityLevel moves one rung and clamps at the ends", () => {
+  assert.equal(stepQualityLevel("high", "down"), "medium");
+  assert.equal(stepQualityLevel("high", "up"), "ultra");
+  assert.equal(stepQualityLevel("ultra", "up"), "ultra"); // clamp top
+  assert.equal(stepQualityLevel("low", "down"), "low"); // clamp bottom
+  assert.equal(stepQualityLevel("medium", "none"), "medium");
+});
+
+check("measurement calibration: steps down when over budget, up with headroom, holds otherwise", () => {
+  const metrics = (avg: number, p95: number, sampleCount = 300): FrameMetrics => ({
+    frameTimeMs: avg,
+    averageFrameTimeMs: avg,
+    p95FrameTimeMs: p95,
+    spikeCount: 0,
+    sampleWindowSeconds: 5,
+    sampleCount,
+    estimatedRefreshIntervalMs: 8.3,
+  });
+
+  // Over budget at 60 FPS (target 16.7, avg 30 > 20.9) → one step down.
+  const down = calibrateFromMeasurement({
+    currentLevel: "high",
+    metrics: metrics(30, 40),
+    targetFrameRate: 60,
+  });
+  assert.equal(down.direction, "down");
+  assert.equal(down.level, "medium");
+  assert.equal(down.changed, true);
+
+  // Comfortable headroom (avg 10 < 12.5, p95 within budget) → one step up.
+  const up = calibrateFromMeasurement({
+    currentLevel: "medium",
+    metrics: metrics(10, 15),
+    targetFrameRate: 60,
+  });
+  assert.equal(up.direction, "up");
+  assert.equal(up.level, "high");
+
+  // Good average but hitchy P95 → do not raise (holds).
+  const hitchy = calibrateFromMeasurement({
+    currentLevel: "medium",
+    metrics: metrics(10, 30),
+    targetFrameRate: 60,
+  });
+  assert.equal(hitchy.direction, "none");
+  assert.equal(hitchy.changed, false);
+
+  // Near target → hold.
+  const hold = calibrateFromMeasurement({
+    currentLevel: "high",
+    metrics: metrics(16, 22),
+    targetFrameRate: 60,
+  });
+  assert.equal(hold.changed, false);
+
+  // A clamp at the ladder end reports as held even when the frame is slow.
+  const floor = calibrateFromMeasurement({
+    currentLevel: "low",
+    metrics: metrics(50, 70),
+    targetFrameRate: 60,
+  });
+  assert.equal(floor.level, "low");
+  assert.equal(floor.changed, false);
+  assert.equal(floor.direction, "none");
+
+  // Too few samples → decline to act regardless of the numbers.
+  const sparse = calibrateFromMeasurement({
+    currentLevel: "high",
+    metrics: metrics(30, 40, 5),
+    targetFrameRate: 60,
+  });
+  assert.equal(sparse.changed, false);
 });
 
 check("debug overlay: formats the frame-time line from a metrics snapshot", () => {

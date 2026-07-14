@@ -168,6 +168,12 @@ import {
   type QualityLevel,
   type QualitySettings,
 } from "@engine/perf/qualityProfiles";
+import {
+  calibrateFromMeasurement,
+  suggestStartingQualityLevel,
+  type ConcreteQualityLevel,
+  type HardwareHintInputs,
+} from "@engine/perf/hardwareHints";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { attachActorLight } from "@engine/render-three/lights";
 import {
@@ -487,6 +493,11 @@ export interface AiNavigationDebugSnapshot {
   readonly followers: readonly AiNavFollowerDebug[];
 }
 
+/** Active-gameplay seconds before the one-time startup measurement pass fires
+ * (Faz 4): long enough that the 5 s frame-time window has aged past load/shader
+ * warm-up spikes, short enough to settle the profile early. */
+const STARTUP_CALIBRATION_SECONDS = 12;
+
 const AI_MOVE_ACCEPTANCE_RADIUS = 0.2;
 const AI_NAV_CELL_SIZE = 0.5;
 const AI_NAV_GRID_SAFETY_MARGIN = AI_NAV_CELL_SIZE * 0.5;
@@ -720,6 +731,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * to the pre-quality-layer runtime until a profile is applied (Principle #2:
    * this only ever gates authored effects down, never writes layout data). */
   private qualitySettings: QualitySettings = resolveQualitySettings("ultra");
+  /** Active-gameplay seconds accumulated toward the one-time startup measurement
+   * calibration (Faz 4). `null` once calibration is done or not pending, so the
+   * update tick does nothing after the single pass. */
+  private startupCalibrationElapsed: number | null = null;
   private activeProject: ActiveProject | null = null;
   private assetLoader: AssetLoader | null = null;
   private layout: RoomLayout | null = null;
@@ -950,6 +965,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.userSettings.graphics.selectedQualityLevel,
       this.userSettings.graphics.customSettings,
     );
+    // Startup calibration (Faz 4): a fresh player who has never picked a profile
+    // gets a hardware-hinted starting profile now, and arms a one-time
+    // first-gameplay measurement pass. A manual choice or a prior calibration
+    // both suppress this — measurement decides, but the player always wins.
+    this.runStartupHintCalibration();
     this.movingPlatformSubsystem = new MovingPlatformSubsystem(this.syncEntityTransform);
     this.characterMovementSubsystem = new CharacterMovementSubsystem(
       this.inputActions,
@@ -1191,6 +1211,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.gamepadInput.poll();
       this.gameModeSession?.beforeEngineUpdate?.(deltaMs / 1000);
       this.engineApp.update(deltaMs / 1000);
+      this.tickStartupCalibration(deltaMs / 1000);
       this.applyKillZ();
       // Consume the `menu` edge after input advances, before the Game Mode reads
       // input, so opening a screen suppresses this frame's camera/movement.
@@ -2212,8 +2233,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * the settings-screen fields with a status line (plan §5.3 — no aggressive popup).
    */
   setGraphicsQualityLevel(level: QualityLevel): boolean {
+    // A manual pick ends any pending startup calibration and marks the choice as
+    // deliberate, so auto-calibration never overrides it again (Faz 4, §17.3).
+    this.startupCalibrationElapsed = null;
     return this.applyAndPersistGraphics(
-      { ...this.userSettings.graphics, selectedQualityLevel: level },
+      { ...this.userSettings.graphics, selectedQualityLevel: level, manuallySelected: true },
       `Quality set to ${qualityLevelLabel(level)}.`,
       true,
     );
@@ -2241,13 +2265,17 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     );
   }
 
-  /** Restores the template default graphics preferences and re-applies them. */
+  /** Restores the template default graphics preferences and re-applies them. The
+   * defaults clear the manual + calibrated flags, so startup auto-calibration
+   * re-arms (a reset is an explicit "start fresh"). */
   resetGraphicsPreferences(): boolean {
-    return this.applyAndPersistGraphics(
+    const ok = this.applyAndPersistGraphics(
       defaultGraphicsPreferences(),
       "Graphics settings restored to defaults.",
       true,
     );
+    this.runStartupHintCalibration();
+    return ok;
   }
 
   /** Current player graphics preferences (chosen profile, adaptive, FPS target). */
@@ -2274,6 +2302,135 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     }
     this.refreshGraphicsUiFields(status);
     return ok;
+  }
+
+  /**
+   * Startup calibration boot step (Faz 4): when the player has neither picked a
+   * profile manually nor been calibrated before, applies a hardware-hinted
+   * starting profile and arms the one-time first-gameplay measurement pass. Both
+   * a manual choice and a prior calibration suppress it — the player's deliberate
+   * choice always wins, and a remembered measurement is never redone.
+   */
+  private runStartupHintCalibration(): void {
+    const g = this.userSettings.graphics;
+    if (g.manuallySelected || g.startupCalibrated) {
+      this.startupCalibrationElapsed = null;
+      return;
+    }
+    const hint = suggestStartingQualityLevel(this.collectHardwareHints());
+    // Apply the hinted start only if it differs; keep it non-manual so the
+    // measurement pass can still refine it up or down.
+    if (hint.level !== g.selectedQualityLevel) {
+      // Concrete hinted level, so any stale `customSettings` is dropped (omitted).
+      const graphics: GraphicsPreferences = {
+        adaptiveOptimizationEnabled: g.adaptiveOptimizationEnabled,
+        targetFrameRate: g.targetFrameRate,
+        selectedQualityLevel: hint.level,
+        allowAdaptiveFineTuning: g.allowAdaptiveFineTuning,
+        manuallySelected: g.manuallySelected,
+        startupCalibrated: g.startupCalibrated,
+      };
+      this.userSettings = { ...this.userSettings, graphics };
+      this.userSettingsStore?.setGraphics(graphics);
+      this.qualitySettings = resolveQualitySettings(hint.level);
+    }
+    // Arm the measurement pass; the update loop counts active-gameplay seconds.
+    this.startupCalibrationElapsed = 0;
+  }
+
+  /**
+   * Counts active-gameplay seconds toward the one-time measurement calibration and
+   * fires it once the warm-up window has passed. Only accumulates while actually
+   * playing (menus under-load the frame and would skew the measurement); a manual
+   * pick or a completed calibration cancels the pending pass.
+   */
+  private tickStartupCalibration(deltaSeconds: number): void {
+    if (this.startupCalibrationElapsed === null) return;
+    const g = this.userSettings.graphics;
+    if (g.manuallySelected || g.startupCalibrated) {
+      this.startupCalibrationElapsed = null;
+      return;
+    }
+    if (this.inputMode !== "game") return;
+    this.startupCalibrationElapsed += deltaSeconds;
+    if (this.startupCalibrationElapsed < STARTUP_CALIBRATION_SECONDS) return;
+    this.startupCalibrationElapsed = null;
+    this.applyMeasuredCalibration();
+  }
+
+  /**
+   * Runs the measurement step: reads the settled frame-time window (warm-up
+   * already aged out) and nudges the profile at most one step. The result is
+   * always persisted with `startupCalibrated`, so calibration never repeats; the
+   * renderer is only re-applied (and a status shown) when the profile changed.
+   */
+  private applyMeasuredCalibration(): void {
+    const g = this.userSettings.graphics;
+    const current: ConcreteQualityLevel = isConcreteQualityLevel(g.selectedQualityLevel)
+      ? g.selectedQualityLevel
+      : "medium";
+    const result = calibrateFromMeasurement({
+      currentLevel: current,
+      metrics: this.frameMetrics.metrics(),
+      targetFrameRate: g.targetFrameRate,
+    });
+    // Concrete measured level, so any stale `customSettings` is dropped (omitted).
+    const graphics: GraphicsPreferences = {
+      adaptiveOptimizationEnabled: g.adaptiveOptimizationEnabled,
+      targetFrameRate: g.targetFrameRate,
+      selectedQualityLevel: result.level,
+      allowAdaptiveFineTuning: g.allowAdaptiveFineTuning,
+      manuallySelected: g.manuallySelected,
+      startupCalibrated: true,
+    };
+    this.userSettings = { ...this.userSettings, graphics };
+    this.userSettingsStore?.setGraphics(graphics);
+    if (result.changed) {
+      this.applyQualitySettings(resolveQualitySettings(result.level));
+      this.refreshGraphicsUiFields(
+        `Auto quality ${result.direction === "up" ? "raised" : "lowered"} to ${qualityLevelLabel(result.level)}.`,
+      );
+    }
+  }
+
+  /**
+   * Collects coarse browser hints for {@link suggestStartingQualityLevel} (thin
+   * adapter — the reasoning is the pure engine core). Every field degrades to
+   * `null` when the global or WebGL extension is unavailable (privacy / headless),
+   * which the pure core treats as "no signal".
+   */
+  private collectHardwareHints(): HardwareHintInputs {
+    const nav = typeof navigator !== "undefined" ? navigator : undefined;
+    const scr = typeof screen !== "undefined" ? screen : undefined;
+    const win = typeof window !== "undefined" ? window : undefined;
+    const deviceMemory = (nav as { deviceMemory?: number } | undefined)?.deviceMemory;
+    const touch =
+      (nav?.maxTouchPoints ?? 0) > 0 ||
+      (win !== undefined && "ontouchstart" in win) ||
+      (win?.matchMedia?.("(pointer: coarse)").matches ?? false);
+    return {
+      hardwareConcurrency: nav?.hardwareConcurrency ?? null,
+      deviceMemoryGb: typeof deviceMemory === "number" ? deviceMemory : null,
+      screenWidth: scr?.width ?? null,
+      screenHeight: scr?.height ?? null,
+      devicePixelRatio: win?.devicePixelRatio ?? null,
+      isTouch: touch,
+      webglRenderer: this.readWebglRenderer(),
+    };
+  }
+
+  /** Reads the unmasked GPU string via WEBGL_debug_renderer_info, or null when the
+   * extension is withheld (Firefox privacy, some Safari builds). */
+  private readWebglRenderer(): string | null {
+    try {
+      const gl = this.renderer.getContext();
+      const ext = gl.getExtension("WEBGL_debug_renderer_info");
+      if (!ext) return null;
+      const value = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) as unknown;
+      return typeof value === "string" && value.length > 0 ? value : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -5149,6 +5306,11 @@ function samePoint3d(a: readonly [number, number, number], b: readonly [number, 
 /** Human-readable label for a quality level (settings-screen status text). */
 function qualityLevelLabel(level: QualityLevel): string {
   return level.charAt(0).toUpperCase() + level.slice(1);
+}
+
+/** Narrows a level to a concrete (non-custom) profile for calibration stepping. */
+function isConcreteQualityLevel(level: QualityLevel): level is ConcreteQualityLevel {
+  return level !== "custom";
 }
 
 function createRuntimeUserSettingsStore(): UserSettingsStore | null {

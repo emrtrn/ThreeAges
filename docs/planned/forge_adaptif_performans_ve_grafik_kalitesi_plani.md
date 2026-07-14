@@ -1063,17 +1063,34 @@ Oyunun ilk açılışta makul bir kalite ile başlamasını sağlamak.
 
 ### Yapılacaklar
 
-- [ ] `engine/perf/hardwareHints.ts` — pure çözümleme (girdiler dışarıdan
-      enjekte edilir: `hardwareConcurrency`, `deviceMemory`, ekran, DPR,
-      UA/touch ipucu, `WEBGL_debug_renderer_info` string'i) + testler
-- [ ] İpuçlarını toplayan ince tarayıcı adapter'ı (src/scene)
-- [ ] Başlangıç profili seçme kuralını tanımla (ipucu yoksa Medium başla)
-- [ ] Ayrı benchmark sahnesi YERİNE ilk oynanışın ilk 8–15 saniyesini ölçüm
-      penceresi olarak kullan (yükleme/warm-up spike'ları pencereden düşülür);
-      sonuçla profili bir kez yukarı/aşağı düzelt
-- [ ] İlk ölçüm sonucunu UserSettings'e kaydet (tekrar tekrar kalibre etme)
-- [ ] Kullanıcının daha önce yaptığı manuel seçim her zaman otomatik
-      kalibrasyonun önüne geçer
+- [x] ~~`engine/perf/hardwareHints.ts` — pure çözümleme~~ (girdiler dışarıdan
+      enjekte edilir: `hardwareConcurrency`, `deviceMemoryGb`, ekran, DPR,
+      touch, `webglRenderer` string'i → `HardwareHintInputs`;
+      `suggestStartingQualityLevel` oy-tabanlı skor → profil + confidence + kanıt;
+      `stepQualityLevel` merdiveni tek basamak kaydırır; `calibrateFromMeasurement`
+      ölçülen frame-time'a göre tek adım) + `tools/engine-tests.ts` testleri (3 check)
+- [x] ~~İpuçlarını toplayan ince tarayıcı adapter'ı (src/scene)~~
+      (`RuntimeSceneApp.collectHardwareHints` + `readWebglRenderer` →
+      `WEBGL_debug_renderer_info`; her alan yoksa `null`'a düşer, headless/gizlilik
+      güvenli. Pure çekirdek `engine/perf`'te, DOM okuması yalnız adapter'da)
+- [x] ~~Başlangıç profili seçme kuralını tanımla (ipucu yoksa Medium başla)~~
+      (skor 0 → Medium; software renderer belirleyici → Low; boot'ta
+      `runStartupHintCalibration` ipuçlu profili seed'ler, `applyQualitySettings`
+      build sonunda uygular)
+- [x] ~~Ayrı benchmark sahnesi YERİNE ilk oynanışın ilk 8–15 saniyesini ölçüm
+      penceresi olarak kullan~~ (`STARTUP_CALIBRATION_SECONDS = 12`; yalnız
+      `inputMode === "game"` iken sayılır — menü kare yükünü çarpıtmaz. 12sn'de
+      5sn'lik `frameMetrics` penceresi yükleme/shader warm-up spike'larını çoktan
+      geride bırakır; `calibrateFromMeasurement` profili bir kez yukarı/aşağı düzeltir)
+- [x] ~~İlk ölçüm sonucunu UserSettings'e kaydet (tekrar tekrar kalibre etme)~~
+      (`GraphicsPreferences.startupCalibrated` — ölçüm bir kez çalışır, sonuç
+      `UserSettingsStore`'a yazılır; sonraki oturumlar kayıtlı profili kullanır)
+- [x] ~~Kullanıcının daha önce yaptığı manuel seçim her zaman otomatik
+      kalibrasyonun önüne geçer~~ (`GraphicsPreferences.manuallySelected`;
+      `setGraphicsQualityLevel` bunu `true` yapar + bekleyen ölçümü iptal eder.
+      Boot hint ve ölçüm adımı her ikisi de `manuallySelected || startupCalibrated`
+      ise atlar. `resetGraphicsPreferences` bayrakları temizler → kalibrasyon
+      yeniden kurulur)
 
 ### Çıkış kriteri
 
