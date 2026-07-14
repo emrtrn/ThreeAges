@@ -15370,6 +15370,30 @@ check("ParticleEffect reports capacity and never exceeds it while alive", () => 
   dense.dispose();
 });
 
+check("ParticleEffect density scale thins the spawn rate (quality knob)", () => {
+  // rate 10, dt 0.5 → 5 spawns at full density.
+  const full = new ParticleEffect(runtimeFx({ loop: true, rate: 10, lifetime: 1 }));
+  full.update(0.5);
+  assert.equal(full.aliveCount(), 5);
+  full.dispose();
+
+  // Density 0.5 halves the effective rate: 10 * 0.5 * 0.5 = 2.5 → 2 particles.
+  const half = new ParticleEffect(runtimeFx({ loop: true, rate: 10, lifetime: 1 }));
+  half.setDensityScale(0.5);
+  half.update(0.5);
+  assert.equal(half.aliveCount(), 2);
+
+  // Density 0 suppresses emission entirely; bad input falls back to full density.
+  half.setDensityScale(0);
+  half.reset();
+  half.update(1);
+  assert.equal(half.aliveCount(), 0);
+  half.setDensityScale(Number.NaN);
+  half.update(0.1); // 10 * 1 * 0.1 = 1
+  assert.equal(half.aliveCount(), 1);
+  half.dispose();
+});
+
 check("ParticleEffect one-shot drains to zero alive and reports finished", () => {
   const fx = new ParticleEffect(runtimeFx({ loop: false, rate: 20, lifetime: 0.5 }));
   assert.equal(fx.isFinished(), false);
@@ -16028,6 +16052,12 @@ check("FoliageRenderBinding builds one batch per chunk and distance-culls far on
   // Pull the camera far away → every chunk beyond cullEnd is hidden.
   binding.updateCulling(new Vector3(1000, 0, 0));
   assert.ok(binding.allMeshes().every((m) => m.parent?.visible === false), "all culled when distant");
+  // Quality cull-distance scale multiplies each type's cullEnd: at 3x the far
+  // chunk (dist ~99, cullEnd 50→150) comes back into view; at 0.1x it stays out.
+  binding.updateCulling(new Vector3(0, 0, 0), 3);
+  assert.ok(binding.allMeshes().every((m) => m.parent?.visible === true), "far chunk restored at 3x cull scale");
+  binding.updateCulling(new Vector3(0, 0, 0), 0.1);
+  assert.ok(binding.allMeshes().some((m) => m.parent?.visible === false), "far chunk culled at 0.1x scale");
   binding.dispose();
 });
 

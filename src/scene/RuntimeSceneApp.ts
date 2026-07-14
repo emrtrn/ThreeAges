@@ -1195,7 +1195,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         followCameraWithClouds(this.cloudObject, this.camera);
         advanceCloudTime(this.cloudObject, deltaMs / 1000);
       }
-      this.foliageBinding?.updateCulling(this.camera.position);
+      this.foliageBinding?.updateCulling(
+        this.camera.position,
+        this.qualitySettings.foliageCullDistanceScale,
+      );
       if (this.debug) this.updateAiNavigationDebugView();
       if (this.postProcessPipeline) this.postProcessPipeline.render(deltaMs / 1000);
       else this.renderer.render(this.scene, this.camera);
@@ -1300,12 +1303,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /**
    * Central quality applier (Faz 2). Sets the active profile and re-resolves the
    * runtime accordingly, without ever writing layout/authored data (Principle
-   * #2). Today it drives render scale + pixel-ratio cap, shadows (toggle / map
-   * size / coverage) and the post-process chain (GTAO / DoF / bloom / SMAA gate
-   * off through {@link applyQualityToPostProcess}); particle-density and
-   * foliage-cull knobs land in follow-up Faz 2 slices as each subsystem grows
-   * its runtime setter. Runtime-only: the editor SceneApp never calls this, so
-   * the editor viewport is unaffected.
+   * #2). Drives render scale + pixel-ratio cap, shadows (toggle / map size /
+   * coverage), the post-process chain (GTAO / DoF / bloom / SMAA gate off through
+   * {@link applyQualityToPostProcess}) and particle density; foliage cull is read
+   * live in the frame loop from {@link QualitySettings.foliageCullDistanceScale}.
+   * Runtime-only: the editor SceneApp never calls this, so the editor viewport is
+   * unaffected.
    *
    * Resolution is applied before the post-process rebuild so a freshly created
    * composer inherits the scaled pixel ratio from the renderer at construction.
@@ -1314,6 +1317,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.qualitySettings = settings;
     this.applyRuntimeResolution();
     this.applyRuntimeShadowQuality();
+    this.vfxSubsystem.setGlobalDensity(settings.particleDensity);
     this.applyRuntimePostProcess();
   }
 

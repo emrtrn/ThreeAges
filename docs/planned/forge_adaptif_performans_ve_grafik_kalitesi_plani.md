@@ -983,13 +983,17 @@ texture limiti — bu fazın DIŞINDA; bkz. §11 ve Faz 7.)
       kullanıyor; merkezi giriş `applyQualitySettings()` (default Ultra = davranış
       aynı). **Kalan:** Bloom yarım çözünürlük (`bloomResolutionScale` →
       `UnrealBloomPass` boyutu, `createPostProcessEffectPasses` param'ı)
-- [ ] Partikül yoğunluğunu bağla: vfx subsystem'a global `particleDensity`
-      çarpanı (spawn rate + `maxParticles`'a uygulanır)
-- [ ] Foliage cull distance çarpanını bağla (foliage Faz 2 cull-fade işiyle
-      koordine et)
-- [ ] Ayar değişiminin güvenliği: pass rebuild / shadow map dispose /
-      composer resize tek bir "apply" noktasında, frame sınırında yapılır;
-      art arda değişimler debounce edilir
+- [x] ~~Partikül yoğunluğunu bağla~~: `VfxSubsystem.setGlobalDensity` (live +
+      pooled + future instance'lara `ParticleEffect.setDensityScale`);
+      `applyQualitySettings` çağırır. Density spawn-rate'i ölçekler → alive count
+      (fill/overdraw) düşer; capacity dokunulmaz, definition mutasyona uğramaz.
+- [x] ~~Foliage cull distance çarpanını bağla~~: `FoliageRenderBinding.updateCulling`
+      opsiyonel `cullDistanceScale` (her type'ın `cullEnd`'ini çarpar; `cullEnd<=0`
+      = asla cull etkilenmez). Frame loop'ta `foliageCullDistanceScale` canlı okunur.
+- [~] Ayar değişiminin güvenliği: **tek "apply" noktası kuruldu**
+      (`applyQualitySettings` → resolution/shadow/particle/post-process sırayla).
+      **Kalan:** art arda değişim debounce'u (Faz 6 adaptif kontrolcü frame
+      sınırında çağırınca gerçek değeri kazanır) + bloom yarım çözünürlük.
 - [x] ~~Editor viewport'u etkilenmez~~: `applyQualitySettings` yalnız
       `RuntimeSceneApp`'te; editör SceneApp bu metodu taşımaz
 

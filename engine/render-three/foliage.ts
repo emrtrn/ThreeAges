@@ -336,10 +336,17 @@ export class FoliageRenderBinding {
    * camera (nearest-point test via the chunk bounding radius). Cheap enough to run
    * every frame; a no-op for types with `cullEnd <= 0`. Per-chunk frustum culling is
    * handled by three itself (each chunk mesh gets a tight bounding sphere at build).
+   *
+   * `cullDistanceScale` is the runtime quality knob: it multiplies each type's
+   * authored `cullEnd` (smaller = foliage culls nearer), without touching the
+   * authored type. `1` keeps the authored distance; a non-positive scale falls
+   * back to `1`. A type with `cullEnd <= 0` (never cull) is unaffected.
    */
-  updateCulling(cameraPosition: Vector3): void {
+  updateCulling(cameraPosition: Vector3, cullDistanceScale = 1): void {
+    const scale = cullDistanceScale > 0 ? cullDistanceScale : 1;
     for (const object of this.objects.values()) {
-      if (object.cullEnd <= 0) {
+      const cullEnd = object.cullEnd * scale;
+      if (cullEnd <= 0) {
         for (const chunk of object.chunks) {
           if (!chunk.group.visible) chunk.group.visible = true;
         }
@@ -347,7 +354,7 @@ export class FoliageRenderBinding {
       }
       for (const chunk of object.chunks) {
         const distance = cameraPosition.distanceTo(chunk.center) - chunk.radius;
-        chunk.group.visible = distance <= object.cullEnd;
+        chunk.group.visible = distance <= cullEnd;
       }
     }
   }

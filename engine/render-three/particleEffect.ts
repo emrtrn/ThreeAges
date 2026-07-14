@@ -132,6 +132,8 @@ export class ParticleEffect {
   private readonly origin: [number, number, number] = [0, 0, 0];
   private elapsed = 0;
   private spawnAccumulator = 0;
+  /** Global density multiplier on the spawn rate (quality knob, 1 = authored). */
+  private densityScale = 1;
 
   /**
    * @param textureUrl Resolved sprite-texture URL (the app boundary turns the
@@ -249,6 +251,16 @@ export class ParticleEffect {
     this.geometry.attributes.aLifeT!.needsUpdate = true;
   }
 
+  /**
+   * Sets the global density multiplier on the spawn rate (a runtime quality
+   * knob): `1` keeps the authored rate, `0` suppresses emission entirely, and a
+   * fraction thins the cloud without touching the buffer. Clamps bad input to 1.
+   * Applied on top of the per-instance `scale` override.
+   */
+  setDensityScale(scale: number): void {
+    this.densityScale = Number.isFinite(scale) && scale >= 0 ? scale : 1;
+  }
+
   /** Sets the emitter origin (world space) new particles spawn from. */
   setOrigin(x: number, y: number, z: number): void {
     this.origin[0] = x;
@@ -284,7 +296,9 @@ export class ParticleEffect {
 
     // A looping effect emits forever; a one-shot emits for one lifetime window.
     if (loop || this.elapsed <= lifetime) {
-      this.spawnAccumulator += rate * dt;
+      // Density scales the emission rate (fewer particles → less fill/overdraw);
+      // capacity is unchanged, but the alive count falls proportionally.
+      this.spawnAccumulator += rate * this.densityScale * dt;
       while (this.spawnAccumulator >= 1) {
         this.spawnAccumulator -= 1;
         this.spawnParticle();

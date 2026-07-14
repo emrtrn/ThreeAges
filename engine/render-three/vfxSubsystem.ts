@@ -98,6 +98,8 @@ export class VfxSubsystem implements Subsystem {
   private readonly pool = new Map<string, ParticleEffect[]>();
   private readonly instances = new Map<VfxInstanceId, VfxInstance>();
   private nextId = 1;
+  /** Global density multiplier applied to every effect's spawn rate (quality). */
+  private globalDensity = 1;
 
   constructor(options: VfxSubsystemOptions = {}) {
     this.root.name = "vfx-root";
@@ -169,6 +171,22 @@ export class VfxSubsystem implements Subsystem {
     if (!instance) return;
     instance.enabled = enabled;
     instance.effect.object3D.visible = enabled;
+  }
+
+  /**
+   * Sets the global particle-density multiplier (quality knob): scales the spawn
+   * rate of every effect — live, pooled and future — so fewer particles are
+   * emitted (less fill/overdraw). `1` = authored density, `0` = suppressed.
+   * Applied on top of per-instance overrides; never mutates effect definitions.
+   */
+  setGlobalDensity(scale: number): void {
+    this.globalDensity = Number.isFinite(scale) && scale >= 0 ? scale : 1;
+    for (const instance of this.instances.values()) {
+      instance.effect.setDensityScale(this.globalDensity);
+    }
+    for (const bucket of this.pool.values()) {
+      for (const effect of bucket) effect.setDensityScale(this.globalDensity);
+    }
   }
 
   update(context: EngineUpdateContext): void {
@@ -249,12 +267,15 @@ export class VfxSubsystem implements Subsystem {
     const pooled = this.pool.get(effectId)?.pop();
     if (pooled) {
       pooled.reset(overrides);
+      pooled.setDensityScale(this.globalDensity);
       return pooled;
     }
     // Same effectId always resolves to the same texture, so a pooled instance
     // (built with it once) needs no texture re-resolution on reuse.
     const textureUrl = definition.texture ? this.resolveTextureUrl(definition.texture) : null;
-    return new ParticleEffect(definition, overrides, textureUrl);
+    const effect = new ParticleEffect(definition, overrides, textureUrl);
+    effect.setDensityScale(this.globalDensity);
+    return effect;
   }
 
   /** Detaches an instance's object and returns its effect to the (bounded) pool. */
