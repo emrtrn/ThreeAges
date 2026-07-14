@@ -32,6 +32,7 @@ import {
   validateSaveEffectPayload,
   validateSaveFoliagePayload,
   validateSaveMeshPaintPayload,
+  validateSaveAssetVertexColorsPayload,
   validateSaveFoliageTypePayload,
   validateSaveDialogueVoicePayload,
   validateSaveDialogueLinePayload,
@@ -279,7 +280,7 @@ async function updateImportedAssetBytes(rel: string, bytes: number): Promise<boo
 // Model assets carry editor sidecars that share the file's base name. Renaming or
 // deleting the model must move/remove these too, or they orphan.
 const MODEL_EXTS = new Set([".glb", ".gltf"]);
-const MODEL_SIDECAR_SUFFIXES = [".collision.json", ".materials.json", ".uvw.json", ".skeleton.json"];
+const MODEL_SIDECAR_SUFFIXES = [".collision.json", ".materials.json", ".uvw.json", ".skeleton.json", ".vertexcolors.json"];
 
 async function pathExists(absPath: string): Promise<boolean> {
   return stat(absPath).then(
@@ -872,6 +873,8 @@ const PRIVILEGED_URLS = new Set([
   "/__save-state-tree",
   "/__save-ui",
   "/__save-uvw",
+  "/__save-meshpaint",
+  "/__save-vertexcolors",
   "/__content-new",
   "/__content-rename",
   "/__content-delete",
@@ -1322,6 +1325,35 @@ function layoutEditorPlugin(): Plugin {
             await mkdir(resolve(sidecarPath, ".."), { recursive: true });
             const previous = await readFile(sidecarPath, "utf8").catch(() => null);
             const next = `${JSON.stringify(payload.meshPaint, null, 2)}\n`;
+            await writeFile(sidecarPath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Asset defaults produced by Mesh Paint > To Mesh. They travel with
+        // their model during Content Drawer rename/copy/delete operations.
+        if (req.url === "/__save-vertexcolors") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveAssetVertexColorsPayload(
+              await readJsonBody(req, LANDSCAPE_BODY_MAX_BYTES),
+            );
+            const sidecarPath = resolvePublicPath(payload.path);
+            await mkdir(resolve(sidecarPath, ".."), { recursive: true });
+            const previous = await readFile(sidecarPath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.vertexColors, null, 2)}\n`;
             await writeFile(sidecarPath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));

@@ -1,6 +1,7 @@
 # Mesh Paint Mode Araştırması ve Forge Planı
 
 > Tarih: 2026-06-23
+> Uygulama guncellemesi (2026-07-14): Faz 2 Copy/Paste, `To Mesh` ve `To Instances` tamamlandi. Static Mesh Editor inspect yuzeyi ve topology fix araclari siradaki acik maddelerdir.
 > Durum: Faz 1 Vertex Color / Vertex Weights dikey kesiti tamamlandı. Aynı RGBA channel-mask authoring yüzeyi Vertex Weights için de kullanılır; Faz 2 aktarım araçları sıradaki kapsamdır.
 > Amaç: Unreal Engine Mesh Paint Mode'un kapsamını araştırmak, Forge'da **level
 > viewport üzerinden mesh paint authoring** sistemini planlamak ve materyallerin
@@ -392,8 +393,8 @@ Faz 1 kabulü:
 ### Faz 2 - Copy/Paste ve asset-level aktarım
 
 - [x] Placement paint verisini başka placement'lara Copy/Paste et. _(Mesh name, primitive index ve vertex count uyumluluğu zorunludur.)_
-- [ ] `To Mesh` ile instance paint'i asset-level `*.vertexcolors.json` sidecar'a aktar.
-- [ ] `To Instances` ile asset-level default'u seçili instance'lara uygula.
+- [x] `To Mesh` ile instance paint'i asset-level `*.vertexcolors.json` sidecar'a aktar. _(Kaynak GLB degistirilmez; Content Drawer dosya tasima/kopyalama/silme akisi sidecar'i modelle birlikte isler.)_
+- [x] `To Instances` ile asset-level default'u seçili instance'lara uygula. _(Yalnızca mesh name, primitive index ve vertex count uyumluysa placement sidecar'ına kopyalanır.)_
 - [ ] Static Mesh Editor'a vertex color inspect/remove/fill paneli ekle.
 - [ ] Reimport/topology değişiminde paint fix/transfer stratejisini ekle.
 

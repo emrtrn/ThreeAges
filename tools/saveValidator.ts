@@ -33,6 +33,7 @@ import {
 import { isBrushShape } from "../engine/scene/blockingVolume";
 import { normalizeFoliageType, normalizeFoliageData } from "../engine/scene/foliage";
 import { normalizeMeshPaintData } from "../engine/scene/meshPaint";
+import { normalizeAssetVertexColors } from "../engine/scene/assetVertexColors";
 import {
   defaultForgeMaterialDef,
   isForgeMaterialPreset,
@@ -3335,6 +3336,33 @@ export function validateSaveMeshPaintPayload(value: unknown): {
   }
   if (input.path.includes("..")) throw new Error("meshPaint payload path must not contain ..");
   return { path: input.path, meshPaint: validateMeshPaintData(input.meshPaint) };
+}
+
+// ─── Mesh Paint (asset vertex-colour defaults) ──────────────────────────────
+
+/** Validates + canonicalizes one model `*.vertexcolors.json` sidecar. */
+export function validateAssetVertexColors(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("asset vertexColors data must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (input.schema !== 1) throw new Error("vertexColors.schema must be 1");
+  if (input.type !== "vertexColors") throw new Error('vertexColors.type must be "vertexColors"');
+  if (input.target !== "asset") throw new Error('vertexColors.target must be "asset"');
+  return normalizeAssetVertexColors(input) as unknown as Record<string, unknown>;
+}
+
+export function validateSaveAssetVertexColorsPayload(value: unknown): {
+  path: string;
+  vertexColors: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") throw new Error("vertexColors payload must be an object");
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string" || !input.path.endsWith(".vertexcolors.json")) {
+    throw new Error("vertexColors payload path must end with .vertexcolors.json");
+  }
+  if (input.path.includes("..")) throw new Error("vertexColors payload path must not contain ..");
+  return { path: input.path, vertexColors: validateAssetVertexColors(input.vertexColors) };
 }
 
 // ─── Dialogue & Voice (D2 editor save) ───────────────────────────────────────

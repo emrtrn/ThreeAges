@@ -1793,7 +1793,8 @@ export class EditorUi {
       name === "metadata-schema.json" ||
       name.endsWith(".collision.json") ||
       name.endsWith(".materials.json") ||
-      name.endsWith(".uvw.json")
+      name.endsWith(".uvw.json") ||
+      name.endsWith(".vertexcolors.json")
     );
   }
 
@@ -3375,9 +3376,11 @@ export class EditorUi {
         <button type="button" data-mesh-paint-fill>Fill Selected Channels</button>
         <button type="button" data-mesh-paint-clear>Clear Selected Mesh</button>
         <div class="detail-section-title">Transfer</div>
-        <div class="detail-hint">Copy painted primitives, select a compatible placement, then paste.</div>
+        <div class="detail-hint">Copy painted primitives, select a compatible placement, then paste. To Mesh stores the selected placement as the source asset's default vertex-color sidecar.</div>
         <button type="button" data-mesh-paint-copy>Copy Selected Mesh</button>
         <button type="button" data-mesh-paint-paste ${this.app.hasMeshPaintClipboard() ? "" : "disabled"}>Paste to Selected Mesh</button>
+        <button type="button" data-mesh-paint-to-mesh>To Mesh</button>
+        <button type="button" data-mesh-paint-to-instances>To Instances</button>
       </div>`;
 
     const numberPatch = (selector: string, key: "brushSize" | "strength" | "falloff" | "flow"): void => {
@@ -3436,6 +3439,12 @@ export class EditorUi {
     });
     this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-paste]")?.addEventListener("click", () => {
       this.app.pasteSelectedMeshPaint();
+    });
+    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-to-mesh]")?.addEventListener("click", () => {
+      void this.app.transferSelectedMeshPaintToAsset();
+    });
+    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-to-instances]")?.addEventListener("click", () => {
+      void this.app.applyAssetVertexColorsToSelectedMeshPaint();
     });
   }
 

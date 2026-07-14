@@ -658,6 +658,7 @@ function isHealthCheckAssetFile(path: string): boolean {
   if (lower.endsWith(".collision.json")) return false;
   if (lower.endsWith(".materials.json")) return false;
   if (lower.endsWith(".uvw.json")) return false;
+  if (lower.endsWith(".vertexcolors.json")) return false;
   return ASSET_FILE_EXTENSIONS.has(extensionOf(lower));
 }
 

@@ -247,6 +247,11 @@ import {
   type LayoutMeshPaintPlacement,
 } from "@engine/scene/meshPaint";
 import { saveMeshPaintData } from "@/editor/meshPaintStore";
+import {
+  loadAssetVertexColors,
+  saveAssetVertexColors,
+  upsertAssetVertexColorMesh,
+} from "@/editor/assetVertexColorsStore";
 import { loadMeshPaintData } from "./meshPaintLoader";
 import type { FoliageSurfacePick, MeshPaintSurfacePick } from "@editor/render-three/scenePicker";
 import {
@@ -7238,6 +7243,99 @@ export class SceneApp {
 
   hasMeshPaintClipboard(): boolean {
     return this.meshPaintClipboard.length > 0;
+  }
+
+  /**
+   * Promotes this placement's painted primitive colours into the model sidecar.
+   * It intentionally does not change other placements; `To Instances` is a
+   * separate, explicit operation that applies these defaults on demand.
+   */
+  async transferSelectedMeshPaintToAsset(): Promise<void> {
+    const selection = this.selectedMeshPaintInstance();
+    const asset = this.manifest && selection ? assetRecordById(this.manifest, selection.assetId) : undefined;
+    if (!selection || !asset || !isModelAssetType(assetType(asset))) {
+      this.onStatus?.("Select a static-mesh placement before using To Mesh.", "warning");
+      return;
+    }
+    const painted = this.meshPaintData.placements.filter(
+      (entry) => entry.target.assetId === selection.assetId && entry.target.placementIndex === selection.placementIndex,
+    );
+    if (painted.length === 0) {
+      this.onStatus?.("Selected placement has no Mesh Paint data to transfer.", "warning");
+      return;
+    }
+    try {
+      const modelPath = assetPath(asset);
+      let vertexColors = await loadAssetVertexColors(modelPath);
+      for (const entry of painted) {
+        vertexColors = upsertAssetVertexColorMesh(vertexColors, {
+          meshName: entry.target.meshName,
+          primitiveIndex: entry.target.primitiveIndex,
+          vertexCount: entry.vertexCount,
+          colors: entry.colors,
+        });
+      }
+      const result = await saveAssetVertexColors(modelPath, vertexColors);
+      this.onStatus?.(
+        result.changed
+          ? `Transferred ${painted.length} painted primitive${painted.length === 1 ? "" : "s"} to ${result.path}.`
+          : "Asset vertex-color defaults already match the selected placement.",
+        "success",
+      );
+    } catch (error) {
+      this.onStatus?.(
+        `To Mesh failed: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
+  }
+
+  /** Applies compatible asset defaults to this placement without affecting its peers. */
+  async applyAssetVertexColorsToSelectedMeshPaint(): Promise<void> {
+    const selection = this.selectedMeshPaintInstance();
+    const asset = this.manifest && selection ? assetRecordById(this.manifest, selection.assetId) : undefined;
+    const gltf = selection ? this.models.get(selection.assetId) : undefined;
+    if (!selection || !asset || !gltf || !isModelAssetType(assetType(asset))) {
+      this.onStatus?.("Select a loaded static-mesh placement before using To Instances.", "warning");
+      return;
+    }
+    try {
+      const vertexColors = await loadAssetVertexColors(assetPath(asset));
+      if (vertexColors.meshes.length === 0) {
+        this.onStatus?.("This asset has no vertex-color defaults. Use To Mesh on a painted placement first.", "warning");
+        return;
+      }
+      const sourcePrimitives = meshPaintPlacementsFromModel(selection, gltf);
+      let applied = 0;
+      for (const defaults of vertexColors.meshes) {
+        const target = sourcePrimitives.find(
+          (entry) =>
+            entry.target.meshName === defaults.meshName &&
+            entry.target.primitiveIndex === defaults.primitiveIndex &&
+            entry.vertexCount === defaults.vertexCount,
+        );
+        if (!target) continue;
+        this.meshPaintData = upsertMeshPaintPlacement(this.meshPaintData, {
+          target: target.target,
+          vertexCount: defaults.vertexCount,
+          colors: [...defaults.colors],
+        });
+        applied += 1;
+      }
+      if (applied === 0) {
+        this.onStatus?.("Asset defaults are incompatible with this placement's current mesh topology.", "warning");
+        return;
+      }
+      this.meshPaintDataDirty = true;
+      this.rebuildInstanceGroup(selection.assetId);
+      this.onStatus?.(`Applied ${applied} asset vertex-color default${applied === 1 ? "" : "s"} to the selected placement.`, "success");
+      this.onMeshPaintChanged?.();
+    } catch (error) {
+      this.onStatus?.(
+        `To Instances failed: ${error instanceof Error ? error.message : String(error)}`,
+        "error",
+      );
+    }
   }
 
   /** Removes paint data from the selected placement and returns it to shared instancing. */

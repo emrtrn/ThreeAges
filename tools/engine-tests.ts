@@ -642,6 +642,8 @@ import {
   validateSaveFoliagePayload,
   validateMeshPaintData,
   validateSaveMeshPaintPayload,
+  validateAssetVertexColors,
+  validateSaveAssetVertexColorsPayload,
 } from "./saveValidator";
 import {
   normalizeFoliageType,
@@ -663,6 +665,11 @@ import {
   removeMeshPaintPlacement,
   upsertMeshPaintPlacement,
 } from "../engine/scene/meshPaint";
+import {
+  assetVertexColorsSidecarPath,
+  normalizeAssetVertexColors,
+  upsertAssetVertexColorMesh,
+} from "../engine/scene/assetVertexColors";
 import { generateLandscapeFoliageSamples } from "../engine/scene/landscapeFoliage";
 import {
   makeFoliageRng,
@@ -16613,6 +16620,38 @@ check("mesh paint save validation enforces a sidecar envelope and path", () => {
   assert.throws(() => validateMeshPaintData({ schema: 2, type: "meshPaint", placements: [] }));
   assert.throws(() => validateSaveMeshPaintPayload({ path: "../bad.meshpaint.json", meshPaint: {} }));
   assert.throws(() => validateSaveMeshPaintPayload({ path: "layouts/bad.json", meshPaint: {} }));
+});
+
+check("asset vertex colors normalize and save as a model sidecar", () => {
+  const data = normalizeAssetVertexColors({
+    schema: 1,
+    type: "vertexColors",
+    target: "asset",
+    meshes: [
+      { meshName: "Rock", primitiveIndex: 0, vertexCount: 1, colors: [2, -1, 0.5, 1] },
+      { meshName: "Rock", primitiveIndex: 0, vertexCount: 1, colors: [0.25, 0.5, 0.75, 1] },
+      { meshName: "Rock", primitiveIndex: 1, vertexCount: 2, colors: [1, 0] },
+    ],
+  });
+  assert.equal(data.meshes.length, 1);
+  assert.deepEqual(data.meshes[0]?.colors, [0.25, 0.5, 0.75, 1]);
+  const updated = upsertAssetVertexColorMesh(data, {
+    meshName: "Rock",
+    primitiveIndex: 1,
+    vertexCount: 1,
+    colors: [1, 0, 0, 1],
+  });
+  assert.equal(updated.meshes.length, 2);
+  assert.equal(assetVertexColorsSidecarPath("/assets/props/Rock.glb"), "assets/props/Rock.vertexcolors.json");
+  const payload = validateSaveAssetVertexColorsPayload({
+    path: "assets/props/Rock.vertexcolors.json",
+    vertexColors: updated,
+  });
+  assert.equal(payload.path, "assets/props/Rock.vertexcolors.json");
+  assert.equal((payload.vertexColors.meshes as unknown[]).length, 2);
+  assert.throws(() => validateAssetVertexColors({ schema: 1, type: "vertexColors", target: "placement", meshes: [] }));
+  assert.throws(() => validateSaveAssetVertexColorsPayload({ path: "../escape.vertexcolors.json", vertexColors: updated }));
+  assert.throws(() => validateSaveAssetVertexColorsPayload({ path: "assets/props/Rock.json", vertexColors: updated }));
 });
 
 check("uniqueFoliageGroupId avoids collisions", () => {
