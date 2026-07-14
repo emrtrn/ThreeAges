@@ -69,10 +69,6 @@ export function renderInstanceDetails({
       : "";
 
   return `
-      <div class="detail-heading">
-        <strong>${escapeHtml(selection.label)}</strong>
-        <span>${selection.kind === "instance" ? "Instance" : selection.kind} / ${escapeHtml(selection.assetId)}</span>
-      </div>
       <label class="detail-row">
         <span>Name</span>
         <input data-detail-name type="text" value="${escapeHtml(selection.label)}"

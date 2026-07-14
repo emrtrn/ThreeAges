@@ -7,11 +7,29 @@ test("Content Drawer exposes toolbar, breadcrumb, history, and view controls", a
 
   const drawer = page.locator("[data-content-drawer]");
   await expect(drawer).toHaveClass(/open/);
+  await expect(page.getByTestId("forge-editor")).toHaveClass(/content-drawer-open/);
   await expect(drawer.getByRole("button", { name: /Add/ })).toBeVisible();
   await expect(drawer.getByRole("button", { name: /Import/ })).toBeVisible();
   await expect(drawer.getByRole("button", { name: "Save All" })).toBeVisible();
   await expect(drawer.locator("[data-content-item-count]")).toContainText(/items?/);
+
+  const filter = drawer.getByRole("button", { name: "Filter assets" });
+  await filter.click();
+  await expect(filter).toHaveAttribute("aria-expanded", "true");
+  await drawer.locator(".content-drawer-title").click();
+  await expect(filter).toHaveAttribute("aria-expanded", "false");
+
   await expect(drawer.locator(".content-breadcrumb").first()).toHaveText("All", { timeout: 30_000 });
+  await expect(drawer.locator(".folder-row-icon").first()).toBeVisible();
+  await expect(drawer.locator(".folder-glyph").first()).toBeVisible();
+
+  await filter.click();
+  await expect(filter).toHaveAttribute("aria-expanded", "true");
+  await drawer.locator("[data-content-type-filter]").selectOption("staticMesh");
+  await expect(filter).toHaveAttribute("aria-expanded", "false");
+  await expect(filter).toHaveClass(/is-filtered/);
+  await drawer.locator("[data-content-type-filter]").selectOption("__all__");
+  await expect(filter).not.toHaveClass(/is-filtered/);
 
   await drawer.locator("[data-content-add]").click();
   await expect(page.getByRole("button", { name: "New Folder" })).toBeVisible();
@@ -24,4 +42,18 @@ test("Content Drawer exposes toolbar, breadcrumb, history, and view controls", a
   await expect(drawer.locator("[data-content-back]")).toBeEnabled();
   await drawer.locator("[data-content-back]").click();
   await expect(drawer.locator("[data-content-forward]")).toBeEnabled();
+
+  const [drawerBox, outlinerBox, detailsBox] = await Promise.all([
+    drawer.boundingBox(),
+    page.locator(".editor-outliner").boundingBox(),
+    page.locator(".editor-details").boundingBox(),
+  ]);
+  expect(drawerBox).not.toBeNull();
+  expect(outlinerBox).not.toBeNull();
+  expect(detailsBox).not.toBeNull();
+  expect(drawerBox!.x + drawerBox!.width).toBeLessThanOrEqual(detailsBox!.x + 1);
+  expect(outlinerBox!.y + outlinerBox!.height).toBeLessThanOrEqual(drawerBox!.y + 1);
+
+  await page.getByRole("button", { name: "Content Drawer" }).click();
+  await expect(page.getByTestId("forge-editor")).not.toHaveClass(/content-drawer-open/);
 });

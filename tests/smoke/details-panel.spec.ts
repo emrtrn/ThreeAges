@@ -22,8 +22,12 @@ test("Details panel exposes redesigned transform and material controls", async (
   });
 
   const details = page.locator('[data-inspector-pane="details"]');
-  await expect(details.locator(".detail-heading-icon")).toBeVisible();
-  await expect(details.locator(".detail-heading-chip")).toContainText("Static Mesh");
+  await expect(details.locator(".detail-heading")).toHaveCount(0);
+  const sectionsToggle = details.locator("[data-details-sections-toggle]");
+  await expect(sectionsToggle).toBeVisible();
+  await expect(sectionsToggle).toHaveAttribute("aria-label", "Collapse all sections");
+  await expect(details.locator(".detail-section-menu")).toHaveCount(0);
+  await expect(details.locator("[data-add-component]")).toHaveCount(0);
   await expect(details.locator("[data-material-thumbnail]")).toBeVisible();
 
   const transform = details.locator('.detail-section[data-detail-section="transform"]');
@@ -35,6 +39,12 @@ test("Details panel exposes redesigned transform and material controls", async (
   await expect(transform.getByTestId("detail-px")).toBeHidden();
   await toggle.click();
   await expect(transform.getByTestId("detail-px")).toBeVisible();
+
+  await sectionsToggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(sectionsToggle).toHaveAttribute("aria-label", "Expand all sections");
+  await sectionsToggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
 
   const pivot = details.locator('.detail-section[data-detail-section="pivot"]');
   await expect(pivot.getByRole("button", { name: "Reset Pivot" })).toBeVisible();

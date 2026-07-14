@@ -12,10 +12,9 @@ import type {
 } from "@engine/scene/layout";
 import type { EditableSelection } from "@/scene/SceneApp";
 
-const ADDABLE_COMPONENTS = ["audio", "behavior", "particle", "interaction", "movingPlatform"] as const;
-type AddableComponent = (typeof ADDABLE_COMPONENTS)[number];
+type ComponentKind = "audio" | "behavior" | "particle" | "interaction" | "movingPlatform";
 
-const COMPONENT_LABELS: Record<AddableComponent, string> = {
+const COMPONENT_LABELS: Record<ComponentKind, string> = {
   audio: "Audio",
   behavior: "Behavior",
   particle: "Particle",
@@ -23,9 +22,6 @@ const COMPONENT_LABELS: Record<AddableComponent, string> = {
   movingPlatform: "Moving Platform",
 };
 
-const DEFAULT_MOVING_PLATFORM: LayoutMovingPlatform = { offset: [4, 0, 0], speed: 2 };
-const DEFAULT_AUDIO_CLIP = "collision-chime";
-const DEFAULT_PARTICLE_EFFECT = "fx.smoke_soft_01";
 const DEFAULT_BEHAVIOR_SCRIPT = "spin";
 
 export interface ComponentDetailsBindOptions {
@@ -59,38 +55,11 @@ export function renderComponentsSection(
     cards.push(componentCard("movingPlatform", renderMovingPlatformFields(selection.movingPlatform)));
   }
 
-  const absent = ADDABLE_COMPONENTS.filter((kind) => {
-    if (selection[kind]) return false;
-    // Moving Platform only applies to static-mesh instances (kinematic body); a
-    // character/light can't be authored as a platform.
-    if (kind === "movingPlatform" && selection.kind !== "instance") return false;
-    return true;
-  });
-  const addMenu =
-    absent.length === 0
-      ? ""
-      : `
-      <div class="detail-section">
-        <label class="detail-row">
-          <span>Add Component</span>
-          <select data-add-component>
-            <option value="">Add…</option>
-            ${absent.map((kind) => `<option value="${kind}">${COMPONENT_LABELS[kind]}</option>`).join("")}
-          </select>
-        </label>
-      </div>`;
-  return cards.join("") + addMenu;
+  return cards.join("");
 }
 
 export function bindComponentsInputs(options: ComponentDetailsBindOptions): void {
   const { body } = options;
-  body.querySelector<HTMLSelectElement>("[data-add-component]")?.addEventListener(
-    "change",
-    (event) => {
-      const kind = (event.currentTarget as HTMLSelectElement).value;
-      if (isAddableComponent(kind)) addComponent(kind, options);
-    },
-  );
   body.querySelectorAll<HTMLButtonElement>("[data-remove-component]").forEach((button) => {
     button.addEventListener("click", () => {
       const kind = button.dataset.removeComponent;
@@ -114,7 +83,7 @@ export function bindComponentsInputs(options: ComponentDetailsBindOptions): void
   });
 }
 
-function componentCard(kind: AddableComponent, fields: string): string {
+function componentCard(kind: ComponentKind, fields: string): string {
   return `
       <div class="detail-section">
         <div class="detail-section-title detail-component-title">
@@ -359,31 +328,7 @@ function renderMovingPlatformFields(platform: LayoutMovingPlatform): string {
       </label>`;
 }
 
-function addComponent(kind: AddableComponent, options: ComponentDetailsBindOptions): void {
-  if (kind === "audio") {
-    const firstSound = options.editableAssets.find((asset) => assetType(asset) === "sound");
-    options.setSelectionAudio({ clipId: firstSound?.id ?? DEFAULT_AUDIO_CLIP, autoPlay: true });
-  } else if (kind === "behavior") {
-    options.setSelectionBehavior({ script: DEFAULT_BEHAVIOR_SCRIPT });
-  } else if (kind === "particle") {
-    const firstEffect = options.editableAssets.find((asset) =>
-      assetPath(asset).endsWith(".effect.json"),
-    );
-    options.setSelectionParticle({
-      effectId: firstEffect?.id ?? DEFAULT_PARTICLE_EFFECT,
-      autoPlay: true,
-    });
-  } else if (kind === "movingPlatform") {
-    options.setSelectionMovingPlatform({
-      offset: [...DEFAULT_MOVING_PLATFORM.offset],
-      speed: DEFAULT_MOVING_PLATFORM.speed,
-    });
-  } else {
-    options.setSelectionInteraction({ action: "interact" });
-  }
-}
-
-function removeComponent(kind: AddableComponent, options: ComponentDetailsBindOptions): void {
+function removeComponent(kind: ComponentKind, options: ComponentDetailsBindOptions): void {
   if (kind === "audio") options.setSelectionAudio(undefined);
   else if (kind === "behavior") options.setSelectionBehavior(undefined);
   else if (kind === "particle") options.setSelectionParticle(undefined);
@@ -523,8 +468,8 @@ function commitMovingPlatformInput(options: ComponentDetailsBindOptions): void {
   options.setSelectionMovingPlatform(platform);
 }
 
-function isAddableComponent(kind: string | undefined): kind is AddableComponent {
-  return ADDABLE_COMPONENTS.includes(kind as AddableComponent);
+function isAddableComponent(kind: string | undefined): kind is ComponentKind {
+  return kind === "audio" || kind === "behavior" || kind === "particle" || kind === "interaction" || kind === "movingPlatform";
 }
 
 function escapeHtml(value: string): string {

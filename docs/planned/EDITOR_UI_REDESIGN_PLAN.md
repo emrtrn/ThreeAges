@@ -209,14 +209,13 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
 
 ### Faz 4 — Details Paneli
 
-- [x] Aktör başlığı: tip ikonu + ad + sağda tip rozeti ("Static Mesh",
-      "Light" …) + alt satır "Instance / `assetId`".
+- [x] Details başlangıcı: seçili aktör kartı kaldırıldı; panel doğrudan Name
+      alanıyla başlar.
 - [x] Katlanabilir bölümler: `detail-section` başlığına chevron + tıklayınca
       katlama; katlanma durumu bölüm anahtarıyla `localStorage`'da kalıcı;
       "Advanced" varsayılan katlı.
-- [x] Bölüm başlığına kebab (⋮) menü çengeli: ilk sürümde "Reset to default"
-      / "Collapse all" gibi düşük maliyetli eylemler; boş kalacaksa kebab'ı
-      sadece uygun bölümlere koy.
+- [x] Genel bölüm aç/kapa: her başlıktaki kebab menüsü kaldırıldı; Name alanının
+      sağındaki küçük toggle tüm bölümleri Collapse All / Expand All olarak açar.
 - [x] Transform satırları: X/Y/Z etiketleri renkli kutucuk (kırmızı/yeşil/
       mavi token'ları), alan odak/hover durumları.
 - [x] Scale satırına uniform-kilit (zincir) toggle'ı: kilitliyken bir eksene
@@ -237,9 +236,11 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
       Foliage. `data-inspector-tab="world"` kaldırılırken smoke/testid
       referansları aynı turda güncellenir.
 - [x] Referans görsel düzeltmesi: panel 410px sabit inspector genişliğine,
-      mavi aktif-tab alt çizgisine, kompakt actor başlığına ve koyu kart tabanlı
-      section yüzeylerine geçirildi; coordinate alanları X/Y/Z vurgu çizgileri,
-      görünür kebab eylemleri ve yoğun Unreal-benzeri spacing ile yeniden düzenlendi.
+      mavi aktif-tab alt çizgisine ve koyu kart tabanlı section yüzeylerine
+      geçirildi; coordinate alanları X/Y/Z vurgu çizgileri ve yoğun Unreal-benzeri
+      spacing ile yeniden düzenlendi.
+- [x] Details kaydırma yüzeyi: görünür scrollbar/gutter gizlenir; mouse tekeri
+      ve trackpad kaydırması korunur.
 - [~] Doğrulama: Details transform smoke adımı + undo/redo; save-validator
       etkilenmez (yeni layout alanı yok — Snap to Wall yalnız transform yazar).
       `details-panel.spec.ts` başlık/katlanma/pivot/material DOM sözleşmesini ekler;
@@ -271,11 +272,20 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
 - [x] Drawer başlık çubuğu ("CONTENT DRAWER" + katla/aç) restyle; mevcut
       aç/kapa davranışı korunur; **status bar'daki "Content Drawer" açma
       butonu kalır** (karar — drawer kapalıyken tek görünür giriş).
+- [x] Katman düzeni: Drawer yalnız Outliner ile Details arasındaki alt alanı
+      kaplar; açıkken Outliner Drawer üstüne kadar kısalır, Details ise status
+      bara kadar kesintisiz kalır. Kapanınca Outliner eski tam yüksekliğine döner.
+- [x] Klasör dili: grid kartları büyük sarı klasör glyph'i, sol ağaç ise küçük
+      sarı klasör ikonları kullanır; seçili klasör referanstaki mavi vurguyla görünür.
+- [x] Filter assets: popover açık durumu ve uygulanmış filtre durumu ayrıldı;
+      dışarı tıklama/Drawer kapanışı popover'ı kapatır ve toggle takılı kalmaz.
 - [~] Doğrulama: content browser smoke + sürükle-bırak yerleştirme + context
       menüler regresyonsuz. `content-drawer-redesign.spec.ts` toolbar, breadcrumb,
       gezinme geçmişi ve görünüm boyutu sözleşmesini ekler; hedefli Playwright
       koşusu önceki Faz 4’teki dev-server başlangıç zaman aşımı giderildiğinde
-      yeniden çalıştırılmalıdır.
+      yeniden çalıştırılmalıdır. `npm.cmd run build:verify` ✅; son hedefli koşu,
+      uygulama `Forge · loading level` durumundan çıkmadan asset ağacını üretmediği
+      için breadcrumb beklerken zaman aşımına uğradı.
 
 ### Faz 6 — Viewport Overlay'leri
 

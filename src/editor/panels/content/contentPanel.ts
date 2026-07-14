@@ -375,7 +375,7 @@ function createFolderCard(options: ContentPanelOptions, item: BrowserFolderItem)
   card.dataset.folderPath = item.path;
   card.title = item.path;
   card.innerHTML = `
-      <span class="asset-thumb folder-thumb">DIR</span>
+      <span class="asset-thumb folder-thumb" aria-hidden="true"><span class="folder-glyph"></span></span>
       <span class="asset-meta">
         <strong title="${escapeHtml(item.label)}">${escapeHtml(item.label)}</strong>
         <span class="asset-type-line">Folder</span>

@@ -595,7 +595,7 @@ export class EditorUi {
           </div>
           <div class="content-search-wrap">
             <input class="content-search" type="search" data-content-search placeholder="Search assets" />
-            <button type="button" class="forge-btn-ghost content-filter-button" data-content-filter-button aria-label="Filter assets" title="Filter assets">${UI_ICONS.filter}</button>
+            <button type="button" class="forge-btn-ghost content-filter-button" data-content-filter-button aria-label="Filter assets" aria-expanded="false" title="Filter assets">${UI_ICONS.filter}</button>
             <div class="content-filter-popover" data-content-filter-popover hidden>
               <label>Asset type<select class="content-filter" data-content-type-filter aria-label="Asset type"><option value="${CONTENT_FILTER_ALL}">All types</option></select></label>
             </div>
@@ -976,7 +976,7 @@ export class EditorUi {
     this.contentBackButton.addEventListener("click", () => this.navigateContentHistory(-1));
     this.contentForwardButton.addEventListener("click", () => this.navigateContentHistory(1));
     this.contentFilterButton.addEventListener("click", () => {
-      this.contentFilterPopover.hidden = !this.contentFilterPopover.hidden;
+      this.setContentFilterPopoverOpen(this.contentFilterPopover.hidden);
     });
     this.contentSettingsButton.addEventListener("click", (event) => this.openContentSettingsMenu(event));
     this.contentViewButton.addEventListener("click", () => this.cycleContentViewSize());
@@ -987,9 +987,17 @@ export class EditorUi {
     document.addEventListener(
       "pointerdown",
       (event) => {
-        if (!this.contentDrawerOpen || this.contentDrawerLocked) return;
+        if (!this.contentDrawerOpen) return;
         const target = event.target as Node | null;
         if (!target) return;
+        if (
+          !this.contentFilterPopover.hidden &&
+          !this.contentFilterPopover.contains(target) &&
+          !this.contentFilterButton.contains(target)
+        ) {
+          this.setContentFilterPopoverOpen(false);
+        }
+        if (this.contentDrawerLocked) return;
         if (this.contentDrawer.contains(target)) return;
         if (this.contentToggle.contains(target)) return;
         this.setContentDrawerOpen(false);
@@ -1017,8 +1025,8 @@ export class EditorUi {
     this.contentTypeFilter.addEventListener("change", () => {
       const value = this.contentTypeFilter.value;
       this.contentType = isContentTypeFilter(value) ? value : CONTENT_FILTER_ALL;
-      this.contentFilterButton.classList.toggle("active", this.contentType !== CONTENT_FILTER_ALL);
-      this.contentFilterPopover.hidden = true;
+      this.syncContentFilterButton();
+      this.setContentFilterPopoverOpen(false);
       this.renderContentAssets();
     });
 
@@ -1251,10 +1259,12 @@ export class EditorUi {
   private applyContentDrawerState(open: boolean): void {
     this.contentDrawerOpen = open;
     this.contentDrawer.classList.toggle("open", open);
+    this.root.classList.toggle("content-drawer-open", open);
     this.contentDrawer.setAttribute("aria-hidden", String(!open));
     this.contentToggle.classList.toggle("active", open);
     this.contentToggle.setAttribute("aria-expanded", String(open));
 
+    if (!open) this.setContentFilterPopoverOpen(false);
     window.clearInterval(this.contentRefreshTimer);
     this.contentRefreshTimer = 0;
     if (open) {
@@ -1272,6 +1282,16 @@ export class EditorUi {
   private setContentDrawerTall(tall: boolean): void {
     this.contentDrawerTall = tall;
     this.contentDrawer.classList.toggle("is-tall", tall);
+    this.root.classList.toggle("content-drawer-tall", tall);
+  }
+
+  private setContentFilterPopoverOpen(open: boolean): void {
+    this.contentFilterPopover.hidden = !open;
+    this.contentFilterButton.setAttribute("aria-expanded", String(open));
+  }
+
+  private syncContentFilterButton(): void {
+    this.contentFilterButton.classList.toggle("is-filtered", this.contentType !== CONTENT_FILTER_ALL);
   }
 
   /**
@@ -1560,7 +1580,7 @@ export class EditorUi {
     button.className = "folder-row folder-row-favorite";
     button.classList.toggle("active", folder.path === this.selectedFolder);
     button.title = folder.path;
-    button.innerHTML = `<span class="folder-caret">${UI_ICONS.star}</span><span class="folder-name">${escapeHtml(folder.name)}</span>`;
+    button.innerHTML = `<span class="folder-caret"></span><span class="folder-row-icon" aria-hidden="true"></span><span class="folder-name">${escapeHtml(folder.name)}</span>`;
     button.addEventListener("click", () => this.navigateToContentFolder(folder.path));
     button.addEventListener("contextmenu", (event) => {
       event.preventDefault();
@@ -1589,6 +1609,7 @@ export class EditorUi {
     if (hasChildDirs) button.setAttribute("aria-expanded", String(!isCollapsed));
     button.innerHTML = `
       <span class="folder-caret">${hasChildDirs ? (isCollapsed ? ">" : "v") : ""}</span>
+      <span class="folder-row-icon" aria-hidden="true"></span>
       <span class="folder-name">${escapeHtml(node.name)}</span>
     `;
     button.addEventListener("click", () => {
@@ -1728,7 +1749,7 @@ export class EditorUi {
           .map((file) => this.toBrowserAssetItem(file))
       : [];
     this.contentType = renderContentFilterOptions(this.contentTypeFilter, allItems, this.contentType);
-    this.contentFilterButton.classList.toggle("active", this.contentType !== CONTENT_FILTER_ALL);
+    this.syncContentFilterButton();
   }
 
   private shouldDisplayAssetFile(file: ProjectDirNode): boolean {
@@ -4258,81 +4279,10 @@ export class EditorUi {
 
   /** Applies the shared Phase 4 Details chrome after a concrete panel has rendered. */
   private finalizeDetailsRender(selection: EditableSelection): void {
-    this.decorateDetailsHeader(selection);
+    this.detailsBody.querySelector(".detail-heading")?.remove();
     this.decorateDetailSections(selection);
+    this.decorateDetailsSectionsToggle(selection);
     if (selection.kind === "instance") void this.renderDetailsMaterialThumbnail(selection);
-  }
-
-  private decorateDetailsHeader(selection: EditableSelection): void {
-    const heading = this.detailsBody.querySelector<HTMLElement>(".detail-heading");
-    if (!heading) return;
-    const label = heading.querySelector("strong")?.textContent?.trim() || selection.label;
-    const summary = heading.querySelector("span")?.textContent?.trim() || selection.assetId;
-    const icon = ACTOR_TYPE_ICONS[this.detailsActorIcon(selection)];
-    heading.classList.add("detail-heading--actor");
-    heading.replaceChildren();
-    const iconElement = document.createElement("span");
-    iconElement.className = "detail-heading-icon";
-    iconElement.setAttribute("aria-hidden", "true");
-    iconElement.innerHTML = icon;
-    const copy = document.createElement("span");
-    copy.className = "detail-heading-copy";
-    const title = document.createElement("strong");
-    title.textContent = label;
-    const meta = document.createElement("span");
-    meta.className = "detail-heading-meta";
-    meta.textContent = summary;
-    copy.append(title, meta);
-    const chip = document.createElement("span");
-    chip.className = "forge-chip detail-heading-chip";
-    chip.textContent = this.detailsActorTypeLabel(selection);
-    heading.append(iconElement, copy, chip);
-  }
-
-  private detailsActorIcon(selection: EditableSelection): ActorTypeIcon {
-    switch (selection.kind) {
-      case "instance": return "mesh";
-      case "character": return "character";
-      case "light": return "light";
-      case "sky":
-      case "fog": return "atmosphere";
-      case "cloud": return "cloud";
-      case "post": return "postprocess";
-      case "reflectionPlane":
-      case "reflectionCapture":
-      case "reflectiveSurface": return "reflection";
-      case "blockingVolume":
-      case "aiNavigationVolume": return "volume";
-      case "landscape": return "terrain";
-      case "worldWidget": return "widget";
-      case "targetPoint":
-      case "spline":
-      case "actor": return "gameplay";
-      default: return "generic";
-    }
-  }
-
-  private detailsActorTypeLabel(selection: EditableSelection): string {
-    switch (selection.kind) {
-      case "instance": return "Static Mesh";
-      case "character": return "Character";
-      case "light": return "Light";
-      case "sky": return "Sky";
-      case "fog": return "Fog";
-      case "cloud": return "Cloud";
-      case "post": return "Post Process";
-      case "reflectionPlane": return "Reflection Plane";
-      case "reflectionCapture": return "Reflection Capture";
-      case "reflectiveSurface": return "Reflective Surface";
-      case "blockingVolume": return "Blocking Volume";
-      case "aiNavigationVolume": return "AI Navigation Volume";
-      case "targetPoint": return "Target Point";
-      case "spline": return "Spline";
-      case "landscape": return "Landscape";
-      case "worldWidget": return "World Widget";
-      case "actor": return "Actor";
-      default: return "Actor";
-    }
   }
 
   private decorateDetailSections(selection: EditableSelection): void {
@@ -4351,26 +4301,43 @@ export class EditorUi {
       toggle.type = "button";
       toggle.className = "detail-section-toggle";
       toggle.innerHTML = `<span class="detail-section-chevron" aria-hidden="true">${UI_ICONS.chevronDown}</span><span>${escapeHtml(label)}</span>`;
-      const menu = document.createElement("button");
-      menu.type = "button";
-      menu.className = "forge-kebab detail-section-menu";
-      menu.title = `${label} options`;
-      menu.setAttribute("aria-label", `${label} options`);
-      menu.innerHTML = UI_ICONS.kebab;
-      heading.append(toggle, menu);
+      heading.append(toggle);
       title.replaceWith(heading);
       section.append(body);
       section.dataset.detailsDecorated = "true";
       const setCollapsed = (next: boolean): void => this.setDetailSectionCollapsed(section, toggle, key, next);
       setCollapsed(collapsed);
       toggle.addEventListener("click", () => setCollapsed(!section.classList.contains("collapsed")));
-      menu.addEventListener("click", (event) => {
-        this.openContextMenu(event, [
-          { label: "Collapse All", run: () => this.setAllDetailSectionsCollapsed(selection, true) },
-          { label: "Expand All", run: () => this.setAllDetailSectionsCollapsed(selection, false) },
-        ]);
-      });
     });
+  }
+
+  private decorateDetailsSectionsToggle(selection: EditableSelection): void {
+    const nameInput = this.detailsBody.querySelector<HTMLInputElement>("[data-detail-name]");
+    const row = nameInput?.closest<HTMLElement>(".detail-row");
+    if (!row || row.querySelector("[data-details-sections-toggle]")) return;
+    row.classList.add("detail-row--name");
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "detail-sections-toggle";
+    toggle.dataset.detailsSectionsToggle = "true";
+    toggle.addEventListener("click", () => {
+      const sections = [...this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-details-decorated]")];
+      this.setAllDetailSectionsCollapsed(selection, sections.some((section) => !section.classList.contains("collapsed")));
+    });
+    row.append(toggle);
+    this.updateDetailsSectionsToggle();
+  }
+
+  private updateDetailsSectionsToggle(): void {
+    const toggle = this.detailsBody.querySelector<HTMLButtonElement>("[data-details-sections-toggle]");
+    if (!toggle) return;
+    const sections = [...this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-details-decorated]")];
+    const allCollapsed = sections.length > 0 && sections.every((section) => section.classList.contains("collapsed"));
+    toggle.hidden = sections.length === 0;
+    toggle.title = allCollapsed ? "Expand all sections" : "Collapse all sections";
+    toggle.setAttribute("aria-label", toggle.title);
+    toggle.setAttribute("aria-pressed", String(allCollapsed));
+    toggle.innerHTML = allCollapsed ? UI_ICONS.chevronDown : UI_ICONS.chevronUp;
   }
 
   private detailSectionStorageKey(selection: EditableSelection, section: string): string {
@@ -4394,6 +4361,7 @@ export class EditorUi {
     } catch {
       // Storage can be disabled without affecting Details interactions.
     }
+    this.updateDetailsSectionsToggle();
   }
 
   private setAllDetailSectionsCollapsed(selection: EditableSelection, collapsed: boolean): void {
@@ -4402,6 +4370,7 @@ export class EditorUi {
       const toggle = section.querySelector<HTMLButtonElement>(".detail-section-toggle");
       if (toggle) this.setDetailSectionCollapsed(section, toggle, this.detailSectionStorageKey(selection, section.dataset.detailSection ?? label), collapsed);
     });
+    this.updateDetailsSectionsToggle();
   }
 
   private async renderDetailsMaterialThumbnail(selection: EditableSelection): Promise<void> {

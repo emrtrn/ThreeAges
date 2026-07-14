@@ -682,18 +682,25 @@ body.editor-mode #debug-stats {
   overflow: hidden;
 }
 
+.editor-shell {
+  --content-drawer-height: clamp(232px, 34vh, 420px);
+}
+
 .editor-outliner {
   left: 0;
   bottom: 28px;
   width: 260px;
+  z-index: 40;
   border-right-style: solid;
   border-right-width: 1px;
+  transition: bottom 140ms ease;
 }
 
 .editor-details {
   right: 0;
   bottom: 28px;
   width: 410px;
+  z-index: 40;
   padding: 0;
   background: #111820;
   border-left-style: solid;
@@ -824,6 +831,17 @@ body.editor-mode #debug-stats {
   height: calc(100% - 44px);
   overflow: auto;
   padding: 10px 9px 18px;
+}
+
+/* Keep Details scrollable with the mouse wheel without reserving a visual
+   scrollbar gutter beside the card stack. */
+.editor-details .inspector-pane[data-inspector-pane="details"] {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.editor-details .inspector-pane[data-inspector-pane="details"]::-webkit-scrollbar {
+  display: none;
 }
 
 .outliner-list {
@@ -1423,6 +1441,34 @@ body.editor-mode #debug-stats {
   gap: 9px;
 }
 
+.editor-details .detail-row--name {
+  grid-template-columns: 66px minmax(0, 1fr) 25px;
+  gap: 6px;
+}
+
+.editor-details .detail-sections-toggle {
+  display: grid;
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #344251;
+  border-radius: 4px;
+  color: #c6d0da;
+  background: #101720;
+}
+
+.editor-details .detail-sections-toggle:hover {
+  border-color: #526275;
+  color: #ffffff;
+  background: #1d2935;
+}
+
+.editor-details .detail-sections-toggle svg {
+  width: 14px;
+  height: 14px;
+}
+
 .editor-details .detail-row > span,
 .editor-details .detail-vector-label {
   color: #b7c2cc;
@@ -1496,18 +1542,6 @@ body.editor-mode #debug-stats {
 .editor-details .detail-section-chevron svg {
   width: 13px;
   height: 13px;
-}
-
-.editor-details .detail-section-menu {
-  visibility: visible;
-  width: 25px;
-  height: 25px;
-  color: #c1cbd4;
-}
-
-.editor-details .detail-section-menu:hover {
-  color: #ffffff;
-  background: #263544;
 }
 
 .editor-details .detail-section-body {
@@ -2166,10 +2200,10 @@ body.editor-mode #debug-stats {
 .editor-content-drawer {
   position: absolute;
   left: 0;
-  right: 0;
+  right: 410px;
   bottom: 28px;
-  z-index: 50;
-  height: clamp(232px, 34vh, 420px);
+  z-index: 30;
+  height: var(--content-drawer-height);
   display: grid;
   grid-template-rows: minmax(42px, auto) minmax(0, 1fr);
   color: var(--forge-text);
@@ -2187,7 +2221,15 @@ body.editor-mode #debug-stats {
 }
 
 .editor-content-drawer.is-tall {
-  height: clamp(360px, 58vh, 680px);
+  height: var(--content-drawer-height);
+}
+
+.editor-shell.content-drawer-tall {
+  --content-drawer-height: clamp(360px, 58vh, 680px);
+}
+
+.editor-shell.content-drawer-open .editor-outliner {
+  bottom: calc(28px + var(--content-drawer-height));
 }
 
 .content-drawer-top {
@@ -2274,6 +2316,13 @@ body.editor-mode #debug-stats {
   top: 2px;
   border-color: transparent;
   background: transparent;
+}
+
+.editor-shell .content-filter-button[aria-expanded="true"],
+.editor-shell .content-filter-button.is-filtered {
+  border-color: #3a4b5d;
+  color: #c9d9e7;
+  background: #1a2734;
 }
 
 .content-filter-popover {
@@ -2386,10 +2435,6 @@ body.editor-mode #debug-stats {
   height: 12px;
 }
 
-.folder-row-favorite .folder-caret {
-  color: #e2b95e;
-}
-
 .folder-node {
   display: grid;
 }
@@ -2398,7 +2443,7 @@ body.editor-mode #debug-stats {
   width: 100%;
   min-height: 24px;
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr);
+  grid-template-columns: 16px 16px minmax(0, 1fr);
   align-items: center;
   gap: 4px;
   border-color: transparent;
@@ -2413,8 +2458,8 @@ body.editor-mode #debug-stats {
 }
 
 .editor-shell .folder-row.active {
-  color: #07120f;
-  background: #72d49f;
+  color: #ffffff;
+  background: #1f6fce;
 }
 
 .folder-caret {
@@ -2431,7 +2476,42 @@ body.editor-mode #debug-stats {
 }
 
 .editor-shell .folder-row.active .folder-caret {
-  color: #07120f;
+  color: #ffffff;
+}
+
+.folder-row-icon {
+  position: relative;
+  display: inline-block;
+  width: 14px;
+  height: 10px;
+  margin-top: 2px;
+  border: 1px solid #d89937;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #f6cd74 0%, #d99a3d 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
+.folder-row-icon::before {
+  position: absolute;
+  top: -4px;
+  left: 1px;
+  width: 7px;
+  height: 4px;
+  content: "";
+  border: 1px solid #d89937;
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+  background: #efbb5b;
+}
+
+.editor-shell .folder-row.active .folder-row-icon {
+  border-color: #b9dcff;
+  background: linear-gradient(180deg, #d8edff 0%, #8fc7fb 100%);
+}
+
+.editor-shell .folder-row.active .folder-row-icon::before {
+  border-color: #b9dcff;
+  background: #c7e5ff;
 }
 
 .folder-name {
@@ -2598,13 +2678,38 @@ body.editor-mode #debug-stats {
 }
 
 .editor-shell .asset-card.is-folder .asset-thumb {
-  border-color: rgba(98, 211, 255, 0.36);
-  color: #9edfff;
-  background-color: #101820;
+  border-color: transparent;
+  background: transparent;
 }
 
-.editor-shell .asset-card.is-folder:hover .asset-thumb {
-  border-color: rgba(98, 211, 255, 0.7);
+.folder-thumb .folder-glyph {
+  position: relative;
+  display: block;
+  width: min(62px, 68%);
+  height: min(42px, 48%);
+  margin-top: 8px;
+  border: 1px solid #d89a3e;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #f5cc77 0%, #d9973a 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 3px 7px rgba(0, 0, 0, 0.22);
+}
+
+.folder-thumb .folder-glyph::before {
+  position: absolute;
+  top: -7px;
+  left: 3px;
+  width: 35%;
+  height: 7px;
+  content: "";
+  border: 1px solid #d89a3e;
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+  background: #efb85a;
+}
+
+.editor-shell .asset-card.is-folder:hover .folder-glyph {
+  border-color: #ffe0a0;
+  filter: brightness(1.1);
 }
 
 .asset-active-badge {
@@ -2771,7 +2876,12 @@ body.editor-mode #debug-stats {
   }
 
   .editor-shell {
+    --content-drawer-height: clamp(216px, 36vh, 340px);
     font-size: 12px;
+  }
+
+  .editor-shell.content-drawer-tall {
+    --content-drawer-height: clamp(300px, 58vh, 520px);
   }
 
   .editor-shell button {
@@ -2779,11 +2889,8 @@ body.editor-mode #debug-stats {
   }
 
   .editor-content-drawer {
-    height: clamp(216px, 36vh, 340px);
-  }
-
-  .editor-content-drawer.is-tall {
-    height: clamp(300px, 58vh, 520px);
+    right: 50vw;
+    height: var(--content-drawer-height);
   }
 
   .content-drawer-top {
