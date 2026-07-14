@@ -235,7 +235,20 @@ import {
   type FoliageSurfaceHit,
 } from "@engine/scene/foliagePaint";
 import { loadFoliageData, loadFoliageTypeByPath, loadFoliageTypesForData } from "./foliageLoader";
-import type { FoliageSurfacePick } from "@editor/render-three/scenePicker";
+import {
+  createEmptyMeshPaintData,
+  fillMeshVertexColors,
+  meshPaintDataPath,
+  paintMeshVertexColors,
+  removeMeshPaintPlacement,
+  upsertMeshPaintPlacement,
+  type MeshPaintChannel,
+  type LayoutMeshPaintData,
+  type LayoutMeshPaintPlacement,
+} from "@engine/scene/meshPaint";
+import { saveMeshPaintData } from "@/editor/meshPaintStore";
+import { loadMeshPaintData } from "./meshPaintLoader";
+import type { FoliageSurfacePick, MeshPaintSurfacePick } from "@editor/render-three/scenePicker";
 import {
   applyReflectiveSurfaceTransform,
   createReflectiveSurfaceObject,
@@ -652,6 +665,16 @@ export interface FoliageToolSettings {
   filters: FoliageTargetFilters;
 }
 
+/** Vertex-color authoring state for Scene Editor's Mesh Paint Mode. */
+export interface MeshPaintToolSettings {
+  tool: "paint" | "erase";
+  color: [number, number, number, number];
+  channels: MeshPaintChannel[];
+  brushSize: number;
+  strength: number;
+  falloff: number;
+}
+
 /** A Foliage Type row surfaced to the editor panel (asset id + resolved def). */
 export interface FoliageTypeView {
   id: string;
@@ -948,6 +971,22 @@ export class SceneApp {
   private foliageBinding: FoliageRenderBinding | null = null;
   /** In-memory level foliage sidecar (`<layout>.foliage.json`). */
   private foliageData: LayoutFoliageData = createEmptyFoliageData();
+  /** Placement-scoped vertex-color sidecar for Mesh Paint Mode. */
+  private meshPaintData: LayoutMeshPaintData = createEmptyMeshPaintData();
+  /** True when Mesh Paint sidecar changes still need the editor Save action. */
+  private meshPaintDataDirty = false;
+  /** Mesh Paint Mode is separate from Material Editor and owns the left pointer. */
+  private meshPaintModeActive = false;
+  private meshPaintBrushCursor: Mesh | null = null;
+  private meshPaintStrokePointerId: number | null = null;
+  private meshPaintToolSettings: MeshPaintToolSettings = {
+    tool: "paint",
+    color: [1, 0, 0, 1],
+    channels: ["r", "g", "b", "a"],
+    brushSize: 1,
+    strength: 0.75,
+    falloff: 1,
+  };
   /** Resolved Foliage Types referenced by the sidecar, keyed by asset id. */
   private foliageTypes = new Map<string, ForgeFoliageTypeDef>();
   /** True when the foliage sidecar has unsaved changes. */
@@ -3007,6 +3046,7 @@ export class SceneApp {
       await this.saveLandscapeData(id);
     }
     await this.saveFoliageData();
+    await this.saveMeshPaintSidecar();
     this.onStatus?.(`Saved ${result.path ?? "layout"}.`, "success");
   }
 
@@ -3033,6 +3073,8 @@ export class SceneApp {
       return null;
     });
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
+    this.meshPaintData = await loadMeshPaintData(this.activeProject.manifest.editor.defaultScene);
+    this.meshPaintDataDirty = false;
     // Normalize world widgets so the editor never reads a malformed anchor (the
     // runtime normalizes on its own load path); keeps the saved JSON clean too.
     if (this.layout.worldWidgets) {
@@ -3229,7 +3271,10 @@ export class SceneApp {
     // as a separate clone â€” and is hidden in the shared InstancedMesh â€” when it has
     // an override material OR a probe envMap (clone-fallback per the plan); picking
     // stays intact because the clone carries `userData.placementIndex`.
-    const decisions = placements.map((placement) => {
+    const decisions = placements.map((placement, placementIndex) => {
+      const meshPaint = this.meshPaintData.placements.filter(
+        (entry) => entry.target.assetId === assetId && entry.target.placementIndex === placementIndex,
+      );
       const materialSlot = placement.materialSlot;
       const materialSlots = materialSlot ? undefined : this.resolveAssetMaterialSlots(assetId);
       const overrideMaterial = materialSlot && this.materialCache.has(materialSlot)
@@ -3247,7 +3292,12 @@ export class SceneApp {
         overrideMaterial,
         materialSlots,
         bake,
-        asClone: Boolean(overrideMaterial) || hasAssignedMaterialSlots(materialSlots) || Boolean(bake),
+        meshPaint,
+        asClone:
+          Boolean(overrideMaterial) ||
+          hasAssignedMaterialSlots(materialSlots) ||
+          Boolean(bake) ||
+          meshPaint.length > 0,
       };
     });
 
@@ -3273,6 +3323,7 @@ export class SceneApp {
         decision.materialSlots,
         decision.bake,
         clonedMaterials,
+        decision.meshPaint,
       );
       group.add(object);
       renderedOverrideObjects.push(object);
@@ -3366,6 +3417,7 @@ export class SceneApp {
     materialSlots: AssetMaterialSlotsDef | undefined,
     bake: SphereReflectionCaptureBake | null,
     clonedMaterials: Material[],
+    meshPaint: readonly LayoutMeshPaintPlacement[] = [],
   ): Object3D {
     const object = gltf.scene.clone(true);
     object.name = `${assetId}-clone-${placementIndex}`;
@@ -3374,10 +3426,29 @@ export class SceneApp {
     object.visible = !(placement.hidden ?? false);
     object.userData.assetId = assetId;
     object.userData.placementIndex = placementIndex;
+    const primitiveIndexByMeshName = new Map<string, number>();
     object.traverse((child) => {
       child.userData.assetId = assetId;
       child.userData.placementIndex = placementIndex;
       if (!isRenderableMesh(child)) return;
+      const meshName = child.name || "__unnamed_mesh";
+      const primitiveIndex = primitiveIndexByMeshName.get(meshName) ?? 0;
+      primitiveIndexByMeshName.set(meshName, primitiveIndex + 1);
+      child.userData.forgeMeshPaintTarget = {
+        assetId,
+        placementIndex,
+        meshName,
+        primitiveIndex,
+      };
+      const paint = meshPaint.find(
+        (entry) => entry.target.meshName === meshName && entry.target.primitiveIndex === primitiveIndex,
+      );
+      if (paint && child.geometry.getAttribute("position")?.count === paint.vertexCount) {
+        const geometry = child.geometry.clone();
+        geometry.setAttribute("color", new Float32BufferAttribute(paint.colors, 4));
+        geometry.userData.forgeMeshPaintClone = true;
+        child.geometry = geometry;
+      }
       const applyBake = (source: Material): Material => {
         const base = overrideMaterial ?? source;
         return bake
@@ -3457,7 +3528,13 @@ export class SceneApp {
   private rebuildInstanceGroup(assetId: string): void {
     if (!this.layout) return;
     const previous = this.instanceGroups.get(assetId);
-    if (previous) this.scene.remove(previous);
+    if (previous) {
+      previous.traverse((child) => {
+        if (!isRenderableMesh(child) || child.geometry.userData.forgeMeshPaintClone !== true) return;
+        child.geometry.dispose();
+      });
+      this.scene.remove(previous);
+    }
     this.disposeInstanceProbeMaterials(assetId);
     this.instanceGroups.delete(assetId);
     this.instanceMeshes.delete(assetId);
@@ -6983,6 +7060,256 @@ export class SceneApp {
     this.foliageDataDirty = false;
   }
 
+  onMeshPaintChanged: (() => void) | undefined;
+
+  isMeshPaintModeActive(): boolean {
+    return this.meshPaintModeActive;
+  }
+
+  setMeshPaintModeActive(active: boolean): void {
+    if (this.meshPaintModeActive === active) return;
+    this.meshPaintModeActive = active;
+    if (!active) this.clearMeshPaintBrushHover();
+    this.onMeshPaintChanged?.();
+  }
+
+  getMeshPaintToolSettings(): MeshPaintToolSettings {
+    return {
+      ...this.meshPaintToolSettings,
+      color: [...this.meshPaintToolSettings.color],
+      channels: [...this.meshPaintToolSettings.channels],
+    };
+  }
+
+  setMeshPaintToolSettings(patch: Partial<MeshPaintToolSettings>): MeshPaintToolSettings {
+    const next = { ...this.meshPaintToolSettings, ...patch };
+    const channels = (next.channels ?? []).filter((channel): channel is MeshPaintChannel =>
+      (["r", "g", "b", "a"] as const).includes(channel),
+    );
+    this.meshPaintToolSettings = {
+      tool: next.tool === "erase" ? "erase" : "paint",
+      color: [
+        clampUnit(next.color?.[0]),
+        clampUnit(next.color?.[1]),
+        clampUnit(next.color?.[2]),
+        clampUnit(next.color?.[3]),
+      ],
+      channels: channels.length > 0 ? channels : ["r"],
+      brushSize: Math.max(0.01, Number.isFinite(next.brushSize) ? next.brushSize : 1),
+      strength: clampUnit(next.strength),
+      falloff: Math.min(32, Math.max(0.01, Number.isFinite(next.falloff) ? next.falloff : 1)),
+    };
+    this.onMeshPaintChanged?.();
+    return this.getMeshPaintToolSettings();
+  }
+
+  /** Fills every primitive of the selected placed mesh, retaining non-selected channels. */
+  fillSelectedMeshPaint(): void {
+    const selection = this.selectedMeshPaintInstance();
+    if (!selection || !this.ensureMeshPaintPlacementData(selection)) return;
+    let changed = 0;
+    for (const object of this.meshPaintObjects(selection)) {
+      const target = meshPaintTargetFromObject(object);
+      const position = object.geometry.getAttribute("position");
+      if (!target || !position) continue;
+      const geometry = this.ensureMeshPaintGeometry(object);
+      const existing = geometry.getAttribute("color");
+      const color = this.meshPaintToolSettings.tool === "erase"
+        ? ([0, 0, 0, 0] as const)
+        : this.meshPaintToolSettings.color;
+      const colors = fillMeshVertexColors(
+        position.count,
+        existing?.itemSize === 4 ? existing.array : initialMeshPaintColors(geometry, position.count),
+        color,
+        this.meshPaintToolSettings.channels,
+      );
+      geometry.setAttribute("color", new Float32BufferAttribute(colors, 4));
+      this.meshPaintData = upsertMeshPaintPlacement(this.meshPaintData, {
+        target,
+        vertexCount: position.count,
+        colors: Array.from(colors),
+      });
+      changed += 1;
+    }
+    if (changed > 0) {
+      this.meshPaintDataDirty = true;
+      this.onStatus?.(`Filled ${changed} mesh primitive${changed === 1 ? "" : "s"}.`, "success");
+      this.onMeshPaintChanged?.();
+    }
+  }
+
+  /** Removes paint data from the selected placement and returns it to shared instancing. */
+  clearSelectedMeshPaint(): void {
+    const selection = this.selectedMeshPaintInstance();
+    if (!selection) return;
+    const before = this.meshPaintData.placements.length;
+    this.meshPaintData = removeMeshPaintPlacement(
+      this.meshPaintData,
+      selection.assetId,
+      selection.placementIndex,
+    );
+    if (this.meshPaintData.placements.length === before) return;
+    this.meshPaintDataDirty = true;
+    this.rebuildInstanceGroup(selection.assetId);
+    this.onStatus?.("Cleared Mesh Paint for selected placement.", "success");
+    this.onMeshPaintChanged?.();
+  }
+
+  private selectedMeshPaintInstance(): InstanceSelection | null {
+    if (this.selection?.kind !== "instance" || this.isSelectionLocked(this.selection)) return null;
+    return this.selection;
+  }
+
+  private ensureMeshPaintPlacementData(selection: InstanceSelection): boolean {
+    const alreadyPrepared = this.meshPaintData.placements.some(
+      (entry) =>
+        entry.target.assetId === selection.assetId &&
+        entry.target.placementIndex === selection.placementIndex,
+    );
+    if (alreadyPrepared) return true;
+    const gltf = this.models.get(selection.assetId);
+    if (!gltf) return false;
+    const placements = meshPaintPlacementsFromModel(selection, gltf);
+    if (placements.length === 0) return false;
+    for (const placement of placements) {
+      this.meshPaintData = upsertMeshPaintPlacement(this.meshPaintData, placement);
+    }
+    this.meshPaintDataDirty = true;
+    this.rebuildInstanceGroup(selection.assetId);
+    return true;
+  }
+
+  private meshPaintObjects(selection: InstanceSelection): Mesh[] {
+    const root = this.instanceOverrideObjects
+      .get(selection.assetId)
+      ?.find((object) => object.userData.placementIndex === selection.placementIndex);
+    if (!root) return [];
+    const meshes: Mesh[] = [];
+    root.traverse((child) => {
+      if (isRenderableMesh(child) && meshPaintTargetFromObject(child)) meshes.push(child);
+    });
+    return meshes;
+  }
+
+  private ensureMeshPaintGeometry(object: Mesh): BufferGeometry {
+    if (object.geometry.userData.forgeMeshPaintClone === true) return object.geometry;
+    const geometry = object.geometry.clone();
+    geometry.userData.forgeMeshPaintClone = true;
+    object.geometry = geometry;
+    return geometry;
+  }
+
+  private ensureMeshPaintBrushCursor(): Mesh {
+    if (this.meshPaintBrushCursor) return this.meshPaintBrushCursor;
+    const cursor = new Mesh(
+      new RingGeometry(0.96, 1, 96),
+      new MeshBasicMaterial({
+        color: 0xf27836,
+        transparent: true,
+        opacity: 0.9,
+        depthWrite: false,
+        side: DoubleSide,
+      }),
+    );
+    cursor.name = "mesh-paint-brush-cursor";
+    cursor.renderOrder = 20;
+    cursor.visible = false;
+    this.meshPaintBrushCursor = cursor;
+    this.scene.add(cursor);
+    return cursor;
+  }
+
+  updateMeshPaintBrushHover(clientX: number, clientY: number): void {
+    const selection = this.meshPaintModeActive ? this.selectedMeshPaintInstance() : null;
+    if (!selection) return this.clearMeshPaintBrushHover();
+    const hit = this.picker.pickMeshPaintSurface(clientX, clientY, selection);
+    if (!hit) return this.clearMeshPaintBrushHover();
+    const cursor = this.ensureMeshPaintBrushCursor();
+    cursor.position.copy(hit.point).addScaledVector(hit.normal, 0.01);
+    cursor.quaternion.setFromUnitVectors(new Vector3(0, 0, 1), hit.normal);
+    cursor.scale.setScalar(this.meshPaintToolSettings.brushSize);
+    cursor.visible = true;
+  }
+
+  clearMeshPaintBrushHover(): void {
+    if (this.meshPaintBrushCursor) this.meshPaintBrushCursor.visible = false;
+  }
+
+  beginMeshPaintStroke(event: PointerEvent): boolean {
+    if (!this.meshPaintModeActive) return false;
+    const selection = this.selectedMeshPaintInstance();
+    if (!selection || !this.ensureMeshPaintPlacementData(selection)) return false;
+    const hit = this.picker.pickMeshPaintSurface(event.clientX, event.clientY, selection);
+    if (!hit) return false;
+    this.meshPaintStrokePointerId = event.pointerId;
+    this.canvas.setPointerCapture(event.pointerId);
+    this.applyMeshPaintDab(hit);
+    return true;
+  }
+
+  updateMeshPaintStroke(event: PointerEvent): boolean {
+    if (this.meshPaintStrokePointerId !== event.pointerId) return false;
+    const selection = this.selectedMeshPaintInstance();
+    if (!selection) return true;
+    const hit = this.picker.pickMeshPaintSurface(event.clientX, event.clientY, selection);
+    if (hit) this.applyMeshPaintDab(hit);
+    this.updateMeshPaintBrushHover(event.clientX, event.clientY);
+    return true;
+  }
+
+  endMeshPaintStroke(event: PointerEvent): boolean {
+    if (this.meshPaintStrokePointerId !== event.pointerId) return false;
+    this.meshPaintStrokePointerId = null;
+    try {
+      this.canvas.releasePointerCapture(event.pointerId);
+    } catch {
+      // The browser may have released capture after a pointercancel.
+    }
+    return true;
+  }
+
+  private applyMeshPaintDab(hit: MeshPaintSurfacePick): void {
+    const target = meshPaintTargetFromObject(hit.object);
+    const position = hit.object.geometry.getAttribute("position");
+    if (!target || !position) return;
+    const geometry = this.ensureMeshPaintGeometry(hit.object);
+    const existing = geometry.getAttribute("color");
+    const local = hit.object.worldToLocal(hit.point.clone());
+    const color = this.meshPaintToolSettings.tool === "erase"
+      ? ([0, 0, 0, 0] as const)
+      : this.meshPaintToolSettings.color;
+    const result = paintMeshVertexColors(
+      position.array,
+      existing?.itemSize === 4 ? existing.array : initialMeshPaintColors(geometry, position.count),
+      [local.x, local.y, local.z],
+      {
+        radius: this.meshPaintToolSettings.brushSize,
+        strength: this.meshPaintToolSettings.strength,
+        falloff: this.meshPaintToolSettings.falloff,
+        channels: this.meshPaintToolSettings.channels,
+        color,
+      },
+    );
+    if (result.changedVertices === 0) return;
+    geometry.setAttribute("color", new Float32BufferAttribute(result.colors, 4));
+    this.meshPaintData = upsertMeshPaintPlacement(this.meshPaintData, {
+      target,
+      vertexCount: position.count,
+      colors: Array.from(result.colors),
+    });
+    this.meshPaintDataDirty = true;
+  }
+
+  private async saveMeshPaintSidecar(): Promise<void> {
+    if (!this.meshPaintDataDirty) return;
+    if (!this.activeProject) throw new Error("Mesh Paint save requires an active project.");
+    await saveMeshPaintData(
+      meshPaintDataPath(this.activeProject.manifest.editor.defaultScene),
+      this.meshPaintData,
+    );
+    this.meshPaintDataDirty = false;
+  }
+
   /** Fetches a landscape sidecar (public-root-relative path); flat Medium data on any failure. */
   private async fetchLandscapeData(dataRef: string): Promise<ForgeLandscapeData> {
     try {
@@ -7056,7 +7383,7 @@ export class SceneApp {
 
   private updateLandscapeBrushHover(clientX: number, clientY: number): void {
     // Foliage mode owns the brush cursor; never show the landscape sculpt ring too.
-    if (this.foliageModeActive) {
+    if (this.foliageModeActive || this.meshPaintModeActive) {
       this.clearLandscapeBrushHover();
       return;
     }
@@ -7083,7 +7410,7 @@ export class SceneApp {
 
   private beginLandscapeSculpt(event: PointerEvent): boolean {
     // Foliage Mode disables terrain sculpting entirely (its brush owns the pointer).
-    if (this.foliageModeActive) return false;
+    if (this.foliageModeActive || this.meshPaintModeActive) return false;
     if (this.landscapeSculptSettings.editMode === "splines") {
       return this.addLandscapeSplinePointAtPointer(event);
     }
@@ -9912,6 +10239,11 @@ export class SceneApp {
       endLandscapeSculpt: (event) => this.endLandscapeSculpt(event),
       updateLandscapeBrushHover: (clientX, clientY) => this.updateLandscapeBrushHover(clientX, clientY),
       clearLandscapeBrushHover: () => this.clearLandscapeBrushHover(),
+      beginMeshPaintStroke: (event) => this.beginMeshPaintStroke(event),
+      updateMeshPaintStroke: (event) => this.updateMeshPaintStroke(event),
+      endMeshPaintStroke: (event) => this.endMeshPaintStroke(event),
+      updateMeshPaintBrushHover: (clientX, clientY) => this.updateMeshPaintBrushHover(clientX, clientY),
+      clearMeshPaintBrushHover: () => this.clearMeshPaintBrushHover(),
       beginFoliageStroke: (event) => this.beginFoliageStroke(event),
       updateFoliageStroke: (event) => this.updateFoliageStroke(event),
       endFoliageStroke: (event) => this.endFoliageStroke(event),
@@ -11886,6 +12218,91 @@ export class SceneApp {
       this.cameraController.syncAnglesFromCurrentView();
     }
   };
+}
+
+function meshPaintPlacementsFromModel(
+  selection: InstanceSelection,
+  gltf: GLTF,
+): LayoutMeshPaintPlacement[] {
+  const primitiveIndexByMeshName = new Map<string, number>();
+  const placements: LayoutMeshPaintPlacement[] = [];
+  gltf.scene.traverse((child) => {
+    if (!isRenderableMesh(child)) return;
+    const position = child.geometry.getAttribute("position");
+    if (!position) return;
+    const meshName = child.name || "__unnamed_mesh";
+    const primitiveIndex = primitiveIndexByMeshName.get(meshName) ?? 0;
+    primitiveIndexByMeshName.set(meshName, primitiveIndex + 1);
+    placements.push({
+      target: {
+        assetId: selection.assetId,
+        placementIndex: selection.placementIndex,
+        meshName,
+        primitiveIndex,
+      },
+      vertexCount: position.count,
+      colors: initialMeshPaintColors(child.geometry, position.count),
+    });
+  });
+  return placements;
+}
+
+function meshPaintTargetFromObject(object: Object3D): LayoutMeshPaintPlacement["target"] | null {
+  const value = object.userData.forgeMeshPaintTarget as Partial<LayoutMeshPaintPlacement["target"]> | undefined;
+  if (
+    !value ||
+    typeof value.assetId !== "string" ||
+    !Number.isInteger(value.placementIndex) ||
+    typeof value.meshName !== "string" ||
+    !Number.isInteger(value.primitiveIndex)
+  ) {
+    return null;
+  }
+  return {
+    assetId: value.assetId,
+    placementIndex: value.placementIndex!,
+    meshName: value.meshName,
+    primitiveIndex: value.primitiveIndex!,
+  };
+}
+
+/** Converts imported RGB/RGBA attribute data to the sidecar's canonical float RGBA shape. */
+function initialMeshPaintColors(geometry: BufferGeometry, vertexCount: number): number[] {
+  const colors = new Array<number>(vertexCount * 4).fill(1);
+  const source = geometry.getAttribute("color");
+  if (!source) return colors;
+  for (let vertex = 0; vertex < vertexCount; vertex += 1) {
+    const offset = vertex * 4;
+    colors[offset] = normalizedAttributeComponent(source.getX(vertex), source) ?? 1;
+    colors[offset + 1] = source.itemSize > 1
+      ? normalizedAttributeComponent(source.getY(vertex), source) ?? 1
+      : colors[offset];
+    colors[offset + 2] = source.itemSize > 2
+      ? normalizedAttributeComponent(source.getZ(vertex), source) ?? 1
+      : colors[offset];
+    colors[offset + 3] = source.itemSize > 3
+      ? normalizedAttributeComponent(source.getW(vertex), source) ?? 1
+      : 1;
+  }
+  return colors;
+}
+
+function normalizedAttributeComponent(
+  value: number,
+  attribute: ReturnType<BufferGeometry["getAttribute"]>,
+): number | null {
+  if (!Number.isFinite(value)) return null;
+  if (!attribute.normalized) return clampUnit(value);
+  const array = attribute.array;
+  if (array instanceof Uint8Array || array instanceof Uint8ClampedArray) return clampUnit(value / 255);
+  if (array instanceof Uint16Array) return clampUnit(value / 65535);
+  if (array instanceof Int8Array) return clampUnit((value + 128) / 255);
+  if (array instanceof Int16Array) return clampUnit((value + 32768) / 65535);
+  return clampUnit(value);
+}
+
+function clampUnit(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0;
 }
 
 function splineGeneratedTriangleCount(group: Group | null | undefined, generatorId?: string): number {

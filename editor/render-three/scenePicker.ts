@@ -1,5 +1,5 @@
 import { InstancedMesh, Matrix3, Matrix4, Plane, Raycaster, Vector2, Vector3 } from "three";
-import type { Camera, Intersection, Object3D, OrthographicCamera, PerspectiveCamera } from "three";
+import type { Camera, Intersection, Mesh, Object3D, OrthographicCamera, PerspectiveCamera } from "three";
 
 import {
   findParentActor,
@@ -34,6 +34,14 @@ export interface FoliageSurfacePick {
   landscapeIndex: number | null;
   /** Static-mesh asset id when the hit landed on a placed instance, else null. */
   staticMeshAssetId: string | null;
+}
+
+/** A Mesh Paint Mode hit on a clone-backed placed mesh primitive. */
+export interface MeshPaintSurfacePick {
+  object: Mesh;
+  point: Vector3;
+  normal: Vector3;
+  selection: InstanceSelection;
 }
 
 export interface ScenePickerOptions {
@@ -286,6 +294,36 @@ export class ScenePicker {
     this.setPointerNdc(clientX, clientY);
     this.raycaster.setFromCamera(this.pointerNdc, this.getCamera());
     return this.classifyFoliageHits(this.raycaster.intersectObjects(this.getPickables(), true));
+  }
+
+  /**
+   * Picks one exact placement clone for Mesh Paint Mode. Mesh Paint always edits
+   * clone geometry (never an InstancedMesh's shared BufferGeometry), so an
+   * instanced placement must first be promoted by SceneApp before this can hit.
+   */
+  pickMeshPaintSurface(
+    clientX: number,
+    clientY: number,
+    expected: InstanceSelection,
+  ): MeshPaintSurfacePick | null {
+    this.setPointerNdc(clientX, clientY);
+    this.raycaster.setFromCamera(this.pointerNdc, this.getCamera());
+    const hits = this.visibleHits(this.raycaster.intersectObjects(this.getPickables(), true));
+    for (const hit of hits) {
+      const selection = findParentMaterialOverride(hit.object);
+      if (
+        !selection ||
+        selection.assetId !== expected.assetId ||
+        selection.placementIndex !== expected.placementIndex ||
+        !(hit.object as { isMesh?: boolean }).isMesh
+      ) {
+        continue;
+      }
+      const object = hit.object as Mesh;
+      if (!object.geometry.getAttribute("position")) continue;
+      return { object, point: hit.point.clone(), normal: this.worldFaceNormal(hit), selection };
+    }
+    return null;
   }
 
   /**

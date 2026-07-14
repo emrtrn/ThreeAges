@@ -141,7 +141,7 @@ import {
   type ContentTypeFilter,
 } from "./panels/content/contentPanel";
 
-type InspectorTab = "details" | "world" | "foliage";
+type InspectorTab = "details" | "world" | "meshPaint" | "foliage";
 
 /** Typed assets the Content Browser context menu can create (besides folders). */
 const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> = [
@@ -295,6 +295,7 @@ export class EditorUi {
   private outlinerList: HTMLDivElement;
   private detailsBody: HTMLDivElement;
   private worldSettingsBody: HTMLDivElement;
+  private meshPaintBody!: HTMLDivElement;
   private foliageBody!: HTMLDivElement;
   private inspectorTab: InspectorTab = "details";
   private statusText: HTMLElement;
@@ -542,6 +543,13 @@ export class EditorUi {
           <button
             type="button"
             class="inspector-tab"
+            data-inspector-tab="meshPaint"
+            role="tab"
+            aria-selected="false"
+          >Mesh Paint</button>
+          <button
+            type="button"
+            class="inspector-tab"
             data-inspector-tab="foliage"
             role="tab"
             aria-selected="false"
@@ -552,6 +560,9 @@ export class EditorUi {
         </div>
         <div class="inspector-pane" data-inspector-pane="world" hidden>
           <div class="details-body world-settings-body" data-world-settings-body></div>
+        </div>
+        <div class="inspector-pane" data-inspector-pane="meshPaint" hidden>
+          <div class="details-body mesh-paint-body" data-mesh-paint-body></div>
         </div>
         <div class="inspector-pane" data-inspector-pane="foliage" hidden>
           <div class="details-body foliage-body" data-foliage-body></div>
@@ -631,6 +642,7 @@ export class EditorUi {
     this.outlinerList = requireElement(this.root, "[data-outliner-list]");
     this.detailsBody = requireElement(this.root, "[data-details-body]");
     this.worldSettingsBody = requireElement(this.root, "[data-world-settings-body]");
+    this.meshPaintBody = requireElement(this.root, "[data-mesh-paint-body]");
     this.foliageBody = requireElement(this.root, "[data-foliage-body]");
     this.statusText = requireElement(this.root, "[data-status]");
     this.undoButton = requireElement(this.root, '[data-action="undo"]');
@@ -653,6 +665,9 @@ export class EditorUi {
     this.app.onWorldSettingsChanged = (settings) => this.renderWorldSettings(settings);
     this.app.onFoliageChanged = () => {
       if (this.inspectorTab === "foliage") this.renderFoliage();
+    };
+    this.app.onMeshPaintChanged = () => {
+      if (this.inspectorTab === "meshPaint") this.renderMeshPaint();
     };
     this.app.onPivotEditModeChanged = () => this.renderDetails(this.selected);
     this.app.onStatus = (message, tone) => this.setStatus(message, tone);
@@ -1086,7 +1101,9 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         const tab = button.dataset.inspectorTab;
-        if (tab === "details" || tab === "world" || tab === "foliage") this.setInspectorTab(tab);
+        if (tab === "details" || tab === "world" || tab === "meshPaint" || tab === "foliage") {
+          this.setInspectorTab(tab);
+        }
       });
     });
 
@@ -3312,7 +3329,80 @@ export class EditorUi {
     // The Foliage tab IS the mode switch: its brush owns pointer input only while
     // the tab is active, so leaving the tab restores normal selection/gizmo input.
     this.app.setFoliageModeActive(tab === "foliage");
+    this.app.setMeshPaintModeActive(tab === "meshPaint");
     if (tab === "foliage") this.renderFoliage();
+    if (tab === "meshPaint") this.renderMeshPaint();
+  }
+
+  /** Scene-level Vertex Color authoring. Material Editor consumes these colors but never edits them. */
+  private renderMeshPaint(): void {
+    const settings = this.app.getMeshPaintToolSettings();
+    const rgb = settings.color
+      .slice(0, 3)
+      .map((value) => Math.round(Math.min(1, Math.max(0, value)) * 255).toString(16).padStart(2, "0"))
+      .join("");
+    const checked = (channel: string): string => settings.channels.includes(channel as "r" | "g" | "b" | "a") ? "checked" : "";
+    this.meshPaintBody.innerHTML = `
+      <div class="detail-section">
+        <div class="detail-section-title">Vertex Colors</div>
+        <div class="detail-hint">Select a static-mesh placement, then paint in the viewport. Data is stored per placement in the level sidecar.</div>
+        <label class="detail-row"><span>Tool</span>
+          <select data-mesh-paint-tool><option value="paint" ${settings.tool === "paint" ? "selected" : ""}>Paint</option><option value="erase" ${settings.tool === "erase" ? "selected" : ""}>Erase</option></select>
+        </label>
+        <label class="detail-row"><span>Color</span><input type="color" value="#${rgb}" data-mesh-paint-color /></label>
+        <label class="detail-row"><span>Alpha</span><input type="number" min="0" max="1" step="0.05" value="${settings.color[3]}" data-mesh-paint-alpha /></label>
+        <label class="detail-row"><span>Brush Size</span><input type="number" min="0.01" step="0.1" value="${settings.brushSize}" data-mesh-paint-size /></label>
+        <label class="detail-row"><span>Strength</span><input type="number" min="0" max="1" step="0.05" value="${settings.strength}" data-mesh-paint-strength /></label>
+        <label class="detail-row"><span>Falloff</span><input type="number" min="0.01" max="32" step="0.1" value="${settings.falloff}" data-mesh-paint-falloff /></label>
+        <div class="detail-row"><span>Channels</span><span>
+          <label><input type="checkbox" value="r" ${checked("r")} data-mesh-paint-channel />R</label>
+          <label><input type="checkbox" value="g" ${checked("g")} data-mesh-paint-channel />G</label>
+          <label><input type="checkbox" value="b" ${checked("b")} data-mesh-paint-channel />B</label>
+          <label><input type="checkbox" value="a" ${checked("a")} data-mesh-paint-channel />A</label>
+        </span></div>
+        <button type="button" data-mesh-paint-fill>Fill Selected Channels</button>
+        <button type="button" data-mesh-paint-clear>Clear Selected Mesh</button>
+      </div>`;
+
+    const numberPatch = (selector: string, key: "brushSize" | "strength" | "falloff"): void => {
+      this.meshPaintBody.querySelector<HTMLInputElement>(selector)?.addEventListener("change", (event) => {
+        this.app.setMeshPaintToolSettings({ [key]: Number((event.currentTarget as HTMLInputElement).value) });
+      });
+    };
+    this.meshPaintBody.querySelector<HTMLSelectElement>("[data-mesh-paint-tool]")?.addEventListener("change", (event) => {
+      this.app.setMeshPaintToolSettings({ tool: (event.currentTarget as HTMLSelectElement).value === "erase" ? "erase" : "paint" });
+    });
+    this.meshPaintBody.querySelector<HTMLInputElement>("[data-mesh-paint-color]")?.addEventListener("change", (event) => {
+      const hex = (event.currentTarget as HTMLInputElement).value.slice(1);
+      const color: [number, number, number, number] = [
+        Number.parseInt(hex.slice(0, 2), 16) / 255,
+        Number.parseInt(hex.slice(2, 4), 16) / 255,
+        Number.parseInt(hex.slice(4, 6), 16) / 255,
+        this.app.getMeshPaintToolSettings().color[3],
+      ];
+      this.app.setMeshPaintToolSettings({ color });
+    });
+    this.meshPaintBody.querySelector<HTMLInputElement>("[data-mesh-paint-alpha]")?.addEventListener("change", (event) => {
+      const current = this.app.getMeshPaintToolSettings().color;
+      this.app.setMeshPaintToolSettings({ color: [current[0], current[1], current[2], Number((event.currentTarget as HTMLInputElement).value)] });
+    });
+    this.meshPaintBody.querySelectorAll<HTMLInputElement>("[data-mesh-paint-channel]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const channels = [...this.meshPaintBody.querySelectorAll<HTMLInputElement>("[data-mesh-paint-channel]:checked")]
+          .map((entry) => entry.value)
+          .filter((value): value is "r" | "g" | "b" | "a" => ["r", "g", "b", "a"].includes(value));
+        this.app.setMeshPaintToolSettings({ channels });
+      });
+    });
+    numberPatch("[data-mesh-paint-size]", "brushSize");
+    numberPatch("[data-mesh-paint-strength]", "strength");
+    numberPatch("[data-mesh-paint-falloff]", "falloff");
+    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-fill]")?.addEventListener("click", () => {
+      this.app.fillSelectedMeshPaint();
+    });
+    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-clear]")?.addEventListener("click", () => {
+      this.app.clearSelectedMeshPaint();
+    });
   }
 
   private renderFoliage(): void {

@@ -24,6 +24,11 @@ export interface EditorInputBindings {
   endLandscapeSculpt(event: PointerEvent): boolean;
   updateLandscapeBrushHover(clientX: number, clientY: number): void;
   clearLandscapeBrushHover(): void;
+  beginMeshPaintStroke(event: PointerEvent): boolean;
+  updateMeshPaintStroke(event: PointerEvent): boolean;
+  endMeshPaintStroke(event: PointerEvent): boolean;
+  updateMeshPaintBrushHover(clientX: number, clientY: number): void;
+  clearMeshPaintBrushHover(): void;
   beginFoliageStroke(event: PointerEvent): boolean;
   updateFoliageStroke(event: PointerEvent): boolean;
   endFoliageStroke(event: PointerEvent): boolean;
@@ -113,6 +118,7 @@ export function bindEditorInputEvents(
       return;
     }
 
+    if (event.button === 0 && bindings.beginMeshPaintStroke(event)) return;
     if (event.button === 0 && bindings.beginFoliageStroke(event)) return;
     if (event.button === 0 && bindings.beginLandscapeSculpt(event)) return;
 
@@ -139,11 +145,13 @@ export function bindEditorInputEvents(
       return;
     }
 
+    if (bindings.updateMeshPaintStroke(event)) return;
     if (bindings.updateFoliageStroke(event)) return;
     if (bindings.updateLandscapeSculpt(event)) return;
 
     const pointerDrag = bindings.pointerDrag();
     if (!pointerDrag) {
+      bindings.updateMeshPaintBrushHover(event.clientX, event.clientY);
       bindings.updateFoliageBrushHover(event.clientX, event.clientY);
       bindings.updateLandscapeBrushHover(event.clientX, event.clientY);
       bindings.updateGizmoHover(event.clientX, event.clientY);
@@ -176,6 +184,9 @@ export function bindEditorInputEvents(
       if (drag) bindings.commitPointerDrag(drag);
       bindings.updateGizmo();
     }
+    if (bindings.endMeshPaintStroke(event)) {
+      bindings.updateGizmo();
+    }
     if (bindings.endFoliageStroke(event)) {
       bindings.updateGizmo();
     }
@@ -186,6 +197,7 @@ export function bindEditorInputEvents(
   on(canvas, "pointerup", clearDrag);
   on(canvas, "pointercancel", clearDrag);
   on(canvas, "pointerleave", () => {
+    bindings.clearMeshPaintBrushHover();
     bindings.clearFoliageBrushHover();
     bindings.clearLandscapeBrushHover();
     bindings.clearGizmoHover();
