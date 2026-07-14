@@ -226,8 +226,8 @@ body.editor-mode #debug-stats {
   flex: 0 0 auto;
 }
 
-/* Play sits directly to the right of the Show menu, so give it a hair of gap. */
-.editor-play-button {
+/* Play split button sits directly to the right of the Show menu. */
+.editor-play-split {
   margin-left: 4px;
 }
 
@@ -257,7 +257,7 @@ body.editor-mode #debug-stats {
 }
 
 .editor-shell .tool-button.active {
-  color: #07120f;
+  color: var(--forge-accent-text);
 }
 
 .editor-shell .tool-button.space-toggle {
@@ -515,11 +515,11 @@ body.editor-mode #debug-stats {
   justify-content: center;
   width: 26px;
   height: 26px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--forge-border-strong);
   border-right: none;
   border-radius: 5px 0 0 5px;
-  background: #2b3136;
-  color: #7c868c;
+  background: var(--forge-bg-3);
+  color: var(--forge-text-dim);
 }
 
 .editor-snaps .snap-icon svg {
@@ -530,24 +530,28 @@ body.editor-mode #debug-stats {
 }
 
 .editor-snaps .snap-widget:hover .snap-icon {
-  background: #394148;
+  background: var(--forge-surface-raise);
+  color: var(--forge-text-secondary);
 }
 
-/* On (snapping enabled) → accent-tinted icon. */
+/* On (snapping enabled) → filled accent highlight so the active state reads at
+   a glance (UI.png). Off = dim icon (rule above). */
 .editor-snaps .snap-widget input:checked + .snap-icon {
-  color: #72d49f;
+  border-color: var(--forge-accent);
+  background: var(--forge-accent-soft);
+  color: var(--forge-accent-hover);
 }
 
 .editor-snaps select {
   height: 26px;
   min-height: 26px;
   min-width: 52px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--forge-border-strong);
   border-radius: 0 5px 5px 0;
   padding: 0 5px;
-  color: #edf2f4;
+  color: var(--forge-text);
   font-size: 12px;
-  background: #2b3136;
+  background: var(--forge-bg-3);
 }
 
 .editor-shell button {
@@ -572,9 +576,14 @@ body.editor-mode #debug-stats {
 
 .editor-shell button.active,
 .editor-shell button.primary {
-  color: #07120f;
-  border-color: #72d49f;
-  background: #72d49f;
+  color: var(--forge-accent-text);
+  border-color: var(--forge-accent);
+  background: var(--forge-accent);
+}
+
+.editor-shell button.primary:hover {
+  border-color: var(--forge-accent-hover);
+  background: var(--forge-accent-hover);
 }
 
 .editor-panel {
@@ -5149,3 +5158,169 @@ body.editor-mode #debug-stats {
   color: var(--forge-text);
 }
 .forge-kebab svg { pointer-events: none; }
+
+/*
+ * ---------------------------------------------------------------------------
+ * Faz 1 — Topbar: brand text, hamburger main menu, World Settings popover
+ * ---------------------------------------------------------------------------
+ */
+
+/* Brand now reads "Forge · <level>" (level name moved next to the product name
+   per the Faz 1 decision). Higher-or-equal specificity than the generic
+   .editor-brand span rule so these win regardless of source order. */
+.editor-brand .editor-brand-text {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  color: var(--forge-text);
+}
+.editor-brand .editor-brand-text strong {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--forge-text);
+}
+.editor-brand .editor-level-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--forge-text-secondary);
+}
+.editor-brand .editor-level-name::before {
+  content: "·";
+  margin-right: 6px;
+  color: var(--forge-text-dim);
+}
+
+/* Hamburger (main menu) button — sits between the brand and the history
+   cluster; inherits the shared .tool-button chrome. */
+.editor-main-menu-button {
+  flex: 0 0 auto;
+}
+
+/* World Settings popover — anchored under the top-left, opened from the
+   hamburger menu (replaces the old inspector "World Settings" tab). */
+.world-settings-popover {
+  position: absolute;
+  top: 50px;
+  left: 8px;
+  z-index: 90;
+  width: 320px;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 66px);
+  overflow-y: auto;
+  border: 1px solid var(--forge-border-mid);
+  border-radius: var(--forge-radius-lg);
+  background: var(--forge-bg-2);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+.world-settings-popover[hidden] {
+  display: none;
+}
+.world-settings-popover-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--forge-border);
+  background: var(--forge-bg-2);
+}
+.world-settings-popover-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--forge-radius-sm);
+  background: transparent;
+  color: var(--forge-text-dim);
+  font-size: 13px;
+  cursor: pointer;
+}
+.world-settings-popover-close:hover {
+  background: var(--forge-border-soft);
+  color: var(--forge-text);
+}
+.world-settings-popover .world-settings-body {
+  padding: 8px 12px 12px;
+}
+
+/* Chevron on a primary (blue) menu button inherits the white text, not the
+   dimmed grey used on ghost menu triggers. */
+.editor-shell .topbar-menu-button.primary .menu-chevron {
+  color: currentColor;
+  opacity: 0.85;
+}
+
+/* Transform tool cluster (Select / Move / Rotate / Scale + World/Local) reads
+   as one segmented control; the active tool is filled with the accent color
+   (rule .editor-shell button.active above). The World/Local space toggle is the
+   5th segment (appended into .editor-tools in buildToolbar). */
+.editor-workbar .editor-tools {
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--forge-border);
+  border-radius: var(--forge-radius-md);
+  background: var(--forge-bg-1);
+}
+.editor-workbar .editor-tools .tool-button {
+  border: 0;
+  background: transparent;
+  border-radius: var(--forge-radius-sm);
+}
+.editor-workbar .editor-tools .tool-button:hover {
+  background: var(--forge-border-soft);
+}
+.editor-workbar .editor-tools .tool-button.space-toggle {
+  margin-left: 2px;
+  /* Thin divider so the space toggle reads as a related-but-separate segment. */
+  border-left: 1px solid var(--forge-border);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+/* Split Play button: primary action (left) + options chevron (right). Both
+   halves carry .primary for the accent fill; a hairline divides them. */
+.editor-play-split {
+  display: inline-flex;
+  align-items: stretch;
+}
+.editor-shell .editor-play-split .editor-play-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0 10px 0 9px;
+  border-radius: var(--forge-radius-md) 0 0 var(--forge-radius-md);
+  font-size: 12px;
+  font-weight: 600;
+}
+.editor-shell .editor-play-split .editor-play-button svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+.editor-shell .editor-play-split .editor-play-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-width: 22px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: 0 var(--forge-radius-md) var(--forge-radius-md) 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.28);
+}
+.editor-shell .editor-play-split .editor-play-more .menu-chevron {
+  color: currentColor;
+  opacity: 0.9;
+}

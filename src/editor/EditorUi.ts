@@ -125,6 +125,7 @@ import {
 } from "./panels/details/environmentDetails";
 import { renderWorldSettingsPanel } from "./panels/world/worldSettingsPanel";
 import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
+import { UI_ICONS } from "./editorIcons";
 import { createFoliageType } from "@engine/scene/foliage";
 import { renderOutlinerPanel } from "./panels/outliner/outlinerPanel";
 import {
@@ -141,7 +142,7 @@ import {
   type ContentTypeFilter,
 } from "./panels/content/contentPanel";
 
-type InspectorTab = "details" | "world" | "meshPaint" | "foliage";
+type InspectorTab = "details" | "meshPaint" | "foliage";
 
 /** Typed assets the Content Browser context menu can create (besides folders). */
 const CONTENT_NEW_ITEMS: ReadonlyArray<{ kind: ContentNewKind; label: string }> = [
@@ -347,6 +348,8 @@ export class EditorUi {
   private transformClipboard: EditableTransform | null = null;
   private contextMenu: HTMLElement | null = null;
   private contextMenuCleanup: (() => void) | null = null;
+  /** Removes the World Settings popover's outside-click / Escape listeners. */
+  private worldSettingsPopoverCleanup: (() => void) | null = null;
   /** Hidden file input reused by the Content Browser Import flow. */
   private importInput: HTMLInputElement | null = null;
   /** Folder the next Import upload targets (set when Import is clicked). */
@@ -369,18 +372,23 @@ export class EditorUi {
         <div class="editor-lead">
           <div class="editor-brand">
             <span class="editor-logo" aria-hidden="true">F</span>
-            <strong data-project-name>loading level</strong>
+            <span class="editor-brand-text">
+              <strong>Forge</strong>
+              <span class="editor-level-name" data-project-name>loading level</span>
+            </span>
           </div>
+          <button type="button" class="tool-button editor-main-menu-button" data-main-menu-button aria-label="Menu" title="Menu">${UI_ICONS.hamburger}</button>
+        </div>
+        <div class="editor-workbar">
           <div class="editor-history-actions">
             <button type="button" class="tool-button" data-action="save" data-testid="editor-save" data-tip="Save Layout" aria-label="Save Layout">${TOOLBAR_ICONS.save}</button>
             <button type="button" class="tool-button" data-action="undo" data-testid="editor-undo" data-tip="Undo" aria-label="Undo">${TOOLBAR_ICONS.undo}</button>
             <button type="button" class="tool-button" data-action="redo" data-testid="editor-redo" data-tip="Redo" aria-label="Redo">${TOOLBAR_ICONS.redo}</button>
             <button type="button" class="tool-button" data-action="delete" data-tip="Delete" aria-label="Delete">${TOOLBAR_ICONS.trash}</button>
           </div>
-        </div>
-        <div class="editor-workbar">
+          <span class="topbar-divider"></span>
           <div class="add-actor-menu">
-            <button type="button" class="topbar-menu-button" data-add-actor-button data-testid="add-actor-button" title="Add actor">+ Add Actor${MENU_CHEVRON}</button>
+            <button type="button" class="topbar-menu-button primary" data-add-actor-button data-testid="add-actor-button" title="Add actor">+ Add Actor${MENU_CHEVRON}</button>
             <div class="add-actor-popover" data-add-actor-popover>
               <div class="add-actor-category">
                 <button type="button" class="add-actor-category-label">Lights</button>
@@ -510,7 +518,10 @@ export class EditorUi {
               <button type="button" data-show-flag="ai-navigation">AI Navigation</button>
             </div>
           </div>
-          <button type="button" class="tool-button editor-play-button" data-action="play" data-testid="editor-play" data-tip="Play — save &amp; open runtime (P)" aria-label="Play" title="Save & open runtime (P)">${TOOLBAR_ICONS.play}</button>
+          <div class="editor-play-split">
+            <button type="button" class="editor-play-button primary" data-action="play" data-testid="editor-play" data-tip="Play — save &amp; open runtime (P)" aria-label="Play" title="Save & open runtime (P)">${TOOLBAR_ICONS.play}<span>Play</span></button>
+            <button type="button" class="editor-play-more primary" data-play-menu aria-label="Play options" title="Play options">${MENU_CHEVRON}</button>
+          </div>
           </div>
         </div>
       </header>
@@ -536,13 +547,6 @@ export class EditorUi {
           <button
             type="button"
             class="inspector-tab"
-            data-inspector-tab="world"
-            role="tab"
-            aria-selected="false"
-          >World Settings</button>
-          <button
-            type="button"
-            class="inspector-tab"
             data-inspector-tab="meshPaint"
             role="tab"
             aria-selected="false"
@@ -557,9 +561,6 @@ export class EditorUi {
         </div>
         <div class="inspector-pane" data-inspector-pane="details">
           <div class="details-body" data-details-body></div>
-        </div>
-        <div class="inspector-pane" data-inspector-pane="world" hidden>
-          <div class="details-body world-settings-body" data-world-settings-body></div>
         </div>
         <div class="inspector-pane" data-inspector-pane="meshPaint" hidden>
           <div class="details-body mesh-paint-body" data-mesh-paint-body></div>
@@ -615,6 +616,12 @@ export class EditorUi {
         </div>
         <div class="content-drawer-status" data-content-status>Loading assets</div>
       </section>
+      <div class="world-settings-popover" data-world-settings-popover role="dialog" aria-label="World Settings" hidden>
+        <div class="world-settings-popover-head">
+          <button type="button" class="world-settings-popover-close" data-world-settings-close aria-label="Close">✕</button>
+        </div>
+        <div class="details-body world-settings-body" data-world-settings-body></div>
+      </div>
       <footer class="editor-status">
         <button type="button" class="content-drawer-toggle" data-content-toggle aria-expanded="false">
           Content Drawer
@@ -651,6 +658,7 @@ export class EditorUi {
 
     this.buildToolbar();
     this.bindActions();
+    this.bindMainMenu();
     this.bindNumericInputSelection();
     this.renderDetails(null);
     this.renderWorldSettings(this.app.getWorldSettings());
@@ -914,6 +922,12 @@ export class EditorUi {
     this.root.querySelector('[data-action="play"]')?.addEventListener("click", () => {
       void this.playTest();
     });
+    this.root.querySelector('[data-play-menu]')?.addEventListener("click", (event) => {
+      this.openContextMenu(event as MouseEvent, [
+        { label: "Play in New Tab", run: () => void this.playTest("newTab") },
+        { label: "Play in Same Tab", run: () => void this.playTest("sameTab") },
+      ]);
+    });
     // Show flags are toggle buttons (active = green) matching the Camera / View
     // Mode option menus, rather than checkboxes.
     this.bindShowFlag("collision", () => this.app.getShowCollision(), (on) =>
@@ -1101,7 +1115,7 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLButtonElement>("[data-inspector-tab]").forEach((button) => {
       button.addEventListener("click", () => {
         const tab = button.dataset.inspectorTab;
-        if (tab === "details" || tab === "world" || tab === "meshPaint" || tab === "foliage") {
+        if (tab === "details" || tab === "meshPaint" || tab === "foliage") {
           this.setInspectorTab(tab);
         }
       });
@@ -1311,7 +1325,7 @@ export class EditorUi {
    * codebase â€” the game is this same app's default route (`/`), so Play just
    * opens it; a project may still override with an external `editor.previewUrl`.
    */
-  private async playTest(): Promise<void> {
+  private async playTest(target: "newTab" | "sameTab" = "newTab"): Promise<void> {
     try {
       await this.app.saveLayout();
     } catch (error) {
@@ -1319,14 +1333,19 @@ export class EditorUi {
       return;
     }
     // Hand the current viewport camera pose to the runtime (default camera mode
-    // starts there). Temporary session override â€” not written to the layout.
+    // starts there). Temporary session override — not written to the layout.
     writePlayCameraPose(this.app.getPlayCameraPose());
     const previewUrl = this.projectInfo?.manifest.editor.previewUrl ?? "/";
+    if (target === "sameTab") {
+      this.setStatus(`Saved. Opening game: ${previewUrl}`, "success");
+      window.location.href = previewUrl;
+      return;
+    }
     const opened = window.open(previewUrl, "_blank", "noopener");
     if (opened) {
       this.setStatus(`Saved. Opening game: ${previewUrl}`, "success");
     } else {
-      this.setStatus(`Saved. Popup blocked â€” open ${previewUrl} manually.`, "warning");
+      this.setStatus(`Saved. Popup blocked — open ${previewUrl} manually.`, "warning");
     }
   }
 
@@ -1581,8 +1600,8 @@ export class EditorUi {
    * Scans the project's `*.actor.json` files and caches each class's name +
    * parent class, then derives the editor pickers that depend on it: the World
    * Settings Game Mode dropdown ({@link projectGameModes}) and (on demand) the
-   * Game Mode "Default Pawn Class" picker. Re-renders the World Settings tab when
-   * the discovered Game Mode set changed.
+   * Game Mode "Default Pawn Class" picker. Re-renders the World Settings panel
+   * when the discovered Game Mode set changed.
    */
   private async refreshProjectActorClasses(): Promise<void> {
     if (!this.assetTreeRoot) return;
@@ -3305,6 +3324,63 @@ export class EditorUi {
     this.contextMenu = null;
   };
 
+  /**
+   * Wires the top-left hamburger (main) menu. It reuses the shared context-menu
+   * infrastructure for its dropdown of level-scoped actions, and the "World
+   * Settings" entry opens a dedicated popover panel (moved out of the inspector
+   * tab strip — see EDITOR_UI_REDESIGN_PLAN Faz 1 decision).
+   */
+  private bindMainMenu(): void {
+    const menuButton = this.root.querySelector<HTMLButtonElement>("[data-main-menu-button]");
+    menuButton?.addEventListener("click", (event) => {
+      this.openContextMenu(event, [
+        { label: "Save Layout", run: () => void this.save() },
+        { label: "Open Level…", run: () => this.setContentDrawerOpen(true) },
+        { separator: true },
+        { label: "World Settings…", run: () => this.openWorldSettingsPopover() },
+      ]);
+    });
+    this.root
+      .querySelector<HTMLButtonElement>("[data-world-settings-close]")
+      ?.addEventListener("click", () => this.closeWorldSettingsPopover());
+  }
+
+  /** Toggles the World Settings popover; renders fresh settings when opening. */
+  private openWorldSettingsPopover(): void {
+    const popover = this.root.querySelector<HTMLElement>("[data-world-settings-popover]");
+    if (!popover) return;
+    if (!popover.hidden) {
+      this.closeWorldSettingsPopover();
+      return;
+    }
+    this.renderWorldSettings(this.worldSettings ?? this.app.getWorldSettings());
+    popover.hidden = false;
+    const menuButton = this.root.querySelector<HTMLElement>("[data-main-menu-button]");
+    const onPointerDown = (pointerEvent: Event): void => {
+      const target = pointerEvent.target as Node;
+      if (!popover.contains(target) && !menuButton?.contains(target)) {
+        this.closeWorldSettingsPopover();
+      }
+    };
+    const onKeyDown = (keyEvent: KeyboardEvent): void => {
+      if (keyEvent.code === "Escape") this.closeWorldSettingsPopover();
+    };
+    // Defer so the opening click doesn't immediately dismiss the popover.
+    window.setTimeout(() => document.addEventListener("pointerdown", onPointerDown), 0);
+    document.addEventListener("keydown", onKeyDown);
+    this.worldSettingsPopoverCleanup = () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }
+
+  private closeWorldSettingsPopover = (): void => {
+    const popover = this.root.querySelector<HTMLElement>("[data-world-settings-popover]");
+    if (popover) popover.hidden = true;
+    this.worldSettingsPopoverCleanup?.();
+    this.worldSettingsPopoverCleanup = null;
+  };
+
   private renderHistory(state: EditorHistoryState): void {
     this.undoButton.disabled = !state.canUndo;
     this.redoButton.disabled = !state.canRedo;
@@ -3326,7 +3402,6 @@ export class EditorUi {
     this.root.querySelectorAll<HTMLElement>("[data-inspector-pane]").forEach((pane) => {
       pane.hidden = pane.dataset.inspectorPane !== tab;
     });
-    if (tab === "world") this.renderWorldSettings(this.worldSettings ?? this.app.getWorldSettings());
     // The Foliage tab IS the mode switch: its brush owns pointer input only while
     // the tab is active, so leaving the tab restores normal selection/gizmo input.
     this.app.setFoliageModeActive(tab === "foliage");

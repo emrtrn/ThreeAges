@@ -48,8 +48,9 @@ görünmeyen öğeler için kullanıcıyla netleşen kararlar:
   tutturulmuş bir popover panel** açar (küçük dropdown menü değil — panel çok
   alanlı). Ayrı bir çark ikonu tercih edilmedi: Content Drawer'ın kendi çark
   (ayarlar) menüsüyle çakışırdı.
-- **Hamburger menü kapsamı (karar):** Save Layout, Open Level, World Settings
-  (popover), Docs — hepsi bugün mevcut eylemler. **New Level / Save As bu
+- **Hamburger menü kapsamı (karar → uygulandı):** Save Layout, Open Level
+  (Content Drawer'ı açar), World Settings (popover). **Docs atlandı** (genel bir
+  hosted docs URL'si yok; uydurma link eklenmedi). **New Level / Save As bu
   plandan hariç** (yeni level-dosyası oluşturma/kopyalama akışı + saveValidator
   dokunuşu gerektiren ayrı iş; ertelendi).
 
@@ -96,45 +97,58 @@ görünmeyen öğeler için kullanıcıyla netleşen kararlar:
 
 Görsel dilin tek kaynağı. DOM yapısına dokunmaz; sonraki tüm fazlar bunu tüketir.
 
-- [ ] `editorUi.css` başına CSS custom property token seti: yüzey renkleri
-      (bg-0/1/2), kenarlık, metin (birincil/ikincil), vurgu mavisi
-      (birincil buton + seçim), başarı/uyarı/hata, border-radius ölçeği,
-      spacing ölçeği, X/Y/Z eksen renkleri.
-- [ ] Mevcut hard-coded renkleri token'lara geçir (mekanik arama-değiştir;
-      görünümde büyük sapma beklenmez, taslak paletine bu adımda yaklaştır).
-- [ ] `TOOLBAR_ICONS` benzeri inline-SVG ikon setini genişlet: aktör tip
-      ikonları (mesh, ışık, atmosfer, bulut, post process, ses, widget…),
-      göz/göz-kapalı, kilit/kilit-açık, filtre, dişli, klasör, arama,
-      hamburger, chevron'lar, viewport kontrol ikonları. Emoji kullanımını
-      (outliner göz/kilit dahil) SVG ile değiştirmeye hazırla.
-- [ ] Ortak kontrol sınıfları: `.btn-primary` (mavi), `.btn-ghost`,
-      segmentli buton grubu, chip/rozet, kebab menü butonu.
-- [ ] Doğrulama: `npx tsc --noEmit` + `npm run smoke:browser` (görünüm
-      değişir, davranış değişmez).
+- [x] `editorUi.css` başına CSS custom property token seti (`:root`): yüzey
+      renkleri (`--forge-bg-0..3`, `surface-raise`), kenarlık (soft/mid/strong),
+      metin (birincil/ikincil/dim), **vurgu mavisi** (`--forge-accent*`),
+      başarı/uyarı/hata, **X/Y/Z eksen renkleri**, border-radius + spacing
+      ölçekleri. (Not: token tanımları büyük-harf hex / boşluksuz rgba yazıldı
+      ki mekanik migration onları kendiyle değiştirmesin.)
+- [x] Mevcut hard-coded renkleri token'lara geçir — ~15 sık renk mekanik olarak
+      geçirildi (346 `var(--forge-*)` kullanımı; değerler korunduğu için görsel
+      nötr).
+- [x] İnline-SVG ikon seti genişletildi → yeni `src/editor/editorIcons.ts`:
+      `ACTOR_TYPE_ICONS` (mesh/ışık/atmosfer/bulut/post-process/ses/widget/
+      volume/terrain/karakter/gameplay/grup/generic), `UI_ICONS` (göz/göz-kapalı,
+      kilit/açık, filtre, dişli, klasör, arama, hamburger, add/import, kebab,
+      refresh, chevron/ok'lar, yıldız, link), `VIEWPORT_ICONS` (pan/orbit/frame/
+      fullscreen). Sonraki fazlar tüketecek (emoji göz/kilit değişimi Faz 3).
+- [x] Ortak kontrol sınıfları: `.forge-btn-primary` (mavi), `.forge-btn-ghost`,
+      `.forge-segmented`, `.forge-chip`, `.forge-kebab` (token tabanlı).
+- [x] Doğrulama: `npx tsc --noEmit` ✅ + `test:engine` 908 ✅ + `build:verify`
+      ✅. DOM'a dokunulmadı; CSS smoke'tan bağımsız olarak aklandı (Faz 0 öncesi
+      baseline de aynı ortamsal timeout'larla takılıyor).
 
 ### Faz 1 — Topbar
 
-- [ ] Sol küme: Forge logosu + "Forge · `level-adı`" ikincil metni (karar:
-      level adı markada kalır; Faz 7 sonrası kirli durumda yıldız) +
-      hamburger menü butonu. Hamburger minimal başlar: Save Layout, Open
-      Level, **World Settings** (popover panel açar — karar), Docs bağlantısı
-      gibi mevcut eylemlerin menü karşılığı (New Level / Save As kapsam dışı,
-      karar). World Settings satırı `renderWorldSettingsPanel` gövdesini
-      hamburger altına tutturulmuş bir popover'da render eder.
-- [ ] Save/Undo/Redo/**Delete** ikon kümesi restyle — Delete kalır (karar).
-- [ ] Add Actor'ı birincil (mavi) buton yap; araç grubu
-      (seç/taşı/döndür/ölçekle + **World/Local 5. ikon**, karar) segmentli
-      görünüm alır, aktif araç dolgulu.
-- [ ] Snap widget'ları ikon + değer dropdown'u görünümüne geçir; **checkbox
-      kalkar, ikona tıklamak aç/kapa toggle olur** (aktifken vurgulu dolgu;
-      karar).
-- [ ] Perspective / Lit / Show menü butonlarını restyle et.
-- [ ] Play: birincil mavi split button — sol yarı mevcut Play davranışı
-      (kaydet + runtime'ı yeni sekmede aç), sağdaki ok küçük menü
-      ("Yeni sekmede oynat" / "Aynı sekmede oynat").
-- [ ] Topbar grid hizasını koru (sol sütun = outliner genişliği); dar
-      ekranda taşma davranışını gözden geçir.
-- [ ] Doğrulama: smoke senaryoları (save/undo/redo/play testid'leri).
+- [x] Sol küme: Forge logosu + "Forge · `level-adı`" ikincil metni (level adı
+      `.editor-level-name`, `data-project-name` korunur) + hamburger menü
+      butonu (`data-main-menu-button`). Hamburger, paylaşılan context-menu
+      altyapısıyla açılır: Save Layout, Open Level (Content Drawer'ı açar),
+      **World Settings** (popover panel açar). **Docs şimdilik atlandı** —
+      Forge'un genel bir docs URL'si yok, uydurma link eklemedim; ileride
+      hosted docs olursa eklenir. New Level / Save As kapsam dışı.
+- [x] Save/Undo/Redo/**Delete** ikon kümesi — token'lı chrome (Delete kalır).
+      **Not:** Lead (260px) hamburger eklenince dar kaldığından history kümesi
+      workbar başına taşındı (UI.png ile de tutarlı: Save outliner sütununun
+      sağında). Aksi halde 260px `overflow:hidden` içinde kırpılıp undo
+      tıklanamıyordu (smoke snapshot ile teşhis edildi).
+- [x] Add Actor birincil (mavi) buton (`.primary`); araç grubu
+      (seç/taşı/döndür/ölçekle + **World/Local 5. ikon**) segmentli görünüm
+      (`.editor-tools` konteyner), aktif araç mavi dolgulu.
+- [x] Snap widget'ları — zaten ikon-toggle + dropdown (checkbox görsel gizli,
+      ikona tıkla toggle); aktif durum accent-mavi vurgulu dolguya geçirildi.
+- [x] Perspective / Lit / Show menü butonları token'lı görünümü miras alır.
+- [x] Play: birincil mavi split button — sol yarı `data-action="play"`
+      (`editor-play` testid korunur, mevcut yeni-sekme davranışı), sağdaki ok
+      (`data-play-menu`) menü açar ("Play in New Tab" / "Play in Same Tab";
+      `playTest("sameTab")` `window.location.href` kullanır).
+- [x] Topbar grid hizası korundu (grid şablonu değişmedi; sol sütun 260px).
+- [~] Doğrulama: `build:verify` (tsc + build + engine 908 + verify:dist
+      --strict) yeşil. `smoke:browser` bu ortamda geçici olarak güvenilmez
+      (dev-server yavaşlığı, 210s timeout'lar — Faz 0'dan bağımsız kanıtlandı);
+      testid sözleşmesi (`editor-save/undo/redo`, `add-actor-button`,
+      `add-shape-cube`, `editor-play`, `editor-status`, `forge-editor`) bilinçli
+      korundu. Ortam yatışınca smoke tekrar koşulmalı.
 
 ### Faz 2 — Add Actor Flyout
 
