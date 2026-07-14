@@ -244,30 +244,33 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
 
 ### Faz 5 — Content Drawer
 
-- [ ] Üst araç çubuğu: `+ Add` (mevcut `/__content-new` akışları),
+- [x] Üst araç çubuğu: `+ Add` (mevcut `/__content-new` akışları),
       `Import` (mevcut), `Save All` → mevcut Save Layout eylemine bağlanır
       (ayrı bir "tüm asset'leri kaydet" sistemi **bu planın kapsamı dışı**).
-- [ ] Geri/ileri gezinme: klasör gezinme geçmişi (basit stack) + ok butonları.
-- [ ] Breadcrumb: `All > Content > …` tıklanabilir yol parçaları (mevcut
+- [x] Geri/ileri gezinme: klasör gezinme geçmişi (basit stack) + ok butonları.
+- [x] Breadcrumb: `All > Content > …` tıklanabilir yol parçaları (mevcut
       yol etiketinin yerine).
-- [ ] Sol ağaca "Favorites" bölümü: klasör context menüsünden ekle/çıkar,
+- [x] Sol ağaca "Favorites" bölümü: klasör context menüsünden ekle/çıkar,
       `localStorage` kalıcılığı.
-- [ ] Arama satırı: arama + huni (filtre) ikonu → mevcut asset tipi
+- [x] Arama satırı: arama + huni (filtre) ikonu → mevcut asset tipi
       filtresi popover olarak.
-- [ ] **Dişli (ayarlar) menüsü** (karar): mevcut Dev Content toggle'ı,
+- [x] **Dişli (ayarlar) menüsü** (karar): mevcut Dev Content toggle'ı,
       drawer kilidi (dışarı tıklayınca kapanmayı engelle), Tall/Short
       yükseklik seçimi ve Refresh buraya taşınır — işlev aynen korunur,
       üst çubuktan kalkar.
-- [ ] Görünüm ikonu: thumbnail boyutu (küçük/orta/büyük).
-- [ ] Kart görünümü: klasör ve asset kartları taslak diline geçer; asset
+- [x] Görünüm ikonu: thumbnail boyutu (küçük/orta/büyük).
+- [x] Kart görünümü: klasör ve asset kartları taslak diline geçer; asset
       kartında alt satır tip etiketi ("Static Mesh", "Material", "Texture",
       "Effect" …); grid üstünde "N items" sayacı. Alt "content-drawer-status"
       satırı kaldırılır; mesajlar ana status bar'a akar (karar).
-- [ ] Drawer başlık çubuğu ("CONTENT DRAWER" + katla/aç) restyle; mevcut
+- [x] Drawer başlık çubuğu ("CONTENT DRAWER" + katla/aç) restyle; mevcut
       aç/kapa davranışı korunur; **status bar'daki "Content Drawer" açma
       butonu kalır** (karar — drawer kapalıyken tek görünür giriş).
-- [ ] Doğrulama: content browser smoke + sürükle-bırak yerleştirme + context
-      menüler regresyonsuz.
+- [~] Doğrulama: content browser smoke + sürükle-bırak yerleştirme + context
+      menüler regresyonsuz. `content-drawer-redesign.spec.ts` toolbar, breadcrumb,
+      gezinme geçmişi ve görünüm boyutu sözleşmesini ekler; hedefli Playwright
+      koşusu önceki Faz 4’teki dev-server başlangıç zaman aşımı giderildiğinde
+      yeniden çalıştırılmalıdır.
 
 ### Faz 6 — Viewport Overlay'leri
 

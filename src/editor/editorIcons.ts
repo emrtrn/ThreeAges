@@ -60,6 +60,7 @@ export const UI_ICONS = {
   gear: S('<circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M14.2 8h-1.6M3.4 8H1.8M12.4 3.6l-1.1 1.1M4.7 11.3l-1.1 1.1M12.4 12.4l-1.1-1.1M4.7 4.7L3.6 3.6"/>'),
   folder: S('<path d="M2.4 4.6h4l1.2 1.4h6v6.4a.6.6 0 0 1-.6.6H3a.6.6 0 0 1-.6-.6z"/>'),
   folderOpen: S('<path d="M2.4 4.6h4l1.2 1.4h6v1.4H2.4z"/><path d="M2.4 7.4h11.9l-1.4 5.2a.6.6 0 0 1-.6.4H3a.6.6 0 0 1-.6-.6z"/>'),
+  grid: S('<rect x="2.6" y="2.6" width="4.2" height="4.2" rx=".6"/><rect x="9.2" y="2.6" width="4.2" height="4.2" rx=".6"/><rect x="2.6" y="9.2" width="4.2" height="4.2" rx=".6"/><rect x="9.2" y="9.2" width="4.2" height="4.2" rx=".6"/>'),
   search: S('<circle cx="7" cy="7" r="4"/><path d="M10 10l3.4 3.4"/>'),
   hamburger: S('<path d="M2.6 4.5h10.8M2.6 8h10.8M2.6 11.5h10.8"/>'),
   add: S('<path d="M8 3.2v9.6M3.2 8h9.6"/>'),

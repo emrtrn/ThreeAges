@@ -332,12 +332,17 @@ export class EditorUi {
   private contentToggle: HTMLButtonElement;
   private contentRootLabel: HTMLElement;
   private contentPathLabel: HTMLElement;
+  private contentItemCount: HTMLElement;
   private contentStatus: HTMLElement;
   private contentSearch: HTMLInputElement;
   private contentTypeFilter: HTMLSelectElement;
   private contentDevelopmentToggle: HTMLInputElement;
-  private contentSizeToggle: HTMLButtonElement;
-  private contentLockToggle: HTMLButtonElement;
+  private contentBackButton: HTMLButtonElement;
+  private contentForwardButton: HTMLButtonElement;
+  private contentFilterButton: HTMLButtonElement;
+  private contentFilterPopover: HTMLElement;
+  private contentSettingsButton: HTMLButtonElement;
+  private contentViewButton: HTMLButtonElement;
   private folderTree: HTMLElement;
   private outlinerList: HTMLDivElement;
   private outlinerSummary: HTMLElement;
@@ -364,18 +369,21 @@ export class EditorUi {
   private projectGameModes: EditorGameModeOption[] = [];
   private selectedFolder = "";
   private collapsedFolderPaths = new Set<string>();
+  /** User-pinned folders, persisted per project for fast Content Drawer access. */
+  private favoriteContentFolders = new Set<string>();
   /** Content Browser asset card highlighted as selected (orange). */
   private selectedAssetId: string | null = null;
   /** Content Browser folder card highlighted as selected. */
   private selectedContentFolderPath: string | null = null;
   /** One-file editor clipboard; Cut remains in memory until a successful paste. */
   private contentClipboard: { path: string; label: string; operation: "copy" | "move" } | null = null;
-  /** Last asset-grid summary status, restored when the selection is cleared. */
-  private contentListStatus = "";
   /** Cached 1x1 transparent image used to suppress the native drag thumbnail. */
   private emptyDragImage: HTMLImageElement | null = null;
   private contentQuery = "";
   private contentType: ContentTypeFilter = CONTENT_FILTER_ALL;
+  private contentNavigationHistory: string[] = [];
+  private contentNavigationIndex = -1;
+  private contentViewSize: "small" | "medium" | "large" = "medium";
   private contentDrawerOpen = false;
   private contentDrawerTall = false;
   /** When locked, the drawer never auto-closes on an outside click or asset drop. */
@@ -573,49 +581,38 @@ export class EditorUi {
       <section class="editor-content-drawer" data-content-drawer aria-hidden="true">
         <div class="content-drawer-top">
           <div class="content-drawer-title">
-            <strong>Content Drawer</strong>
+            <strong>CONTENT DRAWER</strong>
             <span data-content-root>assets</span>
           </div>
-          <input
-            class="content-search"
-            type="search"
-            data-content-search
-            placeholder="Search assets"
-          />
-          <div class="content-filters" data-content-filters>
-            <select class="content-filter" data-content-type-filter aria-label="Asset type">
-              <option value="${CONTENT_FILTER_ALL}">All types</option>
-            </select>
-            <label class="content-dev-toggle" title="Show DevelopmentContent assets">
-              <input type="checkbox" data-content-development-toggle />
-              <span>Dev Content</span>
-            </label>
+          <div class="content-primary-actions">
+            <button type="button" class="forge-btn-primary" data-content-add>${UI_ICONS.add}<span>Add</span></button>
+            <button type="button" class="forge-btn-ghost" data-content-import>${UI_ICONS.import}<span>Import</span></button>
+            <button type="button" class="forge-btn-ghost" data-content-save-all>Save All</button>
           </div>
-          <button
-            type="button"
-            class="content-lock-toggle"
-            data-content-lock-toggle
-            aria-pressed="false"
-            title="Keep the Content Drawer open (do not auto-close on outside click)"
-            aria-label="Lock Content Drawer open"
-          >🔓</button>
-          <button
-            type="button"
-            class="content-size-toggle"
-            data-content-size-toggle
-            aria-pressed="false"
-            title="Toggle drawer height"
-          >Tall</button>
-          <button type="button" data-content-refresh>Refresh</button>
+          <div class="content-navigation" aria-label="Folder navigation">
+            <button type="button" class="forge-btn-ghost" data-content-back aria-label="Back" title="Back">${UI_ICONS.arrowLeft}</button>
+            <button type="button" class="forge-btn-ghost" data-content-forward aria-label="Forward" title="Forward">${UI_ICONS.arrowRight}</button>
+          </div>
+          <div class="content-search-wrap">
+            <input class="content-search" type="search" data-content-search placeholder="Search assets" />
+            <button type="button" class="forge-btn-ghost content-filter-button" data-content-filter-button aria-label="Filter assets" title="Filter assets">${UI_ICONS.filter}</button>
+            <div class="content-filter-popover" data-content-filter-popover hidden>
+              <label>Asset type<select class="content-filter" data-content-type-filter aria-label="Asset type"><option value="${CONTENT_FILTER_ALL}">All types</option></select></label>
+            </div>
+            <input type="checkbox" data-content-development-toggle hidden />
+          </div>
+          <div class="content-drawer-actions">
+            <button type="button" class="forge-btn-ghost" data-content-view aria-label="Change thumbnail size" title="Thumbnail size: Medium">${UI_ICONS.grid}</button>
+            <button type="button" class="forge-btn-ghost" data-content-settings aria-label="Content Drawer settings" title="Content Drawer settings">${UI_ICONS.gear}</button>
+          </div>
         </div>
         <div class="content-drawer-body">
           <nav class="folder-tree" data-folder-tree aria-label="Asset folders"></nav>
           <section class="content-assets">
-            <div class="content-path" data-content-path>assets</div>
+            <div class="content-assets-head"><div class="content-path" data-content-path>assets</div><span class="content-item-count" data-content-item-count>0 items</span></div>
             <div class="content-list" data-content-list></div>
           </section>
         </div>
-        <div class="content-drawer-status" data-content-status>Loading assets</div>
       </section>
       <div class="world-settings-popover" data-world-settings-popover role="dialog" aria-label="World Settings" hidden>
         <div class="world-settings-popover-head">
@@ -640,12 +637,16 @@ export class EditorUi {
     this.contentToggle = requireElement(this.root, "[data-content-toggle]");
     this.contentRootLabel = requireElement(this.root, "[data-content-root]");
     this.contentPathLabel = requireElement(this.root, "[data-content-path]");
-    this.contentStatus = requireElement(this.root, "[data-content-status]");
+    this.contentItemCount = requireElement(this.root, "[data-content-item-count]");
     this.contentSearch = requireElement(this.root, "[data-content-search]");
     this.contentTypeFilter = requireElement(this.root, "[data-content-type-filter]");
     this.contentDevelopmentToggle = requireElement(this.root, "[data-content-development-toggle]");
-    this.contentSizeToggle = requireElement(this.root, "[data-content-size-toggle]");
-    this.contentLockToggle = requireElement(this.root, "[data-content-lock-toggle]");
+    this.contentBackButton = requireElement(this.root, "[data-content-back]");
+    this.contentForwardButton = requireElement(this.root, "[data-content-forward]");
+    this.contentFilterButton = requireElement(this.root, "[data-content-filter-button]");
+    this.contentFilterPopover = requireElement(this.root, "[data-content-filter-popover]");
+    this.contentSettingsButton = requireElement(this.root, "[data-content-settings]");
+    this.contentViewButton = requireElement(this.root, "[data-content-view]");
     this.folderTree = requireElement(this.root, "[data-folder-tree]");
     this.outlinerList = requireElement(this.root, "[data-outliner-list]");
     this.outlinerSummary = requireElement(this.root, "[data-outliner-summary]");
@@ -654,6 +655,7 @@ export class EditorUi {
     this.meshPaintBody = requireElement(this.root, "[data-mesh-paint-body]");
     this.foliageBody = requireElement(this.root, "[data-foliage-body]");
     this.statusText = requireElement(this.root, "[data-status]");
+    this.contentStatus = this.statusText;
     this.undoButton = requireElement(this.root, '[data-action="undo"]');
     this.redoButton = requireElement(this.root, '[data-action="redo"]');
     const projectName = requireElement(this.root, "[data-project-name]");
@@ -962,17 +964,22 @@ export class EditorUi {
       this.setContentDrawerOpen(!this.contentDrawerOpen);
     });
 
-    this.root.querySelector("[data-content-refresh]")?.addEventListener("click", () => {
-      void this.refreshAssetTree();
+    this.root.querySelector<HTMLButtonElement>("[data-content-add]")?.addEventListener("click", (event) => {
+      this.openContentAddMenu(event, this.selectedFolder);
     });
-
-    this.contentSizeToggle.addEventListener("click", () => {
-      this.setContentDrawerTall(!this.contentDrawerTall);
+    this.root.querySelector<HTMLButtonElement>("[data-content-import]")?.addEventListener("click", () => {
+      this.startImport(this.selectedFolder);
     });
-
-    this.contentLockToggle.addEventListener("click", () => {
-      this.setContentDrawerLocked(!this.contentDrawerLocked);
+    this.root.querySelector<HTMLButtonElement>("[data-content-save-all]")?.addEventListener("click", () => {
+      void this.save();
     });
+    this.contentBackButton.addEventListener("click", () => this.navigateContentHistory(-1));
+    this.contentForwardButton.addEventListener("click", () => this.navigateContentHistory(1));
+    this.contentFilterButton.addEventListener("click", () => {
+      this.contentFilterPopover.hidden = !this.contentFilterPopover.hidden;
+    });
+    this.contentSettingsButton.addEventListener("click", (event) => this.openContentSettingsMenu(event));
+    this.contentViewButton.addEventListener("click", () => this.cycleContentViewSize());
 
     // Auto-close on an outside click when the drawer is unlocked. Uses capture +
     // pointerdown so it beats the viewport's own pointer handling; clicks inside
@@ -1010,6 +1017,8 @@ export class EditorUi {
     this.contentTypeFilter.addEventListener("change", () => {
       const value = this.contentTypeFilter.value;
       this.contentType = isContentTypeFilter(value) ? value : CONTENT_FILTER_ALL;
+      this.contentFilterButton.classList.toggle("active", this.contentType !== CONTENT_FILTER_ALL);
+      this.contentFilterPopover.hidden = true;
       this.renderContentAssets();
     });
 
@@ -1223,6 +1232,7 @@ export class EditorUi {
       ]);
       this.syncSnapControls(this.app.getSnapSettings());
       this.projectInfo = projectInfo;
+      this.favoriteContentFolders = this.readFavoriteContentFolders();
       this.metadataSchema = this.app.getMetadataSchema();
       this.editableAssets = assets;
       this.selectedFolder = this.readLastContentFolder() ?? normalizeProjectPath(projectInfo.assetRoot);
@@ -1230,6 +1240,7 @@ export class EditorUi {
       projectName.title = `Active level: ${projectInfo.manifest.editor.defaultScene}`;
       this.contentRootLabel.textContent = this.selectedFolder;
       await this.refreshAssetTree({ quiet: true });
+      this.resetContentNavigationHistory(this.selectedFolder);
     } catch (error) {
       this.contentStatus.textContent = error instanceof Error ? error.message : String(error);
       this.setStatus(this.contentStatus.textContent, "error");
@@ -1261,9 +1272,6 @@ export class EditorUi {
   private setContentDrawerTall(tall: boolean): void {
     this.contentDrawerTall = tall;
     this.contentDrawer.classList.toggle("is-tall", tall);
-    this.contentSizeToggle.classList.toggle("active", tall);
-    this.contentSizeToggle.setAttribute("aria-pressed", String(tall));
-    this.contentSizeToggle.textContent = tall ? "Short" : "Tall";
   }
 
   /**
@@ -1280,12 +1288,34 @@ export class EditorUi {
 
   private setContentDrawerLocked(locked: boolean): void {
     this.contentDrawerLocked = locked;
-    this.contentLockToggle.classList.toggle("active", locked);
-    this.contentLockToggle.setAttribute("aria-pressed", String(locked));
-    this.contentLockToggle.textContent = locked ? "🔒" : "🔓";
-    this.contentLockToggle.title = locked
-      ? "Content Drawer locked open — click to allow auto-close"
-      : "Keep the Content Drawer open (do not auto-close on outside click)";
+  }
+
+  private openContentSettingsMenu(event: MouseEvent): void {
+    this.openContextMenu(event, [
+      {
+        label: this.showDevelopmentContent ? "Hide Development Content" : "Show Development Content",
+        run: () => this.setDevelopmentContentVisible(!this.showDevelopmentContent),
+      },
+      {
+        label: this.contentDrawerLocked ? "Unlock Drawer" : "Lock Drawer Open",
+        run: () => this.setContentDrawerLocked(!this.contentDrawerLocked),
+      },
+      {
+        label: this.contentDrawerTall ? "Use Short Height" : "Use Tall Height",
+        run: () => this.setContentDrawerTall(!this.contentDrawerTall),
+      },
+      { separator: true },
+      { label: "Refresh", run: () => void this.refreshAssetTree() },
+    ]);
+  }
+
+  private cycleContentViewSize(): void {
+    const sizes: Array<typeof this.contentViewSize> = ["small", "medium", "large"];
+    const next = sizes[(sizes.indexOf(this.contentViewSize) + 1) % sizes.length] ?? "medium";
+    this.contentViewSize = next;
+    this.contentDrawer.dataset.contentView = next;
+    this.contentViewButton.title = `Thumbnail size: ${next.slice(0, 1).toUpperCase()}${next.slice(1)}`;
+    this.setStatus(`Content thumbnail size: ${next}.`, "info");
   }
 
   private setDevelopmentContentVisible(visible: boolean): void {
@@ -1505,7 +1535,39 @@ export class EditorUi {
       return;
     }
     this.ensureVisibleSelectedFolder();
-    this.folderTree.replaceChildren(this.createFolderRow(this.assetTreeRoot, 0));
+    const nodes: Node[] = [];
+    const favorites = [...this.favoriteContentFolders]
+      .filter((path) => path !== this.assetTreeRoot?.path)
+      .map((path) => findProjectDir(this.assetTreeRoot?.children ?? [], path))
+      .filter((node): node is ProjectDirNode => Boolean(node && this.shouldShowContentPath(node.path)));
+    if (favorites.length > 0) {
+      const heading = document.createElement("div");
+      heading.className = "folder-section-heading";
+      heading.innerHTML = `${UI_ICONS.star}<span>Favorites</span>`;
+      nodes.push(heading);
+      for (const folder of favorites) nodes.push(this.createFavoriteFolderRow(folder));
+    }
+    const allHeading = document.createElement("div");
+    allHeading.className = "folder-section-heading";
+    allHeading.textContent = "All Content";
+    nodes.push(allHeading, this.createFolderRow(this.assetTreeRoot, 0));
+    this.folderTree.replaceChildren(...nodes);
+  }
+
+  private createFavoriteFolderRow(folder: ProjectDirNode): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "folder-row folder-row-favorite";
+    button.classList.toggle("active", folder.path === this.selectedFolder);
+    button.title = folder.path;
+    button.innerHTML = `<span class="folder-caret">${UI_ICONS.star}</span><span class="folder-name">${escapeHtml(folder.name)}</span>`;
+    button.addEventListener("click", () => this.navigateToContentFolder(folder.path));
+    button.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.openContentFolderContextMenu(event, this.toBrowserFolderItem(folder));
+    });
+    return button;
   }
 
   private createFolderRow(node: ProjectDirNode, depth: number): HTMLElement {
@@ -1562,10 +1624,10 @@ export class EditorUi {
 
   private renderContentAssets(): void {
     if (!this.assetTreeRoot || !this.projectInfo) {
-      this.contentListStatus = renderContentAssetsPanel({
+      renderContentAssetsPanel({
         contentList: this.contentList,
         contentPathLabel: this.contentPathLabel,
-        contentStatus: this.contentStatus,
+        contentItemCount: this.contentItemCount,
         projectLoaded: false,
         rootPath: null,
         selectedFolder: this.selectedFolder,
@@ -1619,10 +1681,10 @@ export class EditorUi {
       .map((file) => this.toBrowserAssetItem(file))
       .filter((item) => this.contentType === CONTENT_FILTER_ALL || item.type === this.contentType)
       .filter((item) => contentItemMatchesQuery(item, this.contentQuery));
-    this.contentListStatus = renderContentAssetsPanel({
+    renderContentAssetsPanel({
       contentList: this.contentList,
       contentPathLabel: this.contentPathLabel,
-      contentStatus: this.contentStatus,
+      contentItemCount: this.contentItemCount,
       projectLoaded: true,
       rootPath: this.assetTreeRoot.path,
       selectedFolder: this.selectedFolder,
@@ -1666,6 +1728,7 @@ export class EditorUi {
           .map((file) => this.toBrowserAssetItem(file))
       : [];
     this.contentType = renderContentFilterOptions(this.contentTypeFilter, allItems, this.contentType);
+    this.contentFilterButton.classList.toggle("active", this.contentType !== CONTENT_FILTER_ALL);
   }
 
   private shouldDisplayAssetFile(file: ProjectDirNode): boolean {
@@ -2140,15 +2203,94 @@ export class EditorUi {
   }
 
   /** Stores the selected folder after project-tree validation, without persisting other Drawer UI state. */
-  private setSelectedContentFolderPath(path: string): void {
+  private setSelectedContentFolderPath(path: string, recordHistory = true): void {
     this.selectedFolder = normalizeProjectPath(path);
     this.saveLastContentFolder();
+    if (recordHistory) this.recordContentNavigation(this.selectedFolder);
+  }
+
+  private resetContentNavigationHistory(path: string): void {
+    this.contentNavigationHistory = [normalizeProjectPath(path)];
+    this.contentNavigationIndex = 0;
+    this.syncContentNavigationControls();
+  }
+
+  private recordContentNavigation(path: string): void {
+    const normalized = normalizeProjectPath(path);
+    if (this.contentNavigationHistory[this.contentNavigationIndex] === normalized) {
+      this.syncContentNavigationControls();
+      return;
+    }
+    this.contentNavigationHistory.splice(this.contentNavigationIndex + 1);
+    this.contentNavigationHistory.push(normalized);
+    this.contentNavigationIndex = this.contentNavigationHistory.length - 1;
+    this.syncContentNavigationControls();
+  }
+
+  private navigateContentHistory(offset: -1 | 1): void {
+    const nextIndex = this.contentNavigationIndex + offset;
+    const nextPath = this.contentNavigationHistory[nextIndex];
+    if (!nextPath) return;
+    this.contentNavigationIndex = nextIndex;
+    this.setSelectedContentFolderPath(nextPath, false);
+    this.clearContentSelection();
+    this.renderFolderTree();
+    this.renderContentAssets();
+    this.syncContentNavigationControls();
+  }
+
+  private syncContentNavigationControls(): void {
+    this.contentBackButton.disabled = this.contentNavigationIndex <= 0;
+    this.contentForwardButton.disabled =
+      this.contentNavigationIndex < 0 || this.contentNavigationIndex >= this.contentNavigationHistory.length - 1;
   }
 
   private contentDrawerLastFolderStorageKey(): string | null {
     if (!this.projectInfo) return null;
     const projectIdentity = `${this.projectInfo.rootName}:${normalizeProjectPath(this.projectInfo.assetRoot)}`;
     return `${CONTENT_DRAWER_LAST_FOLDER_STORAGE_PREFIX}${encodeURIComponent(projectIdentity)}`;
+  }
+
+  private contentDrawerFavoritesStorageKey(): string | null {
+    if (!this.projectInfo) return null;
+    const projectIdentity = `${this.projectInfo.rootName}:${normalizeProjectPath(this.projectInfo.assetRoot)}`;
+    return `forge.contentDrawer.favorites.${encodeURIComponent(projectIdentity)}`;
+  }
+
+  private readFavoriteContentFolders(): Set<string> {
+    const key = this.contentDrawerFavoritesStorageKey();
+    if (!key) return new Set();
+    try {
+      const raw = window.localStorage.getItem(key);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return new Set(
+        Array.isArray(parsed)
+          ? parsed.filter((path): path is string => typeof path === "string").map(normalizeProjectPath)
+          : [],
+      );
+    } catch {
+      return new Set();
+    }
+  }
+
+  private toggleFavoriteContentFolder(path: string): void {
+    const normalized = normalizeProjectPath(path);
+    if (this.favoriteContentFolders.has(normalized)) {
+      this.favoriteContentFolders.delete(normalized);
+    } else {
+      this.favoriteContentFolders.add(normalized);
+    }
+    this.saveFavoriteContentFolders();
+    this.renderFolderTree();
+  }
+
+  private saveFavoriteContentFolders(): void {
+    const key = this.contentDrawerFavoritesStorageKey();
+    try {
+      if (key) window.localStorage.setItem(key, JSON.stringify([...this.favoriteContentFolders]));
+    } catch {
+      // Favorites remain useful for the current session if persistent storage is unavailable.
+    }
   }
 
   private readLastContentFolder(): string | null {
@@ -2178,7 +2320,6 @@ export class EditorUi {
     if (this.selectedAssetId === null && this.selectedContentFolderPath === null) return;
     this.setSelectedAsset(null);
     this.setSelectedContentFolder(null);
-    this.contentStatus.textContent = this.contentListStatus;
   }
 
   /** Right-click menu for a single Content Browser asset card. */
@@ -2234,6 +2375,10 @@ export class EditorUi {
   private openContentFolderContextMenu(event: MouseEvent, item: BrowserFolderItem): void {
     const items: ContextMenuItem[] = [
       { label: "Open", run: () => this.navigateToContentFolder(item.path) },
+      {
+        label: this.favoriteContentFolders.has(item.path) ? "Remove from Favorites" : "Add to Favorites",
+        run: () => this.toggleFavoriteContentFolder(item.path),
+      },
       { separator: true },
       {
         label: "Paste",
@@ -2407,6 +2552,12 @@ export class EditorUi {
           replaceContentPathPrefix(path, item.path, result.path),
         ),
       );
+      this.favoriteContentFolders = new Set(
+        [...this.favoriteContentFolders].map((path) =>
+          replaceContentPathPrefix(path, item.path, result.path),
+        ),
+      );
+      this.saveFavoriteContentFolders();
       this.setStatus(`Renamed folder to ${result.path}`, "success");
       if (result.registered) {
         try {
@@ -2443,6 +2594,10 @@ export class EditorUi {
       this.collapsedFolderPaths = new Set(
         [...this.collapsedFolderPaths].filter((path) => !isSameOrDescendantContentPath(path, item.path)),
       );
+      this.favoriteContentFolders = new Set(
+        [...this.favoriteContentFolders].filter((path) => !isSameOrDescendantContentPath(path, item.path)),
+      );
+      this.saveFavoriteContentFolders();
       this.setStatus(
         `Deleted ${result.path} (${result.deletedFiles} file(s), ${result.removedAssets} asset(s), ${result.cleanedLayouts} level file(s) cleaned)`,
         "success",
@@ -3130,6 +3285,26 @@ export class EditorUi {
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("blur", this.closeContextMenu);
     };
+  }
+
+  /** Toolbar +Add menu: folder and typed-asset creation in the active folder. */
+  private openContentAddMenu(event: MouseEvent, dir: string): void {
+    this.openContextMenu(event, [
+      { label: "New Folder", run: () => void this.createContent("folder", dir) },
+      { separator: true },
+      ...CONTENT_NEW_ITEMS.map((item) => ({
+        label: item.label,
+        run: () => void this.createContent(item.kind, dir),
+      })),
+      { separator: true },
+      {
+        label: "Artificial Intelligence",
+        items: CONTENT_NEW_AI_ITEMS.map((item) => ({
+          label: item.label,
+          run: () => void this.createContent(item.kind, dir),
+        })),
+      },
+    ]);
   }
 
   /** Right-click menu for the Content Browser: New Folder / Import / typed assets. */

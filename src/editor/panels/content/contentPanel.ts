@@ -42,7 +42,7 @@ export type ContentTypeFilter = BrowserAssetItem["type"] | typeof CONTENT_FILTER
 export interface ContentPanelOptions {
   contentList: HTMLDivElement;
   contentPathLabel: HTMLElement;
-  contentStatus: HTMLElement;
+  contentItemCount: HTMLElement;
   projectLoaded: boolean;
   rootPath: string | null;
   selectedFolder: string;
@@ -80,8 +80,10 @@ export interface ContentPanelOptions {
 }
 
 export function renderContentAssetsPanel(options: ContentPanelOptions): string {
-  const { contentList, contentPathLabel, contentStatus } = options;
+  const { contentList, contentPathLabel, contentItemCount } = options;
   if (!options.projectLoaded) {
+    contentPathLabel.textContent = "Content";
+    contentItemCount.textContent = "0 items";
     contentList.innerHTML = `
         <div class="empty-details">
           <strong>No assets</strong>
@@ -94,7 +96,7 @@ export function renderContentAssetsPanel(options: ContentPanelOptions): string {
   const items: BrowserContentItem[] = [...options.folders, ...options.assets];
   const issueCount = options.assets.filter((item) => contentAssetIssues(item).length > 0).length;
 
-  contentPathLabel.textContent = options.selectedFolder || (options.rootPath ?? "");
+  renderContentBreadcrumbs(options);
   const listStatus = formatContentListStatus(
     items.length,
     options.folders.length,
@@ -102,7 +104,7 @@ export function renderContentAssetsPanel(options: ContentPanelOptions): string {
     issueCount,
     options.missingManifestAssetCount,
   );
-  contentStatus.textContent = listStatus;
+  contentItemCount.textContent = `${items.length} item${items.length === 1 ? "" : "s"}`;
 
   if (items.length === 0) {
     contentList.innerHTML = `
@@ -381,7 +383,7 @@ function createFolderCard(options: ContentPanelOptions, item: BrowserFolderItem)
     `;
   card.addEventListener("click", () => {
     options.setSelectedContentFolder(item.path);
-    options.contentStatus.textContent = `${item.label} - Folder`;
+    options.setStatus(`${item.label} - Folder`);
   });
   card.addEventListener("dblclick", (event) => {
     event.preventDefault();
@@ -402,8 +404,42 @@ function showContentAssetDetails(
   issues: readonly BrowserAssetIssue[],
 ): void {
   const prefix = `${item.label} · ${formatContentTypeBadge(item.type)}`;
-  options.contentStatus.textContent =
-    issues.length > 0 ? `${prefix} · ${contentAssetIssueTooltip(issues)}` : `${prefix} · No issues`;
+  options.setStatus(
+    issues.length > 0 ? `${prefix} · ${contentAssetIssueTooltip(issues)}` : `${prefix} · No issues`,
+    issues.length > 0 ? "warning" : "info",
+  );
+}
+
+function renderContentBreadcrumbs(options: ContentPanelOptions): void {
+  const { contentPathLabel, rootPath, selectedFolder } = options;
+  const normalizedRoot = (rootPath ?? selectedFolder).replace(/\/+$/, "");
+  const normalizedSelected = selectedFolder.replace(/\/+$/, "");
+  const suffix = normalizedSelected.startsWith(`${normalizedRoot}/`)
+    ? normalizedSelected.slice(normalizedRoot.length + 1).split("/").filter(Boolean)
+    : [];
+  contentPathLabel.replaceChildren();
+  const appendCrumb = (label: string, path: string): void => {
+    if (contentPathLabel.childNodes.length > 0) {
+      const separator = document.createElement("span");
+      separator.className = "content-breadcrumb-separator";
+      separator.textContent = ">";
+      contentPathLabel.append(separator);
+    }
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "content-breadcrumb";
+    button.textContent = label;
+    button.title = path;
+    button.addEventListener("click", () => options.navigateToContentFolder(path));
+    contentPathLabel.append(button);
+  };
+  appendCrumb("All", normalizedRoot);
+  appendCrumb("Content", normalizedRoot);
+  let current = normalizedRoot;
+  for (const segment of suffix) {
+    current = `${current}/${segment}`;
+    appendCrumb(segment, current);
+  }
 }
 
 function formatContentTypeLabel(value: string): string {
