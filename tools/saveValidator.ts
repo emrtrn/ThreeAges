@@ -37,6 +37,7 @@ import {
   isForgeMaterialPreset,
   isForgeMaterialAlphaMode,
   isForgeMaterialLayerBlendDriver,
+  isForgeMaterialVertexColorChannel,
   isForgeMaterialSide,
   isForgeMaterialType,
   type ForgeMaterialPreset,
@@ -2885,7 +2886,16 @@ function validateForgeMaterialLayerBlend(
   }
   const input = value as Record<string, unknown>;
   if (!isForgeMaterialLayerBlendDriver(input.driver)) {
-    throw new Error("material.layerBlend.driver must be constant, slope, worldHeight, or maskTexture");
+    throw new Error("material.layerBlend.driver must be constant, slope, worldHeight, maskTexture, or vertexColor");
+  }
+  if (
+    input.vertexColorChannel !== undefined &&
+    !isForgeMaterialVertexColorChannel(input.vertexColorChannel)
+  ) {
+    throw new Error("material.layerBlend.vertexColorChannel must be r, g, b, or a");
+  }
+  if (input.invertVertexColor !== undefined && typeof input.invertVertexColor !== "boolean") {
+    throw new Error("material.layerBlend.invertVertexColor must be a boolean");
   }
   const min = validateOptionalNumber(input.min, "material.layerBlend.min", -100000, 100000) ?? 0;
   const max = validateOptionalNumber(input.max, "material.layerBlend.max", -100000, 100000) ?? 1;
@@ -2899,6 +2909,8 @@ function validateForgeMaterialLayerBlend(
     max,
     contrast: validateOptionalNumber(input.contrast, "material.layerBlend.contrast", 0.01, 8) ?? 1,
     maskTexture: explicitMaskTexture ?? (input.driver === "maskTexture" ? legacyMaskTexture : null),
+    ...(input.vertexColorChannel !== undefined ? { vertexColorChannel: input.vertexColorChannel } : {}),
+    ...(input.invertVertexColor !== undefined ? { invertVertexColor: input.invertVertexColor } : {}),
   };
 }
 

@@ -258,6 +258,11 @@ function applyLayerBlendMaterial(
   if (layer1.opacity < 1 || layer1OpacityMap) {
     material.transparent = true;
   }
+  // This enables Three.js' `vColor` varying for the vertex-color blend driver.
+  // Mesh Paint writes a four-component `color` attribute, so alpha is available
+  // when it is selected. Geometries without an RGBA color attribute safely use
+  // zero for the alpha channel in the shader below.
+  if (blend.driver === "vertexColor") material.vertexColors = true;
   material.onBeforeCompile = (shader) => {
     patchLayerBlendShader(shader, blend, {
       layer1Map,
@@ -317,6 +322,10 @@ function patchLayerBlendShader(
   shader.uniforms.forgeLayerMax = { value: blend.max };
   shader.uniforms.forgeLayerContrast = { value: blend.contrast };
   shader.uniforms.forgeLayerDriver = { value: layerBlendDriverIndex(blend.driver) };
+  shader.uniforms.forgeLayerVertexColorChannel = {
+    value: vertexColorChannelIndex(blend.vertexColorChannel),
+  };
+  shader.uniforms.forgeLayerInvertVertexColor = { value: blend.invertVertexColor ? 1 : 0 };
   if (maps.layer1Map) shader.uniforms.forgeLayerMap = { value: maps.layer1Map };
   if (maps.layer1NormalMap) {
     shader.uniforms.forgeLayerNormalMap = { value: maps.layer1NormalMap };
@@ -379,6 +388,8 @@ uniform float forgeLayerMin;
 uniform float forgeLayerMax;
 uniform float forgeLayerContrast;
 uniform int forgeLayerDriver;
+uniform int forgeLayerVertexColorChannel;
+uniform float forgeLayerInvertVertexColor;
 varying vec3 vForgeLayerWorldPosition;
 varying vec3 vForgeLayerWorldNormal;
 #ifdef USE_FORGE_LAYER_MAP
@@ -408,7 +419,7 @@ varying vec3 vForgeLayerWorldNormal;
 // The mask sample is passed in (not read here): this function is injected into
 // <common>, which precedes <uv_pars_fragment>, so \`vUv\` is NOT yet declared at this
 // point. Sampling the mask here compiled to "vUv undeclared" and blanked the material.
-float forgeLayerBlendFactor( float forgeLayerMaskSample ) {
+float forgeLayerBlendFactor( float forgeLayerMaskSample, float forgeLayerVertexColorSample ) {
   float value = forgeLayerAmount;
   if (forgeLayerDriver == 1) {
     value = smoothstep(forgeLayerMin, forgeLayerMax, clamp(dot(normalize(vForgeLayerWorldNormal), vec3(0.0, 1.0, 0.0)), 0.0, 1.0));
@@ -416,6 +427,8 @@ float forgeLayerBlendFactor( float forgeLayerMaskSample ) {
     value = smoothstep(forgeLayerMin, forgeLayerMax, vForgeLayerWorldPosition.y);
   } else if (forgeLayerDriver == 3) {
     value = forgeLayerMaskSample;
+  } else if (forgeLayerDriver == 4) {
+    value = forgeLayerVertexColorSample;
   }
   return clamp(pow(clamp(value, 0.0, 1.0), forgeLayerContrast), 0.0, 1.0);
 }`,
@@ -429,7 +442,25 @@ float forgeLayerMaskSample = 0.0;
 #ifdef USE_FORGE_LAYER_MASKMAP
   forgeLayerMaskSample = texture2D( forgeLayerMaskMap, vUv ).r;
 #endif
-float forgeLayerBlend = forgeLayerBlendFactor( forgeLayerMaskSample );
+// \`vColor\` is declared by Three.js after <common>. Sampling it here (rather
+// than in forgeLayerBlendFactor) keeps the shader valid for every material.
+// Three.js only defines USE_COLOR_ALPHA for a four-component color attribute;
+// treating alpha as zero otherwise preserves layer 0 for unpainted meshes.
+float forgeLayerVertexColorSample = 0.0;
+if (forgeLayerDriver == 4) {
+#if defined( USE_COLOR_ALPHA )
+  if (forgeLayerVertexColorChannel == 0) forgeLayerVertexColorSample = vColor.r;
+  else if (forgeLayerVertexColorChannel == 1) forgeLayerVertexColorSample = vColor.g;
+  else if (forgeLayerVertexColorChannel == 2) forgeLayerVertexColorSample = vColor.b;
+  else forgeLayerVertexColorSample = vColor.a;
+#elif defined( USE_COLOR )
+  if (forgeLayerVertexColorChannel == 0) forgeLayerVertexColorSample = vColor.r;
+  else if (forgeLayerVertexColorChannel == 1) forgeLayerVertexColorSample = vColor.g;
+  else if (forgeLayerVertexColorChannel == 2) forgeLayerVertexColorSample = vColor.b;
+#endif
+  if (forgeLayerInvertVertexColor > 0.5) forgeLayerVertexColorSample = 1.0 - forgeLayerVertexColorSample;
+}
+float forgeLayerBlend = forgeLayerBlendFactor( forgeLayerMaskSample, forgeLayerVertexColorSample );
 vec3 forgeLayerDiffuse = forgeLayerColor;
 #ifdef USE_FORGE_LAYER_MAP
   vec4 forgeLayerSample = texture2D( forgeLayerMap, vUv * forgeLayerTiling );
@@ -511,6 +542,14 @@ function layerBlendDriverIndex(driver: ForgeMaterialLayerBlend["driver"]): numbe
   if (driver === "slope") return 1;
   if (driver === "worldHeight") return 2;
   if (driver === "maskTexture") return 3;
+  if (driver === "vertexColor") return 4;
+  return 0;
+}
+
+function vertexColorChannelIndex(channel: ForgeMaterialLayerBlend["vertexColorChannel"]): number {
+  if (channel === "g") return 1;
+  if (channel === "b") return 2;
+  if (channel === "a") return 3;
   return 0;
 }
 

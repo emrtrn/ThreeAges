@@ -18100,13 +18100,22 @@ check("material save payload requires a material path and canonical fields", () 
       aoIntensity: 2,
     }),
   );
+  const vertexColorDriven = validateForgeMaterialDef({
+    schema: 1,
+    type: "material",
+    materialType: "standard",
+    name: "Vertex Color Driven",
+    layerBlend: { driver: "vertexColor", vertexColorChannel: "a", invertVertexColor: true, layer1: {} },
+  });
+  assert.equal((vertexColorDriven.layerBlend as Record<string, unknown>).vertexColorChannel, "a");
+  assert.equal((vertexColorDriven.layerBlend as Record<string, unknown>).invertVertexColor, true);
   assert.throws(() =>
     validateForgeMaterialDef({
       schema: 1,
       type: "material",
       materialType: "standard",
-      name: "Bad",
-      layerBlend: { driver: "vertexColor", layer1: {} },
+      name: "Bad Vertex Color Channel",
+      layerBlend: { driver: "vertexColor", vertexColorChannel: "orange", layer1: {} },
     }),
   );
   const maskDriven = validateForgeMaterialDef({
@@ -18415,7 +18424,10 @@ check("forge material mapping creates matching Three material types and fields",
   // The blend mask is a whole-surface selector: it samples raw `vUv` (1:1) — where vUv is
   // in scope (at/after <map_fragment>) — never the per-layer detail tiling.
   assert.match(shader.fragmentShader, /texture2D\( forgeLayerMaskMap, vUv \)\.r/);
-  assert.match(shader.fragmentShader, /forgeLayerBlendFactor\( forgeLayerMaskSample \)/);
+  assert.match(
+    shader.fragmentShader,
+    /forgeLayerBlendFactor\( forgeLayerMaskSample, forgeLayerVertexColorSample \)/,
+  );
   assert.equal(layerBlendMaskTexture.repeat.x, 1);
   assert.equal(layerBlendMaskTexture.repeat.y, 1);
   assert.match(shader.fragmentShader, /diffuseColor\.rgb = mix/);
@@ -18426,6 +18438,37 @@ check("forge material mapping creates matching Three material types and fields",
   assert.match(shader.fragmentShader, /ambientOcclusion = mix/);
   assert.match(shader.fragmentShader, /normalize\( mix\( normal/);
   layerBlend.dispose();
+
+  const vertexColorBlend = createThreeMaterialFromForgeDef(
+    normalizeForgeMaterialDef({
+      schema: 1,
+      type: "material",
+      materialType: "standard",
+      name: "Vertex Color Layer Blend",
+      layerBlend: {
+        layer1: {},
+        driver: "vertexColor",
+        vertexColorChannel: "a",
+        invertVertexColor: true,
+      },
+    }),
+  );
+  assert.ok(vertexColorBlend instanceof MeshStandardMaterial);
+  assert.equal(vertexColorBlend.vertexColors, true);
+  assert.match(vertexColorBlend.customProgramCacheKey(), /forge-layer-blend-v1:vertexColor/);
+  const vertexColorShader = {
+    uniforms: {},
+    vertexShader: "#include <common>\nvoid main(){\n#include <worldpos_vertex>\n}",
+    fragmentShader:
+      "#include <common>\nvoid main(){\n#include <map_fragment>\n#include <roughnessmap_fragment>\n#include <metalnessmap_fragment>\n#include <alphamap_fragment>\n#include <emissivemap_fragment>\n#include <aomap_fragment>\n#include <normal_fragment_maps>\n}",
+  } as Parameters<MeshStandardMaterial["onBeforeCompile"]>[0];
+  vertexColorBlend.onBeforeCompile(vertexColorShader, null!);
+  assert.equal((vertexColorShader.uniforms.forgeLayerDriver as { value: number }).value, 4);
+  assert.equal((vertexColorShader.uniforms.forgeLayerVertexColorChannel as { value: number }).value, 3);
+  assert.equal((vertexColorShader.uniforms.forgeLayerInvertVertexColor as { value: number }).value, 1);
+  assert.match(vertexColorShader.fragmentShader, /forgeLayerVertexColorSample/);
+  assert.match(vertexColorShader.fragmentShader, /#if defined\( USE_COLOR_ALPHA \)/);
+  vertexColorBlend.dispose();
 
   const basic = createThreeMaterialFromForgeDef(
     normalizeForgeMaterialDef({

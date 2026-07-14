@@ -22,9 +22,14 @@ export const FORGE_MATERIAL_LAYER_BLEND_DRIVERS = [
   "slope",
   "worldHeight",
   "maskTexture",
+  "vertexColor",
 ] as const;
 export type ForgeMaterialLayerBlendDriver =
   (typeof FORGE_MATERIAL_LAYER_BLEND_DRIVERS)[number];
+
+export const FORGE_MATERIAL_VERTEX_COLOR_CHANNELS = ["r", "g", "b", "a"] as const;
+export type ForgeMaterialVertexColorChannel =
+  (typeof FORGE_MATERIAL_VERTEX_COLOR_CHANNELS)[number];
 
 export interface ForgeMaterialUvTiling {
   x: number;
@@ -57,6 +62,10 @@ export interface ForgeMaterialLayerBlend {
   max: number;
   contrast: number;
   maskTexture: string | null;
+  /** Vertex-color channel used when the blend driver is `vertexColor`. */
+  vertexColorChannel: ForgeMaterialVertexColorChannel;
+  /** Reverses the selected vertex-color channel before layer blending. */
+  invertVertexColor: boolean;
 }
 
 export interface ForgeMaterialDef {
@@ -232,6 +241,15 @@ export function isForgeMaterialLayerBlendDriver(
   );
 }
 
+export function isForgeMaterialVertexColorChannel(
+  value: unknown,
+): value is ForgeMaterialVertexColorChannel {
+  return (
+    typeof value === "string" &&
+    FORGE_MATERIAL_VERTEX_COLOR_CHANNELS.includes(value as ForgeMaterialVertexColorChannel)
+  );
+}
+
 function numberOr(value: unknown, fallback: number): number {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -282,6 +300,10 @@ function layerBlendOrNull(
     max: Math.max(min, max),
     contrast: Math.min(Math.max(numberOr(input.contrast, 1), 0.01), 8),
     maskTexture: explicitMaskTexture ?? (driver === "maskTexture" ? legacyMaskTexture : null),
+    vertexColorChannel: isForgeMaterialVertexColorChannel(input.vertexColorChannel)
+      ? input.vertexColorChannel
+      : "r",
+    invertVertexColor: input.invertVertexColor === true,
   };
 }
 

@@ -1,5 +1,6 @@
 import {
   AmbientLight,
+  BufferAttribute,
   Color,
   DirectionalLight,
   GridHelper,
@@ -17,6 +18,7 @@ import {
 import {
   FORGE_MATERIAL_ALPHA_MODES,
   FORGE_MATERIAL_LAYER_BLEND_DRIVERS,
+  FORGE_MATERIAL_VERTEX_COLOR_CHANNELS,
   FORGE_MATERIAL_SIDES,
   FORGE_MATERIAL_TYPES,
   normalizeForgeMaterialDef,
@@ -115,7 +117,9 @@ export class MaterialEditor {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera = new PerspectiveCamera(32, 1, 0.01, 100);
-  private readonly sphere = new Mesh(new SphereGeometry(0.9, 64, 40));
+  // The preview deliberately carries an RGBA gradient so the Vertex Color
+  // driver remains inspectable before a level placement has been painted.
+  private readonly sphere = new Mesh(createPreviewSphereGeometry());
   private readonly textureLoader = new TextureLoader();
   private readonly loadedTextures: Texture[] = [];
   private readonly controls: OrbitControls;
@@ -511,6 +515,14 @@ export class MaterialEditor {
             ? `<label class="me-row"><span>Blend Mask</span><select data-me-field="layerBlendMaskTexture">${this.textureOptions("layerBlendMaskTexture")}</select></label>`
             : ""
         }
+        ${
+          blend.driver === "vertexColor"
+            ? `
+              <label class="me-row"><span>Vertex Channel</span><select data-me-field="layerBlendVertexColorChannel">${this.enumOptions(FORGE_MATERIAL_VERTEX_COLOR_CHANNELS, blend.vertexColorChannel)}</select></label>
+              <label class="me-row"><span>Invert Vertex Color</span><input data-me-field="layerBlendInvertVertexColor" type="checkbox" ${blend.invertVertexColor ? "checked" : ""} /></label>
+            `
+            : ""
+        }
         ${this.layerNumberRow("Blend Amount", "layerBlendAmount", blend.amount, 0, 1, 0.01)}
         <label class="me-row">
           <span>Blend Min + Max</span>
@@ -693,6 +705,8 @@ export class MaterialEditor {
     else if (field === "layer1UvTilingX") next.layer1.uvTiling = { ...next.layer1.uvTiling, x: numberInput(input.value, 0.001, 100) };
     else if (field === "layer1UvTilingY") next.layer1.uvTiling = { ...next.layer1.uvTiling, y: numberInput(input.value, 0.001, 100) };
     else if (field === "layerBlendDriver") next.driver = input.value as ForgeMaterialLayerBlendDriver;
+    else if (field === "layerBlendVertexColorChannel") next.vertexColorChannel = input.value as ForgeMaterialLayerBlend["vertexColorChannel"];
+    else if (field === "layerBlendInvertVertexColor") next.invertVertexColor = input instanceof HTMLInputElement && input.checked;
     else if (field === "layerBlendAmount") next.amount = numberInput(input.value, 0, 1);
     else if (field === "layerBlendMin") next.min = numberInput(input.value, -100000, 100000);
     else if (field === "layerBlendMax") next.max = numberInput(input.value, -100000, 100000);
@@ -939,7 +953,26 @@ function defaultLayerBlend(current: ForgeMaterialLayerBlend | null): ForgeMateri
     max: current?.max ?? 1,
     contrast: current?.contrast ?? 1,
     maskTexture: current?.maskTexture ?? null,
+    vertexColorChannel: current?.vertexColorChannel ?? "r",
+    invertVertexColor: current?.invertVertexColor ?? false,
   };
+}
+
+function createPreviewSphereGeometry(): SphereGeometry {
+  const geometry = new SphereGeometry(0.9, 64, 40);
+  const position = geometry.getAttribute("position");
+  const colors = new Float32Array(position.count * 4);
+  for (let index = 0; index < position.count; index += 1) {
+    const x = position.getX(index) / 1.8 + 0.5;
+    const y = position.getY(index) / 1.8 + 0.5;
+    const offset = index * 4;
+    colors[offset] = x;
+    colors[offset + 1] = y;
+    colors[offset + 2] = 1 - x;
+    colors[offset + 3] = y;
+  }
+  geometry.setAttribute("color", new BufferAttribute(colors, 4));
+  return geometry;
 }
 
 function isLayerTextureField(field: string): field is
