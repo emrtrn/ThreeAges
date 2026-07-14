@@ -126,7 +126,11 @@ import { renderWorldSettingsPanel } from "./panels/world/worldSettingsPanel";
 import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
 import { UI_ICONS, ACTOR_TYPE_ICONS, type ActorTypeIcon } from "./editorIcons";
 import { createFoliageType } from "@engine/scene/foliage";
-import { renderOutlinerPanel } from "./panels/outliner/outlinerPanel";
+import {
+  OUTLINER_FILTER_TYPES,
+  renderOutlinerPanel,
+  type OutlinerFilterType,
+} from "./panels/outliner/outlinerPanel";
 import {
   CONTENT_FILTER_ALL,
   contentItemMatchesQuery,
@@ -336,6 +340,7 @@ export class EditorUi {
   private contentLockToggle: HTMLButtonElement;
   private folderTree: HTMLElement;
   private outlinerList: HTMLDivElement;
+  private outlinerSummary: HTMLElement;
   private detailsBody: HTMLDivElement;
   private worldSettingsBody: HTMLDivElement;
   private meshPaintBody!: HTMLDivElement;
@@ -379,6 +384,9 @@ export class EditorUi {
   private contentRefreshTimer = 0;
   private outlinerObjects: EditableSceneObject[] = [];
   private outlinerFilter = "";
+  private outlinerVisibleTypes = new Set<OutlinerFilterType>(
+    OUTLINER_FILTER_TYPES.map(({ type }) => type),
+  );
   private selected: EditableSelection | null = null;
   /** Cached skeletal clip names per asset id, for the character Animation dropdown. */
   private readonly characterClipCache = new Map<string, readonly string[]>();
@@ -510,7 +518,15 @@ export class EditorUi {
         </div>
       </header>
       <aside class="editor-panel editor-outliner">
-        <div class="panel-title">Scene Outliner</div>
+        <div class="outliner-header">
+          <div class="panel-title">Scene Outliner</div>
+          <button type="button" class="forge-btn-ghost outliner-filter-button" data-outliner-filter-button
+            data-testid="outliner-filter" aria-label="Filter scene objects" aria-expanded="false" title="Filter scene objects">${UI_ICONS.filter}</button>
+          <div class="outliner-filter-popover" data-outliner-filter-popover hidden>
+            <strong>Show types</strong>
+            ${OUTLINER_FILTER_TYPES.map(({ type, label }) => `<label><input type="checkbox" data-outliner-type-filter="${type}" checked />${label}</label>`).join("")}
+          </div>
+        </div>
         <input
           class="outliner-search"
           type="search"
@@ -518,6 +534,7 @@ export class EditorUi {
           placeholder="Search"
         />
         <div class="outliner-list" data-outliner-list></div>
+        <div class="outliner-summary" data-outliner-summary data-testid="outliner-summary"></div>
       </aside>
       <aside class="editor-panel editor-details">
         <div class="inspector-tabs" role="tablist" aria-label="Inspector">
@@ -631,6 +648,7 @@ export class EditorUi {
     this.contentLockToggle = requireElement(this.root, "[data-content-lock-toggle]");
     this.folderTree = requireElement(this.root, "[data-folder-tree]");
     this.outlinerList = requireElement(this.root, "[data-outliner-list]");
+    this.outlinerSummary = requireElement(this.root, "[data-outliner-summary]");
     this.detailsBody = requireElement(this.root, "[data-details-body]");
     this.worldSettingsBody = requireElement(this.root, "[data-world-settings-body]");
     this.meshPaintBody = requireElement(this.root, "[data-mesh-paint-body]");
@@ -1031,6 +1049,37 @@ export class EditorUi {
         this.renderOutliner(this.outlinerObjects);
       },
     );
+
+    const outlinerFilterButton = this.root.querySelector<HTMLButtonElement>("[data-outliner-filter-button]");
+    const outlinerFilterPopover = this.root.querySelector<HTMLElement>("[data-outliner-filter-popover]");
+    const setOutlinerFilterPopoverOpen = (open: boolean): void => {
+      if (!outlinerFilterButton || !outlinerFilterPopover) return;
+      outlinerFilterPopover.hidden = !open;
+      outlinerFilterButton.setAttribute("aria-expanded", String(open));
+    };
+    outlinerFilterButton?.addEventListener("click", () => {
+      setOutlinerFilterPopoverOpen(outlinerFilterPopover?.hidden ?? false);
+    });
+    this.root.querySelectorAll<HTMLInputElement>("[data-outliner-type-filter]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const type = input.dataset.outlinerTypeFilter as OutlinerFilterType | undefined;
+        if (!type || !OUTLINER_FILTER_TYPES.some((entry) => entry.type === type)) return;
+        if (input.checked) this.outlinerVisibleTypes.add(type);
+        else this.outlinerVisibleTypes.delete(type);
+        outlinerFilterButton?.classList.toggle(
+          "is-filtered",
+          this.outlinerVisibleTypes.size !== OUTLINER_FILTER_TYPES.length,
+        );
+        this.renderOutliner(this.outlinerObjects);
+      });
+    });
+    window.addEventListener("pointerdown", (event) => {
+      if (!outlinerFilterPopover || outlinerFilterPopover.hidden) return;
+      if (!this.root.contains(event.target as Node)) return;
+      if (!(event.target as HTMLElement).closest("[data-outliner-filter-button], [data-outliner-filter-popover]")) {
+        setOutlinerFilterPopoverOpen(false);
+      }
+    });
 
     window.addEventListener("keydown", (event) => this.handleKeyDown(event));
   }
@@ -2899,8 +2948,10 @@ export class EditorUi {
     this.outlinerObjects = objects;
     renderOutlinerPanel({
       body: this.outlinerList,
+      summary: this.outlinerSummary,
       objects,
       filter: this.outlinerFilter,
+      visibleTypes: this.outlinerVisibleTypes,
       selectSceneObject: (id, options) => this.app.selectSceneObject(id, options),
       renameSceneObject: (id, name) => this.app.renameSceneObject(id, name),
       setSceneObjectHidden: (id, hidden) => this.app.setSceneObjectHidden(id, hidden),

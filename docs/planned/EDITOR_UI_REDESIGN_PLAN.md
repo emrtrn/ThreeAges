@@ -189,16 +189,23 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
 
 ### Faz 3 — Scene Outliner
 
-- [ ] Başlık çubuğu: "SCENE OUTLINER" + sağda filtre ikonu (tip bazlı
-      filtre popover'ı — ışık/mesh/volume vb. göster-gizle).
-- [ ] Satırlar: aktör tip ikonu (Faz 0 setinden) + ad + sağda SVG göz/kilit
-      (emoji kalkar); seçili satır mavi vurgu; hover durumları.
-- [ ] Alt bilgi satırı: "N actors (M selected)" — seçim/sahne değişiminde
-      güncellenir.
-- [ ] Hiyerarşi girintisi ve grup satırları yeni görsel dile uyarlanır;
-      drag-to-parent davranışı regresyonsuz.
-- [ ] Doğrulama: outliner'a dokunan smoke adımları + göz/kilit tıklama
-      davranışı.
+- [x] Başlık çubuğu: "SCENE OUTLINER" + sağda filtre ikonu (tip bazlı
+      filtre popover'ı — mesh/character/light/environment/volume/terrain/gameplay/widget
+      ailelerini göster-gizle).
+- [x] Satırlar: aktör tip ikonu (Faz 0 setinden) + ad + sağda SVG göz/kilit
+      (emoji kalktı); seçili satır mavi vurgu; hover durumları.
+- [x] Alt bilgi satırı: "N actors (M selected)" — scene-object render akışında
+      güncellenir; seçim değişimi aynı akıştan yeni Outliner görünümünü alır.
+- [x] Hiyerarşi girintisi ve grup satırları yeni görsel dile uyarlandı;
+      drag-to-parent olay bağları korunmuştur. UI.png karşılaştırması sonrası
+      satır yüzeyleri kart/çerçeve yerine ince ayraçlı yoğun listeye çekildi;
+      tip ikonlarının arka plan kutusu kaldırıldı.
+- [~] Doğrulama: `npm.cmd run build:verify` ✅ (TypeScript + import sınırları +
+      Vite build + engine 908 + strict dist). Yeni `tests/smoke/outliner.spec.ts`,
+      göz/kilit, sayaç ve mesh filtresini kapsar. Hedefli Playwright koşusu bu
+      ortamda iki kez başlangıçtaki seviye yüklemesinde 30 sn içinde Outliner satırı
+      üretmeden zaman aşımına uğradı; mevcut dev-server/smoke gecikmesi giderilince
+      yeniden çalıştırılmalı.
 
 ### Faz 4 — Details Paneli
 
