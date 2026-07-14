@@ -158,6 +158,11 @@ import {
 import type { RenderMemoryStats } from "@engine/render-three/renderer";
 import type { SubsystemProfileSnapshot } from "@engine/core/subsystemProfiler";
 import { FrameMetricsMonitor, type FrameMetrics } from "@engine/perf/frameMetrics";
+import {
+  applyQualityToPostProcess,
+  resolveQualitySettings,
+  type QualitySettings,
+} from "@engine/perf/qualityProfiles";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import { attachActorLight } from "@engine/render-three/lights";
 import {
@@ -706,6 +711,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Skips one frame-time sample after the tab regains focus (drops the rAF
    * catch-up delta so a visibility change is not miscounted as a spike). */
   private skipFrameMetricSample = false;
+  /** Active runtime quality profile. Defaults to Ultra so behaviour is identical
+   * to the pre-quality-layer runtime until a profile is applied (Principle #2:
+   * this only ever gates authored effects down, never writes layout data). */
+  private qualitySettings: QualitySettings = resolveQualitySettings("ultra");
   private activeProject: ActiveProject | null = null;
   private assetLoader: AssetLoader | null = null;
   private layout: RoomLayout | null = null;
@@ -1280,6 +1289,25 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Windowed frame-time stats (avg / P95 / spikes) over the 5 s decision window. */
   getFrameMetricsSnapshot(): FrameMetrics {
     return this.frameMetrics.metrics();
+  }
+
+  /** The active runtime quality profile (defaults to Ultra). */
+  getQualitySettings(): QualitySettings {
+    return this.qualitySettings;
+  }
+
+  /**
+   * Central quality applier (Faz 2). Sets the active profile and re-resolves the
+   * runtime accordingly, without ever writing layout/authored data (Principle
+   * #2). Today it drives the post-process chain (GTAO / DoF / bloom / SMAA gate
+   * off through {@link applyQualityToPostProcess}); render-scale, shadow,
+   * particle-density and foliage-cull knobs land in follow-up Faz 2 slices as
+   * each subsystem grows its runtime setter. Runtime-only: the editor SceneApp
+   * never calls this, so the editor viewport is unaffected.
+   */
+  applyQualitySettings(settings: QualitySettings): void {
+    this.qualitySettings = settings;
+    this.applyRuntimePostProcess();
   }
 
   /** Per-subsystem tick timing for the `?debug` overlay, or null when profiling is off. */
@@ -4663,7 +4691,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Applies global Post Process renderer properties after Sky tone mapping. */
   private applyRuntimePostProcess(): void {
     const actor = this.layout?.postProcess ?? null;
-    const resolved = actor ? resolvePostProcess(actor) : null;
+    // Gate authored post-process through the active quality profile before it
+    // reaches the renderer: quality only turns effects OFF (Principle #2), so a
+    // null (no authored actor) stays null — quality never enables anything.
+    const authored = actor ? resolvePostProcess(actor) : null;
+    const resolved = authored ? applyQualityToPostProcess(authored, this.qualitySettings) : null;
     applyPostProcessToneMapping(this.renderer, resolved);
     this.applyRuntimeSkyPostProcessExposure(resolved);
     if (!hasPostProcessEffectPasses(resolved)) {

@@ -958,10 +958,11 @@ texture limiti — bu fazın DIŞINDA; bkz. §11 ve Faz 7.)
 
 ### Yapılacaklar
 
-- [ ] `engine/perf/qualityProfiles.ts` — profil tanımları + pure çözümleme
-      (profil → efektif QualitySettings; authored post-process ile birleşme
-      kuralı: kalite yalnız kapatır/kısar, İlke #2) + testler
-- [ ] Ultra / High / Medium / Low template profillerini tanımla; `Custom` durumu
+- [x] ~~`engine/perf/qualityProfiles.ts` — profil tanımları + pure çözümleme~~
+      (`resolveQualitySettings` fresh-copy + custom-over-base; `applyQualityToPostProcess`
+      İlke #2 birleşme: yalnız kapatır, null→null) + testler (2 check)
+- [x] ~~Ultra / High / Medium / Low template profillerini tanımla; `Custom` durumu~~
+      (`QUALITY_PROFILES` + `QUALITY_LEVELS` ladder; `Custom` = base + partial override)
 - [ ] Uygulayıcı adapter (src/scene): render scale — renderer + composer
       boyutunu birlikte ölçekle (`setSize`/`setPixelRatio` etkileşimine dikkat)
 - [ ] Pixel ratio üst sınırını `MAX_PIXEL_RATIO` sabitinden profile taşı
@@ -969,10 +970,12 @@ texture limiti — bu fazın DIŞINDA; bkz. §11 ve Faz 7.)
       sabit mapSize'ı profile bağla (mapSize değişiminde
       `light.shadow.map.dispose()` + null'lama gerekir) + shadow camera
       boyutuna `shadowDistanceScale`
-- [ ] AO (GTAO) / DoF / Bloom / SMAA gate'lerini bağla: efektif
-      `ResolvedPostProcess` üzerinden pass'leri yeniden kur (mevcut
-      `setEffectPasses` bu rebuild'i zaten destekliyor); Bloom yarım
-      çözünürlük seçeneği
+- [~] AO (GTAO) / DoF / Bloom / SMAA gate'lerini bağla: **gate kısmı bağlandı** —
+      `RuntimeSceneApp.applyRuntimePostProcess` authored `ResolvedPostProcess`'i
+      `applyQualityToPostProcess` ile geçirip mevcut `setEffectPasses` rebuild'ini
+      kullanıyor; merkezi giriş `applyQualitySettings()` (default Ultra = davranış
+      aynı). **Kalan:** Bloom yarım çözünürlük (`bloomResolutionScale` →
+      `UnrealBloomPass` boyutu, `createPostProcessEffectPasses` param'ı)
 - [ ] Partikül yoğunluğunu bağla: vfx subsystem'a global `particleDensity`
       çarpanı (spawn rate + `maxParticles`'a uygulanır)
 - [ ] Foliage cull distance çarpanını bağla (foliage Faz 2 cull-fade işiyle
@@ -980,8 +983,8 @@ texture limiti — bu fazın DIŞINDA; bkz. §11 ve Faz 7.)
 - [ ] Ayar değişiminin güvenliği: pass rebuild / shadow map dispose /
       composer resize tek bir "apply" noktasında, frame sınırında yapılır;
       art arda değişimler debounce edilir
-- [ ] Editor viewport'u etkilenmez: kalite katmanı yalnız runtime'da
-      (`RuntimeSceneApp`) devrededir; adaptif sistem editörde çalışmaz
+- [x] ~~Editor viewport'u etkilenmez~~: `applyQualitySettings` yalnız
+      `RuntimeSceneApp`'te; editör SceneApp bu metodu taşımaz
 
 ### Çıkış kriteri
 

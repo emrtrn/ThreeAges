@@ -320,6 +320,12 @@ import {
 } from "../engine/perf/perfBudget";
 import { FrameMetricsMonitor } from "../engine/perf/frameMetrics";
 import {
+  QUALITY_LEVELS,
+  QUALITY_PROFILES,
+  applyQualityToPostProcess,
+  resolveQualitySettings,
+} from "../engine/perf/qualityProfiles";
+import {
   computeGltfGeometry,
   computeGltfTextures,
   evaluateGlbThresholds,
@@ -14582,6 +14588,66 @@ check("frame metrics: clamps skew and drops non-finite deltas", () => {
   assert.equal(m.sampleCount, 2);
   assert.equal(m.averageFrameTimeMs, 10); // (0 + 20) / 2
   assert.equal(monitor.frames, 2); // only the two finite deltas counted
+});
+
+check("quality profiles: resolve returns fresh copies and layers custom over a base", () => {
+  // Concrete levels return a copy, never the shared profile object.
+  const high = resolveQualitySettings("high");
+  assert.notEqual(high, QUALITY_PROFILES.high);
+  assert.deepEqual(high, QUALITY_PROFILES.high);
+  high.renderScale = 0.1; // mutating the copy must not corrupt the template
+  assert.equal(QUALITY_PROFILES.high.renderScale, 1.0);
+
+  // The ladder runs highest → lowest for adaptive stepping.
+  assert.deepEqual(QUALITY_LEVELS, ["ultra", "high", "medium", "low"]);
+  // Render scale and pixel-ratio cap are monotonically non-increasing.
+  const scales = QUALITY_LEVELS.map((l) => QUALITY_PROFILES[l].renderScale);
+  const caps = QUALITY_LEVELS.map((l) => QUALITY_PROFILES[l].maxPixelRatio);
+  for (let i = 1; i < scales.length; i += 1) {
+    assert.ok(scales[i]! <= scales[i - 1]!);
+    assert.ok(caps[i]! <= caps[i - 1]!);
+  }
+
+  // Custom layers overrides onto the base (default medium); untouched fields keep the base.
+  const custom = resolveQualitySettings("custom", { renderScale: 0.5, aoAllowed: true });
+  assert.equal(custom.renderScale, 0.5);
+  assert.equal(custom.aoAllowed, true);
+  assert.equal(custom.shadowMapSize, QUALITY_PROFILES.medium.shadowMapSize);
+  // An explicit base level can override the default.
+  const fromLow = resolveQualitySettings("custom", { bloomAllowed: true }, "low");
+  assert.equal(fromLow.shadowsEnabled, false); // low's shadows stay off
+  assert.equal(fromLow.bloomAllowed, true);
+});
+
+check("quality profiles: post-process merge only gates off, never re-authors (Principle #2)", () => {
+  const authoredOn = {
+    ...POST_PROCESS_DEFAULTS,
+    antialias: "smaa" as const,
+    bloom: { ...POST_PROCESS_DEFAULTS.bloom, enabled: true, intensity: 2.5 },
+    dof: { ...POST_PROCESS_DEFAULTS.dof, enabled: true },
+    ao: { ...POST_PROCESS_DEFAULTS.ao, enabled: true },
+  };
+  // Low disallows AO/DoF/SMAA (bloom too); all authored-on effects gate off.
+  const gated = applyQualityToPostProcess(authoredOn, QUALITY_PROFILES.low);
+  assert.equal(gated.ao.enabled, false);
+  assert.equal(gated.dof.enabled, false);
+  assert.equal(gated.bloom.enabled, false);
+  assert.equal(gated.antialias, "none");
+  // Numeric authored params pass through untouched (gate, don't re-author).
+  assert.equal(gated.bloom.intensity, 2.5);
+  // Ultra allows everything, so authored-on stays on.
+  const full = applyQualityToPostProcess(authoredOn, QUALITY_PROFILES.ultra);
+  assert.equal(full.ao.enabled, true);
+  assert.equal(full.dof.enabled, true);
+  assert.equal(full.bloom.enabled, true);
+  assert.equal(full.antialias, "smaa");
+
+  // Author left everything OFF: even Ultra must NOT turn anything on.
+  const allowMax = applyQualityToPostProcess(POST_PROCESS_DEFAULTS, QUALITY_PROFILES.ultra);
+  assert.equal(allowMax.ao.enabled, false);
+  assert.equal(allowMax.dof.enabled, false);
+  assert.equal(allowMax.bloom.enabled, false);
+  assert.equal(allowMax.antialias, "none");
 });
 
 check("debug overlay: formats the frame-time line from a metrics snapshot", () => {
