@@ -437,6 +437,7 @@ export class EditorUi {
     this.root.dataset.testid = "forge-editor";
     this.root.addEventListener("contextmenu", (event) => event.preventDefault());
     this.root.innerHTML = `
+      <div class="editor-viewport-frame" aria-hidden="true"></div>
       <header class="editor-topbar">
         <div class="editor-lead">
           <div class="editor-brand">

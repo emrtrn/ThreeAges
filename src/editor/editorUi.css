@@ -6178,7 +6178,25 @@ body.editor-mode #debug-stats {
     --content-drawer-height: clamp(232px, 34vh, 420px);
   }
 
+  .editor-viewport-frame {
+    position: absolute;
+    top: calc(var(--editor-gap) + var(--editor-topbar-height) + var(--editor-gap));
+    right: calc(var(--editor-details-width) + (var(--editor-gap) * 2));
+    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 2));
+    left: calc(var(--editor-outliner-width) + (var(--editor-gap) * 2));
+    z-index: 1;
+    pointer-events: none;
+    border: 1px solid #303a43;
+    border-radius: 4px;
+    box-shadow: 0 0 0 100vmax #0b1014, 0 10px 22px rgba(0, 0, 0, 0.32);
+  }
+
+  .editor-shell.content-drawer-open .editor-viewport-frame {
+    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 3) + var(--content-drawer-height));
+  }
+
   .editor-topbar {
+    z-index: 50;
     inset: var(--editor-gap) var(--editor-gap) auto;
     height: var(--editor-topbar-height);
     grid-template-columns: var(--editor-outliner-width) minmax(0, 1fr);
@@ -6209,13 +6227,14 @@ body.editor-mode #debug-stats {
 
   .editor-details {
     right: var(--editor-gap);
+    bottom: var(--editor-gap);
     width: var(--editor-details-width);
     border-left-width: 1px;
     background: linear-gradient(180deg, #171e24 0%, #111820 100%);
   }
 
   .editor-status {
-    inset: auto var(--editor-gap) var(--editor-gap);
+    right: calc(var(--editor-details-width) + (var(--editor-gap) * 2));
     height: var(--editor-status-height);
     border: 1px solid #2a333b;
     border-radius: 4px;

@@ -99,6 +99,12 @@ görünmeyen öğeler için kullanıcıyla netleşen kararlar:
       çerçeveli toolbar/panel kartları; viewport da Outliner ve Details arasında
       bağımsız bir çalışma paneli olarak çerçevelenir. Content Drawer açıkken
       viewport alt panele kadar kısalır.
+- [x] Alt sınır düzeltmesi: kapalı Content Drawer/status bar yalnız sol-orta
+      çalışma alanında kalır; Details paneli ekran altına kadar iner. Viewport
+      bu bara kadar biter ve alt köşe fillet'i görünür kalır.
+- [x] Viewport maskesi: çerçeve dışındaki canvas alanı koyu çalışma zeminiyle
+      maskelenir; Details arkasında, sağ boşlukta veya alt sınırda viewport
+      çizimi görünmez.
 
 Görsel dilin tek kaynağı. DOM yapısına dokunmaz; sonraki tüm fazlar bunu tüketir.
 
