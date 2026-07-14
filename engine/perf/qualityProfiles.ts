@@ -68,9 +68,10 @@ export interface QualitySettings {
 }
 
 /**
- * Extension settings whose mechanism is not built yet (Faz 7) or is fork-owned.
- * Template profiles do **not** write these; the schema exists so a fork can
- * override with its own distance-LOD / NPC-budget / texture-streaming systems.
+ * Extension settings whose mechanism is Phase-7 optional or fork-owned. AI and
+ * far-animation cadence have generic runtime appliers; scene chunking, LOD,
+ * NPC budgets and texture streaming remain fork-specific. Template profiles do
+ * **not** write these; a fork opts in with values appropriate to its world scale.
  */
 export interface QualityExtensions {
   viewDistanceMultiplier?: number;

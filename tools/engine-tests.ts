@@ -323,6 +323,11 @@ import {
 } from "../engine/perf/perfBudget";
 import { FrameMetricsMonitor, type FrameMetrics } from "../engine/perf/frameMetrics";
 import {
+  consumeDistanceUpdateDelta,
+  isFarFromFocus,
+  normalizedFarUpdateInterval,
+} from "../engine/perf/distanceUpdateRate";
+import {
   QUALITY_LEVELS,
   QUALITY_PROFILES,
   applyQualityToPostProcess,
@@ -2262,6 +2267,57 @@ check("animation subsystem ticks mixers with engine deltaSeconds", () => {
   animation.clear();
   app.update(0.1);
   assert.deepEqual(deltas, [0.5, 0.25]);
+});
+
+check("Phase 7 distance update cadence preserves near updates and batches far work", () => {
+  assert.equal(normalizedFarUpdateInterval({ farUpdateHz: 10 }), 0.1);
+  assert.equal(normalizedFarUpdateInterval({ farUpdateHz: 0 }), null);
+  assert.equal(isFarFromFocus(900, { farDistance: 30 }), true);
+  assert.equal(isFarFromFocus(899.9, { farDistance: 30 }), false);
+  assert.equal(
+    consumeDistanceUpdateDelta({
+      deltaSeconds: 0.04,
+      accumulatedSeconds: 0.04,
+      isFar: true,
+      settings: { farUpdateHz: 10 },
+    }),
+    0,
+  );
+  assert.equal(
+    consumeDistanceUpdateDelta({
+      deltaSeconds: 0.03,
+      accumulatedSeconds: 0.08,
+      isFar: true,
+      settings: { farUpdateHz: 10 },
+    }),
+    0.11,
+  );
+  assert.equal(
+    consumeDistanceUpdateDelta({
+      deltaSeconds: 0.016,
+      accumulatedSeconds: 0.04,
+      isFar: false,
+      settings: { farUpdateHz: 10 },
+    }),
+    0.056,
+  );
+
+  const deltas: number[] = [];
+  const mixer = { update: (delta: number) => deltas.push(delta) } as unknown as AnimationMixer;
+  const animation = new AnimationSubsystem();
+  animation.add(mixer, { distanceSquared: () => 10_000 });
+  animation.setDistanceUpdateSettings({ farUpdateHz: 10, farDistance: 30 });
+  const app = new EngineApp();
+  app.registerSubsystem(animation);
+  app.update(0.04);
+  app.update(0.04);
+  app.update(0.03);
+  assert.deepEqual(deltas, [0.11]);
+
+  // Removing the optional extension immediately restores exact per-frame work.
+  animation.setDistanceUpdateSettings({});
+  app.update(0.02);
+  assert.deepEqual(deltas, [0.11, 0.02]);
 });
 
 // 6.1.2 The action map turns raw codes into named-action pressed/held/released
@@ -26659,6 +26715,47 @@ check("AISubsystem resolves blackboard and behavior assets, ticks runner, and em
   const behavior = ai.getDebugSnapshot().controllers[0]?.behavior;
   assert.equal(behavior?.lastStatus, "success");
   assert.equal(behavior?.lastTask, "forge.sendMessage");
+});
+
+check("AISubsystem Phase 7 cadence slows only far decision and perception ticks", () => {
+  const messages: string[] = [];
+  let focus: [number, number, number] = [100, 0, 0];
+  const ai = new AISubsystem({
+    qualityFocusPosition: () => focus,
+    emitMessage: (message) => messages.push(message.type),
+  });
+  ai.setAssetLibrary({
+    behaviors: new Map([
+      [
+        "assets/AI/Far.behavior.json",
+        normalizeAiBehaviorTreeAsset({
+          schema: 1,
+          type: "behaviorTree",
+          root: { kind: "task", task: "forge.sendMessage", params: { type: "far.tick" } },
+        }),
+      ],
+    ]),
+  });
+  ai.setEntities([
+    {
+      id: "far-enemy",
+      components: {
+        Transform: { position: [0, 0, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        [AI_CONTROLLER_COMPONENT]: { behaviorTree: "assets/AI/Far.behavior.json" },
+      },
+    },
+  ]);
+  ai.setDistanceUpdateSettings({ farUpdateHz: 10, farDistance: 30 });
+  ai.update({ deltaSeconds: 0.04, elapsedSeconds: 0.04, frame: 1 });
+  ai.update({ deltaSeconds: 0.04, elapsedSeconds: 0.08, frame: 2 });
+  assert.deepEqual(messages, []);
+  ai.update({ deltaSeconds: 0.03, elapsedSeconds: 0.11, frame: 3 });
+  assert.deepEqual(messages, ["far.tick"]);
+
+  // Once the NPC returns to the focus area it immediately resumes normal ticks.
+  focus = [0, 0, 0];
+  ai.update({ deltaSeconds: 0.02, elapsedSeconds: 0.13, frame: 4 });
+  assert.deepEqual(messages, ["far.tick", "far.tick"]);
 });
 
 check("formatAiDebug renders controller count, goal + blackboard size, tagging disabled", () => {

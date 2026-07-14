@@ -165,6 +165,7 @@ import {
   isQualityLevel,
   resolveQualitySettings,
   type GraphicsPreferences,
+  type QualityExtensions,
   type QualityLevel,
   type QualitySettings,
 } from "@engine/perf/qualityProfiles";
@@ -599,6 +600,8 @@ export interface RuntimeSceneAppOptions {
   readonly scriptMessageTraceLimit?: number;
   /** `?debug`: logs boot/travel load timing + asset counts to the console. */
   readonly debug?: boolean;
+  /** Optional fork-owned Phase 7 content-quality settings (never authored layout data). */
+  readonly qualityExtensions?: QualityExtensions;
 }
 
 /** Mounts the dialogue subtitle overlay into `#ui-overlay`, or null when absent. */
@@ -647,6 +650,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     taskRegistry: createGameAiTaskRegistry(),
     blockers: () => this.physicsSubsystem.staticBlockerAabbs(),
     perceptionSourceFilter: (entity) => this.isAiPerceptionSource(entity),
+    qualityFocusPosition: () => this.qualityFocusPosition(),
   });
   private readonly aiPathFollowing = new Map<string, RuntimeAiPathFollowing>();
   /**
@@ -767,6 +771,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * to the pre-quality-layer runtime until a profile is applied (Principle #2:
    * this only ever gates authored effects down, never writes layout data). */
   private qualitySettings: QualitySettings = resolveQualitySettings("ultra");
+  /** Fork-provided Phase 7 content scaling; template profiles deliberately omit it. */
+  private qualityExtensions: QualityExtensions = {};
   /** Adaptive quality controller (Faz 6). Owns the player's profile as its base
    * ceiling and layers transient runtime reductions over it (never persisted,
    * never above the ceiling). Constructed once the profile is resolved in the
@@ -1008,6 +1014,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.userSettings.graphics.selectedQualityLevel,
       this.userSettings.graphics.customSettings,
     );
+    if (options.qualityExtensions) this.applyQualityExtensions(options.qualityExtensions);
     // Startup calibration (Faz 4): a fresh player who has never picked a profile
     // gets a hardware-hinted starting profile now, and arms a one-time
     // first-gameplay measurement pass. A manual choice or a prior calibration
@@ -1384,6 +1391,25 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** The active runtime quality profile (defaults to Ultra). */
   getQualitySettings(): QualitySettings {
     return this.qualitySettings;
+  }
+
+  /**
+   * Applies the optional Phase 7 content-quality hooks supplied by a game fork.
+   * These values are runtime-only and intentionally separate from the template
+   * profiles: Forge has no universal NPC population, world scale or LOD policy.
+   */
+  applyQualityExtensions(extensions: QualityExtensions): void {
+    this.qualityExtensions = { ...extensions };
+    this.aiSubsystem.setDistanceUpdateSettings(
+      extensions.aiUpdateHz !== undefined ? { farUpdateHz: extensions.aiUpdateHz } : {},
+    );
+    this.animationSubsystem.setDistanceUpdateSettings(
+      extensions.farAnimationUpdateHz !== undefined ? { farUpdateHz: extensions.farAnimationUpdateHz } : {},
+    );
+  }
+
+  getQualityExtensions(): Readonly<QualityExtensions> {
+    return this.qualityExtensions;
   }
 
   /**
@@ -3714,7 +3740,11 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         ref.placement.animation,
         ref.skeleton?.rootMotion,
       );
-      if (mixer) this.animationSubsystem.add(mixer);
+      if (mixer) {
+        this.animationSubsystem.add(mixer, {
+          distanceSquared: () => ref.object.position.distanceToSquared(this.camera.position),
+        });
+      }
     }
   }
 
@@ -3731,7 +3761,9 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     );
     if (initial.kind === "blend") animator.playBlend(initial.weights);
     else if (initial.clip) animator.play(initial.clip, 0);
-    this.animationSubsystem.add(animator.mixer);
+    this.animationSubsystem.add(animator.mixer, {
+      distanceSquared: () => ref.object.position.distanceToSquared(this.camera.position),
+    });
     this.aiCharacterAnimators.set(ref.entityId, { ref, animator, config, oneShot: null });
   }
 
@@ -3807,6 +3839,15 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!entity) return null;
     const transform = readTransformComponent(entity);
     return transform ? cloneTransform(transform) : null;
+  }
+
+  /** Possessed pawn is the gameplay focus; camera position is the safe fallback during boot. */
+  private qualityFocusPosition(): readonly [number, number, number] {
+    const pawnEntityId = this.gameModeSession?.playerState.pawnEntityId;
+    const transform = pawnEntityId ? this.transformForEntity(pawnEntityId) : null;
+    return transform
+      ? [transform.position[0], transform.position[1], transform.position[2]]
+      : [this.camera.position.x, this.camera.position.y, this.camera.position.z];
   }
 
   private transformForCharacterEntity(entityId: string): TransformComponent | null {

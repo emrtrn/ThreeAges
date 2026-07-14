@@ -1216,10 +1216,21 @@ ihtiyaç kanıtlandıkça (profiler verisiyle) çekilir — hepsi önkoşul değ
 
 ### Yapılacaklar
 
-- [ ] NPC AI için distance-based update sistemi kur (AI subsystem bugün her
-      frame tick'ler) → `aiUpdateHz` alanını canlandırır
-- [ ] Uzak karakter animasyonları için düşük frekanslı mixer update
-      → `farAnimationUpdateHz`
+- [x] ~~NPC AI için distance-based update sistemi kur (AI subsystem bugün her
+      frame tick'ler) → `aiUpdateHz` alanını canlandırır~~ (`AISubsystem`
+      `setDistanceUpdateSettings`: runtime'ın possessed-pawn focus'undan 30u+
+      uzaktaki controller'lar, fork `RuntimeSceneApp` `qualityExtensions`
+      seçeneğinde `QualityExtensions.aiUpdateHz` verdiğinde
+      biriken delta ile düşük frekansta decision + perception tick alır; yakın
+      NPC'ler ve extension vermeyen fork'lar eski her-frame davranışını korur.
+      Deterministik engine testi kapsar.)
+- [x] ~~Uzak karakter animasyonları için düşük frekanslı mixer update
+      → `farAnimationUpdateHz`~~ (`AnimationSubsystem`
+      `setDistanceUpdateSettings` + mixer başına kamera-uzaklığı callback'i;
+      runtime `qualityExtensions` içinde `QualityExtensions.farAnimationUpdateHz`
+      verilirse uzak mixer
+      biriken delta ile güncellenir, yakına dönünce hemen normal tick'e döner.
+      Editör hiçbir zaman bu extension'ı uygulamaz.)
 - [ ] Chunk bazlı sahne aktivasyonu (foliage Faz 2 chunking işiyle ortak
       altyapı — önce foliage'da kanıtla, sonra genelle)
 - [ ] Statik tekrar eden prop'larda `InstancedMesh` / mesh merge stratejisi

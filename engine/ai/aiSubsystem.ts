@@ -43,6 +43,11 @@ import { SmartObjectReservationStore } from "./smartObjects";
 import { createTargetPointIndex, type TargetPointEntry, type TargetPointIndex } from "./targetPoints";
 import type { SplineRegistry } from "../scene/splineRegistry";
 import {
+  consumeDistanceUpdateDelta,
+  isFarFromFocus,
+  type DistanceUpdateRateSettings,
+} from "../perf/distanceUpdateRate";
+import {
   AiBehaviorRunner,
   createDefaultAiServiceRegistry,
   createDefaultAiTaskRegistry,
@@ -95,7 +100,12 @@ export interface AISubsystemOptions {
   readonly perceptionSourceFilter?: (entity: Entity) => boolean;
   /** Runtime Generic Spline facade consumed by spline patrol tasks. */
   readonly splineRegistry?: SplineRegistry;
+  /** Runtime-owned focus point (normally the possessed pawn); absent = no throttling. */
+  readonly qualityFocusPosition?: () => readonly [number, number, number] | null;
 }
+
+/** Optional Phase 7 quality extension. Empty settings retain every-frame AI. */
+export interface AiDistanceUpdateSettings extends DistanceUpdateRateSettings {}
 
 export interface AiScriptStimulusInput {
   readonly type: string;
@@ -122,6 +132,9 @@ export class AISubsystem implements Subsystem {
   private blockers: (() => readonly PerceptionAabb[]) | undefined;
   private perceptionSourceFilter: ((entity: Entity) => boolean) | undefined;
   private splineRegistry: SplineRegistry | undefined;
+  private qualityFocusPosition: (() => readonly [number, number, number] | null) | undefined;
+  private distanceUpdateSettings: AiDistanceUpdateSettings = {};
+  private runnerAccumulatedSeconds = new Map<EntityId, number>();
   private entities: readonly Entity[] = [];
   private pendingNoises: NoiseStimulus[] = [];
   private pendingScriptStimuli: ScriptStimulus[] = [];
@@ -151,6 +164,7 @@ export class AISubsystem implements Subsystem {
     this.blockers = options.blockers;
     this.perceptionSourceFilter = options.perceptionSourceFilter;
     this.splineRegistry = options.splineRegistry;
+    this.qualityFocusPosition = options.qualityFocusPosition;
   }
 
   configure(options: AISubsystemOptions): void {
@@ -161,6 +175,17 @@ export class AISubsystem implements Subsystem {
     if (options.blockers) this.blockers = options.blockers;
     if (options.perceptionSourceFilter) this.perceptionSourceFilter = options.perceptionSourceFilter;
     if (options.splineRegistry) this.splineRegistry = options.splineRegistry;
+    if (options.qualityFocusPosition) this.qualityFocusPosition = options.qualityFocusPosition;
+  }
+
+  /**
+   * Enables the optional far-NPC cadence.  It only affects controllers for
+   * which the host can resolve a focus point; no focus, invalid Hz or an empty
+   * configuration all preserve the pre-Phase-7 every-frame update.
+   */
+  setDistanceUpdateSettings(settings: AiDistanceUpdateSettings): void {
+    this.distanceUpdateSettings = { ...settings };
+    this.runnerAccumulatedSeconds.clear();
   }
 
   setAssetLibrary(library: AiAssetLibrary): void {
@@ -194,6 +219,7 @@ export class AISubsystem implements Subsystem {
     this.entities = entities;
     this.pendingNoises = [];
     this.pendingScriptStimuli = [];
+    this.runnerAccumulatedSeconds.clear();
     this.sightGrace.clear();
     this.smartObjects.setEntities(entities);
     for (const entity of entities) {
@@ -251,8 +277,12 @@ export class AISubsystem implements Subsystem {
       return;
     }
     this.smartObjects.expire(engine.elapsedSeconds);
-    this.updatePerception(engine.deltaSeconds);
-    for (const entry of this.runners.values()) entry.runner.tick(engine);
+    const dueDeltas = this.dueRunnerDeltas(engine.deltaSeconds);
+    this.updatePerception(dueDeltas);
+    for (const [pawnEntityId, entry] of this.runners) {
+      const deltaSeconds = dueDeltas.get(pawnEntityId) ?? 0;
+      if (deltaSeconds > 0) entry.runner.tick({ ...engine, deltaSeconds });
+    }
     this.pendingNoises = [];
     this.pendingScriptStimuli = [];
   }
@@ -302,6 +332,7 @@ export class AISubsystem implements Subsystem {
     this.pendingNoises = [];
     this.pendingScriptStimuli = [];
     this.sightGrace.clear();
+    this.runnerAccumulatedSeconds.clear();
     this.smartObjects.clear();
     this.targetPoints = createTargetPointIndex([]);
   }
@@ -370,10 +401,38 @@ export class AISubsystem implements Subsystem {
     }
   }
 
-  private updatePerception(deltaSeconds: number): void {
+  private dueRunnerDeltas(deltaSeconds: number): Map<EntityId, number> {
+    const due = new Map<EntityId, number>();
+    const focus = this.qualityFocusPosition?.() ?? null;
+    for (const pawnEntityId of this.controllers.keys()) {
+      const entity = this.entities.find((candidate) => candidate.id === pawnEntityId);
+      const transform = entity ? readTransformComponent(entity) : undefined;
+      const distanceSquared = focus && transform
+        ? squaredDistance(transform.position, focus)
+        : null;
+      const accumulatedSeconds = this.runnerAccumulatedSeconds.get(pawnEntityId) ?? 0;
+      const scheduledDelta = consumeDistanceUpdateDelta({
+        deltaSeconds,
+        accumulatedSeconds,
+        isFar: isFarFromFocus(distanceSquared, this.distanceUpdateSettings),
+        settings: this.distanceUpdateSettings,
+      });
+      if (scheduledDelta > 0) {
+        due.set(pawnEntityId, scheduledDelta);
+        this.runnerAccumulatedSeconds.delete(pawnEntityId);
+      } else {
+        this.runnerAccumulatedSeconds.set(pawnEntityId, accumulatedSeconds + Math.max(0, deltaSeconds));
+      }
+    }
+    return due;
+  }
+
+  private updatePerception(dueDeltas: ReadonlyMap<EntityId, number>): void {
     const sources = perceptionSources(this.entities, this.perceptionSourceFilter);
     const blockers = this.blockers?.() ?? [];
     for (const [pawnEntityId, controller] of this.controllers) {
+      const deltaSeconds = dueDeltas.get(pawnEntityId);
+      if (!deltaSeconds) continue;
       const entity = this.entities.find((candidate) => candidate.id === pawnEntityId);
       const transform = entity ? readTransformComponent(entity) : undefined;
       const config = controller.perceptionConfig;
@@ -607,6 +666,13 @@ function vec3FromUnknown(value: unknown): [number, number, number] | null {
 
 function planarDistance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
   return Math.hypot(b[0] - a[0], b[2] - a[2]);
+}
+
+function squaredDistance(a: readonly [number, number, number], b: readonly [number, number, number]): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const dz = b[2] - a[2];
+  return dx * dx + dy * dy + dz * dz;
 }
 
 function positiveFinite(value: number | undefined): number {
