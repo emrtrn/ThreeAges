@@ -565,36 +565,35 @@ Bu faz görsel veya genel altyapı projesine dönüşmemelidir.
 
 ### Dokümantasyon
 
-- [ ] GDD dosyalarının `GDD/` (repo kökü) konumunu ve çapraz-bağlantıları doğrula. (Not: belgeler `docs/gdd/`'ye taşınmaz; repo `docs/architecture/` ve `GDD/` ayrımını korur.)
-- [ ] `GDD_MASTER.md` bağlantılarını güncelle.
-- [ ] Yeni AI belgesini ana kaynak olarak işaretle.
-- [ ] Bu planı sürüm 0.2 olarak ana üretim planı yap.
-- [ ] `OPEN_QUESTIONS.md` oluştur veya güncelle.
-- [ ] `TECH_DECISIONS.md` oluştur.
-- [ ] `SCOPE_LOG.md` oluştur.
+- [x] GDD dosyalarının `GDD/` (repo kökü) konumunu ve çapraz-bağlantıları doğrula. (Not: belgeler `docs/gdd/`'ye taşınmaz; repo `docs/architecture/` ve `GDD/` ayrımını korur.)
+- [x] `GDD_MASTER.md` bağlantılarını güncelle.
+- [x] Yeni AI belgesini ana kaynak olarak işaretle. (`GDD_MASTER §4.8`)
+- [x] Bu planı sürüm 0.2 olarak ana üretim planı yap. (`GDD_MASTER §14, §15`)
+- [x] `TECH_DECISIONS.md` oluşturuldu (`GDD/TECH_DECISIONS.md`).
+- [x] `SCOPE_LOG.md` oluştur. (`GDD/SCOPE_LOG.md`)
 
 ### Proje temeli
 
-- [ ] TypeScript strict mode’u doğrula.
-- [ ] Build, lint ve test komutlarını doğrula.
-- [ ] Runtime hata yakalama ekle.
-- [ ] Basit log kategorileri oluştur.
-- [ ] Debug ve release config’lerini ayır.
-- [ ] Feature flag sistemini kur.
+- [x] TypeScript strict mode’u doğrula. (`tsconfig.json` strict + noUncheckedIndexedAccess vb.)
+- [x] Build, lint ve test komutlarını doğrula. (`npm run build` / `test:engine` / `build:verify`; lint görevini `tsc --noEmit` üstlenir.)
+- [x] Runtime hata yakalama ekle. (`src/game/core/errorHandler.ts`)
+- [x] Basit log kategorileri oluştur. (`src/game/core/logger.ts`)
+- [x] Debug ve release config’lerini ayır. (`src/game/core/runtimeConfig.ts`)
+- [x] Feature flag sistemini kur. (`src/game/core/featureFlags.ts`)
 
 ### Veri
 
-- [ ] Temel JSON loader oluştur.
-- [ ] ID ve referans doğrulaması ekle.
-- [ ] `gameplay_proof` presetini oluştur.
-- [ ] `debug_fast` presetini oluştur.
-- [ ] Build sürümü ve balance sürümü tanımla.
+- [x] Temel JSON loader oluştur. (`src/game/data/gameDataLoader.ts`)
+- [x] ID ve referans doğrulaması ekle. (`src/game/data/validateGameData.ts`)
+- [x] `gameplay_proof` presetini oluştur. (`public/game-data/presets/gameplay_proof.json`)
+- [x] `debug_fast` presetini oluştur. (`public/game-data/presets/debug_fast.json`)
+- [x] Build sürümü ve balance sürümü tanımla. (`public/game-data/version.json`)
 
 ### Test
 
-- [ ] Tek komutla çalışan test akışı oluştur.
-- [ ] Basit smoke test sahnesi ekle.
-- [ ] Hatalı JSON için başarısız test ekle.
+- [x] Tek komutla çalışan test akışı oluştur. (`npm run test:engine`)
+- [x] Basit smoke test sahnesi ekle. (`test:engine` preset smoke check'leri + mevcut `npm run smoke:browser`)
+- [x] Hatalı JSON için başarısız test ekle. (`test:engine`: bilinmeyen flag / id uyuşmazlığı / eksik alan → `throw`)
 
 ---
 
@@ -611,12 +610,12 @@ Bu faz görsel veya genel altyapı projesine dönüşmemelidir.
 
 ## 19. Kabul Kriterleri
 
-- [ ] Proje tek komutla build oluyor.
-- [ ] Hatalı veri açık hata veriyor.
-- [ ] Feature flag’ler runtime’da okunabiliyor.
-- [ ] Debug preset oyun hızını artırabiliyor.
-- [ ] GDD ve üretim belgeleri proje içinden erişilebilir.
-- [ ] Bu faz iki günden uzun bir genel altyapı çalışmasına dönüşmüyor.
+- [x] Proje tek komutla build oluyor. (`npm run build`; tam gate `npm run build:verify`)
+- [x] Hatalı veri açık hata veriyor. (`validateGameData` alan-düzeyi `GameDataError` fırlatır; `test:engine` kanıtlar)
+- [x] Feature flag’ler runtime’da okunabiliyor. (`runtimeConfig` + dev'de `window.__forge.config`; `?flags=` override)
+- [x] Debug preset oyun hızını artırabiliyor. (`debug_fast.gameSpeed = 3`, `runtimeConfig` okur; uygulama Faz 1 döngüsünde)
+- [x] GDD ve üretim belgeleri proje içinden erişilebilir. (`GDD/` repo kökünde)
+- [x] Bu faz iki günden uzun bir genel altyapı çalışmasına dönüşmüyor. (minimal iskele; ~10 dosya)
 
 ---
 

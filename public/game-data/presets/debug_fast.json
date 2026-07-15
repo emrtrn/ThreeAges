@@ -1,0 +1,12 @@
+{
+  "id": "debug_fast",
+  "label": "Debug Fast",
+  "flags": {},
+  "startingResources": {
+    "food": 500,
+    "wood": 500
+  },
+  "gameSpeed": 3,
+  "mapState": "",
+  "aiProfile": "normal"
+}

@@ -62,7 +62,11 @@ Kök `CLAUDE.md`'den kilit gerçekler:
 - **Save-validator ilişkisi:** `tools/saveValidator.ts` allowlist'i yalnızca **dev yazma endpoint'lerini** (layout/actor/skeleton/effect) korur. Denge verisi runtime'da salt-okunur olduğu için bu allowlist'e tabi **değildir**; ancak denge verisine ayrı bir JSON Schema doğrulama adımı (13 §17 "ID ve referans doğrulaması") eklenir.
 - **`project.3dgame.json` ile ilişki:** Sahne/layout ve snap ayarları Forge'un mevcut `public/project.3dgame.json` + `public/layouts/*.json` yapısında kalır. Oyun kuralları verisi (kaynak/yapı/birim/çağ/AI) ayrı `public/game-data/*` dosyalarında tutulur; ikisi karıştırılmaz.
 - **Gerekçe:** Forge'un veri sözleşmesini kırmadan GDD'nin veri-odaklı ilkesini korur; salt-okunur veri için validator allowlist gotcha'sını devre dışı bırakır.
-- **Durum:** Önerilen varsayılan — Faz 0'da onaylanacak.
+- **Uygulama (Faz 0):** `public/game-data/version.json`,
+  `public/game-data/presets/{gameplay_proof,debug_fast}.json`; tipli loader
+  `src/game/data/gameDataLoader.ts`, doğrulama `src/game/data/validateGameData.ts`
+  (fetch'ten ayrı saf validator, node testleriyle kapsanır).
+- **Durum:** **Kilitlendi** (Faz 0'da onaylandı; bkz. `SCOPE_LOG.md SL-001`).
 
 ### TD-004 — Mevcut Forge yeteneklerini yeniden kullan (sıfırdan yazma)
 
@@ -105,20 +109,33 @@ Kök `CLAUDE.md`'den kilit gerçekler:
 
 ## 5. Üretime Başlamadan Kilitlenecek Açık Teknik Kararlar
 
-`13 §111` ve `Master §9.1` ile hizalı — Faz 0'da kapatılır:
+`13 §111` ve `Master §9.1` ile hizalı. **Faz 0 kararı (2026-07-15, `SCOPE_LOG.md
+SL-002`):** her madde bir **geçici varsayılan** ile kaydedildi; kesin karar
+ilgili faz geldiğinde teyit edilir. Faz 0 kod işi bu varsayılanlarla bloklanmaz.
 
-- [ ] Forge içinde birim navigasyon çözümü (navmesh mi grid pathfinding mi; `05 §67` yol grafiği ile ayrı).
-- [ ] Yapı placement grid ölçüsü ve yol grid ölçüsü (`04 §22`, `05 §21`).
-- [ ] Kamera: perspektif mi ortografik mi (`10 §4` başlangıç tercihi hafif perspektif).
-- [ ] Placeholder asset standardı (`13 §14`, `11 §8` pivot/ölçek).
-- [ ] Birim hedef yoğunluğu (aynı anda aktif birim üst sınırı; `03 §42` nüfus + performans).
-- [ ] Ana test çözünürlükleri (1366×768, 1920×1080; `13 §52`).
-- [ ] Minimum hedef donanım.
-- [ ] `public/game-data/` veri konumu onayı (**TD-003**).
+- [~] Birim navigasyon: **grid-tabanlı pathfinding** (başlangıç varsayılanı;
+  `05 §67` yol grafiğinden ayrı). Teyit: Faz 1–2.
+- [~] Yapı placement grid ve yol grid ölçüsü: **provisional placeholder**; kesin
+  hücre boyutu Faz 2'de blockout ile belirlenir (`04 §22`, `05 §21`).
+- [~] Kamera: **hafif perspektif** (`10 §4` başlangıç tercihi). Teyit: Faz 1.
+- [~] Placeholder asset standardı: **birim küp/kapsül, +Z ileri, taban pivotu**
+  (`13 §14`, `11 §8`). Teyit: Faz 1–2.
+- [~] Birim hedef yoğunluğu: **provisional**; ölçümle belirlenecek (`03 §42`
+  nüfus + performans; `13 §14` "erken optimizasyon yerine ölçüm"). Teyit: Faz 7.
+- [x] Ana test çözünürlükleri: **1366×768 ve 1920×1080** (`13 §52`).
+- [~] Minimum hedef donanım: **provisional**; performans bütçesi Faz 9/12'de netleşir.
+- [x] `public/game-data/` veri konumu onayı — **Kilitlendi** (**TD-003**, `SL-001`).
 
 ---
 
 ## 6. Revizyon Notları
+
+### Sürüm 0.2 — Faz 0 başlangıcı (2026-07-15)
+
+- TD-003 **Kilitlendi**: veri konumu `public/game-data/` onaylandı; Faz 0
+  uygulaması (version + preset JSON, loader, validator) not düşüldü. `SL-001`.
+- §5 açık teknik kararlar **geçici varsayılanlarla** işaretlendi ([~] = ilgili
+  fazda teyit); test çözünürlükleri ve veri konumu kilitlendi ([x]). `SL-002`.
 
 ### Sürüm 0.1
 

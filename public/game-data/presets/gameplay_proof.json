@@ -1,0 +1,12 @@
+{
+  "id": "gameplay_proof",
+  "label": "Gameplay Proof (Ürün A)",
+  "flags": {},
+  "startingResources": {
+    "food": 200,
+    "wood": 200
+  },
+  "gameSpeed": 1,
+  "mapState": "",
+  "aiProfile": "normal"
+}

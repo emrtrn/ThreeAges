@@ -568,7 +568,7 @@ Ardından çalışacağı sisteme ait kaynak belgeyi okumalıdır.
 Bir konuda belgeler arasında çelişki oluşursa:
 
 1. ana kaynak belge dikkate alınır,
-2. çelişki `OPEN_QUESTIONS.md` veya `TECH_DECISIONS.md` içine kaydedilir,
+2. çelişki `TECH_DECISIONS.md` içine kaydedilir,
 3. ilgili belgelerin sürümleri birlikte güncellenir.
 
 ---
@@ -900,8 +900,8 @@ Bu kararlar yalnız test kanıtıyla değiştirilmelidir.
 
 ## 11.2 Üretim öncesi belgeler
 
-- [ ] `OPEN_QUESTIONS.md`
 - [x] `TECH_DECISIONS.md` — oluşturuldu (`GDD/TECH_DECISIONS.md`): Forge hizalama kararları ve Sapma kayıtları
+- [x] `SCOPE_LOG.md` — oluşturuldu (`GDD/SCOPE_LOG.md`): kapsam kararları ve kesinti kaydı (SL-001…SL-003)
 - [ ] `ASSET_INVENTORY.md`
 - [ ] `GAME_DATA_SCHEMA_PLAN.md`
 - [ ] `TEST_STRATEGY.md`
@@ -910,7 +910,7 @@ Bu kararlar yalnız test kanıtıyla değiştirilmelidir.
 
 ### Ürün A — Oynanış Kanıtı
 
-- [ ] Faz 0 — Üretim temeli
+- [x] Faz 0 — Üretim temeli (feature flag + logger + hata yakalama + veri loader/validator + gameplay_proof/debug_fast preset + versiyon; `build:verify` yeşil)
 - [ ] Faz 1 — Oynanabilir omurga
 - [ ] Faz 2 — Küçük harita ve yapı kurma
 - [ ] Faz 3 — İki kaynaklı ekonomi
@@ -1042,33 +1042,21 @@ Vertical slice tamamlanmış sayılırsa (yetkili kaynak: `13_VERTICAL_SLICE_PRO
 
 # 15. Önerilen Sonraki Adım
 
-GDD seti tamamlanmıştır.
+GDD seti tamamlanmış, kapsam v0.2 (Ürün A/B/C) modeline hizalanmış ve `TECH_DECISIONS.md` oluşturulmuştur.
 
-Üretime geçmeden önce sıradaki belge:
-
-```text
-OPEN_QUESTIONS.md
-```
-
-olmalıdır.
-
-Bu belgede tüm GDD dosyalarındaki açık sorular:
-
-- tek listede birleştirilmeli,
-- önem derecesine göre sıralanmalı,
-- üretim öncesi,
-- prototip sırasında,
-- telemetri sonrası
-
-olarak ayrılmalıdır.
-
-Ardından:
+Sıradaki adım doğrudan üretim temelidir:
 
 ```text
-TECH_DECISIONS.md
+13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md → Faz 0 (Üretim Temeli)
 ```
 
-oluşturulmalı ve `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` içindeki Faz 0 başlatılmalıdır.
+Ayrı bir `OPEN_QUESTIONS.md` belgesi tutulmayacaktır. Açık tasarım soruları:
+
+- her sistem belgesinin kendi "Açık Tasarım Soruları" bölümünde,
+- `TECH_DECISIONS.md` içindeki açık teknik kararlar listesinde,
+- ve `13`'ün ürün kapıları (Kapı A/B/C) ile karar kapılarında (§9)
+
+izlenir. Bir karar yalnızca ilgili ürün kapısına gelindiğinde zorunlu hale gelir.
 
 ---
 

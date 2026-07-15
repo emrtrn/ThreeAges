@@ -10,6 +10,15 @@
  */
 import { RuntimeSceneApp } from "@/scene/RuntimeSceneApp";
 import { attachDebugStats } from "@/scene/debugStats";
+import { installGlobalErrorHandlers } from "@/game/core/errorHandler";
+import { setLogLevel, logger } from "@/game/core/logger";
+import {
+  createRuntimeConfig,
+  readBootOptionsFromUrl,
+  snapshotRuntimeConfig,
+} from "@/game/core/runtimeConfig";
+import { loadGamePreset } from "@/game/data/gameDataLoader";
+import type { GamePreset } from "@/game/data/gameDataTypes";
 
 function requireElement<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -17,7 +26,43 @@ function requireElement<T extends HTMLElement>(id: string): T {
   return el as T;
 }
 
+/**
+ * Faz 0 production-foundation boot: install runtime error capture, resolve the
+ * active preset + feature flags, and (in dev) expose a read-only snapshot for
+ * the debug panel. Simulation-speed application lands with the Faz 1 game loop;
+ * here the value is only resolved and logged.
+ */
+async function bootFoundation(): Promise<void> {
+  installGlobalErrorHandlers();
+  const isDev = import.meta.env.DEV;
+  setLogLevel(isDev ? "debug" : "warn");
+
+  const params = new URLSearchParams(location.search);
+  const presetId = params.get("preset") ?? "gameplay_proof";
+  const log = logger("System");
+
+  let preset: GamePreset | null = null;
+  try {
+    preset = await loadGamePreset(presetId);
+  } catch (error) {
+    // A bad/missing preset must not stop the app from booting; log and fall
+    // back to defaults so the runtime stays playable (plan §12).
+    log.warn(`Preset "${presetId}" unavailable; using defaults`, error);
+  }
+
+  const config = createRuntimeConfig(preset, readBootOptionsFromUrl(isDev));
+  log.info(`runtime config ready (preset ${config.presetId})`);
+
+  if (isDev) {
+    (window as unknown as { __forge?: unknown }).__forge = {
+      config: snapshotRuntimeConfig(config),
+    };
+  }
+}
+
 async function main(): Promise<void> {
+  await bootFoundation();
+
   const params = new URLSearchParams(location.search);
   const canvas = requireElement<HTMLCanvasElement>("game-canvas");
   const editorEnabled = params.has("editor");

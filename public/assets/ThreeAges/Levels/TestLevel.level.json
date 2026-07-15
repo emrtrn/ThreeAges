@@ -30,11 +30,42 @@
     {
       "assetId": "resource-tree-group",
       "placements": []
+    },
+    {
+      "assetId": "towncenter-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-secondage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "watchtower-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "watchtower-secondage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "watchtower-secondage-level3",
+      "placements": []
     }
   ],
   "characters": [],
-  "skyAtmosphere": {},
-  "cloudLayer": {},
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 1,
+    "mie": 0.002,
+    "mieDirectionalG": 0.8,
+    "skyLightCapture": {
+      "intensity": 0.6
+    }
+  },
   "postProcess": {
     "antialias": "smaa",
     "bloom": {

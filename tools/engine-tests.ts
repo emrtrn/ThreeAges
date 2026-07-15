@@ -53,6 +53,11 @@ import {
 } from "../src/scene/runtimeDebugSnapshot";
 import { RuntimeActorSpawnCoordinator } from "../src/scene/runtimeActorSpawnCoordinator";
 import { normalizeActorScriptDef } from "../engine/scene/actorScript";
+import {
+  GameDataError,
+  validateGamePreset,
+  validateGameVersion,
+} from "../src/game/data/validateGameData";
 import type { ActorSpawnRequest } from "../engine/behavior/behaviorSubsystem";
 import {
   readAIControllerComponent,
@@ -3386,30 +3391,9 @@ check("DialogueSubsystem.playLine returns not-played for an unknown line", () =>
   });
 });
 
-check("starter dialogue assets classify, validate, and resolve", () => {
-  assert.equal(
-    inferAssetTypeFromPath("assets/x/DV_Narrator.dialoguevoice.json"),
-    "dialogueVoice",
-  );
-  assert.equal(inferAssetTypeFromPath("assets/x/DL_Welcome.dialogue.json"), "dialogueLine");
-  const voice = JSON.parse(
-    readFileSync("public/assets/starter-content/Dialogue/DV_Narrator.dialoguevoice.json", "utf8"),
-  ) as DialogueVoiceAsset;
-  const dline = JSON.parse(
-    readFileSync("public/assets/starter-content/Dialogue/DL_Welcome.dialogue.json", "utf8"),
-  ) as DialogueLineAsset;
-  assert.deepEqual(validateDialogueVoice(voice), []);
-  assert.deepEqual(validateDialogueLine(dline, { voiceIds: new Set([voice.id]) }), []);
-  const resolved = resolveDialogueLine(dline, { speakerVoiceId: "dv-narrator", locale: "en" });
-  assert.equal(resolved.audioSourceId, "starter-snd-ui-confirm");
-  assert.equal(resolved.speakerVoiceId, "dv-narrator");
-  assert.ok(
-    assetManifest.assets.some((a) => a.id === "dv-narrator" && assetType(a) === "dialogueVoice"),
-  );
-  assert.ok(
-    assetManifest.assets.some((a) => a.id === "dl-welcome" && assetType(a) === "dialogueLine"),
-  );
-});
+// NOTE: the "starter dialogue assets" check was removed with the starter-content
+// cleanup (DV_Narrator/DL_Welcome demo files deleted from public/assets). The
+// dialogue voice/line parsers stay covered by the inline-fixture checks below.
 
 // --- Dialogue & Voice (D4: localization + production pipeline) ----------------
 
@@ -3584,34 +3568,9 @@ check("dialogue pipeline reports missing recordings, directions, and missing loc
   assert.equal(buildLocaleTableFromSheet(rows, "tr").greet, "Merhaba.");
 });
 
-check("starter localization tables classify as ui and localize the welcome line", () => {
-  assert.equal(inferAssetTypeFromPath("assets/x/en.loc.json"), "ui");
-  const enTable = JSON.parse(
-    readFileSync("public/assets/starter-content/Localization/en.loc.json", "utf8"),
-  ) as { strings: Record<string, string> };
-  const trTable = JSON.parse(
-    readFileSync("public/assets/starter-content/Localization/tr.loc.json", "utf8"),
-  ) as { strings: Record<string, string> };
-  const registry = new LocaleRegistry();
-  registry.register(normalizeUiLocaleTable(enTable));
-  registry.register(normalizeUiLocaleTable(trTable));
-  const dline = JSON.parse(
-    readFileSync("public/assets/starter-content/Dialogue/DL_Welcome.dialogue.json", "utf8"),
-  ) as DialogueLineAsset;
-  const adapter: DialogueLocalizationSource = { resolveSubtitle: (key) => registry.resolveOptional(key) };
-  // `en` active first (registration order).
-  assert.equal(
-    resolveDialogueLine(dline, { locale: "en" }, adapter).subtitleText,
-    enTable.strings["dialogue.welcome"],
-  );
-  registry.setActiveLocale("tr");
-  assert.equal(
-    resolveDialogueLine(dline, { locale: "en" }, adapter).subtitleText,
-    trTable.strings["dialogue.welcome"],
-  );
-  assert.ok(assetManifest.assets.some((a) => a.id === "loc-en" && assetType(a) === "ui"));
-  assert.ok(assetManifest.assets.some((a) => a.id === "loc-tr" && assetType(a) === "ui"));
-});
+// NOTE: the "starter localization tables" check was removed with the starter-
+// content cleanup (en.loc/tr.loc + DL_Welcome demo files deleted). Locale
+// registry + dialogue localization stay covered by inline-fixture checks above.
 
 // --- Conversation (D3: runner + director + validation) ------------------------
 
@@ -3878,46 +3837,9 @@ check("begin-conversation behavior emits start-conversation from its param", () 
   unsub();
 });
 
-check("starter conversation asset classifies, validates, and runs end to end", () => {
-  assert.equal(
-    inferAssetTypeFromPath("assets/x/CONV_Welcome.conversation.json"),
-    "conversation",
-  );
-  const conversation = JSON.parse(
-    readFileSync("public/assets/starter-content/Dialogue/CONV_Welcome.conversation.json", "utf8"),
-  ) as ConversationAsset;
-  const voice = JSON.parse(
-    readFileSync("public/assets/starter-content/Dialogue/DV_Narrator.dialoguevoice.json", "utf8"),
-  ) as DialogueVoiceAsset;
-  const dline = JSON.parse(
-    readFileSync("public/assets/starter-content/Dialogue/DL_Welcome.dialogue.json", "utf8"),
-  ) as DialogueLineAsset;
-  assert.deepEqual(
-    validateConversation(conversation, {
-      lineIds: new Set([dline.id]),
-      voiceIds: new Set([voice.id]),
-    }),
-    [],
-  );
-  assert.ok(
-    assetManifest.assets.some((a) => a.id === "conv-welcome" && assetType(a) === "conversation"),
-  );
-
-  const runner = new ConversationRunner(conversation);
-  const greet = runner.start();
-  assert.deepEqual(greet.step, {
-    kind: "line",
-    nodeId: "greet",
-    lineId: "dl-welcome",
-    speakerVoiceId: "dv-narrator",
-    locale: "en",
-  });
-  const choice = runner.advance();
-  assert.equal(choice?.step.kind, "choice");
-  const ready = runner.choose(0);
-  assert.deepEqual(ready?.events, [{ nodeId: "ready", eventId: "conversation-ready" }]);
-  assert.deepEqual(ready?.step, { kind: "end" });
-});
+// NOTE: the "starter conversation asset" end-to-end check was removed with the
+// starter-content cleanup (CONV_Welcome demo file deleted). ConversationRunner
+// stays covered by the inline convGraph checks above.
 
 // --- Audio Bus Lite (pure mix model) ------------------------------------------
 
@@ -24403,28 +24325,9 @@ check("AI state tree normalizer rejects malformed assets", () => {
   );
 });
 
-check("starter Boss Phase StateTree asset classifies and normalizes", () => {
-  const blackboardEntry = assetManifest.assets.find((asset) => asset.id === "boss-phase-demo-blackboard");
-  const stateTreeEntry = assetManifest.assets.find((asset) => asset.id === "boss-phase-demo-state-tree");
-  assert.ok(blackboardEntry, "expected Boss Phase Demo blackboard in the manifest");
-  assert.ok(stateTreeEntry, "expected Boss Phase Demo StateTree in the manifest");
-  assert.equal(assetType(blackboardEntry), "blackboard");
-  assert.equal(assetType(stateTreeEntry), "stateTree");
-  assert.equal(inferAssetTypeFromPath(assetPath(stateTreeEntry)), "stateTree");
-
-  const blackboard = normalizeAiBlackboardAsset(
-    JSON.parse(readFileSync(`public/${assetPath(blackboardEntry)}`, "utf8")),
-  );
-  const stateTree = normalizeAiStateTreeAsset(
-    JSON.parse(readFileSync(`public/${assetPath(stateTreeEntry)}`, "utf8")),
-  );
-  assert.equal(stateTree.blackboard, assetPath(blackboardEntry));
-  assert.equal(stateTree.parameters?.phaseKey, "bossPhase");
-  assert.equal(stateTree.context?.routine, "phase-combat");
-  assert.ok(blackboard.keys.some((key) => key.key === "enraged" && key.kind === "boolean"));
-  assert.ok(stateTree.states.some((state) => state.id === "Enraged"));
-  assert.equal(stateTree.evaluators?.length, 2);
-});
+// NOTE: the "starter Boss Phase StateTree asset" check was removed with the
+// starter-content cleanup (Boss_Phase_Demo demo files deleted). The AI
+// blackboard/state-tree normalizers stay covered by the inline-fixture checks.
 
 check("AI query asset normalizer canonicalizes generators, contexts, and tests", () => {
   const asset = normalizeAiQueryAsset({
@@ -27745,6 +27648,65 @@ await checkAsync("spawn coordinator frame-budget queues requests and cancels old
   resolveStaleClass?.(normalizeActorScriptDef({}));
   await settleAsyncSpawn();
   assert.deepEqual(registered, ["spawned:0", "spawned:1"]);
+});
+
+// --- Faz 0 game-data foundation (Vertical Slice Plan v0.2 §17 / §19) ---
+
+const readPresetJson = (id: string): unknown =>
+  JSON.parse(readFileSync(`public/game-data/presets/${id}.json`, "utf8"));
+
+check("game-data version.json validates", () => {
+  const version = validateGameVersion(
+    JSON.parse(readFileSync("public/game-data/version.json", "utf8")),
+  );
+  assert.ok(version.buildVersion.length > 0);
+  assert.ok(version.balanceVersion.length > 0);
+});
+
+check("game-data presets load and debug_fast is faster", () => {
+  const proof = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
+  const fast = validateGamePreset(readPresetJson("debug_fast"), "debug_fast");
+  assert.equal(proof.id, "gameplay_proof");
+  assert.equal(fast.id, "debug_fast");
+  // debug_fast exists to raise the sim speed (plan §19 acceptance criterion).
+  assert.ok(fast.gameSpeed > proof.gameSpeed);
+});
+
+check("game-data validator rejects an unknown feature flag", () => {
+  assert.throws(
+    () =>
+      validateGamePreset({
+        id: "bad_flag",
+        label: "Bad",
+        flags: { notARealFlag: true },
+        startingResources: {},
+        gameSpeed: 1,
+        mapState: "",
+        aiProfile: "normal",
+      }),
+    GameDataError,
+  );
+});
+
+check("game-data validator rejects a mismatched id and missing field", () => {
+  // id does not match the expected file name.
+  assert.throws(
+    () => validateGamePreset(readPresetJson("gameplay_proof"), "debug_fast"),
+    GameDataError,
+  );
+  // required numeric field is missing.
+  assert.throws(
+    () =>
+      validateGamePreset({
+        id: "x",
+        label: "X",
+        flags: {},
+        startingResources: {},
+        mapState: "",
+        aiProfile: "normal",
+      }),
+    GameDataError,
+  );
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);
