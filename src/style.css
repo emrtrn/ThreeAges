@@ -174,6 +174,40 @@ body {
   border-color: #e5d675;
 }
 
+/* Phase 4 road placement sits opposite the build palette and stays compact. */
+.rts-road-controls {
+  position: absolute;
+  left: max(12px, env(safe-area-inset-left));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(300px, calc(100vw - 24px));
+  padding: 10px 12px;
+  color: #edf0dc;
+  background: rgb(18 27 30 / 84%);
+  border: 1px solid rgb(183 206 130 / 55%);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+
+.rts-road-controls button {
+  margin: 8px 6px 0 0;
+  padding: 5px 8px;
+  color: #1d2b1b;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #cddd8d;
+  border: 0;
+  border-radius: 3px;
+}
+
+.rts-road-status {
+  min-height: 1.35em;
+  margin: 8px 0 0;
+  color: #dce8be;
+  font-size: 12px;
+}
+
 /* Faz 2 placement controls: intentionally small until the full RTS HUD lands. */
 .rts-build-palette {
   position: absolute;

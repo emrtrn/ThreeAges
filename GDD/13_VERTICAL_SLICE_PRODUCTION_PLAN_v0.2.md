@@ -899,10 +899,10 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 ### Yol
 
 - [x] Hücre tabanlı yol graph’ı oluştur. (`RoadGraph`: ortogonal en kısa rota, engel kaçınma, bağlantı sorgusu ve tekrar ücretlendirmeme)
-- [ ] Başlangıç ve bitiş ile rota önizleme ekle.
+- [x] Başlangıç ve bitiş ile rota önizleme ekle. (`Yol Kur`: hover önizlemesi, geçersiz rota ve odun yetersizliği geri bildirimi)
 - [ ] Düz ve dönüş segmentlerini oluştur.
-- [ ] Yol maliyetini hesapla.
-- [ ] Yol bağlantısını runtime’da güncelle.
+- [x] Yol maliyetini hesapla. (`balance/roads.json`: yalnız yeni hücre başına 4 Odun; ödeme commit anında yapılır)
+- [x] Yol bağlantısını runtime’da güncelle. (match-owned `RoadGraph` commit sonrası yol görünümünü yeniler; tekrar çizilen hücre ücretsizdir)
 - [ ] Yol debug görünümü ekle.
 
 ### Lojistik

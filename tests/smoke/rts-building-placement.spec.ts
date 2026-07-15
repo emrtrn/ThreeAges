@@ -7,6 +7,7 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await page.goto("/?rts&debug");
   await expect(page.locator("#game-canvas")).toBeVisible();
   await expect(page.locator(".rts-build-palette")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Yol yerleştirme" })).toBeVisible();
   await expect(page.getByRole("region", { name: "Oyun hızı" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Normal", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "4X", exact: true }).click();
@@ -21,6 +22,10 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 5/20");
   await expect(page.locator(".rts-build-income")).toHaveText("Gelir: Yiyecek +0.0/dk · Odun +0.0/dk");
   await expect(page.locator(".rts-debug-overlay")).toContainText("kaynak hareketleri:");
+
+  await page.getByRole("button", { name: "Yol Kur", exact: true }).click();
+  await expect(page.locator(".rts-road-status")).toHaveText("Yol başlangıcını seçin.");
+  await page.getByRole("button", { name: "Yolu İptal", exact: true }).click();
 
   await page.getByRole("button", { name: "Ev", exact: true }).click();
   await expect(page.locator(".rts-build-status")).toHaveText("Haritada konum seçin.");

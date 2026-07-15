@@ -35,6 +35,10 @@ export class RoadGraph {
 
   constructor(private readonly balance: RoadBalance) {}
 
+  get cellSize(): number {
+    return this.balance.cellSize;
+  }
+
   /** Preview the shortest valid orthogonal route and charge only new cells. */
   plan(start: RoadCell, end: RoadCell, blockers: readonly NavBlocker[]): RoadPlan | null {
     const source = this.snap(start);

@@ -54,7 +54,9 @@ import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem } from "./structures/workerProductionSystem";
 import { RoadGraph } from "./roads/roadGraph";
+import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
 import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
+import { RtsRoadControls } from "./ui/rtsRoadControls";
 import {
   COMMAND_CENTER_CONTROL_RADIUS,
   TerritoryControlSystem,
@@ -123,7 +125,9 @@ export class RtsApp {
   private readonly selection: SelectionSystem;
   private readonly commands: CommandSystem;
   private readonly placement: BuildingPlacementSystem;
+  private readonly roadPlacement: RoadPlacementSystem;
   private readonly buildPalette: RtsBuildPalette;
+  private readonly roadControls: RtsRoadControls;
   private readonly gameSpeedControls: RtsGameSpeedControls;
   private readonly unsubscribeWalletChanges: (() => void) | null;
   private readonly log = logger("System");
@@ -205,9 +209,18 @@ export class RtsApp {
       (structure) => this.assignWorkerToConstruction(structure),
       (structure) => this.workerConstruction.cancelStructure(structure),
     );
+    this.roadPlacement = new RoadPlacementSystem(
+      canvas,
+      this.cameraController.camera,
+      this.roads,
+      this.wallet,
+      () => this.navigationBlockers(),
+    );
     this.buildPalette = new RtsBuildPalette(
       this.options.buildingBalance,
       (id) => {
+        this.roadPlacement.cancel();
+        this.syncRoadUi();
         this.placement.begin(id);
         this.syncPlacementUi();
       },
@@ -223,6 +236,18 @@ export class RtsApp {
       () => this.queueGuard(),
       () => this.queueWorker(),
     );
+    this.roadControls = new RtsRoadControls(
+      () => {
+        this.placement.cancel();
+        this.roadPlacement.begin();
+        this.syncPlacementUi();
+        this.syncRoadUi();
+      },
+      () => {
+        this.roadPlacement.cancel();
+        this.syncRoadUi();
+      },
+    );
     this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => {
       this.simulationSpeed = speed;
     });
@@ -236,7 +261,11 @@ export class RtsApp {
     // other); this composition root is the only place that sees both.
     this.pointer = new RtsPointer(canvas, {
       onSelectClick: (x, y, additive) => {
-        if (this.placement.isActive) {
+        if (this.roadPlacement.isActive) {
+          this.roadPlacement.confirmAt(x, y);
+          this.syncPlacementUi();
+          this.syncRoadUi();
+        } else if (this.placement.isActive) {
           this.placement.confirmAt(x, y);
           this.syncPlacementUi();
         } else {
@@ -244,10 +273,14 @@ export class RtsApp {
         }
       },
       onSelectDrag: (rect) => {
-        if (!this.placement.isActive) this.selection.onSelectDrag(rect);
+        if (!this.roadPlacement.isActive && !this.placement.isActive) this.selection.onSelectDrag(rect);
       },
       onSelectCommit: (rect, additive) => {
-        if (this.placement.isActive) {
+        if (this.roadPlacement.isActive) {
+          this.roadPlacement.confirmAt(rect.x1, rect.y1);
+          this.syncPlacementUi();
+          this.syncRoadUi();
+        } else if (this.placement.isActive) {
           this.placement.confirmAt(rect.x1, rect.y1);
           this.syncPlacementUi();
         } else {
@@ -255,11 +288,19 @@ export class RtsApp {
         }
       },
       onSelectCancel: () => {
-        if (!this.placement.isActive) this.selection.onSelectCancel();
+        if (this.roadPlacement.isActive) {
+          this.roadPlacement.cancel();
+          this.syncRoadUi();
+        } else if (!this.placement.isActive) {
+          this.selection.onSelectCancel();
+        }
       },
       onCommandClick: (x, y) => this.commands.issueAt(x, y),
       onPointerHover: (x, y) => {
-        if (this.placement.isActive) {
+        if (this.roadPlacement.isActive) {
+          this.roadPlacement.previewAt(x, y);
+          this.syncRoadUi();
+        } else if (this.placement.isActive) {
           this.placement.previewAt(x, y);
           this.syncPlacementUi();
         }
@@ -268,6 +309,7 @@ export class RtsApp {
     this.buildScene();
     this.spawnTestUnits();
     this.syncPlacementUi();
+    this.syncRoadUi();
   }
 
   start(): void {
@@ -292,14 +334,15 @@ export class RtsApp {
     this.debugOverlay?.dispose();
     this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
+    this.roadControls.dispose();
     this.gameSpeedControls.dispose();
     this.placement.dispose();
+    this.roadPlacement.dispose();
     this.territory.dispose();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
     this.workerProduction.reset();
     this.structures.clear();
-    this.roads.clear();
     this.renderer.dispose();
   }
 
@@ -326,6 +369,7 @@ export class RtsApp {
     this.scene.add(this.centers.root);
     this.scene.add(this.structures.root);
     this.scene.add(this.placement.root);
+    this.scene.add(this.roadPlacement.root);
     this.scene.add(this.territory.root);
     this.scene.add(this.units.root);
     this.scene.add(this.commandMarkers.root);
@@ -443,6 +487,7 @@ export class RtsApp {
     this.units.clear();
     this.centers.clear();
     this.structures.clear();
+    this.roadPlacement.reset();
     this.placement.resetReservations();
     this.wallet.reset(this.options.startingResources);
     this.commandMarkers.clear();
@@ -453,6 +498,7 @@ export class RtsApp {
     this.spawnTestUnits();
     this.placement.cancel();
     this.syncPlacementUi();
+    this.syncRoadUi();
     this.matchOverlay.hide();
     this.log.info("RTS match restarted");
   };
@@ -488,6 +534,10 @@ export class RtsApp {
     const population = this.population.snapshot();
     this.buildPalette.setPopulation(population.used, population.capacity);
     this.syncEconomyUi();
+  }
+
+  private syncRoadUi(): void {
+    this.roadControls.setState(this.roadPlacement.state());
   }
 
   private syncEconomyUi(): void {
