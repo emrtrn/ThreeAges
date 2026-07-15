@@ -24,7 +24,14 @@ import { createSceneRenderer } from "@engine/render-three/renderer";
 import { logger } from "@/game/core/logger";
 import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
+import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround } from "./world/rtsGround";
+import { UnitSystem } from "./units/unitSystem";
+import { updateUnitMovement } from "./units/unitMovement";
+import { MarqueeOverlay } from "./selection/marqueeOverlay";
+import { SelectionSystem } from "./selection/selectionSystem";
+import { CommandMarkerSystem } from "./commands/commandMarker";
+import { CommandSystem } from "./commands/commandSystem";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
@@ -41,6 +48,12 @@ export class RtsApp {
   private readonly scene = new Scene();
   private readonly cameraController = new RtsCameraController();
   private readonly input: RtsInput;
+  private readonly units = new UnitSystem();
+  private readonly marquee = new MarqueeOverlay();
+  private readonly commandMarkers = new CommandMarkerSystem();
+  private readonly pointer: RtsPointer;
+  private readonly selection: SelectionSystem;
+  private readonly commands: CommandSystem;
   private readonly log = logger("System");
   private frameHandle = 0;
   private lastTime = 0;
@@ -55,13 +68,38 @@ export class RtsApp {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
+    this.selection = new SelectionSystem(
+      canvas,
+      this.cameraController.camera,
+      this.units,
+      this.marquee,
+    );
+    this.commands = new CommandSystem(
+      canvas,
+      this.cameraController.camera,
+      this.selection,
+      this.units,
+      this.commandMarkers,
+    );
+    // Composite pointer handler: left button drives selection, right button
+    // issues commands. Keeps the two systems decoupled (neither imports the
+    // other); this composition root is the only place that sees both.
+    this.pointer = new RtsPointer(canvas, {
+      onSelectClick: (x, y, additive) => this.selection.onSelectClick(x, y, additive),
+      onSelectDrag: (rect) => this.selection.onSelectDrag(rect),
+      onSelectCommit: (rect, additive) => this.selection.onSelectCommit(rect, additive),
+      onSelectCancel: () => this.selection.onSelectCancel(),
+      onCommandClick: (x, y) => this.commands.issueAt(x, y),
+    });
     this.buildScene();
+    this.spawnTestUnits();
   }
 
   start(): void {
     if (this.running) return;
     this.running = true;
     this.input.attach();
+    this.pointer.attach();
     this.resize();
     this.lastTime = performance.now();
     this.log.info(`RTS runtime started${this.options.debug ? " (debug)" : ""}`);
@@ -73,6 +111,8 @@ export class RtsApp {
     if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
     this.frameHandle = 0;
     this.input.detach();
+    this.pointer.detach();
+    this.marquee.dispose();
     this.renderer.dispose();
   }
 
@@ -92,6 +132,25 @@ export class RtsApp {
     this.scene.add(sun);
 
     this.scene.add(createRtsGround());
+    this.scene.add(this.units.root);
+    this.scene.add(this.commandMarkers.root);
+  }
+
+  /**
+   * Faz 1 step 2: a small mixed force so selection is exercised end-to-end. The
+   * player Guards cluster near their start; a few enemy units stand apart (not
+   * selectable). Replaced by match-driven spawns once the match backbone lands.
+   */
+  private spawnTestUnits(): void {
+    const cols = 4;
+    for (let i = 0; i < 8; i++) {
+      const x = -4.5 + (i % cols) * 3;
+      const z = 4 + Math.floor(i / cols) * 3;
+      this.units.spawn("player", x, z);
+    }
+    for (let i = 0; i < 3; i++) {
+      this.units.spawn("enemy", -3 + i * 3, -16);
+    }
   }
 
   private readonly onFrame = (now: number): void => {
@@ -103,6 +162,8 @@ export class RtsApp {
 
     this.resize();
     this.cameraController.update(dt, this.input);
+    updateUnitMovement(this.units.all(), dt);
+    this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
   };
 

@@ -58,6 +58,9 @@ import {
   validateGamePreset,
   validateGameVersion,
 } from "../src/game/data/validateGameData";
+import { CommandSystem } from "../src/game/rts/commands/commandSystem";
+import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
+import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import type { ActorSpawnRequest } from "../engine/behavior/behaviorSubsystem";
 import {
   readAIControllerComponent,
@@ -27707,6 +27710,30 @@ check("game-data validator rejects a mismatched id and missing field", () => {
       }),
     GameDataError,
   );
+});
+
+check("RTS contextual right-click assigns an enemy attack target", () => {
+  const units = new UnitSystem();
+  const player = units.spawn("player", 0, 3);
+  const enemy = units.spawn("enemy", 0, 0);
+  units.root.updateMatrixWorld(true);
+
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 10, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const canvas = { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement;
+  const selection = {
+    selected: () => [player],
+  } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem;
+  const commands = new CommandSystem(canvas, camera, selection, units, new CommandMarkerSystem());
+
+  commands.issueAt(50, 50);
+
+  assert.equal(player.attackTarget, enemy);
+  assert.equal(player.targeted, false);
+  assert.equal(enemy.targeted, true);
+  assert.equal(player.moveTarget, null);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

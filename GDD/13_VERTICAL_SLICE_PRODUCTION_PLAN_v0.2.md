@@ -631,28 +631,28 @@ Boş test sahnesinde oyuncunun kamera, seçim, hareket ve basit saldırı ile bi
 
 ### Kamera
 
-- [ ] Üstten eğimli RTS kamera ekle.
-- [ ] WASD hareketi ekle.
-- [ ] Fare tekerleği zoom ekle.
-- [ ] Kamera sınırları ekle.
-- [ ] Pencere odağı kaybında input sıfırla.
-- [ ] Ekran kenarı kaydırmayı opsiyonel flag altında ekle.
+- [x] Üstten eğimli RTS kamera ekle. (`src/game/rts/camera/rtsCameraController.ts`)
+- [x] WASD hareketi ekle. (`src/game/rts/input/rtsInput.ts` → kamera pan)
+- [x] Fare tekerleği zoom ekle. (yumuşatmalı + clamp; `rtsCameraController`)
+- [x] Kamera sınırları ekle. (`rtsCameraConfig.bounds` odak kırpma)
+- [x] Pencere odağı kaybında input sıfırla. (`RtsInput` blur/visibility → reset)
+- [x] Ekran kenarı kaydırmayı opsiyonel flag altında ekle. (`rtsCameraConfig.edgeScroll`, varsayılan kapalı)
 
 ### Seçim ve komut
 
-- [ ] Tekli seçim ekle.
-- [ ] Kutu seçimi ekle.
-- [ ] Seçim halkası ekle.
-- [ ] Sağ tık hareket ekle.
-- [ ] Sağ tık saldırı ekle.
+- [x] Tekli seçim ekle. (raycast; `src/game/rts/selection/selectionSystem.ts`)
+- [x] Kutu seçimi ekle. (ekran-projeksiyonlu marquee; `selectionSystem` + `marqueeOverlay`)
+- [x] Seçim halkası ekle. (`Unit.setSelected` halka görünürlüğü)
+- [x] Sağ tık hareket ekle. (`src/game/rts/commands/commandSystem.ts` + formasyon dağıtımı)
+- [x] Sağ tık saldırı ekle. (düşman raycast'i → takip eden hedef emri + kırmızı hedef halkası)
 - [ ] Dur komutu ekle.
-- [ ] Dünya komut işareti ekle.
+- [x] Dünya komut işareti ekle. (`src/game/rts/commands/commandMarker.ts`; sönümlenen halka)
 
 ### Test birimi
 
-- [ ] Muhafız placeholder oluştur.
+- [x] Muhafız placeholder oluştur. (`src/game/rts/units/unit.ts`; kapsül + takım rengi)
 - [ ] Sağlık bileşeni ekle.
-- [ ] Sahiplik ekle.
+- [x] Sahiplik ekle. (`Unit.owner`: `player` / `enemy`; seçim filtresi)
 - [ ] Basit pathfinding ekle.
 - [ ] Basit yakın dövüş saldırısı ekle.
 - [ ] Ölüm ve seçimden çıkarma davranışı ekle.
