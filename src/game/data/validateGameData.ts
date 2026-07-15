@@ -224,12 +224,33 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     if (constructionSeconds <= 0) {
       throw new GameDataError(`${statsWhere}.constructionSeconds: must be > 0`);
     }
+    const economyRaw = stats["economy"];
+    let economy: BuildingBalance["string"]["economy"];
+    if (economyRaw !== undefined) {
+      const economyWhere = `${statsWhere}.economy`;
+      const economyData = asObject(economyRaw, economyWhere);
+      const resourceId = requireString(economyData, "resourceId", economyWhere);
+      if (!/^[a-z][a-z0-9_]*$/.test(resourceId)) {
+        throw new GameDataError(`${economyWhere}.resourceId: invalid resource id "${resourceId}"`);
+      }
+      const workerCapacity = requireFiniteNumber(economyData, "workerCapacity", economyWhere);
+      const perWorkerPerMinute = requireFiniteNumber(economyData, "perWorkerPerMinute", economyWhere);
+      const localBufferCapacity = requireFiniteNumber(economyData, "localBufferCapacity", economyWhere);
+      if (!Number.isInteger(workerCapacity) || workerCapacity <= 0) {
+        throw new GameDataError(`${economyWhere}.workerCapacity: must be a positive integer`);
+      }
+      if (perWorkerPerMinute <= 0 || localBufferCapacity <= 0) {
+        throw new GameDataError(`${economyWhere}: production rate and local buffer capacity must be > 0`);
+      }
+      economy = { resourceId, workerCapacity, perWorkerPerMinute, localBufferCapacity };
+    }
     buildings[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
       footprint: { width, depth },
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       constructionSeconds,
+      ...(economy ? { economy } : {}),
     };
   }
   if (Object.keys(buildings).length === 0) {

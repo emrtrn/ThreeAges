@@ -807,13 +807,13 @@ Yiyecek ve odun ile çalışan küçük ama tam ekonomi döngüsü oluşturmak.
 
 ### Üretim yapıları
 
-- [ ] Yiyecek yapısı oluştur.
-- [ ] Oduncu Kampı oluştur.
-- [ ] İşçi atama ekle.
-- [ ] İşçi kapasitesi ekle.
-- [ ] Üretim döngüsü ekle.
-- [ ] Yerel tampon ekle.
-- [ ] Tampon dolunca üretimi durdur.
+- [x] Yiyecek yapısı oluştur. (`farm`; JSON maliyet, 3 işçi kapasitesi, 7 yiyecek/dk ve 40 yerel tampon)
+- [x] Oduncu Kampı oluştur. (`lumber_camp`; JSON maliyet, 3 işçi kapasitesi, 6 odun/dk ve 40 yerel tampon)
+- [x] İşçi atama ekle. (tamamlanan üretim yapıları erişebilen en yakın boş işçileri V1 otomatik atar; seçili-yapı üzerinden manuel yeniden atama paneli HUD diliminde)
+- [x] İşçi kapasitesi ekle. (veri tanımındaki T1 kapasitesi üretici başına uygulanır)
+- [x] Üretim döngüsü ekle. (`EconomyProductionSystem`; yalnız çalışma noktasına ulaşan işçiler kaynak üretir)
+- [x] Yerel tampon ekle. (yapı başına bağımsız, veri tanımlı tampon; henüz global stoka aktarılmaz)
+- [x] Tampon dolunca üretimi durdur. (üretim `buffer-full` durumunda kapasitede sabitlenir)
 
 ### İşçi üretimi ve nüfus
 

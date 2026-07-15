@@ -73,6 +73,7 @@ import {
 } from "../src/game/rts/structures/placementGrid";
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
+import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
@@ -27856,10 +27857,51 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
   );
   assert.deepEqual(buildings.house?.footprint, { width: 4, depth: 4 });
   assert.equal(buildings.barracks?.cost.wood, 160);
+  assert.deepEqual(buildings.farm?.economy, {
+    resourceId: "food",
+    workerCapacity: 3,
+    perWorkerPerMinute: 7,
+    localBufferCapacity: 40,
+  });
   assert.throws(
     () => validateBuildingBalance({ house: { label: "Ev", footprint: { width: 0, depth: 4 }, cost: {}, constructionSeconds: 25 } }),
     GameDataError,
   );
+});
+
+check("RTS economy producers assign workers and stop at their local buffer capacity", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const farm = buildings.farm ?? assert.fail("farm definition missing");
+  const units = new UnitSystem();
+  for (let index = 0; index < 4; index += 1) {
+    units.spawn("player", -8 + index * 1.5, 0, RTS_TEST_UNIT_STATS, "worker");
+  }
+  const structures = new PlacedStructureSystem();
+  const site = structures.place(farm, 8, 0);
+  structures.advanceConstruction(site, farm.constructionSeconds);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+
+  for (let frame = 0; frame < 9_000; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+  }
+  const snapshot = production.snapshots()[0] ?? assert.fail("producer snapshot missing");
+  assert.equal(snapshot.assignedWorkers, 3, "T1 farm capacity reserves exactly three workers");
+  assert.equal(snapshot.workingWorkers, 3);
+  assert.equal(snapshot.status, "buffer-full");
+  assert.equal(snapshot.localBuffer, 40, "unconnected production never exceeds its local buffer");
+  assert.equal(
+    units.playerWorkers().filter((worker) => production.stateFor(worker) === "idle").length,
+    1,
+    "one worker remains available after the T1 capacity is filled",
+  );
+  production.reset();
+  structures.clear();
+  units.clear();
 });
 
 check("RTS resource reservations are atomic and refund at most once", () => {

@@ -17,6 +17,30 @@
     "cost": { "wood": 120 },
     "constructionSeconds": 45
   },
+  "farm": {
+    "label": "Tarla",
+    "footprint": { "width": 6, "depth": 6 },
+    "cost": { "wood": 80 },
+    "constructionSeconds": 35,
+    "economy": {
+      "resourceId": "food",
+      "workerCapacity": 3,
+      "perWorkerPerMinute": 7,
+      "localBufferCapacity": 40
+    }
+  },
+  "lumber_camp": {
+    "label": "Oduncu Kampı",
+    "footprint": { "width": 6, "depth": 6 },
+    "cost": { "wood": 100 },
+    "constructionSeconds": 35,
+    "economy": {
+      "resourceId": "wood",
+      "workerCapacity": 3,
+      "perWorkerPerMinute": 6,
+      "localBufferCapacity": 40
+    }
+  },
   "barracks": {
     "label": "Kışla",
     "footprint": { "width": 8, "depth": 8 },

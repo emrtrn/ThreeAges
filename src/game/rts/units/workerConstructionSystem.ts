@@ -34,12 +34,13 @@ export class WorkerConstructionSystem {
     private readonly units: UnitSystem,
     private readonly structures: PlacedStructureSystem,
     private readonly navigation: RtsNavigation,
+    private readonly isReservedForOtherWork: (worker: Unit) => boolean = () => false,
   ) {}
 
   /** Assign the nearest idle worker and name the failure mode for player feedback. */
   assignNearest(structure: PlacedStructure): WorkerAssignmentResult {
     const candidates = this.units.playerWorkers()
-      .filter((worker) => !this.assignments.has(worker.id))
+      .filter((worker) => !this.assignments.has(worker.id) && !this.isReservedForOtherWork(worker))
       .sort((a, b) => a.position.distanceToSquared(structure.object.position)
         - b.position.distanceToSquared(structure.object.position));
     for (const worker of candidates) {
@@ -86,7 +87,8 @@ export class WorkerConstructionSystem {
   }
 
   idleWorkerCount(): number {
-    return this.units.playerWorkers().filter((worker) => this.stateFor(worker) === "idle").length;
+    return this.units.playerWorkers()
+      .filter((worker) => this.stateFor(worker) === "idle" && !this.isReservedForOtherWork(worker)).length;
   }
 
   reset(): void {

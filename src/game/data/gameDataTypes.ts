@@ -74,6 +74,16 @@ export interface BuildingBalanceStats {
   /** Resource reservation is implemented in the following Phase 2 slice. */
   readonly cost: StartingResources;
   readonly constructionSeconds: number;
+  /** Present only on structures which turn assigned workers into a resource. */
+  readonly economy?: EconomyProductionBalance;
+}
+
+/** Data-owned first-pass production behaviour for a food or wood structure. */
+export interface EconomyProductionBalance {
+  readonly resourceId: string;
+  readonly workerCapacity: number;
+  readonly perWorkerPerMinute: number;
+  readonly localBufferCapacity: number;
 }
 
 /** `public/game-data/balance/buildings.json` — keyed by stable building id. */

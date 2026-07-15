@@ -5,6 +5,7 @@ import type { UnitSystem } from "../units/unitSystem";
 import type { CombatHit } from "../units/unitCombat";
 import type { WorkerConstructionSystem } from "../units/workerConstructionSystem";
 import type { ResourceWallet } from "../economy/resourceWallet";
+import type { EconomyProductionSystem } from "../economy/economyProductionSystem";
 
 const MAX_DAMAGE_LINES = 6;
 
@@ -30,6 +31,7 @@ export class RtsDebugOverlay {
     outcome: RtsMatchOutcome,
     workers: WorkerConstructionSystem,
     wallet: ResourceWallet,
+    production: EconomyProductionSystem | null,
   ): void {
     const lines = [`maç: ${outcome}`];
     for (const center of centers.all()) {
@@ -55,6 +57,11 @@ export class RtsDebugOverlay {
       "ekonomi:",
       ...Object.entries(resources).map(([id, amount]) => `${id}: ${amount} (+${wallet.incomePerMinute(id).toFixed(1)}/dk)`),
     );
+    for (const building of production?.snapshots() ?? []) {
+      lines.push(
+        `${building.structureLabel}: ${building.workingWorkers}/${building.workerCapacity} işçi · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · ${building.status}`,
+      );
+    }
     this.root.textContent = lines.join("\n");
   }
 

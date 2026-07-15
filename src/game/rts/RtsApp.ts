@@ -46,6 +46,7 @@ import { PlacedStructureSystem, type PlacedStructure } from "./structures/placed
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { ResourceWallet } from "./economy/resourceWallet";
+import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
 
@@ -81,6 +82,7 @@ export class RtsApp {
   private readonly structures = new PlacedStructureSystem();
   private readonly wallet: ResourceWallet;
   private readonly workerConstruction: WorkerConstructionSystem;
+  private economyProduction: EconomyProductionSystem | null = null;
   private readonly barracksProduction: BarracksProductionSystem;
   private readonly match = new RtsMatchState();
   private readonly matchOverlay: RtsMatchOverlay;
@@ -123,7 +125,18 @@ export class RtsApp {
       this.navigation,
       this.commandMarkers,
     );
-    this.workerConstruction = new WorkerConstructionSystem(this.units, this.structures, this.navigation);
+    this.workerConstruction = new WorkerConstructionSystem(
+      this.units,
+      this.structures,
+      this.navigation,
+      (worker) => this.economyProduction?.isAssigned(worker) ?? false,
+    );
+    this.economyProduction = new EconomyProductionSystem(
+      this.units,
+      this.structures,
+      this.navigation,
+      (worker) => this.workerConstruction.stateFor(worker) !== "idle",
+    );
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
     if (!guard) throw new Error(`Missing unit balance definition "${PLACEHOLDER_GUARD_ID}"`);
     this.barracksProduction = new BarracksProductionSystem(
@@ -294,6 +307,7 @@ export class RtsApp {
       this.wallet.advance(dt);
       updateUnitMovement(this.units.all(), dt);
       this.workerConstruction.update(dt);
+      this.economyProduction?.update(dt);
       for (const event of this.barracksProduction.update(dt)) {
         this.buildPalette.setActionMessage(
           event.type === "completed"
@@ -309,7 +323,14 @@ export class RtsApp {
         this.matchOverlay.showVictory();
       }
     }
-    this.debugOverlay?.update(this.units, this.centers, this.match.outcome, this.workerConstruction, this.wallet);
+    this.debugOverlay?.update(
+      this.units,
+      this.centers,
+      this.match.outcome,
+      this.workerConstruction,
+      this.wallet,
+      this.economyProduction,
+    );
     this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
   };
@@ -332,6 +353,7 @@ export class RtsApp {
   /** Restore all Faz 1 match-owned systems without reloading the browser route. */
   private readonly restartMatch = (): void => {
     this.selection.reset();
+    this.economyProduction?.reset();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
     this.units.clear();
