@@ -10,9 +10,10 @@ import { Plane, Raycaster, Vector2, Vector3, type PerspectiveCamera } from "thre
 import type { SelectionSystem } from "../selection/selectionSystem";
 import type { CommandMarkerSystem } from "./commandMarker";
 import { formationOffsets } from "../units/unitMovement";
-import type { Unit } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
+import type { CombatTarget } from "../combat/combatTarget";
+import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 
 /** The y = 0 walkable ground the runtime commands against. */
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
@@ -27,6 +28,7 @@ export class CommandSystem {
     private readonly camera: PerspectiveCamera,
     private readonly selection: SelectionSystem,
     private readonly units: UnitSystem,
+    private readonly centers: CommandCenterSystem,
     private readonly navigation: RtsNavigation,
     private readonly markers: CommandMarkerSystem,
   ) {}
@@ -36,7 +38,7 @@ export class CommandSystem {
     const selected = this.selection.selected();
     if (selected.length === 0) return;
 
-    const target = this.raycastUnit(x, y);
+    const target = this.raycastTarget(x, y);
     if (target && target.owner !== selected[0]?.owner) {
       for (const unit of selected) unit.setAttackTarget(target);
       this.markers.spawn(target.position, "#ff7468");
@@ -62,12 +64,14 @@ export class CommandSystem {
     for (const unit of this.selection.selected()) unit.stop();
   }
 
-  /** Raycast a screen point against unit bodies before treating it as ground. */
-  private raycastUnit(x: number, y: number): Unit | null {
+  /** Raycast a screen point against units or command centres before ground. */
+  private raycastTarget(x: number, y: number): CombatTarget | null {
     this.setNdc(x, y);
     this.raycaster.setFromCamera(this.ndc, this.camera);
-    const hit = this.raycaster.intersectObjects(this.units.bodyMeshes(), false)[0];
-    return hit ? this.units.unitForObject(hit.object) : null;
+    const targets = [...this.units.bodyMeshes(), ...this.centers.targetMeshes()];
+    const hit = this.raycaster.intersectObjects(targets, false)[0];
+    if (!hit) return null;
+    return this.units.unitForObject(hit.object) ?? this.centers.centerForObject(hit.object);
   }
 
   /** Raycast a screen pixel onto the ground plane, or null if it misses. */

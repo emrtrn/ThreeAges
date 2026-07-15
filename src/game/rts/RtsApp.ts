@@ -27,6 +27,7 @@ import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround } from "./world/rtsGround";
+import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
 import { UnitSystem } from "./units/unitSystem";
 import { updateUnitMovement } from "./units/unitMovement";
 import { updateUnitCombat } from "./units/unitCombat";
@@ -36,15 +37,23 @@ import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
 import { CommandMarkerSystem } from "./commands/commandMarker";
 import { CommandSystem } from "./commands/commandSystem";
+import { CommandCenterSystem } from "./structures/commandCenterSystem";
+import { COMMAND_CENTER_MAX_HEALTH } from "./structures/commandCenter";
+import { RtsMatchState } from "./match/rtsMatchState";
+import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
+import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
+const PLAYER_GUARD_COUNT = 20;
+const PLAYER_CENTER_POSITION = RTS_BLOCKOUT_MAP.playerStart;
+const ENEMY_CENTER_POSITION = RTS_BLOCKOUT_MAP.enemyStart;
 
 export interface RtsAppOptions {
-  /** `?debug`: reserved for the Faz 1 step-5 debug overlay (no-op for now). */
+  /** `?debug`: shows the compact Faz 1 RTS state/debug panel. */
   readonly debug?: boolean;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
   readonly unitBalance: UnitBalance;
@@ -56,6 +65,10 @@ export class RtsApp {
   private readonly cameraController = new RtsCameraController();
   private readonly input: RtsInput;
   private readonly units = new UnitSystem();
+  private readonly centers = new CommandCenterSystem();
+  private readonly match = new RtsMatchState();
+  private readonly matchOverlay: RtsMatchOverlay;
+  private readonly debugOverlay: RtsDebugOverlay | null;
   private readonly navigation = new RtsNavigation();
   private readonly marquee = new MarqueeOverlay();
   private readonly commandMarkers = new CommandMarkerSystem();
@@ -87,9 +100,12 @@ export class RtsApp {
       this.cameraController.camera,
       this.selection,
       this.units,
+      this.centers,
       this.navigation,
       this.commandMarkers,
     );
+    this.matchOverlay = new RtsMatchOverlay(this.restartMatch);
+    this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
     // Composite pointer handler: left button drives selection, right button
     // issues commands. Keeps the two systems decoupled (neither imports the
     // other); this composition root is the only place that sees both.
@@ -122,6 +138,8 @@ export class RtsApp {
     this.input.detach();
     this.pointer.detach();
     this.marquee.dispose();
+    this.matchOverlay.dispose();
+    this.debugOverlay?.dispose();
     this.renderer.dispose();
   }
 
@@ -141,6 +159,10 @@ export class RtsApp {
     this.scene.add(sun);
 
     this.scene.add(createRtsGround());
+    this.scene.add(createRtsMapBlockout());
+    this.navigation.setBlockers(RTS_BLOCKOUT_MAP.navigationBlockers);
+    this.spawnCenters();
+    this.scene.add(this.centers.root);
     this.scene.add(this.units.root);
     this.scene.add(this.commandMarkers.root);
   }
@@ -155,14 +177,14 @@ export class RtsApp {
     if (!guard) {
       throw new Error(`Missing unit balance definition "${PLACEHOLDER_GUARD_ID}"`);
     }
-    const cols = 4;
-    for (let i = 0; i < 8; i++) {
-      const x = -4.5 + (i % cols) * 3;
-      const z = 4 + Math.floor(i / cols) * 3;
+    const cols = 5;
+    for (let i = 0; i < PLAYER_GUARD_COUNT; i++) {
+      const x = PLAYER_CENTER_POSITION.x - 6 + (i % cols) * 3;
+      const z = PLAYER_CENTER_POSITION.z + 7 + Math.floor(i / cols) * 3;
       this.units.spawn("player", x, z, guard);
     }
     for (let i = 0; i < 3; i++) {
-      this.units.spawn("enemy", -3 + i * 3, -16, guard);
+      this.units.spawn("enemy", ENEMY_CENTER_POSITION.x - 3 + i * 3, ENEMY_CENTER_POSITION.z + 9, guard);
     }
   }
 
@@ -176,11 +198,46 @@ export class RtsApp {
     this.resize();
     if (this.input.consumeStopRequest()) this.commands.issueStop();
     this.cameraController.update(dt, this.input);
-    updateUnitMovement(this.units.all(), dt);
-    updateUnitCombat(this.units.all(), dt);
-    updateUnitDeaths(this.units, this.selection, dt);
+    if (this.match.active) {
+      updateUnitMovement(this.units.all(), dt);
+      updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
+      updateUnitDeaths(this.units, this.selection, dt);
+      if (this.match.update(this.centers) === "victory") {
+        this.log.info("Victory: enemy command center destroyed");
+        this.matchOverlay.showVictory();
+      }
+    }
+    this.debugOverlay?.update(this.units, this.centers, this.match.outcome);
     this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
+  };
+
+  private spawnCenters(): void {
+    this.centers.spawn(
+      "player",
+      PLAYER_CENTER_POSITION.x,
+      PLAYER_CENTER_POSITION.z,
+      COMMAND_CENTER_MAX_HEALTH,
+    );
+    this.centers.spawn(
+      "enemy",
+      ENEMY_CENTER_POSITION.x,
+      ENEMY_CENTER_POSITION.z,
+      COMMAND_CENTER_MAX_HEALTH,
+    );
+  }
+
+  /** Restore all Faz 1 match-owned systems without reloading the browser route. */
+  private readonly restartMatch = (): void => {
+    this.selection.reset();
+    this.units.clear();
+    this.centers.clear();
+    this.commandMarkers.clear();
+    this.match.reset();
+    this.spawnCenters();
+    this.spawnTestUnits();
+    this.matchOverlay.hide();
+    this.log.info("RTS match restarted");
   };
 
   /** Sync renderer + camera to the canvas's CSS size when it changes. */

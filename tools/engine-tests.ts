@@ -61,8 +61,11 @@ import {
 } from "../src/game/data/validateGameData";
 import { CommandSystem } from "../src/game/rts/commands/commandSystem";
 import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
+import { CommandCenterSystem } from "../src/game/rts/structures/commandCenterSystem";
+import { RtsMatchState } from "../src/game/rts/match/rtsMatchState";
 import { HealthComponent } from "../src/game/rts/units/health";
 import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
+import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -27745,6 +27748,7 @@ check("RTS contextual right-click assigns an enemy attack target", () => {
     camera,
     selection,
     units,
+    new CommandCenterSystem(),
     new RtsNavigation(),
     new CommandMarkerSystem(),
   );
@@ -27761,6 +27765,35 @@ check("RTS contextual right-click assigns an enemy attack target", () => {
   assert.equal(player.attackTarget, null);
   assert.equal(enemy.targeted, false);
   assert.equal(player.moveTarget, null);
+});
+
+check("RTS command-center placeholders keep one owned centre per side", () => {
+  const centers = new CommandCenterSystem();
+  const player = centers.spawn("player", 0, 16, 300);
+  const enemy = centers.spawn("enemy", 0, -26, 300);
+
+  assert.equal(centers.all().length, 2);
+  assert.equal(centers.get("player"), player);
+  assert.equal(centers.get("enemy"), enemy);
+  assert.equal(player.object.position.z, 16);
+  assert.equal(enemy.object.position.z, -26);
+  assert.equal(player.object.name, "rts-command-center-player");
+  assert.equal(player.health.current, 300);
+  assert.deepEqual(enemy.health.damage(25), {
+    applied: 25,
+    previous: 300,
+    current: 275,
+    depleted: false,
+  });
+  assert.throws(() => centers.spawn("player", 1, 1), /already exists/);
+});
+
+check("RTS test-force layout supports the Phase 1 twenty-unit selection target", () => {
+  const units = new UnitSystem();
+  for (let i = 0; i < 20; i += 1) {
+    units.spawn("player", -6 + (i % 5) * 3, Math.floor(i / 5) * 3, RTS_TEST_UNIT_STATS);
+  }
+  assert.equal(units.playerUnits().length, 20);
 });
 
 check("RTS health clamps damage and healing while exposing current/max/ratio", () => {
@@ -27820,6 +27853,37 @@ check("RTS melee attacks apply JSON damage on cooldown and clear a depleted targ
   assert.equal(defender.targeted, false, "target marker clears with the attack order");
 });
 
+check("RTS melee attacks can damage an enemy command center", () => {
+  const units = new UnitSystem();
+  const centers = new CommandCenterSystem();
+  const attacker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const enemyCenter = centers.spawn("enemy", 1.1, 0, 300);
+  attacker.setAttackTarget(enemyCenter);
+
+  const hits: Array<{ damage: number; targetOwner: string }> = [];
+  updateUnitCombat([attacker], 0, (hit) => {
+    hits.push({ damage: hit.change.applied, targetOwner: hit.target.owner });
+  });
+  assert.equal(enemyCenter.health.current, 288);
+  assert.deepEqual(hits, [{ damage: 12, targetOwner: "enemy" }]);
+});
+
+check("RTS match enters victory when the enemy command center is depleted", () => {
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 16, 300);
+  const enemy = centers.spawn("enemy", 0, -26, 300);
+  const match = new RtsMatchState();
+
+  assert.equal(match.update(centers), "active");
+  enemy.health.damage(300);
+  assert.equal(match.update(centers), "victory");
+  assert.equal(match.active, false);
+  match.reset();
+  assert.equal(match.outcome, "active", "restart returns the match state to playable");
+  centers.clear();
+  assert.equal(centers.all().length, 0, "restart can discard old command centers");
+});
+
 check("RTS death deselects, clears attackers, then removes the defeated unit", () => {
   const units = new UnitSystem();
   const player = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
@@ -27860,6 +27924,21 @@ check("RTS grid navigation routes a unit around a static blocker", () => {
   for (let i = 0; i < 300; i += 1) updateUnitMovement([walker], 1 / 60);
   assert.ok(walker.position.distanceTo(new Vector3(5, 0, 0)) < 0.16, "follows every waypoint to goal");
   assert.equal(walker.pathTarget, null, "clears the path after reaching the goal");
+});
+
+check("RTS Faz 2 blockout keeps both flanks reachable around the central ridge", () => {
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(RTS_BLOCKOUT_MAP.navigationBlockers);
+  const start = new Vector3(RTS_BLOCKOUT_MAP.playerStart.x, 0, RTS_BLOCKOUT_MAP.playerStart.z);
+  const goal = new Vector3(RTS_BLOCKOUT_MAP.enemyStart.x, 0, RTS_BLOCKOUT_MAP.enemyStart.z);
+  const path = navigation.plan(start, goal);
+  assert.ok(path && path.length > 2, "the opposing start areas remain connected");
+  const detours = path.filter((point) => Math.abs(point.x) > 12.5);
+  assert.ok(detours.length > 0, "the route uses an open flank instead of crossing the ridge");
+  assert.ok(
+    RTS_BLOCKOUT_MAP.externalResource.x > 12 && RTS_BLOCKOUT_MAP.externalResource.z > 4,
+    "the external-resource landmark is outside the player start and central ridge",
+  );
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

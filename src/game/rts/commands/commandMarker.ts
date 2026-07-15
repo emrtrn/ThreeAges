@@ -65,4 +65,13 @@ export class CommandMarkerSystem {
       marker.material.opacity = 0.9 * (1 - t);
     }
   }
+
+  /** Remove transient markers when resetting the match before their normal fade. */
+  clear(): void {
+    for (const marker of this.markers) {
+      this.root.remove(marker.mesh);
+      marker.material.dispose();
+    }
+    this.markers.length = 0;
+  }
 }

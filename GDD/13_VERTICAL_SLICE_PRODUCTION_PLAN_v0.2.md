@@ -659,17 +659,17 @@ Boş test sahnesinde oyuncunun kamera, seçim, hareket ve basit saldırı ile bi
 
 ### Maç omurgası
 
-- [ ] Oyuncu ve düşman merkez placeholder’ı ekle.
-- [ ] Merkez sağlık sistemi ekle.
-- [ ] Düşman merkezi yok edilince zafer oluştur.
-- [ ] Yeniden başlat butonu ekle.
+- [x] Oyuncu ve düşman merkez placeholder’ı ekle. (`CommandCenterSystem`: sahiplikli iki takım merkezi, Faz 1 test sahnesinde karşılıklı konumlar)
+- [x] Merkez sağlık sistemi ekle. (`CommandCenter.health`: birimlerle ortak sınırlı sağlık sözleşmesi; Faz 1 geçici dayanıklılığı 300)
+- [x] Düşman merkezi yok edilince zafer oluştur. (`RtsMatchState`: düşman merkezinin sağlık sıfırını tek yönlü `victory` sonucuna çevirir; UI sonraki maddede)
+- [x] Yeniden başlat butonu ekle. (`RtsMatchOverlay`: zafer panelindeki düğme birimleri, merkezleri, seçimi ve maç sonucunu temiz başlangıca döndürür)
 
 ### Debug
 
-- [ ] Birim durumunu göster.
-- [ ] Path durumunu göster.
-- [ ] Hasar logu göster.
-- [ ] Maç durumunu göster.
+- [x] Birim durumunu göster. (`?rts&debug`: sahiplik, can ve aktif emir)
+- [x] Path durumunu göster. (`?rts&debug`: kalan waypoint sayısı)
+- [x] Hasar logu göster. (`?rts&debug`: son altı vuruş)
+- [x] Maç durumunu göster. (`?rts&debug`: sonuç ve iki merkezin canı)
 
 ---
 
@@ -689,14 +689,14 @@ Oyunu başlat
 
 ## 23. Kabul Kriterleri
 
-- [ ] Kamera güvenilir çalışıyor.
-- [ ] UI tıklaması dünya komutu üretmiyor.
-- [ ] 20 birim kutu ile seçilebiliyor.
-- [ ] Birimler hedefe ulaşabiliyor.
-- [ ] Yakın dövüş saldırısı tutarlı çalışıyor.
-- [ ] Düşman merkez yıkımı maçı bitiriyor.
-- [ ] Yeniden başlatma sahneyi temiz duruma getiriyor.
-- [ ] Düşük kare hızında input takılı kalmıyor.
+- [x] Kamera güvenilir çalışıyor. (manuel tarayıcı doğrulaması)
+- [x] UI tıklaması dünya komutu üretmiyor. (manuel tarayıcı doğrulaması)
+- [x] 20 birim kutu ile seçilebiliyor. (manuel tarayıcı doğrulaması)
+- [x] Birimler hedefe ulaşabiliyor. (manuel tarayıcı doğrulaması)
+- [x] Yakın dövüş saldırısı tutarlı çalışıyor. (manuel tarayıcı doğrulaması)
+- [x] Düşman merkez yıkımı maçı bitiriyor. (manuel tarayıcı doğrulaması)
+- [x] Yeniden başlatma sahneyi temiz duruma getiriyor. (manuel tarayıcı doğrulaması)
+- [x] Düşük kare hızında input takılı kalmıyor. (manuel tarayıcı doğrulaması)
 
 ---
 
@@ -712,16 +712,16 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 
 ### Harita blockout
 
-- [ ] Oyuncu başlangıç alanını oluştur.
-- [ ] AI başlangıç alanını oluştur.
-- [ ] Merkezi genişleme alanı oluştur.
-- [ ] İki farklı yaklaşım rotası oluştur.
-- [ ] Bir dış kaynak alanı oluştur.
-- [ ] Harita sınırlarını doğal engel placeholder’larıyla kapat.
+- [x] Oyuncu başlangıç alanını oluştur. (`RTS_BLOCKOUT_MAP.playerStart`; mavi başlangıç alanı placeholder’ı)
+- [x] AI başlangıç alanını oluştur. (`RTS_BLOCKOUT_MAP.enemyStart`; kırmızı başlangıç alanı placeholder’ı)
+- [x] Merkezi genişleme alanı oluştur. (`RTS_BLOCKOUT_MAP.centralExpansion`; merkezi alan işaretçisi)
+- [x] İki farklı yaklaşım rotası oluştur. (merkez kaya sırtının doğu ve batı flankları; engine testi karşı başlangıçlar arasında rota kanıtlar)
+- [x] Bir dış kaynak alanı oluştur. (`RTS_BLOCKOUT_MAP.externalResource`; yeşil placeholder alanı)
+- [x] Harita sınırlarını doğal engel placeholder’larıyla kapat. (`createBoundaryPlaceholders`; navigasyon sınırı mevcut dünya limitleriyle korunur)
 
 ### Navigasyon
 
-- [ ] Piyade navigasyonunu oluştur.
+- [x] Piyade navigasyonunu oluştur. (`RtsNavigation`, artık blockout’un statik sırt engelini kullanır ve iki flank rotası test edilir)
 - [ ] Yapı placement grid’i oluştur.
 - [ ] Geçit minimum genişliğini test et.
 - [ ] Yapı oluşunca navigasyon güncellemesini test et.

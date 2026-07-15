@@ -76,6 +76,66 @@ body {
   pointer-events: auto;
 }
 
+/* RTS Faz 1 victory panel: blocks the field only once a match has ended. */
+.rts-match-overlay {
+  position: absolute;
+  inset: 0;
+  display: none;
+  place-items: center;
+  background: rgb(12 17 22 / 58%);
+  pointer-events: auto;
+  z-index: 20;
+}
+
+.rts-match-overlay.is-visible {
+  display: grid;
+}
+
+.rts-match-card {
+  min-width: 250px;
+  padding: 24px 30px;
+  color: #f6f1de;
+  text-align: center;
+  background: #26323a;
+  border: 1px solid #9eaf75;
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgb(0 0 0 / 40%);
+}
+
+.rts-match-card h1 {
+  margin: 0;
+  color: #e5d675;
+}
+
+.rts-match-card button {
+  padding: 9px 16px;
+  color: #18220f;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  background: #cddd8d;
+  border: 0;
+  border-radius: 4px;
+}
+
+/* Read-only Faz 1 diagnostics, intentionally available only with ?rts&debug. */
+.rts-debug-overlay {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  left: max(12px, env(safe-area-inset-left));
+  max-width: min(360px, calc(100vw - 24px));
+  max-height: 48vh;
+  overflow: auto;
+  padding: 10px 12px;
+  color: #dce8be;
+  font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre-wrap;
+  pointer-events: none;
+  background: rgb(13 20 24 / 78%);
+  border: 1px solid rgb(183 206 130 / 55%);
+  border-radius: 5px;
+}
+
 /*
  * UI Widget (UMG Lite) runtime styles. Rendered by engine/ui/uiRenderer.ts into
  * #ui-overlay. Containers inherit the overlay's click-through; only .ui-interactive

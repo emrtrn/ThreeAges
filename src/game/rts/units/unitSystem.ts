@@ -9,6 +9,7 @@
 import { Group, type Object3D } from "three";
 
 import type { UnitBalanceStats } from "../../data/gameDataTypes";
+import type { CombatTarget } from "../combat/combatTarget";
 import { Unit, type UnitOwner } from "./unit";
 
 export class UnitSystem {
@@ -41,7 +42,7 @@ export class UnitSystem {
   }
 
   /** Clear every attack order aimed at a unit that can no longer be targeted. */
-  clearAttackTargets(target: Unit): void {
+  clearAttackTargets(target: CombatTarget): void {
     for (const unit of this.units) {
       if (unit.attackTarget === target) unit.setAttackTarget(null);
     }
@@ -59,6 +60,11 @@ export class UnitSystem {
     this.root.remove(unit.object);
     unit.dispose();
     return true;
+  }
+
+  /** Remove all live units and release their placeholder render resources. */
+  clear(): void {
+    for (const unit of [...this.units]) this.despawn(unit);
   }
 
   /** Resolve a raycast-hit object (body mesh) back to its owning unit, if any. */

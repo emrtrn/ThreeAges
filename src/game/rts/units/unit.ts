@@ -18,6 +18,7 @@ import {
   Vector3,
 } from "three";
 import type { UnitBalanceStats } from "../../data/gameDataTypes";
+import type { CombatTarget } from "../combat/combatTarget";
 import { HealthComponent } from "./health";
 import { MeleeAttackComponent } from "./meleeAttack";
 
@@ -56,7 +57,7 @@ export class Unit {
   /** Active move destination (y = 0), or null when idle/arrived. */
   moveTarget: Vector3 | null = null;
   /** Enemy explicitly ordered by a contextual right-click, or null. */
-  attackTarget: Unit | null = null;
+  attackTarget: CombatTarget | null = null;
   private readonly ring: Mesh;
   private readonly targetRing: Mesh;
   private movePath: Vector3[] = [];
@@ -157,6 +158,11 @@ export class Unit {
     return this.movePath[0] ?? null;
   }
 
+  /** Remaining planned waypoints, for debug readout only. */
+  get pathWaypointCount(): number {
+    return this.movePath.length;
+  }
+
   /** Drop the current waypoint after reaching it. */
   advancePath(): void {
     this.movePath.shift();
@@ -173,13 +179,13 @@ export class Unit {
    * Order this unit to pursue an enemy. This records intent only: the following
    * melee-combat system decides when it is in range and applies damage.
    */
-  setAttackTarget(target: Unit | null): void {
+  setAttackTarget(target: CombatTarget | null): void {
     if (this.attackTarget === target) return;
-    if (this.attackTarget) this.attackTarget.setTargetedBy(-1);
+    this.attackTarget?.setTargetedBy?.(-1);
     this.attackTarget = target;
     this.moveTarget = null;
     this.movePath = [];
-    if (target) target.setTargetedBy(1);
+    target?.setTargetedBy?.(1);
   }
 
   /** Begin the one-shot defeat presentation. Returns true exactly once. */
@@ -211,7 +217,7 @@ export class Unit {
     this.object.clear();
   }
 
-  private setTargetedBy(delta: number): void {
+  setTargetedBy(delta: number): void {
     this.targeterCount = Math.max(0, this.targeterCount + delta);
     this.targetRing.visible = this.targeterCount > 0;
   }

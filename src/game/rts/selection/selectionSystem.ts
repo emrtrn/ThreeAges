@@ -44,6 +44,12 @@ export class SelectionSystem implements RtsPointerHandler {
     unit.setSelected(false);
   }
 
+  /** Clear selection and transient marquee state for a match restart. */
+  reset(): void {
+    this.clear();
+    this.marquee.hide();
+  }
+
   onSelectClick(x: number, y: number, additive: boolean): void {
     const unit = this.raycastUnit(x, y);
     if (unit && unit.owner === "player") {

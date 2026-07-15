@@ -6,8 +6,20 @@
  * but cannot deal damage or keep stale attack orders.
  */
 import type { Unit } from "./unit";
+import type { CombatTarget } from "../combat/combatTarget";
+import type { HealthChange } from "./health";
 
-export function updateUnitCombat(units: readonly Unit[], dt: number): void {
+export interface CombatHit {
+  readonly attacker: Unit;
+  readonly target: CombatTarget;
+  readonly change: HealthChange;
+}
+
+export function updateUnitCombat(
+  units: readonly Unit[],
+  dt: number,
+  onHit?: (hit: CombatHit) => void,
+): void {
   for (const unit of units) {
     unit.attack.update(dt);
     if (unit.health.depleted) {
@@ -23,7 +35,8 @@ export function updateUnitCombat(units: readonly Unit[], dt: number): void {
     }
     if (unit.position.distanceTo(target.position) > unit.attack.range) continue;
 
-    unit.attack.tryHit(target.health);
+    const change = unit.attack.tryHit(target.health);
+    if (change) onHit?.({ attacker: unit, target, change });
     if (target.health.depleted) unit.setAttackTarget(null);
   }
 }
