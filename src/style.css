@@ -44,25 +44,17 @@ body {
     background: #0b1014;
   }
 
+  /* The canvas is reparented into .editor-viewport-host (EditorUi) and simply
+     fills it. The host owns the geometry — including following the content
+     drawer — so no hand-tuned canvas offsets or :has() drawer rules remain. */
   body.editor-mode #game-canvas {
-    top: 58px;
-    right: 422px;
-    bottom: 40px;
-    left: 312px;
-    width: auto;
-    height: auto;
-    border: 1px solid #303a43;
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
     border-radius: 4px;
-    background: #111820;
-    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.32);
-  }
-
-  body.editor-mode:has(.editor-shell.content-drawer-open) #game-canvas {
-    bottom: calc(46px + clamp(232px, 34vh, 420px));
-  }
-
-  body.editor-mode:has(.editor-shell.content-drawer-open.content-drawer-tall) #game-canvas {
-    bottom: calc(46px + clamp(360px, 58vh, 680px));
+    /* Re-enable pointer events under the click-through host + overlay. */
+    pointer-events: auto;
   }
 }
 

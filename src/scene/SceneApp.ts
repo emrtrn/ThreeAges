@@ -1159,6 +1159,11 @@ export class SceneApp {
   };
   private readonly canvas: HTMLCanvasElement;
   private readonly editorEnabled: boolean;
+  /** Observes the canvas panel so renderer/camera track its real size, not the window. */
+  private viewportResizeObserver: ResizeObserver | null = null;
+  /** Last applied viewport size, so redundant resize callbacks are skipped. */
+  private lastViewportWidth = 0;
+  private lastViewportHeight = 0;
   /** Scratch raycaster + floor plane for the selection-aware orbit target. */
   private readonly raycaster = new Raycaster();
   private readonly floorPlane = new Plane(new Vector3(0, 1, 0), 0);
@@ -1370,19 +1375,20 @@ export class SceneApp {
     });
 
     if (this.editorEnabled) {
+      const { width, height } = this.viewportSize();
       this.postProcessPipeline = new PostProcessPipeline({
         renderer: this.renderer,
         scene: this.scene,
         camera: this.editorViewportCamera(),
-        width: window.innerWidth,
-        height: window.innerHeight,
+        width,
+        height,
       });
       this.selectionOutline = new EditorSelectionOutline({
         scene: this.scene,
         camera: this.editorViewportCamera(),
         pipeline: this.postProcessPipeline,
-        width: window.innerWidth,
-        height: window.innerHeight,
+        width,
+        height,
       });
     }
 
@@ -1443,6 +1449,14 @@ export class SceneApp {
 
     this.handleResize();
     window.addEventListener("resize", this.handleResize);
+    // The canvas is a panel-bounded work surface in the editor: its box changes
+    // when the outliner/details/content-drawer resize, not only on window resize.
+    // Observing the canvas itself catches both, keeping the renderer/camera in
+    // lockstep with the actual drawing area.
+    if (typeof ResizeObserver !== "undefined") {
+      this.viewportResizeObserver = new ResizeObserver(() => this.handleResize());
+      this.viewportResizeObserver.observe(this.canvas);
+    }
   }
 
   start(): void {
@@ -1491,6 +1505,8 @@ export class SceneApp {
   dispose(): void {
     cancelAnimationFrame(this.frameHandle);
     window.removeEventListener("resize", this.handleResize);
+    this.viewportResizeObserver?.disconnect();
+    this.viewportResizeObserver = null;
     this.unbindEditorInput?.();
     this.unbindEditorInput = null;
     this.clearAiScriptStimulusBridge();
@@ -10294,18 +10310,19 @@ export class SceneApp {
     const resolved = actor ? resolvePostProcess(actor) : null;
     applyPostProcessToneMapping(this.renderer, resolved);
     this.applySkyPostProcessExposure(resolved);
+    const { width, height } = this.viewportSize();
     this.postProcessPipeline?.setEffectPasses(
       createPostProcessEffectPasses(resolved, {
         scene: this.scene,
         camera: this.editorViewportCamera(),
-        width: window.innerWidth,
-        height: window.innerHeight,
+        width,
+        height,
       }),
     );
     this.postProcessPipeline?.setAntialiasPass(
       createPostProcessAntialiasPass(resolved, {
-        width: window.innerWidth,
-        height: window.innerHeight,
+        width,
+        height,
       }),
     );
   }
@@ -12532,9 +12549,23 @@ export class SceneApp {
     return Boolean(this.layout.characters[selection.index]);
   }
 
+  /**
+   * The real drawing area: the canvas panel's own box, not the window. In the
+   * editor the canvas is a sub-region between the outliner/details panels, so
+   * sizing the renderer to `window.inner*` would over-render and skew the aspect.
+   * Falls back to the window before the canvas has been laid out.
+   */
+  private viewportSize(): { width: number; height: number } {
+    const width = this.canvas.clientWidth || window.innerWidth || 1;
+    const height = this.canvas.clientHeight || window.innerHeight || 1;
+    return { width, height };
+  }
+
   private handleResize = (): void => {
-    const width = window.innerWidth;
-    const height = window.innerHeight;
+    const { width, height } = this.viewportSize();
+    if (width === this.lastViewportWidth && height === this.lastViewportHeight) return;
+    this.lastViewportWidth = width;
+    this.lastViewportHeight = height;
     const resetView = resizeSceneRuntimeViewport({
       camera: this.camera,
       renderer: this.renderer,

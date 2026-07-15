@@ -212,14 +212,6 @@ const TOOL_LABELS: Record<EditorTool, string> = {
   scale: "Scale",
 };
 
-/** UE5-style hover hint shown after a short delay on each transform-tool button. */
-const TOOL_TOOLTIPS: Record<EditorTool, string> = {
-  select: "Select objects — Q",
-  move: "Select and move objects — W",
-  rotate: "Select and rotate objects — E",
-  scale: "Select and scale objects — R",
-};
-
 /**
  * Inline 16×16 stroke SVGs for the transform toolbar. Kept as strings (no asset
  * files) so the editor bundle stays self-contained. All use `currentColor` so
@@ -282,7 +274,7 @@ const MENU_CHEVRON =
  */
 const ADD_ACTOR_CATEGORIES: readonly { label: string; icon: ActorTypeIcon }[] = [
   { label: "Lights", icon: "light" },
-  { label: "Shapes", icon: "mesh" },
+  { label: "Shapes", icon: "shape" },
   { label: "Volumes", icon: "volume" },
   { label: "Visual Effects", icon: "reflection" },
   { label: "Terrain", icon: "terrain" },
@@ -290,6 +282,14 @@ const ADD_ACTOR_CATEGORIES: readonly { label: string; icon: ActorTypeIcon }[] = 
   { label: "UI", icon: "widget" },
   { label: "Gameplay", icon: "gameplay" },
 ];
+
+const SHAPE_ACTOR_ICONS = {
+  cube: "shapeCube",
+  sphere: "shapeSphere",
+  cylinder: "shapeCylinder",
+  cone: "shapeCone",
+  plane: "shapePlane",
+} as const satisfies Record<"cube" | "sphere" | "cylinder" | "cone" | "plane", ActorTypeIcon>;
 
 /**
  * One placeable actor in the Add Actor flyout. A single descriptor drives the
@@ -428,7 +428,7 @@ export class EditorUi {
     this.root.dataset.testid = "forge-editor";
     this.root.addEventListener("contextmenu", (event) => event.preventDefault());
     this.root.innerHTML = `
-      <div class="editor-viewport-frame" aria-hidden="true"></div>
+      <div class="editor-viewport-host" data-viewport-host></div>
       <header class="editor-topbar">
         <div class="editor-lead">
           <div class="editor-brand">
@@ -438,14 +438,14 @@ export class EditorUi {
               <span class="editor-level-name" data-project-name>loading level</span>
             </span>
           </div>
-          <button type="button" class="tool-button editor-main-menu-button" data-main-menu-button aria-label="Menu" title="Menu">${UI_ICONS.hamburger}</button>
+          <button type="button" class="tool-button editor-main-menu-button" data-main-menu-button aria-label="Menu">${UI_ICONS.hamburger}</button>
         </div>
         <div class="editor-workbar">
           <div class="editor-history-actions">
-            <button type="button" class="tool-button" data-action="save" data-testid="editor-save" data-tip="Save Layout" aria-label="Save Layout">${TOOLBAR_ICONS.save}</button>
-            <button type="button" class="tool-button" data-action="undo" data-testid="editor-undo" data-tip="Undo" aria-label="Undo">${TOOLBAR_ICONS.undo}</button>
-            <button type="button" class="tool-button" data-action="redo" data-testid="editor-redo" data-tip="Redo" aria-label="Redo">${TOOLBAR_ICONS.redo}</button>
-            <button type="button" class="tool-button" data-action="delete" data-tip="Delete" aria-label="Delete">${TOOLBAR_ICONS.trash}</button>
+            <button type="button" class="tool-button" data-action="save" data-testid="editor-save" aria-label="Save Layout">${TOOLBAR_ICONS.save}</button>
+            <button type="button" class="tool-button" data-action="undo" data-testid="editor-undo" aria-label="Undo">${TOOLBAR_ICONS.undo}</button>
+            <button type="button" class="tool-button" data-action="redo" data-testid="editor-redo" aria-label="Redo">${TOOLBAR_ICONS.redo}</button>
+            <button type="button" class="tool-button" data-action="delete" aria-label="Delete">${TOOLBAR_ICONS.trash}</button>
           </div>
           <span class="topbar-divider"></span>
           <div class="add-actor-menu">
@@ -454,7 +454,7 @@ export class EditorUi {
           </div>
           <div class="editor-tools" data-tools></div>
           <div class="editor-snaps">
-          <label class="snap-widget" data-tip="Surface snapping — move grid" title="Move snap">
+          <label class="snap-widget">
             <input type="checkbox" data-snap-toggle="move" checked />
             <span class="snap-icon">${TOOLBAR_ICONS.snap}</span>
             <select data-snap="move" aria-label="Move snap">
@@ -463,7 +463,7 @@ export class EditorUi {
               <option value="1" selected>1</option>
             </select>
           </label>
-          <label class="snap-widget" data-tip="Rotation snapping — degrees" title="Rotate snap">
+          <label class="snap-widget">
             <input type="checkbox" data-snap-toggle="rotate" checked />
             <span class="snap-icon">${TOOLBAR_ICONS.rotate}</span>
             <select data-snap="rotate" aria-label="Rotate snap">
@@ -475,7 +475,7 @@ export class EditorUi {
               <option value="90">90°</option>
             </select>
           </label>
-          <label class="snap-widget" data-tip="Scale snapping — grid" title="Scale snap">
+          <label class="snap-widget">
             <input type="checkbox" data-snap-toggle="scale" checked />
             <span class="snap-icon">${TOOLBAR_ICONS.scale}</span>
             <select data-snap="scale" aria-label="Scale snap">
@@ -489,7 +489,7 @@ export class EditorUi {
           </div>
           <div class="editor-view-controls">
           <div class="camera-menu topbar-menu">
-            <button type="button" class="topbar-menu-button" data-camera-button title="Camera view">
+            <button type="button" class="topbar-menu-button" data-camera-button aria-label="Camera view">
               ${TOOLBAR_ICONS.camera}<span data-camera-label>Perspective</span>${MENU_CHEVRON}
             </button>
             <div class="topbar-popover" data-camera-popover>
@@ -500,7 +500,7 @@ export class EditorUi {
             </div>
           </div>
           <div class="viewmode-menu topbar-menu">
-            <button type="button" class="topbar-menu-button" data-viewmode-button title="View mode">
+            <button type="button" class="topbar-menu-button" data-viewmode-button aria-label="View mode">
               ${TOOLBAR_ICONS.viewmode}<span data-viewmode-label>Lit</span>${MENU_CHEVRON}
             </button>
             <div class="topbar-popover" data-viewmode-popover>
@@ -509,7 +509,7 @@ export class EditorUi {
             </div>
           </div>
           <div class="show-menu topbar-menu">
-            <button type="button" class="topbar-menu-button" data-show-button title="Show flags">Show${MENU_CHEVRON}</button>
+            <button type="button" class="topbar-menu-button" data-show-button aria-label="Show flags">Show${MENU_CHEVRON}</button>
             <div class="topbar-popover" data-show-popover>
               <button type="button" data-show-flag="collision">Collision</button>
               <button type="button" data-show-flag="ai-navigation">AI Navigation</button>
@@ -517,8 +517,8 @@ export class EditorUi {
             </div>
           </div>
           <div class="editor-play-split">
-            <button type="button" class="editor-play-button primary" data-action="play" data-testid="editor-play" data-tip="Play — save &amp; open runtime (P)" aria-label="Play" title="Save & open runtime (P)">${TOOLBAR_ICONS.play}<span>Play</span></button>
-            <button type="button" class="editor-play-more primary" data-play-menu aria-label="Play options" title="Play options">${MENU_CHEVRON}</button>
+            <button type="button" class="editor-play-button primary" data-action="play" data-testid="editor-play" aria-label="Play">${TOOLBAR_ICONS.play}<span>Play</span></button>
+            <button type="button" class="editor-play-more primary" data-play-menu aria-label="Play options">${MENU_CHEVRON}</button>
           </div>
           </div>
         </div>
@@ -651,6 +651,18 @@ export class EditorUi {
     if (!overlay) throw new Error("Missing #ui-overlay");
     overlay.append(this.root);
 
+    // Reparent the WebGL canvas (and the perf overlay) into the viewport host so
+    // the 3D surface is a real panel that sizes itself to the space between the
+    // outliner/details/content-drawer, instead of being a fullscreen backdrop
+    // pinned by hand-tuned CSS offsets. Renderer/camera track the host via a
+    // ResizeObserver on the canvas (SceneApp), and viewport overlays (Stats) now
+    // live inside the host so they clip to the drawing area.
+    const viewportHost = requireElement<HTMLElement>(this.root, "[data-viewport-host]");
+    const canvas = document.getElementById("game-canvas");
+    if (canvas) viewportHost.append(canvas);
+    const stats = document.getElementById("debug-stats");
+    if (stats) viewportHost.append(stats);
+
     this.contentList = requireElement(this.root, "[data-content-list]");
     this.contentDrawer = requireElement(this.root, "[data-content-drawer]");
     this.contentToggle = requireElement(this.root, "[data-content-toggle]");
@@ -716,7 +728,6 @@ export class EditorUi {
       button.className = "tool-button";
       button.innerHTML = TOOLBAR_ICONS[tool];
       button.dataset.tool = tool;
-      button.dataset.tip = TOOL_TOOLTIPS[tool];
       button.setAttribute("aria-label", TOOL_LABELS[tool]);
       button.setAttribute("aria-pressed", String(tool === this.activeTool));
       if (tool === this.activeTool) button.classList.add("active");
@@ -732,7 +743,7 @@ export class EditorUi {
     spaceButton.className = "tool-button space-toggle";
     spaceButton.dataset.spaceToggle = "";
     tools.append(spaceButton);
-    // Render the initial World/Local glyph + tooltip via the shared updater.
+    // Render the initial World/Local glyph and accessible label via the updater.
     this.updateSpaceButton(this.app.getTransformSpace());
     spaceButton.addEventListener("click", () => {
       this.updateSpaceButton(this.app.toggleTransformSpace());
@@ -769,7 +780,6 @@ export class EditorUi {
     const isLocal = space === "local";
     button.innerHTML = isLocal ? TOOLBAR_ICONS.local : TOOLBAR_ICONS.world;
     const label = isLocal ? "Local" : "World";
-    button.dataset.tip = `Transform in ${label} space — X`;
     button.setAttribute("aria-label", `${label} space`);
     button.classList.toggle("active", isLocal);
   }
@@ -970,7 +980,7 @@ export class EditorUi {
       this.openContextMenu(event as MouseEvent, [
         { label: "Play in New Tab", run: () => void this.playTest("newTab") },
         { label: "Play in Same Tab", run: () => void this.playTest("sameTab") },
-      ]);
+      ], "play-options-menu");
     });
     // Show flags are toggle buttons (active = green) matching the Camera / View
     // Mode option menus, rather than checkboxes.
@@ -1933,7 +1943,7 @@ export class EditorUi {
         key: `shape:${type}`,
         label: formatShapeTypeLabel(type),
         category: "Shapes",
-        icon: "mesh",
+        icon: SHAPE_ACTOR_ICONS[type],
         attr:
           `data-add-shape="${type}"` +
           (type === "cube" ? ' data-testid="add-shape-cube"' : ""),
@@ -2045,7 +2055,7 @@ export class EditorUi {
     special("targetPoint", "Target Point", "Gameplay", "gameplay", () =>
       this.app.addTargetPoint(),
     );
-    special("spline", "Spline", "Gameplay", "gameplay", () => this.app.addSpline());
+    special("spline", "Spline", "Gameplay", "spline", () => this.app.addSpline());
 
     return entries;
   }
@@ -3188,11 +3198,11 @@ export class EditorUi {
    * Builds and positions a context menu at the pointer, wiring outside-click /
    * Escape / blur dismissal. Shared by the outliner and the Content Browser.
    */
-  private openContextMenu(event: MouseEvent, items: ContextMenuItem[]): void {
+  private openContextMenu(event: MouseEvent, items: ContextMenuItem[], variantClass?: string): void {
     this.closeContextMenu();
 
     const menu = document.createElement("div");
-    menu.className = "context-menu";
+    menu.className = `context-menu${variantClass ? ` ${variantClass}` : ""}`;
     for (const item of items) {
       if (item.separator) {
         const divider = document.createElement("div");
@@ -3743,10 +3753,8 @@ export class EditorUi {
     this.redoButton.disabled = !state.canRedo;
     const undoTip = state.undoLabel ? `Undo ${state.undoLabel}` : "Undo";
     const redoTip = state.redoLabel ? `Redo ${state.redoLabel}` : "Redo";
-    this.undoButton.title = undoTip;
-    this.redoButton.title = redoTip;
-    this.undoButton.dataset.tip = undoTip;
-    this.redoButton.dataset.tip = redoTip;
+    this.undoButton.setAttribute("aria-label", undoTip);
+    this.redoButton.setAttribute("aria-label", redoTip);
   }
 
   private setInspectorTab(tab: InspectorTab): void {

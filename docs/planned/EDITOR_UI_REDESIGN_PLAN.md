@@ -146,9 +146,13 @@ Görsel dilin tek kaynağı. DOM yapısına dokunmaz; sonraki tüm fazlar bunu t
 - [x] Add Actor birincil (mavi) buton (`.primary`); araç grubu
       (seç/taşı/döndür/ölçekle + **World/Local 5. ikon**) segmentli görünüm
       (`.editor-tools` konteyner), aktif araç mavi dolgulu.
+- [x] Üst araç çubuğundaki `title` ve `data-tip` tooltip'leri kaldırıldı;
+      erişilebilir kontrol adları `aria-label` ile korunur.
 - [x] Snap widget'ları — zaten ikon-toggle + dropdown (checkbox görsel gizli,
       ikona tıkla toggle); aktif durum accent-mavi vurgulu dolguya geçirildi.
-- [x] Perspective / Lit / Show menü butonları token'lı görünümü miras alır.
+- [x] Perspective / Lit / Show menü butonları token'lı görünümü miras alır;
+      Perspective, Lit, Show ve Play seçenek menüleri Add Actor ile aynı düz,
+      çerçevesiz satır dilini kullanır.
 - [x] Play: birincil mavi split button — sol yarı `data-action="play"`
       (`editor-play` testid korunur, mevcut yeni-sekme davranışı), sağdaki ok
       (`data-play-menu`) menü açar ("Play in New Tab" / "Play in Same Tab";
@@ -186,6 +190,10 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
       kaldırıldı, erişilebilir ad `aria-label` ile korundu.
 - [x] Kategori satırlarına ikon (`ACTOR_TYPE_ICONS`) + sağa hizalı chevron
       (`::after` + `margin-left:auto`); hover alt menü davranışı korundu.
+- [x] Shapes kategorisi Volume'dan ayrışan primitive-shapes ikonuna, Spline
+      aktörü Target Point'ten ayrışan eğri/kontrol-noktası ikonuna geçirildi.
+- [x] Shapes altındaki Cube, Sphere, Cylinder, Cone ve Plane aktörleri kendilerine
+      özgü primitive ikonları kullanır; arama sonuçları aynı ikon eşlemesini tüketir.
 - [x] Aktör satırlarına tip ikonları (kategori + arama ortak
       `addActorItemMarkup`).
 - [x] **Sürükle-bırak korunur:** `bindAddActorEntry` her satıra (kategori ve

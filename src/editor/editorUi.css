@@ -573,6 +573,38 @@ body.editor-mode #debug-stats {
   text-align: left;
 }
 
+/* Camera, view-mode, and Show flyouts share Add Actor's flat, borderless rows. */
+.camera-menu .topbar-popover,
+.viewmode-menu .topbar-popover,
+.show-menu .topbar-popover {
+  gap: 0;
+}
+
+.editor-shell .camera-menu .topbar-popover button,
+.editor-shell .viewmode-menu .topbar-popover button,
+.editor-shell .show-menu .topbar-popover button {
+  min-height: 29px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 400;
+}
+
+.editor-shell .camera-menu .topbar-popover button:hover,
+.editor-shell .viewmode-menu .topbar-popover button:hover,
+.editor-shell .show-menu .topbar-popover button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.editor-shell .camera-menu .topbar-popover button.active,
+.editor-shell .viewmode-menu .topbar-popover button.active,
+.editor-shell .show-menu .topbar-popover button.active {
+  color: var(--forge-accent-text);
+  background: var(--forge-accent);
+}
+
 /* Hover-intent guard: when the pointer enters another topbar menu, its siblings
    get `.force-closed` (see bindMenuHoverIntent) which hides them immediately,
    overriding both the :hover reveal and the gentle close-on-leave delay so two
@@ -1052,6 +1084,30 @@ body.editor-mode #debug-stats {
 
 .context-menu-item.danger:hover:not(:disabled) {
   background: rgba(225, 91, 91, 0.25);
+}
+
+/* The Play split-button menu uses the same compact surface and flat rows as
+   Add Actor without changing the editor's general right-click menus. */
+.context-menu.play-options-menu {
+  min-width: 168px;
+  gap: 0;
+  padding: 6px;
+  border-color: var(--forge-border-mid);
+  border-radius: 6px;
+  background: rgba(19, 22, 25, 0.98);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+
+.play-options-menu .context-menu-item {
+  min-height: 29px;
+  padding: 0 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.play-options-menu .context-menu-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .context-menu-separator {
@@ -6336,21 +6392,37 @@ body.editor-mode #debug-stats {
     --content-drawer-height: clamp(232px, 34vh, 420px);
   }
 
-  .editor-viewport-frame {
+  /* The viewport host is a real panel: it owns the drawing area's geometry, and
+     the WebGL canvas + viewport overlays (Stats) are reparented inside it. The
+     dark workbench behind it is the body background (no 100vmax mask needed). */
+  .editor-viewport-host {
     position: absolute;
     top: calc(var(--editor-gap) + var(--editor-topbar-height) + var(--editor-gap));
     right: calc(var(--editor-details-width) + (var(--editor-gap) * 2));
     bottom: calc(var(--content-drawer-collapsed-h) + (var(--editor-gap) * 2));
     left: calc(var(--editor-outliner-width) + (var(--editor-gap) * 2));
     z-index: 1;
+    /* Host forwards to the canvas child (canvas re-enables pointer events). */
     pointer-events: none;
+    overflow: hidden;
     border: 1px solid #303a43;
     border-radius: 4px;
-    box-shadow: 0 0 0 100vmax #0b1014, 0 10px 22px rgba(0, 0, 0, 0.32);
+    background: #111820;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.32);
   }
 
-  .editor-shell.content-drawer-open .editor-viewport-frame {
+  .editor-shell.content-drawer-open .editor-viewport-host {
     bottom: calc(var(--content-drawer-height) + (var(--editor-gap) * 2));
+  }
+
+  /* Viewport overlay surface: Stats (and future overlays) anchor to the host's
+     top-left and clip to the drawing area, never to the whole page. */
+  .editor-viewport-host #debug-stats {
+    top: 8px;
+    left: 8px;
+    z-index: 2;
+    pointer-events: none;
+    max-width: calc(100% - 16px);
   }
 
   .editor-topbar {

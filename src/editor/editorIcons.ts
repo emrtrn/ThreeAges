@@ -20,6 +20,18 @@ const S = (path: string): string =>
 export const ACTOR_TYPE_ICONS = {
   /** Static / skeletal mesh — a cube. */
   mesh: S('<path d="M8 1.8l5.4 3v6.4L8 14.2l-5.4-3V4.8z"/><path d="M2.6 4.8L8 7.8l5.4-3M8 7.8v6.4"/>'),
+  /** Primitive shapes — circle, triangle, and square. */
+  shape: S('<circle cx="4.3" cy="5" r="2.3"/><path d="M9.8 2.7l2.8 4.8H7z"/><rect x="5.3" y="9" width="5.1" height="4.2" rx=".6"/>'),
+  /** Cube primitive. */
+  shapeCube: S('<path d="M8 1.8l5.4 3v6.4L8 14.2l-5.4-3V4.8z"/><path d="M2.6 4.8L8 7.8l5.4-3M8 7.8v6.4"/>'),
+  /** Sphere primitive with latitude and longitude guides. */
+  shapeSphere: S('<circle cx="8" cy="8" r="5.5"/><path d="M2.5 8h11M8 2.5c2 1.6 3 3.4 3 5.5s-1 3.9-3 5.5M8 2.5C6 4.1 5 5.9 5 8s1 3.9 3 5.5"/>'),
+  /** Cylinder primitive. */
+  shapeCylinder: S('<ellipse cx="8" cy="4" rx="4.6" ry="2"/><path d="M3.4 4v7.8M12.6 4v7.8"/><path d="M3.4 11.8c0 1.1 2.1 2 4.6 2s4.6-.9 4.6-2"/>'),
+  /** Cone primitive. */
+  shapeCone: S('<path d="M8 2.2L3.2 12"/><path d="M8 2.2L12.8 12"/><ellipse cx="8" cy="12" rx="4.8" ry="1.8"/>'),
+  /** Plane primitive shown in perspective. */
+  shapePlane: S('<path d="M1.8 9.8L6.3 4l7.9 2.2-4.5 5.8z"/><path d="M6.3 4l3.4 8M1.8 9.8l12.4-3.6"/>'),
   /** Light actor — a sun. */
   light: S('<circle cx="8" cy="8" r="2.6"/><path d="M8 1.6v1.8M8 12.6v1.8M1.6 8h1.8M12.6 8h1.8M3.5 3.5l1.3 1.3M11.2 11.2l1.3 1.3M12.5 3.5l-1.3 1.3M4.8 11.2l-1.3 1.3"/>'),
   /** Sky / atmosphere — a stylized sun over horizon. */
@@ -42,6 +54,8 @@ export const ACTOR_TYPE_ICONS = {
   character: S('<circle cx="8" cy="5" r="2.4"/><path d="M3.4 13.2a4.6 4.6 0 0 1 9.2 0z"/>'),
   /** Gameplay / blueprint node — connected nodes. */
   gameplay: S('<rect x="2.4" y="6" width="4" height="4" rx="1"/><rect x="9.6" y="3" width="4" height="4" rx="1"/><rect x="9.6" y="9" width="4" height="4" rx="1"/><path d="M6.4 8h1.6M11.6 7v2"/>'),
+  /** Spline — a curved path with endpoint and control markers. */
+  spline: S('<path d="M2.5 12c1.1-7.3 9.9-7.3 11 0"/><circle cx="2.5" cy="12" r="1.2"/><circle cx="13.5" cy="12" r="1.2"/><circle cx="8" cy="5.2" r="1"/>'),
   /** Group / folder actor. */
   group: S('<path d="M2.4 4.6h4l1.2 1.4h6v6.4a.6.6 0 0 1-.6.6H3a.6.6 0 0 1-.6-.6z"/>'),
   /** Fallback / unknown type — a generic marker. */
