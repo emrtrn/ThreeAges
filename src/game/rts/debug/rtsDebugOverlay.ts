@@ -8,6 +8,9 @@ import type { ResourceWallet } from "../economy/resourceWallet";
 import type { EconomyProductionSystem } from "../economy/economyProductionSystem";
 import type { PopulationSystem } from "../economy/populationSystem";
 import type { ResourceChange } from "../economy/resourceWallet";
+import type { RoadGraph } from "../roads/roadGraph";
+import type { DepotLogisticsSystem } from "../economy/depotLogisticsSystem";
+import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
 
 const MAX_DAMAGE_LINES = 6;
 const MAX_RESOURCE_LINES = 8;
@@ -44,6 +47,9 @@ export class RtsDebugOverlay {
     wallet: ResourceWallet,
     production: EconomyProductionSystem | null,
     population: PopulationSystem,
+    roads: RoadGraph,
+    depots: DepotLogisticsSystem,
+    productionLogistics: ProductionLogisticsSystem,
   ): void {
     const lines = [`maç: ${outcome}`];
     for (const center of centers.all()) {
@@ -79,6 +85,21 @@ export class RtsDebugOverlay {
         `${building.structureLabel}: ${building.assignedWorkers}/${building.workerCapacity} işçi (${building.workingWorkers} çalışıyor) · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · tick +${building.lastProductionTick.toFixed(2)} · ${building.status}`,
       );
     }
+    const roadComponents = roads.components();
+    lines.push(
+      `yollar: ${roads.all().length} düğüm · ${roads.edgeCount()} kenar · ${roadComponents.length} ağ`,
+      ...roadComponents.map((component) => `  ağ#${component.id}: ${component.cells.length} düğüm`),
+    );
+    const depotNodes = depots.snapshots();
+    lines.push(
+      `depolar: ${depotNodes.length}`,
+      ...depotNodes.map((depot) => `  depo#${depot.structureId}: ${depot.status}${depot.componentId ? ` · ağ#${depot.componentId}` : ""}`),
+    );
+    const producerLinks = productionLogistics.snapshots();
+    lines.push(
+      `üretim bağlantıları: ${producerLinks.length}`,
+      ...producerLinks.map((producer) => `  yapı#${producer.structureId} (${producer.resourceId}): ${producer.status}${producer.depotStructureId ? ` · depo#${producer.depotStructureId}` : ""}`),
+    );
     lines.push("kaynak hareketleri:", ...(this.resourceLines.length ? this.resourceLines : ["- yok"]));
     this.root.textContent = lines.join("\n");
   }

@@ -49,11 +49,14 @@ import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import { ResourceWallet } from "./economy/resourceWallet";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
+import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
+import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { PopulationSystem } from "./economy/populationSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem } from "./structures/workerProductionSystem";
 import { RoadGraph } from "./roads/roadGraph";
+import { RoadDebugView } from "./roads/roadDebugView";
 import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
 import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
 import { RtsRoadControls } from "./ui/rtsRoadControls";
@@ -96,6 +99,7 @@ export class RtsApp {
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
   private readonly roads: RoadGraph;
+  private readonly roadDebugView: RoadDebugView | null;
   private readonly territory = new TerritoryControlSystem(() => this.centers.all().map((center) => ({
     owner: center.owner,
     x: center.position.x,
@@ -113,6 +117,8 @@ export class RtsApp {
   private readonly population: PopulationSystem;
   private readonly workerConstruction: WorkerConstructionSystem;
   private economyProduction: EconomyProductionSystem | null = null;
+  private readonly depotLogistics: DepotLogisticsSystem;
+  private readonly productionLogistics: ProductionLogisticsSystem;
   private readonly barracksProduction: BarracksProductionSystem;
   private readonly workerProduction: WorkerProductionSystem;
   private readonly match = new RtsMatchState();
@@ -144,6 +150,9 @@ export class RtsApp {
   ) {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.roads = new RoadGraph(this.options.roadBalance);
+    this.roadDebugView = this.options.debug ? new RoadDebugView(this.roads) : null;
+    this.depotLogistics = new DepotLogisticsSystem(this.structures, this.roads);
+    this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics);
     this.wallet = new ResourceWallet(this.options.startingResources);
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
@@ -338,6 +347,7 @@ export class RtsApp {
     this.gameSpeedControls.dispose();
     this.placement.dispose();
     this.roadPlacement.dispose();
+    this.roadDebugView?.dispose();
     this.territory.dispose();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
@@ -370,6 +380,7 @@ export class RtsApp {
     this.scene.add(this.structures.root);
     this.scene.add(this.placement.root);
     this.scene.add(this.roadPlacement.root);
+    if (this.roadDebugView) this.scene.add(this.roadDebugView.root);
     this.scene.add(this.territory.root);
     this.scene.add(this.units.root);
     this.scene.add(this.commandMarkers.root);
@@ -424,7 +435,11 @@ export class RtsApp {
       this.wallet,
       this.economyProduction,
       this.population,
+      this.roads,
+      this.depotLogistics,
+      this.productionLogistics,
     );
+    this.roadDebugView?.refresh();
     this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
   };

@@ -75,6 +75,8 @@ import {
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
+import { DepotLogisticsSystem } from "../src/game/rts/economy/depotLogisticsSystem";
+import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLogisticsSystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
@@ -28133,10 +28135,64 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   roads.commit(detour);
   assert.equal(roads.connected({ x: -6, z: 0 }, { x: 6, z: 0 }), true);
   assert.ok(roads.all().some((segment) => segment.kind === "corner"), "detour produces corner segments");
+  const corner = roads.all().find((segment) => segment.kind === "corner");
+  assert.deepEqual(corner?.connections.length, 2, "a visual corner has exactly two exits");
+  assert.ok(corner?.connections.some((direction) => direction === "north" || direction === "south"));
+  assert.ok(corner?.connections.some((direction) => direction === "east" || direction === "west"));
+  assert.equal(roads.components().length, 1);
+  assert.equal(roads.edgeCount(), roads.all().length - 1, "the detour is one acyclic component");
+
+  const isolated = roads.plan({ x: 30, z: 30 }, { x: 34, z: 30 }, blockers);
+  assert.ok(isolated);
+  roads.commit(isolated);
+  assert.equal(roads.components().length, 2, "disconnected roads remain separate graph components");
+  assert.equal(roads.version, 2);
 
   const overlap = roads.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, blockers);
   assert.ok(overlap);
   assert.equal(overlap.woodCost, 0, "existing road cells are never charged twice");
+});
+
+check("RTS completed depots become road-graph nodes only when a road touches their footprint", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  const structures = new PlacedStructureSystem();
+  const depot = structures.place(depotStats, 0, 0);
+  structures.advanceConstruction(depot, depotStats.constructionSeconds);
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const farm = structures.place(farmStats, 0, 10);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  const roads = new RoadGraph(balance);
+  const logistics = new DepotLogisticsSystem(structures, roads);
+  const productionLogistics = new ProductionLogisticsSystem(structures, roads, logistics);
+  assert.deepEqual(logistics.snapshots().map(({ status }) => status), ["unlinked"]);
+  assert.deepEqual(productionLogistics.snapshots().map(({ status }) => status), ["unlinked-road"]);
+
+  const route = roads.plan({ x: 4, z: 0 }, { x: 4, z: 8 }, []);
+  assert.ok(route);
+  roads.commit(route);
+  assert.deepEqual(logistics.snapshots(), [{
+    structureId: depot.id,
+    x: 0,
+    z: 0,
+    roadCell: { x: 4, z: 0 },
+    componentId: 1,
+    status: "linked",
+  }]);
+  assert.deepEqual(productionLogistics.snapshots(), [{
+    structureId: farm.id,
+    resourceId: "food",
+    roadCell: { x: 4, z: 6 },
+    componentId: 1,
+    depotStructureId: depot.id,
+    status: "linked",
+  }]);
+  structures.clear();
 });
 
 check("RTS territory stores centre ownership per grid cell and gates normal building placement", () => {

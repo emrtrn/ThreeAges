@@ -13,16 +13,25 @@ export interface RoadCell {
   readonly z: number;
 }
 
+export type RoadDirection = "north" | "east" | "south" | "west";
+
 export type RoadSegmentKind = "end" | "straight" | "corner" | "t-junction" | "cross";
 
 export interface RoadSegment extends RoadCell {
   readonly kind: RoadSegmentKind;
+  /** Cardinal exits used by the renderer to shape this road tile. */
+  readonly connections: readonly RoadDirection[];
 }
 
 export interface RoadPlan {
   readonly cells: readonly RoadCell[];
   readonly newCells: readonly RoadCell[];
   readonly woodCost: number;
+}
+
+export interface RoadComponent {
+  readonly id: number;
+  readonly cells: readonly RoadCell[];
 }
 
 interface RoadNode extends RoadCell {
@@ -32,11 +41,17 @@ interface RoadNode extends RoadCell {
 /** Mutable, event-driven graph of completed road cells. */
 export class RoadGraph {
   private readonly cells = new Map<string, RoadCell>();
+  private revision = 0;
 
   constructor(private readonly balance: RoadBalance) {}
 
   get cellSize(): number {
     return this.balance.cellSize;
+  }
+
+  /** Increments only when committed topology changes, for event-style views. */
+  get version(): number {
+    return this.revision;
   }
 
   /** Preview the shortest valid orthogonal route and charge only new cells. */
@@ -54,19 +69,26 @@ export class RoadGraph {
 
   /** Commit a previewed plan. Existing cells are idempotent and remain free. */
   commit(plan: RoadPlan): void {
+    let changed = false;
     for (const cell of plan.cells) {
       const snapped = this.snap(cell);
+      if (!this.cells.has(this.key(snapped))) changed = true;
       this.cells.set(this.key(snapped), snapped);
     }
+    if (changed) this.revision += 1;
   }
 
   clear(): void {
+    if (this.cells.size > 0) this.revision += 1;
     this.cells.clear();
   }
 
   all(): readonly RoadSegment[] {
     return [...this.cells.values()]
-      .map((cell) => ({ ...cell, kind: this.segmentKind(cell) }))
+      .map((cell) => {
+        const connections = this.connections(cell);
+        return { ...cell, kind: this.segmentKind(connections), connections };
+      })
       .sort((a, b) => a.x - b.x || a.z - b.z);
   }
 
@@ -90,6 +112,50 @@ export class RoadGraph {
       }
     }
     return false;
+  }
+
+  /** Connected road islands, deterministically ordered for debug and logistics. */
+  components(): readonly RoadComponent[] {
+    const unvisited = new Set(this.cells.keys());
+    const components: RoadComponent[] = [];
+    while (unvisited.size > 0) {
+      const startKey = [...unvisited].sort()[0];
+      if (!startKey) break;
+      const start = this.cells.get(startKey);
+      if (!start) {
+        unvisited.delete(startKey);
+        continue;
+      }
+      const cells: RoadCell[] = [];
+      const queue = [start];
+      unvisited.delete(startKey);
+      for (let index = 0; index < queue.length; index += 1) {
+        const current = queue[index];
+        if (!current) continue;
+        cells.push(current);
+        for (const neighbor of this.neighbors(current)) {
+          const key = this.key(neighbor);
+          const next = this.cells.get(key);
+          if (!next || !unvisited.delete(key)) continue;
+          queue.push(next);
+        }
+      }
+      components.push({
+        id: components.length + 1,
+        cells: cells.sort((a, b) => a.x - b.x || a.z - b.z),
+      });
+    }
+    return components;
+  }
+
+  /** Undirected cardinal edges; each shared road boundary counts once. */
+  edgeCount(): number {
+    let count = 0;
+    for (const cell of this.cells.values()) {
+      if (this.cells.has(this.key({ x: cell.x + this.balance.cellSize, z: cell.z }))) count += 1;
+      if (this.cells.has(this.key({ x: cell.x, z: cell.z + this.balance.cellSize }))) count += 1;
+    }
+    return count;
   }
 
   private shortestRoute(start: RoadCell, goal: RoadCell, blockers: readonly NavBlocker[]): RoadCell[] | null {
@@ -128,12 +194,20 @@ export class RoadGraph {
     return path.reverse();
   }
 
-  private segmentKind(cell: RoadCell): RoadSegmentKind {
-    const neighbors = this.neighbors(cell).filter((neighbor) => this.cells.has(this.key(neighbor)));
-    if (neighbors.length >= 4) return "cross";
-    if (neighbors.length === 3) return "t-junction";
-    if (neighbors.length <= 1) return "end";
-    return neighbors[0]?.x === neighbors[1]?.x || neighbors[0]?.z === neighbors[1]?.z ? "straight" : "corner";
+  private connections(cell: RoadCell): RoadDirection[] {
+    return this.neighbors(cell)
+      .filter((neighbor) => this.cells.has(this.key(neighbor)))
+      .map((neighbor) => this.directionFrom(cell, neighbor));
+  }
+
+  private segmentKind(connections: readonly RoadDirection[]): RoadSegmentKind {
+    if (connections.length >= 4) return "cross";
+    if (connections.length === 3) return "t-junction";
+    if (connections.length <= 1) return "end";
+    return (connections.includes("east") && connections.includes("west"))
+      || (connections.includes("north") && connections.includes("south"))
+      ? "straight"
+      : "corner";
   }
 
   private neighbors(cell: RoadCell): RoadCell[] {
@@ -144,6 +218,12 @@ export class RoadGraph {
       { x: cell.x, z: cell.z + step },
       { x: cell.x, z: cell.z - step },
     ];
+  }
+
+  private directionFrom(cell: RoadCell, neighbor: RoadCell): RoadDirection {
+    if (neighbor.x > cell.x) return "east";
+    if (neighbor.x < cell.x) return "west";
+    return neighbor.z > cell.z ? "south" : "north";
   }
 
   private isBlocked(cell: RoadCell, blockers: readonly NavBlocker[]): boolean {

@@ -900,15 +900,15 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 
 - [x] Hücre tabanlı yol graph’ı oluştur. (`RoadGraph`: ortogonal en kısa rota, engel kaçınma, bağlantı sorgusu ve tekrar ücretlendirmeme)
 - [x] Başlangıç ve bitiş ile rota önizleme ekle. (`Yol Kur`: hover önizlemesi, geçersiz rota ve odun yetersizliği geri bildirimi)
-- [ ] Düz ve dönüş segmentlerini oluştur.
+- [x] Düz ve dönüş segmentlerini oluştur. (Bağlantı yönlerine göre düz, köşe, T ve kavşak hücreleri merkezi parça + kardinal çıkışlarla çizilir.)
 - [x] Yol maliyetini hesapla. (`balance/roads.json`: yalnız yeni hücre başına 4 Odun; ödeme commit anında yapılır)
 - [x] Yol bağlantısını runtime’da güncelle. (match-owned `RoadGraph` commit sonrası yol görünümünü yeniler; tekrar çizilen hücre ücretsizdir)
-- [ ] Yol debug görünümü ekle.
+- [x] Yol debug görünümü ekle. (`?rts&debug`: ağ bileşenine göre renkli düğüm ve kenarlar; panelde düğüm/kenar/ağ sayıları)
 
 ### Lojistik
 
-- [ ] Depoyu graph düğümü yap.
-- [ ] Üretim yapısını graph’a bağla.
+- [x] Depoyu graph düğümü yap. (Tamamlanmış Depo, yol hücresi yapının footprint’ine temas edince bileşen kimliği taşıyan lojistik düğümü olur.)
+- [x] Üretim yapısını graph’a bağla. (Tamamlanmış Tarla/Oduncu Kampı, temas eden yol hücresinin bileşenindeki en düşük kimlikli bağlı Depoyu hedefler.)
 - [ ] Bağlı tamponu global stoğa aktar.
 - [ ] Bağlantı kesilince aktarımı durdur.
 - [ ] Yerel tampon dolunca üretimi durdur.

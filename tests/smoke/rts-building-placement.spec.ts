@@ -22,6 +22,9 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 5/20");
   await expect(page.locator(".rts-build-income")).toHaveText("Gelir: Yiyecek +0.0/dk · Odun +0.0/dk");
   await expect(page.locator(".rts-debug-overlay")).toContainText("kaynak hareketleri:");
+  await expect(page.locator(".rts-debug-overlay")).toContainText("yollar: 0 düğüm · 0 kenar · 0 ağ");
+  await expect(page.locator(".rts-debug-overlay")).toContainText("depolar: 0");
+  await expect(page.locator(".rts-debug-overlay")).toContainText("üretim bağlantıları: 0");
 
   await page.getByRole("button", { name: "Yol Kur", exact: true }).click();
   await expect(page.locator(".rts-road-status")).toHaveText("Yol başlangıcını seçin.");
