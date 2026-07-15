@@ -27875,6 +27875,34 @@ check("RTS resource reservations are atomic and refund at most once", () => {
   assert.equal(wallet.amount("wood"), 200);
 });
 
+check("RTS resource wallet emits mutations and reports rolling income per minute", () => {
+  const wallet = new ResourceWallet({ food: 100, wood: 80 });
+  const changes: Array<{ kind: string; resourceId: string; delta: number }> = [];
+  const unsubscribe = wallet.subscribe((change) => changes.push(change));
+
+  wallet.advance(10);
+  wallet.credit("food", 10);
+  wallet.advance(10);
+  assert.equal(wallet.amount("food"), 110);
+  assert.equal(wallet.incomePerMinute("food"), 60);
+
+  const house = wallet.reserve({ wood: 80 });
+  assert.ok(house);
+  assert.equal(wallet.amount("wood"), 0);
+  assert.equal(wallet.refund(house), true);
+  unsubscribe();
+  wallet.credit("food", 5);
+
+  assert.deepEqual(changes.map(({ kind, resourceId, delta }) => ({ kind, resourceId, delta })), [
+    { kind: "income", resourceId: "food", delta: 10 },
+    { kind: "reserve", resourceId: "wood", delta: -80 },
+    { kind: "refund", resourceId: "wood", delta: 80 },
+  ]);
+  assert.throws(() => wallet.credit("food", 0), RangeError);
+  assert.throws(() => wallet.advance(-1), RangeError);
+  assert.throws(() => new ResourceWallet({ food: -1 }), RangeError);
+});
+
 check("RTS construction progress clamps and only completes once", () => {
   const construction = new ConstructionComponent(2);
   assert.equal(construction.advance(0.75), false);

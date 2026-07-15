@@ -291,6 +291,7 @@ export class RtsApp {
     if (this.input.consumeStopRequest()) this.commands.issueStop();
     this.cameraController.update(dt, this.input);
     if (this.match.active) {
+      this.wallet.advance(dt);
       updateUnitMovement(this.units.all(), dt);
       this.workerConstruction.update(dt);
       for (const event of this.barracksProduction.update(dt)) {
@@ -308,7 +309,7 @@ export class RtsApp {
         this.matchOverlay.showVictory();
       }
     }
-    this.debugOverlay?.update(this.units, this.centers, this.match.outcome, this.workerConstruction);
+    this.debugOverlay?.update(this.units, this.centers, this.match.outcome, this.workerConstruction, this.wallet);
     this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
   };

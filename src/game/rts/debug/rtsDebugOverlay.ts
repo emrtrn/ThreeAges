@@ -4,6 +4,7 @@ import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { UnitSystem } from "../units/unitSystem";
 import type { CombatHit } from "../units/unitCombat";
 import type { WorkerConstructionSystem } from "../units/workerConstructionSystem";
+import type { ResourceWallet } from "../economy/resourceWallet";
 
 const MAX_DAMAGE_LINES = 6;
 
@@ -28,6 +29,7 @@ export class RtsDebugOverlay {
     centers: CommandCenterSystem,
     outcome: RtsMatchOutcome,
     workers: WorkerConstructionSystem,
+    wallet: ResourceWallet,
   ): void {
     const lines = [`maç: ${outcome}`];
     for (const center of centers.all()) {
@@ -48,6 +50,11 @@ export class RtsDebugOverlay {
       );
     }
     lines.push("hasar:", ...(this.damageLines.length ? this.damageLines : ["- yok"]));
+    const resources = wallet.snapshot();
+    lines.push(
+      "ekonomi:",
+      ...Object.entries(resources).map(([id, amount]) => `${id}: ${amount} (+${wallet.incomePerMinute(id).toFixed(1)}/dk)`),
+    );
     this.root.textContent = lines.join("\n");
   }
 

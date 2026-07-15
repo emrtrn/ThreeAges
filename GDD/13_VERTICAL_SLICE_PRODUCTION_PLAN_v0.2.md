@@ -799,11 +799,11 @@ Yiyecek ve odun ile çalışan küçük ama tam ekonomi döngüsü oluşturmak.
 
 ### Ekonomi altyapısı
 
-- [ ] ResourceWallet oluştur.
-- [ ] Kaynak değişim event’leri ekle.
-- [ ] Negatif stok engeli ekle.
-- [ ] Kaynak rezervasyon API’si oluştur.
-- [ ] Kaynak/dakika ölçümünü ekle.
+- [x] ResourceWallet oluştur. (`src/game/rts/economy/resourceWallet.ts`; kaynak bakiyeleri ve match-reset sahipliği)
+- [x] Kaynak değişim event’leri ekle. (`subscribe`; gelir, rezervasyon, iade ve reset mutasyonlarını yayınlar)
+- [x] Negatif stok engeli ekle. (negatif/sonsuz başlangıç veya kredi değerleri `RangeError`; rezervasyon atomik ve negatif bakiyeye izin vermez)
+- [x] Kaynak rezervasyon API’si oluştur. (`reserve`/`refund`; iptal edilen inşaat maliyeti yalnız bir kez iade edilir)
+- [x] Kaynak/dakika ölçümünü ekle. (60 saniyelik kayan pencere; debug overlay kaynak başına geliri gösterir)
 
 ### Üretim yapıları
 
