@@ -2236,11 +2236,32 @@ body.editor-mode #debug-stats {
 
 .content-drawer-top {
   display: grid;
-  grid-template-columns: minmax(130px, 0.8fr) auto auto minmax(180px, 1fr) auto;
+  grid-template-columns: auto auto auto minmax(0, auto) minmax(160px, 1fr) auto;
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Breadcrumb path lives inline in the toolbar (folder icon + clickable crumbs),
+   matching the reference; the grid header keeps only the item count. */
+.content-breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--forge-text-secondary);
+}
+
+.content-breadcrumbs-icon {
+  display: inline-grid;
+  place-items: center;
+  color: var(--forge-text-dim);
+}
+
+.content-breadcrumbs-icon svg {
+  width: 15px;
+  height: 15px;
 }
 
 .content-primary-actions,
@@ -2261,6 +2282,20 @@ body.editor-mode #debug-stats {
   height: 28px;
   padding: 0 8px;
   white-space: nowrap;
+}
+
+/* Restore the accent fill on the primary Add button: the broad
+   `.editor-shell button` reset (element+class) otherwise out-specifies the
+   `.forge-btn-primary` token class and greys it out. */
+.content-primary-actions .forge-btn-primary {
+  border-color: transparent;
+  background: var(--forge-accent);
+  color: var(--forge-accent-text);
+}
+
+.content-primary-actions .forge-btn-primary:hover {
+  border-color: var(--forge-accent-hover);
+  background: var(--forge-accent-hover);
 }
 
 .content-primary-actions svg,
@@ -2333,6 +2368,7 @@ body.editor-mode #debug-stats {
 /* Collapsed strip shows only the title; the toolbar appears once open. */
 .editor-shell:not(.content-drawer-open) .content-primary-actions,
 .editor-shell:not(.content-drawer-open) .content-navigation,
+.editor-shell:not(.content-drawer-open) .content-breadcrumbs,
 .editor-shell:not(.content-drawer-open) .content-search-wrap,
 .editor-shell:not(.content-drawer-open) .content-drawer-actions {
   display: none;
@@ -2582,7 +2618,7 @@ body.editor-mode #debug-stats {
 .content-assets-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 10px;
   min-width: 0;
 }
@@ -2596,19 +2632,23 @@ body.editor-mode #debug-stats {
   white-space: nowrap;
 }
 
-.content-breadcrumb {
+/* Plain-text crumbs (not buttons): the broad `.editor-shell button` reset would
+   otherwise box them with a border + grey fill + 30px min-height. */
+.content-breadcrumbs .content-breadcrumb {
   max-width: 150px;
+  min-height: 0;
   overflow: hidden;
   border: 0;
+  border-radius: 0;
   padding: 0;
   color: var(--forge-text-secondary);
   background: transparent;
-  font-size: 11px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.content-breadcrumb:hover {
+.content-breadcrumbs .content-breadcrumb:hover {
   color: var(--forge-text-primary);
   background: transparent;
 }
@@ -2953,6 +2993,12 @@ body.editor-mode #debug-stats {
 
   .content-drawer-top {
     grid-template-columns: auto minmax(0, 1fr) auto auto auto;
+  }
+
+  /* No room for the inline breadcrumb on narrow screens; folder navigation
+     still works via the tree and the back/forward controls. */
+  .content-breadcrumbs {
+    display: none;
   }
 
   .content-filters {

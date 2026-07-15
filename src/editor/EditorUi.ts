@@ -603,6 +603,10 @@ export class EditorUi {
             <button type="button" class="forge-btn-ghost" data-content-back aria-label="Back" title="Back">${UI_ICONS.arrowLeft}</button>
             <button type="button" class="forge-btn-ghost" data-content-forward aria-label="Forward" title="Forward">${UI_ICONS.arrowRight}</button>
           </div>
+          <nav class="content-breadcrumbs" aria-label="Current folder">
+            <span class="content-breadcrumbs-icon" aria-hidden="true">${UI_ICONS.folder}</span>
+            <div class="content-path" data-content-path></div>
+          </nav>
           <div class="content-search-wrap">
             <input class="content-search" type="search" data-content-search placeholder="Search assets" />
             <button type="button" class="forge-btn-ghost content-filter-button" data-content-filter-button aria-label="Filter assets" aria-expanded="false" title="Filter assets">${UI_ICONS.filter}</button>
@@ -619,7 +623,7 @@ export class EditorUi {
         <div class="content-drawer-body">
           <nav class="folder-tree" data-folder-tree aria-label="Asset folders"></nav>
           <section class="content-assets">
-            <div class="content-assets-head"><div class="content-path" data-content-path>assets</div><span class="content-item-count" data-content-item-count>0 items</span></div>
+            <div class="content-assets-head"><span class="content-item-count" data-content-item-count>0 items</span></div>
             <div class="content-list" data-content-list></div>
           </section>
         </div>
@@ -1597,10 +1601,7 @@ export class EditorUi {
       nodes.push(heading);
       for (const folder of favorites) nodes.push(this.createFavoriteFolderRow(folder));
     }
-    const allHeading = document.createElement("div");
-    allHeading.className = "folder-section-heading";
-    allHeading.textContent = "All Content";
-    nodes.push(allHeading, this.createFolderRow(this.assetTreeRoot, 0));
+    nodes.push(this.createFolderRow(this.assetTreeRoot, 0));
     this.folderTree.replaceChildren(...nodes);
   }
 
