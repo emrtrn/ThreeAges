@@ -2361,87 +2361,6 @@
       "license": "Unknown"
     },
     {
-      "id": "dv-narrator",
-      "name": "DV Narrator",
-      "assetType": "dialogueVoice",
-      "category": "Dialogue",
-      "path": "assets/starter-content/Dialogue/DV_Narrator.dialoguevoice.json",
-      "tags": [
-        "starter",
-        "dialogue",
-        "voice"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Dialogue",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 194
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "dl-welcome",
-      "name": "DL Welcome",
-      "assetType": "dialogueLine",
-      "category": "Dialogue",
-      "path": "assets/starter-content/Dialogue/DL_Welcome.dialogue.json",
-      "tags": [
-        "starter",
-        "dialogue",
-        "line"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Dialogue",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 522
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "conv-welcome",
-      "name": "CONV Welcome",
-      "assetType": "conversation",
-      "category": "Dialogue",
-      "path": "assets/starter-content/Dialogue/CONV_Welcome.conversation.json",
-      "tags": [
-        "starter",
-        "dialogue",
-        "conversation"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Dialogue",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 724
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "hud",
       "name": "Starter HUD",
       "assetType": "ui",
@@ -2521,60 +2440,6 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 7842
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "loc-en",
-      "name": "Localization EN",
-      "assetType": "ui",
-      "category": "Localization",
-      "path": "assets/starter-content/Localization/en.loc.json",
-      "tags": [
-        "starter",
-        "localization",
-        "locale"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "UI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 160
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "loc-tr",
-      "name": "Localization TR",
-      "assetType": "ui",
-      "category": "Localization",
-      "path": "assets/starter-content/Localization/tr.loc.json",
-      "tags": [
-        "starter",
-        "localization",
-        "locale"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "UI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 180
       },
       "license": "Unknown"
     },
@@ -19971,75 +19836,6 @@
       "license": "Unknown"
     },
     {
-      "id": "sm-pickup-coin",
-      "name": "SM Pickup Coin",
-      "assetType": "staticMesh",
-      "category": "Props",
-      "path": "assets/starter-content/StaticMeshes/Props/SM_Pickup_Coin.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Props",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 10236032
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "sm-picku-health",
-      "name": "SM_Pickup_Health",
-      "assetType": "staticMesh",
-      "category": "Props",
-      "path": "assets/starter-content/StaticMeshes/Props/SM_Pickup_Health.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Props",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 10099736
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "sm-trigger-pad",
-      "name": "SM Trigger Pad",
-      "assetType": "staticMesh",
-      "category": "Props",
-      "path": "assets/starter-content/StaticMeshes/Props/SM_Trigger_Pad.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Props",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 6493676
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "script-gamemode-actor",
       "name": "Script Game Mode.Actor",
       "assetType": "prefab",
@@ -20151,29 +19947,6 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 265
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "script-paricle-actor",
-      "name": "Script Paricle.Actor",
-      "assetType": "prefab",
-      "category": "Script",
-      "path": "assets/starter-content/Script/Script_Paricle.actor.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 348
       },
       "license": "Unknown"
     },
@@ -20293,75 +20066,6 @@
       "license": "Unknown"
     },
     {
-      "id": "sm-chair-ktx2",
-      "name": "SM_Chair",
-      "assetType": "staticMesh",
-      "category": "Props",
-      "path": "assets/starter-content/StaticMeshes/Props/SM_Chair.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Props",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 383856
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "george-ktx2",
-      "name": "George",
-      "assetType": "skeletalMesh",
-      "category": "Props",
-      "path": "assets/starter-content/StaticMeshes/Props/George.glb",
-      "tags": [],
-      "placeable": true,
-      "placement": {
-        "surface": "character",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Props",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": true,
-        "bytes": 1639008
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "script-george-actor",
-      "name": "Script George.Actor",
-      "assetType": "prefab",
-      "category": "Props",
-      "path": "assets/starter-content/StaticMeshes/Props/Script_George.actor.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Props",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 347
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "soundcue-fire-soundcue",
       "name": "Sound Cue Fire.Soundcue",
       "assetType": "soundCue",
@@ -20381,342 +20085,6 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 269
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "ai-test-blackboard",
-      "name": "AI Test.Blackboard",
-      "assetType": "blackboard",
-      "category": "AI",
-      "path": "assets/starter-content/AI/AI_Test.blackboard.json",
-      "tags": [
-        "demo",
-        "ai"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "AI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 693
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "ai-test-behavior-tree",
-      "name": "AI Test.Behavior",
-      "assetType": "behaviorTree",
-      "category": "AI",
-      "path": "assets/starter-content/AI/AI_Test.behavior.json",
-      "tags": [
-        "demo",
-        "ai"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "AI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 5772
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "boss-phase-demo-blackboard",
-      "name": "Boss Phase Demo.Blackboard",
-      "assetType": "blackboard",
-      "category": "AI",
-      "path": "assets/starter-content/AI/Boss_Phase_Demo.blackboard.json",
-      "tags": [
-        "demo",
-        "ai",
-        "stateTree"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "AI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 965
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "boss-phase-demo-state-tree",
-      "name": "Boss Phase Demo.StateTree",
-      "assetType": "stateTree",
-      "category": "AI",
-      "path": "assets/starter-content/AI/Boss_Phase_Demo.stateTree.json",
-      "tags": [
-        "demo",
-        "ai",
-        "stateTree",
-        "boss"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "AI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 7153
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "ai-character-actor",
-      "name": "AI Character.Actor",
-      "assetType": "prefab",
-      "category": "Script",
-      "path": "assets/starter-content/Script/AI_Character.actor.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Script",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 350
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "testrange-guard-blackboard",
-      "name": "TestRange Guard.Blackboard",
-      "assetType": "blackboard",
-      "category": "AI",
-      "path": "assets/starter-content/AI/TestRange_Guard.blackboard.json",
-      "tags": [
-        "ai",
-        "testrange"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "AI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 1162
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "testrange-guard-behavior-tree",
-      "name": "TestRange Guard.Behavior",
-      "assetType": "behaviorTree",
-      "category": "AI",
-      "path": "assets/starter-content/AI/TestRange_Guard.behavior.json",
-      "tags": [
-        "ai",
-        "testrange"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "AI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 7636
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "testrange-guard-actor",
-      "name": "TestRange Guard.Actor",
-      "assetType": "prefab",
-      "category": "Actors",
-      "path": "assets/starter-content/Actors/TestRange_Guard.actor.json",
-      "tags": [
-        "ai",
-        "testrange"
-      ],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Actors",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": false,
-        "bytes": 1800
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "testrange-sentry-blackboard",
-      "name": "TestRange Sentry.Blackboard",
-      "assetType": "blackboard",
-      "category": "AI",
-      "path": "assets/starter-content/AI/TestRange_Sentry.blackboard.json",
-      "tags": [
-        "ai",
-        "testrange"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "AI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 417
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "testrange-sentry-behavior-tree",
-      "name": "TestRange Sentry.Behavior",
-      "assetType": "behaviorTree",
-      "category": "AI",
-      "path": "assets/starter-content/AI/TestRange_Sentry.behavior.json",
-      "tags": [
-        "ai",
-        "testrange"
-      ],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "AI",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 2917
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "testrange-sentry-actor",
-      "name": "TestRange Sentry.Actor",
-      "assetType": "prefab",
-      "category": "Actors",
-      "path": "assets/starter-content/Actors/TestRange_Sentry.actor.json",
-      "tags": [
-        "ai",
-        "testrange"
-      ],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Actors",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": false,
-        "bytes": 2205
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "testrange-alarm-button-actor",
-      "name": "TestRange AlarmButton.Actor",
-      "assetType": "prefab",
-      "category": "Actors",
-      "path": "assets/starter-content/Actors/TestRange_AlarmButton.actor.json",
-      "tags": [
-        "ai",
-        "testrange",
-        "interaction"
-      ],
-      "placeable": true,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": true,
-        "allowScale": true
-      },
-      "runtime": {
-        "loadGroup": "Actors",
-        "castShadow": true,
-        "receiveShadow": true,
-        "collision": false,
-        "bytes": 1464
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "land-level",
-      "name": "Land.Level",
-      "assetType": "level",
-      "category": "Levels",
-      "path": "assets/starter-content/Levels/Land.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Levels",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 95
       },
       "license": "Unknown"
     },
@@ -20836,29 +20204,6 @@
       "license": "Unknown"
     },
     {
-      "id": "tree-foliagetype",
-      "name": "Tree.Foliagetype",
-      "assetType": "foliageType",
-      "category": "foliage",
-      "path": "assets/foliage/Tree.foliagetype.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "foliage",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 429
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "sm-road-dirty",
       "name": "SM Road Dirty",
       "assetType": "staticMesh",
@@ -20878,29 +20223,6 @@
         "receiveShadow": true,
         "collision": true,
         "bytes": 9187116
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "bush-foliagetype",
-      "name": "Bush.Foliagetype",
-      "assetType": "foliageType",
-      "category": "foliage",
-      "path": "assets/foliage/Bush.foliagetype.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "foliage",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 429
       },
       "license": "Unknown"
     },
@@ -20928,11 +20250,2955 @@
       "license": "Unknown"
     },
     {
-      "id": "meshpaint-level",
-      "name": "Mesh Paint.Level",
+      "id": "archery-firstage-level1",
+      "name": "Archery First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Archery_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 336803
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archery-firstage-level2",
+      "name": "Archery First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Archery_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 429697
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archery-firstage-level3",
+      "name": "Archery First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Archery_FirstAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 535212
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archery-secondage-level1",
+      "name": "Archery Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Archery_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 512349
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archery-secondage-level2",
+      "name": "Archery Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Archery_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 594859
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "archery-secondage-level3",
+      "name": "Archery Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Archery_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 839513
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "barracks-firstage-level1",
+      "name": "Barracks First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 107856
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "barracks-firstage-level2",
+      "name": "Barracks First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 186323
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "barracks-firstage-level3",
+      "name": "Barracks First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks_FirstAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 367936
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "barracks-secondage-level1",
+      "name": "Barracks Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 306649
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "barracks-secondage-level2",
+      "name": "Barracks Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 655342
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "barracks-secondage-level3",
+      "name": "Barracks Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Barracks_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 786768
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "barrel",
+      "name": "Barrel",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Barrel.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 30797
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "crate",
+      "name": "Crate",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Crate.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 20750
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "crate-big-stack2",
+      "name": "Crate Big Stack2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Crate_Big_Stack2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 37369
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "crate-stack1",
+      "name": "Crate Stack1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Crate_Stack1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 37369
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "crate-stack2",
+      "name": "Crate Stack2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Crate_Stack2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 37368
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "dock-firstage",
+      "name": "Dock First Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Dock_FirstAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 25164
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-dirt-level1",
+      "name": "Farm Dirt Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_Dirt_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 24017
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-dirt-level2",
+      "name": "Farm Dirt Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_Dirt_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 165969
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-dirt-level3",
+      "name": "Farm Dirt Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_Dirt_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2637559
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-firstage-level1",
+      "name": "Farm First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 11063
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-firstage-level1-wheat",
+      "name": "Farm First Age Level1 Wheat",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_FirstAge_Level1_Wheat.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 485655
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-firstage-level2",
+      "name": "Farm First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 19702
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-firstage-level2-wheat",
+      "name": "Farm First Age Level2 Wheat",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_FirstAge_Level2_Wheat.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 990402
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-firstage-level3",
+      "name": "Farm First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_FirstAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 24021
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-firstage-level3-wheat",
+      "name": "Farm First Age Level3 Wheat",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_FirstAge_Level3_Wheat.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1245202
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-secondage-level1",
+      "name": "Farm Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 172557
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-secondage-level1-wheat",
+      "name": "Farm Second Age Level1 Wheat",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_SecondAge_Level1_Wheat.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 365613
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-secondage-level2",
+      "name": "Farm Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 193471
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-secondage-level2-wheat",
+      "name": "Farm Second Age Level2 Wheat",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_SecondAge_Level2_Wheat.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 541582
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-secondage-level3",
+      "name": "Farm Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 311869
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "farm-secondage-level3-wheat",
+      "name": "Farm Second Age Level3 Wheat",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Farm_SecondAge_Level3_Wheat.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 710058
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-firstage-1-level1",
+      "name": "Houses First Age 1 Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_1_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 32724
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-firstage-1-level2",
+      "name": "Houses First Age 1 Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_1_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 49081
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-firstage-1-level3",
+      "name": "Houses First Age 1 Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_1_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 77593
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-firstage-2-level1",
+      "name": "Houses First Age 2 Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_2_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 60378
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-firstage-2-level2",
+      "name": "Houses First Age 2 Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_2_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 79473
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-firstage-2-level3",
+      "name": "Houses First Age 2 Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_2_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 128532
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-firstage-3-level1",
+      "name": "Houses First Age 3 Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_3_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 23673
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-firstage-3-level2",
+      "name": "Houses First Age 3 Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_3_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 49179
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-firstage-3-level3",
+      "name": "Houses First Age 3 Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_FirstAge_3_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 124075
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-secondage-1-level1",
+      "name": "Houses Second Age 1 Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_SecondAge_1_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 145717
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-secondage-1-level2",
+      "name": "Houses Second Age 1 Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_SecondAge_1_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 210869
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-secondage-1-level3",
+      "name": "Houses Second Age 1 Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_SecondAge_1_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 206024
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-secondage-2-level1",
+      "name": "Houses Second Age 2 Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_SecondAge_2_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 104014
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-secondage-2-level2",
+      "name": "Houses Second Age 2 Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_SecondAge_2_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 242585
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-secondage-2-level3",
+      "name": "Houses Second Age 2 Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_SecondAge_2_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 352099
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-secondage-3-level1",
+      "name": "Houses Second Age 3 Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_SecondAge_3_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 67213
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-secondage-3-level2",
+      "name": "Houses Second Age 3 Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_SecondAge_3_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 152388
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "houses-secondage-3-level3",
+      "name": "Houses Second Age 3 Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Houses_SecondAge_3_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 220435
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "logs",
+      "name": "Logs",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Logs.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 37454
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "market-firstage-level1",
+      "name": "Market First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Market_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 191538
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "market-firstage-level2",
+      "name": "Market First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Market_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 334655
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "market-firstage-level3",
+      "name": "Market First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Market_FirstAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 515796
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "market-secondage-level1",
+      "name": "Market Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Market_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 462724
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "market-secondage-level2",
+      "name": "Market Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Market_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 784809
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "market-secondage-level3",
+      "name": "Market Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Market_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 1321371
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "mine",
+      "name": "Mine",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Mine.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 190856
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "mountain-group-1",
+      "name": "Mountain Group 1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Mountain_Group_1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 206700
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "mountain-group-2",
+      "name": "Mountain Group 2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Mountain_Group_2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 78706
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "mountain-single",
+      "name": "Mountain Single",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Mountain_Single.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 23608
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "mountainlarge-single",
+      "name": "Mountain Large Single",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/MountainLarge_Single.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 63627
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "port-firstage-level1",
+      "name": "Port First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Port_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 293882
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "port-firstage-level2",
+      "name": "Port First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Port_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 401405
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "port-firstage-level3",
+      "name": "Port First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Port_FirstAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 292839
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "port-secondage-level1",
+      "name": "Port Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Port_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 551060
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "port-secondage-level2",
+      "name": "Port Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Port_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 634358
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "port-secondage-level3",
+      "name": "Port Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Port_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 719218
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-gold-1",
+      "name": "Resource Gold 1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Gold_1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 66406
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-gold-2",
+      "name": "Resource Gold 2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Gold_2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 68640
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-gold-3",
+      "name": "Resource Gold 3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Gold_3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 60280
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-pinetree",
+      "name": "Resource Pine Tree",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_PineTree.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 16537
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-pinetree-group",
+      "name": "Resource Pine Tree Group",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_PineTree_Group.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 133261
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-pinetree-group-cut",
+      "name": "Resource Pine Tree Group Cut",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_PineTree_Group_Cut.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 41985
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-rock-1",
+      "name": "Resource Rock 1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Rock_1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 41053
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-rock-2",
+      "name": "Resource Rock 2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Rock_2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 37975
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-rock-3",
+      "name": "Resource Rock 3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Rock_3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 28317
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-tree-group",
+      "name": "Resource Tree Group",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Tree_Group.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 123646
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-tree-group-cut",
+      "name": "Resource Tree Group Cut",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Tree_Group_Cut.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 34048
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-tree1",
+      "name": "Resource Tree1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Tree1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 18032
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "resource-tree2",
+      "name": "Resource Tree2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Resource_Tree2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 13736
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Rock.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 12363
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "rock-group",
+      "name": "Rock Group",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Rock_Group.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 54634
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "storage-firstage-leve3",
+      "name": "Storage First Age Leve3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Storage_FirstAge_Leve3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 477834
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "storage-firstage-level1",
+      "name": "Storage First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Storage_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 267400
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "storage-firstage-level2",
+      "name": "Storage First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Storage_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 342120
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "storage-secondage-level1",
+      "name": "Storage Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Storage_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 687873
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "storage-secondage-level2",
+      "name": "Storage Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Storage_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 737684
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "storage-secondage-level3",
+      "name": "Storage Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Storage_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 708787
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "temple-firstage-level1",
+      "name": "Temple First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 371539
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "temple-firstage-level2",
+      "name": "Temple First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 455362
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "temple-firstage-level3",
+      "name": "Temple First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_FirstAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 846578
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "temple-secondage-level1",
+      "name": "Temple Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 36372
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "temple-secondage-level2",
+      "name": "Temple Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 168851
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "temple-secondage-level3",
+      "name": "Temple Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Temple_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 391069
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "towerhouse-firstage",
+      "name": "Tower House First Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/TowerHouse_FirstAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 161651
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "towerhouse-secondage",
+      "name": "Tower House Second Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/TowerHouse_SecondAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 310805
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "towncenter-firstage-level1",
+      "name": "Town Center First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 66568
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "towncenter-firstage-level2",
+      "name": "Town Center First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 214011
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "towncenter-firstage-level3",
+      "name": "Town Center First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter_FirstAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 321458
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "towncenter-secondage-level1",
+      "name": "Town Center Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 234182
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "towncenter-secondage-level2",
+      "name": "Town Center Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 379563
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "towncenter-secondage-level3",
+      "name": "Town Center Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/TownCenter_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 532793
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-firstage",
+      "name": "Wall First Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Wall_FirstAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 25295
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wall-secondage",
+      "name": "Wall Second Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Wall_SecondAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 24946
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "walltowers-door-firstage",
+      "name": "Wall Towers Door First Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WallTowers_Door_FirstAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 111774
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "walltowers-door-secondage",
+      "name": "Wall Towers Door Second Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WallTowers_Door_SecondAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 181866
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "walltowers-doorclosed-firstage",
+      "name": "Wall Towers Door Closed First Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WallTowers_DoorClosed_FirstAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 121860
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "walltowers-doorclosed-secondage",
+      "name": "Wall Towers Door Closed Second Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WallTowers_DoorClosed_SecondAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 200928
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "walltowers-firstage",
+      "name": "Wall Towers First Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WallTowers_FirstAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 82773
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "walltowers-secondage",
+      "name": "Wall Towers Second Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WallTowers_SecondAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 170756
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "watchtower-firstage-level1",
+      "name": "Watch Tower First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 52593
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "watchtower-firstage-level2",
+      "name": "Watch Tower First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 71852
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "watchtower-firstage-level3",
+      "name": "Watch Tower First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower_FirstAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 130098
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "watchtower-secondage-level1",
+      "name": "Watch Tower Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 291886
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "watchtower-secondage-level2",
+      "name": "Watch Tower Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 276170
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "watchtower-secondage-level3",
+      "name": "Watch Tower Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WatchTower_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 257040
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "windmill-firstage",
+      "name": "Windmill First Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Windmill_FirstAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 183663
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "windmill-secondage",
+      "name": "Windmill Second Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Windmill_SecondAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 170665
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wonder-firstage-level1",
+      "name": "Wonder First Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Wonder_FirstAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 328790
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wonder-firstage-level2",
+      "name": "Wonder First Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Wonder_FirstAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 637139
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wonder-firstage-level3",
+      "name": "Wonder First Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Wonder_FirstAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 845651
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wonder-secondage-level1",
+      "name": "Wonder Second Age Level1",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Wonder_SecondAge_Level1.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 58522
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wonder-secondage-level2",
+      "name": "Wonder Second Age Level2",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Wonder_SecondAge_Level2.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 734083
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wonder-secondage-level3",
+      "name": "Wonder Second Age Level3",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/Wonder_SecondAge_Level3.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 798211
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wonderwalls-firstage",
+      "name": "Wonder Walls First Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WonderWalls_FirstAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 315457
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "wonderwalls-secondage",
+      "name": "Wonder Walls Second Age",
+      "assetType": "staticMesh",
+      "category": "StaticMeshes",
+      "path": "assets/ThreeAges/StaticMeshes/WonderWalls_SecondAge.gltf",
+      "tags": [],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "StaticMeshes",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 643290
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "testlevel-level",
+      "name": "Test Level.Level",
       "assetType": "level",
       "category": "Levels",
-      "path": "assets/starter-content/Levels/MeshPaint.level.json",
+      "path": "assets/ThreeAges/Levels/TestLevel.level.json",
       "tags": [],
       "placeable": false,
       "placement": {

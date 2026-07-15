@@ -1,0 +1,79 @@
+{
+  "schema": 1,
+  "name": "TestLevel",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "name": "Player Start",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "archery-firstage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "archery-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "resource-tree-group",
+      "placements": []
+    }
+  ],
+  "characters": [],
+  "skyAtmosphere": {},
+  "cloudLayer": {},
+  "postProcess": {
+    "antialias": "smaa",
+    "bloom": {
+      "enabled": true,
+      "threshold": 1,
+      "intensity": 1,
+      "radius": 1
+    }
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        3,
+        9,
+        4
+      ],
+      "name": "Sun",
+      "rotation": [
+        -55,
+        35,
+        0
+      ],
+      "color": "#ffffff",
+      "intensity": 2,
+      "castShadow": true
+    }
+  ],
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "landscapes/landscape-1.landscape.json",
+      "name": "Landscape"
+    }
+  ]
+}
