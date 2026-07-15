@@ -205,6 +205,14 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
       ailelerini göster-gizle).
 - [x] Satırlar: aktör tip ikonu (Faz 0 setinden) + ad + sağda SVG göz/kilit
       (emoji kalktı); seçili satır mavi vurgu; hover durumları.
+- [x] Arama alanı Add Actor flyout ile aynı `UI_ICONS.search` SVG'sini kullanır;
+      `Search actors...` ipucu ve ikonlu alan; Scene Outliner'a ait tip filtresi
+      aramanın sağında aynı `tabpanel` içinde kalır. Satır grid'i ikon, ad ve
+      göz/kilit aksiyonlarını tek satırda hizalar.
+- [x] Panel kabuğu Details ile aynı sekme şeridi ve mavi aktif-tab alt çizgisine
+      geçirildi; mevcut aktör satırlarına dokunulmadı. `Scene Outliner` ilk
+      `tabpanel` olarak ayrıldı; ileride `Placed Actors` gibi paneller aynı şeride
+      ikinci sekme olarak eklenebilir.
 - [x] Alt bilgi satırı: "N actors (M selected)" — scene-object render akışında
       güncellenir; seçim değişimi aynı akıştan yeni Outliner görünümünü alır.
 - [x] Hiyerarşi girintisi ve grup satırları yeni görsel dile uyarlandı;
@@ -246,6 +254,10 @@ bıraktı (`data-testid="add-shape-cube"` korundu).
       hamburger popover'a taşındı); kalan sekmeler Details / Mesh Paint /
       Foliage. `data-inspector-tab="world"` kaldırılırken smoke/testid
       referansları aynı turda güncellenir.
+- [x] Mesh Paint ve Foliage panelleri, Details ile aynı kart tabanlı açılır/kapanır
+      bölüm başlıklarını ve `localStorage` kalıcılığını kullanır. Mesh Paint'teki
+      Transfer araçları ayrı bir bölüm olarak düzenlendi; mevcut paint/foliage
+      davranışları korunur.
 - [x] Referans görsel düzeltmesi: panel 410px sabit inspector genişliğine,
       mavi aktif-tab alt çizgisine ve koyu kart tabanlı section yüzeylerine
       geçirildi; coordinate alanları X/Y/Z vurgu çizgileri ve yoğun Unreal-benzeri

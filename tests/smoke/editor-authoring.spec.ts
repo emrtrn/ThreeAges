@@ -15,6 +15,23 @@ test("editor authoring smoke: place, transform, undo, save, reload, play", async
   await expect(page.locator("#game-canvas")).toBeVisible();
   await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 30_000 });
 
+  const transformTools = page.locator(".editor-tools [data-tool]");
+  await expect(transformTools).toHaveCount(4);
+  const toolNames = ["select", "move", "rotate", "scale"] as const;
+  for (const tool of toolNames) {
+    const button = page.locator(`.editor-tools [data-tool="${tool}"]`);
+    await button.click();
+    await expect(button).toHaveClass(/active/);
+    await expect(button).toHaveAttribute("aria-pressed", "true");
+    for (const otherTool of toolNames) {
+      if (otherTool === tool) continue;
+      await expect(page.locator(`.editor-tools [data-tool="${otherTool}"]`)).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+    }
+  }
+
   const rowCountBefore = await page.getByTestId("outliner-row").count();
   await page.getByTestId("add-actor-button").hover();
   await page.getByRole("button", { name: /^Shapes/ }).hover();

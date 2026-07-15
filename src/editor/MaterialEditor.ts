@@ -18,7 +18,6 @@ import {
 import {
   FORGE_MATERIAL_ALPHA_MODES,
   FORGE_MATERIAL_LAYER_BLEND_DRIVERS,
-  FORGE_MATERIAL_VERTEX_COLOR_CHANNELS,
   FORGE_MATERIAL_SIDES,
   FORGE_MATERIAL_TYPES,
   normalizeForgeMaterialDef,
@@ -517,10 +516,7 @@ export class MaterialEditor {
         }
         ${
           blend.driver === "vertexColor"
-            ? `
-              <label class="me-row"><span>Vertex Channel</span><select data-me-field="layerBlendVertexColorChannel">${this.enumOptions(FORGE_MATERIAL_VERTEX_COLOR_CHANNELS, blend.vertexColorChannel)}</select></label>
-              <label class="me-row"><span>Invert Vertex Color</span><input data-me-field="layerBlendInvertVertexColor" type="checkbox" ${blend.invertVertexColor ? "checked" : ""} /></label>
-            `
+            ? `<label class="me-row"><span>Invert Vertex Color</span><input data-me-field="layerBlendInvertVertexColor" type="checkbox" ${blend.invertVertexColor ? "checked" : ""} /></label>`
             : ""
         }
         ${this.layerNumberRow("Blend Amount", "layerBlendAmount", blend.amount, 0, 1, 0.01)}
@@ -705,7 +701,6 @@ export class MaterialEditor {
     else if (field === "layer1UvTilingX") next.layer1.uvTiling = { ...next.layer1.uvTiling, x: numberInput(input.value, 0.001, 100) };
     else if (field === "layer1UvTilingY") next.layer1.uvTiling = { ...next.layer1.uvTiling, y: numberInput(input.value, 0.001, 100) };
     else if (field === "layerBlendDriver") next.driver = input.value as ForgeMaterialLayerBlendDriver;
-    else if (field === "layerBlendVertexColorChannel") next.vertexColorChannel = input.value as ForgeMaterialLayerBlend["vertexColorChannel"];
     else if (field === "layerBlendInvertVertexColor") next.invertVertexColor = input instanceof HTMLInputElement && input.checked;
     else if (field === "layerBlendAmount") next.amount = numberInput(input.value, 0, 1);
     else if (field === "layerBlendMin") next.min = numberInput(input.value, -100000, 100000);

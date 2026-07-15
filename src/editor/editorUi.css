@@ -260,6 +260,16 @@ body.editor-mode #debug-stats {
   color: var(--forge-accent-text);
 }
 
+/* Transform tools use the same blue selected state as the reference toolbar.
+   Keep this scoped to the tool group so other toolbar buttons can have their
+   own active/primary treatment. */
+.editor-shell .editor-tools .tool-button.active,
+.editor-shell .editor-tools .tool-button.active:hover {
+  border-color: var(--forge-accent);
+  background: var(--forge-accent);
+  color: var(--forge-accent-text);
+}
+
 .editor-shell .tool-button.space-toggle {
   margin-left: 2px;
 }
@@ -697,6 +707,11 @@ body.editor-mode #debug-stats {
   transition: bottom 140ms ease;
 }
 
+.editor-panel.editor-outliner {
+  padding: 0;
+  background: #111820;
+}
+
 .editor-details {
   right: 0;
   bottom: 0;
@@ -715,19 +730,41 @@ body.editor-mode #debug-stats {
   text-transform: uppercase;
 }
 
-.outliner-header {
+.outliner-tabs {
+  position: relative;
+}
+
+.editor-shell .outliner-tab {
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.outliner-search-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.outliner-search-actions {
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  min-height: 30px;
-  margin-bottom: 10px;
+}
+
+.outliner-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: calc(100% - 44px);
+  min-height: 0;
+  padding: 10px 9px 18px;
 }
 
 .editor-shell .outliner-filter-button {
-  width: 28px;
-  min-width: 28px;
-  height: 28px;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
   padding: 0;
   color: var(--forge-text-secondary);
 }
@@ -867,7 +904,7 @@ body.editor-mode #debug-stats {
 .outliner-list {
   display: grid;
   gap: 0;
-  max-height: calc(100% - 98px);
+  min-height: 0;
   overflow: auto;
   padding-right: 0;
 }
@@ -886,19 +923,41 @@ body.editor-mode #debug-stats {
 .outliner-search {
   width: 100%;
   height: 30px;
-  margin-bottom: 8px;
+  margin: 0;
   border: 1px solid var(--forge-border-strong);
   border-radius: 6px;
-  padding: 0 8px;
+  padding: 0 8px 0 30px;
   color: #ffffff;
   background: #101316;
+}
+
+.outliner-search-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.outliner-search-row .outliner-search-wrap {
+  margin-bottom: 0;
+}
+
+.outliner-search-wrap > svg {
+  position: absolute;
+  top: 50%;
+  left: 9px;
+  width: 14px;
+  height: 14px;
+  color: var(--forge-text-secondary);
+  pointer-events: none;
+  transform: translateY(-50%);
 }
 
 .outliner-row {
   width: 100%;
   min-height: 40px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   text-align: left;
@@ -1028,6 +1087,8 @@ body.editor-mode #debug-stats {
 
 .outliner-actions {
   display: inline-flex;
+  align-items: center;
+  justify-self: end;
   gap: 4px;
 }
 
@@ -6300,10 +6361,11 @@ body.editor-mode #debug-stats {
     box-shadow: 0 8px 18px rgba(0, 0, 0, 0.28);
   }
 
-  .editor-outliner {
+  .editor-panel.editor-outliner {
     left: var(--editor-gap);
     width: var(--editor-outliner-width);
     border-right-width: 1px;
+    background: linear-gradient(180deg, #171e24 0%, #111820 100%);
   }
 
   .editor-details {

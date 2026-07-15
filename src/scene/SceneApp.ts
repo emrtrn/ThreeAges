@@ -1005,8 +1005,9 @@ export class SceneApp {
   private meshPaintToolSettings: MeshPaintToolSettings = {
     tool: "paint",
     colorView: "off",
+    // Mesh Paint is standardized on the R channel: paint drives R->1, erase R->0.
     color: [1, 0, 0, 1],
-    channels: ["r", "g", "b", "a"],
+    channels: ["r"],
     brushSize: 1,
     strength: 0.75,
     falloff: 1,

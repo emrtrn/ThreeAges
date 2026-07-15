@@ -533,23 +533,40 @@ export class EditorUi {
         </div>
       </header>
       <aside class="editor-panel editor-outliner">
-        <div class="outliner-header">
-          <div class="panel-title">Scene Outliner</div>
-          <button type="button" class="forge-btn-ghost outliner-filter-button" data-outliner-filter-button
-            data-testid="outliner-filter" aria-label="Filter scene objects" aria-expanded="false" title="Filter scene objects">${UI_ICONS.filter}</button>
-          <div class="outliner-filter-popover" data-outliner-filter-popover hidden>
-            <strong>Show types</strong>
-            ${OUTLINER_FILTER_TYPES.map(({ type, label }) => `<label><input type="checkbox" data-outliner-type-filter="${type}" checked />${label}</label>`).join("")}
-          </div>
+        <div class="inspector-tabs outliner-tabs" role="tablist" aria-label="Outliner panels">
+          <button
+            type="button"
+            class="inspector-tab outliner-tab active"
+            data-outliner-tab="scene"
+            role="tab"
+            aria-selected="true"
+            aria-controls="scene-outliner-pane"
+          >Scene Outliner</button>
         </div>
-        <input
-          class="outliner-search"
-          type="search"
-          data-outliner-search
-          placeholder="Search"
-        />
-        <div class="outliner-list" data-outliner-list></div>
-        <div class="outliner-summary" data-outliner-summary data-testid="outliner-summary"></div>
+        <div class="outliner-pane" id="scene-outliner-pane" data-outliner-pane="scene" role="tabpanel">
+          <div class="outliner-search-row">
+            <label class="outliner-search-wrap">
+              ${UI_ICONS.search}
+              <input
+                class="outliner-search"
+                type="search"
+                data-outliner-search
+                placeholder="Search actors..."
+                aria-label="Search actors"
+              />
+            </label>
+            <div class="outliner-search-actions">
+              <button type="button" class="forge-btn-ghost outliner-filter-button" data-outliner-filter-button
+                data-testid="outliner-filter" aria-label="Filter scene objects" aria-expanded="false" title="Filter scene objects">${UI_ICONS.filter}</button>
+              <div class="outliner-filter-popover" data-outliner-filter-popover hidden>
+                <strong>Show types</strong>
+                ${OUTLINER_FILTER_TYPES.map(({ type, label }) => `<label><input type="checkbox" data-outliner-type-filter="${type}" checked />${label}</label>`).join("")}
+              </div>
+            </div>
+          </div>
+          <div class="outliner-list" data-outliner-list></div>
+          <div class="outliner-summary" data-outliner-summary data-testid="outliner-summary"></div>
+        </div>
       </aside>
       <aside class="editor-panel editor-details">
         <div class="inspector-tabs" role="tablist" aria-label="Inspector">
@@ -710,7 +727,8 @@ export class EditorUi {
       button.dataset.tool = tool;
       button.dataset.tip = TOOL_TOOLTIPS[tool];
       button.setAttribute("aria-label", TOOL_LABELS[tool]);
-      if (tool === "move") button.classList.add("active");
+      button.setAttribute("aria-pressed", String(tool === this.activeTool));
+      if (tool === this.activeTool) button.classList.add("active");
       button.addEventListener("click", () => {
         this.setActiveTool(tool);
       });
@@ -747,7 +765,9 @@ export class EditorUi {
   private setActiveTool(tool: EditorTool): void {
     this.activeTool = tool;
     for (const [itemTool, item] of this.toolButtons) {
-      item.classList.toggle("active", itemTool === tool);
+      const active = itemTool === tool;
+      item.classList.toggle("active", active);
+      item.setAttribute("aria-pressed", String(active));
     }
     this.app.setEditorTool(tool);
   }
@@ -1024,6 +1044,12 @@ export class EditorUi {
         if (!this.contentDrawerOpen) return;
         const target = event.target as Node | null;
         if (!target) return;
+        // Editor context menus are appended to <body>, so a click on the gear
+        // settings menu (or any menu spawned from a drawer control) is outside
+        // the drawer DOM. It is still part of the drawer's own UI, so it must
+        // not count as an outside click — otherwise "Lock Drawer Open" would
+        // auto-close the drawer before its handler even runs.
+        if (this.contextMenu?.contains(target)) return;
         if (
           !this.contentFilterPopover.hidden &&
           !this.contentFilterPopover.contains(target) &&
@@ -3824,43 +3850,27 @@ export class EditorUi {
   /** Scene-level Vertex Color authoring. Material Editor consumes these colors but never edits them. */
   private renderMeshPaint(): void {
     const settings = this.app.getMeshPaintToolSettings();
-    const rgb = settings.color
-      .slice(0, 3)
-      .map((value) => Math.round(Math.min(1, Math.max(0, value)) * 255).toString(16).padStart(2, "0"))
-      .join("");
-    const checked = (channel: string): string => settings.channels.includes(channel as "r" | "g" | "b" | "a") ? "checked" : "";
     this.meshPaintBody.innerHTML = `
-      <div class="detail-section">
+      <div class="detail-section" data-inspector-section="vertex-color">
         <div class="detail-section-title">Vertex Color / Weights</div>
-        <div class="detail-hint">Select a static-mesh placement, then paint in the viewport. Hold Shift while left-dragging to erase without changing tools. R/G/B/A channels are also the Vertex Weights workflow; data is stored per placement in the level sidecar.</div>
         <label class="detail-row"><span>Tool</span>
           <select data-mesh-paint-tool><option value="paint" ${settings.tool === "paint" ? "selected" : ""}>Paint</option><option value="erase" ${settings.tool === "erase" ? "selected" : ""}>Erase</option></select>
         </label>
         <label class="detail-row"><span>Color View</span>
           <select data-mesh-paint-color-view>
             <option value="off" ${settings.colorView === "off" ? "selected" : ""}>Off</option>
-            <option value="rgb" ${settings.colorView === "rgb" ? "selected" : ""}>RGB</option>
-            <option value="alpha" ${settings.colorView === "alpha" ? "selected" : ""}>Alpha</option>
-            <option value="r" ${settings.colorView === "r" ? "selected" : ""}>Red</option>
-            <option value="g" ${settings.colorView === "g" ? "selected" : ""}>Green</option>
-            <option value="b" ${settings.colorView === "b" ? "selected" : ""}>Blue</option>
+            <option value="r" ${settings.colorView === "r" ? "selected" : ""}>Weight (R)</option>
           </select>
         </label>
-        <label class="detail-row"><span>Color</span><input type="color" value="#${rgb}" data-mesh-paint-color /></label>
-        <label class="detail-row"><span>Alpha</span><input type="number" min="0" max="1" step="0.05" value="${settings.color[3]}" data-mesh-paint-alpha /></label>
         <label class="detail-row"><span>Brush Size</span><input type="number" min="0.01" step="0.1" value="${settings.brushSize}" data-mesh-paint-size /></label>
         <label class="detail-row"><span>Strength</span><input type="number" min="0" max="1" step="0.05" value="${settings.strength}" data-mesh-paint-strength /></label>
         <label class="detail-row"><span>Falloff</span><input type="number" min="0.01" max="32" step="0.1" value="${settings.falloff}" data-mesh-paint-falloff /></label>
         <label class="detail-row"><span>Flow</span><input type="number" min="0" max="1" step="0.05" value="${settings.flow}" data-mesh-paint-flow /></label>
         <label class="detail-row detail-toggle"><span>Ignore Backfaces</span><input type="checkbox" ${settings.ignoreBackfaces ? "checked" : ""} data-mesh-paint-ignore-backfaces /></label>
-        <div class="detail-row"><span>Channels</span><span>
-          <label><input type="checkbox" value="r" ${checked("r")} data-mesh-paint-channel />R</label>
-          <label><input type="checkbox" value="g" ${checked("g")} data-mesh-paint-channel />G</label>
-          <label><input type="checkbox" value="b" ${checked("b")} data-mesh-paint-channel />B</label>
-          <label><input type="checkbox" value="a" ${checked("a")} data-mesh-paint-channel />A</label>
-        </span></div>
-        <button type="button" data-mesh-paint-fill>Fill Selected Channels</button>
+        <button type="button" data-mesh-paint-fill>Fill</button>
         <button type="button" data-mesh-paint-clear>Clear Selected Mesh</button>
+      </div>
+      <div class="detail-section" data-inspector-section="transfer">
         <div class="detail-section-title">Transfer</div>
         <div class="detail-hint">Copy painted primitives, select a compatible placement, then paste. To Mesh stores the selected placement as the source asset's default vertex-color sidecar.</div>
         <button type="button" data-mesh-paint-copy>Copy Selected Mesh</button>
@@ -3880,33 +3890,7 @@ export class EditorUi {
     });
     this.meshPaintBody.querySelector<HTMLSelectElement>("[data-mesh-paint-color-view]")?.addEventListener("change", (event) => {
       const value = (event.currentTarget as HTMLSelectElement).value;
-      this.app.setMeshPaintToolSettings({
-        colorView: ["off", "rgb", "alpha", "r", "g", "b"].includes(value)
-          ? value as "off" | "rgb" | "alpha" | "r" | "g" | "b"
-          : "off",
-      });
-    });
-    this.meshPaintBody.querySelector<HTMLInputElement>("[data-mesh-paint-color]")?.addEventListener("change", (event) => {
-      const hex = (event.currentTarget as HTMLInputElement).value.slice(1);
-      const color: [number, number, number, number] = [
-        Number.parseInt(hex.slice(0, 2), 16) / 255,
-        Number.parseInt(hex.slice(2, 4), 16) / 255,
-        Number.parseInt(hex.slice(4, 6), 16) / 255,
-        this.app.getMeshPaintToolSettings().color[3],
-      ];
-      this.app.setMeshPaintToolSettings({ color });
-    });
-    this.meshPaintBody.querySelector<HTMLInputElement>("[data-mesh-paint-alpha]")?.addEventListener("change", (event) => {
-      const current = this.app.getMeshPaintToolSettings().color;
-      this.app.setMeshPaintToolSettings({ color: [current[0], current[1], current[2], Number((event.currentTarget as HTMLInputElement).value)] });
-    });
-    this.meshPaintBody.querySelectorAll<HTMLInputElement>("[data-mesh-paint-channel]").forEach((input) => {
-      input.addEventListener("change", () => {
-        const channels = [...this.meshPaintBody.querySelectorAll<HTMLInputElement>("[data-mesh-paint-channel]:checked")]
-          .map((entry) => entry.value)
-          .filter((value): value is "r" | "g" | "b" | "a" => ["r", "g", "b", "a"].includes(value));
-        this.app.setMeshPaintToolSettings({ channels });
-      });
+      this.app.setMeshPaintToolSettings({ colorView: value === "r" ? "r" : "off" });
     });
     numberPatch("[data-mesh-paint-size]", "brushSize");
     numberPatch("[data-mesh-paint-strength]", "strength");
@@ -3936,6 +3920,7 @@ export class EditorUi {
     this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-fix]")?.addEventListener("click", () => {
       this.app.fixSelectedMeshPaintTopology();
     });
+    this.decorateInspectorSections(this.meshPaintBody, "meshPaint");
   }
 
   private renderFoliage(): void {
@@ -3983,6 +3968,7 @@ export class EditorUi {
       updateLandscapeRule: (id, patch) => this.app.updateLandscapeFoliageRule(id, patch),
       removeLandscapeRule: (id) => this.app.removeLandscapeFoliageRule(id),
     });
+    this.decorateInspectorSections(this.foliageBody, "foliage");
   }
 
   /** Writes a new `*.foliagetype.json` asset then adds it to the active foliage list. */
@@ -4317,15 +4303,35 @@ export class EditorUi {
   }
 
   private decorateDetailSections(selection: EditableSelection): void {
-    this.detailsBody.querySelectorAll<HTMLElement>(".detail-section").forEach((section, index) => {
+    this.decorateCollapsibleSections(this.detailsBody, (section, label) =>
+      this.detailSectionStorageKey(selection, section.dataset.detailSection ?? label),
+      () => this.updateDetailsSectionsToggle(),
+    );
+  }
+
+  /** Applies the Details accordion chrome to the mode-specific inspector panes. */
+  private decorateInspectorSections(body: HTMLElement, mode: "meshPaint" | "foliage"): void {
+    this.decorateCollapsibleSections(body, (section, label) => {
+      const id = section.dataset.inspectorSection ?? section.dataset.landscapeRule ?? label;
+      return `forge.editor.${mode}.section.${id.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    });
+  }
+
+  /** Wraps each direct section body in an accessible, persisted disclosure header. */
+  private decorateCollapsibleSections(
+    container: HTMLElement,
+    storageKeyFor: (section: HTMLElement, label: string) => string,
+    onCollapsedChange?: () => void,
+  ): void {
+    container.querySelectorAll<HTMLElement>(".detail-section").forEach((section, index) => {
       const title = section.querySelector<HTMLElement>(":scope > .detail-section-title");
-      if (!title || section.dataset.detailsDecorated === "true") return;
+      if (!title || section.dataset.inspectorSectionDecorated === "true") return;
       const label = title.textContent?.trim() || `Section ${index + 1}`;
-      const key = this.detailSectionStorageKey(selection, section.dataset.detailSection ?? label);
+      const key = storageKeyFor(section, label);
       const collapsed = this.readDetailSectionCollapsed(key, label);
-      const body = document.createElement("div");
-      body.className = "detail-section-body";
-      for (const child of [...section.childNodes]) if (child !== title) body.append(child);
+      const sectionBody = document.createElement("div");
+      sectionBody.className = "detail-section-body";
+      for (const child of [...section.childNodes]) if (child !== title) sectionBody.append(child);
       const heading = document.createElement("div");
       heading.className = "detail-section-heading";
       const toggle = document.createElement("button");
@@ -4334,9 +4340,12 @@ export class EditorUi {
       toggle.innerHTML = `<span class="detail-section-chevron" aria-hidden="true">${UI_ICONS.chevronDown}</span><span>${escapeHtml(label)}</span>`;
       heading.append(toggle);
       title.replaceWith(heading);
-      section.append(body);
-      section.dataset.detailsDecorated = "true";
-      const setCollapsed = (next: boolean): void => this.setDetailSectionCollapsed(section, toggle, key, next);
+      section.append(sectionBody);
+      section.dataset.inspectorSectionDecorated = "true";
+      const setCollapsed = (next: boolean): void => {
+        this.setCollapsibleSectionCollapsed(section, toggle, key, next);
+        onCollapsedChange?.();
+      };
       setCollapsed(collapsed);
       toggle.addEventListener("click", () => setCollapsed(!section.classList.contains("collapsed")));
     });
@@ -4352,7 +4361,7 @@ export class EditorUi {
     toggle.className = "detail-sections-toggle";
     toggle.dataset.detailsSectionsToggle = "true";
     toggle.addEventListener("click", () => {
-      const sections = [...this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-details-decorated]")];
+      const sections = [...this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-inspector-section-decorated]")];
       this.setAllDetailSectionsCollapsed(selection, sections.some((section) => !section.classList.contains("collapsed")));
     });
     row.append(toggle);
@@ -4362,7 +4371,7 @@ export class EditorUi {
   private updateDetailsSectionsToggle(): void {
     const toggle = this.detailsBody.querySelector<HTMLButtonElement>("[data-details-sections-toggle]");
     if (!toggle) return;
-    const sections = [...this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-details-decorated]")];
+    const sections = [...this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-inspector-section-decorated]")];
     const allCollapsed = sections.length > 0 && sections.every((section) => section.classList.contains("collapsed"));
     toggle.hidden = sections.length === 0;
     toggle.title = allCollapsed ? "Expand all sections" : "Collapse all sections";
@@ -4385,6 +4394,16 @@ export class EditorUi {
   }
 
   private setDetailSectionCollapsed(section: HTMLElement, toggle: HTMLButtonElement, key: string, collapsed: boolean): void {
+    this.setCollapsibleSectionCollapsed(section, toggle, key, collapsed);
+    this.updateDetailsSectionsToggle();
+  }
+
+  private setCollapsibleSectionCollapsed(
+    section: HTMLElement,
+    toggle: HTMLButtonElement,
+    key: string,
+    collapsed: boolean,
+  ): void {
     section.classList.toggle("collapsed", collapsed);
     toggle.setAttribute("aria-expanded", String(!collapsed));
     try {
@@ -4392,11 +4411,10 @@ export class EditorUi {
     } catch {
       // Storage can be disabled without affecting Details interactions.
     }
-    this.updateDetailsSectionsToggle();
   }
 
   private setAllDetailSectionsCollapsed(selection: EditableSelection, collapsed: boolean): void {
-    this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-details-decorated]").forEach((section) => {
+    this.detailsBody.querySelectorAll<HTMLElement>(".detail-section[data-inspector-section-decorated]").forEach((section) => {
       const label = section.querySelector(".detail-section-toggle span:last-child")?.textContent?.trim() || "section";
       const toggle = section.querySelector<HTMLButtonElement>(".detail-section-toggle");
       if (toggle) this.setDetailSectionCollapsed(section, toggle, this.detailSectionStorageKey(selection, section.dataset.detailSection ?? label), collapsed);

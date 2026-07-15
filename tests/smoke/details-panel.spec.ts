@@ -52,3 +52,36 @@ test("Details panel exposes redesigned transform and material controls", async (
   await expect(pivot.getByRole("button", { name: "Use Base" })).toBeVisible();
   expect(pageErrors).toEqual([]);
 });
+
+test("Mesh Paint and Foliage reuse the collapsible Details section chrome", async ({ page }) => {
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+
+  await page.locator('[data-inspector-tab="meshPaint"]').dispatchEvent("click");
+  const meshPaint = page.locator('[data-inspector-pane="meshPaint"]');
+  const vertexSection = meshPaint.locator('[data-inspector-section="vertex-color"]');
+  const vertexToggle = vertexSection.locator(":scope > .detail-section-heading .detail-section-toggle");
+  await expect(vertexToggle).toHaveAttribute("aria-expanded", "true");
+  await expect(vertexSection.locator(":scope > .detail-section-body > .detail-hint")).toHaveCount(0);
+  await expect(vertexSection.getByRole("button", { name: "Fill", exact: true })).toBeVisible();
+  await expect(meshPaint.getByRole("button", { name: "Transfer", exact: true })).toBeVisible();
+  await vertexToggle.click();
+  await expect(vertexToggle).toHaveAttribute("aria-expanded", "false");
+  await expect(vertexSection.locator(":scope > .detail-section-body")).toBeHidden();
+
+  await page.locator('[data-inspector-tab="foliage"]').dispatchEvent("click");
+  const foliage = page.locator('[data-inspector-pane="foliage"]');
+  const toolsToggle = foliage.getByRole("button", { name: "Tools", exact: true });
+  await expect(toolsToggle).toHaveAttribute("aria-expanded", "true");
+  await toolsToggle.click();
+  await expect(toolsToggle).toHaveAttribute("aria-expanded", "false");
+
+  await page.locator('[data-inspector-tab="meshPaint"]').dispatchEvent("click");
+  await page.locator('[data-inspector-tab="foliage"]').dispatchEvent("click");
+  await expect(
+    page.locator('[data-inspector-pane="foliage"]').getByRole("button", {
+      name: "Tools",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-expanded", "false");
+});
