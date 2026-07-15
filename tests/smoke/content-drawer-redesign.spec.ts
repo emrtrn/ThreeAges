@@ -16,7 +16,9 @@ test("Content Drawer exposes toolbar, breadcrumb, history, and view controls", a
   const filter = drawer.getByRole("button", { name: "Filter assets" });
   await filter.click();
   await expect(filter).toHaveAttribute("aria-expanded", "true");
-  await drawer.locator(".content-drawer-title").click();
+  // Clicking a neutral spot inside the drawer closes the popover without
+  // collapsing the drawer (the title now owns the collapse control).
+  await drawer.locator("[data-content-search]").click();
   await expect(filter).toHaveAttribute("aria-expanded", "false");
 
   await expect(drawer.locator(".content-breadcrumb").first()).toHaveText("All", { timeout: 30_000 });
@@ -28,6 +30,9 @@ test("Content Drawer exposes toolbar, breadcrumb, history, and view controls", a
   await drawer.locator("[data-content-type-filter]").selectOption("staticMesh");
   await expect(filter).toHaveAttribute("aria-expanded", "false");
   await expect(filter).toHaveClass(/is-filtered/);
+  // Choosing an option closes the popover, so reopen it before selecting again.
+  await filter.click();
+  await expect(filter).toHaveAttribute("aria-expanded", "true");
   await drawer.locator("[data-content-type-filter]").selectOption("__all__");
   await expect(filter).not.toHaveClass(/is-filtered/);
 
@@ -54,6 +59,10 @@ test("Content Drawer exposes toolbar, breadcrumb, history, and view controls", a
   expect(drawerBox!.x + drawerBox!.width).toBeLessThanOrEqual(detailsBox!.x + 1);
   expect(outlinerBox!.y + outlinerBox!.height).toBeLessThanOrEqual(drawerBox!.y + 1);
 
-  await page.getByRole("button", { name: "Content Drawer" }).click();
+  // The footer reopen entry is hidden while open (no stacked second bottom bar);
+  // the drawer's own header owns collapse.
+  await expect(page.locator(".content-drawer-toggle")).toBeHidden();
+  await drawer.locator("[data-content-collapse]").click();
   await expect(page.getByTestId("forge-editor")).not.toHaveClass(/content-drawer-open/);
+  await expect(page.locator(".content-drawer-toggle")).toBeVisible();
 });

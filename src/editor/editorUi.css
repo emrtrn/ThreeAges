@@ -2216,6 +2216,12 @@ body.editor-mode #debug-stats {
   font-size: 12px;
 }
 
+/* When the drawer is open its own header owns collapse, so the footer entry
+   point is redundant and hides (no stacked "second bottom bar"). */
+.editor-shell.content-drawer-open .content-drawer-toggle {
+  display: none;
+}
+
 .editor-content-drawer {
   position: absolute;
   left: 0;
@@ -2303,16 +2309,44 @@ body.editor-mode #debug-stats {
 }
 
 .content-drawer-title {
-  display: grid;
-  gap: 1px;
+  display: flex;
+  align-items: center;
   min-width: 0;
 }
 
-.content-drawer-title strong {
-  font-size: 12px;
+.content-drawer-collapse {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 5px;
+  color: var(--forge-text);
+  background: transparent;
+  cursor: pointer;
 }
 
-.content-drawer-title span,
+.content-drawer-collapse:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.content-drawer-collapse strong {
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
+.content-drawer-chevron {
+  display: inline-grid;
+  place-items: center;
+  color: var(--forge-text-secondary);
+}
+
+.content-drawer-chevron svg {
+  width: 12px;
+  height: 12px;
+}
+
 .content-path,
 .content-drawer-status {
   color: var(--forge-text-secondary);
@@ -2329,10 +2363,13 @@ body.editor-mode #debug-stats {
   background: #101316;
 }
 
-.content-filter-button {
+.content-search-wrap .content-filter-button {
   position: absolute;
-  right: 2px;
-  top: 2px;
+  right: 3px;
+  top: 50%;
+  width: 22px;
+  height: 22px;
+  transform: translateY(-50%);
   border-color: transparent;
   background: transparent;
 }
@@ -2357,6 +2394,10 @@ body.editor-mode #debug-stats {
   border-radius: var(--forge-radius-sm);
   background: var(--forge-bg-1);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
+}
+
+.content-filter-popover[hidden] {
+  display: none;
 }
 
 .content-filter-popover label {
@@ -2696,17 +2737,25 @@ body.editor-mode #debug-stats {
   border-color: rgba(74, 214, 160, 0.7);
 }
 
+/* Folders read as a large glyph with the name hugging its base (no boxed thumb,
+   no floating gap): transparent thumb + glyph bottom-aligned + tight meta gap. */
+.editor-shell .asset-card.is-folder {
+  gap: 2px;
+}
+
 .editor-shell .asset-card.is-folder .asset-thumb {
   border-color: transparent;
   background: transparent;
+  place-items: end center;
+  padding-bottom: 2px;
 }
 
 .folder-thumb .folder-glyph {
   position: relative;
   display: block;
-  width: min(62px, 68%);
-  height: min(42px, 48%);
-  margin-top: 8px;
+  width: min(78px, 80%);
+  height: min(52px, 62%);
+  margin-top: 0;
   border: 1px solid #d89a3e;
   border-radius: 3px;
   background: linear-gradient(180deg, #f5cc77 0%, #d9973a 100%);

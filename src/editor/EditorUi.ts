@@ -588,8 +588,11 @@ export class EditorUi {
       <section class="editor-content-drawer" data-content-drawer aria-hidden="true">
         <div class="content-drawer-top">
           <div class="content-drawer-title">
-            <strong>CONTENT DRAWER</strong>
-            <span data-content-root>assets</span>
+            <button type="button" class="content-drawer-collapse" data-content-collapse aria-label="Collapse Content Drawer" title="Collapse Content Drawer">
+              <strong>CONTENT DRAWER</strong>
+              <span class="content-drawer-chevron" aria-hidden="true">${UI_ICONS.chevronDown}</span>
+            </button>
+            <span data-content-root hidden></span>
           </div>
           <div class="content-primary-actions">
             <button type="button" class="forge-btn-primary" data-content-add>${UI_ICONS.add}<span>Add</span></button>
@@ -993,6 +996,9 @@ export class EditorUi {
     this.contentToggle.addEventListener("click", () => {
       this.setContentDrawerOpen(!this.contentDrawerOpen);
     });
+    this.root
+      .querySelector<HTMLButtonElement>("[data-content-collapse]")
+      ?.addEventListener("click", () => this.setContentDrawerOpen(false));
 
     this.root.querySelector<HTMLButtonElement>("[data-content-add]")?.addEventListener("click", (event) => {
       this.openContentAddMenu(event, this.selectedFolder);
