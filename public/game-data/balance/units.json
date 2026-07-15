@@ -3,12 +3,14 @@
     "maxHealth": 100,
     "attackDamage": 12,
     "attackCooldown": 1.4,
-    "attackRange": 1.2
+    "attackRange": 1.2,
+    "trainingSeconds": 12
   },
   "worker_placeholder": {
     "maxHealth": 60,
     "attackDamage": 1,
     "attackCooldown": 2,
-    "attackRange": 1
+    "attackRange": 1,
+    "trainingSeconds": 10
   }
 }

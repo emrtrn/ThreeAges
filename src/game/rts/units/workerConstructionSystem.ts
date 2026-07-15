@@ -13,6 +13,10 @@ import type { Unit } from "./unit";
 import type { UnitSystem } from "./unitSystem";
 
 export type WorkerConstructionState = "idle" | "moving" | "building" | "unreachable";
+export type WorkerAssignmentFailure = "no-idle-worker" | "unreachable";
+export type WorkerAssignmentResult =
+  | { readonly assigned: true }
+  | { readonly assigned: false; readonly reason: WorkerAssignmentFailure };
 
 interface WorkerAssignment {
   readonly worker: Unit;
@@ -32,8 +36,8 @@ export class WorkerConstructionSystem {
     private readonly navigation: RtsNavigation,
   ) {}
 
-  /** Assign the nearest idle worker; returns false when every worker is occupied or unreachable. */
-  assignNearest(structure: PlacedStructure): boolean {
+  /** Assign the nearest idle worker and name the failure mode for player feedback. */
+  assignNearest(structure: PlacedStructure): WorkerAssignmentResult {
     const candidates = this.units.playerWorkers()
       .filter((worker) => !this.assignments.has(worker.id))
       .sort((a, b) => a.position.distanceToSquared(structure.object.position)
@@ -45,9 +49,9 @@ export class WorkerConstructionSystem {
       if (!path) continue;
       worker.setMovePath(path);
       this.assignments.set(worker.id, { worker, structure, approach, state: "moving" });
-      return true;
+      return { assigned: true };
     }
-    return false;
+    return { assigned: false, reason: candidates.length === 0 ? "no-idle-worker" : "unreachable" };
   }
 
   /** Remove a cancelled site's assignment, restoring its worker to idle. */

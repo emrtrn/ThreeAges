@@ -57,6 +57,8 @@ export interface UnitBalanceStats {
   attackCooldown: number;
   /** Maximum ground-plane distance from which a basic hit may land; must be positive. */
   attackRange: number;
+  /** Seconds a completed production building needs to train this unit. */
+  trainingSeconds: number;
 }
 
 /** `public/game-data/balance/units.json` — keyed by stable unit id. */
@@ -64,6 +66,8 @@ export type UnitBalance = Readonly<Record<string, UnitBalanceStats>>;
 
 /** One grid-aligned RTS building definition, loaded from balance/buildings.json. */
 export interface BuildingBalanceStats {
+  /** Stable data id, copied from the key in `balance/buildings.json`. */
+  readonly id: string;
   readonly label: string;
   /** World-space footprint dimensions; both are multiples of the placement grid. */
   readonly footprint: { readonly width: number; readonly depth: number };

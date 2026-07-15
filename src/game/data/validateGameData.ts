@@ -191,7 +191,11 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (attackRange <= 0) {
       throw new GameDataError(`${statsWhere}.attackRange: must be > 0`);
     }
-    units[id] = { maxHealth, attackDamage, attackCooldown, attackRange };
+    const trainingSeconds = requireFiniteNumber(stats, "trainingSeconds", statsWhere);
+    if (trainingSeconds <= 0) {
+      throw new GameDataError(`${statsWhere}.trainingSeconds: must be > 0`);
+    }
+    units[id] = { maxHealth, attackDamage, attackCooldown, attackRange, trainingSeconds };
   }
   if (Object.keys(units).length === 0) {
     throw new GameDataError(`${where}: must define at least one unit`);
@@ -221,6 +225,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       throw new GameDataError(`${statsWhere}.constructionSeconds: must be > 0`);
     }
     buildings[id] = {
+      id,
       label: requireString(stats, "label", statsWhere),
       footprint: { width, depth },
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),

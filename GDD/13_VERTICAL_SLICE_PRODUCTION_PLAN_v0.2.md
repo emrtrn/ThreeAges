@@ -741,7 +741,7 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 - [x] Depo tanımı (`buildings.json: depot`)
 - [x] Kışla tanımı (`buildings.json: barracks`)
 - [x] Basit footprint verisi (JSON `footprint.width/depth`; 2 birimlik gridde doğrulanır)
-- [x] Maliyet ve inşa süresi (`cost` ve `constructionSeconds`; kaynak rezervasyonu sonraki dilimde)
+- [x] Maliyet ve inşa süresi (`cost` ve `constructionSeconds`; placement anında kaynak rezervasyonu aktiftir)
 
 ### Yerleştirme
 
@@ -757,8 +757,8 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 - [x] ConstructionComponent oluştur. (süre-sınırlı ilerleme ve tek-seferlik tamamlanma)
 - [x] Bir işçiyle inşaat ekle. (en yakın boş işçi; çoklu işçi sonraki kapsam)
 - [x] İnşa ilerleme göstergesi ekle. (foundation yanında dünya-uzayı progress bar)
-- [ ] İnşa tamamlanınca işlev aç. (foundation tamamlanmış bina placeholder’ına yükselir; Kışla/Depo gibi gerçek bina işlevleri sonraki dilimde açılacak)
-- [ ] İşçi erişemiyorsa hata durumu üret.
+- [x] İnşa tamamlanınca işlev aç. (tamamlanan Kışla, JSON’daki `trainingSeconds` ile tek Muhafız kuyruğu açar ve güvenli nav çıkışında doğurur; Depo işlevi Faz 3 kapsamındadır)
+- [x] İşçi erişemiyorsa hata durumu üret. (ayrı `boşta işçi yok` / `işçi erişemiyor` oyuncu mesajları)
 
 ---
 
@@ -777,13 +777,13 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 
 ## 27. Kabul Kriterleri
 
-- [ ] İşçi geçerli yapıyı inşa ediyor.
-- [ ] Geçersiz konum açıkça gösteriliyor.
-- [ ] Kaynak yetersizse yapı kurulamıyor.
-- [ ] İptal edilen inşaat doğru iade yapıyor.
-- [ ] Yapı navigasyonu kalıcı biçimde bozmuyor.
-- [ ] Muhafız Kışla’dan güvenli noktada çıkıyor.
-- [ ] Oynanabilir omurga faz sonunda hâlâ tamamlanabiliyor.
+- [x] İşçi geçerli yapıyı inşa ediyor. (`test:engine` worker construction senaryosu)
+- [x] Geçersiz konum açıkça gösteriliyor. (palette, harita-sınırı / çakışma / kaynak nedenleri)
+- [x] Kaynak yetersizse yapı kurulamıyor. (`ResourceWallet` atomik rezervasyon testi)
+- [x] İptal edilen inşaat doğru iade yapıyor. (tek-seferlik tam iade testi)
+- [x] Yapı navigasyonu kalıcı biçimde bozmuyor. (placement sonrası rota sapma testi)
+- [x] Muhafız Kışla’dan güvenli noktada çıkıyor. (`BarracksProductionSystem` navigable-exit testi)
+- [x] Oynanabilir omurga faz sonunda hâlâ tamamlanabiliyor. (Faz 2 Playwright smoke + engine testleri)
 
 ---
 

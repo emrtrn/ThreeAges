@@ -74,6 +74,7 @@ import {
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
+import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
@@ -999,6 +1000,7 @@ const RTS_TEST_UNIT_STATS = {
   attackDamage: 12,
   attackCooldown: 1.4,
   attackRange: 1.2,
+  trainingSeconds: 0.25,
 };
 const check = (label: string, fn: () => void): void => {
   fn();
@@ -27832,12 +27834,17 @@ check("unit balance validates combat stats for stable unit ids", () => {
   );
   assert.equal(balance["guard_placeholder"]?.maxHealth, 100);
   assert.equal(balance["guard_placeholder"]?.attackDamage, 12);
+  assert.equal(balance["guard_placeholder"]?.trainingSeconds, 12);
   assert.throws(
     () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, maxHealth: 0 } }),
     GameDataError,
   );
   assert.throws(
     () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, attackCooldown: 0 } }),
+    GameDataError,
+  );
+  assert.throws(
+    () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, trainingSeconds: 0 } }),
     GameDataError,
   );
   assert.throws(() => validateUnitBalance({ "Guard Placeholder": RTS_TEST_UNIT_STATS }), GameDataError);
@@ -28033,7 +28040,7 @@ check("RTS worker reaches a foundation, builds it, and never enters combat", () 
   const navigation = new RtsNavigation();
   navigation.setBlockers(structures.navigationBlockers());
   const construction = new WorkerConstructionSystem(units, structures, navigation);
-  assert.equal(construction.assignNearest(site), true);
+  assert.deepEqual(construction.assignNearest(site), { assigned: true });
   assert.equal(construction.stateFor(worker), "moving");
   for (let frame = 0; frame < 300 && !site.construction.complete; frame += 1) {
     updateUnitMovement(units.all(), 1 / 60);
@@ -28043,6 +28050,56 @@ check("RTS worker reaches a foundation, builds it, and never enters combat", () 
   assert.equal(construction.stateFor(worker), "idle");
   assert.equal(construction.idleWorkerCount(), 1);
   structures.clear();
+});
+
+check("RTS construction names missing-worker and unreachable placement errors", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const structures = new PlacedStructureSystem();
+  const site = structures.place(house, 0, 0);
+  const noWorker = new WorkerConstructionSystem(new UnitSystem(), structures, new RtsNavigation());
+  assert.deepEqual(noWorker.assignNearest(site), { assigned: false, reason: "no-idle-worker" });
+
+  const units = new UnitSystem();
+  units.spawn("player", -12, 0, RTS_TEST_UNIT_STATS, "worker");
+  const navigation = new RtsNavigation();
+  navigation.setBlockers([{ min: [-20, -1, -20], max: [20, 3, 20] }]);
+  const blocked = new WorkerConstructionSystem(units, structures, navigation);
+  assert.deepEqual(blocked.assignNearest(site), { assigned: false, reason: "unreachable" });
+  structures.clear();
+  units.clear();
+});
+
+check("RTS completed Barracks trains a Guard at a safe exit", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const barracks = buildings.barracks ?? assert.fail("barracks definition missing");
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
+  const structures = new PlacedStructureSystem();
+  const completed = structures.place({ ...barracks, constructionSeconds: 0.1 }, 0, 0);
+  assert.equal(structures.advanceConstruction(completed, 0.1), true);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const units = new UnitSystem();
+  const production = new BarracksProductionSystem(
+    units,
+    structures,
+    navigation,
+    { ...guard, trainingSeconds: 0.1 },
+  );
+  assert.equal(production.queueGuard(), "queued");
+  assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
+  const trained = units.all()[0] ?? assert.fail("trained guard missing");
+  assert.equal(trained.role, "guard");
+  assert.ok(navigation.plan(trained.position, trained.position), "guard spawns on a navigable exit");
+  structures.clear();
+  units.clear();
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

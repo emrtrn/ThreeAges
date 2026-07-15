@@ -42,11 +42,12 @@ import { COMMAND_CENTER_MAX_HEALTH } from "./structures/commandCenter";
 import { RtsMatchState } from "./match/rtsMatchState";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
-import { PlacedStructureSystem } from "./structures/placedStructureSystem";
+import { PlacedStructureSystem, type PlacedStructure } from "./structures/placedStructureSystem";
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { ResourceWallet } from "./economy/resourceWallet";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
+import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
@@ -80,6 +81,7 @@ export class RtsApp {
   private readonly structures = new PlacedStructureSystem();
   private readonly wallet: ResourceWallet;
   private readonly workerConstruction: WorkerConstructionSystem;
+  private readonly barracksProduction: BarracksProductionSystem;
   private readonly match = new RtsMatchState();
   private readonly matchOverlay: RtsMatchOverlay;
   private readonly debugOverlay: RtsDebugOverlay | null;
@@ -122,6 +124,14 @@ export class RtsApp {
       this.commandMarkers,
     );
     this.workerConstruction = new WorkerConstructionSystem(this.units, this.structures, this.navigation);
+    const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
+    if (!guard) throw new Error(`Missing unit balance definition "${PLACEHOLDER_GUARD_ID}"`);
+    this.barracksProduction = new BarracksProductionSystem(
+      this.units,
+      this.structures,
+      this.navigation,
+      guard,
+    );
     this.placement = new BuildingPlacementSystem(
       canvas,
       this.cameraController.camera,
@@ -130,7 +140,7 @@ export class RtsApp {
       this.wallet,
       this.navigation,
       () => this.navigationBlockers(),
-      (structure) => this.workerConstruction.assignNearest(structure),
+      (structure) => this.assignWorkerToConstruction(structure),
       (structure) => this.workerConstruction.cancelStructure(structure),
     );
     this.buildPalette = new RtsBuildPalette(
@@ -145,8 +155,10 @@ export class RtsApp {
       },
       () => {
         this.placement.cancelLatestConstruction();
+        this.buildPalette.setActionMessage(null);
         this.syncPlacementUi();
       },
+      () => this.queueGuard(),
     );
     this.matchOverlay = new RtsMatchOverlay(this.restartMatch);
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
@@ -212,6 +224,7 @@ export class RtsApp {
     this.buildPalette.dispose();
     this.placement.dispose();
     this.workerConstruction.reset();
+    this.barracksProduction.reset();
     this.structures.clear();
     this.renderer.dispose();
   }
@@ -280,6 +293,13 @@ export class RtsApp {
     if (this.match.active) {
       updateUnitMovement(this.units.all(), dt);
       this.workerConstruction.update(dt);
+      for (const event of this.barracksProduction.update(dt)) {
+        this.buildPalette.setActionMessage(
+          event.type === "completed"
+            ? "Muhafız Kışla'dan çıktı."
+            : "Muhafız çıkışı engelli; Kışla çevresini açın.",
+        );
+      }
       this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
       updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
       updateUnitDeaths(this.units, this.selection, dt);
@@ -312,6 +332,7 @@ export class RtsApp {
   private readonly restartMatch = (): void => {
     this.selection.reset();
     this.workerConstruction.reset();
+    this.barracksProduction.reset();
     this.units.clear();
     this.centers.clear();
     this.structures.clear();
@@ -356,5 +377,25 @@ export class RtsApp {
     this.buildPalette.setState(this.placement.state());
     this.buildPalette.setResources(this.wallet.snapshot());
     this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
+  }
+
+  private assignWorkerToConstruction(structure: PlacedStructure): void {
+    const result = this.workerConstruction.assignNearest(structure);
+    this.buildPalette.setActionMessage(result.assigned
+      ? null
+      : result.reason === "no-idle-worker"
+        ? "İnşaat bekliyor: boşta işçi yok."
+        : "İnşaat bekliyor: işçi bu yapıya erişemiyor.");
+  }
+
+  private queueGuard(): void {
+    const result = this.barracksProduction.queueGuard();
+    const message: Record<typeof result, string> = {
+      queued: "Muhafız üretim kuyruğa alındı.",
+      "no-completed-barracks": "Önce tamamlanmış bir Kışla kurun.",
+      "already-training": "Kışla zaten bir Muhafız üretiyor.",
+      "exit-blocked": "Muhafız çıkışı engelli; Kışla çevresini açın.",
+    };
+    this.buildPalette.setActionMessage(message[result]);
   }
 }

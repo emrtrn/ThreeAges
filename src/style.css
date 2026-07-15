@@ -189,6 +189,14 @@ body {
   font-size: 12px;
 }
 
+.rts-build-action-message {
+  min-height: 1.35em;
+  margin-top: 4px;
+  color: #f0c977;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 /*
  * UI Widget (UMG Lite) runtime styles. Rendered by engine/ui/uiRenderer.ts into
  * #ui-overlay. Containers inherit the overlay's click-through; only .ui-interactive
