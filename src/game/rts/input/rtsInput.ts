@@ -34,6 +34,8 @@ export class RtsInput {
   private readonly held = new Set<string>();
   /** Accumulated, unconsumed wheel delta (positive = zoom out). */
   private wheelDelta = 0;
+  /** One-shot request for the selected units to stop (X; avoids the S pan key). */
+  private stopRequested = false;
   /** Pointer position in CSS pixels relative to the canvas, or null when outside. */
   private pointerX: number | null = null;
   private pointerY: number | null = null;
@@ -89,6 +91,13 @@ export class RtsInput {
     return delta;
   }
 
+  /** Take and clear a one-shot selected-unit stop request. */
+  consumeStopRequest(): boolean {
+    const requested = this.stopRequested;
+    this.stopRequested = false;
+    return requested;
+  }
+
   /** Live pointer position in canvas CSS pixels, or null when off-canvas. */
   pointerPosition(): { x: number; y: number } | null {
     return this.pointerX === null || this.pointerY === null
@@ -100,9 +109,16 @@ export class RtsInput {
   reset(): void {
     this.held.clear();
     this.wheelDelta = 0;
+    this.stopRequested = false;
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
+    // S is reserved for camera pan, so RTS stop uses the unambiguous X shortcut.
+    // Ignore auto-repeat: a stop is an edge-triggered command, not held input.
+    if (event.code === "KeyX") {
+      if (!event.repeat) this.stopRequested = true;
+      return;
+    }
     const dir = PAN_KEYS.get(event.code);
     if (dir) this.held.add(dir);
   };

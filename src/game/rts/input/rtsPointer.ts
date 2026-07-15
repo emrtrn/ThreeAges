@@ -2,8 +2,8 @@
  * RTS pointer plumbing — Vertical Slice Plan v0.2 §21 ("Seçim ve komut").
  *
  * Translates raw canvas pointer events into high-level intents: a left click vs.
- * a left box-drag (selection), and a right click (a move/attack command, wired
- * in the next Faz 1 step). All coordinates are canvas-relative CSS pixels; the
+ * a left box-drag (selection), and a right click (a contextual move/attack
+ * command). All coordinates are canvas-relative CSS pixels; the
  * gameplay meaning (raycast, rect test) lives in the systems that consume these
  * callbacks, keeping this module free of scene logic (plan §14).
  */

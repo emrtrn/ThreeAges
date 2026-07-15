@@ -645,7 +645,7 @@ Boş test sahnesinde oyuncunun kamera, seçim, hareket ve basit saldırı ile bi
 - [x] Seçim halkası ekle. (`Unit.setSelected` halka görünürlüğü)
 - [x] Sağ tık hareket ekle. (`src/game/rts/commands/commandSystem.ts` + formasyon dağıtımı)
 - [x] Sağ tık saldırı ekle. (düşman raycast'i → takip eden hedef emri + kırmızı hedef halkası)
-- [ ] Dur komutu ekle.
+- [x] Dur komutu ekle. (`X`; seçili birimlerin hareketi ve saldırı hedefi anında temizlenir)
 - [x] Dünya komut işareti ekle. (`src/game/rts/commands/commandMarker.ts`; sönümlenen halka)
 
 ### Test birimi

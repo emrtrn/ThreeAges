@@ -27734,6 +27734,12 @@ check("RTS contextual right-click assigns an enemy attack target", () => {
   assert.equal(player.targeted, false);
   assert.equal(enemy.targeted, true);
   assert.equal(player.moveTarget, null);
+
+  commands.issueStop();
+
+  assert.equal(player.attackTarget, null);
+  assert.equal(enemy.targeted, false);
+  assert.equal(player.moveTarget, null);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

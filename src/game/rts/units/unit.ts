@@ -126,6 +126,12 @@ export class Unit {
     this.moveTarget = new Vector3(x, 0, z);
   }
 
+  /** Immediately clear both movement and explicit attack intent. */
+  stop(): void {
+    this.setAttackTarget(null);
+    this.moveTarget = null;
+  }
+
   /**
    * Order this unit to pursue an enemy. This records intent only: the following
    * melee-combat step will decide when it is in range and applies damage.

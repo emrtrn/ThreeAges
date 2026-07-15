@@ -161,6 +161,7 @@ export class RtsApp {
     this.lastTime = now;
 
     this.resize();
+    if (this.input.consumeStopRequest()) this.commands.issueStop();
     this.cameraController.update(dt, this.input);
     updateUnitMovement(this.units.all(), dt);
     this.commandMarkers.update(dt);

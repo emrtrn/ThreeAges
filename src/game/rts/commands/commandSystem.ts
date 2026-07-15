@@ -52,6 +52,11 @@ export class CommandSystem {
     this.markers.spawn(point);
   }
 
+  /** Immediately stop every currently selected unit and clear attack pursuit. */
+  issueStop(): void {
+    for (const unit of this.selection.selected()) unit.stop();
+  }
+
   /** Raycast a screen point against unit bodies before treating it as ground. */
   private raycastUnit(x: number, y: number): Unit | null {
     this.setNdc(x, y);
