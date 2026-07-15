@@ -53,7 +53,7 @@ viewport overlay'leri panel sınırları içinde kalmalıdır.
 - [ ] Raycasting ve pointer normalizasyonunu canvas `getBoundingClientRect()`
       ölçülerine göre doğrula.
 - [ ] Select/move/rotate/scale gizmo etkileşimlerini kontrol et.
-- [ ] Perspective ve orthographic kamera görünümlerinde oran bozulması olmadığını
+- [x] Perspective ve orthographic kamera görünümlerinde oran bozulması olmadığını
       doğrula.
 - [x] Content Drawer açık/kapalı ve pencere yeniden boyutlandırma senaryolarını
       test et.
@@ -66,10 +66,13 @@ viewport overlay'leri panel sınırları içinde kalmalıdır.
 - `tests/smoke/editor-viewport-panel.spec.ts`: `?editor&debug` altında canvas ve
   Stats'in host içinde kaldığını; WebGL drawing-buffer oranının host ile eşleştiğini;
   Content Drawer ve pencere boyutu değiştiğinde panelin yeniden ölçüldüğünü doğrular.
+  Aynı smoke, Top (orthographic/wireframe) ve Perspective (lit) geçişlerinde de
+  canvas oranını denetler.
 - `npx.cmd tsc --noEmit` ve `npm.cmd run build:verify` başarılıdır. İkincisi import
   sınırlarını, üretim derlemesini, 908 engine kontrolünü ve strict dist doğrulamasını kapsar.
-- Sonraki dar doğrulama dilimi: gerçek canvas gizmo sürüklemeleri ile perspective /
-  orthographic görünüm geçişlerinde görsel oran regresyonunu browser'da kanıtlamak.
+- Sonraki dar doğrulama dilimi: gerçek canvas gizmo sürüklemelerini browser'da
+  kanıtlamak. WebGL içindeki handle'lar DOM kimliği taşımadığından, bunun için
+  kararlı bir handle-keşif test yüzeyi gerekir.
 
 ## Tamamlanma Kriterleri
 

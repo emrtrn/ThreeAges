@@ -78,6 +78,33 @@ test("editor viewport panel owns the canvas and Stats across layout resizes", as
   expect(bottom(resized.stats)).toBeLessThanOrEqual(bottom(resized.host) + 1);
 });
 
+test("viewport canvas keeps perspective and orthographic camera projections aligned", async ({ page }) => {
+  await page.setViewportSize({ width: 1680, height: 900 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+
+  const canvas = page.locator("#game-canvas");
+  const host = page.locator("[data-viewport-host]");
+  const canvasBox = await requiredBox(canvas);
+
+  const cameraButton = page.locator("[data-camera-button]");
+  await cameraButton.hover();
+  await page.locator('[data-camera-view="top"]').click();
+  await expect(page.locator("[data-camera-label]")).toHaveText("Top");
+  await expect(page.locator("[data-viewmode-label]")).toHaveText("Wireframe");
+  await expectCanvasBufferAspect(canvas);
+
+  await page.setViewportSize({ width: 1440, height: 820 });
+  await expect.poll(async () => (await host.boundingBox())?.width ?? 0).toBeLessThan(canvasBox.width);
+  await expectCanvasBufferAspect(canvas);
+
+  await cameraButton.hover();
+  await page.locator('[data-camera-view="perspective"]').click();
+  await expect(page.locator("[data-camera-label]")).toHaveText("Perspective");
+  await expect(page.locator("[data-viewmode-label]")).toHaveText("Lit");
+  await expectCanvasBufferAspect(canvas);
+});
+
 async function viewportRects(locators: {
   host: Locator;
   canvas: Locator;
@@ -118,4 +145,12 @@ async function requiredBox(locator: Locator): Promise<Rect> {
   const box = await locator.boundingBox();
   if (!box) throw new Error(`Expected ${await locator.evaluate((element) => element.id || element.className)} to have a layout box`);
   return box;
+}
+
+async function expectCanvasBufferAspect(canvas: Locator): Promise<void> {
+  await expect.poll(() => canvas.evaluate((element) => {
+    const clientAspect = element.clientWidth / element.clientHeight;
+    const bufferAspect = element.width / element.height;
+    return Math.abs(bufferAspect - clientAspect) < 0.01;
+  })).toBe(true);
 }
