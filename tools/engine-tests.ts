@@ -74,9 +74,11 @@ import {
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
+import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
+import { WorkerProductionSystem } from "../src/game/rts/structures/workerProductionSystem";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -1002,6 +1004,8 @@ const RTS_TEST_UNIT_STATS = {
   attackCooldown: 1.4,
   attackRange: 1.2,
   trainingSeconds: 0.25,
+  cost: { food: 50 },
+  populationCost: 1,
 };
 const check = (label: string, fn: () => void): void => {
   fn();
@@ -27836,6 +27840,7 @@ check("unit balance validates combat stats for stable unit ids", () => {
   assert.equal(balance["guard_placeholder"]?.maxHealth, 100);
   assert.equal(balance["guard_placeholder"]?.attackDamage, 12);
   assert.equal(balance["guard_placeholder"]?.trainingSeconds, 12);
+  assert.deepEqual(balance["worker_placeholder"]?.cost, { food: 50 });
   assert.throws(
     () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, maxHealth: 0 } }),
     GameDataError,
@@ -27915,6 +27920,10 @@ check("RTS resource reservations are atomic and refund at most once", () => {
   assert.equal(wallet.amount("wood"), 200);
   assert.equal(wallet.refund(barracks), false, "the same site cannot refund twice");
   assert.equal(wallet.amount("wood"), 200);
+  const completed = wallet.reserve({ food: 50 });
+  assert.ok(completed);
+  assert.equal(wallet.commit(completed), true);
+  assert.equal(wallet.refund(completed), false, "completed costs cannot be refunded");
 });
 
 check("RTS resource wallet emits mutations and reports rolling income per minute", () => {
@@ -28157,17 +28166,72 @@ check("RTS completed Barracks trains a Guard at a safe exit", () => {
   const navigation = new RtsNavigation();
   navigation.setBlockers(structures.navigationBlockers());
   const units = new UnitSystem();
+  const wallet = new ResourceWallet({ food: 200, wood: 200 });
+  const population = new PopulationSystem(units, structures, 20);
   const production = new BarracksProductionSystem(
     units,
     structures,
     navigation,
     { ...guard, trainingSeconds: 0.1 },
+    wallet,
+    population,
   );
   assert.equal(production.queueGuard(), "queued");
+  assert.equal(wallet.amount("food"), 140, "guard cost is reserved when the queue starts");
+  assert.equal(population.snapshot().used, 1, "queued guard reserves its population slot");
   assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
   const trained = units.all()[0] ?? assert.fail("trained guard missing");
   assert.equal(trained.role, "guard");
   assert.ok(navigation.plan(trained.position, trained.position), "guard spawns on a navigable exit");
+  structures.clear();
+  units.clear();
+});
+
+check("RTS worker production spends food and population capacity, and houses extend the cap", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+  const structures = new PlacedStructureSystem();
+  const units = new UnitSystem();
+  const population = new PopulationSystem(units, structures, 20);
+  for (let index = 0; index < 20; index += 1) units.spawn("player", index, 0, RTS_TEST_UNIT_STATS);
+  assert.equal(population.reserve(1), null, "base settlement population cap blocks a new queue");
+  const completedHouse = structures.place(house, 10, 0);
+  assert.equal(structures.advanceConstruction(completedHouse, house.constructionSeconds), true);
+  const houseSlot = population.reserve(1);
+  assert.ok(houseSlot, "completed house supplies five additional capacity");
+  population.release(houseSlot);
+  units.clear();
+
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 0);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(centers.navigationBlockers());
+  const wallet = new ResourceWallet({ food: 100, wood: 0 });
+  const production = new WorkerProductionSystem(
+    units,
+    centers,
+    navigation,
+    { ...worker, trainingSeconds: 0.1 },
+    wallet,
+    population,
+  );
+  assert.equal(production.queueWorker(), "queued");
+  assert.equal(wallet.amount("food"), 50);
+  assert.equal(population.snapshot().reserved, 1);
+  assert.equal(production.update(0.1), "completed");
+  assert.equal(units.playerWorkers().length, 1);
+  assert.deepEqual(population.snapshot(), { current: 1, reserved: 0, capacity: 25, used: 1 });
+  assert.equal(production.queueWorker(), "queued", "second worker can be queued while capacity remains");
+  assert.equal(production.queueWorker(), "already-training");
+  production.reset();
+  assert.equal(wallet.amount("food"), 50, "cancelled worker queue refunds its food");
+  centers.clear();
   structures.clear();
   units.clear();
 });

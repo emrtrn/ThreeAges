@@ -1,11 +1,13 @@
 /**
  * The first completed-building function: a Barracks trains one Guard at a
  * time and places it on a navigable exit point outside the building footprint.
- * Unit cost/population are deliberately left to the Phase 3 economy slice.
+ * Phase 3 reserves the JSON cost and population slot before the timer starts.
  */
 import { Vector3 } from "three";
 
 import type { UnitBalanceStats } from "../../data/gameDataTypes";
+import type { PopulationReservation, PopulationSystem } from "../economy/populationSystem";
+import type { ResourceReservation, ResourceWallet } from "../economy/resourceWallet";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { UnitSystem } from "../units/unitSystem";
 import type { PlacedStructure, PlacedStructureSystem } from "./placedStructureSystem";
@@ -14,7 +16,9 @@ export type GuardProductionResult =
   | "queued"
   | "no-completed-barracks"
   | "already-training"
-  | "exit-blocked";
+  | "exit-blocked"
+  | "insufficient-resources"
+  | "population-full";
 
 export interface GuardProductionEvent {
   readonly type: "completed" | "exit-blocked";
@@ -23,6 +27,8 @@ export interface GuardProductionEvent {
 
 interface GuardQueue {
   readonly structure: PlacedStructure;
+  readonly resources: ResourceReservation;
+  readonly population: PopulationReservation;
   remainingSeconds: number;
 }
 
@@ -34,6 +40,8 @@ export class BarracksProductionSystem {
     private readonly structures: PlacedStructureSystem,
     private readonly navigation: RtsNavigation,
     private readonly guardStats: UnitBalanceStats,
+    private readonly wallet: ResourceWallet,
+    private readonly population: PopulationSystem,
   ) {}
 
   queueGuard(): GuardProductionResult {
@@ -42,7 +50,19 @@ export class BarracksProductionSystem {
     );
     if (!barracks) return "no-completed-barracks";
     if (this.queues.has(barracks.id)) return "already-training";
-    this.queues.set(barracks.id, { structure: barracks, remainingSeconds: this.guardStats.trainingSeconds });
+    const resources = this.wallet.reserve(this.guardStats.cost);
+    if (!resources) return "insufficient-resources";
+    const population = this.population.reserve(this.guardStats.populationCost);
+    if (!population) {
+      this.wallet.refund(resources);
+      return "population-full";
+    }
+    this.queues.set(barracks.id, {
+      structure: barracks,
+      resources,
+      population,
+      remainingSeconds: this.guardStats.trainingSeconds,
+    });
     return "queued";
   }
 
@@ -50,6 +70,8 @@ export class BarracksProductionSystem {
     const events: GuardProductionEvent[] = [];
     for (const [id, queue] of this.queues) {
       if (!this.structures.all().includes(queue.structure) || !queue.structure.construction.complete) {
+        this.wallet.refund(queue.resources);
+        this.population.release(queue.population);
         this.queues.delete(id);
         continue;
       }
@@ -61,6 +83,8 @@ export class BarracksProductionSystem {
         continue;
       }
       this.units.spawn("player", exit.x, exit.z, this.guardStats, "guard");
+      this.wallet.commit(queue.resources);
+      this.population.commit(queue.population);
       this.queues.delete(id);
       events.push({ type: "completed", structure: queue.structure });
     }
@@ -68,6 +92,10 @@ export class BarracksProductionSystem {
   }
 
   reset(): void {
+    for (const queue of this.queues.values()) {
+      this.wallet.refund(queue.resources);
+      this.population.release(queue.population);
+    }
     this.queues.clear();
   }
 

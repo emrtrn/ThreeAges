@@ -59,6 +59,10 @@ export interface UnitBalanceStats {
   attackRange: number;
   /** Seconds a completed production building needs to train this unit. */
   trainingSeconds: number;
+  /** Resources reserved when this unit enters a production queue. */
+  readonly cost: StartingResources;
+  /** Population capacity consumed by this unit once queued. */
+  readonly populationCost: number;
 }
 
 /** `public/game-data/balance/units.json` — keyed by stable unit id. */
@@ -74,6 +78,8 @@ export interface BuildingBalanceStats {
   /** Resource reservation is implemented in the following Phase 2 slice. */
   readonly cost: StartingResources;
   readonly constructionSeconds: number;
+  /** Capacity supplied while this completed structure is standing. */
+  readonly populationCapacity?: number;
   /** Present only on structures which turn assigned workers into a resource. */
   readonly economy?: EconomyProductionBalance;
 }

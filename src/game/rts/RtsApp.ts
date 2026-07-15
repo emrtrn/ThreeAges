@@ -47,8 +47,10 @@ import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { ResourceWallet } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
+import { PopulationSystem } from "./economy/populationSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
+import { WorkerProductionSystem } from "./structures/workerProductionSystem";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
@@ -56,8 +58,9 @@ const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
 const PLACEHOLDER_WORKER_ID = "worker_placeholder";
-const PLAYER_GUARD_COUNT = 20;
+const PLAYER_GUARD_COUNT = 0;
 const PLAYER_WORKER_COUNT = 5;
+const SETTLEMENT_POPULATION_CAPACITY = 20;
 const PLAYER_CENTER_POSITION = RTS_BLOCKOUT_MAP.playerStart;
 const ENEMY_CENTER_POSITION = RTS_BLOCKOUT_MAP.enemyStart;
 
@@ -81,9 +84,11 @@ export class RtsApp {
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
   private readonly wallet: ResourceWallet;
+  private readonly population: PopulationSystem;
   private readonly workerConstruction: WorkerConstructionSystem;
   private economyProduction: EconomyProductionSystem | null = null;
   private readonly barracksProduction: BarracksProductionSystem;
+  private readonly workerProduction: WorkerProductionSystem;
   private readonly match = new RtsMatchState();
   private readonly matchOverlay: RtsMatchOverlay;
   private readonly debugOverlay: RtsDebugOverlay | null;
@@ -137,13 +142,25 @@ export class RtsApp {
       this.navigation,
       (worker) => this.workerConstruction.stateFor(worker) !== "idle",
     );
+    this.population = new PopulationSystem(this.units, this.structures, SETTLEMENT_POPULATION_CAPACITY);
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
-    if (!guard) throw new Error(`Missing unit balance definition "${PLACEHOLDER_GUARD_ID}"`);
+    const worker = this.options.unitBalance[PLACEHOLDER_WORKER_ID];
+    if (!guard || !worker) throw new Error("Missing RTS unit balance definition");
     this.barracksProduction = new BarracksProductionSystem(
       this.units,
       this.structures,
       this.navigation,
       guard,
+      this.wallet,
+      this.population,
+    );
+    this.workerProduction = new WorkerProductionSystem(
+      this.units,
+      this.centers,
+      this.navigation,
+      worker,
+      this.wallet,
+      this.population,
     );
     this.placement = new BuildingPlacementSystem(
       canvas,
@@ -172,6 +189,7 @@ export class RtsApp {
         this.syncPlacementUi();
       },
       () => this.queueGuard(),
+      () => this.queueWorker(),
     );
     this.matchOverlay = new RtsMatchOverlay(this.restartMatch);
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
@@ -238,6 +256,7 @@ export class RtsApp {
     this.placement.dispose();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
+    this.workerProduction.reset();
     this.structures.clear();
     this.renderer.dispose();
   }
@@ -297,7 +316,7 @@ export class RtsApp {
     if (!this.running) return;
     this.frameHandle = requestAnimationFrame(this.onFrame);
 
-    const dt = Math.min((now - this.lastTime) / 1000, MAX_FRAME_SECONDS);
+    const dt = Math.max(0, Math.min((now - this.lastTime) / 1000, MAX_FRAME_SECONDS));
     this.lastTime = now;
 
     this.resize();
@@ -308,6 +327,12 @@ export class RtsApp {
       updateUnitMovement(this.units.all(), dt);
       this.workerConstruction.update(dt);
       this.economyProduction?.update(dt);
+      const workerEvent = this.workerProduction.update(dt);
+      if (workerEvent) {
+        this.buildPalette.setActionMessage(workerEvent === "completed"
+          ? "Yeni işçi Merkez'den çıktı."
+          : "İşçi çıkışı engelli; Merkez çevresini açın.");
+      }
       for (const event of this.barracksProduction.update(dt)) {
         this.buildPalette.setActionMessage(
           event.type === "completed"
@@ -316,6 +341,9 @@ export class RtsApp {
         );
       }
       this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
+      this.buildPalette.setResources(this.wallet.snapshot());
+      const population = this.population.snapshot();
+      this.buildPalette.setPopulation(population.used, population.capacity);
       updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
       updateUnitDeaths(this.units, this.selection, dt);
       if (this.match.update(this.centers) === "victory") {
@@ -330,6 +358,7 @@ export class RtsApp {
       this.workerConstruction,
       this.wallet,
       this.economyProduction,
+      this.population,
     );
     this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
@@ -356,6 +385,8 @@ export class RtsApp {
     this.economyProduction?.reset();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
+    this.workerProduction.reset();
+    this.population.reset();
     this.units.clear();
     this.centers.clear();
     this.structures.clear();
@@ -400,6 +431,8 @@ export class RtsApp {
     this.buildPalette.setState(this.placement.state());
     this.buildPalette.setResources(this.wallet.snapshot());
     this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
+    const population = this.population.snapshot();
+    this.buildPalette.setPopulation(population.used, population.capacity);
   }
 
   private assignWorkerToConstruction(structure: PlacedStructure): void {
@@ -418,7 +451,23 @@ export class RtsApp {
       "no-completed-barracks": "Önce tamamlanmış bir Kışla kurun.",
       "already-training": "Kışla zaten bir Muhafız üretiyor.",
       "exit-blocked": "Muhafız çıkışı engelli; Kışla çevresini açın.",
+      "insufficient-resources": "Muhafız için kaynak yetersiz.",
+      "population-full": "Nüfus dolu: önce Ev kurun.",
     };
     this.buildPalette.setActionMessage(message[result]);
+    this.syncPlacementUi();
+  }
+
+  private queueWorker(): void {
+    const result = this.workerProduction.queueWorker();
+    const message: Record<typeof result, string> = {
+      queued: "İşçi üretim kuyruğa alındı.",
+      "already-training": "Merkez zaten bir İşçi üretiyor.",
+      "insufficient-resources": "İşçi için 50 yiyecek gerekli.",
+      "population-full": "Nüfus dolu: önce Ev kurun.",
+      "no-command-center": "İşçi üretmek için Merkez gerekli.",
+    };
+    this.buildPalette.setActionMessage(message[result]);
+    this.syncPlacementUi();
   }
 }

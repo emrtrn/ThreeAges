@@ -4,13 +4,17 @@
     "attackDamage": 12,
     "attackCooldown": 1.4,
     "attackRange": 1.2,
-    "trainingSeconds": 12
+    "trainingSeconds": 12,
+    "cost": { "food": 60, "wood": 20 },
+    "populationCost": 1
   },
   "worker_placeholder": {
     "maxHealth": 60,
     "attackDamage": 1,
     "attackCooldown": 2,
     "attackRange": 1,
-    "trainingSeconds": 10
+    "trainingSeconds": 25,
+    "cost": { "food": 50 },
+    "populationCost": 1
   }
 }

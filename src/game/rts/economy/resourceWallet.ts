@@ -144,6 +144,11 @@ export class ResourceWallet {
     return true;
   }
 
+  /** Finalize a spent reservation so a completed queue cannot refund it later. */
+  commit(reservation: ResourceReservation): boolean {
+    return this.openReservations.delete(reservation.id);
+  }
+
   /** Reset a match wallet; any prior reservation token becomes invalid. */
   reset(startingResources: StartingResources): void {
     for (const [resourceId, amount] of this.amounts) {

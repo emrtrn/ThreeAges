@@ -7,6 +7,7 @@ export class RtsBuildPalette {
   private readonly status = document.createElement("p");
   private readonly resources = document.createElement("p");
   private readonly workers = document.createElement("p");
+  private readonly population = document.createElement("p");
   private readonly actionMessage = document.createElement("p");
 
   constructor(
@@ -15,6 +16,7 @@ export class RtsBuildPalette {
     private readonly onCancel: () => void,
     private readonly onCancelLatest: () => void,
     private readonly onTrainGuard: () => void,
+    private readonly onTrainWorker: () => void,
   ) {
     this.root.className = "rts-build-palette ui-interactive";
     this.root.setAttribute("aria-label", "Yapı yerleştirme");
@@ -46,11 +48,18 @@ export class RtsBuildPalette {
     trainGuard.textContent = "Muhafız Üret";
     trainGuard.addEventListener("click", this.onTrainGuard);
     choices.appendChild(trainGuard);
+    const trainWorker = document.createElement("button");
+    trainWorker.type = "button";
+    trainWorker.textContent = "İşçi Üret";
+    trainWorker.addEventListener("click", this.onTrainWorker);
+    choices.appendChild(trainWorker);
     this.root.appendChild(choices);
     this.resources.className = "rts-build-resources";
     this.root.appendChild(this.resources);
     this.workers.className = "rts-build-workers";
     this.root.appendChild(this.workers);
+    this.population.className = "rts-build-population";
+    this.root.appendChild(this.population);
     this.actionMessage.className = "rts-build-action-message";
     this.root.appendChild(this.actionMessage);
     this.status.className = "rts-build-status";
@@ -89,6 +98,11 @@ export class RtsBuildPalette {
   setIdleWorkerCount(count: number): void {
     const text = `Boşta işçi: ${count}`;
     if (this.workers.textContent !== text) this.workers.textContent = text;
+  }
+
+  setPopulation(used: number, capacity: number): void {
+    const text = `Nüfus: ${used}/${capacity}`;
+    if (this.population.textContent !== text) this.population.textContent = text;
   }
 
   /** Persist completion/error feedback while placement hover state keeps changing. */

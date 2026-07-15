@@ -9,7 +9,8 @@
     "label": "Ev",
     "footprint": { "width": 4, "depth": 4 },
     "cost": { "wood": 80 },
-    "constructionSeconds": 25
+    "constructionSeconds": 25,
+    "populationCapacity": 5
   },
   "depot": {
     "label": "Depo",

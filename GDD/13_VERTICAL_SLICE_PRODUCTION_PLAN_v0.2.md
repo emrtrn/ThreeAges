@@ -817,19 +817,19 @@ Yiyecek ve odun ile çalışan küçük ama tam ekonomi döngüsü oluşturmak.
 
 ### İşçi üretimi ve nüfus
 
-- [ ] Merkezden işçi üretimi ekle.
-- [ ] İşçi maliyeti ekle.
-- [ ] Nüfus kullanımı ekle.
-- [ ] Ev nüfus kapasitesi ekle.
-- [ ] Nüfus doluyken üretimi engelle.
+- [x] Merkezden işçi üretimi ekle. (`WorkerProductionSystem`; Merkez tekli kuyruğu güvenli çıkışta işçi doğurur)
+- [x] İşçi maliyeti ekle. (`worker_placeholder.cost = 50 yiyecek`; kuyrukta ayrılır, iptalde iade edilir)
+- [x] Nüfus kullanımı ekle. (işçi ve Muhafız JSON `populationCost` değeriyle kuyrukta kapasite ayırır)
+- [x] Ev nüfus kapasitesi ekle. (`house.populationCapacity = 5`; tamamlanmış Evler yerleşim üst sınırına eklenir)
+- [x] Nüfus doluyken üretimi engelle. (kuyruk reddedilir ve oyuncuya `önce Ev kurun` mesajı gösterilir)
 
 ### HUD
 
-- [ ] Yiyecek göstergesi
-- [ ] Odun göstergesi
-- [ ] Nüfus göstergesi
+- [x] Yiyecek göstergesi (yapı paletinde canlı global stok)
+- [x] Odun göstergesi (yapı paletinde canlı global stok)
+- [x] Nüfus göstergesi (mevcut + kuyruk rezervasyonu / tamamlanmış Ev kapasitesi)
 - [ ] Gelir hızı
-- [ ] Boşta işçi
+- [x] Boşta işçi (inşaat veya üretim yapısına atanmamış işçilerin anlık sayısı)
 - [ ] Seçili üretim yapısı paneli
 
 ### Debug

@@ -195,7 +195,19 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (trainingSeconds <= 0) {
       throw new GameDataError(`${statsWhere}.trainingSeconds: must be > 0`);
     }
-    units[id] = { maxHealth, attackDamage, attackCooldown, attackRange, trainingSeconds };
+    const populationCost = requireFiniteNumber(stats, "populationCost", statsWhere);
+    if (!Number.isInteger(populationCost) || populationCost <= 0) {
+      throw new GameDataError(`${statsWhere}.populationCost: must be a positive integer`);
+    }
+    units[id] = {
+      maxHealth,
+      attackDamage,
+      attackCooldown,
+      attackRange,
+      trainingSeconds,
+      cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
+      populationCost,
+    };
   }
   if (Object.keys(units).length === 0) {
     throw new GameDataError(`${where}: must define at least one unit`);
@@ -224,6 +236,14 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     if (constructionSeconds <= 0) {
       throw new GameDataError(`${statsWhere}.constructionSeconds: must be > 0`);
     }
+    const populationCapacityRaw = stats["populationCapacity"];
+    let populationCapacity: number | undefined;
+    if (populationCapacityRaw !== undefined) {
+      if (typeof populationCapacityRaw !== "number" || !Number.isInteger(populationCapacityRaw) || populationCapacityRaw <= 0) {
+        throw new GameDataError(`${statsWhere}.populationCapacity: must be a positive integer`);
+      }
+      populationCapacity = populationCapacityRaw;
+    }
     const economyRaw = stats["economy"];
     let economy: BuildingBalance["string"]["economy"];
     if (economyRaw !== undefined) {
@@ -250,6 +270,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       footprint: { width, depth },
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       constructionSeconds,
+      ...(populationCapacity ? { populationCapacity } : {}),
       ...(economy ? { economy } : {}),
     };
   }
