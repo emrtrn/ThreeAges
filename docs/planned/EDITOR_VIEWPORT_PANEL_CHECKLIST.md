@@ -18,34 +18,34 @@ viewport overlay'leri panel sınırları içinde kalmalıdır.
 
 ### 1. Ölçüm ve güvenli hazırlık
 
-- [ ] Canvas, kamera, post-process ve pointer koordinatı kullanan resize
+- [x] Canvas, kamera, post-process ve pointer koordinatı kullanan resize
       noktalarını belirle.
-- [ ] Mevcut viewport, Content Drawer açık/kapalı ve Stats görünümü için kısa
+- [x] Mevcut viewport, Content Drawer açık/kapalı ve Stats görünümü için kısa
       bir başlangıç ekran kaydı veya smoke kanıtı al.
 
 ### 2. Renderer'ı viewport ölçüsüne bağlama
 
-- [ ] Renderer boyutunu `window.innerWidth/innerHeight` yerine canvas veya
+- [x] Renderer boyutunu `window.innerWidth/innerHeight` yerine canvas veya
       viewport host'un gerçek `clientWidth/clientHeight` değerlerinden üret.
-- [ ] Kamera aspect/projection ve post-process hedeflerini aynı ölçülerle güncelle.
-- [ ] Boyut değişikliklerini `ResizeObserver` ile takip et.
-- [ ] Cihaz piksel oranını mevcut performans sınırları içinde koru.
+- [x] Kamera aspect/projection ve post-process hedeflerini aynı ölçülerle güncelle.
+- [x] Boyut değişikliklerini `ResizeObserver` ile takip et.
+- [x] Cihaz piksel oranını mevcut performans sınırları içinde koru.
 
 ### 3. Gerçek viewport paneli
 
-- [ ] Canvas'ı barındıran gerçek bir `editor-viewport-host` oluştur.
-- [ ] Mevcut çerçeve, arka plan ve köşe görünümünü bu host'a taşı.
-- [ ] `100vmax` dış alan maskesini ve tekrarlanan sabit canvas offset'lerini kaldır.
-- [ ] Content Drawer açılıp kapandığında host'un kullanılabilir alana doğal olarak
+- [x] Canvas'ı barındıran gerçek bir `editor-viewport-host` oluştur.
+- [x] Mevcut çerçeve, arka plan ve köşe görünümünü bu host'a taşı.
+- [x] `100vmax` dış alan maskesini ve tekrarlanan sabit canvas offset'lerini kaldır.
+- [x] Content Drawer açılıp kapandığında host'un kullanılabilir alana doğal olarak
       uyduğunu doğrula.
 
 ### 4. Viewport overlay'leri
 
-- [ ] Stats'i viewport host içinde sol üst köşeye bağla; sabit sayfa offset'lerini
+- [x] Stats'i viewport host içinde sol üst köşeye bağla; sabit sayfa offset'lerini
       kaldır.
-- [ ] Stats'in Outliner, toolbar, Details ve Content Drawer altında kalmadığını
+- [x] Stats'in Outliner, toolbar, Details ve Content Drawer altında kalmadığını
       doğrula.
-- [ ] Gelecekte eklenecek viewport overlay'leri için aynı host'u ortak yerleşim
+- [x] Gelecekte eklenecek viewport overlay'leri için aynı host'u ortak yerleşim
       yüzeyi olarak kullan.
 
 ### 5. Etkileşim ve regresyon doğrulaması
@@ -55,11 +55,21 @@ viewport overlay'leri panel sınırları içinde kalmalıdır.
 - [ ] Select/move/rotate/scale gizmo etkileşimlerini kontrol et.
 - [ ] Perspective ve orthographic kamera görünümlerinde oran bozulması olmadığını
       doğrula.
-- [ ] Content Drawer açık/kapalı ve pencere yeniden boyutlandırma senaryolarını
+- [x] Content Drawer açık/kapalı ve pencere yeniden boyutlandırma senaryolarını
       test et.
-- [ ] `npx.cmd tsc --noEmit` çalıştır.
-- [ ] İlgili hedefli browser smoke testlerini çalıştır; ardından mümkünse
+- [x] `npx.cmd tsc --noEmit` çalıştır.
+- [x] İlgili hedefli browser smoke testlerini çalıştır; ardından mümkünse
       `npm.cmd run build:verify` çalıştır.
+
+## 2026-07-15 Doğrulama Kaydı
+
+- `tests/smoke/editor-viewport-panel.spec.ts`: `?editor&debug` altında canvas ve
+  Stats'in host içinde kaldığını; WebGL drawing-buffer oranının host ile eşleştiğini;
+  Content Drawer ve pencere boyutu değiştiğinde panelin yeniden ölçüldüğünü doğrular.
+- `npx.cmd tsc --noEmit` ve `npm.cmd run build:verify` başarılıdır. İkincisi import
+  sınırlarını, üretim derlemesini, 908 engine kontrolünü ve strict dist doğrulamasını kapsar.
+- Sonraki dar doğrulama dilimi: gerçek canvas gizmo sürüklemeleri ile perspective /
+  orthographic görünüm geçişlerinde görsel oran regresyonunu browser'da kanıtlamak.
 
 ## Tamamlanma Kriterleri
 

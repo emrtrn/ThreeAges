@@ -1,0 +1,121 @@
+import { expect, test, type Locator } from "@playwright/test";
+
+type Rect = { x: number; y: number; width: number; height: number };
+
+function right(rect: Rect): number {
+  return rect.x + rect.width;
+}
+
+function bottom(rect: Rect): number {
+  return rect.y + rect.height;
+}
+
+test("editor viewport panel owns the canvas and Stats across layout resizes", async ({ page }) => {
+  await page.setViewportSize({ width: 1680, height: 900 });
+  await page.goto("/?editor&debug");
+
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+
+  const host = page.locator("[data-viewport-host]");
+  const canvas = page.locator("#game-canvas");
+  const stats = page.locator("#debug-stats");
+  const drawer = page.locator("[data-content-drawer]");
+  const outliner = page.locator(".editor-outliner");
+  const details = page.locator(".editor-details");
+
+  await expect(host).toBeVisible();
+  await expect(canvas).toBeVisible();
+  await expect(stats).toBeVisible();
+  await expect(stats).toContainText(/draw calls/, { timeout: 30_000 });
+  await expect(host.locator("#game-canvas")).toHaveCount(1);
+  await expect(host.locator("#debug-stats")).toHaveCount(1);
+
+  const initial = await viewportRects({ host, canvas, stats, drawer, outliner, details });
+  expect(initial.host.x).toBeGreaterThanOrEqual(right(initial.outliner) - 1);
+  expect(right(initial.host)).toBeLessThanOrEqual(initial.details.x + 1);
+  expect(bottom(initial.host)).toBeLessThanOrEqual(initial.drawer.y + 1);
+  expect(initial.canvas.width).toBeCloseTo(initial.canvasClient.width, 0);
+  expect(initial.canvas.height).toBeCloseTo(initial.canvasClient.height, 0);
+  expect(initial.canvasBuffer.width / initial.canvasBuffer.height).toBeCloseTo(
+    initial.canvasClient.width / initial.canvasClient.height,
+    2,
+  );
+  expect(initial.stats.x).toBeGreaterThanOrEqual(initial.host.x);
+  expect(initial.stats.y).toBeGreaterThanOrEqual(initial.host.y);
+  expect(right(initial.stats)).toBeLessThanOrEqual(right(initial.host) + 1);
+  expect(bottom(initial.stats)).toBeLessThanOrEqual(bottom(initial.host) + 1);
+
+  await page.locator("[data-content-toggle]").click();
+  await expect(page.getByTestId("forge-editor")).toHaveClass(/content-drawer-open/);
+  await expect.poll(async () => (await host.boundingBox())?.height ?? 0).toBeLessThan(initial.host.height);
+
+  const withDrawer = await viewportRects({ host, canvas, stats, drawer, outliner, details });
+  expect(bottom(withDrawer.host)).toBeLessThanOrEqual(withDrawer.drawer.y + 1);
+  expect(withDrawer.canvas.width).toBeCloseTo(withDrawer.canvasClient.width, 0);
+  expect(withDrawer.canvas.height).toBeCloseTo(withDrawer.canvasClient.height, 0);
+  expect(withDrawer.canvasBuffer.width / withDrawer.canvasBuffer.height).toBeCloseTo(
+    withDrawer.canvasClient.width / withDrawer.canvasClient.height,
+    2,
+  );
+  expect(withDrawer.stats.x).toBeGreaterThanOrEqual(withDrawer.host.x);
+  expect(withDrawer.stats.y).toBeGreaterThanOrEqual(withDrawer.host.y);
+  expect(right(withDrawer.stats)).toBeLessThanOrEqual(right(withDrawer.host) + 1);
+  expect(bottom(withDrawer.stats)).toBeLessThanOrEqual(bottom(withDrawer.host) + 1);
+
+  await page.setViewportSize({ width: 1440, height: 820 });
+  await expect.poll(async () => (await host.boundingBox())?.width ?? 0).toBeLessThan(withDrawer.host.width);
+
+  const resized = await viewportRects({ host, canvas, stats, drawer, outliner, details });
+  expect(resized.canvas.width).toBeCloseTo(resized.canvasClient.width, 0);
+  expect(resized.canvas.height).toBeCloseTo(resized.canvasClient.height, 0);
+  expect(resized.canvasBuffer.width / resized.canvasBuffer.height).toBeCloseTo(
+    resized.canvasClient.width / resized.canvasClient.height,
+    2,
+  );
+  expect(bottom(resized.host)).toBeLessThanOrEqual(resized.drawer.y + 1);
+  expect(right(resized.host)).toBeLessThanOrEqual(resized.details.x + 1);
+  expect(right(resized.stats)).toBeLessThanOrEqual(right(resized.host) + 1);
+  expect(bottom(resized.stats)).toBeLessThanOrEqual(bottom(resized.host) + 1);
+});
+
+async function viewportRects(locators: {
+  host: Locator;
+  canvas: Locator;
+  stats: Locator;
+  drawer: Locator;
+  outliner: Locator;
+  details: Locator;
+}): Promise<{
+  host: Rect;
+  canvas: Rect;
+  canvasClient: { width: number; height: number };
+  canvasBuffer: { width: number; height: number };
+  stats: Rect;
+  drawer: Rect;
+  outliner: Rect;
+  details: Rect;
+}> {
+  const [host, canvas, stats, drawer, outliner, details, canvasClient, canvasBuffer] = await Promise.all([
+    requiredBox(locators.host),
+    requiredBox(locators.canvas),
+    requiredBox(locators.stats),
+    requiredBox(locators.drawer),
+    requiredBox(locators.outliner),
+    requiredBox(locators.details),
+    locators.canvas.evaluate((element) => ({
+      width: element.clientWidth,
+      height: element.clientHeight,
+    })),
+    locators.canvas.evaluate((element) => ({
+      width: element.width,
+      height: element.height,
+    })),
+  ]);
+  return { host, canvas, canvasClient, canvasBuffer, stats, drawer, outliner, details };
+}
+
+async function requiredBox(locator: Locator): Promise<Rect> {
+  const box = await locator.boundingBox();
+  if (!box) throw new Error(`Expected ${await locator.evaluate((element) => element.id || element.className)} to have a layout box`);
+  return box;
+}
