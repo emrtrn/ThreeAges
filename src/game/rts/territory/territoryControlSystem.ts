@@ -108,6 +108,37 @@ export class TerritoryControlSystem {
     return true;
   }
 
+  /**
+   * Karakol-style expansion may bridge a short neutral gap, but can never be
+   * dropped in friendly interior or enemy-owned territory.
+   */
+  canPlaceExpansion(
+    owner: UnitOwner,
+    x: number,
+    z: number,
+    width: number,
+    depth: number,
+    maximumGap: number,
+  ): boolean {
+    if (!Number.isFinite(maximumGap) || maximumGap <= 0) return false;
+    const owners = this.footprintOwners(x, z, width, depth);
+    if (owners.size === 0 || owners.has(this.opponentOf(owner))) return false;
+    if (!owners.has("neutral")) return false;
+    const step = this.options.cellSize;
+    const snappedX = this.snap(x);
+    const snappedZ = this.snap(z);
+    const cellRange = Math.ceil(maximumGap / step);
+    for (let xOffset = -cellRange; xOffset <= cellRange; xOffset += 1) {
+      for (let zOffset = -cellRange; zOffset <= cellRange; zOffset += 1) {
+        const candidateX = snappedX + xOffset * step;
+        const candidateZ = snappedZ + zOffset * step;
+        if (Math.hypot(candidateX - snappedX, candidateZ - snappedZ) <= maximumGap
+          && this.ownerAt(candidateX, candidateZ) === owner) return true;
+      }
+    }
+    return false;
+  }
+
   dispose(): void {
     this.root.clear();
     this.cellGeometry.dispose();
@@ -126,6 +157,24 @@ export class TerritoryControlSystem {
       winnerDistance = distance;
     }
     return winner?.owner ?? "neutral";
+  }
+
+  private footprintOwners(x: number, z: number, width: number, depth: number): Set<TerritoryOwner> {
+    if (!Number.isFinite(width) || !Number.isFinite(depth) || width <= 0 || depth <= 0) return new Set();
+    const owners = new Set<TerritoryOwner>();
+    const step = this.options.cellSize;
+    const snappedX = this.snap(x);
+    const snappedZ = this.snap(z);
+    for (let offsetX = -width / 2 + step / 2; offsetX < width / 2; offsetX += step) {
+      for (let offsetZ = -depth / 2 + step / 2; offsetZ < depth / 2; offsetZ += step) {
+        owners.add(this.ownerAt(snappedX + offsetX, snappedZ + offsetZ));
+      }
+    }
+    return owners;
+  }
+
+  private opponentOf(owner: UnitOwner): UnitOwner {
+    return owner === "player" ? "enemy" : "player";
   }
 
   private snap(value: number): number {

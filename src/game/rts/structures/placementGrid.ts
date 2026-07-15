@@ -16,6 +16,12 @@ export interface PlacementResult {
   readonly reason: PlacementFailure | null;
 }
 
+export interface PlacementControl {
+  readonly owner: UnitOwner;
+  readonly ownsFootprint: (owner: UnitOwner, x: number, z: number, width: number, depth: number) => boolean;
+  readonly canPlaceExpansion: (owner: UnitOwner, x: number, z: number, width: number, depth: number, maximumGap: number) => boolean;
+}
+
 /** Snap a ground point to the centre of the nearest authored placement cell. */
 export function snapToPlacementGrid(x: number, z: number): { x: number; z: number } {
   return {
@@ -47,7 +53,7 @@ export function validateBuildingPlacement(
   x: number,
   z: number,
   occupied: readonly NavBlocker[],
-  control?: { readonly owner: UnitOwner; readonly ownsFootprint: (owner: UnitOwner, x: number, z: number, width: number, depth: number) => boolean },
+  control?: PlacementControl,
 ): PlacementResult {
   const snapped = snapToPlacementGrid(x, z);
   const candidate = buildingFootprintBlocker(stats, snapped.x, snapped.z);
@@ -60,13 +66,23 @@ export function validateBuildingPlacement(
   if (occupied.some((blocker) => footprintsOverlap(candidate, blocker))) {
     return { ...snapped, valid: false, reason: "blocked" };
   }
-  if (control && !control.ownsFootprint(
-    control.owner,
-    snapped.x,
-    snapped.z,
-    stats.footprint.width,
-    stats.footprint.depth,
-  )) {
+  const territoryAllowed = stats.territory
+    ? control?.canPlaceExpansion(
+      control.owner,
+      snapped.x,
+      snapped.z,
+      stats.footprint.width,
+      stats.footprint.depth,
+      stats.territory.expansionPlacementRange,
+    )
+    : control?.ownsFootprint(
+      control.owner,
+      snapped.x,
+      snapped.z,
+      stats.footprint.width,
+      stats.footprint.depth,
+    );
+  if (control && !territoryAllowed) {
     return { ...snapped, valid: false, reason: "outside-control" };
   }
   return { ...snapped, valid: true, reason: null };

@@ -28113,9 +28113,16 @@ check("RTS territory stores centre ownership per grid cell and gates normal buil
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
   const house = buildings.house ?? assert.fail("house definition missing");
-  const territory = new TerritoryControlSystem(() => [
+  const outpost = buildings.outpost ?? assert.fail("outpost definition missing");
+  assert.deepEqual(outpost.territory, { controlRadius: 8, expansionPlacementRange: 12 });
+  assert.equal(outpost.cost.wood, 140);
+  assert.equal(outpost.constructionSeconds, 45);
+  const sources = [
     { owner: "player" as const, x: 0, z: 0, radius: 10 },
     { owner: "enemy" as const, x: 30, z: 0, radius: 10 },
+  ];
+  const territory = new TerritoryControlSystem(() => [
+    ...sources,
   ]);
   territory.refresh();
 
@@ -28129,16 +28136,40 @@ check("RTS territory stores centre ownership per grid cell and gates normal buil
   const permitted = validateBuildingPlacement(house, 6, 0, [], {
     owner: "player",
     ownsFootprint: territory.ownsFootprint.bind(territory),
+    canPlaceExpansion: territory.canPlaceExpansion.bind(territory),
   });
   assert.equal(permitted.valid, true);
   const denied = validateBuildingPlacement(house, 10, 0, [], {
     owner: "player",
     ownsFootprint: territory.ownsFootprint.bind(territory),
+    canPlaceExpansion: territory.canPlaceExpansion.bind(territory),
   });
   assert.deepEqual({ valid: denied.valid, reason: denied.reason }, {
     valid: false,
     reason: "outside-control",
   });
+  const outpostAllowed = validateBuildingPlacement(outpost, 16, 12, [], {
+    owner: "player",
+    ownsFootprint: territory.ownsFootprint.bind(territory),
+    canPlaceExpansion: territory.canPlaceExpansion.bind(territory),
+  });
+  assert.equal(outpostAllowed.valid, true, "an outpost may bridge a short neutral gap");
+  const outpostInFriendlyInterior = validateBuildingPlacement(outpost, 4, 0, [], {
+    owner: "player",
+    ownsFootprint: territory.ownsFootprint.bind(territory),
+    canPlaceExpansion: territory.canPlaceExpansion.bind(territory),
+  });
+  assert.equal(outpostInFriendlyInterior.reason, "outside-control");
+  const outpostInEnemyTerritory = validateBuildingPlacement(outpost, 24, 0, [], {
+    owner: "player",
+    ownsFootprint: territory.ownsFootprint.bind(territory),
+    canPlaceExpansion: territory.canPlaceExpansion.bind(territory),
+  });
+  assert.equal(outpostInEnemyTerritory.reason, "outside-control");
+
+  sources.push({ owner: "player", x: 16, z: 12, radius: outpost.territory?.controlRadius ?? 0 });
+  territory.refresh();
+  assert.equal(territory.ownerAt(22, 12), "player", "a completed outpost adds its small control area");
   territory.dispose();
 });
 

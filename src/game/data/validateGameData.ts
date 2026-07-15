@@ -264,6 +264,18 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       }
       economy = { resourceId, workerCapacity, perWorkerPerMinute, localBufferCapacity };
     }
+    const territoryRaw = stats["territory"];
+    let territory: BuildingBalance["string"]["territory"];
+    if (territoryRaw !== undefined) {
+      const territoryWhere = `${statsWhere}.territory`;
+      const territoryData = asObject(territoryRaw, territoryWhere);
+      const controlRadius = requireFiniteNumber(territoryData, "controlRadius", territoryWhere);
+      const expansionPlacementRange = requireFiniteNumber(territoryData, "expansionPlacementRange", territoryWhere);
+      if (controlRadius <= 0 || expansionPlacementRange <= 0) {
+        throw new GameDataError(`${territoryWhere}: control radius and placement range must be > 0`);
+      }
+      territory = { controlRadius, expansionPlacementRange };
+    }
     buildings[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
@@ -272,6 +284,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       constructionSeconds,
       ...(populationCapacity ? { populationCapacity } : {}),
       ...(economy ? { economy } : {}),
+      ...(territory ? { territory } : {}),
     };
   }
   if (Object.keys(buildings).length === 0) {

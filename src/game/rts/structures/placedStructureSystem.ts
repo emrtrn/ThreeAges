@@ -124,7 +124,10 @@ export class PlacedStructureSystem {
         Math.max(2.5, structure.stats.footprint.width * 0.45),
         structure.stats.footprint.depth * 0.72,
       ),
-      new MeshStandardMaterial({ color: "#80684a", roughness: 0.85 }),
+      new MeshStandardMaterial({
+        color: structure.stats.territory ? "#467a9f" : "#80684a",
+        roughness: 0.85,
+      }),
     );
     completed.name = "rts-complete-building-placeholder";
     completed.position.y = completed.geometry.parameters.height / 2 + 0.18;

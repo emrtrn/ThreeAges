@@ -18,6 +18,16 @@
     "cost": { "wood": 120 },
     "constructionSeconds": 45
   },
+  "outpost": {
+    "label": "Karakol",
+    "footprint": { "width": 6, "depth": 6 },
+    "cost": { "wood": 140 },
+    "constructionSeconds": 45,
+    "territory": {
+      "controlRadius": 8,
+      "expansionPlacementRange": 12
+    }
+  },
   "farm": {
     "label": "Tarla",
     "footprint": { "width": 6, "depth": 6 },

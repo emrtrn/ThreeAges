@@ -93,7 +93,14 @@ export class RtsApp {
     x: center.position.x,
     z: center.position.z,
     radius: COMMAND_CENTER_CONTROL_RADIUS,
-  })));
+  })).concat(this.structures.all()
+    .filter((structure) => structure.construction.complete && structure.stats.territory)
+    .map((structure) => ({
+      owner: "player" as const,
+      x: structure.x,
+      z: structure.z,
+      radius: structure.stats.territory?.controlRadius ?? 0,
+    }))));
   private readonly wallet: ResourceWallet;
   private readonly population: PopulationSystem;
   private readonly workerConstruction: WorkerConstructionSystem;
@@ -147,6 +154,9 @@ export class RtsApp {
       this.structures,
       this.navigation,
       (worker) => this.economyProduction?.isAssigned(worker) ?? false,
+      (structure) => {
+        if (structure.stats.territory) this.territory.refresh();
+      },
     );
     this.economyProduction = new EconomyProductionSystem(
       this.units,

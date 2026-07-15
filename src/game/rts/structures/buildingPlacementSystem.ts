@@ -99,7 +99,11 @@ export class BuildingPlacementSystem {
       point.x,
       point.z,
       this.occupiedBlockers(),
-      { owner: "player", ownsFootprint: this.territory.ownsFootprint.bind(this.territory) },
+      {
+        owner: "player",
+        ownsFootprint: this.territory.ownsFootprint.bind(this.territory),
+        canPlaceExpansion: this.territory.canPlaceExpansion.bind(this.territory),
+      },
     );
     this.root.position.set(this.result.x, 0, this.result.z);
     this.setGhostValid(this.result.valid);

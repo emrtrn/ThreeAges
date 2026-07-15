@@ -93,7 +93,9 @@ export class RtsBuildPalette {
       return;
     }
     if (!state.result) {
-      this.status.textContent = "Haritada konum seçin.";
+      this.status.textContent = state.activeBuildingId === "outpost"
+        ? "Karakolu kontrol alanının hemen dışındaki nötr bir konuma yerleştirin."
+        : "Haritada konum seçin.";
       return;
     }
     if (state.result.valid) {

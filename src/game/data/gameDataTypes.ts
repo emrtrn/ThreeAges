@@ -82,6 +82,8 @@ export interface BuildingBalanceStats {
   readonly populationCapacity?: number;
   /** Present only on structures which turn assigned workers into a resource. */
   readonly economy?: EconomyProductionBalance;
+  /** Present on structures which extend the control area once complete. */
+  readonly territory?: TerritoryBuildingBalance;
 }
 
 /** Data-owned first-pass production behaviour for a food or wood structure. */
@@ -90,6 +92,14 @@ export interface EconomyProductionBalance {
   readonly workerCapacity: number;
   readonly perWorkerPerMinute: number;
   readonly localBufferCapacity: number;
+}
+
+/** Territory source and bounded expansion rule supplied by a completed structure. */
+export interface TerritoryBuildingBalance {
+  /** Radius unlocked immediately after this structure completes. */
+  readonly controlRadius: number;
+  /** Maximum gap from friendly territory when this special structure is placed. */
+  readonly expansionPlacementRange: number;
 }
 
 /** `public/game-data/balance/buildings.json` — keyed by stable building id. */

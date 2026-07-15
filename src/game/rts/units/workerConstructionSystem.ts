@@ -35,6 +35,7 @@ export class WorkerConstructionSystem {
     private readonly structures: PlacedStructureSystem,
     private readonly navigation: RtsNavigation,
     private readonly isReservedForOtherWork: (worker: Unit) => boolean = () => false,
+    private readonly onConstructionComplete: (structure: PlacedStructure) => void = () => {},
   ) {}
 
   /** Assign the nearest idle worker and name the failure mode for player feedback. */
@@ -78,6 +79,7 @@ export class WorkerConstructionSystem {
       }
       if (assignment.state === "building" && this.structures.advanceConstruction(structure, deltaSeconds)) {
         this.assignments.delete(workerId);
+        this.onConstructionComplete(structure);
       }
     }
   }

@@ -889,9 +889,9 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 
 ### Karakol
 
-- [ ] Karakol yapı tanımı oluştur.
-- [ ] Kontrol alanı dışında sınırlı placement desteği ekle.
-- [ ] Tamamlanınca küçük kontrol alanı aç.
+- [x] Karakol yapı tanımı oluştur. (`buildings.json`: 6x6, 140 odun, 45 sn; küçük alan yarıçapı 8)
+- [x] Kontrol alanı dışında sınırlı placement desteği ekle. (en fazla 12 birimlik nötr boşluk; düşman alanı ve iç alan reddedilir)
+- [x] Tamamlanınca küçük kontrol alanı aç. (inşaat tamamlanma olayı territory kaynaklarını yeniler)
 - [ ] Yol bağlantısı kurulunca tam alan aç.
 - [ ] Karakol yıkılınca alanı kapat.
 - [ ] Bağlı yapıların `Kontrol Dışı` durumunu ekle.
