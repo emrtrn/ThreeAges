@@ -7,9 +7,16 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await page.goto("/?rts&debug");
   await expect(page.locator("#game-canvas")).toBeVisible();
   await expect(page.locator(".rts-build-palette")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Oyun hızı" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Normal", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "4X", exact: true }).click();
+  await expect(page.getByRole("button", { name: "4X", exact: true })).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "Tarla", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Oduncu Kampı", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Karakol", exact: true })).toBeVisible();
+  await expect(page.locator('[data-rts-building="house"]')).toContainText("80 Odun");
+  await expect(page.locator('[data-rts-building="depot"]')).toContainText("120 Odun");
+  await expect(page.locator('[data-rts-building="outpost"]')).toContainText("140 Odun");
   await expect(page.getByRole("button", { name: "İşçi Üret", exact: true })).toBeVisible();
   await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 5/20");
   await expect(page.locator(".rts-build-income")).toHaveText("Gelir: Yiyecek +0.0/dk · Odun +0.0/dk");

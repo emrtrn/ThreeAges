@@ -898,7 +898,7 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 
 ### Yol
 
-- [ ] Hücre tabanlı yol graph’ı oluştur.
+- [x] Hücre tabanlı yol graph’ı oluştur. (`RoadGraph`: ortogonal en kısa rota, engel kaçınma, bağlantı sorgusu ve tekrar ücretlendirmeme)
 - [ ] Başlangıç ve bitiş ile rota önizleme ekle.
 - [ ] Düz ve dönüş segmentlerini oluştur.
 - [ ] Yol maliyetini hesapla.

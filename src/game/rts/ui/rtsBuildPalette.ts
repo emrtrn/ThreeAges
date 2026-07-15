@@ -37,7 +37,18 @@ export class RtsBuildPalette {
       if (id === "command_center") continue;
       const button = document.createElement("button");
       button.type = "button";
-      button.textContent = stats.label;
+      button.className = "rts-build-choice";
+      button.dataset.rtsBuilding = id;
+      // Keep the action's accessible name concise while the visual label shows
+      // the explicit resource cost needed for faster purchase decisions.
+      button.setAttribute("aria-label", stats.label);
+      const label = document.createElement("span");
+      label.className = "rts-build-choice-label";
+      label.textContent = stats.label;
+      const cost = document.createElement("span");
+      cost.className = "rts-build-choice-cost";
+      cost.textContent = formatBuildingCost(stats.cost);
+      button.append(label, cost);
       button.addEventListener("click", () => this.onChoose(id));
       choices.appendChild(button);
     }
@@ -185,4 +196,12 @@ export class RtsBuildPalette {
   dispose(): void {
     this.root.remove();
   }
+}
+
+function formatBuildingCost(cost: Readonly<Record<string, number>>): string {
+  const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun" };
+  const entries = Object.entries(cost).filter(([, amount]) => amount > 0);
+  return entries.length === 0
+    ? "Ücretsiz"
+    : entries.map(([resourceId, amount]) => `${amount} ${labels[resourceId] ?? resourceId}`).join(" · ");
 }

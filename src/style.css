@@ -136,6 +136,44 @@ body {
   border-radius: 5px;
 }
 
+/* Phase 4 test aid: always-visible, simulation-only speed controls. */
+.rts-game-speed {
+  position: absolute;
+  top: max(12px, env(safe-area-inset-top));
+  right: max(12px, env(safe-area-inset-right));
+  padding: 8px 10px;
+  color: #edf0dc;
+  background: rgb(18 27 30 / 84%);
+  border: 1px solid rgb(183 206 130 / 55%);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+
+.rts-game-speed-choices {
+  display: flex;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.rts-game-speed button {
+  min-width: 38px;
+  padding: 5px 7px;
+  color: #e4ebcf;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #3d5140;
+  border: 1px solid #78905f;
+  border-radius: 3px;
+}
+
+.rts-game-speed button[aria-pressed="true"] {
+  color: #1d2b1b;
+  background: #cddd8d;
+  border-color: #e5d675;
+}
+
 /* Faz 2 placement controls: intentionally small until the full RTS HUD lands. */
 .rts-build-palette {
   position: absolute;
@@ -158,7 +196,9 @@ body {
 }
 
 .rts-build-choices button {
-  padding: 6px 9px;
+  display: grid;
+  gap: 2px;
+  padding: 5px 9px;
   color: #1d2b1b;
   font: inherit;
   font-size: 13px;
@@ -167,6 +207,17 @@ body {
   background: #cddd8d;
   border: 0;
   border-radius: 3px;
+}
+
+.rts-build-choice-label {
+  line-height: 1.1;
+}
+
+.rts-build-choice-cost {
+  color: #56632f;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.1;
 }
 
 .rts-build-status {

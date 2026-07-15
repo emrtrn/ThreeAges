@@ -58,6 +58,7 @@ import {
   validateBuildingBalance,
   validateGamePreset,
   validateGameVersion,
+  validateRoadBalance,
   validateUnitBalance,
 } from "../src/game/data/validateGameData";
 import { CommandSystem } from "../src/game/rts/commands/commandSystem";
@@ -80,6 +81,8 @@ import { BarracksProductionSystem } from "../src/game/rts/structures/barracksPro
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { WorkerProductionSystem } from "../src/game/rts/structures/workerProductionSystem";
 import { TerritoryControlSystem } from "../src/game/rts/territory/territoryControlSystem";
+import { simulationSteps } from "../src/game/rts/simulation/simulationSpeed";
+import { RoadGraph } from "../src/game/rts/roads/roadGraph";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -28106,6 +28109,34 @@ check("RTS placement snap rejects occupied footprints and refreshes navigation b
   assert.equal(structures.cancelLatest(), site, "latest unbuilt foundation can be cancelled");
   assert.equal(structures.navigationBlockers().length, 0);
   structures.clear();
+});
+
+check("RTS simulation speed multiplies time in safe fixed-size slices", () => {
+  assert.deepEqual(simulationSteps(1 / 60, 1, 1 / 15), [1 / 60]);
+  const accelerated = simulationSteps(1 / 60, 8, 1 / 15);
+  assert.deepEqual(accelerated, [1 / 15, 1 / 15]);
+  assert.equal(accelerated.reduce((total, step) => total + step, 0), 8 / 60);
+  assert.throws(() => simulationSteps(1 / 60, 3 as never, 1 / 15), /Unsupported RTS simulation speed/);
+});
+
+check("RTS road graph finds obstacle-free cells, charges new segments, and keeps alternate connectivity", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  assert.deepEqual(balance, { cellSize: 2, woodCostPerCell: 4 });
+  const roads = new RoadGraph(balance);
+  const blockers = [{ min: [-1, -1, -1], max: [1, 3, 1] }];
+  const detour = roads.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, blockers);
+  assert.ok(detour, "road graph finds a flank around a blocked cell");
+  assert.ok(detour.cells.every((cell) => cell.x !== 0 || cell.z !== 0), "route avoids the occupied road cell");
+  assert.equal(detour.woodCost, detour.newCells.length * 4);
+  roads.commit(detour);
+  assert.equal(roads.connected({ x: -6, z: 0 }, { x: 6, z: 0 }), true);
+  assert.ok(roads.all().some((segment) => segment.kind === "corner"), "detour produces corner segments");
+
+  const overlap = roads.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, blockers);
+  assert.ok(overlap);
+  assert.equal(overlap.woodCost, 0, "existing road cells are never charged twice");
 });
 
 check("RTS territory stores centre ownership per grid cell and gates normal building placement", () => {

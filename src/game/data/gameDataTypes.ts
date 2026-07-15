@@ -104,3 +104,11 @@ export interface TerritoryBuildingBalance {
 
 /** `public/game-data/balance/buildings.json` — keyed by stable building id. */
 export type BuildingBalance = Readonly<Record<string, BuildingBalanceStats>>;
+
+/** `public/game-data/balance/roads.json` — first-pass logistics road tuning. */
+export interface RoadBalance {
+  /** Grid cell width in world units; intentionally independent from unit navigation. */
+  readonly cellSize: number;
+  /** Wood charged for each newly created road cell. */
+  readonly woodCostPerCell: number;
+}

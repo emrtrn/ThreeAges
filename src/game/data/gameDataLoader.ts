@@ -14,9 +14,10 @@ import {
   validateGamePreset,
   validateGameVersion,
   validateBuildingBalance,
+  validateRoadBalance,
   validateUnitBalance,
 } from "./validateGameData";
-import type { BuildingBalance, GamePreset, GameVersion, UnitBalance } from "./gameDataTypes";
+import type { BuildingBalance, GamePreset, GameVersion, RoadBalance, UnitBalance } from "./gameDataTypes";
 
 const log = logger("Data");
 
@@ -71,5 +72,13 @@ export async function loadBuildingBalance(): Promise<BuildingBalance> {
   const url = `${GAME_DATA_ROOT}/balance/buildings.json`;
   const balance = validateBuildingBalance(await fetchJson(url));
   log.debug(`loaded building balance (${Object.keys(balance).length} definitions)`);
+  return balance;
+}
+
+/** Load and validate `public/game-data/balance/roads.json`. */
+export async function loadRoadBalance(): Promise<RoadBalance> {
+  const url = `${GAME_DATA_ROOT}/balance/roads.json`;
+  const balance = validateRoadBalance(await fetchJson(url));
+  log.debug(`loaded road balance (${balance.cellSize}u cell, ${balance.woodCostPerCell} wood/cell)`);
   return balance;
 }

@@ -13,6 +13,7 @@ import type {
   BuildingBalance,
   GamePreset,
   GameVersion,
+  RoadBalance,
   StartingResources,
   UnitBalance,
 } from "./gameDataTypes";
@@ -291,4 +292,16 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     throw new GameDataError(`${where}: must define at least one building`);
   }
   return buildings;
+}
+
+/** Validate the small data-owned road cost/grid contract before RTS uses it. */
+export function validateRoadBalance(value: unknown): RoadBalance {
+  const where = "balance/roads.json";
+  const obj = asObject(value, where);
+  const cellSize = requireFiniteNumber(obj, "cellSize", where);
+  const woodCostPerCell = requireFiniteNumber(obj, "woodCostPerCell", where);
+  if (cellSize <= 0 || woodCostPerCell <= 0) {
+    throw new GameDataError(`${where}: cell size and wood cost must be > 0`);
+  }
+  return { cellSize, woodCostPerCell };
 }

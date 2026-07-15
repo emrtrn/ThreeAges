@@ -22,7 +22,7 @@ import {
 
 import { createSceneRenderer } from "@engine/render-three/renderer";
 import { logger } from "@/game/core/logger";
-import type { BuildingBalance, StartingResources, UnitBalance } from "@/game/data/gameDataTypes";
+import type { BuildingBalance, RoadBalance, StartingResources, UnitBalance } from "@/game/data/gameDataTypes";
 import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
@@ -45,6 +45,7 @@ import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import { PlacedStructureSystem, type PlacedStructure } from "./structures/placedStructureSystem";
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
+import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import { ResourceWallet } from "./economy/resourceWallet";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
@@ -52,6 +53,8 @@ import { PopulationSystem } from "./economy/populationSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem } from "./structures/workerProductionSystem";
+import { RoadGraph } from "./roads/roadGraph";
+import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
 import {
   COMMAND_CENTER_CONTROL_RADIUS,
   TerritoryControlSystem,
@@ -78,6 +81,8 @@ export interface RtsAppOptions {
   readonly buildingBalance: BuildingBalance;
   /** Preset-owned initial stockpile for Phase 2 construction reservations. */
   readonly startingResources: StartingResources;
+  /** Data-owned grid and wood cost for the Phase 4 road graph. */
+  readonly roadBalance: RoadBalance;
 }
 
 export class RtsApp {
@@ -88,6 +93,7 @@ export class RtsApp {
   private readonly units = new UnitSystem();
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
+  private readonly roads: RoadGraph;
   private readonly territory = new TerritoryControlSystem(() => this.centers.all().map((center) => ({
     owner: center.owner,
     x: center.position.x,
@@ -118,11 +124,13 @@ export class RtsApp {
   private readonly commands: CommandSystem;
   private readonly placement: BuildingPlacementSystem;
   private readonly buildPalette: RtsBuildPalette;
+  private readonly gameSpeedControls: RtsGameSpeedControls;
   private readonly unsubscribeWalletChanges: (() => void) | null;
   private readonly log = logger("System");
   private frameHandle = 0;
   private lastTime = 0;
   private running = false;
+  private simulationSpeed: RtsSimulationSpeed = 1;
   private lastW = 0;
   private lastH = 0;
 
@@ -131,6 +139,7 @@ export class RtsApp {
     private readonly options: RtsAppOptions,
   ) {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
+    this.roads = new RoadGraph(this.options.roadBalance);
     this.wallet = new ResourceWallet(this.options.startingResources);
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
@@ -214,6 +223,9 @@ export class RtsApp {
       () => this.queueGuard(),
       () => this.queueWorker(),
     );
+    this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => {
+      this.simulationSpeed = speed;
+    });
     this.matchOverlay = new RtsMatchOverlay(this.restartMatch);
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
     this.unsubscribeWalletChanges = this.debugOverlay
@@ -280,12 +292,14 @@ export class RtsApp {
     this.debugOverlay?.dispose();
     this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
+    this.gameSpeedControls.dispose();
     this.placement.dispose();
     this.territory.dispose();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
     this.workerProduction.reset();
     this.structures.clear();
+    this.roads.clear();
     this.renderer.dispose();
   }
 
@@ -353,33 +367,9 @@ export class RtsApp {
     if (this.input.consumeStopRequest()) this.commands.issueStop();
     this.cameraController.update(dt, this.input);
     if (this.match.active) {
-      this.wallet.advance(dt);
-      updateUnitMovement(this.units.all(), dt);
-      this.workerConstruction.update(dt);
-      this.economyProduction?.update(dt);
-      const workerEvent = this.workerProduction.update(dt);
-      if (workerEvent) {
-        this.buildPalette.setActionMessage(workerEvent === "completed"
-          ? "Yeni işçi Merkez'den çıktı."
-          : "İşçi çıkışı engelli; Merkez çevresini açın.");
-      }
-      for (const event of this.barracksProduction.update(dt)) {
-        this.buildPalette.setActionMessage(
-          event.type === "completed"
-            ? "Muhafız Kışla'dan çıktı."
-            : "Muhafız çıkışı engelli; Kışla çevresini açın.",
-        );
-      }
-      this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
-      this.buildPalette.setResources(this.wallet.snapshot());
-      const population = this.population.snapshot();
-      this.buildPalette.setPopulation(population.used, population.capacity);
-      this.syncEconomyUi();
-      updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
-      updateUnitDeaths(this.units, this.selection, dt);
-      if (this.match.update(this.centers) === "victory") {
-        this.log.info("Victory: enemy command center destroyed");
-        this.matchOverlay.showVictory();
+      for (const simulationDt of simulationSteps(dt, this.simulationSpeed, MAX_FRAME_SECONDS)) {
+        if (!this.match.active) break;
+        this.updateSimulation(simulationDt);
       }
     }
     this.debugOverlay?.update(
@@ -394,6 +384,38 @@ export class RtsApp {
     this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
   };
+
+  /** Advance match systems; camera and UI keep the unscaled rendered-frame delta. */
+  private updateSimulation(dt: number): void {
+    this.wallet.advance(dt);
+    updateUnitMovement(this.units.all(), dt);
+    this.workerConstruction.update(dt);
+    this.economyProduction?.update(dt);
+    const workerEvent = this.workerProduction.update(dt);
+    if (workerEvent) {
+      this.buildPalette.setActionMessage(workerEvent === "completed"
+        ? "Yeni işçi Merkez'den çıktı."
+        : "İşçi çıkışı engelli; Merkez çevresini açın.");
+    }
+    for (const event of this.barracksProduction.update(dt)) {
+      this.buildPalette.setActionMessage(
+        event.type === "completed"
+          ? "Muhafız Kışla'dan çıktı."
+          : "Muhafız çıkışı engelli; Kışla çevresini açın.",
+      );
+    }
+    this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
+    this.buildPalette.setResources(this.wallet.snapshot());
+    const population = this.population.snapshot();
+    this.buildPalette.setPopulation(population.used, population.capacity);
+    this.syncEconomyUi();
+    updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
+    updateUnitDeaths(this.units, this.selection, dt);
+    if (this.match.update(this.centers) === "victory") {
+      this.log.info("Victory: enemy command center destroyed");
+      this.matchOverlay.showVictory();
+    }
+  }
 
   private spawnCenters(): void {
     this.centers.spawn(
