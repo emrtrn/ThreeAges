@@ -27,6 +27,7 @@ import {
   validateBuildingPlacement,
 } from "./placementGrid";
 import type { PlacedStructureSystem } from "./placedStructureSystem";
+import type { PlacedStructure } from "./placedStructureSystem";
 
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 const VALID_COLOR = new Color("#7dc86d");
@@ -55,6 +56,8 @@ export class BuildingPlacementSystem {
     private readonly wallet: ResourceWallet,
     private readonly navigation: RtsNavigation,
     private readonly occupiedBlockers: () => readonly NavBlocker[],
+    private readonly onStructurePlaced: (structure: PlacedStructure) => void,
+    private readonly onStructureCancelled: (structure: PlacedStructure) => void,
   ) {
     this.root.name = "rts-building-placement-preview";
     this.root.visible = false;
@@ -113,6 +116,7 @@ export class BuildingPlacementSystem {
     const structure = this.structures.place(this.active.stats, state.result.x, state.result.z);
     this.reservations.set(structure.id, reservation);
     this.navigation.setBlockers(this.occupiedBlockers());
+    this.onStructurePlaced(structure);
     // Keep build mode active like an RTS palette; the following preview will be
     // invalid if it overlaps the site just created.
     this.result = null;
@@ -127,6 +131,7 @@ export class BuildingPlacementSystem {
     if (reservation) this.wallet.refund(reservation);
     this.reservations.delete(structure.id);
     this.navigation.setBlockers(this.occupiedBlockers());
+    this.onStructureCancelled(structure);
     return true;
   }
 

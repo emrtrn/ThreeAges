@@ -46,13 +46,16 @@ import { PlacedStructureSystem } from "./structures/placedStructureSystem";
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { ResourceWallet } from "./economy/resourceWallet";
+import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
+const PLACEHOLDER_WORKER_ID = "worker_placeholder";
 const PLAYER_GUARD_COUNT = 20;
+const PLAYER_WORKER_COUNT = 5;
 const PLAYER_CENTER_POSITION = RTS_BLOCKOUT_MAP.playerStart;
 const ENEMY_CENTER_POSITION = RTS_BLOCKOUT_MAP.enemyStart;
 
@@ -76,6 +79,7 @@ export class RtsApp {
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
   private readonly wallet: ResourceWallet;
+  private readonly workerConstruction: WorkerConstructionSystem;
   private readonly match = new RtsMatchState();
   private readonly matchOverlay: RtsMatchOverlay;
   private readonly debugOverlay: RtsDebugOverlay | null;
@@ -117,6 +121,7 @@ export class RtsApp {
       this.navigation,
       this.commandMarkers,
     );
+    this.workerConstruction = new WorkerConstructionSystem(this.units, this.structures, this.navigation);
     this.placement = new BuildingPlacementSystem(
       canvas,
       this.cameraController.camera,
@@ -125,6 +130,8 @@ export class RtsApp {
       this.wallet,
       this.navigation,
       () => this.navigationBlockers(),
+      (structure) => this.workerConstruction.assignNearest(structure),
+      (structure) => this.workerConstruction.cancelStructure(structure),
     );
     this.buildPalette = new RtsBuildPalette(
       this.options.buildingBalance,
@@ -204,6 +211,7 @@ export class RtsApp {
     this.debugOverlay?.dispose();
     this.buildPalette.dispose();
     this.placement.dispose();
+    this.workerConstruction.reset();
     this.structures.clear();
     this.renderer.dispose();
   }
@@ -241,7 +249,8 @@ export class RtsApp {
    */
   private spawnTestUnits(): void {
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
-    if (!guard) {
+    const worker = this.options.unitBalance[PLACEHOLDER_WORKER_ID];
+    if (!guard || !worker) {
       throw new Error(`Missing unit balance definition "${PLACEHOLDER_GUARD_ID}"`);
     }
     const cols = 5;
@@ -252,6 +261,9 @@ export class RtsApp {
     }
     for (let i = 0; i < 3; i++) {
       this.units.spawn("enemy", ENEMY_CENTER_POSITION.x - 3 + i * 3, ENEMY_CENTER_POSITION.z + 9, guard);
+    }
+    for (let i = 0; i < PLAYER_WORKER_COUNT; i++) {
+      this.units.spawn("player", -4 + i * 2, PLAYER_CENTER_POSITION.z - 8, worker, "worker");
     }
   }
 
@@ -267,6 +279,8 @@ export class RtsApp {
     this.cameraController.update(dt, this.input);
     if (this.match.active) {
       updateUnitMovement(this.units.all(), dt);
+      this.workerConstruction.update(dt);
+      this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
       updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
       updateUnitDeaths(this.units, this.selection, dt);
       if (this.match.update(this.centers) === "victory") {
@@ -274,7 +288,7 @@ export class RtsApp {
         this.matchOverlay.showVictory();
       }
     }
-    this.debugOverlay?.update(this.units, this.centers, this.match.outcome);
+    this.debugOverlay?.update(this.units, this.centers, this.match.outcome, this.workerConstruction);
     this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
   };
@@ -297,6 +311,7 @@ export class RtsApp {
   /** Restore all Faz 1 match-owned systems without reloading the browser route. */
   private readonly restartMatch = (): void => {
     this.selection.reset();
+    this.workerConstruction.reset();
     this.units.clear();
     this.centers.clear();
     this.structures.clear();
@@ -340,5 +355,6 @@ export class RtsApp {
   private syncPlacementUi(): void {
     this.buildPalette.setState(this.placement.state());
     this.buildPalette.setResources(this.wallet.snapshot());
+    this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
   }
 }

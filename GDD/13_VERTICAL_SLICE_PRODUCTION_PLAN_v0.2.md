@@ -728,11 +728,11 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 
 ### İşçi
 
-- [ ] İşçi placeholder oluştur.
-- [ ] İşçi hareketi ekle.
-- [ ] İnşa görevi ekle.
-- [ ] Idle, Moving, Building durumlarını ekle.
-- [ ] Boşta işçi göstergesi ekle.
+- [x] İşçi placeholder oluştur. (`worker_placeholder`; başlangıçta beş oyuncu işçisi)
+- [x] İşçi hareketi ekle. (mevcut grid navigasyonu ile foundation’ın erişilebilir kenarına gider)
+- [x] İnşa görevi ekle. (`WorkerConstructionSystem`; yeni foundation’a en yakın boş işçi otomatik atanır)
+- [x] Idle, Moving, Building durumlarını ekle. (işçi atama state’i; `?rts&debug` içinde okunur)
+- [x] Boşta işçi göstergesi ekle. (yapı paletinde anlık boş işçi sayısı)
 
 ### Yapı verisi
 
@@ -754,10 +754,10 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 
 ### İnşaat
 
-- [ ] ConstructionComponent oluştur.
-- [ ] Bir işçiyle inşaat ekle.
-- [ ] İnşa ilerleme göstergesi ekle.
-- [ ] İnşa tamamlanınca işlev aç.
+- [x] ConstructionComponent oluştur. (süre-sınırlı ilerleme ve tek-seferlik tamamlanma)
+- [x] Bir işçiyle inşaat ekle. (en yakın boş işçi; çoklu işçi sonraki kapsam)
+- [x] İnşa ilerleme göstergesi ekle. (foundation yanında dünya-uzayı progress bar)
+- [ ] İnşa tamamlanınca işlev aç. (foundation tamamlanmış bina placeholder’ına yükselir; Kışla/Depo gibi gerçek bina işlevleri sonraki dilimde açılacak)
 - [ ] İşçi erişemiyorsa hata durumu üret.
 
 ---

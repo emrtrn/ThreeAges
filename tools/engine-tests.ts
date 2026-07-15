@@ -73,6 +73,8 @@ import {
 } from "../src/game/rts/structures/placementGrid";
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
+import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
+import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -27866,6 +27868,16 @@ check("RTS resource reservations are atomic and refund at most once", () => {
   assert.equal(wallet.amount("wood"), 200);
 });
 
+check("RTS construction progress clamps and only completes once", () => {
+  const construction = new ConstructionComponent(2);
+  assert.equal(construction.advance(0.75), false);
+  assert.equal(construction.progress, 0.375);
+  assert.equal(construction.advance(1.25), true);
+  assert.equal(construction.progress, 1);
+  assert.equal(construction.advance(1), false);
+  assert.throws(() => new ConstructionComponent(0), RangeError);
+});
+
 check("RTS melee attacks apply JSON damage on cooldown and clear a depleted target", () => {
   const units = new UnitSystem();
   const attacker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
@@ -28001,6 +28013,35 @@ check("RTS placement snap rejects occupied footprints and refreshes navigation b
   assert.equal(site.object.name, "rts-construction-site-1");
   assert.equal(structures.cancelLatest(), site, "latest unbuilt foundation can be cancelled");
   assert.equal(structures.navigationBlockers().length, 0);
+  structures.clear();
+});
+
+check("RTS worker reaches a foundation, builds it, and never enters combat", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const units = new UnitSystem();
+  const worker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS, "worker");
+  const enemy = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  worker.setAttackTarget(enemy);
+  updateUnitCombat([worker], 1);
+  assert.equal(enemy.health.current, enemy.health.max, "workers do not resolve melee attacks");
+
+  const structures = new PlacedStructureSystem();
+  const site = structures.place({ ...house, constructionSeconds: 0.5 }, 10, 0);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const construction = new WorkerConstructionSystem(units, structures, navigation);
+  assert.equal(construction.assignNearest(site), true);
+  assert.equal(construction.stateFor(worker), "moving");
+  for (let frame = 0; frame < 300 && !site.construction.complete; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    construction.update(1 / 60);
+  }
+  assert.equal(site.construction.complete, true);
+  assert.equal(construction.stateFor(worker), "idle");
+  assert.equal(construction.idleWorkerCount(), 1);
   structures.clear();
 });
 

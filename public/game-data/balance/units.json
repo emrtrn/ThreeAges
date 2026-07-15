@@ -4,5 +4,11 @@
     "attackDamage": 12,
     "attackCooldown": 1.4,
     "attackRange": 1.2
+  },
+  "worker_placeholder": {
+    "maxHealth": 60,
+    "attackDamage": 1,
+    "attackCooldown": 2,
+    "attackRange": 1
   }
 }

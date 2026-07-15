@@ -10,7 +10,7 @@ import { Group, type Object3D } from "three";
 
 import type { UnitBalanceStats } from "../../data/gameDataTypes";
 import type { CombatTarget } from "../combat/combatTarget";
-import { Unit, type UnitOwner } from "./unit";
+import { Unit, type UnitOwner, type UnitRole } from "./unit";
 
 export class UnitSystem {
   /** Scene subtree holding all unit render objects. */
@@ -23,8 +23,14 @@ export class UnitSystem {
     this.root.name = "rts-units";
   }
 
-  spawn(owner: UnitOwner, x: number, z: number, stats: UnitBalanceStats): Unit {
-    const unit = new Unit(owner, x, z, stats);
+  spawn(
+    owner: UnitOwner,
+    x: number,
+    z: number,
+    stats: UnitBalanceStats,
+    role: UnitRole = "guard",
+  ): Unit {
+    const unit = new Unit(owner, x, z, stats, role);
     this.units.push(unit);
     // The capsule body is the first child; index it for raycast resolution.
     const body = unit.object.children[0];
@@ -39,6 +45,10 @@ export class UnitSystem {
 
   playerUnits(): Unit[] {
     return this.units.filter((unit) => unit.owner === "player" && !unit.health.depleted);
+  }
+
+  playerWorkers(): Unit[] {
+    return this.playerUnits().filter((unit) => unit.role === "worker");
   }
 
   /** Clear every attack order aimed at a unit that can no longer be targeted. */

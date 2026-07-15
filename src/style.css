@@ -183,6 +183,12 @@ body {
   font-weight: 700;
 }
 
+.rts-build-workers {
+  margin-top: 4px;
+  color: #b8d6db;
+  font-size: 12px;
+}
+
 /*
  * UI Widget (UMG Lite) runtime styles. Rendered by engine/ui/uiRenderer.ts into
  * #ui-overlay. Containers inherit the overlay's click-through; only .ui-interactive

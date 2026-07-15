@@ -6,6 +6,7 @@ export class RtsBuildPalette {
   private readonly root = document.createElement("section");
   private readonly status = document.createElement("p");
   private readonly resources = document.createElement("p");
+  private readonly workers = document.createElement("p");
 
   constructor(
     buildings: BuildingBalance,
@@ -41,6 +42,8 @@ export class RtsBuildPalette {
     this.root.appendChild(choices);
     this.resources.className = "rts-build-resources";
     this.root.appendChild(this.resources);
+    this.workers.className = "rts-build-workers";
+    this.root.appendChild(this.workers);
     this.status.className = "rts-build-status";
     this.root.appendChild(this.status);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
@@ -72,6 +75,11 @@ export class RtsBuildPalette {
     this.resources.textContent = Object.entries(resources)
       .map(([id, amount]) => `${labels[id] ?? id}: ${amount}`)
       .join(" · ");
+  }
+
+  setIdleWorkerCount(count: number): void {
+    const text = `Boşta işçi: ${count}`;
+    if (this.workers.textContent !== text) this.workers.textContent = text;
   }
 
   dispose(): void {

@@ -21,6 +21,7 @@ export function updateUnitCombat(
   onHit?: (hit: CombatHit) => void,
 ): void {
   for (const unit of units) {
+    if (unit.role === "worker") continue;
     unit.attack.update(dt);
     if (unit.health.depleted) {
       unit.stop();

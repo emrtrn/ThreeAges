@@ -24,6 +24,8 @@ import { MeleeAttackComponent } from "./meleeAttack";
 
 /** Which army a unit belongs to. Ürün A is one player vs. one AI (plan §4.2). */
 export type UnitOwner = "player" | "enemy";
+/** Ürün A roles; workers use the same movement shell but do not enter combat. */
+export type UnitRole = "guard" | "worker";
 
 const TEAM_COLOR: Record<UnitOwner, string> = {
   player: "#2d7fd6",
@@ -65,19 +67,28 @@ export class Unit {
   private targeterCount = 0;
   private deathElapsed: number | null = null;
 
-  constructor(owner: UnitOwner, x: number, z: number, stats: UnitBalanceStats) {
+  constructor(
+    owner: UnitOwner,
+    x: number,
+    z: number,
+    stats: UnitBalanceStats,
+    readonly role: UnitRole = "guard",
+  ) {
     this.id = nextUnitId++;
     this.owner = owner;
 
     this.object = new Group();
-    this.object.name = `rts-unit-${owner}-${this.id}`;
+    this.object.name = `rts-unit-${role}-${owner}-${this.id}`;
     this.object.position.set(x, 0, z);
     this.health = new HealthComponent(stats.maxHealth);
     this.attack = new MeleeAttackComponent(stats);
 
     const body = new Mesh(
       new CapsuleGeometry(UNIT_RADIUS, BODY_LENGTH, 6, 12),
-      new MeshStandardMaterial({ color: new Color(TEAM_COLOR[owner]), roughness: 0.6 }),
+      new MeshStandardMaterial({
+        color: new Color(role === "worker" ? "#dfbd5b" : TEAM_COLOR[owner]),
+        roughness: 0.6,
+      }),
     );
     body.position.y = BODY_CENTER_Y;
     body.castShadow = true;

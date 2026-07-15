@@ -3,6 +3,7 @@ import type { RtsMatchOutcome } from "../match/rtsMatchState";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { UnitSystem } from "../units/unitSystem";
 import type { CombatHit } from "../units/unitCombat";
+import type { WorkerConstructionSystem } from "../units/workerConstructionSystem";
 
 const MAX_DAMAGE_LINES = 6;
 
@@ -22,7 +23,12 @@ export class RtsDebugOverlay {
     this.damageLines.length = Math.min(this.damageLines.length, MAX_DAMAGE_LINES);
   }
 
-  update(units: UnitSystem, centers: CommandCenterSystem, outcome: RtsMatchOutcome): void {
+  update(
+    units: UnitSystem,
+    centers: CommandCenterSystem,
+    outcome: RtsMatchOutcome,
+    workers: WorkerConstructionSystem,
+  ): void {
     const lines = [`maç: ${outcome}`];
     for (const center of centers.all()) {
       lines.push(`merkez ${center.owner}: ${center.health.current}/${center.health.max}`);
@@ -36,8 +42,9 @@ export class RtsDebugOverlay {
           : unit.moveTarget
             ? "hareket"
             : "boşta";
+      const workerState = unit.role === "worker" ? ` ${workers.stateFor(unit)}` : "";
       lines.push(
-        `#${unit.id} ${unit.owner} hp ${unit.health.current}/${unit.health.max} ${order}`,
+        `#${unit.id} ${unit.owner}/${unit.role} hp ${unit.health.current}/${unit.health.max} ${order}${workerState}`,
       );
     }
     lines.push("hasar:", ...(this.damageLines.length ? this.damageLines : ["- yok"]));
