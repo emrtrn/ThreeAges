@@ -72,6 +72,7 @@ import {
   validateBuildingPlacement,
 } from "../src/game/rts/structures/placementGrid";
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
+import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -27852,6 +27853,19 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
   );
 });
 
+check("RTS resource reservations are atomic and refund at most once", () => {
+  const wallet = new ResourceWallet({ food: 200, wood: 200 });
+  const barracks = wallet.reserve({ wood: 160 });
+  assert.ok(barracks);
+  assert.equal(wallet.amount("wood"), 40);
+  assert.equal(wallet.reserve({ wood: 80 }), null, "failed reservation cannot partially deduct");
+  assert.equal(wallet.amount("wood"), 40);
+  assert.equal(wallet.refund(barracks), true);
+  assert.equal(wallet.amount("wood"), 200);
+  assert.equal(wallet.refund(barracks), false, "the same site cannot refund twice");
+  assert.equal(wallet.amount("wood"), 200);
+});
+
 check("RTS melee attacks apply JSON damage on cooldown and clear a depleted target", () => {
   const units = new UnitSystem();
   const attacker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
@@ -27985,6 +27999,8 @@ check("RTS placement snap rejects occupied footprints and refreshes navigation b
   assert.ok(route && route.length > 2, "a new structure forces a detour rather than breaking navigation");
   assert.ok(route.some((point) => Math.abs(point.z - 12) > 2.5), "route leaves the structure footprint");
   assert.equal(site.object.name, "rts-construction-site-1");
+  assert.equal(structures.cancelLatest(), site, "latest unbuilt foundation can be cancelled");
+  assert.equal(structures.navigationBlockers().length, 0);
   structures.clear();
 });
 

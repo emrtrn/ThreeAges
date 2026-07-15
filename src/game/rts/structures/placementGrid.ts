@@ -6,7 +6,7 @@ import { RTS_WORLD_HALF_EXTENT } from "../world/rtsGround";
 /** Confirmed Phase 2 placement-grid measure, in world units. */
 export const RTS_PLACEMENT_GRID_SIZE = 2;
 
-export type PlacementFailure = "outside-map" | "blocked";
+export type PlacementFailure = "outside-map" | "blocked" | "insufficient-resources";
 
 export interface PlacementResult {
   readonly x: number;

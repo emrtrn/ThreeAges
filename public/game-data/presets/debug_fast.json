@@ -7,6 +7,6 @@
     "wood": 500
   },
   "gameSpeed": 3,
-  "mapState": "",
+  "mapState": "two_flanks_blockout",
   "aiProfile": "normal"
 }

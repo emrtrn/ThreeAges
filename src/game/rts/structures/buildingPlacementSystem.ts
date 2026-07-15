@@ -20,6 +20,7 @@ import {
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalance, BuildingBalanceStats } from "../../data/gameDataTypes";
+import { ResourceWallet, type ResourceReservation } from "../economy/resourceWallet";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import {
   type PlacementResult,
@@ -44,12 +45,14 @@ export class BuildingPlacementSystem {
   private active: { id: string; stats: BuildingBalanceStats } | null = null;
   private ghost: Mesh | null = null;
   private result: PlacementResult | null = null;
+  private readonly reservations = new Map<number, ResourceReservation>();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly camera: PerspectiveCamera,
     private readonly buildings: BuildingBalance,
     private readonly structures: PlacedStructureSystem,
+    private readonly wallet: ResourceWallet,
     private readonly navigation: RtsNavigation,
     private readonly occupiedBlockers: () => readonly NavBlocker[],
   ) {
@@ -101,12 +104,35 @@ export class BuildingPlacementSystem {
   confirmAt(screenX: number, screenY: number): BuildingPlacementState {
     const state = this.previewAt(screenX, screenY);
     if (!this.active || !state.result?.valid) return state;
-    this.structures.place(this.active.stats, state.result.x, state.result.z);
+    const reservation = this.wallet.reserve(this.active.stats.cost);
+    if (!reservation) {
+      this.result = { ...state.result, valid: false, reason: "insufficient-resources" };
+      this.setGhostValid(false);
+      return this.state();
+    }
+    const structure = this.structures.place(this.active.stats, state.result.x, state.result.z);
+    this.reservations.set(structure.id, reservation);
     this.navigation.setBlockers(this.occupiedBlockers());
     // Keep build mode active like an RTS palette; the following preview will be
     // invalid if it overlaps the site just created.
     this.result = null;
     return this.state();
+  }
+
+  /** Cancel the latest unbuilt site and refund its reservation in full. */
+  cancelLatestConstruction(): boolean {
+    const structure = this.structures.cancelLatest();
+    if (!structure) return false;
+    const reservation = this.reservations.get(structure.id);
+    if (reservation) this.wallet.refund(reservation);
+    this.reservations.delete(structure.id);
+    this.navigation.setBlockers(this.occupiedBlockers());
+    return true;
+  }
+
+  /** Forget site tokens after the match owner resets the wallet. */
+  resetReservations(): void {
+    this.reservations.clear();
   }
 
   dispose(): void {

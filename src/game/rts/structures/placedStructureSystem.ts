@@ -63,16 +63,26 @@ export class PlacedStructureSystem {
     return this.structures;
   }
 
+  /** Remove the newest unbuilt site. Targeted cancellation arrives with workers. */
+  cancelLatest(): PlacedStructure | null {
+    const structure = this.structures.pop() ?? null;
+    if (!structure) return null;
+    this.disposeStructure(structure);
+    return structure;
+  }
+
   clear(): void {
-    for (const structure of this.structures) {
-      this.root.remove(structure.object);
-      structure.object.traverse((child) => {
-        if (!(child instanceof Mesh)) return;
-        child.geometry.dispose();
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        for (const material of materials) material.dispose();
-      });
-    }
+    for (const structure of this.structures) this.disposeStructure(structure);
     this.structures.length = 0;
+  }
+
+  private disposeStructure(structure: PlacedStructure): void {
+    this.root.remove(structure.object);
+    structure.object.traverse((child) => {
+      if (!(child instanceof Mesh)) return;
+      child.geometry.dispose();
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) material.dispose();
+    });
   }
 }

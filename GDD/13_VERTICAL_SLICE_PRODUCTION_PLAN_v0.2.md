@@ -749,8 +749,8 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 - [x] Grid snap ekle. (`RTS_PLACEMENT_GRID_SIZE = 2`)
 - [x] Çakışma kontrolü ekle. (harita sırtı, merkez ve mevcut foundation footprintleri)
 - [x] Geçersiz yerleştirme nedeni göster. (yapı paletinde harita sınırı veya çakışma nedeni)
-- [ ] Kaynak rezervasyonu ekle.
-- [ ] İnşa iptali ve iade ekle.
+- [x] Kaynak rezervasyonu ekle. (`ResourceWallet`; maliyet atomik olarak ayrılır, yetersiz kaynakta placement reddedilir)
+- [x] İnşa iptali ve iade ekle. (yeni temel için `Son İnşaatı İptal`; rezervasyon bir kez tam iade edilir)
 
 ### İnşaat
 

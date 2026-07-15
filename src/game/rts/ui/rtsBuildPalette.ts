@@ -5,11 +5,13 @@ import type { BuildingPlacementState } from "../structures/buildingPlacementSyst
 export class RtsBuildPalette {
   private readonly root = document.createElement("section");
   private readonly status = document.createElement("p");
+  private readonly resources = document.createElement("p");
 
   constructor(
     buildings: BuildingBalance,
     private readonly onChoose: (id: string) => void,
     private readonly onCancel: () => void,
+    private readonly onCancelLatest: () => void,
   ) {
     this.root.className = "rts-build-palette ui-interactive";
     this.root.setAttribute("aria-label", "Yapı yerleştirme");
@@ -31,7 +33,14 @@ export class RtsBuildPalette {
     cancel.textContent = "İptal";
     cancel.addEventListener("click", this.onCancel);
     choices.appendChild(cancel);
+    const cancelLatest = document.createElement("button");
+    cancelLatest.type = "button";
+    cancelLatest.textContent = "Son İnşaatı İptal";
+    cancelLatest.addEventListener("click", this.onCancelLatest);
+    choices.appendChild(cancelLatest);
     this.root.appendChild(choices);
+    this.resources.className = "rts-build-resources";
+    this.root.appendChild(this.resources);
     this.status.className = "rts-build-status";
     this.root.appendChild(this.status);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
@@ -53,7 +62,16 @@ export class RtsBuildPalette {
     }
     this.status.textContent = state.result.reason === "outside-map"
       ? "Geçersiz konum: harita sınırı dışında."
-      : "Geçersiz konum: engel veya yapı ile çakışıyor.";
+      : state.result.reason === "insufficient-resources"
+        ? "Kaynak yetersiz: inşaat maliyeti ayrılmadı."
+        : "Geçersiz konum: engel veya yapı ile çakışıyor.";
+  }
+
+  setResources(resources: Readonly<Record<string, number>>): void {
+    const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun" };
+    this.resources.textContent = Object.entries(resources)
+      .map(([id, amount]) => `${labels[id] ?? id}: ${amount}`)
+      .join(" · ");
   }
 
   dispose(): void {

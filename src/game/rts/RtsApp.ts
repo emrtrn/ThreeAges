@@ -22,7 +22,7 @@ import {
 
 import { createSceneRenderer } from "@engine/render-three/renderer";
 import { logger } from "@/game/core/logger";
-import type { BuildingBalance, UnitBalance } from "@/game/data/gameDataTypes";
+import type { BuildingBalance, StartingResources, UnitBalance } from "@/game/data/gameDataTypes";
 import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
@@ -45,6 +45,7 @@ import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import { PlacedStructureSystem } from "./structures/placedStructureSystem";
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
+import { ResourceWallet } from "./economy/resourceWallet";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
@@ -62,6 +63,8 @@ export interface RtsAppOptions {
   readonly unitBalance: UnitBalance;
   /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
   readonly buildingBalance: BuildingBalance;
+  /** Preset-owned initial stockpile for Phase 2 construction reservations. */
+  readonly startingResources: StartingResources;
 }
 
 export class RtsApp {
@@ -72,6 +75,7 @@ export class RtsApp {
   private readonly units = new UnitSystem();
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
+  private readonly wallet: ResourceWallet;
   private readonly match = new RtsMatchState();
   private readonly matchOverlay: RtsMatchOverlay;
   private readonly debugOverlay: RtsDebugOverlay | null;
@@ -95,6 +99,7 @@ export class RtsApp {
     private readonly options: RtsAppOptions,
   ) {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
+    this.wallet = new ResourceWallet(this.options.startingResources);
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
     this.selection = new SelectionSystem(
@@ -117,6 +122,7 @@ export class RtsApp {
       this.cameraController.camera,
       this.options.buildingBalance,
       this.structures,
+      this.wallet,
       this.navigation,
       () => this.navigationBlockers(),
     );
@@ -128,6 +134,10 @@ export class RtsApp {
       },
       () => {
         this.placement.cancel();
+        this.syncPlacementUi();
+      },
+      () => {
+        this.placement.cancelLatestConstruction();
         this.syncPlacementUi();
       },
     );
@@ -169,6 +179,7 @@ export class RtsApp {
     });
     this.buildScene();
     this.spawnTestUnits();
+    this.syncPlacementUi();
   }
 
   start(): void {
@@ -289,6 +300,8 @@ export class RtsApp {
     this.units.clear();
     this.centers.clear();
     this.structures.clear();
+    this.placement.resetReservations();
+    this.wallet.reset(this.options.startingResources);
     this.commandMarkers.clear();
     this.match.reset();
     this.spawnCenters();
@@ -326,5 +339,6 @@ export class RtsApp {
 
   private syncPlacementUi(): void {
     this.buildPalette.setState(this.placement.state());
+    this.buildPalette.setResources(this.wallet.snapshot());
   }
 }

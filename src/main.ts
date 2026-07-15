@@ -32,7 +32,7 @@ function requireElement<T extends HTMLElement>(id: string): T {
  * the debug panel. Simulation-speed application lands with the Faz 1 game loop;
  * here the value is only resolved and logged.
  */
-async function bootFoundation(): Promise<void> {
+async function bootFoundation(): Promise<GamePreset | null> {
   installGlobalErrorHandlers();
   const isDev = import.meta.env.DEV;
   setLogLevel(isDev ? "debug" : "warn");
@@ -58,10 +58,11 @@ async function bootFoundation(): Promise<void> {
       config: snapshotRuntimeConfig(config),
     };
   }
+  return preset;
 }
 
 async function main(): Promise<void> {
-  await bootFoundation();
+  const preset = await bootFoundation();
 
   const params = new URLSearchParams(location.search);
   const canvas = requireElement<HTMLCanvasElement>("game-canvas");
@@ -81,6 +82,9 @@ async function main(): Promise<void> {
       debug: params.has("debug"),
       unitBalance,
       buildingBalance,
+      // A bad preset must not turn the fallback RTS route into an unwinnable
+      // no-build state; mirror the gameplay-proof stockpile from Faz 0.
+      startingResources: preset?.startingResources ?? { food: 200, wood: 200 },
     });
     rts.start();
     return;
