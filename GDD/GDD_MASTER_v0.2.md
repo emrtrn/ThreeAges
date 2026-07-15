@@ -901,7 +901,7 @@ Bu kararlar yalnız test kanıtıyla değiştirilmelidir.
 ## 11.2 Üretim öncesi belgeler
 
 - [ ] `OPEN_QUESTIONS.md`
-- [ ] `TECH_DECISIONS.md`
+- [x] `TECH_DECISIONS.md` — oluşturuldu (`GDD/TECH_DECISIONS.md`): Forge hizalama kararları ve Sapma kayıtları
 - [ ] `ASSET_INVENTORY.md`
 - [ ] `GAME_DATA_SCHEMA_PLAN.md`
 - [ ] `TEST_STRATEGY.md`
@@ -959,13 +959,13 @@ Her Codex görevi şu bilgileri içermelidir:
 ## Kaynak Belgeler
 
 Ana kaynak:
-- /docs/gdd/05_TERRITORY_LOGISTICS_AND_ROADS.md
+- GDD/05_TERRITORY_LOGISTICS_AND_ROADS.md
 
 Destekleyici:
-- /docs/gdd/03_ECONOMY_AND_RESOURCES.md
-- /docs/gdd/04_BUILDINGS_AND_SETTLEMENT.md
-- /docs/gdd/10_CAMERA_CONTROLS_AND_UI.md
-- /docs/gdd/12_BALANCE_AND_GAME_DATA.md
+- GDD/03_ECONOMY_AND_RESOURCES.md
+- GDD/04_BUILDINGS_AND_SETTLEMENT.md
+- GDD/10_CAMERA_CONTROLS_AND_UI.md
+- GDD/12_BALANCE_AND_GAME_DATA.md
 ```
 
 ---
@@ -1017,7 +1017,7 @@ veya
 
 # 14. Definition of Done Özeti
 
-Vertical slice tamamlanmış sayılırsa:
+Vertical slice tamamlanmış sayılırsa (yetkili kaynak: `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` §107; **save/load kapsam dışıdır**, fog/minimap ve bölgesel zafer koşulludur):
 
 - [ ] Tek haritada tam maç oynanabiliyor.
 - [ ] AI kendi ekonomisini kuruyor.
@@ -1028,10 +1028,9 @@ Vertical slice tamamlanmış sayılırsa:
 - [ ] Oyuncu üç çağdan geçebiliyor.
 - [ ] En az dört çekirdek birim çalışıyor.
 - [ ] Savaş ve geri çekilme çalışıyor.
-- [ ] Fog of war ve minimap çalışıyor.
-- [ ] Askerî zafer çalışıyor.
-- [ ] Bölgesel zafer çalışıyor.
-- [ ] Save/load çalışıyor.
+- [ ] Askerî zafer çalışıyor (zorunlu ana zafer).
+- [ ] Bölgesel zafer — yalnızca Ürün C kapsam kararında kabul edildiyse çalışıyor (koşullu; bkz. 13 v0.2 §58, §107).
+- [ ] Fog of war ve minimap — koşullu sistemlerdir; yalnızca kabul edildiyse çalışır (bkz. 13 v0.2 §59–60, §107).
 - [ ] Temel UI sistemleri açıklıyor.
 - [ ] Quaternius assetleri entegre.
 - [ ] Ortalama maç süresi hedefe yakın.
@@ -1085,6 +1084,15 @@ oluşturulmalı ve `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` içindeki Faz 0 b
 - AI özeti üç katmanlı ve aşamalı modele uyarlandı.
 - Scope-cut sırası ve karar kapıları sadeleştirilmiş plana göre yenilendi.
 - Teknik uygulama checklist’i Faz 0–14 sırasına güncellendi.
+
+## Bakım — Kapsam Hizalaması ve Forge Teknik Kararları (2026-07-15)
+
+- Kırık çapraz-bağlantılar düzeltildi: v0.1 sistem belgeleri artık `07_ENEMY_AI_DESIGN_v0.2.md` ve `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md`’ye bağlanıyor.
+- `/docs/gdd/` yol referansları gerçek konum `GDD/` ile düzeltildi (master §12, 00 §23, 13 Faz 0).
+- v0.1 belgelerine (00–06, 08–12) **Kapsam Hizalaması (v0.2)** bannerı eklendi; üretim kapsamı kaynağı 13 v0.2 (Ürün A/B/C) olarak işaretlendi.
+- §14 Definition of Done, 13 v0.2 §107 ile hizalandı: save/load kapsam dışı; fog/minimap ve bölgesel zafer koşullu.
+- 00 §15.1 tam-oyun-hedefi olarak yeniden çerçevelendi; Ürün A/B/C aşamalandırması eklendi.
+- `TECH_DECISIONS.md` oluşturuldu (Forge hizalaması: oyun kodu `src/game`, veri `public/game-data/`, mevcut kamera/seçim/VFX/asset altyapısının yeniden kullanımı; S-001/S-002 sapmaları).
 
 ## Sürüm 0.1
 

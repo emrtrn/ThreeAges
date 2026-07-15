@@ -9,6 +9,10 @@
 
 ---
 
+> **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. "Vertical slice için zorunlu" ifadeleri tam oyun hedefini anlatır — bir özelliğin hangi üründe (A/B/C) açıldığı ya da koşullu/kapsam dışı olduğu konusunda 13 v0.2 esastır. Forge'a özgü teknik hizalama için bkz. `TECH_DECISIONS.md`.
+
+---
+
 ## 1. Dokümanın Amacı
 
 Bu doküman oyunun temel kimliğini, oyuncuya sunacağı ana deneyimi, tasarım sütunlarını, hedef kapsamını ve kapsam dışı özellikleri tanımlar.
@@ -495,6 +499,8 @@ Hedef ton:
 
 ### 15.1 Dahil edilmesi hedeflenen içerik
 
+> **Kapsam notu (v0.2):** Aşağıdaki liste **tam oyun hedefini** tanımlar. Fiili üretim kapsamı `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` içindeki Ürün A/B/C kapılarına göre aşamalandırılır: Ürün A yalnızca iki kaynak (yiyecek/odun) + tek çağ + İşçi/Muhafız + askerî zafer kullanır; dört kaynak ve iki çağ Ürün B'de; üçüncü çağ Ürün C'dedir. Save/load kapsam dışıdır; fog of war, minimap ve bölgesel zafer koşulludur.
+
 - Tek oynanabilir harita
 - Tek oyuncu fraksiyonu
 - Aynı temel kuralları kullanan tek AI rakip
@@ -516,12 +522,12 @@ Hedef ton:
 - Kaynak toplama ve depolama
 - Birim üretme
 - Temel savaş
-- Fog of war
+- Fog of war (koşullu — Ürün C; bkz. 13 v0.2 §59)
 - Bir AI ekonomi ve savaş döngüsü
-- Askerî zafer
-- Bölgesel zafer
+- Askerî zafer (zorunlu ana zafer)
+- Bölgesel zafer (koşullu — Ürün C; bkz. 13 v0.2 §58)
 - Maç sonu ekranı
-- Temel save/load desteği, teknik uygunluğa göre
+- Save/load: kapsam dışı (13 v0.2 §60); yalnızca tam oyun hedefi olarak kalır
 
 ### 15.2 İlk prototip alt kapsamı
 
@@ -778,8 +784,8 @@ Aşağıdaki konular sonraki dokümanlarda karara bağlanacaktır.
 Planlanan GDD yapısı:
 
 ```text
-/docs/gdd/
-├── GDD_MASTER.md
+GDD/
+├── GDD_MASTER_v0.2.md
 ├── 00_GAME_VISION_AND_PILLARS.md
 ├── 01_CORE_GAMEPLAY_LOOP.md
 ├── 02_MATCH_FLOW_AND_PROGRESSION.md
@@ -787,13 +793,13 @@ Planlanan GDD yapısı:
 ├── 04_BUILDINGS_AND_SETTLEMENT.md
 ├── 05_TERRITORY_LOGISTICS_AND_ROADS.md
 ├── 06_UNITS_AND_COMBAT.md
-├── 07_ENEMY_AI_DESIGN.md
+├── 07_ENEMY_AI_DESIGN_v0.2.md
 ├── 08_MAP_AND_WORLD_DESIGN.md
 ├── 09_VICTORY_DEFEAT_AND_DIFFICULTY.md
 ├── 10_CAMERA_CONTROLS_AND_UI.md
 ├── 11_ART_ASSETS_AND_PRESENTATION.md
 ├── 12_BALANCE_AND_GAME_DATA.md
-└── 13_VERTICAL_SLICE_PRODUCTION_PLAN.md
+└── 13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md
 ```
 
 Bir sonraki önerilen doküman:

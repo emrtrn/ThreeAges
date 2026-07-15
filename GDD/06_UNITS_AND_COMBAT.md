@@ -14,6 +14,10 @@
 
 ---
 
+> **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. "Vertical slice için zorunlu" ifadeleri tam oyun hedefini anlatır — bir özelliğin hangi üründe (A/B/C) açıldığı ya da koşullu/kapsam dışı olduğu konusunda 13 v0.2 esastır. Süvari bu belgede tanımlıdır ancak vertical slice kapsamından çıkarılmıştır (13 v0.2). Forge'a özgü teknik hizalama için bkz. `TECH_DECISIONS.md`.
+
+---
+
 ## 1. Dokümanın Amacı
 
 Bu doküman oyundaki birim sistemini, savaş kurallarını, birim rollerini, hedef seçimini, hareket ve pathfinding davranışını, üretim ve yükseltme ilişkilerini ve askerî çatışmanın ekonomi ile bölge kontrolüne nasıl bağlandığını tanımlar.
@@ -1984,7 +1988,7 @@ Muhafız + Okçu grubu
 
 ## 112. Diğer Dokümanlarla Bağlantılar
 
-- `07_ENEMY_AI_DESIGN.md`
+- `07_ENEMY_AI_DESIGN_v0.2.md`
   - AI hedef seçimi,
   - ordu kompozisyonu,
   - saldırı ve geri çekilme,

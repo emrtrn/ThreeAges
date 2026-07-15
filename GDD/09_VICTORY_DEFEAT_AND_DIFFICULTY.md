@@ -12,8 +12,12 @@
 > - `04_BUILDINGS_AND_SETTLEMENT.md`  
 > - `05_TERRITORY_LOGISTICS_AND_ROADS.md`  
 > - `06_UNITS_AND_COMBAT.md`  
-> - `07_ENEMY_AI_DESIGN.md`  
+> - `07_ENEMY_AI_DESIGN_v0.2.md`  
 > - `08_MAP_AND_WORLD_DESIGN.md`
+
+---
+
+> **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. Askerî zafer zorunludur; bölgesel zafer ve çoklu zorluk profilleri (Kolay/Zor) koşulludur, save/load kapsam dışıdır. Çelişki halinde 13 v0.2 esastır. Forge'a özgü teknik hizalama için bkz. `TECH_DECISIONS.md`.
 
 ---
 
@@ -1530,7 +1534,7 @@ Tek stratejik nokta
   - sayaç gerilemesi,
   - zorluk parametreleri.
 
-- `13_VERTICAL_SLICE_PRODUCTION_PLAN.md`
+- `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md`
   - zafer sistemi uygulama fazı,
   - AI tepki testleri,
   - maç sonu telemetrisi.

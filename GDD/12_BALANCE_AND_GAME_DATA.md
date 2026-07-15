@@ -5,6 +5,10 @@
 > **Sürüm:** 0.1  
 > **Durum:** İlk taslak
 
+> **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. **Önemli:** Veri klasörü konumu (`/game-data/` vs Forge'un `public/` + save-validator pipeline'ı) henüz kilitlenmemiştir; bu bir açık teknik karardır — bkz. `TECH_DECISIONS.md`. Tüm sayılar başlangıç hipotezidir.
+
+---
+
 ## 1. Dokümanın Amacı
 
 Bu doküman oyundaki tüm sayısal değerlerin nasıl tanımlanacağını, saklanacağını, test edileceğini ve sürümleneceğini belirler.

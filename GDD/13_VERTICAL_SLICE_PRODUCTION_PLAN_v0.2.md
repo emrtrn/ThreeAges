@@ -565,7 +565,7 @@ Bu faz görsel veya genel altyapı projesine dönüşmemelidir.
 
 ### Dokümantasyon
 
-- [ ] GDD dosyalarını `/docs/gdd/` altında düzenle.
+- [ ] GDD dosyalarının `GDD/` (repo kökü) konumunu ve çapraz-bağlantıları doğrula. (Not: belgeler `docs/gdd/`'ye taşınmaz; repo `docs/architecture/` ve `GDD/` ayrımını korur.)
 - [ ] `GDD_MASTER.md` bağlantılarını güncelle.
 - [ ] Yeni AI belgesini ana kaynak olarak işaretle.
 - [ ] Bu planı sürüm 0.2 olarak ana üretim planı yap.

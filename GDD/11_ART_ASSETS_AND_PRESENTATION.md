@@ -15,6 +15,10 @@
 
 ---
 
+> **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. Asset entegrasyonu ve görsel polish, oynanış kanıtı (Kapı A) geçilmeden başlamaz. Forge'a özgü teknik hizalama (mevcut Content Browser/manifest, glTF import, VFX sistemi) için bkz. `TECH_DECISIONS.md`.
+
+---
+
 ## 1. Dokümanın Amacı
 
 Bu doküman oyunun görsel kimliğini, Quaternius Ultimate Fantasy RTS asset paketinin projede nasıl kullanılacağını, modellerin oynanış sistemleriyle nasıl eşleştirileceğini ve görsel sunumun teknik sınırlarını tanımlar.
@@ -1960,7 +1964,7 @@ T1/T2/T3 merkez modelleri
   - takım renk kodları,
   - animasyon hızları.
 
-- `13_VERTICAL_SLICE_PRODUCTION_PLAN.md`
+- `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md`
   - asset envanteri,
   - model işleme,
   - animasyon entegrasyonu,

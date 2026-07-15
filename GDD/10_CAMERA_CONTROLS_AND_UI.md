@@ -8,6 +8,10 @@
 
 ---
 
+> **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. Minimap, fog of war overlay'i ve gerçek pause koşulludur; çelişki halinde 13 v0.2 esastır. Forge'a özgü teknik hizalama (mevcut viewport kamera/seçim altyapısı) için bkz. `TECH_DECISIONS.md`.
+
+---
+
 ## 1. Dokümanın Amacı
 
 Bu doküman oyuncunun oyunu nasıl gördüğünü, nasıl kontrol ettiğini ve oyun durumunu kullanıcı arayüzünden nasıl okuduğunu tanımlar.
@@ -1722,7 +1726,7 @@ Yol çiz
   - tooltip gecikmeleri,
   - bildirim tekrar süreleri.
 
-- `13_VERTICAL_SLICE_PRODUCTION_PLAN.md`
+- `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md`
   - kamera ve input fazı,
   - HUD fazı,
   - minimap ve fog fazı,

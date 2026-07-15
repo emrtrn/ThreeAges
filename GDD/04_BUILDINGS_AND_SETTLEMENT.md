@@ -12,6 +12,10 @@
 
 ---
 
+> **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. "Vertical slice için zorunlu" ifadeleri tam oyun hedefini anlatır — bir özelliğin hangi üründe (A/B/C) açıldığı ya da koşullu/kapsam dışı olduğu konusunda 13 v0.2 esastır. Forge'a özgü teknik hizalama için bkz. `TECH_DECISIONS.md`.
+
+---
+
 ## 1. Dokümanın Amacı
 
 Bu doküman oyundaki yapı sistemini, yerleşim kurallarını, bina seviyelerini, inşaat ve yükseltme süreçlerini, hasar ve onarım davranışlarını ve yapıların diğer oyun sistemleriyle ilişkisini tanımlar.
@@ -1956,7 +1960,7 @@ kullanmalıdır.
   - kuşatma,
   - savunma kuleleri.
 
-- `07_ENEMY_AI_DESIGN.md`
+- `07_ENEMY_AI_DESIGN_v0.2.md`
   - AI yapı planlama,
   - yeniden inşa,
   - savunma yerleşimi.
