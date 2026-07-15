@@ -381,14 +381,6 @@ body.editor-mode #debug-stats {
   transition-delay: 0s;
 }
 
-.add-actor-section-title {
-  padding: 4px 6px;
-  color: #9aa4a9;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
 .editor-shell .add-actor-popover button {
   width: 100%;
   justify-content: flex-start;
@@ -400,10 +392,24 @@ body.editor-mode #debug-stats {
   position: relative;
 }
 
+.add-actor-categories {
+  display: grid;
+  gap: 0;
+  padding: 1px 0;
+}
+
 .editor-shell .add-actor-category > .add-actor-category-label {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 29px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  color: #dce3e8;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 400;
 }
 
 .add-actor-category > .add-actor-category-label::after {
@@ -414,7 +420,7 @@ body.editor-mode #debug-stats {
 }
 
 .add-actor-category:hover > .add-actor-category-label {
-  background: var(--forge-border-soft);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .add-actor-submenu {
@@ -440,7 +446,7 @@ body.editor-mode #debug-stats {
   gap: 4px;
 }
 
-/* Faz 2: search field, Recently Used, flat search results, icon rows. */
+/* Faz 2: search field, flat search results, and icon rows. */
 .add-actor-search-row {
   display: flex;
   align-items: center;
@@ -473,7 +479,6 @@ body.editor-mode #debug-stats {
   outline: none;
 }
 
-.add-actor-recent,
 .add-actor-results {
   display: grid;
   gap: 4px;
@@ -485,11 +490,22 @@ body.editor-mode #debug-stats {
   overflow-y: auto;
 }
 
-/* Icon + label rows shared by category submenus, Recently Used, search. */
+/* Icon + label rows shared by category submenus and search. */
 .editor-shell .add-actor-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-height: 29px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  box-shadow: none;
+  font-weight: 400;
+}
+
+.editor-shell .add-actor-item:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .add-actor-item > svg,

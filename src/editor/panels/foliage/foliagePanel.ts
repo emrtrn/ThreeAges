@@ -292,10 +292,6 @@ function renderHtml(options: FoliagePanelOptions): string {
     .join("");
 
   return `
-    <div class="detail-heading">
-      <strong>Foliage Mode</strong>
-      <span>Paint static-mesh foliage</span>
-    </div>
     <div class="detail-section">
       <div class="detail-section-title">Tools</div>
       <div class="foliage-tools">${toolButtons}</div>

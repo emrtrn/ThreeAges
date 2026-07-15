@@ -277,8 +277,8 @@ const MENU_CHEVRON =
 /**
  * Add Actor flyout categories in display order, each with a type icon
  * (EDITOR_UI_REDESIGN_PLAN Faz 2). Entries carry a matching `category` label so
- * the markup can be generated from one source shared by the categories, the
- * "Recently Used" list, and the flat search results.
+ * the markup can be generated from one source shared by the categories and the
+ * flat search results.
  */
 const ADD_ACTOR_CATEGORIES: readonly { label: string; icon: ActorTypeIcon }[] = [
   { label: "Lights", icon: "light" },
@@ -291,17 +291,13 @@ const ADD_ACTOR_CATEGORIES: readonly { label: string; icon: ActorTypeIcon }[] = 
   { label: "Gameplay", icon: "gameplay" },
 ];
 
-/** localStorage key + cap for the Add Actor "Recently Used" list. */
-const RECENT_ACTORS_STORAGE_KEY = "forge.editor.recentActors";
-const RECENT_ACTORS_MAX = 5;
-
 /**
  * One placeable actor in the Add Actor flyout. A single descriptor drives the
- * category submenu button, the Recently Used row, and the search result row, so
- * drag payloads / click actions stay identical across all three surfaces.
+ * category submenu button and the search result row, so drag payloads / click
+ * actions stay identical across both surfaces.
  */
 interface AddActorEntry {
-  /** Stable id (also the Recently Used / search key). */
+  /** Stable id used by category and search rows. */
   key: string;
   label: string;
   /** Matches an `ADD_ACTOR_CATEGORIES` label. */
@@ -313,8 +309,6 @@ interface AddActorEntry {
   drag?: { mime: string; payload: () => string; beginPreview?: () => void };
   /** Runs on click. */
   onClick: () => void;
-  /** True when a plain click also creates the actor (specials + singletons). */
-  clickPlaces: boolean;
 }
 
 function formatActiveLevelName(path: string | undefined): string {
@@ -419,17 +413,14 @@ export class EditorUi {
   private importTargetDir = "";
   /** Existing model selected for the next Reimport upload, if any. */
   private reimportTarget: BrowserAssetItem | null = null;
-  /** All placeable Add Actor entries, built once (drives menu + search + recent). */
+  /** All placeable Add Actor entries, built once (drives menu + search). */
   private readonly addActorEntries: AddActorEntry[];
-  /** Most-recently-used Add Actor keys (persisted to localStorage). */
-  private recentActorKeys: string[] = [];
 
   constructor(private readonly app: SceneApp) {
     document.body.classList.add("editor-mode");
     // Preload the transparent drag image so setDragImage works on the first drag.
     this.getEmptyDragImage();
     this.addActorEntries = this.buildAddActorEntries();
-    this.loadRecentActors();
 
     this.root = document.createElement("div");
     this.root.id = "editor-ui";
@@ -458,7 +449,7 @@ export class EditorUi {
           </div>
           <span class="topbar-divider"></span>
           <div class="add-actor-menu">
-            <button type="button" class="topbar-menu-button primary" data-add-actor-button data-testid="add-actor-button" title="Add actor">+ Add Actor${MENU_CHEVRON}</button>
+            <button type="button" class="topbar-menu-button primary" data-add-actor-button data-testid="add-actor-button" aria-label="Add actor">+ Add Actor${MENU_CHEVRON}</button>
             <div class="add-actor-popover" data-add-actor-popover>${this.buildAddActorMenuMarkup()}</div>
           </div>
           <div class="editor-tools" data-tools></div>
@@ -1908,9 +1899,8 @@ export class EditorUi {
 
   /**
    * The full Add Actor catalog (EDITOR_UI_REDESIGN_PLAN Faz 2). One descriptor
-   * per placeable actor drives three surfaces — the category submenu, the
-   * Recently Used list, and the flat search results — so their drag payloads and
-   * click actions can never drift apart. Drag channels mirror the runtime drop
+   * per placeable actor drives the category submenu and flat search results, so
+   * their drag payloads and click actions can never drift apart. Drag channels mirror the runtime drop
    * handlers: lights (`x-forge-light-actor`), assets (`x-3dgamedev-asset`),
    * special actors (`x-forge-special-actor`); click-only singletons omit `drag`.
    */
@@ -1934,7 +1924,6 @@ export class EditorUi {
           beginPreview: () => this.app.beginLightDragPreview(type),
         },
         onClick: dragHintClick,
-        clickPlaces: false,
       });
     });
 
@@ -1954,7 +1943,6 @@ export class EditorUi {
           beginPreview: () => this.app.beginAssetDragPreview(assetId),
         },
         onClick: dragHintClick,
-        clickPlaces: false,
       });
     });
 
@@ -1973,7 +1961,6 @@ export class EditorUi {
         icon,
         drag: { mime: "application/x-forge-special-actor", payload },
         onClick,
-        clickPlaces: true,
       });
     };
     const singleton = (
@@ -1983,7 +1970,7 @@ export class EditorUi {
       icon: ActorTypeIcon,
       onClick: () => void,
     ): void => {
-      entries.push({ key, label, category, icon, onClick, clickPlaces: true });
+      entries.push({ key, label, category, icon, onClick });
     };
 
     special("blockingVolume", "Blocking Volume", "Volumes", "volume", () =>
@@ -2032,7 +2019,6 @@ export class EditorUi {
         beginPreview: () => this.app.beginAssetDragPreview(AMBIENT_SOUND_ASSET_ID),
       },
       onClick: dragHintClick,
-      clickPlaces: false,
     });
 
     special(
@@ -2055,7 +2041,6 @@ export class EditorUi {
         beginPreview: () => this.app.beginAssetDragPreview(PLAYER_START_ASSET_ID),
       },
       onClick: dragHintClick,
-      clickPlaces: false,
     });
     special("targetPoint", "Target Point", "Gameplay", "gameplay", () =>
       this.app.addTargetPoint(),
@@ -2065,8 +2050,8 @@ export class EditorUi {
     return entries;
   }
 
-  /** Markup for the Add Actor popover body: search row, Recently Used slot,
-   *  category submenus, and the flat search-results slot. */
+  /** Markup for the Add Actor popover body: search row, category submenus, and
+   *  the flat search-results slot. */
   private buildAddActorMenuMarkup(): string {
     const categories = ADD_ACTOR_CATEGORIES.map((cat) => {
       const rows = this.addActorEntries
@@ -2083,7 +2068,6 @@ export class EditorUi {
       `<div class="add-actor-search-row">${UI_ICONS.search}` +
       `<input type="text" class="add-actor-search" data-add-search placeholder="Search actors" aria-label="Search actors" />` +
       `</div>` +
-      `<div class="add-actor-recent" data-add-recent hidden></div>` +
       `<div class="add-actor-categories" data-add-categories>${categories}</div>` +
       `<div class="add-actor-results" data-add-results hidden></div>`
     );
@@ -2093,7 +2077,7 @@ export class EditorUi {
    * One flyout / list button for an Add Actor entry. `showCategory` appends the
    * category as a dim hint (search results). `includeAttr` emits `entry.attr`
    * (the cube `data-testid` + legacy hooks) — only the canonical category row
-   * sets it, so the Recently Used / search copies never duplicate a testid.
+   * sets it, so search copies never duplicate a testid.
    */
   private addActorItemMarkup(
     entry: AddActorEntry,
@@ -2109,8 +2093,8 @@ export class EditorUi {
     );
   }
 
-  /** Wires the static category buttons, the search field, and the initial
-   *  Recently Used list. Dynamic rows (recent / search) are bound on render. */
+  /** Wires the static category buttons and the search field. Dynamic search
+   *  rows are bound on render. */
   private bindAddActorMenu(): void {
     const byKey = new Map(this.addActorEntries.map((entry) => [entry.key, entry]));
     this.root
@@ -2134,12 +2118,10 @@ export class EditorUi {
         first?.click();
       });
     }
-
-    this.renderRecentActors();
   }
 
   /** Attaches the drag payload + click behavior for one Add Actor entry to a
-   *  freshly rendered button (category, Recently Used, or search result). */
+   *  freshly rendered button (category or search result). */
   private bindAddActorEntry(button: HTMLButtonElement, entry: AddActorEntry): void {
     if (entry.drag) {
       const drag = entry.drag;
@@ -2150,7 +2132,6 @@ export class EditorUi {
         event.dataTransfer?.setDragImage(this.getEmptyDragImage(), 0, 0);
         drag.beginPreview?.();
         this.setStatus(`Dragging ${entry.label} - drop in the viewport to place.`);
-        this.recordRecentActor(entry.key);
       });
       button.addEventListener("dragend", () => {
         this.app.endAssetDragPreview();
@@ -2158,69 +2139,10 @@ export class EditorUi {
     }
     button.addEventListener("click", () => {
       entry.onClick();
-      if (entry.clickPlaces) this.recordRecentActor(entry.key);
     });
   }
 
-  /** Reads the persisted Recently Used keys, dropping any that no longer map to
-   *  a known entry (catalog changes across template versions). */
-  private loadRecentActors(): void {
-    try {
-      const raw = window.localStorage.getItem(RECENT_ACTORS_STORAGE_KEY);
-      const parsed: unknown = raw ? JSON.parse(raw) : [];
-      if (!Array.isArray(parsed)) return;
-      const valid = new Set(this.addActorEntries.map((entry) => entry.key));
-      this.recentActorKeys = parsed
-        .filter((key): key is string => typeof key === "string" && valid.has(key))
-        .slice(0, RECENT_ACTORS_MAX);
-    } catch {
-      // Blocked/private storage should leave the flyout fully usable.
-      this.recentActorKeys = [];
-    }
-  }
-
-  /** Moves an entry to the front of the Recently Used list, persists, re-renders. */
-  private recordRecentActor(key: string): void {
-    this.recentActorKeys = [key, ...this.recentActorKeys.filter((k) => k !== key)].slice(
-      0,
-      RECENT_ACTORS_MAX,
-    );
-    try {
-      window.localStorage.setItem(RECENT_ACTORS_STORAGE_KEY, JSON.stringify(this.recentActorKeys));
-    } catch {
-      // Persistence is an enhancement; ignore storage failures.
-    }
-    this.renderRecentActors();
-  }
-
-  /** Renders the Recently Used row (hidden when empty or while searching). */
-  private renderRecentActors(): void {
-    const container = this.root.querySelector<HTMLElement>("[data-add-recent]");
-    if (!container) return;
-    // Don't fight the search view for the slot: it hides recent while active.
-    const searching =
-      (this.root.querySelector<HTMLInputElement>("[data-add-search]")?.value ?? "").trim() !== "";
-    const byKey = new Map(this.addActorEntries.map((entry) => [entry.key, entry]));
-    const entries = this.recentActorKeys
-      .map((key) => byKey.get(key))
-      .filter((entry): entry is AddActorEntry => Boolean(entry));
-    if (searching || entries.length === 0) {
-      container.hidden = true;
-      container.innerHTML = "";
-      return;
-    }
-    container.hidden = false;
-    container.innerHTML =
-      `<div class="add-actor-section-title">Recently Used</div>` +
-      entries.map((entry) => this.addActorItemMarkup(entry)).join("");
-    container.querySelectorAll<HTMLButtonElement>(".add-actor-item").forEach((button) => {
-      const entry = byKey.get(button.dataset.addKey ?? "");
-      if (entry) this.bindAddActorEntry(button, entry);
-    });
-  }
-
-  /** Renders the flat, filtered search results; empty query restores the
-   *  categories + Recently Used view. */
+  /** Renders the flat, filtered search results; empty query restores categories. */
   private renderAddActorSearchResults(query: string): void {
     const results = this.root.querySelector<HTMLElement>("[data-add-results]");
     const categories = this.root.querySelector<HTMLElement>("[data-add-categories]");
@@ -2230,11 +2152,9 @@ export class EditorUi {
       results.hidden = true;
       results.innerHTML = "";
       categories.hidden = false;
-      this.renderRecentActors();
       return;
     }
     categories.hidden = true;
-    this.renderRecentActors(); // hides the recent slot while searching
     const byKey = new Map(this.addActorEntries.map((entry) => [entry.key, entry]));
     const matches = this.addActorEntries.filter(
       (entry) =>
@@ -3852,16 +3772,11 @@ export class EditorUi {
     const settings = this.app.getMeshPaintToolSettings();
     this.meshPaintBody.innerHTML = `
       <div class="detail-section" data-inspector-section="vertex-color">
-        <div class="detail-section-title">Vertex Color / Weights</div>
+        <div class="detail-section-title">Vertex Paint</div>
         <label class="detail-row"><span>Tool</span>
           <select data-mesh-paint-tool><option value="paint" ${settings.tool === "paint" ? "selected" : ""}>Paint</option><option value="erase" ${settings.tool === "erase" ? "selected" : ""}>Erase</option></select>
         </label>
-        <label class="detail-row"><span>Color View</span>
-          <select data-mesh-paint-color-view>
-            <option value="off" ${settings.colorView === "off" ? "selected" : ""}>Off</option>
-            <option value="r" ${settings.colorView === "r" ? "selected" : ""}>Weight (R)</option>
-          </select>
-        </label>
+        <label class="detail-row detail-toggle"><span>Color View</span><input type="checkbox" ${settings.colorView !== "off" ? "checked" : ""} data-mesh-paint-color-view /></label>
         <label class="detail-row"><span>Brush Size</span><input type="number" min="0.01" step="0.1" value="${settings.brushSize}" data-mesh-paint-size /></label>
         <label class="detail-row"><span>Strength</span><input type="number" min="0" max="1" step="0.05" value="${settings.strength}" data-mesh-paint-strength /></label>
         <label class="detail-row"><span>Falloff</span><input type="number" min="0.01" max="32" step="0.1" value="${settings.falloff}" data-mesh-paint-falloff /></label>
@@ -3869,15 +3784,6 @@ export class EditorUi {
         <label class="detail-row detail-toggle"><span>Ignore Backfaces</span><input type="checkbox" ${settings.ignoreBackfaces ? "checked" : ""} data-mesh-paint-ignore-backfaces /></label>
         <button type="button" data-mesh-paint-fill>Fill</button>
         <button type="button" data-mesh-paint-clear>Clear Selected Mesh</button>
-      </div>
-      <div class="detail-section" data-inspector-section="transfer">
-        <div class="detail-section-title">Transfer</div>
-        <div class="detail-hint">Copy painted primitives, select a compatible placement, then paste. To Mesh stores the selected placement as the source asset's default vertex-color sidecar.</div>
-        <button type="button" data-mesh-paint-copy>Copy Selected Mesh</button>
-        <button type="button" data-mesh-paint-paste ${this.app.hasMeshPaintClipboard() ? "" : "disabled"}>Paste to Selected Mesh</button>
-        <button type="button" data-mesh-paint-to-mesh>To Mesh</button>
-        <button type="button" data-mesh-paint-to-instances>To Instances</button>
-        <button type="button" data-mesh-paint-fix>Fix Mesh Paint</button>
       </div>`;
 
     const numberPatch = (selector: string, key: "brushSize" | "strength" | "falloff" | "flow"): void => {
@@ -3888,9 +3794,8 @@ export class EditorUi {
     this.meshPaintBody.querySelector<HTMLSelectElement>("[data-mesh-paint-tool]")?.addEventListener("change", (event) => {
       this.app.setMeshPaintToolSettings({ tool: (event.currentTarget as HTMLSelectElement).value === "erase" ? "erase" : "paint" });
     });
-    this.meshPaintBody.querySelector<HTMLSelectElement>("[data-mesh-paint-color-view]")?.addEventListener("change", (event) => {
-      const value = (event.currentTarget as HTMLSelectElement).value;
-      this.app.setMeshPaintToolSettings({ colorView: value === "r" ? "r" : "off" });
+    this.meshPaintBody.querySelector<HTMLInputElement>("[data-mesh-paint-color-view]")?.addEventListener("change", (event) => {
+      this.app.setMeshPaintToolSettings({ colorView: (event.currentTarget as HTMLInputElement).checked ? "r" : "off" });
     });
     numberPatch("[data-mesh-paint-size]", "brushSize");
     numberPatch("[data-mesh-paint-strength]", "strength");
@@ -3904,21 +3809,6 @@ export class EditorUi {
     });
     this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-clear]")?.addEventListener("click", () => {
       this.app.clearSelectedMeshPaint();
-    });
-    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-copy]")?.addEventListener("click", () => {
-      this.app.copySelectedMeshPaint();
-    });
-    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-paste]")?.addEventListener("click", () => {
-      this.app.pasteSelectedMeshPaint();
-    });
-    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-to-mesh]")?.addEventListener("click", () => {
-      void this.app.transferSelectedMeshPaintToAsset();
-    });
-    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-to-instances]")?.addEventListener("click", () => {
-      void this.app.applyAssetVertexColorsToSelectedMeshPaint();
-    });
-    this.meshPaintBody.querySelector<HTMLButtonElement>("[data-mesh-paint-fix]")?.addEventListener("click", () => {
-      this.app.fixSelectedMeshPaintTopology();
     });
     this.decorateInspectorSections(this.meshPaintBody, "meshPaint");
   }

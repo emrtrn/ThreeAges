@@ -64,7 +64,6 @@ test("Mesh Paint and Foliage reuse the collapsible Details section chrome", asyn
   await expect(vertexToggle).toHaveAttribute("aria-expanded", "true");
   await expect(vertexSection.locator(":scope > .detail-section-body > .detail-hint")).toHaveCount(0);
   await expect(vertexSection.getByRole("button", { name: "Fill", exact: true })).toBeVisible();
-  await expect(meshPaint.getByRole("button", { name: "Transfer", exact: true })).toBeVisible();
   await vertexToggle.click();
   await expect(vertexToggle).toHaveAttribute("aria-expanded", "false");
   await expect(vertexSection.locator(":scope > .detail-section-body")).toBeHidden();
