@@ -54,16 +54,33 @@
     {
       "assetId": "watchtower-secondage-level3",
       "placements": []
+    },
+    {
+      "assetId": "farm-secondage-level3",
+      "placements": [
+        {
+          "position": [
+            1.16,
+            0.1,
+            -4.76
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     }
   ],
   "characters": [],
+  "worldSettings": {
+    "staticObjectsCastShadow": true
+  },
   "skyAtmosphere": {
     "rayleigh": 1,
     "turbidity": 1,
     "mie": 0.002,
     "mieDirectionalG": 0.8,
     "skyLightCapture": {
-      "intensity": 0.6
+      "intensity": 1
     }
   },
   "postProcess": {
@@ -91,7 +108,7 @@
         0
       ],
       "color": "#ffffff",
-      "intensity": 2,
+      "intensity": 3,
       "castShadow": true
     }
   ],

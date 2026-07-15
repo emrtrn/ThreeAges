@@ -11,6 +11,7 @@
   "metalnessTexture": null,
   "aoTexture": null,
   "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
   "emissiveTexture": null,
   "ormTexture": null,
   "uvTiling": {

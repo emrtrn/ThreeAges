@@ -68,6 +68,16 @@ async function main(): Promise<void> {
   const editorEnabled = params.has("editor");
   const scriptMessageTraceLimit = import.meta.env.DEV && params.has("debug") ? 20 : 0;
 
+  // RTS game route (Vertical Slice Plan v0.2 Faz 1). Gated behind ?rts so the
+  // character runtime + editor stay the default until the RTS is promoted. Its
+  // own lightweight runtime — never mixes with the character SceneApp above.
+  if (!editorEnabled && params.has("rts")) {
+    const { RtsApp } = await import("@/game/rts/RtsApp");
+    const rts = new RtsApp(canvas, { debug: params.has("debug") });
+    rts.start();
+    return;
+  }
+
   // The editor is a dev-time authoring tool (it also needs the dev save server).
   // Gating on import.meta.env.DEV lets Vite dead-code-eliminate the whole editor
   // — including the dynamic import — from the production game build, so the
