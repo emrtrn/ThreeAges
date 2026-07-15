@@ -51,6 +51,12 @@ export interface GamePreset {
 export interface UnitBalanceStats {
   /** Maximum hit points; must be positive. */
   maxHealth: number;
+  /** Damage dealt by one successful basic melee hit; must be positive. */
+  attackDamage: number;
+  /** Seconds between basic melee hits; must be positive. */
+  attackCooldown: number;
+  /** Maximum ground-plane distance from which a basic hit may land; must be positive. */
+  attackRange: number;
 }
 
 /** `public/game-data/balance/units.json` — keyed by stable unit id. */

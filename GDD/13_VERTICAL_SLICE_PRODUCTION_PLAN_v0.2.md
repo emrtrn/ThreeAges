@@ -654,8 +654,8 @@ Boş test sahnesinde oyuncunun kamera, seçim, hareket ve basit saldırı ile bi
 - [x] Sağlık bileşeni ekle. (`HealthComponent`: maksimum/mevcut/oran, sınırlandırılmış hasar ve iyileşme; ölüm sonraki dilimde)
 - [x] Sahiplik ekle. (`Unit.owner`: `player` / `enemy`; seçim filtresi)
 - [x] Basit pathfinding ekle. (`RtsNavigation`: cached grid rota + waypoint takibi; yapı engelleri Faz 2’de bağlanacak)
-- [ ] Basit yakın dövüş saldırısı ekle.
-- [ ] Ölüm ve seçimden çıkarma davranışı ekle.
+- [x] Basit yakın dövüş saldırısı ekle. (`MeleeAttackComponent`: JSON hasar/menzil/bekleme; `updateUnitCombat` hedef menzildeyken saldırıyı çözüyor)
+- [x] Ölüm ve seçimden çıkarma davranışı ekle. (`updateUnitDeaths`: anında seçim/hedef temizliği, kısa yenilme pozu ve kalıcı cesetsiz despawn)
 
 ### Maç omurgası
 

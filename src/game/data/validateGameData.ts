@@ -172,12 +172,25 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (!/^[a-z][a-z0-9_]*$/.test(id)) {
       throw new GameDataError(`${where}: invalid unit id "${id}"`);
     }
-    const stats = asObject(raw, `${where}."${id}"`);
-    const maxHealth = requireFiniteNumber(stats, "maxHealth", `${where}."${id}"`);
+    const statsWhere = `${where}."${id}"`;
+    const stats = asObject(raw, statsWhere);
+    const maxHealth = requireFiniteNumber(stats, "maxHealth", statsWhere);
     if (maxHealth <= 0) {
       throw new GameDataError(`${where}."${id}".maxHealth: must be > 0`);
     }
-    units[id] = { maxHealth };
+    const attackDamage = requireFiniteNumber(stats, "attackDamage", statsWhere);
+    if (attackDamage <= 0) {
+      throw new GameDataError(`${statsWhere}.attackDamage: must be > 0`);
+    }
+    const attackCooldown = requireFiniteNumber(stats, "attackCooldown", statsWhere);
+    if (attackCooldown <= 0) {
+      throw new GameDataError(`${statsWhere}.attackCooldown: must be > 0`);
+    }
+    const attackRange = requireFiniteNumber(stats, "attackRange", statsWhere);
+    if (attackRange <= 0) {
+      throw new GameDataError(`${statsWhere}.attackRange: must be > 0`);
+    }
+    units[id] = { maxHealth, attackDamage, attackCooldown, attackRange };
   }
   if (Object.keys(units).length === 0) {
     throw new GameDataError(`${where}: must define at least one unit`);

@@ -18,9 +18,21 @@ const scratchDir = new Vector3();
 /** Advance every moving unit one frame toward its target. */
 export function updateUnitMovement(units: readonly Unit[], dt: number): void {
   for (const unit of units) {
-    // An explicit attack order follows its target's live position. Damage and
-    // attack range are deliberately owned by the later melee-combat step.
-    const target = unit.attackTarget?.position ?? unit.pathTarget ?? unit.moveTarget;
+    if (unit.health.depleted) {
+      unit.stop();
+      continue;
+    }
+    const attackTarget = unit.attackTarget;
+    if (attackTarget?.health.depleted) {
+      unit.setAttackTarget(null);
+      continue;
+    }
+    // An explicit attack order follows its target's live position, stopping at
+    // melee range so the combat system can resolve hits without overlap.
+    if (attackTarget && unit.position.distanceTo(attackTarget.position) <= unit.attack.range) {
+      continue;
+    }
+    const target = attackTarget?.position ?? unit.pathTarget ?? unit.moveTarget;
     if (!target) continue;
 
     const pos = unit.position;

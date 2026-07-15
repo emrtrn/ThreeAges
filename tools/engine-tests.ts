@@ -63,7 +63,10 @@ import { CommandSystem } from "../src/game/rts/commands/commandSystem";
 import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
 import { HealthComponent } from "../src/game/rts/units/health";
 import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
+import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
+import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
+import type { Unit } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import type { ActorSpawnRequest } from "../engine/behavior/behaviorSubsystem";
 import {
@@ -978,6 +981,13 @@ import { getGameEditorCatalog, setGameEditorCatalog } from "../src/editor/gameEd
 import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 
 let checks = 0;
+
+const RTS_TEST_UNIT_STATS = {
+  maxHealth: 100,
+  attackDamage: 12,
+  attackCooldown: 1.4,
+  attackRange: 1.2,
+};
 const check = (label: string, fn: () => void): void => {
   fn();
   checks += 1;
@@ -27718,8 +27728,8 @@ check("game-data validator rejects a mismatched id and missing field", () => {
 
 check("RTS contextual right-click assigns an enemy attack target", () => {
   const units = new UnitSystem();
-  const player = units.spawn("player", 0, 3, 100);
-  const enemy = units.spawn("enemy", 0, 0, 100);
+  const player = units.spawn("player", 0, 3, RTS_TEST_UNIT_STATS);
+  const enemy = units.spawn("enemy", 0, 0, RTS_TEST_UNIT_STATS);
   units.root.updateMatrixWorld(true);
 
   const camera = new PerspectiveCamera(60, 1, 0.1, 100);
@@ -27774,13 +27784,67 @@ check("RTS health clamps damage and healing while exposing current/max/ratio", (
   assert.throws(() => new HealthComponent(0), RangeError);
 });
 
-check("unit balance validates positive health for stable unit ids", () => {
+check("unit balance validates combat stats for stable unit ids", () => {
   const balance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
   assert.equal(balance["guard_placeholder"]?.maxHealth, 100);
-  assert.throws(() => validateUnitBalance({ guard_placeholder: { maxHealth: 0 } }), GameDataError);
-  assert.throws(() => validateUnitBalance({ "Guard Placeholder": { maxHealth: 100 } }), GameDataError);
+  assert.equal(balance["guard_placeholder"]?.attackDamage, 12);
+  assert.throws(
+    () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, maxHealth: 0 } }),
+    GameDataError,
+  );
+  assert.throws(
+    () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, attackCooldown: 0 } }),
+    GameDataError,
+  );
+  assert.throws(() => validateUnitBalance({ "Guard Placeholder": RTS_TEST_UNIT_STATS }), GameDataError);
+});
+
+check("RTS melee attacks apply JSON damage on cooldown and clear a depleted target", () => {
+  const units = new UnitSystem();
+  const attacker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const defender = units.spawn("enemy", 1.1, 0, RTS_TEST_UNIT_STATS);
+  attacker.setAttackTarget(defender);
+
+  updateUnitCombat([attacker], 0);
+  assert.equal(defender.health.current, 88, "first ready hit lands immediately");
+  updateUnitCombat([attacker], 0.7);
+  assert.equal(defender.health.current, 88, "cooldown prevents an early second hit");
+  updateUnitCombat([attacker], 0.7);
+  assert.equal(defender.health.current, 76, "second hit lands after the cooldown");
+
+  defender.health.damage(100);
+  updateUnitCombat([attacker], 0);
+  assert.equal(attacker.attackTarget, null, "stale depleted target is cleared");
+  assert.equal(defender.targeted, false, "target marker clears with the attack order");
+});
+
+check("RTS death deselects, clears attackers, then removes the defeated unit", () => {
+  const units = new UnitSystem();
+  const player = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const enemy = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  const body = player.object.children[0]!;
+  const removed: Unit[] = [];
+  const selection = {
+    remove: (unit: Unit) => {
+      removed.push(unit);
+      unit.setSelected(false);
+    },
+  };
+  player.setSelected(true);
+  enemy.setAttackTarget(player);
+  player.health.damage(100);
+
+  updateUnitDeaths(units, selection, 0.1);
+  assert.deepEqual(removed, [player], "a dead selected unit leaves the selection immediately");
+  assert.equal(player.selected, false);
+  assert.equal(enemy.attackTarget, null, "attackers drop a defeated target immediately");
+  assert.ok(units.all().includes(player), "brief defeat pose happens before removal");
+
+  updateUnitDeaths(units, selection, 0.25);
+  assert.ok(!units.all().includes(player), "defeated unit leaves the live registry");
+  assert.equal(units.unitForObject(body), null, "defeated body no longer resolves from raycasts");
 });
 
 check("RTS grid navigation routes a unit around a static blocker", () => {
@@ -27791,7 +27855,7 @@ check("RTS grid navigation routes a unit around a static blocker", () => {
   assert.ok(path.some((point) => Math.abs(point.z) > 1.5), "path leaves the blocked corridor");
 
   const units = new UnitSystem();
-  const walker = units.spawn("player", -5, 0, 100);
+  const walker = units.spawn("player", -5, 0, RTS_TEST_UNIT_STATS);
   walker.setMovePath(path);
   for (let i = 0; i < 300; i += 1) updateUnitMovement([walker], 1 / 60);
   assert.ok(walker.position.distanceTo(new Vector3(5, 0, 0)) < 0.16, "follows every waypoint to goal");

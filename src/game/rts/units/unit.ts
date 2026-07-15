@@ -17,7 +17,9 @@ import {
   RingGeometry,
   Vector3,
 } from "three";
+import type { UnitBalanceStats } from "../../data/gameDataTypes";
 import { HealthComponent } from "./health";
+import { MeleeAttackComponent } from "./meleeAttack";
 
 /** Which army a unit belongs to. Ürün A is one player vs. one AI (plan §4.2). */
 export type UnitOwner = "player" | "enemy";
@@ -32,6 +34,8 @@ export const UNIT_RADIUS = 0.5;
 const BODY_LENGTH = 1.0;
 /** Capsule centre height so the body rests on the y = 0 ground. */
 const BODY_CENTER_Y = BODY_LENGTH / 2 + UNIT_RADIUS;
+/** Brief defeat presentation before the unit leaves the field. */
+export const UNIT_DEATH_SECONDS = 0.35;
 
 let nextUnitId = 1;
 
@@ -47,6 +51,8 @@ export class Unit {
   readonly speed = UNIT_MOVE_SPEED;
   /** Bounded health state; death/removal is handled by a later combat step. */
   readonly health: HealthComponent;
+  /** JSON-backed basic melee damage, range and cooldown state. */
+  readonly attack: MeleeAttackComponent;
   /** Active move destination (y = 0), or null when idle/arrived. */
   moveTarget: Vector3 | null = null;
   /** Enemy explicitly ordered by a contextual right-click, or null. */
@@ -56,15 +62,17 @@ export class Unit {
   private movePath: Vector3[] = [];
   private selectedFlag = false;
   private targeterCount = 0;
+  private deathElapsed: number | null = null;
 
-  constructor(owner: UnitOwner, x: number, z: number, maxHealth: number) {
+  constructor(owner: UnitOwner, x: number, z: number, stats: UnitBalanceStats) {
     this.id = nextUnitId++;
     this.owner = owner;
 
     this.object = new Group();
     this.object.name = `rts-unit-${owner}-${this.id}`;
     this.object.position.set(x, 0, z);
-    this.health = new HealthComponent(maxHealth);
+    this.health = new HealthComponent(stats.maxHealth);
+    this.attack = new MeleeAttackComponent(stats);
 
     const body = new Mesh(
       new CapsuleGeometry(UNIT_RADIUS, BODY_LENGTH, 6, 12),
@@ -119,6 +127,11 @@ export class Unit {
     return this.targeterCount > 0;
   }
 
+  /** A depleted unit is no longer commandable, even during its short defeat pose. */
+  get dying(): boolean {
+    return this.deathElapsed !== null;
+  }
+
   setSelected(selected: boolean): void {
     if (this.selectedFlag === selected) return;
     this.selectedFlag = selected;
@@ -158,7 +171,7 @@ export class Unit {
 
   /**
    * Order this unit to pursue an enemy. This records intent only: the following
-   * melee-combat step will decide when it is in range and applies damage.
+   * melee-combat system decides when it is in range and applies damage.
    */
   setAttackTarget(target: Unit | null): void {
     if (this.attackTarget === target) return;
@@ -167,6 +180,35 @@ export class Unit {
     this.moveTarget = null;
     this.movePath = [];
     if (target) target.setTargetedBy(1);
+  }
+
+  /** Begin the one-shot defeat presentation. Returns true exactly once. */
+  beginDeath(): boolean {
+    if (!this.health.depleted || this.deathElapsed !== null) return false;
+    this.deathElapsed = 0;
+    this.stop();
+    return true;
+  }
+
+  /** Advance the brief collapse pose; true means the registry may now remove it. */
+  updateDeath(dt: number): boolean {
+    if (this.deathElapsed === null) return false;
+    this.deathElapsed = Math.min(UNIT_DEATH_SECONDS, this.deathElapsed + Math.max(0, dt));
+    const progress = this.deathElapsed / UNIT_DEATH_SECONDS;
+    this.object.rotation.z = -Math.PI * 0.5 * progress;
+    this.object.position.y = -UNIT_RADIUS * 0.2 * progress;
+    return this.deathElapsed >= UNIT_DEATH_SECONDS;
+  }
+
+  /** Release the per-unit render allocations when it permanently leaves play. */
+  dispose(): void {
+    this.object.traverse((child) => {
+      if (!(child instanceof Mesh)) return;
+      child.geometry.dispose();
+      const materials = Array.isArray(child.material) ? child.material : [child.material];
+      for (const material of materials) material.dispose();
+    });
+    this.object.clear();
   }
 
   private setTargetedBy(delta: number): void {

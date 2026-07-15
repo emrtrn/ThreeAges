@@ -29,6 +29,8 @@ import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround } from "./world/rtsGround";
 import { UnitSystem } from "./units/unitSystem";
 import { updateUnitMovement } from "./units/unitMovement";
+import { updateUnitCombat } from "./units/unitCombat";
+import { updateUnitDeaths } from "./units/unitDeath";
 import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
@@ -157,10 +159,10 @@ export class RtsApp {
     for (let i = 0; i < 8; i++) {
       const x = -4.5 + (i % cols) * 3;
       const z = 4 + Math.floor(i / cols) * 3;
-      this.units.spawn("player", x, z, guard.maxHealth);
+      this.units.spawn("player", x, z, guard);
     }
     for (let i = 0; i < 3; i++) {
-      this.units.spawn("enemy", -3 + i * 3, -16, guard.maxHealth);
+      this.units.spawn("enemy", -3 + i * 3, -16, guard);
     }
   }
 
@@ -175,6 +177,8 @@ export class RtsApp {
     if (this.input.consumeStopRequest()) this.commands.issueStop();
     this.cameraController.update(dt, this.input);
     updateUnitMovement(this.units.all(), dt);
+    updateUnitCombat(this.units.all(), dt);
+    updateUnitDeaths(this.units, this.selection, dt);
     this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
   };

@@ -38,6 +38,12 @@ export class SelectionSystem implements RtsPointerHandler {
     return [...this.selectedUnits];
   }
 
+  /** Remove a unit that died or otherwise left the field from the live selection. */
+  remove(unit: Unit): void {
+    if (!this.selectedUnits.delete(unit)) return;
+    unit.setSelected(false);
+  }
+
   onSelectClick(x: number, y: number, additive: boolean): void {
     const unit = this.raycastUnit(x, y);
     if (unit && unit.owner === "player") {

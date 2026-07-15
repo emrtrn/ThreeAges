@@ -1,5 +1,8 @@
 {
   "guard_placeholder": {
-    "maxHealth": 100
+    "maxHealth": 100,
+    "attackDamage": 12,
+    "attackCooldown": 1.4,
+    "attackRange": 1.2
   }
 }

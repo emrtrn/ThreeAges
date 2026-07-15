@@ -8,6 +8,7 @@
  */
 import { Group, type Object3D } from "three";
 
+import type { UnitBalanceStats } from "../../data/gameDataTypes";
 import { Unit, type UnitOwner } from "./unit";
 
 export class UnitSystem {
@@ -21,8 +22,8 @@ export class UnitSystem {
     this.root.name = "rts-units";
   }
 
-  spawn(owner: UnitOwner, x: number, z: number, maxHealth: number): Unit {
-    const unit = new Unit(owner, x, z, maxHealth);
+  spawn(owner: UnitOwner, x: number, z: number, stats: UnitBalanceStats): Unit {
+    const unit = new Unit(owner, x, z, stats);
     this.units.push(unit);
     // The capsule body is the first child; index it for raycast resolution.
     const body = unit.object.children[0];
@@ -36,7 +37,28 @@ export class UnitSystem {
   }
 
   playerUnits(): Unit[] {
-    return this.units.filter((unit) => unit.owner === "player");
+    return this.units.filter((unit) => unit.owner === "player" && !unit.health.depleted);
+  }
+
+  /** Clear every attack order aimed at a unit that can no longer be targeted. */
+  clearAttackTargets(target: Unit): void {
+    for (const unit of this.units) {
+      if (unit.attackTarget === target) unit.setAttackTarget(null);
+    }
+  }
+
+  /** Remove a defeated unit from queries, raycasts and the rendered scene. */
+  despawn(unit: Unit): boolean {
+    const index = this.units.indexOf(unit);
+    if (index < 0) return false;
+    this.clearAttackTargets(unit);
+    unit.stop();
+    const body = unit.object.children[0];
+    if (body) this.byBodyId.delete(body.id);
+    this.units.splice(index, 1);
+    this.root.remove(unit.object);
+    unit.dispose();
+    return true;
   }
 
   /** Resolve a raycast-hit object (body mesh) back to its owning unit, if any. */
@@ -46,6 +68,9 @@ export class UnitSystem {
 
   /** Every body mesh, for raycasting against units. */
   bodyMeshes(): Object3D[] {
-    return this.units.map((unit) => unit.object.children[0]).filter((o): o is Object3D => !!o);
+    return this.units
+      .filter((unit) => !unit.health.depleted)
+      .map((unit) => unit.object.children[0])
+      .filter((o): o is Object3D => !!o);
   }
 }
