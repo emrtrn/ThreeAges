@@ -143,6 +143,12 @@ body.editor-mode #debug-stats {
      (see .editor-details) so it sits above the viewport, ending at the Details
      panel's left edge instead of on top of the panel. */
   margin-right: 410px;
+  /* Never let this cluster be crushed below its content: with min-width:0 +
+     justify-content:flex-end a cramped workbar (narrow window) would overflow
+     its children leftward on top of the transform tools. Keeping it at content
+     width makes the overflow clip against the Details panel on the right
+     instead — the tools stay clickable. */
+  flex: 0 0 auto;
 }
 
 /* Thin vertical rule separating toolbar clusters. */
@@ -210,6 +216,16 @@ body.editor-mode #debug-stats {
 
 .editor-tools {
   justify-content: flex-start;
+}
+
+/* The left workbar clusters must hold their natural width. Left shrinkable,
+   a cramped workbar crushes them to near-zero and their icon children spill
+   out of the box, landing on top of the neighbouring cluster. Pinned at
+   content width, any overflow instead pushes rightward toward the Details
+   panel where the flexible view-controls absorbs it. */
+.editor-workbar > .editor-tools,
+.editor-workbar > .editor-snaps {
+  flex: 0 0 auto;
 }
 
 .editor-actions {
@@ -6439,6 +6455,16 @@ body.editor-mode #debug-stats {
   .editor-lead { border-right: 1px solid rgba(255, 255, 255, 0.055); }
   .editor-workbar { padding: 0 14px; }
   .editor-workbar > .editor-view-controls { margin-right: var(--editor-details-width); }
+
+  /* On narrower desktops the Camera/View labels are the first thing to give:
+     drop to icon-only so the cluster keeps clear of the transform tools instead
+     of clipping behind the Details panel. Wide screens keep the full labels. */
+  @media (max-width: 1400px) {
+    .editor-workbar [data-camera-label],
+    .editor-workbar [data-viewmode-label] {
+      display: none;
+    }
+  }
 
   .editor-panel {
     top: calc(var(--editor-gap) + var(--editor-topbar-height) + var(--editor-gap));
