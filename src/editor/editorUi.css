@@ -2734,13 +2734,13 @@ body.editor-mode #debug-stats {
 
 .editor-shell .asset-card.is-selected,
 .editor-shell .asset-card.is-selected:hover {
-  border-color: #f59e2c;
-  background: rgba(245, 158, 44, 0.2);
-  box-shadow: 0 0 0 1px #f59e2c;
+  border-color: var(--forge-accent);
+  background: var(--forge-accent-soft);
+  box-shadow: 0 0 0 1px var(--forge-accent);
 }
 
 .editor-shell .asset-card.is-selected .asset-thumb {
-  border-color: #f59e2c;
+  border-color: var(--forge-accent);
 }
 
 /* Transient flash when an editor's Browse reveals this card. */
