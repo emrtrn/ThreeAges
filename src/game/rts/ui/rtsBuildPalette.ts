@@ -1,5 +1,6 @@
 /** Minimal Phase 2 build-mode control surface (not the final HUD). */
 import type { BuildingBalance } from "../../data/gameDataTypes";
+import type { EconomyBuildingSnapshot } from "../economy/economyProductionSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
 
 export class RtsBuildPalette {
@@ -8,7 +9,14 @@ export class RtsBuildPalette {
   private readonly resources = document.createElement("p");
   private readonly workers = document.createElement("p");
   private readonly population = document.createElement("p");
+  private readonly income = document.createElement("p");
+  private readonly producerPanel = document.createElement("section");
+  private readonly producerChoices = document.createElement("div");
+  private readonly producerDetails = document.createElement("p");
   private readonly actionMessage = document.createElement("p");
+  private selectedProducerId: number | null = null;
+  private producerSignature = "";
+  private producers: readonly EconomyBuildingSnapshot[] = [];
 
   constructor(
     buildings: BuildingBalance,
@@ -60,6 +68,17 @@ export class RtsBuildPalette {
     this.root.appendChild(this.workers);
     this.population.className = "rts-build-population";
     this.root.appendChild(this.population);
+    this.income.className = "rts-build-income";
+    this.root.appendChild(this.income);
+    this.producerPanel.className = "rts-production-panel";
+    const producerTitle = document.createElement("strong");
+    producerTitle.textContent = "Üretim Yapısı";
+    this.producerPanel.appendChild(producerTitle);
+    this.producerChoices.className = "rts-production-choices";
+    this.producerPanel.appendChild(this.producerChoices);
+    this.producerDetails.className = "rts-production-details";
+    this.producerPanel.appendChild(this.producerDetails);
+    this.root.appendChild(this.producerPanel);
     this.actionMessage.className = "rts-build-action-message";
     this.root.appendChild(this.actionMessage);
     this.status.className = "rts-build-status";
@@ -105,9 +124,58 @@ export class RtsBuildPalette {
     if (this.population.textContent !== text) this.population.textContent = text;
   }
 
+  setIncomeRates(rates: Readonly<Record<string, number>>): void {
+    const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun" };
+    this.income.textContent = `Gelir: ${Object.entries(rates)
+      .map(([id, amount]) => `${labels[id] ?? id} +${amount.toFixed(1)}/dk`)
+      .join(" · ")}`;
+  }
+
+  /** Render a compact, explicitly selectable view of completed production sites. */
+  setProductionBuildings(producers: readonly EconomyBuildingSnapshot[]): void {
+    this.producers = producers;
+    if (!producers.some((producer) => producer.structureId === this.selectedProducerId)) {
+      this.selectedProducerId = producers[0]?.structureId ?? null;
+    }
+    const signature = producers.map((producer) => `${producer.structureId}:${producer.structureLabel}`).join("|");
+    if (signature !== this.producerSignature) {
+      this.producerSignature = signature;
+      this.producerChoices.replaceChildren();
+      for (const producer of producers) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = `${producer.structureLabel} #${producer.structureId}`;
+        button.addEventListener("click", () => {
+          this.selectedProducerId = producer.structureId;
+          this.renderSelectedProducer();
+        });
+        this.producerChoices.appendChild(button);
+      }
+    }
+    this.renderSelectedProducer();
+  }
+
   /** Persist completion/error feedback while placement hover state keeps changing. */
   setActionMessage(message: string | null): void {
     this.actionMessage.textContent = message ?? "";
+  }
+
+  private renderSelectedProducer(): void {
+    const selected = this.producers.find((producer) => producer.structureId === this.selectedProducerId);
+    if (!selected) {
+      this.producerPanel.hidden = true;
+      return;
+    }
+    this.producerPanel.hidden = false;
+    for (const button of this.producerChoices.querySelectorAll("button")) {
+      button.setAttribute("aria-pressed", String(button.textContent === `${selected.structureLabel} #${selected.structureId}`));
+    }
+    this.producerDetails.textContent = [
+      `İşçiler: ${selected.assignedWorkers}/${selected.workerCapacity} (${selected.workingWorkers} çalışıyor)`,
+      `Üretim: ${selected.productionPerMinute.toFixed(1)} ${selected.resourceId}/dk`,
+      `Yerel tampon: ${selected.localBuffer.toFixed(1)}/${selected.localBufferCapacity}`,
+      `Durum: ${selected.status}`,
+    ].join(" · ");
   }
 
   dispose(): void {

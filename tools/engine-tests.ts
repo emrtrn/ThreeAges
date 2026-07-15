@@ -27874,7 +27874,7 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
   );
 });
 
-check("RTS economy producers assign workers and stop at their local buffer capacity", () => {
+check("RTS economy producers report income, survive a ten-minute run, and stop at their local buffer capacity", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
@@ -27890,15 +27890,20 @@ check("RTS economy producers assign workers and stop at their local buffer capac
   navigation.setBlockers(structures.navigationBlockers());
   const production = new EconomyProductionSystem(units, structures, navigation, () => false);
 
-  for (let frame = 0; frame < 9_000; frame += 1) {
+  for (let frame = 0; frame < 600; frame += 1) {
     updateUnitMovement(units.all(), 1 / 60);
     production.update(1 / 60);
   }
-  const snapshot = production.snapshots()[0] ?? assert.fail("producer snapshot missing");
+  let snapshot = production.snapshots()[0] ?? assert.fail("producer snapshot missing");
   assert.equal(snapshot.assignedWorkers, 3, "T1 farm capacity reserves exactly three workers");
   assert.equal(snapshot.workingWorkers, 3);
+  assert.equal(snapshot.productionPerMinute, 21, "three workers expose the JSON food-per-minute rate");
+  for (let second = 0; second < 600; second += 1) production.update(1);
+  snapshot = production.snapshots()[0] ?? assert.fail("producer snapshot missing after ten minutes");
   assert.equal(snapshot.status, "buffer-full");
   assert.equal(snapshot.localBuffer, 40, "unconnected production never exceeds its local buffer");
+  assert.equal(snapshot.productionPerMinute, 0, "a full local buffer stops reported income");
+  assert.equal(snapshot.totalProduced, 40, "ten-minute economy run preserves the buffer ceiling");
   assert.equal(
     units.playerWorkers().filter((worker) => production.stateFor(worker) === "idle").length,
     1,

@@ -46,6 +46,7 @@ import { PlacedStructureSystem, type PlacedStructure } from "./structures/placed
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { ResourceWallet } from "./economy/resourceWallet";
+import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { PopulationSystem } from "./economy/populationSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
@@ -100,6 +101,7 @@ export class RtsApp {
   private readonly commands: CommandSystem;
   private readonly placement: BuildingPlacementSystem;
   private readonly buildPalette: RtsBuildPalette;
+  private readonly unsubscribeWalletChanges: (() => void) | null;
   private readonly log = logger("System");
   private frameHandle = 0;
   private lastTime = 0;
@@ -193,6 +195,9 @@ export class RtsApp {
     );
     this.matchOverlay = new RtsMatchOverlay(this.restartMatch);
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
+    this.unsubscribeWalletChanges = this.debugOverlay
+      ? this.wallet.subscribe((change: ResourceChange) => this.debugOverlay?.recordResourceChange(change))
+      : null;
     // Composite pointer handler: left button drives selection, right button
     // issues commands. Keeps the two systems decoupled (neither imports the
     // other); this composition root is the only place that sees both.
@@ -252,6 +257,7 @@ export class RtsApp {
     this.marquee.dispose();
     this.matchOverlay.dispose();
     this.debugOverlay?.dispose();
+    this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
     this.placement.dispose();
     this.workerConstruction.reset();
@@ -344,6 +350,7 @@ export class RtsApp {
       this.buildPalette.setResources(this.wallet.snapshot());
       const population = this.population.snapshot();
       this.buildPalette.setPopulation(population.used, population.capacity);
+      this.syncEconomyUi();
       updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
       updateUnitDeaths(this.units, this.selection, dt);
       if (this.match.update(this.centers) === "victory") {
@@ -433,6 +440,16 @@ export class RtsApp {
     this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
     const population = this.population.snapshot();
     this.buildPalette.setPopulation(population.used, population.capacity);
+    this.syncEconomyUi();
+  }
+
+  private syncEconomyUi(): void {
+    const production = this.economyProduction?.snapshots() ?? [];
+    this.buildPalette.setIncomeRates({
+      food: this.economyProduction?.productionPerMinute("food") ?? 0,
+      wood: this.economyProduction?.productionPerMinute("wood") ?? 0,
+    });
+    this.buildPalette.setProductionBuildings(production);
   }
 
   private assignWorkerToConstruction(structure: PlacedStructure): void {

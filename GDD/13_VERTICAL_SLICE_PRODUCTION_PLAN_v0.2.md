@@ -828,16 +828,16 @@ Yiyecek ve odun ile çalışan küçük ama tam ekonomi döngüsü oluşturmak.
 - [x] Yiyecek göstergesi (yapı paletinde canlı global stok)
 - [x] Odun göstergesi (yapı paletinde canlı global stok)
 - [x] Nüfus göstergesi (mevcut + kuyruk rezervasyonu / tamamlanmış Ev kapasitesi)
-- [ ] Gelir hızı
+- [x] Gelir hızı (tamponu dolmamış yapılardaki çalışan işçilerin gerçek anlık üretimi, kaynak/dk olarak gösterilir)
 - [x] Boşta işçi (inşaat veya üretim yapısına atanmamış işçilerin anlık sayısı)
-- [ ] Seçili üretim yapısı paneli
+- [x] Seçili üretim yapısı paneli (tamamlanmış üretim yapıları listeden seçilir; işçi, üretim hızı, tampon ve durum gösterilir)
 
 ### Debug
 
-- [ ] Üretim tick’lerini göster.
-- [ ] Yerel tamponu göster.
-- [ ] Atanmış işçileri göster.
-- [ ] Kaynak harcama logu göster.
+- [x] Üretim tick’lerini göster. (`?rts&debug`: yapı başına son tick çıktısı)
+- [x] Yerel tamponu göster. (`?rts&debug`: mevcut/kapasite)
+- [x] Atanmış işçileri göster. (`?rts&debug`: atanmış, çalışan ve kapasite)
+- [x] Kaynak harcama logu göster. (`ResourceWallet` rezervasyon/iade olayları debug akışında)
 
 ---
 
@@ -857,13 +857,13 @@ Başlangıç işçilerini ata
 
 ## 31. Kabul Kriterleri
 
-- [ ] Ekonomi JSON verisiyle dengelenebiliyor.
-- [ ] İşçiler üretim yapısında çalışıyor.
-- [ ] Tampon dolunca üretim duruyor.
-- [ ] Nüfus sınırı doğru çalışıyor.
-- [ ] Kaynak göstergeleri doğru güncelleniyor.
-- [ ] 10 dakikalık ekonomi testi hata vermiyor.
-- [ ] Oyuncu ekonomik kilide açıklamasız düşmüyor.
+- [x] Ekonomi JSON verisiyle dengelenebiliyor. (bina üretim/kapasite/tampon ve birim maliyet/nüfus değerleri doğrulanır)
+- [x] İşçiler üretim yapısında çalışıyor. (`test:engine`: üç işçi çalışma noktasında 21 yiyecek/dk üretir)
+- [x] Tampon dolunca üretim duruyor. (`test:engine`: 40 birimde sabitlenir, gelir 0/dk olur)
+- [x] Nüfus sınırı doğru çalışıyor. (`test:engine`: 20 taban limit, Ev +5, kuyruk rezervasyonu ve reddetme)
+- [x] Kaynak göstergeleri doğru güncelleniyor. (hedefli Playwright: stok, nüfus, gelir hızı ve kaynak hareket logu)
+- [x] 10 dakikalık ekonomi testi hata vermiyor. (`test:engine`: 600 simülasyon saniyesi, tampon tavanı korunur)
+- [x] Oyuncu ekonomik kilide açıklamasız düşmüyor. (yetersiz kaynak, nüfus dolu ve üretim çıkışı engeli için görünür mesajlar)
 
 ---
 

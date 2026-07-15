@@ -7,12 +7,15 @@ import type { WorkerConstructionSystem } from "../units/workerConstructionSystem
 import type { ResourceWallet } from "../economy/resourceWallet";
 import type { EconomyProductionSystem } from "../economy/economyProductionSystem";
 import type { PopulationSystem } from "../economy/populationSystem";
+import type { ResourceChange } from "../economy/resourceWallet";
 
 const MAX_DAMAGE_LINES = 6;
+const MAX_RESOURCE_LINES = 8;
 
 export class RtsDebugOverlay {
   private readonly root = document.createElement("pre");
   private readonly damageLines: string[] = [];
+  private readonly resourceLines: string[] = [];
 
   constructor() {
     this.root.className = "rts-debug-overlay";
@@ -24,6 +27,13 @@ export class RtsDebugOverlay {
     const target = "id" in hit.target ? `birim#${hit.target.id}` : `${hit.target.owner} merkez`;
     this.damageLines.unshift(`-${hit.change.applied}  birim#${hit.attacker.id} -> ${target}`);
     this.damageLines.length = Math.min(this.damageLines.length, MAX_DAMAGE_LINES);
+  }
+
+  recordResourceChange(change: ResourceChange): void {
+    if (change.kind === "reset") return;
+    const sign = change.delta > 0 ? "+" : "";
+    this.resourceLines.unshift(`${change.kind}: ${change.resourceId} ${sign}${change.delta}`);
+    this.resourceLines.length = Math.min(this.resourceLines.length, MAX_RESOURCE_LINES);
   }
 
   update(
@@ -48,7 +58,10 @@ export class RtsDebugOverlay {
           : unit.moveTarget
             ? "hareket"
             : "boşta";
-      const workerState = unit.role === "worker" ? ` ${workers.stateFor(unit)}` : "";
+      const economyState = unit.role === "worker" ? production?.stateFor(unit) : undefined;
+      const workerState = unit.role === "worker"
+        ? ` ${economyState && economyState !== "idle" ? economyState : workers.stateFor(unit)}`
+        : "";
       lines.push(
         `#${unit.id} ${unit.owner}/${unit.role} hp ${unit.health.current}/${unit.health.max} ${order}${workerState}`,
       );
@@ -63,9 +76,10 @@ export class RtsDebugOverlay {
     lines.push(`nüfus: ${populationState.used}/${populationState.capacity} (mevcut ${populationState.current})`);
     for (const building of production?.snapshots() ?? []) {
       lines.push(
-        `${building.structureLabel}: ${building.workingWorkers}/${building.workerCapacity} işçi · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · ${building.status}`,
+        `${building.structureLabel}: ${building.assignedWorkers}/${building.workerCapacity} işçi (${building.workingWorkers} çalışıyor) · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · tick +${building.lastProductionTick.toFixed(2)} · ${building.status}`,
       );
     }
+    lines.push("kaynak hareketleri:", ...(this.resourceLines.length ? this.resourceLines : ["- yok"]));
     this.root.textContent = lines.join("\n");
   }
 

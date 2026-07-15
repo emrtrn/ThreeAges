@@ -21,8 +21,11 @@ export interface EconomyBuildingSnapshot {
   readonly workingWorkers: number;
   readonly workerCapacity: number;
   readonly perWorkerPerMinute: number;
+  readonly productionPerMinute: number;
   readonly localBuffer: number;
   readonly localBufferCapacity: number;
+  readonly lastProductionTick: number;
+  readonly totalProduced: number;
   readonly status: EconomyProductionStatus;
 }
 
@@ -36,6 +39,8 @@ interface ProducerRecord {
   readonly structure: PlacedStructure;
   readonly assignments: Map<number, WorkerAssignment>;
   localBuffer: number;
+  lastProductionTick: number;
+  totalProduced: number;
   status: EconomyProductionStatus;
 }
 
@@ -69,6 +74,13 @@ export class EconomyProductionSystem {
     return this.assignmentByWorker.get(worker.id)?.assignments.get(worker.id)?.state ?? "idle";
   }
 
+  /** Current output rate, including only workers who reached their work point. */
+  productionPerMinute(resourceId: string): number {
+    return this.snapshots()
+      .filter((producer) => producer.resourceId === resourceId)
+      .reduce((total, producer) => total + producer.productionPerMinute, 0);
+  }
+
   /** Stable snapshots for debug/UI; the local buffer is not globally spendable yet. */
   snapshots(): readonly EconomyBuildingSnapshot[] {
     return [...this.producers.values()].map((producer) => {
@@ -84,8 +96,11 @@ export class EconomyProductionSystem {
         workingWorkers,
         workerCapacity: economy.workerCapacity,
         perWorkerPerMinute: economy.perWorkerPerMinute,
+        productionPerMinute: producer.status === "producing" ? workingWorkers * economy.perWorkerPerMinute : 0,
         localBuffer: producer.localBuffer,
         localBufferCapacity: economy.localBufferCapacity,
+        lastProductionTick: producer.lastProductionTick,
+        totalProduced: producer.totalProduced,
         status: producer.status,
       };
     });
@@ -111,6 +126,8 @@ export class EconomyProductionSystem {
         structure,
         assignments: new Map(),
         localBuffer: 0,
+        lastProductionTick: 0,
+        totalProduced: 0,
         status: "awaiting-workers",
       });
     }
@@ -119,6 +136,7 @@ export class EconomyProductionSystem {
   private updateProducer(producer: ProducerRecord, deltaSeconds: number): void {
     const economy = producer.structure.stats.economy;
     if (!economy) return;
+    producer.lastProductionTick = 0;
     this.dropInvalidAssignments(producer);
     if (producer.localBuffer >= economy.localBufferCapacity) {
       producer.localBuffer = economy.localBufferCapacity;
@@ -140,7 +158,9 @@ export class EconomyProductionSystem {
       return;
     }
     const produced = (workingWorkers * economy.perWorkerPerMinute * deltaSeconds) / 60;
-    producer.localBuffer = Math.min(economy.localBufferCapacity, producer.localBuffer + produced);
+    producer.lastProductionTick = Math.min(produced, economy.localBufferCapacity - producer.localBuffer);
+    producer.localBuffer += producer.lastProductionTick;
+    producer.totalProduced += producer.lastProductionTick;
     producer.status = producer.localBuffer >= economy.localBufferCapacity ? "buffer-full" : "producing";
   }
 
