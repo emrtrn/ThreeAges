@@ -684,11 +684,12 @@ body.editor-mode #debug-stats {
 
 .editor-shell {
   --content-drawer-height: clamp(232px, 34vh, 420px);
+  --content-drawer-collapsed-h: 42px;
 }
 
 .editor-outliner {
   left: 0;
-  bottom: 28px;
+  bottom: var(--content-drawer-collapsed-h);
   width: 260px;
   z-index: 40;
   border-right-style: solid;
@@ -698,7 +699,7 @@ body.editor-mode #debug-stats {
 
 .editor-details {
   right: 0;
-  bottom: 28px;
+  bottom: 0;
   width: 410px;
   z-index: 40;
   padding: 0;
@@ -2187,65 +2188,41 @@ body.editor-mode #debug-stats {
   color: #c8d0d4;
 }
 
+/* The former bottom status bar is gone: the drawer's own header is the sole
+   dock/toggle. This element is kept (hidden) only so setStatus() and the
+   `editor-status` testid contract keep working; nothing renders it. */
 .editor-status {
-  position: absolute;
-  inset: auto 0 0 0;
-  z-index: 60;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-  background: rgba(17, 20, 23, 0.96);
-  border-top: 1px solid var(--forge-border);
-  color: #cbd3d7;
-  pointer-events: auto;
-}
-
-.editor-status [data-status] {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.editor-shell .content-drawer-toggle {
-  min-height: 22px;
-  border-radius: 4px;
-  padding: 0 9px;
-  font-size: 12px;
-}
-
-/* When the drawer is open its own header owns collapse, so the footer entry
-   point is redundant and hides (no stacked "second bottom bar"). */
-.editor-shell.content-drawer-open .content-drawer-toggle {
   display: none;
 }
 
+/* The drawer stays docked at the bottom and collapses to just its header
+   strip; that header is the toggle. Height (not a slide) animates open/close so
+   the collapsed strip is always present and clickable (no separate footer). */
 .editor-content-drawer {
   position: absolute;
   left: 0;
   right: 410px;
-  bottom: 28px;
+  bottom: 0;
   z-index: 30;
-  height: var(--content-drawer-height);
+  height: var(--content-drawer-collapsed-h);
   display: grid;
-  grid-template-rows: minmax(42px, auto) minmax(0, 1fr);
+  grid-template-rows: var(--content-drawer-collapsed-h) minmax(0, 1fr);
+  overflow: hidden;
   color: var(--forge-text);
   background: rgba(22, 25, 28, 0.97);
   border-top: 1px solid var(--forge-border-mid);
   box-shadow: 0 -12px 28px rgba(0, 0, 0, 0.38);
   pointer-events: none;
-  transform: translateY(calc(100% + 1px));
-  transition: transform 140ms ease;
+  transition: height 140ms ease;
+}
+
+/* The header strip is interactive even while collapsed so its title toggles. */
+.content-drawer-top {
+  pointer-events: auto;
 }
 
 .editor-content-drawer.open {
   pointer-events: auto;
-  transform: translateY(0);
-}
-
-.editor-content-drawer.is-tall {
   height: var(--content-drawer-height);
 }
 
@@ -2254,7 +2231,7 @@ body.editor-mode #debug-stats {
 }
 
 .editor-shell.content-drawer-open .editor-outliner {
-  bottom: calc(28px + var(--content-drawer-height));
+  bottom: calc(var(--content-drawer-collapsed-h) + var(--content-drawer-height));
 }
 
 .content-drawer-top {
@@ -2345,6 +2322,20 @@ body.editor-mode #debug-stats {
 .content-drawer-chevron svg {
   width: 12px;
   height: 12px;
+  transition: transform 140ms ease;
+}
+
+/* Caret points up while collapsed ("expand up"), flips down when open. */
+.editor-shell.content-drawer-open .content-drawer-chevron svg {
+  transform: rotate(180deg);
+}
+
+/* Collapsed strip shows only the title; the toolbar appears once open. */
+.editor-shell:not(.content-drawer-open) .content-primary-actions,
+.editor-shell:not(.content-drawer-open) .content-navigation,
+.editor-shell:not(.content-drawer-open) .content-search-wrap,
+.editor-shell:not(.content-drawer-open) .content-drawer-actions {
+  display: none;
 }
 
 .content-path,
@@ -2926,20 +2917,20 @@ body.editor-mode #debug-stats {
 
   .editor-panel {
     top: 158px;
-    bottom: 28px;
+    bottom: var(--content-drawer-collapsed-h);
     width: 50vw;
     padding: 8px;
   }
 
   .editor-outliner {
     left: 0;
-    bottom: 28px;
+    bottom: var(--content-drawer-collapsed-h);
     width: 50vw;
   }
 
   .editor-details {
     right: 0;
-    bottom: 28px;
+    bottom: 0;
     width: 50vw;
   }
 
@@ -2958,15 +2949,10 @@ body.editor-mode #debug-stats {
 
   .editor-content-drawer {
     right: 50vw;
-    height: var(--content-drawer-height);
   }
 
   .content-drawer-top {
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
-  }
-
-  .content-drawer-title {
-    display: none;
+    grid-template-columns: auto minmax(0, 1fr) auto auto auto;
   }
 
   .content-filters {
@@ -6231,7 +6217,7 @@ body.editor-mode #debug-stats {
     position: absolute;
     top: calc(var(--editor-gap) + var(--editor-topbar-height) + var(--editor-gap));
     right: calc(var(--editor-details-width) + (var(--editor-gap) * 2));
-    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 2));
+    bottom: calc(var(--content-drawer-collapsed-h) + (var(--editor-gap) * 2));
     left: calc(var(--editor-outliner-width) + (var(--editor-gap) * 2));
     z-index: 1;
     pointer-events: none;
@@ -6241,7 +6227,7 @@ body.editor-mode #debug-stats {
   }
 
   .editor-shell.content-drawer-open .editor-viewport-frame {
-    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 3) + var(--content-drawer-height));
+    bottom: calc(var(--content-drawer-height) + (var(--editor-gap) * 2));
   }
 
   .editor-topbar {
@@ -6261,7 +6247,7 @@ body.editor-mode #debug-stats {
 
   .editor-panel {
     top: calc(var(--editor-gap) + var(--editor-topbar-height) + var(--editor-gap));
-    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 2));
+    bottom: calc(var(--content-drawer-collapsed-h) + (var(--editor-gap) * 2));
     border: 1px solid #2d3740;
     border-radius: 4px;
     background: linear-gradient(180deg, #171e24 0%, #12181e 100%);
@@ -6282,33 +6268,21 @@ body.editor-mode #debug-stats {
     background: linear-gradient(180deg, #171e24 0%, #111820 100%);
   }
 
-  .editor-status {
-    left: var(--editor-gap);
-    right: calc(var(--editor-details-width) + (var(--editor-gap) * 2));
-    bottom: var(--editor-gap);
-    height: var(--editor-status-height);
-    border: 1px solid #2a333b;
-    border-radius: 4px;
-    background: #11171c;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.22);
-  }
-
   .editor-content-drawer {
     left: var(--editor-gap);
     right: calc(var(--editor-details-width) + (var(--editor-gap) * 2));
-    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 2));
-    height: var(--content-drawer-height);
+    bottom: var(--editor-gap);
+    height: var(--content-drawer-collapsed-h);
     border: 1px solid #2d3740;
     border-radius: 4px;
     background: linear-gradient(180deg, #171e24 0%, #11171c 100%);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32);
-    transform: translateY(calc(100% + var(--editor-gap)));
   }
 
   .editor-shell.content-drawer-tall { --content-drawer-height: clamp(360px, 58vh, 680px); }
 
   .editor-shell.content-drawer-open .editor-outliner {
-    bottom: calc(var(--editor-status-height) + (var(--editor-gap) * 3) + var(--content-drawer-height));
+    bottom: calc(var(--content-drawer-height) + (var(--editor-gap) * 2));
   }
 
   .inspector-tabs,

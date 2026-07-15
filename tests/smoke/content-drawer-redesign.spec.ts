@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 test("Content Drawer exposes toolbar, breadcrumb, history, and view controls", async ({ page }) => {
   await page.goto("/?editor");
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("button", { name: "Content Drawer" }).click();
+  await page.locator("[data-content-toggle]").click();
 
   const drawer = page.locator("[data-content-drawer]");
   await expect(drawer).toHaveClass(/open/);
@@ -59,10 +59,14 @@ test("Content Drawer exposes toolbar, breadcrumb, history, and view controls", a
   expect(drawerBox!.x + drawerBox!.width).toBeLessThanOrEqual(detailsBox!.x + 1);
   expect(outlinerBox!.y + outlinerBox!.height).toBeLessThanOrEqual(drawerBox!.y + 1);
 
-  // The footer reopen entry is hidden while open (no stacked second bottom bar);
-  // the drawer's own header owns collapse.
-  await expect(page.locator(".content-drawer-toggle")).toBeHidden();
-  await drawer.locator("[data-content-collapse]").click();
+  // The drawer's own header title is the sole toggle (no separate footer bar).
+  // Collapsing leaves only the header strip docked and clickable.
+  const toggle = drawer.locator("[data-content-toggle]");
+  await toggle.click();
   await expect(page.getByTestId("forge-editor")).not.toHaveClass(/content-drawer-open/);
-  await expect(page.locator(".content-drawer-toggle")).toBeVisible();
+  await expect(toggle).toBeVisible();
+  await expect(drawer.locator("[data-content-add]")).toBeHidden();
+  // Clicking the docked header strip reopens it.
+  await toggle.click();
+  await expect(drawer).toHaveClass(/open/);
 });
