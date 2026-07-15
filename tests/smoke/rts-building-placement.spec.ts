@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("RTS Phase 3 build palette exposes economy structures without runtime errors", async ({ page }) => {
+test("RTS Phase 4 build palette exposes territory-gated economy structures without runtime errors", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
@@ -18,7 +18,7 @@ test("RTS Phase 3 build palette exposes economy structures without runtime error
   await expect(page.locator(".rts-build-status")).toHaveText("Haritada konum seçin.");
 
   await page.locator("#game-canvas").hover({ position: { x: 640, y: 420 } });
-  await expect(page.locator(".rts-build-status")).toContainText(/konum|çakışıyor/);
+  await expect(page.locator(".rts-build-status")).toContainText(/konum|çakışıyor|kontrol/);
 
   await page.getByRole("button", { name: "İptal", exact: true }).click();
   await page.getByRole("button", { name: "Tarla", exact: true }).click();

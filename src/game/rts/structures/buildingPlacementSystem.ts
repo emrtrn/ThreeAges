@@ -20,6 +20,7 @@ import {
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalance, BuildingBalanceStats } from "../../data/gameDataTypes";
+import type { TerritoryControlSystem } from "../territory/territoryControlSystem";
 import { ResourceWallet, type ResourceReservation } from "../economy/resourceWallet";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import {
@@ -56,6 +57,7 @@ export class BuildingPlacementSystem {
     private readonly wallet: ResourceWallet,
     private readonly navigation: RtsNavigation,
     private readonly occupiedBlockers: () => readonly NavBlocker[],
+    private readonly territory: TerritoryControlSystem,
     private readonly onStructurePlaced: (structure: PlacedStructure) => void,
     private readonly onStructureCancelled: (structure: PlacedStructure) => void,
   ) {
@@ -97,6 +99,7 @@ export class BuildingPlacementSystem {
       point.x,
       point.z,
       this.occupiedBlockers(),
+      { owner: "player", ownsFootprint: this.territory.ownsFootprint.bind(this.territory) },
     );
     this.root.position.set(this.result.x, 0, this.result.z);
     this.setGhostValid(this.result.valid);

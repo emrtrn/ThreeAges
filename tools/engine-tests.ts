@@ -79,6 +79,7 @@ import { ConstructionComponent } from "../src/game/rts/structures/constructionCo
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { WorkerProductionSystem } from "../src/game/rts/structures/workerProductionSystem";
+import { TerritoryControlSystem } from "../src/game/rts/territory/territoryControlSystem";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -28105,6 +28106,40 @@ check("RTS placement snap rejects occupied footprints and refreshes navigation b
   assert.equal(structures.cancelLatest(), site, "latest unbuilt foundation can be cancelled");
   assert.equal(structures.navigationBlockers().length, 0);
   structures.clear();
+});
+
+check("RTS territory stores centre ownership per grid cell and gates normal building placement", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const territory = new TerritoryControlSystem(() => [
+    { owner: "player" as const, x: 0, z: 0, radius: 10 },
+    { owner: "enemy" as const, x: 30, z: 0, radius: 10 },
+  ]);
+  territory.refresh();
+
+  assert.equal(territory.ownerAt(4.4, 0), "player");
+  assert.equal(territory.ownerAt(30, 0), "enemy");
+  assert.equal(territory.ownerAt(18, 0), "neutral");
+  assert.equal(territory.ownsFootprint("player", 6, 0, house.footprint.width, house.footprint.depth), true);
+  assert.equal(territory.ownsFootprint("player", 10, 0, house.footprint.width, house.footprint.depth), false);
+  assert.ok(territory.root.children.length > 0, "controlled cells render a territory overlay");
+
+  const permitted = validateBuildingPlacement(house, 6, 0, [], {
+    owner: "player",
+    ownsFootprint: territory.ownsFootprint.bind(territory),
+  });
+  assert.equal(permitted.valid, true);
+  const denied = validateBuildingPlacement(house, 10, 0, [], {
+    owner: "player",
+    ownsFootprint: territory.ownsFootprint.bind(territory),
+  });
+  assert.deepEqual({ valid: denied.valid, reason: denied.reason }, {
+    valid: false,
+    reason: "outside-control",
+  });
+  territory.dispose();
 });
 
 check("RTS worker reaches a foundation, builds it, and never enters combat", () => {

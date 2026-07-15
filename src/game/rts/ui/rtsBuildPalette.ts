@@ -102,6 +102,8 @@ export class RtsBuildPalette {
     }
     this.status.textContent = state.result.reason === "outside-map"
       ? "Geçersiz konum: harita sınırı dışında."
+      : state.result.reason === "outside-control"
+        ? "Geçersiz konum: bu alanın kontrolü sizde değil."
       : state.result.reason === "insufficient-resources"
         ? "Kaynak yetersiz: inşaat maliyeti ayrılmadı."
         : "Geçersiz konum: engel veya yapı ile çakışıyor.";

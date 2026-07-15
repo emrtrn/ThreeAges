@@ -52,6 +52,10 @@ import { PopulationSystem } from "./economy/populationSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem } from "./structures/workerProductionSystem";
+import {
+  COMMAND_CENTER_CONTROL_RADIUS,
+  TerritoryControlSystem,
+} from "./territory/territoryControlSystem";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
@@ -84,6 +88,12 @@ export class RtsApp {
   private readonly units = new UnitSystem();
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
+  private readonly territory = new TerritoryControlSystem(() => this.centers.all().map((center) => ({
+    owner: center.owner,
+    x: center.position.x,
+    z: center.position.z,
+    radius: COMMAND_CENTER_CONTROL_RADIUS,
+  })));
   private readonly wallet: ResourceWallet;
   private readonly population: PopulationSystem;
   private readonly workerConstruction: WorkerConstructionSystem;
@@ -172,6 +182,7 @@ export class RtsApp {
       this.wallet,
       this.navigation,
       () => this.navigationBlockers(),
+      this.territory,
       (structure) => this.assignWorkerToConstruction(structure),
       (structure) => this.workerConstruction.cancelStructure(structure),
     );
@@ -260,6 +271,7 @@ export class RtsApp {
     this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
     this.placement.dispose();
+    this.territory.dispose();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
     this.workerProduction.reset();
@@ -285,10 +297,12 @@ export class RtsApp {
     this.scene.add(createRtsGround());
     this.scene.add(createRtsMapBlockout());
     this.spawnCenters();
+    this.territory.refresh();
     this.refreshNavigationBlockers();
     this.scene.add(this.centers.root);
     this.scene.add(this.structures.root);
     this.scene.add(this.placement.root);
+    this.scene.add(this.territory.root);
     this.scene.add(this.units.root);
     this.scene.add(this.commandMarkers.root);
   }
@@ -402,6 +416,7 @@ export class RtsApp {
     this.commandMarkers.clear();
     this.match.reset();
     this.spawnCenters();
+    this.territory.refresh();
     this.refreshNavigationBlockers();
     this.spawnTestUnits();
     this.placement.cancel();

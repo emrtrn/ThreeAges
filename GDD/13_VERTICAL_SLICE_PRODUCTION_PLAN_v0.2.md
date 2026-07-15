@@ -881,11 +881,11 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 
 ### Kontrol alanı
 
-- [ ] Merkez kontrol alanı oluştur.
-- [ ] Grid hücrelerinde sahiplik tut.
-- [ ] Yapı placement kontrol alanına bağla.
-- [ ] Kontrol overlay’i ekle.
-- [ ] Düşman alanına normal yapı kurmayı engelle.
+- [x] Merkez kontrol alanı oluştur. (`TerritoryControlSystem`, Merkez başına 18 dünya birimi yarıçap)
+- [x] Grid hücrelerinde sahiplik tut. (2 birimlik placement gridinde `player` / `enemy` / `neutral`)
+- [x] Yapı placement kontrol alanına bağla. (yapı footprint’inin tüm hücreleri oyuncuya ait olmalı)
+- [x] Kontrol overlay’i ekle. (hafif mavi/kırmızı takım alanı zemin overlay’i)
+- [x] Düşman alanına normal yapı kurmayı engelle. (`outside-control` yerleştirme nedeni ve UI açıklaması)
 
 ### Karakol
 
@@ -2511,44 +2511,44 @@ Vertical slice tamamlanmıştır yalnızca:
 
 ### Temel
 
-- [ ] Build ve test altyapısı
-- [ ] Veri loader
-- [ ] Feature flag
-- [ ] Debug paneli
+- [x] Build ve test altyapısı (`build:verify`, `test:engine`, hedefli Playwright smoke)
+- [x] Veri loader (`gameDataLoader` + JSON doğrulama)
+- [x] Feature flag (`runtimeConfig` / `featureFlags`)
+- [x] Debug paneli (`?rts&debug`: maç, ekonomi ve kaynak hareketleri)
 
 ### Kontrol
 
-- [ ] Kamera
-- [ ] Tekli seçim
-- [ ] Kutu seçimi
-- [ ] Hareket
-- [ ] Saldırı
-- [ ] Dur
+- [x] Kamera (üstten eğimli RTS kamera, WASD ve zoom)
+- [x] Tekli seçim (birim raycast seçimi)
+- [x] Kutu seçimi (marquee)
+- [x] Hareket (sağ tık + grid navigasyonu)
+- [x] Saldırı (sağ tık hedef emri + yakın dövüş)
+- [x] Dur (`X` ile seçili birimleri durdur)
 
 ### Harita
 
-- [ ] Küçük blockout
-- [ ] İki rota
-- [ ] Dış kaynak alanı
-- [ ] Nav testi
+- [x] Küçük blockout (`RTS_BLOCKOUT_MAP`)
+- [x] İki rota (merkez sırtının doğu/batı flankları)
+- [x] Dış kaynak alanı (`externalResource` placeholder alanı)
+- [x] Nav testi (iki flank, yapı engeli ve güvenli çıkış engine testleri)
 
 ### Yerleşim
 
-- [ ] İşçi
-- [ ] Yapı placement
-- [ ] İnşaat
-- [ ] Merkez
-- [ ] Ev
-- [ ] Depo
-- [ ] Kışla
+- [x] İşçi (inşa, üretim ve boşta durumları)
+- [x] Yapı placement (ghost, snap, çakışma ve maliyet kontrolü)
+- [x] İnşaat (işçi ataması, ilerleme ve iptal/iade)
+- [x] Merkez (sahiplik, sağlık, zafer hedefi ve işçi üretimi)
+- [x] Ev (yerleştirme ve +5 nüfus kapasitesi)
+- [x] Depo (yerleştirilebilir yapı tanımı; graph düğümü rolü Faz 4)
+- [x] Kışla (yerleştirme, inşa ve Muhafız üretimi)
 
 ### Ekonomi
 
-- [ ] Yiyecek
-- [ ] Odun
-- [ ] İşçi üretimi
-- [ ] Nüfus
-- [ ] Yerel tampon
+- [x] Yiyecek (Tarla, işçi üretimi ve yerel tampon)
+- [x] Odun (Oduncu Kampı, işçi üretimi ve yerel tampon)
+- [x] İşçi üretimi (Merkez kuyruğu, 50 yiyecek maliyeti)
+- [x] Nüfus (20 taban kapasite, Ev +5, kuyruk rezervasyonu)
+- [x] Yerel tampon (yapı başına kapasite, dolunca üretim durur)
 
 ### Lojistik
 
@@ -2561,11 +2561,11 @@ Vertical slice tamamlanmıştır yalnızca:
 
 ### Savaş ve AI
 
-- [ ] Muhafız
-- [ ] Merkez yıkımı
+- [x] Muhafız (Kışla kuyruğu, maliyet/nüfus ve güvenli çıkış)
+- [x] Merkez yıkımı (düşman merkezinin yıkımı zaferi tetikler)
 - [ ] AI-1
 - [ ] Zafer ve yenilgi
-- [ ] Restart
+- [x] Restart (maç sahipli state, birimler, merkezler ve rezervasyonlar sıfırlanır)
 
 ### Kapı
 

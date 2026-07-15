@@ -1,12 +1,13 @@
 /** Pure grid snapping and footprint validation for Phase 2 building placement. */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalanceStats } from "../../data/gameDataTypes";
+import type { UnitOwner } from "../units/unit";
 import { RTS_WORLD_HALF_EXTENT } from "../world/rtsGround";
 
 /** Confirmed Phase 2 placement-grid measure, in world units. */
 export const RTS_PLACEMENT_GRID_SIZE = 2;
 
-export type PlacementFailure = "outside-map" | "blocked" | "insufficient-resources";
+export type PlacementFailure = "outside-map" | "outside-control" | "blocked" | "insufficient-resources";
 
 export interface PlacementResult {
   readonly x: number;
@@ -46,6 +47,7 @@ export function validateBuildingPlacement(
   x: number,
   z: number,
   occupied: readonly NavBlocker[],
+  control?: { readonly owner: UnitOwner; readonly ownsFootprint: (owner: UnitOwner, x: number, z: number, width: number, depth: number) => boolean },
 ): PlacementResult {
   const snapped = snapToPlacementGrid(x, z);
   const candidate = buildingFootprintBlocker(stats, snapped.x, snapped.z);
@@ -57,6 +59,15 @@ export function validateBuildingPlacement(
   }
   if (occupied.some((blocker) => footprintsOverlap(candidate, blocker))) {
     return { ...snapped, valid: false, reason: "blocked" };
+  }
+  if (control && !control.ownsFootprint(
+    control.owner,
+    snapped.x,
+    snapped.z,
+    stats.footprint.width,
+    stats.footprint.depth,
+  )) {
+    return { ...snapped, valid: false, reason: "outside-control" };
   }
   return { ...snapped, valid: true, reason: null };
 }
