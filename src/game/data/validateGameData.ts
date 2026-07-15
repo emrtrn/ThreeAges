@@ -13,6 +13,7 @@ import type {
   GamePreset,
   GameVersion,
   StartingResources,
+  UnitBalance,
 } from "./gameDataTypes";
 
 /** Thrown for any malformed / mis-referenced game-data file. */
@@ -160,4 +161,26 @@ export function validateGamePreset(
     mapState: requireStringAllowEmpty(obj, "mapState", where),
     aiProfile: aiProfileRaw as AiProfile,
   };
+}
+
+/** Validate `balance/units.json` without tying balance data to render code. */
+export function validateUnitBalance(value: unknown): UnitBalance {
+  const where = "balance/units.json";
+  const obj = asObject(value, where);
+  const units: Record<string, UnitBalance["string"]> = {};
+  for (const [id, raw] of Object.entries(obj)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(id)) {
+      throw new GameDataError(`${where}: invalid unit id "${id}"`);
+    }
+    const stats = asObject(raw, `${where}."${id}"`);
+    const maxHealth = requireFiniteNumber(stats, "maxHealth", `${where}."${id}"`);
+    if (maxHealth <= 0) {
+      throw new GameDataError(`${where}."${id}".maxHealth: must be > 0`);
+    }
+    units[id] = { maxHealth };
+  }
+  if (Object.keys(units).length === 0) {
+    throw new GameDataError(`${where}: must define at least one unit`);
+  }
+  return units;
 }

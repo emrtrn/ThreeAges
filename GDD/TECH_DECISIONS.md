@@ -113,8 +113,9 @@ Kök `CLAUDE.md`'den kilit gerçekler:
 SL-002`):** her madde bir **geçici varsayılan** ile kaydedildi; kesin karar
 ilgili faz geldiğinde teyit edilir. Faz 0 kod işi bu varsayılanlarla bloklanmaz.
 
-- [~] Birim navigasyon: **grid-tabanlı pathfinding** (başlangıç varsayılanı;
-  `05 §67` yol grafiğinden ayrı). Teyit: Faz 1–2.
+- [x] Birim navigasyon: **grid-tabanlı pathfinding** (`src/game/rts/navigation/rtsNavigation.ts`;
+  cached grid + waypoint takibi, `05 §67` yol grafiğinden ayrı). Faz 1’de teyit;
+  yapı engelleri Faz 2’de bağlanacak.
 - [~] Yapı placement grid ve yol grid ölçüsü: **provisional placeholder**; kesin
   hücre boyutu Faz 2'de blockout ile belirlenir (`04 §22`, `05 §21`).
 - [~] Kamera: **hafif perspektif** (`10 §4` başlangıç tercihi). Teyit: Faz 1.

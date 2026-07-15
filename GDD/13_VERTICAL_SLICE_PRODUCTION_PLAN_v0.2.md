@@ -651,9 +651,9 @@ Boş test sahnesinde oyuncunun kamera, seçim, hareket ve basit saldırı ile bi
 ### Test birimi
 
 - [x] Muhafız placeholder oluştur. (`src/game/rts/units/unit.ts`; kapsül + takım rengi)
-- [ ] Sağlık bileşeni ekle.
+- [x] Sağlık bileşeni ekle. (`HealthComponent`: maksimum/mevcut/oran, sınırlandırılmış hasar ve iyileşme; ölüm sonraki dilimde)
 - [x] Sahiplik ekle. (`Unit.owner`: `player` / `enemy`; seçim filtresi)
-- [ ] Basit pathfinding ekle.
+- [x] Basit pathfinding ekle. (`RtsNavigation`: cached grid rota + waypoint takibi; yapı engelleri Faz 2’de bağlanacak)
 - [ ] Basit yakın dövüş saldırısı ekle.
 - [ ] Ölüm ve seçimden çıkarma davranışı ekle.
 

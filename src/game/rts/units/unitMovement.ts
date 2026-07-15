@@ -1,11 +1,9 @@
 /**
  * RTS unit movement — Vertical Slice Plan v0.2 §21 ("Sağ tık hareket").
  *
- * A minimal straight-line stepper: each unit with a move target advances toward
- * it on the ground plane, faces its heading, and clears the target on arrival.
- * Obstacle-aware pathfinding and crowd separation are deliberately a later small
- * step — this proves the select → command → move loop end to end first (plan
- * §11 "En küçük çalışan uygulama").
+ * Follows planned ground waypoints (or a legacy direct target) on the ground
+ * plane, faces the heading, and clears completed orders. Global grid planning
+ * lives in `rtsNavigation`; local avoidance remains a later small step.
  */
 import { Vector3 } from "three";
 
@@ -22,14 +20,15 @@ export function updateUnitMovement(units: readonly Unit[], dt: number): void {
   for (const unit of units) {
     // An explicit attack order follows its target's live position. Damage and
     // attack range are deliberately owned by the later melee-combat step.
-    const target = unit.attackTarget?.position ?? unit.moveTarget;
+    const target = unit.attackTarget?.position ?? unit.pathTarget ?? unit.moveTarget;
     if (!target) continue;
 
     const pos = unit.position;
     scratchDir.set(target.x - pos.x, 0, target.z - pos.z);
     const dist = scratchDir.length();
     if (dist <= ARRIVAL_RADIUS) {
-      unit.moveTarget = null;
+      if (!unit.attackTarget && unit.pathTarget) unit.advancePath();
+      else if (!unit.attackTarget) unit.moveTarget = null;
       continue;
     }
 

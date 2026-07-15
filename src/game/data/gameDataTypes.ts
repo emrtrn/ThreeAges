@@ -46,3 +46,12 @@ export interface GamePreset {
   /** AI opponent profile. */
   aiProfile: AiProfile;
 }
+
+/** Balance stats shared by a unit definition (GDD 12 §5). */
+export interface UnitBalanceStats {
+  /** Maximum hit points; must be positive. */
+  maxHealth: number;
+}
+
+/** `public/game-data/balance/units.json` — keyed by stable unit id. */
+export type UnitBalance = Readonly<Record<string, UnitBalanceStats>>;

@@ -57,9 +57,13 @@ import {
   GameDataError,
   validateGamePreset,
   validateGameVersion,
+  validateUnitBalance,
 } from "../src/game/data/validateGameData";
 import { CommandSystem } from "../src/game/rts/commands/commandSystem";
 import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
+import { HealthComponent } from "../src/game/rts/units/health";
+import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
+import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import type { ActorSpawnRequest } from "../engine/behavior/behaviorSubsystem";
 import {
@@ -27714,8 +27718,8 @@ check("game-data validator rejects a mismatched id and missing field", () => {
 
 check("RTS contextual right-click assigns an enemy attack target", () => {
   const units = new UnitSystem();
-  const player = units.spawn("player", 0, 3);
-  const enemy = units.spawn("enemy", 0, 0);
+  const player = units.spawn("player", 0, 3, 100);
+  const enemy = units.spawn("enemy", 0, 0, 100);
   units.root.updateMatrixWorld(true);
 
   const camera = new PerspectiveCamera(60, 1, 0.1, 100);
@@ -27726,7 +27730,14 @@ check("RTS contextual right-click assigns an enemy attack target", () => {
   const selection = {
     selected: () => [player],
   } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem;
-  const commands = new CommandSystem(canvas, camera, selection, units, new CommandMarkerSystem());
+  const commands = new CommandSystem(
+    canvas,
+    camera,
+    selection,
+    units,
+    new RtsNavigation(),
+    new CommandMarkerSystem(),
+  );
 
   commands.issueAt(50, 50);
 
@@ -27740,6 +27751,51 @@ check("RTS contextual right-click assigns an enemy attack target", () => {
   assert.equal(player.attackTarget, null);
   assert.equal(enemy.targeted, false);
   assert.equal(player.moveTarget, null);
+});
+
+check("RTS health clamps damage and healing while exposing current/max/ratio", () => {
+  const health = new HealthComponent(100);
+  assert.equal(health.current, 100);
+  assert.equal(health.max, 100);
+  assert.equal(health.ratio, 1);
+  assert.equal(health.depleted, false);
+
+  const hit = health.damage(35);
+  assert.deepEqual(hit, { applied: 35, previous: 100, current: 65, depleted: false });
+  assert.equal(health.ratio, 0.65);
+
+  const lethal = health.damage(100);
+  assert.deepEqual(lethal, { applied: 65, previous: 65, current: 0, depleted: true });
+  assert.equal(health.depleted, true);
+
+  const healed = health.heal(200);
+  assert.deepEqual(healed, { applied: 100, previous: 0, current: 100, depleted: false });
+  assert.throws(() => health.damage(-1), RangeError);
+  assert.throws(() => new HealthComponent(0), RangeError);
+});
+
+check("unit balance validates positive health for stable unit ids", () => {
+  const balance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  assert.equal(balance["guard_placeholder"]?.maxHealth, 100);
+  assert.throws(() => validateUnitBalance({ guard_placeholder: { maxHealth: 0 } }), GameDataError);
+  assert.throws(() => validateUnitBalance({ "Guard Placeholder": { maxHealth: 100 } }), GameDataError);
+});
+
+check("RTS grid navigation routes a unit around a static blocker", () => {
+  const navigation = new RtsNavigation();
+  navigation.setBlockers([{ min: [-1, -1, -1], max: [1, 3, 1] }]);
+  const path = navigation.plan(new Vector3(-5, 0, 0), new Vector3(5, 0, 0));
+  assert.ok(path && path.length > 2, "path detours instead of crossing the blocker");
+  assert.ok(path.some((point) => Math.abs(point.z) > 1.5), "path leaves the blocked corridor");
+
+  const units = new UnitSystem();
+  const walker = units.spawn("player", -5, 0, 100);
+  walker.setMovePath(path);
+  for (let i = 0; i < 300; i += 1) updateUnitMovement([walker], 1 / 60);
+  assert.ok(walker.position.distanceTo(new Vector3(5, 0, 0)) < 0.16, "follows every waypoint to goal");
+  assert.equal(walker.pathTarget, null, "clears the path after reaching the goal");
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

@@ -21,8 +21,8 @@ export class UnitSystem {
     this.root.name = "rts-units";
   }
 
-  spawn(owner: UnitOwner, x: number, z: number): Unit {
-    const unit = new Unit(owner, x, z);
+  spawn(owner: UnitOwner, x: number, z: number, maxHealth: number): Unit {
+    const unit = new Unit(owner, x, z, maxHealth);
     this.units.push(unit);
     // The capsule body is the first child; index it for raycast resolution.
     const body = unit.object.children[0];

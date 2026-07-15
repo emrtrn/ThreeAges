@@ -12,6 +12,7 @@ import type { CommandMarkerSystem } from "./commandMarker";
 import { formationOffsets } from "../units/unitMovement";
 import type { Unit } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
+import type { RtsNavigation } from "../navigation/rtsNavigation";
 
 /** The y = 0 walkable ground the runtime commands against. */
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
@@ -26,6 +27,7 @@ export class CommandSystem {
     private readonly camera: PerspectiveCamera,
     private readonly selection: SelectionSystem,
     private readonly units: UnitSystem,
+    private readonly navigation: RtsNavigation,
     private readonly markers: CommandMarkerSystem,
   ) {}
 
@@ -47,7 +49,10 @@ export class CommandSystem {
     const offsets = formationOffsets(selected.length);
     selected.forEach((unit, i) => {
       const offset = offsets[i] ?? { x: 0, z: 0 };
-      unit.setMoveTarget(point.x + offset.x, point.z + offset.z);
+      const destination = new Vector3(point.x + offset.x, 0, point.z + offset.z);
+      const path = this.navigation.plan(unit.position, destination);
+      if (path) unit.setMovePath(path);
+      else unit.stop();
     });
     this.markers.spawn(point);
   }

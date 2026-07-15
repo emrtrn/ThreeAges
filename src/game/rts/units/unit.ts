@@ -17,6 +17,7 @@ import {
   RingGeometry,
   Vector3,
 } from "three";
+import { HealthComponent } from "./health";
 
 /** Which army a unit belongs to. Ürün A is one player vs. one AI (plan §4.2). */
 export type UnitOwner = "player" | "enemy";
@@ -44,22 +45,26 @@ export class Unit {
   readonly object: Group;
   /** Ground speed in world units/s. */
   readonly speed = UNIT_MOVE_SPEED;
+  /** Bounded health state; death/removal is handled by a later combat step. */
+  readonly health: HealthComponent;
   /** Active move destination (y = 0), or null when idle/arrived. */
   moveTarget: Vector3 | null = null;
   /** Enemy explicitly ordered by a contextual right-click, or null. */
   attackTarget: Unit | null = null;
   private readonly ring: Mesh;
   private readonly targetRing: Mesh;
+  private movePath: Vector3[] = [];
   private selectedFlag = false;
   private targeterCount = 0;
 
-  constructor(owner: UnitOwner, x: number, z: number) {
+  constructor(owner: UnitOwner, x: number, z: number, maxHealth: number) {
     this.id = nextUnitId++;
     this.owner = owner;
 
     this.object = new Group();
     this.object.name = `rts-unit-${owner}-${this.id}`;
     this.object.position.set(x, 0, z);
+    this.health = new HealthComponent(maxHealth);
 
     const body = new Mesh(
       new CapsuleGeometry(UNIT_RADIUS, BODY_LENGTH, 6, 12),
@@ -123,13 +128,32 @@ export class Unit {
   /** Order the unit to walk to a ground point (y is ignored). */
   setMoveTarget(x: number, z: number): void {
     this.setAttackTarget(null);
+    this.movePath = [];
     this.moveTarget = new Vector3(x, 0, z);
+  }
+
+  /** Replace the current movement order with a planned ground waypoint path. */
+  setMovePath(points: readonly Vector3[]): void {
+    this.setAttackTarget(null);
+    this.moveTarget = null;
+    this.movePath = points.map((point) => point.clone());
+  }
+
+  /** Current navigation waypoint, or null when not following a planned path. */
+  get pathTarget(): Vector3 | null {
+    return this.movePath[0] ?? null;
+  }
+
+  /** Drop the current waypoint after reaching it. */
+  advancePath(): void {
+    this.movePath.shift();
   }
 
   /** Immediately clear both movement and explicit attack intent. */
   stop(): void {
     this.setAttackTarget(null);
     this.moveTarget = null;
+    this.movePath = [];
   }
 
   /**
@@ -141,6 +165,7 @@ export class Unit {
     if (this.attackTarget) this.attackTarget.setTargetedBy(-1);
     this.attackTarget = target;
     this.moveTarget = null;
+    this.movePath = [];
     if (target) target.setTargetedBy(1);
   }
 

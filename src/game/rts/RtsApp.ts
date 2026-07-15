@@ -22,12 +22,14 @@ import {
 
 import { createSceneRenderer } from "@engine/render-three/renderer";
 import { logger } from "@/game/core/logger";
+import type { UnitBalance } from "@/game/data/gameDataTypes";
 import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround } from "./world/rtsGround";
 import { UnitSystem } from "./units/unitSystem";
 import { updateUnitMovement } from "./units/unitMovement";
+import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
 import { CommandMarkerSystem } from "./commands/commandMarker";
@@ -37,10 +39,13 @@ const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
 const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
+const PLACEHOLDER_GUARD_ID = "guard_placeholder";
 
 export interface RtsAppOptions {
   /** `?debug`: reserved for the Faz 1 step-5 debug overlay (no-op for now). */
   readonly debug?: boolean;
+  /** JSON-backed placeholder unit stats until full unit data is introduced. */
+  readonly unitBalance: UnitBalance;
 }
 
 export class RtsApp {
@@ -49,6 +54,7 @@ export class RtsApp {
   private readonly cameraController = new RtsCameraController();
   private readonly input: RtsInput;
   private readonly units = new UnitSystem();
+  private readonly navigation = new RtsNavigation();
   private readonly marquee = new MarqueeOverlay();
   private readonly commandMarkers = new CommandMarkerSystem();
   private readonly pointer: RtsPointer;
@@ -63,7 +69,7 @@ export class RtsApp {
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
-    private readonly options: RtsAppOptions = {},
+    private readonly options: RtsAppOptions,
   ) {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.scene.background = new Color(SCENE_BACKGROUND);
@@ -79,6 +85,7 @@ export class RtsApp {
       this.cameraController.camera,
       this.selection,
       this.units,
+      this.navigation,
       this.commandMarkers,
     );
     // Composite pointer handler: left button drives selection, right button
@@ -142,14 +149,18 @@ export class RtsApp {
    * selectable). Replaced by match-driven spawns once the match backbone lands.
    */
   private spawnTestUnits(): void {
+    const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
+    if (!guard) {
+      throw new Error(`Missing unit balance definition "${PLACEHOLDER_GUARD_ID}"`);
+    }
     const cols = 4;
     for (let i = 0; i < 8; i++) {
       const x = -4.5 + (i % cols) * 3;
       const z = 4 + Math.floor(i / cols) * 3;
-      this.units.spawn("player", x, z);
+      this.units.spawn("player", x, z, guard.maxHealth);
     }
     for (let i = 0; i < 3; i++) {
-      this.units.spawn("enemy", -3 + i * 3, -16);
+      this.units.spawn("enemy", -3 + i * 3, -16, guard.maxHealth);
     }
   }
 

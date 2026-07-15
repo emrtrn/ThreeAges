@@ -23,8 +23,11 @@ export interface RtsGroundOptions {
   readonly gridColor: string;
 }
 
+/** Shared square world extent for the Phase 1 ground and navigation bounds. */
+export const RTS_WORLD_HALF_EXTENT = 60;
+
 export const DEFAULT_RTS_GROUND_OPTIONS: RtsGroundOptions = {
-  halfExtent: 60,
+  halfExtent: RTS_WORLD_HALF_EXTENT,
   groundColor: "#4b5d3a",
   gridColor: "#3a4a2d",
 };

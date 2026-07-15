@@ -13,8 +13,9 @@ import { logger } from "../core/logger";
 import {
   validateGamePreset,
   validateGameVersion,
+  validateUnitBalance,
 } from "./validateGameData";
-import type { GamePreset, GameVersion } from "./gameDataTypes";
+import type { GamePreset, GameVersion, UnitBalance } from "./gameDataTypes";
 
 const log = logger("Data");
 
@@ -54,4 +55,12 @@ export async function loadGamePreset(id: string): Promise<GamePreset> {
   const preset = validateGamePreset(await fetchJson(url), id);
   log.debug(`loaded preset "${preset.id}" (speed ${preset.gameSpeed})`);
   return preset;
+}
+
+/** Load and validate `public/game-data/balance/units.json`. */
+export async function loadUnitBalance(): Promise<UnitBalance> {
+  const url = `${GAME_DATA_ROOT}/balance/units.json`;
+  const balance = validateUnitBalance(await fetchJson(url));
+  log.debug(`loaded unit balance (${Object.keys(balance).length} definitions)`);
+  return balance;
 }
