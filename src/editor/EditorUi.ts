@@ -518,7 +518,6 @@ export class EditorUi {
           </div>
           <div class="editor-play-split">
             <button type="button" class="editor-play-button primary" data-action="play" data-testid="editor-play" aria-label="Play">${TOOLBAR_ICONS.play}<span>Play</span></button>
-            <button type="button" class="editor-play-more primary" data-play-menu aria-label="Play options">${MENU_CHEVRON}</button>
           </div>
           </div>
         </div>
@@ -976,12 +975,6 @@ export class EditorUi {
     this.root.querySelector('[data-action="play"]')?.addEventListener("click", () => {
       void this.playTest();
     });
-    this.root.querySelector('[data-play-menu]')?.addEventListener("click", (event) => {
-      this.openContextMenu(event as MouseEvent, [
-        { label: "Play in New Tab", run: () => void this.playTest("newTab") },
-        { label: "Play in Same Tab", run: () => void this.playTest("sameTab") },
-      ], "play-options-menu");
-    });
     // Show flags are toggle buttons (active = green) matching the Camera / View
     // Mode option menus, rather than checkboxes.
     this.bindShowFlag("collision", () => this.app.getShowCollision(), (on) =>
@@ -1269,7 +1262,7 @@ export class EditorUi {
    * codebase â€” the game is this same app's default route (`/`), so Play just
    * opens it; a project may still override with an external `editor.previewUrl`.
    */
-  private async playTest(target: "newTab" | "sameTab" = "newTab"): Promise<void> {
+  private async playTest(): Promise<void> {
     try {
       await this.app.saveLayout();
     } catch (error) {
@@ -1280,11 +1273,6 @@ export class EditorUi {
     // starts there). Temporary session override — not written to the layout.
     writePlayCameraPose(this.app.getPlayCameraPose());
     const previewUrl = this.projectInfo?.manifest.editor.previewUrl ?? "/";
-    if (target === "sameTab") {
-      this.setStatus(`Saved. Opening game: ${previewUrl}`, "success");
-      window.location.href = previewUrl;
-      return;
-    }
     const opened = window.open(previewUrl, "_blank", "noopener");
     if (opened) {
       this.setStatus(`Saved. Opening game: ${previewUrl}`, "success");

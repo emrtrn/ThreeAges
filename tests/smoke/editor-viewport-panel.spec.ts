@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 
 type Rect = { x: number; y: number; width: number; height: number };
 
@@ -27,6 +27,8 @@ test("editor viewport panel owns the canvas and Stats across layout resizes", as
   await expect(canvas).toBeVisible();
   await expect(stats).toBeVisible();
   await expect(stats).toContainText(/draw calls/, { timeout: 30_000 });
+  await expect(stats).toHaveCSS("top", "8px");
+  await expect(stats).toHaveCSS("left", "8px");
   await expect(host.locator("#game-canvas")).toHaveCount(1);
   await expect(host.locator("#debug-stats")).toHaveCount(1);
 
@@ -105,6 +107,58 @@ test("viewport canvas keeps perspective and orthographic camera projections alig
   await expectCanvasBufferAspect(canvas);
 });
 
+test("viewport canvas accepts focused move and scale gizmo drags", async ({ page }) => {
+  test.slow();
+  await page.setViewportSize({ width: 1680, height: 900 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 120_000 });
+
+  const canvas = page.locator("#game-canvas");
+  await expect(page.getByTestId("outliner-row").first()).toBeVisible({ timeout: 120_000 });
+  const rowCount = await page.getByTestId("outliner-row").count();
+  const canvasBox = await requiredBox(canvas);
+  const drop = { x: canvasBox.x + canvasBox.width * 0.5, y: canvasBox.y + canvasBox.height * 0.55 };
+
+  await canvas.dispatchEvent("drop", {
+    dataTransfer: await page.evaluateHandle(() => {
+      const data = new DataTransfer();
+      data.setData("application/x-3dgamedev-asset", "shape:cube");
+      return data;
+    }),
+    clientX: drop.x,
+    clientY: drop.y,
+  });
+  await expect(page.getByTestId("outliner-row")).toHaveCount(rowCount + 1);
+  await page.getByRole("button", { name: "Move" }).click();
+  await expect(page.getByRole("button", { name: "Move" })).toHaveAttribute("aria-pressed", "true");
+
+  await page.keyboard.press("KeyF");
+  const centeredCanvas = await requiredBox(canvas);
+  const handle = { x: centeredCanvas.x + centeredCanvas.width / 2, y: centeredCanvas.y + centeredCanvas.height / 2 };
+  await page.mouse.move(handle.x, handle.y);
+  await expect.poll(() => canvas.evaluate((element) => element.style.cursor)).toBe("pointer");
+
+  const before = await transformPosition(page);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + 72, handle.y - 48, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => transformPosition(page)).not.toEqual(before);
+
+  await page.getByRole("button", { name: "Scale", exact: true }).click();
+  await page.keyboard.press("KeyF");
+  const scaledCanvas = await requiredBox(canvas);
+  const scaleHandle = { x: scaledCanvas.x + scaledCanvas.width / 2, y: scaledCanvas.y + scaledCanvas.height / 2 };
+  await page.mouse.move(scaleHandle.x, scaleHandle.y);
+  await expect.poll(() => canvas.evaluate((element) => element.style.cursor)).toBe("pointer");
+
+  const beforeScale = await transformScale(page);
+  await page.mouse.down();
+  await page.mouse.move(scaleHandle.x + 72, scaleHandle.y - 48, { steps: 6 });
+  await page.mouse.up();
+  await expect.poll(() => transformScale(page)).not.toEqual(beforeScale);
+
+});
+
 async function viewportRects(locators: {
   host: Locator;
   canvas: Locator;
@@ -153,4 +207,20 @@ async function expectCanvasBufferAspect(canvas: Locator): Promise<void> {
     const bufferAspect = element.width / element.height;
     return Math.abs(bufferAspect - clientAspect) < 0.01;
   })).toBe(true);
+}
+
+async function transformPosition(page: Page): Promise<string[]> {
+  const values = await transformValues(page);
+  return values.slice(0, 3);
+}
+
+async function transformScale(page: Page): Promise<string[]> {
+  const values = await transformValues(page);
+  return values.slice(6, 9);
+}
+
+async function transformValues(page: Page): Promise<string[]> {
+  return page.locator(".detail-section", { hasText: "Transform" }).first().locator('input[type="number"]').evaluateAll(
+    (inputs) => inputs.map((input) => (input as HTMLInputElement).value),
+  );
 }

@@ -42,7 +42,7 @@ test("Add Actor menu uses a flat hover-only category list", async ({ page }) => 
   await expect(popover).toBeHidden();
 });
 
-test("Camera, view mode, Show, and Play menus use flat rows", async ({ page }) => {
+test("Camera, view mode, and Show menus use flat rows", async ({ page }) => {
   await page.setViewportSize({ width: 1680, height: 900 });
   await page.goto("/?editor");
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
@@ -67,14 +67,6 @@ test("Camera, view mode, Show, and Play menus use flat rows", async ({ page }) =
   await page.locator("[data-show-button]").hover();
   await expect(showMenu).toBeVisible();
   await expect(showMenu.locator('[data-show-flag="collision"]')).toHaveCSS(
-    "border-top-width",
-    "0px",
-  );
-
-  await page.locator("[data-play-menu]").click();
-  const playMenu = page.locator(".context-menu.play-options-menu");
-  await expect(playMenu).toBeVisible();
-  await expect(playMenu.getByRole("button", { name: "Play in New Tab" })).toHaveCSS(
     "border-top-width",
     "0px",
   );

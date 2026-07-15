@@ -73,11 +73,6 @@
   --forge-space-4: 16px;
 }
 
-body.editor-mode #debug-stats {
-  top: calc(env(safe-area-inset-top) + 48px);
-  left: 268px;
-}
-
 .editor-shell {
   position: absolute;
   inset: 0;
@@ -1100,30 +1095,6 @@ body.editor-mode #debug-stats {
 
 .context-menu-item.danger:hover:not(:disabled) {
   background: rgba(225, 91, 91, 0.25);
-}
-
-/* The Play split-button menu uses the same compact surface and flat rows as
-   Add Actor without changing the editor's general right-click menus. */
-.context-menu.play-options-menu {
-  min-width: 168px;
-  gap: 0;
-  padding: 6px;
-  border-color: var(--forge-border-mid);
-  border-radius: 6px;
-  background: rgba(19, 22, 25, 0.98);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-}
-
-.play-options-menu .context-menu-item {
-  min-height: 29px;
-  padding: 0 8px;
-  border-radius: 3px;
-  font-size: 12px;
-  font-weight: 400;
-}
-
-.play-options-menu .context-menu-item:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
 }
 
 .context-menu-separator {
@@ -6357,8 +6328,7 @@ body.editor-mode #debug-stats {
   border-bottom-left-radius: 0;
 }
 
-/* Split Play button: primary action (left) + options chevron (right). Both
-   halves carry .primary for the accent fill; a hairline divides them. */
+/* Play button: single primary action with the accent fill. */
 .editor-play-split {
   display: inline-flex;
   align-items: stretch;
@@ -6370,7 +6340,7 @@ body.editor-mode #debug-stats {
   height: 26px;
   min-height: 26px;
   padding: 0 10px 0 9px;
-  border-radius: var(--forge-radius-md) 0 0 var(--forge-radius-md);
+  border-radius: var(--forge-radius-md);
   font-size: 12px;
   font-weight: 600;
 }
@@ -6378,22 +6348,6 @@ body.editor-mode #debug-stats {
   width: 13px;
   height: 13px;
   flex: 0 0 auto;
-}
-.editor-shell .editor-play-split .editor-play-more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  min-width: 22px;
-  height: 26px;
-  min-height: 26px;
-  padding: 0;
-  border-radius: 0 var(--forge-radius-md) var(--forge-radius-md) 0;
-  border-left: 1px solid rgba(255, 255, 255, 0.28);
-}
-.editor-shell .editor-play-split .editor-play-more .menu-chevron {
-  color: currentColor;
-  opacity: 0.9;
 }
 
 /* Desktop shell: every major authoring surface sits on the dark workbench as
