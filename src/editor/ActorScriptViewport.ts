@@ -102,7 +102,8 @@ const PLACEHOLDER_COLOR = 0x8a8f96;
 const COLLIDER_COLOR = 0x49e6a2;
 const SENSOR_COLOR = 0xffb648;
 // Matches the main scene's selection outline (editorSelectionOutline.ts).
-const SELECT_OUTLINE_COLOR = 0xff9a1f;
+// Keep the asset viewport selection look aligned with the editor UI accent.
+const SELECT_OUTLINE_COLOR = 0x2f6fed;
 const MARKER_GLYPHS: Record<string, string> = {
   Audio: "♪",
   ParticleEmitter: "✺",

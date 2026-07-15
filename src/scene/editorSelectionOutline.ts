@@ -18,7 +18,9 @@ import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/Skelet
 import { isRenderableMesh } from "@engine/render-three/materials";
 import type { PostProcessPipeline } from "@engine/render-three/postProcess";
 
-const OUTLINE_COLOR = new Color(0xff9a1f);
+// Keep the scene selection outline aligned with the editor UI accent token
+// (--forge-accent: #2f6fed).
+const OUTLINE_COLOR = new Color(0x2f6fed);
 
 /**
  * Editor-only post-process selection outline. Proxy meshes live in the main
