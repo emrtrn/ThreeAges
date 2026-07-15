@@ -17,9 +17,11 @@ import {
 
 import type { UnitOwner } from "../units/unit";
 import { HealthComponent } from "../units/health";
+import type { NavBlocker } from "@engine/navigation/gridNavigation";
 
 /** Temporary Faz 1 centre durability; building balance data arrives in Faz 2. */
 export const COMMAND_CENTER_MAX_HEALTH = 300;
+const COMMAND_CENTER_FOOTPRINT = 7;
 
 const CENTER_TEAM_COLOR: Record<UnitOwner, string> = {
   player: "#2d7fd6",
@@ -74,6 +76,15 @@ export class CommandCenter {
 
   get position() {
     return this.object.position;
+  }
+
+  /** Static footprint used by Phase 2 placement validation and infantry nav. */
+  navigationBlocker(): NavBlocker {
+    const half = COMMAND_CENTER_FOOTPRINT / 2;
+    return {
+      min: [this.position.x - half, 0, this.position.z - half],
+      max: [this.position.x + half, 6.5, this.position.z + half],
+    };
   }
 
   /** Release the centre's placeholder mesh resources on a full match reset. */

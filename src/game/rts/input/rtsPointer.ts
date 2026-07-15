@@ -26,6 +26,8 @@ export interface RtsPointerHandler {
   onSelectCancel(): void;
   /** Right button released as a click (move/attack command). */
   onCommandClick?(x: number, y: number): void;
+  /** Pointer moved over the field; used by the Phase 2 build ghost. */
+  onPointerHover?(x: number, y: number): void;
 }
 
 /** Pixels the pointer must travel before a left press becomes a box drag. */
@@ -81,8 +83,9 @@ export class RtsPointer {
   };
 
   private readonly onPointerMove = (event: PointerEvent): void => {
-    if (!this.leftDown) return;
     const { x, y } = this.local(event);
+    this.handler.onPointerHover?.(x, y);
+    if (!this.leftDown) return;
     if (!this.dragging) {
       const moved = Math.hypot(x - this.startX, y - this.startY);
       if (moved < DRAG_THRESHOLD_PX) return;

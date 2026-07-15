@@ -13,9 +13,10 @@ import { logger } from "../core/logger";
 import {
   validateGamePreset,
   validateGameVersion,
+  validateBuildingBalance,
   validateUnitBalance,
 } from "./validateGameData";
-import type { GamePreset, GameVersion, UnitBalance } from "./gameDataTypes";
+import type { BuildingBalance, GamePreset, GameVersion, UnitBalance } from "./gameDataTypes";
 
 const log = logger("Data");
 
@@ -62,5 +63,13 @@ export async function loadUnitBalance(): Promise<UnitBalance> {
   const url = `${GAME_DATA_ROOT}/balance/units.json`;
   const balance = validateUnitBalance(await fetchJson(url));
   log.debug(`loaded unit balance (${Object.keys(balance).length} definitions)`);
+  return balance;
+}
+
+/** Load and validate `public/game-data/balance/buildings.json`. */
+export async function loadBuildingBalance(): Promise<BuildingBalance> {
+  const url = `${GAME_DATA_ROOT}/balance/buildings.json`;
+  const balance = validateBuildingBalance(await fetchJson(url));
+  log.debug(`loaded building balance (${Object.keys(balance).length} definitions)`);
   return balance;
 }

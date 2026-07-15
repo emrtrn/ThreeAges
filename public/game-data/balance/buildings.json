@@ -1,0 +1,26 @@
+{
+  "command_center": {
+    "label": "Merkez",
+    "footprint": { "width": 8, "depth": 8 },
+    "cost": {},
+    "constructionSeconds": 1
+  },
+  "house": {
+    "label": "Ev",
+    "footprint": { "width": 4, "depth": 4 },
+    "cost": { "wood": 80 },
+    "constructionSeconds": 25
+  },
+  "depot": {
+    "label": "Depo",
+    "footprint": { "width": 6, "depth": 6 },
+    "cost": { "wood": 120 },
+    "constructionSeconds": 45
+  },
+  "barracks": {
+    "label": "Kışla",
+    "footprint": { "width": 8, "depth": 8 },
+    "cost": { "wood": 160 },
+    "constructionSeconds": 55
+  }
+}

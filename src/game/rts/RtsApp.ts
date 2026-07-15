@@ -22,7 +22,7 @@ import {
 
 import { createSceneRenderer } from "@engine/render-three/renderer";
 import { logger } from "@/game/core/logger";
-import type { UnitBalance } from "@/game/data/gameDataTypes";
+import type { BuildingBalance, UnitBalance } from "@/game/data/gameDataTypes";
 import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
@@ -42,6 +42,9 @@ import { COMMAND_CENTER_MAX_HEALTH } from "./structures/commandCenter";
 import { RtsMatchState } from "./match/rtsMatchState";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
+import { PlacedStructureSystem } from "./structures/placedStructureSystem";
+import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
+import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
@@ -57,6 +60,8 @@ export interface RtsAppOptions {
   readonly debug?: boolean;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
   readonly unitBalance: UnitBalance;
+  /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
+  readonly buildingBalance: BuildingBalance;
 }
 
 export class RtsApp {
@@ -66,6 +71,7 @@ export class RtsApp {
   private readonly input: RtsInput;
   private readonly units = new UnitSystem();
   private readonly centers = new CommandCenterSystem();
+  private readonly structures = new PlacedStructureSystem();
   private readonly match = new RtsMatchState();
   private readonly matchOverlay: RtsMatchOverlay;
   private readonly debugOverlay: RtsDebugOverlay | null;
@@ -75,6 +81,8 @@ export class RtsApp {
   private readonly pointer: RtsPointer;
   private readonly selection: SelectionSystem;
   private readonly commands: CommandSystem;
+  private readonly placement: BuildingPlacementSystem;
+  private readonly buildPalette: RtsBuildPalette;
   private readonly log = logger("System");
   private frameHandle = 0;
   private lastTime = 0;
@@ -104,17 +112,60 @@ export class RtsApp {
       this.navigation,
       this.commandMarkers,
     );
+    this.placement = new BuildingPlacementSystem(
+      canvas,
+      this.cameraController.camera,
+      this.options.buildingBalance,
+      this.structures,
+      this.navigation,
+      () => this.navigationBlockers(),
+    );
+    this.buildPalette = new RtsBuildPalette(
+      this.options.buildingBalance,
+      (id) => {
+        this.placement.begin(id);
+        this.syncPlacementUi();
+      },
+      () => {
+        this.placement.cancel();
+        this.syncPlacementUi();
+      },
+    );
     this.matchOverlay = new RtsMatchOverlay(this.restartMatch);
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
     // Composite pointer handler: left button drives selection, right button
     // issues commands. Keeps the two systems decoupled (neither imports the
     // other); this composition root is the only place that sees both.
     this.pointer = new RtsPointer(canvas, {
-      onSelectClick: (x, y, additive) => this.selection.onSelectClick(x, y, additive),
-      onSelectDrag: (rect) => this.selection.onSelectDrag(rect),
-      onSelectCommit: (rect, additive) => this.selection.onSelectCommit(rect, additive),
-      onSelectCancel: () => this.selection.onSelectCancel(),
+      onSelectClick: (x, y, additive) => {
+        if (this.placement.isActive) {
+          this.placement.confirmAt(x, y);
+          this.syncPlacementUi();
+        } else {
+          this.selection.onSelectClick(x, y, additive);
+        }
+      },
+      onSelectDrag: (rect) => {
+        if (!this.placement.isActive) this.selection.onSelectDrag(rect);
+      },
+      onSelectCommit: (rect, additive) => {
+        if (this.placement.isActive) {
+          this.placement.confirmAt(rect.x1, rect.y1);
+          this.syncPlacementUi();
+        } else {
+          this.selection.onSelectCommit(rect, additive);
+        }
+      },
+      onSelectCancel: () => {
+        if (!this.placement.isActive) this.selection.onSelectCancel();
+      },
       onCommandClick: (x, y) => this.commands.issueAt(x, y),
+      onPointerHover: (x, y) => {
+        if (this.placement.isActive) {
+          this.placement.previewAt(x, y);
+          this.syncPlacementUi();
+        }
+      },
     });
     this.buildScene();
     this.spawnTestUnits();
@@ -140,6 +191,9 @@ export class RtsApp {
     this.marquee.dispose();
     this.matchOverlay.dispose();
     this.debugOverlay?.dispose();
+    this.buildPalette.dispose();
+    this.placement.dispose();
+    this.structures.clear();
     this.renderer.dispose();
   }
 
@@ -160,9 +214,11 @@ export class RtsApp {
 
     this.scene.add(createRtsGround());
     this.scene.add(createRtsMapBlockout());
-    this.navigation.setBlockers(RTS_BLOCKOUT_MAP.navigationBlockers);
     this.spawnCenters();
+    this.refreshNavigationBlockers();
     this.scene.add(this.centers.root);
+    this.scene.add(this.structures.root);
+    this.scene.add(this.placement.root);
     this.scene.add(this.units.root);
     this.scene.add(this.commandMarkers.root);
   }
@@ -232,10 +288,14 @@ export class RtsApp {
     this.selection.reset();
     this.units.clear();
     this.centers.clear();
+    this.structures.clear();
     this.commandMarkers.clear();
     this.match.reset();
     this.spawnCenters();
+    this.refreshNavigationBlockers();
     this.spawnTestUnits();
+    this.placement.cancel();
+    this.syncPlacementUi();
     this.matchOverlay.hide();
     this.log.info("RTS match restarted");
   };
@@ -250,5 +310,21 @@ export class RtsApp {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     this.renderer.setSize(width, height, false);
     this.cameraController.setViewport(width, height);
+  }
+
+  private navigationBlockers() {
+    return [
+      ...RTS_BLOCKOUT_MAP.navigationBlockers,
+      ...this.centers.navigationBlockers(),
+      ...this.structures.navigationBlockers(),
+    ];
+  }
+
+  private refreshNavigationBlockers(): void {
+    this.navigation.setBlockers(this.navigationBlockers());
+  }
+
+  private syncPlacementUi(): void {
+    this.buildPalette.setState(this.placement.state());
   }
 }

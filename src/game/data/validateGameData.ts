@@ -10,6 +10,7 @@
 import { isFeatureFlag } from "../core/featureFlags";
 import type {
   AiProfile,
+  BuildingBalance,
   GamePreset,
   GameVersion,
   StartingResources,
@@ -196,4 +197,38 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     throw new GameDataError(`${where}: must define at least one unit`);
   }
   return units;
+}
+
+/** Validate `balance/buildings.json` before placement code receives its data. */
+export function validateBuildingBalance(value: unknown): BuildingBalance {
+  const where = "balance/buildings.json";
+  const obj = asObject(value, where);
+  const buildings: Record<string, BuildingBalance["string"]> = {};
+  for (const [id, raw] of Object.entries(obj)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(id)) {
+      throw new GameDataError(`${where}: invalid building id "${id}"`);
+    }
+    const statsWhere = `${where}."${id}"`;
+    const stats = asObject(raw, statsWhere);
+    const footprint = asObject(stats["footprint"], `${statsWhere}.footprint`);
+    const width = requireFiniteNumber(footprint, "width", `${statsWhere}.footprint`);
+    const depth = requireFiniteNumber(footprint, "depth", `${statsWhere}.footprint`);
+    if (width <= 0 || depth <= 0) {
+      throw new GameDataError(`${statsWhere}.footprint: width and depth must be > 0`);
+    }
+    const constructionSeconds = requireFiniteNumber(stats, "constructionSeconds", statsWhere);
+    if (constructionSeconds <= 0) {
+      throw new GameDataError(`${statsWhere}.constructionSeconds: must be > 0`);
+    }
+    buildings[id] = {
+      label: requireString(stats, "label", statsWhere),
+      footprint: { width, depth },
+      cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
+      constructionSeconds,
+    };
+  }
+  if (Object.keys(buildings).length === 0) {
+    throw new GameDataError(`${where}: must define at least one building`);
+  }
+  return buildings;
 }

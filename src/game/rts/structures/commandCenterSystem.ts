@@ -1,5 +1,6 @@
 /** Registry for the two Faz 1 command-centre placeholders. */
 import { Group } from "three";
+import type { NavBlocker } from "@engine/navigation/gridNavigation";
 
 import type { UnitOwner } from "../units/unit";
 import { CommandCenter } from "./commandCenter";
@@ -47,5 +48,10 @@ export class CommandCenterSystem {
 
   all(): readonly CommandCenter[] {
     return [...this.centers.values()];
+  }
+
+  /** Existing centres occupy both placement and ground-navigation space. */
+  navigationBlockers(): readonly NavBlocker[] {
+    return this.all().map((center) => center.navigationBlocker());
   }
 }

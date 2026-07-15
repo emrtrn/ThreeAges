@@ -61,3 +61,16 @@ export interface UnitBalanceStats {
 
 /** `public/game-data/balance/units.json` — keyed by stable unit id. */
 export type UnitBalance = Readonly<Record<string, UnitBalanceStats>>;
+
+/** One grid-aligned RTS building definition, loaded from balance/buildings.json. */
+export interface BuildingBalanceStats {
+  readonly label: string;
+  /** World-space footprint dimensions; both are multiples of the placement grid. */
+  readonly footprint: { readonly width: number; readonly depth: number };
+  /** Resource reservation is implemented in the following Phase 2 slice. */
+  readonly cost: StartingResources;
+  readonly constructionSeconds: number;
+}
+
+/** `public/game-data/balance/buildings.json` — keyed by stable building id. */
+export type BuildingBalance = Readonly<Record<string, BuildingBalanceStats>>;

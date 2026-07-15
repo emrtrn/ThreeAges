@@ -55,6 +55,7 @@ import { RuntimeActorSpawnCoordinator } from "../src/scene/runtimeActorSpawnCoor
 import { normalizeActorScriptDef } from "../engine/scene/actorScript";
 import {
   GameDataError,
+  validateBuildingBalance,
   validateGamePreset,
   validateGameVersion,
   validateUnitBalance,
@@ -66,6 +67,11 @@ import { RtsMatchState } from "../src/game/rts/match/rtsMatchState";
 import { HealthComponent } from "../src/game/rts/units/health";
 import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
 import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
+import {
+  RTS_PLACEMENT_GRID_SIZE,
+  validateBuildingPlacement,
+} from "../src/game/rts/structures/placementGrid";
+import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -27834,6 +27840,18 @@ check("unit balance validates combat stats for stable unit ids", () => {
   assert.throws(() => validateUnitBalance({ "Guard Placeholder": RTS_TEST_UNIT_STATS }), GameDataError);
 });
 
+check("building balance validates grid-aligned Phase 2 footprints", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  assert.deepEqual(buildings.house?.footprint, { width: 4, depth: 4 });
+  assert.equal(buildings.barracks?.cost.wood, 160);
+  assert.throws(
+    () => validateBuildingBalance({ house: { label: "Ev", footprint: { width: 0, depth: 4 }, cost: {}, constructionSeconds: 25 } }),
+    GameDataError,
+  );
+});
+
 check("RTS melee attacks apply JSON damage on cooldown and clear a depleted target", () => {
   const units = new UnitSystem();
   const attacker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
@@ -27939,6 +27957,35 @@ check("RTS Faz 2 blockout keeps both flanks reachable around the central ridge",
     RTS_BLOCKOUT_MAP.externalResource.x > 12 && RTS_BLOCKOUT_MAP.externalResource.z > 4,
     "the external-resource landmark is outside the player start and central ridge",
   );
+});
+
+check("RTS placement snap rejects occupied footprints and refreshes navigation blockers", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  assert.equal(RTS_PLACEMENT_GRID_SIZE, 2);
+  const open = validateBuildingPlacement(house, 20.8, 12.9, RTS_BLOCKOUT_MAP.navigationBlockers);
+  assert.deepEqual({ x: open.x, z: open.z, valid: open.valid, reason: open.reason }, {
+    x: 20,
+    z: 12,
+    valid: true,
+    reason: null,
+  });
+
+  const structures = new PlacedStructureSystem();
+  const site = structures.place(house, open.x, open.z);
+  const overlap = validateBuildingPlacement(house, 20, 12, structures.navigationBlockers());
+  assert.equal(overlap.valid, false);
+  assert.equal(overlap.reason, "blocked");
+
+  const navigation = new RtsNavigation();
+  navigation.setBlockers([...RTS_BLOCKOUT_MAP.navigationBlockers, ...structures.navigationBlockers()]);
+  const route = navigation.plan(new Vector3(14, 0, 12), new Vector3(28, 0, 12));
+  assert.ok(route && route.length > 2, "a new structure forces a detour rather than breaking navigation");
+  assert.ok(route.some((point) => Math.abs(point.z - 12) > 2.5), "route leaves the structure footprint");
+  assert.equal(site.object.name, "rts-construction-site-1");
+  structures.clear();
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

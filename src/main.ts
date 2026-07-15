@@ -17,7 +17,7 @@ import {
   readBootOptionsFromUrl,
   snapshotRuntimeConfig,
 } from "@/game/core/runtimeConfig";
-import { loadGamePreset, loadUnitBalance } from "@/game/data/gameDataLoader";
+import { loadBuildingBalance, loadGamePreset, loadUnitBalance } from "@/game/data/gameDataLoader";
 import type { GamePreset } from "@/game/data/gameDataTypes";
 
 function requireElement<T extends HTMLElement>(id: string): T {
@@ -73,8 +73,15 @@ async function main(): Promise<void> {
   // own lightweight runtime — never mixes with the character SceneApp above.
   if (!editorEnabled && params.has("rts")) {
     const { RtsApp } = await import("@/game/rts/RtsApp");
-    const unitBalance = await loadUnitBalance();
-    const rts = new RtsApp(canvas, { debug: params.has("debug"), unitBalance });
+    const [unitBalance, buildingBalance] = await Promise.all([
+      loadUnitBalance(),
+      loadBuildingBalance(),
+    ]);
+    const rts = new RtsApp(canvas, {
+      debug: params.has("debug"),
+      unitBalance,
+      buildingBalance,
+    });
     rts.start();
     return;
   }

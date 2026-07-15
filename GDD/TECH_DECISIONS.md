@@ -116,8 +116,9 @@ ilgili faz geldiğinde teyit edilir. Faz 0 kod işi bu varsayılanlarla bloklanm
 - [x] Birim navigasyon: **grid-tabanlı pathfinding** (`src/game/rts/navigation/rtsNavigation.ts`;
   cached grid + waypoint takibi, `05 §67` yol grafiğinden ayrı). Faz 1’de teyit;
   yapı engelleri Faz 2’de bağlanacak.
-- [~] Yapı placement grid ve yol grid ölçüsü: **provisional placeholder**; kesin
-  hücre boyutu Faz 2'de blockout ile belirlenir (`04 §22`, `05 §21`).
+- [x] Yapı placement grid ölçüsü: **2 dünya birimi** (`RTS_PLACEMENT_GRID_SIZE`;
+  Ev 4×4, Depo 6×6, Kışla 8×8 footprintleriyle doğrulandı). Yol grid ölçüsü
+  Faz 3 lojistik dilimine kadar provisional kalır (`04 §22`, `05 §21`).
 - [~] Kamera: **hafif perspektif** (`10 §4` başlangıç tercihi). Teyit: Faz 1.
 - [~] Placeholder asset standardı: **birim küp/kapsül, +Z ileri, taban pivotu**
   (`13 §14`, `11 §8`). Teyit: Faz 1–2.

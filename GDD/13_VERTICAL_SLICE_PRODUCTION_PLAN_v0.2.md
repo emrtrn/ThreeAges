@@ -736,19 +736,19 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 
 ### Yapı verisi
 
-- [ ] Merkez tanımı
-- [ ] Ev tanımı
-- [ ] Depo tanımı
-- [ ] Kışla tanımı
-- [ ] Basit footprint verisi
-- [ ] Maliyet ve inşa süresi
+- [x] Merkez tanımı (`buildings.json: command_center`; önceden yerleştirilmiş merkez)
+- [x] Ev tanımı (`buildings.json: house`)
+- [x] Depo tanımı (`buildings.json: depot`)
+- [x] Kışla tanımı (`buildings.json: barracks`)
+- [x] Basit footprint verisi (JSON `footprint.width/depth`; 2 birimlik gridde doğrulanır)
+- [x] Maliyet ve inşa süresi (`cost` ve `constructionSeconds`; kaynak rezervasyonu sonraki dilimde)
 
 ### Yerleştirme
 
-- [ ] Ghost önizleme ekle.
-- [ ] Grid snap ekle.
-- [ ] Çakışma kontrolü ekle.
-- [ ] Geçersiz yerleştirme nedeni göster.
+- [x] Ghost önizleme ekle. (`BuildingPlacementSystem`; geçerli/engelli konum için yeşil/kırmızı preview)
+- [x] Grid snap ekle. (`RTS_PLACEMENT_GRID_SIZE = 2`)
+- [x] Çakışma kontrolü ekle. (harita sırtı, merkez ve mevcut foundation footprintleri)
+- [x] Geçersiz yerleştirme nedeni göster. (yapı paletinde harita sınırı veya çakışma nedeni)
 - [ ] Kaynak rezervasyonu ekle.
 - [ ] İnşa iptali ve iade ekle.
 

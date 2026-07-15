@@ -136,6 +136,46 @@ body {
   border-radius: 5px;
 }
 
+/* Faz 2 placement controls: intentionally small until the full RTS HUD lands. */
+.rts-build-palette {
+  position: absolute;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: max(12px, env(safe-area-inset-bottom));
+  width: min(320px, calc(100vw - 24px));
+  padding: 10px 12px;
+  color: #edf0dc;
+  background: rgb(18 27 30 / 84%);
+  border: 1px solid rgb(183 206 130 / 55%);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+
+.rts-build-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.rts-build-choices button {
+  padding: 6px 9px;
+  color: #1d2b1b;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #cddd8d;
+  border: 0;
+  border-radius: 3px;
+}
+
+.rts-build-status {
+  min-height: 1.35em;
+  margin-top: 8px;
+  color: #dce8be;
+  font-size: 12px;
+}
+
 /*
  * UI Widget (UMG Lite) runtime styles. Rendered by engine/ui/uiRenderer.ts into
  * #ui-overlay. Containers inherit the overlay's click-through; only .ui-interactive
