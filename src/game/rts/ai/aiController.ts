@@ -16,6 +16,7 @@ import type { AiBalance, AiProfile, UnitRoleId } from "../../data/gameDataTypes"
 import type { BarracksProductionSystem } from "../structures/barracksProductionSystem";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { StructureConstructionService } from "../structures/structureConstructionService";
+import type { StructureUpgradeSystem } from "../structures/structureUpgradeSystem";
 import type { WorkerProductionSystem } from "../structures/workerProductionSystem";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { RoadConstructionService } from "../roads/roadConstructionService";
@@ -27,10 +28,11 @@ import { AiBlackboardReader, type AiBlackboard, type AiBlackboardSources } from 
 import { AiBuildManager } from "./aiBuildManager";
 import { AiDecisionLog } from "./aiDecisionLog";
 import { AiEconomyManager, type AiBottleneck } from "./aiEconomyManager";
-import { AiExpansionManager } from "./aiExpansionManager";
+import { AiExpansionCoordinator, AI_MAX_EXPANSION_PLANS } from "./aiExpansionCoordinator";
 import { AiInfrastructureManager, type AiInfrastructureStep } from "./aiInfrastructureManager";
 import { AiProductionManager } from "./aiProductionManager";
-import { ArmyManager } from "./armyManager";
+import { AiUpgradeManager, type AiUpgradeStep } from "./aiUpgradeManager";
+import { ArmyManager, type AiRetreatReason } from "./armyManager";
 import { KingdomDirector } from "./kingdomDirector";
 import type { AiTargetScore } from "./armyTargeting";
 import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } from "./aiTypes";
@@ -49,12 +51,22 @@ export interface AiControllerOptions extends AiBlackboardSources {
    * base producer stays stuck on its local buffer, so the AI has no income.
    */
   readonly baseRoute: readonly RtsMapPoint[];
-  /** §10/§45: the single authored region this kingdom may expand into. */
-  readonly expansion: RtsExpansionRegion;
+  /**
+   * §45/§49: the authored regions this kingdom may expand into, in preference
+   * order. How many of them it actually runs is the AI's own cap
+   * ({@link AI_MAX_EXPANSION_PLANS}), not the length of this list.
+   */
+  readonly expansions: readonly RtsExpansionRegion[];
   readonly construction: StructureConstructionService;
   readonly roadConstruction: RoadConstructionService;
   readonly workerProduction: WorkerProductionSystem;
   readonly barracksProduction: BarracksProductionSystem;
+  /**
+   * §53: the same tier research the player's palette drives. Without it the AI's
+   * composition ratio can never leave Guards — the Archer and the Ram are gated
+   * on Barracks II.
+   */
+  readonly structureUpgrades: StructureUpgradeSystem;
   /** §53: which unit id fills a combat role, read off `balance/units.json`. */
   readonly unitIdForRole: (role: UnitRoleId) => string | null;
 }
@@ -72,12 +84,19 @@ export interface AiControllerSnapshot {
   readonly garrisonCount: number;
   /** §60: the target the army is committed to, with the reason it won. */
   readonly target: AiTargetScore | null;
+  /** §65: which retreat trigger stood the army down, while it is standing down. */
+  readonly retreatReason: AiRetreatReason | null;
   /** §69: the AI has stopped deciding because the match is over. */
   readonly concluded: boolean;
   readonly bottleneck: AiBottleneck;
   readonly expansionStep: AiExpansionStep;
+  /** §49: regions running and finished, against the AI's two-plan budget. */
+  readonly expansionsCompleted: number;
+  readonly expansionPlanAvailable: boolean;
   /** §37: how far the base depot + spine have got, for the §82 panel. */
   readonly infrastructureStep: AiInfrastructureStep;
+  /** §53: how far the Barracks tier research the composition needs has got. */
+  readonly upgradeStep: AiUpgradeStep;
   /**
    * §82 "Aktif yapı planı": the building id occupying the §42 build slot, or
    * null when it is free. This is what separates "saving up" from "stuck".
@@ -85,6 +104,9 @@ export interface AiControllerSnapshot {
   readonly activeBuild: string | null;
   readonly blackboard: AiBlackboard | null;
 }
+
+/** §53: the building whose tier gates the age composition's roles. */
+const AI_COMPOSITION_BUILDING_ID = "barracks";
 
 export class AiController {
   readonly log = new AiDecisionLog();
@@ -94,9 +116,10 @@ export class AiController {
   private readonly age: AiAgeManager;
   private readonly builds: AiBuildManager;
   private readonly economy: AiEconomyManager;
-  private readonly expansion: AiExpansionManager;
+  private readonly expansion: AiExpansionCoordinator;
   private readonly infrastructure: AiInfrastructureManager;
   private readonly production: AiProductionManager;
+  private readonly upgrades: AiUpgradeManager;
   private readonly profileBalance;
   private now = 0;
   private directorAccumulator = 0;
@@ -141,9 +164,9 @@ export class AiController {
       options.structures,
       this.log,
     );
-    this.expansion = new AiExpansionManager(
+    this.expansion = new AiExpansionCoordinator(
       options.owner,
-      options.expansion,
+      options.expansions,
       this.builds,
       options.roadConstruction,
       options.structures,
@@ -155,6 +178,15 @@ export class AiController {
       options.barracksProduction,
       options.balance,
       options.unitIdForRole,
+    );
+    this.upgrades = new AiUpgradeManager(
+      options.owner,
+      // The Barracks is what trains the §53 composition, so its tier is the one
+      // the composition can be gated on. Scoped here rather than searched for:
+      // the same single building {@link BarracksProductionSystem} is scoped to.
+      AI_COMPOSITION_BUILDING_ID,
+      options.structureUpgrades,
+      this.log,
     );
     this.profileBalance = options.balance.profiles[options.profile];
   }
@@ -203,6 +235,11 @@ export class AiController {
       // §17/§55: the production queues are a standing concern — they keep the
       // population unlocked whatever the director is currently committed to.
       this.production.update(blackboard);
+      // §53: so is the tier the composition needs. It reads the gate the
+      // production manager just hit rather than a rule of its own, so the AI
+      // researches Barracks II exactly when its own ratio is asking for a unit
+      // the current tier refuses — and never merely because it could.
+      this.upgrades.update(blackboard, this.production.upgradeGatedRole !== null);
       // §37: so is the base link. A base whose producers cannot reach a depot
       // has no income at all, so this outranks the committed plan rather than
       // waiting for the economy intent to come back around — and because it runs
@@ -212,11 +249,11 @@ export class AiController {
       if (this.director.currentIntent === "economy") this.economy.update(blackboard);
       if (this.director.currentIntent === "ageUp") this.runAgeUp(blackboard);
       // §26 warns that a claimed-but-unconnected region is the failure mode to
-      // avoid, and the recipe outlasts any one plan. So once the outpost is down
-      // the recipe finishes even if an emergency pulls the director elsewhere —
-      // otherwise a stray population lock strands the expansion mid-step.
-      const claimed = this.expansion.currentStep !== "outpost";
-      if (this.director.currentIntent === "expand" || (claimed && !this.expansion.settled)) {
+      // avoid, and the recipe outlasts any one plan. So a claimed region finishes
+      // — and a finished one keeps its outpost, depot and road standing — even if
+      // an emergency pulls the director elsewhere; otherwise a stray population
+      // lock strands the expansion mid-step, or a razed outpost is never noticed.
+      if (this.director.currentIntent === "expand" || this.expansion.hasClaims) {
         this.runExpansion(blackboard);
       }
     }
@@ -239,10 +276,14 @@ export class AiController {
       armyPower: armyState.power,
       garrisonCount: armyState.garrisonCount,
       target: armyState.target,
+      retreatReason: armyState.retreatReason,
       concluded: this.matchConcluded,
       bottleneck: this.economy.bottleneck,
       expansionStep: this.expansion.currentStep,
+      expansionsCompleted: this.expansion.completedCount,
+      expansionPlanAvailable: this.expansion.planAvailable,
       infrastructureStep: this.infrastructure.currentStep,
+      upgradeStep: this.upgrades.currentStep,
       activeBuild: this.builds.activeStructure?.stats.id ?? null,
       blackboard: this.lastBlackboard,
     };
@@ -261,6 +302,10 @@ export class AiController {
     this.economy.reset();
     this.expansion.reset();
     this.infrastructure.reset();
+    this.production.reset();
+    // The upgrade *system* is shared with the player and reset by the match, not
+    // by one kingdom's AI; only this executor's own view of it resets here.
+    this.upgrades.reset();
     this.log.clear();
   }
 
@@ -321,6 +366,7 @@ export class AiController {
       currentPlan: this.director.currentPlan,
       armyMission: this.army.currentMission,
       expansionStep: this.expansion.currentStep,
+      expansionPlanAvailable: this.expansion.planAvailable,
     });
     return this.lastBlackboard;
   }

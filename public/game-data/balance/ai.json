@@ -36,7 +36,7 @@
   },
   "economy": {
     "workerTarget": {
-      "settlement": 8,
+      "settlement": 12,
       "town": 16
     },
     "populationPressureBuffer": 3,

@@ -53,11 +53,18 @@ export interface RtsExpansionRegion {
   /** §26 step 4: the region's resource building. */
   readonly production: RtsBuildAnchor;
   /**
-   * §48: the authored corridor, walked as consecutive segments. It joins the
-   * owner's base road spine and ends past the region, passing close enough to
-   * touch the outpost, depot and production slots.
+   * §48/§49: the authored corridors, in preference order, each walked as
+   * consecutive segments. A corridor joins the owner's base road spine and ends
+   * past the region, passing close enough to touch the outpost, depot and
+   * production slots.
+   *
+   * More than one because §49 asks for a route fallback: a corridor can be
+   * refused for reasons the AI did not cause — a player's building or road
+   * standing on a cell of it — and a region with a single authored line would
+   * retire over an obstacle it could simply have gone around. §48 still rules out
+   * a free route search; the alternatives are authored, not discovered.
    */
-  readonly route: readonly RtsMapPoint[];
+  readonly routes: readonly (readonly RtsMapPoint[])[];
 }
 
 export interface RtsMapBlockout {
@@ -85,8 +92,14 @@ export interface RtsMapBlockout {
    * here, and the AI builds them through the same road service the player uses.
    */
   readonly enemyBaseRoute: readonly RtsMapPoint[];
-  /** The enemy kingdom's single authored expansion (§10: one region in AI-1). */
-  readonly enemyExpansion: RtsExpansionRegion;
+  /**
+   * The enemy kingdom's authored expansion regions, in preference order.
+   *
+   * §10 gave AI-1 exactly one; Faz 8 asks for "en fazla iki genişleme planı", so
+   * the map authors the candidates and the AI's own plan limit — not the map's
+   * length — is what caps how many it runs.
+   */
+  readonly enemyExpansions: readonly RtsExpansionRegion[];
   /** Faz 6's finite safe and external stone/gold deposits. */
   readonly resourceNodes: readonly RtsResourceNodeDefinition[];
   /** Static obstacle footprints consumed by `RtsNavigation`. */
@@ -143,26 +156,64 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { x: 12, z: -18 },
     { x: 12, z: -22 },
   ],
-  // West flank. The outpost sits in neutral land just within the 12-unit
-  // expansion reach of the enemy's starting territory; the depot and production
-  // slots need the outpost's *connected* radius (12, not the unconnected 8), so
-  // §47's "road before depot" ordering is enforced by the geometry itself.
-  enemyExpansion: {
-    id: "enemy_west",
-    outpost: { buildingId: "outpost", x: -28, z: -20 },
-    depot: { buildingId: "depot", x: -28, z: -28 },
-    production: { buildingId: "farm", x: -28, z: -12 },
-    // Joins the base spine at its west end, runs out along z = -18, then covers
-    // the x = -24 corridor, which touches all three region slots. It used to
-    // leave the centre up the x = -6 line; Faz 8's quarry now stands there, and
-    // a road cell may never overlap a footprint.
-    route: [
-      { x: -12, z: -18 },
-      { x: -24, z: -18 },
-      { x: -24, z: -12 },
-      { x: -24, z: -28 },
-    ],
-  },
+  // West then east flank. Each outpost sits in neutral land just within the
+  // 12-unit expansion reach of the enemy's starting territory; the depot and
+  // production slots need the outpost's *connected* radius (12, not the
+  // unconnected 8), so §47's "road before depot" ordering is enforced by the
+  // geometry itself. The two are mirrors: §49 wants a second plan to be a real
+  // alternative, not a worse consolation.
+  enemyExpansions: [
+    {
+      id: "enemy_west",
+      outpost: { buildingId: "outpost", x: -28, z: -20 },
+      depot: { buildingId: "depot", x: -28, z: -28 },
+      production: { buildingId: "farm", x: -28, z: -12 },
+      routes: [
+        // Joins the base spine at its west end, runs out along z = -18, then
+        // covers the x = -24 corridor, which touches all three region slots. It
+        // used to leave the centre up the x = -6 line; Faz 8's quarry now stands
+        // there, and a road cell may never overlap a footprint.
+        [
+          { x: -12, z: -18 },
+          { x: -24, z: -18 },
+          { x: -24, z: -12 },
+          { x: -24, z: -28 },
+        ],
+        // Fallback: leave the base northward and come at the corridor along
+        // z = -8, clear of the z = -18 leg entirely. Nothing is authored on this
+        // line, so an obstruction on the direct corridor does not retire the
+        // region (§49 "yol rota fallback'i").
+        [
+          { x: -12, z: -18 },
+          { x: -12, z: -8 },
+          { x: -24, z: -8 },
+          { x: -24, z: -12 },
+          { x: -24, z: -28 },
+        ],
+      ],
+    },
+    {
+      id: "enemy_east",
+      outpost: { buildingId: "outpost", x: 28, z: -20 },
+      depot: { buildingId: "depot", x: 28, z: -28 },
+      production: { buildingId: "lumber_camp", x: 28, z: -12 },
+      routes: [
+        [
+          { x: 12, z: -18 },
+          { x: 24, z: -18 },
+          { x: 24, z: -12 },
+          { x: 24, z: -28 },
+        ],
+        [
+          { x: 12, z: -18 },
+          { x: 12, z: -8 },
+          { x: 24, z: -8 },
+          { x: 24, z: -12 },
+          { x: 24, z: -28 },
+        ],
+      ],
+    },
+  ],
   resourceNodes: [
     { id: "player_safe_stone", resourceId: "stone", kind: "safe", x: -4, z: 10 },
     { id: "player_safe_gold", resourceId: "gold", kind: "safe", x: 4, z: 10 },

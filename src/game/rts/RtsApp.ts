@@ -359,11 +359,12 @@ export class RtsApp {
       navigation: this.navigation,
       anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
       baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
-      expansion: RTS_BLOCKOUT_MAP.enemyExpansion,
+      expansions: RTS_BLOCKOUT_MAP.enemyExpansions,
       construction: this.structureConstruction,
       roadConstruction: this.roadConstruction,
       workerProduction: this.workerProduction,
       barracksProduction: this.barracksProduction,
+      structureUpgrades: this.structureUpgrades,
       balance: this.options.aiBalance,
       profile: this.options.aiProfile,
     });
@@ -757,9 +758,13 @@ export class RtsApp {
         : "Merkez yıkıldığı için çağ yükseltmesi iptal edildi; kaynaklar iade edildi.");
     }
     for (const event of this.structureUpgrades.update(dt)) {
-      if (event.structure.owner !== PLAYER_OWNER) continue;
+      // The world consequences of a tier upgrade belong to whichever kingdom
+      // bought it — Faz 8 gave the AI the same research, and a T2 outpost of its
+      // own has to claim its wider radius exactly as the player's does.
       if (event.type === "completed") this.applyStructureVisual(event.structure);
       if (event.structure.stats.territory) this.territory.refresh();
+      // Only the message is the player's; the AI has the debug panel instead.
+      if (event.structure.owner !== PLAYER_OWNER) continue;
       this.buildPalette.setActionMessage(event.type === "completed"
         ? `${event.structure.stats.label} T2 yükseltmesi tamamlandı.`
         : `${event.structure.stats.label} yıkıldığı için yükseltme iptal edildi; kaynaklar iade edildi.`);

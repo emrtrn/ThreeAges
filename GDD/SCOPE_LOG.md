@@ -65,6 +65,38 @@ Format:
   bağımlılığı CI gate'ini (`test:engine`) kırıyordu. Motor kapsamı korunur.
 - **İlgili:** Faz 0 (§17 Test), `tools/engine-tests.ts`, `build:verify` gate.
 
+### SL-004 — AI Koçbaşı'nı dış yatak ekonomisine bağlı bıraktık (2026-07-16)
+
+- **Karar:** Faz 8 "AI yapı hedefleri için kuşatma kullanıyor" kabul kriteri
+  **açık bırakıldı**. §53 oranı Koçbaşı istiyor, AI onu üretmeye çalışıyor ve
+  Kışla II engeli Faz 8'de kalktı — ama bu harita Koçbaşı'nı finanse edemiyor:
+  iki güvenli yatak 300 taş / 200 altın veriyor, Kasaba çağı (150 taş) ve
+  Kışla II (80 taş) sonrası tek bir 100 taşlık Koçbaşı için ~70 taş kalıyor.
+- **Kapsam etkisi:** Ertelendi (Faz 8 → harita ekonomisi kararı).
+- **Gerekçe:** Bu bir AI açığı değil, harita yazım açığı. GDD 08 §15 "ikinci ve
+  üçüncü çağ için dış kaynak zorunlu" diyor — yani Koçbaşı zaten *dış* yatak
+  ekonomisini şart koşuyor. Ancak `RTS_BLOCKOUT_MAP`'in iki dış yatağı da
+  (`external_stone`, `external_gold`, z = 16) oyuncunun yarısında; AI'ın erişimi
+  yok. Aynı §15 "Oyuncu ve AI kaynak erişim süreleri ölçülür, büyük fark
+  olmamalıdır" diyor, dolayısıyla mevcut yerleşim kendi tasarım kuralını
+  çiğniyor. Düzeltmek Faz 6 kaynak yerleşimine dokunmayı ve bir tasarım kararı
+  vermeyi gerektiriyor (yataklar aynalansın mı, yoksa iki üssün ortasına mı
+  taşınsın?) — Faz 8'in AI kapsamında tek taraflı alınacak bir karar değil.
+- **İlgili:** `13 §48/§49` (Ordu), `08 §15`, `public/game-data/balance/resources.json`.
+
+### SL-005 — AI üs anchor'larına ikinci aday slot eklenmedi (2026-07-16)
+
+- **Karar:** Faz 8 "Birden fazla aday yapı alanı" görevi **mekanizma tarafında**
+  tamamlandı (`AiBuildManager` bir yapının bütün adaylarını sırayla dener ve
+  reddedileni §43 kara listesine alır), fakat haritaya ekonomi yapıları için
+  ikinci aday slot **eklenmedi**; yalnız Ev'in altı adayı var.
+- **Kapsam etkisi:** Kısıtlandı (harita kapasitesine bağlı).
+- **Gerekçe:** Düşman üssünün 18 birimlik başlangıç kontrol yarıçapı Merkez
+  (8×8), dört üretici (6×6), Depo, Kışla (8×8), altı Ev ve yol hattıyla dolu;
+  ikinci bir 6×6 slot geometrik olarak sığmıyor. Ev slotlarından birini feda
+  etmek nüfus tavanını 45'e düşürüyor ve §55 nüfus kilidi riskini geri getiriyor.
+- **İlgili:** `13 §48` (Yapı ve genişleme), `src/game/rts/world/rtsMapBlockout.ts`.
+
 ---
 
 ## 3. Referans — Scope-Cut Sırası
@@ -83,3 +115,8 @@ bölümde listelidir.
 
 - Belge oluşturuldu (Faz 0 §17 "SCOPE_LOG.md oluştur").
 - SL-001 … SL-003 kayıtları eklendi.
+
+### Sürüm 0.2 (2026-07-16)
+
+- Faz 8 (AI-2) kapsam kararları: SL-004 (Koçbaşı ↔ dış yatak ekonomisi) ve
+  SL-005 (üs anchor kapasitesi) eklendi.

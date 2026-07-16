@@ -47,6 +47,12 @@ export interface AiBlackboard {
   readonly disconnectedProducers: number;
   /** §19 ActiveExpansion: how far the §47 recipe has run. */
   readonly expansionStep: AiExpansionStep;
+  /**
+   * §49: a region is left to claim and the AI's plan budget allows another.
+   * Distinct from the step: a *finished* region leaves the step at "done" while
+   * a second plan may still be open, and §30's Expand has to tell those apart.
+   */
+  readonly expansionPlanAvailable: boolean;
   /** §19 DevelopmentLevel: the kingdom's current age. */
   readonly age: SettlementAge;
   /** True while the Town transition is paid for and running. */
@@ -121,6 +127,7 @@ export class AiBlackboardReader {
     readonly currentPlan: AiPlan | null;
     readonly armyMission: AiArmyMission | null;
     readonly expansionStep: AiExpansionStep;
+    readonly expansionPlanAvailable: boolean;
   }): AiBlackboard {
     const { owner, units, structures, centers, kingdoms, production, logistics, ages } = this.sources;
     const kingdom = kingdoms.get(owner);
@@ -178,6 +185,7 @@ export class AiBlackboardReader {
       buildingCounts,
       disconnectedProducers,
       expansionStep: context.expansionStep,
+      expansionPlanAvailable: context.expansionPlanAvailable,
       age: ageSnapshot.age,
       ageUpgrading: ageSnapshot.upgrading,
       ageRequiredBuildingIds: this.sources.townRequiredBuildingIds,

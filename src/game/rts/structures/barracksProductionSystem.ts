@@ -166,6 +166,23 @@ export class BarracksProductionSystem {
     return this.rallyPoints.get(owner)?.clone() ?? null;
   }
 
+  /**
+   * Population the paid, not-yet-spawned orders of this kingdom already hold.
+   *
+   * A head count cannot stand in for this: a Ram costs three. Any caller
+   * budgeting an army has to read what the queue has *committed* to, not only
+   * what has walked out of the door — otherwise a full queue silently overshoots
+   * the budget by everything still in it.
+   */
+  queuedPopulation(owner: UnitOwner): number {
+    return [...this.queues.values()]
+      .filter((queue) => queue.structure.owner === owner)
+      .reduce(
+        (total, queue) => total + queue.orders.reduce((sum, order) => sum + order.stats.populationCost, 0),
+        0,
+      );
+  }
+
   /** Paid orders currently held across every completed Barracks. */
   queuedCount(owner: UnitOwner): number {
     return [...this.queues.values()]

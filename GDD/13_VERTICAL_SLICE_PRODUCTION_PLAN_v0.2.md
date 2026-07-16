@@ -1503,8 +1503,11 @@ olan bir niyete karşı duramaz. Hazırlık artık `riskyAttackPowerRatio` →
   düşer ve üssü açan aynı sıra onu yeniden kurar — ayrı bir onarım dalı yok.
   Üs deposu için `AiInfrastructureManager` aynı işi yapıyor: depo kaybolursa
   adım 1'e düşüp yeniden kuruyor.)
-- [ ] İşçi kaybı sonrası toparlanma (`workers-lost` acili ve darboğazı var —
-  yönetici ekonomiye dönüyor — ama baskın sonrası *toparlanma testi* henüz yok.)
+- [x] İşçi kaybı sonrası toparlanma (`test:engine` §27: çalışan bir ekonominin
+  **bütün** işçileri öldürülüyor; `workers-lost` acili yanıyor, darboğaz onu
+  hepsinin önüne alıyor, yönetici Economy'ye dönüyor ve AI kendi kendine işçi
+  üretip üreticileri yeniden dolduruyor — gelir geri geliyor ve acil **sönüyor**.
+  Toparlanma ayrı bir dal değil: sıradan ekonominin yeniden çalışması.)
 
 **Faz 8'de bulunan ve düzeltilen üç hata.**
 
@@ -1525,22 +1528,88 @@ olan bir niyete karşı duramaz. Hazırlık artık `riskyAttackPowerRatio` →
    baştan tarıyordu. Motor testi 16 dakika çıktı vermeden askıda kaldı. Hat artık
    yalnız `disconnectedProducers` kesinti sinyali geldiğinde ele alınıyor.
 
+**Faz 8'in ikinci turunda bulunan üç hata daha.** Üçü de aynı kökten: *test
+dünyası `RtsApp`ı aynalamıyordu ve bu, gerçek hataları saklıyordu.*
+
+1. **Kuyruk aşımı (işçi ve ordu).** AI hem işçi hedefini hem ordu nüfus payını
+   **yaşayan birimlere** karşı ölçüyordu; oysa Merkez ve Kışla çağa göre 5/10/20
+   *ödenmiş* sipariş tutuyor. Uçuştaki her sipariş bütçeyi aşıyordu: ordu payını
+   bir kuyruk dolusu (Koçbaşı'yla 15 nüfusa kadar) geçiyor, artan işçiler de
+   ordunun bütçelendiği nüfusu yiyordu; ikisi birlikte AI'ı nüfus tavanına
+   sıkıştırıyordu — §49'un "karar değiştirme döngüsü" kriterinin bir başka düz
+   ihlali. Artık iki bütçe de `queuedPopulation` / `queuedCount` ile *taahhüt
+   edilmiş* olanı sayıyor.
+2. **Test dünyası Kışla kuyruğunu 1'e sabitliyordu** (`RtsApp` çağ ölçekli 5
+   kullanıyor). Bu, 1'i görünmez kılan şeydi *ve* bir sonraki hatayı sakladı.
+3. **`workerTarget.settlement = 8` Kasaba çağına yetmiyordu.** Üs dört üretici
+   çalıştırıyor (tarla, oduncu, taş ocağı, altın madeni) ve her biri 3 el
+   istiyor: 12. Sekiz işçiyle taş ocağı ve altın madeni boş kalıyor, Kasaba çağı
+   ise taş *ve* altına bağlı — AI Kasaba'ya yalnızca 1'deki işçi aşımı sayesinde,
+   kazara ulaşıyordu. Hedef 12'ye çıkarıldı; §35 "çağ hazırlığı işçi dağılımı"
+   artık gerçekten üretici kapasitesinden türüyor.
+
 ### Yapı ve genişleme
 
-- [ ] Birden fazla aday yapı alanı
-- [ ] En fazla iki genişleme planı
-- [ ] Karakol ve depo yeniden kurma
-- [ ] Yol rota fallback’i
-- [ ] Bağlantı kesintisi onarımı
+- [x] Birden fazla aday yapı alanı (Mekanizma Faz 5'ten: `AiBuildManager` bir
+  yapının bütün aday çapalarını sırayla dener, reddedileni §43 kara listesine
+  alır ve bir sonrakine geçer. **Kapsam notu:** haritada yalnız Ev'in birden
+  fazla adayı var (6 slot). Düşman üssünün 18 birimlik kontrol yarıçapı Merkez,
+  dört üretici, Depo, Kışla, altı Ev ve yol hattıyla dolu — ekonomi yapılarına
+  ikinci bir slot sığmıyor. Alternatif slot haritanın kapasitesine bağlı; kod
+  tarafı hazır.)
+- [x] En fazla iki genişleme planı (`AiExpansionCoordinator`; sınır haritanın
+  kaç bölge yazdığına değil AI'a ait: `AI_MAX_EXPANSION_PLANS = 2`. `test:engine`
+  üç bölge yazılmış bir haritada AI'ın yalnız ikisini talep ettiğini ve harita
+  tercih sırasına uyduğunu kanıtlıyor. Bölge sayımı *denenen* plandır (§45), bitense
+  değil. Harita artık iki aynalı bölge yazıyor: `enemy_west` ve `enemy_east`.)
+- [x] Karakol ve depo yeniden kurma (Reçete artık "done"da bitmiyor: talep edilen
+  her bölge her tick'te kendi karakolu, deposu ve üretim yapısından sorumlu.
+  Kaybolan slot reçeteyi o adıma geri döndürüyor ve **ilk kez kuran kodun aynısı**
+  yeniden kuruyor — ayrı bir onarım dalı yok. `test:engine`: tamamlanmış bölgenin
+  karakolu yıkılıyor, adım `outpost`'a düşüyor, AI yeniden kuruyor.)
+- [x] Yol rota fallback'i (`RtsExpansionRegion.routes` tercih sıralı bir liste.
+  Reddedilen koridor *rotayı* emekliye ayırıyor, bölgeyi değil; bölge ancak
+  yazılmış alternatifleri tükendiğinde terk ediliyor. §48 hâlâ serbest rota
+  aramasını dışlıyor — alternatifler yazılmış, keşfedilmiş değil. `test:engine`:
+  birincil koridora yapı park ediliyor, AI alternatiften bağlanıyor.)
+- [x] Bağlantı kesintisi onarımı (`disconnectedProducers` sinyali tamamlanmış
+  bölgeyi `route` adımına geri alıyor. Sağlam ayak `plan` ile sıfır maliyet
+  görülüp atlanıyor, yani onarım *yeniden döşeme*ye dönüşmüyor — `test:engine`
+  onarım sonrası cüzdanın değişmediğini doğruluyor. Bu, üs hattında bir kez
+  yaşanmış bir hatanın bölge tarafındaki karşılığı.)
 
 ### Ordu
 
-- [ ] Muhafız / Okçu / Kuşatma oranı
-- [ ] Tek ana saha ordusu
-- [ ] Küçük üs savunma rezervi
-- [ ] Dış ekonomi hedefleme
-- [ ] Merkez saldırısı
-- [ ] Kayıp eşiğinde geri çekilme
+- [x] Muhafız / Okçu / Kuşatma oranı (`army.composition` yaş başına; üretim,
+  ordunun *payına göre açığı* en büyük rolü seçiyor — sayıya göre değil, yoksa
+  AI açılışta hangi rolü ürettiyse onu yığardı. Faz 8 eksik parçayı ekledi:
+  `AiUpgradeManager` Kışla II'yi araştırıyor, yoksa Okçu/Koçbaşı `requiredBuildingLevel: 2`
+  arkasında kalıcı olarak erişilemezdi. Tetikleyici bir kural değil, üretimin
+  **verinin kendi kapısından** aldığı `requires-barracks-upgrade` cevabı — kapı
+  veride kalıyor. `test:engine`: headless maçta 17 Muhafız + 8 Okçu ve `barracks#2`.
+  **Kuşatma açığı aşağıda.**)
+- [x] Tek ana saha ordusu (Faz 5'ten: `fieldArmy()` yaşayan her savaş birimi;
+  aynı anda tek görev — §51'in "ikinci akın ordusu yok" kuralı yapı gereği.)
+- [x] Küçük üs savunma rezervi (Faz 5'ten: `garrison()` üsse en yakın birimleri
+  `minimumDefensePower` dolana dek tutuyor. `test:engine` §54.)
+- [x] Dış ekonomi hedefleme (Faz 5'ten: `harassEconomy` görevi + §60 puanlaması.
+  `test:engine` §60: eşit güçteyken dış ekonomi, ezici üstünlükte Merkez.)
+- [x] Merkez saldırısı (Faz 5'ten: `assaultTarget`; §69 dominance bandı Merkez'e
+  ne zaman değeceğini belirliyor. `test:engine` §60.)
+- [x] Kayıp eşiğinde geri çekilme (İki bağımsız §65 tetikleyicisi: güç oranı ve
+  ortalama can. `test:engine` §62/§65 ikisini de ayrı ayrı doğruluyor.)
+
+**Faz 8'de kapatılamayan kapsam: Koçbaşı.** §53 oranı Koçbaşı istiyor ve AI artık
+onu üretmeye *çalışıyor* — ama bu harita finanse edemiyor. İki güvenli yatak 300
+taş / 200 altın taşıyor; Kasaba çağı (150) ve Kışla II (80) taşın neredeyse
+tamamını harcıyor, geriye tek bir 100 taşlık Koçbaşı için yetmeyen ~70 kalıyor.
+GDD 08 §15 zaten "ikinci ve üçüncü çağ için dış kaynak zorunlu" diyor: Koçbaşı
+**dış** yatak ekonomisini şart koşuyor. Bu haritanın iki dış yatağının **ikisi de**
+(`external_stone` ve `external_gold`, z = 16) oyuncunun yarısında; AI'ın erişimi
+yok. GDD 08 §15 aynı zamanda "Oyuncu ve AI kaynak erişim süreleri ölçülür, büyük
+fark olmamalıdır" diyor — yani bu bir harita yazım açığı, AI açığı değil. Kapatmak
+haritanın kaynak yerleşimine dokunmayı gerektiriyor (Faz 6 kapsamı) ve bir tasarım
+kararı: dış yataklar aynalanmalı mı, yoksa iki üssün ortasına mı taşınmalı?
 
 ### Bilgi
 
@@ -1565,8 +1634,10 @@ doğrulanıyor, ekran görüntüsüne bakarak değil.
 - [x] Ordu gücü (Faz 5'ten; Faz 8 rol bazlı bileşim satırını ekledi — çıplak güç
   §53 oranının tutulup tutulmadığını göstermez.)
 - [x] Seçilen saldırı hedefi (Faz 5'ten: hedef + puan + kazanma gerekçesi.)
-- [ ] Geri çekilme nedeni (Ordu grubunda; `armyManager` iki geri çekilme
-  tetikleyicisini ayırt ediyor ama panele nedeni ayrı yazmıyor.)
+- [x] Geri çekilme nedeni (`AiRetreatReason`: `outmatched` "güç oranı düştü" /
+  `attrition` "ordu yıprandı". Yalnız iki §65 tetikleyicisi neden yazabiliyor —
+  hiç çıkmamış bir ordunun "toplanması" geri çekilme değildir. `test:engine`
+  üç durumu da doğruluyor.)
 - [x] Son on karar (`MAX_DECISION_LINES` 5 → 10.)
 
 ---
@@ -1582,20 +1653,30 @@ doğrulanıyor, ekran görüntüsüne bakarak değil.
   Betiklenmiş bir adım değil — çağın gereksinim listesi veride, AI oraya yalnız
   altı gerekli yapıyı sağlayan bir ekonomiyi işleterek geldi.)
 - [x] AI en az bir dış ekonomi açıyor. (Faz 5'ten: §47 reçetesi `done`.)
-- [ ] AI karışık ordu üretiyor. (§53 oranı ve seçim mantığı hazır
-  (`army.composition`, yaş başına 3:2:1), **ama** Okçu/Koçbaşı Kışla II'nin
-  arkasında ve Kışla II Kasaba çağını şart koşuyor. Yapı yükseltme uygulayıcısı
-  henüz yok, dolayısıyla AI pratikte hâlâ yalnız Muhafız üretebiliyor.)
-- [ ] AI yapı hedefleri için kuşatma kullanıyor. (Aynı Kışla II engeli.)
-- [ ] AI merkez saldırısına bütün ordusunu gereksiz yere kaybetmiyor. (§62
-  hazırlık eğrisi düzeltildi — AI artık yazı tura orana saldırmıyor — ama ordu
-  grubunun kendisi (geri çekilme, dış ekonomi hedefleme) Faz 8'de açık.)
-- [ ] AI ağır kayıp sonrası yeniden ekonomi kurabiliyor.
-- [ ] AI 10 hızlandırılmış maçın en az 8’ini tamamlıyor.
-- [ ] AI karar değiştirme döngüsüne girmiyor. (İki kalıcı kilit düzeltildi — nüfus
-  acili ve yapı sırası — ama kriterin kendisi çoklu maç ölçümü istiyor.)
+- [x] AI karışık ordu üretiyor. (`AiUpgradeManager` eksik uygulayıcıyı kapattı:
+  AI Kışla II'yi oyuncunun düğmesiyle aynı sistemden araştırıyor. `test:engine`
+  headless maçta 17 Muhafız + 8 Okçu, `barracks#2`, `upgradeStep === "done"`.)
+- [ ] AI yapı hedefleri için kuşatma kullanıyor. **Kışla II engeli kalktı; kalan
+  engel harita ekonomisi.** İki güvenli yatak 300 taş / 200 altın veriyor; Kasaba
+  (150) + Kışla II (80) sonrası tek bir 100 taşlık Koçbaşı için yetmiyor. GDD 08
+  §15 dış yatağı ikinci çağ için zorunlu kılıyor, ama bu haritanın iki dış yatağı
+  da oyuncunun yarısında (z = 16) — aynı §15'in "erişim süreleri arasında büyük
+  fark olmamalı" kuralına aykırı. Bkz. Ordu bölümündeki kapsam notu.
+- [x] AI merkez saldırısına bütün ordusunu gereksiz yere kaybetmiyor. (§62
+  hazırlık eğrisi + iki bağımsız §65 geri çekilme tetikleyicisi, ikisi de
+  `test:engine` ile ayrı ayrı doğrulanıyor; §54 garnizonu üssü boş bırakmıyor.)
+- [x] AI ağır kayıp sonrası yeniden ekonomi kurabiliyor. (`test:engine` §27:
+  bütün işçileri öldürülen AI acili yakıyor, Economy'ye dönüyor, işçi üretiyor ve
+  geliri geri geliyor — acil sönüyor.)
+- [ ] AI 10 hızlandırılmış maçın en az 8’ini tamamlıyor. **Ölçüm altyapısı eksik:**
+  headless test dünyası savaşı çözmüyor (`step()` içinde çatışma/ölüm/yıkım yok),
+  bu yüzden hiçbir maç *bitmiyor*. Kriter, `RtsApp`ın savaş hattını da aynalayan
+  tam bir maç koşucusu istiyor.
+- [ ] AI karar değiştirme döngüsüne girmiyor. (Üç kalıcı kilit düzeltildi — nüfus
+  acili, yapı sırası ve Faz 8'de bulunan işçi/ordu **kuyruk aşımı** — ama kriterin
+  kendisi yukarıdakiyle aynı çoklu maç ölçümünü istiyor.)
 - [x] AI’ın davranış nedeni debug panelinden izlenebiliyor. (Geri çekilme nedeni
-  hariç; yukarıdaki Debug listesine bakınız.)
+  dahil, Faz 8'de tamamlandı; yukarıdaki Debug listesine bakınız.)
 
 ---
 

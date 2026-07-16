@@ -19,9 +19,15 @@
  */
 import type { AiBalance } from "../../data/gameDataTypes";
 import { AI_RESOURCE_IDS, type AiBlackboard } from "./aiBlackboard";
-import { AI_INTENTS, type AiIntent, type AiIntentScore } from "./aiTypes";
+import { AI_INTENTS, type AiExpansionStep, type AiIntent, type AiIntentScore } from "./aiTypes";
 
 const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+
+/**
+ * §47 steps with a claim already on the ground. "outpost" is not one of them —
+ * it is the recipe's *starting* state, before anything has been committed.
+ */
+const RUNNING_EXPANSION_STEPS: readonly AiExpansionStep[] = ["route", "depot", "production"];
 
 /** Score every intent, highest first. Ties break on the §23 intent order. */
 export function scoreIntents(blackboard: AiBlackboard, balance: AiBalance): readonly AiIntentScore[] {
@@ -161,14 +167,22 @@ function scoreAgeUp(bb: AiBlackboard, balance: AiBalance): { rawScore: number; r
 
 /** §30: ResourceNeed × BestRegionValue × RouteFeasibility × Safety */
 function scoreExpand(bb: AiBlackboard, balance: AiBalance): { rawScore: number; reason: string } {
-  // §10: AI-1 has one region, so a finished or abandoned recipe ends the intent.
-  if (bb.expansionStep === "done") return { rawScore: 0, reason: "bölge aktif" };
-  if (bb.expansionStep === "failed") return { rawScore: 0, reason: "bölge terk edildi" };
   // §7: the §47 recipe outlives the plan's commitment window (outpost → road →
   // depot → farm is minutes of work). Hold the intent while it runs, or the
   // director would drop a half-built expansion the moment the outpost landed,
   // leaving a claim with no depot and therefore no income.
-  if (bb.expansionStep !== "outpost") return { rawScore: 1, reason: `genişleme sürüyor: ${bb.expansionStep}` };
+  if (RUNNING_EXPANSION_STEPS.includes(bb.expansionStep)) {
+    return { rawScore: 1, reason: `genişleme sürüyor: ${bb.expansionStep}` };
+  }
+  // §45/§49: the AI runs at most two regions. Once its plan budget is spent — or
+  // the map has no region left — Expand must go to zero rather than keep scoring
+  // for ground that does not exist, which §7's hysteresis would make permanent.
+  if (!bb.expansionPlanAvailable) {
+    return {
+      rawScore: 0,
+      reason: bb.expansionStep === "failed" ? "bölge terk edildi, plan kalmadı" : "genişleme planı kalmadı",
+    };
+  }
   // §34: the opening template runs to completion — food, wood, *then* a Barracks
   // — before free strategic evaluation begins. Gating on the whole opening keeps
   // that order without a separate opening state: an AI that expanded first would

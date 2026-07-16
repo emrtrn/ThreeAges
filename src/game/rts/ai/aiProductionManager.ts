@@ -23,6 +23,8 @@ import { workerTargetFor } from "./intentScorer";
 const COMPOSITION_ROLES: readonly (keyof AiArmyComposition)[] = ["guard", "archer", "siege"];
 
 export class AiProductionManager {
+  private gatedRole: keyof AiArmyComposition | null = null;
+
   constructor(
     private readonly owner: UnitOwner,
     private readonly workers: WorkerProductionSystem,
@@ -31,6 +33,16 @@ export class AiProductionManager {
     /** Which unit id trains a given role, read off the same balance the player uses. */
     private readonly unitIdForRole: (role: UnitRoleId) => string | null,
   ) {}
+
+  /**
+   * §53: the role the composition wants but this Barracks tier cannot train, or
+   * null. {@link AiUpgradeManager} acts on this — the gate itself stays in the
+   * unit data (`requiredBuildingLevel`), which is why this is *reported* from a
+   * refused queue rather than re-derived from a tier rule copied into the AI.
+   */
+  get upgradeGatedRole(): keyof AiArmyComposition | null {
+    return this.gatedRole;
+  }
 
   update(bb: AiBlackboard): void {
     // §55 step 1: never queue into a full population — that is the economy
@@ -42,7 +54,13 @@ export class AiProductionManager {
     // and the extra producers each want their own hands ("çağ hazırlığı işçi
     // dağılımı"): producers pull idle workers themselves, so the AI shapes the
     // distribution by how many workers exist, not by assigning them.
-    if (bb.workerCount < workerTargetFor(bb, this.balance)) {
+    //
+    // Orders in flight count, exactly as they do for the army below: the centre
+    // holds an age-scaled queue, and a target compared against live workers
+    // alone is overshot by every worker still training. That overshoot is not
+    // cosmetic — the surplus eats the population the army budget was sized
+    // against, and the two together wedge the AI at its cap.
+    if (bb.workerCount + this.workers.queuedCount(this.owner) < workerTargetFor(bb, this.balance)) {
       this.workers.queueWorker(this.owner);
       return;
     }
@@ -53,44 +71,61 @@ export class AiProductionManager {
     // never be relieved: it fires forever, pins the director on Economy, and the
     // AI stops ageing up or acting at all. The ceiling is what keeps that
     // emergency a passing state rather than a terminal one.
-    if (bb.armyPopulation >= bb.populationCap * this.balance.army.populationShare) return;
+    // Orders already paid for count against the budget: the Barracks holds a
+    // whole age-scaled queue, so a ceiling read off the live army alone is
+    // overshot by everything still training — up to a full queue of Rams.
+    const committed = bb.armyPopulation + this.army.queuedPopulation(this.owner);
+    if (committed >= bb.populationCap * this.balance.army.populationShare) return;
     if ((bb.buildingCounts["barracks"] ?? 0) === 0) return;
-    const role = this.nextRole(bb);
-    if (!role) return;
-    const unitId = this.unitIdForRole(role);
-    if (unitId) this.army.queueUnit(this.owner, unitId);
+    this.gatedRole = null;
+    // §53: take the most wanted role, but do not stall the whole army on it. A
+    // Town-age AI wants an Archer long before its Barracks II research lands, and
+    // an AI that queued nothing until then would field no army at all through the
+    // one window it is most likely to be attacked in.
+    for (const role of this.rolesByDeficit(bb)) {
+      const unitId = this.unitIdForRole(role);
+      if (!unitId) continue;
+      const result = this.army.queueUnit(this.owner, unitId);
+      if (result !== "requires-barracks-upgrade") return;
+      // The first gated role is the one the upgrade is *for*; keep it and drop to
+      // whatever this tier can still train.
+      this.gatedRole ??= role;
+    }
+  }
+
+  reset(): void {
+    this.gatedRole = null;
   }
 
   /**
-   * §53: the role furthest below its share of the age's composition.
+   * §53: the age's roles, most starved of its share of the composition first.
    *
    * Comparing *deficits against the ratio* rather than counts is what keeps the
    * mix honest while the army is small: with a 3:2:1 Town ratio and an army of
    * one Guard, the Archer is further behind its share than a second Guard is,
    * so the AI actually diversifies instead of stacking whichever role it opened
-   * with. A role whose training building is still Barracks I simply fails to
-   * queue and is skipped next tick, so the gate stays in the data (§45).
+   * with.
    */
-  private nextRole(bb: AiBlackboard): keyof AiArmyComposition | null {
+  private rolesByDeficit(bb: AiBlackboard): readonly (keyof AiArmyComposition)[] {
     const composition = this.balance.army.composition[bb.age];
     const totalShare = COMPOSITION_ROLES.reduce((total, role) => total + composition[role], 0);
-    if (totalShare <= 0) return null;
+    if (totalShare <= 0) return [];
     const armySize = COMPOSITION_ROLES.reduce((total, role) => total + bb.armyComposition[role], 0);
 
-    let best: keyof AiArmyComposition | null = null;
-    let bestDeficit = 0;
-    for (const role of COMPOSITION_ROLES) {
-      const share = composition[role];
-      if (share <= 0) continue;
-      // How many of this role an army of this size *should* already have.
-      const wanted = (share / totalShare) * (armySize + 1);
-      const deficit = wanted - bb.armyComposition[role];
-      // §80: ties must not reorder between two identical runs, so the first role
-      // in the fixed list wins rather than whichever the iteration reached.
-      if (deficit <= bestDeficit) continue;
-      best = role;
-      bestDeficit = deficit;
-    }
-    return best;
+    return COMPOSITION_ROLES
+      // A role the age's ratio does not ask for is not a fallback: queuing a
+      // Settlement Archer would answer the tier gate by ignoring §53 entirely.
+      .filter((role) => composition[role] > 0)
+      .map((role) => ({
+        role,
+        // How many of this role an army of this size *should* already have.
+        deficit: (composition[role] / totalShare) * (armySize + 1) - bb.armyComposition[role],
+      }))
+      .filter((entry) => entry.deficit > 0)
+      // §80: ties must not reorder between two identical runs, so the fixed list
+      // order breaks them rather than whichever the sort happened to reach.
+      .sort((left, right) => right.deficit - left.deficit
+        || COMPOSITION_ROLES.indexOf(left.role) - COMPOSITION_ROLES.indexOf(right.role))
+      .map((entry) => entry.role);
   }
 }

@@ -87,12 +87,13 @@ import {
   roadCellTouchingFootprint,
 } from "../src/game/rts/economy/depotLogisticsSystem";
 import { AiExpansionManager, AI_EXPANSION_FAILURE_LIMIT } from "../src/game/rts/ai/aiExpansionManager";
+import { AiExpansionCoordinator, AI_MAX_EXPANSION_PLANS } from "../src/game/rts/ai/aiExpansionCoordinator";
 import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
-import { AiController } from "../src/game/rts/ai/aiController";
+import { AiController, type AiControllerSnapshot } from "../src/game/rts/ai/aiController";
 import { AiDecisionLog } from "../src/game/rts/ai/aiDecisionLog";
 import { ArmyManager } from "../src/game/rts/ai/armyManager";
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
@@ -30099,13 +30100,16 @@ function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
     // satisfied by default, so a test perturbs exactly the one it is about.
     resourceStocks: { food: 200, wood: 200, stone: 100, gold: 100 },
     resourceIncomePerMinute: { food: 20, wood: 18, stone: 10, gold: 6 },
-    workerCount: 8,
+    // Read off the balance rather than pinned: "settled" means *at the target*,
+    // and a literal here silently becomes "understaffed" the day the target moves.
+    workerCount: AI_TEST_BALANCE.economy.workerTarget.settlement,
     idleWorkerCount: 0,
-    population: 8,
+    population: AI_TEST_BALANCE.economy.workerTarget.settlement,
     populationCap: 20,
     buildingCounts: {},
     disconnectedProducers: 0,
     expansionStep: "outpost",
+    expansionPlanAvailable: true,
     age: "settlement",
     ageUpgrading: false,
     ageRequiredBuildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "barracks", "outpost"],
@@ -30232,6 +30236,12 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
   );
   const ages = new AgeSystem(["player", "enemy"], ageBalance, centers, structures, kingdoms);
   const workerProduction = new WorkerProductionSystem(units, centers, navigation, worker, kingdoms);
+  // As in RtsApp: the tier research both kingdoms buy through, Town-gated.
+  const structureUpgrades = new StructureUpgradeSystem(
+    structures,
+    kingdoms,
+    (owner) => ages.snapshot(owner).age === "town",
+  );
   // The full Faz 7 roster, and the same age-scaled Barracks tier gate RtsApp
   // applies — so an AI-2 composition may only queue Archers and Rams once its
   // Barracks is level 2, exactly as the player's panel does.
@@ -30241,6 +30251,8 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     navigation,
     unitBalance,
     kingdoms,
+    (structure) => structureUpgrades.isUpgrading(structure),
+    (owner) => guardQueueCapacityForAgeLevel(centers.get(owner)?.level ?? 1),
   );
   const ai = new AiController({
     owner: "enemy",
@@ -30259,13 +30271,19 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     navigation,
     anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
     baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
-    expansion: RTS_BLOCKOUT_MAP.enemyExpansion,
+    expansions: RTS_BLOCKOUT_MAP.enemyExpansions,
     construction,
     roadConstruction,
     workerProduction,
     barracksProduction,
+    structureUpgrades,
     balance: AI_TEST_BALANCE,
     profile: "normal",
+  });
+  // As in RtsApp: a building finished after its type's research still gets the
+  // tier — otherwise a second Barracks would silently come out at level 1.
+  structures.setCompletedVisualHandler((structure) => {
+    structureUpgrades.applyCompletedUpgrade(structure);
   });
   /** Advance the world the way RtsApp's simulation loop does. */
   const step = (dt: number) => {
@@ -30276,13 +30294,73 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     transfers.update();
     workerProduction.update(dt);
     barracksProduction.update(dt);
+    for (const event of structureUpgrades.update(dt)) {
+      if (event.type === "completed" && event.structure.stats.territory) territory.refresh();
+    }
     ages.update(dt);
     ai.update(dt);
   };
   return {
     units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, ages,
-    production, resourceNodes, step,
+    production, resourceNodes, structureUpgrades, step,
   };
+}
+
+/**
+ * A §82 panel snapshot with every field present. The panel's fixtures used to be
+ * written out by hand and had quietly drifted from the interface — esbuild strips
+ * the types, so a missing field printed as "undefined" rather than failing.
+ */
+function aiTestSnapshot(overrides: Partial<AiControllerSnapshot> = {}): AiControllerSnapshot {
+  return {
+    owner: "enemy",
+    intent: null,
+    plan: null,
+    planSeconds: 0,
+    scores: [],
+    mission: null,
+    armyPower: 0,
+    garrisonCount: 0,
+    target: null,
+    retreatReason: null,
+    concluded: false,
+    bottleneck: null,
+    expansionStep: "outpost",
+    expansionsCompleted: 0,
+    expansionPlanAvailable: true,
+    infrastructureStep: "linked",
+    upgradeStep: "idle",
+    activeBuild: null,
+    blackboard: null,
+    ...overrides,
+  };
+}
+
+/** The region the AI claims first — its plan 1 of {@link AI_MAX_EXPANSION_PLANS}. */
+const AI_TEST_PRIMARY_REGION = RTS_BLOCKOUT_MAP.enemyExpansions[0]
+  ?? assert.fail("the map must author at least one enemy expansion region");
+
+/**
+ * Put a standing player defence on the field, far from the AI's base.
+ *
+ * Not scenery. §62 scores Attack against the *enemy* army, so an opponent with no
+ * army at all puts the AI past the dominance bar the moment it trains its first
+ * Guard: Attack saturates at 1.0, §7's hysteresis makes it unbeatable, and the
+ * director marches out and never re-decides. Against a genuinely undefended enemy
+ * that is correct play — so every scenario about the AI's *economy* has to be a
+ * contested one, or it is measuring an AI that has already decided to win.
+ *
+ * Spawned at the player's own edge of the map, so this raises no §56 base threat
+ * and the AI's own defend intent stays out of the measurement.
+ */
+function spawnPlayerDefence(
+  world: { units: UnitSystem },
+  guard: UnitBalanceStats,
+  count = 10,
+): void {
+  for (let index = 0; index < count; index += 1) {
+    world.units.spawn("player", -12 + index * 3, 29, guard);
+  }
 }
 
 const AI_TEST_BALANCE = validateAiBalance(
@@ -30390,12 +30468,28 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
     buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 },
   });
   assert.ok(scoreFor(readyToExpand, "expand").rawScore > 0);
-  const expanded = aiTestBlackboard({
+  // §49: AI-1 expanded once and stopped. AI-2 gets a second plan, so a finished
+  // region no longer ends the intent — the *plan budget* does. The step and the
+  // budget are separate facts, and conflating them is what capped AI-1 at one
+  // region: "done" meant both "this region is finished" and "stop expanding".
+  const expandedWithPlanLeft = aiTestBlackboard({
     resourceStocks: { food: 0, wood: 500 },
     buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 },
     expansionStep: "done",
+    expansionPlanAvailable: true,
   });
-  assert.equal(scoreFor(expanded, "expand").rawScore, 0, "§10: AI-1 expands once");
+  assert.ok(
+    scoreFor(expandedWithPlanLeft, "expand").rawScore > 0,
+    "§49: a finished region with a plan left still wants the second one",
+  );
+  const expandedOut = aiTestBlackboard({
+    resourceStocks: { food: 0, wood: 500 },
+    buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 },
+    expansionStep: "done",
+    expansionPlanAvailable: false,
+  });
+  assert.equal(scoreFor(expandedOut, "expand").rawScore, 0, "§45: the two-plan budget ends the intent");
+  assert.equal(scoreFor(expandedOut, "expand").reason, "genişleme planı kalmadı");
 
   // §7: the recipe takes minutes, far longer than a plan's commitment window,
   // so a running expansion pins the intent — otherwise the director would drop a
@@ -30602,19 +30696,14 @@ check("AI debug view exposes the intent, its reason and the decision trail (plan
   const blackboard = aiTestBlackboard({ workerCount: 2, baseThreat: 2, knownEnemyArmyPower: 2 });
   const plan = director.evaluate(blackboard);
   const text = formatRtsAiDebug(
-    {
-      owner: "enemy",
+    aiTestSnapshot({
       intent: director.currentIntent,
       plan,
       planSeconds: 3,
       scores: director.state().scores,
       mission: "regroup",
-      armyPower: 0,
-      garrisonCount: 0,
-      target: null,
-      concluded: false,
       blackboard,
-    },
+    }),
     log.recent(),
     1,
   ).join("\n");
@@ -30633,36 +30722,54 @@ check("AI debug view exposes the intent, its reason and the decision trail (plan
 
   // §60/§82: an attacking AI explains which target it picked and why.
   const attacking = formatRtsAiDebug(
-    {
-      owner: "enemy",
+    aiTestSnapshot({
       intent: "attack",
-      plan: null,
-      planSeconds: 0,
-      scores: [],
       mission: "harassEconomy",
       armyPower: 6,
       garrisonCount: 2,
-      concluded: false,
       target: {
         candidate: { id: "structure:4", kind: "economy", x: 0, z: 0, healthRatio: 1, defensePower: 0, distance: 10 },
         score: 1.84,
         reason: "dış ekonomi: savunmasız",
       },
-      bottleneck: null,
       expansionStep: "done",
+      expansionsCompleted: 1,
       blackboard,
-    },
+    }),
     [],
     1,
   ).join("\n");
   assert.match(attacking, /hedef: economy 1\.84 — dış ekonomi: savunmasız/);
   assert.match(attacking, /üste kalan 2/, "§54: the panel shows what stayed home");
+  // §49/§82: "done" alone cannot say whether the AI has finished expanding or is
+  // simply between its two plans, so the panel carries the budget as well.
+  assert.match(attacking, /genişleme: done \(1\/2, plan var\)/);
+  assert.match(
+    formatRtsAiDebug(aiTestSnapshot({ expansionsCompleted: 2, expansionPlanAvailable: false }), [], 1).join("\n"),
+    /genişleme: outpost \(2\/2, plan yok\)/,
+  );
+
+  // §65/§82: "regroup" cannot tell an army that lost the exchange from one that
+  // was ground down, and those are two different balance problems. The panel
+  // stays silent when the army is merely gathering rather than retreating.
+  assert.doesNotMatch(text, /geri çekilme:/, "an army that never left has not retreated");
+  assert.match(
+    formatRtsAiDebug(aiTestSnapshot({ mission: "regroup", retreatReason: "outmatched" }), [], 1).join("\n"),
+    /geri çekilme: güç oranı düştü/,
+  );
+  assert.match(
+    formatRtsAiDebug(aiTestSnapshot({ mission: "regroup", retreatReason: "attrition" }), [], 1).join("\n"),
+    /geri çekilme: ordu yıprandı/,
+  );
+
+  // §53/§82: the Barracks tier the composition is gated on.
+  assert.match(
+    formatRtsAiDebug(aiTestSnapshot({ upgradeStep: "researching" }), [], 1).join("\n"),
+    /kışla II: researching/,
+  );
 
   const empty = formatRtsAiDebug(
-    {
-      owner: "enemy", intent: null, plan: null, planSeconds: 0, scores: [], mission: null,
-      armyPower: 0, garrisonCount: 0, target: null, concluded: true, blackboard: null,
-    },
+    aiTestSnapshot({ concluded: true }),
     [],
     1,
   ).join("\n");
@@ -30778,7 +30885,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
     "the AI only ever builds for its own kingdom",
   );
   // §40: every AI structure sits on an authored anchor, never a free-searched spot.
-  const expansion = RTS_BLOCKOUT_MAP.enemyExpansion;
+  const expansion = AI_TEST_PRIMARY_REGION;
   const authored = [
     ...RTS_BLOCKOUT_MAP.enemyBaseAnchors,
     expansion.outpost,
@@ -30809,6 +30916,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   // for the income the Genişleme group will unlock.
   const housed = aiTestWorld({ food: 4000, wood: 4000 });
   for (let index = 0; index < 5; index += 1) housed.units.spawn("enemy", -4 + index * 2, -18, worker);
+  spawnPlayerDefence(housed, guard);
   for (let index = 0; index < 1600; index += 1) housed.step(0.5);
   const housedBoard = housed.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
   assert.ok(
@@ -30885,10 +30993,14 @@ check("AI expansion runs the §47 recipe end to end and finally earns income", (
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
   const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
-  const region = RTS_BLOCKOUT_MAP.enemyExpansion;
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
+  const region = AI_TEST_PRIMARY_REGION;
 
   const world = aiTestWorld({ food: 4000, wood: 4000 });
   for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker);
+  // Expansion is what a *contested* AI does with the economy it cannot yet win
+  // with; an unopposed one rightly marches out instead.
+  spawnPlayerDefence(world, guard);
   for (let index = 0; index < 2400; index += 1) world.step(0.5);
 
   assert.equal(world.ai.snapshot().expansionStep, "done", "§47: the recipe reaches an active region");
@@ -30996,9 +31108,11 @@ check("Faz 8 §55: the army leaves the economy population headroom", () => {
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
   const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
 
   const world = aiTestWorld({ food: 6000, wood: 6000 });
   for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker);
+  spawnPlayerDefence(world, guard);
   for (let index = 0; index < 6000; index += 1) world.step(0.5);
 
   const board = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
@@ -31037,6 +31151,348 @@ check("Faz 8 §55: the army leaves the economy population headroom", () => {
   assert.equal(board.armyComposition.worker, 0, "workers are never part of the army composition");
 });
 
+check("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
+
+  const world = aiTestWorld({ food: 6000, wood: 6000 });
+  for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker);
+  spawnPlayerDefence(world, guard, 20);
+  for (let index = 0; index < 6000; index += 1) world.step(0.5);
+
+  const board = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
+
+  // §53's ratio has been data since Faz 7, but it could never be honoured: the
+  // Archer and the Ram sit behind `requiredBuildingLevel: 2`, and nothing in the
+  // AI could research the tier. It fielded Guards and only Guards, whatever the
+  // ratio asked for — the "AI karışık ordu üretiyor" criterion failed on a
+  // missing executor rather than on a scoring rule.
+  assert.equal(world.ai.snapshot().upgradeStep, "done", "§53: the AI finished the tier its ratio needs");
+  const barracks = world.structures.ownedBy("enemy").filter((structure) => structure.stats.id === "barracks");
+  assert.ok(barracks.length > 0 && barracks.every((structure) => structure.level === 2), "its Barracks is tier 2");
+
+  assert.ok(board.armyComposition.guard > 0, "§53: Guards are still the line");
+  assert.ok(board.armyComposition.archer > 0, "§53: and the AI actually diversifies into Archers");
+
+  // §4/§45: the gate stayed in the data. It paid the Town price for the tier out
+  // of the same wallet and the same upgrade system the player's button drives —
+  // there is no AI-only unlock.
+  assert.equal(world.ages.snapshot("enemy").age, "town", "§53: the tier is Town-gated for both kingdoms");
+  assert.equal(
+    world.structureUpgrades.snapshot("player", "barracks").completed,
+    false,
+    "the AI's research is its own; the player's Barracks is untouched",
+  );
+
+  // Known gap, recorded rather than asserted: the Ram is the one role §53 asks
+  // for that this map cannot fund. The two safe deposits hold 300 stone / 200
+  // gold, and the Town age (150) plus the Barracks tier (80) spend almost all of
+  // the stone before a single 100-stone Ram is affordable. §53's siege share
+  // needs the *external* deposits, and this map authors both of them on the
+  // player's half — so "AI yapı hedefleri için kuşatma kullanıyor" is blocked on
+  // the map's resource layout, not on anything in the AI.
+});
+
+check("Faz 8 §27: an AI whose workers are wiped out rebuilds its economy", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
+
+  const world = aiTestWorld({ food: 4000, wood: 4000 });
+  for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker);
+  spawnPlayerDefence(world, guard);
+  // Long enough for a working economy, so the raid takes something real.
+  for (let index = 0; index < 1200; index += 1) world.step(0.5);
+  const beforeIncome = world.production.productionPerMinute("enemy", "food");
+  assert.ok(beforeIncome > 0, "the AI is earning before the raid");
+
+  // The raid: every worker dies. §27 is explicit that this — not a lost army — is
+  // the collapse that matters, because nothing else rebuilds itself.
+  for (const unit of world.units.unitsOf("enemy").filter((item) => item.role === "worker")) {
+    unit.health.damage(unit.health.max);
+  }
+  // No selection exists headlessly; the AI's kingdom is not the player's.
+  updateUnitDeaths(world.units, { remove: () => {} }, 0.1);
+  for (let index = 0; index < 20; index += 1) world.step(0.5);
+
+  const raidedBoard = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
+  assert.equal(raidedBoard.workerCount, 0, "the raid landed");
+  assert.ok(
+    raidedBoard.emergencyFlags.includes("workers-lost"),
+    "§7: an economy with no hands is an emergency that cuts the committed plan",
+  );
+  assert.equal(world.ai.snapshot().bottleneck, "workers-lost", "§37: and it outranks every other bottleneck");
+  assert.equal(world.ai.snapshot().intent, "economy", "§27: the AI turns to rebuilding rather than fighting on");
+
+  // Recovery is the point: the emergency has to *end*, and end by itself. The
+  // centre trains workers, the producers pull them back in, and income returns —
+  // none of which is a recovery branch, only the ordinary economy running again.
+  for (let index = 0; index < 600; index += 1) world.step(0.5);
+  const recovered = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
+  assert.ok(recovered.workerCount > 0, "§27: the AI trained workers again");
+  assert.ok(
+    !recovered.emergencyFlags.includes("workers-lost"),
+    "§7: the emergency clears rather than pinning the director forever",
+  );
+  assert.ok(
+    world.production.productionPerMinute("enemy", "food") > 0,
+    "§27: and the economy is earning again, not merely populated",
+  );
+});
+
+check("Faz 8 §45/§49: the AI runs at most two expansion plans, whatever the map offers", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 900, wood: 900 }, 20);
+  const navigation = new RtsNavigation();
+  const roads = new RoadGraph(validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  ));
+  // No territory at all, so every region fails fast (§43) and the coordinator
+  // moves on. Failure is the quickest way to make it *use up* its plan budget,
+  // and §45 caps what the AI attempts rather than what it completes.
+  const territory = new TerritoryControlSystem(() => []);
+  territory.refresh();
+  const log = new AiDecisionLog();
+  const construction = new StructureConstructionService(
+    buildings, structures, kingdoms, navigation,
+    () => structures.navigationBlockers(), territory, () => {}, () => {},
+  );
+  const builds = new AiBuildManager("enemy", [], construction, structures, log);
+  const roadConstruction = new RoadConstructionService(roads, kingdoms, () => []);
+
+  // Three authored regions against a two-plan budget: the cap has to be the AI's,
+  // not the map's, or a map that offered ten would have the AI claim ten.
+  const regions = [
+    { ...AI_TEST_PRIMARY_REGION, id: "region_a" },
+    { ...AI_TEST_PRIMARY_REGION, id: "region_b" },
+    { ...AI_TEST_PRIMARY_REGION, id: "region_c" },
+  ];
+  assert.ok(regions.length > AI_MAX_EXPANSION_PLANS, "the map must offer more than the budget allows");
+  const coordinator = new AiExpansionCoordinator(
+    "enemy", regions, builds, roadConstruction, structures, log,
+  );
+
+  assert.ok(coordinator.planAvailable, "a fresh AI has a plan to run");
+  const bb = aiTestBlackboard({ now: 1 });
+  // Enough ticks for every region to burn its whole failure allowance twice over.
+  for (let tick = 0; tick < regions.length * AI_EXPANSION_FAILURE_LIMIT * 2; tick += 1) {
+    coordinator.update(bb);
+  }
+
+  assert.equal(coordinator.planAvailable, false, "§45: the budget is spent after two plans");
+  assert.equal(coordinator.completedCount, 0, "nothing was completed on unclaimable ground");
+  const claims = log.recent().filter((entry) => entry.reason.includes("genişleme planı"));
+  assert.deepEqual(
+    claims.map((entry) => entry.reason.split(": ")[1]).reverse(),
+    ["region_a", "region_b"],
+    "§46: regions are claimed in the map's preference order",
+  );
+  assert.equal(claims.length, AI_MAX_EXPANSION_PLANS, "§45: a third region is never claimed");
+  territory.dispose();
+});
+
+check("Faz 8 §49: a finished region rebuilds its own outpost and depot, and repairs its road", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
+  const region = AI_TEST_PRIMARY_REGION;
+
+  const world = aiTestWorld({ food: 6000, wood: 6000 });
+  for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker);
+  spawnPlayerDefence(world, guard);
+  for (let index = 0; index < 2400; index += 1) world.step(0.5);
+  assert.equal(world.ai.snapshot().expansionsCompleted > 0, true, "the region is active before it is raided");
+
+  const outpostOf = () => world.structures.ownedBy("enemy")
+    .find((structure) => structure.x === region.outpost.x && structure.z === region.outpost.z);
+  const raided = outpostOf() ?? assert.fail("the expansion outpost is missing");
+
+  // A raid takes the outpost. Faz 5's recipe ended at "done" and never looked at
+  // its own region again, so this claim would have stayed a hole in the map for
+  // the rest of the match — the region's depot and farm sit inside a control
+  // radius that no longer exists.
+  world.structures.destroy(raided);
+  world.territory.refresh();
+  for (let index = 0; index < 40; index += 1) world.step(0.5);
+  assert.equal(
+    world.ai.snapshot().expansionStep,
+    "outpost",
+    "§49: losing the outpost puts the recipe back on the step that owns it",
+  );
+  assert.match(
+    world.ai.log.recent().map((entry) => entry.reason).join("\n"),
+    /outpost kaybedildi, yeniden kuruluyor/,
+    "§5: and the AI says so rather than silently re-running its opening",
+  );
+
+  // The rebuild is the same code path that built it the first time, on the same
+  // authored anchor — there is no separate repair branch to drift out of sync.
+  for (let index = 0; index < 1200; index += 1) world.step(0.5);
+  const rebuilt = outpostOf() ?? assert.fail("§49: the AI never rebuilt its outpost");
+  assert.equal(rebuilt.stats.id, "outpost");
+  assert.ok(rebuilt.construction.complete, "and it finished it");
+  assert.notEqual(rebuilt, raided, "it is a genuinely new building, not the old reference");
+});
+
+check("Faz 8 §37/§49: a severed region re-walks its own corridor", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 900, wood: 900 }, 20);
+  const roads = new RoadGraph(validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  ));
+  const navigation = new RtsNavigation();
+  const territory = new TerritoryControlSystem(() => []);
+  territory.refresh();
+  const log = new AiDecisionLog();
+  const construction = new StructureConstructionService(
+    buildings, structures, kingdoms, navigation,
+    () => structures.navigationBlockers(), territory, () => {}, () => {},
+  );
+  const builds = new AiBuildManager("enemy", [], construction, structures, log);
+  const roadConstruction = new RoadConstructionService(roads, kingdoms, () => []);
+  const region = AI_TEST_PRIMARY_REGION;
+  const expansion = new AiExpansionManager(
+    "enemy", region, builds, roadConstruction, structures, log,
+  );
+
+  // Stand the whole recipe up by hand, so the test is about what happens *after*
+  // "done" rather than about the recipe reaching it (covered elsewhere).
+  for (const slot of ["outpost", "depot", "production"] as const) {
+    const anchor = region[slot];
+    const stats = buildings[anchor.buildingId] ?? assert.fail(`${anchor.buildingId} definition missing`);
+    const built = structures.place("enemy", stats, anchor.x, anchor.z);
+    structures.advanceConstruction(built, stats.constructionSeconds * 2);
+  }
+  const linked = aiTestBlackboard({ now: 10, disconnectedProducers: 0 });
+  for (let tick = 0; tick < 8; tick += 1) expansion.update(linked);
+  assert.equal(expansion.currentStep, "done", "the region is active before it is cut");
+  assert.ok(expansion.done);
+
+  // §37: the corridor is cut. The region still stands, but its farm's output can
+  // no longer reach a depot, so it earns nothing — the Faz 4 logistics rule. The
+  // recipe treats that as damage to its own road and re-enters the step that
+  // owns it, which is the whole of "bağlantı kesintisi onarımı": no repair
+  // branch, just the step that built the road building it again.
+  const cut = aiTestBlackboard({ now: 20, disconnectedProducers: 2 });
+  expansion.update(cut);
+  assert.match(
+    log.recent().map((entry) => entry.reason).join("\n"),
+    /bölge bağlantısı koptu, yol onarılıyor/,
+    "§49: a severed region reopens its corridor, and says so",
+  );
+  assert.notEqual(expansion.currentStep, "done", "the region is working again, not sitting on a cut road");
+
+  // Here the corridor is in fact intact, so re-walking it is free and the region
+  // settles straight back — which is the property that matters. An intact leg
+  // costs nothing to plan, so repair must not turn into re-paving on every tick:
+  // committing a road segment refreshes the whole territory grid, and a finished
+  // AI that re-paved its own road forever would spend the rest of the match doing
+  // it. That is a bug this project has already had once, in the base spine.
+  const paidBefore = kingdoms.get("enemy").wallet.amount("wood");
+  for (let tick = 0; tick < 8 && expansion.currentStep !== "done"; tick += 1) expansion.update(linked);
+  assert.equal(expansion.currentStep, "done", "§49: a repaired region settles rather than oscillating");
+  for (let tick = 0; tick < 8; tick += 1) expansion.update(linked);
+  assert.equal(
+    kingdoms.get("enemy").wallet.amount("wood"),
+    paidBefore,
+    "§49: re-walking an intact corridor is free",
+  );
+});
+
+check("Faz 8 §49: a blocked corridor falls through to the region's next authored route", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const depot = buildings["depot"] ?? assert.fail("depot definition missing");
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 900, wood: 900 }, 20);
+  const roads = new RoadGraph(validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  ));
+  const log = new AiDecisionLog();
+  const roadConstruction = new RoadConstructionService(
+    roads, kingdoms, () => structures.navigationBlockers(),
+  );
+
+  const region = AI_TEST_PRIMARY_REGION;
+  const primary = region.routes[0] ?? assert.fail("the region must author a primary route");
+  const fallback = region.routes[1] ?? assert.fail("§49 needs an authored alternative to fall back to");
+
+  // A building parked across the primary corridor — a player's, a neutral's, it
+  // does not matter. A road cell may never overlap a footprint, so the leg is
+  // simply unbuildable, and no amount of waiting or wood changes that.
+  const blockade = primary[1] ?? assert.fail("route too short");
+  structures.place("player", depot, blockade.x, blockade.z);
+
+  const blocked = roadConstruction.build("enemy", primary[0]!, blockade);
+  assert.equal(blocked.built, false, "the primary corridor really is refused");
+  assert.notEqual(blocked.reason, "insufficient-resources", "and not merely unaffordable");
+
+  // Hand the recipe a finished outpost so it starts on the step under test.
+  const outpostStats = buildings["outpost"] ?? assert.fail("outpost definition missing");
+  const claim = structures.place("enemy", outpostStats, region.outpost.x, region.outpost.z);
+  structures.advanceConstruction(claim, outpostStats.constructionSeconds * 2);
+  assert.ok(claim.construction.complete);
+
+  const navigation = new RtsNavigation();
+  const territory = new TerritoryControlSystem(() => []);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings, structures, kingdoms, navigation,
+    () => structures.navigationBlockers(), territory, () => {}, () => {},
+  );
+  const builds = new AiBuildManager("enemy", [], construction, structures, log);
+  const expansion = new AiExpansionManager(
+    "enemy", region, builds, roadConstruction, structures, log,
+  );
+
+  const bb = aiTestBlackboard({ now: 5 });
+  assert.equal(expansion.update(bb), "route", "the claimed region moves on to its corridor");
+  // The blocked leg must not retire the region: §43's failure count is for a
+  // region with nowhere left to go, and this one has somewhere.
+  assert.equal(expansion.update(bb), "route", "§49: a refused corridor is not a failed region");
+  assert.match(
+    log.recent().map((entry) => entry.reason).join("\n"),
+    /yol rotası engelli .*alternatif deneniyor/,
+    "§5: and the AI says which corridor it gave up on and why",
+  );
+
+  // §49: the fallback is a genuine alternative, not a relabelled copy — it has to
+  // reach the region around the obstruction, or falling back to it is theatre.
+  for (let tick = 0; tick < 10 && expansion.currentStep === "route"; tick += 1) expansion.update(bb);
+  assert.equal(expansion.currentStep, "depot", "§49: the alternative corridor completes the connection");
+  assert.ok(
+    !fallback.some((point) => point.x === blockade.x && point.z === blockade.z),
+    "the fallback routes around the blockade rather than back through it",
+  );
+
+  // Every region the map authors carries an alternative, or the fallback is a
+  // rule the map does not actually support.
+  for (const authored of RTS_BLOCKOUT_MAP.enemyExpansions) {
+    assert.ok(authored.routes.length > 1, `${authored.id} authors no fallback route`);
+    // §48 rules out a free route search, so the alternatives are authored — but
+    // an "alternative" that shares the blocked leg is not one.
+    const [first, second] = authored.routes;
+    assert.notDeepEqual(first, second, `${authored.id}'s fallback repeats its primary`);
+  }
+});
+
 check("AI expansion abandons a region it cannot claim rather than retrying forever (§43/§49)", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -31059,7 +31515,7 @@ check("AI expansion abandons a region it cannot claim rather than retrying forev
   const builds = new AiBuildManager("enemy", [], construction, structures, log);
   const roadConstruction = new RoadConstructionService(roads, kingdoms, () => []);
   const expansion = new AiExpansionManager(
-    "enemy", RTS_BLOCKOUT_MAP.enemyExpansion, builds, roadConstruction, structures, log,
+    "enemy", AI_TEST_PRIMARY_REGION, builds, roadConstruction, structures, log,
   );
 
   const bb = aiTestBlackboard({ now: 1 });
@@ -31069,11 +31525,16 @@ check("AI expansion abandons a region it cannot claim rather than retrying forev
   assert.equal(structures.ownedBy("enemy").length, 0, "nothing was built on an unclaimable region");
   assert.match(log.latest?.reason ?? "", /terk edildi/, "and the reason is logged");
 
-  // §7/§32: a failed expansion scores zero, so the director stops choosing it.
-  const dead = scoreIntents(aiTestBlackboard({ expansionStep: "failed" }), AI_TEST_BALANCE)
-    .find((score) => score.intent === "expand");
+  // §7/§32: once the last plan is spent, Expand scores zero, so the director
+  // stops choosing an intent that has nowhere to go. A retired region on its own
+  // no longer does that — §49 gives the AI a second region to fall back to, and
+  // "this region failed" is not "expansion failed".
+  const dead = scoreIntents(
+    aiTestBlackboard({ expansionStep: "failed", expansionPlanAvailable: false }),
+    AI_TEST_BALANCE,
+  ).find((score) => score.intent === "expand");
   assert.equal(dead?.score, 0);
-  assert.equal(dead?.reason, "bölge terk edildi");
+  assert.equal(dead?.reason, "bölge terk edildi, plan kalmadı");
   territory.dispose();
 });
 
@@ -31561,6 +32022,10 @@ check("§62/§65: the AI retreats on a lost exchange and on a ground-down army",
   assert.equal(outmatched.army.currentMission, "harassEconomy");
   outmatched.army.update(aiTestBlackboard({ ownArmyPower: 2, knownEnemyArmyPower: 6 }), "attack");
   assert.equal(outmatched.army.currentMission, "regroup", "§62: retreat below the power floor");
+  // §82: the panel has to name *which* trigger fired. "regroup" cannot tell an
+  // army that lost the exchange from one that was ground down, and those are two
+  // different balance problems to go and fix.
+  assert.equal(outmatched.army.state().retreatReason, "outmatched");
   assert.equal(
     outmatched.units.unitsOf("enemy").filter((unit) => unit.attackTarget !== null).length,
     0,
@@ -31578,12 +32043,22 @@ check("§62/§65: the AI retreats on a lost exchange and on a ground-down army",
   for (const guard of batteredGuards) guard.health.damage(guard.health.max * 0.7);
   bled.army.update(aiTestBlackboard({ ownArmyPower: 5, knownEnemyArmyPower: 3 }), "attack");
   assert.equal(bled.army.currentMission, "regroup", "§65: mean health below the floor pulls it back");
+  assert.equal(
+    bled.army.state().retreatReason,
+    "attrition",
+    "§82: and it is reported as attrition, not as a lost power ratio",
+  );
 
   // An army that never left does not "retreat" — regroup is its resting state.
   const idle = armyTestWorld();
   idle.enemyGuards(6, 0.3);
   idle.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 3 }), "economy");
   assert.equal(idle.army.currentMission, "regroup");
+  assert.equal(
+    idle.army.state().retreatReason,
+    null,
+    "§82: an army that never left has no retreat to explain",
+  );
 });
 
 // --- Faz 5 §38 Zafer: symmetric match result, and §69 stopping ---

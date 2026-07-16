@@ -41,6 +41,20 @@ const ORDER_TOLERANCE = 2.5;
 /** §60 DefenseStrength: guards this close to a target are defending it. */
 const TARGET_DEFENSE_RADIUS = 16;
 
+/** §82: the retreat triggers, in the words the panel and the log use. */
+export const RETREAT_REASON_TEXT: Readonly<Record<AiRetreatReason, string>> = {
+  outmatched: "güç oranı düştü",
+  attrition: "ordu yıprandı",
+};
+
+/**
+ * §65: why the army broke off. The two triggers are independent and mean
+ * different things — `outmatched` is losing the exchange, `attrition` is being
+ * ground down by a target that cannot be finished — so the §82 panel names which
+ * one fired rather than showing an unexplained "regroup".
+ */
+export type AiRetreatReason = "outmatched" | "attrition";
+
 export interface ArmyManagerState {
   readonly mission: AiArmyMission | null;
   readonly unitCount: number;
@@ -49,12 +63,15 @@ export interface ArmyManagerState {
   readonly garrisonCount: number;
   /** §60: what the army is currently going after, for the §82 panel. */
   readonly target: AiTargetScore | null;
+  /** §65: set while the army is regrouping from a retreat, else null. */
+  readonly retreatReason: AiRetreatReason | null;
 }
 
 export class ArmyManager {
   private mission: AiArmyMission | null = null;
   private target: CombatTarget | null = null;
   private targetScore: AiTargetScore | null = null;
+  private retreatReason: AiRetreatReason | null = null;
 
   constructor(
     private readonly owner: UnitOwner,
@@ -80,6 +97,7 @@ export class ArmyManager {
         ? this.garrison(army).length
         : 0,
       target: this.targetScore,
+      retreatReason: this.mission === "regroup" ? this.retreatReason : null,
     };
   }
 
@@ -99,6 +117,7 @@ export class ArmyManager {
     this.mission = null;
     this.target = null;
     this.targetScore = null;
+    this.retreatReason = null;
   }
 
   /** §51: every live combat unit belongs to the one field army. */
@@ -120,8 +139,8 @@ export class ArmyManager {
       // §65: two independent retreat triggers — losing the exchange, and simply
       // being ground down. A power ratio alone misses an army that wiped the
       // defenders and is now dying to a centre it cannot finish.
-      if (ratio < this.balance.army.retreatPowerRatio) return this.withoutTarget("regroup");
-      if (meanHealth(army) < this.balance.army.retreatHealthRatio) return this.withoutTarget("regroup");
+      if (ratio < this.balance.army.retreatPowerRatio) return this.retreat("outmatched");
+      if (meanHealth(army) < this.balance.army.retreatHealthRatio) return this.retreat("attrition");
     }
     if (intent !== "attack") return this.withoutTarget("regroup");
 
@@ -333,6 +352,17 @@ export class ArmyManager {
   private withoutTarget(mission: AiArmyMission): AiArmyMission {
     this.target = null;
     this.targetScore = null;
+    // An army that regroups because it was never sent out did not retreat; only
+    // the two §65 triggers may claim a reason, or the panel would explain a
+    // stand-down that never happened.
+    this.retreatReason = null;
+    return mission;
+  }
+
+  /** §65: break off, and record which of the two triggers did it. */
+  private retreat(reason: AiRetreatReason): AiArmyMission {
+    const mission = this.withoutTarget("regroup");
+    this.retreatReason = reason;
     return mission;
   }
 
@@ -350,7 +380,9 @@ export class ArmyManager {
       case "harassEconomy": return this.targetScore
         ? `${this.targetScore.reason} (puan ${this.targetScore.score.toFixed(2)}, güç ${blackboard.ownArmyPower.toFixed(1)} vs ${blackboard.knownEnemyArmyPower.toFixed(1)})`
         : `güç oranı saldırıya uygun (${blackboard.ownArmyPower.toFixed(1)} vs ${blackboard.knownEnemyArmyPower.toFixed(1)})`;
-      case "regroup": return "ordu toplanıyor";
+      case "regroup": return this.retreatReason
+        ? `geri çekilme: ${RETREAT_REASON_TEXT[this.retreatReason]}`
+        : "ordu toplanıyor";
       default: return mission;
     }
   }

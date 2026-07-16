@@ -11,6 +11,8 @@ import type { AiBalance } from "../../data/gameDataTypes";
 import { AI_COMBAT_ROLES, AI_RESOURCE_IDS } from "./aiBlackboard";
 import type { AiControllerSnapshot } from "./aiController";
 import type { AiDecisionEntry } from "./aiDecisionLog";
+import { AI_MAX_EXPANSION_PLANS } from "./aiExpansionCoordinator";
+import { RETREAT_REASON_TEXT } from "./armyManager";
 
 /** Plan §48 debug list: "Son on karar". */
 const MAX_DECISION_LINES = 10;
@@ -32,6 +34,10 @@ export function formatRtsAiDebug(
     `ordu görevi: ${snapshot.mission ?? "-"} · güç ${snapshot.armyPower.toFixed(1)}`
     + ` · üste kalan ${snapshot.garrisonCount}`,
   );
+  // §65: which of the two retreat triggers pulled the army back. "regroup" alone
+  // cannot tell an army that lost the exchange from one that was ground down —
+  // and those are two different balance problems.
+  if (snapshot.retreatReason) lines.push(`geri çekilme: ${RETREAT_REASON_TEXT[snapshot.retreatReason]}`);
   if (bb) {
     // §53: the shape of the army, not just its size — a power number alone
     // cannot show whether the composition ratio is actually being followed.
@@ -41,8 +47,13 @@ export function formatRtsAiDebug(
     ? `hedef: ${snapshot.target.candidate.kind} ${snapshot.target.score.toFixed(2)} — ${snapshot.target.reason}`
     : "hedef: -");
   lines.push(
-    `darboğaz: ${snapshot.bottleneck ?? "yok"} · genişleme: ${snapshot.expansionStep}`
-    + ` · üs lojistiği: ${snapshot.infrastructureStep}`,
+    `darboğaz: ${snapshot.bottleneck ?? "yok"}`
+    // §49: the step alone cannot say whether a "done" AI is finished expanding
+    // or simply between its two plans.
+    + ` · genişleme: ${snapshot.expansionStep} (${snapshot.expansionsCompleted}/${AI_MAX_EXPANSION_PLANS}`
+    + `${snapshot.expansionPlanAvailable ? ", plan var" : ", plan yok"})`
+    + ` · üs lojistiği: ${snapshot.infrastructureStep}`
+    + ` · kışla II: ${snapshot.upgradeStep}`,
   );
   // §82 "Aktif yapı planı": what the build slot is holding right now, which is
   // the difference between "the AI is saving up" and "the AI is stuck".
