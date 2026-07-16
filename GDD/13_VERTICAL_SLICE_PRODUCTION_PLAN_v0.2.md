@@ -1020,12 +1020,26 @@ motor testlerini denetlemez. RTS imzaları değiştiğinde `npm run test:engine`
 
 ### AI temel yapı
 
-- [ ] `KingdomDirector` oluştur.
-- [ ] `ArmyManager` oluştur.
-- [ ] Birim AI komut yürütmesini bağla.
-- [ ] AI blackboard oluştur.
-- [ ] Karar logu ekle.
-- [ ] AI hızlandırılmış test modu ekle.
+- [x] `KingdomDirector` oluştur. (`kingdomDirector.ts`: beş niyet, §7 bağlılık
+  süresi + %25 histerezis, acil durum kesmesi, plan zaman aşımı. Niyet puanları
+  `intentScorer.ts` içinde saf fonksiyonlar; ağırlıklar `balance/ai.json`'da.)
+- [x] `ArmyManager` oluştur. (`armyManager.ts`: §51 tek saha ordusu,
+  §15 görev sözlüğü, §62 güç eşikleri.)
+- [x] Birim AI komut yürütmesini bağla. (ArmyManager oyuncunun sağ tıkıyla aynı
+  `setMovePath`/`setAttackTarget` çağrılarını üretir — ayrı bir AI birim yolu yok.)
+- [x] AI blackboard oluştur. (`aiBlackboard.ts`: §19 minimal alan seti. §20 bilgi
+  sınırı burada uygulanıyor — AI rakibin stoğunu okuyamıyor.)
+- [x] Karar logu ekle. (`aiDecisionLog.ts`: sınırlı ring buffer; gerekçesiz kayıt
+  hata fırlatıyor. `aiDebugView.ts` §82 panelini üretiyor.)
+- [x] AI hızlandırılmış test modu ekle. (AI kararları ölçeklenmiş maç deltasıyla
+  ilerlediği için mevcut 2X/4X/8X oyun hızı AI'ı da hızlandırıyor; ayrı bir
+  anahtar gerekmedi. `AiController` renderer'dan bağımsız, bu yüzden motor
+  testleri tam maçı headless koşabiliyor.)
+
+Not: Bu grup AI'ın **karar** katmanıdır. Planı binaya çeviren uygulayıcılar
+(Açılış/Ekonomi/Genişleme grupları) henüz yok, bu yüzden bir plan şimdilik zaman
+aşımına uğrayana kadar çalışır. §54 "minimum savunma grubu tut" da ayrı bir Ordu
+görevi olarak duruyor: ArmyManager şu an saldırıda tüm muhafızları gönderiyor.
 
 ### Açılış
 
@@ -1076,8 +1090,13 @@ motor testlerini denetlemez. RTS imzaları değiştiğinde `npm run test:engine`
 - [ ] AI en az bir saldırı gerçekleştiriyor.
 - [ ] AI merkezi saldırı altında savunmaya dönüyor.
 - [ ] AI geçersiz yapı konumunda sonsuz döngüye girmiyor.
-- [ ] AI normal oyunda gizli kaynak bonusu kullanmıyor.
-- [ ] AI karar nedeni debug panelinde görülebiliyor.
+- [x] AI normal oyunda gizli kaynak bonusu kullanmıyor. (`test:engine`:
+  `balance/ai.json` normal profilinde `economyMultiplier != 1` doğrulayıcıdan
+  geçmiyor; çarpan debug panelinde görünüyor. AI kaynağı §4 ile aynı
+  `KingdomRegistry` kasasından harcıyor.)
+- [x] AI karar nedeni debug panelinde görülebiliyor. (`test:engine`:
+  `formatRtsAiDebug` aktif niyeti, beş niyetin puan/gerekçesini ve son kararları
+  yazıyor; gerekçesiz karar logu hata fırlatıyor.)
 - [ ] Oyuncu veya AI maçı kazanabiliyor.
 
 ---

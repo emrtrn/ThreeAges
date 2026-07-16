@@ -107,6 +107,58 @@ export interface TerritoryBuildingBalance {
 /** `public/game-data/balance/buildings.json` — keyed by stable building id. */
 export type BuildingBalance = Readonly<Record<string, BuildingBalanceStats>>;
 
+/**
+ * The five strategic intents the Kingdom Director chooses between
+ * (`07_ENEMY_AI_DESIGN_v0.2.md` §23). Exactly one is active at a time.
+ */
+export type AiIntent = "economy" | "ageUp" | "expand" | "defend" | "attack";
+
+/** Per-difficulty knobs. AI design §70: difficulty is timing/quality, not cheating. */
+export interface AiProfileBalance {
+  /**
+   * Resource multiplier. §72 pins normal at 1.00 and §73 caps hard at 1.05; any
+   * bonus must be visible in data rather than hidden in code.
+   */
+  readonly economyMultiplier: number;
+  /** Seconds the director waits before reacting to a new event (§70). */
+  readonly reactionDelaySeconds: number;
+}
+
+/** `public/game-data/balance/ai.json` — AI design §30 keeps the weights in data. */
+export interface AiBalance {
+  readonly evaluation: {
+    /** Director intent re-evaluation cadence; §78 suggests 3–6s. */
+    readonly directorSeconds: number;
+    /** Army mission re-evaluation cadence; §78 suggests 0.5–1.0s. */
+    readonly armySeconds: number;
+    /** §7: a plan is held at least this long before a rival plan can take over. */
+    readonly minimumCommitmentSeconds: number;
+    /** §32: a plan that runs longer than this fails rather than hanging forever. */
+    readonly planTimeoutSeconds: number;
+    /** §7: a rival intent must beat the running plan by this fraction (0.25 = 25%). */
+    readonly hysteresisMargin: number;
+  };
+  readonly army: {
+    /** §62: attack when own/enemy power is at or above this. */
+    readonly attackPowerRatio: number;
+    /** §62: below `attackPowerRatio`, only a high-value target justifies attacking. */
+    readonly riskyAttackPowerRatio: number;
+    /** §62: retreat below this ratio. */
+    readonly retreatPowerRatio: number;
+    /** §54: power held back at the base before the field army may leave. */
+    readonly minimumDefensePower: number;
+  };
+  readonly economy: {
+    /** §35: worker count the economy intent drives toward in AI-1. */
+    readonly workerTarget: number;
+    /** §24: population headroom below which housing becomes urgent. */
+    readonly populationPressureBuffer: number;
+  };
+  readonly profiles: Readonly<Record<AiProfile, AiProfileBalance>>;
+  /** §30: per-intent multipliers applied to the raw utility score. */
+  readonly intentWeights: Readonly<Record<AiIntent, number>>;
+}
+
 /** `public/game-data/balance/roads.json` — first-pass logistics road tuning. */
 export interface RoadBalance {
   /** Grid cell width in world units; intentionally independent from unit navigation. */

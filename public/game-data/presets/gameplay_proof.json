@@ -3,8 +3,8 @@
   "label": "Gameplay Proof (Ürün A)",
   "flags": {},
   "startingResources": {
-    "food": 200,
-    "wood": 200
+    "food": 1000,
+    "wood": 1000
   },
   "gameSpeed": 1,
   "mapState": "two_flanks_blockout",

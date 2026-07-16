@@ -19,6 +19,7 @@ export class RtsDebugOverlay {
   private readonly root = document.createElement("pre");
   private readonly damageLines: string[] = [];
   private readonly resourceLines: string[] = [];
+  private aiLines: readonly string[] = [];
 
   constructor() {
     this.root.className = "rts-debug-overlay";
@@ -30,6 +31,11 @@ export class RtsDebugOverlay {
     const target = "id" in hit.target ? `birim#${hit.target.id}` : `${hit.target.owner} merkez`;
     this.damageLines.unshift(`-${hit.change.applied}  birim#${hit.attacker.id} -> ${target}`);
     this.damageLines.length = Math.min(this.damageLines.length, MAX_DAMAGE_LINES);
+  }
+
+  /** AI design §82 panel block, formatted by `formatRtsAiDebug` (plan §39). */
+  setAiLines(lines: readonly string[]): void {
+    this.aiLines = lines;
   }
 
   recordResourceChange(change: ResourceChange): void {
@@ -101,6 +107,7 @@ export class RtsDebugOverlay {
       ...producerLinks.map((producer) => `  yapı#${producer.structureId} (${producer.resourceId}): ${producer.status}${producer.depotStructureId ? ` · depo#${producer.depotStructureId}` : ""}`),
     );
     lines.push("kaynak hareketleri:", ...(this.resourceLines.length ? this.resourceLines : ["- yok"]));
+    if (this.aiLines.length > 0) lines.push("", ...this.aiLines);
     this.root.textContent = lines.join("\n");
   }
 

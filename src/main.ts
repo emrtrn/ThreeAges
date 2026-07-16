@@ -17,7 +17,7 @@ import {
   readBootOptionsFromUrl,
   snapshotRuntimeConfig,
 } from "@/game/core/runtimeConfig";
-import { loadBuildingBalance, loadGamePreset, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
+import { loadAiBalance, loadBuildingBalance, loadGamePreset, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
 import type { GamePreset } from "@/game/data/gameDataTypes";
 
 function requireElement<T extends HTMLElement>(id: string): T {
@@ -74,19 +74,23 @@ async function main(): Promise<void> {
   // own lightweight runtime — never mixes with the character SceneApp above.
   if (!editorEnabled && params.has("rts")) {
     const { RtsApp } = await import("@/game/rts/RtsApp");
-    const [unitBalance, buildingBalance, roadBalance] = await Promise.all([
+    const [unitBalance, buildingBalance, roadBalance, aiBalance] = await Promise.all([
       loadUnitBalance(),
       loadBuildingBalance(),
       loadRoadBalance(),
+      loadAiBalance(),
     ]);
     const rts = new RtsApp(canvas, {
       debug: params.has("debug"),
       unitBalance,
       buildingBalance,
       roadBalance,
+      aiBalance,
+      // §72: the preset picks the AI profile; normal is the fair baseline.
+      aiProfile: preset?.aiProfile ?? "normal",
       // A bad preset must not turn the fallback RTS route into an unwinnable
       // no-build state; mirror the gameplay-proof stockpile from Faz 0.
-      startingResources: preset?.startingResources ?? { food: 200, wood: 200 },
+      startingResources: preset?.startingResources ?? { food: 1000, wood: 1000 },
     });
     rts.start();
     return;

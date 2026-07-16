@@ -22,7 +22,16 @@ import {
 
 import { createSceneRenderer } from "@engine/render-three/renderer";
 import { logger } from "@/game/core/logger";
-import type { BuildingBalance, RoadBalance, StartingResources, UnitBalance } from "@/game/data/gameDataTypes";
+import type {
+  AiBalance,
+  AiProfile,
+  BuildingBalance,
+  RoadBalance,
+  StartingResources,
+  UnitBalance,
+} from "@/game/data/gameDataTypes";
+import { AiController } from "./ai/aiController";
+import { formatRtsAiDebug } from "./ai/aiDebugView";
 import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
@@ -85,6 +94,8 @@ const ENEMY_CENTER_POSITION = RTS_BLOCKOUT_MAP.enemyStart;
 /** Faz 5.0: both kingdoms run the same economy; only this one has a UI. */
 const KINGDOM_OWNERS: readonly UnitOwner[] = ["player", "enemy"];
 const PLAYER_OWNER: UnitOwner = "player";
+/** Faz 5: the kingdom the AI opponent plays (plan §37). */
+const AI_OWNER: UnitOwner = "enemy";
 
 export interface RtsAppOptions {
   /** `?debug`: shows the compact Faz 1 RTS state/debug panel. */
@@ -97,6 +108,10 @@ export interface RtsAppOptions {
   readonly startingResources: StartingResources;
   /** Data-owned grid and wood cost for the Phase 4 road graph. */
   readonly roadBalance: RoadBalance;
+  /** Data-owned AI cadences, thresholds and intent weights (Faz 5). */
+  readonly aiBalance: AiBalance;
+  /** Difficulty profile the enemy kingdom runs with (AI design §70). */
+  readonly aiProfile: AiProfile;
 }
 
 export class RtsApp {
@@ -125,6 +140,7 @@ export class RtsApp {
         : structure.stats.territory?.controlRadius ?? 0,
     }))));
   private readonly kingdoms: KingdomRegistry;
+  private readonly ai: AiController;
   private readonly structureConstruction: StructureConstructionService;
   private readonly roadConstruction: RoadConstructionService;
   private readonly workerConstruction: WorkerConstructionSystem;
@@ -216,6 +232,20 @@ export class RtsApp {
       this.productionLogistics,
       this.kingdoms,
     );
+    this.ai = new AiController({
+      owner: AI_OWNER,
+      units: this.units,
+      structures: this.structures,
+      centers: this.centers,
+      kingdoms: this.kingdoms,
+      production: this.economyProduction,
+      logistics: this.productionLogistics,
+      isWorkerBusy: (worker) => this.workerConstruction.stateFor(worker) !== "idle"
+        || (this.economyProduction?.isAssigned(worker) ?? false),
+      navigation: this.navigation,
+      balance: this.options.aiBalance,
+      profile: this.options.aiProfile,
+    });
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
     const worker = this.options.unitBalance[PLACEHOLDER_WORKER_ID];
     if (!guard || !worker) throw new Error("Missing RTS unit balance definition");
@@ -310,9 +340,10 @@ export class RtsApp {
     this.unsubscribeWalletChanges = this.debugOverlay
       ? this.playerKingdom.wallet.subscribe((change: ResourceChange) => this.debugOverlay?.recordResourceChange(change))
       : null;
-    // Composite pointer handler: left button drives selection, right button
-    // issues commands. Keeps the two systems decoupled (neither imports the
-    // other); this composition root is the only place that sees both.
+    // Composite pointer handler: left button drives selection, while right
+    // button cancels active building placement or issues commands otherwise.
+    // Keeps the systems decoupled (neither imports the other); this composition
+    // root is the only place that sees both.
     this.pointer = new RtsPointer(canvas, {
       onSelectClick: (x, y, additive) => {
         if (this.roadPlacement.isActive) {
@@ -351,7 +382,17 @@ export class RtsApp {
           this.selection.onSelectCancel();
         }
       },
-      onCommandClick: (x, y) => this.commands.issueAt(x, y),
+      onCommandClick: (x, y) => {
+        // Placement deliberately persists after each confirmed structure so
+        // players can build in sequence. A contextual right-click exits that
+        // mode before it can be interpreted as a unit command.
+        if (this.placement.isActive) {
+          this.placement.cancel();
+          this.syncPlacementUi();
+          return;
+        }
+        this.commands.issueAt(x, y);
+      },
       onPointerHover: (x, y) => {
         if (this.roadPlacement.isActive) {
           this.roadPlacement.previewAt(x, y);
@@ -480,6 +521,11 @@ export class RtsApp {
         this.updateSimulation(simulationDt);
       }
     }
+    if (this.debugOverlay) {
+      this.debugOverlay.setAiLines(
+        formatRtsAiDebug(this.ai.snapshot(), this.ai.log.recent(), this.ai.economyMultiplier),
+      );
+    }
     this.debugOverlay?.update(
       this.units,
       this.centers,
@@ -520,6 +566,9 @@ export class RtsApp {
           : "Muhafız çıkışı engelli; Kışla çevresini açın.",
       );
     }
+    // The AI decides on the same scaled match delta as every other system, so
+    // the game-speed control accelerates it too (plan §38 test mode).
+    this.ai.update(dt);
     this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
     this.buildPalette.setResources(this.playerKingdom.wallet.snapshot());
     const population = this.playerKingdom.population.snapshot();
@@ -557,6 +606,7 @@ export class RtsApp {
     this.workerConstruction.reset();
     this.barracksProduction.reset();
     this.workerProduction.reset();
+    this.ai.reset();
     this.units.clear();
     this.centers.clear();
     this.structures.clear();

@@ -1,0 +1,31 @@
+{
+  "evaluation": {
+    "directorSeconds": 4,
+    "armySeconds": 0.75,
+    "minimumCommitmentSeconds": 12,
+    "planTimeoutSeconds": 120,
+    "hysteresisMargin": 0.25
+  },
+  "army": {
+    "attackPowerRatio": 1.1,
+    "riskyAttackPowerRatio": 0.9,
+    "retreatPowerRatio": 0.8,
+    "minimumDefensePower": 2
+  },
+  "economy": {
+    "workerTarget": 8,
+    "populationPressureBuffer": 3
+  },
+  "profiles": {
+    "easy": { "economyMultiplier": 1.0, "reactionDelaySeconds": 3 },
+    "normal": { "economyMultiplier": 1.0, "reactionDelaySeconds": 1 },
+    "hard": { "economyMultiplier": 1.05, "reactionDelaySeconds": 0.25 }
+  },
+  "intentWeights": {
+    "economy": 1.0,
+    "ageUp": 0.0,
+    "expand": 0.9,
+    "defend": 1.2,
+    "attack": 1.0
+  }
+}

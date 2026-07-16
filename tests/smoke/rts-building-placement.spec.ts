@@ -40,7 +40,8 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await page.locator("#game-canvas").hover({ position: { x: 640, y: 420 } });
   await expect(page.locator(".rts-build-status")).toContainText(/konum|çakışıyor|kontrol/);
 
-  await page.getByRole("button", { name: "İptal", exact: true }).click();
+  await page.locator("#game-canvas").click({ button: "right", position: { x: 640, y: 420 } });
+  await expect(page.locator(".rts-build-status")).toHaveText("Bir yapı seçin.");
   await page.getByRole("button", { name: "Karakol", exact: true }).click();
   await expect(page.locator(".rts-build-status")).toHaveText(
     "Karakolu kontrol alanının hemen dışındaki nötr bir konuma yerleştirin.",

@@ -55,6 +55,7 @@ import { RuntimeActorSpawnCoordinator } from "../src/scene/runtimeActorSpawnCoor
 import { normalizeActorScriptDef } from "../engine/scene/actorScript";
 import {
   GameDataError,
+  validateAiBalance,
   validateBuildingBalance,
   validateGamePreset,
   validateGameVersion,
@@ -81,6 +82,12 @@ import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransf
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
+import { AiController } from "../src/game/rts/ai/aiController";
+import { AiDecisionLog } from "../src/game/rts/ai/aiDecisionLog";
+import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
+import { scoreIntents } from "../src/game/rts/ai/intentScorer";
+import { formatRtsAiDebug } from "../src/game/rts/ai/aiDebugView";
+import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
@@ -28786,6 +28793,345 @@ check("RTS workers, production and logistics never cross kingdoms", () => {
   production.reset();
   structures.clear();
   units.clear();
+});
+
+// --- Faz 5 §38: AI temel yapı (blackboard, director, army, decision log) ---
+
+/** A neutral blackboard; each test perturbs only the fields it is about. */
+function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
+  return {
+    now: 0,
+    resourceStocks: { food: 200, wood: 200 },
+    resourceIncomePerMinute: { food: 20, wood: 20 },
+    workerCount: 8,
+    idleWorkerCount: 0,
+    population: 8,
+    populationCap: 20,
+    buildingCounts: {},
+    disconnectedProducers: 0,
+    hasExpansion: false,
+    ownArmyPower: 0,
+    knownEnemyArmyPower: 0,
+    baseThreat: 0,
+    ownCenterHealthRatio: 1,
+    enemyCenterExists: true,
+    currentIntent: null,
+    currentPlan: null,
+    planRunningSeconds: 0,
+    armyMission: null,
+    emergencyFlags: [],
+    ...overrides,
+  };
+}
+
+const AI_TEST_BALANCE = validateAiBalance(
+  JSON.parse(readFileSync("public/game-data/balance/ai.json", "utf8")) as unknown,
+);
+
+check("ai balance validates cadences, ordered power thresholds and the no-cheat rule", () => {
+  assert.equal(AI_TEST_BALANCE.evaluation.hysteresisMargin, 0.25, "AI design §7 fixes the 25% margin");
+  assert.equal(AI_TEST_BALANCE.profiles.normal.economyMultiplier, 1, "§72: normal never cheats");
+  assert.ok(AI_TEST_BALANCE.profiles.hard.economyMultiplier <= 1.05, "§73 caps the hard bonus");
+  assert.equal(AI_TEST_BALANCE.intentWeights.ageUp, 0, "§10: AI-1 has no age to reach");
+
+  const raw = JSON.parse(readFileSync("public/game-data/balance/ai.json", "utf8")) as Record<string, unknown>;
+  const withProfile = (profile: Record<string, unknown>) => ({
+    ...raw,
+    profiles: { ...(raw["profiles"] as object), ...profile },
+  });
+  // §72/§73: a hidden economy bonus must fail loudly rather than ship quietly.
+  assert.throws(
+    () => validateAiBalance(withProfile({ normal: { economyMultiplier: 1.2, reactionDelaySeconds: 1 } })),
+    GameDataError,
+  );
+  assert.throws(
+    () => validateAiBalance(withProfile({ hard: { economyMultiplier: 1.5, reactionDelaySeconds: 0.25 } })),
+    GameDataError,
+  );
+  // §62: retreat <= risky <= attack, or the army would attack and retreat at once.
+  assert.throws(
+    () => validateAiBalance({ ...raw, army: { ...(raw["army"] as object), retreatPowerRatio: 2 } }),
+    GameDataError,
+  );
+  assert.throws(
+    () => validateAiBalance({ ...raw, intentWeights: { ...(raw["intentWeights"] as object), siege: 1 } }),
+    GameDataError,
+  );
+  assert.throws(
+    () => validateAiBalance({ ...raw, profiles: { normal: raw["profiles"] } }),
+    GameDataError,
+  );
+});
+
+check("AI intent scoring reflects the §30 drivers and always names a reason", () => {
+  const scoreFor = (bb: AiBlackboard, intent: string) =>
+    scoreIntents(bb, AI_TEST_BALANCE).find((score) => score.intent === intent)
+      ?? assert.fail(`missing ${intent} score`);
+
+  // §5: every intent explains itself, or the debug panel shows a blank.
+  for (const score of scoreIntents(aiTestBlackboard(), AI_TEST_BALANCE)) {
+    assert.ok(score.reason.length > 0, `${score.intent} must carry a reason`);
+    assert.ok(score.score >= 0 && score.score <= 1, `${score.intent} must be normalised`);
+  }
+
+  // §24: a worker deficit and a population lock both drive Economy up.
+  const starved = aiTestBlackboard({ workerCount: 1, resourceIncomePerMinute: { food: 0, wood: 0 } });
+  assert.ok(scoreFor(starved, "economy").score > scoreFor(aiTestBlackboard(), "economy").score);
+  const locked = aiTestBlackboard({ population: 20, populationCap: 20 });
+  assert.match(scoreFor(locked, "economy").reason, /nüfus kilidi/);
+
+  // §27: a threatened base raises Defend and suppresses Attack.
+  const threatened = aiTestBlackboard({ baseThreat: 3, ownArmyPower: 4, knownEnemyArmyPower: 3 });
+  assert.ok(scoreFor(threatened, "defend").score > 0);
+  assert.equal(scoreFor(threatened, "attack").reason, "üs tehdit altında, saldırı beklemede");
+  assert.ok(scoreFor(threatened, "attack").score < scoreFor(threatened, "defend").score);
+
+  // §59: the army may not leave while it is below the minimum base defence.
+  const thinArmy = aiTestBlackboard({ ownArmyPower: 1 });
+  assert.equal(scoreFor(thinArmy, "attack").score, 0);
+  const strongArmy = aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 1 });
+  assert.ok(scoreFor(strongArmy, "attack").score > 0);
+
+  // §26: expansion waits for a base economy, then happens exactly once.
+  const preEconomy = aiTestBlackboard({ resourceStocks: { food: 0, wood: 300 } });
+  assert.equal(scoreFor(preEconomy, "expand").score, 0);
+  const readyToExpand = aiTestBlackboard({
+    resourceStocks: { food: 0, wood: 300 },
+    buildingCounts: { farm: 1, lumber_camp: 1 },
+  });
+  assert.ok(scoreFor(readyToExpand, "expand").score > 0);
+  const expanded = aiTestBlackboard({
+    resourceStocks: { food: 0, wood: 300 },
+    buildingCounts: { farm: 1, lumber_camp: 1 },
+    hasExpansion: true,
+  });
+  assert.equal(scoreFor(expanded, "expand").score, 0, "§10: AI-1 expands once");
+
+  // §10: ageUp stays scored but inert until Faz 6.
+  assert.equal(scoreFor(aiTestBlackboard(), "ageUp").score, 0);
+});
+
+check("KingdomDirector holds a plan through commitment and hysteresis, and emergencies cut it", () => {
+  const log = new AiDecisionLog();
+  const director = new KingdomDirector(AI_TEST_BALANCE, log);
+
+  // A fresh director commits immediately and explains why.
+  const first = director.evaluate(aiTestBlackboard({ now: 0, workerCount: 1 }));
+  assert.ok(first);
+  assert.equal(first?.intent, "economy");
+  assert.equal(first?.status, "running");
+  assert.equal(log.latest?.kind, "intent-selected");
+  assert.ok((log.latest?.reason ?? "").length > 0);
+
+  // §7: inside the commitment window a better rival cannot take over.
+  const tempting = aiTestBlackboard({ now: 2, ownArmyPower: 9, knownEnemyArmyPower: 1, workerCount: 8 });
+  assert.equal(director.evaluate(tempting)?.id, first?.id, "plan is held during commitment");
+  assert.equal(log.latest?.kind, "intent-held");
+  assert.match(log.latest?.reason ?? "", /bağlılık süresi/);
+
+  // §7: past commitment a rival still needs to clear the 25% margin. Economy
+  // scores 0.35 here, so a rival must reach 0.4375; attack lands at 0.40.
+  const marginal = aiTestBlackboard({ now: 30, workerCount: 1, ownArmyPower: 4.4, knownEnemyArmyPower: 10 });
+  const heldByMargin = director.evaluate(marginal);
+  assert.equal(heldByMargin?.id, first?.id, "a marginally better rival does not flip the plan");
+  assert.match(log.latest?.reason ?? "", /histerezis/);
+
+  // A decisively better intent past commitment does take over.
+  const decisive = aiTestBlackboard({ now: 40, workerCount: 8, ownArmyPower: 9, knownEnemyArmyPower: 1 });
+  const switched = director.evaluate(decisive);
+  assert.equal(switched?.intent, "attack");
+  assert.notEqual(switched?.id, first?.id);
+  assert.equal(first?.status, "cancelled", "the superseded plan is closed out");
+  assert.equal(first?.failureReason, "superseded");
+  assert.match(log.latest?.reason ?? "", /economy → attack/);
+
+  // §7: an emergency bypasses commitment entirely — no waiting.
+  const raided = aiTestBlackboard({ now: 41, baseThreat: 4, ownArmyPower: 9, emergencyFlags: ["base-under-attack"] });
+  const emergency = director.evaluate(raided);
+  assert.equal(emergency?.intent, "defend");
+  assert.equal(log.latest?.kind, "emergency");
+  assert.match(log.latest?.reason ?? "", /acil: base-under-attack/);
+
+  // §27: with no army to respond, defending is not the emergency answer.
+  const fresh = new KingdomDirector(AI_TEST_BALANCE, new AiDecisionLog());
+  const helpless = aiTestBlackboard({ baseThreat: 4, ownArmyPower: 0, emergencyFlags: ["base-under-attack"] });
+  assert.notEqual(fresh.evaluate(helpless)?.intent, "defend");
+
+  // §32: a plan that outlives its timeout fails instead of hanging forever.
+  const timeoutDirector = new KingdomDirector(AI_TEST_BALANCE, new AiDecisionLog());
+  const running = timeoutDirector.evaluate(aiTestBlackboard({ now: 0, workerCount: 1 }));
+  assert.ok(running);
+  timeoutDirector.evaluate(aiTestBlackboard({ now: AI_TEST_BALANCE.evaluation.planTimeoutSeconds + 1, workerCount: 1 }));
+  assert.equal(running?.status, "failed");
+  assert.equal(running?.failureReason, "timeout");
+
+  // §32: an executor can close its plan and free the director to re-decide.
+  const done = new KingdomDirector(AI_TEST_BALANCE, new AiDecisionLog());
+  const plan = done.evaluate(aiTestBlackboard({ workerCount: 1 }));
+  assert.ok(plan);
+  if (plan) done.completePlan(plan, 5, true);
+  assert.equal(plan?.status, "succeeded");
+  assert.equal(done.currentPlan, null);
+});
+
+check("AI decision log stays bounded, newest first, and refuses an unexplained entry", () => {
+  const log = new AiDecisionLog(3);
+  for (let index = 0; index < 5; index += 1) {
+    log.record({ at: index, kind: "intent-selected", intent: "economy", reason: `karar ${index}` });
+  }
+  assert.equal(log.size, 3, "the ring buffer never grows past its capacity");
+  assert.deepEqual(log.recent().map((entry) => entry.reason), ["karar 4", "karar 3", "karar 2"]);
+  assert.equal(log.latest?.reason, "karar 4");
+  // §5: a plan change without a reason is the bug this guards against.
+  assert.throws(
+    () => log.record({ at: 6, kind: "intent-selected", intent: "economy", reason: "" }),
+    /must carry a reason/,
+  );
+  log.clear();
+  assert.equal(log.size, 0);
+  assert.throws(() => new AiDecisionLog(0), RangeError);
+});
+
+check("AI debug view exposes the intent, its reason and the decision trail (plan §39)", () => {
+  const log = new AiDecisionLog();
+  const director = new KingdomDirector(AI_TEST_BALANCE, log);
+  const blackboard = aiTestBlackboard({ workerCount: 2, baseThreat: 2, knownEnemyArmyPower: 2 });
+  const plan = director.evaluate(blackboard);
+  const text = formatRtsAiDebug(
+    {
+      owner: "enemy",
+      intent: director.currentIntent,
+      plan,
+      planSeconds: 3,
+      scores: director.state().scores,
+      mission: "regroup",
+      armyPower: 0,
+      blackboard,
+    },
+    log.recent(),
+    1,
+  ).join("\n");
+
+  assert.match(text, /AI \(enemy\)/);
+  assert.match(text, /ekonomi çarpanı 1\.00/, "§73: the multiplier is visible for audit");
+  assert.match(text, /niyet: economy/);
+  assert.match(text, /niyet puanları:/);
+  assert.match(text, /\*economy: /, "the active intent is marked");
+  assert.match(text, /işçi hedefin altında/, "the reason behind the choice is shown");
+  assert.match(text, /ordu görevi: regroup/);
+  assert.match(text, /tehdit: üs 2\.0/);
+  assert.match(text, /kararlar:/);
+  assert.match(text, /intent-selected/);
+
+  const empty = formatRtsAiDebug(
+    { owner: "enemy", intent: null, plan: null, planSeconds: 0, scores: [], mission: null, armyPower: 0, blackboard: null },
+    [],
+    1,
+  ).join("\n");
+  assert.match(empty, /niyet: -/);
+  assert.match(empty, /- yok/);
+});
+
+check("AI controller runs a headless accelerated match, decides on cadence, and commands its army", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+
+  const build = () => {
+    const units = new UnitSystem();
+    const structures = new PlacedStructureSystem();
+    const centers = new CommandCenterSystem();
+    centers.spawn("player", 0, 16);
+    centers.spawn("enemy", 0, -26);
+    const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 200, wood: 200 }, 20);
+    const navigation = new RtsNavigation();
+    navigation.setBlockers(centers.navigationBlockers());
+    const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+    const roads = new RoadGraph(balance);
+    const depots = new DepotLogisticsSystem(structures, roads);
+    const logistics = new ProductionLogisticsSystem(structures, roads, depots);
+    const ai = new AiController({
+      owner: "enemy",
+      units,
+      structures,
+      centers,
+      kingdoms,
+      production,
+      logistics,
+      isWorkerBusy: () => false,
+      navigation,
+      balance: AI_TEST_BALANCE,
+      profile: "normal",
+    });
+    return { units, structures, centers, kingdoms, ai };
+  };
+
+  const world = build();
+  for (let index = 0; index < 2; index += 1) {
+    world.units.spawn("enemy", -2 + index * 2, -20, worker, "worker");
+  }
+
+  // §78: nothing is decided before the director's first cadence tick.
+  world.ai.update(0.5);
+  assert.equal(world.ai.snapshot().intent, null, "the director does not fire every frame");
+
+  // The whole match is stepped headlessly at an accelerated rate (plan §38).
+  for (let step = 0; step < 200; step += 1) world.ai.update(0.5);
+  const settled = world.ai.snapshot();
+  assert.ok(settled.intent, "the director commits to an intent once its cadence elapses");
+  assert.equal(settled.intent, "economy", "§34: an AI with two workers and no buildings builds its economy");
+  assert.ok(world.ai.log.size > 0, "decisions are logged");
+  assert.equal(world.ai.economyMultiplier, 1, "§39: normal difficulty grants no hidden bonus");
+
+  // §20: the AI reads its own economy, never the opponent's stock.
+  const bb = settled.blackboard ?? assert.fail("blackboard missing");
+  assert.equal(bb.workerCount, 2);
+  assert.deepEqual(bb.resourceStocks, world.kingdoms.get("enemy").wallet.snapshot());
+  assert.notEqual(bb.resourceStocks, world.kingdoms.get("player").wallet.snapshot());
+
+  // §51/§15: guards become the field army and receive real unit orders.
+  const armed = build();
+  for (let index = 0; index < 6; index += 1) armed.units.spawn("enemy", -4 + index * 2, -20, guard);
+  for (let step = 0; step < 40; step += 1) armed.ai.update(0.5);
+  const armedSnapshot = armed.ai.snapshot();
+  assert.ok(armedSnapshot.armyPower > 0);
+  assert.ok(armedSnapshot.mission, "the army manager picks a mission");
+  const ordered = armed.units.unitsOf("enemy")
+    .filter((unit) => unit.role === "guard")
+    .some((unit) => unit.pathWaypointCount > 0 || unit.attackTarget !== null || unit.moveTarget !== null);
+  assert.ok(ordered, "§16: the army issues the same unit orders a player's click would");
+
+  // §57: an enemy at the base overrides whatever the director wanted.
+  const raided = build();
+  for (let index = 0; index < 6; index += 1) raided.units.spawn("enemy", -4 + index * 2, -20, guard);
+  raided.units.spawn("player", 0, -24, guard);
+  for (let step = 0; step < 40; step += 1) raided.ai.update(0.5);
+  assert.equal(raided.ai.snapshot().mission, "defendBase", "a raid on the base pulls the army home");
+  const defender = raided.units.unitsOf("enemy").find((unit) => unit.role === "guard" && unit.attackTarget !== null);
+  assert.ok(defender, "defending guards target the intruder");
+
+  // §80: identical inputs produce identical decisions.
+  const runA = build();
+  const runB = build();
+  for (const run of [runA, runB]) {
+    for (let index = 0; index < 2; index += 1) run.units.spawn("enemy", -2 + index * 2, -20, worker, "worker");
+    for (let step = 0; step < 60; step += 1) run.ai.update(0.5);
+  }
+  assert.deepEqual(
+    runA.ai.log.recent().map((entry) => `${entry.at}:${entry.kind}:${entry.reason}`),
+    runB.ai.log.recent().map((entry) => `${entry.at}:${entry.kind}:${entry.reason}`),
+    "the same inputs must replay the same decisions",
+  );
+
+  world.ai.reset();
+  assert.equal(world.ai.snapshot().intent, null);
+  assert.equal(world.ai.log.size, 0);
+  assert.throws(() => world.ai.update(-1), RangeError);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

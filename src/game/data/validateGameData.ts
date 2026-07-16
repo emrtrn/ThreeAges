@@ -9,7 +9,10 @@
  */
 import { isFeatureFlag } from "../core/featureFlags";
 import type {
+  AiBalance,
+  AiIntent,
   AiProfile,
+  AiProfileBalance,
   BuildingBalance,
   GamePreset,
   GameVersion,
@@ -293,6 +296,106 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     throw new GameDataError(`${where}: must define at least one building`);
   }
   return buildings;
+}
+
+const AI_INTENTS: readonly AiIntent[] = ["economy", "ageUp", "expand", "defend", "attack"];
+/** AI design §73 caps a hard-difficulty economy bonus; anything above is a data bug. */
+const MAX_AI_ECONOMY_MULTIPLIER = 1.05;
+
+function requirePositive(obj: Record<string, unknown>, key: string, where: string): number {
+  const value = requireFiniteNumber(obj, key, where);
+  if (value <= 0) throw new GameDataError(`${where}: field "${key}" must be > 0`);
+  return value;
+}
+
+function validateAiProfileBalance(value: unknown, profile: AiProfile, where: string): AiProfileBalance {
+  const obj = asObject(value, `${where}.profiles.${profile}`);
+  const scope = `${where}.profiles.${profile}`;
+  const economyMultiplier = requirePositive(obj, "economyMultiplier", scope);
+  const reactionDelaySeconds = requireFiniteNumber(obj, "reactionDelaySeconds", scope);
+  if (economyMultiplier > MAX_AI_ECONOMY_MULTIPLIER) {
+    throw new GameDataError(`${scope}: economyMultiplier must not exceed ${MAX_AI_ECONOMY_MULTIPLIER}`);
+  }
+  // §72: normal is the fair baseline and may never grant a hidden bonus.
+  if (profile === "normal" && economyMultiplier !== 1) {
+    throw new GameDataError(`${scope}: the normal profile must keep economyMultiplier at 1`);
+  }
+  if (reactionDelaySeconds < 0) {
+    throw new GameDataError(`${scope}: reactionDelaySeconds must be >= 0`);
+  }
+  return { economyMultiplier, reactionDelaySeconds };
+}
+
+/** Validate the data-owned AI tuning contract (AI design §30, §70–§73). */
+export function validateAiBalance(value: unknown): AiBalance {
+  const where = "balance/ai.json";
+  const obj = asObject(value, where);
+
+  const evaluationObj = asObject(obj["evaluation"], `${where}.evaluation`);
+  const evaluation = {
+    directorSeconds: requirePositive(evaluationObj, "directorSeconds", `${where}.evaluation`),
+    armySeconds: requirePositive(evaluationObj, "armySeconds", `${where}.evaluation`),
+    minimumCommitmentSeconds: requirePositive(evaluationObj, "minimumCommitmentSeconds", `${where}.evaluation`),
+    planTimeoutSeconds: requirePositive(evaluationObj, "planTimeoutSeconds", `${where}.evaluation`),
+    hysteresisMargin: requireFiniteNumber(evaluationObj, "hysteresisMargin", `${where}.evaluation`),
+  };
+  if (evaluation.hysteresisMargin < 0) {
+    throw new GameDataError(`${where}.evaluation: hysteresisMargin must be >= 0`);
+  }
+  if (evaluation.planTimeoutSeconds < evaluation.minimumCommitmentSeconds) {
+    throw new GameDataError(`${where}.evaluation: planTimeoutSeconds must be >= minimumCommitmentSeconds`);
+  }
+
+  const armyObj = asObject(obj["army"], `${where}.army`);
+  const army = {
+    attackPowerRatio: requirePositive(armyObj, "attackPowerRatio", `${where}.army`),
+    riskyAttackPowerRatio: requirePositive(armyObj, "riskyAttackPowerRatio", `${where}.army`),
+    retreatPowerRatio: requirePositive(armyObj, "retreatPowerRatio", `${where}.army`),
+    minimumDefensePower: requireFiniteNumber(armyObj, "minimumDefensePower", `${where}.army`),
+  };
+  // §62 orders these thresholds; an out-of-order set would make the army both
+  // attack and retreat in the same band.
+  if (!(army.retreatPowerRatio <= army.riskyAttackPowerRatio && army.riskyAttackPowerRatio <= army.attackPowerRatio)) {
+    throw new GameDataError(
+      `${where}.army: expected retreatPowerRatio <= riskyAttackPowerRatio <= attackPowerRatio`,
+    );
+  }
+  if (army.minimumDefensePower < 0) {
+    throw new GameDataError(`${where}.army: minimumDefensePower must be >= 0`);
+  }
+
+  const economyObj = asObject(obj["economy"], `${where}.economy`);
+  const economy = {
+    workerTarget: requirePositive(economyObj, "workerTarget", `${where}.economy`),
+    populationPressureBuffer: requireFiniteNumber(economyObj, "populationPressureBuffer", `${where}.economy`),
+  };
+  if (economy.populationPressureBuffer < 0) {
+    throw new GameDataError(`${where}.economy: populationPressureBuffer must be >= 0`);
+  }
+
+  const profilesObj = asObject(obj["profiles"], `${where}.profiles`);
+  const profiles = {} as Record<AiProfile, AiProfileBalance>;
+  for (const profile of AI_PROFILES) {
+    if (profilesObj[profile] === undefined) {
+      throw new GameDataError(`${where}.profiles: missing profile "${profile}"`);
+    }
+    profiles[profile] = validateAiProfileBalance(profilesObj[profile], profile, where);
+  }
+
+  const weightsObj = asObject(obj["intentWeights"], `${where}.intentWeights`);
+  const intentWeights = {} as Record<AiIntent, number>;
+  for (const intent of AI_INTENTS) {
+    const weight = requireFiniteNumber(weightsObj, intent, `${where}.intentWeights`);
+    if (weight < 0) throw new GameDataError(`${where}.intentWeights: "${intent}" must be >= 0`);
+    intentWeights[intent] = weight;
+  }
+  for (const key of Object.keys(weightsObj)) {
+    if (!AI_INTENTS.includes(key as AiIntent)) {
+      throw new GameDataError(`${where}.intentWeights: unknown intent "${key}"`);
+    }
+  }
+
+  return { evaluation, army, economy, profiles, intentWeights };
 }
 
 /** Validate the small data-owned road cost/grid contract before RTS uses it. */

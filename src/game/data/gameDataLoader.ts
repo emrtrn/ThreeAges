@@ -11,13 +11,14 @@
  */
 import { logger } from "../core/logger";
 import {
+  validateAiBalance,
   validateGamePreset,
   validateGameVersion,
   validateBuildingBalance,
   validateRoadBalance,
   validateUnitBalance,
 } from "./validateGameData";
-import type { BuildingBalance, GamePreset, GameVersion, RoadBalance, UnitBalance } from "./gameDataTypes";
+import type { AiBalance, BuildingBalance, GamePreset, GameVersion, RoadBalance, UnitBalance } from "./gameDataTypes";
 
 const log = logger("Data");
 
@@ -72,6 +73,14 @@ export async function loadBuildingBalance(): Promise<BuildingBalance> {
   const url = `${GAME_DATA_ROOT}/balance/buildings.json`;
   const balance = validateBuildingBalance(await fetchJson(url));
   log.debug(`loaded building balance (${Object.keys(balance).length} definitions)`);
+  return balance;
+}
+
+/** Load and validate `public/game-data/balance/ai.json`. */
+export async function loadAiBalance(): Promise<AiBalance> {
+  const url = `${GAME_DATA_ROOT}/balance/ai.json`;
+  const balance = validateAiBalance(await fetchJson(url));
+  log.debug(`loaded AI balance (director every ${balance.evaluation.directorSeconds}s)`);
   return balance;
 }
 

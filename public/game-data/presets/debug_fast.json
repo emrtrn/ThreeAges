@@ -3,8 +3,8 @@
   "label": "Debug Fast",
   "flags": {},
   "startingResources": {
-    "food": 500,
-    "wood": 500
+    "food": 1000,
+    "wood": 1000
   },
   "gameSpeed": 3,
   "mapState": "two_flanks_blockout",
