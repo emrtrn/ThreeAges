@@ -100,6 +100,7 @@ export class AgeSystem {
       upgrade.remainingSeconds = Math.max(0, upgrade.remainingSeconds - Math.max(0, deltaSeconds));
       if (upgrade.remainingSeconds > 0) continue;
       this.kingdoms.get(owner).wallet.commit(upgrade.reservation);
+      this.centers.get(owner)?.applyTownUpgrade(this.balance.town.commandCenter);
       state.age = "town";
       state.upgrade = null;
       events.push({ owner, type: "completed" });

@@ -12,7 +12,7 @@ import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import type { CommandCenter } from "./commandCenter";
 import type { PlacedStructure } from "./placedStructureSystem";
 
-type VisualBuildingId = "command_center" | "house" | "depot" | "outpost" | "farm" | "lumber_camp" | "barracks";
+type VisualBuildingId = "command_center_t1" | "command_center_t2" | "house" | "depot" | "outpost" | "farm" | "lumber_camp" | "barracks";
 
 interface BuildingVisualDefinition {
   readonly path: string;
@@ -25,7 +25,8 @@ const STATIC_MESH_ROOT = "/assets/ThreeAges/StaticMeshes";
  * readable temporary stand-in until a woodcutter model is added to the set.
  */
 const VISUALS: Record<VisualBuildingId, BuildingVisualDefinition> = {
-  command_center: { path: `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level1.gltf` },
+  command_center_t1: { path: `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level1.gltf` },
+  command_center_t2: { path: `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level2.gltf` },
   house: { path: `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level1.gltf` },
   depot: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level1.gltf` },
   outpost: { path: `${STATIC_MESH_ROOT}/WatchTower_FirstAge_Level1.gltf` },
@@ -54,14 +55,14 @@ export class RtsBuildingVisuals {
   }
 
   applyToCenter(center: CommandCenter): void {
-    const visual = this.create("command_center", 8, 8);
+    const visual = this.create(center.level >= 2 ? "command_center_t2" : "command_center_t1", 8, 8);
     if (visual) center.setVisual(visual);
   }
 
   createForStructure(structure: PlacedStructure): Group | null {
     if (!structure.construction.complete) return null;
     return this.create(
-      structure.stats.id as Exclude<VisualBuildingId, "command_center">,
+      structure.stats.id as Exclude<VisualBuildingId, "command_center_t1" | "command_center_t2">,
       structure.stats.footprint.width,
       structure.stats.footprint.depth,
     );

@@ -152,6 +152,12 @@ export interface TownAgeBalance {
   readonly upgradeSeconds: number;
   /** Completed structures that prove the economy and defence are established. */
   readonly requiredBuildingIds: readonly string[];
+  /** The command centre's concrete T2 gains, applied when the age completes. */
+  readonly commandCenter: {
+    readonly maxHealth: number;
+    readonly controlRadius: number;
+    readonly workerTrainingSeconds: number;
+  };
 }
 
 /** `public/game-data/balance/ages.json` — the Faz 6 progression contract. */

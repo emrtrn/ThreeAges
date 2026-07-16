@@ -384,6 +384,14 @@ export function validateAgeBalance(value: unknown): AgeBalance {
     || new Set(requirements).size !== requirements.length) {
     throw new GameDataError(`${where}.town.requiredBuildingIds: must be a non-empty unique building-id array`);
   }
+  const commandCenterWhere = `${where}.town.commandCenter`;
+  const commandCenter = asObject(town["commandCenter"], commandCenterWhere);
+  const commandCenterMaxHealth = requireFiniteNumber(commandCenter, "maxHealth", commandCenterWhere);
+  const commandCenterControlRadius = requireFiniteNumber(commandCenter, "controlRadius", commandCenterWhere);
+  const commandCenterWorkerTrainingSeconds = requireFiniteNumber(commandCenter, "workerTrainingSeconds", commandCenterWhere);
+  if (commandCenterMaxHealth <= 0 || commandCenterControlRadius <= 0 || commandCenterWorkerTrainingSeconds <= 0) {
+    throw new GameDataError(`${commandCenterWhere}: maxHealth, controlRadius and workerTrainingSeconds must be > 0`);
+  }
   return {
     settlement: { id: "settlement", label: requireString(settlement, "label", `${where}.settlement`) },
     town: {
@@ -392,6 +400,11 @@ export function validateAgeBalance(value: unknown): AgeBalance {
       cost,
       upgradeSeconds,
       requiredBuildingIds: [...requirements] as string[],
+      commandCenter: {
+        maxHealth: commandCenterMaxHealth,
+        controlRadius: commandCenterControlRadius,
+        workerTrainingSeconds: commandCenterWorkerTrainingSeconds,
+      },
     },
   };
 }

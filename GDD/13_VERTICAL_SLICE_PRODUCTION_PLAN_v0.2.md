@@ -1225,7 +1225,8 @@ Kapı A geçilmezse:
 
 ### Yapı yükseltmeleri
 
-- [ ] Merkez T1 → T2
+- [x] Merkez T1 → T2. (`ages.json` Kasaba sonucu: 450 sağlık, 22 kontrol yarıçapı
+  ve 9 sn yeni işçi üretimi; `TownCenter_FirstAge_Level2.gltf` tamamlanınca uygulanır.)
 - [ ] Ev T1 → T2
 - [ ] Depo T1 → T2, kapsam uygunsa
 - [ ] Kışla T1 → T2
@@ -2715,7 +2716,7 @@ Vertical slice tamamlanmıştır yalnızca:
 
 - [x] Yerleşim
 - [x] Kasaba
-- [ ] Merkez T2
+- [x] Merkez T2
 - [ ] Kışla T2
 
 ### Savaş

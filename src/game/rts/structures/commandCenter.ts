@@ -17,11 +17,13 @@ import {
 } from "three";
 
 import type { UnitOwner } from "../units/unit";
+import type { TownAgeBalance } from "../../data/gameDataTypes";
 import { HealthComponent } from "../units/health";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 
 /** Temporary Faz 1 centre durability; building balance data arrives in Faz 2. */
 export const COMMAND_CENTER_MAX_HEALTH = 300;
+export const COMMAND_CENTER_CONTROL_RADIUS = 18;
 const COMMAND_CENTER_FOOTPRINT = 7;
 
 const CENTER_TEAM_COLOR: Record<UnitOwner, string> = {
@@ -33,6 +35,9 @@ export class CommandCenter {
   readonly object = new Group();
   /** Shared bounded-health contract used by units and structures. */
   readonly health: HealthComponent;
+  level = 1;
+  controlRadius = COMMAND_CENTER_CONTROL_RADIUS;
+  workerTrainingSeconds: number | null = null;
   /** Lets melee units strike the outer footprint without entering its nav blocker. */
   readonly combatRadius = COMMAND_CENTER_FOOTPRINT / 2;
 
@@ -82,6 +87,14 @@ export class CommandCenter {
 
   get position() {
     return this.object.position;
+  }
+
+  /** Apply the data-owned Town benefit after a completed Settlement upgrade. */
+  applyTownUpgrade(upgrade: TownAgeBalance["commandCenter"]): void {
+    this.level = 2;
+    this.health.upgradeMax(upgrade.maxHealth);
+    this.controlRadius = upgrade.controlRadius;
+    this.workerTrainingSeconds = upgrade.workerTrainingSeconds;
   }
 
   /** Replace the Faz 1 primitive tower with an RTS building asset. */

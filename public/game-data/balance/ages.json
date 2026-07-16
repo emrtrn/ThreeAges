@@ -13,6 +13,11 @@
       "gold": 150
     },
     "upgradeSeconds": 105,
+    "commandCenter": {
+      "maxHealth": 450,
+      "controlRadius": 22,
+      "workerTrainingSeconds": 9
+    },
     "requiredBuildingIds": [
       "farm",
       "lumber_camp",

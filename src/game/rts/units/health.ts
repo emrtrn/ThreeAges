@@ -19,14 +19,14 @@ export interface HealthChange {
 
 /** Small, data-agnostic health component for a live RTS unit or structure. */
 export class HealthComponent {
-  readonly max: number;
+  private maxValue: number;
   private currentValue: number;
 
   constructor(max: number) {
     if (!Number.isFinite(max) || max <= 0) {
       throw new RangeError("Health maximum must be a positive finite number");
     }
-    this.max = max;
+    this.maxValue = max;
     this.currentValue = max;
   }
 
@@ -34,9 +34,13 @@ export class HealthComponent {
     return this.currentValue;
   }
 
+  get max(): number {
+    return this.maxValue;
+  }
+
   /** Normalized [0, 1] value for later health-bar/debug presentation. */
   get ratio(): number {
-    return this.currentValue / this.max;
+    return this.currentValue / this.maxValue;
   }
 
   get depleted(): boolean {
@@ -61,14 +65,22 @@ export class HealthComponent {
   heal(amount: number): HealthChange {
     this.assertAmount(amount, "Healing");
     const previous = this.currentValue;
-    const applied = Math.min(amount, this.max - previous);
+    const applied = Math.min(amount, this.maxValue - previous);
     this.currentValue += applied;
     return { applied, previous, current: this.currentValue, depleted: false };
   }
 
   /** Return to full health for match restart or a future respawn flow. */
   reset(): void {
-    this.currentValue = this.max;
+    this.currentValue = this.maxValue;
+  }
+
+  /** Raise a live target's maximum without silently restoring damage it has taken. */
+  upgradeMax(nextMax: number): void {
+    if (!Number.isFinite(nextMax) || nextMax < this.maxValue) {
+      throw new RangeError("Health upgrades must be finite and may not lower the maximum");
+    }
+    this.maxValue = nextMax;
   }
 
   private assertAmount(amount: number, label: string): void {

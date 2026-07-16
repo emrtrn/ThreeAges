@@ -27948,6 +27948,7 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   );
   assert.deepEqual(ages.town.cost, { food: 600, wood: 350, stone: 150, gold: 150 });
   assert.equal(ages.town.upgradeSeconds, 105);
+  assert.deepEqual(ages.town.commandCenter, { maxHealth: 450, controlRadius: 22, workerTrainingSeconds: 9 });
   const invalid = JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as Record<string, unknown>;
   assert.throws(() => validateAgeBalance({
     ...invalid,
@@ -27975,6 +27976,7 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   const workerProduction = new WorkerProductionSystem(
     units, centers, navigation, RTS_TEST_UNIT_STATS, kingdoms,
     (owner) => ageSystem.isUpgrading(owner),
+    (owner) => centers.get(owner)?.workerTrainingSeconds ?? RTS_TEST_UNIT_STATS.trainingSeconds,
   );
   assert.equal(workerProduction.queueWorker("player"), "queued");
   assert.equal(ageSystem.startTownUpgrade("player"), "started");
@@ -27990,10 +27992,20 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.deepEqual(ageSystem.snapshot("player"), {
     owner: "player", age: "town", upgrading: false, remainingSeconds: 0, missingBuildingIds: [],
   });
+  const townCenter = centers.get("player") ?? assert.fail("player center missing after Town upgrade");
+  assert.equal(townCenter.level, 2);
+  assert.equal(townCenter.health.max, 450);
+  assert.equal(townCenter.controlRadius, 22);
+  assert.equal(townCenter.workerTrainingSeconds, 9);
   assert.equal(workerProduction.queueWorker("player"), "already-training");
   assert.deepEqual(workerProduction.update(RTS_TEST_UNIT_STATS.trainingSeconds).map((event) => event.type), ["completed"],
     "the paused paid worker queue resumes after Town completes");
   assert.equal(units.workersOf("player").length, 1);
+  kingdoms.get("player").wallet.credit("food", 50);
+  assert.equal(workerProduction.queueWorker("player"), "queued");
+  assert.deepEqual(workerProduction.update(8.9), [], "new Town-centre workers use the T2 duration");
+  assert.deepEqual(workerProduction.update(0.1).map((event) => event.type), ["completed"]);
+  assert.equal(units.workersOf("player").length, 2);
 });
 
 check("Faz 6 quarry uses its finite stone node and cannot be placed away from one", () => {

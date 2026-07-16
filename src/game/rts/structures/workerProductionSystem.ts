@@ -40,6 +40,8 @@ export class WorkerProductionSystem {
     private readonly kingdoms: KingdomRegistry,
     /** Town upgrades pause the centre queue without cancelling its paid order. */
     private readonly isCenterUpgrading: (owner: UnitOwner) => boolean = () => false,
+    /** A completed Town centre trains subsequent workers at its data-owned pace. */
+    private readonly trainingSecondsForOwner: (owner: UnitOwner) => number = () => workerStats.trainingSeconds,
   ) {}
 
   /** Train a worker at one kingdom's centre, paid from that kingdom's economy. */
@@ -56,7 +58,11 @@ export class WorkerProductionSystem {
       wallet.refund(resources);
       return "population-full";
     }
-    this.queues.set(owner, { center, resources, population, remainingSeconds: this.workerStats.trainingSeconds });
+    const trainingSeconds = this.trainingSecondsForOwner(owner);
+    if (!Number.isFinite(trainingSeconds) || trainingSeconds <= 0) {
+      throw new RangeError("Worker production duration must be a positive finite number");
+    }
+    this.queues.set(owner, { center, resources, population, remainingSeconds: trainingSeconds });
     return "queued";
   }
 

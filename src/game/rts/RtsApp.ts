@@ -82,10 +82,7 @@ import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
 import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
 import { RtsRoadControls } from "./ui/rtsRoadControls";
 import { RtsLogisticsWarning } from "./ui/rtsLogisticsWarning";
-import {
-  COMMAND_CENTER_CONTROL_RADIUS,
-  TerritoryControlSystem,
-} from "./territory/territoryControlSystem";
+import { TerritoryControlSystem } from "./territory/territoryControlSystem";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
@@ -149,7 +146,7 @@ export class RtsApp {
     owner: center.owner,
     x: center.position.x,
     z: center.position.z,
-    radius: COMMAND_CENTER_CONTROL_RADIUS,
+    radius: center.controlRadius,
   })).concat(this.structures.all()
     .filter((structure) => structure.construction.complete && structure.stats.territory)
     .map((structure) => ({
@@ -279,6 +276,7 @@ export class RtsApp {
       worker,
       this.kingdoms,
       (owner) => this.ages.isUpgrading(owner),
+      (owner) => this.centers.get(owner)?.workerTrainingSeconds ?? worker.trainingSeconds,
     );
     this.structureConstruction = new StructureConstructionService(
       this.options.buildingBalance,
@@ -629,6 +627,11 @@ export class RtsApp {
     this.kingdoms.advance(dt);
     for (const event of this.ages.update(dt)) {
       if (event.owner !== PLAYER_OWNER) continue;
+      if (event.type === "completed") {
+        const center = this.centers.get(event.owner);
+        if (center) this.buildingVisuals.applyToCenter(center);
+        this.territory.refresh();
+      }
       this.buildPalette.setActionMessage(event.type === "completed"
         ? "Kasaba Çağı tamamlandı."
         : "Merkez yıkıldığı için çağ yükseltmesi iptal edildi; kaynaklar iade edildi.");
