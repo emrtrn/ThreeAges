@@ -86,7 +86,11 @@ import { RoadDebugView } from "./roads/roadDebugView";
 import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
 import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
 import { RtsRoadControls } from "./ui/rtsRoadControls";
-import { RtsLogisticsWarning } from "./ui/rtsLogisticsWarning";
+import { RtsHudBar } from "./ui/rtsHudBar";
+import { RtsNotificationCenter } from "./ui/rtsNotifications";
+import { RtsNotificationFeed } from "./ui/rtsNotificationFeed";
+import { RtsAttackWatch } from "./ui/rtsAttackWatch";
+import { resourceLabel, RESOURCE_ORDER } from "./ui/resourceLabels";
 import { TerritoryControlSystem } from "./territory/territoryControlSystem";
 
 const MAX_PIXEL_RATIO = 2;
@@ -194,7 +198,11 @@ export class RtsApp {
   private readonly selectionPanel = new RtsSelectionPanel();
   private readonly projectiles = new ProjectileSystem();
   private readonly roadControls: RtsRoadControls;
-  private readonly logisticsWarning: RtsLogisticsWarning;
+  private readonly hudBar = new RtsHudBar();
+  private readonly notifications = new RtsNotificationCenter();
+  private readonly notificationFeed = new RtsNotificationFeed();
+  /** §51 "saldırı altında": combat has no event bus, so health is sampled. */
+  private readonly attackWatch = new RtsAttackWatch();
   private readonly gameSpeedControls: RtsGameSpeedControls;
   private readonly unsubscribeWalletChanges: (() => void) | null;
   private readonly log = logger("System");
@@ -433,7 +441,6 @@ export class RtsApp {
       },
     );
     this.roadControls.setOverlayVisible(this.roadOverlayVisible);
-    this.logisticsWarning = new RtsLogisticsWarning();
     this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => {
       this.simulationSpeed = speed;
     });
@@ -573,7 +580,8 @@ export class RtsApp {
     this.selectionPanel.dispose();
     this.projectiles.dispose();
     this.roadControls.dispose();
-    this.logisticsWarning.dispose();
+    this.hudBar.dispose();
+    this.notificationFeed.dispose();
     this.gameSpeedControls.dispose();
     this.placement.dispose();
     this.roadPlacement.dispose();
@@ -710,6 +718,11 @@ export class RtsApp {
     this.projectiles.update(dt);
     this.units.updatePresentation(this.cameraController.camera.quaternion);
     this.selectionPanel.setSelection(this.selection.selected());
+    // Notices expire on real seconds for the same reason a health bar animates
+    // on them: at §38's 8x test speed a warning that vanished eight times faster
+    // would be unreadable exactly when the match is hardest to follow.
+    this.notifications.advance(dt);
+    this.notificationFeed.setNotifications(this.notifications.active());
     this.renderer.render(this.scene, this.cameraController.camera);
   };
 
@@ -747,11 +760,28 @@ export class RtsApp {
   private updateSimulation(dt: number): void {
     this.kingdoms.advance(dt);
     for (const event of this.ages.update(dt)) {
-      if (event.owner !== PLAYER_OWNER) continue;
       if (event.type === "completed") {
         const center = this.centers.get(event.owner);
         if (center) this.buildingVisuals.applyToCenter(center);
         this.territory.refresh();
+      }
+      // §51 wants the AI's age-up called out, and only this event knows it: the
+      // player has no other honest way to learn the opponent got stronger
+      // (there is no fog yet, but scanning the enemy base is not a HUD).
+      if (event.owner !== PLAYER_OWNER) {
+        if (event.type === "completed") {
+          this.notifications.post({
+            kind: "enemy-age-upgraded",
+            text: `Düşman ${this.options.ageBalance.town.label} Çağına geçti.`,
+          });
+        }
+        continue;
+      }
+      if (event.type === "completed") {
+        this.notifications.post({
+          kind: "age-upgraded",
+          text: `${this.options.ageBalance.town.label} Çağı tamamlandı: T2 yükseltmeleri açıldı.`,
+        });
       }
       this.buildPalette.setActionMessage(event.type === "completed"
         ? "Kasaba Çağı tamamlandı."
@@ -801,13 +831,11 @@ export class RtsApp {
     // The AI decides on the same scaled match delta as every other system, so
     // the game-speed control accelerates it too (plan §38 test mode).
     this.ai.update(dt);
-    this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
-    this.buildPalette.setResources(this.playerKingdom.wallet.snapshot());
-    const population = this.playerKingdom.population.snapshot();
-    this.buildPalette.setPopulation(population.used, population.capacity);
+    this.syncHudBar();
     this.syncAgeUi();
     this.syncStructureUpgradeUi();
     this.syncEconomyUi();
+    this.syncNotifications();
     updateUnitCombat(
       this.units.all(),
       dt,
@@ -899,6 +927,12 @@ export class RtsApp {
     this.kingdoms.reset();
     this.resourceNodes.reset();
     this.commandMarkers.clear();
+    // A restart is a new match, not a continuation: carrying a cooldown over
+    // would mute a real notice in the first seconds of the next game, and a
+    // stale health baseline would read the fresh centre as already damaged.
+    this.notifications.reset();
+    this.notificationFeed.setNotifications([]);
+    this.attackWatch.reset();
     this.match.reset();
     this.spawnCenters();
     this.territory.refresh();
@@ -955,12 +989,33 @@ export class RtsApp {
 
   private syncPlacementUi(): void {
     this.buildPalette.setState(this.placement.state());
-    this.buildPalette.setResources(this.playerKingdom.wallet.snapshot());
-    this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
-    const population = this.playerKingdom.population.snapshot();
-    this.buildPalette.setPopulation(population.used, population.capacity);
     this.buildPalette.setTrainableUnits(this.barracksProduction.trainableUnits(PLAYER_OWNER));
+    this.syncHudBar();
     this.syncEconomyUi();
+  }
+
+  /** Push the §51 readouts. The bar decides nothing; it only diffs its cells. */
+  private syncHudBar(): void {
+    this.hudBar.setResources(this.playerKingdom.wallet.snapshot(), this.playerIncomeRates());
+    this.hudBar.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
+    const population = this.playerKingdom.population.snapshot();
+    this.hudBar.setPopulation(population.used, population.capacity);
+    this.hudBar.setAge(this.ages.snapshot(PLAYER_OWNER), this.options.ageBalance);
+  }
+
+  /**
+   * All four resources, not the Faz 3 pair. The HUD's job in a four-resource
+   * economy is to show which income is the one holding the Town age back, and a
+   * missing row cannot do that — a zero stone rate has to be *visible* to read
+   * as the reason (Faz 8 hit exactly this: AI scoring averaged its incomes and
+   * a healthy three hid a zero stone).
+   */
+  private playerIncomeRates(): Record<string, number> {
+    const rates: Record<string, number> = {};
+    for (const resourceId of RESOURCE_ORDER) {
+      rates[resourceId] = this.economyProduction?.productionPerMinute(PLAYER_OWNER, resourceId) ?? 0;
+    }
+    return rates;
   }
 
   private syncRoadUi(): void {
@@ -972,15 +1027,87 @@ export class RtsApp {
     this.logisticsOccupation.sync();
     const logistics = this.productionLogistics.snapshots()
       .filter((producer) => producer.owner === PLAYER_OWNER);
-    this.buildPalette.setIncomeRates({
-      food: this.economyProduction?.productionPerMinute(PLAYER_OWNER, "food") ?? 0,
-      wood: this.economyProduction?.productionPerMinute(PLAYER_OWNER, "wood") ?? 0,
-    });
     this.buildPalette.setProductionBuildings(production);
     this.buildPalette.setProductionLogistics(new Map(
       logistics.map((producer) => [producer.structureId, producer.status]),
     ));
-    this.logisticsWarning.setStatuses(logistics.map((producer) => producer.status));
+    this.hudBar.setLogisticsStatuses(logistics.map((producer) => producer.status));
+  }
+
+  /**
+   * Raise the §51 notifications whose conditions are *polled* rather than
+   * evented. The two age notices are not here: `AgeSystem.update` already
+   * reports them as owner-scoped events, and re-deriving them from a snapshot
+   * would be a second, weaker source of the same truth.
+   *
+   * Every branch posts unconditionally and lets {@link RtsNotificationCenter}
+   * decide what the player actually sees. That is the point of the split: this
+   * method answers "is it true right now", the notification centre answers "has
+   * the player already been told" — mixing the two is how a feed starts to spam.
+   */
+  private syncNotifications(): void {
+    const population = this.playerKingdom.population.snapshot();
+    if (population.used >= population.capacity) {
+      this.notifications.post({
+        kind: "population-full",
+        text: `Nüfus dolu (${population.used}/${population.capacity}): yeni birim üretmek için Ev kurun.`,
+      });
+    }
+
+    for (const producer of this.economyProduction?.snapshots(PLAYER_OWNER) ?? []) {
+      // Renewable producers report null, and a live deposit is not news.
+      if (producer.sourceRemaining === null || producer.sourceRemaining > 0) continue;
+      this.notifications.post({
+        // Keyed by resource, not by building: two exhausted quarries are one
+        // problem ("there is no more stone here"), and the player solves both
+        // with the same decision.
+        kind: "resource-depleted",
+        subject: producer.resourceId,
+        text: `${resourceLabel(producer.resourceId)} yatağı tükendi: ${producer.structureLabel} artık üretmiyor.`,
+      });
+    }
+
+    for (const producer of this.productionLogistics.snapshots()) {
+      if (producer.owner !== PLAYER_OWNER || producer.status === "linked") continue;
+      this.notifications.post({
+        kind: "logistics-cut",
+        subject: String(producer.structureId),
+        text: `${resourceLabel(producer.resourceId)} üretimi durdu: lojistik bağlantısı kesildi.`,
+      });
+    }
+
+    this.syncUnderAttackNotifications();
+  }
+
+  /**
+   * One watch over both target kinds. They are sampled together because the
+   * watch's contract is "what lost health since the last look" — splitting it
+   * per kind would need two baselines advanced in lockstep for no gain.
+   */
+  private syncUnderAttackNotifications(): void {
+    const center = this.centers.get(PLAYER_OWNER);
+    const outposts = this.structures.ownedBy(PLAYER_OWNER)
+      .filter((structure) => structure.stats.territory !== undefined);
+    const damaged = this.attackWatch.observe([
+      ...(center ? [{ id: "center", health: center.health.current }] : []),
+      ...outposts.map((outpost) => ({ id: `outpost:${outpost.id}`, health: outpost.health.current })),
+    ]);
+    for (const id of damaged) {
+      if (id === "center") {
+        this.notifications.post({
+          kind: "center-under-attack",
+          text: "Merkeziniz saldırı altında!",
+        });
+        continue;
+      }
+      this.notifications.post({
+        kind: "outpost-under-attack",
+        // Keyed per outpost: two outposts under attack are two places the player
+        // has to choose between, which is the decision the notice exists to prompt.
+        subject: id,
+        text: "Karakolunuz saldırı altında.",
+      });
+    }
   }
 
   private assignWorkerToConstruction(structure: PlacedStructure): void {
@@ -1131,7 +1258,7 @@ export class RtsApp {
   }
 
   private syncAgeUi(): void {
-    this.buildPalette.setAge(this.ages.snapshot(PLAYER_OWNER), this.options.ageBalance);
+    this.buildPalette.setAgeState(this.ages.snapshot(PLAYER_OWNER));
   }
 
   private syncStructureUpgradeUi(): void {

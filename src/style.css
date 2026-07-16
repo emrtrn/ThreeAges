@@ -13,6 +13,15 @@
   box-sizing: border-box;
 }
 
+:root {
+  /*
+   * Height of the Faz 9 HUD strip. Lives here rather than on .rts-hud-bar
+   * because the elements that must clear the bar are its *siblings* in
+   * #ui-overlay, and a custom property only inherits downward.
+   */
+  --rts-hud-bar-height: 46px;
+}
+
 html,
 body {
   width: 100%;
@@ -121,7 +130,8 @@ body {
 /* Read-only Faz 1 diagnostics, intentionally available only with ?rts&debug. */
 .rts-debug-overlay {
   position: absolute;
-  top: max(12px, env(safe-area-inset-top));
+  /* Clears the Faz 9 HUD strip, which owns the top edge in both modes. */
+  top: calc(var(--rts-hud-bar-height) + 8px);
   left: max(12px, env(safe-area-inset-left));
   max-width: min(360px, calc(100vw - 24px));
   max-height: 48vh;
@@ -139,7 +149,7 @@ body {
 /* Phase 4 test aid: always-visible, simulation-only speed controls. */
 .rts-game-speed {
   position: absolute;
-  top: max(12px, env(safe-area-inset-top));
+  top: calc(var(--rts-hud-bar-height) + 8px);
   right: max(12px, env(safe-area-inset-right));
   padding: 8px 10px;
   color: #edf0dc;
@@ -174,19 +184,201 @@ body {
   border-color: #e5d675;
 }
 
-.rts-logistics-warning {
+/*
+ * Faz 9 main HUD strip (plan §51). A full-width top bar is the classic RTS
+ * placement and the one §52 ("UI haritanın kritik alanlarını aşırı kapatmıyor")
+ * tolerates at 1366x768: it costs map height only once, where a side panel would
+ * eat width the map needs for both approach routes.
+ *
+ * Everything else that used to sit at the top now hangs off this height rather
+ * than a hand-tuned offset, so the bar can grow without silently sliding the
+ * debug overlay under it.
+ */
+.rts-hud-bar {
   position: absolute;
-  top: max(66px, calc(env(safe-area-inset-top) + 54px));
-  right: max(12px, env(safe-area-inset-right));
-  max-width: min(320px, calc(100vw - 24px));
-  padding: 8px 10px;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  /* Strictly one row. The bar's height is published as a custom property that
+     other panels offset against, so a wrapping bar would silently slide under
+     the debug overlay and the speed controls. */
+  flex-wrap: nowrap;
+  gap: 18px;
+  height: var(--rts-hud-bar-height);
+  padding: 6px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left));
+  color: #edf0dc;
+  /* Opaque, unlike the floating panels: the bar is a frame edge, and a
+     translucent one would let map contrast fight the numbers. */
+  background: rgb(15 23 26 / 96%);
+  border-bottom: 1px solid rgb(183 206 130 / 55%);
+  box-shadow: 0 4px 18px rgb(0 0 0 / 32%);
+}
+
+.rts-hud-resources {
+  display: flex;
+  flex-shrink: 0;
+  gap: 14px;
+}
+
+.rts-hud-resource {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.rts-hud-resource-label {
+  color: #93a68a;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/*
+ * Reserved width keeps the income text from sliding as a stock crosses a digit
+ * (9 -> 10 -> 100). Right-aligned so the slack falls *before* the number: the
+ * amount and its rate are the pair the player reads, and left-aligning stranded
+ * a single-digit stock a full 28px away from its own income.
+ */
+.rts-hud-resource-amount {
+  min-width: 34px;
+  color: #e5d675;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.rts-hud-resource-income {
+  color: #8fc08f;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A resource earning nothing is the readout that explains a stalled age. */
+.rts-hud-resource-income[data-idle="true"] {
+  color: #c9743f;
+}
+
+.rts-hud-status {
+  display: flex;
+  flex-shrink: 0;
+  gap: 14px;
+  /* Pins the status block to the right edge whether or not the warning between
+     them is showing. */
+  margin-left: auto;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rts-hud-population,
+.rts-hud-age {
+  color: #dce8be;
+}
+
+.rts-hud-idle-workers {
+  color: #93a68a;
+}
+
+/* Idle labour and a full population are both "you owe the game a decision". */
+.rts-hud-idle-workers[data-idle="true"] {
+  color: #e5d675;
+  font-weight: 700;
+}
+
+.rts-hud-population[data-full="true"] {
+  color: #e09b5c;
+  font-weight: 700;
+}
+
+/*
+ * The §51 critical connection warning, in the bar's free middle. It shrinks
+ * before it wraps: the strip publishes a fixed height, so a warning that grew
+ * the bar would push the panels that offset against it out of alignment.
+ */
+.rts-hud-warning {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin-left: auto;
+  padding: 4px 8px;
+  overflow: hidden;
   color: #fff1cf;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   background: rgb(105 48 35 / 90%);
   border: 1px solid #e09b5c;
-  border-radius: 5px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  border-radius: 4px;
+}
+
+.rts-hud-warning[hidden] {
+  display: none;
+}
+
+/*
+ * Faz 9 notification feed (plan §51). Top-centre, directly under the HUD strip.
+ *
+ * Not the right edge, which was the first attempt: the build palette owns that
+ * whole column from the strip down to the bottom of the screen, and the feed
+ * rendered *behind* it — the notice existed, fired, and was invisible. The
+ * centre column is free between the top-left debug overlay and the top-right
+ * speed controls, and it stays clear of the bottom-centre selection panel.
+ */
+.rts-notification-feed {
+  position: absolute;
+  top: calc(var(--rts-hud-bar-height) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(340px, calc(100vw - 24px));
+  /* Read-only: a notice must never swallow a click meant for the map. */
+  pointer-events: none;
+}
+
+.rts-notification-feed[hidden] {
+  display: none;
+}
+
+.rts-notification {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 9px;
+  color: #edf0dc;
+  font-size: 12px;
+  background: rgb(18 27 30 / 92%);
+  border: 1px solid rgb(183 206 130 / 55%);
+  border-left-width: 3px;
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgb(0 0 0 / 30%);
+}
+
+.rts-notification[data-severity="info"] {
+  border-left-color: #8fc08f;
+}
+
+.rts-notification[data-severity="warning"] {
+  color: #fff1cf;
+  border-left-color: #e5d675;
+}
+
+.rts-notification[data-severity="alert"] {
+  color: #fff1cf;
+  background: rgb(78 34 26 / 92%);
+  border-color: rgb(224 155 92 / 70%);
+  border-left-color: #e09b5c;
+}
+
+.rts-notification-repeats {
+  flex-shrink: 0;
+  color: #93a68a;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Phase 4 road placement sits opposite the build palette and stays compact. */
@@ -337,29 +529,12 @@ body {
   font-size: 12px;
 }
 
-.rts-build-resources {
-  margin-top: 8px;
-  color: #e5d675;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.rts-build-workers {
-  margin-top: 4px;
-  color: #b8d6db;
-  font-size: 12px;
-}
-
-.rts-build-population,
-.rts-build-income,
+/* The palette's resource/worker/population/income rows moved to .rts-hud-bar in
+   Faz 9; their rules left with the elements. */
 .rts-production-details {
   margin-top: 4px;
   color: #b8d6db;
   font-size: 12px;
-}
-
-.rts-build-income {
-  color: #a8d991;
 }
 
 .rts-production-panel {

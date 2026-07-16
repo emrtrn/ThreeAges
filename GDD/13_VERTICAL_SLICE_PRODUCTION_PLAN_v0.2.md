@@ -1690,14 +1690,36 @@ Oyuncunun dış açıklama olmadan temel maçı yönetebilmesini sağlamak.
 
 ## 51. Görevler
 
+**Faz 9 dilim düzeni.** §12 "her faz oynanabilir kalmalıdır" gereği bu bölüm tek
+seferde değil dilimler halinde üretiliyor. **Dilim 1 (Ana HUD + Bildirimler)
+tamamlandı**; kalan dört grup (seçim panelleri, yapı/yol araçları, maç akışı,
+minimal ayarlar) sırada.
+
 ### Ana HUD
 
-- [ ] Dört kaynak
-- [ ] Gelir hızları
-- [ ] Nüfus
-- [ ] Çağ seviyesi
-- [ ] Boşta işçi
-- [ ] Kritik bağlantı uyarısı
+Faz 2'den beri bütün readout'lar `rtsBuildPalette` içinde birikmişti — kendi
+başlığı zaten "not the final HUD" diyordu. Dilim 1 bunları klasik RTS üst
+şeridine (`src/game/rts/ui/rtsHudBar.ts`) taşıdı; palette yalnız *eylemleri*
+tuttu. Şerit hiçbir karar vermiyor: bütün değerler `RtsApp`ten push ediliyor,
+şeridin tek kuralı hangi hücrenin DOM'una ne zaman dokunacağı.
+
+- [x] Dört kaynak (`rtsHudBar.setResources`; sıra ve etiketler tek yerde:
+  `ui/resourceLabels.ts`. Bu modül, aynı etiket haritasının palette içinde üç kez
+  kopyalanmış olması yüzünden açıldı — dördüncü kopya HUD ile maliyet satırının
+  "stone"a farklı isim vermesi riskiydi. Not: `resources.json` yalnız *yatakları*
+  tanımladığı için taş/altın etiketi veride var, yiyecek/odun'unki yok; dört
+  etiketi de veriye taşımak loader/validator işi, HUD işi değil.)
+- [x] Gelir hızları (Dört kaynağın **hepsi**, Faz 3'ün ikilisi değil. Sıfır gelir
+  turuncu: §24 "çağ atlama ekonomi ile denge içinde" ancak hangi gelirin çağı
+  tuttuğu *görünürse* okunabilir — Faz 8 aynı hatayı AI puanlamasında yaşadı,
+  ortalama gelir sıfır taşı gizliyordu.)
+- [x] Nüfus (`used/capacity`; tavana değince vurgulanıyor.)
+- [x] Çağ seviyesi (Yükseltme sürerken kalan saniye dahil.)
+- [x] Boşta işçi (Sıfırdan büyükken vurgulanıyor: boşta işçi oyuncunun oyuna
+  borçlu olduğu bir karardır.)
+- [x] Kritik bağlantı uyarısı (Faz 4'ün ayrı `rtsLogisticsWarning` bileşeni
+  şeride katıldı ve silindi — §51 bunu Ana HUD kalemi olarak sayıyor ve mesaj
+  haritası birebir aynıydı; ayrı tutmak ölü kopya olurdu.)
 
 ### Seçim panelleri
 
@@ -1718,13 +1740,62 @@ Oyuncunun dış açıklama olmadan temel maçı yönetebilmesini sağlamak.
 
 ### Bildirimler
 
-- [ ] Nüfus dolu
-- [ ] Kaynak tükendi
-- [ ] Bağlantı kesildi
-- [ ] Karakol saldırı altında
-- [ ] Merkez saldırı altında
-- [ ] Çağ yükseltmesi tamamlandı
-- [ ] AI çağ atladı
+`RtsNotificationCenter` (`ui/rtsNotifications.ts`) saf durum — DOM yok, çünkü
+§52'nin "aynı uyarı sürekli spam oluşturmuyor" kriteri `test:engine` ile
+kanıtlanmalı, ekran görüntüsüyle değil (§82'de `formatRtsAiDebug`'ın kurduğu
+kalıp). `RtsNotificationFeed` yalnız `active()`'i çiziyor.
+
+**Neden bir bastırma katmanı gerekti.** Bu koşulların çoğu *event* değil, her
+karede *yoklanan* durum: nüfus dolu ve lojistik kesik oldukları her karede
+doğrular. `RtsApp` koşulu sorgusuz post ediyor, ne gösterileceğine merkez karar
+veriyor — iki sorumluluğu karıştırmak feed'in spam'e dönüşme yolu. İki kural:
+canlı bir bildirimin tekrarı *yığmıyor*, tazeliyor (kalıcı koşul tek satır olarak
+duruyor; satırın kaybolması sorunun bittiğinin işareti); süresi dolan anahtar
+cooldown boyunca susturuluyor (sınırda titreyen koşul sonsuza dek yeniden
+post edemesin).
+
+- [x] Nüfus dolu (Yoklanan koşul; `used >= capacity`.)
+- [x] Kaynak tükendi (Yapıya göre değil **kaynağa** göre anahtarlanıyor: iki
+  tükenmiş taş ocağı tek problemdir ve oyuncu ikisini de aynı kararla çözer.)
+- [x] Bağlantı kesildi (Üretim yapısı başına anahtarlı.)
+- [x] Karakol saldırı altında (Karakol başına anahtarlı: iki karakol iki ayrı
+  tercihtir — bildirimin var oluş sebebi olan karar.)
+- [x] Merkez saldırı altında
+- [x] Çağ yükseltmesi tamamlandı (`AgeSystem.update` zaten owner'lı event
+  döndürüyor; snapshot'tan yeniden türetmek aynı gerçeğin ikinci ve zayıf
+  kaynağı olurdu.)
+- [x] AI çağ atladı (Aynı event akışının `enemy` ayağı. Oyuncunun rakibin
+  güçlendiğini öğrenmesinin başka dürüst yolu yok.)
+
+**"Saldırı altında" nasıl tespit ediliyor.** Savaşta damage event bus'ı yok
+(`updateUnitCombat` vuruşları debug overlay'e callback ile bildiriyor, yapılar
+düz `HealthComponent` ile hasar alıyor). Tek bir HUD satırı için savaşa event
+kanalı döşemek yerine `ui/rtsAttackWatch.ts` her tick canı örnekleyip *düşeni*
+bildiriyor. Yoklama kriter açısından daha dürüst de: §51 yapının saldırı altında
+olup olmadığını soruyor, savaş sisteminin "saldırı" diye sınıflamadığı bir şey
+tarafından yenen yapı da buna dahil. İlk görülen id asla rapor etmiyor (yapı
+kurmak ona hasar değildir) ve yok olan id unutuluyor (yoksa aynı id ile yeniden
+kurulan karakol ilk örnekte hasarlı okunurdu).
+
+**Faz 9'da bulunan ve düzeltilen üç hata.** Üçü de yalnız gerçek maçta göründü;
+motor testleri ve geometri iddiaları üçünü de yeşil geçiyordu.
+
+1. **Tekrar sayacı tick hızını ölçüyordu.** Sayaç *tazelemeleri* sayıyordu, bu
+   yüzden yola bağlanmamış tek bir tarla feed'de **"×378"** yazdırdı — oyuncunun
+   yaptığı veya yapabileceği hiçbir şeyi değil, simülasyon tick hızını ölçen bir
+   sayı. Artık yalnız *yeniden yükselişler* sayılıyor: "×3" = bu problem üç ayrı
+   kez yaşandı, göz atmaya değer bir tekrar.
+2. **Uyarı şeridi ikinci satıra kırıyordu.** Kritik bağlantı uyarısına tam
+   genişlikte kendi satırı verilmişti; yol kesilir kesilmez şerit iki satıra
+   çıkıyor ve kesintiyi *açıklayan* kaynak sayıları tam da okunmaları gereken
+   anda kendi altlarına akıyordu. Uyarı artık şeridin boş ortasında, tek satırda.
+   Şerit sabit yükseklik yayınlıyor (`--rts-hud-bar-height`); büyüyen bir şerit,
+   ona göre hizalanan panelleri sessizce altına alırdı.
+3. **Feed yapı paletinin arkasında kalıyordu.** İlk yerleşim sağ kenardı; palet o
+   sütunun tamamını şeritten ekranın altına kadar kaplıyor. Bildirim var oluyor,
+   tetikleniyor ve **görünmüyordu**. Feed artık üst-ortada: sol üstteki debug
+   overlay ile sağ üstteki hız kontrolü arasındaki sütun boş ve alt-ortadaki
+   seçim panelinden uzak.
 
 ### Maç akışı
 
@@ -1746,12 +1817,34 @@ Oyuncunun dış açıklama olmadan temel maçı yönetebilmesini sağlamak.
 
 ## 52. Kabul Kriterleri
 
-- [ ] UI haritanın kritik alanlarını aşırı kapatmıyor.
-- [ ] Bir yapı çalışmadığında nedeni gösteriliyor.
-- [ ] Aynı uyarı sürekli spam oluşturmuyor.
+Dilim 1 sonrası durum. Kalan kutular kapsamı henüz üretilmemiş dilimlere ait;
+Kapı B değerlendirmesi §53 gereği ancak altı grup da bittiğinde yapılır.
+
+- [ ] UI haritanın kritik alanlarını aşırı kapatmıyor. **Kısmen:** şerit ekran
+  yüksekliğinin %10'undan azını alıyor ve feed sınırlı (`MAX_ACTIVE_NOTIFICATIONS`
+  = 4, en eskisini düşürüyor — aşağı doğru harita üzerine büyümüyor); ikisi de
+  Playwright ile iki çözünürlükte ölçülüyor. **Ama** kriter bütün UI'ı kapsıyor:
+  yapı paleti hâlâ sağ sütunun tamamını (1366×768'de 647px) kaplayan Faz 2
+  yığını. Bu, "Seçim panelleri" + "Yapı ve yol araçları" dilimlerinin işi.
+- [ ] Bir yapı çalışmadığında nedeni gösteriliyor. **Kısmen:** lojistik kesintisi
+  hem şeritte hem feed'de nedeniyle okunuyor; seçili üretim yapısının paneli
+  durum + neden veriyor. Tam kapsam "Seçim panelleri" dilimine bağlı.
+- [x] Aynı uyarı sürekli spam oluşturmuyor. (`test:engine`: 60 kare boyunca her
+  tick post edilen `population-full` tek satır kalıyor, sonra süresi dolup
+  cooldown'a giriyor. Gerçek maçta doğrulandı: yola bağlanmamış tarla 378 kez
+  yoklandı, feed'de tek satır çıktı.)
 - [ ] Oyuncu yol ve karakol araçlarını dış açıklama olmadan kullanabiliyor.
-- [ ] Maç başlatma, bitirme ve yeniden başlatma güvenilir.
-- [ ] 1366×768 ve 1920×1080 çözünürlükleri kullanılabilir.
+  (Kapsam: "Yapı ve yol araçları" dilimi — yol rota/maliyet önizlemesi ve karakol
+  kontrol alanı önizlemesi henüz yok.)
+- [ ] Maç başlatma, bitirme ve yeniden başlatma güvenilir. (Kapsam: "Maç akışı"
+  dilimi. Yeniden başlatma Faz 1'den beri çalışıyor ve dilim 1 bildirim/attack
+  watch durumunu ona bağladı — restart artık sessiz başlıyor ve taze Merkez
+  "hasarlı" okunmuyor; ancak başlatma ekranı, pause, teslim ol ve yenilgi ekranı
+  hâlâ yok.)
+- [x] 1366×768 ve 1920×1080 çözünürlükleri kullanılabilir. (Playwright her iki
+  çözünürlükte: şerit tam genişlik + %10'dan kısa, debug overlay ve hız kontrolü
+  şeridin altından başlıyor, yatay taşma yok. Bu test `--rts-hud-bar-height` ile
+  şeridin gerçek yüksekliği ayrışırsa kırılır.)
 
 ---
 

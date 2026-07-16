@@ -1,19 +1,27 @@
-/** Minimal Phase 2 build-mode control surface (not the final HUD). */
-import type { AgeBalance, BuildingBalance, UnitBalanceStats } from "../../data/gameDataTypes";
+/**
+ * Build/train action surface — Vertical Slice Plan v0.2 §51 (Faz 9).
+ *
+ * Faz 2 opened this as "the build palette (not the final HUD)" and every slice
+ * since hung its readout here, because it was the only panel that existed. Faz 9
+ * gave the readouts a home of their own ({@link RtsHudBar}), so what is left is
+ * what the name always promised: the actions, their costs, their locks, and the
+ * reason an action is refused. State the player only *reads* belongs to the bar.
+ *
+ * Age is the one deliberate overlap: the panel does not print the age, but it
+ * still consumes the snapshot, because the T2 buttons' locked/unlocked state is
+ * an age fact and reading it here is what keeps a button from lying about it.
+ */
+import type { BuildingBalance, UnitBalanceStats } from "../../data/gameDataTypes";
 import { townUnlocksAvailable, type AgeSnapshot } from "../progression/ageSystem";
 import type { EconomyBuildingSnapshot } from "../economy/economyProductionSystem";
 import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
 import type { StructureUpgradeSnapshot } from "../structures/structureUpgradeSystem";
+import { formatResourceCost, resourceLabel } from "./resourceLabels";
 
 export class RtsBuildPalette {
   private readonly root = document.createElement("section");
   private readonly status = document.createElement("p");
-  private readonly resources = document.createElement("p");
-  private readonly workers = document.createElement("p");
-  private readonly population = document.createElement("p");
-  private readonly income = document.createElement("p");
-  private readonly age = document.createElement("p");
   private readonly townUnlocks = document.createElement("p");
   private readonly townUpgradeButton = document.createElement("button");
   private readonly trainChoices = document.createElement("div");
@@ -66,7 +74,7 @@ export class RtsBuildPalette {
       label.textContent = stats.label;
       const cost = document.createElement("span");
       cost.className = "rts-build-choice-cost";
-      cost.textContent = formatBuildingCost(stats.cost);
+      cost.textContent = formatResourceCost(stats.cost);
       button.append(label, cost);
       button.addEventListener("click", () => this.onChoose(id));
       choices.appendChild(button);
@@ -124,16 +132,6 @@ export class RtsBuildPalette {
     this.townStructureUpgradeButtons.set("outpost", outpostUpgrade);
     choices.appendChild(outpostUpgrade);
     this.root.appendChild(choices);
-    this.resources.className = "rts-build-resources";
-    this.root.appendChild(this.resources);
-    this.workers.className = "rts-build-workers";
-    this.root.appendChild(this.workers);
-    this.population.className = "rts-build-population";
-    this.root.appendChild(this.population);
-    this.income.className = "rts-build-income";
-    this.root.appendChild(this.income);
-    this.age.className = "rts-build-age";
-    this.root.appendChild(this.age);
     this.townUnlocks.className = "rts-build-age";
     this.root.appendChild(this.townUnlocks);
     this.producerPanel.className = "rts-production-panel";
@@ -151,7 +149,7 @@ export class RtsBuildPalette {
     this.root.appendChild(this.status);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setState({ activeBuildingId: null, result: null });
-    this.setTownUnlockState({ age: "settlement", upgrading: false });
+    this.setAgeState({ age: "settlement", upgrading: false });
   }
 
   setState(state: BuildingPlacementState): void {
@@ -180,40 +178,11 @@ export class RtsBuildPalette {
         : "Geçersiz konum: engel veya yapı ile çakışıyor.";
   }
 
-  setResources(resources: Readonly<Record<string, number>>): void {
-    const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun", stone: "Taş", gold: "Altın" };
-    this.resources.textContent = Object.entries(resources)
-      .map(([id, amount]) => `${labels[id] ?? id}: ${formatInventoryAmount(amount)}`)
-      .join(" · ");
-  }
-
-  setIdleWorkerCount(count: number): void {
-    const text = `Boşta işçi: ${count}`;
-    if (this.workers.textContent !== text) this.workers.textContent = text;
-  }
-
-  setPopulation(used: number, capacity: number): void {
-    const text = `Nüfus: ${used}/${capacity}`;
-    if (this.population.textContent !== text) this.population.textContent = text;
-  }
-
-  setIncomeRates(rates: Readonly<Record<string, number>>): void {
-    const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun", stone: "Taş", gold: "Altın" };
-    this.income.textContent = `Gelir: ${Object.entries(rates)
-      .map(([id, amount]) => `${labels[id] ?? id} +${amount.toFixed(1)}/dk`)
-      .join(" · ")}`;
-  }
-
-  /** Compact progression status; the button remains the explicit player action. */
-  setAge(snapshot: AgeSnapshot, balance: AgeBalance): void {
-    const text = snapshot.upgrading
-      ? `Çağ: ${balance.settlement.label} → ${balance.town.label} (${Math.ceil(snapshot.remainingSeconds)} sn)`
-      : `Çağ: ${snapshot.age === "town" ? balance.town.label : balance.settlement.label}`;
-    if (this.age.textContent !== text) this.age.textContent = text;
-    this.setTownUnlockState(snapshot);
-  }
-
-  private setTownUnlockState(snapshot: Pick<AgeSnapshot, "age" | "upgrading">): void {
+  /**
+   * Age drives which actions are legal, not what the age *is* — the bar prints
+   * that. This keeps the T2 buttons and their explanation on the same snapshot.
+   */
+  setAgeState(snapshot: Pick<AgeSnapshot, "age" | "upgrading">): void {
     const unlocked = townUnlocksAvailable(snapshot);
     this.townUnlocksAreAvailable = unlocked;
     this.refreshStructureUpgradeButtons();
@@ -289,7 +258,7 @@ export class RtsBuildPalette {
       label.textContent = `${stats.label} Üret`;
       const cost = document.createElement("span");
       cost.className = "rts-train-choice-cost";
-      cost.textContent = `${formatBuildingCost(stats.cost)} · ${stats.populationCost} Nüfus`;
+      cost.textContent = `${formatResourceCost(stats.cost)} · ${stats.populationCost} Nüfus`;
       button.append(label, cost);
       button.disabled = !unlocked;
       button.title = unlocked
@@ -318,7 +287,7 @@ export class RtsBuildPalette {
     }
     this.producerDetails.textContent = [
       `İşçiler: ${selected.assignedWorkers}/${selected.workerCapacity} (${selected.workingWorkers} çalışıyor)`,
-      `Üretim: ${selected.productionPerMinute.toFixed(1)} ${selected.resourceId}/dk`,
+      `Üretim: ${selected.productionPerMinute.toFixed(1)} ${resourceLabel(selected.resourceId)}/dk`,
       `Yerel tampon: ${selected.localBuffer.toFixed(1)}/${selected.localBufferCapacity}`,
       selected.sourceRemaining === null ? null : `Düğüm: ${selected.sourceRemaining.toFixed(1)} kaldı`,
       `Durum: ${selected.status}`,
@@ -369,15 +338,3 @@ function logisticsReason(status: ProducerLogisticsStatus | undefined): string {
   return status ? reasons[status] : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.";
 }
 
-function formatBuildingCost(cost: Readonly<Record<string, number>>): string {
-  const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun", stone: "Taş", gold: "Altın" };
-  const entries = Object.entries(cost).filter(([, amount]) => amount > 0);
-  return entries.length === 0
-    ? "Ücretsiz"
-    : entries.map(([resourceId, amount]) => `${amount} ${labels[resourceId] ?? resourceId}`).join(" · ");
-}
-
-/** Stocks are accumulated as floats, but the player-facing inventory never overstates them. */
-export function formatInventoryAmount(amount: number): number {
-  return Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0;
-}

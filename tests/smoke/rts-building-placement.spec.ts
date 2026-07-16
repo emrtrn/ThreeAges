@@ -22,13 +22,24 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator('[data-rts-building="depot"]')).toContainText("120 Odun");
   await expect(page.locator('[data-rts-building="outpost"]')).toContainText("140 Odun");
   await expect(page.getByRole("button", { name: "İşçi Üret", exact: true })).toBeVisible();
-  await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 9/20");
-  await expect(page.locator(".rts-build-income")).toHaveText("Gelir: Yiyecek +0.0/dk · Odun +0.0/dk");
+  await expect(page.locator(".rts-hud-population")).toHaveText("Nüfus: 9/20");
+  await expect(page.locator(".rts-hud-age")).toHaveText("Çağ: Yerleşim");
+  await expect(page.locator(".rts-hud-idle-workers")).toHaveText("Boşta işçi: 5");
+  // Faz 9 §51: all four resources are on the bar, not the Faz 3 pair. A zero
+  // stone income has to be *visible* to read as the reason the Town age stalls.
+  for (const resourceId of ["food", "wood", "stone", "gold"]) {
+    await expect(page.locator(`[data-rts-resource="${resourceId}"]`)).toBeVisible();
+    await expect(
+      page.locator(`[data-rts-resource="${resourceId}"] .rts-hud-resource-income`),
+    ).toHaveText("+0.0/dk");
+  }
   await expect(page.locator(".rts-debug-overlay")).toContainText("kaynak hareketleri:");
   await expect(page.locator(".rts-debug-overlay")).toContainText("yollar: 0 düğüm · 0 kenar · 0 ağ");
   await expect(page.locator(".rts-debug-overlay")).toContainText("depolar: 0");
   await expect(page.locator(".rts-debug-overlay")).toContainText("üretim bağlantıları: 0");
-  await expect(page.locator(".rts-logistics-warning")).toBeHidden();
+  await expect(page.locator(".rts-hud-warning")).toBeHidden();
+  // Nothing has happened yet, so the feed must be silent rather than empty-boxed.
+  await expect(page.locator(".rts-notification-feed")).toBeHidden();
 
   await page.getByRole("button", { name: "Yol Kur", exact: true }).click();
   await expect(page.locator(".rts-road-status")).toHaveText(
@@ -58,8 +69,43 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator(".rts-build-action-message")).toHaveText(
     /İşçi üretim kuyruğa alındı \(\d+\/\d+\)\.|Yeni işçi Merkez'den çıktı\./,
   );
-  await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 10/20");
+  await expect(page.locator(".rts-hud-population")).toHaveText("Nüfus: 10/20");
   await expect(page.locator(".rts-debug-overlay")).toContainText("reserve: food -50");
+  expect(errors).toEqual([]);
+});
+
+test("RTS Phase 9 the HUD strip stays clear of the map at 1366x768 and 1920x1080", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  // §52 asks for both resolutions to be usable. 1366x768 is the binding one: the
+  // HUD, the speed controls and the debug overlay all compete for the top edge.
+  for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/?rts&debug");
+    const hud = page.locator(".rts-hud-bar");
+    await expect(hud).toBeVisible();
+
+    const bar = await hud.boundingBox();
+    if (!bar) throw new Error("HUD bar has no box");
+    // §52 "UI haritanın kritik alanlarını aşırı kapatmıyor": the strip is a frame
+    // edge, so it may cost map height once — but never a tenth of the screen.
+    expect(bar.height).toBeLessThan(viewport.height * 0.1);
+    expect(bar.width).toBe(viewport.width);
+
+    // The bar owns the top edge, so everything that used to live there has to
+    // start below it. This is the assertion that fails if the height variable
+    // and the strip's real height drift apart.
+    for (const selector of [".rts-debug-overlay", ".rts-game-speed"]) {
+      const box = await page.locator(selector).boundingBox();
+      if (!box) throw new Error(`${selector} has no box`);
+      expect(box.y, `${selector} must clear the HUD bar`).toBeGreaterThanOrEqual(bar.y + bar.height);
+    }
+
+    // Nothing may push the page into a horizontal scroll at either width.
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  }
   expect(errors).toEqual([]);
 });
 

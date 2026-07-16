@@ -111,7 +111,9 @@ import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
-import { formatInventoryAmount } from "../src/game/rts/ui/rtsBuildPalette";
+import { formatInventoryAmount, formatResourceCost, resourceLabel } from "../src/game/rts/ui/resourceLabels";
+import { RtsNotificationCenter, MAX_ACTIVE_NOTIFICATIONS } from "../src/game/rts/ui/rtsNotifications";
+import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
@@ -27825,6 +27827,138 @@ check("RTS inventory display floors fractional stocks without overstating them",
   assert.equal(formatInventoryAmount(67.321711111104), 67);
   assert.equal(formatInventoryAmount(0.99), 0);
   assert.equal(formatInventoryAmount(Number.NaN), 0);
+});
+
+check("RTS resource costs read in HUD order and name every resource (plan §51)", () => {
+  // Costs arrive in whatever order the JSON author wrote them; the player reads
+  // them next to a HUD bar that is always food-wood-stone-gold.
+  assert.equal(
+    formatResourceCost({ gold: 20, food: 50, stone: 10 }),
+    "50 Yiyecek · 10 Taş · 20 Altın",
+  );
+  // A zero is not a cost; printing "0 Altın" invents a requirement.
+  assert.equal(formatResourceCost({ food: 50, gold: 0 }), "50 Yiyecek");
+  assert.equal(formatResourceCost({}), "Ücretsiz");
+  // An unlabelled resource stays visible rather than vanishing from a cost line.
+  assert.equal(formatResourceCost({ mythril: 5 }), "5 mythril");
+  assert.equal(resourceLabel("stone"), "Taş");
+});
+
+check("RTS notifications refresh rather than stack, and mute after expiry (plan §52)", () => {
+  const notifications = new RtsNotificationCenter();
+
+  // §52 "Aynı uyarı sürekli spam oluşturmuyor": population-full is a *polled*
+  // condition, so RtsApp posts it on every tick it holds. One line, not sixty.
+  assert.equal(notifications.post({ kind: "population-full", text: "Nüfus dolu" }), "posted");
+  for (let tick = 0; tick < 60; tick += 1) {
+    notifications.advance(1 / 60);
+    assert.equal(notifications.post({ kind: "population-full", text: "Nüfus dolu" }), "refreshed");
+  }
+  assert.equal(notifications.active().length, 1, "a re-posted live notice never stacks");
+  // A refresh is not a raise. Counting refreshes made a single unroaded farm
+  // read "×378" in a real match — the tick rate, not anything the player did.
+  assert.equal(notifications.active()[0]?.raises, 1, "61 refreshes are still the first raise");
+
+  // A refreshed notice does not expire while the condition holds: the notice
+  // disappearing is what tells the player the problem is gone.
+  notifications.advance(5);
+  assert.equal(notifications.active().length, 1, "still true, still shown");
+  notifications.advance(2);
+  assert.equal(notifications.active().length, 0, "nothing refreshed it, so it retired");
+
+  // Expiry arms a cooldown: a condition flickering across the boundary must not
+  // re-post forever. population-full mutes for 20s.
+  assert.equal(notifications.post({ kind: "population-full", text: "Nüfus dolu" }), "suppressed");
+  notifications.advance(19);
+  assert.equal(notifications.post({ kind: "population-full", text: "Nüfus dolu" }), "suppressed");
+  notifications.advance(2);
+  assert.equal(
+    notifications.post({ kind: "population-full", text: "Nüfus dolu" }),
+    "posted",
+    "once the cooldown lapses the player is told again",
+  );
+  // *This* is what the counter is for: the same problem raised a second time,
+  // which is a recurring failure rather than a busy simulation tick.
+  assert.equal(notifications.active()[0]?.raises, 2, "history survives expiry and the cooldown");
+});
+
+check("RTS notifications separate subjects and bound the feed (plan §51/§52)", () => {
+  const notifications = new RtsNotificationCenter();
+
+  // Depleted stone and depleted gold are two decisions, not one repeat.
+  assert.equal(
+    notifications.post({ kind: "resource-depleted", subject: "stone", text: "Taş bitti" }),
+    "posted",
+  );
+  assert.equal(
+    notifications.post({ kind: "resource-depleted", subject: "gold", text: "Altın bitti" }),
+    "posted",
+  );
+  assert.equal(notifications.active().length, 2);
+  // ...but the same subject twice still collapses.
+  assert.equal(
+    notifications.post({ kind: "resource-depleted", subject: "stone", text: "Taş bitti" }),
+    "refreshed",
+  );
+  assert.equal(notifications.active().length, 2);
+
+  // §52 "UI haritanın kritik alanlarını aşırı kapatmıyor": the feed is a corner
+  // overlay, so it drops the oldest instead of growing down over the map.
+  for (const structureId of ["1", "2", "3", "4"]) {
+    notifications.post({ kind: "logistics-cut", subject: structureId, text: `Kesildi ${structureId}` });
+  }
+  const active = notifications.active();
+  assert.equal(active.length, MAX_ACTIVE_NOTIFICATIONS);
+  assert.deepEqual(
+    active.map((entry) => entry.text),
+    ["Kesildi 1", "Kesildi 2", "Kesildi 3", "Kesildi 4"],
+    "the oldest notices are the ones the player has had longest to read",
+  );
+
+  // Severity is data, not a caller's choice: the feed colours an alert from the
+  // kind alone, so a "logistics cut" can never be posted as a friendly info.
+  assert.equal(active[0]?.severity, "alert");
+
+  // A restart is a new match: no carried cooldown, no carried raise history,
+  // nothing left on screen. A fresh match's first cut is "×1", not "×2".
+  notifications.reset();
+  assert.equal(notifications.active().length, 0);
+  assert.equal(notifications.post({ kind: "logistics-cut", subject: "1", text: "Kesildi" }), "posted");
+  assert.equal(notifications.active()[0]?.raises, 1);
+
+  assert.throws(() => notifications.advance(-1), RangeError);
+});
+
+check("RTS attack watch reports health losses, not placements or rebuilds (plan §51)", () => {
+  const watch = new RtsAttackWatch();
+
+  // First sight is a baseline: placing a building is not damage to it.
+  assert.deepEqual(watch.observe([{ id: "center", health: 300 }]), []);
+  assert.deepEqual(watch.observe([{ id: "center", health: 300 }]), [], "an untouched centre is silent");
+  assert.deepEqual(watch.observe([{ id: "center", health: 288 }]), ["center"]);
+  // Still damaged is not still *being* damaged — the notice must be able to end.
+  assert.deepEqual(watch.observe([{ id: "center", health: 288 }]), []);
+  // Repairs and upgrades raise health; neither is an attack.
+  assert.deepEqual(watch.observe([{ id: "center", health: 300 }]), []);
+
+  // Two outposts under attack are two places the player must choose between.
+  watch.observe([{ id: "outpost:1", health: 100 }, { id: "outpost:2", health: 100 }]);
+  assert.deepEqual(
+    watch.observe([{ id: "outpost:1", health: 90 }, { id: "outpost:2", health: 80 }]),
+    ["outpost:1", "outpost:2"],
+  );
+
+  // A destroyed structure's baseline must not survive it: ids are reused, and a
+  // stale 90 would make a freshly rebuilt outpost read as already under attack.
+  assert.deepEqual(watch.observe([{ id: "outpost:2", health: 80 }]), [], "outpost:1 is gone");
+  assert.deepEqual(
+    watch.observe([{ id: "outpost:1", health: 100 }, { id: "outpost:2", health: 80 }]),
+    [],
+    "the rebuilt outpost starts a fresh baseline rather than reporting damage",
+  );
+
+  watch.reset();
+  assert.deepEqual(watch.observe([{ id: "center", health: 1 }]), [], "a reset watch re-baselines");
 });
 
 check("game-data presets load and debug_fast is faster", () => {
