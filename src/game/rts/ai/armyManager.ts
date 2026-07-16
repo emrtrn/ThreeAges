@@ -23,7 +23,7 @@ import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import { issueAttackOrder } from "../units/attackPathing";
-import type { AiBlackboard } from "./aiBlackboard";
+import { armyPower, type AiBlackboard } from "./aiBlackboard";
 import type { AiDecisionLog } from "./aiDecisionLog";
 import {
   bestTarget,
@@ -75,7 +75,7 @@ export class ArmyManager {
     return {
       mission: this.mission,
       unitCount: army.length,
-      power: armyPower(army),
+      power: armyPower(army, this.balance),
       garrisonCount: this.mission === "assaultTarget" || this.mission === "harassEconomy"
         ? this.garrison(army).length
         : 0,
@@ -127,7 +127,7 @@ export class ArmyManager {
 
     // §54/§59: only what is left after the garrison may take the field, so an
     // army that is merely at the minimum never leaves the base undefended.
-    if (armyPower(army) - this.balance.army.minimumDefensePower <= 0) {
+    if (armyPower(army, this.balance) - this.balance.army.minimumDefensePower <= 0) {
       return this.withoutTarget("regroup");
     }
 
@@ -187,8 +187,11 @@ export class ArmyManager {
     origin: { x: number; z: number },
     enemyGuards: readonly Unit[],
   ): AiTargetCandidate {
-    const defensePower = armyPower(enemyGuards.filter((guard) =>
-      Math.hypot(guard.position.x - x, guard.position.z - z) <= TARGET_DEFENSE_RADIUS));
+    const defensePower = armyPower(
+      enemyGuards.filter((guard) =>
+        Math.hypot(guard.position.x - x, guard.position.z - z) <= TARGET_DEFENSE_RADIUS),
+      this.balance,
+    );
     return {
       id,
       kind,
@@ -360,11 +363,6 @@ function targetKindFor(stats: BuildingBalanceStats): AiTargetKind {
   if (stats.id === "depot") return "depot";
   if (stats.id === "barracks") return "military";
   return "support";
-}
-
-/** §52: ArmyPower = Σ(UnitBasePower × HealthRatio); guard base power is 1 in AI-1. */
-function armyPower(units: readonly Unit[]): number {
-  return units.reduce((total, unit) => total + unit.health.ratio, 0);
 }
 
 function meanHealth(army: readonly Unit[]): number {

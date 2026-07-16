@@ -1,9 +1,10 @@
 /**
- * Single-worker construction assignment for the first settlement loop.
+ * Worker construction assignments for the settlement loop.
  *
- * A newly placed foundation selects the nearest idle player worker, paths to a
- * reachable edge point, and contributes build time once in range. Multi-worker
- * acceleration and player-directed assignments remain later Phase 2 work.
+ * Foundations receive one automatic builder so the economy cannot deadlock.
+ * The player can then add selected workers explicitly; every active builder
+ * contributes one worker-second of progress, up to the small approach-point
+ * cap below.
  */
 import { Vector3 } from "three";
 
@@ -18,14 +19,25 @@ export type WorkerAssignmentResult =
   | { readonly assigned: true }
   | { readonly assigned: false; readonly reason: WorkerAssignmentFailure };
 
+export interface ManualConstructionAssignmentResult {
+  readonly assignedWorkers: number;
+  readonly rejectedWorkers: number;
+  readonly reason: WorkerAssignmentFailure | null;
+}
+
+type AssignmentSource = "automatic" | "manual";
+
 interface WorkerAssignment {
   readonly worker: Unit;
   readonly structure: PlacedStructure;
   readonly approach: Vector3;
+  readonly source: AssignmentSource;
   state: Exclude<WorkerConstructionState, "idle">;
 }
 
 const BUILD_RANGE = 1.25;
+/** Four unique footprint-edge work positions keep worker pathing readable. */
+const MAX_BUILDERS_PER_SITE = 4;
 
 export class WorkerConstructionSystem {
   private readonly assignments = new Map<number, WorkerAssignment>();
@@ -36,34 +48,83 @@ export class WorkerConstructionSystem {
     private readonly navigation: RtsNavigation,
     private readonly isReservedForOtherWork: (worker: Unit) => boolean = () => false,
     private readonly onConstructionComplete: (structure: PlacedStructure) => void = () => {},
-    /**
-     * Pull a worker off gathering when a site would otherwise never be built.
-     * §55 ranks securing population capacity above income, and without this a
-     * kingdom whose producers hold every worker deadlocks: no builder → no
-     * house → no population → no new workers.
-     */
-    private readonly releaseFromOtherWork: (worker: Unit) => boolean = () => false,
+    /** Automatic recovery may only preempt automatic economy work; an explicit
+     * player construction order may replace any economy assignment. */
+    private readonly releaseFromOtherWork: (worker: Unit, source: AssignmentSource) => boolean = () => false,
   ) {}
 
-  /**
-   * Assign the site owner's nearest idle worker and name the failure mode for
-   * player feedback. A kingdom never builds with the other kingdom's workers.
-   */
+  /** Assign one automatic builder, including recovery for an abandoned site. */
   assignNearest(structure: PlacedStructure): WorkerAssignmentResult {
+    if (structure.construction.complete || this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) {
+      return { assigned: false, reason: "no-idle-worker" };
+    }
     const free = this.candidatesFor(structure, (worker) => !this.isReservedForOtherWork(worker));
-    const assignedFree = this.tryAssign(free, structure);
-    if (assignedFree) return { assigned: true };
+    if (this.tryAssign(free, structure, "automatic")) return { assigned: true };
 
-    // Nobody idle: preempt a gatherer rather than leave the site unbuilt (§55).
+    // A foundation must not deadlock behind automatic gathering assignments.
     const gathering = this.candidatesFor(structure, (worker) => this.isReservedForOtherWork(worker));
     for (const worker of gathering) {
-      if (!this.releaseFromOtherWork(worker)) continue;
-      if (this.tryAssign([worker], structure)) return { assigned: true };
+      if (!this.releaseFromOtherWork(worker, "automatic")) continue;
+      if (this.tryAssign([worker], structure, "automatic")) return { assigned: true };
     }
     return {
       assigned: false,
       reason: free.length === 0 && gathering.length === 0 ? "no-idle-worker" : "unreachable",
     };
+  }
+
+  /**
+   * Make the player's currently selected workers build this foundation. Explicit
+   * orders may take a worker from gathering or another construction site.
+   */
+  assignWorkers(structure: PlacedStructure, workers: readonly Unit[]): ManualConstructionAssignmentResult {
+    if (structure.construction.complete) {
+      return { assignedWorkers: 0, rejectedWorkers: workers.length, reason: "unreachable" };
+    }
+    let assignedWorkers = 0;
+    let rejectedWorkers = 0;
+    let sawReachableCandidate = false;
+    for (const worker of workers) {
+      if (worker.role !== "worker" || worker.owner !== structure.owner || worker.health.depleted) {
+        rejectedWorkers += 1;
+        continue;
+      }
+      const existing = this.assignments.get(worker.id);
+      if (existing?.structure === structure) {
+        assignedWorkers += 1;
+        continue;
+      }
+      if (this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) {
+        rejectedWorkers += 1;
+        continue;
+      }
+      if (existing) this.release(worker);
+      if (this.isReservedForOtherWork(worker) && !this.releaseFromOtherWork(worker, "manual")) {
+        rejectedWorkers += 1;
+        continue;
+      }
+      const assigned = this.tryAssign([worker], structure, "manual");
+      if (assigned) {
+        assignedWorkers += 1;
+        sawReachableCandidate = true;
+      } else {
+        rejectedWorkers += 1;
+      }
+    }
+    return {
+      assignedWorkers,
+      rejectedWorkers,
+      reason: assignedWorkers > 0 ? null : sawReachableCandidate ? "no-idle-worker" : "unreachable",
+    };
+  }
+
+  /** Remove a worker from construction before a player-issued move or job order. */
+  release(worker: Unit): boolean {
+    const assignment = this.assignments.get(worker.id);
+    if (!assignment) return false;
+    assignment.worker.stop();
+    this.assignments.delete(worker.id);
+    return true;
   }
 
   private candidatesFor(structure: PlacedStructure, extra: (worker: Unit) => boolean): Unit[] {
@@ -73,25 +134,24 @@ export class WorkerConstructionSystem {
         - b.position.distanceToSquared(structure.object.position));
   }
 
-  private tryAssign(candidates: readonly Unit[], structure: PlacedStructure): boolean {
+  private tryAssign(candidates: readonly Unit[], structure: PlacedStructure, source: AssignmentSource): boolean {
     for (const worker of candidates) {
-      const approach = this.findReachableApproach(worker, structure);
+      if (this.assignmentCount(structure) >= MAX_BUILDERS_PER_SITE) return false;
+      const approach = this.findReachableApproach(worker, structure, this.approachesFor(structure));
       if (!approach) continue;
       const path = this.navigation.plan(worker.position, approach);
       if (!path) continue;
       worker.setMovePath(path);
-      this.assignments.set(worker.id, { worker, structure, approach, state: "moving" });
+      this.assignments.set(worker.id, { worker, structure, approach, source, state: "moving" });
       return true;
     }
     return false;
   }
 
-  /** Remove a cancelled site's assignment, restoring its worker to idle. */
+  /** Remove a cancelled site's assignments, restoring its workers to idle. */
   cancelStructure(structure: PlacedStructure): void {
-    for (const [workerId, assignment] of this.assignments) {
-      if (assignment.structure !== structure) continue;
-      assignment.worker.stop();
-      this.assignments.delete(workerId);
+    for (const assignment of [...this.assignments.values()]) {
+      if (assignment.structure === structure) this.release(assignment.worker);
     }
   }
 
@@ -103,23 +163,36 @@ export class WorkerConstructionSystem {
         this.assignments.delete(workerId);
         continue;
       }
-      if (assignment.state === "moving") {
-        if (worker.position.distanceTo(assignment.approach) > BUILD_RANGE) continue;
+      if (assignment.state !== "moving") continue;
+      if (worker.position.distanceTo(assignment.approach) <= BUILD_RANGE) {
         worker.stop();
         assignment.state = "building";
+        continue;
       }
-      if (assignment.state === "building" && this.structures.advanceConstruction(structure, deltaSeconds)) {
-        this.assignments.delete(workerId);
-        this.onConstructionComplete(structure);
+      // A failed/stopped route used to leave the assignment occupied forever.
+      // Re-plan once the mover has no active destination; if no route remains,
+      // release it so the foundation can be staffed again on the next update.
+      if (worker.pathTarget || worker.moveTarget) continue;
+      const path = this.navigation.plan(worker.position, assignment.approach);
+      if (path) worker.setMovePath(path);
+      else this.assignments.delete(workerId);
+    }
+
+    const activeBuilders = new Map<PlacedStructure, number>();
+    for (const assignment of this.assignments.values()) {
+      if (assignment.state !== "building") continue;
+      activeBuilders.set(assignment.structure, (activeBuilders.get(assignment.structure) ?? 0) + 1);
+    }
+    for (const [structure, workerCount] of activeBuilders) {
+      if (!this.structures.advanceConstruction(structure, deltaSeconds, workerCount)) continue;
+      for (const assignment of [...this.assignments.values()]) {
+        if (assignment.structure === structure) this.release(assignment.worker);
       }
+      this.onConstructionComplete(structure);
     }
   }
 
-  /**
-   * Retry any unfinished site that has no builder. Assignment used to happen
-   * only once, at placement, so a site placed while every worker was busy —
-   * or whose builder died — stayed a foundation forever.
-   */
+  /** Keep one automatic worker on a foundation that lost all of its builders. */
   private restaffAbandonedSites(): void {
     const staffed = new Set([...this.assignments.values()].map((assignment) => assignment.structure));
     for (const structure of this.structures.all()) {
@@ -138,11 +211,24 @@ export class WorkerConstructionSystem {
   }
 
   reset(): void {
-    for (const assignment of this.assignments.values()) assignment.worker.stop();
-    this.assignments.clear();
+    for (const assignment of [...this.assignments.values()]) this.release(assignment.worker);
   }
 
-  private findReachableApproach(worker: Unit, structure: PlacedStructure): Vector3 | null {
+  private assignmentCount(structure: PlacedStructure): number {
+    return [...this.assignments.values()].filter((assignment) => assignment.structure === structure).length;
+  }
+
+  private approachesFor(structure: PlacedStructure): readonly Vector3[] {
+    return [...this.assignments.values()]
+      .filter((assignment) => assignment.structure === structure)
+      .map((assignment) => assignment.approach);
+  }
+
+  private findReachableApproach(
+    worker: Unit,
+    structure: PlacedStructure,
+    occupied: readonly Vector3[],
+  ): Vector3 | null {
     const halfW = structure.stats.footprint.width / 2;
     const halfD = structure.stats.footprint.depth / 2;
     const gap = BUILD_RANGE * 0.7;
@@ -151,7 +237,7 @@ export class WorkerConstructionSystem {
       new Vector3(structure.x - halfW - gap, 0, structure.z),
       new Vector3(structure.x, 0, structure.z + halfD + gap),
       new Vector3(structure.x, 0, structure.z - halfD - gap),
-    ];
+    ].filter((point) => !occupied.some((used) => used.distanceToSquared(point) < 0.01));
     candidates.sort((a, b) => worker.position.distanceToSquared(a) - worker.position.distanceToSquared(b));
     return candidates.find((point) => this.navigation.plan(worker.position, point) !== null) ?? null;
   }

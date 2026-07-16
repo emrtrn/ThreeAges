@@ -759,7 +759,7 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 ### İnşaat
 
 - [x] ConstructionComponent oluştur. (süre-sınırlı ilerleme ve tek-seferlik tamamlanma)
-- [x] Bir işçiyle inşaat ekle. (en yakın boş işçi; çoklu işçi sonraki kapsam)
+- [x] Çoklu işçiyle inşaat ekle. (foundation başlangıçta bir otomatik işçi alır; seçili işçiler sağ tıkla eklenir, en fazla dört ayrı kenar noktasında çalışır ve ilerleme aktif işçi sayısıyla doğrusal hızlanır)
 - [x] İnşa ilerleme göstergesi ekle. (foundation yanında dünya-uzayı progress bar)
 - [x] İnşa tamamlanınca işlev aç. (tamamlanan Kışla, JSON’daki `trainingSeconds` ile tek Muhafız kuyruğu açar ve güvenli nav çıkışında doğurur; Depo işlevi Faz 3 kapsamındadır)
 - [x] İşçi erişemiyorsa hata durumu üret. (ayrı `boşta işçi yok` / `işçi erişemiyor` oyuncu mesajları)
@@ -781,7 +781,7 @@ Oyuncunun işçiyle temel yapılar kurabildiği ve küçük blockout haritada ha
 
 ## 27. Kabul Kriterleri
 
-- [x] İşçi geçerli yapıyı inşa ediyor. (`test:engine` worker construction senaryosu)
+- [x] İşçi geçerli yapıyı inşa ediyor. (sağ tıkla seçili işçi inşaata veya tamamlanmış üretim yapısına atanır; hareket/saldırı/dur emri görevini bırakır; `test:engine` hedefleme ve çoklu inşaat hızı senaryoları)
 - [x] Geçersiz konum açıkça gösteriliyor. (palette, harita-sınırı / çakışma / kaynak nedenleri)
 - [x] Kaynak yetersizse yapı kurulamıyor. (`ResourceWallet` atomik rezervasyon testi)
 - [x] İptal edilen inşaat doğru iade yapıyor. (tek-seferlik tam iade testi)
@@ -1464,18 +1464,66 @@ AI yalnızca şu ana niyetleri kullanır:
 
 Görevler:
 
-- [ ] Niyet puanlarını veri tabanlı hale getir.
-- [ ] Minimum plan süresi ekle.
-- [ ] Plan değiştirme eşiği ekle.
-- [ ] Acil savunma kesmesini ekle.
+- [x] Niyet puanlarını veri tabanlı hale getir. (`balance/ai.json` `scoring` bloğu:
+  her §30 teriminin katsayısı + normalize ediciler artık veride; `intentScorer`
+  yalnız formülün *şeklini* tutuyor — hangi terimler toplanır, hangileri çarpılır.
+  `validateAiBalance` bilinmeyen terimi ve negatif katsayıyı reddediyor.
+  `test:engine`: `workerNeed`'i veride sıfırlamak katkısını kaldırıyor.)
+- [x] Minimum plan süresi ekle. (Faz 5'ten mevcut: `minimumCommitmentSeconds`.)
+- [x] Plan değiştirme eşiği ekle. (Faz 5'ten mevcut: `hysteresisMargin` %25.)
+- [x] Acil savunma kesmesini ekle. (Faz 5'ten mevcut; Faz 8 `workers-lost`
+  acilini ekledi — §27: işçisi kalmayan krallık önce ekonomiyi kurar.)
+
+**Faz 8'de bulunan ve düzeltilen puanlama hatası.** `scoreAttack` hazırlığı
+`powerRatio / attackPowerRatio` ile ölçüyordu; bu, ordu **asgari** saldırı
+barajını (1.1 — yazı tura) geçer geçmez hazırlığı 1.0'a doyuruyordu. Puanlar
+0..1'e kırpıldığı için Attack kalıcı 1.0'da kalıyor, §7 histerezisi de onu
+yenilmez yapıyordu (rakip 1.25× gerektirir, ulaşılamaz). Sonuç: AI izin verilen
+ilk kavgaya 5 muhafızla giriyor, bir daha asla gelişmiyor, çağ atlamıyordu —
+§24'ün "çağ atlama ekonomi ile denge içinde olmalıdır" kuralı her zaman maksimum
+olan bir niyete karşı duramaz. Hazırlık artık `riskyAttackPowerRatio` → 
+`dominancePowerRatio` bandına yayılıyor: yazı tura kavga 0.18, ezici üstünlük
+1.0. (`test:engine` regresyon testi ekli.)
 
 ### Ekonomi
 
-- [ ] Dört kaynak için hedef gelirler
-- [ ] Çağ hazırlığı işçi dağılımı
-- [ ] Kaynak darboğazı tespiti
-- [ ] Kritik yapı yeniden kurma
-- [ ] İşçi kaybı sonrası toparlanma
+- [x] Dört kaynak için hedef gelirler (`balance/ai.json`
+  `economy.incomeTargetsPerMinute`; puanlama **en kötü** açığı alıyor, ortalamayı
+  değil — ortalama, üç sağlıklı gelirin sıfır taşı gizlemesine izin verirdi ve
+  Kasaba taş *ve* altına bağlı. `test:engine`: gıda/odun hedefteyken sıfır taş
+  hâlâ "stone geliri yetersiz" olarak okunuyor.)
+- [x] Çağ hazırlığı işçi dağılımı (`economy.workerTarget` yaş başına: Yerleşim 8 →
+  Kasaba 16. Üreticiler boştaki işçiyi kendileri kapıyor, dolayısıyla AI dağılımı
+  işçi *atayarak* değil kaç işçi var ederek şekillendiriyor — dört kaynaklı
+  ekonomi iki katı el istiyor.)
+- [x] Kaynak darboğazı tespiti (`no-stone-production` / `no-gold-production`
+  eklendi; §27 gereği `workers-lost` hepsinin önünde — işçisiz hiçbir şey kendini
+  yeniden kurmaz.)
+- [x] Kritik yapı yeniden kurma (Sıra durum güdümlü: yıkılan yapının sayısı 0'a
+  düşer ve üssü açan aynı sıra onu yeniden kurar — ayrı bir onarım dalı yok.
+  Üs deposu için `AiInfrastructureManager` aynı işi yapıyor: depo kaybolursa
+  adım 1'e düşüp yeniden kuruyor.)
+- [ ] İşçi kaybı sonrası toparlanma (`workers-lost` acili ve darboğazı var —
+  yönetici ekonomiye dönüyor — ama baskın sonrası *toparlanma testi* henüz yok.)
+
+**Faz 8'de bulunan ve düzeltilen üç hata.**
+
+1. **Yapı sırası kilitleniyordu.** `nextBuilding` tek bir istek döndürüyordu:
+   bütün ev slotları dolunca nüfus baskısı sonsuza dek "house" diyordu, ev
+   kurulamıyordu ve altındaki Taş Ocağı/Altın Madeni'ne hiç sıra gelmiyordu —
+   yani Kasaba çağı yapısal olarak ulaşılamazdı. Artık `buildOrder` bir öncelik
+   *listesi* döndürüyor ve tıkanan öncelik altındakileri dondurmuyor.
+2. **Kalıcı nüfus kilidi.** Ordu tavana kadar büyüyor, sonra `population-blocked`
+   acili sonsuza dek yanıyordu; bütün ev slotları doluyken bu acil hiçbir zaman
+   giderilemez, yönetici Economy'de çakılı kalır ve AI bir daha asla çağ atlamaz
+   veya karar değiştirmezdi (§49 "karar değiştirme döngüsüne girmiyor"un en
+   düz ihlali). `army.populationShare` (0.55) orduya tavan koyuyor.
+   (`test:engine`: yerleşmiş AI'da `population < populationCap` ve kalıcı acil yok.)
+3. **Yol hattı her tick yeniden döşeniyordu.** `AiInfrastructureManager` ayakta
+   olan hattı her ekonomi tick'inde yeniden `build` ediyordu; döşenmiş segmentin
+   commit'i de `territory.refresh()` tetikleyip 121×121 dünya ızgarasını
+   baştan tarıyordu. Motor testi 16 dakika çıktı vermeden askıda kaldı. Hat artık
+   yalnız `disconnectedProducers` kesinti sinyali geldiğinde ele alınıyor.
 
 ### Yapı ve genişleme
 
@@ -1505,29 +1553,49 @@ Görevler:
 
 ### Debug
 
-- [ ] Aktif niyet
-- [ ] Niyet puanları
-- [ ] Kaynak hedefleri
-- [ ] Aktif yapı planı
-- [ ] Ordu gücü
-- [ ] Seçilen saldırı hedefi
-- [ ] Geri çekilme nedeni
-- [ ] Son on karar
+`formatRtsAiDebug` saf bir biçimlendirici; §82 paneli motor testiyle
+doğrulanıyor, ekran görüntüsüne bakarak değil.
+
+- [x] Aktif niyet (Faz 5'ten; Faz 8 çağ satırını ekledi.)
+- [x] Niyet puanları (Faz 5'ten: beş niyetin puanı + gerekçesi.)
+- [x] Kaynak hedefleri (Dört kaynağın **hedefiyle birlikte** oranı: çıplak bir
+  oran hangi kaynağın AI'ı tuttuğunu göstermez.)
+- [x] Aktif yapı planı (`snapshot.activeBuild`: §42 yapı slotunu ne tutuyor —
+  "biriktiriyor" ile "sıkıştı" arasındaki fark.)
+- [x] Ordu gücü (Faz 5'ten; Faz 8 rol bazlı bileşim satırını ekledi — çıplak güç
+  §53 oranının tutulup tutulmadığını göstermez.)
+- [x] Seçilen saldırı hedefi (Faz 5'ten: hedef + puan + kazanma gerekçesi.)
+- [ ] Geri çekilme nedeni (Ordu grubunda; `armyManager` iki geri çekilme
+  tetikleyicisini ayırt ediyor ama panele nedeni ayrı yazmıyor.)
+- [x] Son on karar (`MAX_DECISION_LINES` 5 → 10.)
 
 ---
 
 ## 49. Kabul Kriterleri
 
-- [ ] AI dört kaynaklı ekonomi kuruyor.
-- [ ] AI Kasaba çağına ulaşıyor.
-- [ ] AI en az bir dış ekonomi açıyor.
-- [ ] AI karışık ordu üretiyor.
-- [ ] AI yapı hedefleri için kuşatma kullanıyor.
-- [ ] AI merkez saldırısına bütün ordusunu gereksiz yere kaybetmiyor.
+- [x] AI dört kaynaklı ekonomi kuruyor. (`test:engine`: AI'a **hiç** taş ve altın
+  verilmiyor; maç sonunda ikisini de kasasında tutuyor, yani hepsini yerden
+  çıkardı. Bu tek başına bütün zinciri kanıtlıyor: yatağı örten bir çıkarıcı,
+  üstünde işçiler, ona değen bir yol ve aynı yol adasında bir depo. Ayrıca
+  `disconnectedProducers === 0` — Faz 5'in "AI'ın geliri yok" sınırı kapandı.)
+- [x] AI Kasaba çağına ulaşıyor. (`test:engine`: headless maçta `age === "town"`.
+  Betiklenmiş bir adım değil — çağın gereksinim listesi veride, AI oraya yalnız
+  altı gerekli yapıyı sağlayan bir ekonomiyi işleterek geldi.)
+- [x] AI en az bir dış ekonomi açıyor. (Faz 5'ten: §47 reçetesi `done`.)
+- [ ] AI karışık ordu üretiyor. (§53 oranı ve seçim mantığı hazır
+  (`army.composition`, yaş başına 3:2:1), **ama** Okçu/Koçbaşı Kışla II'nin
+  arkasında ve Kışla II Kasaba çağını şart koşuyor. Yapı yükseltme uygulayıcısı
+  henüz yok, dolayısıyla AI pratikte hâlâ yalnız Muhafız üretebiliyor.)
+- [ ] AI yapı hedefleri için kuşatma kullanıyor. (Aynı Kışla II engeli.)
+- [ ] AI merkez saldırısına bütün ordusunu gereksiz yere kaybetmiyor. (§62
+  hazırlık eğrisi düzeltildi — AI artık yazı tura orana saldırmıyor — ama ordu
+  grubunun kendisi (geri çekilme, dış ekonomi hedefleme) Faz 8'de açık.)
 - [ ] AI ağır kayıp sonrası yeniden ekonomi kurabiliyor.
 - [ ] AI 10 hızlandırılmış maçın en az 8’ini tamamlıyor.
-- [ ] AI karar değiştirme döngüsüne girmiyor.
-- [ ] AI’ın davranış nedeni debug panelinden izlenebiliyor.
+- [ ] AI karar değiştirme döngüsüne girmiyor. (İki kalıcı kilit düzeltildi — nüfus
+  acili ve yapı sırası — ama kriterin kendisi çoklu maç ölçümü istiyor.)
+- [x] AI’ın davranış nedeni debug panelinden izlenebiliyor. (Geri çekilme nedeni
+  hariç; yukarıdaki Debug listesine bakınız.)
 
 ---
 

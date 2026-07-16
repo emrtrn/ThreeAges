@@ -12,20 +12,23 @@
  * touches no renderer or DOM, so engine tests can also step a whole match
  * headlessly at any rate (§80 determinism).
  */
-import type { AiBalance, AiProfile } from "../../data/gameDataTypes";
+import type { AiBalance, AiProfile, UnitRoleId } from "../../data/gameDataTypes";
 import type { BarracksProductionSystem } from "../structures/barracksProductionSystem";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { StructureConstructionService } from "../structures/structureConstructionService";
 import type { WorkerProductionSystem } from "../structures/workerProductionSystem";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { RoadConstructionService } from "../roads/roadConstructionService";
-import type { RtsBuildAnchor, RtsExpansionRegion } from "../world/rtsMapBlockout";
+import type { RtsBuildAnchor, RtsExpansionRegion, RtsMapPoint } from "../world/rtsMapBlockout";
 import type { UnitOwner } from "../units/unit";
+import type { AgeSystem } from "../progression/ageSystem";
+import { AiAgeManager } from "./aiAgeManager";
 import { AiBlackboardReader, type AiBlackboard, type AiBlackboardSources } from "./aiBlackboard";
 import { AiBuildManager } from "./aiBuildManager";
 import { AiDecisionLog } from "./aiDecisionLog";
 import { AiEconomyManager, type AiBottleneck } from "./aiEconomyManager";
 import { AiExpansionManager } from "./aiExpansionManager";
+import { AiInfrastructureManager, type AiInfrastructureStep } from "./aiInfrastructureManager";
 import { AiProductionManager } from "./aiProductionManager";
 import { ArmyManager } from "./armyManager";
 import { KingdomDirector } from "./kingdomDirector";
@@ -35,16 +38,25 @@ import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } 
 export interface AiControllerOptions extends AiBlackboardSources {
   readonly balance: AiBalance;
   readonly profile: AiProfile;
+  /** §24: the same owner-scoped progression the player's centre panel drives. */
+  readonly ages: AgeSystem;
   readonly navigation: RtsNavigation;
   readonly centers: CommandCenterSystem;
   /** §40: the authored slots this kingdom may build on. */
   readonly anchors: readonly RtsBuildAnchor[];
+  /**
+   * §37: the base road spine. Without it the base depot has no island and every
+   * base producer stays stuck on its local buffer, so the AI has no income.
+   */
+  readonly baseRoute: readonly RtsMapPoint[];
   /** §10/§45: the single authored region this kingdom may expand into. */
   readonly expansion: RtsExpansionRegion;
   readonly construction: StructureConstructionService;
   readonly roadConstruction: RoadConstructionService;
   readonly workerProduction: WorkerProductionSystem;
   readonly barracksProduction: BarracksProductionSystem;
+  /** §53: which unit id fills a combat role, read off `balance/units.json`. */
+  readonly unitIdForRole: (role: UnitRoleId) => string | null;
 }
 
 /** Everything the debug panel needs (§82), in one read. */
@@ -64,6 +76,13 @@ export interface AiControllerSnapshot {
   readonly concluded: boolean;
   readonly bottleneck: AiBottleneck;
   readonly expansionStep: AiExpansionStep;
+  /** §37: how far the base depot + spine have got, for the §82 panel. */
+  readonly infrastructureStep: AiInfrastructureStep;
+  /**
+   * §82 "Aktif yapı planı": the building id occupying the §42 build slot, or
+   * null when it is free. This is what separates "saving up" from "stuck".
+   */
+  readonly activeBuild: string | null;
   readonly blackboard: AiBlackboard | null;
 }
 
@@ -72,9 +91,11 @@ export class AiController {
   private readonly reader: AiBlackboardReader;
   private readonly director: KingdomDirector;
   private readonly army: ArmyManager;
+  private readonly age: AiAgeManager;
   private readonly builds: AiBuildManager;
   private readonly economy: AiEconomyManager;
   private readonly expansion: AiExpansionManager;
+  private readonly infrastructure: AiInfrastructureManager;
   private readonly production: AiProductionManager;
   private readonly profileBalance;
   private now = 0;
@@ -85,8 +106,9 @@ export class AiController {
   private matchConcluded = false;
 
   constructor(private readonly options: AiControllerOptions) {
-    this.reader = new AiBlackboardReader(options);
+    this.reader = new AiBlackboardReader(options, options.balance);
     this.director = new KingdomDirector(options.balance, this.log);
+    this.age = new AiAgeManager(options.owner, options.ages, this.log);
     this.army = new ArmyManager(
       options.owner,
       options.units,
@@ -104,6 +126,21 @@ export class AiController {
       this.log,
     );
     this.economy = new AiEconomyManager(options.balance, this.builds, this.log);
+    const depotAnchor = options.anchors.find((anchor) => anchor.buildingId === "depot");
+    if (!depotAnchor) {
+      // A base with no depot slot can never earn income (§37), so this is a map
+      // authoring error rather than a state the AI should quietly limp through.
+      throw new Error(`No base depot anchor authored for AI owner "${options.owner}"`);
+    }
+    this.infrastructure = new AiInfrastructureManager(
+      options.owner,
+      depotAnchor,
+      options.baseRoute,
+      this.builds,
+      options.roadConstruction,
+      options.structures,
+      this.log,
+    );
     this.expansion = new AiExpansionManager(
       options.owner,
       options.expansion,
@@ -117,6 +154,7 @@ export class AiController {
       options.workerProduction,
       options.barracksProduction,
       options.balance,
+      options.unitIdForRole,
     );
     this.profileBalance = options.balance.profiles[options.profile];
   }
@@ -165,8 +203,14 @@ export class AiController {
       // §17/§55: the production queues are a standing concern — they keep the
       // population unlocked whatever the director is currently committed to.
       this.production.update(blackboard);
+      // §37: so is the base link. A base whose producers cannot reach a depot
+      // has no income at all, so this outranks the committed plan rather than
+      // waiting for the economy intent to come back around — and because it runs
+      // first, the depot and spine take the build slot before the opening does.
+      this.infrastructure.update(blackboard);
       // §17: these only execute; which one runs is the director's committed plan.
       if (this.director.currentIntent === "economy") this.economy.update(blackboard);
+      if (this.director.currentIntent === "ageUp") this.runAgeUp(blackboard);
       // §26 warns that a claimed-but-unconnected region is the failure mode to
       // avoid, and the recipe outlasts any one plan. So once the outpost is down
       // the recipe finishes even if an emergency pulls the director elsewhere —
@@ -198,6 +242,8 @@ export class AiController {
       concluded: this.matchConcluded,
       bottleneck: this.economy.bottleneck,
       expansionStep: this.expansion.currentStep,
+      infrastructureStep: this.infrastructure.currentStep,
+      activeBuild: this.builds.activeStructure?.stats.id ?? null,
       blackboard: this.lastBlackboard,
     };
   }
@@ -214,7 +260,22 @@ export class AiController {
     this.builds.reset();
     this.economy.reset();
     this.expansion.reset();
+    this.infrastructure.reset();
     this.log.clear();
+  }
+
+  /**
+   * §32: the age plan closes only once the transition has *completed*. A started
+   * upgrade is left running rather than reported as success: the age is what the
+   * plan is for, and freeing the director at the moment the resources were spent
+   * would let it re-plan into an economy it just emptied.
+   */
+  private runAgeUp(blackboard: AiBlackboard): void {
+    const outcome = this.age.update(blackboard);
+    const plan = this.director.currentPlan;
+    if (!plan || plan.intent !== "ageUp") return;
+    if (outcome.kind === "done") this.director.completePlan(plan, this.now, true);
+    else if (outcome.kind === "failed") this.director.completePlan(plan, this.now, false, outcome.reason);
   }
 
   /**

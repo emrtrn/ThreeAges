@@ -77,7 +77,7 @@ import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
-import type { UnitOwner } from "./units/unit";
+import type { Unit, UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "./structures/structureUpgradeSystem";
@@ -253,6 +253,9 @@ export class RtsApp {
       this.centers,
       this.navigation,
       this.commandMarkers,
+      this.structures,
+      (workers, structure) => this.assignSelectedWorkersToStructure(workers, structure),
+      (workers) => this.releaseWorkerTasks(workers),
     );
     this.workerConstruction = new WorkerConstructionSystem(
       this.units,
@@ -262,7 +265,9 @@ export class RtsApp {
       (structure) => {
         if (structure.stats.territory) this.territory.refresh();
       },
-      (worker) => this.economyProduction?.release(worker) ?? false,
+      (worker, source) => source === "manual"
+        ? this.economyProduction?.release(worker) ?? false
+        : this.economyProduction?.releaseAutomatic(worker) ?? false,
     );
     this.economyProduction = new EconomyProductionSystem(
       this.units,
@@ -344,10 +349,16 @@ export class RtsApp {
       kingdoms: this.kingdoms,
       production: this.economyProduction,
       logistics: this.productionLogistics,
+      ages: this.ages,
+      townCost: this.options.ageBalance.town.cost,
+      townRequiredBuildingIds: this.options.ageBalance.town.requiredBuildingIds,
+      unitIdForRole: (role) => Object.entries(this.options.unitBalance)
+        .find(([, stats]) => stats.role === role)?.[0] ?? null,
       isWorkerBusy: (unit) => this.workerConstruction.stateFor(unit) !== "idle"
         || (this.economyProduction?.isAssigned(unit) ?? false),
       navigation: this.navigation,
       anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
+      baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
       expansion: RTS_BLOCKOUT_MAP.enemyExpansion,
       construction: this.structureConstruction,
       roadConstruction: this.roadConstruction,
@@ -671,7 +682,12 @@ export class RtsApp {
     }
     if (this.debugOverlay) {
       this.debugOverlay.setAiLines(
-        formatRtsAiDebug(this.ai.snapshot(), this.ai.log.recent(), this.ai.economyMultiplier),
+        formatRtsAiDebug(
+          this.ai.snapshot(),
+          this.ai.log.recent(),
+          this.ai.economyMultiplier,
+          this.options.aiBalance,
+        ),
       );
     }
     this.debugOverlay?.update(
@@ -911,12 +927,19 @@ export class RtsApp {
     ];
   }
 
+  /**
+   * "Main road" means the road network of the outpost's *own* kingdom. This used
+   * to resolve the player's centre for every outpost, so an AI outpost was
+   * judged against a centre it does not own and never earned its connected
+   * control radius — the radius its expansion depot and production slots need to
+   * be placeable at all.
+   */
   private outpostConnectedToMainRoad(structure: PlacedStructure): boolean {
     const outpostRoad = roadCellTouchingFootprint(
       this.roads, structure.x, structure.z, structure.stats.footprint.width, structure.stats.footprint.depth,
     );
-    const playerCenter = this.centers.all().find((center) => center.owner === "player");
-    const centerRoad = playerCenter && roadCellTouchingFootprint(this.roads, playerCenter.position.x, playerCenter.position.z, 8, 8);
+    const center = this.centers.get(structure.owner);
+    const centerRoad = center && roadCellTouchingFootprint(this.roads, center.position.x, center.position.z, 8, 8);
     if (!outpostRoad || !centerRoad) return false;
     return this.roads.connected(outpostRoad, centerRoad);
   }
@@ -965,6 +988,36 @@ export class RtsApp {
       : result.reason === "no-idle-worker"
         ? "İnşaat bekliyor: boşta işçi yok."
         : "İnşaat bekliyor: işçi bu yapıya erişemiyor.");
+  }
+
+  /** Contextual worker order: a foundation builds; a finished producer gathers. */
+  private assignSelectedWorkersToStructure(workers: readonly Unit[], structure: PlacedStructure): boolean {
+    if (structure.owner !== PLAYER_OWNER) return false;
+    if (!structure.construction.complete) {
+      const result = this.workerConstruction.assignWorkers(structure, workers);
+      this.buildPalette.setActionMessage(result.assignedWorkers > 0
+        ? `${result.assignedWorkers} işçi inşaata atandı.`
+        : result.reason === "unreachable"
+          ? "İşçiler bu inşaata erişemiyor."
+          : "İnşaat için uygun işçi yok.");
+      return true;
+    }
+    if (!structure.stats.economy || !this.economyProduction) return false;
+    // A direct gathering order transfers workers out of construction first.
+    for (const worker of workers) this.workerConstruction.release(worker);
+    const result = this.economyProduction.assignWorkers(structure, workers);
+    this.buildPalette.setActionMessage(result.assignedWorkers > 0
+      ? `${result.assignedWorkers} işçi ${structure.stats.label} görevine atandı.`
+      : "Bu yapıda uygun işçi kontenjanı yok.");
+    return true;
+  }
+
+  /** A move, attack, or stop order is an explicit request to leave current work. */
+  private releaseWorkerTasks(workers: readonly Unit[]): void {
+    for (const worker of workers) {
+      this.workerConstruction.release(worker);
+      this.economyProduction?.release(worker);
+    }
   }
 
   private queueUnit(unitId: string): void {

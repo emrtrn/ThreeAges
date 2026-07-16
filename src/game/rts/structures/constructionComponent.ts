@@ -1,4 +1,4 @@
-/** Bounded, single-worker construction progress state for Phase 2 foundations. */
+/** Bounded construction progress state for Phase 2 foundations. */
 export class ConstructionComponent {
   private elapsedSeconds = 0;
 
@@ -16,10 +16,15 @@ export class ConstructionComponent {
     return this.progress >= 1;
   }
 
-  /** Advance only while a worker actively builds. Returns true on first completion. */
-  advance(deltaSeconds: number): boolean {
+  /**
+   * Advance only while one or more workers actively build. Each worker
+   * contributes one worker-second, so four active workers finish four times as
+   * much work per simulation second (up to the assignment cap).
+   */
+  advance(deltaSeconds: number, workerCount = 1): boolean {
     if (this.complete || !Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return false;
-    this.elapsedSeconds = Math.min(this.durationSeconds, this.elapsedSeconds + deltaSeconds);
+    if (!Number.isFinite(workerCount) || workerCount <= 0) return false;
+    this.elapsedSeconds = Math.min(this.durationSeconds, this.elapsedSeconds + deltaSeconds * workerCount);
     return this.complete;
   }
 }

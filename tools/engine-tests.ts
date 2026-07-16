@@ -97,7 +97,7 @@ import { AiDecisionLog } from "../src/game/rts/ai/aiDecisionLog";
 import { ArmyManager } from "../src/game/rts/ai/armyManager";
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
 import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBuildManager";
-import { detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
+import { buildOrder, detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
 import { scoreIntents } from "../src/game/rts/ai/intentScorer";
 import {
   bestTarget,
@@ -27918,6 +27918,48 @@ check("RTS contextual right-click assigns an enemy attack target", () => {
   assert.equal(player.moveTarget, null);
 });
 
+check("RTS contextual right-click routes selected workers to a friendly structure job", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const units = new UnitSystem();
+  const worker = units.spawn("player", 0, 4, RTS_TEST_WORKER_STATS);
+  const structures = new PlacedStructureSystem();
+  const site = structures.place("player", house, 0, 0);
+  structures.root.updateMatrixWorld(true);
+
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 10, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const canvas = { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement;
+  const selection = {
+    selected: () => [worker],
+  } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem;
+  let assigned: readonly import("../src/game/rts/units/unit").Unit[] | null = null;
+  const commands = new CommandSystem(
+    canvas,
+    camera,
+    selection,
+    units,
+    new CommandCenterSystem(),
+    new RtsNavigation(),
+    new CommandMarkerSystem(),
+    structures,
+    (workers, structure) => {
+      if (structure !== site) return false;
+      assigned = workers;
+      return true;
+    },
+  );
+
+  commands.issueAt(50, 50);
+  assert.deepEqual(assigned, [worker]);
+  assert.equal(worker.moveTarget, null, "job interaction does not become a ground move order");
+  structures.clear();
+});
+
 check("RTS command-center placeholders keep one owned centre per side", () => {
   const centers = new CommandCenterSystem();
   const player = centers.spawn("player", 0, 16, 300);
@@ -29548,6 +29590,32 @@ check("RTS worker reaches a foundation, builds it, and never enters combat", () 
   structures.clear();
 });
 
+check("RTS selected workers add linear construction speed at separate work points", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const units = new UnitSystem();
+  const workers = [
+    units.spawn("player", 3, 0, RTS_TEST_WORKER_STATS),
+    units.spawn("player", -3, 0, RTS_TEST_WORKER_STATS),
+    units.spawn("player", 0, 3, RTS_TEST_WORKER_STATS),
+    units.spawn("player", 0, -3, RTS_TEST_WORKER_STATS),
+  ];
+  const structures = new PlacedStructureSystem();
+  const site = structures.place("player", { ...house, constructionSeconds: 8 }, 0, 0);
+  const construction = new WorkerConstructionSystem(units, structures, new RtsNavigation());
+  assert.deepEqual(construction.assignWorkers(site, workers), {
+    assignedWorkers: 4,
+    rejectedWorkers: 0,
+    reason: null,
+  });
+  construction.update(0); // workers already stand inside their assigned build range
+  construction.update(1);
+  assert.equal(site.construction.progress, 0.5, "four builders contribute four worker-seconds per second");
+  structures.clear();
+});
+
 check("RTS construction names missing-worker and unreachable placement errors", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -30027,8 +30095,10 @@ check("RTS workers, production and logistics never cross kingdoms", () => {
 function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
   return {
     now: 0,
-    resourceStocks: { food: 200, wood: 200 },
-    resourceIncomePerMinute: { food: 20, wood: 20 },
+    // A settled four-resource economy at its income targets: every AI-2 term is
+    // satisfied by default, so a test perturbs exactly the one it is about.
+    resourceStocks: { food: 200, wood: 200, stone: 100, gold: 100 },
+    resourceIncomePerMinute: { food: 20, wood: 18, stone: 10, gold: 6 },
     workerCount: 8,
     idleWorkerCount: 0,
     population: 8,
@@ -30036,6 +30106,13 @@ function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
     buildingCounts: {},
     disconnectedProducers: 0,
     expansionStep: "outpost",
+    age: "settlement",
+    ageUpgrading: false,
+    ageRequiredBuildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "barracks", "outpost"],
+    ageMissingBuildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "barracks", "outpost"],
+    ageAffordable: false,
+    armyComposition: { guard: 0, archer: 0, siege: 0, worker: 0 },
+    armyPopulation: 0,
     ownArmyPower: 0,
     knownEnemyArmyPower: 0,
     baseThreat: 0,
@@ -30061,6 +30138,12 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
   const balance = validateRoadBalance(
     JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
   );
+  const ageBalance = validateAgeBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
+  );
+  const resourceBalance = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
   const guard = unitBalance.guard_placeholder;
   const worker = unitBalance.worker_placeholder;
   if (!guard || !worker) throw new Error("missing unit balance");
@@ -30072,6 +30155,9 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
   const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, startingResources, 20);
   const navigation = new RtsNavigation();
   navigation.setBlockers(centers.navigationBlockers());
+  // As in RtsApp: the map's real deposits, so the AI's quarry and gold mine are
+  // gated on covering one exactly as the player's are.
+  const resourceNodes = new ResourceNodeSystem(resourceBalance, RTS_BLOCKOUT_MAP.resourceNodes);
   // As in RtsApp: production must not re-grab a worker that is mid-construction.
   // The two systems reference each other, so the link is resolved lazily.
   let workerConstructionRef: WorkerConstructionSystem | null = null;
@@ -30080,6 +30166,7 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     structures,
     navigation,
     (unit) => workerConstructionRef !== null && workerConstructionRef.stateFor(unit) !== "idle",
+    resourceNodes,
   );
   const roads = new RoadGraph(balance);
   const depots = new DepotLogisticsSystem(structures, roads);
@@ -30129,6 +30216,11 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     territory,
     (structure) => { workerConstruction.assignNearest(structure); },
     (structure) => workerConstruction.cancelStructure(structure),
+    // As in RtsApp: an extractor must cover a live deposit.
+    (stats, x, z) => stats.economy?.requiresResourceNode
+      && !resourceNodes.canExtractAt(stats.economy.resourceId, x, z, stats.footprint.width, stats.footprint.depth)
+      ? "missing-resource-node"
+      : null,
   );
   const roadConstruction = new RoadConstructionService(
     roads,
@@ -30138,8 +30230,18 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     // which grows its control radius.
     () => territory.refresh(),
   );
+  const ages = new AgeSystem(["player", "enemy"], ageBalance, centers, structures, kingdoms);
   const workerProduction = new WorkerProductionSystem(units, centers, navigation, worker, kingdoms);
-  const barracksProduction = new BarracksProductionSystem(units, structures, navigation, { guard_placeholder: guard }, kingdoms);
+  // The full Faz 7 roster, and the same age-scaled Barracks tier gate RtsApp
+  // applies — so an AI-2 composition may only queue Archers and Rams once its
+  // Barracks is level 2, exactly as the player's panel does.
+  const barracksProduction = new BarracksProductionSystem(
+    units,
+    structures,
+    navigation,
+    unitBalance,
+    kingdoms,
+  );
   const ai = new AiController({
     owner: "enemy",
     units,
@@ -30148,9 +30250,15 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     kingdoms,
     production,
     logistics,
+    ages,
+    townCost: ageBalance.town.cost,
+    townRequiredBuildingIds: ageBalance.town.requiredBuildingIds,
+    unitIdForRole: (role) => Object.entries(unitBalance)
+      .find(([, stats]) => stats.role === role)?.[0] ?? null,
     isWorkerBusy: (unit) => workerConstruction.stateFor(unit) !== "idle" || production.isAssigned(unit),
     navigation,
     anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
+    baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
     expansion: RTS_BLOCKOUT_MAP.enemyExpansion,
     construction,
     roadConstruction,
@@ -30168,9 +30276,13 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     transfers.update();
     workerProduction.update(dt);
     barracksProduction.update(dt);
+    ages.update(dt);
     ai.update(dt);
   };
-  return { units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, step };
+  return {
+    units, structures, centers, kingdoms, ai, workerConstruction, territory, roads, ages,
+    production, resourceNodes, step,
+  };
 }
 
 const AI_TEST_BALANCE = validateAiBalance(
@@ -30181,7 +30293,14 @@ check("ai balance validates cadences, ordered power thresholds and the no-cheat 
   assert.equal(AI_TEST_BALANCE.evaluation.hysteresisMargin, 0.25, "AI design §7 fixes the 25% margin");
   assert.equal(AI_TEST_BALANCE.profiles.normal.economyMultiplier, 1, "§72: normal never cheats");
   assert.ok(AI_TEST_BALANCE.profiles.hard.economyMultiplier <= 1.05, "§73 caps the hard bonus");
-  assert.equal(AI_TEST_BALANCE.intentWeights.ageUp, 0, "§10: AI-1 has no age to reach");
+  // §11: AI-2 plays Settlement *and* Town, so the age intent is live. It stayed
+  // pinned at 0 through AI-1 only because no executor could act on it.
+  assert.ok(AI_TEST_BALANCE.intentWeights.ageUp > 0, "§11: AI-2 reaches the Town age");
+  assert.equal(AI_TEST_BALANCE.army.rolePower.worker, 0, "§52: workers are never army power");
+  assert.ok(
+    AI_TEST_BALANCE.army.composition.town.archer > 0 && AI_TEST_BALANCE.army.composition.town.siege > 0,
+    "§11: a Town-age AI fields a mixed army, not only Guards",
+  );
 
   const raw = JSON.parse(readFileSync("public/game-data/balance/ai.json", "utf8")) as Record<string, unknown>;
   const withProfile = (profile: Record<string, unknown>) => ({
@@ -30241,6 +30360,20 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
   const strongArmy = aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 1 });
   assert.ok(scoreFor(strongArmy, "attack").score > 0);
 
+  // §62: readiness climbs toward dominance rather than saturating at the bar the
+  // army is merely *allowed* to attack from. A coin-flip fight must not score
+  // the same as a rout — when it did, Attack sat at a permanent 1.0 that §7's
+  // hysteresis made unbeatable, and the AI rushed the first fight it could take
+  // and then never developed, aged up or rebuilt again.
+  const evenFight = aiTestBlackboard({ ownArmyPower: 11, knownEnemyArmyPower: 10 });
+  const rout = aiTestBlackboard({ ownArmyPower: 30, knownEnemyArmyPower: 10 });
+  assert.ok(
+    scoreFor(evenFight, "attack").score < scoreFor(rout, "attack").score,
+    "§62: a marginal advantage scores below a decisive one",
+  );
+  assert.ok(scoreFor(evenFight, "attack").score < 0.5, "§62: a coin-flip fight is not a maxed intent");
+  assert.equal(scoreFor(rout, "attack").score, 1, "§62: dominance is what maxes the attack intent");
+
   // §26: expansion waits for a base economy, then happens exactly once. Scored
   // on rawScore because the weight currently gates the whole intent off (below).
   const preEconomy = aiTestBlackboard({ resourceStocks: { food: 0, wood: 500 } });
@@ -30273,11 +30406,105 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
     assert.match(running.reason, /genişleme sürüyor/);
   }
 
-  // An intent whose executor does not exist yet is gated off by its data weight,
-  // so the director can never commit to a plan that nothing would carry out.
-  assert.equal(AI_TEST_BALANCE.intentWeights.ageUp, 0, "§10: the Çağ system is not built yet");
-  assert.equal(scoreFor(aiTestBlackboard(), "ageUp").score, 0, "a zero weight keeps ageUp out of the rotation");
   assert.ok(AI_TEST_BALANCE.intentWeights.expand > 0, "expand is live now that its executor exists");
+
+  // --- Faz 8 §48: the age intent is live, and §24 orders it behind the economy.
+  const ageComplete = { farm: 1, lumber_camp: 1, quarry: 1, gold_mine: 1, barracks: 1, outpost: 1 };
+  // §24: requirements missing → the AI wants the economy that fixes them, not
+  // the age. It must not out-score Economy, or a rich AI would stall forever
+  // wanting an upgrade it is not allowed to start.
+  const preAge = aiTestBlackboard({ ageMissingBuildingIds: ["quarry", "gold_mine"], ageAffordable: true });
+  assert.match(scoreFor(preAge, "ageUp").reason, /çağ gereksinimi eksik/);
+  assert.ok(
+    scoreFor(preAge, "ageUp").rawScore < scoreFor(preAge, "ageUp").rawScore + 1,
+    "an illegal age never reaches a full score",
+  );
+  assert.ok(scoreFor(preAge, "ageUp").rawScore < 1);
+
+  // Requirements met but the stockpile is short: the AI saves rather than acts.
+  const saving = aiTestBlackboard({
+    buildingCounts: ageComplete,
+    ageMissingBuildingIds: [],
+    ageAffordable: false,
+  });
+  assert.equal(scoreFor(saving, "ageUp").reason, "çağ için kaynak biriktiriliyor");
+
+  // Requirements met and paid for: this is the moment the age wins.
+  const ready = aiTestBlackboard({
+    buildingCounts: ageComplete,
+    ageMissingBuildingIds: [],
+    ageAffordable: true,
+  });
+  assert.equal(scoreFor(ready, "ageUp").reason, "kasaba çağı için hazır");
+  assert.ok(
+    scoreFor(ready, "ageUp").score > scoreFor(saving, "ageUp").score,
+    "affordability is what turns a saved-for age into an acted-on one",
+  );
+
+  // §24: a two-minute upgrade is never started while the base is contested.
+  const contested = aiTestBlackboard({
+    buildingCounts: ageComplete,
+    ageMissingBuildingIds: [],
+    ageAffordable: true,
+    baseThreat: 4,
+    ownArmyPower: 4,
+  });
+  assert.equal(scoreFor(contested, "ageUp").reason, "üs tehdit altında, çağ ertelendi");
+  assert.ok(scoreFor(contested, "ageUp").score < scoreFor(ready, "ageUp").score);
+  assert.ok(scoreFor(contested, "defend").score > scoreFor(contested, "ageUp").score, "§57: defence first");
+
+  // A running transition pins the intent so the director does not wander off
+  // and leave a paid-for upgrade unattended.
+  const upgrading = aiTestBlackboard({ ageUpgrading: true, ageMissingBuildingIds: [] });
+  assert.equal(scoreFor(upgrading, "ageUp").rawScore, 1, "a running upgrade holds the intent");
+  // And a finished one stops competing entirely.
+  assert.equal(scoreFor(aiTestBlackboard({ age: "town" }), "ageUp").rawScore, 0, "Town needs no ageUp");
+});
+
+check("Faz 8 §48: intent scoring is data-driven and reads all four resources", () => {
+  const scoreFor = (bb: AiBlackboard, intent: AiIntent) =>
+    scoreIntents(bb, AI_TEST_BALANCE).find((score) => score.intent === intent) ?? assert.fail(`${intent} missing`);
+
+  // §36: a zero stone income is a real deficit even while food and wood are at
+  // target. A mean across the four would let three healthy incomes hide it —
+  // and with Town gated behind stone *and* gold, that is the deficit that matters.
+  const noStone = aiTestBlackboard({
+    resourceIncomePerMinute: { food: 20, wood: 18, stone: 0, gold: 6 },
+  });
+  assert.equal(scoreFor(noStone, "economy").reason, "stone geliri yetersiz");
+  const settled = aiTestBlackboard();
+  assert.equal(scoreFor(settled, "economy").reason, "ekonomi hedefe yakın");
+  assert.ok(
+    scoreFor(noStone, "economy").score > scoreFor(settled, "economy").score,
+    "an unmet income target keeps the economy intent alive",
+  );
+
+  // Plan §48 "niyet puanlarını veri tabanlı hale getir": the coefficients are
+  // data, so retuning ai.json — not editing the scorer — changes the decision.
+  const bb = aiTestBlackboard({ workerCount: 1 });
+  const indifferent = {
+    ...AI_TEST_BALANCE,
+    scoring: {
+      ...AI_TEST_BALANCE.scoring,
+      economy: { ...AI_TEST_BALANCE.scoring.economy, workerNeed: 0 },
+    },
+  };
+  const withWeight = scoreIntents(bb, AI_TEST_BALANCE).find((score) => score.intent === "economy");
+  const withoutWeight = scoreIntents(bb, indifferent).find((score) => score.intent === "economy");
+  assert.ok(withWeight && withoutWeight);
+  assert.ok(
+    (withWeight?.rawScore ?? 0) > (withoutWeight?.rawScore ?? 0),
+    "zeroing workerNeed in data removes its contribution",
+  );
+
+  // §35: the worker target is per age, so a Town AI keeps hiring past the
+  // Settlement target instead of reading itself as fully staffed.
+  const townWorkers = aiTestBlackboard({ age: "town", workerCount: 8, ageMissingBuildingIds: [] });
+  assert.ok(
+    scoreFor(townWorkers, "economy").rawScore > 0,
+    "a Town economy still wants workers at the Settlement target",
+  );
+  assert.match(scoreFor(townWorkers, "economy").reason, /işçi hedefin altında \(8\/16\)/);
 });
 
 check("KingdomDirector holds a plan through commitment and hysteresis, and emergencies cut it", () => {
@@ -30298,9 +30525,17 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   assert.equal(log.latest?.kind, "intent-held");
   assert.match(log.latest?.reason ?? "", /bağlılık süresi/);
 
-  // §7: past commitment a rival still needs to clear the 25% margin. Economy
-  // scores 0.35 here, so a rival must reach 0.4375; attack lands at 0.40.
-  const marginal = aiTestBlackboard({ now: 30, workerCount: 1, ownArmyPower: 4.4, knownEnemyArmyPower: 10 });
+  // §7: past commitment a rival still needs to clear the 25% margin. Faz 8 moved
+  // the scoring coefficients into ai.json, so the boundary is read back off the
+  // scorer rather than pinned to numbers that would rot the next time the data
+  // is retuned — what this test is about is the margin rule, not the tuning.
+  const marginal = aiTestBlackboard({ now: 30, workerCount: 1, ownArmyPower: 12.7, knownEnemyArmyPower: 10 });
+  const marginalScores = scoreIntents(marginal, AI_TEST_BALANCE);
+  const scoreOf = (intent: AiIntent) =>
+    marginalScores.find((score) => score.intent === intent)?.score ?? assert.fail(`${intent} missing`);
+  const margin = AI_TEST_BALANCE.evaluation.hysteresisMargin;
+  assert.ok(scoreOf("attack") > scoreOf("economy"), "the rival really is the better intent");
+  assert.ok(scoreOf("attack") <= scoreOf("economy") * (1 + margin), "but only inside the margin");
   const heldByMargin = director.evaluate(marginal);
   assert.equal(heldByMargin?.id, first?.id, "a marginally better rival does not flip the plan");
   assert.match(log.latest?.reason ?? "", /histerezis/);
@@ -30688,13 +30923,118 @@ check("AI expansion runs the §47 recipe end to end and finally earns income", (
   const board = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
   assert.ok((board.resourceIncomePerMinute["food"] ?? 0) > 0, "the region actually produces");
   assert.equal(world.kingdoms.get("player").wallet.amount("wood"), 4000, "and none of it leaked to the player");
-  // Known limit: only the expansion is on the road network. The base farm and
-  // lumber camp have no depot of their own, so they still bank into local
-  // buffers — a base depot and base road corridor are not authored yet.
-  assert.equal(board.disconnectedProducers, 2, "the two base producers remain unconnected for now");
+  // Faz 5 left the base itself unlinked — its farm and lumber camp had no depot
+  // of their own and banked into local buffers forever ("AI'ın geliri yok").
+  // Faz 8 authors a base depot and spine, so every completed producer the AI
+  // owns now reaches a depot, not just the expansion's.
+  assert.equal(board.disconnectedProducers, 0, "Faz 8: the base producers are linked too");
+  assert.equal(world.ai.snapshot().infrastructureStep, "linked", "the base spine completed");
 
   // §10: one region only — a finished expansion stops scoring.
   assert.notEqual(world.ai.snapshot().intent, "expand", "a completed expansion releases the plan");
+});
+
+// --- Faz 8 §48–§49: AI-2, the core-match opponent ---
+
+check("Faz 8 §49: the AI builds a four-resource economy and reaches the Kasaba age", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
+
+  // The same five workers the player opens with (§4) — the AI earns the rest.
+  // Food and wood only: the AI is given *no* stone or gold, so every gram of
+  // both had to come out of the ground. That is what makes this a test of a
+  // four-resource economy rather than of a four-resource starting gift.
+  const world = aiTestWorld({ food: 4000, wood: 4000 });
+  for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker);
+  // A *defended* opponent, which is what makes this a test of development.
+  // Against an empty player base the AI reads a 34:1 power ratio and attacks —
+  // correctly, per §62 — and an AI that is winning outright has no reason to
+  // spend 105 seconds on an age. §24's balance between economy and age only has
+  // meaning when the opponent can actually punch back.
+  for (let index = 0; index < 20; index += 1) world.units.spawn("player", -10 + index, 22, guard);
+  for (let index = 0; index < 6000; index += 1) world.step(0.5);
+
+  const board = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
+
+  // §49 "AI dört kaynaklı ekonomi kuruyor". Faz 6 made income conditional on
+  // logistics, so banked stone and gold prove the whole chain: an extractor
+  // covering a deposit, workers on it, a road touching it, and a depot on that
+  // same road island. Measured as *banked* rather than as a live rate because
+  // the safe deposits are finite (300 stone / 200 gold) — a mined-out node
+  // reporting zero income is the economy working, not failing.
+  // It started with none of either and the Town age costs 150 of each, so
+  // holding any at all proves it mined more than it spent.
+  assert.ok(world.kingdoms.get("enemy").wallet.amount("stone") > 0, "§49: the AI mined stone from nothing");
+  assert.ok(world.kingdoms.get("enemy").wallet.amount("gold") > 0, "§49: the AI mined gold from nothing");
+  assert.equal(board.disconnectedProducers, 0, "§37: every producer reaches a depot");
+
+  // The two extractors are what make stone and gold possible, and each one is
+  // only legal because it covers one of the map's authored deposits.
+  const completed = world.structures.ownedBy("enemy").filter((structure) => structure.construction.complete);
+  const idsOf = new Set(completed.map((structure) => structure.stats.id));
+  for (const id of ["farm", "lumber_camp", "quarry", "gold_mine", "barracks", "depot", "outpost"]) {
+    assert.ok(idsOf.has(id), `§34: the AI completed its ${id}`);
+  }
+
+  // §49 "AI Kasaba çağına ulaşıyor". Reaching it is not a scripted step: the
+  // age's requirement list is data, so the AI got here only by running an
+  // economy that happens to satisfy all six required buildings.
+  assert.equal(world.ages.snapshot("enemy").age, "town", "§49: the AI reached the Town age");
+  assert.equal(board.ageMissingBuildingIds.length, 0);
+
+  // §4/§39: it paid for all of it out of the same wallet the player uses, and
+  // never touched the player's.
+  assert.equal(world.kingdoms.get("player").wallet.amount("wood"), 4000, "no cross-kingdom spending");
+  assert.equal(world.ai.economyMultiplier, 1, "§72: normal profile grants no hidden bonus");
+});
+
+check("Faz 8 §55: the army leaves the economy population headroom", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
+
+  const world = aiTestWorld({ food: 6000, wood: 6000 });
+  for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker);
+  for (let index = 0; index < 6000; index += 1) world.step(0.5);
+
+  const board = world.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
+  const army = world.units.armyOf("enemy");
+  assert.ok(army.length > 0, "the AI still fields an army");
+
+  // §55: an army with no ceiling grows until the population is full. Once every
+  // authored house slot is taken, PopulationBlocked can never be relieved — it
+  // fires forever, pins the director on Economy, and the AI never ages up or
+  // acts again. This is the §49 "karar değiştirme döngüsüne girmiyor" criterion
+  // in its most literal form: a permanent unfixable emergency.
+  // The ceiling gates *starting* a unit rather than trimming a finished one, so
+  // the army settles at most one unit past the line. That overshoot is the
+  // honest contract; what matters is that it stops.
+  const largestUnitPopulation = Math.max(
+    ...Object.values(unitBalance).map((stats) => stats.populationCost),
+  );
+  const budget = board.populationCap * AI_TEST_BALANCE.army.populationShare;
+  assert.ok(
+    board.armyPopulation <= budget + largestUnitPopulation,
+    `§55: the army stays at its population share (${board.armyPopulation} vs budget ${budget})`,
+  );
+  assert.ok(board.population < board.populationCap, "§55: the AI never wedges its own population shut");
+  assert.ok(
+    !board.emergencyFlags.includes("population-blocked"),
+    "§7: a settled AI is not stuck in a permanent population emergency",
+  );
+
+  // §52/§53: the blackboard's view of the army matches the field, and a worker
+  // is never counted into it.
+  assert.equal(
+    board.armyComposition.guard + board.armyComposition.archer + board.armyComposition.siege,
+    army.length,
+    "the blackboard's composition matches the field army",
+  );
+  assert.equal(board.armyComposition.worker, 0, "workers are never part of the army composition");
 });
 
 check("AI expansion abandons a region it cannot claim rather than retrying forever (§43/§49)", () => {
@@ -30745,10 +31085,34 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   assert.equal(nextBuilding(bb(), AI_TEST_BALANCE), "farm");
   assert.equal(nextBuilding(bb({ buildingCounts: { farm: 1 } }), AI_TEST_BALANCE), "lumber_camp");
   assert.equal(nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE), "barracks");
+  // Faz 8: the Town age needs stone and gold too, so the opening now continues
+  // past the Barracks into the two extractors — after it, so the base is never
+  // mining while it has nothing to defend itself with.
   assert.equal(
     nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
+    "quarry",
+  );
+  assert.equal(
+    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, quarry: 1 } }), AI_TEST_BALANCE),
+    "gold_mine",
+  );
+  assert.equal(
+    nextBuilding(
+      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, quarry: 1, gold_mine: 1 } }),
+      AI_TEST_BALANCE,
+    ),
     null,
     "a complete base stops requesting buildings",
+  );
+
+  // Faz 8: the order is a *priority list*, not a single pick. A single pick
+  // deadlocks the base — once every house slot is taken, population pressure
+  // keeps naming "house", which can no longer be built, and the quarry and gold
+  // mine underneath it are never reached, so the Town age stays unreachable.
+  assert.deepEqual(
+    buildOrder(bb({ population: 19, populationCap: 20, buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
+    ["house", "quarry", "gold_mine"],
+    "a blocked priority still lets the ones below it through",
   );
   // §34: housing outranks the economy order, so a lock is never reached.
   assert.equal(
@@ -30764,19 +31128,37 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
     detectBottleneck(bb({ buildingCounts: { farm: 1, lumber_camp: 1 }, disconnectedProducers: 1 }), AI_TEST_BALANCE),
     "disconnected-production",
   );
+  // Faz 8: stone and gold are part of a working economy now, so "the staples are
+  // up" is no longer a complete base — these fixtures carry all four producers.
+  const fourResources = { farm: 1, lumber_camp: 1, quarry: 1, gold_mine: 1 };
   assert.equal(
-    detectBottleneck(bb({ buildingCounts: { farm: 1, lumber_camp: 1 }, workerCount: 2, idleWorkerCount: 0 }), AI_TEST_BALANCE),
+    detectBottleneck(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE),
+    "no-stone-production",
+    "§24: a base with no quarry cannot reach the Town age",
+  );
+  assert.equal(
+    detectBottleneck(bb({ buildingCounts: { farm: 1, lumber_camp: 1, quarry: 1 } }), AI_TEST_BALANCE),
+    "no-gold-production",
+  );
+  assert.equal(
+    detectBottleneck(bb({ buildingCounts: fourResources, workerCount: 2, idleWorkerCount: 0 }), AI_TEST_BALANCE),
     "no-available-worker",
   );
   assert.equal(
     detectBottleneck(bb({
-      buildingCounts: { farm: 1, lumber_camp: 1 },
+      buildingCounts: fourResources,
       resourceStocks: { food: 200, wood: 10 },
     }), AI_TEST_BALANCE),
     "wood-shortage",
   );
+  // §27: losing every worker outranks even a full population — nothing rebuilds
+  // itself, so this is the one bottleneck that must win.
   assert.equal(
-    detectBottleneck(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE),
+    detectBottleneck(bb({ buildingCounts: fourResources, workerCount: 0, population: 20, populationCap: 20 }), AI_TEST_BALANCE),
+    "workers-lost",
+  );
+  assert.equal(
+    detectBottleneck(bb({ buildingCounts: fourResources }), AI_TEST_BALANCE),
     null,
     "a healthy base reports no bottleneck",
   );

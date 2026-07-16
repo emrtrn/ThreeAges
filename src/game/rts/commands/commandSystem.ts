@@ -15,10 +15,15 @@ import { issueAttackOrder } from "../units/attackPathing";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { CombatTarget } from "../combat/combatTarget";
 import type { UnitStance } from "../units/unit";
+import type { Unit } from "../units/unit";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
+import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
 
 /** The y = 0 walkable ground the runtime commands against. */
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
+
+/** RtsApp owns the actual economy/construction hand-off; commands only pick it. */
+export type WorkerStructureCommand = (workers: readonly Unit[], structure: PlacedStructure) => boolean;
 
 export class CommandSystem {
   private readonly raycaster = new Raycaster();
@@ -33,6 +38,9 @@ export class CommandSystem {
     private readonly centers: CommandCenterSystem,
     private readonly navigation: RtsNavigation,
     private readonly markers: CommandMarkerSystem,
+    private readonly structures: PlacedStructureSystem | null = null,
+    private readonly onWorkerStructureCommand: WorkerStructureCommand | null = null,
+    private readonly onWorkerOrderCancelled: ((workers: readonly Unit[]) => void) | null = null,
   ) {}
 
   /** Issue the contextual move-or-attack order at a screen position. */
@@ -42,14 +50,24 @@ export class CommandSystem {
 
     const target = this.raycastTarget(x, y);
     if (target && target.owner !== selected[0]?.owner) {
+      this.clearWorkerTasks(selected);
       for (const unit of selected) issueAttackOrder(unit, target, this.navigation);
       this.markers.spawn(target.position, "#ff7468");
+      return;
+    }
+
+    const structure = this.raycastStructure(x, y);
+    const workers = selected.filter((unit) => unit.role === "worker");
+    if (structure && workers.length > 0 && structure.owner === selected[0]?.owner
+      && this.onWorkerStructureCommand?.(workers, structure)) {
+      this.markers.spawn(structure.position, "#7ce08a");
       return;
     }
 
     const point = this.groundPoint(x, y);
     if (!point) return;
 
+    this.clearWorkerTasks(selected);
     for (const { unit, path } of assignGroupDestinations(selected, point, this.navigation)) {
       if (path) unit.setMovePath(path);
       else unit.stop();
@@ -77,7 +95,9 @@ export class CommandSystem {
 
   /** Immediately stop every currently selected unit and clear attack pursuit. */
   issueStop(): void {
-    for (const unit of this.selection.selected()) unit.stop();
+    const selected = this.selection.selected();
+    this.clearWorkerTasks(selected);
+    for (const unit of selected) unit.stop();
   }
 
   /** Set the stance of every selected combat unit (GDD 06 §26). */
@@ -100,6 +120,20 @@ export class CommandSystem {
     const hit = this.raycaster.intersectObjects(targets, true)[0];
     if (!hit) return null;
     return this.units.unitForObject(hit.object) ?? this.centers.centerForObject(hit.object);
+  }
+
+  /** Raycast friendly construction/economy sites separately from combat targets. */
+  private raycastStructure(x: number, y: number): PlacedStructure | null {
+    if (!this.structures) return null;
+    this.setNdc(x, y);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    const hit = this.raycaster.intersectObjects([...this.structures.targetMeshes()], true)[0];
+    return hit ? this.structures.structureForObject(hit.object) : null;
+  }
+
+  private clearWorkerTasks(selected: readonly Unit[]): void {
+    const workers = selected.filter((unit) => unit.role === "worker");
+    if (workers.length > 0) this.onWorkerOrderCancelled?.(workers);
   }
 
   /** Raycast a screen pixel onto the ground plane, or null if it misses. */

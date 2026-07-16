@@ -58,6 +58,8 @@ export interface PlacedStructure {
 export class PlacedStructureSystem {
   readonly root = new Group();
   private readonly structures: PlacedStructure[] = [];
+  private readonly structureByPickObjectId = new Map<number, PlacedStructure>();
+  private readonly pickObjects = new Map<number, Object3D>();
   private nextId = 1;
   private completedVisualHandler: ((structure: PlacedStructure) => void) | null = null;
 
@@ -110,6 +112,8 @@ export class PlacedStructureSystem {
       territoryConnectedControlRadius: stats.territory?.connectedControlRadius ?? null,
     };
     this.structures.push(structure);
+    this.registerPickTargets(structure, foundation);
+    this.registerPickTargets(structure, progressFill);
     return structure;
   }
 
@@ -117,9 +121,9 @@ export class PlacedStructureSystem {
     return this.structures.map((structure) => structure.blocker);
   }
 
-  /** Apply one worker-second and promote the site visual when it completes. */
-  advanceConstruction(structure: PlacedStructure, deltaSeconds: number): boolean {
-    const justCompleted = structure.construction.advance(deltaSeconds);
+  /** Apply active worker-seconds and promote the site visual when it completes. */
+  advanceConstruction(structure: PlacedStructure, deltaSeconds: number, workerCount = 1): boolean {
+    const justCompleted = structure.construction.advance(deltaSeconds, workerCount);
     structure.progressFill.scale.x = Math.max(0.001, structure.construction.progress);
     if (justCompleted) this.finishVisual(structure);
     return justCompleted;
@@ -127,6 +131,20 @@ export class PlacedStructureSystem {
 
   all(): readonly PlacedStructure[] {
     return this.structures;
+  }
+
+  /** Render objects that can receive a contextual worker command. */
+  targetMeshes(): readonly Object3D[] {
+    return [...this.pickObjects.values()];
+  }
+
+  /** Resolve a raycast hit on a foundation or completed visual back to its site. */
+  structureForObject(object: Object3D): PlacedStructure | null {
+    for (let current: Object3D | null = object; current; current = current.parent) {
+      const structure = this.structureByPickObjectId.get(current.id);
+      if (structure) return structure;
+    }
+    return null;
   }
 
   /** Lets the runtime replace completed placeholders without changing construction rules. */
@@ -139,11 +157,16 @@ export class PlacedStructureSystem {
     const placeholder = structure.object.getObjectByName("rts-complete-building-placeholder");
     if (placeholder) {
       structure.object.remove(placeholder);
+      this.unregisterPickTargets(placeholder);
       disposeObjectMeshes(placeholder);
     }
     const existing = structure.object.getObjectByName("rts-complete-building-model");
-    if (existing) structure.object.remove(existing);
+    if (existing) {
+      structure.object.remove(existing);
+      this.unregisterPickTargets(existing);
+    }
     structure.object.add(visual);
+    this.registerPickTargets(structure, visual);
   }
 
   /** One kingdom's structures. The Faz 5 AI reads its own base through this. */
@@ -183,6 +206,11 @@ export class PlacedStructureSystem {
   }
 
   private disposeStructure(structure: PlacedStructure): void {
+    for (const [objectId, pickStructure] of this.structureByPickObjectId) {
+      if (pickStructure !== structure) continue;
+      this.structureByPickObjectId.delete(objectId);
+      this.pickObjects.delete(objectId);
+    }
     this.root.remove(structure.object);
     structure.object.traverse((child) => {
       if (!(child instanceof Mesh) || isSharedModelMesh(child)) return;
@@ -213,7 +241,24 @@ export class PlacedStructureSystem {
     completed.castShadow = true;
     completed.receiveShadow = true;
     structure.object.add(completed);
+    this.registerPickTargets(structure, completed);
     this.completedVisualHandler?.(structure);
+  }
+
+  private registerPickTargets(structure: PlacedStructure, object: Object3D): void {
+    object.traverse((child) => {
+      if (!(child instanceof Mesh)) return;
+      child.userData.structureId = structure.id;
+      this.structureByPickObjectId.set(child.id, structure);
+      this.pickObjects.set(child.id, child);
+    });
+  }
+
+  private unregisterPickTargets(object: Object3D): void {
+    object.traverse((child) => {
+      this.structureByPickObjectId.delete(child.id);
+      this.pickObjects.delete(child.id);
+    });
   }
 }
 

@@ -53,9 +53,9 @@ export interface RtsExpansionRegion {
   /** §26 step 4: the region's resource building. */
   readonly production: RtsBuildAnchor;
   /**
-   * §48: the authored corridor, walked as consecutive segments. It starts on a
-   * tile touching the owner's command centre and ends past the region, passing
-   * close enough to touch the outpost, depot and production slots.
+   * §48: the authored corridor, walked as consecutive segments. It joins the
+   * owner's base road spine and ends past the region, passing close enough to
+   * touch the outpost, depot and production slots.
    */
   readonly route: readonly RtsMapPoint[];
 }
@@ -71,6 +71,20 @@ export interface RtsMapBlockout {
    * the AI plays is a runtime choice, not map data.
    */
   readonly enemyBaseAnchors: readonly RtsBuildAnchor[];
+  /**
+   * The enemy kingdom's base road spine, walked as consecutive segments like an
+   * expansion route (retraced legs are idempotent, which is how one polyline
+   * expresses a branching network).
+   *
+   * Faz 6 made income conditional on logistics: a producer only pays into the
+   * stockpile when a road touches its footprint *and* that road island also
+   * touches one of the owner's depots. The base had neither, so its farm and
+   * lumber camp filled their local buffers and stopped — the "AI'ın geliri yok"
+   * limit recorded against Faz 5 §38. Faz 8 needs real income (the Town age
+   * alone costs 600/350/150/150), so the base depot and its spine are authored
+   * here, and the AI builds them through the same road service the player uses.
+   */
+  readonly enemyBaseRoute: readonly RtsMapPoint[];
   /** The enemy kingdom's single authored expansion (§10: one region in AI-1). */
   readonly enemyExpansion: RtsExpansionRegion;
   /** Faz 6's finite safe and external stone/gold deposits. */
@@ -98,11 +112,36 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   enemyBaseAnchors: [
     { buildingId: "farm", x: -12, z: -26 },
     { buildingId: "lumber_camp", x: 12, z: -26 },
+    // Faz 8: the Town age requires a quarry and a gold mine, and both must cover
+    // a live deposit. The two enemy-side safe nodes sit at (-4,-14) and (4,-14),
+    // so these are the only two slots on this map that can ever satisfy it — the
+    // 6-wide footprint reaches a node up to 3 units off centre.
+    { buildingId: "quarry", x: -6, z: -14 },
+    { buildingId: "gold_mine", x: 6, z: -14 },
+    // The base depot sits in the gap the two extractors leave, where the spine
+    // can touch all three from the z=-18 leg.
+    { buildingId: "depot", x: 0, z: -14 },
     { buildingId: "barracks", x: 0, z: -38 },
-    { buildingId: "house", x: -12, z: -20 },
-    { buildingId: "house", x: 12, z: -20 },
+    // Housing moved behind the base: the two former slots at (±12,-20) stood on
+    // what is now the spine's branch down to the farm and lumber camp.
     { buildingId: "house", x: -12, z: -32 },
     { buildingId: "house", x: 12, z: -32 },
+    { buildingId: "house", x: -16, z: -32 },
+    { buildingId: "house", x: 16, z: -32 },
+    { buildingId: "house", x: -12, z: -36 },
+    { buildingId: "house", x: 12, z: -36 },
+  ],
+  // Spur to the centre, spine across the base, then a branch down to each of the
+  // two starting producers. The leg back along z=-18 is retraced on purpose:
+  // segments are idempotent, so one polyline can express a branching network.
+  enemyBaseRoute: [
+    { x: 0, z: -20 },
+    { x: 0, z: -18 },
+    { x: -12, z: -18 },
+    { x: -12, z: -22 },
+    { x: -12, z: -18 },
+    { x: 12, z: -18 },
+    { x: 12, z: -22 },
   ],
   // West flank. The outpost sits in neutral land just within the 12-unit
   // expansion reach of the enemy's starting territory; the depot and production
@@ -113,11 +152,13 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     outpost: { buildingId: "outpost", x: -28, z: -20 },
     depot: { buildingId: "depot", x: -28, z: -28 },
     production: { buildingId: "farm", x: -28, z: -12 },
-    // Leaves the centre on its west side, runs north clear of the base slots,
-    // then turns west and down the x = -24 corridor, which touches all three.
+    // Joins the base spine at its west end, runs out along z = -18, then covers
+    // the x = -24 corridor, which touches all three region slots. It used to
+    // leave the centre up the x = -6 line; Faz 8's quarry now stands there, and
+    // a road cell may never overlap a footprint.
     route: [
-      { x: -6, z: -26 },
-      { x: -6, z: -12 },
+      { x: -12, z: -18 },
+      { x: -24, z: -18 },
       { x: -24, z: -12 },
       { x: -24, z: -28 },
     ],

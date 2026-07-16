@@ -25,6 +25,9 @@ const EMERGENCY_INTENT: Readonly<Record<AiEmergencyFlag, AiIntent>> = {
   "base-under-attack": "defend",
   "army-destroyed": "economy",
   "population-blocked": "economy",
+  // §27: a raid that clears the workers ends every income at once. Nothing else
+  // the AI could commit to matters until it has hands again.
+  "workers-lost": "economy",
 };
 
 export interface KingdomDirectorState {

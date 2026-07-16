@@ -262,6 +262,62 @@ export const AI_TARGET_WEIGHTS: readonly (keyof AiTargetWeights)[] = [
   "defenseStrength",
 ];
 
+/** §53: how many of each combat role the AI wants, as a ratio not a count. */
+export interface AiArmyComposition {
+  readonly guard: number;
+  readonly archer: number;
+  readonly siege: number;
+}
+
+/**
+ * §30's Economy terms: WorkerNeed + IncomeDeficit + PopulationPressure +
+ * RecoveryNeed − ImmediateThreat.
+ */
+export interface AiEconomyScoring {
+  readonly workerNeed: number;
+  readonly incomeDeficit: number;
+  readonly populationPressure: number;
+  readonly recoveryNeed: number;
+  /** Subtracted: a base under attack is not the moment to expand the economy. */
+  readonly immediateThreat: number;
+}
+
+/**
+ * §30's AgeUp terms. §24 orders the age behind a working economy, so the score
+ * is gated on requirements and paid for out of surplus rather than raced to.
+ */
+export interface AiAgeUpScoring {
+  /** How much of the age's required building list already stands. */
+  readonly requirementProgress: number;
+  /** How close the stockpile is to the transition's cost. */
+  readonly affordability: number;
+  /** Whether income can refill what the transition drains. */
+  readonly economyMaturity: number;
+  /** Subtracted: never start a two-minute upgrade while the base is contested. */
+  readonly immediateThreat: number;
+}
+
+/** §30's Expand terms: ResourceNeed × BestRegionValue × RouteFeasibility × Safety. */
+export interface AiExpandScoring {
+  /** Wood stock at which the whole §47 recipe reads as affordable. */
+  readonly recipeWoodCost: number;
+}
+
+/** §29: the divisors that normalise raw world quantities into 0..1 terms. */
+export interface AiScoringNormalizers {
+  /** Enemy power at the base that reads as a full-strength threat. */
+  readonly threatPower: number;
+  /** Disconnected producers that read as a total logistics collapse. */
+  readonly disconnectedProducers: number;
+}
+
+export interface AiScoringBalance {
+  readonly economy: AiEconomyScoring;
+  readonly ageUp: AiAgeUpScoring;
+  readonly expand: AiExpandScoring;
+  readonly normalizers: AiScoringNormalizers;
+}
+
 /** `public/game-data/balance/ai.json` — AI design §30 keeps the weights in data. */
 export interface AiBalance {
   readonly evaluation: {
@@ -296,15 +352,41 @@ export interface AiBalance {
     readonly dominancePowerRatio: number;
     /** §54: power held back at the base before the field army may leave. */
     readonly minimumDefensePower: number;
+    /**
+     * §55: the largest share of the population cap the field army may occupy.
+     *
+     * Without a ceiling the army grows until the population is full, and then
+     * §7's PopulationBlocked fires forever: once every authored house slot is
+     * taken there is nothing the economy can do to relieve it, so the emergency
+     * pins the director on Economy and the AI never ages up or acts again. The
+     * headroom this leaves is what keeps the kingdom able to replace workers and
+     * to pay a population cost later.
+     */
+    readonly populationShare: number;
+    /**
+     * §52 UnitBasePower, per role. Workers are 0: they never fight, and counting
+     * them would read a base full of villagers as a defended one.
+     */
+    readonly rolePower: Readonly<Record<UnitRoleId, number>>;
+    /** §53: the army shape the AI trains toward, per age. */
+    readonly composition: Readonly<Record<SettlementAge, AiArmyComposition>>;
     /** §60: per-term weights of the target score. */
     readonly targetWeights: AiTargetWeights;
   };
   readonly economy: {
-    /** §35: worker count the economy intent drives toward in AI-1. */
-    readonly workerTarget: number;
+    /** §35: worker count the economy intent drives toward, per age. */
+    readonly workerTarget: Readonly<Record<SettlementAge, number>>;
     /** §24: population headroom below which housing becomes urgent. */
     readonly populationPressureBuffer: number;
+    /**
+     * §36: the per-minute income each resource is driven toward. Reaching a
+     * target stops that resource pulling on the economy score, which is what
+     * lets a balanced four-resource economy settle instead of over-building one.
+     */
+    readonly incomeTargetsPerMinute: Readonly<Record<string, number>>;
   };
+  /** §29–§30: the utility formula's own coefficients, not just its weights. */
+  readonly scoring: AiScoringBalance;
   readonly profiles: Readonly<Record<AiProfile, AiProfileBalance>>;
   /** §30: per-intent multipliers applied to the raw utility score. */
   readonly intentWeights: Readonly<Record<AiIntent, number>>;

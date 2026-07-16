@@ -14,6 +14,17 @@
     "retreatHealthRatio": 0.45,
     "dominancePowerRatio": 2.0,
     "minimumDefensePower": 2,
+    "populationShare": 0.55,
+    "rolePower": {
+      "guard": 1.0,
+      "archer": 0.9,
+      "siege": 1.6,
+      "worker": 0.0
+    },
+    "composition": {
+      "settlement": { "guard": 1, "archer": 0, "siege": 0 },
+      "town": { "guard": 3, "archer": 2, "siege": 1 }
+    },
     "targetWeights": {
       "economicValue": 1.0,
       "strategicValue": 0.7,
@@ -24,8 +35,39 @@
     }
   },
   "economy": {
-    "workerTarget": 8,
-    "populationPressureBuffer": 3
+    "workerTarget": {
+      "settlement": 8,
+      "town": 16
+    },
+    "populationPressureBuffer": 3,
+    "incomeTargetsPerMinute": {
+      "food": 20,
+      "wood": 18,
+      "stone": 10,
+      "gold": 6
+    }
+  },
+  "scoring": {
+    "economy": {
+      "workerNeed": 0.35,
+      "incomeDeficit": 0.3,
+      "populationPressure": 0.25,
+      "recoveryNeed": 0.1,
+      "immediateThreat": 0.5
+    },
+    "ageUp": {
+      "requirementProgress": 0.3,
+      "affordability": 0.45,
+      "economyMaturity": 0.25,
+      "immediateThreat": 0.6
+    },
+    "expand": {
+      "recipeWoodCost": 400
+    },
+    "normalizers": {
+      "threatPower": 4,
+      "disconnectedProducers": 2
+    }
   },
   "profiles": {
     "easy": { "economyMultiplier": 1.0, "reactionDelaySeconds": 3 },
@@ -34,7 +76,7 @@
   },
   "intentWeights": {
     "economy": 1.0,
-    "ageUp": 0.0,
+    "ageUp": 1.1,
     "expand": 0.9,
     "defend": 1.2,
     "attack": 1.0

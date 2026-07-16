@@ -38,6 +38,7 @@ export interface EconomyBuildingSnapshot {
 interface WorkerAssignment {
   readonly worker: Unit;
   readonly approach: Vector3;
+  readonly source: "automatic" | "manual";
   state: Exclude<EconomyWorkerState, "idle">;
 }
 
@@ -53,6 +54,11 @@ interface ProducerRecord {
 }
 
 const WORK_RANGE = 1.25;
+
+export interface ManualEconomyAssignmentResult {
+  readonly assignedWorkers: number;
+  readonly rejectedWorkers: number;
+}
 
 export class EconomyProductionSystem {
   private readonly producers = new Map<number, ProducerRecord>();
@@ -150,6 +156,47 @@ export class EconomyProductionSystem {
     this.assignmentByWorker.delete(worker.id);
     worker.stop();
     return true;
+  }
+
+  /** Automatic construction recovery must not override an explicit gather order. */
+  releaseAutomatic(worker: Unit): boolean {
+    const producer = this.assignmentByWorker.get(worker.id);
+    const assignment = producer?.assignments.get(worker.id);
+    if (!assignment || assignment.source !== "automatic") return false;
+    return this.release(worker);
+  }
+
+  /**
+   * Assign selected workers to a completed resource building. This is an
+   * explicit player order, so it remains protected from automatic construction
+   * recovery until the player gives the worker another order.
+   */
+  assignWorkers(structure: PlacedStructure, workers: readonly Unit[]): ManualEconomyAssignmentResult {
+    this.syncCompletedProducers();
+    const producer = this.producers.get(structure.id);
+    const economy = structure.stats.economy;
+    if (!producer || !economy) return { assignedWorkers: 0, rejectedWorkers: workers.length };
+    let assignedWorkers = 0;
+    let rejectedWorkers = 0;
+    for (const worker of workers) {
+      if (worker.role !== "worker" || worker.owner !== structure.owner || worker.health.depleted) {
+        rejectedWorkers += 1;
+        continue;
+      }
+      const existingProducer = this.assignmentByWorker.get(worker.id);
+      if (existingProducer === producer) {
+        assignedWorkers += 1;
+        continue;
+      }
+      if (producer.assignments.size >= economy.workerCapacity || this.isWorkerConstructing(worker)) {
+        rejectedWorkers += 1;
+        continue;
+      }
+      if (existingProducer) this.release(worker);
+      if (this.assignWorker(producer, worker, "manual")) assignedWorkers += 1;
+      else rejectedWorkers += 1;
+    }
+    return { assignedWorkers, rejectedWorkers };
   }
 
   /** Remove buffered output for a connected logistics transfer, never below zero. */
@@ -263,14 +310,7 @@ export class EconomyProductionSystem {
         - b.position.distanceToSquared(producer.structure.object.position));
     for (const worker of candidates) {
       if (producer.assignments.size >= economy.workerCapacity) return;
-      const approach = this.findReachableApproach(worker, producer.structure);
-      if (!approach) continue;
-      const path = this.navigation.plan(worker.position, approach);
-      if (!path) continue;
-      worker.setMovePath(path);
-      const assignment: WorkerAssignment = { worker, approach, state: "moving" };
-      producer.assignments.set(worker.id, assignment);
-      this.assignmentByWorker.set(worker.id, producer);
+      this.assignWorker(producer, worker, "automatic");
     }
   }
 
@@ -288,6 +328,24 @@ export class EconomyProductionSystem {
       this.assignmentByWorker.delete(assignment.worker.id);
     }
     producer.assignments.clear();
+  }
+
+  private assignWorker(
+    producer: ProducerRecord,
+    worker: Unit,
+    source: "automatic" | "manual",
+  ): boolean {
+    const economy = producer.structure.stats.economy;
+    if (!economy || producer.assignments.size >= economy.workerCapacity) return false;
+    const approach = this.findReachableApproach(worker, producer.structure);
+    if (!approach) return false;
+    const path = this.navigation.plan(worker.position, approach);
+    if (!path) return false;
+    worker.setMovePath(path);
+    const assignment: WorkerAssignment = { worker, approach, source, state: "moving" };
+    producer.assignments.set(worker.id, assignment);
+    this.assignmentByWorker.set(worker.id, producer);
+    return true;
   }
 
   private findReachableApproach(worker: Unit, structure: PlacedStructure): Vector3 | null {

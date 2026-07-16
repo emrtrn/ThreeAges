@@ -10,17 +10,22 @@
 import { isFeatureFlag } from "../core/featureFlags";
 import { AI_TARGET_WEIGHTS } from "./gameDataTypes";
 import type {
+  AiAgeUpScoring,
+  AiArmyComposition,
   AiBalance,
   AgeBalance,
+  AiEconomyScoring,
   AiIntent,
   AiProfile,
   AiProfileBalance,
+  AiScoringBalance,
   AiTargetWeights,
   BuildingBalance,
   GamePreset,
   GameVersion,
   ResourceBalance,
   RoadBalance,
+  SettlementAge,
   StartingResources,
   UnitArmorClass,
   UnitAttackType,
@@ -527,6 +532,24 @@ export function validateAgeBalance(value: unknown): AgeBalance {
 }
 
 const AI_INTENTS: readonly AiIntent[] = ["economy", "ageUp", "expand", "defend", "attack"];
+const SETTLEMENT_AGES: readonly SettlementAge[] = ["settlement", "town"];
+/** The four Faz 6 resources the AI drives income targets for. */
+const AI_SCORED_RESOURCES: readonly string[] = ["food", "wood", "stone", "gold"];
+/** §53 shapes the three combat roles; a worker is not part of an army ratio. */
+const AI_COMPOSITION_ROLES: readonly (keyof AiArmyComposition)[] = ["guard", "archer", "siege"];
+const AI_ECONOMY_SCORING_TERMS: readonly (keyof AiEconomyScoring)[] = [
+  "workerNeed",
+  "incomeDeficit",
+  "populationPressure",
+  "recoveryNeed",
+  "immediateThreat",
+];
+const AI_AGE_UP_SCORING_TERMS: readonly (keyof AiAgeUpScoring)[] = [
+  "requirementProgress",
+  "affordability",
+  "economyMaturity",
+  "immediateThreat",
+];
 /** AI design §73 caps a hard-difficulty economy bonus; anything above is a data bug. */
 const MAX_AI_ECONOMY_MULTIPLIER = 1.05;
 
@@ -583,6 +606,9 @@ export function validateAiBalance(value: unknown): AiBalance {
     retreatHealthRatio: requireFiniteNumber(armyObj, "retreatHealthRatio", `${where}.army`),
     dominancePowerRatio: requirePositive(armyObj, "dominancePowerRatio", `${where}.army`),
     minimumDefensePower: requireFiniteNumber(armyObj, "minimumDefensePower", `${where}.army`),
+    populationShare: requirePositive(armyObj, "populationShare", `${where}.army`),
+    rolePower: validateAiRolePower(armyObj["rolePower"], `${where}.army.rolePower`),
+    composition: validateAiCompositions(armyObj["composition"], `${where}.army.composition`),
     targetWeights: validateAiTargetWeights(armyObj["targetWeights"], `${where}.army.targetWeights`),
   };
   // §65: a health floor outside 0..1 would either never fire or retreat always.
@@ -606,15 +632,46 @@ export function validateAiBalance(value: unknown): AiBalance {
   if (army.minimumDefensePower < 0) {
     throw new GameDataError(`${where}.army: minimumDefensePower must be >= 0`);
   }
+  // §55: a share of 1 lets the army fill the population by itself, which is the
+  // deadlock the ceiling exists to prevent — there would be no headroom left for
+  // the workers that pay for it.
+  if (army.populationShare >= 1) {
+    throw new GameDataError(`${where}.army: populationShare must be < 1 — the economy needs headroom`);
+  }
 
   const economyObj = asObject(obj["economy"], `${where}.economy`);
+  const workerTargetObj = asObject(economyObj["workerTarget"], `${where}.economy.workerTarget`);
+  const workerTarget = {} as Record<SettlementAge, number>;
+  for (const age of SETTLEMENT_AGES) {
+    workerTarget[age] = requirePositive(workerTargetObj, age, `${where}.economy.workerTarget`);
+  }
+  // §35: a Town that wanted fewer workers than a Settlement would have the AI
+  // stop growing exactly when its four-resource economy needs the most hands.
+  if (workerTarget.town < workerTarget.settlement) {
+    throw new GameDataError(`${where}.economy.workerTarget: town must be >= settlement`);
+  }
+  const incomeObj = asObject(economyObj["incomeTargetsPerMinute"], `${where}.economy.incomeTargetsPerMinute`);
+  const incomeTargetsPerMinute: Record<string, number> = {};
+  for (const resourceId of AI_SCORED_RESOURCES) {
+    incomeTargetsPerMinute[resourceId] = requirePositive(
+      incomeObj, resourceId, `${where}.economy.incomeTargetsPerMinute`,
+    );
+  }
+  for (const key of Object.keys(incomeObj)) {
+    if (!AI_SCORED_RESOURCES.includes(key)) {
+      throw new GameDataError(`${where}.economy.incomeTargetsPerMinute: unknown resource "${key}"`);
+    }
+  }
   const economy = {
-    workerTarget: requirePositive(economyObj, "workerTarget", `${where}.economy`),
+    workerTarget,
     populationPressureBuffer: requireFiniteNumber(economyObj, "populationPressureBuffer", `${where}.economy`),
+    incomeTargetsPerMinute,
   };
   if (economy.populationPressureBuffer < 0) {
     throw new GameDataError(`${where}.economy: populationPressureBuffer must be >= 0`);
   }
+
+  const scoring = validateAiScoring(obj["scoring"], `${where}.scoring`);
 
   const profilesObj = asObject(obj["profiles"], `${where}.profiles`);
   const profiles = {} as Record<AiProfile, AiProfileBalance>;
@@ -638,7 +695,92 @@ export function validateAiBalance(value: unknown): AiBalance {
     }
   }
 
-  return { evaluation, army, economy, profiles, intentWeights };
+  return { evaluation, army, economy, scoring, profiles, intentWeights };
+}
+
+/** §52: every role's base power is data, and a worker may never count as army. */
+function validateAiRolePower(value: unknown, where: string): Record<UnitRoleId, number> {
+  const obj = asObject(value, where);
+  const power = {} as Record<UnitRoleId, number>;
+  for (const role of UNIT_ROLES) {
+    const term = requireFiniteNumber(obj, role, where);
+    if (term < 0) throw new GameDataError(`${where}: "${role}" must be >= 0`);
+    power[role] = term;
+  }
+  for (const key of Object.keys(obj)) {
+    if (!UNIT_ROLES.includes(key as UnitRoleId)) {
+      throw new GameDataError(`${where}: unknown role "${key}"`);
+    }
+  }
+  // §52 measures fighting strength; a worker with power would read a base full
+  // of villagers as defended and suppress the AI's own defend score.
+  if (power.worker !== 0) throw new GameDataError(`${where}: "worker" must be 0 — workers never fight`);
+  return power;
+}
+
+/** §53: the army shape per age. An all-zero ratio would train nothing at all. */
+function validateAiCompositions(value: unknown, where: string): Record<SettlementAge, AiArmyComposition> {
+  const obj = asObject(value, where);
+  const compositions = {} as Record<SettlementAge, AiArmyComposition>;
+  for (const age of SETTLEMENT_AGES) {
+    const scope = `${where}.${age}`;
+    const ageObj = asObject(obj[age], scope);
+    const composition = {} as Record<keyof AiArmyComposition, number>;
+    for (const role of AI_COMPOSITION_ROLES) {
+      const share = requireFiniteNumber(ageObj, role, scope);
+      if (share < 0) throw new GameDataError(`${scope}: "${role}" must be >= 0`);
+      composition[role] = share;
+    }
+    for (const key of Object.keys(ageObj)) {
+      if (!AI_COMPOSITION_ROLES.includes(key as keyof AiArmyComposition)) {
+        throw new GameDataError(`${scope}: unknown role "${key}"`);
+      }
+    }
+    if (AI_COMPOSITION_ROLES.every((role) => composition[role] === 0)) {
+      throw new GameDataError(`${scope}: at least one role must be > 0, or the AI trains nothing`);
+    }
+    compositions[age] = composition;
+  }
+  return compositions;
+}
+
+/**
+ * §29–§30: the scoring coefficients themselves, not only the intent weights.
+ *
+ * Every term is a non-negative contribution to a raw score that is clamped to
+ * 0..1, so the numbers only have meaning relative to each other — which is
+ * exactly why they belong in data next to the weights that scale them.
+ */
+function validateAiScoring(value: unknown, where: string): AiScoringBalance {
+  const obj = asObject(value, where);
+
+  const economyObj = asObject(obj["economy"], `${where}.economy`);
+  const economy = {} as Record<keyof AiEconomyScoring, number>;
+  for (const term of AI_ECONOMY_SCORING_TERMS) {
+    const weight = requireFiniteNumber(economyObj, term, `${where}.economy`);
+    if (weight < 0) throw new GameDataError(`${where}.economy: "${term}" must be >= 0`);
+    economy[term] = weight;
+  }
+
+  const ageUpObj = asObject(obj["ageUp"], `${where}.ageUp`);
+  const ageUp = {} as Record<keyof AiAgeUpScoring, number>;
+  for (const term of AI_AGE_UP_SCORING_TERMS) {
+    const weight = requireFiniteNumber(ageUpObj, term, `${where}.ageUp`);
+    if (weight < 0) throw new GameDataError(`${where}.ageUp: "${term}" must be >= 0`);
+    ageUp[term] = weight;
+  }
+
+  const expandObj = asObject(obj["expand"], `${where}.expand`);
+  const expand = { recipeWoodCost: requirePositive(expandObj, "recipeWoodCost", `${where}.expand`) };
+
+  const normalizersObj = asObject(obj["normalizers"], `${where}.normalizers`);
+  const normalizers = {
+    // Both are divisors: a zero would make every threat read as infinite.
+    threatPower: requirePositive(normalizersObj, "threatPower", `${where}.normalizers`),
+    disconnectedProducers: requirePositive(normalizersObj, "disconnectedProducers", `${where}.normalizers`),
+  };
+
+  return { economy, ageUp, expand, normalizers };
 }
 
 /** §60: every term is weighted in data, and an unknown term is a typo, not a feature. */
