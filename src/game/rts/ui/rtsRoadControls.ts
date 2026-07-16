@@ -4,10 +4,12 @@ import type { RoadPlacementState } from "../roads/roadPlacementSystem";
 export class RtsRoadControls {
   private readonly root = document.createElement("section");
   private readonly status = document.createElement("p");
+  private readonly overlay = document.createElement("button");
 
   constructor(
     private readonly onBegin: () => void,
     private readonly onCancel: () => void,
+    private readonly onToggleOverlay: () => void,
   ) {
     this.root.className = "rts-road-controls ui-interactive";
     this.root.setAttribute("aria-label", "Yol yerleştirme");
@@ -21,10 +23,18 @@ export class RtsRoadControls {
     cancel.type = "button";
     cancel.textContent = "Yolu İptal";
     cancel.addEventListener("click", this.onCancel);
+    this.overlay.type = "button";
+    this.overlay.textContent = "Ağ Görünümü";
+    this.overlay.setAttribute("aria-pressed", "false");
+    this.overlay.addEventListener("click", this.onToggleOverlay);
     this.status.className = "rts-road-status";
-    this.root.append(title, begin, cancel, this.status);
+    this.root.append(title, begin, cancel, this.overlay, this.status);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setState({ active: false, start: null, plan: null, reason: null });
+  }
+
+  setOverlayVisible(visible: boolean): void {
+    this.overlay.setAttribute("aria-pressed", String(visible));
   }
 
   setState(state: RoadPlacementState): void {

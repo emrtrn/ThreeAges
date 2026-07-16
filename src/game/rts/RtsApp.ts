@@ -103,7 +103,7 @@ export class RtsApp {
   private readonly centers = new CommandCenterSystem();
   private readonly structures = new PlacedStructureSystem();
   private readonly roads: RoadGraph;
-  private readonly roadDebugView: RoadDebugView | null;
+  private readonly roadDebugView: RoadDebugView;
   private readonly territory = new TerritoryControlSystem(() => this.centers.all().map((center) => ({
     owner: center.owner,
     x: center.position.x,
@@ -150,6 +150,7 @@ export class RtsApp {
   private lastTime = 0;
   private running = false;
   private simulationSpeed: RtsSimulationSpeed = 1;
+  private roadOverlayVisible = false;
   private lastW = 0;
   private lastH = 0;
 
@@ -159,7 +160,9 @@ export class RtsApp {
   ) {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.roads = new RoadGraph(this.options.roadBalance);
-    this.roadDebugView = this.options.debug ? new RoadDebugView(this.roads) : null;
+    this.roadDebugView = new RoadDebugView(this.roads);
+    this.roadOverlayVisible = Boolean(this.options.debug);
+    this.roadDebugView.root.visible = this.roadOverlayVisible;
     this.depotLogistics = new DepotLogisticsSystem(this.structures, this.roads);
     this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
     this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
@@ -271,7 +274,13 @@ export class RtsApp {
         this.roadPlacement.cancel();
         this.syncRoadUi();
       },
+      () => {
+        this.roadOverlayVisible = !this.roadOverlayVisible;
+        this.roadDebugView.root.visible = this.roadOverlayVisible;
+        this.roadControls.setOverlayVisible(this.roadOverlayVisible);
+      },
     );
+    this.roadControls.setOverlayVisible(this.roadOverlayVisible);
     this.logisticsWarning = new RtsLogisticsWarning();
     this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => {
       this.simulationSpeed = speed;
@@ -366,7 +375,7 @@ export class RtsApp {
     this.gameSpeedControls.dispose();
     this.placement.dispose();
     this.roadPlacement.dispose();
-    this.roadDebugView?.dispose();
+    this.roadDebugView.dispose();
     this.territory.dispose();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
@@ -399,7 +408,7 @@ export class RtsApp {
     this.scene.add(this.structures.root);
     this.scene.add(this.placement.root);
     this.scene.add(this.roadPlacement.root);
-    if (this.roadDebugView) this.scene.add(this.roadDebugView.root);
+    this.scene.add(this.roadDebugView.root);
     this.scene.add(this.territory.root);
     this.scene.add(this.units.root);
     this.scene.add(this.commandMarkers.root);
@@ -458,7 +467,7 @@ export class RtsApp {
       this.depotLogistics,
       this.productionLogistics,
     );
-    this.roadDebugView?.refresh();
+    this.roadDebugView.refresh();
     this.commandMarkers.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
   };

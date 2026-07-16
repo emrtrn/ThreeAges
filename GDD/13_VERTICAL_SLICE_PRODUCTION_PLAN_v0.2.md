@@ -923,11 +923,11 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 
 ### UI
 
-- [ ] Bağlı / Bağlantısız durumu
-- [ ] Kontrol Dışı durumu
-- [ ] Yerel tampon durumu
-- [ ] Lojistik overlay
-- [ ] Bağlantı nedeni tooltip’i
+- [x] Bağlı / Bağlantısız durumu (Üretim paneli `Lojistik: Bağlı/Yol Yok/Depo Yok` gösterir.)
+- [x] Kontrol Dışı durumu (Üretim paneli `Lojistik: Kontrol Dışı` ve ekranda kesinti uyarısı gösterir.)
+- [x] Yerel tampon durumu (Seçili üretim yapısında mevcut/kapasite tampon değeri görünür.)
+- [x] Lojistik overlay (`Ağ Görünümü` düğmesi yol ağ bileşenlerinin renkli düğüm/kenar katmanını açıp kapatır.)
+- [x] Bağlantı nedeni tooltip’i (Üretim ayrıntısının tooltip’i her lojistik durumunun çözüm yolunu açıklar.)
 
 ---
 

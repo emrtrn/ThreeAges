@@ -200,6 +200,7 @@ export class RtsBuildPalette {
       `Durum: ${selected.status}`,
       `Lojistik: ${formatLogisticsStatus(this.logisticsStatuses.get(selected.structureId))}`,
     ].join(" · ");
+    this.producerDetails.title = logisticsReason(this.logisticsStatuses.get(selected.structureId));
   }
 
   dispose(): void {
@@ -216,6 +217,17 @@ function formatLogisticsStatus(status: ProducerLogisticsStatus | undefined): str
     "depot-occupied": "Depo İşgal Altında",
   };
   return status ? labels[status] : "Bekleniyor";
+}
+
+function logisticsReason(status: ProducerLogisticsStatus | undefined): string {
+  const reasons: Record<ProducerLogisticsStatus, string> = {
+    linked: "Bu üretim yapısı, aynı yol ağındaki Depoya bağlı.",
+    "outside-control": "Kontrol alanı kaybedildi; Karakolu veya alanı geri alın.",
+    "unlinked-road": "Yapı footprint’ine temas eden bir yol hücresi gerekli.",
+    "unlinked-depot": "Aynı yol ağında tamamlanmış bir Depo gerekli.",
+    "depot-occupied": "Bağlı Depo düşman işgali altında; işgali kaldırın.",
+  };
+  return status ? reasons[status] : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.";
 }
 
 function formatBuildingCost(cost: Readonly<Record<string, number>>): string {

@@ -8,6 +8,9 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator("#game-canvas")).toBeVisible();
   await expect(page.locator(".rts-build-palette")).toBeVisible();
   await expect(page.getByRole("region", { name: "Yol yerleştirme" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Ağ Görünümü", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Ağ Görünümü", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Ağ Görünümü", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("region", { name: "Oyun hızı" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Normal", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "4X", exact: true }).click();
