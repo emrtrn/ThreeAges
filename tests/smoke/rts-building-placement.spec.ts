@@ -88,3 +88,39 @@ test("RTS Phase 7 palette gates the Archer and the Ram behind a tier-2 Barracks"
   await expect(page.locator(".rts-selection-panel")).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test("RTS Phase 7 a box-selected group takes a move order and every unit finishes it", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  await page.goto("/?rts&debug");
+  const canvas = page.locator("#game-canvas");
+  await expect(canvas).toBeVisible();
+  const overlay = page.locator(".rts-debug-overlay");
+  await expect(overlay).toContainText("birimler:");
+
+  // Pan the starting Guards up off the bottom edge so the marquee below can be
+  // drawn over them without crossing the build palette or the debug overlay.
+  await canvas.click({ position: { x: 640, y: 400 } });
+  await page.keyboard.down("s");
+  await page.waitForTimeout(700);
+  await page.keyboard.up("s");
+
+  // Box-select the Guard line, then send it somewhere as one group. This is the
+  // plan §45 group-movement path end to end — slot distribution, path following,
+  // crowd separation and the congestion timeout all run together here, which the
+  // headless suite only exercises one system at a time.
+  await page.mouse.move(420, 520);
+  await page.mouse.down();
+  await page.mouse.move(900, 610, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.locator(".rts-selection-panel")).toBeVisible();
+
+  await canvas.click({ button: "right", position: { x: 640, y: 300 } });
+  await expect(overlay).toContainText(/yol:\d+/);
+
+  // The acceptance that matters is that the order *ends*: no unit may be left
+  // walking a route it can never finish (plan §46 "kalıcı sıkışma oluşmuyor").
+  await expect(overlay).not.toContainText(/yol:\d+/, { timeout: 30_000 });
+  expect(errors).toEqual([]);
+});

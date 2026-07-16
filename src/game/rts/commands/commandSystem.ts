@@ -9,7 +9,7 @@ import { Plane, Raycaster, Vector2, Vector3, type PerspectiveCamera } from "thre
 
 import type { SelectionSystem } from "../selection/selectionSystem";
 import type { CommandMarkerSystem } from "./commandMarker";
-import { formationOffsets } from "../units/unitMovement";
+import { assignGroupDestinations } from "../units/groupOrders";
 import type { UnitSystem } from "../units/unitSystem";
 import { issueAttackOrder } from "../units/attackPathing";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
@@ -50,14 +50,10 @@ export class CommandSystem {
     const point = this.groundPoint(x, y);
     if (!point) return;
 
-    const offsets = formationOffsets(selected.length);
-    selected.forEach((unit, i) => {
-      const offset = offsets[i] ?? { x: 0, z: 0 };
-      const destination = new Vector3(point.x + offset.x, 0, point.z + offset.z);
-      const path = this.navigation.plan(unit.position, destination);
+    for (const { unit, path } of assignGroupDestinations(selected, point, this.navigation)) {
       if (path) unit.setMovePath(path);
       else unit.stop();
-    });
+    }
     this.markers.spawn(point);
   }
 
@@ -72,14 +68,10 @@ export class CommandSystem {
     const point = this.groundPoint(x, y);
     if (!point) return;
 
-    const offsets = formationOffsets(selected.length);
-    selected.forEach((unit, i) => {
-      const offset = offsets[i] ?? { x: 0, z: 0 };
-      const destination = new Vector3(point.x + offset.x, 0, point.z + offset.z);
-      const path = this.navigation.plan(unit.position, destination);
+    for (const { unit, destination, path } of assignGroupDestinations(selected, point, this.navigation)) {
       if (path) unit.setAttackMovePath(path, destination);
       else unit.stop();
-    });
+    }
     this.markers.spawn(point, "#ffb45e");
   }
 

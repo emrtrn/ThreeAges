@@ -17,8 +17,6 @@ import type { UnitSystem } from "../units/unitSystem";
 import { PopulationSystem } from "../economy/populationSystem";
 import { ResourceWallet } from "../economy/resourceWallet";
 
-export type StartingResourcesByOwner = Readonly<Partial<Record<UnitOwner, StartingResources>>>;
-
 export interface Kingdom {
   readonly owner: UnitOwner;
   readonly wallet: ResourceWallet;
@@ -35,12 +33,11 @@ export class KingdomRegistry {
     structures: PlacedStructureSystem,
     private readonly startingResources: StartingResources,
     basePopulationCapacity: number,
-    private readonly startingResourcesByOwner?: StartingResourcesByOwner,
   ) {
     for (const owner of owners) {
       this.kingdoms.set(owner, {
         owner,
-        wallet: new ResourceWallet(this.startingResourcesFor(owner)),
+        wallet: new ResourceWallet(startingResources),
         population: new PopulationSystem(owner, units, structures, basePopulationCapacity),
       });
     }
@@ -60,7 +57,7 @@ export class KingdomRegistry {
   /** Restore every kingdom to its match-start economy. */
   reset(): void {
     for (const kingdom of this.kingdoms.values()) {
-      kingdom.wallet.reset(this.startingResourcesFor(kingdom.owner));
+      kingdom.wallet.reset(this.startingResources);
       kingdom.population.reset();
     }
   }
@@ -68,9 +65,5 @@ export class KingdomRegistry {
   /** Advance every kingdom's rolling income window. */
   advance(deltaSeconds: number): void {
     for (const kingdom of this.kingdoms.values()) kingdom.wallet.advance(deltaSeconds);
-  }
-
-  private startingResourcesFor(owner: UnitOwner): StartingResources {
-    return this.startingResourcesByOwner?.[owner] ?? this.startingResources;
   }
 }

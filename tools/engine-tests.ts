@@ -71,6 +71,7 @@ import { CommandCenterSystem } from "../src/game/rts/structures/commandCenterSys
 import { RtsMatchState } from "../src/game/rts/match/rtsMatchState";
 import { HealthComponent } from "../src/game/rts/units/health";
 import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
+import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
 import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
 import {
   RTS_PLACEMENT_GRID_SIZE,
@@ -91,11 +92,6 @@ import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransf
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
-import {
-  AI_STARTING_FOOD_AND_WOOD,
-  matchStartingResourcesFor,
-  PLAYER_STARTING_FOOD_AND_WOOD,
-} from "../src/game/rts/kingdom/matchStartingResources";
 import { AiController } from "../src/game/rts/ai/aiController";
 import { AiDecisionLog } from "../src/game/rts/ai/aiDecisionLog";
 import { ArmyManager } from "../src/game/rts/ai/armyManager";
@@ -129,7 +125,9 @@ import { simulationSteps } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
-import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
+import { congestionSeconds, updateUnitMovement } from "../src/game/rts/units/unitMovement";
+import { updateUnitSeparation } from "../src/game/rts/units/unitSeparation";
+import { assignGroupDestinations } from "../src/game/rts/units/groupOrders";
 import { issueAttackOrder } from "../src/game/rts/units/attackPathing";
 import { updateUnitEngagement } from "../src/game/rts/combat/engagementSystem";
 import { resolveDamage } from "../src/game/rts/combat/damageResolution";
@@ -28507,27 +28505,6 @@ check("RTS melee attacks can damage an enemy command center", () => {
   assert.deepEqual(hits, [{ damage: perHit, targetOwner: "enemy" }]);
 });
 
-check("RTS test sandbox protects the player command center without disabling enemy attacks", () => {
-  const units = new UnitSystem();
-  const centers = new CommandCenterSystem();
-  const attacker = units.spawn("enemy", 0, 0, RTS_TEST_UNIT_STATS);
-  const playerCenter = centers.spawn("player", 1.1, 0, 300);
-  attacker.setAttackTarget(playerCenter);
-
-  updateUnitCombat(
-    [attacker],
-    0,
-    undefined,
-    (unit, target) => !(unit.owner === "enemy" && target === playerCenter),
-  );
-  assert.equal(playerCenter.health.current, 300, "a protected center receives no sandbox damage");
-  assert.equal(attacker.attackTarget, playerCenter, "the AI still retains and pursues its attack order");
-
-  updateUnitCombat([attacker], 0);
-  const perHit = RTS_TEST_UNIT_STATS.attackDamage * RTS_TEST_UNIT_STATS.damageMultipliers.structure;
-  assert.equal(playerCenter.health.current, 300 - perHit, "normal combat remains unchanged outside the sandbox policy");
-});
-
 check("RTS match enters victory when the enemy command center is depleted", () => {
   const centers = new CommandCenterSystem();
   centers.spawn("player", 0, 16, 300);
@@ -28771,6 +28748,299 @@ check("Faz 7 the AI reads Archers and Rams as army, not as nothing", () => {
     "every combat role counts toward an army; workers never do",
   );
   assert.equal(units.armyOf("player").length, 0);
+});
+
+/**
+ * Faz 7 group-movement fixtures (plan §45 "Grup hareketi").
+ *
+ * A corridor is two blockers with a gap between them. The gap is quoted as its
+ * clear width, which is what the plan's "geçit minimum genişliği" is about: the
+ * grid erodes each wall by the agent radius, so a 3-unit gap is a comfortable
+ * lane for a 0.5-radius Guard and refuses a 0.75-radius Ram outright.
+ *
+ * The walls run past the world bounds on purpose: a wall that stops short of the
+ * map edge is not a corridor at all, it is a detour, and the pathfinder will
+ * happily prove that instead of what these tests are asking about.
+ */
+function corridorBlockers(gapWidth: number): NavBlocker[] {
+  const half = gapWidth / 2;
+  const edge = RTS_WORLD_HALF_EXTENT + 2;
+  return [
+    { min: [-edge, -1, -1], max: [-half, 4, 1] },
+    { min: [half, -1, -1], max: [edge, 4, 1] },
+  ];
+}
+
+/** Walk a squad until it settles, and report whether every unit finished. */
+function simulateSquad(
+  units: readonly Unit[],
+  navigation: RtsNavigation,
+  seconds: number,
+): { readonly ticks: number } {
+  const dt = 1 / 30;
+  const ticks = Math.round(seconds / dt);
+  for (let i = 0; i < ticks; i += 1) {
+    updateUnitMovement(units, dt, { navigation });
+    updateUnitSeparation(units, dt, { navigation });
+  }
+  return { ticks };
+}
+
+check("Faz 7 a group order hands each unit its nearest slot, not its selection index", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  // Four units around the command point, one per quadrant. The 2x2 formation has
+  // a slot in each quadrant too, so the correct assignment is the one where
+  // nobody crosses the middle — which is exactly what index order would break,
+  // since these are spawned in the opposite order to the slots.
+  const northEast = units.spawn("player", 20, 20, RTS_TEST_UNIT_STATS);
+  const northWest = units.spawn("player", -20, 20, RTS_TEST_UNIT_STATS);
+  const southEast = units.spawn("player", 20, -20, RTS_TEST_UNIT_STATS);
+  const southWest = units.spawn("player", -20, -20, RTS_TEST_UNIT_STATS);
+  const squad = [northEast, northWest, southEast, southWest];
+
+  const assignments = assignGroupDestinations(squad, new Vector3(0, 0, 0), navigation);
+  const slot = new Map(assignments.map((a) => [a.unit, a.destination]));
+  for (const unit of squad) {
+    const destination = slot.get(unit) ?? assert.fail("unit missing a slot");
+    assert.ok(
+      Math.sign(destination.x) === Math.sign(unit.position.x)
+        && Math.sign(destination.z) === Math.sign(unit.position.z),
+      "each unit takes the slot on its own side instead of crossing the group",
+    );
+  }
+  assert.ok(
+    assignments.every((a) => a.path && a.path.length > 0),
+    "every unit gets a route on open ground",
+  );
+  assert.equal(
+    new Set(assignments.map((a) => `${a.destination.x}:${a.destination.z}`)).size,
+    4,
+    "no two units are sent to the same square",
+  );
+
+  // Determinism: the same selection, reordered, is the same set of orders.
+  const shuffled = assignGroupDestinations([southWest, northEast, southEast, northWest], new Vector3(0, 0, 0), navigation);
+  for (const a of shuffled) {
+    assert.deepEqual(
+      [a.destination.x, a.destination.z],
+      [slot.get(a.unit)?.x, slot.get(a.unit)?.z],
+      "assignment does not depend on selection order",
+    );
+  }
+});
+
+check("Faz 7 a squad clears a narrow corridor instead of jamming in it", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(corridorBlockers(3));
+
+  // Twelve Guards south of a 3-wide gap, ordered through it. Without separation
+  // they overlap into one body; without the congestion escape, the ones that
+  // cannot reach their slot grind against the group forever.
+  const squad: Unit[] = [];
+  for (let i = 0; i < 12; i += 1) {
+    squad.push(units.spawn("player", -4 + (i % 4) * 2.5, 8 + Math.floor(i / 4) * 2.5, RTS_TEST_UNIT_STATS));
+  }
+  for (const { unit, path } of assignGroupDestinations(squad, new Vector3(0, 0, -8), navigation)) {
+    assert.ok(path, "the corridor is passable for infantry");
+    unit.setMovePath(path ?? []);
+  }
+
+  simulateSquad(squad, navigation, 30);
+  assert.ok(
+    squad.every((unit) => unit.position.z < -4),
+    "every Guard is through the gap and on the far side",
+  );
+  assert.ok(
+    squad.every((unit) => unit.pathTarget === null),
+    "plan §45: no unit is left holding an order it can never finish",
+  );
+  // The whole point of separation: they arrive as twelve bodies, not one stack.
+  for (const unit of squad) {
+    for (const other of squad) {
+      if (unit === other) continue;
+      const gap = Math.hypot(unit.position.x - other.position.x, unit.position.z - other.position.z);
+      assert.ok(gap > unit.navRadius, `units ${unit.id} and ${other.id} are not standing inside each other`);
+    }
+  }
+});
+
+check("Faz 7 two squads meeting head-on in a bridge do not deadlock", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  // A bridge is the corridor case with traffic in both directions at once: the
+  // plan's acceptance is "köprüde kalıcı sıkışma oluşmuyor".
+  navigation.setBlockers(corridorBlockers(4));
+
+  const northbound: Unit[] = [];
+  const southbound: Unit[] = [];
+  for (let i = 0; i < 6; i += 1) {
+    northbound.push(units.spawn("player", -1.5 + (i % 2) * 3, 6 + Math.floor(i / 2) * 2.5, RTS_TEST_UNIT_STATS));
+    southbound.push(units.spawn("player", -1.5 + (i % 2) * 3, -6 - Math.floor(i / 2) * 2.5, RTS_TEST_UNIT_STATS));
+  }
+  for (const { unit, path } of assignGroupDestinations(northbound, new Vector3(0, 0, -10), navigation)) {
+    unit.setMovePath(path ?? []);
+  }
+  for (const { unit, path } of assignGroupDestinations(southbound, new Vector3(0, 0, 10), navigation)) {
+    unit.setMovePath(path ?? []);
+  }
+
+  const all = [...northbound, ...southbound];
+  simulateSquad(all, navigation, 40);
+  assert.ok(
+    all.every((unit) => unit.pathTarget === null),
+    "every crossing ends — in arrival or in a stop, never in a permanent jam",
+  );
+  assert.ok(
+    northbound.filter((unit) => unit.position.z < -1).length >= 4
+      && southbound.filter((unit) => unit.position.z > 1).length >= 4,
+    "both columns get the bulk of their units across the bridge",
+  );
+});
+
+check("Faz 7 the wide Ram crosses a corridor with its escort without being swallowed by it", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(corridorBlockers(4));
+
+  // The Ram is the largest body the roster fields. A siege line is escorted
+  // (§46: siege is weak against units), so the case that matters is the Ram
+  // inside a crowd of Guards, in a gap, not the Ram alone on open ground.
+  const ram = units.spawn("player", 0, 8, RTS_TEST_SIEGE_STATS);
+  const escort: Unit[] = [];
+  for (let i = 0; i < 8; i += 1) {
+    escort.push(units.spawn("player", -3 + (i % 4) * 2, 11 + Math.floor(i / 4) * 2, RTS_TEST_UNIT_STATS));
+  }
+  const squad = [ram, ...escort];
+  assert.ok(
+    escort.every((guard) => ram.navRadius > guard.navRadius),
+    "the siege body is wider than the infantry it travels with",
+  );
+
+  for (const { unit, path } of assignGroupDestinations(squad, new Vector3(0, 0, -8), navigation)) {
+    assert.ok(path, "the corridor carries the siege line");
+    unit.setMovePath(path ?? []);
+  }
+  simulateSquad(squad, navigation, 40);
+  assert.ok(squad.every((unit) => unit.position.z < -4), "the whole squad, Ram included, is through");
+  assert.ok(squad.every((unit) => unit.pathTarget === null), "and nobody is left grinding on an order");
+
+  // The width has to buy the Ram real ground: the crowd keeps its distance from
+  // the wide body, which is the one place the roster's radii are expressible.
+  for (const guard of escort) {
+    const gap = Math.hypot(ram.position.x - guard.position.x, ram.position.z - guard.position.z);
+    assert.ok(
+      gap > ram.navRadius,
+      `Guard ${guard.id} is standing inside the Ram (${gap.toFixed(2)} < ${ram.navRadius})`,
+    );
+  }
+});
+
+check("Faz 7 units contesting one spot time out into arrival instead of shoving forever", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const dt = 1 / 30;
+
+  // Six units sent to the exact same point — the shape of every real stall,
+  // since a body only ever fails to advance because another body is in the way.
+  // Five of them can never stand where they were told to; the timeout is what
+  // stops them spending the rest of the match pushing for it.
+  const goal = new Vector3(0, 0, 0);
+  const crowd: Unit[] = [];
+  for (let i = 0; i < 6; i += 1) {
+    const unit = units.spawn("player", -6 + i * 2.4, 9, RTS_TEST_UNIT_STATS);
+    unit.replanPath([goal.clone()]);
+    crowd.push(unit);
+  }
+  simulateSquad(crowd, navigation, 20);
+  assert.ok(
+    crowd.every((unit) => unit.pathTarget === null),
+    "plan §45: every contested order ends rather than grinding forever",
+  );
+  assert.ok(
+    crowd.every((unit) => congestionSeconds(unit) === 0),
+    "and the stall bookkeeping is released with it",
+  );
+  // Ending the order must not mean abandoning it far away: the point of the
+  // crowd-arrival rule is that they pile up *on* the objective.
+  assert.ok(
+    crowd.every((unit) => Math.hypot(unit.position.x, unit.position.z) < 4),
+    "the crowd settles on the objective it was given",
+  );
+
+  // Progress is never mistaken for congestion: an unobstructed walk keeps its
+  // order all the way to the end.
+  const free = units.spawn("player", 0, -20, RTS_TEST_UNIT_STATS);
+  const route = navigation.plan(free.position, new Vector3(0, 0, -50)) ?? assert.fail("route missing");
+  free.setMovePath(route);
+  // Stopped well short of arrival: this asserts the order survives the walk, so
+  // it must still be under way when the assertion runs.
+  for (let i = 0; i < 30 * 2; i += 1) updateUnitMovement([free], dt, { navigation });
+  assert.ok(free.position.z < -25 && free.pathTarget, "a unit making headway is still under orders");
+  assert.equal(congestionSeconds(free), 0, "and never accrues a stall");
+});
+
+check("Faz 7 a group order onto unreachable ground stops the unit instead of walking it into rock", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  // Movement follows waypoints and does not collide with terrain — planning is
+  // the only thing keeping a unit out of a rock. So an unroutable slot has to
+  // surface as "no path" at order time, not as a walk through the geometry.
+  navigation.setBlockers([{ min: [-6, -1, -16], max: [6, 4, -4] }]);
+  const unit = units.spawn("player", 0, 8, RTS_TEST_UNIT_STATS);
+  unit.setMovePath([new Vector3(0, 0, 4)]);
+
+  const orders = assignGroupDestinations([unit], new Vector3(0, 0, -10), navigation);
+  assert.equal(orders[0]?.path, null, "no route exists into the rock");
+  for (const order of orders) {
+    if (order.path) order.unit.setMovePath(order.path);
+    else order.unit.stop();
+  }
+  assert.equal(unit.pathTarget, null, "the refused order clears the unit's previous one");
+  simulateSquad([unit], navigation, 5);
+  assert.ok(unit.position.z > 0, "and the unit never sets off into the rock");
+});
+
+check("Faz 7 a 40-unit engagement stays within frame budget", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const all: Unit[] = [];
+  // Plan §46: "25–40 birimlik çatışma kabul edilebilir performansta." Two 20-unit
+  // armies walk into each other — the movement, separation and engagement passes
+  // together, which is the per-frame simulation cost of a real slice fight.
+  for (let i = 0; i < 20; i += 1) {
+    all.push(units.spawn("player", -10 + (i % 5) * 2, 12 + Math.floor(i / 5) * 2, RTS_TEST_UNIT_STATS));
+    all.push(units.spawn("enemy", -10 + (i % 5) * 2, -12 - Math.floor(i / 5) * 2, RTS_TEST_UNIT_STATS));
+  }
+  for (const { unit, path } of assignGroupDestinations(all.filter((u) => u.owner === "player"), new Vector3(0, 0, -12), navigation)) {
+    unit.setAttackMovePath(path ?? [], new Vector3(0, 0, -12));
+  }
+  for (const { unit, path } of assignGroupDestinations(all.filter((u) => u.owner === "enemy"), new Vector3(0, 0, 12), navigation)) {
+    unit.setAttackMovePath(path ?? [], new Vector3(0, 0, 12));
+  }
+
+  const dt = 1 / 30;
+  const frames = 300;
+  const started = performance.now();
+  for (let i = 0; i < frames; i += 1) {
+    updateUnitEngagement(units.all(), { navigation, targets: units.all() });
+    updateUnitMovement(units.all(), dt, { navigation });
+    updateUnitSeparation(units.all(), dt, { navigation });
+    updateUnitCombat(units.all(), dt);
+  }
+  const msPerFrame = (performance.now() - started) / frames;
+  // A generous ceiling on purpose: this is a floor-level regression guard against
+  // an O(n^2) pass creeping back in, not a rendering benchmark. Simulation for 40
+  // units has no business approaching a 16ms budget on its own.
+  assert.ok(
+    msPerFrame < 4,
+    `40-unit simulation costs ${msPerFrame.toFixed(2)}ms/frame, which no longer leaves room to render`,
+  );
+  assert.ok(
+    units.all().some((unit) => unit.health.current < unit.health.max),
+    "the armies actually met — an empty field would make the timing meaningless",
+  );
 });
 
 check("Faz 7 ranged attacks fire a tracer while melee does not", () => {
@@ -30841,26 +31111,16 @@ check("§60: the AI picks the outer economy while even and the centre once domin
   );
 });
 
-check("RTS match-start resources give the player 2000 food/wood and the AI 100", () => {
+check("RTS match-start resources are shared fairly by both kingdoms", () => {
   const preset = { food: 1000, wood: 1000, stone: 0, gold: 0 };
-  const playerStart = matchStartingResourcesFor("player", preset);
-  const enemyStart = matchStartingResourcesFor("enemy", preset);
-  assert.deepEqual(playerStart, { food: PLAYER_STARTING_FOOD_AND_WOOD, wood: PLAYER_STARTING_FOOD_AND_WOOD, stone: 0, gold: 0 });
-  assert.deepEqual(enemyStart, { food: AI_STARTING_FOOD_AND_WOOD, wood: AI_STARTING_FOOD_AND_WOOD, stone: 0, gold: 0 });
-
-  const kingdoms = new KingdomRegistry(
-    ["player", "enemy"], new UnitSystem(), new PlacedStructureSystem(), preset, 20,
-    { player: playerStart, enemy: enemyStart },
-  );
-  assert.equal(kingdoms.get("player").wallet.amount("food"), 2000);
-  assert.equal(kingdoms.get("player").wallet.amount("wood"), 2000);
-  assert.equal(kingdoms.get("enemy").wallet.amount("food"), 100);
-  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 100);
+  const kingdoms = new KingdomRegistry(["player", "enemy"], new UnitSystem(), new PlacedStructureSystem(), preset, 20);
+  assert.deepEqual(kingdoms.get("player").wallet.snapshot(), preset);
+  assert.deepEqual(kingdoms.get("enemy").wallet.snapshot(), preset);
   kingdoms.get("player").wallet.credit("food", 1);
   kingdoms.get("enemy").wallet.credit("wood", 1);
   kingdoms.reset();
-  assert.equal(kingdoms.get("player").wallet.amount("food"), 2000, "restart restores the player start");
-  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 100, "restart restores the AI start");
+  assert.deepEqual(kingdoms.get("player").wallet.snapshot(), preset, "restart restores the shared player start");
+  assert.deepEqual(kingdoms.get("enemy").wallet.snapshot(), preset, "restart restores the shared AI start");
 });
 
 check("§62/§65: the AI retreats on a lost exchange and on a ground-down army", () => {

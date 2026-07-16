@@ -24,19 +24,13 @@ export interface EngagementOptions {
    * the composition root sees units, centres and structures at once.
    */
   readonly targets: readonly CombatTarget[];
-  /**
-   * Optional veto mirroring the combat system's own. The test sandbox stops the
-   * AI damaging the player's centre; without the same veto here its army would
-   * still lock onto the centre and stand there swinging at nothing.
-   */
-  readonly canEngage?: (attacker: Unit, target: CombatTarget) => boolean;
 }
 
 export function updateUnitEngagement(units: readonly Unit[], options: EngagementOptions): void {
   for (const unit of units) {
     if (unit.role === "worker" || unit.health.depleted || unit.dying) continue;
 
-    releaseInvalidTarget(unit, options);
+    releaseInvalidTarget(unit);
     if (!unit.attackTarget) acquireTarget(unit, options);
     if (!unit.attackTarget) resumeAttackMove(unit, options);
   }
@@ -49,10 +43,10 @@ export function updateUnitEngagement(units: readonly Unit[], options: Engagement
  * simply holds the ground it drifted to rather than walking home through the
  * enemy that just baited it.
  */
-function releaseInvalidTarget(unit: Unit, options: EngagementOptions): void {
+function releaseInvalidTarget(unit: Unit): void {
   const target = unit.attackTarget;
   if (!target) return;
-  if (target.health.depleted || options.canEngage?.(unit, target) === false) {
+  if (target.health.depleted) {
     unit.setAttackTarget(null);
     return;
   }
@@ -123,7 +117,6 @@ function nearestHostile(
   for (const target of options.targets) {
     if (target === (unit as CombatTarget)) continue;
     if (target.owner === unit.owner || target.health.depleted) continue;
-    if (options.canEngage?.(unit, target) === false) continue;
     const distance = combatDistance(unit.position, target);
     if (distance > range) continue;
     // Troops outrank buildings at any distance inside the circle: a Guard that

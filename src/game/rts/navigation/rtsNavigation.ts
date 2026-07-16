@@ -5,7 +5,7 @@
  * The grid is cached until the blocker set changes. The field starts obstacle
  * free; building placement supplies blockers through `setBlockers` in Faz 2.
  */
-import { NavGridCache, searchNavGrid, type NavBlocker } from "@engine/navigation/gridNavigation";
+import { NavGridCache, searchNavGrid, type NavBlocker, type NavGrid } from "@engine/navigation/gridNavigation";
 import { Vector3 } from "three";
 
 import { UNIT_RADIUS } from "../units/unit";
@@ -34,16 +34,18 @@ export class RtsNavigation {
   /**
    * Return a waypoint path, including the exact start/goal, or null when the
    * destination cannot be reached within the current ground bounds.
+   *
+   * Every role plans on the one infantry grid, including the wider Ram. That is
+   * a resolution decision, not an oversight: the cell is 1 world unit and the
+   * whole roster's radii span 0.39–0.75, so a per-agent grid could not express a
+   * gap that admits a Guard and refuses a Ram — it would only cost a second
+   * 14k-cell bake per blocker change to return the same answer. The Ram's width
+   * is enforced where it is expressible instead: `unitSeparation` spaces bodies
+   * by {@link Unit.navRadius}. Revisit if the cell size ever drops (which needs
+   * the engine's `MAX_GRID_CELLS` raised first).
    */
   plan(start: Vector3, goal: Vector3): Vector3[] | null {
-    const grid = this.gridCache.getOrBuild(`rts:${this.revision}`, {
-      agent: { radius: UNIT_RADIUS, height: UNIT_HEIGHT },
-      blockers: this.blockers,
-      bounds: NAV_BOUNDS,
-      footY: 0,
-      cellSize: CELL_SIZE,
-      safetyMargin: 0,
-    });
+    const grid = this.grid();
     if (!grid) return null;
     const result = searchNavGrid(
       grid,
@@ -53,6 +55,32 @@ export class RtsNavigation {
     return result.status === "success"
       ? result.points.map(([x, y, z]) => new Vector3(x, y, z))
       : null;
+  }
+
+  /**
+   * Whether a unit may stand on a ground point. Crowd separation uses this to
+   * veto a shove that would push a body inside a ridge or off the map: the grid,
+   * not the pusher, stays the authority on where a unit is allowed to be.
+   */
+  isWalkable(x: number, z: number): boolean {
+    const grid = this.grid();
+    if (!grid) return false;
+    const col = Math.round((x - grid.originX) / grid.cellSize);
+    const row = Math.round((z - grid.originZ) / grid.cellSize);
+    if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) return false;
+    return grid.passable[row * grid.cols + col] === 1;
+  }
+
+  /** The single baked grid, rebuilt only when the blocker set changes. */
+  private grid(): NavGrid | null {
+    return this.gridCache.getOrBuild(`rts:${this.revision}`, {
+      agent: { radius: UNIT_RADIUS, height: UNIT_HEIGHT },
+      blockers: this.blockers,
+      bounds: NAV_BOUNDS,
+      footY: 0,
+      cellSize: CELL_SIZE,
+      safetyMargin: 0,
+    });
   }
 
   /**

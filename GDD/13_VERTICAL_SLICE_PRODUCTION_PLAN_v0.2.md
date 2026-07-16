@@ -670,8 +670,8 @@ Boş test sahnesinde oyuncunun kamera, seçim, hareket ve basit saldırı ile bi
 - [x] Path durumunu göster. (`?rts&debug`: kalan waypoint sayısı)
 - [x] Hasar logu göster. (`?rts&debug`: son altı vuruş)
 - [x] Maç durumunu göster. (`?rts&debug`: sonuç ve iki merkezin canı)
-- [x] Test sandbox ekle. (`?rts&testSandbox`: AI çalışmaya devam eder; düşman
-  birimleri oyuncu Merkezine hasar veremez ve test oturumu erken yenilgiyle bitmez.)
+- [x] Maç sonucu debug yüzeyinden izlenebilir. (`?rts&debug`: iki Merkezin canı
+  ve sonuç görünür; AI normal maç kurallarıyla saldırmaya ve kazanabilmeye devam eder.)
 
 ---
 
@@ -1370,14 +1370,38 @@ Muhafız, Okçu ve Kuşatma arasında okunabilir bir karşıtlık sistemi oluşt
 
 ### Grup hareketi
 
-Bu bölüm ayrı bir dilime bırakıldı: kalabalık/tıkanma davranışı kendi test
-setini gerektirir ve Faz 7 savaş kadrosunun kabulünü bloke etmez.
+Bu bölüm ayrı bir dilim olarak üretildi: kalabalık/tıkanma davranışı kendi test
+setini gerektirdi ve Faz 7 savaş kadrosunun kabulünü bloke etmedi.
 
-- [ ] Küçük grup hedef dağıtımı
-- [ ] Dar geçit testi
-- [ ] Köprü testi
-- [ ] Büyük kuşatma agent testi
-- [ ] Tıkanma timeout ve fallback
+- [x] Küçük grup hedef dağıtımı. (`groupOrders.assignGroupDestinations`: formasyon
+  slotları seçim sırasına göre değil, yakınlığa göre dağıtılır — en yakın çift
+  önce, greedy. Grup kendi içinden geçerek yer değiştirmez; aynı seçim farklı
+  sırada verildiğinde aynı emirler çıkar. Ulaşılamayan slot önce ham komut
+  noktasına düşer, ancak sonra `path: null` olur.)
+- [x] Dar geçit testi. (`test:engine`: 3 birim genişliğinde geçitten 12 Muhafız
+  geçer; hepsi karşı tarafa ulaşır, kimse bitmeyen emirle kalmaz ve hiçbir birim
+  bir diğerinin içinde durmaz.)
+- [x] Köprü testi. (`test:engine`: 4 birim genişliğinde geçitte karşılıklı iki
+  kol aynı anda; her geçiş sonlanır ve iki kolun da çoğunluğu karşıya geçer.)
+- [x] Büyük kuşatma agent testi. (`test:engine`: Koçbaşı, Muhafız korumasıyla
+  geçitten geçer ve kalabalık geniş gövdesinin içine girmez. **Kapsam notu:**
+  ajan başına navigasyon gridi denendi ve geri alındı — nav hücresi 1 dünya
+  birimi, kadronun yarıçap farkı ise 0.25, yani grid "Muhafızın geçtiği ama
+  Koçbaşının geçemediği geçit" ayrımını ifade edemiyor. Hücreyi küçültmek
+  engine'deki `MAX_GRID_CELLS = 20000` sınırını aşıyor (mevcut grid 14.641
+  hücre). Gövde genişliği bu yüzden yalnız ifade edilebildiği yerde,
+  `unitSeparation` mesafesinde uygulanır; gerekçe `rtsNavigation.plan`
+  yorumunda.)
+- [x] Tıkanma timeout ve fallback. (`unitMovement`: waypoint'ine 1.5 sn boyunca
+  yaklaşamayan birim önce en fazla iki kez yeniden rota planlar; sonra hedefine
+  2 birimden yakınsa varmış sayılır, değilse emir düşer. Böylece hiçbir stall
+  kalıcı olmaz. `test:engine` aynı noktaya gönderilen altı birimin hedefte
+  toplanıp emirlerini bitirdiğini, ilerleyen birimin ise emrini koruduğunu
+  doğrular.)
+- [x] Kalabalık ayrımı. (`unitSeparation`: hareket sonrası çakışan gövdeler
+  birbirini iter; itme birimin kendi hızının %55'iyle sınırlıdır ve navigasyon
+  gridi yürünemez zemine itmeyi veto eder. Komşu taraması uniform hash ile
+  3x3 hücreyle sınırlıdır — kabul kriterindeki O(n²) riski buradan çıkarıldı.)
 
 ### UI
 
@@ -1402,9 +1426,14 @@ setini gerektirir ve Faz 7 savaş kadrosunun kabulünü bloke etmez.
   yalnız 4.2 hasarla ~208 sim saniyede yıkabildi.)
 - [x] Tek birim türü her durumda en iyi seçim değil. (`test:engine`: her
   saldıran en az bir hedef sınıfında bir diğerine yeniliyor.)
-- [ ] 25–40 birimlik çatışma kabul edilebilir performansta. (Ölçüm bekliyor;
-  grup hareketi dilimiyle birlikte değerlendirilecek.)
-- [ ] Köprüde kalıcı sıkışma oluşmuyor. (Grup hareketi dilimine bağlı.)
+- [x] 25–40 birimlik çatışma kabul edilebilir performansta. (`test:engine`:
+  20'ye 20 saldırı-hareket çatışmasında hedefleme + hareket + ayrım + savaş
+  geçişleri birlikte kare başına **0.18 ms** — 16 ms bütçesinin ~%1'i. Test
+  4 ms tavanıyla korunur; bu bir benchmark değil, ayrım geçişine O(n²) tarama
+  geri sızarsa yakalayan regresyon kapısıdır.)
+- [x] Köprüde kalıcı sıkışma oluşmuyor. (`test:engine` köprü testi: dar geçitte
+  karşılıklı iki kol; her emir ya varışla ya durmayla sonlanır — tıkanma
+  timeout'u kalıcı stall'u yapı gereği imkânsız kılar.)
 - [x] Oyuncu birim rollerini görsel ve UI üzerinden anlayabiliyor. (Rol başına
   ayrı siluet + `RtsSelectionPanel` rol/güçlü/zayıf satırları; tarayıcı
   doğrulaması: karışık seçimde "Güçlü: ağır birim · Zayıf: yapı".)

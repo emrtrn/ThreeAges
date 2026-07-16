@@ -42,11 +42,11 @@ import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
 import { RtsMapArt } from "./world/rtsMapArt";
 import { UnitSystem } from "./units/unitSystem";
 import { updateUnitMovement } from "./units/unitMovement";
+import { updateUnitSeparation } from "./units/unitSeparation";
 import { updateUnitCombat } from "./units/unitCombat";
 import { updateUnitDeaths } from "./units/unitDeath";
 import { updateUnitEngagement } from "./combat/engagementSystem";
 import { ProjectileSystem } from "./combat/projectileSystem";
-import type { CombatTarget } from "./combat/combatTarget";
 import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
@@ -63,7 +63,6 @@ import { PlacedStructureSystem, type PlacedStructure } from "./structures/placed
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { StructureConstructionService } from "./structures/structureConstructionService";
 import { KingdomRegistry } from "./kingdom/kingdomRegistry";
-import { matchStartingResourcesFor } from "./kingdom/matchStartingResources";
 import { RoadConstructionService } from "./roads/roadConstructionService";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
@@ -78,7 +77,7 @@ import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
-import type { Unit, UnitOwner } from "./units/unit";
+import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "./structures/structureUpgradeSystem";
@@ -118,8 +117,6 @@ const AI_OWNER: UnitOwner = "enemy";
 export interface RtsAppOptions {
   /** `?debug`: shows the compact Faz 1 RTS state/debug panel. */
   readonly debug?: boolean;
-  /** `?testSandbox`: enemy units cannot damage the player's command centre. */
-  readonly testSandbox?: boolean;
   /** `?flags=prosperity`: debug information only; never a gameplay requirement. */
   readonly prosperityDebugEnabled?: boolean;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
@@ -233,10 +230,6 @@ export class RtsApp {
       this.structures,
       this.options.startingResources,
       SETTLEMENT_POPULATION_CAPACITY,
-      {
-        [PLAYER_OWNER]: matchStartingResourcesFor(PLAYER_OWNER, this.options.startingResources),
-        [AI_OWNER]: matchStartingResourcesFor(AI_OWNER, this.options.startingResources),
-      },
     );
     this.ages = new AgeSystem(KINGDOM_OWNERS, this.options.ageBalance, this.centers, this.structures, this.kingdoms);
     this.structureUpgrades = new StructureUpgradeSystem(
@@ -543,7 +536,7 @@ export class RtsApp {
     this.resize();
     this.lastTime = performance.now();
     this.log.info(
-      `RTS runtime started${this.options.debug ? " (debug)" : ""}${this.options.testSandbox ? " (test sandbox)" : ""}`,
+      `RTS runtime started${this.options.debug ? " (debug)" : ""}`,
     );
     this.frameHandle = requestAnimationFrame(this.onFrame);
   }
@@ -712,15 +705,9 @@ export class RtsApp {
   }
 
   /** Every damageable thing on the field, for target acquisition. */
-  private combatTargets(): readonly CombatTarget[] {
+  private combatTargets() {
     return [...this.units.all(), ...this.centers.all(), ...this.structures.all()];
   }
-
-  /** The sandbox veto, shared by damage resolution and target acquisition. */
-  private readonly canEngage = (attacker: Unit, target: CombatTarget): boolean =>
-    !(this.options.testSandbox
-      && attacker.owner === AI_OWNER
-      && target === this.centers.get(PLAYER_OWNER));
 
   private commitRallyPoint(x: number, y: number): void {
     const point = this.commands.groundPointAt(x, y);
@@ -761,9 +748,11 @@ export class RtsApp {
     updateUnitEngagement(this.units.all(), {
       navigation: this.navigation,
       targets: this.combatTargets(),
-      canEngage: this.canEngage,
     });
-    updateUnitMovement(this.units.all(), dt);
+    updateUnitMovement(this.units.all(), dt, { navigation: this.navigation });
+    // Separation runs after movement so it corrects the overlap this frame's
+    // steps actually created, rather than one frame of stale positions.
+    updateUnitSeparation(this.units.all(), dt, { navigation: this.navigation });
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
     this.logisticsTransfers.update();
@@ -800,7 +789,6 @@ export class RtsApp {
         this.debugOverlay?.recordHit(hit);
         if (hit.ranged) this.projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
       },
-      this.canEngage,
     );
     updateUnitDeaths(this.units, this.selection, dt);
     this.destroyRuinedStructures();

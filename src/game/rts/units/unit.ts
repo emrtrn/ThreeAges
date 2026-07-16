@@ -71,6 +71,12 @@ export class Unit {
   readonly role: UnitRoleId;
   /** Ground speed in world units/s, from `balance/units.json`. */
   readonly speed: number;
+  /**
+   * Ground footprint radius, used both to plan on a grid the body actually fits
+   * and to keep the crowd from standing inside itself. It follows the silhouette:
+   * the Ram is genuinely wider than the Archer, so it navigates as a wider agent.
+   */
+  readonly navRadius: number;
   /** {@link CombatTarget}: which §33 column attackers resolve against. */
   readonly armorClass: UnitBalanceStats["armorClass"];
   /** Bounded health state; death/removal is handled by the death system. */
@@ -122,6 +128,7 @@ export class Unit {
     this.attack = new AttackComponent(stats);
 
     const shape = ROLE_BODY[this.role];
+    this.navRadius = shape.radius;
     const geometry: BufferGeometry = shape.box
       ? new BoxGeometry(shape.radius * 2, shape.length, shape.radius * 2.6)
       : new CapsuleGeometry(shape.radius, shape.length, 6, 12);
@@ -230,8 +237,12 @@ export class Unit {
     this.attackMoveTarget = destination.clone();
   }
 
-  /** Replace the route followed while retaining the current attack target. */
-  setAttackPath(points: readonly Vector3[]): void {
+  /**
+   * Swap the route under the current order, leaving the order itself alone.
+   * This is how an attack pursuit gets its path, and how congestion re-planning
+   * hands a jammed unit a fresh route without cancelling what it was told to do.
+   */
+  replanPath(points: readonly Vector3[]): void {
     this.moveTarget = null;
     this.movePath = points.map((point) => point.clone());
   }
@@ -239,6 +250,11 @@ export class Unit {
   /** Current navigation waypoint, or null when not following a planned path. */
   get pathTarget(): Vector3 | null {
     return this.movePath[0] ?? null;
+  }
+
+  /** Final point of the planned route, or null when not following one. */
+  get pathDestination(): Vector3 | null {
+    return this.movePath[this.movePath.length - 1] ?? null;
   }
 
   /** Remaining planned waypoints, for debug readout only. */

@@ -24,5 +24,5 @@ export function issueAttackOrder(
   // A later moving-target pursuit slice can add a distance/cadence replan.
   if (!targetChanged) return;
   const path = navigation.planAttack(unit.position, target, unit.attack.range);
-  unit.setAttackPath(path ?? []);
+  unit.replanPath(path ?? []);
 }
