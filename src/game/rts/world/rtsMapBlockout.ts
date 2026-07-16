@@ -10,6 +10,7 @@
 import { BoxGeometry, CircleGeometry, Color, Group, Mesh, MeshStandardMaterial } from "three";
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
+import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
 
 export interface RtsMapPoint {
   readonly x: number;
@@ -72,6 +73,8 @@ export interface RtsMapBlockout {
   readonly enemyBaseAnchors: readonly RtsBuildAnchor[];
   /** The enemy kingdom's single authored expansion (§10: one region in AI-1). */
   readonly enemyExpansion: RtsExpansionRegion;
+  /** Faz 6's finite safe and external stone/gold deposits. */
+  readonly resourceNodes: readonly RtsResourceNodeDefinition[];
   /** Static obstacle footprints consumed by `RtsNavigation`. */
   readonly navigationBlockers: readonly NavBlocker[];
 }
@@ -119,6 +122,14 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
       { x: -24, z: -28 },
     ],
   },
+  resourceNodes: [
+    { id: "player_safe_stone", resourceId: "stone", kind: "safe", x: -4, z: 10 },
+    { id: "player_safe_gold", resourceId: "gold", kind: "safe", x: 4, z: 10 },
+    { id: "enemy_safe_stone", resourceId: "stone", kind: "safe", x: -4, z: -14 },
+    { id: "enemy_safe_gold", resourceId: "gold", kind: "safe", x: 4, z: -14 },
+    { id: "external_stone", resourceId: "stone", kind: "external", x: -34, z: 16 },
+    { id: "external_gold", resourceId: "gold", kind: "external", x: 34, z: 16 },
+  ],
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },
   ],
@@ -133,6 +144,14 @@ export function createRtsMapBlockout(map: RtsMapBlockout = RTS_BLOCKOUT_MAP): Gr
   root.add(createZoneMarker("rts-enemy-start", map.enemyStart, "#c0392b", 8));
   root.add(createZoneMarker("rts-central-expansion", map.centralExpansion, "#d7ad52", 7));
   root.add(createZoneMarker("rts-external-resource", map.externalResource, "#63a86e", 5));
+  for (const node of map.resourceNodes) {
+    root.add(createZoneMarker(
+      `rts-resource-node-${node.id}`,
+      node,
+      node.resourceId === "gold" ? "#d6af3a" : "#8f969b",
+      node.kind === "external" ? 2.5 : 2,
+    ));
+  }
 
   for (const blocker of map.navigationBlockers) {
     root.add(createRockRidge(blocker));

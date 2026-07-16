@@ -77,6 +77,7 @@ import {
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
+import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import {
   DepotLogisticsSystem,
   roadCellTouchingFootprint,
@@ -27934,6 +27935,70 @@ check("Faz 6 stone and gold data defines finite safe and richer external deposit
     ...raw,
     gold: { ...(raw.gold as object), safeNode: { capacity: 0, perWorkerPerMinute: 3 } },
   }), GameDataError, "empty deposits are invalid data, not an exhausted starting state");
+});
+
+check("Faz 6 quarry uses its finite stone node and cannot be placed away from one", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const quarry = buildings.quarry ?? assert.fail("quarry balance missing");
+  assert.equal(quarry.economy?.resourceId, "stone");
+  assert.equal(quarry.economy?.requiresResourceNode, true);
+
+  const resourceBalance = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  // A deliberately tiny source makes depletion observable in a fast headless test.
+  const nodes = new ResourceNodeSystem({
+    ...resourceBalance,
+    stone: { ...resourceBalance.stone!, safeNode: { capacity: 1, perWorkerPerMinute: 5 } },
+  }, [{ id: "test-stone", resourceId: "stone", kind: "safe", x: 0, z: 0 }]);
+
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 10);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(centers.navigationBlockers());
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 500 }, 20);
+  const territory = new TerritoryControlSystem(() => centers.all().map((center) => ({
+    owner: center.owner, x: center.position.x, z: center.position.z, radius: COMMAND_CENTER_CONTROL_RADIUS,
+  })));
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => [...centers.navigationBlockers(), ...structures.navigationBlockers()],
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => stats.economy?.requiresResourceNode
+      && !nodes.canExtractAt(stats.economy.resourceId, x, z, stats.footprint.width, stats.footprint.depth)
+      ? "missing-resource-node"
+      : null,
+  );
+  assert.equal(construction.validate("player", "quarry", 4, 0)?.reason, "missing-resource-node");
+  const built = construction.build("player", "quarry", 0, 0);
+  assert.ok(built.built, "the same quarry is legal when it covers matching stone");
+  if (!built.built) return assert.fail("quarry construction unexpectedly failed");
+  structures.advanceConstruction(built.structure, quarry.constructionSeconds);
+
+  const worker = units.spawn("player", 5, 0, RTS_TEST_UNIT_STATS, "worker");
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false, nodes);
+  let withdrawn = 0;
+  for (let tick = 0; tick < 80; tick += 1) {
+    updateUnitMovement(units.all(), 0.5);
+    production.update(0.5);
+    withdrawn += production.withdrawBuffered(built.structure.id)?.amount ?? 0;
+  }
+  const snapshot = production.snapshots("player")[0] ?? assert.fail("quarry producer missing");
+  assert.equal(snapshot.sourceRemaining, 0);
+  assert.equal(snapshot.status, "source-depleted");
+  assert.ok(Math.abs(withdrawn - 1) < 0.0001, "a finite node never pays more material than it holds");
+  assert.equal(production.isAssigned(worker), false, "workers are released once their source is exhausted");
+  territory.dispose();
 });
 
 check("RTS economy producers report income, survive a ten-minute run, and stop at their local buffer capacity", () => {

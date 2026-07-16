@@ -10,9 +10,10 @@ import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
+import type { ResourceNodeSystem } from "./resourceNodeSystem";
 
 export type EconomyWorkerState = "idle" | "moving" | "producing";
-export type EconomyProductionStatus = "awaiting-workers" | "workers-moving" | "producing" | "buffer-full";
+export type EconomyProductionStatus = "awaiting-workers" | "workers-moving" | "producing" | "buffer-full" | "missing-resource-node" | "source-depleted";
 
 export interface EconomyBuildingSnapshot {
   readonly structureId: number;
@@ -29,6 +30,8 @@ export interface EconomyBuildingSnapshot {
   readonly lastTransferTick: number;
   readonly totalProduced: number;
   readonly totalTransferred: number;
+  /** Remaining material at a finite source; null for renewable producers. */
+  readonly sourceRemaining: number | null;
   readonly status: EconomyProductionStatus;
 }
 
@@ -60,6 +63,7 @@ export class EconomyProductionSystem {
     private readonly structures: PlacedStructureSystem,
     private readonly navigation: RtsNavigation,
     private readonly isWorkerConstructing: (worker: Unit) => boolean,
+    private readonly resourceNodes?: ResourceNodeSystem,
   ) {}
 
   update(deltaSeconds: number): void {
@@ -110,6 +114,15 @@ export class EconomyProductionSystem {
           lastTransferTick: producer.lastTransferTick,
           totalProduced: producer.totalProduced,
           totalTransferred: producer.totalTransferred,
+          sourceRemaining: economy.requiresResourceNode
+            ? this.resourceNodes?.remainingAt(
+              economy.resourceId,
+              producer.structure.x,
+              producer.structure.z,
+              producer.structure.stats.footprint.width,
+              producer.structure.stats.footprint.depth,
+            ) ?? null
+            : null,
           status: producer.status,
         };
       });
@@ -180,6 +193,25 @@ export class EconomyProductionSystem {
     producer.lastProductionTick = 0;
     producer.lastTransferTick = 0;
     this.dropInvalidAssignments(producer);
+    if (economy.requiresResourceNode) {
+      if (!this.resourceNodes || !this.resourceNodes.canExtractAt(
+        economy.resourceId,
+        producer.structure.x,
+        producer.structure.z,
+        producer.structure.stats.footprint.width,
+        producer.structure.stats.footprint.depth,
+      )) {
+        this.releaseProducer(producer);
+        producer.status = this.resourceNodes?.remainingAt(
+          economy.resourceId,
+          producer.structure.x,
+          producer.structure.z,
+          producer.structure.stats.footprint.width,
+          producer.structure.stats.footprint.depth,
+        ) === 0 ? "source-depleted" : "missing-resource-node";
+        return;
+      }
+    }
     if (producer.localBuffer >= economy.localBufferCapacity) {
       producer.localBuffer = economy.localBufferCapacity;
       producer.status = "buffer-full";
@@ -199,11 +231,27 @@ export class EconomyProductionSystem {
       producer.status = producer.assignments.size === 0 ? "awaiting-workers" : "workers-moving";
       return;
     }
-    const produced = (workingWorkers * economy.perWorkerPerMinute * deltaSeconds) / 60;
-    producer.lastProductionTick = Math.min(produced, economy.localBufferCapacity - producer.localBuffer);
+    const requested = Math.min(
+      (workingWorkers * economy.perWorkerPerMinute * deltaSeconds) / 60,
+      economy.localBufferCapacity - producer.localBuffer,
+    );
+    producer.lastProductionTick = economy.requiresResourceNode
+      ? this.resourceNodes?.extract(
+        economy.resourceId,
+        producer.structure.x,
+        producer.structure.z,
+        producer.structure.stats.footprint.width,
+        producer.structure.stats.footprint.depth,
+        requested,
+      ) ?? 0
+      : requested;
     producer.localBuffer += producer.lastProductionTick;
     producer.totalProduced += producer.lastProductionTick;
-    producer.status = producer.localBuffer >= economy.localBufferCapacity ? "buffer-full" : "producing";
+    producer.status = producer.lastProductionTick <= 0 && economy.requiresResourceNode
+      ? "source-depleted"
+      : producer.localBuffer >= economy.localBufferCapacity
+        ? "buffer-full"
+        : "producing";
   }
 
   private assignIdleWorkers(producer: ProducerRecord): void {

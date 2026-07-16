@@ -11,7 +11,7 @@
  * system above it keeps only the input and preview concerns.
  */
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import type { BuildingBalance } from "../../data/gameDataTypes";
+import type { BuildingBalance, BuildingBalanceStats } from "../../data/gameDataTypes";
 import type { ResourceReservation } from "../economy/resourceWallet";
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
@@ -25,7 +25,8 @@ export type StructureBuildFailure =
   | "outside-map"
   | "outside-control"
   | "blocked"
-  | "insufficient-resources";
+  | "insufficient-resources"
+  | "missing-resource-node";
 
 export type StructureBuildResult =
   | { readonly built: true; readonly structure: PlacedStructure; readonly result: PlacementResult }
@@ -43,6 +44,8 @@ export class StructureConstructionService {
     private readonly territory: TerritoryControlSystem,
     private readonly onStructurePlaced: (structure: PlacedStructure) => void,
     private readonly onStructureCancelled: (structure: PlacedStructure) => void,
+    /** Optional world-specific requirement, e.g. Faz 6 extractors covering a deposit. */
+    private readonly additionalPlacementFailure?: (stats: BuildingBalanceStats, x: number, z: number) => PlacementResult["reason"],
   ) {}
 
   /**
@@ -52,11 +55,14 @@ export class StructureConstructionService {
   validate(owner: UnitOwner, buildingId: string, x: number, z: number): PlacementResult | null {
     const stats = this.buildings[buildingId];
     if (!stats || buildingId === "command_center") return null;
-    return validateBuildingPlacement(stats, x, z, this.occupiedBlockers(), {
+    const result = validateBuildingPlacement(stats, x, z, this.occupiedBlockers(), {
       owner,
       ownsFootprint: this.territory.ownsFootprint.bind(this.territory),
       canPlaceExpansion: this.territory.canPlaceExpansion.bind(this.territory),
     });
+    if (!result.valid) return result;
+    const reason = this.additionalPlacementFailure?.(stats, result.x, result.z) ?? null;
+    return reason ? { ...result, valid: false, reason } : result;
   }
 
   /** Validate, reserve the owner's resources, and create the construction site. */

@@ -1199,9 +1199,12 @@ Kapı A geçilmezse:
   kapasitesi ve işçi başına üretim hızı; `ResourceBalance` doğrulayıcısı.)
 - [x] Altın kaynağı verisi. (`balance/resources.json`: güvenli/dış Altın düğümü
   kapasitesi ve işçi başına üretim hızı; RTS açılışında veri yükleniyor.)
-- [ ] Taş Ocağı
-- [ ] Altın Madeni
-- [ ] Kaynak düğümü tükenmesi
+- [x] Taş Ocağı. (`quarry`: yalnız Taş düğümünü örten yerleşim, üç işçi ve
+  düğümden çekilen sonlu üretim; düğüm bittiğinde işçiler serbest kalır.)
+- [x] Altın Madeni. (`gold_mine`: yalnız Altın düğümünü örten yerleşim, üç işçi ve
+  düğümden çekilen sonlu üretim.)
+- [x] Kaynak düğümü tükenmesi. (`ResourceNodeSystem`: güvenli/dış düğüm kapasitesi
+  biter, üretim durur; `test:engine` taş düğümü tükenmesini ve işçi bırakmayı doğrular.)
 - [x] Güvenli ve dış kaynak kapasite farkları. (`test:engine`: her iki kaynakta
   dış düğümün toplam kapasitesi güvenli düğümden büyük olmak zorunda; eşit/bozuk
   veri açık hata veriyor.)

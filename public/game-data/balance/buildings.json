@@ -59,6 +59,34 @@
       "localBufferCapacity": 40
     }
   },
+  "quarry": {
+    "label": "Taş Ocağı",
+    "footprint": { "width": 6, "depth": 6 },
+    "cost": { "wood": 120 },
+    "constructionSeconds": 40,
+    "maxHealth": 450,
+    "economy": {
+      "resourceId": "stone",
+      "workerCapacity": 3,
+      "perWorkerPerMinute": 5,
+      "localBufferCapacity": 40,
+      "requiresResourceNode": true
+    }
+  },
+  "gold_mine": {
+    "label": "Altın Madeni",
+    "footprint": { "width": 6, "depth": 6 },
+    "cost": { "wood": 140 },
+    "constructionSeconds": 45,
+    "maxHealth": 450,
+    "economy": {
+      "resourceId": "gold",
+      "workerCapacity": 3,
+      "perWorkerPerMinute": 3,
+      "localBufferCapacity": 40,
+      "requiresResourceNode": true
+    }
+  },
   "barracks": {
     "label": "Kışla",
     "footprint": { "width": 8, "depth": 8 },

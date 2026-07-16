@@ -267,13 +267,23 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       const workerCapacity = requireFiniteNumber(economyData, "workerCapacity", economyWhere);
       const perWorkerPerMinute = requireFiniteNumber(economyData, "perWorkerPerMinute", economyWhere);
       const localBufferCapacity = requireFiniteNumber(economyData, "localBufferCapacity", economyWhere);
+      const requiresResourceNode = economyData["requiresResourceNode"];
       if (!Number.isInteger(workerCapacity) || workerCapacity <= 0) {
         throw new GameDataError(`${economyWhere}.workerCapacity: must be a positive integer`);
       }
       if (perWorkerPerMinute <= 0 || localBufferCapacity <= 0) {
         throw new GameDataError(`${economyWhere}: production rate and local buffer capacity must be > 0`);
       }
-      economy = { resourceId, workerCapacity, perWorkerPerMinute, localBufferCapacity };
+      if (requiresResourceNode !== undefined && typeof requiresResourceNode !== "boolean") {
+        throw new GameDataError(`${economyWhere}.requiresResourceNode: must be a boolean`);
+      }
+      economy = {
+        resourceId,
+        workerCapacity,
+        perWorkerPerMinute,
+        localBufferCapacity,
+        ...(requiresResourceNode === true ? { requiresResourceNode: true } : {}),
+      };
     }
     const territoryRaw = stats["territory"];
     let territory: BuildingBalance["string"]["territory"];

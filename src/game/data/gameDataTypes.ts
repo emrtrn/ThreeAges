@@ -93,12 +93,14 @@ export interface BuildingBalanceStats {
   readonly territory?: TerritoryBuildingBalance;
 }
 
-/** Data-owned first-pass production behaviour for a food or wood structure. */
+/** Data-owned production behaviour for an RTS resource structure. */
 export interface EconomyProductionBalance {
   readonly resourceId: string;
   readonly workerCapacity: number;
   readonly perWorkerPerMinute: number;
   readonly localBufferCapacity: number;
+  /** Stone/gold buildings must cover a live matching finite deposit. */
+  readonly requiresResourceNode?: boolean;
 }
 
 /** Territory source and bounded expansion rule supplied by a completed structure. */

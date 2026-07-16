@@ -64,6 +64,7 @@ import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
+import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
@@ -161,6 +162,7 @@ export class RtsApp {
   private readonly roadConstruction: RoadConstructionService;
   private readonly workerConstruction: WorkerConstructionSystem;
   private economyProduction: EconomyProductionSystem | null = null;
+  private readonly resourceNodes: ResourceNodeSystem;
   private readonly depotLogistics: DepotLogisticsSystem;
   private readonly productionLogistics: ProductionLogisticsSystem;
   private readonly logisticsOccupation: LogisticsOccupationSystem;
@@ -207,6 +209,7 @@ export class RtsApp {
     this.depotLogistics = new DepotLogisticsSystem(this.structures, this.roads);
     this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
     this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
+    this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, RTS_BLOCKOUT_MAP.resourceNodes);
     this.kingdoms = new KingdomRegistry(
       KINGDOM_OWNERS,
       this.units,
@@ -246,6 +249,7 @@ export class RtsApp {
       this.structures,
       this.navigation,
       (worker) => this.workerConstruction.stateFor(worker) !== "idle",
+      this.resourceNodes,
     );
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
@@ -278,6 +282,16 @@ export class RtsApp {
       this.territory,
       (structure) => this.assignWorkerToConstruction(structure),
       (structure) => this.workerConstruction.cancelStructure(structure),
+      (stats, x, z) => stats.economy?.requiresResourceNode
+        && !this.resourceNodes.canExtractAt(
+          stats.economy.resourceId,
+          x,
+          z,
+          stats.footprint.width,
+          stats.footprint.depth,
+        )
+        ? "missing-resource-node"
+        : null,
     );
     this.roadConstruction = new RoadConstructionService(
       this.roads,
@@ -710,6 +724,7 @@ export class RtsApp {
     this.roadPlacement.reset();
     this.structureConstruction.resetReservations();
     this.kingdoms.reset();
+    this.resourceNodes.reset();
     this.commandMarkers.clear();
     this.match.reset();
     this.spawnCenters();

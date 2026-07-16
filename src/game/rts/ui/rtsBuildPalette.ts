@@ -121,11 +121,13 @@ export class RtsBuildPalette {
         ? "Geçersiz konum: bu alanın kontrolü sizde değil."
       : state.result.reason === "insufficient-resources"
         ? "Kaynak yetersiz: inşaat maliyeti ayrılmadı."
+        : state.result.reason === "missing-resource-node"
+          ? "Geçersiz konum: Taş Ocağı veya Altın Madeni uygun kaynak düğümünü örtmeli."
         : "Geçersiz konum: engel veya yapı ile çakışıyor.";
   }
 
   setResources(resources: Readonly<Record<string, number>>): void {
-    const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun" };
+    const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun", stone: "Taş", gold: "Altın" };
     this.resources.textContent = Object.entries(resources)
       .map(([id, amount]) => `${labels[id] ?? id}: ${amount}`)
       .join(" · ");
@@ -142,7 +144,7 @@ export class RtsBuildPalette {
   }
 
   setIncomeRates(rates: Readonly<Record<string, number>>): void {
-    const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun" };
+    const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun", stone: "Taş", gold: "Altın" };
     this.income.textContent = `Gelir: ${Object.entries(rates)
       .map(([id, amount]) => `${labels[id] ?? id} +${amount.toFixed(1)}/dk`)
       .join(" · ")}`;
@@ -197,9 +199,10 @@ export class RtsBuildPalette {
       `İşçiler: ${selected.assignedWorkers}/${selected.workerCapacity} (${selected.workingWorkers} çalışıyor)`,
       `Üretim: ${selected.productionPerMinute.toFixed(1)} ${selected.resourceId}/dk`,
       `Yerel tampon: ${selected.localBuffer.toFixed(1)}/${selected.localBufferCapacity}`,
+      selected.sourceRemaining === null ? null : `Düğüm: ${selected.sourceRemaining.toFixed(1)} kaldı`,
       `Durum: ${selected.status}`,
       `Lojistik: ${formatLogisticsStatus(this.logisticsStatuses.get(selected.structureId))}`,
-    ].join(" · ");
+    ].filter((part): part is string => part !== null).join(" · ");
     this.producerDetails.title = logisticsReason(this.logisticsStatuses.get(selected.structureId));
   }
 
@@ -231,7 +234,7 @@ function logisticsReason(status: ProducerLogisticsStatus | undefined): string {
 }
 
 function formatBuildingCost(cost: Readonly<Record<string, number>>): string {
-  const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun" };
+  const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun", stone: "Taş", gold: "Altın" };
   const entries = Object.entries(cost).filter(([, amount]) => amount > 0);
   return entries.length === 0
     ? "Ücretsiz"
