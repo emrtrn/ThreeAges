@@ -271,11 +271,12 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       const territoryWhere = `${statsWhere}.territory`;
       const territoryData = asObject(territoryRaw, territoryWhere);
       const controlRadius = requireFiniteNumber(territoryData, "controlRadius", territoryWhere);
+      const connectedControlRadius = requireFiniteNumber(territoryData, "connectedControlRadius", territoryWhere);
       const expansionPlacementRange = requireFiniteNumber(territoryData, "expansionPlacementRange", territoryWhere);
-      if (controlRadius <= 0 || expansionPlacementRange <= 0) {
+      if (controlRadius <= 0 || connectedControlRadius < controlRadius || expansionPlacementRange <= 0) {
         throw new GameDataError(`${territoryWhere}: control radius and placement range must be > 0`);
       }
-      territory = { controlRadius, expansionPlacementRange };
+      territory = { controlRadius, connectedControlRadius, expansionPlacementRange };
     }
     buildings[id] = {
       id,

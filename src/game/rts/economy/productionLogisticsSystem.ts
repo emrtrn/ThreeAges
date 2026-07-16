@@ -1,9 +1,11 @@
 /** Phase 4 producer-to-depot graph attachment; transfer remains a later step. */
 import type { RoadCell, RoadGraph } from "../roads/roadGraph";
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
+import type { TerritoryControlSystem } from "../territory/territoryControlSystem";
 import { type DepotLogisticsSystem, roadCellTouchingFootprint } from "./depotLogisticsSystem";
+import type { LogisticsOccupationSystem } from "./logisticsOccupationSystem";
 
-export type ProducerLogisticsStatus = "unlinked-road" | "unlinked-depot" | "linked";
+export type ProducerLogisticsStatus = "outside-control" | "unlinked-road" | "unlinked-depot" | "depot-occupied" | "linked";
 
 export interface ProducerLogisticsSnapshot {
   readonly structureId: number;
@@ -20,6 +22,8 @@ export class ProductionLogisticsSystem {
     private readonly structures: PlacedStructureSystem,
     private readonly roads: RoadGraph,
     private readonly depots: DepotLogisticsSystem,
+    private readonly territory?: TerritoryControlSystem,
+    private readonly occupation?: LogisticsOccupationSystem,
   ) {}
 
   snapshots(): readonly ProducerLogisticsSnapshot[] {
@@ -47,13 +51,24 @@ export class ProductionLogisticsSystem {
         );
         const componentId = roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null;
         const depotStructureId = componentId === null ? null : depotByComponent.get(componentId) ?? null;
+        const controlled = this.territory?.ownsFootprint(
+          "player", structure.x, structure.z, structure.stats.footprint.width, structure.stats.footprint.depth,
+        ) ?? true;
         return {
           structureId: structure.id,
           resourceId: economy.resourceId,
           roadCell,
           componentId,
           depotStructureId,
-          status: componentId === null ? "unlinked-road" : depotStructureId === null ? "unlinked-depot" : "linked",
+          status: !controlled
+            ? "outside-control"
+            : componentId === null
+              ? "unlinked-road"
+              : depotStructureId === null
+                ? "unlinked-depot"
+                : this.occupation !== undefined && !this.occupation.isUsable(depotStructureId)
+                  ? "depot-occupied"
+                  : "linked",
         };
       });
   }

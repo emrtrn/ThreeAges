@@ -78,6 +78,7 @@ import { EconomyProductionSystem } from "../src/game/rts/economy/economyProducti
 import { DepotLogisticsSystem } from "../src/game/rts/economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
+import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
@@ -28207,6 +28208,16 @@ check("RTS completed depots become road-graph nodes only when a road touches the
     depotStructureId: depot.id,
     status: "linked",
   }]);
+  const occupation = new LogisticsOccupationSystem(logistics);
+  occupation.setOccupier(depot.id, "enemy");
+  const occupiedLink = new ProductionLogisticsSystem(structures, roads, logistics, undefined, occupation);
+  assert.equal(occupiedLink.snapshots()[0]?.status, "depot-occupied");
+  occupation.setOccupier(depot.id, null);
+  const neutralTerritory = new TerritoryControlSystem(() => []);
+  neutralTerritory.refresh();
+  const outsideControl = new ProductionLogisticsSystem(structures, roads, logistics, neutralTerritory);
+  assert.equal(outsideControl.snapshots()[0]?.status, "outside-control");
+  neutralTerritory.dispose();
   structures.clear();
 });
 
@@ -28262,13 +28273,35 @@ check("RTS logistics transfers linked buffers globally and stops when the road i
   units.clear();
 });
 
+check("RTS depot destruction removes the graph node and cuts an otherwise linked producer", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const balance = validateRoadBalance(JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown);
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const structures = new PlacedStructureSystem();
+  const depot = structures.place(depotStats, 0, 0);
+  const farm = structures.place(farmStats, 0, 10);
+  structures.advanceConstruction(depot, depotStats.constructionSeconds);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  const roads = new RoadGraph(balance);
+  const route = roads.plan({ x: 4, z: 0 }, { x: 4, z: 10 }, []);
+  assert.ok(route);
+  roads.commit(route);
+  const depots = new DepotLogisticsSystem(structures, roads);
+  const links = new ProductionLogisticsSystem(structures, roads, depots);
+  assert.equal(links.snapshots()[0]?.status, "linked");
+  assert.equal(structures.destroy(depot), true);
+  assert.equal(links.snapshots()[0]?.status, "unlinked-depot");
+  structures.clear();
+});
+
 check("RTS territory stores centre ownership per grid cell and gates normal building placement", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
   const house = buildings.house ?? assert.fail("house definition missing");
   const outpost = buildings.outpost ?? assert.fail("outpost definition missing");
-  assert.deepEqual(outpost.territory, { controlRadius: 8, expansionPlacementRange: 12 });
+  assert.deepEqual(outpost.territory, { controlRadius: 8, connectedControlRadius: 12, expansionPlacementRange: 12 });
   assert.equal(outpost.cost.wood, 140);
   assert.equal(outpost.constructionSeconds, 45);
   const sources = [
@@ -28325,6 +28358,76 @@ check("RTS territory stores centre ownership per grid cell and gates normal buil
   territory.refresh();
   assert.equal(territory.ownerAt(22, 12), "player", "a completed outpost adds its small control area");
   territory.dispose();
+});
+
+check("RTS destroying a completed outpost removes its territory source without deleting nearby structures", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const houseStats = buildings.house ?? assert.fail("house definition missing");
+  const structures = new PlacedStructureSystem();
+  const outpost = structures.place(outpostStats, 20, 0);
+  const house = structures.place(houseStats, 16, 0);
+  structures.advanceConstruction(outpost, outpostStats.constructionSeconds);
+  structures.advanceConstruction(house, houseStats.constructionSeconds);
+  const territory = new TerritoryControlSystem(() => structures.all()
+    .filter((structure) => structure.construction.complete && structure.stats.territory)
+    .map((structure) => ({
+      owner: "player" as const,
+      x: structure.x,
+      z: structure.z,
+      radius: structure.stats.territory?.controlRadius ?? 0,
+    })));
+  territory.refresh();
+  assert.equal(territory.ownerAt(20, 0), "player");
+  assert.equal(structures.destroy(outpost), true);
+  territory.refresh();
+  assert.equal(territory.ownerAt(20, 0), "neutral", "destroyed outpost no longer controls territory");
+  assert.ok(structures.all().includes(house), "nearby structures remain after outpost loss");
+  assert.equal(structures.destroy(outpost), false, "destruction is idempotent");
+  territory.dispose();
+  structures.clear();
+});
+
+check("RTS outpost loss cuts logistics for an otherwise road-and-depot-linked producer", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const structures = new PlacedStructureSystem();
+  const outpost = structures.place(outpostStats, 20, 0);
+  const farm = structures.place(farmStats, 20, 4);
+  const depot = structures.place(depotStats, 20, 12);
+  for (const structure of [outpost, farm, depot]) {
+    structures.advanceConstruction(structure, structure.stats.constructionSeconds);
+  }
+  const territory = new TerritoryControlSystem(() => structures.all()
+    .filter((structure) => structure.construction.complete && structure.stats.territory)
+    .map((structure) => ({
+      owner: "player" as const,
+      x: structure.x,
+      z: structure.z,
+      radius: structure.stats.territory?.controlRadius ?? 0,
+    })));
+  territory.refresh();
+  const roads = new RoadGraph(balance);
+  const route = roads.plan({ x: 24, z: 4 }, { x: 24, z: 12 }, []);
+  assert.ok(route);
+  roads.commit(route);
+  const depots = new DepotLogisticsSystem(structures, roads);
+  const links = new ProductionLogisticsSystem(structures, roads, depots, territory);
+  assert.equal(links.snapshots()[0]?.status, "linked");
+  assert.equal(structures.destroy(outpost), true);
+  territory.refresh();
+  assert.equal(links.snapshots()[0]?.status, "outside-control", "outpost loss cuts a still-physical depot route");
+  territory.dispose();
+  structures.clear();
 });
 
 check("RTS worker reaches a foundation, builds it, and never enters combat", () => {

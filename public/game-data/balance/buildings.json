@@ -25,6 +25,7 @@
     "constructionSeconds": 45,
     "territory": {
       "controlRadius": 8,
+      "connectedControlRadius": 12,
       "expansionPlacementRange": 12
     }
   },

@@ -1,6 +1,7 @@
 /** Minimal Phase 2 build-mode control surface (not the final HUD). */
 import type { BuildingBalance } from "../../data/gameDataTypes";
 import type { EconomyBuildingSnapshot } from "../economy/economyProductionSystem";
+import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
 
 export class RtsBuildPalette {
@@ -17,6 +18,7 @@ export class RtsBuildPalette {
   private selectedProducerId: number | null = null;
   private producerSignature = "";
   private producers: readonly EconomyBuildingSnapshot[] = [];
+  private readonly logisticsStatuses = new Map<number, ProducerLogisticsStatus>();
 
   constructor(
     buildings: BuildingBalance,
@@ -170,6 +172,12 @@ export class RtsBuildPalette {
     this.renderSelectedProducer();
   }
 
+  setProductionLogistics(statuses: ReadonlyMap<number, ProducerLogisticsStatus>): void {
+    this.logisticsStatuses.clear();
+    for (const [structureId, status] of statuses) this.logisticsStatuses.set(structureId, status);
+    this.renderSelectedProducer();
+  }
+
   /** Persist completion/error feedback while placement hover state keeps changing. */
   setActionMessage(message: string | null): void {
     this.actionMessage.textContent = message ?? "";
@@ -190,12 +198,24 @@ export class RtsBuildPalette {
       `Üretim: ${selected.productionPerMinute.toFixed(1)} ${selected.resourceId}/dk`,
       `Yerel tampon: ${selected.localBuffer.toFixed(1)}/${selected.localBufferCapacity}`,
       `Durum: ${selected.status}`,
+      `Lojistik: ${formatLogisticsStatus(this.logisticsStatuses.get(selected.structureId))}`,
     ].join(" · ");
   }
 
   dispose(): void {
     this.root.remove();
   }
+}
+
+function formatLogisticsStatus(status: ProducerLogisticsStatus | undefined): string {
+  const labels: Record<ProducerLogisticsStatus, string> = {
+    linked: "Bağlı",
+    "outside-control": "Kontrol Dışı",
+    "unlinked-road": "Yol Yok",
+    "unlinked-depot": "Depo Yok",
+    "depot-occupied": "Depo İşgal Altında",
+  };
+  return status ? labels[status] : "Bekleniyor";
 }
 
 function formatBuildingCost(cost: Readonly<Record<string, number>>): string {

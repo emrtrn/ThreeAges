@@ -100,6 +100,15 @@ export class PlacedStructureSystem {
     return structure;
   }
 
+  /** Remove a completed or unfinished structure; combat uses this destruction hook. */
+  destroy(structure: PlacedStructure): boolean {
+    const index = this.structures.indexOf(structure);
+    if (index < 0) return false;
+    this.structures.splice(index, 1);
+    this.disposeStructure(structure);
+    return true;
+  }
+
   clear(): void {
     for (const structure of this.structures) this.disposeStructure(structure);
     this.structures.length = 0;

@@ -52,6 +52,8 @@ import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
+import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
+import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { PopulationSystem } from "./economy/populationSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
@@ -61,6 +63,7 @@ import { RoadDebugView } from "./roads/roadDebugView";
 import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
 import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
 import { RtsRoadControls } from "./ui/rtsRoadControls";
+import { RtsLogisticsWarning } from "./ui/rtsLogisticsWarning";
 import {
   COMMAND_CENTER_CONTROL_RADIUS,
   TerritoryControlSystem,
@@ -112,7 +115,9 @@ export class RtsApp {
       owner: "player" as const,
       x: structure.x,
       z: structure.z,
-      radius: structure.stats.territory?.controlRadius ?? 0,
+      radius: this.outpostConnectedToMainRoad(structure)
+        ? structure.stats.territory?.connectedControlRadius ?? 0
+        : structure.stats.territory?.controlRadius ?? 0,
     }))));
   private readonly wallet: ResourceWallet;
   private readonly population: PopulationSystem;
@@ -120,6 +125,7 @@ export class RtsApp {
   private economyProduction: EconomyProductionSystem | null = null;
   private readonly depotLogistics: DepotLogisticsSystem;
   private readonly productionLogistics: ProductionLogisticsSystem;
+  private readonly logisticsOccupation: LogisticsOccupationSystem;
   private readonly logisticsTransfers: LogisticsTransferSystem;
   private readonly barracksProduction: BarracksProductionSystem;
   private readonly workerProduction: WorkerProductionSystem;
@@ -136,6 +142,7 @@ export class RtsApp {
   private readonly roadPlacement: RoadPlacementSystem;
   private readonly buildPalette: RtsBuildPalette;
   private readonly roadControls: RtsRoadControls;
+  private readonly logisticsWarning: RtsLogisticsWarning;
   private readonly gameSpeedControls: RtsGameSpeedControls;
   private readonly unsubscribeWalletChanges: (() => void) | null;
   private readonly log = logger("System");
@@ -154,7 +161,8 @@ export class RtsApp {
     this.roads = new RoadGraph(this.options.roadBalance);
     this.roadDebugView = this.options.debug ? new RoadDebugView(this.roads) : null;
     this.depotLogistics = new DepotLogisticsSystem(this.structures, this.roads);
-    this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics);
+    this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
+    this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
     this.wallet = new ResourceWallet(this.options.startingResources);
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
@@ -264,6 +272,7 @@ export class RtsApp {
         this.syncRoadUi();
       },
     );
+    this.logisticsWarning = new RtsLogisticsWarning();
     this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => {
       this.simulationSpeed = speed;
     });
@@ -279,6 +288,7 @@ export class RtsApp {
       onSelectClick: (x, y, additive) => {
         if (this.roadPlacement.isActive) {
           this.roadPlacement.confirmAt(x, y);
+          this.territory.refresh();
           this.syncPlacementUi();
           this.syncRoadUi();
         } else if (this.placement.isActive) {
@@ -294,6 +304,7 @@ export class RtsApp {
       onSelectCommit: (rect, additive) => {
         if (this.roadPlacement.isActive) {
           this.roadPlacement.confirmAt(rect.x1, rect.y1);
+          this.territory.refresh();
           this.syncPlacementUi();
           this.syncRoadUi();
         } else if (this.placement.isActive) {
@@ -351,6 +362,7 @@ export class RtsApp {
     this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
     this.roadControls.dispose();
+    this.logisticsWarning.dispose();
     this.gameSpeedControls.dispose();
     this.placement.dispose();
     this.roadPlacement.dispose();
@@ -503,6 +515,7 @@ export class RtsApp {
   private readonly restartMatch = (): void => {
     this.selection.reset();
     this.economyProduction?.reset();
+    this.logisticsOccupation.reset();
     this.logisticsTransfers.reset();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
@@ -547,6 +560,16 @@ export class RtsApp {
     ];
   }
 
+  private outpostConnectedToMainRoad(structure: PlacedStructure): boolean {
+    const outpostRoad = roadCellTouchingFootprint(
+      this.roads, structure.x, structure.z, structure.stats.footprint.width, structure.stats.footprint.depth,
+    );
+    const playerCenter = this.centers.all().find((center) => center.owner === "player");
+    const centerRoad = playerCenter && roadCellTouchingFootprint(this.roads, playerCenter.position.x, playerCenter.position.z, 8, 8);
+    if (!outpostRoad || !centerRoad) return false;
+    return this.roads.connected(outpostRoad, centerRoad);
+  }
+
   private refreshNavigationBlockers(): void {
     this.navigation.setBlockers(this.navigationBlockers());
   }
@@ -566,11 +589,17 @@ export class RtsApp {
 
   private syncEconomyUi(): void {
     const production = this.economyProduction?.snapshots() ?? [];
+    this.logisticsOccupation.sync();
+    const logistics = this.productionLogistics.snapshots();
     this.buildPalette.setIncomeRates({
       food: this.economyProduction?.productionPerMinute("food") ?? 0,
       wood: this.economyProduction?.productionPerMinute("wood") ?? 0,
     });
     this.buildPalette.setProductionBuildings(production);
+    this.buildPalette.setProductionLogistics(new Map(
+      logistics.map((producer) => [producer.structureId, producer.status]),
+    ));
+    this.logisticsWarning.setStatuses(logistics.map((producer) => producer.status));
   }
 
   private assignWorkerToConstruction(structure: PlacedStructure): void {

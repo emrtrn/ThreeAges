@@ -892,9 +892,9 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 - [x] Karakol yapı tanımı oluştur. (`buildings.json`: 6x6, 140 odun, 45 sn; küçük alan yarıçapı 8)
 - [x] Kontrol alanı dışında sınırlı placement desteği ekle. (en fazla 12 birimlik nötr boşluk; düşman alanı ve iç alan reddedilir)
 - [x] Tamamlanınca küçük kontrol alanı aç. (inşaat tamamlanma olayı territory kaynaklarını yeniler)
-- [ ] Yol bağlantısı kurulunca tam alan aç.
-- [ ] Karakol yıkılınca alanı kapat.
-- [ ] Bağlı yapıların `Kontrol Dışı` durumunu ekle.
+- [x] Yol bağlantısı kurulunca tam alan aç. (Karakolun yol hücresi oyuncu Merkezine temas eden hücreyle aynı graph bileşenindeyse yarıçap 8’den 12’ye yükselir.)
+- [x] Karakol yıkılınca alanı kapat. (`PlacedStructureSystem.destroy` Karakol territory kaynağını kaldırır; yakın yapılar varlığını korur.)
+- [x] Bağlı yapıların `Kontrol Dışı` durumunu ekle. (Kontrol alanı kaybeden üretici aktarımı keser; üretim panelinde `Lojistik: Kontrol Dışı` görünür.)
 
 ### Yol
 
@@ -916,10 +916,10 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 
 ### Savaş bağlantısı
 
-- [ ] Karakol yıkımının lojistiği kesmesini doğrula.
-- [ ] Depo yıkımının dış ekonomiyi etkilemesini doğrula.
-- [ ] Opsiyonel lojistik düğüm işgali prototipi oluştur.
-- [ ] Bağlantı kesintisi uyarısı ekle.
+- [x] Karakol yıkımının lojistiği kesmesini doğrula. (`test:engine`: yol ve Depo ayakta kalsa bile Karakol kaybı üreticiyi `Kontrol Dışı` yapar.)
+- [x] Depo yıkımının dış ekonomiyi etkilemesini doğrula. (`test:engine`: Depo yıkımı üreticiyi `Depo Yok` durumuna geçirir.)
+- [x] Opsiyonel lojistik düğüm işgali prototipi oluştur. (`LogisticsOccupationSystem`: düşman işgali Depoyu sahiplik değiştirmeden aktarım dışı bırakır.)
+- [x] Bağlantı kesintisi uyarısı ekle. (Yol/Depo/Kontrol/işgal kesintisi için ekranda tek, açıklayıcı uyarı.)
 
 ### UI
 

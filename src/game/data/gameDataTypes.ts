@@ -98,6 +98,8 @@ export interface EconomyProductionBalance {
 export interface TerritoryBuildingBalance {
   /** Radius unlocked immediately after this structure completes. */
   readonly controlRadius: number;
+  /** Radius while the outpost's touching road component reaches the main base. */
+  readonly connectedControlRadius: number;
   /** Maximum gap from friendly territory when this special structure is placed. */
   readonly expansionPlacementRange: number;
 }
