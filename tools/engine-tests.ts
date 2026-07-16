@@ -55,6 +55,7 @@ import { RuntimeActorSpawnCoordinator } from "../src/scene/runtimeActorSpawnCoor
 import { normalizeActorScriptDef } from "../engine/scene/actorScript";
 import {
   GameDataError,
+  validateAgeBalance,
   validateAiBalance,
   validateBuildingBalance,
   validateGamePreset,
@@ -78,6 +79,7 @@ import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructur
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
+import { AgeSystem } from "../src/game/rts/progression/ageSystem";
 import {
   DepotLogisticsSystem,
   roadCellTouchingFootprint,
@@ -27935,6 +27937,63 @@ check("Faz 6 stone and gold data defines finite safe and richer external deposit
     ...raw,
     gold: { ...(raw.gold as object), safeNode: { capacity: 0, perWorkerPerMinute: 3 } },
   }), GameDataError, "empty deposits are invalid data, not an exhausted starting state");
+});
+
+check("Faz 6 Town upgrade reserves four resources, pauses the centre, and completes after its data timer", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const ages = validateAgeBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
+  );
+  assert.deepEqual(ages.town.cost, { food: 600, wood: 350, stone: 150, gold: 150 });
+  assert.equal(ages.town.upgradeSeconds, 105);
+  const invalid = JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as Record<string, unknown>;
+  assert.throws(() => validateAgeBalance({
+    ...invalid,
+    town: { ...(invalid.town as object), cost: { food: 600, wood: 350, stone: 150 } },
+  }), GameDataError, "Town data must demand all four resources");
+
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 0);
+  const navigation = new RtsNavigation();
+  const kingdoms = new KingdomRegistry(
+    ["player"], units, structures,
+    { food: 650, wood: 350, stone: 150, gold: 150 }, 20,
+  );
+  const ageSystem = new AgeSystem(["player"], ages, centers, structures, kingdoms);
+  assert.equal(ageSystem.startTownUpgrade("player"), "missing-requirements");
+  assert.equal(kingdoms.get("player").wallet.amount("food"), 650, "failed prerequisites do not spend");
+
+  for (const [index, buildingId] of ages.town.requiredBuildingIds.entries()) {
+    const stats = buildings[buildingId] ?? assert.fail(`required building ${buildingId} is missing`);
+    const structure = structures.place("player", stats, index * 10, 10);
+    structures.advanceConstruction(structure, stats.constructionSeconds);
+  }
+  const workerProduction = new WorkerProductionSystem(
+    units, centers, navigation, RTS_TEST_UNIT_STATS, kingdoms,
+    (owner) => ageSystem.isUpgrading(owner),
+  );
+  assert.equal(workerProduction.queueWorker("player"), "queued");
+  assert.equal(ageSystem.startTownUpgrade("player"), "started");
+  assert.equal(kingdoms.get("player").wallet.amount("food"), 0);
+  assert.equal(kingdoms.get("player").wallet.amount("wood"), 0);
+  assert.equal(kingdoms.get("player").wallet.amount("stone"), 0);
+  assert.equal(kingdoms.get("player").wallet.amount("gold"), 0);
+  assert.equal(ageSystem.snapshot("player").upgrading, true);
+  assert.deepEqual(workerProduction.update(10), [], "an existing worker queue pauses during the centre upgrade");
+  assert.equal(units.workersOf("player").length, 0);
+
+  assert.deepEqual(ageSystem.update(ages.town.upgradeSeconds), [{ owner: "player", type: "completed" }]);
+  assert.deepEqual(ageSystem.snapshot("player"), {
+    owner: "player", age: "town", upgrading: false, remainingSeconds: 0, missingBuildingIds: [],
+  });
+  assert.equal(workerProduction.queueWorker("player"), "already-training");
+  assert.deepEqual(workerProduction.update(RTS_TEST_UNIT_STATS.trainingSeconds).map((event) => event.type), ["completed"],
+    "the paused paid worker queue resumes after Town completes");
+  assert.equal(units.workersOf("player").length, 1);
 });
 
 check("Faz 6 quarry uses its finite stone node and cannot be placed away from one", () => {

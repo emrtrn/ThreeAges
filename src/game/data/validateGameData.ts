@@ -11,6 +11,7 @@ import { isFeatureFlag } from "../core/featureFlags";
 import { AI_TARGET_WEIGHTS } from "./gameDataTypes";
 import type {
   AiBalance,
+  AgeBalance,
   AiIntent,
   AiProfile,
   AiProfileBalance,
@@ -353,6 +354,46 @@ export function validateResourceBalance(value: unknown): ResourceBalance {
     if (!resources[id]) throw new GameDataError(`${where}: missing required resource "${id}"`);
   }
   return resources;
+}
+
+/** Validate the data-owned Faz 6 Settlement -> Town transition. */
+export function validateAgeBalance(value: unknown): AgeBalance {
+  const where = "balance/ages.json";
+  const obj = asObject(value, where);
+  const settlement = asObject(obj["settlement"], `${where}.settlement`);
+  const town = asObject(obj["town"], `${where}.town`);
+  if (requireString(settlement, "id", `${where}.settlement`) !== "settlement") {
+    throw new GameDataError(`${where}.settlement.id: must be \"settlement\"`);
+  }
+  if (requireString(town, "id", `${where}.town`) !== "town") {
+    throw new GameDataError(`${where}.town.id: must be \"town\"`);
+  }
+  const upgradeSeconds = requireFiniteNumber(town, "upgradeSeconds", `${where}.town`);
+  if (upgradeSeconds <= 0) {
+    throw new GameDataError(`${where}.town.upgradeSeconds: must be > 0`);
+  }
+  const cost = validateStartingResources(town["cost"], `${where}.town`);
+  for (const resourceId of ["food", "wood", "stone", "gold"]) {
+    if ((cost[resourceId] ?? 0) <= 0) {
+      throw new GameDataError(`${where}.town.cost: must include positive ${resourceId}`);
+    }
+  }
+  const requirements = town["requiredBuildingIds"];
+  if (!Array.isArray(requirements) || requirements.length === 0
+    || requirements.some((id) => typeof id !== "string" || !/^[a-z][a-z0-9_]*$/.test(id))
+    || new Set(requirements).size !== requirements.length) {
+    throw new GameDataError(`${where}.town.requiredBuildingIds: must be a non-empty unique building-id array`);
+  }
+  return {
+    settlement: { id: "settlement", label: requireString(settlement, "label", `${where}.settlement`) },
+    town: {
+      id: "town",
+      label: requireString(town, "label", `${where}.town`),
+      cost,
+      upgradeSeconds,
+      requiredBuildingIds: [...requirements] as string[],
+    },
+  };
 }
 
 const AI_INTENTS: readonly AiIntent[] = ["economy", "ageUp", "expand", "defend", "attack"];

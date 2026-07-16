@@ -11,7 +11,7 @@ import type { UnitSystem } from "../units/unitSystem";
 import type { CommandCenter } from "./commandCenter";
 import type { CommandCenterSystem } from "./commandCenterSystem";
 
-export type WorkerProductionResult = "queued" | "already-training" | "insufficient-resources" | "population-full" | "no-command-center";
+export type WorkerProductionResult = "queued" | "already-training" | "insufficient-resources" | "population-full" | "no-command-center" | "center-upgrading";
 export type WorkerProductionEventType = "completed" | "exit-blocked";
 
 export interface WorkerProductionEvent {
@@ -38,12 +38,15 @@ export class WorkerProductionSystem {
     private readonly navigation: RtsNavigation,
     private readonly workerStats: UnitBalanceStats,
     private readonly kingdoms: KingdomRegistry,
+    /** Town upgrades pause the centre queue without cancelling its paid order. */
+    private readonly isCenterUpgrading: (owner: UnitOwner) => boolean = () => false,
   ) {}
 
   /** Train a worker at one kingdom's centre, paid from that kingdom's economy. */
   queueWorker(owner: UnitOwner): WorkerProductionResult {
     const center = this.centers.get(owner);
     if (!center) return "no-command-center";
+    if (this.isCenterUpgrading(owner)) return "center-upgrading";
     if (this.queues.has(owner)) return "already-training";
     const { wallet, population: pool } = this.kingdoms.get(owner);
     const resources = wallet.reserve(this.workerStats.cost);
@@ -64,6 +67,7 @@ export class WorkerProductionSystem {
         this.cancelQueue(owner);
         continue;
       }
+      if (this.isCenterUpgrading(owner)) continue;
       queue.remainingSeconds = Math.max(0, queue.remainingSeconds - Math.max(0, deltaSeconds));
       if (queue.remainingSeconds > 0) continue;
       const exit = this.findSafeExit(queue.center);

@@ -140,6 +140,26 @@ export interface ResourceBalanceStats {
 /** `public/game-data/balance/resources.json` — finite stone and gold deposits. */
 export type ResourceBalance = Readonly<Record<string, ResourceBalanceStats>>;
 
+/** The two progression states included in Faz 6 (Kingdom deliberately remains out of scope). */
+export type SettlementAge = "settlement" | "town";
+
+/** One data-owned transition from the opening Settlement into Town. */
+export interface TownAgeBalance {
+  readonly id: "town";
+  readonly label: string;
+  /** Atomically reserved when the command-centre upgrade begins. */
+  readonly cost: StartingResources;
+  readonly upgradeSeconds: number;
+  /** Completed structures that prove the economy and defence are established. */
+  readonly requiredBuildingIds: readonly string[];
+}
+
+/** `public/game-data/balance/ages.json` — the Faz 6 progression contract. */
+export interface AgeBalance {
+  readonly settlement: { readonly id: "settlement"; readonly label: string };
+  readonly town: TownAgeBalance;
+}
+
 /**
  * The five strategic intents the Kingdom Director chooses between
  * (`07_ENEMY_AI_DESIGN_v0.2.md` §23). Exactly one is active at a time.

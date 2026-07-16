@@ -24,6 +24,7 @@ import { createSceneRenderer } from "@engine/render-three/renderer";
 import { logger } from "@/game/core/logger";
 import type {
   AiBalance,
+  AgeBalance,
   AiProfile,
   BuildingBalance,
   ResourceBalance,
@@ -65,6 +66,7 @@ import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
+import { AgeSystem } from "./progression/ageSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
@@ -119,6 +121,8 @@ export interface RtsAppOptions {
   readonly buildingBalance: BuildingBalance;
   /** Faz 6 finite stone/gold deposit profiles; consumed by the quarry/mine slice. */
   readonly resourceBalance: ResourceBalance;
+  /** Faz 6 Settlement -> Town cost, prerequisites and upgrade duration. */
+  readonly ageBalance: AgeBalance;
   /** Preset-owned initial stockpile for Phase 2 construction reservations. */
   readonly startingResources: StartingResources;
   /** Data-owned grid and wood cost for the Phase 4 road graph. */
@@ -157,6 +161,7 @@ export class RtsApp {
         : structure.stats.territory?.controlRadius ?? 0,
     }))));
   private readonly kingdoms: KingdomRegistry;
+  private readonly ages: AgeSystem;
   private readonly ai: AiController;
   private readonly structureConstruction: StructureConstructionService;
   private readonly roadConstruction: RoadConstructionService;
@@ -217,6 +222,7 @@ export class RtsApp {
       this.options.startingResources,
       SETTLEMENT_POPULATION_CAPACITY,
     );
+    this.ages = new AgeSystem(KINGDOM_OWNERS, this.options.ageBalance, this.centers, this.structures, this.kingdoms);
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
     this.selection = new SelectionSystem(
@@ -272,6 +278,7 @@ export class RtsApp {
       this.navigation,
       worker,
       this.kingdoms,
+      (owner) => this.ages.isUpgrading(owner),
     );
     this.structureConstruction = new StructureConstructionService(
       this.options.buildingBalance,
@@ -360,6 +367,7 @@ export class RtsApp {
       },
       () => this.queueGuard(),
       () => this.queueWorker(),
+      () => this.startTownUpgrade(),
     );
     this.roadControls = new RtsRoadControls(
       () => {
@@ -454,6 +462,7 @@ export class RtsApp {
     void this.loadBuildingVisuals();
     this.spawnStartingUnits();
     this.syncPlacementUi();
+    this.syncAgeUi();
     this.syncRoadUi();
   }
 
@@ -618,6 +627,12 @@ export class RtsApp {
   /** Advance match systems; camera and UI keep the unscaled rendered-frame delta. */
   private updateSimulation(dt: number): void {
     this.kingdoms.advance(dt);
+    for (const event of this.ages.update(dt)) {
+      if (event.owner !== PLAYER_OWNER) continue;
+      this.buildPalette.setActionMessage(event.type === "completed"
+        ? "Kasaba Çağı tamamlandı."
+        : "Merkez yıkıldığı için çağ yükseltmesi iptal edildi; kaynaklar iade edildi.");
+    }
     updateUnitMovement(this.units.all(), dt);
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
@@ -645,6 +660,7 @@ export class RtsApp {
     this.buildPalette.setResources(this.playerKingdom.wallet.snapshot());
     const population = this.playerKingdom.population.snapshot();
     this.buildPalette.setPopulation(population.used, population.capacity);
+    this.syncAgeUi();
     this.syncEconomyUi();
     updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
     updateUnitDeaths(this.units, this.selection, dt);
@@ -717,6 +733,7 @@ export class RtsApp {
     this.workerConstruction.reset();
     this.barracksProduction.reset();
     this.workerProduction.reset();
+    this.ages.reset();
     this.ai.reset();
     this.units.clear();
     this.centers.clear();
@@ -733,6 +750,7 @@ export class RtsApp {
     this.spawnStartingUnits();
     this.placement.cancel();
     this.syncPlacementUi();
+    this.syncAgeUi();
     this.syncRoadUi();
     this.matchOverlay.hide();
     this.log.info("RTS match restarted");
@@ -835,8 +853,28 @@ export class RtsApp {
       "insufficient-resources": "İşçi için 50 yiyecek gerekli.",
       "population-full": "Nüfus dolu: önce Ev kurun.",
       "no-command-center": "İşçi üretmek için Merkez gerekli.",
+      "center-upgrading": "Merkez Kasaba Çağına yükselirken işçi üretimi durur.",
     };
     this.buildPalette.setActionMessage(message[result]);
     this.syncPlacementUi();
+  }
+
+  private startTownUpgrade(): void {
+    const result = this.ages.startTownUpgrade(PLAYER_OWNER);
+    const snapshot = this.ages.snapshot(PLAYER_OWNER);
+    const message: Record<typeof result, string> = {
+      started: `Kasaba Çağı yükseltmesi başladı (${this.options.ageBalance.town.upgradeSeconds} sn). Merkez işçi üretimi durdu.`,
+      "already-town": "Zaten Kasaba Çağındasınız.",
+      "already-upgrading": `Kasaba Çağı yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`,
+      "no-command-center": "Kasaba Çağı için Merkez gerekli.",
+      "missing-requirements": `Kasaba Çağı için eksik yapılar: ${snapshot.missingBuildingIds.join(", ")}.`,
+      "insufficient-resources": "Kasaba Çağı için kaynak yetersiz.",
+    };
+    this.buildPalette.setActionMessage(message[result]);
+    this.syncAgeUi();
+  }
+
+  private syncAgeUi(): void {
+    this.buildPalette.setAge(this.ages.snapshot(PLAYER_OWNER), this.options.ageBalance);
   }
 }

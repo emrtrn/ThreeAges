@@ -1,5 +1,6 @@
 /** Minimal Phase 2 build-mode control surface (not the final HUD). */
-import type { BuildingBalance } from "../../data/gameDataTypes";
+import type { AgeBalance, BuildingBalance } from "../../data/gameDataTypes";
+import type { AgeSnapshot } from "../progression/ageSystem";
 import type { EconomyBuildingSnapshot } from "../economy/economyProductionSystem";
 import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
@@ -11,6 +12,7 @@ export class RtsBuildPalette {
   private readonly workers = document.createElement("p");
   private readonly population = document.createElement("p");
   private readonly income = document.createElement("p");
+  private readonly age = document.createElement("p");
   private readonly producerPanel = document.createElement("section");
   private readonly producerChoices = document.createElement("div");
   private readonly producerDetails = document.createElement("p");
@@ -27,6 +29,7 @@ export class RtsBuildPalette {
     private readonly onCancelLatest: () => void,
     private readonly onTrainGuard: () => void,
     private readonly onTrainWorker: () => void,
+    private readonly onStartTownUpgrade: () => void,
   ) {
     this.root.className = "rts-build-palette ui-interactive";
     this.root.setAttribute("aria-label", "Yapı yerleştirme");
@@ -74,6 +77,11 @@ export class RtsBuildPalette {
     trainWorker.textContent = "İşçi Üret";
     trainWorker.addEventListener("click", this.onTrainWorker);
     choices.appendChild(trainWorker);
+    const townUpgrade = document.createElement("button");
+    townUpgrade.type = "button";
+    townUpgrade.textContent = "Kasaba Çağına Geç";
+    townUpgrade.addEventListener("click", this.onStartTownUpgrade);
+    choices.appendChild(townUpgrade);
     this.root.appendChild(choices);
     this.resources.className = "rts-build-resources";
     this.root.appendChild(this.resources);
@@ -83,6 +91,8 @@ export class RtsBuildPalette {
     this.root.appendChild(this.population);
     this.income.className = "rts-build-income";
     this.root.appendChild(this.income);
+    this.age.className = "rts-build-age";
+    this.root.appendChild(this.age);
     this.producerPanel.className = "rts-production-panel";
     const producerTitle = document.createElement("strong");
     producerTitle.textContent = "Üretim Yapısı";
@@ -148,6 +158,14 @@ export class RtsBuildPalette {
     this.income.textContent = `Gelir: ${Object.entries(rates)
       .map(([id, amount]) => `${labels[id] ?? id} +${amount.toFixed(1)}/dk`)
       .join(" · ")}`;
+  }
+
+  /** Compact progression status; the button remains the explicit player action. */
+  setAge(snapshot: AgeSnapshot, balance: AgeBalance): void {
+    const text = snapshot.upgrading
+      ? `Çağ: ${balance.settlement.label} → ${balance.town.label} (${Math.ceil(snapshot.remainingSeconds)} sn)`
+      : `Çağ: ${snapshot.age === "town" ? balance.town.label : balance.settlement.label}`;
+    if (this.age.textContent !== text) this.age.textContent = text;
   }
 
   /** Render a compact, explicitly selectable view of completed production sites. */

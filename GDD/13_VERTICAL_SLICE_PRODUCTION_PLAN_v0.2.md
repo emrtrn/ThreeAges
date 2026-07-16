@@ -1211,12 +1211,17 @@ Kapı A geçilmezse:
 
 ### Çağ sistemi
 
-- [ ] Yerleşim ve Kasaba durumları
-- [ ] Çağ maliyeti
-- [ ] Çağ yükseltme süresi
-- [ ] Yükseltme sırasında merkezin davranışı
+- [x] Yerleşim ve Kasaba durumları. (`AgeSystem`: her krallık Yerleşim başlar;
+  tamamlanan Merkez yükseltmesi yalnız o krallığı Kasaba durumuna geçirir.)
+- [x] Çağ maliyeti. (`balance/ages.json`: 600 Yiyecek, 350 Odun, 150 Taş ve
+  150 Altın atomik rezerve edilir; eksik kaynak veya önkoşul harcama yapmaz.)
+- [x] Çağ yükseltme süresi. (`balance/ages.json`: Kasaba yükseltmesi 105 saniye;
+  `test:engine` veri süresi tamamlanmadan durumu değiştirmediğini doğrular.)
+- [x] Yükseltme sırasında merkezin davranışı. (İşçi kuyruğu iptal edilmez ancak
+  Merkez yükseltmesi boyunca durur; Kasaba tamamlanınca aynı kuyruğu sürdürür.)
 - [ ] Açılan yapı ve birlikler
-- [ ] Çağ bildirimi
+- [x] Çağ bildirimi. (HUD çağ durumunu/geri sayımını gösterir; başlatma, iptal ve
+  tamamlanma mesajları `RtsBuildPalette` eylem alanına yazılır.)
 
 ### Yapı yükseltmeleri
 
@@ -2701,15 +2706,15 @@ Vertical slice tamamlanmıştır yalnızca:
 
 ### Ekonomi
 
-- [ ] Taş
-- [ ] Altın
-- [ ] Kaynak tükenmesi
+- [x] Taş
+- [x] Altın
+- [x] Kaynak tükenmesi
 - [ ] Dört kaynak HUD
 
 ### İlerleme
 
-- [ ] Yerleşim
-- [ ] Kasaba
+- [x] Yerleşim
+- [x] Kasaba
 - [ ] Merkez T2
 - [ ] Kışla T2
 

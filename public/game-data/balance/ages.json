@@ -1,0 +1,25 @@
+{
+  "settlement": {
+    "id": "settlement",
+    "label": "Yerleşim"
+  },
+  "town": {
+    "id": "town",
+    "label": "Kasaba",
+    "cost": {
+      "food": 600,
+      "wood": 350,
+      "stone": 150,
+      "gold": 150
+    },
+    "upgradeSeconds": 105,
+    "requiredBuildingIds": [
+      "farm",
+      "lumber_camp",
+      "quarry",
+      "gold_mine",
+      "barracks",
+      "outpost"
+    ]
+  }
+}

@@ -12,6 +12,7 @@
 import { logger } from "../core/logger";
 import {
   validateAiBalance,
+  validateAgeBalance,
   validateGamePreset,
   validateGameVersion,
   validateBuildingBalance,
@@ -19,7 +20,7 @@ import {
   validateRoadBalance,
   validateUnitBalance,
 } from "./validateGameData";
-import type { AiBalance, BuildingBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, UnitBalance } from "./gameDataTypes";
+import type { AgeBalance, AiBalance, BuildingBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, UnitBalance } from "./gameDataTypes";
 
 const log = logger("Data");
 
@@ -82,6 +83,14 @@ export async function loadResourceBalance(): Promise<ResourceBalance> {
   const url = `${GAME_DATA_ROOT}/balance/resources.json`;
   const balance = validateResourceBalance(await fetchJson(url));
   log.debug(`loaded resource balance (${Object.keys(balance).length} definitions)`);
+  return balance;
+}
+
+/** Load the data-owned Settlement -> Town upgrade contract. */
+export async function loadAgeBalance(): Promise<AgeBalance> {
+  const url = `${GAME_DATA_ROOT}/balance/ages.json`;
+  const balance = validateAgeBalance(await fetchJson(url));
+  log.debug(`loaded age balance (${balance.settlement.id} -> ${balance.town.id})`);
   return balance;
 }
 
