@@ -39,11 +39,11 @@ export class RtsRoadControls {
 
   setState(state: RoadPlacementState): void {
     if (!state.active) {
-      this.status.textContent = "Başlangıç ve bitiş seçerek rota çizin.";
+      this.status.textContent = "Yol Kur'a basın; sol tıkla zincir kurun, sağ tıkla bitirin.";
       return;
     }
     if (state.reason === "choose-start") {
-      this.status.textContent = "Yol başlangıcını seçin.";
+      this.status.textContent = "Yol başlangıcını sol tıkla seçin; sağ tıkla bitirin.";
       return;
     }
     if (state.reason === "invalid-route") {
@@ -56,8 +56,8 @@ export class RtsRoadControls {
     }
     const cost = state.plan?.woodCost ?? 0;
     this.status.textContent = state.plan
-      ? `Rota: ${state.plan.newCells.length} yeni hücre · Maliyet: ${cost} Odun · Bitişi tıklayın.`
-      : "Yol bitişini seçin.";
+      ? `Rota: ${state.plan.newCells.length} yeni hücre · Maliyet: ${cost} Odun · Sol tıkla ekleyin, sağ tıkla bitirin.`
+      : "Yol bitişini sol tıkla seçin; sağ tıkla bitirin.";
   }
 
   dispose(): void {

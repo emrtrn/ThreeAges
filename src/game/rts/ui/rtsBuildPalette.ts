@@ -173,7 +173,7 @@ export class RtsBuildPalette {
   setResources(resources: Readonly<Record<string, number>>): void {
     const labels: Record<string, string> = { food: "Yiyecek", wood: "Odun", stone: "Taş", gold: "Altın" };
     this.resources.textContent = Object.entries(resources)
-      .map(([id, amount]) => `${labels[id] ?? id}: ${amount}`)
+      .map(([id, amount]) => `${labels[id] ?? id}: ${formatInventoryAmount(amount)}`)
       .join(" · ");
   }
 
@@ -310,4 +310,9 @@ function formatBuildingCost(cost: Readonly<Record<string, number>>): string {
   return entries.length === 0
     ? "Ücretsiz"
     : entries.map(([resourceId, amount]) => `${amount} ${labels[resourceId] ?? resourceId}`).join(" · ");
+}
+
+/** Stocks are accumulated as floats, but the player-facing inventory never overstates them. */
+export function formatInventoryAmount(amount: number): number {
+  return Number.isFinite(amount) ? Math.max(0, Math.floor(amount)) : 0;
 }

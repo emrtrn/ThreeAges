@@ -819,7 +819,7 @@ Yiyecek ve odun ile çalışan küçük ama tam ekonomi döngüsü oluşturmak.
 
 ### İşçi üretimi ve nüfus
 
-- [x] Merkezden işçi üretimi ekle. (`WorkerProductionSystem`; Merkez tekli kuyruğu güvenli çıkışta işçi doğurur)
+- [x] Merkezden işçi üretimi ekle. (`WorkerProductionSystem`; Merkez sırayla işçi doğurur; kuyruk kapasitesi Merkez seviyesiyle 5 / 10 / 20'ye çıkar)
 - [x] İşçi maliyeti ekle. (`worker_placeholder.cost = 50 yiyecek`; kuyrukta ayrılır, iptalde iade edilir)
 - [x] Nüfus kullanımı ekle. (işçi ve Muhafız JSON `populationCost` değeriyle kuyrukta kapasite ayırır)
 - [x] Ev nüfus kapasitesi ekle. (`house.populationCapacity = 5`; tamamlanmış Evler yerleşim üst sınırına eklenir)
@@ -891,17 +891,17 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 
 ### Karakol
 
-- [x] Karakol yapı tanımı oluştur. (`buildings.json`: 6x6, 140 odun, 45 sn; küçük alan yarıçapı 8)
+- [x] Karakol yapı tanımı oluştur. (`buildings.json`: 6x6, 140 odun, 45 sn; küçük alan yarıçapı 16)
 - [x] Kontrol alanı dışında sınırlı placement desteği ekle. (en fazla 12 birimlik nötr boşluk; düşman alanı ve iç alan reddedilir)
 - [x] Tamamlanınca küçük kontrol alanı aç. (inşaat tamamlanma olayı territory kaynaklarını yeniler)
-- [x] Yol bağlantısı kurulunca tam alan aç. (Karakolun yol hücresi oyuncu Merkezine temas eden hücreyle aynı graph bileşenindeyse yarıçap 8’den 12’ye yükselir.)
+- [x] Yol bağlantısı kurulunca tam alan aç. (Karakolun yol hücresi oyuncu Merkezine temas eden hücreyle aynı graph bileşenindeyse yarıçap 16’dan 20’ye yükselir.)
 - [x] Karakol yıkılınca alanı kapat. (`PlacedStructureSystem.destroy` Karakol territory kaynağını kaldırır; yakın yapılar varlığını korur.)
 - [x] Bağlı yapıların `Kontrol Dışı` durumunu ekle. (Kontrol alanı kaybeden üretici aktarımı keser; üretim panelinde `Lojistik: Kontrol Dışı` görünür.)
 
 ### Yol
 
 - [x] Hücre tabanlı yol graph’ı oluştur. (`RoadGraph`: ortogonal en kısa rota, engel kaçınma, bağlantı sorgusu ve tekrar ücretlendirmeme)
-- [x] Başlangıç ve bitiş ile rota önizleme ekle. (`Yol Kur`: hover önizlemesi, geçersiz rota ve odun yetersizliği geri bildirimi)
+- [x] Başlangıç ve bitiş ile rota önizleme ekle. (`Yol Kur`: ilk sol tık başlangıcı seçer; sonraki sol tıklar zincire rota ekler; sağ tık aracı bitirir. Hover önizlemesi, geçersiz rota ve odun yetersizliği geri bildirimi.)
 - [x] Düz ve dönüş segmentlerini oluştur. (Bağlantı yönlerine göre düz, köşe, T ve kavşak hücreleri merkezi parça + kardinal çıkışlarla çizilir.)
 - [x] Yol maliyetini hesapla. (`balance/roads.json`: yalnız yeni hücre başına 4 Odun; ödeme commit anında yapılır)
 - [x] Yol bağlantısını runtime’da güncelle. (match-owned `RoadGraph` commit sonrası yol görünümünü yeniler; tekrar çizilen hücre ücretsizdir)
@@ -953,7 +953,7 @@ Merkez ekonomisini kur
 
 - [x] Karakol olmadan dış bölgeye normal yapı kurulamıyor. (`test:engine`: kontrol alanı dışındaki normal yapı yerleştirmesi `outside-control` ile reddedilir.)
 - [x] Karakol küçük alanı hemen açıyor. (`test:engine`: tamamlanmış Karakol küçük kontrol yarıçapını territory kaynağına ekler.)
-- [x] Tam alan yol bağlantısıyla aktif oluyor. (`RtsApp`: Karakol ana Merkezle aynı yol graph bileşenine bağlandığında yarıçapı 8’den 12’ye çıkar.)
+- [x] Tam alan yol bağlantısıyla aktif oluyor. (`RtsApp`: Karakol ana Merkezle aynı yol graph bileşenine bağlandığında yarıçapı 16’dan 20’ye çıkar.)
 - [x] Bağlantılı yapı üretimi global stoğa aktarılıyor. (`test:engine`: bağlı üreticinin tamponu `ResourceWallet` stoğuna aktarılır.)
 - [ ] Bağlantı kesintisi 30–90 saniye içinde üretimi etkiliyor.
 - [x] Alternatif rota gerçek yedeklilik sağlıyor. (`test:engine`: bir yol hücresi kesildiğinde alternatif dal üretici–Depo bağlantısını korur.)
@@ -1097,7 +1097,7 @@ Genişleme grubu geldiğinde açılacak.
 yol ızgarası 2 birim: değen her hücre bloklanıyor, bloklanmayan hiçbiri değmiyordu.
 Yani `roadCellTouchingFootprint` Merkez için **hiçbir zaman** hücre bulamıyordu ve
 `outpostConnectedToMainRoad` hep `false` dönüyordu — Karakol'un bağlı kontrol
-yarıçapı (8→12) ne AI'a ne oyuncuya veriliyordu. §35'te bu kriter [x] işaretliydi
+yarıçapı (16→20) ne AI'a ne oyuncuya veriliyordu. §35'te bu kriter [x] işaretliydi
 ama çalışmıyordu. Tolerans yarım yol hücresine çekildi (`test:engine` regresyon
 testi ekli). Bu düzeltme olmadan Karakol'un yanına 6x6 depo sığmadığı için
 genişleme reçetesi tamamlanamıyor.
@@ -1238,7 +1238,7 @@ Kapı A geçilmezse:
 - [x] Kışla T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 140 Odun + 80 Taş,
   50 sn; Muhafız kuyruğu durur, T2 900 sağlığa ve Level 2 modele geçer.)
 - [x] Karakol T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 110 Odun + 70 Taş,
-  55 sn; sağlık 1000'e, yalnız kontrol 12'ye ve yol bağlı kontrol 15'e çıkar;
+  55 sn; sağlık 1000'e, yalnız kontrol 20'ye ve yol bağlı kontrol 24'e çıkar;
   Level 2 karakol modeli tamamlanınca uygulanır.)
 - [x] Placeholder model değişimi. (Tamamlanan tüm Faz 6 yapıları gerçek İlk Çağ
   varlıklarına geçer; Taş Ocağı ve Altın Madeni `Mine.gltf`, Oduncu Kampı geçici
@@ -1254,28 +1254,41 @@ Vertical slice’ın bu aşamasında Refah:
 
 Görevler:
 
-- [ ] Refah feature flag’i oluştur.
-- [ ] Basit hesap formülü ekle, yalnız gerekli görülürse.
-- [ ] Sert kilit olarak kullanılmadığını test et.
+- [x] Refah feature flag’i oluştur. (`prosperity` varsayılan olarak kapalıdır; preset
+  veya `?flags=prosperity` ile yalnız debug bilgisi açılır.)
+- [x] Basit hesap formülü ekle, yalnız gerekli görülürse. (Gerekli değildir: Faz 6
+  Refahı yalnız bilgi/feature flag kararı olarak tutar, oyun durumu hesaplamaz.)
+- [x] Sert kilit olarak kullanılmadığını test et. (`test:engine`: Refah varsayılan
+  kapalıdır, URL ile açılabilir ve `AgeSystem` bu bayrağı hiçbir çağ/üretim kapısında okumaz.)
 
 ### Denge
 
-- [ ] İki çağ için `core_match` presetini oluştur.
-- [ ] İlk çağ hedef süresini belirle.
-- [ ] İlk askerî temas hedefini belirle.
+- [x] İki çağ için `core_match` presetini oluştur. (`preset=core_match`: dört kaynak
+  tanımlı, Taş/Altın başlangıçta sıfır, normal hız ve normal AI; Yerleşimden Kasabaya
+  ilerlemeyi gerçek üretimle sınar.)
+- [x] İlk çağ hedef süresini belirle. (`core_match` için Kasaba tamamlanma hedefi
+  7–12 dk; 105 sn Merkez yükseltmesi nedeniyle başlatma penceresi 5:15–10:15'tir.
+  Bu, eski taslaklardaki daha geniş 6–10 dk karar penceresinin v0.2 kabul aralığıdır.)
+- [x] İlk askerî temas hedefini belirle. (`core_match`: ilk iki taraflı Muhafız
+  teması 5–9 dk; kışla kuruluşu, ilk Muhafız kuyruğu ve karşı tarafa ilk saldırı
+  emri birlikte ölçülür.)
 - [ ] Kaynak darboğaz raporu oluştur.
 
 ---
 
 ## 43. Kabul Kriterleri
 
-- [ ] Dört kaynak farklı kullanım alanına sahip.
+- [x] Dört kaynak farklı kullanım alanına sahip. (`test:engine`: Yiyecek işçi,
+  Odun yapı/Muhafız, Taş T2 yapı ve Altın Kasaba geçişi kararlarına bağlanır.)
 - [ ] Oyuncu yalnız güvenli kaynaklarla bütün maçı bitiremiyor.
-- [ ] Kasabaya geçiş gerçek fırsat maliyeti oluşturuyor.
-- [ ] Çağ atlama sırasında oyuncu savunmasız kalabiliyor.
+- [x] Kasabaya geçiş gerçek fırsat maliyeti oluşturuyor. (`AgeSystem` dört kaynak
+  maliyetini atomik rezerve eder; testte başarılı başlangıç sonrası tüm stok sıfırdır.)
+- [x] Çağ atlama sırasında oyuncu savunmasız kalabiliyor. (Merkez işçi kuyruğu
+  yükseltme boyunca durur ve ayrılmış kaynaklar yeni üretime kullanılamaz.)
 - [ ] AI Kasaba çağına ulaşabiliyor.
 - [ ] Kaynak düğümü tükenmesi yeni genişlemeyi teşvik ediyor.
-- [ ] Refah oyuncuyu bekleten görünmez kilit oluşturmuyor.
+- [x] Refah oyuncuyu bekleten görünmez kilit oluşturmuyor. (`prosperity` yalnız
+  isteğe bağlı debug bilgisidir; `AgeSystem` ve üretim kapıları bu bayrağı okumaz.)
 
 ---
 

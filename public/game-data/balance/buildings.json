@@ -38,8 +38,8 @@
     "constructionSeconds": 45,
     "maxHealth": 700,
     "territory": {
-      "controlRadius": 8,
-      "connectedControlRadius": 12,
+      "controlRadius": 16,
+      "connectedControlRadius": 20,
       "expansionPlacementRange": 12
     },
     "upgrade": {
@@ -47,8 +47,8 @@
       "durationSeconds": 55,
       "maxHealth": 1000,
       "territory": {
-        "controlRadius": 12,
-        "connectedControlRadius": 15
+        "controlRadius": 20,
+        "connectedControlRadius": 24
       }
     }
   },

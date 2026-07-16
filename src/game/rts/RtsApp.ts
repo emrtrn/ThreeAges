@@ -60,6 +60,7 @@ import { PlacedStructureSystem, type PlacedStructure } from "./structures/placed
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { StructureConstructionService } from "./structures/structureConstructionService";
 import { KingdomRegistry } from "./kingdom/kingdomRegistry";
+import { matchStartingResourcesFor } from "./kingdom/matchStartingResources";
 import { RoadConstructionService } from "./roads/roadConstructionService";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
@@ -75,7 +76,7 @@ import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
-import { WorkerProductionSystem } from "./structures/workerProductionSystem";
+import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "./structures/structureUpgradeSystem";
 import { RoadGraph } from "./roads/roadGraph";
 import { RoadDebugView } from "./roads/roadDebugView";
@@ -115,6 +116,8 @@ export interface RtsAppOptions {
   readonly debug?: boolean;
   /** `?testSandbox`: enemy units cannot damage the player's command centre. */
   readonly testSandbox?: boolean;
+  /** `?flags=prosperity`: debug information only; never a gameplay requirement. */
+  readonly prosperityDebugEnabled?: boolean;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
   readonly unitBalance: UnitBalance;
   /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
@@ -222,6 +225,10 @@ export class RtsApp {
       this.structures,
       this.options.startingResources,
       SETTLEMENT_POPULATION_CAPACITY,
+      {
+        [PLAYER_OWNER]: matchStartingResourcesFor(PLAYER_OWNER, this.options.startingResources),
+        [AI_OWNER]: matchStartingResourcesFor(AI_OWNER, this.options.startingResources),
+      },
     );
     this.ages = new AgeSystem(KINGDOM_OWNERS, this.options.ageBalance, this.centers, this.structures, this.kingdoms);
     this.structureUpgrades = new StructureUpgradeSystem(
@@ -287,6 +294,7 @@ export class RtsApp {
       this.kingdoms,
       (owner) => this.ages.isUpgrading(owner),
       (owner) => this.centers.get(owner)?.workerTrainingSeconds ?? worker.trainingSeconds,
+      (owner) => workerQueueCapacityForCenterLevel(this.centers.get(owner)?.level ?? 1),
     );
     this.structureConstruction = new StructureConstructionService(
       this.options.buildingBalance,
@@ -405,6 +413,11 @@ export class RtsApp {
     });
     this.matchOverlay = new RtsMatchOverlay(this.restartMatch);
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
+    if (this.options.prosperityDebugEnabled) {
+      this.debugOverlay?.setProgressionLines([
+        "Refah: bilgi metriği etkin; çağ ve üretim için gereksinim değildir.",
+      ]);
+    }
     this.unsubscribeWalletChanges = this.debugOverlay
       ? this.playerKingdom.wallet.subscribe((change: ResourceChange) => this.debugOverlay?.recordResourceChange(change))
       : null;
@@ -449,9 +462,14 @@ export class RtsApp {
         }
       },
       onCommandClick: (x, y) => {
-        // Placement deliberately persists after each confirmed structure so
-        // players can build in sequence. A contextual right-click exits that
-        // mode before it can be interpreted as a unit command.
+        // Both placement tools persist after a successful left-click so players
+        // can keep building. A contextual right-click exits the active tool
+        // before it can be interpreted as a unit command.
+        if (this.roadPlacement.isActive) {
+          this.roadPlacement.cancel();
+          this.syncRoadUi();
+          return;
+        }
         if (this.placement.isActive) {
           this.placement.cancel();
           this.syncPlacementUi();
@@ -883,9 +901,11 @@ export class RtsApp {
 
   private queueWorker(): void {
     const result = this.workerProduction.queueWorker(PLAYER_OWNER);
+    const queuedCount = this.workerProduction.queuedCount(PLAYER_OWNER);
+    const queueCapacity = workerQueueCapacityForCenterLevel(this.centers.get(PLAYER_OWNER)?.level ?? 1);
     const message: Record<typeof result, string> = {
-      queued: "İşçi üretim kuyruğa alındı.",
-      "already-training": "Merkez zaten bir İşçi üretiyor.",
+      queued: `İşçi üretim kuyruğa alındı (${queuedCount}/${queueCapacity}).`,
+      "queue-full": `İşçi üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
       "insufficient-resources": "İşçi için 50 yiyecek gerekli.",
       "population-full": "Nüfus dolu: önce Ev kurun.",
       "no-command-center": "İşçi üretmek için Merkez gerekli.",

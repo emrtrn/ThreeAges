@@ -32,7 +32,13 @@ function requireElement<T extends HTMLElement>(id: string): T {
  * the debug panel. Simulation-speed application lands with the Faz 1 game loop;
  * here the value is only resolved and logged.
  */
-async function bootFoundation(): Promise<GamePreset | null> {
+interface BootFoundationResult {
+  readonly preset: GamePreset | null;
+  /** Prosperity is debug-only in Phase 6 and never enters gameplay gates. */
+  readonly prosperityDebugEnabled: boolean;
+}
+
+async function bootFoundation(): Promise<BootFoundationResult> {
   installGlobalErrorHandlers();
   const isDev = import.meta.env.DEV;
   setLogLevel(isDev ? "debug" : "warn");
@@ -58,11 +64,11 @@ async function bootFoundation(): Promise<GamePreset | null> {
       config: snapshotRuntimeConfig(config),
     };
   }
-  return preset;
+  return { preset, prosperityDebugEnabled: config.flags.prosperity };
 }
 
 async function main(): Promise<void> {
-  const preset = await bootFoundation();
+  const { preset, prosperityDebugEnabled } = await bootFoundation();
 
   const params = new URLSearchParams(location.search);
   const canvas = requireElement<HTMLCanvasElement>("game-canvas");
@@ -85,6 +91,7 @@ async function main(): Promise<void> {
     const rts = new RtsApp(canvas, {
       debug: params.has("debug"),
       testSandbox: params.has("testSandbox"),
+      prosperityDebugEnabled,
       unitBalance,
       buildingBalance,
       resourceBalance,

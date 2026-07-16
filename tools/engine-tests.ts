@@ -45,6 +45,7 @@ import {
   roomLayoutToSceneDocument,
 } from "../engine/scene/legacyRoomLayoutAdapter";
 import { validateSceneDocument } from "../engine/scene/sceneSerialization";
+import { resolveFeatureFlags } from "../src/game/core/featureFlags";
 import { normalizeAssetCollisionDef } from "../src/scene/assetCollisionLoader";
 import {
   buildGameModeDebugSnapshot,
@@ -90,6 +91,11 @@ import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransf
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
+import {
+  AI_STARTING_FOOD_AND_WOOD,
+  matchStartingResourcesFor,
+  PLAYER_STARTING_FOOD_AND_WOOD,
+} from "../src/game/rts/kingdom/matchStartingResources";
 import { AiController } from "../src/game/rts/ai/aiController";
 import { AiDecisionLog } from "../src/game/rts/ai/aiDecisionLog";
 import { ArmyManager } from "../src/game/rts/ai/armyManager";
@@ -108,10 +114,11 @@ import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
+import { formatInventoryAmount } from "../src/game/rts/ui/rtsBuildPalette";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
-import { WorkerProductionSystem } from "../src/game/rts/structures/workerProductionSystem";
+import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "../src/game/rts/structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "../src/game/rts/structures/structureUpgradeSystem";
 import { visualBuildingIdForStructure } from "../src/game/rts/structures/rtsBuildingVisuals";
 import {
@@ -27741,13 +27748,28 @@ check("game-data version.json validates", () => {
   assert.ok(version.balanceVersion.length > 0);
 });
 
+check("RTS inventory display floors fractional stocks without overstating them", () => {
+  assert.equal(formatInventoryAmount(78.34832000000674), 78);
+  assert.equal(formatInventoryAmount(67.321711111104), 67);
+  assert.equal(formatInventoryAmount(0.99), 0);
+  assert.equal(formatInventoryAmount(Number.NaN), 0);
+});
+
 check("game-data presets load and debug_fast is faster", () => {
   const proof = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
   const fast = validateGamePreset(readPresetJson("debug_fast"), "debug_fast");
+  const coreMatch = validateGamePreset(readPresetJson("core_match"), "core_match");
   assert.equal(proof.id, "gameplay_proof");
   assert.equal(fast.id, "debug_fast");
+  assert.equal(coreMatch.flags.prosperity, false, "the core match keeps optional prosperity disabled");
+  assert.deepEqual(coreMatch.startingResources, { food: 1000, wood: 1000, stone: 0, gold: 0 });
   // debug_fast exists to raise the sim speed (plan §19 acceptance criterion).
   assert.ok(fast.gameSpeed > proof.gameSpeed);
+});
+
+check("Faz 6 prosperity is opt-in debug information, not a default gameplay flag", () => {
+  assert.equal(resolveFeatureFlags().prosperity, false);
+  assert.equal(resolveFeatureFlags({ prosperity: false }, "prosperity").prosperity, true);
 });
 
 check("game-data validator rejects an unknown feature flag", () => {
@@ -27941,6 +27963,24 @@ check("Faz 6 stone and gold data defines finite safe and richer external deposit
   }), GameDataError, "empty deposits are invalid data, not an exhausted starting state");
 });
 
+check("Faz 6 assigns all four resources to distinct core-match decisions", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const ages = validateAgeBalance(
+    JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as unknown,
+  );
+  assert.equal(units.worker_placeholder?.cost.food, 50, "food pays for worker growth");
+  assert.equal(units.guard_placeholder?.cost.wood, 20, "wood contributes to military production");
+  assert.equal(buildings.house?.cost.wood, 80, "wood pays for settlement construction");
+  assert.equal(buildings.house?.upgrade?.cost.stone, 40, "stone pays for Town-era structure upgrades");
+  assert.equal(ages.town.cost.gold, 150, "gold is a mandatory Town transition resource");
+  assert.deepEqual(ages.town.cost, { food: 600, wood: 350, stone: 150, gold: 150 });
+});
+
 check("Faz 6 completed resource buildings replace their construction placeholders with mapped models", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -28020,7 +28060,8 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.equal(townCenter.health.max, 450);
   assert.equal(townCenter.controlRadius, 22);
   assert.equal(townCenter.workerTrainingSeconds, 9);
-  assert.equal(workerProduction.queueWorker("player"), "already-training");
+  kingdoms.get("player").wallet.credit("food", 50);
+  assert.equal(workerProduction.queueWorker("player"), "queued", "Town centres accept an additional waiting worker order");
   assert.deepEqual(workerProduction.update(RTS_TEST_UNIT_STATS.trainingSeconds).map((event) => event.type), ["completed"],
     "the paused paid worker queue resumes after Town completes");
   assert.equal(units.workersOf("player").length, 1);
@@ -28082,16 +28123,16 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
     ?? assert.fail("Town prerequisite outpost missing");
   assert.deepEqual(outpost.stats.upgrade, {
     cost: { wood: 110, stone: 70 }, durationSeconds: 55, maxHealth: 1000,
-    territory: { controlRadius: 12, connectedControlRadius: 15 },
+    territory: { controlRadius: 20, connectedControlRadius: 24 },
   });
   const outpostTerritory = new TerritoryControlSystem(() => [{
     owner: "player" as const,
-    x: outpost.x,
-    z: outpost.z,
+    x: 0,
+    z: 0,
     radius: outpost.territoryControlRadius ?? 0,
   }]);
   outpostTerritory.refresh();
-  assert.equal(outpostTerritory.ownerAt(outpost.x + 10, outpost.z), "neutral", "T1 outpost has its smaller radius");
+  assert.equal(outpostTerritory.ownerAt(18, 0), "neutral", "T1 outpost has its smaller radius");
   kingdoms.get("player").wallet.credit("wood", 110);
   kingdoms.get("player").wallet.credit("stone", 70);
   assert.equal(upgrades.start("player", "outpost"), "started");
@@ -28099,10 +28140,10 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"]);
   assert.equal(outpost.level, 2);
   assert.equal(outpost.health.max, 1000);
-  assert.equal(outpost.territoryControlRadius, 12);
-  assert.equal(outpost.territoryConnectedControlRadius, 15);
+  assert.equal(outpost.territoryControlRadius, 20);
+  assert.equal(outpost.territoryConnectedControlRadius, 24);
   outpostTerritory.refresh();
-  assert.equal(outpostTerritory.ownerAt(outpost.x + 10, outpost.z), "player", "T2 outpost expands control on completion");
+  assert.equal(outpostTerritory.ownerAt(18, 0), "player", "T2 outpost expands control on completion");
   outpostTerritory.dispose();
 });
 
@@ -28631,7 +28672,7 @@ check("RTS territory stores centre ownership per grid cell and gates normal buil
   );
   const house = buildings.house ?? assert.fail("house definition missing");
   const outpost = buildings.outpost ?? assert.fail("outpost definition missing");
-  assert.deepEqual(outpost.territory, { controlRadius: 8, connectedControlRadius: 12, expansionPlacementRange: 12 });
+  assert.deepEqual(outpost.territory, { controlRadius: 16, connectedControlRadius: 20, expansionPlacementRange: 12 });
   assert.equal(outpost.cost.wood, 140);
   assert.equal(outpost.constructionSeconds, 45);
   const sources = [
@@ -28687,6 +28728,11 @@ check("RTS territory stores centre ownership per grid cell and gates normal buil
   sources.push({ owner: "player", x: 16, z: 12, radius: outpost.territory?.controlRadius ?? 0 });
   territory.refresh();
   assert.equal(territory.ownerAt(22, 12), "player", "a completed outpost adds its small control area");
+  assert.equal(
+    territory.ownsFootprint("player", 26, 12, 6, 6),
+    true,
+    "one T1 outpost controls the full footprint of a nearby quarry-sized building",
+  );
   territory.dispose();
 });
 
@@ -28845,7 +28891,7 @@ check("RTS completed Barracks trains a Guard at a safe exit", () => {
   units.clear();
 });
 
-check("RTS worker production spends food and population capacity, and houses extend the cap", () => {
+check("RTS worker production queues paid worker orders by command-centre age capacity", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
@@ -28856,7 +28902,7 @@ check("RTS worker production spends food and population capacity, and houses ext
   const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
   const structures = new PlacedStructureSystem();
   const units = new UnitSystem();
-  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 100, wood: 0 }, 20);
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 300, wood: 0 }, 20);
   const population = kingdoms.get("player").population;
   for (let index = 0; index < 20; index += 1) units.spawn("player", index, 0, RTS_TEST_UNIT_STATS);
   assert.equal(population.reserve(1), null, "base settlement population cap blocks a new queue");
@@ -28878,17 +28924,39 @@ check("RTS worker production spends food and population capacity, and houses ext
     navigation,
     { ...worker, trainingSeconds: 0.1 },
     kingdoms,
+    undefined,
+    undefined,
+    (owner) => workerQueueCapacityForCenterLevel(centers.get(owner)?.level ?? 1),
   );
-  assert.equal(production.queueWorker("player"), "queued");
-  assert.equal(wallet.amount("food"), 50);
-  assert.equal(population.snapshot().reserved, 1);
-  assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
-  assert.equal(units.workersOf("player").length, 1);
-  assert.deepEqual(population.snapshot(), { current: 1, reserved: 0, capacity: 25, used: 1 });
-  assert.equal(production.queueWorker("player"), "queued", "second worker can be queued while capacity remains");
-  assert.equal(production.queueWorker("player"), "already-training");
+  assert.equal(workerQueueCapacityForCenterLevel(1), 5);
+  assert.equal(workerQueueCapacityForCenterLevel(2), 10);
+  assert.equal(workerQueueCapacityForCenterLevel(3), 20);
+  for (let index = 0; index < 5; index += 1) assert.equal(production.queueWorker("player"), "queued");
+  assert.equal(production.queuedCount("player"), 5);
+  assert.equal(wallet.amount("food"), 50, "every queued worker reserves its food immediately");
+  assert.equal(population.snapshot().reserved, 5, "every queued worker reserves its population immediately");
+  assert.equal(production.queueWorker("player"), "queue-full", "Settlement centres hold at most five worker orders");
+  for (let index = 0; index < 5; index += 1) {
+    assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
+  }
+  assert.equal(units.workersOf("player").length, 5);
+  assert.equal(production.queuedCount("player"), 0);
+  assert.deepEqual(population.snapshot(), { current: 5, reserved: 0, capacity: 25, used: 5 });
+
+  const center = centers.get("player") ?? assert.fail("worker-production centre missing");
+  center.level = 2;
+  wallet.credit("food", 500);
+  for (let index = 0; index < 10; index += 1) assert.equal(production.queueWorker("player"), "queued");
+  assert.equal(production.queueWorker("player"), "queue-full", "Town centres hold at most ten worker orders");
   production.reset();
-  assert.equal(wallet.amount("food"), 50, "cancelled worker queue refunds its food");
+  assert.equal(population.snapshot().reserved, 0, "reset releases every waiting Town order");
+
+  center.level = 3;
+  wallet.credit("food", 1000);
+  for (let index = 0; index < 20; index += 1) assert.equal(production.queueWorker("player"), "queued");
+  assert.equal(production.queueWorker("player"), "queue-full", "third-age centres hold at most twenty worker orders");
+  production.reset();
+  assert.equal(population.snapshot().reserved, 0, "reset releases every waiting third-age order");
   centers.clear();
   structures.clear();
   units.clear();
@@ -30247,6 +30315,28 @@ check("§60: the AI picks the outer economy while even and the centre once domin
     raided.units.unitsOf("enemy").some((unit) => unit.attackTarget === raider),
     "§57: guards protect the centre by attacking its nearby raider",
   );
+});
+
+check("RTS match-start resources give the player 2000 food/wood and the AI 100", () => {
+  const preset = { food: 1000, wood: 1000, stone: 0, gold: 0 };
+  const playerStart = matchStartingResourcesFor("player", preset);
+  const enemyStart = matchStartingResourcesFor("enemy", preset);
+  assert.deepEqual(playerStart, { food: PLAYER_STARTING_FOOD_AND_WOOD, wood: PLAYER_STARTING_FOOD_AND_WOOD, stone: 0, gold: 0 });
+  assert.deepEqual(enemyStart, { food: AI_STARTING_FOOD_AND_WOOD, wood: AI_STARTING_FOOD_AND_WOOD, stone: 0, gold: 0 });
+
+  const kingdoms = new KingdomRegistry(
+    ["player", "enemy"], new UnitSystem(), new PlacedStructureSystem(), preset, 20,
+    { player: playerStart, enemy: enemyStart },
+  );
+  assert.equal(kingdoms.get("player").wallet.amount("food"), 2000);
+  assert.equal(kingdoms.get("player").wallet.amount("wood"), 2000);
+  assert.equal(kingdoms.get("enemy").wallet.amount("food"), 100);
+  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 100);
+  kingdoms.get("player").wallet.credit("food", 1);
+  kingdoms.get("enemy").wallet.credit("wood", 1);
+  kingdoms.reset();
+  assert.equal(kingdoms.get("player").wallet.amount("food"), 2000, "restart restores the player start");
+  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 100, "restart restores the AI start");
 });
 
 check("§62/§65: the AI retreats on a lost exchange and on a ground-down army", () => {

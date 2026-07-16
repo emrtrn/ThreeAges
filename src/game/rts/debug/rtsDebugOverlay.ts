@@ -20,6 +20,7 @@ export class RtsDebugOverlay {
   private readonly damageLines: string[] = [];
   private readonly resourceLines: string[] = [];
   private aiLines: readonly string[] = [];
+  private progressionLines: readonly string[] = [];
 
   constructor() {
     this.root.className = "rts-debug-overlay";
@@ -36,6 +37,11 @@ export class RtsDebugOverlay {
   /** AI design §82 panel block, formatted by `formatRtsAiDebug` (plan §39). */
   setAiLines(lines: readonly string[]): void {
     this.aiLines = lines;
+  }
+
+  /** Optional, static progression diagnostics such as the Phase 6 Refah flag. */
+  setProgressionLines(lines: readonly string[]): void {
+    this.progressionLines = lines;
   }
 
   recordResourceChange(change: ResourceChange): void {
@@ -107,6 +113,7 @@ export class RtsDebugOverlay {
       ...producerLinks.map((producer) => `  yapı#${producer.structureId} (${producer.resourceId}): ${producer.status}${producer.depotStructureId ? ` · depo#${producer.depotStructureId}` : ""}`),
     );
     lines.push("kaynak hareketleri:", ...(this.resourceLines.length ? this.resourceLines : ["- yok"]));
+    if (this.progressionLines.length > 0) lines.push("", ...this.progressionLines);
     if (this.aiLines.length > 0) lines.push("", ...this.aiLines);
     this.root.textContent = lines.join("\n");
   }

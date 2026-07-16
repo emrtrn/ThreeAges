@@ -1,0 +1,16 @@
+{
+  "id": "core_match",
+  "label": "Core Match (Settlement to Town)",
+  "flags": {
+    "prosperity": false
+  },
+  "startingResources": {
+    "food": 1000,
+    "wood": 1000,
+    "stone": 0,
+    "gold": 0
+  },
+  "gameSpeed": 1,
+  "mapState": "two_flanks_blockout",
+  "aiProfile": "normal"
+}
