@@ -1,5 +1,5 @@
 /** Minimal Phase 2 build-mode control surface (not the final HUD). */
-import type { AgeBalance, BuildingBalance } from "../../data/gameDataTypes";
+import type { AgeBalance, BuildingBalance, UnitBalanceStats } from "../../data/gameDataTypes";
 import { townUnlocksAvailable, type AgeSnapshot } from "../progression/ageSystem";
 import type { EconomyBuildingSnapshot } from "../economy/economyProductionSystem";
 import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
@@ -16,6 +16,9 @@ export class RtsBuildPalette {
   private readonly age = document.createElement("p");
   private readonly townUnlocks = document.createElement("p");
   private readonly townUpgradeButton = document.createElement("button");
+  private readonly trainChoices = document.createElement("div");
+  private readonly trainButtons = new Map<string, HTMLButtonElement>();
+  private trainSignature = "";
   private readonly townStructureUpgradeButtons = new Map<string, HTMLButtonElement>();
   private readonly structureUpgradeStates = new Map<string, StructureUpgradeSnapshot>();
   private townUnlocksAreAvailable = false;
@@ -33,8 +36,9 @@ export class RtsBuildPalette {
     private readonly onChoose: (id: string) => void,
     private readonly onCancel: () => void,
     private readonly onCancelLatest: () => void,
-    private readonly onTrainGuard: () => void,
+    private readonly onTrainUnit: (unitId: string) => void,
     private readonly onTrainWorker: () => void,
+    private readonly onSetRallyPoint: () => void,
     private readonly onStartTownUpgrade: () => void,
     private readonly onUpgradeBarracks: () => void,
     private readonly onUpgradeHouse: () => void,
@@ -77,16 +81,19 @@ export class RtsBuildPalette {
     cancelLatest.textContent = "Son İnşaatı İptal";
     cancelLatest.addEventListener("click", this.onCancelLatest);
     choices.appendChild(cancelLatest);
-    const trainGuard = document.createElement("button");
-    trainGuard.type = "button";
-    trainGuard.textContent = "Muhafız Üret";
-    trainGuard.addEventListener("click", this.onTrainGuard);
-    choices.appendChild(trainGuard);
+    this.trainChoices.className = "rts-train-choices";
+    choices.appendChild(this.trainChoices);
     const trainWorker = document.createElement("button");
     trainWorker.type = "button";
     trainWorker.textContent = "İşçi Üret";
     trainWorker.addEventListener("click", this.onTrainWorker);
     choices.appendChild(trainWorker);
+    const rallyPoint = document.createElement("button");
+    rallyPoint.type = "button";
+    rallyPoint.textContent = "Toplanma Noktası";
+    rallyPoint.title = "Kışladan çıkan birliklerin gideceği noktayı haritada seçin.";
+    rallyPoint.addEventListener("click", this.onSetRallyPoint);
+    choices.appendChild(rallyPoint);
     this.townUpgradeButton.type = "button";
     const townUpgrade = this.townUpgradeButton;
     townUpgrade.textContent = "Kasaba Çağına Geç";
@@ -256,6 +263,42 @@ export class RtsBuildPalette {
     this.logisticsStatuses.clear();
     for (const [structureId, status] of statuses) this.logisticsStatuses.set(structureId, status);
     this.renderSelectedProducer();
+  }
+
+  /**
+   * Render one button per Barracks-trainable unit. A locked unit stays visible
+   * and disabled rather than hidden: the player needs to see that Barracks II
+   * is what an Archer costs, which is a reason to upgrade (plan §45).
+   */
+  setTrainableUnits(
+    units: readonly { readonly id: string; readonly stats: UnitBalanceStats; readonly unlocked: boolean }[],
+  ): void {
+    const signature = units.map((unit) => `${unit.id}:${unit.unlocked}`).join("|");
+    if (signature === this.trainSignature) return;
+    this.trainSignature = signature;
+    this.trainChoices.replaceChildren();
+    this.trainButtons.clear();
+    for (const { id, stats, unlocked } of units) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "rts-train-choice";
+      button.dataset.rtsUnit = id;
+      button.setAttribute("aria-label", `${stats.label} üret`);
+      const label = document.createElement("span");
+      label.className = "rts-train-choice-label";
+      label.textContent = `${stats.label} Üret`;
+      const cost = document.createElement("span");
+      cost.className = "rts-train-choice-cost";
+      cost.textContent = `${formatBuildingCost(stats.cost)} · ${stats.populationCost} Nüfus`;
+      button.append(label, cost);
+      button.disabled = !unlocked;
+      button.title = unlocked
+        ? `${stats.label}: ${stats.trainingSeconds} sn`
+        : `${stats.label} için Kışla T${stats.requiredBuildingLevel} gerekir.`;
+      button.addEventListener("click", () => this.onTrainUnit(id));
+      this.trainButtons.set(id, button);
+      this.trainChoices.appendChild(button);
+    }
   }
 
   /** Persist completion/error feedback while placement hover state keeps changing. */

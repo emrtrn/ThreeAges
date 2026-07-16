@@ -31,7 +31,9 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator(".rts-logistics-warning")).toBeHidden();
 
   await page.getByRole("button", { name: "Yol Kur", exact: true }).click();
-  await expect(page.locator(".rts-road-status")).toHaveText("Yol başlangıcını seçin.");
+  await expect(page.locator(".rts-road-status")).toHaveText(
+    "Yol başlangıcını sol tıkla seçin; sağ tıkla bitirin.",
+  );
   await page.getByRole("button", { name: "Yolu İptal", exact: true }).click();
 
   await page.getByRole("button", { name: "Ev", exact: true }).click();
@@ -51,8 +53,38 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator(".rts-build-status")).toHaveText("Haritada konum seçin.");
   await page.getByRole("button", { name: "İptal", exact: true }).click();
   await page.getByRole("button", { name: "İşçi Üret", exact: true }).click();
-  await expect(page.locator(".rts-build-action-message")).toHaveText("İşçi üretim kuyruğa alındı.");
+  // The match runs at 4X here, so the order can finish before this assertion:
+  // accept either side of that race rather than depending on the timing.
+  await expect(page.locator(".rts-build-action-message")).toHaveText(
+    /İşçi üretim kuyruğa alındı \(\d+\/\d+\)\.|Yeni işçi Merkez'den çıktı\./,
+  );
   await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 10/20");
   await expect(page.locator(".rts-debug-overlay")).toContainText("reserve: food -50");
+  expect(errors).toEqual([]);
+});
+
+test("RTS Phase 7 palette gates the Archer and the Ram behind a tier-2 Barracks", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  await page.goto("/?rts");
+  await expect(page.locator(".rts-build-palette")).toBeVisible();
+
+  // Plan §45: the whole core roster is visible from the start. A locked unit
+  // stays on screen and explains itself — that is what makes Barracks II read
+  // as a decision rather than a surprise.
+  for (const unitId of ["guard_placeholder", "archer_placeholder", "siege_placeholder"]) {
+    await expect(page.locator(`[data-rts-unit="${unitId}"]`)).toBeVisible();
+  }
+  await expect(page.locator('[data-rts-unit="archer_placeholder"]')).toContainText("Okçu Üret");
+  await expect(page.locator('[data-rts-unit="siege_placeholder"]')).toContainText("Koçbaşı Üret");
+  await expect(page.locator('[data-rts-unit="archer_placeholder"]')).toHaveAttribute(
+    "title",
+    /Kışla T2 gerekir/,
+  );
+  // With no Barracks standing, nothing is trainable yet.
+  await expect(page.locator('[data-rts-unit="guard_placeholder"]')).toBeDisabled();
+
+  await expect(page.locator(".rts-selection-panel")).toBeHidden();
   expect(errors).toEqual([]);
 });

@@ -14,6 +14,7 @@ import type { UnitSystem } from "../units/unitSystem";
 import { issueAttackOrder } from "../units/attackPathing";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { CombatTarget } from "../combat/combatTarget";
+import type { UnitStance } from "../units/unit";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 
 /** The y = 0 walkable ground the runtime commands against. */
@@ -60,9 +61,43 @@ export class CommandSystem {
     this.markers.spawn(point);
   }
 
+  /**
+   * Attack-move the selection to the pointer (GDD 06 §25): units walk the route
+   * but stop to fight anything they acquire, then resume. Workers are excluded —
+   * an attack-move that drags the economy along is not what the player meant.
+   */
+  issueAttackMoveAt(x: number, y: number): void {
+    const selected = this.selection.selected().filter((unit) => unit.role !== "worker");
+    if (selected.length === 0) return;
+    const point = this.groundPoint(x, y);
+    if (!point) return;
+
+    const offsets = formationOffsets(selected.length);
+    selected.forEach((unit, i) => {
+      const offset = offsets[i] ?? { x: 0, z: 0 };
+      const destination = new Vector3(point.x + offset.x, 0, point.z + offset.z);
+      const path = this.navigation.plan(unit.position, destination);
+      if (path) unit.setAttackMovePath(path, destination);
+      else unit.stop();
+    });
+    this.markers.spawn(point, "#ffb45e");
+  }
+
   /** Immediately stop every currently selected unit and clear attack pursuit. */
   issueStop(): void {
     for (const unit of this.selection.selected()) unit.stop();
+  }
+
+  /** Set the stance of every selected combat unit (GDD 06 §26). */
+  issueStance(stance: UnitStance): void {
+    for (const unit of this.selection.selected()) {
+      if (unit.role !== "worker") unit.setStance(stance);
+    }
+  }
+
+  /** Ground position under a screen pixel, for tools that pick a map point. */
+  groundPointAt(x: number, y: number): Vector3 | null {
+    return this.groundPoint(x, y);
   }
 
   /** Raycast a screen point against units or command centres before ground. */

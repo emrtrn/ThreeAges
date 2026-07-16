@@ -23,6 +23,9 @@ export function updateUnitMovement(units: readonly Unit[], dt: number): void {
       unit.stop();
       continue;
     }
+    // Hold Position is exactly this: the unit keeps its weapon and gives up its
+    // feet (GDD 06 §26). Everything else below is a reason to take a step.
+    if (unit.stance === "hold") continue;
     const attackTarget = unit.attackTarget;
     if (attackTarget?.health.depleted) {
       unit.setAttackTarget(null);

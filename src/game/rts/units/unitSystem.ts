@@ -8,9 +8,11 @@
  */
 import { Group, type Object3D } from "three";
 
+import type { Quaternion } from "three";
+
 import type { UnitBalanceStats } from "../../data/gameDataTypes";
 import type { CombatTarget } from "../combat/combatTarget";
-import { Unit, type UnitOwner, type UnitRole } from "./unit";
+import { Unit, type UnitOwner } from "./unit";
 
 export class UnitSystem {
   /** Scene subtree holding all unit render objects. */
@@ -23,14 +25,9 @@ export class UnitSystem {
     this.root.name = "rts-units";
   }
 
-  spawn(
-    owner: UnitOwner,
-    x: number,
-    z: number,
-    stats: UnitBalanceStats,
-    role: UnitRole = "guard",
-  ): Unit {
-    const unit = new Unit(owner, x, z, stats, role);
+  /** Role, speed and counters all ride on `stats` now — there is no role argument. */
+  spawn(owner: UnitOwner, x: number, z: number, stats: UnitBalanceStats): Unit {
+    const unit = new Unit(owner, x, z, stats);
     this.units.push(unit);
     // The capsule body is the first child; index it for raycast resolution.
     const body = unit.object.children[0];
@@ -50,6 +47,16 @@ export class UnitSystem {
 
   workersOf(owner: UnitOwner): Unit[] {
     return this.unitsOf(owner).filter((unit) => unit.role === "worker");
+  }
+
+  /** One kingdom's live combat units, for HUD group summaries and AI power. */
+  armyOf(owner: UnitOwner): Unit[] {
+    return this.unitsOf(owner).filter((unit) => unit.role !== "worker");
+  }
+
+  /** Refresh every health bar and billboard it toward the shared RTS camera. */
+  updatePresentation(cameraQuaternion: Quaternion): void {
+    for (const unit of this.units) unit.updatePresentation(cameraQuaternion);
   }
 
   /** Clear every attack order aimed at a unit that can no longer be targeted. */

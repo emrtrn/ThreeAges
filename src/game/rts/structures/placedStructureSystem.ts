@@ -42,6 +42,8 @@ export interface PlacedStructure {
   readonly health: HealthComponent;
   /** {@link CombatTarget}: the same world position the object sits at. */
   readonly position: Vector3;
+  /** {@link CombatTarget}: every building is the §33 table's "structure" column. */
+  readonly armorClass: "structure";
   /** Melee units strike the footprint edge rather than walking into the blocker. */
   readonly combatRadius: number;
   /** T1 at placement; data-owned upgrades may promote this to T2. */
@@ -98,6 +100,7 @@ export class PlacedStructureSystem {
       progressFill,
       health: new HealthComponent(stats.maxHealth),
       position: object.position,
+      armorClass: "structure",
       // The inscribed radius: a rectangular footprint is attackable from its
       // nearest edge, so the shorter side is what a melee unit must reach.
       combatRadius: Math.min(stats.footprint.width, stats.footprint.depth) / 2,

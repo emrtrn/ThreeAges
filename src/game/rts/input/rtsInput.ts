@@ -30,12 +30,30 @@ const PAN_KEYS = new Map<string, keyof RtsPanIntent | "up" | "down" | "left" | "
   ["ArrowRight", "right"],
 ]);
 
+/**
+ * Edge-triggered command keys. WASD is camera pan, so the RTS conventions (A for
+ * attack-move, S for stop) are all taken; each command below picks the nearest
+ * free, unambiguous key instead.
+ */
+const COMMAND_KEYS = {
+  /** Stop. RTS convention is S, which pans. */
+  KeyX: "stop",
+  /** Attack-move. RTS convention is A, which pans; F reads as "fight-move". */
+  KeyF: "attackMove",
+  /** Hold Position — H is free and matches the convention. */
+  KeyH: "hold",
+  /** Return held units to normal orders. */
+  KeyG: "aggressive",
+} as const;
+
+type RtsCommandKey = (typeof COMMAND_KEYS)[keyof typeof COMMAND_KEYS];
+
 export class RtsInput {
   private readonly held = new Set<string>();
   /** Accumulated, unconsumed wheel delta (positive = zoom out). */
   private wheelDelta = 0;
-  /** One-shot request for the selected units to stop (X; avoids the S pan key). */
-  private stopRequested = false;
+  /** One-shot edge-triggered commands, drained once per frame. */
+  private readonly commands = new Set<RtsCommandKey>();
   /** Pointer position in CSS pixels relative to the canvas, or null when outside. */
   private pointerX: number | null = null;
   private pointerY: number | null = null;
@@ -93,9 +111,12 @@ export class RtsInput {
 
   /** Take and clear a one-shot selected-unit stop request. */
   consumeStopRequest(): boolean {
-    const requested = this.stopRequested;
-    this.stopRequested = false;
-    return requested;
+    return this.consumeCommand("stop");
+  }
+
+  /** Take and clear one edge-triggered command request. */
+  consumeCommand(command: RtsCommandKey): boolean {
+    return this.commands.delete(command);
   }
 
   /** Live pointer position in canvas CSS pixels, or null when off-canvas. */
@@ -109,14 +130,14 @@ export class RtsInput {
   reset(): void {
     this.held.clear();
     this.wheelDelta = 0;
-    this.stopRequested = false;
+    this.commands.clear();
   }
 
   private readonly onKeyDown = (event: KeyboardEvent): void => {
-    // S is reserved for camera pan, so RTS stop uses the unambiguous X shortcut.
-    // Ignore auto-repeat: a stop is an edge-triggered command, not held input.
-    if (event.code === "KeyX") {
-      if (!event.repeat) this.stopRequested = true;
+    const command = COMMAND_KEYS[event.code as keyof typeof COMMAND_KEYS];
+    if (command) {
+      // Ignore auto-repeat: these are edge-triggered commands, not held input.
+      if (!event.repeat) this.commands.add(command);
       return;
     }
     const dir = PAN_KEYS.get(event.code);

@@ -88,13 +88,15 @@ export class AiBlackboardReader {
 
     const ownUnits = units.unitsOf(owner);
     const workers = ownUnits.filter((unit) => unit.role === "worker");
-    const ownArmyPower = armyPower(ownUnits.filter((unit) => unit.role === "guard"));
-    const enemyUnits = units.unitsOf(opponent);
-
+    // Every combat unit, not just Guards: `role === "guard"` meant "the whole
+    // army" only while Guard and worker were the only roles. Faz 7 added the
+    // Archer and the Ram, and an AI that cannot see them reads an Archer push
+    // as zero threat (AI design §56/§62).
+    const ownArmyPower = armyPower(units.armyOf(owner));
     const center = centers.get(owner);
     const baseThreat = center
-      ? armyPower(enemyUnits.filter((unit) => unit.role === "guard"
-        && Math.hypot(unit.position.x - center.position.x, unit.position.z - center.position.z)
+      ? armyPower(units.armyOf(opponent).filter((unit) =>
+        Math.hypot(unit.position.x - center.position.x, unit.position.z - center.position.z)
           <= AI_BASE_THREAT_RADIUS))
       : 0;
 
@@ -128,7 +130,7 @@ export class AiBlackboardReader {
       disconnectedProducers,
       expansionStep: context.expansionStep,
       ownArmyPower,
-      knownEnemyArmyPower: armyPower(enemyUnits.filter((unit) => unit.role === "guard")),
+      knownEnemyArmyPower: armyPower(units.armyOf(opponent)),
       baseThreat,
       ownCenterHealthRatio: center ? center.health.ratio : 0,
       enemyCenterExists: centers.get(opponent) !== null,

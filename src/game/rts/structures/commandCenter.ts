@@ -40,6 +40,8 @@ export class CommandCenter {
   workerTrainingSeconds: number | null = null;
   /** Lets melee units strike the outer footprint without entering its nav blocker. */
   readonly combatRadius = COMMAND_CENTER_FOOTPRINT / 2;
+  /** {@link CombatTarget}: the centre is a building, so siege is the answer to it. */
+  readonly armorClass = "structure" as const;
 
   constructor(
     readonly owner: UnitOwner,

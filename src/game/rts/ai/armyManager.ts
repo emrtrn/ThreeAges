@@ -101,9 +101,9 @@ export class ArmyManager {
     this.targetScore = null;
   }
 
-  /** §51: every live guard belongs to the one field army. */
+  /** §51: every live combat unit belongs to the one field army. */
   private fieldArmy(): Unit[] {
-    return this.units.unitsOf(this.owner).filter((unit) => unit.role === "guard" && !unit.dying);
+    return this.units.armyOf(this.owner).filter((unit) => !unit.dying);
   }
 
   private chooseMission(
@@ -148,8 +148,9 @@ export class ArmyManager {
   private chooseTarget(army: readonly Unit[], ratio: number): AiTargetScore | null {
     const opponent = this.opponent;
     const origin = centroid(army);
-    const enemyGuards = this.units.unitsOf(opponent)
-      .filter((unit) => unit.role === "guard" && !unit.dying);
+    // §60 DefenseStrength counts every defender. Filtering to Guards would let
+    // an Archer-screened target score as undefended and invite the army into it.
+    const enemyGuards = this.units.armyOf(opponent).filter((unit) => !unit.dying);
     const candidates: AiTargetCandidate[] = [];
     const targets = new Map<string, CombatTarget>();
 

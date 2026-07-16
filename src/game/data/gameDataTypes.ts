@@ -47,18 +47,63 @@ export interface GamePreset {
   aiProfile: AiProfile;
 }
 
+/**
+ * What a damage source is hitting. GDD 12 §33's soft-counter table is expressed
+ * as attacker multipliers against these three classes, so a unit's counters are
+ * data rather than a rule keyed on unit ids (plan §14).
+ */
+export type UnitArmorClass = "light" | "heavy" | "structure";
+
+/** Ürün B roles. Cavalry is deliberately out of the vertical slice (plan §2.9). */
+export type UnitRoleId = "guard" | "archer" | "siege" | "worker";
+
+/** Melee lands instantly at range; ranged spawns a tracer toward the target. */
+export type UnitAttackType = "melee" | "ranged";
+
+/** Per-armour-class damage multipliers — the GDD 12 §33 soft-counter table. */
+export type UnitDamageMultipliers = Readonly<Record<UnitArmorClass, number>>;
+
 /** Balance stats shared by a unit definition (GDD 12 §5). */
 export interface UnitBalanceStats {
+  /** Player-facing name; the HUD never invents a label for a unit id. */
+  readonly label: string;
+  /** Battlefield role, driving both production gating and UI role copy. */
+  readonly role: UnitRoleId;
+  /** What attackers resolve their §33 multiplier against when hitting this unit. */
+  readonly armorClass: Exclude<UnitArmorClass, "structure">;
   /** Maximum hit points; must be positive. */
   maxHealth: number;
-  /** Damage dealt by one successful basic melee hit; must be positive. */
+  /** Ground speed in world units/s; must be positive. */
+  readonly moveSpeed: number;
+  readonly attackType: UnitAttackType;
+  /**
+   * Base damage of one hit, before the target's armour-class multiplier. The
+   * player-facing number in GDD 12 §32 is the *resolved* one, so e.g. siege's 28
+   * base becomes the documented ~70 against a structure.
+   */
   attackDamage: number;
-  /** Seconds between basic melee hits; must be positive. */
+  /** Seconds between hits; must be positive. */
   attackCooldown: number;
-  /** Maximum ground-plane distance from which a basic hit may land; must be positive. */
+  /** Maximum ground-plane distance from which a hit may land; must be positive. */
   attackRange: number;
+  /**
+   * Distance at which an idle unit picks up a nearby enemy by itself. Zero opts
+   * a unit out entirely, which is how workers stay out of combat.
+   */
+  readonly acquisitionRange: number;
+  /**
+   * How far an auto-acquired chase may drag a unit from where it started before
+   * it gives up and returns (GDD 06 §39). Explicit orders ignore this leash.
+   */
+  readonly chaseRange: number;
+  readonly damageMultipliers: UnitDamageMultipliers;
   /** Seconds a completed production building needs to train this unit. */
   trainingSeconds: number;
+  /**
+   * Minimum tier of the training building. Archers and siege sit behind Barracks
+   * II (plan §2.10 / §45), so the gate is data instead of a hard-coded id check.
+   */
+  readonly requiredBuildingLevel: number;
   /** Resources reserved when this unit enters a production queue. */
   readonly cost: StartingResources;
   /** Population capacity consumed by this unit once queued. */

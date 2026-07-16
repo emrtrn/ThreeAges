@@ -121,7 +121,7 @@ export class WorkerProductionSystem {
         continue;
       }
       const { wallet, population } = this.kingdoms.get(owner);
-      this.units.spawn(owner, exit.x, exit.z, this.workerStats, "worker");
+      this.units.spawn(owner, exit.x, exit.z, this.workerStats);
       wallet.commit(order.resources);
       population.commit(order.population);
       queue.orders.shift();

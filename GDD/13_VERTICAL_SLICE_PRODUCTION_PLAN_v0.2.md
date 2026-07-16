@@ -1311,39 +1311,67 @@ Muhafız, Okçu ve Kuşatma arasında okunabilir bir karşıtlık sistemi oluşt
 
 ### Birim verisi
 
-- [ ] Muhafız verisini tamamla.
-- [ ] Okçu verisi oluştur.
-- [ ] Kuşatma birimi verisi oluştur.
-- [ ] Nüfus maliyetleri ekle.
-- [ ] Hedef sınıfları ekle.
-- [ ] Hareket ve saldırı verilerini JSON’a taşı.
+- [x] Muhafız verisini tamamla. (`balance/units.json`: 110 sağlık, 12 hasar,
+  1.4 sn, `heavy` zırh sınıfı, 6 hız; GDD 12 §31–§34 aralıklarında.)
+- [x] Okçu verisi oluştur. (`archer_placeholder`: 75 sağlık, `ranged` 7 menzil,
+  `light` zırh; Kışla T2 gerektirir.)
+- [x] Kuşatma birimi verisi oluştur. (`siege_placeholder` Koçbaşı: 220 sağlık,
+  28 taban hasar × 2.5 yapı çarpanı = ~70 yapı hasarı, 4.2 hız, 3 nüfus.)
+- [x] Nüfus maliyetleri ekle. (`populationCost`: İşçi/Muhafız/Okçu 1, Kuşatma 3.)
+- [x] Hedef sınıfları ekle. (`UnitArmorClass` = light/heavy/structure;
+  `damageMultipliers` GDD 12 §33 yumuşak karşıtlık tablosunu veriye taşır.
+  Her yapı ve Merkez `structure` sınıfı taşır.)
+- [x] Hareket ve saldırı verilerini JSON’a taşı. (`moveSpeed`, `attackType`,
+  `acquisitionRange`, `chaseRange`; koddaki `UNIT_MOVE_SPEED` sabiti kaldırıldı.
+  `validateUnitBalance` her alanı ve tutarsız menzil/leash kombinasyonlarını
+  açık hata ile reddeder.)
 
 ### Üretim
 
-- [ ] Okçuyu Kışla II içinde aç.
-- [ ] Kuşatma üretimini tek seviyeli Atölye veya Kışla II içinde çöz.
-- [ ] Üretim kuyruğu ekle.
-- [ ] Rally point ekle.
-- [ ] Bağlantısı kesilen askerî yapının davranışını uygula.
+- [x] Okçuyu Kışla II içinde aç. (`requiredBuildingLevel: 2`; kapı veride,
+  kodda bina kimliği kontrolü yok.)
+- [x] Kuşatma üretimini tek seviyeli Atölye veya Kışla II içinde çöz. (Kışla II
+  seçildi; ayrı Atölye yapısı kapsam dışında kaldı.)
+- [x] Üretim kuyruğu ekle. (`BarracksProductionSystem.queueUnit`; mevcut
+  5 / 10 / 20 çağ kapasitesi tüm kadro için ortaktır.)
+- [x] Rally point ekle. (Palet `Toplanma Noktası` düğmesi; yeni birlik güvenli
+  çıkışta doğar ve rota planlanabiliyorsa oraya yürür.)
+- [x] Bağlantısı kesilen askerî yapının davranışını uygula. (Kontrol alanı
+  dışında kalan Kışla `disconnected` döner ve üretim durur.)
 
 ### Komutlar
 
-- [ ] Saldırı-Hareket
-- [ ] Pozisyonu Koru
-- [ ] Geri çekilme için normal hareket kullanımı
-- [ ] Hedef ve komut göstergeleri
+- [x] Saldırı-Hareket (`F`; WASD pan nedeniyle klasik `A` yerine. Yol boyunca
+  hedef edinir, çatışma bitince ilerlemeyi sürdürür. İşçiler dahil edilmez.)
+- [x] Pozisyonu Koru (`H`: hareket emirlerini bırakır, menzilindekine ateş eder;
+  `G` serbest duruşa döndürür.)
+- [x] Geri çekilme için normal hareket kullanımı (Normal hareket emri bir transit
+  emridir: yol üzerindeki düşmanı hedef edinmez, bu yüzden geri çekilme
+  güvenilirdir.)
+- [x] Hedef ve komut göstergeleri (mevcut hedef halkası + saldırı-hareket için
+  turuncu, toplanma noktası için yeşil komut işareti.)
 
 ### Savaş
 
-- [ ] Yakın dövüş slot sistemi veya basit yaklaşma düzeni
-- [ ] Menzilli saldırı ve mermi
-- [ ] Yapı hasar sınıfı
-- [ ] Kuşatma yapı bonusu
-- [ ] Hedef kaybı ve yeniden hedefleme
-- [ ] Kovalama mesafesi
-- [ ] Dost ateşi olmaması
+- [x] Yakın dövüş slot sistemi veya basit yaklaşma düzeni (basit yaklaşma
+  seçildi: `planAttack` menzil kenarında durur, formasyon dağıtımı korunur.)
+- [x] Menzilli saldırı ve mermi (`ProjectileSystem`: hasar atış anında uygulanır,
+  mermi yalnız görsel iz taşır — hedefi ölen/uzaklaşan mermi sınıfı hata
+  yüzeyini kapsam dışında bırakır.)
+- [x] Yapı hasar sınıfı (`CombatTarget.armorClass`; Merkez ve tüm yapılar
+  `structure`.)
+- [x] Kuşatma yapı bonusu (2.5 çarpan; Muhafızın 0.35'ine karşı 7 kat.)
+- [x] Hedef kaybı ve yeniden hedefleme (`engagementSystem`: ölen hedef bırakılır,
+  menzildeki bir sonraki düşman edinilir; birimler yapılara tercih edilir.)
+- [x] Kovalama mesafesi (`chaseRange`; yalnız kendi edindiği hedefi kovalarken
+  geçerlidir — oyuncunun verdiği emir leash'e takılmaz.)
+- [x] Dost ateşi olmaması (yapı gereği: hasar yalnız `attackTarget` üzerine
+  çözülür ve hiçbir sistem onu dost birime yöneltmez.)
 
 ### Grup hareketi
+
+Bu bölüm ayrı bir dilime bırakıldı: kalabalık/tıkanma davranışı kendi test
+setini gerektirir ve Faz 7 savaş kadrosunun kabulünü bloke etmez.
 
 - [ ] Küçük grup hedef dağıtımı
 - [ ] Dar geçit testi
@@ -1353,22 +1381,33 @@ Muhafız, Okçu ve Kuşatma arasında okunabilir bir karşıtlık sistemi oluşt
 
 ### UI
 
-- [ ] Birim rol açıklaması
-- [ ] Güçlü ve zayıf hedef göstergesi
-- [ ] Grup özeti
-- [ ] Sağlık çubukları
+- [x] Birim rol açıklaması (`RtsSelectionPanel`; GDD 06 §6–§9 rol özetleri.)
+- [x] Güçlü ve zayıf hedef göstergesi (aynı `damageMultipliers` verisinden
+  türetilir; HUD veride olmayan bir karşıtlığı gösteremez.)
+- [x] Grup özeti (rol başına adet + toplam can; karışık seçimde baskın *savaş*
+  rolü anlatılır, işçiler yalnız saf ekonomi seçiminde.)
+- [x] Sağlık çubukları (birim üstünde billboard çubuk; orana göre renk.)
 
 ---
 
 ## 46. Kabul Kriterleri
 
-- [ ] Muhafız ön hat rolü taşıyor.
-- [ ] Okçu korunduğunda etkili, yakalandığında zayıf.
-- [ ] Kuşatma yapılara karşı gerekli ve birimlere karşı zayıf.
-- [ ] Tek birim türü her durumda en iyi seçim değil.
-- [ ] 25–40 birimlik çatışma kabul edilebilir performansta.
-- [ ] Köprüde kalıcı sıkışma oluşmuyor.
-- [ ] Oyuncu birim rollerini görsel ve UI üzerinden anlayabiliyor.
+- [x] Muhafız ön hat rolü taşıyor. (`test:engine`: ağır hedefe karşı en yüksek
+  hasarı Muhafız verir; en yüksek sağlıklı piyade odur.)
+- [x] Okçu korunduğunda etkili, yakalandığında zayıf. (`test:engine`: menzili
+  Muhafızın 3 katından fazla, sağlığı ve yakın dövüş takası daha düşük.)
+- [x] Kuşatma yapılara karşı gerekli ve birimlere karşı zayıf. (`test:engine`:
+  yapı çarpanı Muhafızın 4 katından fazla, birimlere karşı her iki sınıfta da
+  en düşük. Tarayıcı doğrulaması: 4 Muhafız 300 canlı Merkezi vuruş başına
+  yalnız 4.2 hasarla ~208 sim saniyede yıkabildi.)
+- [x] Tek birim türü her durumda en iyi seçim değil. (`test:engine`: her
+  saldıran en az bir hedef sınıfında bir diğerine yeniliyor.)
+- [ ] 25–40 birimlik çatışma kabul edilebilir performansta. (Ölçüm bekliyor;
+  grup hareketi dilimiyle birlikte değerlendirilecek.)
+- [ ] Köprüde kalıcı sıkışma oluşmuyor. (Grup hareketi dilimine bağlı.)
+- [x] Oyuncu birim rollerini görsel ve UI üzerinden anlayabiliyor. (Rol başına
+  ayrı siluet + `RtsSelectionPanel` rol/güçlü/zayıf satırları; tarayıcı
+  doğrulaması: karışık seçimde "Güçlü: ağır birim · Zayıf: yapı".)
 
 ---
 

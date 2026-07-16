@@ -1,14 +1,17 @@
 /**
- * RTS unit entity — Vertical Slice Plan v0.2 §21 ("Test birimi").
+ * RTS unit entity — Vertical Slice Plan v0.2 §21 ("Test birimi") / §45.
  *
- * A single controllable actor (Faz 1: the Guard placeholder). It owns its render
- * object (a capsule body + a flat selection ring) and the small gameplay state
- * the Faz 1 systems need: ownership (whose army it belongs to), selection, and
- * an explicit attack target. Movement, health and combat resolution are layered
- * on in later Faz 1 steps —
- * this stays a thin data+render holder, not a mega-object (plan §14).
+ * A single controllable actor. It owns its render object (a body + a flat
+ * selection ring + a health bar) and the small gameplay state the systems need:
+ * ownership, selection, stance, and an explicit attack target. Movement, combat
+ * resolution and death cleanup are layered on by their own systems — this stays
+ * a thin data+render holder, not a mega-object (plan §14).
+ *
+ * Faz 7 made the silhouette, speed, armour class and counters data-owned: a
+ * Guard, an Archer and a Ram are the same class with different `stats`.
  */
 import {
+  BoxGeometry,
   CapsuleGeometry,
   Color,
   Group,
@@ -16,52 +19,85 @@ import {
   MeshStandardMaterial,
   RingGeometry,
   Vector3,
+  type BufferGeometry,
+  type Quaternion,
 } from "three";
-import type { UnitBalanceStats } from "../../data/gameDataTypes";
+import type { UnitBalanceStats, UnitRoleId } from "../../data/gameDataTypes";
 import type { CombatTarget } from "../combat/combatTarget";
+import { AttackComponent } from "./attackComponent";
 import { HealthComponent } from "./health";
-import { MeleeAttackComponent } from "./meleeAttack";
+import { HealthBar } from "./healthBar";
 
 /** Which army a unit belongs to. Ürün A is one player vs. one AI (plan §4.2). */
 export type UnitOwner = "player" | "enemy";
-/** Ürün A roles; workers use the same movement shell but do not enter combat. */
-export type UnitRole = "guard" | "worker";
+/** Ürün B roles; workers use the same movement shell but do not enter combat. */
+export type UnitRole = UnitRoleId;
+
+/**
+ * How a unit treats enemies it was not explicitly ordered onto (GDD 06 §26).
+ * `aggressive` acquires and chases within its data leash; `hold` fires from
+ * where it stands and never steps off its position.
+ */
+export type UnitStance = "aggressive" | "hold";
 
 const TEAM_COLOR: Record<UnitOwner, string> = {
   player: "#2d7fd6",
   enemy: "#c0392b",
 };
 
-/** Capsule body radius; also the gameplay footprint used by selection/commands. */
+/** Gameplay footprint used by selection, commands and formation spacing. */
 export const UNIT_RADIUS = 0.5;
-const BODY_LENGTH = 1.0;
-/** Capsule centre height so the body rests on the y = 0 ground. */
-const BODY_CENTER_Y = BODY_LENGTH / 2 + UNIT_RADIUS;
 /** Brief defeat presentation before the unit leaves the field. */
 export const UNIT_DEATH_SECONDS = 0.35;
 
-let nextUnitId = 1;
+/**
+ * Per-role silhouette. GDD 06 §3.4 asks that a role be readable before its UI
+ * is: the Archer is slighter than the Guard, and the Ram is an unmistakable
+ * low box rather than a person.
+ */
+const ROLE_BODY: Record<UnitRoleId, { readonly radius: number; readonly length: number; readonly box?: boolean }> = {
+  guard: { radius: UNIT_RADIUS, length: 1.0 },
+  archer: { radius: UNIT_RADIUS * 0.78, length: 1.15 },
+  siege: { radius: UNIT_RADIUS * 1.5, length: 0.9, box: true },
+  worker: { radius: UNIT_RADIUS * 0.85, length: 0.8 },
+};
 
-/** Default ground speed (world units/s). Balance number — moves to JSON in the
- *  Faz 1 data step; a constant for now (plan §14). */
-export const UNIT_MOVE_SPEED = 6;
+let nextUnitId = 1;
 
 export class Unit {
   readonly id: number;
   readonly owner: UnitOwner;
   readonly object: Group;
-  /** Ground speed in world units/s. */
-  readonly speed = UNIT_MOVE_SPEED;
-  /** Bounded health state; death/removal is handled by a later combat step. */
+  readonly role: UnitRoleId;
+  /** Ground speed in world units/s, from `balance/units.json`. */
+  readonly speed: number;
+  /** {@link CombatTarget}: which §33 column attackers resolve against. */
+  readonly armorClass: UnitBalanceStats["armorClass"];
+  /** Bounded health state; death/removal is handled by the death system. */
   readonly health: HealthComponent;
-  /** JSON-backed basic melee damage, range and cooldown state. */
-  readonly attack: MeleeAttackComponent;
+  /** JSON-backed damage, range, counters and cooldown state. */
+  readonly attack: AttackComponent;
   /** Active move destination (y = 0), or null when idle/arrived. */
   moveTarget: Vector3 | null = null;
-  /** Enemy explicitly ordered by a contextual right-click, or null. */
+  /** Enemy this unit is currently fighting, or null. */
   attackTarget: CombatTarget | null = null;
+  stance: UnitStance = "aggressive";
+  /**
+   * Ground destination of an attack-move (GDD 06 §25). The unit walks here but
+   * stops to engage anything it acquires on the way; cleared on arrival or Stop.
+   */
+  attackMoveTarget: Vector3 | null = null;
+  /**
+   * True while the current `attackTarget` was chosen by auto-acquisition rather
+   * than by an order. Only these chases are leashed: a player who clicks a
+   * target across the map means it (GDD 06 §39).
+   */
+  autoAcquired = false;
+  /** Where an auto-acquired chase began; the leash is measured from here. */
+  private chaseOrigin: Vector3 | null = null;
   private readonly ring: Mesh;
   private readonly targetRing: Mesh;
+  private readonly healthBar: HealthBar;
   private movePath: Vector3[] = [];
   private selectedFlag = false;
   private targeterCount = 0;
@@ -71,26 +107,33 @@ export class Unit {
     owner: UnitOwner,
     x: number,
     z: number,
-    stats: UnitBalanceStats,
-    readonly role: UnitRole = "guard",
+    readonly stats: UnitBalanceStats,
   ) {
     this.id = nextUnitId++;
     this.owner = owner;
+    this.role = stats.role;
+    this.speed = stats.moveSpeed;
+    this.armorClass = stats.armorClass;
 
     this.object = new Group();
-    this.object.name = `rts-unit-${role}-${owner}-${this.id}`;
+    this.object.name = `rts-unit-${this.role}-${owner}-${this.id}`;
     this.object.position.set(x, 0, z);
     this.health = new HealthComponent(stats.maxHealth);
-    this.attack = new MeleeAttackComponent(stats);
+    this.attack = new AttackComponent(stats);
 
+    const shape = ROLE_BODY[this.role];
+    const geometry: BufferGeometry = shape.box
+      ? new BoxGeometry(shape.radius * 2, shape.length, shape.radius * 2.6)
+      : new CapsuleGeometry(shape.radius, shape.length, 6, 12);
+    const bodyCenterY = shape.box ? shape.length / 2 : shape.length / 2 + shape.radius;
     const body = new Mesh(
-      new CapsuleGeometry(UNIT_RADIUS, BODY_LENGTH, 6, 12),
+      geometry,
       new MeshStandardMaterial({
-        color: new Color(role === "worker" ? "#dfbd5b" : TEAM_COLOR[owner]),
+        color: new Color(this.role === "worker" ? "#dfbd5b" : TEAM_COLOR[owner]),
         roughness: 0.6,
       }),
     );
-    body.position.y = BODY_CENTER_Y;
+    body.position.y = bodyCenterY;
     body.castShadow = true;
     // Back-reference so a raycast hit on the body resolves to this unit.
     body.userData.unitId = this.id;
@@ -123,6 +166,9 @@ export class Unit {
     this.targetRing.position.y = 0.04;
     this.targetRing.visible = false;
     this.object.add(this.targetRing);
+
+    this.healthBar = new HealthBar(shape.radius * 2.4, bodyCenterY + shape.length / 2 + 0.55);
+    this.object.add(this.healthBar.object);
   }
 
   /** World position on the ground plane (y tracks 0 for gameplay purposes). */
@@ -150,9 +196,16 @@ export class Unit {
     this.ring.visible = selected;
   }
 
+  /** Refresh the health bar and keep it turned toward the camera. */
+  updatePresentation(cameraQuaternion: Quaternion): void {
+    this.healthBar.set(this.health.ratio);
+    this.healthBar.faceCamera(cameraQuaternion);
+  }
+
   /** Order the unit to walk to a ground point (y is ignored). */
   setMoveTarget(x: number, z: number): void {
     this.setAttackTarget(null);
+    this.attackMoveTarget = null;
     this.movePath = [];
     this.moveTarget = new Vector3(x, 0, z);
   }
@@ -160,8 +213,21 @@ export class Unit {
   /** Replace the current movement order with a planned ground waypoint path. */
   setMovePath(points: readonly Vector3[]): void {
     this.setAttackTarget(null);
+    this.attackMoveTarget = null;
     this.moveTarget = null;
     this.movePath = points.map((point) => point.clone());
+  }
+
+  /**
+   * Walk a planned path, engaging anything acquired on the way (GDD 06 §25).
+   * The destination is retained separately so the unit resumes its advance once
+   * the fight it was pulled into is over.
+   */
+  setAttackMovePath(points: readonly Vector3[], destination: Vector3): void {
+    this.setAttackTarget(null);
+    this.moveTarget = null;
+    this.movePath = points.map((point) => point.clone());
+    this.attackMoveTarget = destination.clone();
   }
 
   /** Replace the route followed while retaining the current attack target. */
@@ -185,24 +251,57 @@ export class Unit {
     this.movePath.shift();
   }
 
-  /** Immediately clear both movement and explicit attack intent. */
+  /** Immediately clear movement, attack-move and explicit attack intent. */
   stop(): void {
     this.setAttackTarget(null);
+    this.attackMoveTarget = null;
     this.moveTarget = null;
     this.movePath = [];
   }
 
   /**
-   * Order this unit to pursue an enemy. This records intent only: the following
-   * melee-combat system decides when it is in range and applies damage.
+   * Hold makes a unit surrender its movement orders on the spot; it will still
+   * shoot what comes into range. Switching back to aggressive does not restore
+   * the discarded orders — the player re-issues them (GDD 06 §26).
+   *
+   * Dropping a target it can no longer reach is `engagementSystem`'s job: that
+   * is where every "is this target still valid" rule lives, and a held unit can
+   * also be handed an unreachable target *after* the stance is set.
    */
-  setAttackTarget(target: CombatTarget | null): void {
+  setStance(stance: UnitStance): void {
+    if (this.stance === stance) return;
+    this.stance = stance;
+    if (stance !== "hold") return;
+    this.attackMoveTarget = null;
+    this.moveTarget = null;
+    this.movePath = [];
+  }
+
+  /**
+   * Order this unit to fight an enemy. This records intent only: the movement
+   * system pursues and the combat system decides when a hit lands.
+   *
+   * `auto` marks a target the unit picked for itself, which is what makes the
+   * chase leash apply to it and not to a clicked order.
+   */
+  setAttackTarget(target: CombatTarget | null, auto = false): void {
     if (this.attackTarget === target) return;
     this.attackTarget?.setTargetedBy?.(-1);
     this.attackTarget = target;
+    this.autoAcquired = target !== null && auto;
+    this.chaseOrigin = target !== null && auto ? this.position.clone() : null;
     this.moveTarget = null;
     this.movePath = [];
     target?.setTargetedBy?.(1);
+  }
+
+  /**
+   * Distance from where an auto-acquired chase began, or 0 when this unit is not
+   * on a leashed chase. The combat system compares it to `attack.chaseRange`.
+   */
+  chaseDistance(): number {
+    if (!this.chaseOrigin) return 0;
+    return Math.hypot(this.position.x - this.chaseOrigin.x, this.position.z - this.chaseOrigin.z);
   }
 
   /** Begin the one-shot defeat presentation. Returns true exactly once. */
@@ -210,6 +309,7 @@ export class Unit {
     if (!this.health.depleted || this.deathElapsed !== null) return false;
     this.deathElapsed = 0;
     this.stop();
+    this.healthBar.object.visible = false;
     return true;
   }
 
@@ -225,6 +325,7 @@ export class Unit {
 
   /** Release the per-unit render allocations when it permanently leaves play. */
   dispose(): void {
+    this.healthBar.dispose();
     this.object.traverse((child) => {
       if (!(child instanceof Mesh)) return;
       child.geometry.dispose();

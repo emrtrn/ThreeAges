@@ -44,6 +44,9 @@ import { UnitSystem } from "./units/unitSystem";
 import { updateUnitMovement } from "./units/unitMovement";
 import { updateUnitCombat } from "./units/unitCombat";
 import { updateUnitDeaths } from "./units/unitDeath";
+import { updateUnitEngagement } from "./combat/engagementSystem";
+import { ProjectileSystem } from "./combat/projectileSystem";
+import type { CombatTarget } from "./combat/combatTarget";
 import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
@@ -63,6 +66,7 @@ import { KingdomRegistry } from "./kingdom/kingdomRegistry";
 import { matchStartingResourcesFor } from "./kingdom/matchStartingResources";
 import { RoadConstructionService } from "./roads/roadConstructionService";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
+import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
@@ -74,7 +78,7 @@ import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
-import type { UnitOwner } from "./units/unit";
+import type { Unit, UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "./structures/structureUpgradeSystem";
@@ -190,6 +194,8 @@ export class RtsApp {
   private readonly placement: BuildingPlacementSystem;
   private readonly roadPlacement: RoadPlacementSystem;
   private readonly buildPalette: RtsBuildPalette;
+  private readonly selectionPanel = new RtsSelectionPanel();
+  private readonly projectiles = new ProjectileSystem();
   private readonly roadControls: RtsRoadControls;
   private readonly logisticsWarning: RtsLogisticsWarning;
   private readonly gameSpeedControls: RtsGameSpeedControls;
@@ -201,6 +207,8 @@ export class RtsApp {
   private disposed = false;
   private simulationSpeed: RtsSimulationSpeed = 1;
   private roadOverlayVisible = false;
+  /** Armed by the palette's rally button; the next left-click on the map sets it. */
+  private rallyPointPending = false;
   private lastW = 0;
   private lastH = 0;
 
@@ -282,10 +290,14 @@ export class RtsApp {
       this.units,
       this.structures,
       this.navigation,
-      guard,
+      this.options.unitBalance,
       this.kingdoms,
       (structure) => this.structureUpgrades.isUpgrading(structure),
       (owner) => guardQueueCapacityForAgeLevel(this.centers.get(owner)?.level ?? 1),
+      // Plan §45: a Barracks whose ground has been taken stops training, the
+      // same severance rule the economy's producers already live under.
+      (structure) => this.territory.ownerAt(structure.x, structure.z) === structure.owner,
+      PLACEHOLDER_GUARD_ID,
     );
     this.workerProduction = new WorkerProductionSystem(
       this.units,
@@ -382,8 +394,16 @@ export class RtsApp {
         this.buildPalette.setActionMessage(null);
         this.syncPlacementUi();
       },
-      () => this.queueGuard(),
+      (unitId) => this.queueUnit(unitId),
       () => this.queueWorker(),
+      () => {
+        this.placement.cancel();
+        this.roadPlacement.cancel();
+        this.rallyPointPending = true;
+        this.buildPalette.setActionMessage("Toplanma noktası için haritada bir konum seçin.");
+        this.syncPlacementUi();
+        this.syncRoadUi();
+      },
       () => this.startTownUpgrade(),
       () => this.startBarracksUpgrade(),
       () => this.startHouseUpgrade(),
@@ -428,7 +448,9 @@ export class RtsApp {
     // root is the only place that sees both.
     this.pointer = new RtsPointer(canvas, {
       onSelectClick: (x, y, additive) => {
-        if (this.roadPlacement.isActive) {
+        if (this.rallyPointPending) {
+          this.commitRallyPoint(x, y);
+        } else if (this.roadPlacement.isActive) {
           this.roadPlacement.confirmAt(x, y);
           this.syncPlacementUi();
           this.syncRoadUi();
@@ -443,7 +465,9 @@ export class RtsApp {
         if (!this.roadPlacement.isActive && !this.placement.isActive) this.selection.onSelectDrag(rect);
       },
       onSelectCommit: (rect, additive) => {
-        if (this.roadPlacement.isActive) {
+        if (this.rallyPointPending) {
+          this.commitRallyPoint(rect.x1, rect.y1);
+        } else if (this.roadPlacement.isActive) {
           this.roadPlacement.confirmAt(rect.x1, rect.y1);
           this.syncPlacementUi();
           this.syncRoadUi();
@@ -466,6 +490,11 @@ export class RtsApp {
         // Both placement tools persist after a successful left-click so players
         // can keep building. A contextual right-click exits the active tool
         // before it can be interpreted as a unit command.
+        if (this.rallyPointPending) {
+          this.rallyPointPending = false;
+          this.buildPalette.setActionMessage("Toplanma noktası seçimi iptal edildi.");
+          return;
+        }
         if (this.roadPlacement.isActive) {
           this.roadPlacement.cancel();
           this.syncRoadUi();
@@ -531,6 +560,8 @@ export class RtsApp {
     this.debugOverlay?.dispose();
     this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
+    this.selectionPanel.dispose();
+    this.projectiles.dispose();
     this.roadControls.dispose();
     this.logisticsWarning.dispose();
     this.gameSpeedControls.dispose();
@@ -590,6 +621,7 @@ export class RtsApp {
     this.scene.add(this.roadDebugView.root);
     this.scene.add(this.territory.root);
     this.scene.add(this.units.root);
+    this.scene.add(this.projectiles.root);
     this.scene.add(this.commandMarkers.root);
   }
 
@@ -618,8 +650,8 @@ export class RtsApp {
       this.units.spawn("player", x, z, guard);
     }
     for (let i = 0; i < STARTING_WORKER_COUNT; i++) {
-      this.units.spawn("player", -4 + i * 2, PLAYER_CENTER_POSITION.z - 8, worker, "worker");
-      this.units.spawn("enemy", -4 + i * 2, ENEMY_CENTER_POSITION.z + 8, worker, "worker");
+      this.units.spawn("player", -4 + i * 2, PLAYER_CENTER_POSITION.z - 8, worker);
+      this.units.spawn("enemy", -4 + i * 2, ENEMY_CENTER_POSITION.z + 8, worker);
     }
   }
 
@@ -631,7 +663,7 @@ export class RtsApp {
     this.lastTime = now;
 
     this.resize();
-    if (this.input.consumeStopRequest()) this.commands.issueStop();
+    this.consumeCommandInput();
     this.cameraController.update(dt, this.input);
     if (this.match.active) {
       for (const simulationDt of simulationSteps(dt, this.simulationSpeed, MAX_FRAME_SECONDS)) {
@@ -658,8 +690,49 @@ export class RtsApp {
     );
     this.roadDebugView.refresh();
     this.commandMarkers.update(dt);
+    // Presentation runs on the rendered-frame delta, not the simulation's: a
+    // tracer and a health bar should look the same at any game speed.
+    this.projectiles.update(dt);
+    this.units.updatePresentation(this.cameraController.camera.quaternion);
+    this.selectionPanel.setSelection(this.selection.selected());
     this.renderer.render(this.scene, this.cameraController.camera);
   };
+
+  /**
+   * Drain this frame's edge-triggered orders. Attack-move needs a map position,
+   * so it uses the live pointer — the same place a right-click would have read.
+   */
+  private consumeCommandInput(): void {
+    if (this.input.consumeStopRequest()) this.commands.issueStop();
+    if (this.input.consumeCommand("hold")) this.commands.issueStance("hold");
+    if (this.input.consumeCommand("aggressive")) this.commands.issueStance("aggressive");
+    if (!this.input.consumeCommand("attackMove")) return;
+    const pointer = this.input.pointerPosition();
+    if (pointer) this.commands.issueAttackMoveAt(pointer.x, pointer.y);
+  }
+
+  /** Every damageable thing on the field, for target acquisition. */
+  private combatTargets(): readonly CombatTarget[] {
+    return [...this.units.all(), ...this.centers.all(), ...this.structures.all()];
+  }
+
+  /** The sandbox veto, shared by damage resolution and target acquisition. */
+  private readonly canEngage = (attacker: Unit, target: CombatTarget): boolean =>
+    !(this.options.testSandbox
+      && attacker.owner === AI_OWNER
+      && target === this.centers.get(PLAYER_OWNER));
+
+  private commitRallyPoint(x: number, y: number): void {
+    const point = this.commands.groundPointAt(x, y);
+    this.rallyPointPending = false;
+    if (!point) {
+      this.buildPalette.setActionMessage("Toplanma noktası için harita üzerinde bir konum seçin.");
+      return;
+    }
+    this.barracksProduction.setRallyPoint(PLAYER_OWNER, point);
+    this.commandMarkers.spawn(point, "#8fe08f");
+    this.buildPalette.setActionMessage("Toplanma noktası belirlendi.");
+  }
 
   /** Advance match systems; camera and UI keep the unscaled rendered-frame delta. */
   private updateSimulation(dt: number): void {
@@ -683,6 +756,13 @@ export class RtsApp {
         ? `${event.structure.stats.label} T2 yükseltmesi tamamlandı.`
         : `${event.structure.stats.label} yıkıldığı için yükseltme iptal edildi; kaynaklar iade edildi.`);
     }
+    // Acquisition before movement: a unit that picks up a target this tick
+    // should start walking toward it on the same tick, not the next one.
+    updateUnitEngagement(this.units.all(), {
+      navigation: this.navigation,
+      targets: this.combatTargets(),
+      canEngage: this.canEngage,
+    });
     updateUnitMovement(this.units.all(), dt);
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
@@ -699,8 +779,8 @@ export class RtsApp {
       if (event.structure.owner !== PLAYER_OWNER) continue;
       this.buildPalette.setActionMessage(
         event.type === "completed"
-          ? "Muhafız Kışla'dan çıktı."
-          : "Muhafız çıkışı engelli; Kışla çevresini açın.",
+          ? `${event.label} Kışla'dan çıktı.`
+          : `${event.label} çıkışı engelli; Kışla çevresini açın.`,
       );
     }
     // The AI decides on the same scaled match delta as every other system, so
@@ -716,10 +796,11 @@ export class RtsApp {
     updateUnitCombat(
       this.units.all(),
       dt,
-      (hit) => this.debugOverlay?.recordHit(hit),
-      (attacker, target) => !(this.options.testSandbox
-        && attacker.owner === AI_OWNER
-        && target === this.centers.get(PLAYER_OWNER)),
+      (hit) => {
+        this.debugOverlay?.recordHit(hit);
+        if (hit.ranged) this.projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
+      },
+      this.canEngage,
     );
     updateUnitDeaths(this.units, this.selection, dt);
     this.destroyRuinedStructures();
@@ -798,6 +879,8 @@ export class RtsApp {
     this.centers.clear();
     this.structures.clear();
     this.roadPlacement.reset();
+    this.projectiles.clear();
+    this.rallyPointPending = false;
     this.structureConstruction.resetReservations();
     this.kingdoms.reset();
     this.resourceNodes.reset();
@@ -855,6 +938,7 @@ export class RtsApp {
     this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
     const population = this.playerKingdom.population.snapshot();
     this.buildPalette.setPopulation(population.used, population.capacity);
+    this.buildPalette.setTrainableUnits(this.barracksProduction.trainableUnits(PLAYER_OWNER));
     this.syncEconomyUi();
   }
 
@@ -890,18 +974,22 @@ export class RtsApp {
         : "İnşaat bekliyor: işçi bu yapıya erişemiyor.");
   }
 
-  private queueGuard(): void {
-    const result = this.barracksProduction.queueGuard(PLAYER_OWNER);
+  private queueUnit(unitId: string): void {
+    const label = this.options.unitBalance[unitId]?.label ?? unitId;
+    const result = this.barracksProduction.queueUnit(PLAYER_OWNER, unitId);
     const queuedCount = this.barracksProduction.queuedCount(PLAYER_OWNER);
     const queueCapacity = this.barracksProduction.queueCapacity(PLAYER_OWNER);
     const message: Record<typeof result, string> = {
-      queued: `Muhafız üretim kuyruğa alındı (${queuedCount}/${queueCapacity}).`,
+      queued: `${label} üretim kuyruğa alındı (${queuedCount}/${queueCapacity}).`,
+      "unknown-unit": `${label} Kışla'da üretilemiyor.`,
       "no-completed-barracks": "Önce tamamlanmış bir Kışla kurun.",
-      "queue-full": `Muhafız üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
-      "exit-blocked": "Muhafız çıkışı engelli; Kışla çevresini açın.",
-      "insufficient-resources": "Muhafız için kaynak yetersiz.",
+      "requires-barracks-upgrade": `${label} için Kışla T2 yükseltmesi gerekir.`,
+      "queue-full": `Üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
+      "exit-blocked": `${label} çıkışı engelli; Kışla çevresini açın.`,
+      "insufficient-resources": `${label} için kaynak yetersiz.`,
       "population-full": "Nüfus dolu: önce Ev kurun.",
-      "structure-upgrading": "Kışla T2 yükseltmesi sürerken Muhafız üretimi durur.",
+      "structure-upgrading": `Kışla T2 yükseltmesi sürerken ${label} üretimi durur.`,
+      disconnected: "Kışla kontrol alanınızın dışında kaldı; üretim durdu.",
     };
     this.buildPalette.setActionMessage(message[result]);
     this.syncPlacementUi();

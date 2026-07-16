@@ -1,11 +1,16 @@
 /**
- * A Barracks trains Guards sequentially and places each on a navigable exit
- * point outside the building footprint. Paid orders follow the same age-based
- * 5 / 10 / 20 queue progression as workers.
+ * Barracks unit training — Vertical Slice Plan v0.2 §45 ("Üretim").
+ *
+ * A Barracks trains any unit its data allows, sequentially, and places each on a
+ * navigable exit outside the footprint. Faz 7 widened this from Guards-only: the
+ * Archer and the Ram unlock at Barracks II purely because their
+ * `requiredBuildingLevel` says 2 (plan §2.10 — no separate Workshop, no id check
+ * in code). Paid orders follow the same age-based 5 / 10 / 20 queue progression
+ * as workers.
  */
 import { Vector3 } from "three";
 
-import type { UnitBalanceStats } from "../../data/gameDataTypes";
+import type { UnitBalance, UnitBalanceStats } from "../../data/gameDataTypes";
 import type { PopulationReservation } from "../economy/populationSystem";
 import type { ResourceReservation } from "../economy/resourceWallet";
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
@@ -14,29 +19,39 @@ import type { UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { PlacedStructure, PlacedStructureSystem } from "./placedStructureSystem";
 
-export type GuardProductionResult =
+export type UnitProductionResult =
   | "queued"
+  | "unknown-unit"
   | "no-completed-barracks"
+  | "requires-barracks-upgrade"
   | "queue-full"
   | "exit-blocked"
   | "insufficient-resources"
   | "population-full"
-  | "structure-upgrading";
+  | "structure-upgrading"
+  | "disconnected";
 
-export interface GuardProductionEvent {
+/** Retained for the Faz 5 AI, which still only knows how to ask for Guards. */
+export type GuardProductionResult = UnitProductionResult;
+
+export interface UnitProductionEvent {
   readonly type: "completed" | "exit-blocked";
   readonly structure: PlacedStructure;
+  readonly unitId: string;
+  readonly label: string;
 }
 
-interface GuardOrder {
+interface UnitOrder {
+  readonly unitId: string;
+  readonly stats: UnitBalanceStats;
   readonly resources: ResourceReservation;
   readonly population: PopulationReservation;
   remainingSeconds: number;
 }
 
-interface GuardQueue {
+interface BarracksQueue {
   readonly structure: PlacedStructure;
-  readonly orders: GuardOrder[];
+  readonly orders: UnitOrder[];
 }
 
 export const GUARD_QUEUE_CAPACITY_BY_AGE_LEVEL = [5, 10, 20] as const;
@@ -49,50 +64,109 @@ export function guardQueueCapacityForAgeLevel(level: number): number {
 }
 
 export class BarracksProductionSystem {
-  private readonly queues = new Map<number, GuardQueue>();
+  private readonly queues = new Map<number, BarracksQueue>();
+  /** Keyed by kingdom, not by Barracks: the rally point is a kingdom's order. */
+  private readonly rallyPoints = new Map<UnitOwner, Vector3>();
 
   constructor(
     private readonly units: UnitSystem,
     private readonly structures: PlacedStructureSystem,
     private readonly navigation: RtsNavigation,
-    private readonly guardStats: UnitBalanceStats,
+    private readonly unitBalance: UnitBalance,
     private readonly kingdoms: KingdomRegistry,
     private readonly isStructureUpgrading: (structure: PlacedStructure) => boolean = () => false,
     /** Callers that do not own age state retain the original single-order behavior. */
     private readonly queueCapacityForOwner: (owner: UnitOwner) => number = () => 1,
+    /**
+     * Plan §45: "Bağlantısı kesilen askerî yapının davranışını uygula". A
+     * Barracks whose control area has been taken cannot train — the same rule
+     * that severs a producer's logistics, applied to the military line.
+     */
+    private readonly isStructureConnected: (structure: PlacedStructure) => boolean = () => true,
+    /** The Barracks-trained unit the Faz 5 AI asks for by default. */
+    private readonly defaultUnitId = "guard_placeholder",
   ) {}
 
-  /** Train a Guard at one kingdom's Barracks, paid from that kingdom's economy. */
-  queueGuard(owner: UnitOwner): GuardProductionResult {
-    const barrackses = this.structures.ownedBy(owner).filter(
+  /** Every unit this kingdom's Barracks could train right now, for the HUD. */
+  trainableUnits(owner: UnitOwner): { readonly id: string; readonly stats: UnitBalanceStats; readonly unlocked: boolean }[] {
+    const level = this.bestBarracksLevel(owner);
+    return Object.entries(this.unitBalance)
+      .filter(([, stats]) => stats.role !== "worker")
+      .map(([id, stats]) => ({ id, stats, unlocked: level >= stats.requiredBuildingLevel }));
+  }
+
+  /** Train a Guard — the Faz 5 AI's only production verb (AI design §55). */
+  queueGuard(owner: UnitOwner): UnitProductionResult {
+    return this.queueUnit(owner, this.defaultUnitId);
+  }
+
+  /** Train one unit at a kingdom's Barracks, paid from that kingdom's economy. */
+  queueUnit(owner: UnitOwner, unitId: string): UnitProductionResult {
+    const stats = this.unitBalance[unitId];
+    if (!stats || stats.role === "worker") return "unknown-unit";
+    const completed = this.structures.ownedBy(owner).filter(
       (structure) => structure.stats.id === "barracks" && structure.construction.complete,
     );
-    if (barrackses.length === 0) return "no-completed-barracks";
-    const readyBarracks = barrackses.filter((structure) => !this.isStructureUpgrading(structure));
-    if (readyBarracks.length === 0) return "structure-upgrading";
+    if (completed.length === 0) return "no-completed-barracks";
+    const connected = completed.filter((structure) => this.isStructureConnected(structure));
+    if (connected.length === 0) return "disconnected";
+    const ready = connected.filter((structure) => !this.isStructureUpgrading(structure));
+    if (ready.length === 0) return "structure-upgrading";
+    // The tier gate is checked before cost so a player who cannot build the unit
+    // at all is told why, rather than being told they are poor.
+    const eligible = ready.filter((structure) => structure.level >= stats.requiredBuildingLevel);
+    if (eligible.length === 0) return "requires-barracks-upgrade";
+
     const capacity = this.queueCapacityForOwner(owner);
-    if (!Number.isInteger(capacity) || capacity <= 0) throw new RangeError("Guard queue capacity must be a positive integer");
-    const barracks = readyBarracks
+    if (!Number.isInteger(capacity) || capacity <= 0) {
+      throw new RangeError("Barracks queue capacity must be a positive integer");
+    }
+    const barracks = eligible
       .map((structure) => ({ structure, queued: this.queues.get(structure.id)?.orders.length ?? 0 }))
       .filter((candidate) => candidate.queued < capacity)
       .sort((left, right) => left.queued - right.queued || left.structure.id - right.structure.id)[0]?.structure;
     if (!barracks) return "queue-full";
+
     const { wallet, population: pool } = this.kingdoms.get(owner);
-    const resources = wallet.reserve(this.guardStats.cost);
+    const resources = wallet.reserve(stats.cost);
     if (!resources) return "insufficient-resources";
-    const population = pool.reserve(this.guardStats.populationCost);
+    const population = pool.reserve(stats.populationCost);
     if (!population) {
       wallet.refund(resources);
       return "population-full";
     }
-    const order = { resources, population, remainingSeconds: this.guardStats.trainingSeconds };
+    const order: UnitOrder = {
+      unitId,
+      stats,
+      resources,
+      population,
+      remainingSeconds: stats.trainingSeconds,
+    };
     const queue = this.queues.get(barracks.id);
     if (queue) queue.orders.push(order);
     else this.queues.set(barracks.id, { structure: barracks, orders: [order] });
     return "queued";
   }
 
-  /** Paid Guard orders currently held across every completed Barracks. */
+  /**
+   * Send this kingdom's newly trained units to a gathering point (GDD 06 §18).
+   * One point per kingdom keeps the Faz 7 HUD to a single click; per-Barracks
+   * rally points are a HUD problem, not a production one.
+   *
+   * Stored against the kingdom rather than against the Barracks standing at the
+   * time: a Barracks built after the order still has to honour it, or the same
+   * button would produce two behaviours with nothing explaining the difference.
+   */
+  setRallyPoint(owner: UnitOwner, point: Vector3 | null): void {
+    if (point) this.rallyPoints.set(owner, point.clone());
+    else this.rallyPoints.delete(owner);
+  }
+
+  rallyPoint(owner: UnitOwner): Vector3 | null {
+    return this.rallyPoints.get(owner)?.clone() ?? null;
+  }
+
+  /** Paid orders currently held across every completed Barracks. */
   queuedCount(owner: UnitOwner): number {
     return [...this.queues.values()]
       .filter((queue) => queue.structure.owner === owner)
@@ -107,8 +181,8 @@ export class BarracksProductionSystem {
       .length * perBarracks;
   }
 
-  update(deltaSeconds: number): GuardProductionEvent[] {
-    const events: GuardProductionEvent[] = [];
+  update(deltaSeconds: number): UnitProductionEvent[] {
+    const events: UnitProductionEvent[] = [];
     for (const [id, queue] of this.queues) {
       const { wallet, population } = this.kingdoms.get(queue.structure.owner);
       if (!this.structures.all().includes(queue.structure) || !queue.structure.construction.complete) {
@@ -129,15 +203,22 @@ export class BarracksProductionSystem {
       if (order.remainingSeconds > 0) continue;
       const exit = this.findSafeExit(queue.structure);
       if (!exit) {
-        events.push({ type: "exit-blocked", structure: queue.structure });
+        events.push({ type: "exit-blocked", structure: queue.structure, unitId: order.unitId, label: order.stats.label });
         continue;
       }
-      this.units.spawn(queue.structure.owner, exit.x, exit.z, this.guardStats, "guard");
+      const unit = this.units.spawn(queue.structure.owner, exit.x, exit.z, order.stats);
+      const rally = this.rallyPoints.get(queue.structure.owner);
+      if (rally) {
+        const path = this.navigation.plan(unit.position, rally);
+        // An unreachable rally point leaves the unit at the exit rather than
+        // silently teleporting it; the player can see it never left.
+        if (path) unit.setMovePath(path);
+      }
       wallet.commit(order.resources);
       population.commit(order.population);
       queue.orders.shift();
       if (queue.orders.length === 0) this.queues.delete(id);
-      events.push({ type: "completed", structure: queue.structure });
+      events.push({ type: "completed", structure: queue.structure, unitId: order.unitId, label: order.stats.label });
     }
     return events;
   }
@@ -151,6 +232,14 @@ export class BarracksProductionSystem {
       }
     }
     this.queues.clear();
+    this.rallyPoints.clear();
+  }
+
+  /** Highest tier among this kingdom's usable Barracks; 0 when it has none. */
+  private bestBarracksLevel(owner: UnitOwner): number {
+    return this.structures.ownedBy(owner)
+      .filter((structure) => structure.stats.id === "barracks" && structure.construction.complete)
+      .reduce((best, structure) => Math.max(best, structure.level), 0);
   }
 
   private findSafeExit(structure: PlacedStructure): Vector3 | null {

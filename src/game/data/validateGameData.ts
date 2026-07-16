@@ -22,7 +22,11 @@ import type {
   ResourceBalance,
   RoadBalance,
   StartingResources,
+  UnitArmorClass,
+  UnitAttackType,
   UnitBalance,
+  UnitDamageMultipliers,
+  UnitRoleId,
 } from "./gameDataTypes";
 
 /** Thrown for any malformed / mis-referenced game-data file. */
@@ -172,6 +176,33 @@ export function validateGamePreset(
   };
 }
 
+const UNIT_ROLES: readonly UnitRoleId[] = ["guard", "archer", "siege", "worker"];
+const UNIT_ATTACK_TYPES: readonly UnitAttackType[] = ["melee", "ranged"];
+const UNIT_ARMOR_CLASSES: readonly UnitArmorClass[] = ["light", "heavy", "structure"];
+/** A unit's own armour is what attackers hit; only buildings are "structure". */
+const UNIT_SELF_ARMOR_CLASSES: readonly UnitArmorClass[] = ["light", "heavy"];
+
+/** GDD 12 §33: every attacker states a multiplier for every armour class. */
+function validateDamageMultipliers(value: unknown, where: string): UnitDamageMultipliers {
+  const obj = asObject(value, where);
+  const multipliers = {} as Record<UnitArmorClass, number>;
+  for (const armorClass of UNIT_ARMOR_CLASSES) {
+    const multiplier = requireFiniteNumber(obj, armorClass, where);
+    // Zero would make a matchup silently unwinnable rather than merely bad, and
+    // §33's whole point is that counters are soft.
+    if (multiplier <= 0) {
+      throw new GameDataError(`${where}."${armorClass}": must be > 0`);
+    }
+    multipliers[armorClass] = multiplier;
+  }
+  for (const key of Object.keys(obj)) {
+    if (!UNIT_ARMOR_CLASSES.includes(key as UnitArmorClass)) {
+      throw new GameDataError(`${where}: unknown armour class "${key}"`);
+    }
+  }
+  return multipliers;
+}
+
 /** Validate `balance/units.json` without tying balance data to render code. */
 export function validateUnitBalance(value: unknown): UnitBalance {
   const where = "balance/units.json";
@@ -183,9 +214,29 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     }
     const statsWhere = `${where}."${id}"`;
     const stats = asObject(raw, statsWhere);
+    const role = requireString(stats, "role", statsWhere);
+    if (!UNIT_ROLES.includes(role as UnitRoleId)) {
+      throw new GameDataError(`${statsWhere}.role: "${role}" is not one of ${UNIT_ROLES.join(", ")}`);
+    }
+    const armorClass = requireString(stats, "armorClass", statsWhere);
+    if (!UNIT_SELF_ARMOR_CLASSES.includes(armorClass as UnitArmorClass)) {
+      throw new GameDataError(
+        `${statsWhere}.armorClass: "${armorClass}" is not one of ${UNIT_SELF_ARMOR_CLASSES.join(", ")}`,
+      );
+    }
+    const attackType = requireString(stats, "attackType", statsWhere);
+    if (!UNIT_ATTACK_TYPES.includes(attackType as UnitAttackType)) {
+      throw new GameDataError(
+        `${statsWhere}.attackType: "${attackType}" is not one of ${UNIT_ATTACK_TYPES.join(", ")}`,
+      );
+    }
     const maxHealth = requireFiniteNumber(stats, "maxHealth", statsWhere);
     if (maxHealth <= 0) {
       throw new GameDataError(`${where}."${id}".maxHealth: must be > 0`);
+    }
+    const moveSpeed = requireFiniteNumber(stats, "moveSpeed", statsWhere);
+    if (moveSpeed <= 0) {
+      throw new GameDataError(`${statsWhere}.moveSpeed: must be > 0`);
     }
     const attackDamage = requireFiniteNumber(stats, "attackDamage", statsWhere);
     if (attackDamage <= 0) {
@@ -199,20 +250,54 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (attackRange <= 0) {
       throw new GameDataError(`${statsWhere}.attackRange: must be > 0`);
     }
+    const acquisitionRange = requireFiniteNumber(stats, "acquisitionRange", statsWhere);
+    if (acquisitionRange < 0) {
+      throw new GameDataError(`${statsWhere}.acquisitionRange: must be >= 0`);
+    }
+    const chaseRange = requireFiniteNumber(stats, "chaseRange", statsWhere);
+    if (chaseRange < 0) {
+      throw new GameDataError(`${statsWhere}.chaseRange: must be >= 0`);
+    }
+    // A leash shorter than the range that starts the chase would make a unit
+    // acquire a target and abandon it on the same tick (GDD 06 §39).
+    if (acquisitionRange > 0 && chaseRange < acquisitionRange) {
+      throw new GameDataError(`${statsWhere}.chaseRange: must be >= acquisitionRange`);
+    }
+    // A unit that cannot see as far as it can shoot could never open fire on its
+    // own; the archer's range is the reason this is worth failing loudly on.
+    if (acquisitionRange > 0 && acquisitionRange < attackRange) {
+      throw new GameDataError(`${statsWhere}.acquisitionRange: must be >= attackRange`);
+    }
     const trainingSeconds = requireFiniteNumber(stats, "trainingSeconds", statsWhere);
     if (trainingSeconds <= 0) {
       throw new GameDataError(`${statsWhere}.trainingSeconds: must be > 0`);
+    }
+    const requiredBuildingLevel = requireFiniteNumber(stats, "requiredBuildingLevel", statsWhere);
+    if (!Number.isInteger(requiredBuildingLevel) || requiredBuildingLevel <= 0) {
+      throw new GameDataError(`${statsWhere}.requiredBuildingLevel: must be a positive integer`);
     }
     const populationCost = requireFiniteNumber(stats, "populationCost", statsWhere);
     if (!Number.isInteger(populationCost) || populationCost <= 0) {
       throw new GameDataError(`${statsWhere}.populationCost: must be a positive integer`);
     }
     units[id] = {
+      label: requireString(stats, "label", statsWhere),
+      role: role as UnitRoleId,
+      armorClass: armorClass as Exclude<UnitArmorClass, "structure">,
       maxHealth,
+      moveSpeed,
+      attackType: attackType as UnitAttackType,
       attackDamage,
       attackCooldown,
       attackRange,
+      acquisitionRange,
+      chaseRange,
+      damageMultipliers: validateDamageMultipliers(
+        stats["damageMultipliers"],
+        `${statsWhere}.damageMultipliers`,
+      ),
       trainingSeconds,
+      requiredBuildingLevel,
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       populationCost,
     };

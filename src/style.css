@@ -223,6 +223,62 @@ body {
   font-size: 12px;
 }
 
+/*
+ * Faz 7 selected-army readout. Sits bottom-centre, between the road controls on
+ * the left and the build palette on the right: the selection is what the player
+ * is looking at, and it must not land under the ?rts&debug overlay at top-left.
+ */
+.rts-selection-panel {
+  position: absolute;
+  left: 50%;
+  bottom: max(12px, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(420px, calc(100vw - 640px));
+  padding: 10px 12px;
+  color: #edf0dc;
+  background: rgb(18 27 30 / 84%);
+  border: 1px solid rgb(183 206 130 / 55%);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+}
+
+.rts-selection-panel[hidden] {
+  display: none;
+}
+
+.rts-selection-summary {
+  margin-top: 8px;
+  color: #e5d675;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.rts-selection-role,
+.rts-selection-counters,
+.rts-selection-stance {
+  margin-top: 4px;
+  color: #dce8be;
+  font-size: 12px;
+}
+
+.rts-selection-counters {
+  color: #b8d6db;
+}
+
+.rts-selection-hints {
+  margin-top: 8px;
+  color: #93a68a;
+  font-size: 11px;
+}
+
+/* Faz 7 unit training sits on its own row so the roster reads as one group. */
+.rts-train-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
 /* Faz 2 placement controls: intentionally small until the full RTS HUD lands. */
 .rts-build-palette {
   position: absolute;

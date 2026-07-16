@@ -131,6 +131,11 @@ import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { updateUnitMovement } from "../src/game/rts/units/unitMovement";
 import { issueAttackOrder } from "../src/game/rts/units/attackPathing";
+import { updateUnitEngagement } from "../src/game/rts/combat/engagementSystem";
+import { resolveDamage } from "../src/game/rts/combat/damageResolution";
+import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
+import type { CombatTarget } from "../src/game/rts/combat/combatTarget";
+import type { UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import type { Unit } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import type { ActorSpawnRequest } from "../engine/behavior/behaviorSubsystem";
@@ -1047,14 +1052,80 @@ import { GAME_EDITOR_CATALOG } from "../src/game/editorCatalog";
 
 let checks = 0;
 
+/**
+ * Faz 7 unit fixtures. Deliberately not the shipped `balance/units.json`: these
+ * are round numbers a test can assert exactly against, and pinning suites to the
+ * live balance table would make every tuning pass a test failure.
+ */
 const RTS_TEST_UNIT_STATS = {
+  label: "Test Muhafızı",
+  role: "guard",
+  armorClass: "heavy",
   maxHealth: 100,
+  moveSpeed: 6,
+  attackType: "melee",
   attackDamage: 12,
   attackCooldown: 1.4,
   attackRange: 1.2,
+  acquisitionRange: 9,
+  chaseRange: 14,
+  damageMultipliers: { light: 1, heavy: 1.2, structure: 0.35 },
   trainingSeconds: 0.25,
+  requiredBuildingLevel: 1,
   cost: { food: 50 },
   populationCost: 1,
+} as const satisfies UnitBalanceStats;
+
+/** Workers never fight: a zero acquisition range is what opts them out. */
+const RTS_TEST_WORKER_STATS = {
+  ...RTS_TEST_UNIT_STATS,
+  label: "Test İşçisi",
+  role: "worker",
+  armorClass: "light",
+  maxHealth: 60,
+  acquisitionRange: 0,
+  chaseRange: 0,
+  damageMultipliers: { light: 1, heavy: 1, structure: 1 },
+} as const satisfies UnitBalanceStats;
+
+const RTS_TEST_ARCHER_STATS = {
+  ...RTS_TEST_UNIT_STATS,
+  label: "Test Okçusu",
+  role: "archer",
+  armorClass: "light",
+  maxHealth: 60,
+  attackType: "ranged",
+  attackDamage: 10,
+  attackRange: 7,
+  acquisitionRange: 9,
+  chaseRange: 11,
+  damageMultipliers: { light: 1.2, heavy: 0.8, structure: 0.25 },
+  requiredBuildingLevel: 2,
+} as const satisfies UnitBalanceStats;
+
+const RTS_TEST_SIEGE_STATS = {
+  ...RTS_TEST_UNIT_STATS,
+  label: "Test Koçbaşı",
+  role: "siege",
+  armorClass: "heavy",
+  maxHealth: 200,
+  moveSpeed: 4,
+  attackDamage: 28,
+  attackCooldown: 4,
+  attackRange: 2.6,
+  acquisitionRange: 7,
+  chaseRange: 8,
+  damageMultipliers: { light: 0.35, heavy: 0.3, structure: 2.5 },
+  requiredBuildingLevel: 2,
+  cost: { wood: 140 },
+  populationCost: 3,
+} as const satisfies UnitBalanceStats;
+
+const RTS_TEST_UNIT_BALANCE: UnitBalance = {
+  guard_placeholder: RTS_TEST_UNIT_STATS,
+  archer_placeholder: RTS_TEST_ARCHER_STATS,
+  siege_placeholder: RTS_TEST_SIEGE_STATS,
+  worker_placeholder: RTS_TEST_WORKER_STATS,
 };
 const check = (label: string, fn: () => void): void => {
   fn();
@@ -27901,10 +27972,46 @@ check("unit balance validates combat stats for stable unit ids", () => {
   const balance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
-  assert.equal(balance["guard_placeholder"]?.maxHealth, 100);
-  assert.equal(balance["guard_placeholder"]?.attackDamage, 12);
-  assert.equal(balance["guard_placeholder"]?.trainingSeconds, 12);
+  // The roster contract, not the tuning: asserting concrete health/damage here
+  // would make every balance pass a test failure (plan §75).
+  assert.deepEqual(
+    Object.keys(balance).sort(),
+    ["archer_placeholder", "guard_placeholder", "siege_placeholder", "worker_placeholder"],
+    "Faz 7 ships the Guard/Archer/Siege core roster plus the worker",
+  );
+  assert.equal(balance["guard_placeholder"]?.role, "guard");
+  assert.equal(balance["archer_placeholder"]?.attackType, "ranged");
+  assert.equal(balance["siege_placeholder"]?.role, "siege");
   assert.deepEqual(balance["worker_placeholder"]?.cost, { food: 50 });
+
+  // Plan §46: the Archer and the Ram sit behind Barracks II; the Guard does not.
+  assert.equal(balance["guard_placeholder"]?.requiredBuildingLevel, 1);
+  assert.equal(balance["archer_placeholder"]?.requiredBuildingLevel, 2);
+  assert.equal(balance["siege_placeholder"]?.requiredBuildingLevel, 2);
+
+  for (const [id, stats] of Object.entries(balance)) {
+    if (id === "worker_placeholder") continue;
+    assert.ok(stats.moveSpeed > 0, `${id} carries a data-owned move speed`);
+    assert.ok(stats.acquisitionRange > 0, `${id} can find its own targets`);
+  }
+  // GDD 12 §33 read as a contract rather than as numbers: each role's identity
+  // is which column it is best against, and that must hold after any retune.
+  const bestClass = (id: string) =>
+    (Object.entries(balance[id]!.damageMultipliers) as [string, number][])
+      .sort((left, right) => right[1] - left[1])[0]![0];
+  assert.equal(bestClass("guard_placeholder"), "heavy", "the Guard is the front-line answer to other heavies");
+  assert.equal(bestClass("archer_placeholder"), "light", "the Archer punishes light units");
+  assert.equal(bestClass("siege_placeholder"), "structure", "siege exists to break buildings");
+  assert.ok(
+    balance["siege_placeholder"]!.damageMultipliers.structure
+      > balance["guard_placeholder"]!.damageMultipliers.structure * 4,
+    "plan §46: siege is *necessary* against buildings, not merely better",
+  );
+  assert.ok(
+    balance["archer_placeholder"]!.attackRange > balance["guard_placeholder"]!.attackRange * 3,
+    "plan §46: the Archer is only effective while it is not reached",
+  );
+
   assert.throws(
     () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, maxHealth: 0 } }),
     GameDataError,
@@ -27916,6 +28023,45 @@ check("unit balance validates combat stats for stable unit ids", () => {
   assert.throws(
     () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, trainingSeconds: 0 } }),
     GameDataError,
+  );
+  assert.throws(
+    () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, moveSpeed: 0 } }),
+    GameDataError,
+    "a motionless unit is a data bug, not a design",
+  );
+  assert.throws(
+    () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, role: "cavalry" } }),
+    GameDataError,
+    "cavalry is out of vertical-slice scope; the id must not slip in through data",
+  );
+  assert.throws(
+    () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, armorClass: "structure" } }),
+    GameDataError,
+    "only buildings carry the structure armour class",
+  );
+  assert.throws(
+    () => validateUnitBalance({
+      guard_placeholder: { ...RTS_TEST_UNIT_STATS, damageMultipliers: { light: 1, heavy: 1 } },
+    }),
+    GameDataError,
+    "an attacker missing a §33 column would silently resolve to NaN damage",
+  );
+  assert.throws(
+    () => validateUnitBalance({
+      guard_placeholder: { ...RTS_TEST_UNIT_STATS, damageMultipliers: { light: 1, heavy: 1, structure: 0 } },
+    }),
+    GameDataError,
+    "§33 counters are soft: a zero multiplier makes a matchup unwinnable",
+  );
+  assert.throws(
+    () => validateUnitBalance({ guard_placeholder: { ...RTS_TEST_UNIT_STATS, chaseRange: 1 } }),
+    GameDataError,
+    "a leash shorter than acquisition would drop a target on the tick it was found",
+  );
+  assert.throws(
+    () => validateUnitBalance({ archer_placeholder: { ...RTS_TEST_ARCHER_STATS, acquisitionRange: 2 } }),
+    GameDataError,
+    "a unit that sees less far than it shoots could never open fire",
   );
   assert.throws(() => validateUnitBalance({ "Guard Placeholder": RTS_TEST_UNIT_STATS }), GameDataError);
 });
@@ -28035,9 +28181,9 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
     structures.advanceConstruction(structure, stats.constructionSeconds);
   }
   const workerProduction = new WorkerProductionSystem(
-    units, centers, navigation, RTS_TEST_UNIT_STATS, kingdoms,
+    units, centers, navigation, RTS_TEST_WORKER_STATS, kingdoms,
     (owner) => ageSystem.isUpgrading(owner),
-    (owner) => centers.get(owner)?.workerTrainingSeconds ?? RTS_TEST_UNIT_STATS.trainingSeconds,
+    (owner) => centers.get(owner)?.workerTrainingSeconds ?? RTS_TEST_WORKER_STATS.trainingSeconds,
   );
   assert.equal(workerProduction.queueWorker("player"), "queued");
   assert.equal(ageSystem.startTownUpgrade("player"), "started");
@@ -28079,7 +28225,7 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   kingdoms.get("player").wallet.credit("stone", 80);
   const upgrades = new StructureUpgradeSystem(structures, kingdoms, (owner) => ageSystem.snapshot(owner).age === "town");
   const barracksProduction = new BarracksProductionSystem(
-    units, structures, navigation, RTS_TEST_UNIT_STATS, kingdoms,
+    units, structures, navigation, RTS_TEST_UNIT_BALANCE, kingdoms,
     (structure) => upgrades.isUpgrading(structure),
   );
   assert.equal(barracksProduction.queueGuard("player"), "queued");
@@ -28207,7 +28353,7 @@ check("Faz 6 quarry uses its finite stone node and cannot be placed away from on
   if (!built.built) return assert.fail("quarry construction unexpectedly failed");
   structures.advanceConstruction(built.structure, quarry.constructionSeconds);
 
-  const worker = units.spawn("player", 5, 0, RTS_TEST_UNIT_STATS, "worker");
+  const worker = units.spawn("player", 5, 0, RTS_TEST_WORKER_STATS);
   const production = new EconomyProductionSystem(units, structures, navigation, () => false, nodes);
   let withdrawn = 0;
   for (let tick = 0; tick < 80; tick += 1) {
@@ -28230,7 +28376,7 @@ check("RTS economy producers report income, survive a ten-minute run, and stop a
   const farm = buildings.farm ?? assert.fail("farm definition missing");
   const units = new UnitSystem();
   for (let index = 0; index < 4; index += 1) {
-    units.spawn("player", -8 + index * 1.5, 0, RTS_TEST_UNIT_STATS, "worker");
+    units.spawn("player", -8 + index * 1.5, 0, RTS_TEST_WORKER_STATS);
   }
   const structures = new PlacedStructureSystem();
   const site = structures.place("player", farm, 8, 0);
@@ -28323,13 +28469,19 @@ check("RTS melee attacks apply JSON damage on cooldown and clear a depleted targ
   const attacker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
   const defender = units.spawn("enemy", 1.1, 0, RTS_TEST_UNIT_STATS);
   attacker.setAttackTarget(defender);
+  // Guard vs Guard is the §33 heavy column: 12 base x 1.2 = 14.4 per hit.
+  const perHit = RTS_TEST_UNIT_STATS.attackDamage * RTS_TEST_UNIT_STATS.damageMultipliers.heavy;
 
   updateUnitCombat([attacker], 0);
-  assert.equal(defender.health.current, 88, "first ready hit lands immediately");
+  assert.equal(defender.health.current, 100 - perHit, "first ready hit lands immediately");
   updateUnitCombat([attacker], 0.7);
-  assert.equal(defender.health.current, 88, "cooldown prevents an early second hit");
+  assert.equal(defender.health.current, 100 - perHit, "cooldown prevents an early second hit");
   updateUnitCombat([attacker], 0.7);
-  assert.equal(defender.health.current, 76, "second hit lands after the cooldown");
+  // Two multiplied hits accumulate float error; the damage rule is what matters.
+  assert.ok(
+    Math.abs(defender.health.current - (100 - perHit * 2)) < 1e-6,
+    "second hit lands after the cooldown",
+  );
 
   defender.health.damage(100);
   updateUnitCombat([attacker], 0);
@@ -28348,8 +28500,11 @@ check("RTS melee attacks can damage an enemy command center", () => {
   updateUnitCombat([attacker], 0, (hit) => {
     hits.push({ damage: hit.change.applied, targetOwner: hit.target.owner });
   });
-  assert.equal(enemyCenter.health.current, 288);
-  assert.deepEqual(hits, [{ damage: 12, targetOwner: "enemy" }]);
+  // The Guard's §33 structure column is 0.35 — it can hurt a centre, but the
+  // point of the multiplier is that it is a bad way to spend an army.
+  const perHit = RTS_TEST_UNIT_STATS.attackDamage * RTS_TEST_UNIT_STATS.damageMultipliers.structure;
+  assert.equal(enemyCenter.health.current, 300 - perHit);
+  assert.deepEqual(hits, [{ damage: perHit, targetOwner: "enemy" }]);
 });
 
 check("RTS test sandbox protects the player command center without disabling enemy attacks", () => {
@@ -28369,7 +28524,8 @@ check("RTS test sandbox protects the player command center without disabling ene
   assert.equal(attacker.attackTarget, playerCenter, "the AI still retains and pursues its attack order");
 
   updateUnitCombat([attacker], 0);
-  assert.equal(playerCenter.health.current, 288, "normal combat remains unchanged outside the sandbox policy");
+  const perHit = RTS_TEST_UNIT_STATS.attackDamage * RTS_TEST_UNIT_STATS.damageMultipliers.structure;
+  assert.equal(playerCenter.health.current, 300 - perHit, "normal combat remains unchanged outside the sandbox policy");
 });
 
 check("RTS match enters victory when the enemy command center is depleted", () => {
@@ -28413,6 +28569,234 @@ check("RTS death deselects, clears attackers, then removes the defeated unit", (
   updateUnitDeaths(units, selection, 0.25);
   assert.ok(!units.all().includes(player), "defeated unit leaves the live registry");
   assert.equal(units.unitForObject(body), null, "defeated body no longer resolves from raycasts");
+});
+
+check("Faz 7 soft counters make each role the answer to a different target", () => {
+  const units = new UnitSystem();
+  const guard = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const archer = units.spawn("player", 0, 0, RTS_TEST_ARCHER_STATS);
+  const ram = units.spawn("player", 0, 0, RTS_TEST_SIEGE_STATS);
+  const lightEnemy = units.spawn("enemy", 0, 0, RTS_TEST_ARCHER_STATS);
+  const heavyEnemy = units.spawn("enemy", 0, 0, RTS_TEST_UNIT_STATS);
+  const wall: CombatTarget = {
+    owner: "enemy",
+    position: new Vector3(0, 0, 0),
+    health: new HealthComponent(1000),
+    armorClass: "structure",
+  };
+
+  // Plan §46: "Tek birim türü her durumda en iyi seçim değil." Each attacker
+  // must lose to another attacker on at least one target class.
+  assert.ok(
+    resolveDamage(guard.stats, heavyEnemy) > resolveDamage(archer.stats, heavyEnemy),
+    "the Guard, not the Archer, is what answers a heavy front line",
+  );
+  assert.ok(
+    resolveDamage(ram.stats, wall) > resolveDamage(guard.stats, wall) * 4,
+    "plan §46: siege is necessary against buildings",
+  );
+  assert.ok(
+    resolveDamage(ram.stats, lightEnemy) < resolveDamage(archer.stats, lightEnemy)
+      && resolveDamage(ram.stats, heavyEnemy) < resolveDamage(guard.stats, heavyEnemy),
+    "plan §46: siege is weak against units and must be escorted",
+  );
+
+  // The Archer's claim on a light target is its own preference, not a raw
+  // damage race with the Guard: §7.1 gives it range as the actual advantage,
+  // and it stays fragile up close.
+  assert.ok(
+    resolveDamage(archer.stats, lightEnemy) > resolveDamage(archer.stats, heavyEnemy),
+    "the Archer would rather be shooting a light target",
+  );
+  assert.ok(
+    archer.stats.attackRange > guard.stats.attackRange * 3,
+    "plan §46: the Archer is effective while it is protected — by outranging",
+  );
+  assert.ok(
+    archer.health.max < guard.health.max
+      && resolveDamage(guard.stats, archer) > resolveDamage(archer.stats, guard),
+    "plan §46: and weak the moment a Guard reaches it",
+  );
+
+  // Time-to-kill sanity (GDD 12 §30): a mirror fight leaves room to react.
+  const mirrorTtk = (stats: UnitBalanceStats, target: Unit) =>
+    (target.health.max / resolveDamage(stats, target)) * stats.attackCooldown;
+  assert.ok(mirrorTtk(RTS_TEST_UNIT_STATS, heavyEnemy) > 4, "a Guard mirror is not a coin flip");
+});
+
+check("Faz 7 friendly fire cannot be resolved, even onto a stacked ally", () => {
+  const units = new UnitSystem();
+  const attacker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const ally = units.spawn("player", 0.2, 0, RTS_TEST_UNIT_STATS);
+  const navigation = new RtsNavigation();
+
+  updateUnitEngagement([attacker], { navigation, targets: [attacker, ally] });
+  assert.equal(attacker.attackTarget, null, "an ally is never acquired");
+  updateUnitCombat([attacker], 1);
+  assert.equal(ally.health.current, ally.health.max, "and never takes damage");
+});
+
+check("Faz 7 idle units acquire the nearest enemy and prefer troops over buildings", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const defender = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const worker = units.spawn("player", 0, 0, RTS_TEST_WORKER_STATS);
+  const raider = units.spawn("enemy", 5, 0, RTS_TEST_UNIT_STATS);
+  const wall: CombatTarget = {
+    owner: "enemy",
+    position: new Vector3(1, 0, 0),
+    health: new HealthComponent(500),
+    armorClass: "structure",
+  };
+  const targets = [defender, worker, raider, wall];
+
+  updateUnitEngagement(units.all(), { navigation, targets });
+  assert.equal(defender.attackTarget, raider, "troops outrank a closer building");
+  assert.equal(defender.autoAcquired, true, "an unordered pickup is leashed");
+  assert.equal(worker.attackTarget, null, "a zero acquisition range keeps workers out of combat");
+
+  // Plan §45 "Hedef kaybı ve yeniden hedefleme": losing a target finds the next.
+  raider.health.damage(raider.health.max);
+  updateUnitEngagement(units.all(), { navigation, targets });
+  assert.equal(defender.attackTarget, wall, "with the troops gone the building becomes the target");
+});
+
+check("Faz 7 a plain Move is not derailed, but an attack-move stops and resumes", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const mover = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const enemy = units.spawn("enemy", 2, 0, RTS_TEST_UNIT_STATS);
+  const targets = [mover, enemy];
+
+  // GDD 06 §23: a transit order walks past a fight it did not ask for.
+  const route = navigation.plan(new Vector3(0, 0, 0), new Vector3(12, 0, 0)) ?? assert.fail("route missing");
+  mover.setMovePath(route);
+  updateUnitEngagement([mover], { navigation, targets });
+  assert.equal(mover.attackTarget, null, "a Move order ignores an enemy it passes");
+
+  // GDD 06 §25: an attack-move is the order that opts into stopping.
+  mover.setAttackMovePath(route, new Vector3(12, 0, 0));
+  updateUnitEngagement([mover], { navigation, targets });
+  assert.equal(mover.attackTarget, enemy, "an attack-move engages what it finds");
+  assert.ok(mover.attackMoveTarget, "and remembers where it was going");
+
+  enemy.health.damage(enemy.health.max);
+  updateUnitEngagement([mover], { navigation, targets });
+  assert.equal(mover.attackTarget, null);
+  assert.ok(mover.pathTarget, "the advance resumes once the fight is over");
+
+  for (let i = 0; i < 600; i += 1) {
+    updateUnitEngagement([mover], { navigation, targets });
+    updateUnitMovement([mover], 1 / 60);
+  }
+  assert.ok(mover.position.x > 10, "the attack-move reaches its destination");
+  assert.equal(mover.attackMoveTarget, null, "arrival ends the order");
+});
+
+check("Faz 7 the chase leash returns a baited defender, but never abandons an ordered target", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const defender = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const bait = units.spawn("enemy", 5, 0, RTS_TEST_UNIT_STATS);
+  const targets = [defender, bait];
+
+  updateUnitEngagement([defender], { navigation, targets });
+  assert.equal(defender.attackTarget, bait, "the defender takes the bait");
+
+  // Drag it past the data-owned leash (GDD 06 §39).
+  defender.position.set(RTS_TEST_UNIT_STATS.chaseRange + 1, 0, 0);
+  updateUnitEngagement([defender], { navigation, targets });
+  assert.equal(defender.attackTarget, null, "an auto-acquired chase gives up past its leash");
+
+  // An explicit order is the player's decision and is not second-guessed.
+  defender.position.set(0, 0, 0);
+  issueAttackOrder(defender, bait, navigation);
+  assert.equal(defender.autoAcquired, false);
+  defender.position.set(RTS_TEST_UNIT_STATS.chaseRange * 3, 0, 0);
+  updateUnitEngagement([defender], { navigation, targets });
+  assert.equal(defender.attackTarget, bait, "a commanded attack ignores the leash");
+});
+
+check("Faz 7 Hold Position fires without stepping off its ground", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const archer = units.spawn("player", 0, 0, RTS_TEST_ARCHER_STATS);
+  const far = units.spawn("enemy", RTS_TEST_ARCHER_STATS.attackRange + 3, 0, RTS_TEST_UNIT_STATS);
+  const targets = [archer, far];
+
+  archer.setStance("hold");
+  updateUnitEngagement([archer], { navigation, targets });
+  assert.equal(archer.attackTarget, null, "hold does not acquire what it cannot already shoot");
+
+  far.position.set(RTS_TEST_ARCHER_STATS.attackRange - 1, 0, 0);
+  updateUnitEngagement([archer], { navigation, targets });
+  assert.equal(archer.attackTarget, far, "hold shoots what walks into range");
+
+  const origin = archer.position.clone();
+  for (let i = 0; i < 120; i += 1) updateUnitMovement([archer], 1 / 60);
+  assert.deepEqual(archer.position.toArray(), origin.toArray(), "hold never takes a step");
+
+  // Hold also drops a move order rather than queueing it behind the stance.
+  archer.setStance("aggressive");
+  archer.setMoveTarget(20, 0);
+  archer.setStance("hold");
+  assert.equal(archer.moveTarget, null, "switching to hold surrenders movement orders");
+
+  // A held unit never closes, so a target it cannot reach must be released —
+  // otherwise it stands locked onto something forever while an enemy at its
+  // feet goes unanswered, which is the opposite of what Hold promises.
+  const near = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  far.position.set(60, 0, 0);
+  archer.setStance("aggressive");
+  issueAttackOrder(archer, far, navigation);
+  archer.setStance("hold");
+  assert.equal(archer.autoAcquired, false, "the ordered target is not a leashed chase");
+  updateUnitEngagement([archer], { navigation, targets: [archer, far, near] });
+  assert.equal(archer.attackTarget, near, "a held unit drops an unreachable order and answers what is on top of it");
+});
+
+check("Faz 7 the AI reads Archers and Rams as army, not as nothing", () => {
+  // Regression: `role === "guard"` meant "every combat unit" only while Guard
+  // and worker were the only roles. Once Faz 7 shipped the Archer and the Ram,
+  // any surviving Guard-only filter made a whole army invisible to the AI.
+  const units = new UnitSystem();
+  units.spawn("enemy", 0, 0, RTS_TEST_ARCHER_STATS);
+  units.spawn("enemy", 1, 0, RTS_TEST_SIEGE_STATS);
+  units.spawn("enemy", 2, 0, RTS_TEST_UNIT_STATS);
+  units.spawn("enemy", 3, 0, RTS_TEST_WORKER_STATS);
+
+  assert.deepEqual(
+    units.armyOf("enemy").map((unit) => unit.role).sort(),
+    ["archer", "guard", "siege"],
+    "every combat role counts toward an army; workers never do",
+  );
+  assert.equal(units.armyOf("player").length, 0);
+});
+
+check("Faz 7 ranged attacks fire a tracer while melee does not", () => {
+  const units = new UnitSystem();
+  const projectiles = new ProjectileSystem();
+  const archer = units.spawn("player", 0, 0, RTS_TEST_ARCHER_STATS);
+  const guard = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const archerTarget = units.spawn("enemy", 5, 0, RTS_TEST_UNIT_STATS);
+  const guardTarget = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  archer.setAttackTarget(archerTarget);
+  guard.setAttackTarget(guardTarget);
+
+  const ranged: boolean[] = [];
+  updateUnitCombat([archer, guard], 0, (hit) => {
+    ranged.push(hit.ranged);
+    if (hit.ranged) projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
+  });
+  assert.deepEqual(ranged, [true, false], "only the Archer's hit asks for a tracer");
+  assert.equal(projectiles.root.children.length, 1);
+
+  // Damage already landed at fire time, so a tracer expiring changes nothing.
+  const health = archerTarget.health.current;
+  for (let i = 0; i < 60; i += 1) projectiles.update(1 / 60);
+  assert.equal(projectiles.root.children.length, 0, "tracers retire once they arrive");
+  assert.equal(archerTarget.health.current, health);
+  projectiles.dispose();
 });
 
 check("RTS grid navigation routes a unit around a static blocker", () => {
@@ -28609,7 +28993,7 @@ check("RTS logistics transfers linked buffers globally and stops when the road i
   const farmStats = buildings.farm ?? assert.fail("farm definition missing");
   const depotStats = buildings.depot ?? assert.fail("depot definition missing");
   const units = new UnitSystem();
-  for (let index = 0; index < 3; index += 1) units.spawn("player", -2 + index * 2, 17, RTS_TEST_UNIT_STATS, "worker");
+  for (let index = 0; index < 3; index += 1) units.spawn("player", -2 + index * 2, 17, RTS_TEST_WORKER_STATS);
   const structures = new PlacedStructureSystem();
   const depot = structures.place("player", depotStats, 0, 0);
   const farm = structures.place("player", farmStats, 0, 10);
@@ -28824,7 +29208,7 @@ check("RTS worker reaches a foundation, builds it, and never enters combat", () 
   );
   const house = buildings.house ?? assert.fail("house definition missing");
   const units = new UnitSystem();
-  const worker = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS, "worker");
+  const worker = units.spawn("player", 0, 0, RTS_TEST_WORKER_STATS);
   const enemy = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
   worker.setAttackTarget(enemy);
   updateUnitCombat([worker], 1);
@@ -28858,7 +29242,7 @@ check("RTS construction names missing-worker and unreachable placement errors", 
   assert.deepEqual(noWorker.assignNearest(site), { assigned: false, reason: "no-idle-worker" });
 
   const units = new UnitSystem();
-  units.spawn("player", -12, 0, RTS_TEST_UNIT_STATS, "worker");
+  units.spawn("player", -12, 0, RTS_TEST_WORKER_STATS);
   const navigation = new RtsNavigation();
   navigation.setBlockers([{ min: [-20, -1, -20], max: [20, 3, 20] }]);
   const blocked = new WorkerConstructionSystem(units, structures, navigation);
@@ -28890,7 +29274,7 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
     units,
     structures,
     navigation,
-    { ...guard, trainingSeconds: 0.1 },
+    { guard_placeholder: { ...guard, trainingSeconds: 0.1 } },
     kingdoms,
     undefined,
     () => guardQueueCapacityForAgeLevel(ageLevel),
@@ -28922,6 +29306,111 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
   assert.equal(production.queueGuard("player"), "queue-full", "third-age Barracks hold at most twenty Guard orders");
   production.reset();
   assert.equal(population.snapshot().reserved, 0, "reset releases every waiting third-age Guard order");
+  structures.clear();
+  units.clear();
+});
+
+check("Faz 7 Barracks II is what unlocks the Archer and the Ram", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const barracksStats = buildings.barracks ?? assert.fail("barracks definition missing");
+  const structures = new PlacedStructureSystem();
+  const barracks = structures.place("player", { ...barracksStats, constructionSeconds: 0.1 }, 0, 0);
+  structures.advanceConstruction(barracks, 0.1);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const units = new UnitSystem();
+  const kingdoms = new KingdomRegistry(
+    ["player", "enemy"], units, structures,
+    { food: 5000, wood: 5000, stone: 5000, gold: 5000 }, 80,
+  );
+  const production = new BarracksProductionSystem(
+    units, structures, navigation, RTS_TEST_UNIT_BALANCE, kingdoms,
+    undefined, () => 5,
+  );
+
+  // Plan §2.10: the Archer arrives through a Barracks upgrade, not a new building.
+  assert.equal(production.queueUnit("player", "guard_placeholder"), "queued", "T1 trains the Guard");
+  assert.equal(production.queueUnit("player", "archer_placeholder"), "requires-barracks-upgrade");
+  assert.equal(production.queueUnit("player", "siege_placeholder"), "requires-barracks-upgrade");
+  assert.equal(production.queueUnit("player", "worker_placeholder"), "unknown-unit", "the Barracks is not a Centre");
+  assert.deepEqual(
+    production.trainableUnits("player").filter((unit) => unit.unlocked).map((unit) => unit.id),
+    ["guard_placeholder"],
+    "the HUD is told exactly which units a T1 Barracks can build",
+  );
+
+  barracks.level = 2;
+  assert.equal(production.queueUnit("player", "archer_placeholder"), "queued");
+  assert.equal(production.queueUnit("player", "siege_placeholder"), "queued");
+  assert.deepEqual(
+    production.trainableUnits("player").filter((unit) => unit.unlocked).map((unit) => unit.id).sort(),
+    ["archer_placeholder", "guard_placeholder", "siege_placeholder"],
+    "plan §45: one tier-2 Barracks covers the whole core roster — no Workshop",
+  );
+
+  const events = [];
+  for (let i = 0; i < 200 && events.length < 3; i += 1) events.push(...production.update(1));
+  assert.deepEqual(
+    events.map((event) => event.unitId).sort(),
+    ["archer_placeholder", "guard_placeholder", "siege_placeholder"],
+    "every queued unit is trained, and each event names what came out",
+  );
+  const roles = units.unitsOf("player").map((unit) => unit.role).sort();
+  assert.deepEqual(roles, ["archer", "guard", "siege"], "role comes from the trained unit's data");
+  structures.clear();
+  units.clear();
+});
+
+check("Faz 7 a Barracks rallies its trained units and stops when its ground is lost", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const barracksStats = buildings.barracks ?? assert.fail("barracks definition missing");
+  const structures = new PlacedStructureSystem();
+  const barracks = structures.place("player", { ...barracksStats, constructionSeconds: 0.1 }, 0, 0);
+  structures.advanceConstruction(barracks, 0.1);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const units = new UnitSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 3000, wood: 3000 }, 50);
+  let connected = true;
+  const production = new BarracksProductionSystem(
+    units, structures, navigation,
+    { guard_placeholder: { ...RTS_TEST_UNIT_STATS, trainingSeconds: 0.1 } },
+    kingdoms, undefined, () => 5,
+    () => connected,
+  );
+
+  // GDD 06 §18: a rally point is where new units go, not where they appear.
+  const rally = new Vector3(14, 0, 10);
+  production.setRallyPoint("player", rally);
+  assert.deepEqual(production.rallyPoint("player")?.toArray(), rally.toArray());
+  assert.equal(production.queueUnit("player", "guard_placeholder"), "queued");
+  assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
+  const trained = units.unitsOf("player")[0] ?? assert.fail("trained guard missing");
+  assert.ok(
+    trained.position.distanceTo(rally) > 1,
+    "the unit still exits at the Barracks rather than teleporting to the rally point",
+  );
+  assert.ok(trained.pathTarget, "but it leaves under a movement order toward the rally point");
+  for (let i = 0; i < 900; i += 1) updateUnitMovement([trained], 1 / 60);
+  assert.ok(trained.position.distanceTo(rally) < 1.5, "and walks there");
+
+  production.setRallyPoint("player", null);
+  assert.equal(production.rallyPoint("player"), null, "the rally point can be cleared");
+
+  // Plan §45: "Bağlantısı kesilen askerî yapının davranışını uygula."
+  connected = false;
+  assert.equal(
+    production.queueUnit("player", "guard_placeholder"),
+    "disconnected",
+    "a Barracks outside its kingdom's control area cannot train",
+  );
+  connected = true;
+  assert.equal(production.queueUnit("player", "guard_placeholder"), "queued", "and recovers when the ground is retaken");
+  production.reset();
   structures.clear();
   units.clear();
 });
@@ -29150,7 +29639,7 @@ check("RTS workers, production and logistics never cross kingdoms", () => {
   const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 400, wood: 400 }, 40);
 
   // Only the enemy has workers on the field; only the enemy has a farm.
-  for (let index = 0; index < 3; index += 1) units.spawn("enemy", -2 + index * 2, 17, RTS_TEST_UNIT_STATS, "worker");
+  for (let index = 0; index < 3; index += 1) units.spawn("enemy", -2 + index * 2, 17, RTS_TEST_WORKER_STATS);
   const enemyFarm = structures.place("enemy", farmStats, 0, 10);
   structures.advanceConstruction(enemyFarm, farmStats.constructionSeconds);
   const playerFarm = structures.place("player", farmStats, 30, 10);
@@ -29202,7 +29691,7 @@ check("RTS workers, production and logistics never cross kingdoms", () => {
   // Barracks train for whoever owns them, spending that kingdom's economy.
   const enemyBarracks = structures.place("enemy", { ...barracks, constructionSeconds: 0.1 }, -20, 0);
   structures.advanceConstruction(enemyBarracks, 0.1);
-  const guards = new BarracksProductionSystem(units, structures, navigation, { ...guard, trainingSeconds: 0.1 }, kingdoms);
+  const guards = new BarracksProductionSystem(units, structures, navigation, { guard_placeholder: { ...guard, trainingSeconds: 0.1 } }, kingdoms);
   assert.equal(guards.queueGuard("player"), "no-completed-barracks", "the player has no barracks of its own");
   assert.equal(guards.queueGuard("enemy"), "queued");
   const trained = guards.update(0.1);
@@ -29333,7 +29822,7 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     () => territory.refresh(),
   );
   const workerProduction = new WorkerProductionSystem(units, centers, navigation, worker, kingdoms);
-  const barracksProduction = new BarracksProductionSystem(units, structures, navigation, guard, kingdoms);
+  const barracksProduction = new BarracksProductionSystem(units, structures, navigation, { guard_placeholder: guard }, kingdoms);
   const ai = new AiController({
     owner: "enemy",
     units,
@@ -29646,7 +30135,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
 
   const world = aiTestWorld();
   for (let index = 0; index < 2; index += 1) {
-    world.units.spawn("enemy", -2 + index * 2, -20, worker, "worker");
+    world.units.spawn("enemy", -2 + index * 2, -20, worker);
   }
 
   // §78: nothing is decided before the director's first cadence tick.
@@ -29692,7 +30181,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   const runA = aiTestWorld();
   const runB = aiTestWorld();
   for (const run of [runA, runB]) {
-    for (let index = 0; index < 2; index += 1) run.units.spawn("enemy", -2 + index * 2, -20, worker, "worker");
+    for (let index = 0; index < 2; index += 1) run.units.spawn("enemy", -2 + index * 2, -20, worker);
     for (let step = 0; step < 60; step += 1) run.ai.update(0.5);
   }
   assert.deepEqual(
@@ -29710,7 +30199,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
 
   const opener = aiTestWorld({ food: 400, wood: 600 });
   // The match-start force: workers only, no army — exactly what RtsApp spawns.
-  for (let index = 0; index < 5; index += 1) opener.units.spawn("enemy", -4 + index * 2, -18, worker, "worker");
+  for (let index = 0; index < 5; index += 1) opener.units.spawn("enemy", -4 + index * 2, -18, worker);
   // The player fields a standing defence the AI can see.
   for (let index = 0; index < 4; index += 1) opener.units.spawn("player", -4 + index * 3, 29, guard);
 
@@ -29767,7 +30256,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   // depot and road exist (Faz 4 logistics), so a starting stockpile stands in
   // for the income the Genişleme group will unlock.
   const housed = aiTestWorld({ food: 4000, wood: 4000 });
-  for (let index = 0; index < 5; index += 1) housed.units.spawn("enemy", -4 + index * 2, -18, worker, "worker");
+  for (let index = 0; index < 5; index += 1) housed.units.spawn("enemy", -4 + index * 2, -18, worker);
   for (let index = 0; index < 1600; index += 1) housed.step(0.5);
   const housedBoard = housed.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
   assert.ok(
@@ -29785,7 +30274,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   // §38: a broke AI waits and re-evaluates instead of spinning on a build it
   // cannot afford — and never drives its wallet negative.
   const broke = aiTestWorld({ food: 0, wood: 0 });
-  for (let index = 0; index < 3; index += 1) broke.units.spawn("enemy", -2 + index * 2, -18, worker, "worker");
+  for (let index = 0; index < 3; index += 1) broke.units.spawn("enemy", -2 + index * 2, -18, worker);
   for (let index = 0; index < 200; index += 1) broke.step(0.5);
   assert.equal(broke.structures.ownedBy("enemy").length, 0, "nothing is built without resources");
   assert.equal(broke.kingdoms.get("enemy").wallet.amount("wood"), 0, "a blocked AI never overdraws");
@@ -29847,7 +30336,7 @@ check("AI expansion runs the §47 recipe end to end and finally earns income", (
   const region = RTS_BLOCKOUT_MAP.enemyExpansion;
 
   const world = aiTestWorld({ food: 4000, wood: 4000 });
-  for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker, "worker");
+  for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker);
   for (let index = 0; index < 2400; index += 1) world.step(0.5);
 
   assert.equal(world.ai.snapshot().expansionStep, "done", "§47: the recipe reaches an active region");
@@ -30144,7 +30633,7 @@ check("a destroyed producer releases its gatherers and stops producing (Faz 5.1)
   const production = new EconomyProductionSystem(units, structures, navigation, () => false);
   const farm = structures.place("player", farmStats, 0, 0);
   structures.advanceConstruction(farm, farmStats.constructionSeconds);
-  const worker = units.spawn("player", 5, 0, workerStats, "worker");
+  const worker = units.spawn("player", 5, 0, workerStats);
   for (let tick = 0; tick < 60; tick += 1) {
     updateUnitMovement(units.all(), 0.5);
     production.update(0.5);

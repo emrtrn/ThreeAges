@@ -1,9 +1,12 @@
 /**
- * RTS combat resolution â€” Vertical Slice Plan v0.2 Faz 1.
+ * RTS combat resolution — Vertical Slice Plan v0.2 §21 / §45.
  *
- * Resolves an existing attack order after movement has pursued the target into
- * melee range. Depleted units are retained for the next death/removal slice,
- * but cannot deal damage or keep stale attack orders.
+ * Resolves an existing attack order once the target is in weapon range. Target
+ * choice lives in `engagementSystem`, pursuit in `unitMovement`, and removal in
+ * `unitDeath`; this owns the hit itself.
+ *
+ * Friendly fire cannot happen here: a hit only ever lands on `unit.attackTarget`,
+ * and nothing in the match will point that at an ally (plan §45).
  */
 import type { Unit } from "./unit";
 import { combatDistance, type CombatTarget } from "../combat/combatTarget";
@@ -13,6 +16,8 @@ export interface CombatHit {
   readonly attacker: Unit;
   readonly target: CombatTarget;
   readonly change: HealthChange;
+  /** Ranged hits ask the caller for a tracer; melee hits land where they stand. */
+  readonly ranged: boolean;
 }
 
 export function updateUnitCombat(
@@ -38,8 +43,8 @@ export function updateUnitCombat(
     if (combatDistance(unit.position, target) > unit.attack.range) continue;
     if (canDamageTarget && !canDamageTarget(unit, target)) continue;
 
-    const change = unit.attack.tryHit(target.health);
-    if (change) onHit?.({ attacker: unit, target, change });
+    const change = unit.attack.tryHit(target);
+    if (change) onHit?.({ attacker: unit, target, change, ranged: unit.attack.ranged });
     if (target.health.depleted) unit.setAttackTarget(null);
   }
 }
