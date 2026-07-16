@@ -11,7 +11,17 @@
     "attackPowerRatio": 1.1,
     "riskyAttackPowerRatio": 0.9,
     "retreatPowerRatio": 0.8,
-    "minimumDefensePower": 2
+    "retreatHealthRatio": 0.45,
+    "dominancePowerRatio": 2.0,
+    "minimumDefensePower": 2,
+    "targetWeights": {
+      "economicValue": 1.0,
+      "strategicValue": 0.7,
+      "victoryValue": 1.0,
+      "vulnerability": 0.5,
+      "proximity": 0.4,
+      "defenseStrength": 0.8
+    }
   },
   "economy": {
     "workerTarget": 8,

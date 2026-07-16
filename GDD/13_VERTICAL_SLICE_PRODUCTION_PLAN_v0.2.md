@@ -1113,17 +1113,26 @@ koridoru henüz haritada tanımlı değil.
 
 ### Ordu
 
-- [ ] Tek saha ordusu oluştur.
-- [ ] Minimum savunma grubu tut.
-- [ ] Belirli güç eşiğinde saldır.
-- [ ] Hedef olarak dış ekonomi veya merkez seç.
-- [ ] Ağır kayıpta üsse dön.
+- [x] Tek saha ordusu oluştur. (`ArmyManager`: bütün canlı Muhafızlar tek saha
+  ordusunda; paralel raid/siege grubu yok.)
+- [x] Minimum savunma grubu tut. (`test:engine`: iki Muhafız merkezde kalırken
+  kalan dört Muhafız hedefe gidiyor; minimum güçteki ordu üssü boşaltmıyor.)
+- [x] Belirli güç eşiğinde saldır. (`test:engine`: riskli eşikte yalnız yüksek
+  değerli hedefe çıkıyor, kaybedilen güç oranında yeniden toplanıyor.)
+- [x] Hedef olarak dış ekonomi veya merkez seç. (`test:engine`: dengeli güçte
+  savunmasız dış ekonomi, kesin üstünlükte merkez seçiliyor.)
+- [x] Ağır kayıpta üsse dön. (`test:engine`: güç oranı veya ortalama sağlık
+  eşiği düştüğünde saldırı hedefi temizlenip ordu üsse dönüyor.)
 
 ### Zafer
 
-- [ ] Oyuncu merkezini hedefleyebilme
-- [ ] Kendi merkezini savunma
-- [ ] Maç bittikten sonra karar üretmeyi durdurma
+- [x] Oyuncu merkezini hedefleyebilme. (`test:engine`: kesin üstünlükte
+  `assaultTarget` oyuncu Merkezini hedefliyor.)
+- [x] Kendi merkezini savunma. (`test:engine`: üs baskını saldırı niyetini
+  kesiyor ve Muhafızlar merkezdeki düşmana saldırıyor.)
+- [x] Maç bittikten sonra karar üretmeyi durdurma. (`test:engine`: AI tek
+  `match-ended` kaydıyla planı/ordu komutunu durduruyor; yeniden başlatılan
+  dünyada tekrar karar veriyor.)
 
 ---
 
@@ -1135,10 +1144,14 @@ koridoru henüz haritada tanımlı değil.
   tek koşu beş koşuyu temsil ediyor. Gerçek beş maçlık oyuncu testi hâlâ açık.)
 - [x] AI nüfus sınırında kalıcı kilitlenmiyor. (`test:engine`: baskı altında Ev
   kuruyor, tavanı haritanın tanımladığı 4 ev slotu boyunca yükseltiyor.)
-- [ ] AI en az bir kez karakol kuruyor.
-- [ ] AI karakolu yola bağlayabiliyor.
-- [ ] AI en az bir saldırı gerçekleştiriyor.
-- [ ] AI merkezi saldırı altında savunmaya dönüyor.
+- [x] AI en az bir kez karakol kuruyor. (`test:engine`: genişleme reçetesi
+  Karakol adımını tamamlıyor.)
+- [x] AI karakolu yola bağlayabiliyor. (`test:engine`: yol koridoru tamamlanıp
+  Karakol ana yol ağına bağlanıyor.)
+- [x] AI en az bir saldırı gerçekleştiriyor. (`test:engine`: saha ordusu dış
+  ekonomiye veya yeterli üstünlükte Merkeze saldırı emri üretiyor.)
+- [x] AI merkezi saldırı altında savunmaya dönüyor. (`test:engine`: üs tehdidi
+  her saldırı niyetinin önüne geçiyor ve merkezdeki saldırgana hedef emri veriyor.)
 - [x] AI geçersiz yapı konumunda sonsuz döngüye girmiyor. (`test:engine`: §40
   aday alanlar haritadan geliyor; art arda `AI_ANCHOR_FAILURE_LIMIT` kez
   reddedilen aday kara listeye alınıyor ve adaylar tükenince görev
@@ -1150,7 +1163,8 @@ koridoru henüz haritada tanımlı değil.
 - [x] AI karar nedeni debug panelinde görülebiliyor. (`test:engine`:
   `formatRtsAiDebug` aktif niyeti, beş niyetin puan/gerekçesini ve son kararları
   yazıyor; gerekçesiz karar logu hata fırlatıyor.)
-- [ ] Oyuncu veya AI maçı kazanabiliyor.
+- [x] Oyuncu veya AI maçı kazanabiliyor. (`test:engine`: rakip Merkezinin
+  yıkılması `victory`, oyuncu Merkezinin yıkılması `defeat`; çift yıkım `defeat`.)
 
 ---
 

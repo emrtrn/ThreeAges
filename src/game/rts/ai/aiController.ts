@@ -29,6 +29,7 @@ import { AiExpansionManager } from "./aiExpansionManager";
 import { AiProductionManager } from "./aiProductionManager";
 import { ArmyManager } from "./armyManager";
 import { KingdomDirector } from "./kingdomDirector";
+import type { AiTargetScore } from "./armyTargeting";
 import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } from "./aiTypes";
 
 export interface AiControllerOptions extends AiBlackboardSources {
@@ -55,6 +56,12 @@ export interface AiControllerSnapshot {
   readonly scores: readonly AiIntentScore[];
   readonly mission: AiArmyMission | null;
   readonly armyPower: number;
+  /** §54: how many guards the mission is holding at the base. */
+  readonly garrisonCount: number;
+  /** §60: the target the army is committed to, with the reason it won. */
+  readonly target: AiTargetScore | null;
+  /** §69: the AI has stopped deciding because the match is over. */
+  readonly concluded: boolean;
   readonly bottleneck: AiBottleneck;
   readonly expansionStep: AiExpansionStep;
   readonly blackboard: AiBlackboard | null;
@@ -75,6 +82,7 @@ export class AiController {
   private armyAccumulator = 0;
   private economyAccumulator = 0;
   private lastBlackboard: AiBlackboard | null = null;
+  private matchConcluded = false;
 
   constructor(private readonly options: AiControllerOptions) {
     this.reader = new AiBlackboardReader(options);
@@ -83,6 +91,7 @@ export class AiController {
       options.owner,
       options.units,
       options.centers,
+      options.structures,
       options.navigation,
       options.balance,
       this.log,
@@ -117,12 +126,22 @@ export class AiController {
     return this.profileBalance.economyMultiplier;
   }
 
+  /** §69: true once the match is decided and this AI has stopped deciding. */
+  get concluded(): boolean {
+    return this.matchConcluded;
+  }
+
   /** Advance AI time by one simulation step; evaluates only on its own cadence. */
   update(deltaSeconds: number): void {
     if (!Number.isFinite(deltaSeconds) || deltaSeconds < 0) {
       throw new RangeError("AI delta must be a non-negative finite number");
     }
     this.now += deltaSeconds;
+    // §69/plan §38 ("Maç bittikten sonra karar üretmeyi durdurma"): once a centre
+    // has fallen the match is over. Deciding past that point would keep issuing
+    // orders behind a result screen, and the AI checks this itself rather than
+    // trusting a caller to stop stepping it — engine tests step it directly.
+    if (this.checkMatchEnd()) return;
     this.directorAccumulator += deltaSeconds;
     this.armyAccumulator += deltaSeconds;
     this.economyAccumulator += deltaSeconds;
@@ -174,6 +193,9 @@ export class AiController {
       scores: this.director.state().scores,
       mission: armyState.mission,
       armyPower: armyState.power,
+      garrisonCount: armyState.garrisonCount,
+      target: armyState.target,
+      concluded: this.matchConcluded,
       bottleneck: this.economy.bottleneck,
       expansionStep: this.expansion.currentStep,
       blackboard: this.lastBlackboard,
@@ -186,6 +208,7 @@ export class AiController {
     this.armyAccumulator = 0;
     this.economyAccumulator = 0;
     this.lastBlackboard = null;
+    this.matchConcluded = false;
     this.director.reset();
     this.army.reset();
     this.builds.reset();
@@ -205,6 +228,29 @@ export class AiController {
     if (!plan || plan.intent !== "expand") return;
     if (step === "done") this.director.completePlan(plan, this.now, true);
     else if (step === "failed") this.director.completePlan(plan, this.now, false, "no-valid-placement");
+  }
+
+  /**
+   * §69: stop at the first decided match. The army is stood down on the way out
+   * so no guard is left walking at a centre that no longer exists.
+   */
+  private checkMatchEnd(): boolean {
+    if (this.matchConcluded) return true;
+    const own = this.options.centers.get(this.options.owner);
+    const opponent: UnitOwner = this.options.owner === "player" ? "enemy" : "player";
+    const rival = this.options.centers.get(opponent);
+    const won = !rival || rival.health.depleted;
+    const lost = !own || own.health.depleted;
+    if (!won && !lost) return false;
+    this.matchConcluded = true;
+    this.army.reset();
+    this.director.reset();
+    this.log.record({
+      at: this.now,
+      kind: "match-ended",
+      reason: won ? "maç bitti: rakip merkezi yıkıldı" : "maç bitti: merkezimiz yıkıldı",
+    });
+    return true;
   }
 
   private readBlackboard(): AiBlackboard {

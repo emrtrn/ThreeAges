@@ -78,6 +78,13 @@ export interface BuildingBalanceStats {
   /** Resource reservation is implemented in the following Phase 2 slice. */
   readonly cost: StartingResources;
   readonly constructionSeconds: number;
+  /**
+   * Durability of the placed structure, following the GDD §37 health classes
+   * (`12_BALANCE_AND_GAME_DATA.md`). Required rather than optional: a building
+   * without it would be silently invulnerable, which is the failure this data
+   * exists to prevent.
+   */
+  readonly maxHealth: number;
   /** Capacity supplied while this completed structure is standing. */
   readonly populationCapacity?: number;
   /** Present only on structures which turn assigned workers into a resource. */
@@ -124,6 +131,30 @@ export interface AiProfileBalance {
   readonly reactionDelaySeconds: number;
 }
 
+/**
+ * §60 `TargetScore` terms. The formula and each target kind's base values live
+ * in `armyTargeting.ts`; only the weights are data, mirroring `intentWeights`.
+ */
+export interface AiTargetWeights {
+  readonly economicValue: number;
+  readonly strategicValue: number;
+  readonly victoryValue: number;
+  readonly vulnerability: number;
+  readonly proximity: number;
+  /** Subtracted: defenders near a target push the army toward a softer one. */
+  readonly defenseStrength: number;
+}
+
+/** The §60 target-score term names, in the order the formula lists them. */
+export const AI_TARGET_WEIGHTS: readonly (keyof AiTargetWeights)[] = [
+  "economicValue",
+  "strategicValue",
+  "victoryValue",
+  "vulnerability",
+  "proximity",
+  "defenseStrength",
+];
+
 /** `public/game-data/balance/ai.json` — AI design §30 keeps the weights in data. */
 export interface AiBalance {
   readonly evaluation: {
@@ -147,8 +178,19 @@ export interface AiBalance {
     readonly riskyAttackPowerRatio: number;
     /** §62: retreat below this ratio. */
     readonly retreatPowerRatio: number;
+    /** §65: retreat once the army's mean health ratio falls below this. */
+    readonly retreatHealthRatio: number;
+    /**
+     * §69: the power ratio at which the AI reads itself as decisively winning
+     * and starts valuing the enemy centre. Well above `attackPowerRatio` on
+     * purpose — an army that merely *may* attack has not won anything yet, and
+     * §60 requires that the centre not always be the best target.
+     */
+    readonly dominancePowerRatio: number;
     /** §54: power held back at the base before the field army may leave. */
     readonly minimumDefensePower: number;
+    /** §60: per-term weights of the target score. */
+    readonly targetWeights: AiTargetWeights;
   };
   readonly economy: {
     /** §35: worker count the economy intent drives toward in AI-1. */

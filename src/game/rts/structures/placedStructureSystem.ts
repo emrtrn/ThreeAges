@@ -3,12 +3,17 @@
  *
  * A confirmed placement creates a visible foundation and a nav blocker, but has
  * no gameplay function until the worker/construction slice supplies progress.
+ *
+ * Faz 5.1: a placed structure is also a {@link CombatTarget}. Until then only
+ * command centres carried health, so the AI's §60 target scoring had exactly one
+ * thing it could ever choose — see plan §37.2.
  */
-import { BoxGeometry, Group, Mesh, MeshStandardMaterial, type Object3D } from "three";
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial, type Object3D, type Vector3 } from "three";
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalanceStats } from "../../data/gameDataTypes";
 import type { UnitOwner } from "../units/unit";
+import { HealthComponent } from "../units/health";
 import { buildingFootprintBlocker } from "./placementGrid";
 import { ConstructionComponent } from "./constructionComponent";
 
@@ -29,6 +34,16 @@ export interface PlacedStructure {
   readonly object: Group;
   readonly construction: ConstructionComponent;
   readonly progressFill: Mesh;
+  /**
+   * Data-owned durability (GDD §37 classes). A construction site carries its
+   * finished building's health: it is a real object on the field from the moment
+   * it is placed, and progress-scaled durability is a Faz 7 combat concern.
+   */
+  readonly health: HealthComponent;
+  /** {@link CombatTarget}: the same world position the object sits at. */
+  readonly position: Vector3;
+  /** Melee units strike the footprint edge rather than walking into the blocker. */
+  readonly combatRadius: number;
 }
 
 export class PlacedStructureSystem {
@@ -74,6 +89,11 @@ export class PlacedStructureSystem {
       object,
       construction: new ConstructionComponent(stats.constructionSeconds),
       progressFill,
+      health: new HealthComponent(stats.maxHealth),
+      position: object.position,
+      // The inscribed radius: a rectangular footprint is attackable from its
+      // nearest edge, so the shorter side is what a melee unit must reach.
+      combatRadius: Math.min(stats.footprint.width, stats.footprint.depth) / 2,
     };
     this.structures.push(structure);
     return structure;

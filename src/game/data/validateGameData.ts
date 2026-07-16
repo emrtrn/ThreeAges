@@ -8,11 +8,13 @@
  * exact same way (tests feed readFileSync content).
  */
 import { isFeatureFlag } from "../core/featureFlags";
+import { AI_TARGET_WEIGHTS } from "./gameDataTypes";
 import type {
   AiBalance,
   AiIntent,
   AiProfile,
   AiProfileBalance,
+  AiTargetWeights,
   BuildingBalance,
   GamePreset,
   GameVersion,
@@ -240,6 +242,10 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     if (constructionSeconds <= 0) {
       throw new GameDataError(`${statsWhere}.constructionSeconds: must be > 0`);
     }
+    const maxHealth = requireFiniteNumber(stats, "maxHealth", statsWhere);
+    if (maxHealth <= 0) {
+      throw new GameDataError(`${statsWhere}.maxHealth: must be > 0`);
+    }
     const populationCapacityRaw = stats["populationCapacity"];
     let populationCapacity: number | undefined;
     if (populationCapacityRaw !== undefined) {
@@ -287,6 +293,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       footprint: { width, depth },
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       constructionSeconds,
+      maxHealth,
       ...(populationCapacity ? { populationCapacity } : {}),
       ...(economy ? { economy } : {}),
       ...(territory ? { territory } : {}),
@@ -352,8 +359,22 @@ export function validateAiBalance(value: unknown): AiBalance {
     attackPowerRatio: requirePositive(armyObj, "attackPowerRatio", `${where}.army`),
     riskyAttackPowerRatio: requirePositive(armyObj, "riskyAttackPowerRatio", `${where}.army`),
     retreatPowerRatio: requirePositive(armyObj, "retreatPowerRatio", `${where}.army`),
+    retreatHealthRatio: requireFiniteNumber(armyObj, "retreatHealthRatio", `${where}.army`),
+    dominancePowerRatio: requirePositive(armyObj, "dominancePowerRatio", `${where}.army`),
     minimumDefensePower: requireFiniteNumber(armyObj, "minimumDefensePower", `${where}.army`),
+    targetWeights: validateAiTargetWeights(armyObj["targetWeights"], `${where}.army.targetWeights`),
   };
+  // §65: a health floor outside 0..1 would either never fire or retreat always.
+  if (!(army.retreatHealthRatio >= 0 && army.retreatHealthRatio <= 1)) {
+    throw new GameDataError(`${where}.army: retreatHealthRatio must be within 0..1`);
+  }
+  // §60/§69: dominance below the attack bar would hand the centre full victory
+  // value the moment attacking became legal, making it always the best target.
+  if (army.dominancePowerRatio < army.attackPowerRatio) {
+    throw new GameDataError(
+      `${where}.army: dominancePowerRatio must be >= attackPowerRatio`,
+    );
+  }
   // §62 orders these thresholds; an out-of-order set would make the army both
   // attack and retreat in the same band.
   if (!(army.retreatPowerRatio <= army.riskyAttackPowerRatio && army.riskyAttackPowerRatio <= army.attackPowerRatio)) {
@@ -397,6 +418,23 @@ export function validateAiBalance(value: unknown): AiBalance {
   }
 
   return { evaluation, army, economy, profiles, intentWeights };
+}
+
+/** §60: every term is weighted in data, and an unknown term is a typo, not a feature. */
+function validateAiTargetWeights(value: unknown, where: string): AiTargetWeights {
+  const obj = asObject(value, where);
+  const weights = {} as Record<keyof AiTargetWeights, number>;
+  for (const term of AI_TARGET_WEIGHTS) {
+    const weight = requireFiniteNumber(obj, term, where);
+    if (weight < 0) throw new GameDataError(`${where}: "${term}" must be >= 0`);
+    weights[term] = weight;
+  }
+  for (const key of Object.keys(obj)) {
+    if (!AI_TARGET_WEIGHTS.includes(key as keyof AiTargetWeights)) {
+      throw new GameDataError(`${where}: unknown target term "${key}"`);
+    }
+  }
+  return weights;
 }
 
 /** Validate the small data-owned road cost/grid contract before RTS uses it. */

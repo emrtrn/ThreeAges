@@ -50,6 +50,7 @@ import { CommandSystem } from "./commands/commandSystem";
 import { CommandCenterSystem } from "./structures/commandCenterSystem";
 import { COMMAND_CENTER_MAX_HEALTH } from "./structures/commandCenter";
 import { RtsBuildingVisuals } from "./structures/rtsBuildingVisuals";
+import { updateStructureDestruction } from "./structures/structureDestruction";
 import { RtsMatchState } from "./match/rtsMatchState";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
@@ -630,24 +631,48 @@ export class RtsApp {
     this.syncEconomyUi();
     updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
     updateUnitDeaths(this.units, this.selection, dt);
-    if (this.match.update(this.centers) === "victory") {
-      this.log.info("Victory: enemy command center destroyed");
-      this.matchOverlay.showVictory();
+    this.destroyRuinedStructures();
+    const outcome = this.match.update(this.centers);
+    if (outcome !== "active") {
+      this.log.info(outcome === "victory"
+        ? "Victory: enemy command center destroyed"
+        : "Defeat: the player's command center was destroyed");
+      this.matchOverlay.showResult(outcome);
     }
   }
 
+  /**
+   * Faz 5.1: a destroyed footprint frees ground and can shrink a control area,
+   * and both are cached — every other system reconciles against the live
+   * structure list on its own tick.
+   */
+  private destroyRuinedStructures(): void {
+    let territoryChanged = false;
+    const destroyed = updateStructureDestruction(this.structures, (structure) => {
+      if (structure.stats.territory) territoryChanged = true;
+      this.log.info(`${structure.stats.label} destroyed (${structure.owner})`);
+    });
+    if (destroyed.length === 0) return;
+    if (territoryChanged) this.territory.refresh();
+    this.refreshNavigationBlockers();
+  }
+
   private spawnCenters(): void {
+    // Faz 5.1: every structure's durability is data now, the centre included, so
+    // there is one place to tune a match's length rather than two.
+    const maxHealth = this.options.buildingBalance["command_center"]?.maxHealth
+      ?? COMMAND_CENTER_MAX_HEALTH;
     const playerCenter = this.centers.spawn(
       "player",
       PLAYER_CENTER_POSITION.x,
       PLAYER_CENTER_POSITION.z,
-      COMMAND_CENTER_MAX_HEALTH,
+      maxHealth,
     );
     const enemyCenter = this.centers.spawn(
       "enemy",
       ENEMY_CENTER_POSITION.x,
       ENEMY_CENTER_POSITION.z,
-      COMMAND_CENTER_MAX_HEALTH,
+      maxHealth,
     );
     this.buildingVisuals.applyToCenter(playerCenter);
     this.buildingVisuals.applyToCenter(enemyCenter);

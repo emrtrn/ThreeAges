@@ -22,8 +22,15 @@ export function formatRtsAiDebug(
   lines.push(
     `niyet: ${snapshot.intent ?? "-"}${snapshot.plan ? ` · plan ${snapshot.plan.id} (${snapshot.planSeconds.toFixed(1)}sn)` : ""}`,
   );
-  lines.push(`ordu görevi: ${snapshot.mission ?? "-"} · güç ${snapshot.armyPower.toFixed(1)}`);
+  lines.push(
+    `ordu görevi: ${snapshot.mission ?? "-"} · güç ${snapshot.armyPower.toFixed(1)}`
+    + ` · üste kalan ${snapshot.garrisonCount}`,
+  );
+  lines.push(snapshot.target
+    ? `hedef: ${snapshot.target.candidate.kind} ${snapshot.target.score.toFixed(2)} — ${snapshot.target.reason}`
+    : "hedef: -");
   lines.push(`darboğaz: ${snapshot.bottleneck ?? "yok"} · genişleme: ${snapshot.expansionStep}`);
+  if (snapshot.concluded) lines.push("maç bitti: karar üretimi durdu");
 
   if (snapshot.scores.length > 0) {
     lines.push("niyet puanları:");

@@ -18,7 +18,9 @@ export type AiDecisionKind =
   | "plan-succeeded"
   | "plan-failed"
   | "army-mission"
-  | "emergency";
+  | "emergency"
+  /** §69: the last entry of a match — the AI stops deciding after this. */
+  | "match-ended";
 
 export interface AiDecisionEntry {
   /** Match seconds at which the decision was taken. */

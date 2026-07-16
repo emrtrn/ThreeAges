@@ -88,12 +88,20 @@ import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
 import { AiController } from "../src/game/rts/ai/aiController";
 import { AiDecisionLog } from "../src/game/rts/ai/aiDecisionLog";
+import { ArmyManager } from "../src/game/rts/ai/armyManager";
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
 import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBuildManager";
 import { detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
 import { scoreIntents } from "../src/game/rts/ai/intentScorer";
+import {
+  bestTarget,
+  scoreTargets,
+  AI_HIGH_VALUE_TARGET_SCORE,
+  type AiTargetCandidate,
+} from "../src/game/rts/ai/armyTargeting";
 import { formatRtsAiDebug } from "../src/game/rts/ai/aiDebugView";
 import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
+import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
@@ -29178,6 +29186,9 @@ check("AI debug view exposes the intent, its reason and the decision trail (plan
       scores: director.state().scores,
       mission: "regroup",
       armyPower: 0,
+      garrisonCount: 0,
+      target: null,
+      concluded: false,
       blackboard,
     },
     log.recent(),
@@ -29194,14 +29205,46 @@ check("AI debug view exposes the intent, its reason and the decision trail (plan
   assert.match(text, /tehdit: üs 2\.0/);
   assert.match(text, /kararlar:/);
   assert.match(text, /intent-selected/);
+  assert.match(text, /hedef: -/, "an army with no mission shows no target");
+
+  // §60/§82: an attacking AI explains which target it picked and why.
+  const attacking = formatRtsAiDebug(
+    {
+      owner: "enemy",
+      intent: "attack",
+      plan: null,
+      planSeconds: 0,
+      scores: [],
+      mission: "harassEconomy",
+      armyPower: 6,
+      garrisonCount: 2,
+      concluded: false,
+      target: {
+        candidate: { id: "structure:4", kind: "economy", x: 0, z: 0, healthRatio: 1, defensePower: 0, distance: 10 },
+        score: 1.84,
+        reason: "dış ekonomi: savunmasız",
+      },
+      bottleneck: null,
+      expansionStep: "done",
+      blackboard,
+    },
+    [],
+    1,
+  ).join("\n");
+  assert.match(attacking, /hedef: economy 1\.84 — dış ekonomi: savunmasız/);
+  assert.match(attacking, /üste kalan 2/, "§54: the panel shows what stayed home");
 
   const empty = formatRtsAiDebug(
-    { owner: "enemy", intent: null, plan: null, planSeconds: 0, scores: [], mission: null, armyPower: 0, blackboard: null },
+    {
+      owner: "enemy", intent: null, plan: null, planSeconds: 0, scores: [], mission: null,
+      armyPower: 0, garrisonCount: 0, target: null, concluded: true, blackboard: null,
+    },
     [],
     1,
   ).join("\n");
   assert.match(empty, /niyet: -/);
   assert.match(empty, /- yok/);
+  assert.match(empty, /maç bitti: karar üretimi durdu/, "§69 is visible in the panel");
 });
 
 check("AI controller runs a headless accelerated match, decides on cadence, and commands its army", () => {
@@ -29628,6 +29671,417 @@ check("AiBuildManager keeps one site, skips taken anchors and blacklists a faili
   }
   territory.dispose();
   outside.dispose();
+});
+
+// --- Faz 5.1 §37.2: structure durability, the §60 targeting prerequisite ---
+
+check("every building declares a positive durability, and a bad one fails loudly", () => {
+  const raw = JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as Record<string, unknown>;
+  const buildings = validateBuildingBalance(raw);
+  for (const [id, stats] of Object.entries(buildings)) {
+    assert.ok(stats.maxHealth > 0, `${id} must declare durability`);
+  }
+  // GDD §37 health classes: a depot outlasts a farm, an outpost outlasts both.
+  assert.ok((buildings.depot?.maxHealth ?? 0) > (buildings.farm?.maxHealth ?? 0));
+  assert.ok((buildings.outpost?.maxHealth ?? 0) > (buildings.depot?.maxHealth ?? 0));
+
+  const withFarm = (farm: Record<string, unknown>) => ({ ...raw, farm: { ...(raw["farm"] as object), ...farm } });
+  // A structure without durability would be silently invulnerable — the exact
+  // failure this required field exists to prevent.
+  assert.throws(() => {
+    const { maxHealth: _dropped, ...rest } = raw["farm"] as Record<string, unknown>;
+    return validateBuildingBalance({ ...raw, farm: rest });
+  }, GameDataError);
+  assert.throws(() => validateBuildingBalance(withFarm({ maxHealth: 0 })), GameDataError);
+  assert.throws(() => validateBuildingBalance(withFarm({ maxHealth: -10 })), GameDataError);
+});
+
+check("a placed structure is a combat target: it takes damage, dies, and frees its ground", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const farmStats = buildings.farm ?? assert.fail("farm balance missing");
+  const guardStats = unitBalance.guard_placeholder ?? assert.fail("guard balance missing");
+
+  const structures = new PlacedStructureSystem();
+  const units = new UnitSystem();
+  const farm = structures.place("player", farmStats, 10, 10);
+
+  assert.equal(farm.health.max, farmStats.maxHealth, "durability comes from data, not from code");
+  assert.equal(farm.combatRadius, 3, "a 6x6 footprint is struck from its edge, 3 units out");
+  assert.equal(farm.position.x, 10);
+  assert.equal(farm.position.z, 10);
+  assert.equal(structures.navigationBlockers().length, 1);
+
+  // The AI and the player both reach a building through the same combat path
+  // that kills a unit — there is no structure-specific damage rule in AI-1.
+  const guard = units.spawn("enemy", 10, 14, guardStats);
+  guard.setAttackTarget(farm);
+  for (let tick = 0; tick < 400 && !farm.health.depleted; tick += 1) {
+    updateUnitCombat(units.all(), 0.5);
+  }
+  assert.ok(farm.health.depleted, "a guard standing at the footprint edge can destroy a farm");
+  assert.equal(guard.attackTarget, null, "a destroyed target is dropped, not hit forever");
+  assert.equal(structures.all().length, 1, "combat itself never removes the structure");
+
+  // Destruction is one explicit pass, mirroring updateUnitDeaths.
+  const seen: string[] = [];
+  const destroyed = updateStructureDestruction(structures, (structure) => seen.push(structure.stats.id));
+  assert.deepEqual(destroyed, [farm]);
+  assert.deepEqual(seen, ["farm"], "the caller is told what fell, so it can refresh what it caches");
+  assert.equal(structures.all().length, 0);
+  assert.equal(structures.navigationBlockers().length, 0, "its footprint stops blocking ground");
+
+  // A healthy world is left alone.
+  const intact = new PlacedStructureSystem();
+  intact.place("player", farmStats, 0, 0);
+  assert.equal(updateStructureDestruction(intact).length, 0);
+  assert.equal(intact.all().length, 1);
+});
+
+check("a destroyed producer releases its gatherers and stops producing (Faz 5.1)", () => {
+  // The destruction pass notifies nobody: every system reconciles against the
+  // live structure list. This locks that claim down for the economy, which is
+  // the one that would silently keep paying out.
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const farmStats = buildings.farm ?? assert.fail("farm balance missing");
+  const workerStats = unitBalance.worker_placeholder ?? assert.fail("worker balance missing");
+
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+  const farm = structures.place("player", farmStats, 0, 0);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  const worker = units.spawn("player", 5, 0, workerStats, "worker");
+  for (let tick = 0; tick < 60; tick += 1) {
+    updateUnitMovement(units.all(), 0.5);
+    production.update(0.5);
+  }
+  assert.ok(production.isAssigned(worker), "the worker is gathering before the attack");
+  assert.ok((production.snapshots("player")[0]?.totalProduced ?? 0) > 0);
+
+  farm.health.damage(farm.health.max);
+  updateStructureDestruction(structures);
+  production.update(0.5);
+  assert.equal(production.snapshots("player").length, 0, "the ruined farm is no longer a producer");
+  assert.equal(production.isAssigned(worker), false, "its worker is freed rather than stranded");
+});
+
+// --- Faz 5 §38 Ordu: §54 minimum defence, §60 targeting, §62/§65 retreat ---
+
+check("§60 target scoring prefers soft economy while even, and the centre once dominant", () => {
+  const weights = AI_TEST_BALANCE.army.targetWeights;
+  const candidate = (overrides: Partial<AiTargetCandidate>): AiTargetCandidate => ({
+    id: "t", kind: "economy", x: 0, z: 0, healthRatio: 1, defensePower: 0, distance: 10, ...overrides,
+  });
+  const farm = candidate({ id: "farm", kind: "economy" });
+  const center = candidate({ id: "center", kind: "center" });
+
+  // §60: "Merkez her zaman en iyi hedef olmamalıdır". An evenly matched army
+  // takes the outer economy...
+  const even = scoreTargets([farm, center], weights, { dominance: 0 });
+  assert.equal(even[0]?.candidate.id, "farm");
+  assert.match(
+    even.find((score) => score.candidate.id === "center")?.reason ?? "",
+    /üstünlük yok/,
+    "and the centre says why it lost",
+  );
+
+  // ...and §67/§69: a decisively winning one closes the match out instead of
+  // farming outbuildings forever.
+  assert.equal(scoreTargets([farm, center], weights, { dominance: 1 })[0]?.candidate.id, "center");
+
+  // §60 DefenseStrength: defenders push the army onto a softer target.
+  const guarded = candidate({ id: "guarded", kind: "economy", defensePower: 4 });
+  const soft = candidate({ id: "soft", kind: "depot", defensePower: 0 });
+  assert.equal(bestTarget([guarded, soft], weights, { dominance: 0 })?.candidate.id, "soft");
+
+  // §60 Proximity and Vulnerability, each isolated.
+  assert.equal(
+    bestTarget([candidate({ id: "near", distance: 5 }), candidate({ id: "far", distance: 90 })],
+      weights, { dominance: 0 })?.candidate.id,
+    "near",
+  );
+  assert.equal(
+    bestTarget([candidate({ id: "hurt", healthRatio: 0.2 }), candidate({ id: "whole", healthRatio: 1 })],
+      weights, { dominance: 0 })?.candidate.id,
+    "hurt",
+    "a half-destroyed building is worth finishing",
+  );
+
+  // §5: every score explains itself, and an empty field is not a target.
+  for (const score of scoreTargets([farm, center], weights, { dominance: 0.5 })) {
+    assert.ok(score.reason.length > 0, `${score.candidate.kind} must carry a reason`);
+  }
+  assert.equal(bestTarget([], weights, { dominance: 1 }), null);
+
+  // §62: the risky-attack bar is cleared by a prime target and nothing less.
+  const prize = bestTarget([candidate({ id: "prize", kind: "economy", distance: 0 })], weights, { dominance: 0 });
+  assert.ok((prize?.score ?? 0) >= AI_HIGH_VALUE_TARGET_SCORE, "an undefended adjacent farm is worth a risk");
+  const scrap = bestTarget([candidate({ id: "scrap", kind: "support", defensePower: 4, distance: 90 })],
+    weights, { dominance: 0 });
+  assert.ok((scrap?.score ?? 0) < AI_HIGH_VALUE_TARGET_SCORE, "a defended distant shed is not");
+
+  // §80: identical input, identical order — including ties.
+  const tied = [candidate({ id: "b", kind: "depot" }), candidate({ id: "a", kind: "depot" })];
+  assert.deepEqual(
+    scoreTargets(tied, weights, { dominance: 0 }).map((score) => score.candidate.id),
+    scoreTargets([...tied].reverse(), weights, { dominance: 0 }).map((score) => score.candidate.id),
+  );
+});
+
+check("ai balance orders the §69 dominance bar above the §62 attack bar", () => {
+  const raw = JSON.parse(readFileSync("public/game-data/balance/ai.json", "utf8")) as Record<string, unknown>;
+  const withArmy = (army: Record<string, unknown>) => ({ ...raw, army: { ...(raw["army"] as object), ...army } });
+  assert.ok(AI_TEST_BALANCE.army.dominancePowerRatio >= AI_TEST_BALANCE.army.attackPowerRatio);
+  // §60: a dominance bar at or below the attack bar would hand the centre full
+  // victory value the moment attacking became legal.
+  assert.throws(() => validateAiBalance(withArmy({ dominancePowerRatio: 0.5 })), GameDataError);
+  // §65: a health floor outside 0..1 either never fires or always fires.
+  assert.throws(() => validateAiBalance(withArmy({ retreatHealthRatio: 1.5 })), GameDataError);
+  assert.throws(() => validateAiBalance(withArmy({ retreatHealthRatio: -0.1 })), GameDataError);
+  // §60: an unknown or missing target term is a typo, not a new feature.
+  assert.throws(
+    () => validateAiBalance(withArmy({
+      targetWeights: { ...(AI_TEST_BALANCE.army.targetWeights as object), sabotageValue: 1 },
+    })),
+    GameDataError,
+  );
+  assert.throws(() => validateAiBalance(withArmy({ targetWeights: { economicValue: 1 } })), GameDataError);
+});
+
+/** An ArmyManager over a headless world, so missions can be driven directly. */
+function armyTestWorld() {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard balance missing");
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 22);
+  centers.spawn("enemy", 0, -26);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(centers.navigationBlockers());
+  const log = new AiDecisionLog();
+  const army = new ArmyManager("enemy", units, centers, structures, navigation, AI_TEST_BALANCE, log);
+  /** A completed player building the AI can see and score. */
+  const playerBuilding = (id: string, x: number, z: number) => {
+    const stats = buildings[id] ?? assert.fail(`${id} balance missing`);
+    const structure = structures.place("player", stats, x, z);
+    structures.advanceConstruction(structure, stats.constructionSeconds);
+    return structure;
+  };
+  const enemyGuards = (count: number, health = 1) => {
+    const spawned = [];
+    for (let index = 0; index < count; index += 1) {
+      const unit = units.spawn("enemy", -4 + index * 2, -20, guard);
+      if (health < 1) unit.health.damage(unit.health.max * (1 - health));
+      spawned.push(unit);
+    }
+    return spawned;
+  };
+  const playerGuards = (count: number) => {
+    const spawned = [];
+    for (let index = 0; index < count; index += 1) {
+      spawned.push(units.spawn("player", -2 + index * 2, -22, guard));
+    }
+    return spawned;
+  };
+  return { army, units, structures, centers, log, playerBuilding, enemyGuards, playerGuards };
+}
+
+check("§54: the AI holds a garrison at its base instead of sending every guard", () => {
+  const world = armyTestWorld();
+  const guards = world.enemyGuards(6);
+  world.playerBuilding("farm", 0, 16);
+
+  // A clearly winning power ratio, so the army is free to leave (§59).
+  world.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 3 }), "attack");
+  assert.ok(world.army.currentMission === "harassEconomy" || world.army.currentMission === "assaultTarget");
+
+  const state = world.army.state();
+  // §54: minimumDefensePower (2) worth of guards stays home; the rest strike.
+  assert.equal(state.garrisonCount, 2, "the minimum defence is held back");
+  const striking = guards.filter((unit) => unit.attackTarget !== null);
+  assert.equal(striking.length, 4, "everything above the minimum takes the field");
+
+  // §59/§54: an army that *is* the minimum has nothing to spare, so it stays.
+  const thin = armyTestWorld();
+  thin.enemyGuards(2);
+  thin.playerBuilding("farm", 0, 16);
+  thin.army.update(aiTestBlackboard({ ownArmyPower: 2, knownEnemyArmyPower: 0.5 }), "attack");
+  assert.equal(thin.army.currentMission, "regroup", "a minimum-sized army never leaves the base empty");
+  assert.equal(
+    thin.units.unitsOf("enemy").filter((unit) => unit.attackTarget !== null).length,
+    0,
+  );
+});
+
+check("§60: the AI picks the outer economy while even and the centre once dominant", () => {
+  // An even fight: the undefended farm outscores a centre with no victory value.
+  const even = armyTestWorld();
+  even.enemyGuards(6);
+  const farm = even.playerBuilding("farm", 0, 16);
+  even.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
+  assert.equal(even.army.currentMission, "harassEconomy", "§60 #2: undefended outer economy first");
+  assert.ok(
+    even.units.unitsOf("enemy").some((unit) => unit.attackTarget === farm),
+    "and the guards are actually ordered onto it",
+  );
+  assert.match(even.log.latest?.reason ?? "", /dış ekonomi/, "§5: the panel can explain the choice");
+
+  // §69: the same army against a collapsed defence goes for the win instead.
+  const dominant = armyTestWorld();
+  dominant.enemyGuards(6);
+  dominant.playerBuilding("farm", 0, 16);
+  dominant.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 0 }), "attack");
+  assert.equal(dominant.army.currentMission, "assaultTarget", "§67: a won match gets finished");
+  const center = dominant.centers.get("player");
+  assert.ok(dominant.units.unitsOf("enemy").some((unit) => unit.attackTarget === center));
+
+  // §57: whatever the target, a raid at home outranks it.
+  const raided = armyTestWorld();
+  raided.enemyGuards(6);
+  raided.playerBuilding("farm", 0, 16);
+  const [raider] = raided.playerGuards(1);
+  raided.army.update(
+    aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 0, baseThreat: 3 }),
+    "attack",
+  );
+  assert.equal(raided.army.currentMission, "defendBase");
+  assert.equal(raided.army.state().target, null, "a defending army holds no assault target");
+  assert.ok(
+    raided.units.unitsOf("enemy").some((unit) => unit.attackTarget === raider),
+    "§57: guards protect the centre by attacking its nearby raider",
+  );
+});
+
+check("§62/§65: the AI retreats on a lost exchange and on a ground-down army", () => {
+  // §62: the power ratio collapses mid-assault.
+  const outmatched = armyTestWorld();
+  outmatched.enemyGuards(6);
+  outmatched.playerBuilding("farm", 0, 16);
+  outmatched.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
+  assert.equal(outmatched.army.currentMission, "harassEconomy");
+  outmatched.army.update(aiTestBlackboard({ ownArmyPower: 2, knownEnemyArmyPower: 6 }), "attack");
+  assert.equal(outmatched.army.currentMission, "regroup", "§62: retreat below the power floor");
+  assert.equal(
+    outmatched.units.unitsOf("enemy").filter((unit) => unit.attackTarget !== null).length,
+    0,
+    "§65: a retreating army does not chase what followed it home",
+  );
+
+  // §65: an army winning on paper but dying anyway still goes home. The power
+  // ratio alone misses this — it wiped the defenders and is now bleeding on a
+  // building it cannot finish.
+  const bled = armyTestWorld();
+  const batteredGuards = bled.enemyGuards(6);
+  bled.playerBuilding("farm", 0, 16);
+  bled.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 4 }), "attack");
+  assert.equal(bled.army.currentMission, "harassEconomy");
+  for (const guard of batteredGuards) guard.health.damage(guard.health.max * 0.7);
+  bled.army.update(aiTestBlackboard({ ownArmyPower: 5, knownEnemyArmyPower: 3 }), "attack");
+  assert.equal(bled.army.currentMission, "regroup", "§65: mean health below the floor pulls it back");
+
+  // An army that never left does not "retreat" — regroup is its resting state.
+  const idle = armyTestWorld();
+  idle.enemyGuards(6, 0.3);
+  idle.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 3 }), "economy");
+  assert.equal(idle.army.currentMission, "regroup");
+});
+
+// --- Faz 5 §38 Zafer: symmetric match result, and §69 stopping ---
+
+check("either kingdom can win: a destroyed player centre is a defeat (plan §39)", () => {
+  const centers = new CommandCenterSystem();
+  const player = centers.spawn("player", 0, 22);
+  const enemy = centers.spawn("enemy", 0, -26);
+  const match = new RtsMatchState();
+  assert.equal(match.update(centers), "active");
+
+  enemy.health.damage(enemy.health.max);
+  assert.equal(match.update(centers), "victory", "the AI's centre falling is still a win");
+
+  const lost = new RtsMatchState();
+  const lostCenters = new CommandCenterSystem();
+  const lostPlayer = lostCenters.spawn("player", 0, 22);
+  lostCenters.spawn("enemy", 0, -26);
+  lostPlayer.health.damage(lostPlayer.health.max);
+  assert.equal(lost.update(lostCenters), "defeat", "§39: the AI can win the match too");
+  assert.equal(lost.active, false);
+
+  // A mutual kill is a defeat: losing your own centre is the specific outcome,
+  // and a win here would let a player trade a loss for a victory.
+  const mutual = new RtsMatchState();
+  const mutualCenters = new CommandCenterSystem();
+  const mutualPlayer = mutualCenters.spawn("player", 0, 22);
+  const mutualEnemy = mutualCenters.spawn("enemy", 0, -26);
+  mutualPlayer.health.damage(mutualPlayer.health.max);
+  mutualEnemy.health.damage(mutualEnemy.health.max);
+  assert.equal(mutual.update(mutualCenters), "defeat");
+
+  // The result is one-way until an explicit restart.
+  player.health.damage(player.health.max);
+  assert.equal(match.update(centers), "victory", "a decided match does not flip");
+  match.reset();
+  assert.equal(match.outcome, "active");
+});
+
+check("§69: the AI stops deciding once the match is over", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard balance missing");
+
+  const world = aiTestWorld();
+  for (let index = 0; index < 6; index += 1) world.units.spawn("enemy", -4 + index * 2, -20, guard);
+  for (let step = 0; step < 40; step += 1) world.ai.update(0.5);
+  assert.ok(world.ai.snapshot().intent, "the AI is deciding while the match runs");
+  assert.equal(world.ai.concluded, false);
+
+  // The AI wins: the player's centre falls.
+  const playerCenter = world.centers.get("player") ?? assert.fail("player centre missing");
+  playerCenter.health.damage(playerCenter.health.max);
+  world.ai.update(0.5);
+  assert.ok(world.ai.concluded, "a decided match stops the AI");
+  assert.equal(world.ai.snapshot().intent, null, "it holds no plan behind the result screen");
+  assert.equal(world.ai.snapshot().mission, null, "and commands no army");
+  assert.equal(world.ai.log.latest?.kind, "match-ended");
+  assert.match(world.ai.log.latest?.reason ?? "", /rakip merkezi yıkıldı/);
+
+  // §69: it stays stopped, and logs the end exactly once.
+  const size = world.ai.log.size;
+  for (let step = 0; step < 40; step += 1) world.ai.update(0.5);
+  assert.equal(world.ai.log.size, size, "no further decisions are produced");
+
+  // Losing stops it just as hard, and a restart brings it back.
+  const losing = aiTestWorld();
+  for (let step = 0; step < 40; step += 1) losing.ai.update(0.5);
+  const enemyCenter = losing.centers.get("enemy") ?? assert.fail("enemy centre missing");
+  enemyCenter.health.damage(enemyCenter.health.max);
+  losing.ai.update(0.5);
+  assert.ok(losing.ai.concluded);
+  assert.match(losing.ai.log.latest?.reason ?? "", /merkezimiz yıkıldı/);
+  // Recreating a match restores the objective before the controller is reset;
+  // AiController deliberately owns decisions, not world resurrection.
+  enemyCenter.health.heal(enemyCenter.health.max);
+  losing.ai.reset();
+  assert.equal(losing.ai.concluded, false, "a restarted match decides again");
+  for (let step = 0; step < 40; step += 1) losing.ai.update(0.5);
+  assert.ok(losing.ai.snapshot().intent);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);
