@@ -61,6 +61,24 @@ export class SelectionSystem implements RtsPointerHandler {
     if (!additive) this.clear();
   }
 
+  /**
+   * Double-clicking a combat unit selects every live player unit of its role.
+   * Workers intentionally remain a single-click-only selection surface for now.
+   */
+  onSelectDoubleClick(x: number, y: number, additive: boolean): void {
+    const unit = this.raycastUnit(x, y);
+    if (!unit || unit.owner !== "player" || unit.role === "worker") return;
+    const matching = this.units.unitsOf("player").filter((candidate) => candidate.role === unit.role);
+    if (!additive) {
+      this.replaceWith(matching);
+      return;
+    }
+    for (const candidate of matching) {
+      this.selectedUnits.add(candidate);
+      candidate.setSelected(true);
+    }
+  }
+
   onSelectDrag(rect: RtsPointerRect): void {
     this.marquee.show(rect);
   }

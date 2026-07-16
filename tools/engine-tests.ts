@@ -136,6 +136,8 @@ import type { CombatTarget } from "../src/game/rts/combat/combatTarget";
 import type { UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import type { Unit } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
+import { SelectionSystem } from "../src/game/rts/selection/selectionSystem";
+import type { MarqueeOverlay } from "../src/game/rts/selection/marqueeOverlay";
 import type { ActorSpawnRequest } from "../engine/behavior/behaviorSubsystem";
 import {
   readAIControllerComponent,
@@ -27943,6 +27945,51 @@ check("RTS test-force layout supports the Phase 1 twenty-unit selection target",
     units.spawn("player", -6 + (i % 5) * 3, Math.floor(i / 5) * 3, RTS_TEST_UNIT_STATS);
   }
   assert.equal(units.unitsOf("player").length, 20);
+});
+
+check("RTS double-click selects every player combat unit of the clicked role, never workers", () => {
+  const units = new UnitSystem();
+  const guards = [
+    units.spawn("player", -3, 0, RTS_TEST_UNIT_STATS),
+    units.spawn("player", -1, 0, RTS_TEST_UNIT_STATS),
+  ];
+  const archers = [
+    units.spawn("player", 1, 0, RTS_TEST_ARCHER_STATS),
+    units.spawn("player", 3, 0, RTS_TEST_ARCHER_STATS),
+  ];
+  const rams = [
+    units.spawn("player", -2, -4, RTS_TEST_SIEGE_STATS),
+    units.spawn("player", 2, -4, RTS_TEST_SIEGE_STATS),
+  ];
+  const workers = [
+    units.spawn("player", -2, 4, RTS_TEST_WORKER_STATS),
+    units.spawn("player", 2, 4, RTS_TEST_WORKER_STATS),
+  ];
+  units.spawn("enemy", -5, 0, RTS_TEST_UNIT_STATS);
+  units.root.updateMatrixWorld(true);
+
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 12, 14);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const canvas = { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement;
+  const marquee = { show: () => {}, hide: () => {} } as unknown as MarqueeOverlay;
+  const selection = new SelectionSystem(canvas, camera, units, marquee);
+  const screenPointFor = (unit: Unit) => {
+    const projected = new Vector3(unit.position.x, 1, unit.position.z).project(camera);
+    return { x: (projected.x * 0.5 + 0.5) * 100, y: (-projected.y * 0.5 + 0.5) * 100 };
+  };
+
+  for (const group of [guards, archers, rams]) {
+    const point = screenPointFor(group[0]!);
+    selection.onSelectDoubleClick(point.x, point.y, false);
+    assert.deepEqual(new Set(selection.selected()), new Set(group));
+  }
+
+  const workerPoint = screenPointFor(workers[0]!);
+  selection.onSelectClick(workerPoint.x, workerPoint.y, false);
+  selection.onSelectDoubleClick(workerPoint.x, workerPoint.y, false);
+  assert.deepEqual(selection.selected(), [workers[0]], "workers stay single-select only");
 });
 
 check("RTS health clamps damage and healing while exposing current/max/ratio", () => {

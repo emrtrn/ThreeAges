@@ -641,6 +641,8 @@ Boş test sahnesinde oyuncunun kamera, seçim, hareket ve basit saldırı ile bi
 ### Seçim ve komut
 
 - [x] Tekli seçim ekle. (raycast; `src/game/rts/selection/selectionSystem.ts`)
+- [x] Çift tıkla aynı savaş birimi türünü seç. (Muhafız, Okçu ve Koçbaşı için
+  tüm canlı oyuncu birimleri; İşçi tekli/kutu seçiminde kalır.)
 - [x] Kutu seçimi ekle. (ekran-projeksiyonlu marquee; `selectionSystem` + `marqueeOverlay`)
 - [x] Seçim halkası ekle. (`Unit.setSelected` halka görünürlüğü)
 - [x] Sağ tık hareket ekle. (`src/game/rts/commands/commandSystem.ts` + formasyon dağıtımı)

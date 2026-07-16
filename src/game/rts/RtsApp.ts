@@ -454,6 +454,11 @@ export class RtsApp {
           this.selection.onSelectClick(x, y, additive);
         }
       },
+      onSelectDoubleClick: (x, y, additive) => {
+        if (!this.rallyPointPending && !this.roadPlacement.isActive && !this.placement.isActive) {
+          this.selection.onSelectDoubleClick(x, y, additive);
+        }
+      },
       onSelectDrag: (rect) => {
         if (!this.roadPlacement.isActive && !this.placement.isActive) this.selection.onSelectDrag(rect);
       },

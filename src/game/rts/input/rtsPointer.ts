@@ -18,6 +18,8 @@ export interface RtsPointerRect {
 export interface RtsPointerHandler {
   /** Left button released without dragging (single select / deselect). */
   onSelectClick(x: number, y: number, additive: boolean): void;
+  /** Left double-clicked without dragging (select the matching combat group). */
+  onSelectDoubleClick?(x: number, y: number, additive: boolean): void;
   /** Left drag crossed the threshold — live marquee update (may fire often). */
   onSelectDrag(rect: RtsPointerRect): void;
   /** Left drag released — commit the box selection. */
@@ -51,6 +53,7 @@ export class RtsPointer {
     this.canvas.addEventListener("pointerdown", this.onPointerDown);
     this.canvas.addEventListener("pointermove", this.onPointerMove);
     this.canvas.addEventListener("pointerup", this.onPointerUp);
+    this.canvas.addEventListener("dblclick", this.onDoubleClick);
     this.canvas.addEventListener("contextmenu", this.onContextMenu);
     window.addEventListener("blur", this.onCancel);
   }
@@ -61,12 +64,13 @@ export class RtsPointer {
     this.canvas.removeEventListener("pointerdown", this.onPointerDown);
     this.canvas.removeEventListener("pointermove", this.onPointerMove);
     this.canvas.removeEventListener("pointerup", this.onPointerUp);
+    this.canvas.removeEventListener("dblclick", this.onDoubleClick);
     this.canvas.removeEventListener("contextmenu", this.onContextMenu);
     window.removeEventListener("blur", this.onCancel);
     this.onCancel();
   }
 
-  private local(event: PointerEvent): { x: number; y: number } {
+  private local(event: MouseEvent): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
@@ -111,6 +115,12 @@ export class RtsPointer {
       const { x, y } = this.local(event);
       this.handler.onCommandClick?.(x, y);
     }
+  };
+
+  private readonly onDoubleClick = (event: MouseEvent): void => {
+    if (event.button !== 0) return;
+    const { x, y } = this.local(event);
+    this.handler.onSelectDoubleClick?.(x, y, event.shiftKey);
   };
 
   private readonly onContextMenu = (event: MouseEvent): void => {
