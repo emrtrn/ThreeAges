@@ -12,7 +12,7 @@ import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import type { CommandCenter } from "./commandCenter";
 import type { PlacedStructure } from "./placedStructureSystem";
 
-type VisualBuildingId = "command_center_t1" | "command_center_t2" | "house_t1" | "house_t2" | "depot_t1" | "depot_t2" | "outpost" | "farm" | "lumber_camp" | "barracks_t1" | "barracks_t2";
+type VisualBuildingId = "command_center_t1" | "command_center_t2" | "house_t1" | "house_t2" | "depot_t1" | "depot_t2" | "outpost_t1" | "outpost_t2" | "farm" | "lumber_camp" | "mine" | "barracks_t1" | "barracks_t2";
 
 interface BuildingVisualDefinition {
   readonly path: string;
@@ -31,9 +31,11 @@ const VISUALS: Record<VisualBuildingId, BuildingVisualDefinition> = {
   house_t2: { path: `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level2.gltf` },
   depot_t1: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level1.gltf` },
   depot_t2: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level2.gltf` },
-  outpost: { path: `${STATIC_MESH_ROOT}/WatchTower_FirstAge_Level1.gltf` },
+  outpost_t1: { path: `${STATIC_MESH_ROOT}/WatchTower_FirstAge_Level1.gltf` },
+  outpost_t2: { path: `${STATIC_MESH_ROOT}/WatchTower_FirstAge_Level2.gltf` },
   farm: { path: `${STATIC_MESH_ROOT}/Farm_FirstAge_Level1_Wheat.gltf` },
   lumber_camp: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level1.gltf` },
+  mine: { path: `${STATIC_MESH_ROOT}/Mine.gltf` },
   barracks_t1: { path: `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level1.gltf` },
   barracks_t2: { path: `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level2.gltf` },
 };
@@ -63,14 +65,8 @@ export class RtsBuildingVisuals {
   }
 
   createForStructure(structure: PlacedStructure): Group | null {
-    if (!structure.construction.complete) return null;
-    const id = structure.stats.id === "house"
-      ? (structure.level >= 2 ? "house_t2" : "house_t1")
-      : structure.stats.id === "depot"
-      ? (structure.level >= 2 ? "depot_t2" : "depot_t1")
-      : structure.stats.id === "barracks"
-      ? (structure.level >= 2 ? "barracks_t2" : "barracks_t1")
-      : structure.stats.id as Exclude<VisualBuildingId, "command_center_t1" | "command_center_t2" | "house_t1" | "house_t2" | "depot_t1" | "depot_t2" | "barracks_t1" | "barracks_t2">;
+    const id = visualBuildingIdForStructure(structure);
+    if (!id) return null;
     return this.create(
       id,
       structure.stats.footprint.width,
@@ -101,6 +97,24 @@ export class RtsBuildingVisuals {
       child.receiveShadow = true;
     });
     return visual;
+  }
+}
+
+/** Pure gameplay-to-art mapping: every completed Faz 6 structure has a model. */
+export function visualBuildingIdForStructure(
+  structure: Pick<PlacedStructure, "stats" | "level" | "construction">,
+): VisualBuildingId | null {
+  if (!structure.construction.complete) return null;
+  switch (structure.stats.id) {
+    case "house": return structure.level >= 2 ? "house_t2" : "house_t1";
+    case "depot": return structure.level >= 2 ? "depot_t2" : "depot_t1";
+    case "outpost": return structure.level >= 2 ? "outpost_t2" : "outpost_t1";
+    case "barracks": return structure.level >= 2 ? "barracks_t2" : "barracks_t1";
+    case "farm": return "farm";
+    case "lumber_camp": return "lumber_camp";
+    case "quarry":
+    case "gold_mine": return "mine";
+    default: return null;
   }
 }
 

@@ -157,8 +157,8 @@ export class RtsApp {
       x: structure.x,
       z: structure.z,
       radius: this.outpostConnectedToMainRoad(structure)
-        ? structure.stats.territory?.connectedControlRadius ?? 0
-        : structure.stats.territory?.controlRadius ?? 0,
+        ? structure.territoryConnectedControlRadius ?? 0
+        : structure.territoryControlRadius ?? 0,
     }))));
   private readonly kingdoms: KingdomRegistry;
   private readonly ages: AgeSystem;
@@ -379,6 +379,7 @@ export class RtsApp {
       () => this.startBarracksUpgrade(),
       () => this.startHouseUpgrade(),
       () => this.startDepotUpgrade(),
+      () => this.startOutpostUpgrade(),
     );
     this.roadControls = new RtsRoadControls(
       () => {
@@ -654,6 +655,7 @@ export class RtsApp {
     for (const event of this.structureUpgrades.update(dt)) {
       if (event.structure.owner !== PLAYER_OWNER) continue;
       if (event.type === "completed") this.applyStructureVisual(event.structure);
+      if (event.structure.stats.territory) this.territory.refresh();
       this.buildPalette.setActionMessage(event.type === "completed"
         ? `${event.structure.stats.label} T2 yükseltmesi tamamlandı.`
         : `${event.structure.stats.label} yıkıldığı için yükseltme iptal edildi; kaynaklar iade edildi.`);
@@ -940,6 +942,18 @@ export class RtsApp {
       "already-upgrading": "Depo T2 yükseltmesi zaten sürüyor.",
       "not-town": "Depoyu T2 yükseltmek için önce Kasaba Çağına geçin.",
       "insufficient-resources": "Depo T2 için kaynak yetersiz.",
+    };
+    this.buildPalette.setActionMessage(message[result]);
+  }
+
+  private startOutpostUpgrade(): void {
+    const result = this.structureUpgrades.start(PLAYER_OWNER, "outpost");
+    const message: Record<typeof result, string> = {
+      started: "Karakol T2 yükseltmesi başladı; kontrol alanı tamamlanınca büyür.",
+      "no-eligible-structure": "Yükseltilecek tamamlanmış T1 Karakol yok.",
+      "already-upgrading": "Karakol T2 yükseltmesi zaten sürüyor.",
+      "not-town": "Karakolu T2 yükseltmek için önce Kasaba Çağına geçin.",
+      "insufficient-resources": "Karakol T2 için kaynak yetersiz.",
     };
     this.buildPalette.setActionMessage(message[result]);
   }

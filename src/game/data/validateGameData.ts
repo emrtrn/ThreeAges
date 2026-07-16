@@ -309,7 +309,26 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       if (durationSeconds <= 0 || upgradeMaxHealth <= maxHealth) {
         throw new GameDataError(`${upgradeWhere}: durationSeconds must be > 0 and maxHealth must exceed T1`);
       }
-      upgrade = { cost: validateStartingResources(upgradeData["cost"] ?? {}, upgradeWhere), durationSeconds, maxHealth: upgradeMaxHealth };
+      const upgradeTerritoryRaw = upgradeData["territory"];
+      let upgradeTerritory: NonNullable<BuildingBalance["string"]["upgrade"]>["territory"];
+      if (upgradeTerritoryRaw !== undefined) {
+        if (!territory) throw new GameDataError(`${upgradeWhere}.territory requires a T1 territory definition`);
+        const upgradeTerritoryWhere = `${upgradeWhere}.territory`;
+        const upgradeTerritoryData = asObject(upgradeTerritoryRaw, upgradeTerritoryWhere);
+        const controlRadius = requireFiniteNumber(upgradeTerritoryData, "controlRadius", upgradeTerritoryWhere);
+        const connectedControlRadius = requireFiniteNumber(upgradeTerritoryData, "connectedControlRadius", upgradeTerritoryWhere);
+        if (controlRadius < territory.controlRadius || connectedControlRadius < controlRadius
+          || connectedControlRadius < territory.connectedControlRadius) {
+          throw new GameDataError(`${upgradeTerritoryWhere}: T2 radii must not shrink T1 control`);
+        }
+        upgradeTerritory = { controlRadius, connectedControlRadius };
+      }
+      upgrade = {
+        cost: validateStartingResources(upgradeData["cost"] ?? {}, upgradeWhere),
+        durationSeconds,
+        maxHealth: upgradeMaxHealth,
+        ...(upgradeTerritory ? { territory: upgradeTerritory } : {}),
+      };
     }
     buildings[id] = {
       id,

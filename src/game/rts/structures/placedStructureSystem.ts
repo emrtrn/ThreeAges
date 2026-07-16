@@ -48,6 +48,9 @@ export interface PlacedStructure {
   level: number;
   /** T2 currently grants population only when its upgrade completes. */
   populationCapacityBonus: number;
+  /** Current territory values; T2 outposts promote these without replacing the site. */
+  territoryControlRadius: number | null;
+  territoryConnectedControlRadius: number | null;
 }
 
 export class PlacedStructureSystem {
@@ -100,6 +103,8 @@ export class PlacedStructureSystem {
       combatRadius: Math.min(stats.footprint.width, stats.footprint.depth) / 2,
       level: 1,
       populationCapacityBonus: 0,
+      territoryControlRadius: stats.territory?.controlRadius ?? null,
+      territoryConnectedControlRadius: stats.territory?.connectedControlRadius ?? null,
     };
     this.structures.push(structure);
     return structure;

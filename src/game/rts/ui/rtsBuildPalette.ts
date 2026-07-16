@@ -1,6 +1,6 @@
 /** Minimal Phase 2 build-mode control surface (not the final HUD). */
 import type { AgeBalance, BuildingBalance } from "../../data/gameDataTypes";
-import type { AgeSnapshot } from "../progression/ageSystem";
+import { townUnlocksAvailable, type AgeSnapshot } from "../progression/ageSystem";
 import type { EconomyBuildingSnapshot } from "../economy/economyProductionSystem";
 import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
@@ -13,6 +13,9 @@ export class RtsBuildPalette {
   private readonly population = document.createElement("p");
   private readonly income = document.createElement("p");
   private readonly age = document.createElement("p");
+  private readonly townUnlocks = document.createElement("p");
+  private readonly townUpgradeButton = document.createElement("button");
+  private readonly townStructureUpgradeButtons: HTMLButtonElement[] = [];
   private readonly producerPanel = document.createElement("section");
   private readonly producerChoices = document.createElement("div");
   private readonly producerDetails = document.createElement("p");
@@ -33,6 +36,7 @@ export class RtsBuildPalette {
     private readonly onUpgradeBarracks: () => void,
     private readonly onUpgradeHouse: () => void,
     private readonly onUpgradeDepot: () => void,
+    private readonly onUpgradeOutpost: () => void,
   ) {
     this.root.className = "rts-build-palette ui-interactive";
     this.root.setAttribute("aria-label", "Yapı yerleştirme");
@@ -80,26 +84,35 @@ export class RtsBuildPalette {
     trainWorker.textContent = "İşçi Üret";
     trainWorker.addEventListener("click", this.onTrainWorker);
     choices.appendChild(trainWorker);
-    const townUpgrade = document.createElement("button");
-    townUpgrade.type = "button";
+    this.townUpgradeButton.type = "button";
+    const townUpgrade = this.townUpgradeButton;
     townUpgrade.textContent = "Kasaba Çağına Geç";
-    townUpgrade.addEventListener("click", this.onStartTownUpgrade);
-    choices.appendChild(townUpgrade);
+    this.townUpgradeButton.addEventListener("click", this.onStartTownUpgrade);
+    choices.appendChild(this.townUpgradeButton);
     const barracksUpgrade = document.createElement("button");
     barracksUpgrade.type = "button";
     barracksUpgrade.textContent = "Kışlayı T2 Yükselt";
     barracksUpgrade.addEventListener("click", this.onUpgradeBarracks);
+    this.townStructureUpgradeButtons.push(barracksUpgrade);
     choices.appendChild(barracksUpgrade);
     const houseUpgrade = document.createElement("button");
     houseUpgrade.type = "button";
     houseUpgrade.textContent = "Evi T2 Yükselt";
     houseUpgrade.addEventListener("click", this.onUpgradeHouse);
+    this.townStructureUpgradeButtons.push(houseUpgrade);
     choices.appendChild(houseUpgrade);
     const depotUpgrade = document.createElement("button");
     depotUpgrade.type = "button";
     depotUpgrade.textContent = "Depoyu T2 Yükselt";
     depotUpgrade.addEventListener("click", this.onUpgradeDepot);
+    this.townStructureUpgradeButtons.push(depotUpgrade);
     choices.appendChild(depotUpgrade);
+    const outpostUpgrade = document.createElement("button");
+    outpostUpgrade.type = "button";
+    outpostUpgrade.textContent = "Karakolu T2 Yükselt";
+    outpostUpgrade.addEventListener("click", this.onUpgradeOutpost);
+    this.townStructureUpgradeButtons.push(outpostUpgrade);
+    choices.appendChild(outpostUpgrade);
     this.root.appendChild(choices);
     this.resources.className = "rts-build-resources";
     this.root.appendChild(this.resources);
@@ -111,6 +124,8 @@ export class RtsBuildPalette {
     this.root.appendChild(this.income);
     this.age.className = "rts-build-age";
     this.root.appendChild(this.age);
+    this.townUnlocks.className = "rts-build-age";
+    this.root.appendChild(this.townUnlocks);
     this.producerPanel.className = "rts-production-panel";
     const producerTitle = document.createElement("strong");
     producerTitle.textContent = "Üretim Yapısı";
@@ -126,6 +141,7 @@ export class RtsBuildPalette {
     this.root.appendChild(this.status);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setState({ activeBuildingId: null, result: null });
+    this.setTownUnlockState({ age: "settlement", upgrading: false });
   }
 
   setState(state: BuildingPlacementState): void {
@@ -184,6 +200,25 @@ export class RtsBuildPalette {
       ? `Çağ: ${balance.settlement.label} → ${balance.town.label} (${Math.ceil(snapshot.remainingSeconds)} sn)`
       : `Çağ: ${snapshot.age === "town" ? balance.town.label : balance.settlement.label}`;
     if (this.age.textContent !== text) this.age.textContent = text;
+    this.setTownUnlockState(snapshot);
+  }
+
+  private setTownUnlockState(snapshot: Pick<AgeSnapshot, "age" | "upgrading">): void {
+    const unlocked = townUnlocksAvailable(snapshot);
+    for (const button of this.townStructureUpgradeButtons) {
+      button.disabled = !unlocked;
+      button.title = unlocked ? "" : "Kasaba Cagi tamamlandiktan sonra acilir.";
+    }
+    this.townUpgradeButton.disabled = snapshot.upgrading || snapshot.age === "town";
+    this.townUpgradeButton.title = snapshot.upgrading
+      ? "Kasaba Cagi yukseltmesi suruyor."
+      : snapshot.age === "town" ? "Kasaba Cagi zaten tamamlandi." : "";
+    const text = unlocked
+      ? "Kasaba acilimlari: T2 Ev, Depo, Kisla ve Karakol kullanilabilir."
+      : snapshot.upgrading
+        ? "Kasaba acilimlari: yukseltme tamamlaninca T2 Ev, Depo, Kisla ve Karakol acilir."
+        : "Kasaba acilimlari: T2 Ev, Depo, Kisla ve Karakol icin Kasaba Cagi gerekir.";
+    if (this.townUnlocks.textContent !== text) this.townUnlocks.textContent = text;
   }
 
   /** Render a compact, explicitly selectable view of completed production sites. */

@@ -99,6 +99,8 @@ export interface BuildingUpgradeBalance {
   readonly cost: StartingResources;
   readonly durationSeconds: number;
   readonly maxHealth: number;
+  /** T2 outposts can expand both their isolated and road-connected control area. */
+  readonly territory?: Pick<TerritoryBuildingBalance, "controlRadius" | "connectedControlRadius">;
 }
 
 /** Data-owned production behaviour for an RTS resource structure. */

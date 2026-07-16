@@ -41,6 +41,15 @@
       "controlRadius": 8,
       "connectedControlRadius": 12,
       "expansionPlacementRange": 12
+    },
+    "upgrade": {
+      "cost": { "wood": 110, "stone": 70 },
+      "durationSeconds": 55,
+      "maxHealth": 1000,
+      "territory": {
+        "controlRadius": 12,
+        "connectedControlRadius": 15
+      }
     }
   },
   "farm": {

@@ -44,6 +44,10 @@ export class StructureUpgradeSystem {
       if (upgrade.structure.stats.id === "house") {
         upgrade.structure.populationCapacityBonus = 3;
       }
+      if (upgrade.structure.stats.upgrade?.territory) {
+        upgrade.structure.territoryControlRadius = upgrade.structure.stats.upgrade.territory.controlRadius;
+        upgrade.structure.territoryConnectedControlRadius = upgrade.structure.stats.upgrade.territory.connectedControlRadius;
+      }
       this.upgrades.delete(id); events.push({ structure: upgrade.structure, type: "completed" });
     }
     return events;

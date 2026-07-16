@@ -1221,7 +1221,9 @@ Kapı A geçilmezse:
   `test:engine` veri süresi tamamlanmadan durumu değiştirmediğini doğrular.)
 - [x] Yükseltme sırasında merkezin davranışı. (İşçi kuyruğu iptal edilmez ancak
   Merkez yükseltmesi boyunca durur; Kasaba tamamlanınca aynı kuyruğu sürdürür.)
-- [ ] Açılan yapı ve birlikler
+- [x] Açılan yapı ve birlikler. (Kasaba tamamlanana kadar T2 Ev, Depo, Kışla ve
+  Karakol eylemleri paletten kilitlidir; tamamlanınca açılır. Yeni birlik türleri
+  ve Okçu yapısı Faz 7 birim kadrosu kapsamında tutulur.)
 - [x] Çağ bildirimi. (HUD çağ durumunu/geri sayımını gösterir; başlatma, iptal ve
   tamamlanma mesajları `RtsBuildPalette` eylem alanına yazılır.)
 
@@ -1235,8 +1237,12 @@ Kapı A geçilmezse:
   45 sn; yol bağlantısı kesilmeden sağlık 750'ye ve Level 2 Depo modeline geçer.)
 - [x] Kışla T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 140 Odun + 80 Taş,
   50 sn; Muhafız kuyruğu durur, T2 900 sağlığa ve Level 2 modele geçer.)
-- [ ] Karakol T1 → T2, kapsam uygunsa
-- [ ] Placeholder model değişimi
+- [x] Karakol T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 110 Odun + 70 Taş,
+  55 sn; sağlık 1000'e, yalnız kontrol 12'ye ve yol bağlı kontrol 15'e çıkar;
+  Level 2 karakol modeli tamamlanınca uygulanır.)
+- [x] Placeholder model değişimi. (Tamamlanan tüm Faz 6 yapıları gerçek İlk Çağ
+  varlıklarına geçer; Taş Ocağı ve Altın Madeni `Mine.gltf`, Oduncu Kampı geçici
+  Depo modeli, diğer yapılar kendi T1/T2 modellerini kullanır.)
 
 ### Refah kararı
 

@@ -29,6 +29,11 @@ export interface AgeSnapshot {
   readonly missingBuildingIds: readonly string[];
 }
 
+/** T2 structure actions are available only after the Town transition commits. */
+export function townUnlocksAvailable(snapshot: Pick<AgeSnapshot, "age" | "upgrading">): boolean {
+  return snapshot.age === "town" && !snapshot.upgrading;
+}
+
 export interface AgeUpgradeEvent {
   readonly owner: UnitOwner;
   readonly type: "completed" | "cancelled";

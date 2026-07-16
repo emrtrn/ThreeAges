@@ -79,7 +79,7 @@ import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructur
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
-import { AgeSystem } from "../src/game/rts/progression/ageSystem";
+import { AgeSystem, townUnlocksAvailable } from "../src/game/rts/progression/ageSystem";
 import {
   DepotLogisticsSystem,
   roadCellTouchingFootprint,
@@ -113,6 +113,7 @@ import { BarracksProductionSystem } from "../src/game/rts/structures/barracksPro
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { WorkerProductionSystem } from "../src/game/rts/structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "../src/game/rts/structures/structureUpgradeSystem";
+import { visualBuildingIdForStructure } from "../src/game/rts/structures/rtsBuildingVisuals";
 import {
   COMMAND_CENTER_CONTROL_RADIUS,
   TerritoryControlSystem,
@@ -27940,6 +27941,24 @@ check("Faz 6 stone and gold data defines finite safe and richer external deposit
   }), GameDataError, "empty deposits are invalid data, not an exhausted starting state");
 });
 
+check("Faz 6 completed resource buildings replace their construction placeholders with mapped models", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const completed = { complete: true } as import("../src/game/rts/structures/constructionComponent").ConstructionComponent;
+  const pending = { complete: false } as import("../src/game/rts/structures/constructionComponent").ConstructionComponent;
+  const visualFor = (id: "lumber_camp" | "quarry" | "gold_mine", construction = completed) =>
+    visualBuildingIdForStructure({
+      stats: buildings[id] ?? assert.fail(`${id} balance missing`),
+      level: 1,
+      construction,
+    });
+  assert.equal(visualFor("lumber_camp"), "lumber_camp");
+  assert.equal(visualFor("quarry"), "mine");
+  assert.equal(visualFor("gold_mine"), "mine");
+  assert.equal(visualFor("quarry", pending), null, "an unfinished foundation keeps its construction visual");
+});
+
 check("Faz 6 Town upgrade reserves four resources, pauses the centre, and completes after its data timer", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -27966,6 +27985,7 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
     { food: 650, wood: 350, stone: 150, gold: 150 }, 20,
   );
   const ageSystem = new AgeSystem(["player"], ages, centers, structures, kingdoms);
+  assert.equal(townUnlocksAvailable(ageSystem.snapshot("player")), false, "Settlement does not expose Town structure upgrades");
   assert.equal(ageSystem.startTownUpgrade("player"), "missing-requirements");
   assert.equal(kingdoms.get("player").wallet.amount("food"), 650, "failed prerequisites do not spend");
 
@@ -27981,6 +28001,7 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   );
   assert.equal(workerProduction.queueWorker("player"), "queued");
   assert.equal(ageSystem.startTownUpgrade("player"), "started");
+  assert.equal(townUnlocksAvailable(ageSystem.snapshot("player")), false, "the transition does not expose Town structure upgrades early");
   assert.equal(kingdoms.get("player").wallet.amount("food"), 0);
   assert.equal(kingdoms.get("player").wallet.amount("wood"), 0);
   assert.equal(kingdoms.get("player").wallet.amount("stone"), 0);
@@ -27993,6 +28014,7 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.deepEqual(ageSystem.snapshot("player"), {
     owner: "player", age: "town", upgrading: false, remainingSeconds: 0, missingBuildingIds: [],
   });
+  assert.equal(townUnlocksAvailable(ageSystem.snapshot("player")), true, "Town completion exposes the T2 structure upgrades");
   const townCenter = centers.get("player") ?? assert.fail("player center missing after Town upgrade");
   assert.equal(townCenter.level, 2);
   assert.equal(townCenter.health.max, 450);
@@ -28055,6 +28077,33 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"]);
   assert.equal(depot.level, 2);
   assert.equal(depot.health.max, 750);
+
+  const outpost = structures.ownedBy("player").find((structure) => structure.stats.id === "outpost")
+    ?? assert.fail("Town prerequisite outpost missing");
+  assert.deepEqual(outpost.stats.upgrade, {
+    cost: { wood: 110, stone: 70 }, durationSeconds: 55, maxHealth: 1000,
+    territory: { controlRadius: 12, connectedControlRadius: 15 },
+  });
+  const outpostTerritory = new TerritoryControlSystem(() => [{
+    owner: "player" as const,
+    x: outpost.x,
+    z: outpost.z,
+    radius: outpost.territoryControlRadius ?? 0,
+  }]);
+  outpostTerritory.refresh();
+  assert.equal(outpostTerritory.ownerAt(outpost.x + 10, outpost.z), "neutral", "T1 outpost has its smaller radius");
+  kingdoms.get("player").wallet.credit("wood", 110);
+  kingdoms.get("player").wallet.credit("stone", 70);
+  assert.equal(upgrades.start("player", "outpost"), "started");
+  assert.deepEqual(upgrades.update(54.9), []);
+  assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"]);
+  assert.equal(outpost.level, 2);
+  assert.equal(outpost.health.max, 1000);
+  assert.equal(outpost.territoryControlRadius, 12);
+  assert.equal(outpost.territoryConnectedControlRadius, 15);
+  outpostTerritory.refresh();
+  assert.equal(outpostTerritory.ownerAt(outpost.x + 10, outpost.z), "player", "T2 outpost expands control on completion");
+  outpostTerritory.dispose();
 });
 
 check("Faz 6 quarry uses its finite stone node and cannot be placed away from one", () => {
