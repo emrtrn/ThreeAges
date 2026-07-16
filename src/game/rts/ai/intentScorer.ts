@@ -83,18 +83,32 @@ function scoreAgeUp(): { rawScore: number; reason: string } {
 
 /** §30: ResourceNeed × BestRegionValue × RouteFeasibility × Safety */
 function scoreExpand(bb: AiBlackboard): { rawScore: number; reason: string } {
-  if (bb.hasExpansion) return { rawScore: 0, reason: "karakol zaten kurulu" };
-  // §10: AI-1 expands exactly once, and only after the base economy stands up.
-  const economyReady = (bb.buildingCounts["farm"] ?? 0) > 0 && (bb.buildingCounts["lumber_camp"] ?? 0) > 0;
-  if (!economyReady) return { rawScore: 0, reason: "temel ekonomi henüz kurulmadı" };
-  const resourceNeed = clamp01((bb.resourceStocks["wood"] ?? 0) / 140);
+  // §10: AI-1 has one region, so a finished or abandoned recipe ends the intent.
+  if (bb.expansionStep === "done") return { rawScore: 0, reason: "bölge aktif" };
+  if (bb.expansionStep === "failed") return { rawScore: 0, reason: "bölge terk edildi" };
+  // §7: the §47 recipe outlives the plan's commitment window (outpost → road →
+  // depot → farm is minutes of work). Hold the intent while it runs, or the
+  // director would drop a half-built expansion the moment the outpost landed,
+  // leaving a claim with no depot and therefore no income.
+  if (bb.expansionStep !== "outpost") return { rawScore: 1, reason: `genişleme sürüyor: ${bb.expansionStep}` };
+  // §34: the opening template runs to completion — food, wood, *then* a Barracks
+  // — before free strategic evaluation begins. Gating on the whole opening keeps
+  // that order without a separate opening state: an AI that expanded first would
+  // stretch a defenceless base across half the map.
+  const openingDone = (bb.buildingCounts["farm"] ?? 0) > 0
+    && (bb.buildingCounts["lumber_camp"] ?? 0) > 0
+    && (bb.buildingCounts["barracks"] ?? 0) > 0;
+  if (!openingDone) return { rawScore: 0, reason: "açılış henüz tamamlanmadı" };
+  // The whole recipe has to be affordable, not just the outpost, or the AI
+  // strands itself with a claim it cannot connect.
+  const resourceNeed = clamp01((bb.resourceStocks["wood"] ?? 0) / 400);
   const safety = bb.baseThreat > 0 ? 0 : 1;
   const rawScore = clamp01(resourceNeed * safety);
   const reason = safety === 0
     ? "üs tehdit altında, genişleme ertelendi"
     : resourceNeed < 1
-      ? "karakol için odun biriktiriliyor"
-      : "karakol için hazır";
+      ? "genişleme için odun biriktiriliyor"
+      : "genişleme için hazır";
   return { rawScore, reason };
 }
 

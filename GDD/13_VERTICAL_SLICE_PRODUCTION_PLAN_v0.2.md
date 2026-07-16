@@ -1080,11 +1080,36 @@ Genişleme grubu geldiğinde açılacak.
 
 ### Genişleme
 
-- [ ] Harita verisinden tek aday genişleme alanı oku.
-- [ ] Karakol kur.
-- [ ] Hazır veya sınırlı rota ile yol bağla.
-- [ ] Dış üretim yapısı kur.
-- [ ] Yerleştirme başarısızlığında fallback kullan.
+- [x] Harita verisinden tek aday genişleme alanı oku. (`RTS_BLOCKOUT_MAP.enemyExpansion`:
+  §45 bölge tanımı — karakol/depo/üretim çapası + §48 hazır yol koridoru.)
+- [x] Karakol kur. (`aiExpansionManager` §47 reçetesi, adım 1.)
+- [x] Hazır veya sınırlı rota ile yol bağla. (Koridor segment segment kuruluyor;
+  segmentler idempotent olduğu için yarım kalan rota baştan başlamıyor.)
+- [x] Dış üretim yapısı kur. (`test:engine`: depo → tarla; tarla depoya aynı yol
+  adasında bağlanıyor, yani AI **ilk kez gerçek gelir elde ediyor**.)
+- [x] Yerleştirme başarısızlığında fallback kullan. (`test:engine`: claim
+  edilemeyen bölge `AI_EXPANSION_FAILURE_LIMIT` sonrası terk ediliyor, sonsuz
+  denemiyor; terk edilen bölge puanı 0'a düşüyor.)
+
+**Bu grupta bulunan ve düzeltilen Faz 4 hatası.** Merkez'in nav footprint'i 7 birim,
+yol ızgarası 2 birim: değen her hücre bloklanıyor, bloklanmayan hiçbiri değmiyordu.
+Yani `roadCellTouchingFootprint` Merkez için **hiçbir zaman** hücre bulamıyordu ve
+`outpostConnectedToMainRoad` hep `false` dönüyordu — Karakol'un bağlı kontrol
+yarıçapı (8→12) ne AI'a ne oyuncuya veriliyordu. §35'te bu kriter [x] işaretliydi
+ama çalışmıyordu. Tolerans yarım yol hücresine çekildi (`test:engine` regresyon
+testi ekli). Bu düzeltme olmadan Karakol'un yanına 6x6 depo sığmadığı için
+genişleme reçetesi tamamlanamıyor.
+
+**İkinci düzeltme — kalıcı nüfus kilidi.** Üreticiler her boşta işçiyi kapınca
+şantiyeye işçi kalmıyordu: ev bitmiyor → nüfus açılmıyor → yeni işçi üretilemiyor.
+Ayrıca işçisiz kalan şantiye bir daha hiç denenmiyordu. `WorkerConstructionSystem`
+artık işçisiz şantiyeyi yeniden deniyor ve gerekirse üretimden işçi çekiyor
+(§55: önce nüfus kapasitesi). Oyuncu için de geçerli.
+
+**Bilinen sınır.** Yalnız genişleme bölgesi yol ağında. Üssdeki Tarla ve Oduncu
+Kampı'nın kendi deposu ve yolu yok, bu yüzden hâlâ yerel tamponda birikiyorlar
+(`test:engine` bunu 2 bağlantısız üretici olarak kilitliyor). Üs deposu + üs yol
+koridoru henüz haritada tanımlı değil.
 
 ### Ordu
 

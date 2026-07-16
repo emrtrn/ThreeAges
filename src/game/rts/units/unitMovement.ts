@@ -7,6 +7,7 @@
  */
 import { Vector3 } from "three";
 
+import { combatDistance } from "../combat/combatTarget";
 import type { Unit } from "./unit";
 import { UNIT_RADIUS } from "./unit";
 
@@ -29,17 +30,19 @@ export function updateUnitMovement(units: readonly Unit[], dt: number): void {
     }
     // An explicit attack order follows its target's live position, stopping at
     // melee range so the combat system can resolve hits without overlap.
-    if (attackTarget && unit.position.distanceTo(attackTarget.position) <= unit.attack.range) {
+    if (attackTarget && combatDistance(unit.position, attackTarget) <= unit.attack.range) {
       continue;
     }
-    const target = attackTarget?.position ?? unit.pathTarget ?? unit.moveTarget;
+    // Attack orders follow a preplanned path. Never fall back to the target
+    // pivot here: that was the route that let attackers walk through the ridge.
+    const target = unit.pathTarget ?? (attackTarget ? null : unit.moveTarget);
     if (!target) continue;
 
     const pos = unit.position;
     scratchDir.set(target.x - pos.x, 0, target.z - pos.z);
     const dist = scratchDir.length();
     if (dist <= ARRIVAL_RADIUS) {
-      if (!unit.attackTarget && unit.pathTarget) unit.advancePath();
+      if (unit.pathTarget) unit.advancePath();
       else if (!unit.attackTarget) unit.moveTarget = null;
       continue;
     }

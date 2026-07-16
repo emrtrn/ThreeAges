@@ -59,7 +59,20 @@ export class DepotLogisticsSystem {
   }
 }
 
-/** Returns the deterministic road tile whose footprint touches a structure. */
+/**
+ * Returns the deterministic road tile whose footprint touches a structure.
+ *
+ * The tolerance is half a road cell rather than zero because a road tile can
+ * never *overlap* a footprint — the footprint is a nav blocker, so the graph
+ * refuses to route through it. "Touching" therefore means the nearest legal
+ * tile outside the footprint, and whether one lands exactly on the edge depends
+ * on how the footprint's half-width falls on the 2-unit road grid.
+ *
+ * Even footprints (depot/farm/outpost, 6) happen to line up; the 7-unit command
+ * centre does not, and with a zero tolerance *no* tile could ever touch it —
+ * which silently made {@link RtsApp.outpostConnectedToMainRoad} always false and
+ * withheld the outpost's connected control radius from both kingdoms.
+ */
 export function roadCellTouchingFootprint(
   roads: RoadGraph,
   x: number,
@@ -78,7 +91,7 @@ export function roadCellTouchingFootprint(
         Math.max(0, Math.abs(cell.z - z) - halfDepth - halfRoad),
       ),
     }))
-    .filter((candidate) => candidate.distance <= 0.001)
+    .filter((candidate) => candidate.distance <= halfRoad)
     .sort((a, b) => a.distance - b.distance || a.cell.x - b.cell.x || a.cell.z - b.cell.z)
     .map((candidate) => ({ x: candidate.cell.x, z: candidate.cell.z }))[0] ?? null;
 }

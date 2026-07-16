@@ -121,6 +121,24 @@ export class EconomyProductionSystem {
     this.assignmentByWorker.clear();
   }
 
+  /**
+   * Hand a gathering worker back to the idle pool.
+   *
+   * §55 puts securing population capacity above growing income: without this a
+   * kingdom whose producers have soaked up every worker can never staff a
+   * construction site, so it can never finish the house that would let it train
+   * more workers — a deadlock, and exactly the permanent population lock plan
+   * §39 forbids.
+   */
+  release(worker: Unit): boolean {
+    const producer = this.assignmentByWorker.get(worker.id);
+    if (!producer) return false;
+    producer.assignments.delete(worker.id);
+    this.assignmentByWorker.delete(worker.id);
+    worker.stop();
+    return true;
+  }
+
   /** Remove buffered output for a connected logistics transfer, never below zero. */
   withdrawBuffered(structureId: number): { resourceId: string; amount: number } | null {
     const producer = this.producers.get(structureId);

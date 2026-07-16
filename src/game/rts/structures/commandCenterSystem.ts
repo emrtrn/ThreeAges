@@ -29,12 +29,12 @@ export class CommandCenterSystem {
 
   /** Every direct structure mesh accepted by contextual target raycasts. */
   targetMeshes(): import("three").Object3D[] {
-    return this.all().flatMap((center) => center.object.children);
+    return this.all().map((center) => center.object);
   }
 
   /** Resolve a raycast hit back to its centre. */
   centerForObject(object: import("three").Object3D): CommandCenter | null {
-    return this.all().find((center) => center.object.children.includes(object)) ?? null;
+    return this.all().find((center) => isChildOf(object, center.object)) ?? null;
   }
 
   /** Remove the current match's centres so fresh ones can be spawned. */
@@ -54,4 +54,11 @@ export class CommandCenterSystem {
   navigationBlockers(): readonly NavBlocker[] {
     return this.all().map((center) => center.navigationBlocker());
   }
+}
+
+function isChildOf(object: import("three").Object3D, parent: import("three").Object3D): boolean {
+  for (let current: import("three").Object3D | null = object; current; current = current.parent) {
+    if (current === parent) return true;
+  }
+  return false;
 }

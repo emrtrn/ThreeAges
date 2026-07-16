@@ -11,6 +11,7 @@ import type { SelectionSystem } from "../selection/selectionSystem";
 import type { CommandMarkerSystem } from "./commandMarker";
 import { formationOffsets } from "../units/unitMovement";
 import type { UnitSystem } from "../units/unitSystem";
+import { issueAttackOrder } from "../units/attackPathing";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { CombatTarget } from "../combat/combatTarget";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
@@ -40,7 +41,7 @@ export class CommandSystem {
 
     const target = this.raycastTarget(x, y);
     if (target && target.owner !== selected[0]?.owner) {
-      for (const unit of selected) unit.setAttackTarget(target);
+      for (const unit of selected) issueAttackOrder(unit, target, this.navigation);
       this.markers.spawn(target.position, "#ff7468");
       return;
     }
@@ -69,7 +70,7 @@ export class CommandSystem {
     this.setNdc(x, y);
     this.raycaster.setFromCamera(this.ndc, this.camera);
     const targets = [...this.units.bodyMeshes(), ...this.centers.targetMeshes()];
-    const hit = this.raycaster.intersectObjects(targets, false)[0];
+    const hit = this.raycaster.intersectObjects(targets, true)[0];
     if (!hit) return null;
     return this.units.unitForObject(hit.object) ?? this.centers.centerForObject(hit.object);
   }

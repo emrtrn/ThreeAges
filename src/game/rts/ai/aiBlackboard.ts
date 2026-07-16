@@ -18,7 +18,7 @@ import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { EconomyProductionSystem } from "../economy/economyProductionSystem";
 import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
-import type { AiArmyMission, AiIntent, AiPlan } from "./aiTypes";
+import type { AiArmyMission, AiExpansionStep, AiIntent, AiPlan } from "./aiTypes";
 
 /** §52: ArmyPower = Σ(UnitBasePower × HealthRatio). Roles arrive with AI-2. */
 const GUARD_BASE_POWER = 1;
@@ -35,8 +35,8 @@ export interface AiBlackboard {
   readonly buildingCounts: Readonly<Record<string, number>>;
   /** Completed producers whose output cannot currently reach a depot (§37). */
   readonly disconnectedProducers: number;
-  /** True once this kingdom owns a completed outpost (§26 expansion done). */
-  readonly hasExpansion: boolean;
+  /** §19 ActiveExpansion: how far the §47 recipe has run. */
+  readonly expansionStep: AiExpansionStep;
   readonly ownArmyPower: number;
   /** §20: only enemies actually on the field — never a hidden stockpile read. */
   readonly knownEnemyArmyPower: number;
@@ -79,6 +79,7 @@ export class AiBlackboardReader {
     readonly currentIntent: AiIntent | null;
     readonly currentPlan: AiPlan | null;
     readonly armyMission: AiArmyMission | null;
+    readonly expansionStep: AiExpansionStep;
   }): AiBlackboard {
     const { owner, units, structures, centers, kingdoms, production, logistics } = this.sources;
     const kingdom = kingdoms.get(owner);
@@ -98,11 +99,9 @@ export class AiBlackboardReader {
       : 0;
 
     const buildingCounts: Record<string, number> = {};
-    let hasExpansion = false;
     for (const structure of structures.ownedBy(owner)) {
       if (!structure.construction.complete) continue;
       buildingCounts[structure.stats.id] = (buildingCounts[structure.stats.id] ?? 0) + 1;
-      if (structure.stats.territory) hasExpansion = true;
     }
 
     const disconnectedProducers = logistics.snapshots()
@@ -127,7 +126,7 @@ export class AiBlackboardReader {
       populationCap: populationSnapshot.capacity,
       buildingCounts,
       disconnectedProducers,
-      hasExpansion,
+      expansionStep: context.expansionStep,
       ownArmyPower,
       knownEnemyArmyPower: armyPower(enemyUnits.filter((unit) => unit.role === "guard")),
       baseThreat,

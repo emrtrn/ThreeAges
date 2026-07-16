@@ -4,7 +4,7 @@
  * A confirmed placement creates a visible foundation and a nav blocker, but has
  * no gameplay function until the worker/construction slice supplies progress.
  */
-import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
+import { BoxGeometry, Group, Mesh, MeshStandardMaterial, type Object3D } from "three";
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalanceStats } from "../../data/gameDataTypes";
@@ -35,6 +35,7 @@ export class PlacedStructureSystem {
   readonly root = new Group();
   private readonly structures: PlacedStructure[] = [];
   private nextId = 1;
+  private completedVisualHandler: ((structure: PlacedStructure) => void) | null = null;
 
   constructor() {
     this.root.name = "rts-placed-structures";
@@ -94,6 +95,23 @@ export class PlacedStructureSystem {
     return this.structures;
   }
 
+  /** Lets the runtime replace completed placeholders without changing construction rules. */
+  setCompletedVisualHandler(handler: (structure: PlacedStructure) => void): void {
+    this.completedVisualHandler = handler;
+  }
+
+  /** Swap a completed box for an externally loaded building model. */
+  setCompletedVisual(structure: PlacedStructure, visual: Object3D): void {
+    const placeholder = structure.object.getObjectByName("rts-complete-building-placeholder");
+    if (placeholder) {
+      structure.object.remove(placeholder);
+      disposeObjectMeshes(placeholder);
+    }
+    const existing = structure.object.getObjectByName("rts-complete-building-model");
+    if (existing) structure.object.remove(existing);
+    structure.object.add(visual);
+  }
+
   /** One kingdom's structures. The Faz 5 AI reads its own base through this. */
   ownedBy(owner: UnitOwner): readonly PlacedStructure[] {
     return this.structures.filter((structure) => structure.owner === owner);
@@ -133,7 +151,7 @@ export class PlacedStructureSystem {
   private disposeStructure(structure: PlacedStructure): void {
     this.root.remove(structure.object);
     structure.object.traverse((child) => {
-      if (!(child instanceof Mesh)) return;
+      if (!(child instanceof Mesh) || isSharedModelMesh(child)) return;
       child.geometry.dispose();
       const materials = Array.isArray(child.material) ? child.material : [child.material];
       for (const material of materials) material.dispose();
@@ -161,5 +179,22 @@ export class PlacedStructureSystem {
     completed.castShadow = true;
     completed.receiveShadow = true;
     structure.object.add(completed);
+    this.completedVisualHandler?.(structure);
   }
+}
+
+function disposeObjectMeshes(root: Object3D): void {
+  root.traverse((child) => {
+    if (!(child instanceof Mesh) || isSharedModelMesh(child)) return;
+    child.geometry.dispose();
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) material.dispose();
+  });
+}
+
+function isSharedModelMesh(object: Object3D): boolean {
+  for (let current: Object3D | null = object; current; current = current.parent) {
+    if (current.userData.rtsSharedModel === true) return true;
+  }
+  return false;
 }

@@ -56,12 +56,17 @@ export class AiBuildManager {
    * Try to start one building. Returns `busy` when §42's single-slot rule
    * blocks it, `waiting` for a recoverable condition (no resources yet), and
    * `failed` when every authored anchor has been exhausted.
+   *
+   * `scope` narrows the candidate slots — the expansion recipe passes its own
+   * region anchors so it shares this manager's single build slot and blacklist
+   * (§42/§43) without the base build order ever placing a farm out at the
+   * expansion, or vice versa.
    */
-  request(buildingId: string, now: number): AiBuildOutcome {
+  request(buildingId: string, now: number, scope: readonly RtsBuildAnchor[] = this.anchors): AiBuildOutcome {
     this.syncActive();
     if (this.active) return { kind: "busy" };
 
-    const candidates = this.availableAnchors(buildingId);
+    const candidates = this.availableAnchors(buildingId, scope);
     if (candidates.length === 0) {
       this.log.record({
         at: now,
@@ -97,8 +102,8 @@ export class AiBuildManager {
   }
 
   /** Anchors for a building that are neither taken nor blacklisted. */
-  private availableAnchors(buildingId: string): readonly RtsBuildAnchor[] {
-    return this.anchors.filter((anchor) => anchor.buildingId === buildingId
+  private availableAnchors(buildingId: string, scope: readonly RtsBuildAnchor[]): readonly RtsBuildAnchor[] {
+    return scope.filter((anchor) => anchor.buildingId === buildingId
       && (this.anchorFailures.get(this.key(anchor)) ?? 0) < AI_ANCHOR_FAILURE_LIMIT
       && !this.occupied(anchor));
   }

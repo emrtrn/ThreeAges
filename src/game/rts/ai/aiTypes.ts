@@ -59,6 +59,9 @@ export interface AiIntentScore {
   readonly reason: string;
 }
 
+/** §47: the fixed expansion recipe, as the steps an executor moves through. */
+export type AiExpansionStep = "outpost" | "route" | "depot" | "production" | "done" | "failed";
+
 /** §15: the field army's mission vocabulary. One is active at a time. */
 export type AiArmyMission =
   | "defendBase"

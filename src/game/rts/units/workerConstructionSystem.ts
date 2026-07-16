@@ -36,6 +36,13 @@ export class WorkerConstructionSystem {
     private readonly navigation: RtsNavigation,
     private readonly isReservedForOtherWork: (worker: Unit) => boolean = () => false,
     private readonly onConstructionComplete: (structure: PlacedStructure) => void = () => {},
+    /**
+     * Pull a worker off gathering when a site would otherwise never be built.
+     * §55 ranks securing population capacity above income, and without this a
+     * kingdom whose producers hold every worker deadlocks: no builder → no
+     * house → no population → no new workers.
+     */
+    private readonly releaseFromOtherWork: (worker: Unit) => boolean = () => false,
   ) {}
 
   /**
@@ -43,10 +50,30 @@ export class WorkerConstructionSystem {
    * player feedback. A kingdom never builds with the other kingdom's workers.
    */
   assignNearest(structure: PlacedStructure): WorkerAssignmentResult {
-    const candidates = this.units.workersOf(structure.owner)
-      .filter((worker) => !this.assignments.has(worker.id) && !this.isReservedForOtherWork(worker))
+    const free = this.candidatesFor(structure, (worker) => !this.isReservedForOtherWork(worker));
+    const assignedFree = this.tryAssign(free, structure);
+    if (assignedFree) return { assigned: true };
+
+    // Nobody idle: preempt a gatherer rather than leave the site unbuilt (§55).
+    const gathering = this.candidatesFor(structure, (worker) => this.isReservedForOtherWork(worker));
+    for (const worker of gathering) {
+      if (!this.releaseFromOtherWork(worker)) continue;
+      if (this.tryAssign([worker], structure)) return { assigned: true };
+    }
+    return {
+      assigned: false,
+      reason: free.length === 0 && gathering.length === 0 ? "no-idle-worker" : "unreachable",
+    };
+  }
+
+  private candidatesFor(structure: PlacedStructure, extra: (worker: Unit) => boolean): Unit[] {
+    return this.units.workersOf(structure.owner)
+      .filter((worker) => !this.assignments.has(worker.id) && extra(worker))
       .sort((a, b) => a.position.distanceToSquared(structure.object.position)
         - b.position.distanceToSquared(structure.object.position));
+  }
+
+  private tryAssign(candidates: readonly Unit[], structure: PlacedStructure): boolean {
     for (const worker of candidates) {
       const approach = this.findReachableApproach(worker, structure);
       if (!approach) continue;
@@ -54,9 +81,9 @@ export class WorkerConstructionSystem {
       if (!path) continue;
       worker.setMovePath(path);
       this.assignments.set(worker.id, { worker, structure, approach, state: "moving" });
-      return { assigned: true };
+      return true;
     }
-    return { assigned: false, reason: candidates.length === 0 ? "no-idle-worker" : "unreachable" };
+    return false;
   }
 
   /** Remove a cancelled site's assignment, restoring its worker to idle. */
@@ -69,6 +96,7 @@ export class WorkerConstructionSystem {
   }
 
   update(deltaSeconds: number): void {
+    this.restaffAbandonedSites();
     for (const [workerId, assignment] of this.assignments) {
       const { worker, structure } = assignment;
       if (worker.health.depleted || !this.structures.all().includes(structure)) {
@@ -84,6 +112,19 @@ export class WorkerConstructionSystem {
         this.assignments.delete(workerId);
         this.onConstructionComplete(structure);
       }
+    }
+  }
+
+  /**
+   * Retry any unfinished site that has no builder. Assignment used to happen
+   * only once, at placement, so a site placed while every worker was busy —
+   * or whose builder died — stayed a foundation forever.
+   */
+  private restaffAbandonedSites(): void {
+    const staffed = new Set([...this.assignments.values()].map((assignment) => assignment.structure));
+    for (const structure of this.structures.all()) {
+      if (structure.construction.complete || staffed.has(structure)) continue;
+      this.assignNearest(structure);
     }
   }
 

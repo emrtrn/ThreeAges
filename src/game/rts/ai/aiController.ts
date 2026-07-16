@@ -18,16 +18,18 @@ import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { StructureConstructionService } from "../structures/structureConstructionService";
 import type { WorkerProductionSystem } from "../structures/workerProductionSystem";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
-import type { RtsBuildAnchor } from "../world/rtsMapBlockout";
+import type { RoadConstructionService } from "../roads/roadConstructionService";
+import type { RtsBuildAnchor, RtsExpansionRegion } from "../world/rtsMapBlockout";
 import type { UnitOwner } from "../units/unit";
 import { AiBlackboardReader, type AiBlackboard, type AiBlackboardSources } from "./aiBlackboard";
 import { AiBuildManager } from "./aiBuildManager";
 import { AiDecisionLog } from "./aiDecisionLog";
 import { AiEconomyManager, type AiBottleneck } from "./aiEconomyManager";
+import { AiExpansionManager } from "./aiExpansionManager";
 import { AiProductionManager } from "./aiProductionManager";
 import { ArmyManager } from "./armyManager";
 import { KingdomDirector } from "./kingdomDirector";
-import type { AiArmyMission, AiIntent, AiIntentScore, AiPlan } from "./aiTypes";
+import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } from "./aiTypes";
 
 export interface AiControllerOptions extends AiBlackboardSources {
   readonly balance: AiBalance;
@@ -36,7 +38,10 @@ export interface AiControllerOptions extends AiBlackboardSources {
   readonly centers: CommandCenterSystem;
   /** §40: the authored slots this kingdom may build on. */
   readonly anchors: readonly RtsBuildAnchor[];
+  /** §10/§45: the single authored region this kingdom may expand into. */
+  readonly expansion: RtsExpansionRegion;
   readonly construction: StructureConstructionService;
+  readonly roadConstruction: RoadConstructionService;
   readonly workerProduction: WorkerProductionSystem;
   readonly barracksProduction: BarracksProductionSystem;
 }
@@ -51,6 +56,7 @@ export interface AiControllerSnapshot {
   readonly mission: AiArmyMission | null;
   readonly armyPower: number;
   readonly bottleneck: AiBottleneck;
+  readonly expansionStep: AiExpansionStep;
   readonly blackboard: AiBlackboard | null;
 }
 
@@ -61,6 +67,7 @@ export class AiController {
   private readonly army: ArmyManager;
   private readonly builds: AiBuildManager;
   private readonly economy: AiEconomyManager;
+  private readonly expansion: AiExpansionManager;
   private readonly production: AiProductionManager;
   private readonly profileBalance;
   private now = 0;
@@ -88,6 +95,14 @@ export class AiController {
       this.log,
     );
     this.economy = new AiEconomyManager(options.balance, this.builds, this.log);
+    this.expansion = new AiExpansionManager(
+      options.owner,
+      options.expansion,
+      this.builds,
+      options.roadConstruction,
+      options.structures,
+      this.log,
+    );
     this.production = new AiProductionManager(
       options.owner,
       options.workerProduction,
@@ -131,8 +146,16 @@ export class AiController {
       // §17/§55: the production queues are a standing concern — they keep the
       // population unlocked whatever the director is currently committed to.
       this.production.update(blackboard);
-      // §17: the build manager only executes; it runs when Economy is the plan.
+      // §17: these only execute; which one runs is the director's committed plan.
       if (this.director.currentIntent === "economy") this.economy.update(blackboard);
+      // §26 warns that a claimed-but-unconnected region is the failure mode to
+      // avoid, and the recipe outlasts any one plan. So once the outpost is down
+      // the recipe finishes even if an emergency pulls the director elsewhere —
+      // otherwise a stray population lock strands the expansion mid-step.
+      const claimed = this.expansion.currentStep !== "outpost";
+      if (this.director.currentIntent === "expand" || (claimed && !this.expansion.settled)) {
+        this.runExpansion(blackboard);
+      }
     }
     if (armyDue) {
       this.armyAccumulator = 0;
@@ -152,6 +175,7 @@ export class AiController {
       mission: armyState.mission,
       armyPower: armyState.power,
       bottleneck: this.economy.bottleneck,
+      expansionStep: this.expansion.currentStep,
       blackboard: this.lastBlackboard,
     };
   }
@@ -166,7 +190,21 @@ export class AiController {
     this.army.reset();
     this.builds.reset();
     this.economy.reset();
+    this.expansion.reset();
     this.log.clear();
+  }
+
+  /**
+   * §32: an executor owns its plan's outcome. Closing the plan here is what
+   * frees the director to re-decide immediately instead of holding a finished
+   * (or abandoned) expansion until its timeout.
+   */
+  private runExpansion(blackboard: AiBlackboard): void {
+    const step = this.expansion.update(blackboard);
+    const plan = this.director.currentPlan;
+    if (!plan || plan.intent !== "expand") return;
+    if (step === "done") this.director.completePlan(plan, this.now, true);
+    else if (step === "failed") this.director.completePlan(plan, this.now, false, "no-valid-placement");
   }
 
   private readBlackboard(): AiBlackboard {
@@ -175,6 +213,7 @@ export class AiController {
       currentIntent: this.director.currentIntent,
       currentPlan: this.director.currentPlan,
       armyMission: this.army.currentMission,
+      expansionStep: this.expansion.currentStep,
     });
     return this.lastBlackboard;
   }

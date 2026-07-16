@@ -164,6 +164,12 @@ export class Unit {
     this.movePath = points.map((point) => point.clone());
   }
 
+  /** Replace the route followed while retaining the current attack target. */
+  setAttackPath(points: readonly Vector3[]): void {
+    this.moveTarget = null;
+    this.movePath = points.map((point) => point.clone());
+  }
+
   /** Current navigation waypoint, or null when not following a planned path. */
   get pathTarget(): Vector3 | null {
     return this.movePath[0] ?? null;

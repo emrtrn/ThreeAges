@@ -8,6 +8,17 @@ export interface CombatTarget {
   readonly owner: UnitOwner;
   readonly position: Vector3;
   readonly health: HealthComponent;
+  /**
+   * Horizontal radius that can be attacked from outside the target's collision
+   * footprint. Units use zero; command centres expose their perimeter.
+   */
+  readonly combatRadius?: number;
   /** Units show a target ring; structures may omit that presentation hook. */
   setTargetedBy?(delta: number): void;
+}
+
+/** Ground-plane distance to a target's attackable edge rather than its pivot. */
+export function combatDistance(position: Vector3, target: CombatTarget): number {
+  return Math.max(0, Math.hypot(position.x - target.position.x, position.z - target.position.z)
+    - (target.combatRadius ?? 0));
 }

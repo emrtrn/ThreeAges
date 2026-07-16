@@ -7,7 +7,6 @@
  * placeholder with no gameplay meaning.
  */
 import {
-  BoxGeometry,
   Color,
   GridHelper,
   Group,
@@ -33,9 +32,8 @@ export const DEFAULT_RTS_GROUND_OPTIONS: RtsGroundOptions = {
 };
 
 /**
- * Builds the ground group (plane + grid + corner reference posts). The plane
- * receives shadows so later lit units read against it; y = 0 is the walkable
- * surface all gameplay uses.
+ * Builds the ground group (plane + grid). The plane receives shadows so later
+ * lit units read against it; y = 0 is the walkable surface all gameplay uses.
  */
 export function createRtsGround(options: RtsGroundOptions = DEFAULT_RTS_GROUND_OPTIONS): Group {
   const group = new Group();
@@ -57,26 +55,5 @@ export function createRtsGround(options: RtsGroundOptions = DEFAULT_RTS_GROUND_O
   (grid.material as { transparent: boolean }).transparent = true;
   group.add(grid);
 
-  // Reference markers at known coordinates so camera pan/zoom is perceptible in
-  // the otherwise-featureless field (removed once real map/units land in Faz 2).
-  group.add(createMarker(0, 0, "#e8e2c0", 1.5)); // origin
-  const e = options.halfExtent - 4;
-  group.add(createMarker(e, e, "#c0392b", 3)); // +X +Z
-  group.add(createMarker(-e, e, "#2980b9", 3)); // -X +Z
-  group.add(createMarker(e, -e, "#27ae60", 3)); // +X -Z
-  group.add(createMarker(-e, -e, "#f1c40f", 3)); // -X -Z
-
   return group;
-}
-
-/** A small emissive-ish post used only as a spatial reference in Faz 1. */
-function createMarker(x: number, z: number, color: string, height: number): Mesh {
-  const marker = new Mesh(
-    new BoxGeometry(2, height, 2),
-    new MeshStandardMaterial({ color: new Color(color), roughness: 0.7 }),
-  );
-  marker.position.set(x, height / 2, z);
-  marker.castShadow = true;
-  marker.name = "rts-ref-marker";
-  return marker;
 }

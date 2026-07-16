@@ -17,6 +17,7 @@ import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
+import { issueAttackOrder } from "../units/attackPathing";
 import type { AiBlackboard } from "./aiBlackboard";
 import type { AiDecisionLog } from "./aiDecisionLog";
 import type { AiArmyMission, AiIntent } from "./aiTypes";
@@ -109,7 +110,7 @@ export class ArmyManager {
       // Prefer a live defender in reach, else keep hitting the centre (§64).
       const defender = this.nearestEnemyUnit(unit, opponent);
       const next = defender ?? target;
-      if (unit.attackTarget !== next) unit.setAttackTarget(next);
+      issueAttackOrder(unit, next, this.navigation);
     }
   }
 
@@ -118,7 +119,7 @@ export class ArmyManager {
     for (const unit of army) {
       const attacker = this.nearestEnemyUnit(unit, opponent);
       if (attacker) {
-        if (unit.attackTarget !== attacker) unit.setAttackTarget(attacker);
+        issueAttackOrder(unit, attacker, this.navigation);
         continue;
       }
       this.moveToRally(unit);

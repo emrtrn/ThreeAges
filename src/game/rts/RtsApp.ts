@@ -37,6 +37,7 @@ import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround } from "./world/rtsGround";
 import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
+import { RtsMapArt } from "./world/rtsMapArt";
 import { UnitSystem } from "./units/unitSystem";
 import { updateUnitMovement } from "./units/unitMovement";
 import { updateUnitCombat } from "./units/unitCombat";
@@ -48,6 +49,7 @@ import { CommandMarkerSystem } from "./commands/commandMarker";
 import { CommandSystem } from "./commands/commandSystem";
 import { CommandCenterSystem } from "./structures/commandCenterSystem";
 import { COMMAND_CENTER_MAX_HEALTH } from "./structures/commandCenter";
+import { RtsBuildingVisuals } from "./structures/rtsBuildingVisuals";
 import { RtsMatchState } from "./match/rtsMatchState";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
@@ -124,6 +126,8 @@ export interface RtsAppOptions {
 
 export class RtsApp {
   private readonly renderer: WebGLRenderer;
+  private readonly buildingVisuals: RtsBuildingVisuals;
+  private readonly mapArt: RtsMapArt;
   private readonly scene = new Scene();
   private readonly cameraController = new RtsCameraController();
   private readonly input: RtsInput;
@@ -179,6 +183,7 @@ export class RtsApp {
   private frameHandle = 0;
   private lastTime = 0;
   private running = false;
+  private disposed = false;
   private simulationSpeed: RtsSimulationSpeed = 1;
   private roadOverlayVisible = false;
   private lastW = 0;
@@ -189,6 +194,8 @@ export class RtsApp {
     private readonly options: RtsAppOptions,
   ) {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
+    this.buildingVisuals = new RtsBuildingVisuals(this.renderer);
+    this.mapArt = new RtsMapArt(this.renderer);
     this.roads = new RoadGraph(this.options.roadBalance);
     this.roadDebugView = new RoadDebugView(this.roads);
     this.roadOverlayVisible = Boolean(this.options.debug);
@@ -228,6 +235,7 @@ export class RtsApp {
       (structure) => {
         if (structure.stats.territory) this.territory.refresh();
       },
+      (worker) => this.economyProduction?.release(worker) ?? false,
     );
     this.economyProduction = new EconomyProductionSystem(
       this.units,
@@ -271,7 +279,13 @@ export class RtsApp {
       this.roads,
       this.kingdoms,
       () => this.navigationBlockers(),
-      () => this.roadPlacement.renderNetwork(),
+      () => {
+        this.roadPlacement.renderNetwork();
+        // A committed road can link an outpost to its main network, which grows
+        // that outpost's control radius. This lives on the service rather than
+        // the pointer handler so an AI-built road refreshes territory too.
+        this.territory.refresh();
+      },
     );
     // Built last among the AI's dependencies: it drives the very same
     // construction/production services the player's UI does (AI design §4).
@@ -287,7 +301,9 @@ export class RtsApp {
         || (this.economyProduction?.isAssigned(unit) ?? false),
       navigation: this.navigation,
       anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
+      expansion: RTS_BLOCKOUT_MAP.enemyExpansion,
       construction: this.structureConstruction,
+      roadConstruction: this.roadConstruction,
       workerProduction: this.workerProduction,
       barracksProduction: this.barracksProduction,
       balance: this.options.aiBalance,
@@ -362,7 +378,6 @@ export class RtsApp {
       onSelectClick: (x, y, additive) => {
         if (this.roadPlacement.isActive) {
           this.roadPlacement.confirmAt(x, y);
-          this.territory.refresh();
           this.syncPlacementUi();
           this.syncRoadUi();
         } else if (this.placement.isActive) {
@@ -378,7 +393,6 @@ export class RtsApp {
       onSelectCommit: (rect, additive) => {
         if (this.roadPlacement.isActive) {
           this.roadPlacement.confirmAt(rect.x1, rect.y1);
-          this.territory.refresh();
           this.syncPlacementUi();
           this.syncRoadUi();
         } else if (this.placement.isActive) {
@@ -418,6 +432,8 @@ export class RtsApp {
       },
     });
     this.buildScene();
+    this.structures.setCompletedVisualHandler((structure) => this.applyStructureVisual(structure));
+    void this.loadBuildingVisuals();
     this.spawnStartingUnits();
     this.syncPlacementUi();
     this.syncRoadUi();
@@ -440,6 +456,7 @@ export class RtsApp {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.running = false;
     if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
     this.frameHandle = 0;
@@ -461,7 +478,23 @@ export class RtsApp {
     this.barracksProduction.reset();
     this.workerProduction.reset();
     this.structures.clear();
+    this.centers.clear();
+    this.buildingVisuals.dispose();
+    this.mapArt.dispose();
     this.renderer.dispose();
+  }
+
+  private async loadBuildingVisuals(): Promise<void> {
+    try {
+      await this.buildingVisuals.load();
+      if (this.disposed) return;
+      for (const center of this.centers.all()) this.buildingVisuals.applyToCenter(center);
+      for (const structure of this.structures.all()) this.applyStructureVisual(structure);
+    } catch (error) {
+      // Keep the original construction visuals usable if an optional art asset
+      // is unavailable in a development build or an interrupted reload.
+      this.log.warn("First Age RTS building models could not be loaded", error);
+    }
   }
 
   private buildScene(): void {
@@ -480,7 +513,9 @@ export class RtsApp {
     this.scene.add(sun);
 
     this.scene.add(createRtsGround());
-    this.scene.add(createRtsMapBlockout());
+    const blockout = createRtsMapBlockout();
+    this.scene.add(blockout);
+    void this.loadMapArt(blockout);
     this.spawnCenters();
     this.territory.refresh();
     this.refreshNavigationBlockers();
@@ -602,18 +637,33 @@ export class RtsApp {
   }
 
   private spawnCenters(): void {
-    this.centers.spawn(
+    const playerCenter = this.centers.spawn(
       "player",
       PLAYER_CENTER_POSITION.x,
       PLAYER_CENTER_POSITION.z,
       COMMAND_CENTER_MAX_HEALTH,
     );
-    this.centers.spawn(
+    const enemyCenter = this.centers.spawn(
       "enemy",
       ENEMY_CENTER_POSITION.x,
       ENEMY_CENTER_POSITION.z,
       COMMAND_CENTER_MAX_HEALTH,
     );
+    this.buildingVisuals.applyToCenter(playerCenter);
+    this.buildingVisuals.applyToCenter(enemyCenter);
+  }
+
+  private applyStructureVisual(structure: PlacedStructure): void {
+    const visual = this.buildingVisuals.createForStructure(structure);
+    if (visual) this.structures.setCompletedVisual(structure, visual);
+  }
+
+  private async loadMapArt(blockout: import("three").Group): Promise<void> {
+    try {
+      await this.mapArt.apply(blockout, RTS_BLOCKOUT_MAP);
+    } catch (error) {
+      this.log.warn("RTS map art could not be loaded", error);
+    }
   }
 
   /** Restore all Faz 1 match-owned systems without reloading the browser route. */

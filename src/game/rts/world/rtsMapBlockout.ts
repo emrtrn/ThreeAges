@@ -33,6 +33,32 @@ export interface RtsBuildAnchor {
   readonly z: number;
 }
 
+/**
+ * One authored expansion region (`07_ENEMY_AI_DESIGN_v0.2.md` §45, §47–§48).
+ *
+ * AI-1 scope (§10) is a single expansion region, and §48 states the first slice
+ * does not free-search road routes either: the map supplies the corridor. The
+ * ordering of the members mirrors §47's recipe, which is also the order the
+ * pieces become legal — the depot and production slots only fall inside the
+ * outpost's *connected* control radius, so the road genuinely has to exist
+ * before they can be built.
+ */
+export interface RtsExpansionRegion {
+  readonly id: string;
+  /** §26 step 1: the outpost that claims the region. */
+  readonly outpost: RtsBuildAnchor;
+  /** §26 step 3: the depot that lets the region's output reach the stockpile. */
+  readonly depot: RtsBuildAnchor;
+  /** §26 step 4: the region's resource building. */
+  readonly production: RtsBuildAnchor;
+  /**
+   * §48: the authored corridor, walked as consecutive segments. It starts on a
+   * tile touching the owner's command centre and ends past the region, passing
+   * close enough to touch the outpost, depot and production slots.
+   */
+  readonly route: readonly RtsMapPoint[];
+}
+
 export interface RtsMapBlockout {
   readonly playerStart: RtsMapPoint;
   readonly enemyStart: RtsMapPoint;
@@ -44,6 +70,8 @@ export interface RtsMapBlockout {
    * the AI plays is a runtime choice, not map data.
    */
   readonly enemyBaseAnchors: readonly RtsBuildAnchor[];
+  /** The enemy kingdom's single authored expansion (§10: one region in AI-1). */
+  readonly enemyExpansion: RtsExpansionRegion;
   /** Static obstacle footprints consumed by `RtsNavigation`. */
   readonly navigationBlockers: readonly NavBlocker[];
 }
@@ -73,6 +101,24 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { buildingId: "house", x: -12, z: -32 },
     { buildingId: "house", x: 12, z: -32 },
   ],
+  // West flank. The outpost sits in neutral land just within the 12-unit
+  // expansion reach of the enemy's starting territory; the depot and production
+  // slots need the outpost's *connected* radius (12, not the unconnected 8), so
+  // §47's "road before depot" ordering is enforced by the geometry itself.
+  enemyExpansion: {
+    id: "enemy_west",
+    outpost: { buildingId: "outpost", x: -28, z: -20 },
+    depot: { buildingId: "depot", x: -28, z: -28 },
+    production: { buildingId: "farm", x: -28, z: -12 },
+    // Leaves the centre on its west side, runs north clear of the base slots,
+    // then turns west and down the x = -24 corridor, which touches all three.
+    route: [
+      { x: -6, z: -26 },
+      { x: -6, z: -12 },
+      { x: -24, z: -12 },
+      { x: -24, z: -28 },
+    ],
+  },
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },
   ],

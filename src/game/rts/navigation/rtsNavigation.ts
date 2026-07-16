@@ -10,6 +10,7 @@ import { Vector3 } from "three";
 
 import { UNIT_RADIUS } from "../units/unit";
 import { RTS_WORLD_HALF_EXTENT } from "../world/rtsGround";
+import { combatDistance, type CombatTarget } from "../combat/combatTarget";
 
 const UNIT_HEIGHT = 2;
 const CELL_SIZE = 1;
@@ -52,5 +53,25 @@ export class RtsNavigation {
     return result.status === "success"
       ? result.points.map(([x, y, z]) => new Vector3(x, y, z))
       : null;
+  }
+
+  /**
+   * Plan to an attackable edge around a live target. In particular, command
+   * centres are solid navigation blockers, so their centre can never be a
+   * valid walking goal. The closest perimeter point preserves the attacker's
+   * current flank; the grid then finds the required detour around obstacles.
+   */
+  planAttack(start: Vector3, target: CombatTarget, attackRange: number): Vector3[] | null {
+    if (combatDistance(start, target) <= attackRange) return [];
+    const radius = target.combatRadius === undefined
+      ? Math.max(UNIT_RADIUS * 2, attackRange * 0.85)
+      : target.combatRadius + attackRange * 0.9;
+    const startAngle = Math.atan2(start.z - target.position.z, start.x - target.position.x);
+    const goal = new Vector3(
+      target.position.x + Math.cos(startAngle) * radius,
+      0,
+      target.position.z + Math.sin(startAngle) * radius,
+    );
+    return this.plan(start, goal);
   }
 }
