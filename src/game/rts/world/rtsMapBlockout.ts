@@ -16,11 +16,34 @@ export interface RtsMapPoint {
   readonly z: number;
 }
 
+/**
+ * An authored candidate slot for one building
+ * (`07_ENEMY_AI_DESIGN_v0.2.md` §40).
+ *
+ * §40 is explicit that the first vertical slice does *not* give the AI a
+ * general-purpose city planner: the hand-made map supplies the legal spots, and
+ * the AI only picks between them. That keeps AI bases tidy, tests repeatable,
+ * and — the reason it is a plan §39 criterion — makes an infinite
+ * "no valid placement" retry loop impossible.
+ */
+export interface RtsBuildAnchor {
+  /** Building id from `balance/buildings.json` this slot is authored for. */
+  readonly buildingId: string;
+  readonly x: number;
+  readonly z: number;
+}
+
 export interface RtsMapBlockout {
   readonly playerStart: RtsMapPoint;
   readonly enemyStart: RtsMapPoint;
   readonly centralExpansion: RtsMapPoint;
   readonly externalResource: RtsMapPoint;
+  /**
+   * Base-interior build slots for the enemy kingdom, all inside its starting
+   * control radius. Named for the kingdom rather than for "the AI": which side
+   * the AI plays is a runtime choice, not map data.
+   */
+  readonly enemyBaseAnchors: readonly RtsBuildAnchor[];
   /** Static obstacle footprints consumed by `RtsNavigation`. */
   readonly navigationBlockers: readonly NavBlocker[];
 }
@@ -35,6 +58,21 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   enemyStart: { x: 0, z: -26 },
   centralExpansion: { x: 0, z: 0 },
   externalResource: { x: 27, z: 13 },
+  // Authored around the enemy centre at (0, -26): every slot is grid-snapped,
+  // clear of the 8x8 centre footprint and of its neighbours, and inside the
+  // 18-unit starting control radius. §41 orders economy near the centre and the
+  // Barracks between the centre and the front (here: the player's side is +z,
+  // so the Barracks sits at -38, behind the base, matching §41's "merkez ile
+  // sınır arasında" once the army rallies northward).
+  enemyBaseAnchors: [
+    { buildingId: "farm", x: -12, z: -26 },
+    { buildingId: "lumber_camp", x: 12, z: -26 },
+    { buildingId: "barracks", x: 0, z: -38 },
+    { buildingId: "house", x: -12, z: -20 },
+    { buildingId: "house", x: 12, z: -20 },
+    { buildingId: "house", x: -12, z: -32 },
+    { buildingId: "house", x: 12, z: -32 },
+  ],
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },
   ],

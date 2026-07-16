@@ -335,6 +335,7 @@ export function validateAiBalance(value: unknown): AiBalance {
   const evaluation = {
     directorSeconds: requirePositive(evaluationObj, "directorSeconds", `${where}.evaluation`),
     armySeconds: requirePositive(evaluationObj, "armySeconds", `${where}.evaluation`),
+    economySeconds: requirePositive(evaluationObj, "economySeconds", `${where}.evaluation`),
     minimumCommitmentSeconds: requirePositive(evaluationObj, "minimumCommitmentSeconds", `${where}.evaluation`),
     planTimeoutSeconds: requirePositive(evaluationObj, "planTimeoutSeconds", `${where}.evaluation`),
     hysteresisMargin: requireFiniteNumber(evaluationObj, "hysteresisMargin", `${where}.evaluation`),

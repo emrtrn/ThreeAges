@@ -85,6 +85,8 @@ import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
 import { AiController } from "../src/game/rts/ai/aiController";
 import { AiDecisionLog } from "../src/game/rts/ai/aiDecisionLog";
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
+import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBuildManager";
+import { detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
 import { scoreIntents } from "../src/game/rts/ai/intentScorer";
 import { formatRtsAiDebug } from "../src/game/rts/ai/aiDebugView";
 import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
@@ -94,7 +96,10 @@ import { ConstructionComponent } from "../src/game/rts/structures/constructionCo
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { WorkerProductionSystem } from "../src/game/rts/structures/workerProductionSystem";
-import { TerritoryControlSystem } from "../src/game/rts/territory/territoryControlSystem";
+import {
+  COMMAND_CENTER_CONTROL_RADIUS,
+  TerritoryControlSystem,
+} from "../src/game/rts/territory/territoryControlSystem";
 import { simulationSteps } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
@@ -28892,23 +28897,27 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
   const strongArmy = aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 1 });
   assert.ok(scoreFor(strongArmy, "attack").score > 0);
 
-  // §26: expansion waits for a base economy, then happens exactly once.
+  // §26: expansion waits for a base economy, then happens exactly once. Scored
+  // on rawScore because the weight currently gates the whole intent off (below).
   const preEconomy = aiTestBlackboard({ resourceStocks: { food: 0, wood: 300 } });
-  assert.equal(scoreFor(preEconomy, "expand").score, 0);
+  assert.equal(scoreFor(preEconomy, "expand").rawScore, 0);
   const readyToExpand = aiTestBlackboard({
     resourceStocks: { food: 0, wood: 300 },
     buildingCounts: { farm: 1, lumber_camp: 1 },
   });
-  assert.ok(scoreFor(readyToExpand, "expand").score > 0);
+  assert.ok(scoreFor(readyToExpand, "expand").rawScore > 0);
   const expanded = aiTestBlackboard({
     resourceStocks: { food: 0, wood: 300 },
     buildingCounts: { farm: 1, lumber_camp: 1 },
     hasExpansion: true,
   });
-  assert.equal(scoreFor(expanded, "expand").score, 0, "§10: AI-1 expands once");
+  assert.equal(scoreFor(expanded, "expand").rawScore, 0, "§10: AI-1 expands once");
 
-  // §10: ageUp stays scored but inert until Faz 6.
-  assert.equal(scoreFor(aiTestBlackboard(), "ageUp").score, 0);
+  // An intent whose executor does not exist yet is gated off by its data weight,
+  // so the director can never commit to a plan that nothing would carry out.
+  assert.equal(AI_TEST_BALANCE.intentWeights.expand, 0, "the Genişleme executor is not built yet");
+  assert.equal(scoreFor(readyToExpand, "expand").score, 0, "a zero weight keeps expand out of the rotation");
+  assert.equal(scoreFor(aiTestBlackboard(), "ageUp").score, 0, "§10: ageUp is inert until Faz 6");
 });
 
 check("KingdomDirector holds a plan through commitment and hysteresis, and emergencies cut it", () => {
@@ -29036,25 +29045,48 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
   const balance = validateRoadBalance(
     JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
   );
   const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
   const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
 
-  const build = () => {
+  const build = (startingResources = { food: 200, wood: 200 }) => {
     const units = new UnitSystem();
     const structures = new PlacedStructureSystem();
     const centers = new CommandCenterSystem();
-    centers.spawn("player", 0, 16);
+    centers.spawn("player", 0, 22);
     centers.spawn("enemy", 0, -26);
-    const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 200, wood: 200 }, 20);
+    const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, startingResources, 20);
     const navigation = new RtsNavigation();
     navigation.setBlockers(centers.navigationBlockers());
     const production = new EconomyProductionSystem(units, structures, navigation, () => false);
     const roads = new RoadGraph(balance);
     const depots = new DepotLogisticsSystem(structures, roads);
     const logistics = new ProductionLogisticsSystem(structures, roads, depots);
+    const territory = new TerritoryControlSystem(() => centers.all().map((center) => ({
+      owner: center.owner,
+      x: center.position.x,
+      z: center.position.z,
+      radius: COMMAND_CENTER_CONTROL_RADIUS,
+    })));
+    territory.refresh();
+    const workerConstruction = new WorkerConstructionSystem(units, structures, navigation);
+    const construction = new StructureConstructionService(
+      buildings,
+      structures,
+      kingdoms,
+      navigation,
+      () => [...centers.navigationBlockers(), ...structures.navigationBlockers()],
+      territory,
+      (structure) => { workerConstruction.assignNearest(structure); },
+      (structure) => workerConstruction.cancelStructure(structure),
+    );
+    const workerProduction = new WorkerProductionSystem(units, centers, navigation, worker, kingdoms);
+    const barracksProduction = new BarracksProductionSystem(units, structures, navigation, guard, kingdoms);
     const ai = new AiController({
       owner: "enemy",
       units,
@@ -29063,12 +29095,25 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
       kingdoms,
       production,
       logistics,
-      isWorkerBusy: () => false,
+      isWorkerBusy: (unit) => workerConstruction.stateFor(unit) !== "idle" || production.isAssigned(unit),
       navigation,
+      anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
+      construction,
+      workerProduction,
+      barracksProduction,
       balance: AI_TEST_BALANCE,
       profile: "normal",
     });
-    return { units, structures, centers, kingdoms, ai };
+    /** Advance the world the way RtsApp's simulation loop does. */
+    const step = (dt: number) => {
+      updateUnitMovement(units.all(), dt);
+      workerConstruction.update(dt);
+      production.update(dt);
+      workerProduction.update(dt);
+      barracksProduction.update(dt);
+      ai.update(dt);
+    };
+    return { units, structures, centers, kingdoms, ai, workerConstruction, territory, step };
   };
 
   const world = build();
@@ -29081,7 +29126,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   assert.equal(world.ai.snapshot().intent, null, "the director does not fire every frame");
 
   // The whole match is stepped headlessly at an accelerated rate (plan §38).
-  for (let step = 0; step < 200; step += 1) world.ai.update(0.5);
+  for (let index = 0; index < 200; index += 1) world.ai.update(0.5);
   const settled = world.ai.snapshot();
   assert.ok(settled.intent, "the director commits to an intent once its cadence elapses");
   assert.equal(settled.intent, "economy", "§34: an AI with two workers and no buildings builds its economy");
@@ -29132,6 +29177,210 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   assert.equal(world.ai.snapshot().intent, null);
   assert.equal(world.ai.log.size, 0);
   assert.throws(() => world.ai.update(-1), RangeError);
+
+  // --- §34/§37: the opening executes on authored anchors (plan §38) ---
+
+  const opener = build({ food: 400, wood: 600 });
+  // The match-start force: workers only, no army — exactly what RtsApp spawns.
+  for (let index = 0; index < 5; index += 1) opener.units.spawn("enemy", -4 + index * 2, -18, worker, "worker");
+  // The player fields a standing defence the AI can see.
+  for (let index = 0; index < 4; index += 1) opener.units.spawn("player", -4 + index * 3, 29, guard);
+
+  // §34's opening window (~2 min): an army-less AI builds. It must not rush —
+  // with no Barracks yet it has nothing to attack with, and its workers must
+  // never be walked at the player.
+  for (let index = 0; index < 240; index += 1) opener.step(0.5);
+  assert.equal(opener.ai.snapshot().intent, "economy", "the opening is economic, not a rush");
+  assert.equal(
+    opener.units.unitsOf("enemy").filter((unit) => unit.attackTarget !== null).length,
+    0,
+    "no AI unit is sent at the player during the opening",
+  );
+
+  // Out to ~5 minutes, the base completes.
+  for (let index = 0; index < 360; index += 1) opener.step(0.5);
+  const built = opener.structures.ownedBy("enemy").map((structure) => structure.stats.id);
+  assert.ok(built.includes("farm"), "§34: the opening puts up a food building");
+  assert.ok(built.includes("lumber_camp"), "§34: then a wood building");
+  assert.ok(built.includes("barracks"), "§34: then a Barracks");
+  assert.equal(
+    opener.structures.ownedBy("player").length,
+    0,
+    "the AI only ever builds for its own kingdom",
+  );
+  // §40: every AI structure sits on an authored anchor, never a free-searched spot.
+  for (const structure of opener.structures.ownedBy("enemy")) {
+    assert.ok(
+      RTS_BLOCKOUT_MAP.enemyBaseAnchors.some((anchor) => anchor.buildingId === structure.stats.id
+        && anchor.x === structure.x && anchor.z === structure.z),
+      `${structure.stats.id} @${structure.x},${structure.z} is not an authored anchor`,
+    );
+  }
+  // §42: never more than one construction site open at a time.
+  assert.ok(
+    opener.structures.ownedBy("enemy").filter((structure) => !structure.construction.complete).length <= 1,
+    "§42: a single active construction",
+  );
+  // §35: the AI produces workers toward its target rather than idling at five.
+  assert.ok(
+    opener.units.unitsOf("enemy").filter((unit) => unit.role === "worker").length > 5,
+    "§35: the AI trains workers toward its target",
+  );
+
+  // §39: the AI must not sit locked at its population cap. It only reaches the
+  // cap with resources to spend — AI-1 output sits in local buffers until a
+  // depot and road exist (Faz 4 logistics), so a starting stockpile stands in
+  // for the income the Genişleme group will unlock.
+  const housed = build({ food: 4000, wood: 4000 });
+  for (let index = 0; index < 5; index += 1) housed.units.spawn("enemy", -4 + index * 2, -18, worker, "worker");
+  for (let index = 0; index < 1600; index += 1) housed.step(0.5);
+  const housedBoard = housed.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
+  assert.ok(
+    housed.structures.ownedBy("enemy").some((structure) => structure.stats.id === "house"),
+    "§37 PopulationBlocked → the AI puts up housing",
+  );
+  // §39: the AI answers population pressure by building rather than idling at
+  // the base cap. The map authors four house slots (§40), so 40 is its designed
+  // ceiling — reaching it with a full army is the intended end state, not a lock.
+  assert.equal(
+    housedBoard.populationCap,
+    20 + 4 * 5,
+    "the AI keeps raising its cap until every authored house anchor is used",
+  );
+
+  // §38: a broke AI waits and re-evaluates instead of spinning on a build it
+  // cannot afford — and never drives its wallet negative.
+  const broke = build({ food: 0, wood: 0 });
+  for (let index = 0; index < 3; index += 1) broke.units.spawn("enemy", -2 + index * 2, -18, worker, "worker");
+  for (let index = 0; index < 200; index += 1) broke.step(0.5);
+  assert.equal(broke.structures.ownedBy("enemy").length, 0, "nothing is built without resources");
+  assert.equal(broke.kingdoms.get("enemy").wallet.amount("wood"), 0, "a blocked AI never overdraws");
+  assert.ok(broke.ai.snapshot().intent, "a blocked AI keeps deciding rather than hanging");
+});
+
+check("AI opening order and bottleneck detection follow §34/§37", () => {
+  const bb = (overrides: Partial<AiBlackboard> = {}) => aiTestBlackboard(overrides);
+
+  // §34 order: housing pressure first, then food, wood, military.
+  assert.equal(nextBuilding(bb({ population: 19, populationCap: 20 }), AI_TEST_BALANCE), "house");
+  assert.equal(nextBuilding(bb(), AI_TEST_BALANCE), "farm");
+  assert.equal(nextBuilding(bb({ buildingCounts: { farm: 1 } }), AI_TEST_BALANCE), "lumber_camp");
+  assert.equal(nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE), "barracks");
+  assert.equal(
+    nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
+    null,
+    "a complete base stops requesting buildings",
+  );
+  // §34: housing outranks the economy order, so a lock is never reached.
+  assert.equal(
+    nextBuilding(bb({ population: 19, populationCap: 20, buildingCounts: { farm: 1 } }), AI_TEST_BALANCE),
+    "house",
+  );
+
+  // §37: the most severe bottleneck wins, and a healthy base reports none.
+  assert.equal(detectBottleneck(bb({ population: 20, populationCap: 20 }), AI_TEST_BALANCE), "population-blocked");
+  assert.equal(detectBottleneck(bb(), AI_TEST_BALANCE), "no-food-production");
+  assert.equal(detectBottleneck(bb({ buildingCounts: { farm: 1 } }), AI_TEST_BALANCE), "no-wood-production");
+  assert.equal(
+    detectBottleneck(bb({ buildingCounts: { farm: 1, lumber_camp: 1 }, disconnectedProducers: 1 }), AI_TEST_BALANCE),
+    "disconnected-production",
+  );
+  assert.equal(
+    detectBottleneck(bb({ buildingCounts: { farm: 1, lumber_camp: 1 }, workerCount: 2, idleWorkerCount: 0 }), AI_TEST_BALANCE),
+    "no-available-worker",
+  );
+  assert.equal(
+    detectBottleneck(bb({
+      buildingCounts: { farm: 1, lumber_camp: 1 },
+      resourceStocks: { food: 200, wood: 10 },
+    }), AI_TEST_BALANCE),
+    "wood-shortage",
+  );
+  assert.equal(
+    detectBottleneck(bb({ buildingCounts: { farm: 1, lumber_camp: 1 } }), AI_TEST_BALANCE),
+    null,
+    "a healthy base reports no bottleneck",
+  );
+});
+
+check("AiBuildManager keeps one site, skips taken anchors and blacklists a failing one (§42/§43)", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 500, wood: 500 }, 20);
+  const navigation = new RtsNavigation();
+  const territory = new TerritoryControlSystem(() => [{ owner: "enemy", x: 0, z: -26, radius: 18 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings, structures, kingdoms, navigation,
+    () => structures.navigationBlockers(), territory, () => {}, () => {},
+  );
+  const log = new AiDecisionLog();
+  const anchors = [
+    { buildingId: "house", x: -12, z: -20 },
+    { buildingId: "house", x: 12, z: -20 },
+  ];
+  const manager = new AiBuildManager("enemy", anchors, construction, structures, log);
+
+  const first = manager.request("house", 0);
+  assert.equal(first.kind, "started");
+  assert.ok(manager.busy, "§42: the manager now holds its single slot");
+  assert.equal(manager.request("house", 1).kind, "busy", "§42: no second concurrent site");
+
+  // Completing the site frees the slot; the taken anchor is skipped.
+  const site = first.kind === "started" ? first.structure : assert.fail("no structure");
+  structures.advanceConstruction(site, buildings.house?.constructionSeconds ?? 25);
+  const second = manager.request("house", 2);
+  assert.equal(second.kind, "started");
+  const secondSite = second.kind === "started" ? second.structure : assert.fail("no structure");
+  assert.notEqual(secondSite.x, site.x, "an occupied anchor is not reused");
+
+  // With both anchors taken there is nowhere left — a named failure, not a loop.
+  structures.advanceConstruction(secondSite, buildings.house?.constructionSeconds ?? 25);
+  const exhausted = manager.request("house", 3);
+  assert.equal(exhausted.kind, "failed");
+  assert.equal(exhausted.kind === "failed" && exhausted.reason, "no-valid-placement");
+
+  // §43: an anchor outside our control fails, blacklists, and stops being tried.
+  const outside = new TerritoryControlSystem(() => []);
+  outside.refresh();
+  const hostile = new StructureConstructionService(
+    buildings, structures, kingdoms, navigation,
+    () => structures.navigationBlockers(), outside, () => {}, () => {},
+  );
+  const blocked = new AiBuildManager(
+    "enemy", [{ buildingId: "house", x: -12, z: -20 }], hostile, new PlacedStructureSystem(), new AiDecisionLog(),
+  );
+  for (let attempt = 0; attempt < AI_ANCHOR_FAILURE_LIMIT; attempt += 1) {
+    assert.equal(blocked.request("house", attempt).kind, "failed", "an illegal anchor fails");
+  }
+  const giveUp = blocked.request("house", 10);
+  assert.equal(giveUp.kind, "failed");
+  assert.equal(
+    giveUp.kind === "failed" && giveUp.reason,
+    "no-valid-placement",
+    "§39: a blacklisted anchor is not retried forever",
+  );
+
+  // §38: a request we cannot afford waits — it must not blacklist a good anchor.
+  const poor = new KingdomRegistry(["player", "enemy"], units, new PlacedStructureSystem(), { food: 0, wood: 0 }, 20);
+  const poorStructures = new PlacedStructureSystem();
+  const poorService = new StructureConstructionService(
+    buildings, poorStructures, poor, navigation,
+    () => poorStructures.navigationBlockers(), territory, () => {}, () => {},
+  );
+  const waiting = new AiBuildManager(
+    "enemy", [{ buildingId: "house", x: -12, z: -20 }], poorService, poorStructures, new AiDecisionLog(),
+  );
+  for (let attempt = 0; attempt < AI_ANCHOR_FAILURE_LIMIT + 2; attempt += 1) {
+    const outcome = waiting.request("house", attempt);
+    assert.equal(outcome.kind, "waiting");
+    assert.equal(outcome.kind === "waiting" && outcome.reason, "insufficient-resources");
+  }
+  territory.dispose();
+  outside.dispose();
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

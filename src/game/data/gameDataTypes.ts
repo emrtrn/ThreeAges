@@ -131,6 +131,8 @@ export interface AiBalance {
     readonly directorSeconds: number;
     /** Army mission re-evaluation cadence; §78 suggests 0.5–1.0s. */
     readonly armySeconds: number;
+    /** Economy/build/production executor cadence; §78 suggests 1–3s. */
+    readonly economySeconds: number;
     /** §7: a plan is held at least this long before a rival plan can take over. */
     readonly minimumCommitmentSeconds: number;
     /** §32: a plan that runs longer than this fails rather than hanging forever. */

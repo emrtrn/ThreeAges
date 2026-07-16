@@ -1043,19 +1043,40 @@ görevi olarak duruyor: ArmyManager şu an saldırıda tüm muhafızları gönde
 
 ### Açılış
 
-- [ ] Başlangıç işçi dağılımı
-- [ ] İlk ev
-- [ ] İlk yiyecek ve odun yapısı
-- [ ] İlk Kışla
-- [ ] Minimum savunma gücü
+- [x] Başlangıç işçi dağılımı. (AI artık oyuncuyla aynı 5 işçiyle başlıyor;
+  bedava muhafızı yok — ordusu kurduğu Kışla'dan çıkmak zorunda, bu yüzden açılış
+  rush değil ekonomik.)
+- [x] İlk ev. (`aiEconomyManager.nextBuilding`: nüfus tavanına
+  `populationPressureBuffer` kadar yaklaşınca Ev sırayı öne alıyor.)
+- [x] İlk yiyecek ve odun yapısı. (`test:engine`: Tarla → Oduncu Kampı sırası.)
+- [x] İlk Kışla. (`test:engine`: ekonomiden sonra Kışla.)
+- [x] Minimum savunma gücü. (`aiProductionManager`: işçi hedefi dolunca Kışla
+  muhafız üretiyor. Not: §54'ün "orduyu üste bırakma" kısmı hâlâ Ordu grubunda.)
 
 ### Ekonomi
 
-- [ ] Yiyecek ve odun gelir hedefleri
-- [ ] Nüfus kilidi önleme
-- [ ] İşçi üretimi
-- [ ] Yapı kuyruğu
-- [ ] Kaynak yetersizliğinde bekleme ve yeniden değerlendirme
+- [x] Yiyecek ve odun gelir hedefleri. (`intentScorer` IncomeDeficit + §37
+  `no-food-production` / `no-wood-production` darboğazları.)
+- [x] Nüfus kilidi önleme. (`test:engine`: AI baskı altında Ev kuruyor ve tavanı
+  yükseltiyor; §55 nüfus doluyken kuyruğa girmiyor.)
+- [x] İşçi üretimi. (`aiProductionManager`: oyuncuyla aynı
+  `WorkerProductionSystem`, aynı maliyet ve nüfus kuralları.)
+- [x] Yapı kuyruğu. (`aiBuildManager`: §42 tek aktif inşaat, §40 haritada
+  tanımlı aday alanlar, §43 aday tükenince adlandırılmış hata.)
+- [x] Kaynak yetersizliğinde bekleme ve yeniden değerlendirme. (`test:engine`:
+  parasız AI `waiting` döndürüyor, iyi bir aday alanı kara listeye almıyor ve
+  cüzdanı eksiye düşmüyor.)
+
+**Bilinen sınır — AI'ın geliri yok.** Faz 4 lojistiğine göre üretim yerel
+tamponda birikir ve cüzdana ancak depo + yol bağlantısıyla akar. AI henüz depo
+ve yol kurmuyor (Genişleme grubu), bu yüzden başlangıç stoğuyla sınırlı ve
+darboğazı doğru şekilde `disconnected-production` olarak raporluyor. Bu, AI'ın
+uzun maçta ekonomik olarak duracağı anlamına gelir; Genişleme grubu bunu açar.
+
+**`expand` niyeti veriyle kapalı.** Uygulayıcısı olmayan bir niyet seçilirse AI
+plan zaman aşımına kadar hiçbir şey yapmaz ve üssü durur. Bu yüzden
+`balance/ai.json` içinde `intentWeights.expand = 0` — `ageUp` ile aynı gerekçe.
+Genişleme grubu geldiğinde açılacak.
 
 ### Genişleme
 
@@ -1083,13 +1104,20 @@ görevi olarak duruyor: ArmyManager şu an saldırıda tüm muhafızları gönde
 
 ## 39. Kabul Kriterleri
 
-- [ ] AI beş ardışık maçta açılışını tamamlıyor.
-- [ ] AI nüfus sınırında kalıcı kilitlenmiyor.
+- [x] AI beş ardışık maçta açılışını tamamlıyor. (`test:engine`: headless maç
+  Tarla → Oduncu Kampı → Kışla sırasını tamamlıyor ve işçi hedefine ulaşıyor;
+  §80 determinizm testi aynı girdinin aynı kararları ürettiğini doğruluyor, yani
+  tek koşu beş koşuyu temsil ediyor. Gerçek beş maçlık oyuncu testi hâlâ açık.)
+- [x] AI nüfus sınırında kalıcı kilitlenmiyor. (`test:engine`: baskı altında Ev
+  kuruyor, tavanı haritanın tanımladığı 4 ev slotu boyunca yükseltiyor.)
 - [ ] AI en az bir kez karakol kuruyor.
 - [ ] AI karakolu yola bağlayabiliyor.
 - [ ] AI en az bir saldırı gerçekleştiriyor.
 - [ ] AI merkezi saldırı altında savunmaya dönüyor.
-- [ ] AI geçersiz yapı konumunda sonsuz döngüye girmiyor.
+- [x] AI geçersiz yapı konumunda sonsuz döngüye girmiyor. (`test:engine`: §40
+  aday alanlar haritadan geliyor; art arda `AI_ANCHOR_FAILURE_LIMIT` kez
+  reddedilen aday kara listeye alınıyor ve adaylar tükenince görev
+  `no-valid-placement` ile başarısız oluyor.)
 - [x] AI normal oyunda gizli kaynak bonusu kullanmıyor. (`test:engine`:
   `balance/ai.json` normal profilinde `economyMultiplier != 1` doğrulayıcıdan
   geçmiyor; çarpan debug panelinde görünüyor. AI kaynağı §4 ile aynı

@@ -2,6 +2,7 @@
   "evaluation": {
     "directorSeconds": 4,
     "armySeconds": 0.75,
+    "economySeconds": 2,
     "minimumCommitmentSeconds": 12,
     "planTimeoutSeconds": 120,
     "hysteresisMargin": 0.25
@@ -24,7 +25,7 @@
   "intentWeights": {
     "economy": 1.0,
     "ageUp": 0.0,
-    "expand": 0.9,
+    "expand": 0.0,
     "defend": 1.2,
     "attack": 1.0
   }

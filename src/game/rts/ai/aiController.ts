@@ -13,11 +13,18 @@
  * headlessly at any rate (§80 determinism).
  */
 import type { AiBalance, AiProfile } from "../../data/gameDataTypes";
+import type { BarracksProductionSystem } from "../structures/barracksProductionSystem";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
+import type { StructureConstructionService } from "../structures/structureConstructionService";
+import type { WorkerProductionSystem } from "../structures/workerProductionSystem";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
+import type { RtsBuildAnchor } from "../world/rtsMapBlockout";
 import type { UnitOwner } from "../units/unit";
 import { AiBlackboardReader, type AiBlackboard, type AiBlackboardSources } from "./aiBlackboard";
+import { AiBuildManager } from "./aiBuildManager";
 import { AiDecisionLog } from "./aiDecisionLog";
+import { AiEconomyManager, type AiBottleneck } from "./aiEconomyManager";
+import { AiProductionManager } from "./aiProductionManager";
 import { ArmyManager } from "./armyManager";
 import { KingdomDirector } from "./kingdomDirector";
 import type { AiArmyMission, AiIntent, AiIntentScore, AiPlan } from "./aiTypes";
@@ -27,6 +34,11 @@ export interface AiControllerOptions extends AiBlackboardSources {
   readonly profile: AiProfile;
   readonly navigation: RtsNavigation;
   readonly centers: CommandCenterSystem;
+  /** §40: the authored slots this kingdom may build on. */
+  readonly anchors: readonly RtsBuildAnchor[];
+  readonly construction: StructureConstructionService;
+  readonly workerProduction: WorkerProductionSystem;
+  readonly barracksProduction: BarracksProductionSystem;
 }
 
 /** Everything the debug panel needs (§82), in one read. */
@@ -38,6 +50,7 @@ export interface AiControllerSnapshot {
   readonly scores: readonly AiIntentScore[];
   readonly mission: AiArmyMission | null;
   readonly armyPower: number;
+  readonly bottleneck: AiBottleneck;
   readonly blackboard: AiBlackboard | null;
 }
 
@@ -46,10 +59,14 @@ export class AiController {
   private readonly reader: AiBlackboardReader;
   private readonly director: KingdomDirector;
   private readonly army: ArmyManager;
+  private readonly builds: AiBuildManager;
+  private readonly economy: AiEconomyManager;
+  private readonly production: AiProductionManager;
   private readonly profileBalance;
   private now = 0;
   private directorAccumulator = 0;
   private armyAccumulator = 0;
+  private economyAccumulator = 0;
   private lastBlackboard: AiBlackboard | null = null;
 
   constructor(private readonly options: AiControllerOptions) {
@@ -62,6 +79,20 @@ export class AiController {
       options.navigation,
       options.balance,
       this.log,
+    );
+    this.builds = new AiBuildManager(
+      options.owner,
+      options.anchors,
+      options.construction,
+      options.structures,
+      this.log,
+    );
+    this.economy = new AiEconomyManager(options.balance, this.builds, this.log);
+    this.production = new AiProductionManager(
+      options.owner,
+      options.workerProduction,
+      options.barracksProduction,
+      options.balance,
     );
     this.profileBalance = options.balance.profiles[options.profile];
   }
@@ -79,19 +110,29 @@ export class AiController {
     this.now += deltaSeconds;
     this.directorAccumulator += deltaSeconds;
     this.armyAccumulator += deltaSeconds;
+    this.economyAccumulator += deltaSeconds;
 
     const { evaluation } = this.options.balance;
     // §70: difficulty adds reaction delay rather than resources.
     const directorPeriod = evaluation.directorSeconds + this.profileBalance.reactionDelaySeconds;
     const directorDue = this.directorAccumulator >= directorPeriod;
+    const economyDue = this.economyAccumulator >= evaluation.economySeconds;
     const armyDue = this.armyAccumulator >= evaluation.armySeconds;
-    if (!directorDue && !armyDue) return;
+    if (!directorDue && !economyDue && !armyDue) return;
 
-    const blackboard = this.readBlackboard();
     if (directorDue) {
       // §79: drop whole missed periods after a stall rather than replaying them.
       this.directorAccumulator = 0;
-      this.director.evaluate(blackboard);
+      this.director.evaluate(this.readBlackboard());
+    }
+    if (economyDue) {
+      this.economyAccumulator = 0;
+      const blackboard = this.readBlackboard();
+      // §17/§55: the production queues are a standing concern — they keep the
+      // population unlocked whatever the director is currently committed to.
+      this.production.update(blackboard);
+      // §17: the build manager only executes; it runs when Economy is the plan.
+      if (this.director.currentIntent === "economy") this.economy.update(blackboard);
     }
     if (armyDue) {
       this.armyAccumulator = 0;
@@ -110,6 +151,7 @@ export class AiController {
       scores: this.director.state().scores,
       mission: armyState.mission,
       armyPower: armyState.power,
+      bottleneck: this.economy.bottleneck,
       blackboard: this.lastBlackboard,
     };
   }
@@ -118,9 +160,12 @@ export class AiController {
     this.now = 0;
     this.directorAccumulator = 0;
     this.armyAccumulator = 0;
+    this.economyAccumulator = 0;
     this.lastBlackboard = null;
     this.director.reset();
     this.army.reset();
+    this.builds.reset();
+    this.economy.reset();
     this.log.clear();
   }
 

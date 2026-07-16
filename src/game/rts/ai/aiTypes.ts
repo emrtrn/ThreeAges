@@ -46,7 +46,12 @@ export interface AiPlan {
 /** One intent's utility score for a single evaluation (§29). */
 export interface AiIntentScore {
   readonly intent: AiIntent;
-  /** Weighted, clamped to 0..1 — what the director actually compares. */
+  /**
+   * Weighted, clamped to 0..1 — what the director actually compares. A weight
+   * of 0 in `balance/ai.json` disables an intent whose executor does not exist
+   * yet, which is how `ageUp` and `expand` stay out of AI-1's rotation without
+   * the director having to know about build phases.
+   */
   readonly score: number;
   /** Unweighted score, kept so the debug panel can explain a weight's effect. */
   readonly rawScore: number;

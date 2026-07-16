@@ -86,8 +86,16 @@ const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
 const PLACEHOLDER_WORKER_ID = "worker_placeholder";
-const PLAYER_GUARD_COUNT = 0;
-const PLAYER_WORKER_COUNT = 5;
+/** The human player opens with a small standing defence. */
+const PLAYER_GUARD_COUNT = 4;
+/**
+ * Both kingdoms start with the same workers: the AI cannot run the economy
+ * (AI design §34/§35) without them, and §39 requires it to earn everything else
+ * through the same buildings and costs the player pays. It starts with no army
+ * on purpose — its Guards come out of a Barracks it has to build first, so the
+ * opening is economic rather than a rush.
+ */
+const STARTING_WORKER_COUNT = 5;
 const SETTLEMENT_POPULATION_CAPACITY = 20;
 const PLAYER_CENTER_POSITION = RTS_BLOCKOUT_MAP.playerStart;
 const ENEMY_CENTER_POSITION = RTS_BLOCKOUT_MAP.enemyStart;
@@ -232,20 +240,6 @@ export class RtsApp {
       this.productionLogistics,
       this.kingdoms,
     );
-    this.ai = new AiController({
-      owner: AI_OWNER,
-      units: this.units,
-      structures: this.structures,
-      centers: this.centers,
-      kingdoms: this.kingdoms,
-      production: this.economyProduction,
-      logistics: this.productionLogistics,
-      isWorkerBusy: (worker) => this.workerConstruction.stateFor(worker) !== "idle"
-        || (this.economyProduction?.isAssigned(worker) ?? false),
-      navigation: this.navigation,
-      balance: this.options.aiBalance,
-      profile: this.options.aiProfile,
-    });
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
     const worker = this.options.unitBalance[PLACEHOLDER_WORKER_ID];
     if (!guard || !worker) throw new Error("Missing RTS unit balance definition");
@@ -279,6 +273,26 @@ export class RtsApp {
       () => this.navigationBlockers(),
       () => this.roadPlacement.renderNetwork(),
     );
+    // Built last among the AI's dependencies: it drives the very same
+    // construction/production services the player's UI does (AI design §4).
+    this.ai = new AiController({
+      owner: AI_OWNER,
+      units: this.units,
+      structures: this.structures,
+      centers: this.centers,
+      kingdoms: this.kingdoms,
+      production: this.economyProduction,
+      logistics: this.productionLogistics,
+      isWorkerBusy: (unit) => this.workerConstruction.stateFor(unit) !== "idle"
+        || (this.economyProduction?.isAssigned(unit) ?? false),
+      navigation: this.navigation,
+      anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
+      construction: this.structureConstruction,
+      workerProduction: this.workerProduction,
+      barracksProduction: this.barracksProduction,
+      balance: this.options.aiBalance,
+      profile: this.options.aiProfile,
+    });
     this.placement = new BuildingPlacementSystem(
       canvas,
       this.cameraController.camera,
@@ -404,7 +418,7 @@ export class RtsApp {
       },
     });
     this.buildScene();
-    this.spawnTestUnits();
+    this.spawnStartingUnits();
     this.syncPlacementUi();
     this.syncRoadUi();
   }
@@ -481,11 +495,18 @@ export class RtsApp {
   }
 
   /**
-   * Faz 1 step 2: a small mixed force so selection is exercised end-to-end. The
-   * player Guards cluster near their start; a few enemy units stand apart (not
-   * selectable). Replaced by match-driven spawns once the match backbone lands.
+   * Match-start forces.
+   *
+   * The Faz 1 arrangement gave the enemy three free Guards and no workers — a
+   * selection/combat fixture. With a real opponent that was backwards: it was an
+   * unearned army *and* an economy the AI could never run, so the AI's only
+   * possible opening was to walk those Guards at the player.
+   *
+   * Faz 5 gives the enemy the workers instead. Its army now has to come out of a
+   * Barracks it builds and pays for (§34 → §55), which is what makes the AI
+   * opening economic rather than a rush.
    */
-  private spawnTestUnits(): void {
+  private spawnStartingUnits(): void {
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
     const worker = this.options.unitBalance[PLACEHOLDER_WORKER_ID];
     if (!guard || !worker) {
@@ -497,11 +518,9 @@ export class RtsApp {
       const z = PLAYER_CENTER_POSITION.z + 7 + Math.floor(i / cols) * 3;
       this.units.spawn("player", x, z, guard);
     }
-    for (let i = 0; i < 3; i++) {
-      this.units.spawn("enemy", ENEMY_CENTER_POSITION.x - 3 + i * 3, ENEMY_CENTER_POSITION.z + 9, guard);
-    }
-    for (let i = 0; i < PLAYER_WORKER_COUNT; i++) {
+    for (let i = 0; i < STARTING_WORKER_COUNT; i++) {
       this.units.spawn("player", -4 + i * 2, PLAYER_CENTER_POSITION.z - 8, worker, "worker");
+      this.units.spawn("enemy", -4 + i * 2, ENEMY_CENTER_POSITION.z + 8, worker, "worker");
     }
   }
 
@@ -618,7 +637,7 @@ export class RtsApp {
     this.spawnCenters();
     this.territory.refresh();
     this.refreshNavigationBlockers();
-    this.spawnTestUnits();
+    this.spawnStartingUnits();
     this.placement.cancel();
     this.syncPlacementUi();
     this.syncRoadUi();
@@ -691,6 +710,9 @@ export class RtsApp {
 
   private assignWorkerToConstruction(structure: PlacedStructure): void {
     const result = this.workerConstruction.assignNearest(structure);
+    // Both kingdoms build through this hook, but only the human has a palette:
+    // narrating an AI site here would put the AI's problems in the player's HUD.
+    if (structure.owner !== PLAYER_OWNER) return;
     this.buildPalette.setActionMessage(result.assigned
       ? null
       : result.reason === "no-idle-worker"

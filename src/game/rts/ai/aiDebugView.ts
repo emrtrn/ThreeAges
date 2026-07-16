@@ -23,6 +23,7 @@ export function formatRtsAiDebug(
     `niyet: ${snapshot.intent ?? "-"}${snapshot.plan ? ` · plan ${snapshot.plan.id} (${snapshot.planSeconds.toFixed(1)}sn)` : ""}`,
   );
   lines.push(`ordu görevi: ${snapshot.mission ?? "-"} · güç ${snapshot.armyPower.toFixed(1)}`);
+  lines.push(`darboğaz: ${snapshot.bottleneck ?? "yok"}`);
 
   if (snapshot.scores.length > 0) {
     lines.push("niyet puanları:");

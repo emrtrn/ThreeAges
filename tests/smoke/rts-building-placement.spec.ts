@@ -22,7 +22,7 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator('[data-rts-building="depot"]')).toContainText("120 Odun");
   await expect(page.locator('[data-rts-building="outpost"]')).toContainText("140 Odun");
   await expect(page.getByRole("button", { name: "İşçi Üret", exact: true })).toBeVisible();
-  await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 5/20");
+  await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 9/20");
   await expect(page.locator(".rts-build-income")).toHaveText("Gelir: Yiyecek +0.0/dk · Odun +0.0/dk");
   await expect(page.locator(".rts-debug-overlay")).toContainText("kaynak hareketleri:");
   await expect(page.locator(".rts-debug-overlay")).toContainText("yollar: 0 düğüm · 0 kenar · 0 ağ");
@@ -52,7 +52,7 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await page.getByRole("button", { name: "İptal", exact: true }).click();
   await page.getByRole("button", { name: "İşçi Üret", exact: true }).click();
   await expect(page.locator(".rts-build-action-message")).toHaveText("İşçi üretim kuyruğa alındı.");
-  await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 6/20");
+  await expect(page.locator(".rts-build-population")).toHaveText("Nüfus: 10/20");
   await expect(page.locator(".rts-debug-overlay")).toContainText("reserve: food -50");
   expect(errors).toEqual([]);
 });
