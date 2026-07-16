@@ -909,10 +909,10 @@ Bu faz, Ürün A’nın en kritik bölümüdür.
 
 - [x] Depoyu graph düğümü yap. (Tamamlanmış Depo, yol hücresi yapının footprint’ine temas edince bileşen kimliği taşıyan lojistik düğümü olur.)
 - [x] Üretim yapısını graph’a bağla. (Tamamlanmış Tarla/Oduncu Kampı, temas eden yol hücresinin bileşenindeki en düşük kimlikli bağlı Depoyu hedefler.)
-- [ ] Bağlı tamponu global stoğa aktar.
-- [ ] Bağlantı kesilince aktarımı durdur.
-- [ ] Yerel tampon dolunca üretimi durdur.
-- [ ] Alternatif rota varsa bağlantıyı koru.
+- [x] Bağlı tamponu global stoğa aktar. (Bağlı üretici tamponu her simülasyon adımında global `ResourceWallet` stoğuna aktarılır.)
+- [x] Bağlantı kesilince aktarımı durdur. (Yol veya aynı bileşendeki Depo yoksa global kredi kesilir, çıktı yerel tamponda kalır.)
+- [x] Yerel tampon dolunca üretimi durdur. (Kesinti sırasında 40 birim yerel limit korunur; yol geri geldiğinde aktarım tamponu boşaltır.)
+- [x] Alternatif rota varsa bağlantıyı koru. (`RoadGraph.remove` sonrası bile aynı ağ bileşenindeki alternatif dal üretici-Depo bağlantısını korur.)
 
 ### Savaş bağlantısı
 

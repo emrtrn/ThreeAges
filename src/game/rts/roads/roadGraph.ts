@@ -83,6 +83,16 @@ export class RoadGraph {
     this.cells.clear();
   }
 
+  /** Remove selected road tiles (combat/destruction hook); returns removed count. */
+  remove(cells: readonly RoadCell[]): number {
+    let removed = 0;
+    for (const cell of cells) {
+      if (this.cells.delete(this.key(this.snap(cell)))) removed += 1;
+    }
+    if (removed > 0) this.revision += 1;
+    return removed;
+  }
+
   all(): readonly RoadSegment[] {
     return [...this.cells.values()]
       .map((cell) => {

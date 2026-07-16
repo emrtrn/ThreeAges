@@ -82,7 +82,7 @@ export class RtsDebugOverlay {
     lines.push(`nüfus: ${populationState.used}/${populationState.capacity} (mevcut ${populationState.current})`);
     for (const building of production?.snapshots() ?? []) {
       lines.push(
-        `${building.structureLabel}: ${building.assignedWorkers}/${building.workerCapacity} işçi (${building.workingWorkers} çalışıyor) · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · tick +${building.lastProductionTick.toFixed(2)} · ${building.status}`,
+        `${building.structureLabel}: ${building.assignedWorkers}/${building.workerCapacity} işçi (${building.workingWorkers} çalışıyor) · ${building.resourceId} ${building.localBuffer.toFixed(1)}/${building.localBufferCapacity} · üretim +${building.lastProductionTick.toFixed(2)} · aktarım +${building.lastTransferTick.toFixed(2)} · ${building.status}`,
       );
     }
     const roadComponents = roads.components();

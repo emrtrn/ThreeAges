@@ -1,7 +1,8 @@
 /**
  * Phase 3 resource-building loop: completed producers reserve nearby idle
  * workers, have them walk to the site, then accumulate a data-driven local
- * buffer. Road/depot transfer intentionally remains a Phase 4 concern.
+ * buffer. Phase 4 logistics withdraws from this buffer only after a valid
+ * road/depot connection has been resolved.
  */
 import { Vector3 } from "three";
 
@@ -25,7 +26,9 @@ export interface EconomyBuildingSnapshot {
   readonly localBuffer: number;
   readonly localBufferCapacity: number;
   readonly lastProductionTick: number;
+  readonly lastTransferTick: number;
   readonly totalProduced: number;
+  readonly totalTransferred: number;
   readonly status: EconomyProductionStatus;
 }
 
@@ -40,7 +43,9 @@ interface ProducerRecord {
   readonly assignments: Map<number, WorkerAssignment>;
   localBuffer: number;
   lastProductionTick: number;
+  lastTransferTick: number;
   totalProduced: number;
+  totalTransferred: number;
   status: EconomyProductionStatus;
 }
 
@@ -100,7 +105,9 @@ export class EconomyProductionSystem {
         localBuffer: producer.localBuffer,
         localBufferCapacity: economy.localBufferCapacity,
         lastProductionTick: producer.lastProductionTick,
+        lastTransferTick: producer.lastTransferTick,
         totalProduced: producer.totalProduced,
+        totalTransferred: producer.totalTransferred,
         status: producer.status,
       };
     });
@@ -110,6 +117,18 @@ export class EconomyProductionSystem {
     for (const producer of this.producers.values()) this.releaseProducer(producer);
     this.producers.clear();
     this.assignmentByWorker.clear();
+  }
+
+  /** Remove buffered output for a connected logistics transfer, never below zero. */
+  withdrawBuffered(structureId: number): { resourceId: string; amount: number } | null {
+    const producer = this.producers.get(structureId);
+    const economy = producer?.structure.stats.economy;
+    if (!producer || !economy || producer.localBuffer <= 0) return null;
+    const amount = producer.localBuffer;
+    producer.localBuffer = 0;
+    producer.lastTransferTick = amount;
+    producer.totalTransferred += amount;
+    return { resourceId: economy.resourceId, amount };
   }
 
   private syncCompletedProducers(): void {
@@ -127,7 +146,9 @@ export class EconomyProductionSystem {
         assignments: new Map(),
         localBuffer: 0,
         lastProductionTick: 0,
+        lastTransferTick: 0,
         totalProduced: 0,
+        totalTransferred: 0,
         status: "awaiting-workers",
       });
     }
@@ -137,6 +158,7 @@ export class EconomyProductionSystem {
     const economy = producer.structure.stats.economy;
     if (!economy) return;
     producer.lastProductionTick = 0;
+    producer.lastTransferTick = 0;
     this.dropInvalidAssignments(producer);
     if (producer.localBuffer >= economy.localBufferCapacity) {
       producer.localBuffer = economy.localBufferCapacity;

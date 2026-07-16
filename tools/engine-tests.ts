@@ -77,6 +77,7 @@ import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
 import { DepotLogisticsSystem } from "../src/game/rts/economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLogisticsSystem";
+import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
@@ -28151,6 +28152,20 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   const overlap = roads.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, blockers);
   assert.ok(overlap);
   assert.equal(overlap.woodCost, 0, "existing road cells are never charged twice");
+
+  const redundant = new RoadGraph(balance);
+  for (const [start, end] of [
+    [{ x: -4, z: 0 }, { x: 4, z: 0 }],
+    [{ x: -4, z: 0 }, { x: -4, z: 4 }],
+    [{ x: -4, z: 4 }, { x: 4, z: 4 }],
+    [{ x: 4, z: 4 }, { x: 4, z: 0 }],
+  ] as const) {
+    const plan = redundant.plan(start, end, []);
+    assert.ok(plan);
+    redundant.commit(plan);
+  }
+  assert.equal(redundant.remove([{ x: 0, z: 0 }]), 1);
+  assert.equal(redundant.connected({ x: -4, z: 0 }, { x: 4, z: 0 }), true, "an alternate branch preserves connectivity after a road cut");
 });
 
 check("RTS completed depots become road-graph nodes only when a road touches their footprint", () => {
@@ -28193,6 +28208,58 @@ check("RTS completed depots become road-graph nodes only when a road touches the
     status: "linked",
   }]);
   structures.clear();
+});
+
+check("RTS logistics transfers linked buffers globally and stops when the road is cut", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const balance = validateRoadBalance(JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown);
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  const units = new UnitSystem();
+  for (let index = 0; index < 3; index += 1) units.spawn("player", -2 + index * 2, 17, RTS_TEST_UNIT_STATS, "worker");
+  const structures = new PlacedStructureSystem();
+  const depot = structures.place(depotStats, 0, 0);
+  const farm = structures.place(farmStats, 0, 10);
+  structures.advanceConstruction(depot, depotStats.constructionSeconds);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+  const roads = new RoadGraph(balance);
+  const depots = new DepotLogisticsSystem(structures, roads);
+  const links = new ProductionLogisticsSystem(structures, roads, depots);
+  const wallet = new ResourceWallet({ food: 0, wood: 0 });
+  const transfer = new LogisticsTransferSystem(production, links, wallet);
+
+  for (let frame = 0; frame < 900; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+    transfer.update();
+  }
+  assert.equal(wallet.amount("food"), 0, "unlinked output remains local");
+  assert.ok((production.snapshots()[0]?.localBuffer ?? 0) > 0);
+  const route = roads.plan({ x: 4, z: 0 }, { x: 4, z: 10 }, []);
+  assert.ok(route);
+  roads.commit(route);
+  for (let frame = 0; frame < 120; frame += 1) {
+    wallet.advance(1 / 60);
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+    transfer.update();
+  }
+  assert.ok(wallet.amount("food") > 0, "linked output reaches global stock");
+  assert.equal(production.snapshots()[0]?.localBuffer, 0, "linked buffer flushes every tick");
+  const beforeCut = wallet.amount("food");
+  roads.clear();
+  for (let frame = 0; frame < 120; frame += 1) {
+    wallet.advance(1 / 60);
+    production.update(1 / 60);
+    transfer.update();
+  }
+  assert.equal(wallet.amount("food"), beforeCut, "road loss stops global credit");
+  assert.ok((production.snapshots()[0]?.localBuffer ?? 0) > 0, "disconnected output returns to local storage");
+  structures.clear();
+  units.clear();
 });
 
 check("RTS territory stores centre ownership per grid cell and gates normal building placement", () => {

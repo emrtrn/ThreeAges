@@ -51,6 +51,7 @@ import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
+import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { PopulationSystem } from "./economy/populationSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
@@ -119,6 +120,7 @@ export class RtsApp {
   private economyProduction: EconomyProductionSystem | null = null;
   private readonly depotLogistics: DepotLogisticsSystem;
   private readonly productionLogistics: ProductionLogisticsSystem;
+  private readonly logisticsTransfers: LogisticsTransferSystem;
   private readonly barracksProduction: BarracksProductionSystem;
   private readonly workerProduction: WorkerProductionSystem;
   private readonly match = new RtsMatchState();
@@ -185,6 +187,11 @@ export class RtsApp {
       this.structures,
       this.navigation,
       (worker) => this.workerConstruction.stateFor(worker) !== "idle",
+    );
+    this.logisticsTransfers = new LogisticsTransferSystem(
+      this.economyProduction,
+      this.productionLogistics,
+      this.wallet,
     );
     this.population = new PopulationSystem(this.units, this.structures, SETTLEMENT_POPULATION_CAPACITY);
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
@@ -450,6 +457,7 @@ export class RtsApp {
     updateUnitMovement(this.units.all(), dt);
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
+    this.logisticsTransfers.update();
     const workerEvent = this.workerProduction.update(dt);
     if (workerEvent) {
       this.buildPalette.setActionMessage(workerEvent === "completed"
@@ -495,6 +503,7 @@ export class RtsApp {
   private readonly restartMatch = (): void => {
     this.selection.reset();
     this.economyProduction?.reset();
+    this.logisticsTransfers.reset();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
     this.workerProduction.reset();
