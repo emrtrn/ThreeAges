@@ -15,10 +15,11 @@ import {
   validateGamePreset,
   validateGameVersion,
   validateBuildingBalance,
+  validateResourceBalance,
   validateRoadBalance,
   validateUnitBalance,
 } from "./validateGameData";
-import type { AiBalance, BuildingBalance, GamePreset, GameVersion, RoadBalance, UnitBalance } from "./gameDataTypes";
+import type { AiBalance, BuildingBalance, GamePreset, GameVersion, ResourceBalance, RoadBalance, UnitBalance } from "./gameDataTypes";
 
 const log = logger("Data");
 
@@ -73,6 +74,14 @@ export async function loadBuildingBalance(): Promise<BuildingBalance> {
   const url = `${GAME_DATA_ROOT}/balance/buildings.json`;
   const balance = validateBuildingBalance(await fetchJson(url));
   log.debug(`loaded building balance (${Object.keys(balance).length} definitions)`);
+  return balance;
+}
+
+/** Load and validate Faz 6's finite stone/gold deposit profiles. */
+export async function loadResourceBalance(): Promise<ResourceBalance> {
+  const url = `${GAME_DATA_ROOT}/balance/resources.json`;
+  const balance = validateResourceBalance(await fetchJson(url));
+  log.debug(`loaded resource balance (${Object.keys(balance).length} definitions)`);
   return balance;
 }
 

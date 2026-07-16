@@ -17,7 +17,7 @@ import {
   readBootOptionsFromUrl,
   snapshotRuntimeConfig,
 } from "@/game/core/runtimeConfig";
-import { loadAiBalance, loadBuildingBalance, loadGamePreset, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
+import { loadAiBalance, loadBuildingBalance, loadGamePreset, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
 import type { GamePreset } from "@/game/data/gameDataTypes";
 
 function requireElement<T extends HTMLElement>(id: string): T {
@@ -74,9 +74,10 @@ async function main(): Promise<void> {
   // own lightweight runtime — never mixes with the character SceneApp above.
   if (!editorEnabled && params.has("rts")) {
     const { RtsApp } = await import("@/game/rts/RtsApp");
-    const [unitBalance, buildingBalance, roadBalance, aiBalance] = await Promise.all([
+    const [unitBalance, buildingBalance, resourceBalance, roadBalance, aiBalance] = await Promise.all([
       loadUnitBalance(),
       loadBuildingBalance(),
+      loadResourceBalance(),
       loadRoadBalance(),
       loadAiBalance(),
     ]);
@@ -84,6 +85,7 @@ async function main(): Promise<void> {
       debug: params.has("debug"),
       unitBalance,
       buildingBalance,
+      resourceBalance,
       roadBalance,
       aiBalance,
       // §72: the preset picks the AI profile; normal is the fair baseline.

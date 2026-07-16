@@ -26,6 +26,7 @@ import type {
   AiBalance,
   AiProfile,
   BuildingBalance,
+  ResourceBalance,
   RoadBalance,
   StartingResources,
   UnitBalance,
@@ -115,6 +116,8 @@ export interface RtsAppOptions {
   readonly unitBalance: UnitBalance;
   /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
   readonly buildingBalance: BuildingBalance;
+  /** Faz 6 finite stone/gold deposit profiles; consumed by the quarry/mine slice. */
+  readonly resourceBalance: ResourceBalance;
   /** Preset-owned initial stockpile for Phase 2 construction reservations. */
   readonly startingResources: StartingResources;
   /** Data-owned grid and wood cost for the Phase 4 road graph. */

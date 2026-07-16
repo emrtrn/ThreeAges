@@ -1,0 +1,12 @@
+{
+  "stone": {
+    "label": "Taş",
+    "safeNode": { "capacity": 300, "perWorkerPerMinute": 5 },
+    "externalNode": { "capacity": 900, "perWorkerPerMinute": 7 }
+  },
+  "gold": {
+    "label": "Altın",
+    "safeNode": { "capacity": 200, "perWorkerPerMinute": 3 },
+    "externalNode": { "capacity": 700, "perWorkerPerMinute": 5 }
+  }
+}

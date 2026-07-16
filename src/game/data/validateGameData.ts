@@ -18,6 +18,7 @@ import type {
   BuildingBalance,
   GamePreset,
   GameVersion,
+  ResourceBalance,
   RoadBalance,
   StartingResources,
   UnitBalance,
@@ -303,6 +304,45 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     throw new GameDataError(`${where}: must define at least one building`);
   }
   return buildings;
+}
+
+/** Validate Faz 6's finite stone/gold deposit profiles. */
+export function validateResourceBalance(value: unknown): ResourceBalance {
+  const where = "balance/resources.json";
+  const obj = asObject(value, where);
+  const resources: Record<string, ResourceBalance["string"]> = {};
+  for (const [id, raw] of Object.entries(obj)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(id)) {
+      throw new GameDataError(`${where}: invalid resource id "${id}"`);
+    }
+    const statsWhere = `${where}."${id}"`;
+    const stats = asObject(raw, statsWhere);
+    const node = (key: "safeNode" | "externalNode") => {
+      const nodeWhere = `${statsWhere}.${key}`;
+      const nodeData = asObject(stats[key], nodeWhere);
+      const capacity = requireFiniteNumber(nodeData, "capacity", nodeWhere);
+      const perWorkerPerMinute = requireFiniteNumber(nodeData, "perWorkerPerMinute", nodeWhere);
+      if (capacity <= 0 || perWorkerPerMinute <= 0) {
+        throw new GameDataError(`${nodeWhere}: capacity and perWorkerPerMinute must be > 0`);
+      }
+      return { capacity, perWorkerPerMinute };
+    };
+    const safeNode = node("safeNode");
+    const externalNode = node("externalNode");
+    if (externalNode.capacity <= safeNode.capacity) {
+      throw new GameDataError(`${statsWhere}.externalNode.capacity: must exceed safeNode.capacity`);
+    }
+    resources[id] = {
+      id,
+      label: requireString(stats, "label", statsWhere),
+      safeNode,
+      externalNode,
+    };
+  }
+  for (const id of ["stone", "gold"]) {
+    if (!resources[id]) throw new GameDataError(`${where}: missing required resource "${id}"`);
+  }
+  return resources;
 }
 
 const AI_INTENTS: readonly AiIntent[] = ["economy", "ageUp", "expand", "defend", "attack"];

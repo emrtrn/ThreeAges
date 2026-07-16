@@ -59,6 +59,7 @@ import {
   validateBuildingBalance,
   validateGamePreset,
   validateGameVersion,
+  validateResourceBalance,
   validateRoadBalance,
   validateUnitBalance,
 } from "../src/game/data/validateGameData";
@@ -27908,6 +27909,31 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
     () => validateBuildingBalance({ house: { label: "Ev", footprint: { width: 0, depth: 4 }, cost: {}, constructionSeconds: 25 } }),
     GameDataError,
   );
+});
+
+check("Faz 6 stone and gold data defines finite safe and richer external deposits", () => {
+  const resources = validateResourceBalance(
+    JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown,
+  );
+  assert.deepEqual(resources.stone?.safeNode, { capacity: 300, perWorkerPerMinute: 5 });
+  assert.deepEqual(resources.gold?.externalNode, { capacity: 700, perWorkerPerMinute: 5 });
+  for (const resource of Object.values(resources)) {
+    assert.ok(resource.externalNode.capacity > resource.safeNode.capacity,
+      `${resource.id}: expansion must offer more total material than the safe deposit`);
+    assert.ok(resource.safeNode.capacity > 0 && resource.externalNode.perWorkerPerMinute > 0);
+  }
+
+  const raw = JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as Record<string, unknown>;
+  assert.throws(() => validateResourceBalance({ gold: raw.gold }), GameDataError,
+    "both Faz 6 resources are required");
+  assert.throws(() => validateResourceBalance({
+    ...raw,
+    stone: { ...(raw.stone as object), externalNode: { capacity: 300, perWorkerPerMinute: 7 } },
+  }), GameDataError, "external capacity must actually reward expansion");
+  assert.throws(() => validateResourceBalance({
+    ...raw,
+    gold: { ...(raw.gold as object), safeNode: { capacity: 0, perWorkerPerMinute: 3 } },
+  }), GameDataError, "empty deposits are invalid data, not an exhausted starting state");
 });
 
 check("RTS economy producers report income, survive a ten-minute run, and stop at their local buffer capacity", () => {

@@ -115,6 +115,30 @@ export interface TerritoryBuildingBalance {
 export type BuildingBalance = Readonly<Record<string, BuildingBalanceStats>>;
 
 /**
+ * One finite stone or gold deposit profile for Faz 6. Safe deposits establish
+ * the early, low-risk baseline; external deposits are richer and later make
+ * expansion/road decisions meaningful. Buildings consume this data in the
+ * following quarry/mine slice rather than inventing their own capacities.
+ */
+export interface ResourceNodeBalance {
+  /** Total material in one deposit before it is exhausted. */
+  readonly capacity: number;
+  /** Maximum output of one assigned worker while material remains. */
+  readonly perWorkerPerMinute: number;
+}
+
+/** Data contract for one finite Faz 6 resource type. */
+export interface ResourceBalanceStats {
+  readonly id: string;
+  readonly label: string;
+  readonly safeNode: ResourceNodeBalance;
+  readonly externalNode: ResourceNodeBalance;
+}
+
+/** `public/game-data/balance/resources.json` — finite stone and gold deposits. */
+export type ResourceBalance = Readonly<Record<string, ResourceBalanceStats>>;
+
+/**
  * The five strategic intents the Kingdom Director chooses between
  * (`07_ENEMY_AI_DESIGN_v0.2.md` §23). Exactly one is active at a time.
  */

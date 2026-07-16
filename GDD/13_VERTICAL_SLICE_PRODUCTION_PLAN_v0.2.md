@@ -1195,12 +1195,16 @@ Kapı A geçilmezse:
 
 ### Kaynaklar
 
-- [ ] Taş kaynağı verisi
-- [ ] Altın kaynağı verisi
+- [x] Taş kaynağı verisi. (`balance/resources.json`: güvenli/dış Taş düğümü
+  kapasitesi ve işçi başına üretim hızı; `ResourceBalance` doğrulayıcısı.)
+- [x] Altın kaynağı verisi. (`balance/resources.json`: güvenli/dış Altın düğümü
+  kapasitesi ve işçi başına üretim hızı; RTS açılışında veri yükleniyor.)
 - [ ] Taş Ocağı
 - [ ] Altın Madeni
 - [ ] Kaynak düğümü tükenmesi
-- [ ] Güvenli ve dış kaynak kapasite farkları
+- [x] Güvenli ve dış kaynak kapasite farkları. (`test:engine`: her iki kaynakta
+  dış düğümün toplam kapasitesi güvenli düğümden büyük olmak zorunda; eşit/bozuk
+  veri açık hata veriyor.)
 
 ### Çağ sistemi
 
