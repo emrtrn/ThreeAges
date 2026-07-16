@@ -299,6 +299,18 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       }
       territory = { controlRadius, connectedControlRadius, expansionPlacementRange };
     }
+    const upgradeRaw = stats["upgrade"];
+    let upgrade: BuildingBalance["string"]["upgrade"];
+    if (upgradeRaw !== undefined) {
+      const upgradeWhere = `${statsWhere}.upgrade`;
+      const upgradeData = asObject(upgradeRaw, upgradeWhere);
+      const durationSeconds = requireFiniteNumber(upgradeData, "durationSeconds", upgradeWhere);
+      const upgradeMaxHealth = requireFiniteNumber(upgradeData, "maxHealth", upgradeWhere);
+      if (durationSeconds <= 0 || upgradeMaxHealth <= maxHealth) {
+        throw new GameDataError(`${upgradeWhere}: durationSeconds must be > 0 and maxHealth must exceed T1`);
+      }
+      upgrade = { cost: validateStartingResources(upgradeData["cost"] ?? {}, upgradeWhere), durationSeconds, maxHealth: upgradeMaxHealth };
+    }
     buildings[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
@@ -309,6 +321,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       ...(populationCapacity ? { populationCapacity } : {}),
       ...(economy ? { economy } : {}),
       ...(territory ? { territory } : {}),
+      ...(upgrade ? { upgrade } : {}),
     };
   }
   if (Object.keys(buildings).length === 0) {

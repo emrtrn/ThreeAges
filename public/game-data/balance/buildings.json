@@ -92,6 +92,11 @@
     "footprint": { "width": 8, "depth": 8 },
     "cost": { "wood": 160 },
     "constructionSeconds": 55,
-    "maxHealth": 650
+    "maxHealth": 650,
+    "upgrade": {
+      "cost": { "wood": 140, "stone": 80 },
+      "durationSeconds": 50,
+      "maxHealth": 900
+    }
   }
 }

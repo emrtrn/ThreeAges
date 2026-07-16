@@ -12,7 +12,7 @@ import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import type { CommandCenter } from "./commandCenter";
 import type { PlacedStructure } from "./placedStructureSystem";
 
-type VisualBuildingId = "command_center_t1" | "command_center_t2" | "house" | "depot" | "outpost" | "farm" | "lumber_camp" | "barracks";
+type VisualBuildingId = "command_center_t1" | "command_center_t2" | "house" | "depot" | "outpost" | "farm" | "lumber_camp" | "barracks_t1" | "barracks_t2";
 
 interface BuildingVisualDefinition {
   readonly path: string;
@@ -32,7 +32,8 @@ const VISUALS: Record<VisualBuildingId, BuildingVisualDefinition> = {
   outpost: { path: `${STATIC_MESH_ROOT}/WatchTower_FirstAge_Level1.gltf` },
   farm: { path: `${STATIC_MESH_ROOT}/Farm_FirstAge_Level1_Wheat.gltf` },
   lumber_camp: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level1.gltf` },
-  barracks: { path: `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level1.gltf` },
+  barracks_t1: { path: `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level1.gltf` },
+  barracks_t2: { path: `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level2.gltf` },
 };
 
 const FOUNDATION_TOP = 0.18;
@@ -61,8 +62,11 @@ export class RtsBuildingVisuals {
 
   createForStructure(structure: PlacedStructure): Group | null {
     if (!structure.construction.complete) return null;
+    const id = structure.stats.id === "barracks"
+      ? (structure.level >= 2 ? "barracks_t2" : "barracks_t1")
+      : structure.stats.id as Exclude<VisualBuildingId, "command_center_t1" | "command_center_t2" | "barracks_t1" | "barracks_t2">;
     return this.create(
-      structure.stats.id as Exclude<VisualBuildingId, "command_center_t1" | "command_center_t2">,
+      id,
       structure.stats.footprint.width,
       structure.stats.footprint.depth,
     );

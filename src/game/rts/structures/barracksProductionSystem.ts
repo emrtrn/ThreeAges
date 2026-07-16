@@ -20,7 +20,8 @@ export type GuardProductionResult =
   | "already-training"
   | "exit-blocked"
   | "insufficient-resources"
-  | "population-full";
+  | "population-full"
+  | "structure-upgrading";
 
 export interface GuardProductionEvent {
   readonly type: "completed" | "exit-blocked";
@@ -43,6 +44,7 @@ export class BarracksProductionSystem {
     private readonly navigation: RtsNavigation,
     private readonly guardStats: UnitBalanceStats,
     private readonly kingdoms: KingdomRegistry,
+    private readonly isStructureUpgrading: (structure: PlacedStructure) => boolean = () => false,
   ) {}
 
   /** Train a Guard at one kingdom's Barracks, paid from that kingdom's economy. */
@@ -51,6 +53,7 @@ export class BarracksProductionSystem {
       (structure) => structure.stats.id === "barracks" && structure.construction.complete,
     );
     if (!barracks) return "no-completed-barracks";
+    if (this.isStructureUpgrading(barracks)) return "structure-upgrading";
     if (this.queues.has(barracks.id)) return "already-training";
     const { wallet, population: pool } = this.kingdoms.get(owner);
     const resources = wallet.reserve(this.guardStats.cost);
@@ -79,6 +82,7 @@ export class BarracksProductionSystem {
         this.queues.delete(id);
         continue;
       }
+      if (this.isStructureUpgrading(queue.structure)) continue;
       queue.remainingSeconds = Math.max(0, queue.remainingSeconds - Math.max(0, deltaSeconds));
       if (queue.remainingSeconds > 0) continue;
       const exit = this.findSafeExit(queue.structure);

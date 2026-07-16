@@ -91,6 +91,14 @@ export interface BuildingBalanceStats {
   readonly economy?: EconomyProductionBalance;
   /** Present on structures which extend the control area once complete. */
   readonly territory?: TerritoryBuildingBalance;
+  /** Optional Town-era T1 -> T2 path; absent buildings stay single-level. */
+  readonly upgrade?: BuildingUpgradeBalance;
+}
+
+export interface BuildingUpgradeBalance {
+  readonly cost: StartingResources;
+  readonly durationSeconds: number;
+  readonly maxHealth: number;
 }
 
 /** Data-owned production behaviour for an RTS resource structure. */

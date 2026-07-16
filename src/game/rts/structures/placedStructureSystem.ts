@@ -44,6 +44,8 @@ export interface PlacedStructure {
   readonly position: Vector3;
   /** Melee units strike the footprint edge rather than walking into the blocker. */
   readonly combatRadius: number;
+  /** T1 at placement; data-owned upgrades may promote this to T2. */
+  level: number;
 }
 
 export class PlacedStructureSystem {
@@ -94,6 +96,7 @@ export class PlacedStructureSystem {
       // The inscribed radius: a rectangular footprint is attackable from its
       // nearest edge, so the shorter side is what a melee unit must reach.
       combatRadius: Math.min(stats.footprint.width, stats.footprint.depth) / 2,
+      level: 1,
     };
     this.structures.push(structure);
     return structure;

@@ -1229,7 +1229,8 @@ Kapı A geçilmezse:
   ve 9 sn yeni işçi üretimi; `TownCenter_FirstAge_Level2.gltf` tamamlanınca uygulanır.)
 - [ ] Ev T1 → T2
 - [ ] Depo T1 → T2, kapsam uygunsa
-- [ ] Kışla T1 → T2
+- [x] Kışla T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 140 Odun + 80 Taş,
+  50 sn; Muhafız kuyruğu durur, T2 900 sağlığa ve Level 2 modele geçer.)
 - [ ] Karakol T1 → T2, kapsam uygunsa
 - [ ] Placeholder model değişimi
 
@@ -2717,7 +2718,7 @@ Vertical slice tamamlanmıştır yalnızca:
 - [x] Yerleşim
 - [x] Kasaba
 - [x] Merkez T2
-- [ ] Kışla T2
+- [x] Kışla T2
 
 ### Savaş
 

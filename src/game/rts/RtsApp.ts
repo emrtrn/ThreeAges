@@ -76,6 +76,7 @@ import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem } from "./structures/workerProductionSystem";
+import { StructureUpgradeSystem } from "./structures/structureUpgradeSystem";
 import { RoadGraph } from "./roads/roadGraph";
 import { RoadDebugView } from "./roads/roadDebugView";
 import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
@@ -171,6 +172,7 @@ export class RtsApp {
   private readonly logisticsTransfers: LogisticsTransferSystem;
   private readonly barracksProduction: BarracksProductionSystem;
   private readonly workerProduction: WorkerProductionSystem;
+  private readonly structureUpgrades: StructureUpgradeSystem;
   private readonly match = new RtsMatchState();
   private readonly matchOverlay: RtsMatchOverlay;
   private readonly debugOverlay: RtsDebugOverlay | null;
@@ -220,6 +222,11 @@ export class RtsApp {
       SETTLEMENT_POPULATION_CAPACITY,
     );
     this.ages = new AgeSystem(KINGDOM_OWNERS, this.options.ageBalance, this.centers, this.structures, this.kingdoms);
+    this.structureUpgrades = new StructureUpgradeSystem(
+      this.structures,
+      this.kingdoms,
+      (owner) => this.ages.snapshot(owner).age === "town",
+    );
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
     this.selection = new SelectionSystem(
@@ -268,6 +275,7 @@ export class RtsApp {
       this.navigation,
       guard,
       this.kingdoms,
+      (structure) => this.structureUpgrades.isUpgrading(structure),
     );
     this.workerProduction = new WorkerProductionSystem(
       this.units,
@@ -366,6 +374,7 @@ export class RtsApp {
       () => this.queueGuard(),
       () => this.queueWorker(),
       () => this.startTownUpgrade(),
+      () => this.startBarracksUpgrade(),
     );
     this.roadControls = new RtsRoadControls(
       () => {
@@ -636,6 +645,13 @@ export class RtsApp {
         ? "Kasaba Çağı tamamlandı."
         : "Merkez yıkıldığı için çağ yükseltmesi iptal edildi; kaynaklar iade edildi.");
     }
+    for (const event of this.structureUpgrades.update(dt)) {
+      if (event.structure.owner !== PLAYER_OWNER) continue;
+      if (event.type === "completed") this.applyStructureVisual(event.structure);
+      this.buildPalette.setActionMessage(event.type === "completed"
+        ? `${event.structure.stats.label} T2 yükseltmesi tamamlandı.`
+        : `${event.structure.stats.label} yıkıldığı için yükseltme iptal edildi; kaynaklar iade edildi.`);
+    }
     updateUnitMovement(this.units.all(), dt);
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
@@ -735,6 +751,7 @@ export class RtsApp {
     this.logisticsTransfers.reset();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
+    this.structureUpgrades.reset();
     this.workerProduction.reset();
     this.ages.reset();
     this.ai.reset();
@@ -843,6 +860,7 @@ export class RtsApp {
       "exit-blocked": "Muhafız çıkışı engelli; Kışla çevresini açın.",
       "insufficient-resources": "Muhafız için kaynak yetersiz.",
       "population-full": "Nüfus dolu: önce Ev kurun.",
+      "structure-upgrading": "Kışla T2 yükseltmesi sürerken Muhafız üretimi durur.",
     };
     this.buildPalette.setActionMessage(message[result]);
     this.syncPlacementUi();
@@ -875,6 +893,18 @@ export class RtsApp {
     };
     this.buildPalette.setActionMessage(message[result]);
     this.syncAgeUi();
+  }
+
+  private startBarracksUpgrade(): void {
+    const result = this.structureUpgrades.start(PLAYER_OWNER, "barracks");
+    const message: Record<typeof result, string> = {
+      started: "Kışla T2 yükseltmesi başladı; Muhafız üretimi geçici olarak durur.",
+      "no-eligible-structure": "Yükseltilecek tamamlanmış T1 Kışla yok.",
+      "already-upgrading": "Kışla T2 yükseltmesi zaten sürüyor.",
+      "not-town": "Kışlayı T2 yükseltmek için önce Kasaba Çağına geçin.",
+      "insufficient-resources": "Kışla T2 için kaynak yetersiz.",
+    };
+    this.buildPalette.setActionMessage(message[result]);
   }
 
   private syncAgeUi(): void {

@@ -112,6 +112,7 @@ import { ConstructionComponent } from "../src/game/rts/structures/constructionCo
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { WorkerProductionSystem } from "../src/game/rts/structures/workerProductionSystem";
+import { StructureUpgradeSystem } from "../src/game/rts/structures/structureUpgradeSystem";
 import {
   COMMAND_CENTER_CONTROL_RADIUS,
   TerritoryControlSystem,
@@ -28006,6 +28007,27 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.deepEqual(workerProduction.update(8.9), [], "new Town-centre workers use the T2 duration");
   assert.deepEqual(workerProduction.update(0.1).map((event) => event.type), ["completed"]);
   assert.equal(units.workersOf("player").length, 2);
+
+  const barracks = structures.ownedBy("player").find((structure) => structure.stats.id === "barracks")
+    ?? assert.fail("Town prerequisite barracks missing");
+  assert.deepEqual(barracks.stats.upgrade, { cost: { wood: 140, stone: 80 }, durationSeconds: 50, maxHealth: 900 });
+  kingdoms.get("player").wallet.credit("food", 60);
+  kingdoms.get("player").wallet.credit("wood", 160);
+  kingdoms.get("player").wallet.credit("stone", 80);
+  const upgrades = new StructureUpgradeSystem(structures, kingdoms, (owner) => ageSystem.snapshot(owner).age === "town");
+  const barracksProduction = new BarracksProductionSystem(
+    units, structures, navigation, RTS_TEST_UNIT_STATS, kingdoms,
+    (structure) => upgrades.isUpgrading(structure),
+  );
+  assert.equal(barracksProduction.queueGuard("player"), "queued");
+  assert.equal(upgrades.start("player", "barracks"), "started");
+  assert.deepEqual(barracksProduction.update(10), [], "paid Guard production pauses during the Barracks upgrade");
+  assert.deepEqual(upgrades.update(49.9), []);
+  assert.equal(barracks.level, 1);
+  assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"]);
+  assert.equal(barracks.level, 2);
+  assert.equal(barracks.health.max, 900);
+  assert.deepEqual(barracksProduction.update(RTS_TEST_UNIT_STATS.trainingSeconds).map((event) => event.type), ["completed"]);
 });
 
 check("Faz 6 quarry uses its finite stone node and cannot be placed away from one", () => {

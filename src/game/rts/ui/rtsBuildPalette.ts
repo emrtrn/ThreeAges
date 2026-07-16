@@ -30,6 +30,7 @@ export class RtsBuildPalette {
     private readonly onTrainGuard: () => void,
     private readonly onTrainWorker: () => void,
     private readonly onStartTownUpgrade: () => void,
+    private readonly onUpgradeBarracks: () => void,
   ) {
     this.root.className = "rts-build-palette ui-interactive";
     this.root.setAttribute("aria-label", "Yapı yerleştirme");
@@ -82,6 +83,11 @@ export class RtsBuildPalette {
     townUpgrade.textContent = "Kasaba Çağına Geç";
     townUpgrade.addEventListener("click", this.onStartTownUpgrade);
     choices.appendChild(townUpgrade);
+    const barracksUpgrade = document.createElement("button");
+    barracksUpgrade.type = "button";
+    barracksUpgrade.textContent = "Kışlayı T2 Yükselt";
+    barracksUpgrade.addEventListener("click", this.onUpgradeBarracks);
+    choices.appendChild(barracksUpgrade);
     this.root.appendChild(choices);
     this.resources.className = "rts-build-resources";
     this.root.appendChild(this.resources);
