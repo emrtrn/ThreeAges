@@ -5,11 +5,13 @@
  */
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { RoadCell, RoadGraph } from "../roads/roadGraph";
+import type { UnitOwner } from "../units/unit";
 
 export type DepotNodeStatus = "unlinked" | "linked";
 
 export interface DepotNodeSnapshot {
   readonly structureId: number;
+  readonly owner: UnitOwner;
   readonly x: number;
   readonly z: number;
   readonly roadCell: RoadCell | null;
@@ -42,6 +44,7 @@ export class DepotLogisticsSystem {
         const componentId = roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null;
         return {
           structureId: structure.id,
+          owner: structure.owner,
           x: structure.x,
           z: structure.z,
           roadCell,

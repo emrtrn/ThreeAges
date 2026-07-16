@@ -6,9 +6,11 @@
 import { Vector3 } from "three";
 
 import type { UnitBalanceStats } from "../../data/gameDataTypes";
-import type { PopulationReservation, PopulationSystem } from "../economy/populationSystem";
-import type { ResourceReservation, ResourceWallet } from "../economy/resourceWallet";
+import type { PopulationReservation } from "../economy/populationSystem";
+import type { ResourceReservation } from "../economy/resourceWallet";
+import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
+import type { UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { PlacedStructure, PlacedStructureSystem } from "./placedStructureSystem";
 
@@ -40,21 +42,22 @@ export class BarracksProductionSystem {
     private readonly structures: PlacedStructureSystem,
     private readonly navigation: RtsNavigation,
     private readonly guardStats: UnitBalanceStats,
-    private readonly wallet: ResourceWallet,
-    private readonly population: PopulationSystem,
+    private readonly kingdoms: KingdomRegistry,
   ) {}
 
-  queueGuard(): GuardProductionResult {
-    const barracks = this.structures.all().find(
+  /** Train a Guard at one kingdom's Barracks, paid from that kingdom's economy. */
+  queueGuard(owner: UnitOwner): GuardProductionResult {
+    const barracks = this.structures.ownedBy(owner).find(
       (structure) => structure.stats.id === "barracks" && structure.construction.complete,
     );
     if (!barracks) return "no-completed-barracks";
     if (this.queues.has(barracks.id)) return "already-training";
-    const resources = this.wallet.reserve(this.guardStats.cost);
+    const { wallet, population: pool } = this.kingdoms.get(owner);
+    const resources = wallet.reserve(this.guardStats.cost);
     if (!resources) return "insufficient-resources";
-    const population = this.population.reserve(this.guardStats.populationCost);
+    const population = pool.reserve(this.guardStats.populationCost);
     if (!population) {
-      this.wallet.refund(resources);
+      wallet.refund(resources);
       return "population-full";
     }
     this.queues.set(barracks.id, {
@@ -69,9 +72,10 @@ export class BarracksProductionSystem {
   update(deltaSeconds: number): GuardProductionEvent[] {
     const events: GuardProductionEvent[] = [];
     for (const [id, queue] of this.queues) {
+      const { wallet, population } = this.kingdoms.get(queue.structure.owner);
       if (!this.structures.all().includes(queue.structure) || !queue.structure.construction.complete) {
-        this.wallet.refund(queue.resources);
-        this.population.release(queue.population);
+        wallet.refund(queue.resources);
+        population.release(queue.population);
         this.queues.delete(id);
         continue;
       }
@@ -82,9 +86,9 @@ export class BarracksProductionSystem {
         events.push({ type: "exit-blocked", structure: queue.structure });
         continue;
       }
-      this.units.spawn("player", exit.x, exit.z, this.guardStats, "guard");
-      this.wallet.commit(queue.resources);
-      this.population.commit(queue.population);
+      this.units.spawn(queue.structure.owner, exit.x, exit.z, this.guardStats, "guard");
+      wallet.commit(queue.resources);
+      population.commit(queue.population);
       this.queues.delete(id);
       events.push({ type: "completed", structure: queue.structure });
     }
@@ -93,8 +97,9 @@ export class BarracksProductionSystem {
 
   reset(): void {
     for (const queue of this.queues.values()) {
-      this.wallet.refund(queue.resources);
-      this.population.release(queue.population);
+      const { wallet, population } = this.kingdoms.get(queue.structure.owner);
+      wallet.refund(queue.resources);
+      population.release(queue.population);
     }
     this.queues.clear();
   }

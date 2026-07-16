@@ -8,7 +8,7 @@ import { Vector3 } from "three";
 
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
-import type { Unit } from "../units/unit";
+import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 
 export type EconomyWorkerState = "idle" | "moving" | "producing";
@@ -79,38 +79,40 @@ export class EconomyProductionSystem {
     return this.assignmentByWorker.get(worker.id)?.assignments.get(worker.id)?.state ?? "idle";
   }
 
-  /** Current output rate, including only workers who reached their work point. */
-  productionPerMinute(resourceId: string): number {
-    return this.snapshots()
+  /** One kingdom's output rate, counting only workers who reached their work point. */
+  productionPerMinute(owner: UnitOwner, resourceId: string): number {
+    return this.snapshots(owner)
       .filter((producer) => producer.resourceId === resourceId)
       .reduce((total, producer) => total + producer.productionPerMinute, 0);
   }
 
   /** Stable snapshots for debug/UI; the local buffer is not globally spendable yet. */
-  snapshots(): readonly EconomyBuildingSnapshot[] {
-    return [...this.producers.values()].map((producer) => {
-      const economy = producer.structure.stats.economy;
-      if (!economy) throw new Error("Economy producer missing economy balance");
-      const workingWorkers = [...producer.assignments.values()]
-        .filter((assignment) => assignment.state === "producing").length;
-      return {
-        structureId: producer.structure.id,
-        structureLabel: producer.structure.stats.label,
-        resourceId: economy.resourceId,
-        assignedWorkers: producer.assignments.size,
-        workingWorkers,
-        workerCapacity: economy.workerCapacity,
-        perWorkerPerMinute: economy.perWorkerPerMinute,
-        productionPerMinute: producer.status === "producing" ? workingWorkers * economy.perWorkerPerMinute : 0,
-        localBuffer: producer.localBuffer,
-        localBufferCapacity: economy.localBufferCapacity,
-        lastProductionTick: producer.lastProductionTick,
-        lastTransferTick: producer.lastTransferTick,
-        totalProduced: producer.totalProduced,
-        totalTransferred: producer.totalTransferred,
-        status: producer.status,
-      };
-    });
+  snapshots(owner?: UnitOwner): readonly EconomyBuildingSnapshot[] {
+    return [...this.producers.values()]
+      .filter((producer) => owner === undefined || producer.structure.owner === owner)
+      .map((producer) => {
+        const economy = producer.structure.stats.economy;
+        if (!economy) throw new Error("Economy producer missing economy balance");
+        const workingWorkers = [...producer.assignments.values()]
+          .filter((assignment) => assignment.state === "producing").length;
+        return {
+          structureId: producer.structure.id,
+          structureLabel: producer.structure.stats.label,
+          resourceId: economy.resourceId,
+          assignedWorkers: producer.assignments.size,
+          workingWorkers,
+          workerCapacity: economy.workerCapacity,
+          perWorkerPerMinute: economy.perWorkerPerMinute,
+          productionPerMinute: producer.status === "producing" ? workingWorkers * economy.perWorkerPerMinute : 0,
+          localBuffer: producer.localBuffer,
+          localBufferCapacity: economy.localBufferCapacity,
+          lastProductionTick: producer.lastProductionTick,
+          lastTransferTick: producer.lastTransferTick,
+          totalProduced: producer.totalProduced,
+          totalTransferred: producer.totalTransferred,
+          status: producer.status,
+        };
+      });
   }
 
   reset(): void {
@@ -189,7 +191,7 @@ export class EconomyProductionSystem {
   private assignIdleWorkers(producer: ProducerRecord): void {
     const economy = producer.structure.stats.economy;
     if (!economy) return;
-    const candidates = this.units.playerWorkers()
+    const candidates = this.units.workersOf(producer.structure.owner)
       .filter((worker) => !this.assignmentByWorker.has(worker.id) && !this.isWorkerConstructing(worker))
       .sort((a, b) => a.position.distanceToSquared(producer.structure.object.position)
         - b.position.distanceToSquared(producer.structure.object.position));

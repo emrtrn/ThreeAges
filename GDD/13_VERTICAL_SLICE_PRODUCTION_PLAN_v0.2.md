@@ -949,15 +949,15 @@ Merkez ekonomisini kur
 
 ## 35. Kabul Kriterleri
 
-- [ ] Karakol olmadan dış bölgeye normal yapı kurulamıyor.
-- [ ] Karakol küçük alanı hemen açıyor.
-- [ ] Tam alan yol bağlantısıyla aktif oluyor.
-- [ ] Bağlantılı yapı üretimi global stoğa aktarılıyor.
+- [x] Karakol olmadan dış bölgeye normal yapı kurulamıyor. (`test:engine`: kontrol alanı dışındaki normal yapı yerleştirmesi `outside-control` ile reddedilir.)
+- [x] Karakol küçük alanı hemen açıyor. (`test:engine`: tamamlanmış Karakol küçük kontrol yarıçapını territory kaynağına ekler.)
+- [x] Tam alan yol bağlantısıyla aktif oluyor. (`RtsApp`: Karakol ana Merkezle aynı yol graph bileşenine bağlandığında yarıçapı 8’den 12’ye çıkar.)
+- [x] Bağlantılı yapı üretimi global stoğa aktarılıyor. (`test:engine`: bağlı üreticinin tamponu `ResourceWallet` stoğuna aktarılır.)
 - [ ] Bağlantı kesintisi 30–90 saniye içinde üretimi etkiliyor.
-- [ ] Alternatif rota gerçek yedeklilik sağlıyor.
+- [x] Alternatif rota gerçek yedeklilik sağlıyor. (`test:engine`: bir yol hücresi kesildiğinde alternatif dal üretici–Depo bağlantısını korur.)
 - [ ] Oyuncu bağlantı sorununu tek bakışta anlayabiliyor.
 - [ ] Graph güncellemesi performans sorunu oluşturmuyor.
-- [ ] Karakol kaybı binaları anında yok etmiyor.
+- [x] Karakol kaybı binaları anında yok etmiyor. (`test:engine`: Karakol kaldırılır, yakındaki tamamlanmış yapı korunur.)
 - [ ] Beş tam test maçı blocker olmadan bitiyor.
 
 ---
@@ -984,6 +984,35 @@ Olumsuz sonuçta içerik eklemek yerine sistem sadeleştirilir.
 Oyuncuyla aynı küçük ekonomik döngüyü kullanan, bir kez genişleyen, ordu üreten ve saldıran ilk gerçek rakibi oluşturmak.
 
 Ana kaynak: `07_ENEMY_AI_DESIGN_v0.2.md`
+
+---
+
+## 37.1. Faz 5.0 — Sahiplik Önkoşulu
+
+`07_ENEMY_AI_DESIGN_v0.2.md` §4 AI'ın oyuncuyla **aynı** kaynak, nüfus ve maliyet
+kurallarını kullanmasını şart koşar. Faz 1–4 altyapısı ise tek oyunculu kurulmuştu:
+kaynak stoğu ve nüfus havuzu maç başına tekti, `PlacedStructure` sahip taşımıyordu,
+yerleştirme yalnız pointer/ghost üzerinden çalışıyordu.
+
+Bu durumda AI'ın "ev kur" kararı oyuncunun kasasından harcayıp oyuncunun nüfus
+tavanını yükseltirdi; §39 kabul kriterleri ölçülemez olurdu. Bu yüzden §38'den önce
+sahiplik ve headless API katmanı ayrıldı.
+
+- [x] `PlacedStructure.owner` + `PlacedStructureSystem.ownedBy(owner)`.
+- [x] `UnitSystem.unitsOf(owner)` / `workersOf(owner)`.
+- [x] `KingdomRegistry`: krallık başına `ResourceWallet` + `PopulationSystem`.
+- [x] Ekonomi, inşaat ve üretim sistemleri yapının sahibine göre çalışıyor.
+- [x] Lojistik: üretici yalnız **kendi** krallığının deposuna teslim ediyor.
+- [x] `StructureConstructionService`: pointer'sız, owner'lı yapı kurma.
+- [x] `RoadConstructionService`: pointer'sız, owner'lı yol kurma.
+- [x] Kabul: krallık ekonomileri izole. (`test:engine`: düşman inşaatı oyuncunun
+  stoğunu ve nüfus tavanını değiştirmiyor.)
+- [x] Kabul: AI her iki servisi de oyuncuyla aynı kurallar altında çağırabiliyor.
+  (`test:engine`: kontrol alanı, maliyet ve iptal kuralları iki taraf için aynı.)
+
+Not: `tools/` dizini `tsconfig.json` `include` listesinde değildir; `npx tsc --noEmit`
+motor testlerini denetlemez. RTS imzaları değiştiğinde `npm run test:engine`
+çalıştırmak zorunludur.
 
 ---
 

@@ -9,7 +9,7 @@ import { Vector3 } from "three";
 
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { PlacedStructure, PlacedStructureSystem } from "../structures/placedStructureSystem";
-import type { Unit } from "./unit";
+import type { Unit, UnitOwner } from "./unit";
 import type { UnitSystem } from "./unitSystem";
 
 export type WorkerConstructionState = "idle" | "moving" | "building" | "unreachable";
@@ -38,9 +38,12 @@ export class WorkerConstructionSystem {
     private readonly onConstructionComplete: (structure: PlacedStructure) => void = () => {},
   ) {}
 
-  /** Assign the nearest idle worker and name the failure mode for player feedback. */
+  /**
+   * Assign the site owner's nearest idle worker and name the failure mode for
+   * player feedback. A kingdom never builds with the other kingdom's workers.
+   */
   assignNearest(structure: PlacedStructure): WorkerAssignmentResult {
-    const candidates = this.units.playerWorkers()
+    const candidates = this.units.workersOf(structure.owner)
       .filter((worker) => !this.assignments.has(worker.id) && !this.isReservedForOtherWork(worker))
       .sort((a, b) => a.position.distanceToSquared(structure.object.position)
         - b.position.distanceToSquared(structure.object.position));
@@ -88,8 +91,8 @@ export class WorkerConstructionSystem {
     return this.assignments.get(worker.id)?.state ?? "idle";
   }
 
-  idleWorkerCount(): number {
-    return this.units.playerWorkers()
+  idleWorkerCount(owner: UnitOwner): number {
+    return this.units.workersOf(owner)
       .filter((worker) => this.stateFor(worker) === "idle" && !this.isReservedForOtherWork(worker)).length;
   }
 

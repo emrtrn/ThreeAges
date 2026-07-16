@@ -2,6 +2,7 @@
 import type { RoadCell, RoadGraph } from "../roads/roadGraph";
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { TerritoryControlSystem } from "../territory/territoryControlSystem";
+import type { UnitOwner } from "../units/unit";
 import { type DepotLogisticsSystem, roadCellTouchingFootprint } from "./depotLogisticsSystem";
 import type { LogisticsOccupationSystem } from "./logisticsOccupationSystem";
 
@@ -9,6 +10,7 @@ export type ProducerLogisticsStatus = "outside-control" | "unlinked-road" | "unl
 
 export interface ProducerLogisticsSnapshot {
   readonly structureId: number;
+  readonly owner: UnitOwner;
   readonly resourceId: string;
   readonly roadCell: RoadCell | null;
   readonly componentId: number | null;
@@ -31,11 +33,14 @@ export class ProductionLogisticsSystem {
     for (const component of this.roads.components()) {
       for (const cell of component.cells) componentByCell.set(this.key(cell), component.id);
     }
-    const depotByComponent = new Map<number, number>();
+    // Roads are unowned in AI-1, so a single component can touch both kingdoms.
+    // Key by owner too: a producer may only deliver into its own depot.
+    const depotByComponent = new Map<string, number>();
     for (const depot of this.depots.snapshots()) {
       if (depot.componentId === null) continue;
-      const existing = depotByComponent.get(depot.componentId);
-      if (existing === undefined || depot.structureId < existing) depotByComponent.set(depot.componentId, depot.structureId);
+      const key = `${depot.owner}:${depot.componentId}`;
+      const existing = depotByComponent.get(key);
+      if (existing === undefined || depot.structureId < existing) depotByComponent.set(key, depot.structureId);
     }
     return this.structures.all()
       .filter((structure) => structure.construction.complete && structure.stats.economy)
@@ -50,12 +55,15 @@ export class ProductionLogisticsSystem {
           structure.stats.footprint.depth,
         );
         const componentId = roadCell ? componentByCell.get(this.key(roadCell)) ?? null : null;
-        const depotStructureId = componentId === null ? null : depotByComponent.get(componentId) ?? null;
+        const depotStructureId = componentId === null
+          ? null
+          : depotByComponent.get(`${structure.owner}:${componentId}`) ?? null;
         const controlled = this.territory?.ownsFootprint(
-          "player", structure.x, structure.z, structure.stats.footprint.width, structure.stats.footprint.depth,
+          structure.owner, structure.x, structure.z, structure.stats.footprint.width, structure.stats.footprint.depth,
         ) ?? true;
         return {
           structureId: structure.id,
+          owner: structure.owner,
           resourceId: economy.resourceId,
           roadCell,
           componentId,

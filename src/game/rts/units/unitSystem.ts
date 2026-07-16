@@ -43,12 +43,13 @@ export class UnitSystem {
     return this.units;
   }
 
-  playerUnits(): Unit[] {
-    return this.units.filter((unit) => unit.owner === "player" && !unit.health.depleted);
+  /** Live units of one kingdom. Faz 5 AI queries this exactly as the player does. */
+  unitsOf(owner: UnitOwner): Unit[] {
+    return this.units.filter((unit) => unit.owner === owner && !unit.health.depleted);
   }
 
-  playerWorkers(): Unit[] {
-    return this.playerUnits().filter((unit) => unit.role === "worker");
+  workersOf(owner: UnitOwner): Unit[] {
+    return this.unitsOf(owner).filter((unit) => unit.role === "worker");
   }
 
   /** Clear every attack order aimed at a unit that can no longer be targeted. */

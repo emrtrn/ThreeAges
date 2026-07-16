@@ -1,5 +1,10 @@
-/** Phase 3 population capacity and queue-reservation rules. */
+/**
+ * Phase 3 population capacity and queue-reservation rules, scoped to one
+ * kingdom. Faz 5 runs one instance per owner so the AI hits the same cap the
+ * player does (AI design §4) instead of sharing the player's headroom.
+ */
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
+import type { UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 
 export interface PopulationReservation {
@@ -20,6 +25,7 @@ export class PopulationSystem {
   private reserved = 0;
 
   constructor(
+    private readonly owner: UnitOwner,
     private readonly units: UnitSystem,
     private readonly structures: PlacedStructureSystem,
     private readonly baseCapacity: number,
@@ -30,8 +36,8 @@ export class PopulationSystem {
   }
 
   snapshot(): PopulationSnapshot {
-    const current = this.units.playerUnits().length;
-    const capacity = this.baseCapacity + this.structures.all()
+    const current = this.units.unitsOf(this.owner).length;
+    const capacity = this.baseCapacity + this.structures.ownedBy(this.owner)
       .filter((structure) => structure.construction.complete)
       .reduce((total, structure) => total + (structure.stats.populationCapacity ?? 0), 0);
     return { current, reserved: this.reserved, capacity, used: current + this.reserved };

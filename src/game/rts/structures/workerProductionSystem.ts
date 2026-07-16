@@ -1,16 +1,23 @@
-/** One-at-a-time player-worker production at the command centre. */
+/** One-at-a-time worker production at a kingdom's command centre. */
 import { Vector3 } from "three";
 
 import type { UnitBalanceStats } from "../../data/gameDataTypes";
-import type { PopulationReservation, PopulationSystem } from "../economy/populationSystem";
-import type { ResourceReservation, ResourceWallet } from "../economy/resourceWallet";
+import type { PopulationReservation } from "../economy/populationSystem";
+import type { ResourceReservation } from "../economy/resourceWallet";
+import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
+import type { UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
 import type { CommandCenter } from "./commandCenter";
 import type { CommandCenterSystem } from "./commandCenterSystem";
 
 export type WorkerProductionResult = "queued" | "already-training" | "insufficient-resources" | "population-full" | "no-command-center";
-export type WorkerProductionEvent = "completed" | "exit-blocked";
+export type WorkerProductionEventType = "completed" | "exit-blocked";
+
+export interface WorkerProductionEvent {
+  readonly owner: UnitOwner;
+  readonly type: WorkerProductionEventType;
+}
 
 interface WorkerQueue {
   readonly center: CommandCenter;
@@ -23,59 +30,68 @@ const EXIT_GAP = 1.3;
 const CENTER_HALF_FOOTPRINT = 3.5;
 
 export class WorkerProductionSystem {
-  private queue: WorkerQueue | null = null;
+  private readonly queues = new Map<UnitOwner, WorkerQueue>();
 
   constructor(
     private readonly units: UnitSystem,
     private readonly centers: CommandCenterSystem,
     private readonly navigation: RtsNavigation,
     private readonly workerStats: UnitBalanceStats,
-    private readonly wallet: ResourceWallet,
-    private readonly population: PopulationSystem,
+    private readonly kingdoms: KingdomRegistry,
   ) {}
 
-  queueWorker(): WorkerProductionResult {
-    const center = this.centers.get("player");
+  /** Train a worker at one kingdom's centre, paid from that kingdom's economy. */
+  queueWorker(owner: UnitOwner): WorkerProductionResult {
+    const center = this.centers.get(owner);
     if (!center) return "no-command-center";
-    if (this.queue) return "already-training";
-    const resources = this.wallet.reserve(this.workerStats.cost);
+    if (this.queues.has(owner)) return "already-training";
+    const { wallet, population: pool } = this.kingdoms.get(owner);
+    const resources = wallet.reserve(this.workerStats.cost);
     if (!resources) return "insufficient-resources";
-    const population = this.population.reserve(this.workerStats.populationCost);
+    const population = pool.reserve(this.workerStats.populationCost);
     if (!population) {
-      this.wallet.refund(resources);
+      wallet.refund(resources);
       return "population-full";
     }
-    this.queue = { center, resources, population, remainingSeconds: this.workerStats.trainingSeconds };
+    this.queues.set(owner, { center, resources, population, remainingSeconds: this.workerStats.trainingSeconds });
     return "queued";
   }
 
-  update(deltaSeconds: number): WorkerProductionEvent | null {
-    const queue = this.queue;
-    if (!queue) return null;
-    if (this.centers.get("player") !== queue.center) {
-      this.cancelQueue();
-      return null;
+  update(deltaSeconds: number): WorkerProductionEvent[] {
+    const events: WorkerProductionEvent[] = [];
+    for (const [owner, queue] of this.queues) {
+      if (this.centers.get(owner) !== queue.center) {
+        this.cancelQueue(owner);
+        continue;
+      }
+      queue.remainingSeconds = Math.max(0, queue.remainingSeconds - Math.max(0, deltaSeconds));
+      if (queue.remainingSeconds > 0) continue;
+      const exit = this.findSafeExit(queue.center);
+      if (!exit) {
+        events.push({ owner, type: "exit-blocked" });
+        continue;
+      }
+      const { wallet, population } = this.kingdoms.get(owner);
+      this.units.spawn(owner, exit.x, exit.z, this.workerStats, "worker");
+      wallet.commit(queue.resources);
+      population.commit(queue.population);
+      this.queues.delete(owner);
+      events.push({ owner, type: "completed" });
     }
-    queue.remainingSeconds = Math.max(0, queue.remainingSeconds - Math.max(0, deltaSeconds));
-    if (queue.remainingSeconds > 0) return null;
-    const exit = this.findSafeExit(queue.center);
-    if (!exit) return "exit-blocked";
-    this.units.spawn("player", exit.x, exit.z, this.workerStats, "worker");
-    this.wallet.commit(queue.resources);
-    this.population.commit(queue.population);
-    this.queue = null;
-    return "completed";
+    return events;
   }
 
   reset(): void {
-    this.cancelQueue();
+    for (const owner of [...this.queues.keys()]) this.cancelQueue(owner);
   }
 
-  private cancelQueue(): void {
-    if (!this.queue) return;
-    this.wallet.refund(this.queue.resources);
-    this.population.release(this.queue.population);
-    this.queue = null;
+  private cancelQueue(owner: UnitOwner): void {
+    const queue = this.queues.get(owner);
+    if (!queue) return;
+    const { wallet, population } = this.kingdoms.get(owner);
+    wallet.refund(queue.resources);
+    population.release(queue.population);
+    this.queues.delete(owner);
   }
 
   private findSafeExit(center: CommandCenter): Vector3 | null {

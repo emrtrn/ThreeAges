@@ -44,9 +44,11 @@ import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import { PlacedStructureSystem, type PlacedStructure } from "./structures/placedStructureSystem";
 import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
+import { StructureConstructionService } from "./structures/structureConstructionService";
+import { KingdomRegistry } from "./kingdom/kingdomRegistry";
+import { RoadConstructionService } from "./roads/roadConstructionService";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
-import { ResourceWallet } from "./economy/resourceWallet";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
@@ -54,8 +56,8 @@ import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
-import { PopulationSystem } from "./economy/populationSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
+import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem } from "./structures/workerProductionSystem";
 import { RoadGraph } from "./roads/roadGraph";
@@ -80,6 +82,9 @@ const PLAYER_WORKER_COUNT = 5;
 const SETTLEMENT_POPULATION_CAPACITY = 20;
 const PLAYER_CENTER_POSITION = RTS_BLOCKOUT_MAP.playerStart;
 const ENEMY_CENTER_POSITION = RTS_BLOCKOUT_MAP.enemyStart;
+/** Faz 5.0: both kingdoms run the same economy; only this one has a UI. */
+const KINGDOM_OWNERS: readonly UnitOwner[] = ["player", "enemy"];
+const PLAYER_OWNER: UnitOwner = "player";
 
 export interface RtsAppOptions {
   /** `?debug`: shows the compact Faz 1 RTS state/debug panel. */
@@ -112,15 +117,16 @@ export class RtsApp {
   })).concat(this.structures.all()
     .filter((structure) => structure.construction.complete && structure.stats.territory)
     .map((structure) => ({
-      owner: "player" as const,
+      owner: structure.owner,
       x: structure.x,
       z: structure.z,
       radius: this.outpostConnectedToMainRoad(structure)
         ? structure.stats.territory?.connectedControlRadius ?? 0
         : structure.stats.territory?.controlRadius ?? 0,
     }))));
-  private readonly wallet: ResourceWallet;
-  private readonly population: PopulationSystem;
+  private readonly kingdoms: KingdomRegistry;
+  private readonly structureConstruction: StructureConstructionService;
+  private readonly roadConstruction: RoadConstructionService;
   private readonly workerConstruction: WorkerConstructionSystem;
   private economyProduction: EconomyProductionSystem | null = null;
   private readonly depotLogistics: DepotLogisticsSystem;
@@ -166,7 +172,13 @@ export class RtsApp {
     this.depotLogistics = new DepotLogisticsSystem(this.structures, this.roads);
     this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
     this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
-    this.wallet = new ResourceWallet(this.options.startingResources);
+    this.kingdoms = new KingdomRegistry(
+      KINGDOM_OWNERS,
+      this.units,
+      this.structures,
+      this.options.startingResources,
+      SETTLEMENT_POPULATION_CAPACITY,
+    );
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
     this.selection = new SelectionSystem(
@@ -202,9 +214,8 @@ export class RtsApp {
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
       this.productionLogistics,
-      this.wallet,
+      this.kingdoms,
     );
-    this.population = new PopulationSystem(this.units, this.structures, SETTLEMENT_POPULATION_CAPACITY);
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
     const worker = this.options.unitBalance[PLACEHOLDER_WORKER_ID];
     if (!guard || !worker) throw new Error("Missing RTS unit balance definition");
@@ -213,35 +224,44 @@ export class RtsApp {
       this.structures,
       this.navigation,
       guard,
-      this.wallet,
-      this.population,
+      this.kingdoms,
     );
     this.workerProduction = new WorkerProductionSystem(
       this.units,
       this.centers,
       this.navigation,
       worker,
-      this.wallet,
-      this.population,
+      this.kingdoms,
     );
-    this.placement = new BuildingPlacementSystem(
-      canvas,
-      this.cameraController.camera,
+    this.structureConstruction = new StructureConstructionService(
       this.options.buildingBalance,
       this.structures,
-      this.wallet,
+      this.kingdoms,
       this.navigation,
       () => this.navigationBlockers(),
       this.territory,
       (structure) => this.assignWorkerToConstruction(structure),
       (structure) => this.workerConstruction.cancelStructure(structure),
     );
+    this.roadConstruction = new RoadConstructionService(
+      this.roads,
+      this.kingdoms,
+      () => this.navigationBlockers(),
+      () => this.roadPlacement.renderNetwork(),
+    );
+    this.placement = new BuildingPlacementSystem(
+      canvas,
+      this.cameraController.camera,
+      this.options.buildingBalance,
+      this.structureConstruction,
+      PLAYER_OWNER,
+    );
     this.roadPlacement = new RoadPlacementSystem(
       canvas,
       this.cameraController.camera,
       this.roads,
-      this.wallet,
-      () => this.navigationBlockers(),
+      this.roadConstruction,
+      PLAYER_OWNER,
     );
     this.buildPalette = new RtsBuildPalette(
       this.options.buildingBalance,
@@ -288,7 +308,7 @@ export class RtsApp {
     this.matchOverlay = new RtsMatchOverlay(this.restartMatch);
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
     this.unsubscribeWalletChanges = this.debugOverlay
-      ? this.wallet.subscribe((change: ResourceChange) => this.debugOverlay?.recordResourceChange(change))
+      ? this.playerKingdom.wallet.subscribe((change: ResourceChange) => this.debugOverlay?.recordResourceChange(change))
       : null;
     // Composite pointer handler: left button drives selection, right button
     // issues commands. Keeps the two systems decoupled (neither imports the
@@ -346,6 +366,11 @@ export class RtsApp {
     this.spawnTestUnits();
     this.syncPlacementUi();
     this.syncRoadUi();
+  }
+
+  /** The human kingdom's economy — everything the HUD reads and writes. */
+  private get playerKingdom() {
+    return this.kingdoms.get(PLAYER_OWNER);
   }
 
   start(): void {
@@ -460,9 +485,9 @@ export class RtsApp {
       this.centers,
       this.match.outcome,
       this.workerConstruction,
-      this.wallet,
+      this.playerKingdom.wallet,
       this.economyProduction,
-      this.population,
+      this.playerKingdom.population,
       this.roads,
       this.depotLogistics,
       this.productionLogistics,
@@ -474,27 +499,30 @@ export class RtsApp {
 
   /** Advance match systems; camera and UI keep the unscaled rendered-frame delta. */
   private updateSimulation(dt: number): void {
-    this.wallet.advance(dt);
+    this.kingdoms.advance(dt);
     updateUnitMovement(this.units.all(), dt);
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
     this.logisticsTransfers.update();
-    const workerEvent = this.workerProduction.update(dt);
-    if (workerEvent) {
-      this.buildPalette.setActionMessage(workerEvent === "completed"
+    // Only the human kingdom's production narrates into the build palette; the
+    // AI's own queue events are surfaced by its decision log in a later slice.
+    for (const event of this.workerProduction.update(dt)) {
+      if (event.owner !== PLAYER_OWNER) continue;
+      this.buildPalette.setActionMessage(event.type === "completed"
         ? "Yeni işçi Merkez'den çıktı."
         : "İşçi çıkışı engelli; Merkez çevresini açın.");
     }
     for (const event of this.barracksProduction.update(dt)) {
+      if (event.structure.owner !== PLAYER_OWNER) continue;
       this.buildPalette.setActionMessage(
         event.type === "completed"
           ? "Muhafız Kışla'dan çıktı."
           : "Muhafız çıkışı engelli; Kışla çevresini açın.",
       );
     }
-    this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
-    this.buildPalette.setResources(this.wallet.snapshot());
-    const population = this.population.snapshot();
+    this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
+    this.buildPalette.setResources(this.playerKingdom.wallet.snapshot());
+    const population = this.playerKingdom.population.snapshot();
     this.buildPalette.setPopulation(population.used, population.capacity);
     this.syncEconomyUi();
     updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
@@ -529,13 +557,12 @@ export class RtsApp {
     this.workerConstruction.reset();
     this.barracksProduction.reset();
     this.workerProduction.reset();
-    this.population.reset();
     this.units.clear();
     this.centers.clear();
     this.structures.clear();
     this.roadPlacement.reset();
-    this.placement.resetReservations();
-    this.wallet.reset(this.options.startingResources);
+    this.structureConstruction.resetReservations();
+    this.kingdoms.reset();
     this.commandMarkers.clear();
     this.match.reset();
     this.spawnCenters();
@@ -585,9 +612,9 @@ export class RtsApp {
 
   private syncPlacementUi(): void {
     this.buildPalette.setState(this.placement.state());
-    this.buildPalette.setResources(this.wallet.snapshot());
-    this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount());
-    const population = this.population.snapshot();
+    this.buildPalette.setResources(this.playerKingdom.wallet.snapshot());
+    this.buildPalette.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
+    const population = this.playerKingdom.population.snapshot();
     this.buildPalette.setPopulation(population.used, population.capacity);
     this.syncEconomyUi();
   }
@@ -597,12 +624,13 @@ export class RtsApp {
   }
 
   private syncEconomyUi(): void {
-    const production = this.economyProduction?.snapshots() ?? [];
+    const production = this.economyProduction?.snapshots(PLAYER_OWNER) ?? [];
     this.logisticsOccupation.sync();
-    const logistics = this.productionLogistics.snapshots();
+    const logistics = this.productionLogistics.snapshots()
+      .filter((producer) => producer.owner === PLAYER_OWNER);
     this.buildPalette.setIncomeRates({
-      food: this.economyProduction?.productionPerMinute("food") ?? 0,
-      wood: this.economyProduction?.productionPerMinute("wood") ?? 0,
+      food: this.economyProduction?.productionPerMinute(PLAYER_OWNER, "food") ?? 0,
+      wood: this.economyProduction?.productionPerMinute(PLAYER_OWNER, "wood") ?? 0,
     });
     this.buildPalette.setProductionBuildings(production);
     this.buildPalette.setProductionLogistics(new Map(
@@ -621,7 +649,7 @@ export class RtsApp {
   }
 
   private queueGuard(): void {
-    const result = this.barracksProduction.queueGuard();
+    const result = this.barracksProduction.queueGuard(PLAYER_OWNER);
     const message: Record<typeof result, string> = {
       queued: "Muhafız üretim kuyruğa alındı.",
       "no-completed-barracks": "Önce tamamlanmış bir Kışla kurun.",
@@ -635,7 +663,7 @@ export class RtsApp {
   }
 
   private queueWorker(): void {
-    const result = this.workerProduction.queueWorker();
+    const result = this.workerProduction.queueWorker(PLAYER_OWNER);
     const message: Record<typeof result, string> = {
       queued: "İşçi üretim kuyruğa alındı.",
       "already-training": "Merkez zaten bir İşçi üretiyor.",

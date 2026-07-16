@@ -105,7 +105,8 @@ export class SelectionSystem implements RtsPointerHandler {
     const minY = Math.min(rect.y0, rect.y1);
     const maxY = Math.max(rect.y0, rect.y1);
     const result: Unit[] = [];
-    for (const unit of this.units.playerUnits()) {
+    // Marquee selection is a human-input concern: it never picks AI units.
+    for (const unit of this.units.unitsOf("player")) {
       this.scratch.set(unit.position.x, PROJECT_HEIGHT, unit.position.z);
       this.scratch.project(this.camera);
       // Behind the camera → z outside [-1, 1]; skip.

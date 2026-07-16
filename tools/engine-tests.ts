@@ -80,6 +80,9 @@ import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLog
 import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
+import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
+import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
+import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
@@ -27817,7 +27820,7 @@ check("RTS test-force layout supports the Phase 1 twenty-unit selection target",
   for (let i = 0; i < 20; i += 1) {
     units.spawn("player", -6 + (i % 5) * 3, Math.floor(i / 5) * 3, RTS_TEST_UNIT_STATS);
   }
-  assert.equal(units.playerUnits().length, 20);
+  assert.equal(units.unitsOf("player").length, 20);
 });
 
 check("RTS health clamps damage and healing while exposing current/max/ratio", () => {
@@ -27892,7 +27895,7 @@ check("RTS economy producers report income, survive a ten-minute run, and stop a
     units.spawn("player", -8 + index * 1.5, 0, RTS_TEST_UNIT_STATS, "worker");
   }
   const structures = new PlacedStructureSystem();
-  const site = structures.place(farm, 8, 0);
+  const site = structures.place("player", farm, 8, 0);
   structures.advanceConstruction(site, farm.constructionSeconds);
   const navigation = new RtsNavigation();
   navigation.setBlockers(structures.navigationBlockers());
@@ -27913,7 +27916,7 @@ check("RTS economy producers report income, survive a ten-minute run, and stop a
   assert.equal(snapshot.productionPerMinute, 0, "a full local buffer stops reported income");
   assert.equal(snapshot.totalProduced, 40, "ten-minute economy run preserves the buffer ceiling");
   assert.equal(
-    units.playerWorkers().filter((worker) => production.stateFor(worker) === "idle").length,
+    units.workersOf("player").filter((worker) => production.stateFor(worker) === "idle").length,
     1,
     "one worker remains available after the T1 capacity is filled",
   );
@@ -28099,7 +28102,7 @@ check("RTS placement snap rejects occupied footprints and refreshes navigation b
   });
 
   const structures = new PlacedStructureSystem();
-  const site = structures.place(house, open.x, open.z);
+  const site = structures.place("player", house, open.x, open.z);
   const overlap = validateBuildingPlacement(house, 20, 12, structures.navigationBlockers());
   assert.equal(overlap.valid, false);
   assert.equal(overlap.reason, "blocked");
@@ -28109,8 +28112,8 @@ check("RTS placement snap rejects occupied footprints and refreshes navigation b
   const route = navigation.plan(new Vector3(14, 0, 12), new Vector3(28, 0, 12));
   assert.ok(route && route.length > 2, "a new structure forces a detour rather than breaking navigation");
   assert.ok(route.some((point) => Math.abs(point.z - 12) > 2.5), "route leaves the structure footprint");
-  assert.equal(site.object.name, "rts-construction-site-1");
-  assert.equal(structures.cancelLatest(), site, "latest unbuilt foundation can be cancelled");
+  assert.equal(site.object.name, "rts-construction-site-player-1");
+  assert.equal(structures.cancelLatest("player"), site, "latest unbuilt foundation can be cancelled");
   assert.equal(structures.navigationBlockers().length, 0);
   structures.clear();
 });
@@ -28178,10 +28181,10 @@ check("RTS completed depots become road-graph nodes only when a road touches the
   );
   const depotStats = buildings.depot ?? assert.fail("depot definition missing");
   const structures = new PlacedStructureSystem();
-  const depot = structures.place(depotStats, 0, 0);
+  const depot = structures.place("player", depotStats, 0, 0);
   structures.advanceConstruction(depot, depotStats.constructionSeconds);
   const farmStats = buildings.farm ?? assert.fail("farm definition missing");
-  const farm = structures.place(farmStats, 0, 10);
+  const farm = structures.place("player", farmStats, 0, 10);
   structures.advanceConstruction(farm, farmStats.constructionSeconds);
   const roads = new RoadGraph(balance);
   const logistics = new DepotLogisticsSystem(structures, roads);
@@ -28194,6 +28197,7 @@ check("RTS completed depots become road-graph nodes only when a road touches the
   roads.commit(route);
   assert.deepEqual(logistics.snapshots(), [{
     structureId: depot.id,
+    owner: "player",
     x: 0,
     z: 0,
     roadCell: { x: 4, z: 0 },
@@ -28202,6 +28206,7 @@ check("RTS completed depots become road-graph nodes only when a road touches the
   }]);
   assert.deepEqual(productionLogistics.snapshots(), [{
     structureId: farm.id,
+    owner: "player",
     resourceId: "food",
     roadCell: { x: 4, z: 6 },
     componentId: 1,
@@ -28229,8 +28234,8 @@ check("RTS logistics transfers linked buffers globally and stops when the road i
   const units = new UnitSystem();
   for (let index = 0; index < 3; index += 1) units.spawn("player", -2 + index * 2, 17, RTS_TEST_UNIT_STATS, "worker");
   const structures = new PlacedStructureSystem();
-  const depot = structures.place(depotStats, 0, 0);
-  const farm = structures.place(farmStats, 0, 10);
+  const depot = structures.place("player", depotStats, 0, 0);
+  const farm = structures.place("player", farmStats, 0, 10);
   structures.advanceConstruction(depot, depotStats.constructionSeconds);
   structures.advanceConstruction(farm, farmStats.constructionSeconds);
   const navigation = new RtsNavigation();
@@ -28239,8 +28244,9 @@ check("RTS logistics transfers linked buffers globally and stops when the road i
   const roads = new RoadGraph(balance);
   const depots = new DepotLogisticsSystem(structures, roads);
   const links = new ProductionLogisticsSystem(structures, roads, depots);
-  const wallet = new ResourceWallet({ food: 0, wood: 0 });
-  const transfer = new LogisticsTransferSystem(production, links, wallet);
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 0, wood: 0 }, 20);
+  const wallet = kingdoms.get("player").wallet;
+  const transfer = new LogisticsTransferSystem(production, links, kingdoms);
 
   for (let frame = 0; frame < 900; frame += 1) {
     updateUnitMovement(units.all(), 1 / 60);
@@ -28279,8 +28285,8 @@ check("RTS depot destruction removes the graph node and cuts an otherwise linked
   const depotStats = buildings.depot ?? assert.fail("depot definition missing");
   const farmStats = buildings.farm ?? assert.fail("farm definition missing");
   const structures = new PlacedStructureSystem();
-  const depot = structures.place(depotStats, 0, 0);
-  const farm = structures.place(farmStats, 0, 10);
+  const depot = structures.place("player", depotStats, 0, 0);
+  const farm = structures.place("player", farmStats, 0, 10);
   structures.advanceConstruction(depot, depotStats.constructionSeconds);
   structures.advanceConstruction(farm, farmStats.constructionSeconds);
   const roads = new RoadGraph(balance);
@@ -28367,8 +28373,8 @@ check("RTS destroying a completed outpost removes its territory source without d
   const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
   const houseStats = buildings.house ?? assert.fail("house definition missing");
   const structures = new PlacedStructureSystem();
-  const outpost = structures.place(outpostStats, 20, 0);
-  const house = structures.place(houseStats, 16, 0);
+  const outpost = structures.place("player", outpostStats, 20, 0);
+  const house = structures.place("player", houseStats, 16, 0);
   structures.advanceConstruction(outpost, outpostStats.constructionSeconds);
   structures.advanceConstruction(house, houseStats.constructionSeconds);
   const territory = new TerritoryControlSystem(() => structures.all()
@@ -28401,9 +28407,9 @@ check("RTS outpost loss cuts logistics for an otherwise road-and-depot-linked pr
   const depotStats = buildings.depot ?? assert.fail("depot definition missing");
   const farmStats = buildings.farm ?? assert.fail("farm definition missing");
   const structures = new PlacedStructureSystem();
-  const outpost = structures.place(outpostStats, 20, 0);
-  const farm = structures.place(farmStats, 20, 4);
-  const depot = structures.place(depotStats, 20, 12);
+  const outpost = structures.place("player", outpostStats, 20, 0);
+  const farm = structures.place("player", farmStats, 20, 4);
+  const depot = structures.place("player", depotStats, 20, 12);
   for (const structure of [outpost, farm, depot]) {
     structures.advanceConstruction(structure, structure.stats.constructionSeconds);
   }
@@ -28443,7 +28449,7 @@ check("RTS worker reaches a foundation, builds it, and never enters combat", () 
   assert.equal(enemy.health.current, enemy.health.max, "workers do not resolve melee attacks");
 
   const structures = new PlacedStructureSystem();
-  const site = structures.place({ ...house, constructionSeconds: 0.5 }, 10, 0);
+  const site = structures.place("player", { ...house, constructionSeconds: 0.5 }, 10, 0);
   const navigation = new RtsNavigation();
   navigation.setBlockers(structures.navigationBlockers());
   const construction = new WorkerConstructionSystem(units, structures, navigation);
@@ -28455,7 +28461,7 @@ check("RTS worker reaches a foundation, builds it, and never enters combat", () 
   }
   assert.equal(site.construction.complete, true);
   assert.equal(construction.stateFor(worker), "idle");
-  assert.equal(construction.idleWorkerCount(), 1);
+  assert.equal(construction.idleWorkerCount("player"), 1);
   structures.clear();
 });
 
@@ -28465,7 +28471,7 @@ check("RTS construction names missing-worker and unreachable placement errors", 
   );
   const house = buildings.house ?? assert.fail("house definition missing");
   const structures = new PlacedStructureSystem();
-  const site = structures.place(house, 0, 0);
+  const site = structures.place("player", house, 0, 0);
   const noWorker = new WorkerConstructionSystem(new UnitSystem(), structures, new RtsNavigation());
   assert.deepEqual(noWorker.assignNearest(site), { assigned: false, reason: "no-idle-worker" });
 
@@ -28489,22 +28495,22 @@ check("RTS completed Barracks trains a Guard at a safe exit", () => {
   const barracks = buildings.barracks ?? assert.fail("barracks definition missing");
   const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
   const structures = new PlacedStructureSystem();
-  const completed = structures.place({ ...barracks, constructionSeconds: 0.1 }, 0, 0);
+  const completed = structures.place("player", { ...barracks, constructionSeconds: 0.1 }, 0, 0);
   assert.equal(structures.advanceConstruction(completed, 0.1), true);
   const navigation = new RtsNavigation();
   navigation.setBlockers(structures.navigationBlockers());
   const units = new UnitSystem();
-  const wallet = new ResourceWallet({ food: 200, wood: 200 });
-  const population = new PopulationSystem(units, structures, 20);
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 200, wood: 200 }, 20);
+  const wallet = kingdoms.get("player").wallet;
+  const population = kingdoms.get("player").population;
   const production = new BarracksProductionSystem(
     units,
     structures,
     navigation,
     { ...guard, trainingSeconds: 0.1 },
-    wallet,
-    population,
+    kingdoms,
   );
-  assert.equal(production.queueGuard(), "queued");
+  assert.equal(production.queueGuard("player"), "queued");
   assert.equal(wallet.amount("food"), 140, "guard cost is reserved when the queue starts");
   assert.equal(population.snapshot().used, 1, "queued guard reserves its population slot");
   assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
@@ -28526,10 +28532,11 @@ check("RTS worker production spends food and population capacity, and houses ext
   const worker = unitBalance.worker_placeholder ?? assert.fail("worker definition missing");
   const structures = new PlacedStructureSystem();
   const units = new UnitSystem();
-  const population = new PopulationSystem(units, structures, 20);
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 100, wood: 0 }, 20);
+  const population = kingdoms.get("player").population;
   for (let index = 0; index < 20; index += 1) units.spawn("player", index, 0, RTS_TEST_UNIT_STATS);
   assert.equal(population.reserve(1), null, "base settlement population cap blocks a new queue");
-  const completedHouse = structures.place(house, 10, 0);
+  const completedHouse = structures.place("player", house, 10, 0);
   assert.equal(structures.advanceConstruction(completedHouse, house.constructionSeconds), true);
   const houseSlot = population.reserve(1);
   assert.ok(houseSlot, "completed house supplies five additional capacity");
@@ -28540,26 +28547,243 @@ check("RTS worker production spends food and population capacity, and houses ext
   centers.spawn("player", 0, 0);
   const navigation = new RtsNavigation();
   navigation.setBlockers(centers.navigationBlockers());
-  const wallet = new ResourceWallet({ food: 100, wood: 0 });
+  const wallet = kingdoms.get("player").wallet;
   const production = new WorkerProductionSystem(
     units,
     centers,
     navigation,
     { ...worker, trainingSeconds: 0.1 },
-    wallet,
-    population,
+    kingdoms,
   );
-  assert.equal(production.queueWorker(), "queued");
+  assert.equal(production.queueWorker("player"), "queued");
   assert.equal(wallet.amount("food"), 50);
   assert.equal(population.snapshot().reserved, 1);
-  assert.equal(production.update(0.1), "completed");
-  assert.equal(units.playerWorkers().length, 1);
+  assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
+  assert.equal(units.workersOf("player").length, 1);
   assert.deepEqual(population.snapshot(), { current: 1, reserved: 0, capacity: 25, used: 1 });
-  assert.equal(production.queueWorker(), "queued", "second worker can be queued while capacity remains");
-  assert.equal(production.queueWorker(), "already-training");
+  assert.equal(production.queueWorker("player"), "queued", "second worker can be queued while capacity remains");
+  assert.equal(production.queueWorker("player"), "already-training");
   production.reset();
   assert.equal(wallet.amount("food"), 50, "cancelled worker queue refunds its food");
   centers.clear();
+  structures.clear();
+  units.clear();
+});
+
+// --- Faz 5.0: kingdom ownership + headless construction (AI-1 prerequisites) ---
+// `07_ENEMY_AI_DESIGN_v0.2.md` §4 requires the AI to play by the player's rules.
+// These lock the two properties that makes that claim testable at all: economies
+// do not leak between kingdoms, and building/roads are reachable without a mouse.
+
+check("RTS kingdom economies are isolated: an enemy build never spends the player's stock or cap", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 100, wood: 300 }, 20);
+  const player = kingdoms.get("player");
+  const enemy = kingdoms.get("enemy");
+
+  const enemySite = structures.place("enemy", house, 30, 0);
+  const paid = enemy.wallet.reserve(house.cost);
+  assert.ok(paid, "enemy pays from its own wallet");
+  assert.equal(player.wallet.amount("wood"), 300, "player stock is untouched by an enemy build");
+  assert.ok(enemy.wallet.amount("wood") < 300, "enemy stock actually dropped");
+
+  // A completed enemy house must raise only the enemy's population ceiling.
+  structures.advanceConstruction(enemySite, house.constructionSeconds);
+  assert.equal(player.population.snapshot().capacity, 20, "enemy housing does not extend the player cap");
+  assert.equal(enemy.population.snapshot().capacity, 25, "enemy housing extends the enemy cap");
+
+  for (let index = 0; index < 20; index += 1) units.spawn("player", index, 0, RTS_TEST_UNIT_STATS);
+  assert.equal(player.population.snapshot().current, 20);
+  assert.equal(enemy.population.snapshot().current, 0, "player units never count against the enemy pool");
+  assert.equal(player.population.reserve(1), null, "player is capped by its own housing only");
+  assert.ok(enemy.population.reserve(1), "enemy still has headroom of its own");
+  assert.throws(() => kingdoms.get("neutral" as never), /No kingdom registered/);
+  structures.clear();
+  units.clear();
+});
+
+check("RTS headless structure construction builds for either kingdom under the same placement rules", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 100, wood: 300 }, 20);
+  const navigation = new RtsNavigation();
+  const territory = new TerritoryControlSystem(() => [
+    { owner: "player", x: 0, z: 0, radius: 12 },
+    { owner: "enemy", x: 40, z: 0, radius: 12 },
+  ]);
+  territory.refresh();
+  const placed: string[] = [];
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => structures.navigationBlockers(),
+    territory,
+    (structure) => placed.push(`${structure.owner}:${structure.stats.id}`),
+    () => {},
+  );
+
+  // The AI builds with no pointer, no ghost, no camera — the same call the
+  // player's palette makes underneath.
+  const enemyBuild = construction.build("enemy", "house", 40, 0);
+  assert.equal(enemyBuild.built, true, "enemy can build inside its own territory");
+  assert.ok(enemyBuild.built && enemyBuild.structure.owner === "enemy");
+  assert.deepEqual(placed, ["enemy:house"]);
+  assert.equal(kingdoms.get("player").wallet.amount("wood"), 300, "enemy construction is billed to the enemy");
+
+  // Same rules both ways: neither kingdom may build in the other's control area.
+  const trespass = construction.build("enemy", "house", 0, 0);
+  assert.equal(trespass.built, false);
+  assert.equal(trespass.built === false && trespass.reason, "outside-control");
+  const playerTrespass = construction.build("player", "house", 40, 8);
+  assert.equal(playerTrespass.built, false, "the player is bound by the same control rule");
+
+  // Bankrupt kingdoms cannot build, and a rejected build spends nothing.
+  const broke = new KingdomRegistry(["player", "enemy"], units, structures, { food: 0, wood: 0 }, 20);
+  const brokeService = new StructureConstructionService(
+    buildings, structures, broke, navigation, () => structures.navigationBlockers(), territory, () => {}, () => {},
+  );
+  const denied = brokeService.build("player", "house", 0, 0);
+  assert.equal(denied.built, false);
+  assert.equal(denied.built === false && denied.reason, "insufficient-resources");
+  assert.equal(broke.get("player").wallet.amount("wood"), 0);
+  assert.equal(construction.build("enemy", "command_center", 40, 0).built, false, "centres are not palette-buildable");
+
+  // Cancellation is owner-scoped: the enemy cannot refund the player's site.
+  assert.equal(construction.cancelLatest("player"), false, "player has no site to cancel");
+  assert.equal(construction.cancelLatest("enemy"), true);
+  assert.equal(structures.ownedBy("enemy").length, 0);
+  const refunded = kingdoms.get("enemy").wallet.amount("wood");
+  assert.equal(refunded, 300, "cancelling refunds the enemy's own wood in full");
+  territory.dispose();
+  structures.clear();
+  units.clear();
+});
+
+check("RTS headless road construction charges the building kingdom's wood", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 0, wood: 200 }, 20);
+  const roads = new RoadGraph(balance);
+  let renders = 0;
+  const construction = new RoadConstructionService(roads, kingdoms, () => [], () => { renders += 1; });
+
+  const plan = construction.plan({ x: 0, z: 0 }, { x: 0, z: 8 });
+  assert.ok(plan && plan.woodCost > 0, "planning reports a cost without spending");
+  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 200, "a plan alone never charges");
+
+  const built = construction.build("enemy", { x: 0, z: 0 }, { x: 0, z: 8 });
+  assert.equal(built.built, true);
+  assert.equal(renders, 1, "a committed route notifies the view exactly once");
+  assert.equal(kingdoms.get("player").wallet.amount("wood"), 200, "the player did not pay for the AI's road");
+  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 200 - (plan?.woodCost ?? 0));
+
+  // Re-walking existing cells is idempotent and free, as in the pointer flow.
+  const enemyWoodAfter = kingdoms.get("enemy").wallet.amount("wood");
+  assert.equal(construction.build("player", { x: 0, z: 0 }, { x: 0, z: 8 }).built, true);
+  assert.equal(kingdoms.get("player").wallet.amount("wood"), 200, "existing cells cost nothing to reuse");
+  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), enemyWoodAfter);
+
+  const poor = new KingdomRegistry(["player", "enemy"], units, structures, { food: 0, wood: 0 }, 20);
+  const poorRoads = new RoadConstructionService(new RoadGraph(balance), poor, () => []);
+  const denied = poorRoads.build("enemy", { x: 0, z: 0 }, { x: 0, z: 8 });
+  assert.equal(denied.built, false);
+  assert.equal(denied.built === false && denied.reason, "insufficient-resources");
+});
+
+check("RTS workers, production and logistics never cross kingdoms", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  const barracks = buildings.barracks ?? assert.fail("barracks definition missing");
+  const guard = unitBalance.guard_placeholder ?? assert.fail("guard definition missing");
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 400, wood: 400 }, 40);
+
+  // Only the enemy has workers on the field; only the enemy has a farm.
+  for (let index = 0; index < 3; index += 1) units.spawn("enemy", -2 + index * 2, 17, RTS_TEST_UNIT_STATS, "worker");
+  const enemyFarm = structures.place("enemy", farmStats, 0, 10);
+  structures.advanceConstruction(enemyFarm, farmStats.constructionSeconds);
+  const playerFarm = structures.place("player", farmStats, 30, 10);
+  structures.advanceConstruction(playerFarm, farmStats.constructionSeconds);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+  for (let frame = 0; frame < 600; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+  }
+  const enemySnapshot = production.snapshots("enemy")[0] ?? assert.fail("enemy producer missing");
+  const playerSnapshot = production.snapshots("player")[0] ?? assert.fail("player producer missing");
+  assert.equal(enemySnapshot.assignedWorkers, 3, "the enemy farm uses the enemy's workers");
+  assert.equal(playerSnapshot.assignedWorkers, 0, "the player farm cannot borrow enemy workers");
+  assert.ok(production.productionPerMinute("enemy", "food") > 0);
+  assert.equal(production.productionPerMinute("player", "food"), 0, "income is reported per kingdom");
+  assert.equal(production.snapshots().length, 2, "an unscoped snapshot still sees both");
+
+  // A shared road island must not let one kingdom deliver into the other's depot.
+  const roads = new RoadGraph(balance);
+  const depots = new DepotLogisticsSystem(structures, roads);
+  const links = new ProductionLogisticsSystem(structures, roads, depots);
+  const playerDepot = structures.place("player", depotStats, 0, 0);
+  structures.advanceConstruction(playerDepot, depotStats.constructionSeconds);
+  const route = roads.plan({ x: 4, z: 0 }, { x: 4, z: 10 }, []);
+  assert.ok(route);
+  roads.commit(route);
+  const enemyLink = links.snapshots().find((link) => link.owner === "enemy") ?? assert.fail("enemy link missing");
+  assert.equal(
+    enemyLink.status,
+    "unlinked-depot",
+    "the enemy farm touches the road but must not deliver into the player's depot",
+  );
+  const transfers = new LogisticsTransferSystem(production, links, kingdoms);
+  transfers.update();
+  assert.equal(kingdoms.get("enemy").wallet.amount("food"), 400, "no credit without an own-kingdom depot");
+
+  // Give the enemy its own depot touching that same island; now it may deliver.
+  const enemyDepot = structures.place("enemy", depotStats, 8, 10);
+  structures.advanceConstruction(enemyDepot, depotStats.constructionSeconds);
+  const relinked = links.snapshots().find((link) => link.owner === "enemy") ?? assert.fail("enemy link missing");
+  assert.equal(relinked.status, "linked");
+  assert.equal(relinked.depotStructureId, enemyDepot.id, "a producer resolves to its own kingdom's depot");
+  transfers.update();
+  assert.ok(kingdoms.get("enemy").wallet.amount("food") > 400, "the enemy's output reaches the enemy's stock");
+  assert.equal(kingdoms.get("player").wallet.amount("food"), 400, "and never the player's");
+
+  // Barracks train for whoever owns them, spending that kingdom's economy.
+  const enemyBarracks = structures.place("enemy", { ...barracks, constructionSeconds: 0.1 }, -20, 0);
+  structures.advanceConstruction(enemyBarracks, 0.1);
+  const guards = new BarracksProductionSystem(units, structures, navigation, { ...guard, trainingSeconds: 0.1 }, kingdoms);
+  assert.equal(guards.queueGuard("player"), "no-completed-barracks", "the player has no barracks of its own");
+  assert.equal(guards.queueGuard("enemy"), "queued");
+  const trained = guards.update(0.1);
+  assert.deepEqual(trained.map((event) => event.type), ["completed"]);
+  const newGuard = units.unitsOf("enemy").find((unit) => unit.role === "guard") ?? assert.fail("guard missing");
+  assert.equal(newGuard.owner, "enemy", "a Barracks spawns units for its own kingdom");
+  assert.equal(units.unitsOf("player").length, 0, "the player gained nothing from the enemy's Barracks");
+  production.reset();
   structures.clear();
   units.clear();
 });

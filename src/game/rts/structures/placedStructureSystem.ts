@@ -8,11 +8,20 @@ import { BoxGeometry, Group, Mesh, MeshStandardMaterial } from "three";
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalanceStats } from "../../data/gameDataTypes";
+import type { UnitOwner } from "../units/unit";
 import { buildingFootprintBlocker } from "./placementGrid";
 import { ConstructionComponent } from "./constructionComponent";
 
+/** Completed-building tint per kingdom; outposts stay lighter to read as territory. */
+const COMPLETED_COLOR: Record<UnitOwner, { readonly territory: string; readonly plain: string }> = {
+  player: { territory: "#467a9f", plain: "#80684a" },
+  enemy: { territory: "#9f4a46", plain: "#8a5a4a" },
+};
+
 export interface PlacedStructure {
   readonly id: number;
+  /** Which kingdom paid for and controls this structure (AI design §4). */
+  readonly owner: UnitOwner;
   readonly stats: BuildingBalanceStats;
   readonly x: number;
   readonly z: number;
@@ -31,10 +40,10 @@ export class PlacedStructureSystem {
     this.root.name = "rts-placed-structures";
   }
 
-  place(stats: BuildingBalanceStats, x: number, z: number): PlacedStructure {
+  place(owner: UnitOwner, stats: BuildingBalanceStats, x: number, z: number): PlacedStructure {
     const object = new Group();
     const id = this.nextId++;
-    object.name = `rts-construction-site-${id}`;
+    object.name = `rts-construction-site-${owner}-${id}`;
     object.position.set(x, 0, z);
     const foundation = new Mesh(
       new BoxGeometry(stats.footprint.width, 0.18, stats.footprint.depth),
@@ -56,6 +65,7 @@ export class PlacedStructureSystem {
     this.root.add(object);
     const structure: PlacedStructure = {
       id,
+      owner,
       stats,
       x,
       z,
@@ -84,11 +94,17 @@ export class PlacedStructureSystem {
     return this.structures;
   }
 
-  /** Remove the newest unbuilt site. Targeted cancellation arrives with workers. */
-  cancelLatest(): PlacedStructure | null {
+  /** One kingdom's structures. The Faz 5 AI reads its own base through this. */
+  ownedBy(owner: UnitOwner): readonly PlacedStructure[] {
+    return this.structures.filter((structure) => structure.owner === owner);
+  }
+
+  /** Remove a kingdom's newest unbuilt site. Targeted cancellation arrives with workers. */
+  cancelLatest(owner: UnitOwner): PlacedStructure | null {
     let index = -1;
     for (let i = this.structures.length - 1; i >= 0; i -= 1) {
-      if (!this.structures[i]?.construction.complete) {
+      const structure = this.structures[i];
+      if (structure && structure.owner === owner && !structure.construction.complete) {
         index = i;
         break;
       }
@@ -134,7 +150,9 @@ export class PlacedStructureSystem {
         structure.stats.footprint.depth * 0.72,
       ),
       new MeshStandardMaterial({
-        color: structure.stats.territory ? "#467a9f" : "#80684a",
+        color: structure.stats.territory
+          ? COMPLETED_COLOR[structure.owner].territory
+          : COMPLETED_COLOR[structure.owner].plain,
         roughness: 0.85,
       }),
     );

@@ -1,9 +1,10 @@
 /**
  * RTS building placement controller — Vertical Slice Plan v0.2 §25 (Faz 2).
  *
- * Owns the screen-to-ground ghost, grid snap, collision validation, and the
- * narrow handoff that creates a pre-construction foundation. Worker assignment,
- * resources, cancellation, and build progress deliberately remain separate.
+ * Owns the *input* half only: the screen-to-ground ray and the ghost mesh. The
+ * rules (snap, validation, payment, site creation) moved to the headless
+ * {@link StructureConstructionService} in Faz 5.0 so the AI opponent can build
+ * through exactly the same path without a pointer (AI design §4).
  */
 import {
   BoxGeometry,
@@ -18,17 +19,10 @@ import {
   type PerspectiveCamera,
 } from "three";
 
-import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalance, BuildingBalanceStats } from "../../data/gameDataTypes";
-import type { TerritoryControlSystem } from "../territory/territoryControlSystem";
-import { ResourceWallet, type ResourceReservation } from "../economy/resourceWallet";
-import type { RtsNavigation } from "../navigation/rtsNavigation";
-import {
-  type PlacementResult,
-  validateBuildingPlacement,
-} from "./placementGrid";
-import type { PlacedStructureSystem } from "./placedStructureSystem";
-import type { PlacedStructure } from "./placedStructureSystem";
+import type { UnitOwner } from "../units/unit";
+import type { PlacementResult } from "./placementGrid";
+import type { StructureConstructionService } from "./structureConstructionService";
 
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 const VALID_COLOR = new Color("#7dc86d");
@@ -47,19 +41,14 @@ export class BuildingPlacementSystem {
   private active: { id: string; stats: BuildingBalanceStats } | null = null;
   private ghost: Mesh | null = null;
   private result: PlacementResult | null = null;
-  private readonly reservations = new Map<number, ResourceReservation>();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly camera: PerspectiveCamera,
     private readonly buildings: BuildingBalance,
-    private readonly structures: PlacedStructureSystem,
-    private readonly wallet: ResourceWallet,
-    private readonly navigation: RtsNavigation,
-    private readonly occupiedBlockers: () => readonly NavBlocker[],
-    private readonly territory: TerritoryControlSystem,
-    private readonly onStructurePlaced: (structure: PlacedStructure) => void,
-    private readonly onStructureCancelled: (structure: PlacedStructure) => void,
+    private readonly construction: StructureConstructionService,
+    /** The kingdom this palette builds for — the human player. */
+    private readonly owner: UnitOwner,
   ) {
     this.root.name = "rts-building-placement-preview";
     this.root.visible = false;
@@ -94,17 +83,8 @@ export class BuildingPlacementSystem {
     if (!this.active) return this.state();
     const point = this.groundPoint(screenX, screenY);
     if (!point) return this.state();
-    this.result = validateBuildingPlacement(
-      this.active.stats,
-      point.x,
-      point.z,
-      this.occupiedBlockers(),
-      {
-        owner: "player",
-        ownsFootprint: this.territory.ownsFootprint.bind(this.territory),
-        canPlaceExpansion: this.territory.canPlaceExpansion.bind(this.territory),
-      },
-    );
+    this.result = this.construction.validate(this.owner, this.active.id, point.x, point.z);
+    if (!this.result) return this.state();
     this.root.position.set(this.result.x, 0, this.result.z);
     this.setGhostValid(this.result.valid);
     return this.state();
@@ -114,16 +94,12 @@ export class BuildingPlacementSystem {
   confirmAt(screenX: number, screenY: number): BuildingPlacementState {
     const state = this.previewAt(screenX, screenY);
     if (!this.active || !state.result?.valid) return state;
-    const reservation = this.wallet.reserve(this.active.stats.cost);
-    if (!reservation) {
-      this.result = { ...state.result, valid: false, reason: "insufficient-resources" };
+    const build = this.construction.build(this.owner, this.active.id, state.result.x, state.result.z);
+    if (!build.built) {
+      this.result = build.result;
       this.setGhostValid(false);
       return this.state();
     }
-    const structure = this.structures.place(this.active.stats, state.result.x, state.result.z);
-    this.reservations.set(structure.id, reservation);
-    this.navigation.setBlockers(this.occupiedBlockers());
-    this.onStructurePlaced(structure);
     // Keep build mode active like an RTS palette; the following preview will be
     // invalid if it overlaps the site just created.
     this.result = null;
@@ -132,19 +108,7 @@ export class BuildingPlacementSystem {
 
   /** Cancel the latest unbuilt site and refund its reservation in full. */
   cancelLatestConstruction(): boolean {
-    const structure = this.structures.cancelLatest();
-    if (!structure) return false;
-    const reservation = this.reservations.get(structure.id);
-    if (reservation) this.wallet.refund(reservation);
-    this.reservations.delete(structure.id);
-    this.navigation.setBlockers(this.occupiedBlockers());
-    this.onStructureCancelled(structure);
-    return true;
-  }
-
-  /** Forget site tokens after the match owner resets the wallet. */
-  resetReservations(): void {
-    this.reservations.clear();
+    return this.construction.cancelLatest(this.owner);
   }
 
   dispose(): void {

@@ -12,8 +12,8 @@ import {
   type PerspectiveCamera,
 } from "three";
 
-import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import type { ResourceWallet } from "../economy/resourceWallet";
+import type { UnitOwner } from "../units/unit";
+import type { RoadConstructionService } from "./roadConstructionService";
 import {
   RoadGraph,
   type RoadCell,
@@ -64,8 +64,9 @@ export class RoadPlacementSystem {
     private readonly canvas: HTMLCanvasElement,
     private readonly camera: PerspectiveCamera,
     private readonly roads: RoadGraph,
-    private readonly wallet: ResourceWallet,
-    private readonly blockers: () => readonly NavBlocker[],
+    private readonly construction: RoadConstructionService,
+    /** The kingdom these road controls build for — the human player. */
+    private readonly owner: UnitOwner,
   ) {
     this.root.name = "rts-roads";
     this.permanent.name = "rts-road-segments";
@@ -105,7 +106,7 @@ export class RoadPlacementSystem {
     if (!this.active || !this.start) return this.state();
     const point = this.groundPoint(screenX, screenY);
     if (!point) return this.state();
-    this.plan = this.roads.plan(this.start, point, this.blockers());
+    this.plan = this.construction.plan(this.start, point);
     this.reason = this.plan ? "choose-end" : "invalid-route";
     this.renderPreview(this.plan, this.plan ? PREVIEW_COLOR : INVALID_COLOR);
     return this.state();
@@ -116,7 +117,7 @@ export class RoadPlacementSystem {
     const point = this.groundPoint(screenX, screenY);
     if (!point) return this.state();
     if (!this.start) {
-      const startPlan = this.roads.plan(point, point, this.blockers());
+      const startPlan = this.construction.plan(point, point);
       if (!startPlan) {
         this.reason = "invalid-route";
         return this.state();
@@ -126,19 +127,14 @@ export class RoadPlacementSystem {
       return this.state();
     }
     const state = this.previewAt(screenX, screenY);
-    if (!state.plan) return state;
-    if (state.plan.woodCost > 0) {
-      const reservation = this.wallet.reserve({ wood: state.plan.woodCost });
-      if (!reservation) {
-        this.reason = "insufficient-resources";
-        this.renderPreview(state.plan, INVALID_COLOR);
-        return this.state();
-      }
-      this.wallet.commit(reservation);
+    if (!state.plan || !this.start) return state;
+    const build = this.construction.build(this.owner, this.start, state.plan.cells.at(-1) ?? this.start);
+    if (!build.built) {
+      this.reason = build.reason;
+      this.renderPreview(state.plan, INVALID_COLOR);
+      return this.state();
     }
-    this.roads.commit(state.plan);
-    this.renderPermanent();
-    this.start = state.plan.cells.at(-1) ?? null;
+    this.start = build.plan.cells.at(-1) ?? null;
     this.plan = null;
     this.reason = "choose-end";
     this.clearPreview();
@@ -178,7 +174,11 @@ export class RoadPlacementSystem {
     for (const cell of plan.cells) this.preview.add(this.createPreviewMesh(cell));
   }
 
-  private renderPermanent(): void {
+  /**
+   * Rebuild every committed road tile. Public because roads can now be
+   * committed headlessly by the AI, not only through this pointer flow.
+   */
+  renderNetwork(): void {
     this.clearMeshes(this.permanent);
     for (const segment of this.roads.all()) {
       this.permanent.add(this.createSegmentMesh(segment));
