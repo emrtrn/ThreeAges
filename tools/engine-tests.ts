@@ -116,7 +116,7 @@ import { StructureConstructionService } from "../src/game/rts/structures/structu
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
 import { formatInventoryAmount } from "../src/game/rts/ui/rtsBuildPalette";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
-import { BarracksProductionSystem } from "../src/game/rts/structures/barracksProductionSystem";
+import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "../src/game/rts/structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "../src/game/rts/structures/structureUpgradeSystem";
@@ -28097,14 +28097,26 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   const house = structures.place("player", houseStats, 80, 10);
   structures.advanceConstruction(house, houseStats.constructionSeconds);
   assert.equal(kingdoms.get("player").population.snapshot().capacity, 25, "a completed T1 House adds five population");
+  const secondHouse = structures.place("player", houseStats, 90, 10);
+  structures.advanceConstruction(secondHouse, houseStats.constructionSeconds);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 30, "each completed House contributes its own T1 capacity");
   kingdoms.get("player").wallet.credit("wood", 70);
   kingdoms.get("player").wallet.credit("stone", 40);
   assert.equal(upgrades.start("player", "house"), "started");
+  assert.deepEqual(upgrades.snapshot("player", "house"), { completed: false, upgrading: true, remainingSeconds: 35 });
   assert.deepEqual(upgrades.update(34.9), []);
-  assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"]);
+  assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed", "completed"],
+    "one type-wide upgrade promotes every completed house for its single research cost");
   assert.equal(house.level, 2);
+  assert.equal(secondHouse.level, 2);
   assert.equal(house.health.max, 450);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 28, "a T2 House raises its capacity from five to eight");
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 36, "both T2 Houses raise their capacity from five to eight");
+  assert.deepEqual(upgrades.snapshot("player", "house"), { completed: true, upgrading: false, remainingSeconds: 0 });
+  const postUpgradeHouse = structures.place("player", houseStats, 100, 10);
+  structures.advanceConstruction(postUpgradeHouse, houseStats.constructionSeconds);
+  assert.equal(upgrades.applyCompletedUpgrade(postUpgradeHouse), true, "houses completed after the type upgrade inherit T2");
+  assert.equal(postUpgradeHouse.level, 2);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 44, "future T2 Houses add their full capacity once");
 
   const depotStats = buildings.depot ?? assert.fail("depot balance missing");
   const depot = structures.place("player", depotStats, 100, 10);
@@ -28855,7 +28867,7 @@ check("RTS construction names missing-worker and unreachable placement errors", 
   units.clear();
 });
 
-check("RTS completed Barracks trains a Guard at a safe exit", () => {
+check("RTS Barracks queues paid Guards by age capacity and trains them at a safe exit", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
@@ -28870,23 +28882,46 @@ check("RTS completed Barracks trains a Guard at a safe exit", () => {
   const navigation = new RtsNavigation();
   navigation.setBlockers(structures.navigationBlockers());
   const units = new UnitSystem();
-  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 200, wood: 200 }, 20);
+  const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 3000, wood: 3000 }, 50);
   const wallet = kingdoms.get("player").wallet;
   const population = kingdoms.get("player").population;
+  let ageLevel = 1;
   const production = new BarracksProductionSystem(
     units,
     structures,
     navigation,
     { ...guard, trainingSeconds: 0.1 },
     kingdoms,
+    undefined,
+    () => guardQueueCapacityForAgeLevel(ageLevel),
   );
-  assert.equal(production.queueGuard("player"), "queued");
-  assert.equal(wallet.amount("food"), 140, "guard cost is reserved when the queue starts");
-  assert.equal(population.snapshot().used, 1, "queued guard reserves its population slot");
-  assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
+  assert.equal(guardQueueCapacityForAgeLevel(1), 5);
+  assert.equal(guardQueueCapacityForAgeLevel(2), 10);
+  assert.equal(guardQueueCapacityForAgeLevel(3), 20);
+  for (let index = 0; index < 5; index += 1) assert.equal(production.queueGuard("player"), "queued");
+  assert.equal(production.queuedCount("player"), 5);
+  assert.equal(production.queueCapacity("player"), 5);
+  assert.equal(wallet.amount("food"), 2700, "every settlement Guard order reserves its food immediately");
+  assert.equal(population.snapshot().reserved, 5, "every queued Guard reserves its population slot");
+  assert.equal(production.queueGuard("player"), "queue-full", "Settlement Barracks hold at most five Guard orders");
+  for (let index = 0; index < 5; index += 1) assert.deepEqual(production.update(0.1).map((event) => event.type), ["completed"]);
   const trained = units.all()[0] ?? assert.fail("trained guard missing");
   assert.equal(trained.role, "guard");
+  assert.equal(units.unitsOf("player").filter((unit) => unit.role === "guard").length, 5);
   assert.ok(navigation.plan(trained.position, trained.position), "guard spawns on a navigable exit");
+
+  ageLevel = 2;
+  for (let index = 0; index < 10; index += 1) assert.equal(production.queueGuard("player"), "queued");
+  assert.equal(production.queueGuard("player"), "queue-full", "Town Barracks hold at most ten Guard orders");
+  assert.equal(production.queuedCount("player"), 10);
+  production.reset();
+  assert.equal(population.snapshot().reserved, 0, "reset releases every waiting Town Guard order");
+
+  ageLevel = 3;
+  for (let index = 0; index < 20; index += 1) assert.equal(production.queueGuard("player"), "queued");
+  assert.equal(production.queueGuard("player"), "queue-full", "third-age Barracks hold at most twenty Guard orders");
+  production.reset();
+  assert.equal(population.snapshot().reserved, 0, "reset releases every waiting third-age Guard order");
   structures.clear();
   units.clear();
 });

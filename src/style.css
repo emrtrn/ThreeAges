@@ -258,6 +258,11 @@ body {
   border-radius: 3px;
 }
 
+.rts-build-choices button:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
 .rts-build-choice-label {
   line-height: 1.1;
 }

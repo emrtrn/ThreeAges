@@ -75,7 +75,7 @@ import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import type { UnitOwner } from "./units/unit";
-import { BarracksProductionSystem } from "./structures/barracksProductionSystem";
+import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "./structures/structureUpgradeSystem";
 import { RoadGraph } from "./roads/roadGraph";
@@ -285,6 +285,7 @@ export class RtsApp {
       guard,
       this.kingdoms,
       (structure) => this.structureUpgrades.isUpgrading(structure),
+      (owner) => guardQueueCapacityForAgeLevel(this.centers.get(owner)?.level ?? 1),
     );
     this.workerProduction = new WorkerProductionSystem(
       this.units,
@@ -488,11 +489,15 @@ export class RtsApp {
       },
     });
     this.buildScene();
-    this.structures.setCompletedVisualHandler((structure) => this.applyStructureVisual(structure));
+    this.structures.setCompletedVisualHandler((structure) => {
+      this.structureUpgrades.applyCompletedUpgrade(structure);
+      this.applyStructureVisual(structure);
+    });
     void this.loadBuildingVisuals();
     this.spawnStartingUnits();
     this.syncPlacementUi();
     this.syncAgeUi();
+    this.syncStructureUpgradeUi();
     this.syncRoadUi();
   }
 
@@ -706,6 +711,7 @@ export class RtsApp {
     const population = this.playerKingdom.population.snapshot();
     this.buildPalette.setPopulation(population.used, population.capacity);
     this.syncAgeUi();
+    this.syncStructureUpgradeUi();
     this.syncEconomyUi();
     updateUnitCombat(
       this.units.all(),
@@ -886,10 +892,12 @@ export class RtsApp {
 
   private queueGuard(): void {
     const result = this.barracksProduction.queueGuard(PLAYER_OWNER);
+    const queuedCount = this.barracksProduction.queuedCount(PLAYER_OWNER);
+    const queueCapacity = this.barracksProduction.queueCapacity(PLAYER_OWNER);
     const message: Record<typeof result, string> = {
-      queued: "Muhafız üretim kuyruğa alındı.",
+      queued: `Muhafız üretim kuyruğa alındı (${queuedCount}/${queueCapacity}).`,
       "no-completed-barracks": "Önce tamamlanmış bir Kışla kurun.",
-      "already-training": "Kışla zaten bir Muhafız üretiyor.",
+      "queue-full": `Muhafız üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
       "exit-blocked": "Muhafız çıkışı engelli; Kışla çevresini açın.",
       "insufficient-resources": "Muhafız için kaynak yetersiz.",
       "population-full": "Nüfus dolu: önce Ev kurun.",
@@ -927,6 +935,7 @@ export class RtsApp {
       "insufficient-resources": "Kasaba Çağı için kaynak yetersiz.",
     };
     this.buildPalette.setActionMessage(message[result]);
+    this.syncStructureUpgradeUi();
     this.syncAgeUi();
   }
 
@@ -940,6 +949,7 @@ export class RtsApp {
       "insufficient-resources": "Kışla T2 için kaynak yetersiz.",
     };
     this.buildPalette.setActionMessage(message[result]);
+    this.syncStructureUpgradeUi();
   }
 
   private startHouseUpgrade(): void {
@@ -952,6 +962,7 @@ export class RtsApp {
       "insufficient-resources": "Ev T2 için kaynak yetersiz.",
     };
     this.buildPalette.setActionMessage(message[result]);
+    this.syncStructureUpgradeUi();
   }
 
   private startDepotUpgrade(): void {
@@ -964,6 +975,7 @@ export class RtsApp {
       "insufficient-resources": "Depo T2 için kaynak yetersiz.",
     };
     this.buildPalette.setActionMessage(message[result]);
+    this.syncStructureUpgradeUi();
   }
 
   private startOutpostUpgrade(): void {
@@ -976,9 +988,16 @@ export class RtsApp {
       "insufficient-resources": "Karakol T2 için kaynak yetersiz.",
     };
     this.buildPalette.setActionMessage(message[result]);
+    this.syncStructureUpgradeUi();
   }
 
   private syncAgeUi(): void {
     this.buildPalette.setAge(this.ages.snapshot(PLAYER_OWNER), this.options.ageBalance);
+  }
+
+  private syncStructureUpgradeUi(): void {
+    for (const buildingId of ["barracks", "house", "depot", "outpost"]) {
+      this.buildPalette.setStructureUpgradeState(buildingId, this.structureUpgrades.snapshot(PLAYER_OWNER, buildingId));
+    }
   }
 }

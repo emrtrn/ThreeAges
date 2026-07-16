@@ -820,6 +820,9 @@ Yiyecek ve odun ile çalışan küçük ama tam ekonomi döngüsü oluşturmak.
 ### İşçi üretimi ve nüfus
 
 - [x] Merkezden işçi üretimi ekle. (`WorkerProductionSystem`; Merkez sırayla işçi doğurur; kuyruk kapasitesi Merkez seviyesiyle 5 / 10 / 20'ye çıkar)
+- [x] Kışladan Muhafız üretim kuyruğu ekle. (`BarracksProductionSystem`; her Kışla
+  sırayla Muhafız doğurur; çağ seviyesi başına kapasite 5 / 10 / 20'dir ve
+  maliyet/nüfus kuyruğa alınırken ayrılır.)
 - [x] İşçi maliyeti ekle. (`worker_placeholder.cost = 50 yiyecek`; kuyrukta ayrılır, iptalde iade edilir)
 - [x] Nüfus kullanımı ekle. (işçi ve Muhafız JSON `populationCost` değeriyle kuyrukta kapasite ayırır)
 - [x] Ev nüfus kapasitesi ekle. (`house.populationCapacity = 5`; tamamlanmış Evler yerleşim üst sınırına eklenir)
@@ -1229,6 +1232,10 @@ Kapı A geçilmezse:
 
 ### Yapı yükseltmeleri
 
+- [x] Tür-geneli tek seferlik T2 araştırması. (`StructureUpgradeSystem`: Ev, Depo,
+  Kışla veya Karakol düğmesi tek maliyet ve süreyle o türün tamamlanmış tüm
+  yapılarını yükseltir; sonra tamamlanan aynı tür yapılar da T2 başlar. Palet,
+  süren veya biten araştırmayı devre dışı ve soluk gösterir.)
 - [x] Merkez T1 → T2. (`ages.json` Kasaba sonucu: 450 sağlık, 22 kontrol yarıçapı
   ve 9 sn yeni işçi üretimi; `TownCenter_FirstAge_Level2.gltf` tamamlanınca uygulanır.)
 - [x] Ev T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 70 Odun + 40 Taş,
