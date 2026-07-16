@@ -85,7 +85,11 @@ body {
   pointer-events: auto;
 }
 
-/* RTS Faz 1 victory panel: blocks the field only once a match has ended. */
+/*
+ * The Faz 9 match modal: the start screen, the pause menu and the result screen
+ * are one card in one place (see rtsMatchOverlay.ts). It blocks the field
+ * whenever the match is not running, which is now also *before* it has begun.
+ */
 .rts-match-overlay {
   position: absolute;
   inset: 0;
@@ -114,6 +118,30 @@ body {
 .rts-match-card h1 {
   margin: 0;
   color: #e5d675;
+  font-size: 24px;
+}
+
+/* A loss announced in the victory gold reads, for a beat, as a win. */
+.rts-match-card[data-tone="defeat"] {
+  border-color: #e09b5c;
+}
+
+.rts-match-card[data-tone="defeat"] h1 {
+  color: #e09b5c;
+}
+
+.rts-match-card p {
+  margin-top: 8px;
+  color: #dce8be;
+  font-size: 13px;
+}
+
+.rts-match-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 20px;
 }
 
 .rts-match-card button {
@@ -125,6 +153,22 @@ body {
   background: #cddd8d;
   border: 0;
   border-radius: 4px;
+}
+
+/*
+ * Only the default action wears the bright fill. "Teslim Ol" sitting in the
+ * same pill as "Devam Et" would read as an equally ordinary thing to click.
+ */
+.rts-match-card button[data-primary="false"] {
+  color: #e4ebcf;
+  background: #3d5140;
+  border: 1px solid #78905f;
+}
+
+.rts-match-card button[data-danger="true"] {
+  color: #fff1cf;
+  background: #7a3527;
+  border-color: #e09b5c;
 }
 
 /* Read-only Faz 1 diagnostics, intentionally available only with ?rts&debug. */

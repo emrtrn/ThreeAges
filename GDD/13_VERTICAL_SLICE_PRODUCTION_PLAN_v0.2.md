@@ -59,7 +59,7 @@ Bu sürümde aşağıdaki üretim kararları alınmıştır:
 5. Refah ilk vertical slice içinde sert ilerleme koşulu olmayacaktır.
 6. Save/load vertical slice zorunluluğundan çıkarılmıştır.
 7. Tam telemetri sistemi yerine küçük ve hedefli test kayıtları kullanılacaktır.
-8. Fog of war ve minimap çekirdek maç kanıtlandıktan sonra değerlendirilecektir.
+8. Fog of war çekirdek maç kanıtlandıktan sonra değerlendirilecektir; minimap küçük sahne ölçeği nedeniyle kapsamdan çıkarılmıştır (`SCOPE_LOG.md` SL-006).
 9. Süvari vertical slice kapsamından çıkarılmıştır.
 10. Okçu ayrı yapı yerine Kışla yükseltmesi veya Kışla II içinde açılacaktır.
 11. Tek kuşatma birimi kullanılacaktır.
@@ -294,7 +294,6 @@ Aşağıdaki özellikler yalnızca çekirdek maç kararlıysa eklenir:
 
 - Bölgesel zafer
 - Fog of war
-- Minimap
 - Refah göstergesi
 - Kule
 - Üçüncü seviye tüm bina modelleri
@@ -1691,9 +1690,23 @@ Oyuncunun dış açıklama olmadan temel maçı yönetebilmesini sağlamak.
 ## 51. Görevler
 
 **Faz 9 dilim düzeni.** §12 "her faz oynanabilir kalmalıdır" gereği bu bölüm tek
-seferde değil dilimler halinde üretiliyor. **Dilim 1 (Ana HUD + Bildirimler)
-tamamlandı**; kalan dört grup (seçim panelleri, yapı/yol araçları, maç akışı,
-minimal ayarlar) sırada.
+seferde değil dilimler halinde üretiliyor.
+
+- **Dilim 1 — Ana HUD + Bildirimler: tamamlandı.**
+- **Dilim 2 — Maç akışı: tamamlandı.**
+- Kalan: **seçim panelleri**, **yapı ve yol araçları**, **minimal ayarlar**.
+
+Kapı B değerlendirmesi §53 gereği ancak altı grup da bittiğinde yapılır.
+
+**Test notu (Faz 9 kapsamı dışı, ama sonraki dilimleri rahatsız edecek).**
+`tests/smoke/rts-building-placement.spec.ts` içindeki Faz 7 "box-selected group"
+testi **flaky**: ölçüldü, üç koşudan yaklaşık biri geçiyor. Faz 9'dan önce de
+(temiz `main`'de, `git stash` ile doğrulandı) başarısız oluyordu — yani bir
+regresyon değil. Sebep testin kendi kurulumunda: kamerayı 700 ms "s" tuşuyla
+kaydırıp birimlerin sabit bir marquee dikdörtgeninin (420,520 → 900,610) içine
+düşmesine bel bağlıyor. Seçim panelleri dilimi bu dosyaya dokunacak; testin
+kamera kaydırma yerine deterministik bir seçim yoluna geçirilmesi o dilimin
+işine dahil edilmeli.
 
 ### Ana HUD
 
@@ -1799,12 +1812,36 @@ motor testleri ve geometri iddiaları üçünü de yeşil geçiyordu.
 
 ### Maç akışı
 
-- [ ] Ana menü yerine basit başlatma ekranı
-- [ ] Pause
-- [ ] Yeniden başlat
-- [ ] Teslim ol
-- [ ] Zafer ekranı
-- [ ] Yenilgi ekranı
+**Dilim 2 — tamamlandı.** Altı kalem de tek bir modalda birleşti
+(`match/rtsMatchOverlay.ts`): başlatma ekranı, duraklatma menüsü ve sonuç ekranı
+aynı kart, aynı yerde, aynı sahayı kapatıyor — yalnız ne söyledikleri ve hangi
+eylemleri sundukları farklı. Üç ayrı bileşen, modalın CSS'inin üç kopyası ve
+ikisinin aynı anda ekranda olması için üç şans demekti.
+
+**İki durum, iki modül.** `RtsMatchFlow` (`match/rtsMatchFlow.ts`) yalnız
+*simülasyon çalışmalı mı* sorusunu yanıtlıyor: `start` → `playing` ↔ `paused`.
+`RtsMatchState` ise *kim kazandı* sorusunu. Birleştirmedim çünkü `ended`
+fazı ikinci bir gerçek kopyası olurdu — ve iki kopya anlaşmazlığa düşebilir.
+İkisi de saf durum; `test:engine` geçişleri doğrudan sürüyor.
+
+- [x] Ana menü yerine basit başlatma ekranı (Maç, oyuncu isteyene kadar
+  başlamıyor: RTS'in saf ekonomi ve saf karar olan açılışı, oyuncu ekranı hâlâ
+  okurken harcanmamalı. Sahne kartın arkasında render olmaya devam ediyor.)
+- [x] Pause (`Escape`. Ama önce bekleyen yerleştirmenin hakkı var: Escape "şu an
+  yaptığım şeyi geri al" demektir ve yarım yerleştirilmiş bir bina menüden daha
+  acildir — aksi halde hayalet, menünün altında kurulu kalırdı. Kamera duraklamada
+  da çalışıyor: haritaya bakmak maçı oynamak değildir.)
+- [x] Yeniden başlat (Hem sonuç ekranından hem duraklatma menüsünden. `flow`
+  da sıfırlanıyor — yoksa duraklatılmışken yeniden başlatmak dünyayı kurup onu
+  gizli bir menünün arkasında donmuş bırakırdı.)
+- [x] Teslim ol (Maçın kendi tek yönlü kapısından geçiyor, paralel bir bayrak
+  değil. "Yeniden Başlat"ın yanında tek tıkla maçı atmak olduğu için önce
+  onay istiyor; onay overlay'e ait — bu bir düğmenin özelliği, maçın değil.)
+- [x] Zafer ekranı
+- [x] Yenilgi ekranı (Yenilginin artık iki sebebi var. Merkezi hâlâ ayakta
+  dururken teslim olan oyuncuya "Merkeziniz yıkıldı" demek düpedüz yalandır;
+  `RtsMatchEndReason` bu yüzden var. Başlık da zafer altınında değil — bir kayıp,
+  bir an için bile olsa, kazanç gibi okunmamalı.)
 
 ### Minimal ayarlar
 
@@ -1836,11 +1873,14 @@ Kapı B değerlendirmesi §53 gereği ancak altı grup da bittiğinde yapılır.
 - [ ] Oyuncu yol ve karakol araçlarını dış açıklama olmadan kullanabiliyor.
   (Kapsam: "Yapı ve yol araçları" dilimi — yol rota/maliyet önizlemesi ve karakol
   kontrol alanı önizlemesi henüz yok.)
-- [ ] Maç başlatma, bitirme ve yeniden başlatma güvenilir. (Kapsam: "Maç akışı"
-  dilimi. Yeniden başlatma Faz 1'den beri çalışıyor ve dilim 1 bildirim/attack
-  watch durumunu ona bağladı — restart artık sessiz başlıyor ve taze Merkez
-  "hasarlı" okunmuyor; ancak başlatma ekranı, pause, teslim ol ve yenilgi ekranı
-  hâlâ yok.)
+- [x] Maç başlatma, bitirme ve yeniden başlatma güvenilir. (Dilim 2. Playwright
+  tam turu sürüyor: başlatma ekranı → Escape ile duraklat/devam → yerleştirme
+  varken Escape'in önceliği → teslim ol (onaylı) → "Teslim oldunuz." yenilgisi →
+  yeniden başlat → yeniden *çalışan* maç, taze nüfusla ve silinmiş onayla.
+  **Pause'un gerçekten simülasyonu durdurduğu ayrı bir testle kanıtlanıyor:** 8X'te
+  25 sn'lik işçi siparişi verilip duraklatılıyor, gereken sürenin iki katı
+  bekleniyor ve boşta işçi sayısı kıpırdamıyor; devam edilince sipariş tamamlanıyor.
+  Menü iddiaları bunu gösteremezdi.)
 - [x] 1366×768 ve 1920×1080 çözünürlükleri kullanılabilir. (Playwright her iki
   çözünürlükte: şerit tam genişlik + %10'dan kısa, debug overlay ve hız kontrolü
   şeridin altından başlıyor, yatay taşma yok. Bu test `--rts-hud-bar-height` ile
@@ -1986,24 +2026,16 @@ Başarısızsa sistem feature flag arkasında kapatılır.
 
 ---
 
-## 60. Minimap — Koşullu
+## 60. Minimap — Kapsamdan Çıkarıldı
 
-### Ekleme koşulları
+**Karar (2026-07-17, `SCOPE_LOG.md` SL-006):** Sahneler kamera ile yönetilebilecek kadar küçük olduğu için minimap üretilmeyecektir. Ekranda minimap çerçevesi, devre dışı ikon veya geleceğe ayrılmış boş alan bırakılmaz.
 
-- Harita kamera ile yönetilemeyecek kadar büyük.
-- Stratejik uyarılara hızlı erişim gerekli.
-- Fog sistemi varsa bilgi modeli hazır.
+Minimap'in navigasyon görevi şu düşük maliyetli araçlarla karşılanır:
 
-### Görevler
-
-- [ ] Harita temsili
-- [ ] Kamera çerçevesi
-- [ ] Dost ve düşman göstergeleri
-- [ ] Stratejik noktalar
-- [ ] Uyarı pingleri
-- [ ] Tıklayarak kamera taşıma
-
-Minimap gerekli değilse yalnızca uyarıya tıklayarak kamera odaklama kullanılabilir.
+- bildirime tıklayarak kamera odaklama,
+- kısa süreli world-space veya ekran kenarı pingi,
+- stratejik nokta isimleri,
+- kontrol grupları ve kamera konumu kısayolları.
 
 ---
 
@@ -2490,10 +2522,11 @@ Koşullu sistemler kritik yol üzerinde değildir:
 
 - Bölgesel zafer
 - Fog of war
-- Minimap
 - Refah
 - Kule
 - Kolay ve Zor AI
+
+Minimap koşullu sistem değil, SL-006 ile kapsamdan çıkarılmış bir özelliktir.
 
 ---
 
@@ -2649,7 +2682,7 @@ Belirti:
 - Refah koşullu,
 - büyük sabit panellerden kaçınma,
 - aynı uyarıyı gruplayarak gösterme,
-- minimap’i yalnız gerekliyse ekleme.
+- minimap için ekran alanı veya üretim bütçesi ayırmama.
 
 ---
 
@@ -2670,16 +2703,15 @@ Belirti:
 
 Takvim veya kalite baskısı oluşursa şu sırayla kesilir:
 
-1. Minimap
-2. Fog of war
-3. Bölgesel zafer
-4. Refah
-5. Kule
-6. Kolay ve Zor zorluk profilleri
-7. T3 yan yapı modelleri
-8. Gelişmiş maç istatistikleri
-9. Ekran kenarı kamera kaydırma
-10. Kontrol grupları
+1. Fog of war
+2. Bölgesel zafer
+3. Refah
+4. Kule
+5. Kolay ve Zor zorluk profilleri
+6. T3 yan yapı modelleri
+7. Gelişmiş maç istatistikleri
+8. Ekran kenarı kamera kaydırma
+9. Kontrol grupları
 11. Ayrıntılı VFX
 12. Ayrıntılı ses varyasyonları
 
@@ -3107,7 +3139,7 @@ Vertical slice tamamlanmıştır yalnızca:
 
 - [ ] Bölgesel zafer kararı
 - [ ] Fog kararı
-- [ ] Minimap kararı
+- [x] Minimap kapsamdan çıkarıldı. (`SCOPE_LOG.md` SL-006)
 - [ ] Refah kararı
 
 ### Sunum
@@ -3161,7 +3193,7 @@ Vertical slice tamamlanmıştır yalnızca:
 
 - [ ] Bölgesel zafer gerekli mi?
 - [ ] Fog of war gerçekten oynanış değerine sahip mi?
-- [ ] Minimap gerekli mi?
+- [x] Minimap gerekli değil; küçük sahne ölçeği için kapsamdan çıkarıldı. (`SCOPE_LOG.md` SL-006)
 - [ ] Refah hangi rolde kalmalı?
 - [ ] Kule çekirdek savaşa katkı sağlıyor mu?
 - [ ] Krallık çağında hangi yeni karar açılmalı?
@@ -3187,11 +3219,15 @@ Vertical slice tamamlanmıştır yalnızca:
 - Refah sert çağ kilidi değildir.
 - Askerî zafer zorunlu, bölgesel zafer koşulludur.
 - Save/load kapsam dışıdır.
-- Fog ve minimap koşulludur.
+- Fog koşulludur; minimap kapsam dışıdır (`SCOPE_LOG.md` SL-006).
 
 ---
 
 ## 115. Revizyon Notları
+
+### 2026-07-17 kapsam kararı
+
+- Minimap küçük sahne ölçeği nedeniyle kapsamdan çıkarıldı; navigasyon tıklanabilir bildirim, world-space/kenar pingi ve stratejik nokta etiketleriyle çözülecek (`SCOPE_LOG.md` SL-006).
 
 ### Sürüm 0.2
 

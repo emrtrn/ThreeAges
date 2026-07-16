@@ -57,6 +57,7 @@ import { COMMAND_CENTER_MAX_HEALTH } from "./structures/commandCenter";
 import { RtsBuildingVisuals } from "./structures/rtsBuildingVisuals";
 import { updateStructureDestruction } from "./structures/structureDestruction";
 import { RtsMatchState } from "./match/rtsMatchState";
+import { RtsMatchFlow } from "./match/rtsMatchFlow";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import { PlacedStructureSystem, type PlacedStructure } from "./structures/placedStructureSystem";
@@ -184,6 +185,8 @@ export class RtsApp {
   private readonly workerProduction: WorkerProductionSystem;
   private readonly structureUpgrades: StructureUpgradeSystem;
   private readonly match = new RtsMatchState();
+  /** §51: whether the simulation should be running; `match` owns who won. */
+  private readonly flow = new RtsMatchFlow();
   private readonly matchOverlay: RtsMatchOverlay;
   private readonly debugOverlay: RtsDebugOverlay | null;
   private readonly navigation = new RtsNavigation();
@@ -444,7 +447,12 @@ export class RtsApp {
     this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => {
       this.simulationSpeed = speed;
     });
-    this.matchOverlay = new RtsMatchOverlay(this.restartMatch);
+    this.matchOverlay = new RtsMatchOverlay({
+      onStart: this.beginMatch,
+      onResume: this.resumeMatch,
+      onRestart: this.restartMatch,
+      onSurrender: this.surrenderMatch,
+    });
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
     if (this.options.prosperityDebugEnabled) {
       this.debugOverlay?.setProgressionLines([
@@ -562,6 +570,10 @@ export class RtsApp {
     this.log.info(
       `RTS runtime started${this.options.debug ? " (debug)" : ""}`,
     );
+    // The runtime is live but the match is not: §51's start screen holds the
+    // simulation until the player asks for it. The scene still renders behind
+    // the card, so the opening position is something they can look at first.
+    this.matchOverlay.showStart();
     this.frameHandle = requestAnimationFrame(this.onFrame);
   }
 
@@ -682,8 +694,11 @@ export class RtsApp {
 
     this.resize();
     this.consumeCommandInput();
+    // The camera keeps running while paused and on the start screen: looking at
+    // the map is not playing the match, and freezing it would trap the player
+    // staring at whatever the last frame happened to show.
     this.cameraController.update(dt, this.input);
-    if (this.match.active) {
+    if (this.match.active && this.flow.running) {
       for (const simulationDt of simulationSteps(dt, this.simulationSpeed, MAX_FRAME_SECONDS)) {
         if (!this.match.active) break;
         this.updateSimulation(simulationDt);
@@ -731,6 +746,9 @@ export class RtsApp {
    * so it uses the live pointer — the same place a right-click would have read.
    */
   private consumeCommandInput(): void {
+    // Drained before the unit orders: pause is about the match, not the
+    // selection, and it must answer even when the simulation is frozen.
+    if (this.input.consumeCommand("pause")) this.togglePause();
     if (this.input.consumeStopRequest()) this.commands.issueStop();
     if (this.input.consumeCommand("hold")) this.commands.issueStance("hold");
     if (this.input.consumeCommand("aggressive")) this.commands.issueStance("aggressive");
@@ -851,7 +869,7 @@ export class RtsApp {
       this.log.info(outcome === "victory"
         ? "Victory: enemy command center destroyed"
         : "Defeat: the player's command center was destroyed");
-      this.matchOverlay.showResult(outcome);
+      this.showMatchResult();
     }
   }
 
@@ -905,6 +923,62 @@ export class RtsApp {
     }
   }
 
+  /** §51: leave the start screen and let the simulation run. */
+  private readonly beginMatch = (): void => {
+    if (!this.flow.begin()) return;
+    this.matchOverlay.hide();
+    this.log.info("RTS match started");
+  };
+
+  private readonly resumeMatch = (): void => {
+    if (!this.flow.resume()) return;
+    this.matchOverlay.hide();
+  };
+
+  /**
+   * §51 "Teslim ol". Routed through the match's own one-way door, so resigning
+   * lands on the same defeat screen a razed centre does — with its own reason.
+   */
+  private readonly surrenderMatch = (): void => {
+    if (!this.match.surrender()) return;
+    this.log.info("Defeat: the player surrendered");
+    this.showMatchResult();
+  };
+
+  /**
+   * Pause, unless there is a pending placement to back out of first. Escape
+   * means "undo the thing I am in the middle of", and a half-placed building is
+   * more immediate than the menu.
+   */
+  private readonly togglePause = (): void => {
+    if (!this.match.active || this.flow.phase === "start") return;
+    if (this.placement.state().activeBuildingId !== null) {
+      this.placement.cancel();
+      this.syncPlacementUi();
+      return;
+    }
+    if (this.roadPlacement.state().active) {
+      this.roadPlacement.cancel();
+      this.syncRoadUi();
+      return;
+    }
+    if (this.rallyPointPending) {
+      this.rallyPointPending = false;
+      this.buildPalette.setActionMessage("Toplanma noktası seçimi iptal edildi.");
+      return;
+    }
+    if (!this.flow.togglePause()) return;
+    if (this.flow.phase === "paused") this.matchOverlay.showPause();
+    else this.matchOverlay.hide();
+  };
+
+  private showMatchResult(): void {
+    const outcome = this.match.outcome;
+    const reason = this.match.reason;
+    if (outcome === "active" || reason === null) return;
+    this.matchOverlay.showResult(outcome, reason);
+  }
+
   /** Restore all Faz 1 match-owned systems without reloading the browser route. */
   private readonly restartMatch = (): void => {
     this.selection.reset();
@@ -934,6 +1008,10 @@ export class RtsApp {
     this.notificationFeed.setNotifications([]);
     this.attackWatch.reset();
     this.match.reset();
+    // "Yeniden Başlat" is reachable from the pause menu as well as the result
+    // screen, so the flow has to be told too — otherwise restarting a paused
+    // match would rebuild the world and leave it frozen behind a hidden menu.
+    this.flow.restart();
     this.spawnCenters();
     this.territory.refresh();
     this.refreshNavigationBlockers();

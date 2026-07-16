@@ -8,7 +8,7 @@
 
 ---
 
-> **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. Minimap, fog of war overlay'i ve gerçek pause koşulludur; çelişki halinde 13 v0.2 esastır. Forge'a özgü teknik hizalama (mevcut viewport kamera/seçim altyapısı) için bkz. `TECH_DECISIONS.md`.
+> **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. **Minimap, küçük sahne ölçeği nedeniyle 2026-07-17 tarihli `SCOPE_LOG.md` SL-006 kararıyla kapsamdan çıkarılmıştır; aşağıdaki minimap bölümleri tarihsel tasarım notudur ve üretim görevi değildir.** Fog of war overlay'i ve gerçek pause ayrı koşullu kararlardır; çelişki halinde 13 v0.2 esastır. Forge'a özgü teknik hizalama (mevcut viewport kamera/seçim altyapısı) için bkz. `TECH_DECISIONS.md`.
 
 ---
 

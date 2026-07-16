@@ -44,6 +44,13 @@ const COMMAND_KEYS = {
   KeyH: "hold",
   /** Return held units to normal orders. */
   KeyG: "aggressive",
+  /**
+   * Faz 9 §51 pause. Escape is where players reach for it, but it is also where
+   * they reach to cancel a pending build placement — `RtsApp` gives placement
+   * the first claim on it, so this only ever becomes a pause when there is
+   * nothing to back out of.
+   */
+  Escape: "pause",
 } as const;
 
 type RtsCommandKey = (typeof COMMAND_KEYS)[keyof typeof COMMAND_KEYS];

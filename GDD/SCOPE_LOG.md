@@ -97,12 +97,25 @@ Format:
   etmek nüfus tavanını 45'e düşürüyor ve §55 nüfus kilidi riskini geri getiriyor.
 - **İlgili:** `13 §48` (Yapı ve genişleme), `src/game/rts/world/rtsMapBlockout.ts`.
 
+### SL-006 — Minimap küçük sahne ölçeği nedeniyle kapsamdan çıkarıldı (2026-07-17)
+
+- **Karar:** Minimap hiçbir ürün fazında üretilmeyecek; UI'da boş çerçeve,
+  devre dışı ikon veya geleceğe ayrılmış alan bırakılmayacak. Navigasyon,
+  tıklanabilir kritik bildirimler, world-space/ekran kenarı pingleri, stratejik
+  nokta etiketleri ve kamera/kontrol grubu kısayollarıyla sağlanacak.
+- **Kapsam etkisi:** Kesildi (Ürün A/B/C ve Faz 11 koşullu sistemlerinden).
+- **Gerekçe:** ThreeAges sahneleri kamera ile yönetilebilecek kadar küçük olacak;
+  minimap'in ekran alanı, bilgi tekrarı, fog senkronizasyonu, çizim ve test
+  maliyeti sağladığı navigasyon faydasını aşar.
+- **İlgili:** `13 §60`, `UI_PRODUCTION_PLAN_v0.1.md §6.8/§13`,
+  `10_CAMERA_CONTROLS_AND_UI.md` kapsam hizalaması.
+
 ---
 
 ## 3. Referans — Scope-Cut Sırası
 
 Takvim/teknik risk oluşursa özellikler `GDD_MASTER_v0.2.md §8.4` sırasıyla
-ertelenir (Save/load → Süvari → Kolay/Zor AI → Bölgesel zafer → Fog/minimap →
+ertelenir (Save/load → Süvari → Kolay/Zor AI → Bölgesel zafer → Fog →
 Refah mekaniği → Okçu ayrı binası → Yol II → Kule → Gelişmiş telemetri →
 Gelişmiş VFX → Kontrol grupları). Kesilmemesi gereken Ürün A çekirdeği aynı
 bölümde listelidir.
@@ -120,3 +133,8 @@ bölümde listelidir.
 
 - Faz 8 (AI-2) kapsam kararları: SL-004 (Koçbaşı ↔ dış yatak ekonomisi) ve
   SL-005 (üs anchor kapasitesi) eklendi.
+
+### Sürüm 0.3 (2026-07-17)
+
+- SL-006 ile minimap küçük sahne ölçeği nedeniyle bütün ürün kapsamından
+  çıkarıldı; minimapsiz navigasyon yüzeyleri UI planına bağlandı.

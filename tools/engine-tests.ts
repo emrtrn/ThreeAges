@@ -69,6 +69,7 @@ import { CommandSystem } from "../src/game/rts/commands/commandSystem";
 import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
 import { CommandCenterSystem } from "../src/game/rts/structures/commandCenterSystem";
 import { RtsMatchState } from "../src/game/rts/match/rtsMatchState";
+import { RtsMatchFlow } from "../src/game/rts/match/rtsMatchFlow";
 import { HealthComponent } from "../src/game/rts/units/health";
 import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
 import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
@@ -32230,6 +32231,79 @@ check("either kingdom can win: a destroyed player centre is a defeat (plan §39)
   assert.equal(match.update(centers), "victory", "a decided match does not flip");
   match.reset();
   assert.equal(match.outcome, "active");
+});
+
+check("Faz 9 §51: the match flow gates the simulation without owning the result", () => {
+  const flow = new RtsMatchFlow();
+
+  // §51: a match does not run until the player asks for it.
+  assert.equal(flow.phase, "start");
+  assert.equal(flow.running, false, "the opening is not spent while the card is up");
+
+  // Pause is meaningless before the match begins, and "pausing" the start screen
+  // would strand the player behind a menu with no running match under it.
+  assert.equal(flow.togglePause(), false);
+  assert.equal(flow.phase, "start");
+
+  assert.equal(flow.begin(), true);
+  assert.equal(flow.running, true);
+  assert.equal(flow.begin(), false, "beginning a running match changes nothing");
+
+  assert.equal(flow.togglePause(), true);
+  assert.equal(flow.phase, "paused");
+  assert.equal(flow.running, false, "a paused match does not advance");
+  assert.equal(flow.togglePause(), true);
+  assert.equal(flow.phase, "playing");
+  assert.equal(flow.resume(), false, "resuming a running match changes nothing");
+
+  // A restart is a running match, not a trip back to the start screen: the
+  // player already made that decision by pressing "Yeniden Başlat".
+  flow.pause();
+  flow.restart();
+  assert.equal(flow.running, true, "restarting from the pause menu leaves it playing");
+});
+
+check("Faz 9 §51: surrender is a defeat with its own reason (plan §51)", () => {
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 22);
+  centers.spawn("enemy", 0, -26);
+
+  const match = new RtsMatchState();
+  assert.equal(match.update(centers), "active");
+  assert.equal(match.reason, null, "an undecided match has no reason");
+
+  assert.equal(match.surrender(), true);
+  assert.equal(match.outcome, "defeat");
+  assert.equal(match.reason, "surrendered");
+
+  // The result screen reads this reason. Letting `update` overwrite it would
+  // tell a player who resigned with their centre standing that it was razed.
+  assert.equal(match.update(centers), "defeat");
+  assert.equal(match.reason, "surrendered", "a resigned match is not re-explained");
+  assert.equal(match.surrender(), false, "a decided match cannot be resigned again");
+
+  // A destroyed centre still explains itself as one.
+  const razed = new RtsMatchState();
+  const razedCenters = new CommandCenterSystem();
+  const razedPlayer = razedCenters.spawn("player", 0, 22);
+  razedCenters.spawn("enemy", 0, -26);
+  razedPlayer.health.damage(razedPlayer.health.max);
+  assert.equal(razed.update(razedCenters), "defeat");
+  assert.equal(razed.reason, "center-destroyed");
+
+  // You cannot resign a match you have already won.
+  const won = new RtsMatchState();
+  const wonCenters = new CommandCenterSystem();
+  wonCenters.spawn("player", 0, 22);
+  const wonEnemy = wonCenters.spawn("enemy", 0, -26);
+  wonEnemy.health.damage(wonEnemy.health.max);
+  assert.equal(won.update(wonCenters), "victory");
+  assert.equal(won.surrender(), false);
+  assert.equal(won.outcome, "victory");
+
+  match.reset();
+  assert.equal(match.outcome, "active");
+  assert.equal(match.reason, null, "a restart carries no reason from the last match");
 });
 
 check("§69: the AI stops deciding once the match is over", () => {
