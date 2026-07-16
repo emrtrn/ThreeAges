@@ -28028,6 +28028,33 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.equal(barracks.level, 2);
   assert.equal(barracks.health.max, 900);
   assert.deepEqual(barracksProduction.update(RTS_TEST_UNIT_STATS.trainingSeconds).map((event) => event.type), ["completed"]);
+
+  const houseStats = buildings.house ?? assert.fail("house balance missing");
+  assert.deepEqual(houseStats.upgrade, { cost: { wood: 70, stone: 40 }, durationSeconds: 35, maxHealth: 450 });
+  const house = structures.place("player", houseStats, 80, 10);
+  structures.advanceConstruction(house, houseStats.constructionSeconds);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 25, "a completed T1 House adds five population");
+  kingdoms.get("player").wallet.credit("wood", 70);
+  kingdoms.get("player").wallet.credit("stone", 40);
+  assert.equal(upgrades.start("player", "house"), "started");
+  assert.deepEqual(upgrades.update(34.9), []);
+  assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"]);
+  assert.equal(house.level, 2);
+  assert.equal(house.health.max, 450);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 28, "a T2 House raises its capacity from five to eight");
+
+  const depotStats = buildings.depot ?? assert.fail("depot balance missing");
+  const depot = structures.place("player", depotStats, 100, 10);
+  structures.advanceConstruction(depot, depotStats.constructionSeconds);
+  assert.deepEqual(depot.stats.upgrade, { cost: { wood: 90, stone: 40 }, durationSeconds: 45, maxHealth: 750 });
+  kingdoms.get("player").wallet.credit("wood", 90);
+  kingdoms.get("player").wallet.credit("stone", 40);
+  assert.equal(upgrades.start("player", "depot"), "started");
+  assert.equal(depot.construction.complete, true, "a depot stays a completed logistics endpoint while upgrading");
+  assert.deepEqual(upgrades.update(44.9), []);
+  assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"]);
+  assert.equal(depot.level, 2);
+  assert.equal(depot.health.max, 750);
 });
 
 check("Faz 6 quarry uses its finite stone node and cannot be placed away from one", () => {
@@ -28221,6 +28248,26 @@ check("RTS melee attacks can damage an enemy command center", () => {
   });
   assert.equal(enemyCenter.health.current, 288);
   assert.deepEqual(hits, [{ damage: 12, targetOwner: "enemy" }]);
+});
+
+check("RTS test sandbox protects the player command center without disabling enemy attacks", () => {
+  const units = new UnitSystem();
+  const centers = new CommandCenterSystem();
+  const attacker = units.spawn("enemy", 0, 0, RTS_TEST_UNIT_STATS);
+  const playerCenter = centers.spawn("player", 1.1, 0, 300);
+  attacker.setAttackTarget(playerCenter);
+
+  updateUnitCombat(
+    [attacker],
+    0,
+    undefined,
+    (unit, target) => !(unit.owner === "enemy" && target === playerCenter),
+  );
+  assert.equal(playerCenter.health.current, 300, "a protected center receives no sandbox damage");
+  assert.equal(attacker.attackTarget, playerCenter, "the AI still retains and pursues its attack order");
+
+  updateUnitCombat([attacker], 0);
+  assert.equal(playerCenter.health.current, 288, "normal combat remains unchanged outside the sandbox policy");
 });
 
 check("RTS match enters victory when the enemy command center is depleted", () => {

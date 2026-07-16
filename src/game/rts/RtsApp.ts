@@ -113,6 +113,8 @@ const AI_OWNER: UnitOwner = "enemy";
 export interface RtsAppOptions {
   /** `?debug`: shows the compact Faz 1 RTS state/debug panel. */
   readonly debug?: boolean;
+  /** `?testSandbox`: enemy units cannot damage the player's command centre. */
+  readonly testSandbox?: boolean;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
   readonly unitBalance: UnitBalance;
   /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
@@ -375,6 +377,8 @@ export class RtsApp {
       () => this.queueWorker(),
       () => this.startTownUpgrade(),
       () => this.startBarracksUpgrade(),
+      () => this.startHouseUpgrade(),
+      () => this.startDepotUpgrade(),
     );
     this.roadControls = new RtsRoadControls(
       () => {
@@ -485,7 +489,9 @@ export class RtsApp {
     this.pointer.attach();
     this.resize();
     this.lastTime = performance.now();
-    this.log.info(`RTS runtime started${this.options.debug ? " (debug)" : ""}`);
+    this.log.info(
+      `RTS runtime started${this.options.debug ? " (debug)" : ""}${this.options.testSandbox ? " (test sandbox)" : ""}`,
+    );
     this.frameHandle = requestAnimationFrame(this.onFrame);
   }
 
@@ -681,7 +687,14 @@ export class RtsApp {
     this.buildPalette.setPopulation(population.used, population.capacity);
     this.syncAgeUi();
     this.syncEconomyUi();
-    updateUnitCombat(this.units.all(), dt, (hit) => this.debugOverlay?.recordHit(hit));
+    updateUnitCombat(
+      this.units.all(),
+      dt,
+      (hit) => this.debugOverlay?.recordHit(hit),
+      (attacker, target) => !(this.options.testSandbox
+        && attacker.owner === AI_OWNER
+        && target === this.centers.get(PLAYER_OWNER)),
+    );
     updateUnitDeaths(this.units, this.selection, dt);
     this.destroyRuinedStructures();
     const outcome = this.match.update(this.centers);
@@ -903,6 +916,30 @@ export class RtsApp {
       "already-upgrading": "Kışla T2 yükseltmesi zaten sürüyor.",
       "not-town": "Kışlayı T2 yükseltmek için önce Kasaba Çağına geçin.",
       "insufficient-resources": "Kışla T2 için kaynak yetersiz.",
+    };
+    this.buildPalette.setActionMessage(message[result]);
+  }
+
+  private startHouseUpgrade(): void {
+    const result = this.structureUpgrades.start(PLAYER_OWNER, "house");
+    const message: Record<typeof result, string> = {
+      started: "Ev T2 yükseltmesi başladı.",
+      "no-eligible-structure": "Yükseltilecek tamamlanmış T1 Ev yok.",
+      "already-upgrading": "Ev T2 yükseltmesi zaten sürüyor.",
+      "not-town": "Evi T2 yükseltmek için önce Kasaba Çağına geçin.",
+      "insufficient-resources": "Ev T2 için kaynak yetersiz.",
+    };
+    this.buildPalette.setActionMessage(message[result]);
+  }
+
+  private startDepotUpgrade(): void {
+    const result = this.structureUpgrades.start(PLAYER_OWNER, "depot");
+    const message: Record<typeof result, string> = {
+      started: "Depo T2 yükseltmesi başladı; yol bağlantısı korunur.",
+      "no-eligible-structure": "Yükseltilecek tamamlanmış T1 Depo yok.",
+      "already-upgrading": "Depo T2 yükseltmesi zaten sürüyor.",
+      "not-town": "Depoyu T2 yükseltmek için önce Kasaba Çağına geçin.",
+      "insufficient-resources": "Depo T2 için kaynak yetersiz.",
     };
     this.buildPalette.setActionMessage(message[result]);
   }

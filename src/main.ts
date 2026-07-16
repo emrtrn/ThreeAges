@@ -84,6 +84,7 @@ async function main(): Promise<void> {
     ]);
     const rts = new RtsApp(canvas, {
       debug: params.has("debug"),
+      testSandbox: params.has("testSandbox"),
       unitBalance,
       buildingBalance,
       resourceBalance,

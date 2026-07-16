@@ -12,14 +12,24 @@
     "cost": { "wood": 80 },
     "constructionSeconds": 25,
     "maxHealth": 300,
-    "populationCapacity": 5
+    "populationCapacity": 5,
+    "upgrade": {
+      "cost": { "wood": 70, "stone": 40 },
+      "durationSeconds": 35,
+      "maxHealth": 450
+    }
   },
   "depot": {
     "label": "Depo",
     "footprint": { "width": 6, "depth": 6 },
     "cost": { "wood": 120 },
     "constructionSeconds": 45,
-    "maxHealth": 500
+    "maxHealth": 500,
+    "upgrade": {
+      "cost": { "wood": 90, "stone": 40 },
+      "durationSeconds": 45,
+      "maxHealth": 750
+    }
   },
   "outpost": {
     "label": "Karakol",

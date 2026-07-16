@@ -19,6 +19,7 @@ export function updateUnitCombat(
   units: readonly Unit[],
   dt: number,
   onHit?: (hit: CombatHit) => void,
+  canDamageTarget?: (attacker: Unit, target: CombatTarget) => boolean,
 ): void {
   for (const unit of units) {
     if (unit.role === "worker") continue;
@@ -35,6 +36,7 @@ export function updateUnitCombat(
       continue;
     }
     if (combatDistance(unit.position, target) > unit.attack.range) continue;
+    if (canDamageTarget && !canDamageTarget(unit, target)) continue;
 
     const change = unit.attack.tryHit(target.health);
     if (change) onHit?.({ attacker: unit, target, change });

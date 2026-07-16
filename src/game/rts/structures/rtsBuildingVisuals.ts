@@ -12,7 +12,7 @@ import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 import type { CommandCenter } from "./commandCenter";
 import type { PlacedStructure } from "./placedStructureSystem";
 
-type VisualBuildingId = "command_center_t1" | "command_center_t2" | "house" | "depot" | "outpost" | "farm" | "lumber_camp" | "barracks_t1" | "barracks_t2";
+type VisualBuildingId = "command_center_t1" | "command_center_t2" | "house_t1" | "house_t2" | "depot_t1" | "depot_t2" | "outpost" | "farm" | "lumber_camp" | "barracks_t1" | "barracks_t2";
 
 interface BuildingVisualDefinition {
   readonly path: string;
@@ -27,8 +27,10 @@ const STATIC_MESH_ROOT = "/assets/ThreeAges/StaticMeshes";
 const VISUALS: Record<VisualBuildingId, BuildingVisualDefinition> = {
   command_center_t1: { path: `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level1.gltf` },
   command_center_t2: { path: `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level2.gltf` },
-  house: { path: `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level1.gltf` },
-  depot: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level1.gltf` },
+  house_t1: { path: `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level1.gltf` },
+  house_t2: { path: `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level2.gltf` },
+  depot_t1: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level1.gltf` },
+  depot_t2: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level2.gltf` },
   outpost: { path: `${STATIC_MESH_ROOT}/WatchTower_FirstAge_Level1.gltf` },
   farm: { path: `${STATIC_MESH_ROOT}/Farm_FirstAge_Level1_Wheat.gltf` },
   lumber_camp: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level1.gltf` },
@@ -62,9 +64,13 @@ export class RtsBuildingVisuals {
 
   createForStructure(structure: PlacedStructure): Group | null {
     if (!structure.construction.complete) return null;
-    const id = structure.stats.id === "barracks"
+    const id = structure.stats.id === "house"
+      ? (structure.level >= 2 ? "house_t2" : "house_t1")
+      : structure.stats.id === "depot"
+      ? (structure.level >= 2 ? "depot_t2" : "depot_t1")
+      : structure.stats.id === "barracks"
       ? (structure.level >= 2 ? "barracks_t2" : "barracks_t1")
-      : structure.stats.id as Exclude<VisualBuildingId, "command_center_t1" | "command_center_t2" | "barracks_t1" | "barracks_t2">;
+      : structure.stats.id as Exclude<VisualBuildingId, "command_center_t1" | "command_center_t2" | "house_t1" | "house_t2" | "depot_t1" | "depot_t2" | "barracks_t1" | "barracks_t2">;
     return this.create(
       id,
       structure.stats.footprint.width,

@@ -46,6 +46,8 @@ export interface PlacedStructure {
   readonly combatRadius: number;
   /** T1 at placement; data-owned upgrades may promote this to T2. */
   level: number;
+  /** T2 currently grants population only when its upgrade completes. */
+  populationCapacityBonus: number;
 }
 
 export class PlacedStructureSystem {
@@ -97,6 +99,7 @@ export class PlacedStructureSystem {
       // nearest edge, so the shorter side is what a melee unit must reach.
       combatRadius: Math.min(stats.footprint.width, stats.footprint.depth) / 2,
       level: 1,
+      populationCapacityBonus: 0,
     };
     this.structures.push(structure);
     return structure;

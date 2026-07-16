@@ -41,6 +41,9 @@ export class StructureUpgradeSystem {
       this.kingdoms.get(upgrade.structure.owner).wallet.commit(upgrade.reservation);
       upgrade.structure.level = 2;
       upgrade.structure.health.upgradeMax(upgrade.structure.stats.upgrade!.maxHealth);
+      if (upgrade.structure.stats.id === "house") {
+        upgrade.structure.populationCapacityBonus = 3;
+      }
       this.upgrades.delete(id); events.push({ structure: upgrade.structure, type: "completed" });
     }
     return events;

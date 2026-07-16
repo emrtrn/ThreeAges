@@ -670,6 +670,8 @@ Boş test sahnesinde oyuncunun kamera, seçim, hareket ve basit saldırı ile bi
 - [x] Path durumunu göster. (`?rts&debug`: kalan waypoint sayısı)
 - [x] Hasar logu göster. (`?rts&debug`: son altı vuruş)
 - [x] Maç durumunu göster. (`?rts&debug`: sonuç ve iki merkezin canı)
+- [x] Test sandbox ekle. (`?rts&testSandbox`: AI çalışmaya devam eder; düşman
+  birimleri oyuncu Merkezine hasar veremez ve test oturumu erken yenilgiyle bitmez.)
 
 ---
 
@@ -1227,8 +1229,10 @@ Kapı A geçilmezse:
 
 - [x] Merkez T1 → T2. (`ages.json` Kasaba sonucu: 450 sağlık, 22 kontrol yarıçapı
   ve 9 sn yeni işçi üretimi; `TownCenter_FirstAge_Level2.gltf` tamamlanınca uygulanır.)
-- [ ] Ev T1 → T2
-- [ ] Depo T1 → T2, kapsam uygunsa
+- [x] Ev T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 70 Odun + 40 Taş,
+  35 sn; kapasite 5'ten 8'e, sağlık 450'ye çıkar ve Level 2 ev modeli uygulanır.)
+- [x] Depo T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 90 Odun + 40 Taş,
+  45 sn; yol bağlantısı kesilmeden sağlık 750'ye ve Level 2 Depo modeline geçer.)
 - [x] Kışla T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 140 Odun + 80 Taş,
   50 sn; Muhafız kuyruğu durur, T2 900 sağlığa ve Level 2 modele geçer.)
 - [ ] Karakol T1 → T2, kapsam uygunsa

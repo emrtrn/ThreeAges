@@ -39,7 +39,7 @@ export class PopulationSystem {
     const current = this.units.unitsOf(this.owner).length;
     const capacity = this.baseCapacity + this.structures.ownedBy(this.owner)
       .filter((structure) => structure.construction.complete)
-      .reduce((total, structure) => total + (structure.stats.populationCapacity ?? 0), 0);
+      .reduce((total, structure) => total + (structure.stats.populationCapacity ?? 0) + structure.populationCapacityBonus, 0);
     return { current, reserved: this.reserved, capacity, used: current + this.reserved };
   }
 
