@@ -87,6 +87,7 @@ export function updateUnitMovement(
   options: UnitMovementOptions = {},
 ): void {
   for (const unit of units) {
+    unit.advanceWorkerReturnDelay(dt);
     if (unit.health.depleted) {
       unit.stop();
       continue;

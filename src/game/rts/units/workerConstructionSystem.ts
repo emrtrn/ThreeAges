@@ -129,7 +129,7 @@ export class WorkerConstructionSystem {
 
   private candidatesFor(structure: PlacedStructure, extra: (worker: Unit) => boolean): Unit[] {
     return this.units.workersOf(structure.owner)
-      .filter((worker) => !this.assignments.has(worker.id) && !worker.hasPlayerMoveOrder && extra(worker))
+      .filter((worker) => !this.assignments.has(worker.id) && !worker.blocksAutomaticWorkerAssignment && extra(worker))
       .sort((a, b) => a.position.distanceToSquared(structure.object.position)
         - b.position.distanceToSquared(structure.object.position));
   }
@@ -212,7 +212,13 @@ export class WorkerConstructionSystem {
 
   idleWorkerCount(owner: UnitOwner): number {
     return this.units.workersOf(owner)
-      .filter((worker) => this.stateFor(worker) === "idle" && !this.isReservedForOtherWork(worker)).length;
+      .filter((worker) => this.stateFor(worker) === "idle"
+        && !worker.blocksAutomaticWorkerAssignment && !this.isReservedForOtherWork(worker)).length;
+  }
+
+  /** Immediately retry automatic staffing of abandoned foundations. */
+  assignIdleWorkers(): void {
+    this.restaffAbandonedSites();
   }
 
   reset(): void {

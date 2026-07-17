@@ -71,6 +71,11 @@ export class SelectionSystem implements RtsPointerHandler {
     return this.selectedCenterRef;
   }
 
+  /** Replace the live selection with player units chosen by a HUD command. */
+  selectUnits(units: readonly Unit[]): void {
+    this.replaceWith(units.filter((unit) => unit.owner === "player" && !unit.health.depleted));
+  }
+
   /** Remove a unit that died or otherwise left the field from the live selection. */
   remove(unit: Unit): void {
     if (!this.selectedUnits.delete(unit)) return;
@@ -102,7 +107,7 @@ export class SelectionSystem implements RtsPointerHandler {
     const unit = this.raycastUnit(x, y);
     if (unit && unit.owner === "player") {
       if (additive) this.toggle(unit);
-      else this.replaceWith([unit]);
+      else this.replaceWith(unit.role === "worker" ? this.units.workersOf("player") : [unit]);
       return;
     }
     // Units win the pick when both are under the cursor: a unit standing on its
@@ -128,7 +133,7 @@ export class SelectionSystem implements RtsPointerHandler {
 
   /**
    * Double-clicking a combat unit selects every live player unit of its role.
-   * Workers intentionally remain a single-click-only selection surface for now.
+   * A normal worker click already selects the whole worker line.
    */
   onSelectDoubleClick(x: number, y: number, additive: boolean): void {
     const unit = this.raycastUnit(x, y);

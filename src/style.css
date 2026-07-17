@@ -374,6 +374,32 @@ body {
   font-weight: 700;
 }
 
+.rts-hud-worker-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.rts-hud-worker-action {
+  border: 1px solid rgb(147 166 138 / 65%);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: #dce8be;
+  font: inherit;
+  font-size: 11px;
+  background: rgb(34 48 48 / 82%);
+  cursor: pointer;
+}
+
+.rts-hud-worker-action:hover:not(:disabled) {
+  border-color: #e5d675;
+  color: #fff1a3;
+}
+
+.rts-hud-worker-action:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .rts-hud-population[data-full="true"] {
   color: #e09b5c;
   font-weight: 700;

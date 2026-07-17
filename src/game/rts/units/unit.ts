@@ -49,6 +49,8 @@ const TEAM_COLOR: Record<UnitOwner, string> = {
 export const UNIT_RADIUS = 0.5;
 /** Brief defeat presentation before the unit leaves the field. */
 export const UNIT_DEATH_SECONDS = 0.35;
+/** A worker rests at a player-chosen point before automatic work may reclaim it. */
+export const WORKER_RETURN_DELAY_SECONDS = 3;
 
 /**
  * Per-role silhouette. GDD 06 §3.4 asks that a role be readable before its UI
@@ -112,6 +114,8 @@ export class Unit {
    * with its old job or a Guard may abandon after taking one hit.
    */
   private playerMoveOrder = false;
+  private workerReturnDelayAfterMove = 0;
+  private workerReturnDelayRemaining = 0;
   private selectedFlag = false;
   private targeterCount = 0;
   private deathElapsed: number | null = null;
@@ -222,6 +226,7 @@ export class Unit {
     this.attackMoveTarget = null;
     this.movePath = [];
     this.playerMoveOrder = false;
+    this.resumeAutomaticWorkerAssignment();
     this.moveTarget = new Vector3(x, 0, z);
   }
 
@@ -240,12 +245,37 @@ export class Unit {
     return this.playerMoveOrder && (this.movePath.length > 0 || this.moveTarget !== null);
   }
 
+  /** Whether worker automation must leave this unit at its player-chosen spot. */
+  get blocksAutomaticWorkerAssignment(): boolean {
+    return this.hasPlayerMoveOrder || this.workerReturnDelayRemaining > 0;
+  }
+
+  /** Start the post-arrival rest timer for a worker's player-issued route. */
+  waitBeforeReturningToWork(seconds = WORKER_RETURN_DELAY_SECONDS): void {
+    const delay = Math.max(0, seconds);
+    this.workerReturnDelayAfterMove = delay;
+    this.workerReturnDelayRemaining = this.hasPlayerMoveOrder ? 0 : delay;
+  }
+
+  /** Let the worker re-enter automatic construction/production immediately. */
+  resumeAutomaticWorkerAssignment(): void {
+    this.workerReturnDelayAfterMove = 0;
+    this.workerReturnDelayRemaining = 0;
+  }
+
+  /** Advance only the post-arrival worker rest timer. */
+  advanceWorkerReturnDelay(dt: number): void {
+    if (this.workerReturnDelayRemaining <= 0) return;
+    this.workerReturnDelayRemaining = Math.max(0, this.workerReturnDelayRemaining - Math.max(0, dt));
+  }
+
   private replaceMovePath(points: readonly Vector3[], playerMoveOrder: boolean): void {
     this.setAttackTarget(null);
     this.attackMoveTarget = null;
     this.moveTarget = null;
     this.movePath = points.map((point) => point.clone());
     this.playerMoveOrder = playerMoveOrder;
+    if (!playerMoveOrder) this.resumeAutomaticWorkerAssignment();
   }
 
   /**
@@ -289,7 +319,11 @@ export class Unit {
   /** Drop the current waypoint after reaching it. */
   advancePath(): void {
     this.movePath.shift();
-    if (this.movePath.length === 0) this.playerMoveOrder = false;
+    if (this.movePath.length === 0) {
+      this.playerMoveOrder = false;
+      this.workerReturnDelayRemaining = this.workerReturnDelayAfterMove;
+      this.workerReturnDelayAfterMove = 0;
+    }
   }
 
   /** Immediately clear movement, attack-move and explicit attack intent. */
@@ -299,6 +333,7 @@ export class Unit {
     this.moveTarget = null;
     this.movePath = [];
     this.playerMoveOrder = false;
+    this.resumeAutomaticWorkerAssignment();
   }
 
   /**
@@ -334,7 +369,10 @@ export class Unit {
     this.chaseOrigin = target !== null && auto ? this.position.clone() : null;
     this.moveTarget = null;
     this.movePath = [];
-    if (target) this.playerMoveOrder = false;
+    if (target) {
+      this.playerMoveOrder = false;
+      this.resumeAutomaticWorkerAssignment();
+    }
     target?.setTargetedBy?.(1);
   }
 

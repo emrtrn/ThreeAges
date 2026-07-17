@@ -28173,7 +28173,7 @@ check("RTS test-force layout supports the Phase 1 twenty-unit selection target",
   assert.equal(units.unitsOf("player").length, 20);
 });
 
-check("RTS double-click selects every player combat unit of the clicked role, never workers", () => {
+check("RTS double-click selects combat roles and a worker click selects every player worker", () => {
   const units = new UnitSystem();
   const guards = [
     units.spawn("player", -3, 0, RTS_TEST_UNIT_STATS),
@@ -28215,7 +28215,7 @@ check("RTS double-click selects every player combat unit of the clicked role, ne
   const workerPoint = screenPointFor(workers[0]!);
   selection.onSelectClick(workerPoint.x, workerPoint.y, false);
   selection.onSelectDoubleClick(workerPoint.x, workerPoint.y, false);
-  assert.deepEqual(selection.selected(), [workers[0]], "workers stay single-select only");
+  assert.deepEqual(new Set(selection.selected()), new Set(workers), "a worker click selects the whole worker line");
 });
 
 check("RTS health clamps damage and healing while exposing current/max/ratio", () => {
@@ -29947,6 +29947,35 @@ check("RTS player move orders keep workers out of automatic construction and pro
   gatherer.setPlayerMovePath([new Vector3(-8, 0, 8)]);
   production.update(0);
   assert.equal(production.isAssigned(gatherer), false, "a commanded worker is not immediately returned to gathering");
+  structures.clear();
+  units.clear();
+});
+
+check("RTS workers rest for three seconds after reaching a player-ordered point", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const units = new UnitSystem();
+  const worker = units.spawn("player", 0, 0, RTS_TEST_WORKER_STATS);
+  const structures = new PlacedStructureSystem();
+  const foundation = structures.place("player", house, 8, 0);
+  const construction = new WorkerConstructionSystem(units, structures, new RtsNavigation());
+
+  worker.setPlayerMovePath([worker.position.clone()]);
+  worker.waitBeforeReturningToWork();
+  updateUnitMovement([worker], 0);
+  assert.equal(worker.blocksAutomaticWorkerAssignment, true, "arrival starts the worker's manual-position delay");
+  construction.update(0);
+  assert.equal(construction.stateFor(worker), "idle", "automatic construction does not reclaim the worker immediately");
+
+  updateUnitMovement([worker], 2.9);
+  construction.update(0);
+  assert.equal(construction.stateFor(worker), "idle", "the worker remains at the command point during the delay");
+
+  updateUnitMovement([worker], 0.2);
+  construction.update(0);
+  assert.equal(construction.stateFor(worker), "moving", "automatic work resumes once the three-second delay ends");
   structures.clear();
   units.clear();
 });

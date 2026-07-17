@@ -264,7 +264,7 @@ export class EconomyProductionSystem {
       producer.status = "buffer-full";
       return;
     }
-    this.assignIdleWorkers(producer);
+    this.assignIdleWorkersToProducer(producer);
     let workingWorkers = 0;
     for (const assignment of producer.assignments.values()) {
       if (assignment.state === "moving") {
@@ -301,12 +301,18 @@ export class EconomyProductionSystem {
         : "producing";
   }
 
-  private assignIdleWorkers(producer: ProducerRecord): void {
+  /** Immediately offer every currently eligible worker to a completed producer. */
+  assignIdleWorkers(): void {
+    this.syncCompletedProducers();
+    for (const producer of this.producers.values()) this.assignIdleWorkersToProducer(producer);
+  }
+
+  private assignIdleWorkersToProducer(producer: ProducerRecord): void {
     const economy = producer.structure.stats.economy;
     if (!economy) return;
     const candidates = this.units.workersOf(producer.structure.owner)
       .filter((worker) => !this.assignmentByWorker.has(worker.id)
-        && !worker.hasPlayerMoveOrder && !this.isWorkerConstructing(worker))
+        && !worker.blocksAutomaticWorkerAssignment && !this.isWorkerConstructing(worker))
       .sort((a, b) => a.position.distanceToSquared(producer.structure.object.position)
         - b.position.distanceToSquared(producer.structure.object.position));
     for (const worker of candidates) {

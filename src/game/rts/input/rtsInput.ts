@@ -44,6 +44,10 @@ const COMMAND_KEYS = {
   KeyH: "hold",
   /** Return held units to normal orders. */
   KeyG: "aggressive",
+  /** Select every worker that is currently available for automatic work. */
+  KeyI: "selectIdleWorkers",
+  /** Send the selected idle workers back into automatic staffing. */
+  KeyR: "assignIdleWorkers",
   /**
    * Faz 9 §51 pause. Escape is where players reach for it, but it is also where
    * they reach to cancel a pending build placement — `RtsApp` gives placement

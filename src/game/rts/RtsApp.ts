@@ -218,7 +218,10 @@ export class RtsApp {
   private readonly projectiles = new ProjectileSystem();
   private readonly structureDefense = new StructureDefenseSystem();
   private readonly roadControls: RtsRoadControls;
-  private readonly hudBar = new RtsHudBar();
+  private readonly hudBar = new RtsHudBar(
+    () => this.selectIdleWorkers(),
+    () => this.assignSelectedIdleWorkers(),
+  );
   private readonly notifications = new RtsNotificationCenter();
   private readonly notificationFeed = new RtsNotificationFeed();
   /** §51 "saldırı altında": combat has no event bus, so health is sampled. */
@@ -773,6 +776,8 @@ export class RtsApp {
     if (this.input.consumeStopRequest()) this.commands.issueStop();
     if (this.input.consumeCommand("hold")) this.commands.issueStance("hold");
     if (this.input.consumeCommand("aggressive")) this.commands.issueStance("aggressive");
+    if (this.input.consumeCommand("selectIdleWorkers")) this.selectIdleWorkers();
+    if (this.input.consumeCommand("assignIdleWorkers")) this.assignSelectedIdleWorkers();
     if (!this.input.consumeCommand("attackMove")) return;
     const pointer = this.input.pointerPosition();
     if (pointer) this.commands.issueAttackMoveAt(pointer.x, pointer.y);
@@ -1267,6 +1272,38 @@ export class RtsApp {
       return this.economyProduction.stateFor(worker) === "producing" ? "producing" : "moving";
     }
     return this.workerConstruction.stateFor(worker);
+  }
+
+  /** Select every player worker that is free for automatic staffing (I). */
+  private selectIdleWorkers(): void {
+    const workers = this.units.workersOf(PLAYER_OWNER).filter((worker) => this.isIdleWorker(worker));
+    this.selection.selectUnits(workers);
+    this.buildPalette.setActionMessage(workers.length > 0
+      ? `${workers.length} boşta işçi seçildi.`
+      : "Seçilecek boşta işçi yok.");
+  }
+
+  /** Return selected free workers to the normal construction-then-production queue (R). */
+  private assignSelectedIdleWorkers(): void {
+    const workers = this.selection.selected().filter((worker) => this.isIdleWorker(worker));
+    if (workers.length === 0) {
+      this.buildPalette.setActionMessage("İşe gönderilecek boşta işçi seçili değil.");
+      return;
+    }
+    for (const worker of workers) worker.resumeAutomaticWorkerAssignment();
+    this.workerConstruction.assignIdleWorkers();
+    this.economyProduction?.assignIdleWorkers();
+    const assigned = workers.filter((worker) => !this.isIdleWorker(worker)).length;
+    this.buildPalette.setActionMessage(assigned > 0
+      ? `${assigned} işçi uygun işe gönderildi.`
+      : "Şu anda işçi bekleyen uygun bir iş yok.");
+  }
+
+  private isIdleWorker(worker: Unit): boolean {
+    return worker.role === "worker"
+      && !worker.blocksAutomaticWorkerAssignment
+      && this.workerConstruction.stateFor(worker) === "idle"
+      && !(this.economyProduction?.isAssigned(worker) ?? false);
   }
 
   private structureDetail(structure: PlacedStructure): StructureDetailView {

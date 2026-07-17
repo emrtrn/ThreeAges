@@ -38,8 +38,13 @@ export class RtsHudBar {
   private readonly idleWorkers = document.createElement("span");
   private readonly age = document.createElement("span");
   private readonly warning = document.createElement("p");
+  private readonly selectIdleWorkers = document.createElement("button");
+  private readonly assignIdleWorkers = document.createElement("button");
 
-  constructor() {
+  constructor(
+    onSelectIdleWorkers: () => void = () => {},
+    onAssignIdleWorkers: () => void = () => {},
+  ) {
     this.root.className = "rts-hud-bar ui-interactive";
     this.root.setAttribute("aria-label", "Krallık durumu");
 
@@ -82,7 +87,18 @@ export class RtsHudBar {
     this.population.className = "rts-hud-population";
     this.idleWorkers.className = "rts-hud-idle-workers";
     this.age.className = "rts-hud-age";
-    status.append(this.population, this.idleWorkers, this.age);
+    const workerActions = document.createElement("div");
+    workerActions.className = "rts-hud-worker-actions";
+    this.selectIdleWorkers.type = "button";
+    this.selectIdleWorkers.className = "rts-hud-worker-action";
+    this.selectIdleWorkers.textContent = "Boştaları Seç (I)";
+    this.selectIdleWorkers.addEventListener("click", onSelectIdleWorkers);
+    this.assignIdleWorkers.type = "button";
+    this.assignIdleWorkers.className = "rts-hud-worker-action";
+    this.assignIdleWorkers.textContent = "İşe Gönder (R)";
+    this.assignIdleWorkers.addEventListener("click", onAssignIdleWorkers);
+    workerActions.append(this.selectIdleWorkers, this.assignIdleWorkers);
+    status.append(this.population, this.idleWorkers, workerActions, this.age);
     this.root.appendChild(status);
 
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
@@ -115,6 +131,8 @@ export class RtsHudBar {
     const text = `Boşta işçi: ${count}`;
     if (this.idleWorkers.textContent !== text) this.idleWorkers.textContent = text;
     this.idleWorkers.dataset.idle = String(count > 0);
+    this.selectIdleWorkers.disabled = count === 0;
+    this.assignIdleWorkers.disabled = count === 0;
   }
 
   setAge(snapshot: AgeSnapshot, balance: AgeBalance): void {
