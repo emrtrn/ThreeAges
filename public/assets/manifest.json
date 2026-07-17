@@ -22182,11 +22182,11 @@
       "license": "Unknown"
     },
     {
-      "id": "storage-firstage-leve3",
-      "name": "Storage First Age Leve3",
+      "id": "storage-firstage-level3",
+      "name": "Storage First Age Level3",
       "assetType": "staticMesh",
       "category": "StaticMeshes",
-      "path": "assets/ThreeAges/StaticMeshes/Storage_FirstAge_Leve3.gltf",
+      "path": "assets/ThreeAges/StaticMeshes/Storage_FirstAge_Level3.gltf",
       "tags": [],
       "placeable": true,
       "placement": {

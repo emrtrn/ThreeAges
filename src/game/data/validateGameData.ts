@@ -21,6 +21,7 @@ import type {
   AiScoringBalance,
   AiTargetWeights,
   BuildingBalance,
+  BuildingLevelBalance,
   GamePreset,
   GameVersion,
   ResourceBalance,
@@ -412,35 +413,62 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
         damageMultipliers: validateDamageMultipliers(defenseData["damageMultipliers"], `${defenseWhere}.damageMultipliers`),
       };
     }
-    const upgradeRaw = stats["upgrade"];
+    // In-age level steps: an ordered list starting at level 2, each strictly
+    // stronger than the previous. The legacy single-step `upgrade` is derived
+    // from the level-2 entry so pre-per-level systems keep one shape to read.
+    const levelsRaw = stats["levels"];
+    let levels: BuildingBalance["string"]["levels"];
     let upgrade: BuildingBalance["string"]["upgrade"];
-    if (upgradeRaw !== undefined) {
-      const upgradeWhere = `${statsWhere}.upgrade`;
-      const upgradeData = asObject(upgradeRaw, upgradeWhere);
-      const durationSeconds = requireFiniteNumber(upgradeData, "durationSeconds", upgradeWhere);
-      const upgradeMaxHealth = requireFiniteNumber(upgradeData, "maxHealth", upgradeWhere);
-      if (durationSeconds <= 0 || upgradeMaxHealth <= maxHealth) {
-        throw new GameDataError(`${upgradeWhere}: durationSeconds must be > 0 and maxHealth must exceed T1`);
-      }
-      const upgradeTerritoryRaw = upgradeData["territory"];
-      let upgradeTerritory: NonNullable<BuildingBalance["string"]["upgrade"]>["territory"];
-      if (upgradeTerritoryRaw !== undefined) {
-        if (!territory) throw new GameDataError(`${upgradeWhere}.territory requires a T1 territory definition`);
-        const upgradeTerritoryWhere = `${upgradeWhere}.territory`;
-        const upgradeTerritoryData = asObject(upgradeTerritoryRaw, upgradeTerritoryWhere);
-        const controlRadius = requireFiniteNumber(upgradeTerritoryData, "controlRadius", upgradeTerritoryWhere);
-        const connectedControlRadius = requireFiniteNumber(upgradeTerritoryData, "connectedControlRadius", upgradeTerritoryWhere);
-        if (controlRadius < territory.controlRadius || connectedControlRadius < controlRadius
-          || connectedControlRadius < territory.connectedControlRadius) {
-          throw new GameDataError(`${upgradeTerritoryWhere}: T2 radii must not shrink T1 control`);
+    if (levelsRaw !== undefined) {
+      const levelsWhere = `${statsWhere}.levels`;
+      if (!Array.isArray(levelsRaw)) throw new GameDataError(`${levelsWhere}: must be an array`);
+      const parsed: BuildingLevelBalance[] = [];
+      let previousMaxHealth = maxHealth;
+      let expectedLevel = 2;
+      levelsRaw.forEach((entryRaw, index) => {
+        const entryWhere = `${levelsWhere}[${index}]`;
+        const entryData = asObject(entryRaw, entryWhere);
+        const level = requireFiniteNumber(entryData, "level", entryWhere);
+        if (level !== expectedLevel) {
+          throw new GameDataError(`${entryWhere}.level: expected ${expectedLevel} (levels must run contiguously from 2)`);
         }
-        upgradeTerritory = { controlRadius, connectedControlRadius };
-      }
+        const durationSeconds = requireFiniteNumber(entryData, "durationSeconds", entryWhere);
+        const entryMaxHealth = requireFiniteNumber(entryData, "maxHealth", entryWhere);
+        if (durationSeconds <= 0 || entryMaxHealth <= previousMaxHealth) {
+          throw new GameDataError(`${entryWhere}: durationSeconds must be > 0 and maxHealth must exceed the previous level`);
+        }
+        const entryTerritoryRaw = entryData["territory"];
+        let entryTerritory: BuildingLevelBalance["territory"];
+        if (entryTerritoryRaw !== undefined) {
+          if (!territory) throw new GameDataError(`${entryWhere}.territory requires a base territory definition`);
+          const entryTerritoryWhere = `${entryWhere}.territory`;
+          const entryTerritoryData = asObject(entryTerritoryRaw, entryTerritoryWhere);
+          const controlRadius = requireFiniteNumber(entryTerritoryData, "controlRadius", entryTerritoryWhere);
+          const connectedControlRadius = requireFiniteNumber(entryTerritoryData, "connectedControlRadius", entryTerritoryWhere);
+          if (controlRadius < territory.controlRadius || connectedControlRadius < controlRadius
+            || connectedControlRadius < territory.connectedControlRadius) {
+            throw new GameDataError(`${entryTerritoryWhere}: level radii must not shrink base control`);
+          }
+          entryTerritory = { controlRadius, connectedControlRadius };
+        }
+        parsed.push({
+          level: expectedLevel,
+          cost: validateStartingResources(entryData["cost"] ?? {}, entryWhere),
+          durationSeconds,
+          maxHealth: entryMaxHealth,
+          ...(entryTerritory ? { territory: entryTerritory } : {}),
+        });
+        previousMaxHealth = entryMaxHealth;
+        expectedLevel += 1;
+      });
+      if (parsed.length === 0) throw new GameDataError(`${levelsWhere}: must define at least one level step`);
+      levels = parsed;
+      const levelTwo = parsed[0]!;
       upgrade = {
-        cost: validateStartingResources(upgradeData["cost"] ?? {}, upgradeWhere),
-        durationSeconds,
-        maxHealth: upgradeMaxHealth,
-        ...(upgradeTerritory ? { territory: upgradeTerritory } : {}),
+        cost: levelTwo.cost,
+        durationSeconds: levelTwo.durationSeconds,
+        maxHealth: levelTwo.maxHealth,
+        ...(levelTwo.territory ? { territory: levelTwo.territory } : {}),
       };
     }
     buildings[id] = {
@@ -454,6 +482,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       ...(economy ? { economy } : {}),
       ...(territory ? { territory } : {}),
       ...(defense ? { defense } : {}),
+      ...(levels ? { levels } : {}),
       ...(upgrade ? { upgrade } : {}),
     };
   }

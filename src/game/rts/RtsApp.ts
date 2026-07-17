@@ -49,6 +49,7 @@ import { updateUnitDeaths } from "./units/unitDeath";
 import { retaliateAgainstAttack, updateUnitEngagement } from "./combat/engagementSystem";
 import { ProjectileSystem } from "./combat/projectileSystem";
 import { StructureDefenseSystem } from "./combat/structureDefenseSystem";
+import type { CombatTarget } from "./combat/combatTarget";
 import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
@@ -113,14 +114,13 @@ const MAX_FRAME_SECONDS = 1 / 15;
 const SCENE_BACKGROUND = "#20262b";
 const PLACEHOLDER_GUARD_ID = "guard_placeholder";
 const PLACEHOLDER_WORKER_ID = "worker_placeholder";
-/** The human player opens with a small standing defence. */
-const PLAYER_GUARD_COUNT = 4;
+/** Both camps open with equal standing defence. */
+const STARTING_GUARD_COUNT = 3;
 /**
  * Both kingdoms start with the same workers: the AI cannot run the economy
  * (AI design §34/§35) without them, and §39 requires it to earn everything else
- * through the same buildings and costs the player pays. It starts with no army
- * on purpose — its Guards come out of a Barracks it has to build first, so the
- * opening is economic rather than a rush.
+ * through the same buildings and costs the player pays. Both camps also begin
+ * with the same small Guard force, so neither gets a free opening advantage.
  */
 const STARTING_WORKER_COUNT = 5;
 const SETTLEMENT_POPULATION_CAPACITY = 20;
@@ -289,6 +289,7 @@ export class RtsApp {
       this.structures,
       (workers, structure) => this.assignSelectedWorkersToStructure(workers, structure),
       (workers) => this.releaseWorkerTasks(workers),
+      (structure, target) => this.orderStructureAttack(structure, target),
     );
     this.workerConstruction = new WorkerConstructionSystem(
       this.units,
@@ -347,7 +348,10 @@ export class RtsApp {
       this.navigation,
       () => this.navigationBlockers(),
       this.territory,
-      (structure) => this.assignWorkerToConstruction(structure),
+      (structure) => {
+        this.applyConstructionVisual(structure);
+        this.assignWorkerToConstruction(structure);
+      },
       (structure) => this.workerConstruction.cancelStructure(structure),
       (stats, x, z) => stats.economy?.requiresResourceNode
         && !this.resourceNodes.canExtractAt(
@@ -409,6 +413,8 @@ export class RtsApp {
       this.structureConstruction,
       PLAYER_OWNER,
     );
+    this.placement.setPreviewFactory((buildingId, width, depth) =>
+      this.buildingVisuals.createPreviewForBuilding(buildingId, width, depth));
     this.roadPlacement = new RoadPlacementSystem(
       canvas,
       this.cameraController.camera,
@@ -561,7 +567,7 @@ export class RtsApp {
     this.buildScene();
     this.structures.setCompletedVisualHandler((structure) => {
       this.structureUpgrades.applyCompletedUpgrade(structure);
-      this.applyStructureVisual(structure);
+      this.applyStructureVisual(structure, true);
     });
     void this.loadBuildingVisuals();
     this.spawnStartingUnits();
@@ -636,8 +642,13 @@ export class RtsApp {
     try {
       await this.buildingVisuals.load();
       if (this.disposed) return;
+      this.placement.setPreviewFactory((buildingId, width, depth) =>
+        this.buildingVisuals.createPreviewForBuilding(buildingId, width, depth));
       for (const center of this.centers.all()) this.buildingVisuals.applyToCenter(center);
-      for (const structure of this.structures.all()) this.applyStructureVisual(structure);
+      for (const structure of this.structures.all()) {
+        if (structure.construction.complete) this.applyStructureVisual(structure);
+        else this.applyConstructionVisual(structure);
+      }
     } catch (error) {
       // Keep the original construction visuals usable if an optional art asset
       // is unavailable in a development build or an interrupted reload.
@@ -681,14 +692,8 @@ export class RtsApp {
   /**
    * Match-start forces.
    *
-   * The Faz 1 arrangement gave the enemy three free Guards and no workers — a
-   * selection/combat fixture. With a real opponent that was backwards: it was an
-   * unearned army *and* an economy the AI could never run, so the AI's only
-   * possible opening was to walk those Guards at the player.
-   *
-   * Faz 5 gives the enemy the workers instead. Its army now has to come out of a
-   * Barracks it builds and pays for (§34 → §55), which is what makes the AI
-   * opening economic rather than a rush.
+   * Each side begins with the same workers and three Guards. Further military
+   * strength must come from a Barracks each kingdom builds and pays for.
    */
   private spawnStartingUnits(): void {
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
@@ -697,10 +702,16 @@ export class RtsApp {
       throw new Error(`Missing unit balance definition "${PLACEHOLDER_GUARD_ID}"`);
     }
     const cols = 5;
-    for (let i = 0; i < PLAYER_GUARD_COUNT; i++) {
+    for (let i = 0; i < STARTING_GUARD_COUNT; i++) {
       const x = PLAYER_CENTER_POSITION.x - 6 + (i % cols) * 3;
       const z = PLAYER_CENTER_POSITION.z + 7 + Math.floor(i / cols) * 3;
       this.units.spawn("player", x, z, guard);
+      this.units.spawn(
+        "enemy",
+        ENEMY_CENTER_POSITION.x - 6 + (i % cols) * 3,
+        ENEMY_CENTER_POSITION.z - 7 - Math.floor(i / cols) * 3,
+        guard,
+      );
     }
     for (let i = 0; i < STARTING_WORKER_COUNT; i++) {
       this.units.spawn("player", PLAYER_CENTER_POSITION.x - 4 + i * 2, PLAYER_CENTER_POSITION.z - 8, worker);
@@ -752,6 +763,7 @@ export class RtsApp {
     );
     this.roadDebugView.refresh();
     this.commandMarkers.update(dt);
+    this.structures.updateVisualAnimations(dt);
     // Presentation runs on the rendered-frame delta, not the simulation's: a
     // tracer and a health bar should look the same at any game speed.
     this.projectiles.update(dt);
@@ -954,9 +966,16 @@ export class RtsApp {
     this.buildingVisuals.applyToCenter(enemyCenter);
   }
 
-  private applyStructureVisual(structure: PlacedStructure): void {
+  private applyStructureVisual(structure: PlacedStructure, animate = false): void {
     const visual = this.buildingVisuals.createForStructure(structure);
-    if (visual) this.structures.setCompletedVisual(structure, visual);
+    if (!visual) return;
+    if (animate) this.structures.setCompletedVisualWithDrop(structure, visual);
+    else this.structures.setCompletedVisual(structure, visual);
+  }
+
+  private applyConstructionVisual(structure: PlacedStructure): void {
+    const visual = this.buildingVisuals.createConstructionVisual(structure);
+    if (visual) this.structures.setConstructionVisual(structure, visual);
   }
 
   private async loadMapArt(blockout: import("three").Group): Promise<void> {
@@ -1463,6 +1482,19 @@ export class RtsApp {
       : result.reason === "no-idle-worker"
         ? "İnşaat bekliyor: boşta işçi yok."
         : "İnşaat bekliyor: işçi bu yapıya erişemiyor.");
+  }
+
+  /** Handle a selected Karakol's right-click target order. */
+  private orderStructureAttack(structure: PlacedStructure, target: CombatTarget): boolean {
+    const result = this.structureDefense.orderAttack(structure, target);
+    const message: Record<typeof result, string> = {
+      ordered: `${structure.stats.label} hedefe yönlendirildi.`,
+      "not-defensive": "Bu yapı saldırı emri veremez.",
+      incomplete: "Karakol tamamlanmadan saldırı emri verilemez.",
+      "out-of-range": "Hedef Karakol menzilinin dışında.",
+    };
+    this.buildPalette.setActionMessage(message[result]);
+    return true;
   }
 
   /** Contextual worker order: a foundation builds; a finished producer gathers. */

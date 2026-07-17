@@ -24,6 +24,8 @@ const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
 
 /** RtsApp owns the actual economy/construction hand-off; commands only pick it. */
 export type WorkerStructureCommand = (workers: readonly Unit[], structure: PlacedStructure) => boolean;
+/** RtsApp owns stationary-defense validation and player feedback. */
+export type StructureAttackCommand = (structure: PlacedStructure, target: CombatTarget) => boolean;
 
 export class CommandSystem {
   private readonly raycaster = new Raycaster();
@@ -41,14 +43,22 @@ export class CommandSystem {
     private readonly structures: PlacedStructureSystem | null = null,
     private readonly onWorkerStructureCommand: WorkerStructureCommand | null = null,
     private readonly onWorkerOrderCancelled: ((workers: readonly Unit[]) => void) | null = null,
+    private readonly onStructureAttackCommand: StructureAttackCommand | null = null,
   ) {}
 
   /** Issue the contextual move-or-attack order at a screen position. */
   issueAt(x: number, y: number): void {
     const selected = this.selection.selected();
-    if (selected.length === 0) return;
-
     const target = this.raycastTarget(x, y);
+    if (selected.length === 0) {
+      const selectedStructure = this.selection.selectedStructure();
+      if (selectedStructure && target && target.owner !== selectedStructure.owner
+        && this.onStructureAttackCommand?.(selectedStructure, target)) {
+        this.markers.spawn(target.position, "#ff7468");
+      }
+      return;
+    }
+
     if (target && target.owner !== selected[0]?.owner) {
       this.clearWorkerTasks(selected);
       for (const unit of selected) issueAttackOrder(unit, target, this.navigation);
@@ -119,10 +129,17 @@ export class CommandSystem {
   private raycastTarget(x: number, y: number): CombatTarget | null {
     this.setNdc(x, y);
     this.raycaster.setFromCamera(this.ndc, this.camera);
-    const targets = [...this.units.bodyMeshes(), ...this.centers.targetMeshes()];
+    const targets = [
+      ...this.units.bodyMeshes(),
+      ...this.centers.targetMeshes(),
+      ...(this.structures ? this.structures.targetMeshes() : []),
+    ];
     const hit = this.raycaster.intersectObjects(targets, true)[0];
     if (!hit) return null;
-    return this.units.unitForObject(hit.object) ?? this.centers.centerForObject(hit.object);
+    return this.units.unitForObject(hit.object)
+      ?? this.centers.centerForObject(hit.object)
+      ?? this.structures?.structureForObject(hit.object)
+      ?? null;
   }
 
   /** Raycast friendly construction/economy sites separately from combat targets. */

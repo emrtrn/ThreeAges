@@ -253,6 +253,7 @@ const LOGISTICS_REASON: Record<ProducerLogisticsStatus, string> = {
 const UNIT_HINT = "F: Saldırı-Hareket · H: Pozisyonu Koru · G: Serbest · X: Dur";
 const WORKER_HINT = "Sağ tık: inşaata veya üretim yapısına ata · X: Görevi bırak";
 const STRUCTURE_HINT = "Sağ tık: seçili işçileri bu yapıya ata";
+const OUTPOST_HINT = "Sağ tık: menzildeki düşmana saldırı emri ver";
 
 /** Above this an attacker is meaningfully strong; below its mirror, weak. */
 const STRONG_MULTIPLIER = 1.1;
@@ -406,7 +407,7 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
             : "Yol bağlantısı yok — yalnız küçük alan açık.",
         ],
         actions: [],
-        hint: STRUCTURE_HINT,
+        hint: OUTPOST_HINT,
         // "yerine" rather than a number + case suffix: Turkish suffixes follow
         // the vowel of the *spoken* number (16 → "16’dan", 20 → "20’ye"), which
         // a template cannot pick for a value it does not know at build time.

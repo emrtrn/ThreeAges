@@ -1,7 +1,7 @@
 /**
  * Phase 2 pre-construction structure sites.
  *
- * A confirmed placement creates a visible foundation and a nav blocker, but has
+ * A confirmed placement creates a construction progress marker and a nav blocker, but has
  * no gameplay function until the worker/construction slice supplies progress.
  *
  * Faz 5.1: a placed structure is also a {@link CombatTarget}. Until then only
@@ -13,6 +13,7 @@ import {
   Color,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   RingGeometry,
   type Object3D,
@@ -31,6 +32,9 @@ const COMPLETED_COLOR: Record<UnitOwner, { readonly territory: string; readonly 
   player: { territory: "#467a9f", plain: "#80684a" },
   enemy: { territory: "#9f4a46", plain: "#8a5a4a" },
 };
+const CONSTRUCTION_OPACITY = 0.5;
+const COMPLETION_DROP_DURATION = 0.2;
+const COMPLETION_DROP_HEIGHT = 2.5;
 
 export interface PlacedStructure {
   readonly id: number;
@@ -73,6 +77,7 @@ export class PlacedStructureSystem {
   private readonly pickObjects = new Map<number, Object3D>();
   private nextId = 1;
   private completedVisualHandler: ((structure: PlacedStructure) => void) | null = null;
+  private readonly dropAnimations = new Map<PlacedStructure, { readonly visual: Object3D; elapsed: number }>();
 
   constructor() {
     this.root.name = "rts-placed-structures";
@@ -83,15 +88,15 @@ export class PlacedStructureSystem {
     const id = this.nextId++;
     object.name = `rts-construction-site-${owner}-${id}`;
     object.position.set(x, 0, z);
-    const foundation = new Mesh(
-      new BoxGeometry(stats.footprint.width, 0.18, stats.footprint.depth),
-      new MeshStandardMaterial({ color: "#9b7a4d", roughness: 0.95 }),
+    // Keep the construction site clickable without rendering the old brown
+    // foundation slab underneath every building.
+    const pickProxy = new Mesh(
+      new BoxGeometry(stats.footprint.width, 0.3, stats.footprint.depth),
+      new MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
     );
-    foundation.name = "rts-construction-foundation";
-    foundation.position.y = 0.09;
-    foundation.receiveShadow = true;
-    foundation.castShadow = true;
-    object.add(foundation);
+    pickProxy.name = "rts-construction-pick-proxy";
+    pickProxy.position.y = 0.15;
+    object.add(pickProxy);
     const progressFill = new Mesh(
       new BoxGeometry(stats.footprint.width - 0.4, 0.12, 0.36),
       new MeshStandardMaterial({ color: "#d8d05c", emissive: "#59520e", roughness: 0.7 }),
@@ -141,8 +146,8 @@ export class PlacedStructureSystem {
       territoryConnectedControlRadius: stats.territory?.connectedControlRadius ?? null,
     };
     this.structures.push(structure);
-    this.registerPickTargets(structure, foundation);
     this.registerPickTargets(structure, progressFill);
+    this.registerPickTargets(structure, pickProxy);
     return structure;
   }
 
@@ -156,6 +161,20 @@ export class PlacedStructureSystem {
     structure.progressFill.scale.x = Math.max(0.001, structure.construction.progress);
     if (justCompleted) this.finishVisual(structure);
     return justCompleted;
+  }
+
+  /** Advance the presentation-only completion drop using real rendered time. */
+  updateVisualAnimations(deltaSeconds: number): void {
+    for (const [structure, animation] of this.dropAnimations) {
+      if (!this.structures.includes(structure) || animation.visual.parent !== structure.object) {
+        this.dropAnimations.delete(structure);
+        continue;
+      }
+      animation.elapsed = Math.min(COMPLETION_DROP_DURATION, animation.elapsed + Math.max(0, deltaSeconds));
+      const progress = animation.elapsed / COMPLETION_DROP_DURATION;
+      animation.visual.position.y = COMPLETION_DROP_HEIGHT * (1 - progress);
+      if (progress >= 1) this.dropAnimations.delete(structure);
+    }
   }
 
   all(): readonly PlacedStructure[] {
@@ -183,19 +202,29 @@ export class PlacedStructureSystem {
 
   /** Swap a completed box for an externally loaded building model. */
   setCompletedVisual(structure: PlacedStructure, visual: Object3D): void {
-    const placeholder = structure.object.getObjectByName("rts-complete-building-placeholder");
-    if (placeholder) {
-      structure.object.remove(placeholder);
-      this.unregisterPickTargets(placeholder);
-      disposeObjectMeshes(placeholder);
-    }
-    const existing = structure.object.getObjectByName("rts-complete-building-model");
-    if (existing) {
-      structure.object.remove(existing);
-      this.unregisterPickTargets(existing);
-    }
+    this.removeVisual(structure, "rts-complete-building-placeholder");
+    this.removeVisual(structure, "rts-complete-building-model");
+    this.removeVisual(structure, "rts-construction-building-model");
+    this.dropAnimations.delete(structure);
+    visual.name = "rts-complete-building-model";
     structure.object.add(visual);
     this.registerPickTargets(structure, visual);
+  }
+
+  /** Show the finished model as a translucent in-progress construction site. */
+  setConstructionVisual(structure: PlacedStructure, visual: Object3D): void {
+    this.removeVisual(structure, "rts-construction-building-model");
+    visual.name = "rts-construction-building-model";
+    setObjectOpacity(visual, CONSTRUCTION_OPACITY);
+    structure.object.add(visual);
+    this.registerPickTargets(structure, visual);
+  }
+
+  /** Replace the construction placeholder and begin the short landing animation. */
+  setCompletedVisualWithDrop(structure: PlacedStructure, visual: Object3D): void {
+    this.setCompletedVisual(structure, visual);
+    visual.position.y = COMPLETION_DROP_HEIGHT;
+    this.dropAnimations.set(structure, { visual, elapsed: 0 });
   }
 
   /** One kingdom's structures. The Faz 5 AI reads its own base through this. */
@@ -232,6 +261,7 @@ export class PlacedStructureSystem {
   clear(): void {
     for (const structure of this.structures) this.disposeStructure(structure);
     this.structures.length = 0;
+    this.dropAnimations.clear();
   }
 
   private disposeStructure(structure: PlacedStructure): void {
@@ -241,6 +271,7 @@ export class PlacedStructureSystem {
       this.pickObjects.delete(objectId);
     }
     this.root.remove(structure.object);
+    this.dropAnimations.delete(structure);
     structure.object.traverse((child) => {
       if (!(child instanceof Mesh) || isSharedModelMesh(child)) return;
       child.geometry.dispose();
@@ -283,6 +314,14 @@ export class PlacedStructureSystem {
     });
   }
 
+  private removeVisual(structure: PlacedStructure, name: string): void {
+    const visual = structure.object.getObjectByName(name);
+    if (!visual) return;
+    structure.object.remove(visual);
+    this.unregisterPickTargets(visual);
+    disposeObjectMeshes(visual);
+  }
+
   private unregisterPickTargets(object: Object3D): void {
     object.traverse((child) => {
       this.structureByPickObjectId.delete(child.id);
@@ -302,10 +341,29 @@ export function setStructureSelected(structure: PlacedStructure, selected: boole
 
 function disposeObjectMeshes(root: Object3D): void {
   root.traverse((child) => {
-    if (!(child instanceof Mesh) || isSharedModelMesh(child)) return;
-    child.geometry.dispose();
+    if (!(child instanceof Mesh)) return;
+    const sharedModel = isSharedModelMesh(child);
+    if (!sharedModel) child.geometry.dispose();
     const materials = Array.isArray(child.material) ? child.material : [child.material];
-    for (const material of materials) material.dispose();
+    for (const material of materials) {
+      if (!sharedModel || material.userData.rtsOwnedByStructure === true) material.dispose();
+    }
+  });
+}
+
+function setObjectOpacity(root: Object3D, opacity: number): void {
+  root.traverse((child) => {
+    if (!(child instanceof Mesh)) return;
+    const clone = (material: import("three").Material): import("three").Material => {
+      const copy = material.clone();
+      copy.userData.rtsOwnedByStructure = true;
+      copy.transparent = true;
+      copy.opacity = opacity;
+      return copy;
+    };
+    child.material = Array.isArray(child.material)
+      ? child.material.map(clone)
+      : clone(child.material);
   });
 }
 

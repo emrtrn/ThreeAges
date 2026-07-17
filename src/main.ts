@@ -44,7 +44,7 @@ async function bootFoundation(): Promise<BootFoundationResult> {
   setLogLevel(isDev ? "debug" : "warn");
 
   const params = new URLSearchParams(location.search);
-  const presetId = params.get("preset") ?? "gameplay_proof";
+  const presetId = params.get("preset") ?? "core_match";
   const log = logger("System");
 
   let preset: GamePreset | null = null;
@@ -100,8 +100,8 @@ async function main(): Promise<void> {
       // §72: the preset picks the AI profile; normal is the fair baseline.
       aiProfile: preset?.aiProfile ?? "normal",
       // A bad preset must not turn the fallback RTS route into an unwinnable
-      // no-build state; mirror the gameplay-proof stockpile from Faz 0.
-      startingResources: preset?.startingResources ?? { food: 1000, wood: 1000 },
+      // no-build state; mirror the standard core-match stockpile.
+      startingResources: preset?.startingResources ?? { food: 500, wood: 500 },
     });
     rts.start();
     return;

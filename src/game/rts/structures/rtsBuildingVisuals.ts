@@ -1,51 +1,29 @@
 /**
- * First Age visual library for the RTS building contracts.
+ * Visual library for the RTS building contracts.
  *
  * Gameplay continues to own footprints, navigation blockers and construction;
  * this module only replaces their temporary box meshes once the corresponding
- * glTF is ready. Models are shared templates and every placed structure gets a
- * clone, so the same building can appear many times without repeated requests.
+ * glTF is ready. Models are shared templates keyed by mesh path and every placed
+ * structure gets a clone, so the same building can appear many times without
+ * repeated requests. The gameplay-to-path mapping lives in {@link rtsBuildingArt}
+ * so it stays Three.js-free and testable; callers pass the owner's
+ * {@link SettlementAge} to pick the art family (defaulting to Settlement/First
+ * Age, which preserves the pre-age-split behaviour of every current call site).
  */
 import { Box3, Group, Mesh, type Object3D, type WebGLRenderer } from "three";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 
+import type { SettlementAge } from "../../data/gameDataTypes";
 import type { CommandCenter } from "./commandCenter";
 import type { PlacedStructure } from "./placedStructureSystem";
-
-type VisualBuildingId = "command_center_t1" | "command_center_t2" | "house_t1" | "house_t2" | "depot_t1" | "depot_t2" | "outpost_t1" | "outpost_t2" | "farm" | "lumber_camp" | "mine" | "barracks_t1" | "barracks_t2";
-
-interface BuildingVisualDefinition {
-  readonly path: string;
-}
-
-const STATIC_MESH_ROOT = "/assets/ThreeAges/StaticMeshes";
-
-/**
- * `lumber_camp` has no dedicated source mesh in this pack yet. Storage is a
- * readable temporary stand-in until a woodcutter model is added to the set.
- */
-const VISUALS: Record<VisualBuildingId, BuildingVisualDefinition> = {
-  command_center_t1: { path: `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level1.gltf` },
-  command_center_t2: { path: `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level2.gltf` },
-  house_t1: { path: `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level1.gltf` },
-  house_t2: { path: `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level2.gltf` },
-  depot_t1: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level1.gltf` },
-  depot_t2: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level2.gltf` },
-  outpost_t1: { path: `${STATIC_MESH_ROOT}/WatchTower_FirstAge_Level1.gltf` },
-  outpost_t2: { path: `${STATIC_MESH_ROOT}/WatchTower_FirstAge_Level2.gltf` },
-  farm: { path: `${STATIC_MESH_ROOT}/Farm_FirstAge_Level1_Wheat.gltf` },
-  lumber_camp: { path: `${STATIC_MESH_ROOT}/Storage_FirstAge_Level1.gltf` },
-  mine: { path: `${STATIC_MESH_ROOT}/Mine.gltf` },
-  barracks_t1: { path: `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level1.gltf` },
-  barracks_t2: { path: `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level2.gltf` },
-};
+import { allBuildingMeshPaths, buildingMeshPath } from "./rtsBuildingArt";
 
 const FOUNDATION_TOP = 0.18;
 const MODEL_FOOTPRINT_FILL = 0.86;
 
 export class RtsBuildingVisuals {
   private readonly loader;
-  private readonly templates = new Map<VisualBuildingId, Object3D>();
+  private readonly templates = new Map<string, Object3D>();
   private loaded = false;
 
   constructor(renderer: WebGLRenderer) {
@@ -53,25 +31,44 @@ export class RtsBuildingVisuals {
   }
 
   async load(): Promise<void> {
-    const entries = await Promise.all((Object.entries(VISUALS) as [VisualBuildingId, BuildingVisualDefinition][])
-      .map(async ([id, definition]) => [id, (await this.loader.loadAsync(definition.path)).scene] as const));
-    for (const [id, scene] of entries) this.templates.set(id, scene);
+    const entries = await Promise.all(allBuildingMeshPaths()
+      .map(async (path) => [path, (await this.loader.loadAsync(path)).scene] as const));
+    for (const [path, scene] of entries) this.templates.set(path, scene);
     this.loaded = true;
   }
 
-  applyToCenter(center: CommandCenter): void {
-    const visual = this.create(center.level >= 2 ? "command_center_t2" : "command_center_t1", 8, 8);
+  applyToCenter(center: CommandCenter, age: SettlementAge = "settlement"): void {
+    const path = buildingMeshPath("command_center", age, center.level);
+    const visual = path ? this.create(path, 8, 8) : null;
     if (visual) center.setVisual(visual);
   }
 
-  createForStructure(structure: PlacedStructure): Group | null {
-    const id = visualBuildingIdForStructure(structure);
-    if (!id) return null;
+  createForStructure(structure: PlacedStructure, age: SettlementAge = "settlement"): Group | null {
+    const path = visualMeshPathForStructure(structure, age);
+    if (!path) return null;
     return this.create(
-      id,
+      path,
       structure.stats.footprint.width,
       structure.stats.footprint.depth,
     );
+  }
+
+  createPreviewForBuilding(
+    buildingId: string,
+    footprintWidth: number,
+    footprintDepth: number,
+    age: SettlementAge = "settlement",
+  ): Group | null {
+    const path = buildingMeshPath(buildingId, age, 1);
+    return path ? this.create(path, footprintWidth, footprintDepth) : null;
+  }
+
+  createConstructionVisual(
+    structure: Pick<PlacedStructure, "stats">,
+    age: SettlementAge = "settlement",
+  ): Group | null {
+    const path = buildingMeshPath(structure.stats.id, age, 1);
+    return path ? this.create(path, structure.stats.footprint.width, structure.stats.footprint.depth) : null;
   }
 
   dispose(): void {
@@ -80,9 +77,9 @@ export class RtsBuildingVisuals {
     this.loaded = false;
   }
 
-  private create(id: VisualBuildingId, footprintWidth: number, footprintDepth: number): Group | null {
+  private create(path: string, footprintWidth: number, footprintDepth: number): Group | null {
     if (!this.loaded) return null;
-    const template = this.templates.get(id);
+    const template = this.templates.get(path);
     if (!template) return null;
 
     const visual = new Group();
@@ -100,22 +97,17 @@ export class RtsBuildingVisuals {
   }
 }
 
-/** Pure gameplay-to-art mapping: every completed Faz 6 structure has a model. */
-export function visualBuildingIdForStructure(
+/**
+ * Mesh path for a structure's current model, or `null` while its foundation is
+ * still under construction (the caller keeps the construction placeholder). A
+ * completed structure with no mapped art also returns `null`.
+ */
+export function visualMeshPathForStructure(
   structure: Pick<PlacedStructure, "stats" | "level" | "construction">,
-): VisualBuildingId | null {
+  age: SettlementAge = "settlement",
+): string | null {
   if (!structure.construction.complete) return null;
-  switch (structure.stats.id) {
-    case "house": return structure.level >= 2 ? "house_t2" : "house_t1";
-    case "depot": return structure.level >= 2 ? "depot_t2" : "depot_t1";
-    case "outpost": return structure.level >= 2 ? "outpost_t2" : "outpost_t1";
-    case "barracks": return structure.level >= 2 ? "barracks_t2" : "barracks_t1";
-    case "farm": return "farm";
-    case "lumber_camp": return "lumber_camp";
-    case "quarry":
-    case "gold_mine": return "mine";
-    default: return null;
-  }
+  return buildingMeshPath(structure.stats.id, age, structure.level);
 }
 
 /** Preserve each author's proportions while fitting safely inside gameplay's footprint. */

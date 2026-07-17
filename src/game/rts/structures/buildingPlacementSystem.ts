@@ -1,18 +1,22 @@
 /**
  * RTS building placement controller — Vertical Slice Plan v0.2 §25 (Faz 2).
  *
- * Owns the *input* half only: the screen-to-ground ray and the ghost mesh. The
+ * Owns the *input* half only: the screen-to-ground ray and the ghost preview. The
  * rules (snap, validation, payment, site creation) moved to the headless
  * {@link StructureConstructionService} in Faz 5.0 so the AI opponent can build
  * through exactly the same path without a pointer (AI design §4).
  */
 import {
   BoxGeometry,
+  BufferGeometry,
   Color,
   Group,
+  LineBasicMaterial,
+  LineLoop,
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  Object3D,
   Plane,
   Raycaster,
   RingGeometry,
@@ -41,7 +45,9 @@ export class BuildingPlacementSystem {
   private readonly ndc = new Vector2();
   private readonly hit = new Vector3();
   private active: { id: string; stats: BuildingBalanceStats } | null = null;
-  private ghost: Mesh | null = null;
+  private ghost: Object3D | null = null;
+  private placementFrame: LineLoop | null = null;
+  private previewFactory: ((buildingId: string, footprintWidth: number, footprintDepth: number) => Object3D | null) | null = null;
   /**
    * §51 "Karakol kontrol alanı önizlemesi". An outpost is bought for the ground
    * it opens, and that ground is invisible until the moment it is too late to
@@ -64,6 +70,11 @@ export class BuildingPlacementSystem {
     this.root.visible = false;
   }
 
+  setPreviewFactory(factory: (buildingId: string, footprintWidth: number, footprintDepth: number) => Object3D | null): void {
+    this.previewFactory = factory;
+    if (this.active) this.rebuildGhost(this.active.id, this.active.stats);
+  }
+
   get isActive(): boolean {
     return this.active !== null;
   }
@@ -77,7 +88,7 @@ export class BuildingPlacementSystem {
     if (!stats || buildingId === "command_center") return false;
     this.active = { id: buildingId, stats };
     this.result = null;
-    this.rebuildGhost(stats);
+    this.rebuildGhost(buildingId, stats);
     this.rebuildTerritoryPreview(stats);
     this.root.visible = true;
     return true;
@@ -123,14 +134,15 @@ export class BuildingPlacementSystem {
   }
 
   dispose(): void {
-    this.ghost?.geometry.dispose();
-    const material = this.ghost?.material;
-    if (material instanceof MeshStandardMaterial) material.dispose();
+    disposePreviewObject(this.ghost);
+    this.placementFrame?.geometry.dispose();
+    disposeMaterial(this.placementFrame?.material);
     this.territoryPreview?.geometry.dispose();
     const territory = this.territoryPreview?.material;
     if (territory instanceof MeshBasicMaterial) territory.dispose();
     this.root.clear();
     this.ghost = null;
+    this.placementFrame = null;
     this.territoryPreview = null;
   }
 
@@ -142,26 +154,49 @@ export class BuildingPlacementSystem {
     return this.raycaster.ray.intersectPlane(GROUND_PLANE, this.hit)?.clone() ?? null;
   }
 
-  private rebuildGhost(stats: BuildingBalanceStats): void {
+  private rebuildGhost(buildingId: string, stats: BuildingBalanceStats): void {
     if (this.ghost) {
       this.root.remove(this.ghost);
-      this.ghost.geometry.dispose();
-      const material = this.ghost.material;
-      if (material instanceof MeshStandardMaterial) material.dispose();
+      disposePreviewObject(this.ghost);
     }
-    const geometry = new BoxGeometry(stats.footprint.width, 0.32, stats.footprint.depth);
-    const material = new MeshStandardMaterial({
-      color: VALID_COLOR,
-      emissive: VALID_COLOR,
-      emissiveIntensity: 0.28,
-      transparent: true,
-      opacity: 0.48,
-      depthWrite: false,
-    });
-    this.ghost = new Mesh(geometry, material);
+    const model = this.previewFactory?.(buildingId, stats.footprint.width, stats.footprint.depth);
+    this.ghost = model ?? createFallbackPreview(stats);
     this.ghost.name = "rts-building-ghost";
-    this.ghost.position.y = 0.16;
+    this.ghost.traverse((child) => {
+      if (!(child instanceof Mesh)) return;
+      child.material = clonePreviewMaterial(child.material);
+    });
+    this.ghost.position.y += 0.02;
     this.root.add(this.ghost);
+    this.rebuildPlacementFrame(stats);
+  }
+
+  private rebuildPlacementFrame(stats: BuildingBalanceStats): void {
+    if (this.placementFrame) {
+      this.root.remove(this.placementFrame);
+      this.placementFrame.geometry.dispose();
+      disposeMaterial(this.placementFrame.material);
+    }
+    const halfWidth = stats.footprint.width * 0.5;
+    const halfDepth = stats.footprint.depth * 0.5;
+    const frame = new LineLoop(
+      new BufferGeometry().setFromPoints([
+        new Vector3(-halfWidth, 0, -halfDepth),
+        new Vector3(halfWidth, 0, -halfDepth),
+        new Vector3(halfWidth, 0, halfDepth),
+        new Vector3(-halfWidth, 0, halfDepth),
+      ]),
+      new LineBasicMaterial({
+        color: VALID_COLOR,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+      }),
+    );
+    frame.name = "rts-building-placement-frame";
+    frame.position.y = 0.08;
+    this.placementFrame = frame;
+    this.root.add(frame);
   }
 
   /**
@@ -198,10 +233,9 @@ export class BuildingPlacementSystem {
   }
 
   private setGhostValid(valid: boolean): void {
-    const material = this.ghost?.material;
-    if (material instanceof MeshStandardMaterial) {
-      material.color.copy(valid ? VALID_COLOR : INVALID_COLOR);
-      material.emissive.copy(valid ? VALID_COLOR : INVALID_COLOR);
+    const color = valid ? VALID_COLOR : INVALID_COLOR;
+    if (this.placementFrame?.material instanceof LineBasicMaterial) {
+      this.placementFrame.material.color.copy(color);
     }
     // The radius follows the ghost's verdict: a red disc reads as "this ground
     // is not what you would get", which is exactly true of a refused placement.
@@ -210,4 +244,54 @@ export class BuildingPlacementSystem {
       territory.color.copy(valid ? VALID_COLOR : INVALID_COLOR);
     }
   }
+}
+
+function createFallbackPreview(stats: BuildingBalanceStats): Mesh {
+  const material = new MeshStandardMaterial({
+    color: VALID_COLOR,
+    emissive: VALID_COLOR,
+    emissiveIntensity: 0.28,
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+  });
+  const mesh = new Mesh(new BoxGeometry(stats.footprint.width, 0.32, stats.footprint.depth), material);
+  mesh.position.y = 0.16;
+  return mesh;
+}
+
+function clonePreviewMaterial(material: import("three").Material | import("three").Material[]): import("three").Material | import("three").Material[] {
+  const clone = (item: import("three").Material): import("three").Material => {
+    const copy = item.clone();
+    copy.transparent = true;
+    copy.opacity = 0.5;
+    copy.depthWrite = false;
+    return copy;
+  };
+  return Array.isArray(material) ? material.map(clone) : clone(material);
+}
+
+function disposePreviewObject(root: Object3D | null): void {
+  root?.traverse((child) => {
+    if (!(child instanceof Mesh)) return;
+    if (!isSharedPreviewMesh(child)) child.geometry.dispose();
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) material.dispose();
+  });
+}
+
+function disposeMaterial(material: import("three").Material | import("three").Material[] | undefined): void {
+  if (!material) return;
+  if (Array.isArray(material)) {
+    for (const item of material) item.dispose();
+    return;
+  }
+  material.dispose();
+}
+
+function isSharedPreviewMesh(object: Object3D): boolean {
+  for (let current: Object3D | null = object; current; current = current.parent) {
+    if (current.userData.rtsSharedModel === true) return true;
+  }
+  return false;
 }

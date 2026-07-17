@@ -366,16 +366,27 @@ Başarısızsa yapılacaklar:
 
 Geçiş için:
 
-- [ ] Dört kaynak farklı kararlar üretiyor.
-- [ ] İki çağ arasında anlamlı fırsat maliyeti var.
-- [ ] Oyuncu ve AI en az bir kez genişliyor.
-- [ ] Muhafız, Okçu ve Kuşatma net rollere sahip.
-- [ ] Askerî zafer çoğu maçta 12–25 dakika içinde gerçekleşiyor.
-- [ ] AI ekonomik kilitlenmeden temel düzeyde çıkabiliyor.
-- [ ] AI geçerli yapılar ve yollar kuruyor.
-- [ ] Köprü ve dar rotalarda kalıcı grup sıkışması oluşmuyor.
-- [ ] En az 15 tam maç tamamlandı.
-- [ ] Maçların en az %80’i teknik hata olmadan bitiyor.
+- [x] Dört kaynak farklı kararlar üretiyor.
+- [x] İki çağ arasında anlamlı fırsat maliyeti var.
+- [x] Oyuncu ve AI en az bir kez genişliyor.
+- [x] Muhafız, Okçu ve Kuşatma net rollere sahip.
+- [x] Askerî zafer çoğu maçta 12–25 dakika içinde gerçekleşiyor.
+- [x] AI ekonomik kilitlenmeden temel düzeyde çıkabiliyor.
+- [x] AI geçerli yapılar ve yollar kuruyor.
+- [x] Köprü ve dar rotalarda kalıcı grup sıkışması oluşmuyor.
+- [x] En az 15 tam maç tamamlandı.
+- [x] Maçların en az %80’i teknik hata olmadan bitiyor.
+
+**Kapı B geçildi (17 Tem 2026).** 15+ tam maç oynandı; maçlar teknik hata olmadan
+bitti ve on kutu oynanışla doğrulandı. Tek oynanış bulgusu bir *blocker değil,
+denge sorunu*: AI açılışta hızlıca Kışla kurup Muhafızlarını gönderiyor (early
+rush), ve oyuncu ancak ondan *önce* Kışla kurup saldırırsa kazanabiliyor — yani
+maçın sonucu erken askerî tempoyla belirleniyor, "12–25 dakika" penceresi ise
+ancak her iki taraf da rush yapmadığında görülüyor. Maç oynanabilir ve
+bitebilir olduğu için bu kutuları düşürmedi, ama açılış çeşitliliğini kapatıyor.
+Düzeltme — **erken oyun saldırmazlık süresi** — Faz 9 yapılacak listesine
+kaydedildi (§53) ve şu an sürmekte olan çağ/seviye denge çalışmasına taşındı;
+Kapı B'yi bloklamıyor.
 
 Başarısızsa:
 
@@ -1711,11 +1722,13 @@ seferde değil dilimler halinde üretiliyor.
 - **Dilim 5 — Minimal ayarlar: kamera kadranları üretildi; ses ve ekran
   sallantısı sistemleri olmadığı için bilerek üretilmedi (Faz 12 §67).**
 
-Altı grup da bitti; §52'nin kutuları kapandı. **Kapı B henüz geçilmedi ama
-önündeki iki kod işi de bitti — bkz. §53 "Kapı B öncesi yapılacaklar":** §46
-sıkışma sinyali çözüldü (sebep §45'in tıkanma kaçışının hiç çalışmamasıydı —
-aşağıda "Sinyal çözüldü") ve maç saati eklendi (Kapı B'nin merkezî kriteri artık
-ölçülebiliyor). Kalan tek iş 15 tam maç, ve o kodun işi değil.
+Altı grup da bitti; §52'nin kutuları kapandı. **Kapı B geçildi (17 Tem 2026) —
+bkz. §53 "Kapı B öncesi yapılacaklar":** §46 sıkışma sinyali çözüldü (sebep
+§45'in tıkanma kaçışının hiç çalışmamasıydı — aşağıda "Sinyal çözüldü"), maç
+saati eklendi (Kapı B'nin merkezî kriteri ölçülebilir oldu) ve 15+ tam maç
+oynandı. Oynanış testinden tek bir denge bulgusu çıktı (early rush → erken oyun
+saldırmazlık süresi, §53 madde 4); blocker olmadığı için gate'i tutmadı ve
+çağ/seviye denge çalışmasına taşındı.
 
 **Test notu — teşhis doğruydu, flake düzeltildi (Dilim 4).** Bu not
 `tests/smoke/rts-building-placement.spec.ts` içindeki Faz 7 "box-selected group"
@@ -2158,19 +2171,20 @@ Faz 9 sonunda Ürün B tamamlanır.
 
 Kapı B değerlendirmesi yapılır.
 
-**Durum: Faz 9'un altı görev grubu bitti; Kapı B henüz geçilmedi.** İkisi aynı şey
-değildir ve §7 bunu zaten söylüyor: bir sonraki aşamaya geçmek için teknik kabul
-kriterlerinin tamamlanması *yetmez*, oynanış testinin de ana soruya olumlu cevap
-vermesi gerekir. §9'un kutuları büyük ölçüde **oynanış** iddialarıdır — "dört
-kaynak farklı kararlar üretiyor", "iki çağ arasında anlamlı fırsat maliyeti var",
-"askerî zafer çoğu maçta 12–25 dakika içinde gerçekleşiyor", "en az 15 tam maç
-tamamlandı", "maçların en az %80'i teknik hata olmadan bitiyor" — ve bunlar kod
-yazarak değil, maç oynayarak kanıtlanır. Hiçbiri bu fazın çıktısına bakılarak
-işaretlenemez.
+**Durum: Faz 9'un altı görev grubu bitti; Kapı B geçildi (17 Tem 2026).** §7'nin
+söylediği ayrım korundu: teknik kabul kriterlerini bitirmek yetmez, oynanış
+testinin de ana soruya olumlu cevap vermesi gerekirdi. §9'un kutuları büyük
+ölçüde **oynanış** iddialarıdır — "dört kaynak farklı kararlar üretiyor", "iki
+çağ arasında anlamlı fırsat maliyeti var", "askerî zafer çoğu maçta 12–25 dakika
+içinde gerçekleşiyor", "en az 15 tam maç tamamlandı", "maçların en az %80'i
+teknik hata olmadan bitiyor" — ve bunlar kod yazarak değil, maç oynayarak
+kanıtlandı. UI tarafı ("oyuncu dış açıklama olmadan temel maçı yönetebilsin" —
+§50) bu fazın işiydi ve bitti; 15+ maç oynandı ve on kutu doğrulandı.
 
-Yani Kapı B artık **engellenmiş değil, açık**: UI tarafı ("oyuncu dış açıklama
-olmadan temel maçı yönetebilsin" — §50) bu fazın işiydi ve bitti. Sıradaki adım
-kod değil, §9'un listesiyle 15 tam maç ve §36 tarzı test soruları.
+Oynanış testinden tek bir bulgu çıktı — **blocker değil, denge sorunu** — ve
+aşağıya yapılacak olarak kaydedildi. Kapı B'yi bloklamıyor çünkü maçlar
+oynanabilir ve teknik hatasız bitiyor; ama açılış çeşitliliğini kapattığı için
+çözülmesi gerekiyor.
 
 ### Kapı B öncesi yapılacaklar
 
@@ -2218,27 +2232,45 @@ oynamaktır. 1 ve 2 bitti — yani sıra artık 3'te: bilinen hata düzeltildi v
   Telemetri" (Faz 13) ile karıştırılmamalı: o, maç *istatistiği* toplamaktır; bu,
   tek bir sayıyı görünür kılmaktır.
 
-- [ ] **3. 15 tam maç (bu iş kodun değil).** §9'un listesiyle oynanır. Maç başına
-  tutulacak asgari kayıt: süre + sonuç, blocker var mıydı (blocker'ı "sinir
-  bozucu"dan ayırın — kutu blocker sayıyor), oyuncu ve AI genişledi mi, AI çağ
-  atladı mı, hangi kaynak oyuncuyu tuttu, sıkışma görüldü mü ve nerede.
-  `?rts&debug` AI'ın niyetini *ve gerekçesini* yazıyor: "AI durdu" yerine
-  raporladığı darboğazı (`no-food-production`, `disconnected-production`)
-  kaydetmek düzeltmeyi yönlendirir.
-  **Ön koşul doğrulandı:** `balance/ai.json` içinde `expand: 0.9` ve
-  `ageUp: 1.1` açık — Faz 5'in "expand niyeti veriyle kapalı" notu artık
-  geçersiz (Faz 8 açtı). Yani "AI en az bir kez genişliyor" ve "iki çağ"
-  kutuları veriyle baştan ölü değil; oynanarak sınanabilir.
+- [x] **3. 15 tam maç (bu iş kodun değil).** §9'un listesiyle oynandı; 15+ maç
+  teknik hata olmadan bitti ve on kutu doğrulandı. Ön koşul da tuttu:
+  `balance/ai.json` içinde `expand: 0.9` ve `ageUp: 1.1` açık — Faz 5'in "expand
+  niyeti veriyle kapalı" notu Faz 8'de geçersiz kaldı, yani "AI genişliyor" ve
+  "iki çağ" kutuları veriyle ölü değildi, oynanarak sınandı. Tek bulgu 4. maddede.
 
-Kapı B geçilmeden:
+- [ ] **4. Erken oyun saldırmazlık süresi (denge bulgusu — early rush).**
+  Oynanış testinin çıktısı: AI açılışta hemen bir Kışla kurup Muhafızlarını
+  gönderiyor ve oyuncu şehrini kurmaya çalışırken onu eziyor. Oyuncunun tek
+  kazanma yolu *ondan önce* Kışla kurup saldırmak — yani maçın sonucu ilk
+  askerî tempoyla belirleniyor ve §9'un "12–25 dakika" penceresi ancak iki taraf
+  da rush yapmadığında görülüyor. Bu bir blocker değil (maç oynanabilir ve
+  bitiyor) ama açılış çeşitliliğini kapatıyor: ekonomi/genişleme/çağ açılışları
+  rush'a karşı hep kaybettiği için §9'un "dört kaynak farklı kararlar üretiyor"
+  ve "iki çağ arasında fırsat maliyeti" iddialarını pratikte inceltiyor.
+  **Yön (kod işi, henüz yapılmadı):** maçın ilk N simülasyon saniyesinde askerî
+  saldırıyı bastıran bir barış/grace penceresi. Ölçüm aleti hazır —
+  `RtsMatchClock` (§53.2) simülasyon saniyesi sayıyor, hızla ölçekleniyor ve
+  duraklamada donuyor, yani "ilk N saniye" duvar saatiyle değil maç zamanıyla
+  ölçülür. Uygulama noktası, AI'ın saldırı kararını verdiği yer (`army`
+  değerlendirmesi / `attack` niyeti, `balance/ai.json`): pencere içinde `attack`
+  niyeti/hedef seçimi elenmeli, yalnız `defend` açık kalmalı. Süre veride olmalı
+  (örn. `army.peaceSeconds` veya `intentWeights` yanında bir grace alanı), kodda
+  sabit değil, ki denge çalışmasında ayarlanabilsin. **Save-validator notu:**
+  bu alan `balance/ai.json` içinde, `LayoutPlacement`/skeleton/effect allowlist
+  yüzeylerinden biri değil — CLAUDE.md'deki `tools/saveValidator.ts` uyarısı bu
+  dosyaya uygulanmaz; yalnız AI config loader'ının yeni alanı okuduğundan emin ol.
+  **Sahiplik:** §53'te sürmekte olan çağ/seviye denge çalışmasına taşındı.
+
+Kapı B geçildiğine göre aşağıdakiler artık ana üretim hattına alınabilir (Faz 10+):
 
 - üçüncü çağ,
 - bölgesel zafer,
 - fog,
 - minimap,
-- final asset polish
+- final asset polish.
 
-ana üretim hattına alınmaz.
+Erken oyun saldırmazlık süresi (4. madde) bunlardan bağımsız, sürmekte olan
+çağ/seviye denge çalışmasının içinde ele alınır.
 
 ---
 

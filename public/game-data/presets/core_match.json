@@ -5,8 +5,8 @@
     "prosperity": false
   },
   "startingResources": {
-    "food": 1000,
-    "wood": 1000,
+    "food": 500,
+    "wood": 500,
     "stone": 0,
     "gold": 0
   },

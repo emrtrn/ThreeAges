@@ -13,11 +13,14 @@
     "constructionSeconds": 25,
     "maxHealth": 300,
     "populationCapacity": 5,
-    "upgrade": {
-      "cost": { "wood": 70, "stone": 40 },
-      "durationSeconds": 35,
-      "maxHealth": 450
-    }
+    "levels": [
+      {
+        "level": 2,
+        "cost": { "wood": 70, "stone": 40 },
+        "durationSeconds": 35,
+        "maxHealth": 450
+      }
+    ]
   },
   "depot": {
     "label": "Depo",
@@ -25,11 +28,14 @@
     "cost": { "wood": 120 },
     "constructionSeconds": 45,
     "maxHealth": 500,
-    "upgrade": {
-      "cost": { "wood": 90, "stone": 40 },
-      "durationSeconds": 45,
-      "maxHealth": 750
-    }
+    "levels": [
+      {
+        "level": 2,
+        "cost": { "wood": 90, "stone": 40 },
+        "durationSeconds": 45,
+        "maxHealth": 750
+      }
+    ]
   },
   "outpost": {
     "label": "Karakol",
@@ -45,19 +51,22 @@
     "defense": {
       "attackDamage": 10,
       "attackCooldown": 1.6,
-      "attackRange": 7,
+        "attackRange": 12,
       "arrowsPerVolley": 2,
       "damageMultipliers": { "light": 1.2, "heavy": 0.8, "structure": 0.25 }
     },
-    "upgrade": {
-      "cost": { "wood": 110, "stone": 70 },
-      "durationSeconds": 55,
-      "maxHealth": 1000,
-      "territory": {
-        "controlRadius": 20,
-        "connectedControlRadius": 24
+    "levels": [
+      {
+        "level": 2,
+        "cost": { "wood": 110, "stone": 70 },
+        "durationSeconds": 55,
+        "maxHealth": 1000,
+        "territory": {
+          "controlRadius": 20,
+          "connectedControlRadius": 24
+        }
       }
-    }
+    ]
   },
   "farm": {
     "label": "Tarla",
@@ -119,10 +128,13 @@
     "cost": { "wood": 160 },
     "constructionSeconds": 55,
     "maxHealth": 650,
-    "upgrade": {
-      "cost": { "wood": 140, "stone": 80 },
-      "durationSeconds": 50,
-      "maxHealth": 900
-    }
+    "levels": [
+      {
+        "level": 2,
+        "cost": { "wood": 140, "stone": 80 },
+        "durationSeconds": 50,
+        "maxHealth": 900
+      }
+    ]
   }
 }

@@ -138,8 +138,28 @@ export interface BuildingBalanceStats {
   readonly territory?: TerritoryBuildingBalance;
   /** Optional stationary ranged defense, fired only after construction completes. */
   readonly defense?: BuildingDefenseBalance;
-  /** Optional Town-era T1 -> T2 path; absent buildings stay single-level. */
+  /**
+   * In-age level-up steps (Level 2, then 3), applied per building instance and
+   * independent of the Settlement -> Town age transition. Absent buildings stay
+   * single-level. See `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`.
+   */
+  readonly levels?: readonly BuildingLevelBalance[];
+  /**
+   * Legacy single-step Town upgrade, derived from `levels` (the level-2 entry)
+   * by the loader so pre-per-level systems keep reading one shape. Removed once
+   * every consumer moves onto {@link levels}.
+   */
   readonly upgrade?: BuildingUpgradeBalance;
+}
+
+/** One in-age level-up step. `level` is the level this step promotes to (2 or 3). */
+export interface BuildingLevelBalance {
+  readonly level: number;
+  readonly cost: StartingResources;
+  readonly durationSeconds: number;
+  readonly maxHealth: number;
+  /** Outposts can expand both their isolated and road-connected control area. */
+  readonly territory?: Pick<TerritoryBuildingBalance, "controlRadius" | "connectedControlRadius">;
 }
 
 export interface BuildingUpgradeBalance {

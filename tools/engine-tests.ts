@@ -142,7 +142,13 @@ import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "../src/
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "../src/game/rts/structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "../src/game/rts/structures/structureUpgradeSystem";
-import { visualBuildingIdForStructure } from "../src/game/rts/structures/rtsBuildingVisuals";
+import { visualMeshPathForStructure } from "../src/game/rts/structures/rtsBuildingVisuals";
+import {
+  allBuildingMeshPaths,
+  buildingMeshPath,
+  hasBuildingArt,
+  STATIC_MESH_ROOT,
+} from "../src/game/rts/structures/rtsBuildingArt";
 import {
   COMMAND_CENTER_CONTROL_RADIUS,
   TerritoryControlSystem,
@@ -27992,7 +27998,7 @@ check("game-data presets load and debug_fast is faster", () => {
   assert.equal(proof.id, "gameplay_proof");
   assert.equal(fast.id, "debug_fast");
   assert.equal(coreMatch.flags.prosperity, false, "the core match keeps optional prosperity disabled");
-  assert.deepEqual(coreMatch.startingResources, { food: 1000, wood: 1000, stone: 0, gold: 0 });
+  assert.deepEqual(coreMatch.startingResources, { food: 500, wood: 500, stone: 0, gold: 0 });
   // debug_fast exists to raise the sim speed (plan §19 acceptance criterion).
   assert.ok(fast.gameSpeed > proof.gameSpeed);
 });
@@ -28142,6 +28148,50 @@ check("RTS contextual right-click routes selected workers to a friendly structur
   assert.deepEqual(assigned, [worker]);
   assert.equal(worker.moveTarget, null, "job interaction does not become a ground move order");
   structures.clear();
+});
+
+check("RTS contextual right-click directs a selected Karakol at an enemy", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const structures = new PlacedStructureSystem();
+  const outpost = structures.place("player", outpostStats, 0, -3);
+  structures.advanceConstruction(outpost, outpostStats.constructionSeconds);
+  const units = new UnitSystem();
+  const enemy = units.spawn("enemy", 0, 0, RTS_TEST_UNIT_STATS);
+  structures.root.updateMatrixWorld(true);
+  units.root.updateMatrixWorld(true);
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 10, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const projected = new Vector3(enemy.position.x, 1, enemy.position.z).project(camera);
+  let ordered: CombatTarget | null = null;
+  const commands = new CommandSystem(
+    { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
+    camera,
+    {
+      selected: () => [],
+      selectedStructure: () => outpost,
+    } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem,
+    units,
+    new CommandCenterSystem(),
+    new RtsNavigation(),
+    new CommandMarkerSystem(),
+    structures,
+    null,
+    null,
+    (structure, target) => {
+      if (structure === outpost) ordered = target;
+      return true;
+    },
+  );
+
+  commands.issueAt((projected.x * 0.5 + 0.5) * 100, (-projected.y * 0.5 + 0.5) * 100);
+  assert.equal(ordered, enemy);
+  structures.clear();
+  units.clear();
 });
 
 check("RTS command-center placeholders keep one owned centre per side", () => {
@@ -28352,7 +28402,7 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
   assert.deepEqual(buildings.outpost?.defense, {
     attackDamage: 10,
     attackCooldown: 1.6,
-    attackRange: 7,
+    attackRange: 12,
     arrowsPerVolley: 2,
     damageMultipliers: { light: 1.2, heavy: 0.8, structure: 0.25 },
   });
@@ -28412,15 +28462,44 @@ check("Faz 6 completed resource buildings replace their construction placeholder
   const completed = { complete: true } as import("../src/game/rts/structures/constructionComponent").ConstructionComponent;
   const pending = { complete: false } as import("../src/game/rts/structures/constructionComponent").ConstructionComponent;
   const visualFor = (id: "lumber_camp" | "quarry" | "gold_mine", construction = completed) =>
-    visualBuildingIdForStructure({
+    visualMeshPathForStructure({
       stats: buildings[id] ?? assert.fail(`${id} balance missing`),
       level: 1,
       construction,
     });
-  assert.equal(visualFor("lumber_camp"), "lumber_camp");
-  assert.equal(visualFor("quarry"), "mine");
-  assert.equal(visualFor("gold_mine"), "mine");
+  assert.equal(visualFor("lumber_camp"), `${STATIC_MESH_ROOT}/Resource_Tree_Group_Cut.gltf`);
+  assert.equal(visualFor("quarry"), `${STATIC_MESH_ROOT}/Mine.gltf`);
+  assert.equal(visualFor("gold_mine"), `${STATIC_MESH_ROOT}/Mine.gltf`);
   assert.equal(visualFor("quarry", pending), null, "an unfinished foundation keeps its construction visual");
+});
+
+check("Faz 0 building mesh paths resolve by age family and in-age level", () => {
+  // Aged buildings pick the art family from the age and the variant from level.
+  assert.equal(buildingMeshPath("command_center", "settlement", 1), `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level1.gltf`);
+  assert.equal(buildingMeshPath("command_center", "town", 1), `${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level1.gltf`);
+  assert.equal(buildingMeshPath("house", "settlement", 2), `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level2.gltf`);
+  assert.equal(buildingMeshPath("depot", "settlement", 3), `${STATIC_MESH_ROOT}/Storage_FirstAge_Level3.gltf`);
+  assert.equal(buildingMeshPath("barracks", "town", 3), `${STATIC_MESH_ROOT}/Barracks_SecondAge_Level3.gltf`);
+  assert.equal(buildingMeshPath("farm", "town", 2), `${STATIC_MESH_ROOT}/Farm_SecondAge_Level2_Wheat.gltf`);
+  // Level is clamped to the pack's 1..3 range rather than fabricating a path.
+  assert.equal(buildingMeshPath("barracks", "settlement", 0), `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level1.gltf`);
+  assert.equal(buildingMeshPath("barracks", "settlement", 9), `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level3.gltf`);
+  // Fixed resource meshes ignore age and level; unknown buildings map to null.
+  assert.equal(buildingMeshPath("quarry", "town", 3), `${STATIC_MESH_ROOT}/Mine.gltf`);
+  assert.equal(buildingMeshPath("lumber_camp", "settlement", 1), `${STATIC_MESH_ROOT}/Resource_Tree_Group_Cut.gltf`);
+  assert.equal(buildingMeshPath("nonexistent", "settlement", 1), null);
+  assert.equal(hasBuildingArt("barracks"), true);
+  assert.equal(hasBuildingArt("nonexistent"), false);
+});
+
+check("Faz 0 preload set is deduplicated and every mesh file exists on disk", () => {
+  const paths = allBuildingMeshPaths();
+  assert.equal(new Set(paths).size, paths.length, "preload paths are deduplicated");
+  assert.ok(paths.includes(`${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level1.gltf`), "both age families are preloaded");
+  for (const path of paths) {
+    const diskPath = `public${path}`;
+    assert.ok(statSync(diskPath).isFile(), `preloaded mesh is missing on disk: ${diskPath}`);
+  }
 });
 
 check("Faz 6 Town upgrade reserves four resources, pauses the centre, and completes after its data timer", () => {
@@ -28812,6 +28891,31 @@ check("a completed outpost fires two Archer-strength arrows at hostile units in 
   assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * 2, "volley respects Archer cadence");
   defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], defense.attackCooldown / 2);
   assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * 4);
+});
+
+check("a selected outpost prioritizes its player-ordered enemy inside the extended range", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const defense = outpostStats.defense ?? assert.fail("outpost defense missing");
+  assert.equal(defense.attackRange, 12, "the Karakol reaches meaningfully into its control area");
+  const structures = new PlacedStructureSystem();
+  const outpost = structures.place("player", outpostStats, 0, 0);
+  structures.advanceConstruction(outpost, outpostStats.constructionSeconds);
+  const units = new UnitSystem();
+  const nearerEnemy = units.spawn("enemy", 2, 0, RTS_TEST_UNIT_STATS);
+  const orderedEnemy = units.spawn("enemy", 11, 0, RTS_TEST_UNIT_STATS);
+  const defenseSystem = new StructureDefenseSystem();
+
+  assert.equal(defenseSystem.orderAttack(outpost, orderedEnemy), "ordered");
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], 0);
+  assert.ok(orderedEnemy.health.current < orderedEnemy.health.max, "the selected target receives the volley");
+  assert.equal(nearerEnemy.health.current, nearerEnemy.health.max, "a nearer enemy does not override the player order");
+  const outsideRange = units.spawn("enemy", 12.1, 0, RTS_TEST_UNIT_STATS);
+  assert.equal(defenseSystem.orderAttack(outpost, outsideRange), "out-of-range");
+  structures.clear();
+  units.clear();
 });
 
 check("RTS match enters victory when the enemy command center is depleted", () => {
@@ -31183,10 +31287,12 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
     .some((unit) => unit.pathWaypointCount > 0 || unit.attackTarget !== null || unit.moveTarget !== null);
   assert.ok(ordered, "§16: the army issues the same unit orders a player's click would");
 
-  // §57: an enemy at the base overrides whatever the director wanted.
+  // §57: an enemy at the base overrides whatever the director wanted. The
+  // raider is placed relative to the AI's actual start so it stays inside
+  // AI_BASE_THREAT_RADIUS even after the map blockout moves the corners.
   const raided = aiTestWorld();
   for (let index = 0; index < 6; index += 1) raided.units.spawn("enemy", -4 + index * 2, -20, guard);
-  raided.units.spawn("player", 0, -24, guard);
+  raided.units.spawn("player", RTS_BLOCKOUT_MAP.enemyStart.x, RTS_BLOCKOUT_MAP.enemyStart.z + 2, guard);
   for (let step = 0; step < 40; step += 1) raided.ai.update(0.5);
   assert.equal(raided.ai.snapshot().mission, "defendBase", "a raid on the base pulls the army home");
   const defender = raided.units.unitsOf("enemy").find((unit) => unit.role === "guard" && unit.attackTarget !== null);
