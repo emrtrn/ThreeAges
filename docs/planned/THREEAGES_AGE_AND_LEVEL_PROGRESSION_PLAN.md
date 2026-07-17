@@ -197,13 +197,34 @@ yukseltmesi bu binalarda kapali tutulur - Faz 2'de karara baglanacak).
 > Level2` olarak cozuluyor (yine bir SecondAge modeli). Cag-up bildirim/panel
 > metinleri ("T2 yükseltmeleri açıldı" vb.) hala eski dilde - Faz 3'e birakildi.
 
-### Faz 3 - UI ve mesajlar
+### Faz 3 - UI ve mesajlar - TAMAMLANDI
 
-- [ ] `rtsSelectionView`: per-bina "Lv{n+1}'e Yukselt" butonu; seviye + maliyet
-      + kazanim gosterimi.
-- [ ] Bina paneli ve bildirim metinleri yeni dile ("Lv{n}", cag reset) uyarlandi.
-- [ ] Cag kapisi ("T2 icin Kasaba Cagi gerekir") metinleri kaldirildi.
-- [ ] Elle oyun ici dogrulama (verify skill): cag ici seviye + cag atlama akisi.
+- [x] `rtsSelectionView`: per-bina "Lv{n+1}'e Yukselt" butonu artik seviye +
+      maliyet + kazanimi birlikte gosteriyor. Yeni `UpgradeGain` view alani
+      (`RtsApp.structureUpgradeGain` ile veriden hesaplanir) panele
+      "Lv{n}: {can} can (+{delta})" satirini ve varsa nufus/kontrol yaricapi
+      kazanimlarini ekliyor; en ust seviyede satir yok.
+- [x] Bina paneli ve bildirim metinleri "Lv" diline gecti: detay basligi `T{n}`
+      -> `Lv{n}` ("Ev Lv2"), kisla oz-yukseltme/uretim mesajlari "Seviye
+      yukseltmesi ...", `startStructureUpgrade` iade/yetersiz mesajlari `Lv{n}`.
+      Cag-tamamlanma bildirimi artik davranisi anlatiyor ("tum binalariniz yeni
+      cag modeline gecti ve seviye 1'e dondu"). Build palette cag readout'u da
+      cag-milestone davranisini anlatacak sekilde yeniden yazildi.
+- [x] Cag kapisi metinleri kaldirildi: build palette "T2 ... icin Kasaba Cagi
+      gerekir" yerine cag-milestone aciklamasi veriyor; kisla birim tier-kapisi
+      `Kisla T{n} gerekir` -> `Kisla Lv{n} gerekir` (birim `requiredBuildingLevel`
+      degerinden). KR-04 geregi cag ici seviye her zaman acik.
+- [x] Elle oyun ici dogrulama (verify skill, `?rts`): ev kuruldu, panelde
+      "Ev Lv2'e Yukselt · 70 Odun · 40 Tas" butonu + "Lv2: 450 can (+150) · 8
+      nufus" kazanim satiri + cag-milestone metni + `Lv` dilli yetersiz-kaynak
+      mesaji gercek DOM'da gozlendi.
+
+> Not: Faz 3 sirasinda `tests/smoke/rts-building-placement.spec.ts` icindeki
+> arsiver tier-kapisi iddiasi `T2` -> `Lv2` olarak guncellendi. Ayni smoke
+> dosyasindaki arsiver testi, bu calismayla ilgisiz bir sekilde calisma
+> agacindaki `rtsMapBlockout.ts` degisikliginin sabit kodlanmis insaat noktasini
+> (950,660) kontrol alani disina kaydirmasi nedeniyle yerlestirme adiminda
+> takiliyor (Faz 3 metnine ulasmadan); bu Faz 3 kapsaminda degil.
 
 ### Faz 4 - AI uyumu ve kapanis
 

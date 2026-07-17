@@ -118,6 +118,27 @@ export interface RtsMapBlockout {
 const PLAYER_START: RtsMapPoint = { x: -38, z: 38 };
 const ENEMY_START: RtsMapPoint = { x: 38, z: -38 };
 
+const TREE_VARIANTS: readonly RtsTreeDefinition["variant"][] = ["pine", "tree1", "tree2"];
+
+/** Double each authored grove's density and per-tree yield without turning it into one static resource mesh. */
+function denseForestTrees(trees: readonly RtsTreeDefinition[]): readonly RtsTreeDefinition[] {
+  return trees.flatMap((tree, index) => {
+    const offset = index % 2 === 0 ? { x: 2, z: -2 } : { x: -2, z: 2 };
+    const capacity = tree.capacity * 2;
+    return [
+      { ...tree, capacity },
+      {
+        ...tree,
+        id: `${tree.id}-dense`,
+        x: tree.x + offset.x,
+        z: tree.z + offset.z,
+        capacity,
+        variant: TREE_VARIANTS[(index + 1) % TREE_VARIANTS.length]!,
+      },
+    ];
+  });
+}
+
 const atEnemyBase = (x: number, z: number): RtsMapPoint => ({
   x: ENEMY_START.x + x,
   z: ENEMY_START.z + z,
@@ -236,7 +257,7 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { id: "external_stone", resourceId: "stone", kind: "external", x: -34, z: 16 },
     { id: "external_gold", resourceId: "gold", kind: "external", x: 34, z: 16 },
   ],
-  trees: [
+  trees: denseForestTrees([
     { id: "player-wood-1", forestId: "player-grove", x: -56, z: 40, capacity: 20, variant: "pine" },
     { id: "player-wood-2", forestId: "player-grove", x: -52, z: 42, capacity: 20, variant: "tree1" },
     { id: "player-wood-3", forestId: "player-grove", x: -48, z: 40, capacity: 20, variant: "tree2" },
@@ -275,7 +296,7 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { id: "south-wood-3", forestId: "south-grove", x: 16, z: 42, capacity: 20, variant: "tree2" },
     { id: "south-wood-4", forestId: "south-grove", x: 6, z: 36, capacity: 20, variant: "tree1" },
     { id: "south-wood-5", forestId: "south-grove", x: 14, z: 36, capacity: 20, variant: "pine" },
-  ],
+  ]),
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },
   ],

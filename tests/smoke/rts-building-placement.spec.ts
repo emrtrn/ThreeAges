@@ -353,7 +353,7 @@ test("RTS Phase 9 the Barracks panel gates the Archer and the Ram behind a tier-
   await expect(page.locator('[data-rts-action="train:siege_placeholder"]')).toContainText("Koçbaşı Üret");
   await expect(page.locator('[data-rts-action="train:archer_placeholder"]')).toHaveAttribute(
     "title",
-    /Kışla T2 gerekir/,
+    /Kışla Lv2 gerekir/,
   );
   await expect(page.locator('[data-rts-action="train:archer_placeholder"]')).toBeDisabled();
   // A T1 Barracks trains the Guard, and a legal action carries no excuse.

@@ -132,7 +132,7 @@
       "localBufferCapacity": 40,
       "requiresForest": true,
       "gatherRadius": 200,
-      "carryCapacity": 5
+      "carryCapacity": 10
     }
   },
   "quarry": {

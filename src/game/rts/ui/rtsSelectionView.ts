@@ -149,13 +149,34 @@ export type StructureDetailView =
   | CenterDetailView;
 
 /**
+ * What one level step buys, so the panel can show the gain next to its cost
+ * (plan Faz 3: "seviye + maliyet + kazanım gösterimi"). Absolute figures rather
+ * than "the data step", because the player reads a total ("240 can"), and the
+ * one delta that matters — extra health — is computed against the live building.
+ */
+export interface UpgradeGain {
+  /** Maximum health at the next level. */
+  readonly maxHealth: number;
+  /** Extra maximum health the step adds over the building's current level. */
+  readonly maxHealthDelta: number;
+  /** Population capacity the next level supplies, or null when it grants none. */
+  readonly populationCapacity: number | null;
+  /** Control radius the next level supplies, or null when it grants none. */
+  readonly controlRadius: number | null;
+}
+
+/**
  * The per-instance level-up path, when the building's data declares `levels`. It
  * hangs off the structure rather than off a detail kind because every kind of
  * building can have one — a House, a Depot and a Barracks all level up, and the
  * next level's cost and state live entirely in {@link StructureUpgradeSnapshot}.
+ *
+ * {@link gain} is the next step's benefits, or null at max level — it rides
+ * alongside the snapshot so the panel can name what the cost is buying.
  */
 export interface StructureUpgradeView {
   readonly snapshot: StructureUpgradeSnapshot;
+  readonly gain: UpgradeGain | null;
 }
 
 export interface SelectedStructureView {
@@ -320,7 +341,27 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
 function describeStructure(structure: SelectedStructureView): SelectionPanelContent {
   const base = describeStructureDetail(structure);
   const upgrade = upgradeAction(structure);
-  return upgrade ? { ...base, actions: [...base.actions, upgrade] } : base;
+  const gainLine = upgradeGainLine(structure);
+  const lines = gainLine ? [...base.lines, gainLine] : base.lines;
+  const actions = upgrade ? [...base.actions, upgrade] : base.actions;
+  return { ...base, lines, actions };
+}
+
+/**
+ * The one line that turns "Lv2'ye Yükselt" into a decision: what the next level
+ * grants. Health is shown as a total with the delta in parentheses; capacity and
+ * radius, when the step sets them, as the totals the player will read on the
+ * levelled building. Null once the building is at max or its data grants nothing.
+ */
+function upgradeGainLine(structure: SelectedStructureView): string | null {
+  const upgrade = structure.upgrade;
+  if (!upgrade?.gain || upgrade.snapshot.completed) return null;
+  const { gain } = upgrade;
+  const nextLevel = upgrade.snapshot.level + 1;
+  const parts = [`${Math.round(gain.maxHealth)} can (+${Math.round(gain.maxHealthDelta)})`];
+  if (gain.populationCapacity !== null) parts.push(`${gain.populationCapacity} nüfus`);
+  if (gain.controlRadius !== null) parts.push(`${gain.controlRadius} kontrol yarıçapı`);
+  return `Lv${nextLevel}: ${parts.join(" · ")}`;
 }
 
 /**
@@ -358,7 +399,7 @@ function upgradeAction(structure: SelectedStructureView): SelectionAction | null
 function describeStructureDetail(structure: SelectedStructureView): SelectionPanelContent {
   const { detail } = structure;
   const summary = `Can: ${Math.ceil(structure.health)}/${Math.ceil(structure.maxHealth)}`;
-  const title = structure.level > 1 ? `${structure.label} T${structure.level}` : structure.label;
+  const title = structure.level > 1 ? `${structure.label} Lv${structure.level}` : structure.label;
   switch (detail.kind) {
     case "construction":
       return {
@@ -519,7 +560,7 @@ function describeMilitary(
       `Toplanma noktası: ${detail.rallySet ? "belirlendi" : "yok"}`,
       // The two things that stop a Barracks silently. Only shown when true: a
       // healthy Barracks does not need a line saying nothing is wrong with it.
-      ...(detail.upgrading ? ["T2 yükseltmesi sürüyor — üretim duraklatıldı."] : []),
+      ...(detail.upgrading ? ["Seviye yükseltmesi sürüyor — üretim duraklatıldı."] : []),
       ...(detail.connected ? [] : ["Kontrol Dışı — bu Kışla birlik üretemez."]),
     ],
     actions: [
@@ -576,11 +617,11 @@ function ageUpAction(age: AgeSnapshot, labels: ReadonlyMap<string, string>): Sel
 function trainAction(entry: RosterEntry, detail: MilitaryDetailView): SelectionAction {
   const full = detail.queue.queued >= detail.queue.capacity;
   const reason = !entry.unlocked
-    ? `${entry.stats.label} için Kışla T${entry.stats.requiredBuildingLevel} gerekir.`
+    ? `${entry.stats.label} için Kışla Lv${entry.stats.requiredBuildingLevel} gerekir.`
     : !detail.connected
       ? "Kontrol Dışı: bu Kışla birlik üretemez."
       : detail.upgrading
-        ? "T2 yükseltmesi sürerken kuyruk duraklatıldı."
+        ? "Seviye yükseltmesi sürerken kuyruk duraklatıldı."
         : full
           ? `Kuyruk dolu (${detail.queue.queued}/${detail.queue.capacity}).`
           : null;

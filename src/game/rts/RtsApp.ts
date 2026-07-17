@@ -80,6 +80,7 @@ import {
   UPGRADE_ACTION,
   type RtsSelectionView,
   type StructureDetailView,
+  type UpgradeGain,
   type WorkerJob,
 } from "./ui/rtsSelectionView";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
@@ -889,7 +890,7 @@ export class RtsApp {
       if (event.type === "completed") {
         this.notifications.post({
           kind: "age-upgraded",
-          text: `${this.options.ageBalance.town.label} Çağı tamamlandı: T2 yükseltmeleri açıldı.`,
+          text: `${this.options.ageBalance.town.label} Çağı tamamlandı: tüm binalarınız yeni çağ modeline geçti ve seviye 1'e döndü.`,
         });
       }
       this.buildPalette.setActionMessage(event.type === "completed"
@@ -1278,7 +1279,10 @@ export class RtsApp {
           // Null when the data gives this building no `levels` at all — the
           // absence of an upgrade path is the data's statement, not a UI decision.
           upgrade: structure.stats.levels
-            ? { snapshot: this.structureUpgrades.snapshot(structure) }
+            ? {
+                snapshot: this.structureUpgrades.snapshot(structure),
+                gain: this.structureUpgradeGain(structure),
+              }
             : null,
         },
       };
@@ -1304,6 +1308,23 @@ export class RtsApp {
         // The centre's own T2 rides on the age, not on a per-type research.
         upgrade: null,
       },
+    };
+  }
+
+  /**
+   * What the selected building's next level buys, for the panel's gain line
+   * (plan Faz 3). Read from the data step that promotes it — the same step
+   * {@link StructureUpgradeSystem} will apply — with the health delta measured
+   * against the building's live maximum. Null once it is at its top level.
+   */
+  private structureUpgradeGain(structure: PlacedStructure): UpgradeGain | null {
+    const next = structure.stats.levels?.find((entry) => entry.level === structure.level + 1);
+    if (!next) return null;
+    return {
+      maxHealth: next.maxHealth,
+      maxHealthDelta: next.maxHealth - structure.health.max,
+      populationCapacity: next.populationCapacity ?? null,
+      controlRadius: next.territory?.controlRadius ?? null,
     };
   }
 
@@ -1594,6 +1615,7 @@ export class RtsApp {
 
   private queueUnit(unitId: string): void {
     const label = this.options.unitBalance[unitId]?.label ?? unitId;
+    const requiredLevel = this.options.unitBalance[unitId]?.requiredBuildingLevel ?? 2;
     const result = this.barracksProduction.queueUnit(PLAYER_OWNER, unitId);
     const queuedCount = this.barracksProduction.queuedCount(PLAYER_OWNER);
     const queueCapacity = this.barracksProduction.queueCapacity(PLAYER_OWNER);
@@ -1601,12 +1623,12 @@ export class RtsApp {
       queued: `${label} üretim kuyruğa alındı (${queuedCount}/${queueCapacity}).`,
       "unknown-unit": `${label} Kışla'da üretilemiyor.`,
       "no-completed-barracks": "Önce tamamlanmış bir Kışla kurun.",
-      "requires-barracks-upgrade": `${label} için Kışla T2 yükseltmesi gerekir.`,
+      "requires-barracks-upgrade": `${label} için Kışla Lv${requiredLevel} yükseltmesi gerekir.`,
       "queue-full": `Üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
       "exit-blocked": `${label} çıkışı engelli; Kışla çevresini açın.`,
       "insufficient-resources": `${label} için kaynak yetersiz.`,
       "population-full": "Nüfus dolu: önce Ev kurun.",
-      "structure-upgrading": `Kışla T2 yükseltmesi sürerken ${label} üretimi durur.`,
+      "structure-upgrading": `Kışla seviye yükseltmesi sürerken ${label} üretimi durur.`,
       disconnected: "Kışla kontrol alanınızın dışında kaldı; üretim durdu.",
     };
     this.buildPalette.setActionMessage(message[result]);

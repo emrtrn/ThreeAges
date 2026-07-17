@@ -5,6 +5,8 @@
  */
 export type TreeVariant = "pine" | "tree1" | "tree2";
 
+const DEPLETION_EPSILON = 1e-9;
+
 export interface RtsTreeDefinition {
   readonly id: string;
   readonly forestId: string;
@@ -101,6 +103,7 @@ export class ForestSystem {
     if (!tree || tree.reservedByWorkerId !== workerId || tree.remaining <= 0) return 0;
     const amount = Math.min(requested, tree.remaining);
     tree.remaining -= amount;
+    if (tree.remaining <= DEPLETION_EPSILON) tree.remaining = 0;
     return amount;
   }
 

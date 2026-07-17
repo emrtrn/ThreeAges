@@ -135,6 +135,7 @@ import {
   type SelectionPanelContent,
   type StructureDetailView,
   type StructureUpgradeView,
+  type UpgradeGain,
   type WorkerJob,
 } from "../src/game/rts/ui/rtsSelectionView";
 import type { StructureUpgradeSnapshot } from "../src/game/rts/structures/structureUpgradeSystem";
@@ -28860,7 +28861,7 @@ check("RTS lumber camps require individual trees and workers carry wood back to 
   const camp = buildings.lumber_camp ?? assert.fail("lumber camp definition missing");
   assert.equal(camp.economy?.requiresForest, true);
   const forests = new ForestSystem([
-    { id: "test-tree", forestId: "test-grove", x: 8, z: 0, capacity: 20, variant: "pine" },
+    { id: "test-tree", forestId: "test-grove", x: 8, z: 0, capacity: 40, variant: "pine" },
   ]);
   const units = new UnitSystem();
   const structures = new PlacedStructureSystem();
@@ -28896,14 +28897,14 @@ check("RTS lumber camps require individual trees and workers carry wood back to 
 
   const worker = units.spawn("player", 3, 0, RTS_TEST_WORKER_STATS);
   const production = new EconomyProductionSystem(units, structures, navigation, () => false, undefined, forests);
-  for (let tick = 0; tick < 600; tick += 1) {
+  for (let tick = 0; tick < 1600; tick += 1) {
     updateUnitMovement(units.all(), 0.5);
     production.update(0.5);
   }
   const snapshot = production.snapshots("player")[0] ?? assert.fail("lumber producer missing");
   assert.equal(forests.snapshots()[0]?.depleted, true, "only the harvested tree becomes depleted");
   assert.equal(snapshot.sourceRemaining, 0);
-  assert.ok(Math.abs(snapshot.totalProduced - 20) < 0.0001, "one 20-wood tree reaches camp in four 5-wood deliveries");
+  assert.ok(Math.abs(snapshot.totalProduced - 40) < 0.0001, "one 40-wood tree reaches camp in four 10-wood deliveries");
   assert.equal(snapshot.status, "source-depleted");
   assert.equal(production.isAssigned(worker), false, "a worker is released after its grove is exhausted");
   territory.dispose();
@@ -33053,8 +33054,8 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
       structure: { id: 1, label, level, health: 200, maxHealth: 400, detail },
     }) ?? assert.fail("a structure selection has a panel");
 
-  // A T2 building says so in its title: level is the whole reason it cost twice.
-  assert.equal(structure({ kind: "passive", populationCapacity: 8 }, "Ev", 2).title, "Ev T2");
+  // A levelled building says so in its title: level is the whole reason it cost twice.
+  assert.equal(structure({ kind: "passive", populationCapacity: 8 }, "Ev", 2).title, "Ev Lv2");
   assert.equal(structure({ kind: "passive", populationCapacity: 5 }, "Ev").title, "Ev");
   assert.match(structure({ kind: "passive", populationCapacity: 5 }, "Ev").summary, /Can: 200\/400/);
 
@@ -33144,7 +33145,7 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   }, "Kışla");
   assert.match(severed.lines.join(" | "), /Üretim yok/);
   assert.match(severed.lines.join(" | "), /Kontrol Dışı/);
-  assert.match(severed.lines.join(" | "), /T2 yükseltmesi sürüyor/);
+  assert.match(severed.lines.join(" | "), /Seviye yükseltmesi sürüyor/);
   assert.match(severed.tooltip ?? "", /alanı geri alın/);
 });
 
@@ -33183,7 +33184,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   assert.match(action(healthy, "train:guard_placeholder").cost ?? "", /50 Yiyecek · 1 Nüfus/);
   const locked = action(healthy, "train:archer_placeholder");
   assert.equal(locked.enabled, false);
-  assert.match(locked.reason ?? "", /Kışla T2 gerekir/);
+  assert.match(locked.reason ?? "", /Kışla Lv2 gerekir/);
   assert.ok(action(healthy, "rally"), "a Barracks can always be given a rally point");
 
   // The refusal order mirrors BarracksProductionSystem.queueUnit: a player who
@@ -33192,7 +33193,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   assert.match(action(severed, "train:guard_placeholder").reason ?? "", /Kontrol Dışı/);
   assert.match(
     action(severed, "train:archer_placeholder").reason ?? "",
-    /Kışla T2 gerekir/,
+    /Kışla Lv2 gerekir/,
     "the tier gate outranks the territory gate, as the production system reports it",
   );
 
@@ -33275,12 +33276,14 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
     content.actions.find((candidate) => candidate.id === "upgrade");
   const snapshot = (over: Partial<StructureUpgradeSnapshot> = {}): StructureUpgradeSnapshot =>
     ({ level: 1, maxLevel: 3, completed: false, upgrading: false, remainingSeconds: 0, nextCost: null, ...over });
+  const view = (over: Partial<StructureUpgradeSnapshot> = {}, gain: UpgradeGain | null = null): StructureUpgradeView =>
+    ({ snapshot: snapshot(over), gain });
 
   // A building whose data declares no `levels` offers no button. The absence is
   // the data's statement, not something the UI decides.
   assert.equal(upgradeOf(panel(null)), undefined);
 
-  const ready = panel({ snapshot: snapshot({ nextCost: { wood: 100, stone: 60 } }) });
+  const ready = panel(view({ nextCost: { wood: 100, stone: 60 } }));
   const button = upgradeOf(ready) ?? assert.fail("no upgrade action");
   assert.equal(button.enabled, true);
   assert.equal(button.reason, null);
@@ -33289,13 +33292,27 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
   // building, not a type-wide promotion.
   assert.equal(button.label, "Kışla Lv2'e Yükselt");
 
+  // Faz 3: the gain rides next to the cost, so a level-up reads as a decision —
+  // health as a total plus its delta, and each stat the step grants.
+  const withGain = panel(view(
+    { nextCost: { wood: 100 } },
+    { maxHealth: 900, maxHealthDelta: 250, populationCapacity: null, controlRadius: 22 },
+  ));
+  assert.match(withGain.lines.join(" | "), /Lv2: 900 can \(\+250\) · 22 kontrol yarıçapı/);
+  // No gain line once the building is at max, even if one is somehow supplied.
+  assert.ok(
+    !panel(view({ level: 3, completed: true }, { maxHealth: 900, maxHealthDelta: 0, populationCapacity: null, controlRadius: null }))
+      .lines.join(" | ").includes("Lv"),
+    "a maxed building states no next-level gain",
+  );
+
   // KR-04: there is no age gate — a level-up in progress is the only "wait".
   assert.match(
-    upgradeOf(panel({ snapshot: snapshot({ upgrading: true, remainingSeconds: 12.1 }) }))?.reason ?? "",
+    upgradeOf(panel(view({ upgrading: true, remainingSeconds: 12.1 })))?.reason ?? "",
     /Lv2 yükseltmesi sürüyor \(13 sn\)/,
   );
   // A maxed building shows a disabled "already top level" button.
-  const maxed = upgradeOf(panel({ snapshot: snapshot({ level: 3, completed: true }) })) ?? assert.fail("no button");
+  const maxed = upgradeOf(panel(view({ level: 3, completed: true }))) ?? assert.fail("no button");
   assert.equal(maxed.enabled, false);
   assert.match(maxed.reason ?? "", /en yüksek seviyede/);
   assert.match(maxed.label, /En Üst Seviyede/);
@@ -33306,7 +33323,7 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
     kind: "structure",
     structure: {
       id: 1, label: "Kışla", level: 1, health: 650, maxHealth: 650,
-      upgrade: { snapshot: snapshot({ nextCost: { wood: 100 } }) },
+      upgrade: view({ nextCost: { wood: 100 } }),
       detail: {
         kind: "military",
         rallySet: false,

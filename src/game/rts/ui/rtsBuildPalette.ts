@@ -10,13 +10,14 @@
  * By the end of Faz 9 this is one thing: *placement*. Everything a building or a
  * unit does moved onto the thing that does it ({@link RtsSelectionPanel}) — the
  * production readout that made the player pick "Tarla #7" from a list of ids
- * standing in for the map, the training verbs, the age, and the T2 upgrades. A
+ * standing in for the map, the training verbs, the age, and the level-ups. A
  * palette is where you buy a building you do not have yet; it is not where you
  * command the ones you do.
  *
  * The age snapshot is the one thing left that is not placement, and it earns its
- * place: it states the Town gate *before* the player owns any T2-capable
- * building to click, which no building's own panel can do.
+ * place: it states what the Town milestone *does* to every building (re-skin +
+ * level reset, KR-03) before the player owns one to click, which no building's
+ * own panel can do.
  */
 import type { BuildingBalance, StartingResources } from "../../data/gameDataTypes";
 import { townUnlocksAvailable, type AgeSnapshot } from "../progression/ageSystem";
@@ -162,18 +163,18 @@ export class RtsBuildPalette {
   }
 
   /**
-   * What the Town age opens. The T2 *buttons* left for the buildings themselves
-   * (§51) — an upgrade is started on the Barracks, not across the screen from it
-   * — so what remains here is the one thing the buildings cannot say: that the
-   * age is the gate, before the player owns any of them to click.
+   * What the age milestone means, before the player owns a building to click.
+   * The age no longer gates any T2 button (KR-04) — level-ups are always open on
+   * the building's own panel. What it *does* is the one thing no building panel
+   * can say: reaching the Town age re-skins every building into the new age
+   * family and resets its level to 1 (KR-03), so the ladder is climbed afresh.
    */
   setAgeState(snapshot: Pick<AgeSnapshot, "age" | "upgrading">): void {
-    const unlocked = townUnlocksAvailable(snapshot);
-    const text = unlocked
-      ? "Kasaba açılımları: T2 Ev, Depo, Kışla ve Karakol açık — yükseltmeyi binanın kendi panelinden başlatın."
+    const text = townUnlocksAvailable(snapshot)
+      ? "Kasaba Çağındasınız — binaları kendi panelinden Lv2/Lv3'e yükseltin."
       : snapshot.upgrading
-        ? "Kasaba açılımları: yükseltme tamamlanınca T2 Ev, Depo, Kışla ve Karakol açılır."
-        : "Kasaba açılımları: T2 Ev, Depo, Kışla ve Karakol için Kasaba Çağı gerekir.";
+        ? "Kasaba Çağı yükseltmesi sürüyor — tamamlanınca tüm binalar yeni çağ modeline geçer."
+        : "Kasaba Çağı: tamamlanınca tüm binalarınız yeni çağ modeline geçer ve seviyeleri sıfırlanır.";
     if (this.townUnlocks.textContent !== text) this.townUnlocks.textContent = text;
   }
 

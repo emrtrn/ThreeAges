@@ -270,7 +270,9 @@ body {
   color: #dce8be;
   font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
   white-space: pre-wrap;
-  pointer-events: none;
+  /* This panel can exceed its viewport. Opt back into pointer input so its
+     native scrollbar and mouse-wheel scrolling stay usable above the canvas. */
+  pointer-events: auto;
   background: rgb(13 20 24 / 78%);
   border: 1px solid rgb(183 206 130 / 55%);
   border-radius: 5px;
