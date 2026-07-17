@@ -30,6 +30,13 @@ interface WorkerQueue {
   readonly orders: WorkerOrder[];
 }
 
+/** The centre's worker queue, for the §51 selection panel. */
+export interface WorkerQueueSnapshot {
+  readonly queued: number;
+  readonly capacity: number;
+  readonly trainingRemainingSeconds: number | null;
+}
+
 export const WORKER_QUEUE_CAPACITY_BY_CENTER_LEVEL = [5, 10, 20] as const;
 
 /** Worker queue capacity grows with the command-centre level / age. */
@@ -98,6 +105,16 @@ export class WorkerProductionSystem {
   /** Number of paid orders, including the worker currently in production. */
   queuedCount(owner: UnitOwner): number {
     return this.queues.get(owner)?.orders.length ?? 0;
+  }
+
+  /** The centre's queue for the §51 selection panel: what it is doing, and for how long. */
+  queueSnapshot(owner: UnitOwner): WorkerQueueSnapshot {
+    const orders = this.queues.get(owner)?.orders ?? [];
+    return {
+      queued: orders.length,
+      capacity: this.queueCapacityForOwner(owner),
+      trainingRemainingSeconds: orders[0]?.remainingSeconds ?? null,
+    };
   }
 
   update(deltaSeconds: number): WorkerProductionEvent[] {

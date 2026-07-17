@@ -54,6 +54,24 @@ interface BarracksQueue {
   readonly orders: UnitOrder[];
 }
 
+/**
+ * One Barracks' queue, for the §51 military panel. Per-structure rather than the
+ * per-kingdom {@link BarracksProductionSystem.queuedCount}: a panel opened by
+ * clicking *this* Barracks must describe this one, and a kingdom-wide total
+ * would credit it with orders another Barracks is training.
+ */
+export interface BarracksQueueSnapshot {
+  readonly structureId: number;
+  /** Paid orders held here, including the one in progress. */
+  readonly queued: number;
+  /** Per-Barracks limit from the owner's age (5 / 10 / 20). */
+  readonly capacity: number;
+  readonly trainingLabel: string | null;
+  readonly trainingRemainingSeconds: number | null;
+  /** Order labels behind the one in progress, in the order they will train. */
+  readonly pendingLabels: readonly string[];
+}
+
 export const GUARD_QUEUE_CAPACITY_BY_AGE_LEVEL = [5, 10, 20] as const;
 
 /** A future third age inherits the same queue curve without a new production-system change. */
@@ -188,6 +206,20 @@ export class BarracksProductionSystem {
     return [...this.queues.values()]
       .filter((queue) => queue.structure.owner === owner)
       .reduce((total, queue) => total + queue.orders.length, 0);
+  }
+
+  /** This Barracks' own queue, for the panel opened by selecting it. */
+  queueSnapshot(structure: PlacedStructure): BarracksQueueSnapshot {
+    const orders = this.queues.get(structure.id)?.orders ?? [];
+    const [training, ...pending] = orders;
+    return {
+      structureId: structure.id,
+      queued: orders.length,
+      capacity: this.queueCapacityForOwner(structure.owner),
+      trainingLabel: training?.stats.label ?? null,
+      trainingRemainingSeconds: training?.remainingSeconds ?? null,
+      pendingLabels: pending.map((order) => order.stats.label),
+    };
   }
 
   /** Total capacity; the per-Barracks age limit is multiplied by ready Barracks. */

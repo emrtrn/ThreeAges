@@ -67,6 +67,7 @@ import { KingdomRegistry } from "./kingdom/kingdomRegistry";
 import { RoadConstructionService } from "./roads/roadConstructionService";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
+import type { RtsSelectionView, StructureDetailView, WorkerJob } from "./ui/rtsSelectionView";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
@@ -255,6 +256,7 @@ export class RtsApp {
       this.cameraController.camera,
       this.units,
       this.marquee,
+      this.structures,
     );
     this.commands = new CommandSystem(
       canvas,
@@ -407,6 +409,7 @@ export class RtsApp {
       },
       () => {
         this.placement.cancelLatestConstruction();
+        this.selection.reconcileStructures(this.structures.all());
         this.buildPalette.setActionMessage(null);
         this.syncPlacementUi();
       },
@@ -732,7 +735,7 @@ export class RtsApp {
     // tracer and a health bar should look the same at any game speed.
     this.projectiles.update(dt);
     this.units.updatePresentation(this.cameraController.camera.quaternion);
-    this.selectionPanel.setSelection(this.selection.selected());
+    this.selectionPanel.setSelection(this.selectionView());
     // Notices expire on real seconds for the same reason a health bar animates
     // on them: at §38's 8x test speed a warning that vanished eight times faster
     // would be unreadable exactly when the match is hardest to follow.
@@ -886,6 +889,7 @@ export class RtsApp {
     });
     if (destroyed.length === 0) return;
     if (territoryChanged) this.territory.refresh();
+    this.selection.reconcileStructures(this.structures.all());
     this.refreshNavigationBlockers();
   }
 
@@ -1100,15 +1104,125 @@ export class RtsApp {
     this.roadControls.setState(this.roadPlacement.state());
   }
 
+  /**
+   * Build the §51 panel's answer from the live systems.
+   *
+   * The panel is told what is true and never asks; this is the same contract the
+   * HUD bar runs on, and it is what keeps the panel's text under `test:engine`
+   * (see {@link describeSelection}). Buildings win nothing here: a unit
+   * selection is checked first because {@link SelectionSystem} guarantees the
+   * two are mutually exclusive, and asking in a fixed order is cheaper than
+   * asserting it twice.
+   */
+  private selectionView(): RtsSelectionView {
+    const units = this.selection.selected();
+    if (units.length > 0) {
+      return {
+        kind: "units",
+        units: units.map((unit) => ({
+          id: unit.id,
+          role: unit.role,
+          stats: unit.stats,
+          health: unit.health.current,
+          maxHealth: unit.health.max,
+          stance: unit.stance,
+          job: unit.role === "worker" ? this.workerJob(unit) : null,
+        })),
+      };
+    }
+    const structure = this.selection.selectedStructure();
+    if (!structure) return { kind: "none" };
+    return {
+      kind: "structure",
+      structure: {
+        id: structure.id,
+        label: structure.stats.label,
+        level: structure.level,
+        health: structure.health.current,
+        maxHealth: structure.health.max,
+        detail: this.structureDetail(structure),
+      },
+    };
+  }
+
+  /**
+   * A worker answers to two systems, so the panel needs the one that currently
+   * holds it. Economy is asked first: only an assigned worker is in it at all,
+   * and construction reports an unassigned worker as "idle" — the same word it
+   * uses for a genuinely free one.
+   */
+  private workerJob(worker: Unit): WorkerJob {
+    if (this.economyProduction?.isAssigned(worker)) {
+      return this.economyProduction.stateFor(worker) === "producing" ? "producing" : "moving";
+    }
+    return this.workerConstruction.stateFor(worker);
+  }
+
+  private structureDetail(structure: PlacedStructure): StructureDetailView {
+    if (!structure.construction.complete) {
+      return {
+        kind: "construction",
+        progress: structure.construction.progress,
+        assignedWorkers: this.workerConstruction.assignedWorkers(structure),
+      };
+    }
+    const production = this.economyProduction?.snapshots(structure.owner)
+      .find((snapshot) => snapshot.structureId === structure.id);
+    if (production) {
+      return {
+        kind: "producer",
+        production,
+        logistics: this.productionLogistics.snapshots()
+          .find((producer) => producer.structureId === structure.id)?.status ?? null,
+      };
+    }
+    if (structure.stats.id === "depot") {
+      const depot = this.depotLogistics.snapshots().find((node) => node.structureId === structure.id);
+      return {
+        kind: "depot",
+        status: depot?.status ?? "unlinked",
+        componentId: depot?.componentId ?? null,
+        linkedProducers: this.productionLogistics.snapshots()
+          .filter((producer) => producer.depotStructureId === structure.id).length,
+        occupied: this.logisticsOccupation.occupierFor(structure.id) !== null,
+      };
+    }
+    if (structure.stats.territory) {
+      return {
+        kind: "outpost",
+        controlRadius: structure.territoryControlRadius ?? 0,
+        connectedControlRadius: structure.territoryConnectedControlRadius,
+        roadConnected: this.outpostConnectedToMainRoad(structure),
+      };
+    }
+    if (structure.stats.id === "barracks") {
+      return {
+        kind: "military",
+        queue: this.barracksProduction.queueSnapshot(structure),
+        rallySet: this.barracksProduction.rallyPoint(structure.owner) !== null,
+        // Deliberately the *same* predicate the production system is wired with
+        // (see `new BarracksProductionSystem`), not an equivalent-looking one: a
+        // panel that judged connection by footprint while training judged it by
+        // centre point would call a working Barracks "Kontrol Dışı".
+        connected: this.territory.ownerAt(structure.x, structure.z) === structure.owner,
+        upgrading: this.structureUpgrades.isUpgrading(structure),
+      };
+    }
+    // Population is the only thing a House does, and the panel reads it the same
+    // way `PopulationSystem` totals it — data plus whatever T2 granted.
+    return {
+      kind: "passive",
+      populationCapacity: (structure.stats.populationCapacity ?? 0) + structure.populationCapacityBonus,
+    };
+  }
+
   private syncEconomyUi(): void {
-    const production = this.economyProduction?.snapshots(PLAYER_OWNER) ?? [];
     this.logisticsOccupation.sync();
     const logistics = this.productionLogistics.snapshots()
       .filter((producer) => producer.owner === PLAYER_OWNER);
-    this.buildPalette.setProductionBuildings(production);
-    this.buildPalette.setProductionLogistics(new Map(
-      logistics.map((producer) => [producer.structureId, producer.status]),
-    ));
+    // The per-producer detail left with the palette's id list (§51): those facts
+    // now reach the player by clicking the building. What the bar still needs is
+    // the kingdom-wide question — is *anything* severed right now.
     this.hudBar.setLogisticsStatuses(logistics.map((producer) => producer.status));
   }
 

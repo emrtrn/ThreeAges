@@ -205,6 +205,11 @@ export class WorkerConstructionSystem {
     return this.assignments.get(worker.id)?.state ?? "idle";
   }
 
+  /** Builders on one site, for the §51 panel opened by selecting a foundation. */
+  assignedWorkers(structure: PlacedStructure): number {
+    return this.assignmentCount(structure);
+  }
+
   idleWorkerCount(owner: UnitOwner): number {
     return this.units.workersOf(owner)
       .filter((worker) => this.stateFor(worker) === "idle" && !this.isReservedForOtherWork(worker)).length;

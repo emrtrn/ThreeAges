@@ -1,0 +1,388 @@
+/**
+ * Selection panel content — Vertical Slice Plan v0.2 §51 ("Seçim panelleri").
+ *
+ * The six panels the plan asks for are one panel with six answers, and the
+ * answer is computed here as plain data rather than written into the DOM. Two
+ * reasons, both taken from slices that already paid for the lesson:
+ *
+ * - §52's readable-reason criteria ("bir yapı çalışmadığında nedeni
+ *   gösteriliyor") is a claim about *text*, and `test:engine` can hold text to
+ *   account without a browser. This is the pattern `formatRtsAiDebug` (§82) and
+ *   `RtsNotificationCenter` established.
+ * - The panel must not decide anything. Like {@link RtsHudBar}, it renders what
+ *   `RtsApp` pushed; here the deciding is a pure function, so the DOM component's
+ *   only remaining rule is which node to touch when the content changed.
+ *
+ * Selection is one question with one answer: either an army, or a building. The
+ * kinds below are the shapes that question can take, not a catalogue of
+ * buildings — a Farm and a Gold Mine share `producer` because the player asks
+ * them both the same thing.
+ */
+import type { UnitArmorClass, UnitBalanceStats, UnitRoleId } from "../../data/gameDataTypes";
+import type { UnitStance } from "../units/unit";
+import type { EconomyBuildingSnapshot, EconomyProductionStatus } from "../economy/economyProductionSystem";
+import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
+import type { DepotNodeStatus } from "../economy/depotLogisticsSystem";
+import type { BarracksQueueSnapshot } from "../structures/barracksProductionSystem";
+import { resourceLabel } from "./resourceLabels";
+
+/** What a selected worker is doing; the union of the two systems that own workers. */
+export type WorkerJob = "idle" | "moving" | "building" | "producing" | "unreachable";
+
+export interface SelectedUnitView {
+  readonly id: number;
+  readonly role: UnitRoleId;
+  readonly stats: UnitBalanceStats;
+  readonly health: number;
+  readonly maxHealth: number;
+  readonly stance: UnitStance;
+  /** Workers only; a Guard has no job beyond its orders. */
+  readonly job: WorkerJob | null;
+}
+
+/** A site that is not a building yet: the only thing to say is when it will be. */
+export interface ConstructionDetailView {
+  readonly kind: "construction";
+  readonly progress: number;
+  readonly assignedWorkers: number;
+}
+
+export interface ProducerDetailView {
+  readonly kind: "producer";
+  readonly production: EconomyBuildingSnapshot;
+  readonly logistics: ProducerLogisticsStatus | null;
+}
+
+export interface DepotDetailView {
+  readonly kind: "depot";
+  readonly status: DepotNodeStatus;
+  readonly componentId: number | null;
+  /** Producers currently delivering here — the depot's whole reason to exist. */
+  readonly linkedProducers: number;
+  readonly occupied: boolean;
+}
+
+export interface OutpostDetailView {
+  readonly kind: "outpost";
+  readonly controlRadius: number;
+  readonly connectedControlRadius: number | null;
+  readonly roadConnected: boolean;
+}
+
+export interface MilitaryDetailView {
+  readonly kind: "military";
+  readonly queue: BarracksQueueSnapshot;
+  readonly rallySet: boolean;
+  readonly connected: boolean;
+  readonly upgrading: boolean;
+}
+
+/** A completed building with no ongoing job of its own (House, and future kin). */
+export interface PassiveDetailView {
+  readonly kind: "passive";
+  readonly populationCapacity: number;
+}
+
+export type StructureDetailView =
+  | ConstructionDetailView
+  | ProducerDetailView
+  | DepotDetailView
+  | OutpostDetailView
+  | MilitaryDetailView
+  | PassiveDetailView;
+
+export interface SelectedStructureView {
+  readonly id: number;
+  readonly label: string;
+  readonly level: number;
+  readonly health: number;
+  readonly maxHealth: number;
+  readonly detail: StructureDetailView;
+}
+
+export type RtsSelectionView =
+  | { readonly kind: "none" }
+  | { readonly kind: "units"; readonly units: readonly SelectedUnitView[] }
+  | { readonly kind: "structure"; readonly structure: SelectedStructureView };
+
+/** What the panel shows. `lines` is the panel's body, one fact per line. */
+export interface SelectionPanelContent {
+  readonly title: string;
+  readonly summary: string;
+  readonly lines: readonly string[];
+  readonly hint: string;
+  /** Hover explanation for the panel body; null when there is nothing to resolve. */
+  readonly tooltip: string | null;
+}
+
+/** GDD 06 §6–§9 role summaries, in the player's language. */
+const ROLE_DESCRIPTION: Record<UnitRoleId, string> = {
+  guard: "Ön hat. Okçuları korur, dar geçidi tutar; yapılara karşı zayıftır.",
+  archer: "Menzilli destek. Ön hattın arkasından vurur; yakın dövüşte erir.",
+  siege: "Kuşatma. Yapıları yıkar; birimlere karşı savunmasızdır, koruma ister.",
+  worker: "Ekonomi birimi. İnşa eder ve kaynak üretir; savaşmaz.",
+};
+
+const ARMOR_CLASS_LABEL: Record<UnitArmorClass, string> = {
+  light: "hafif birim",
+  heavy: "ağır birim",
+  structure: "yapı",
+};
+
+const STANCE_LABEL: Record<UnitStance, string> = {
+  aggressive: "Serbest",
+  hold: "Pozisyonu Koru",
+};
+
+const WORKER_JOB_LABEL: Record<WorkerJob, string> = {
+  idle: "boşta",
+  moving: "yolda",
+  building: "inşaatta",
+  producing: "üretimde",
+  unreachable: "erişemiyor",
+};
+
+const PRODUCTION_STATUS_LABEL: Record<EconomyProductionStatus, string> = {
+  "awaiting-workers": "İşçi bekliyor",
+  "workers-moving": "İşçiler yolda",
+  producing: "Üretiyor",
+  "buffer-full": "Tampon dolu",
+  "missing-resource-node": "Kaynak düğümü yok",
+  "source-depleted": "Kaynak tükendi",
+};
+
+const LOGISTICS_LABEL: Record<ProducerLogisticsStatus, string> = {
+  linked: "Bağlı",
+  "outside-control": "Kontrol Dışı",
+  "unlinked-road": "Yol Yok",
+  "unlinked-depot": "Depo Yok",
+  "depot-occupied": "Depo İşgal Altında",
+};
+
+const LOGISTICS_REASON: Record<ProducerLogisticsStatus, string> = {
+  linked: "Bu üretim yapısı, aynı yol ağındaki Depoya bağlı.",
+  "outside-control": "Kontrol alanı kaybedildi; Karakolu veya alanı geri alın.",
+  "unlinked-road": "Yapı footprint’ine temas eden bir yol hücresi gerekli.",
+  "unlinked-depot": "Aynı yol ağında tamamlanmış bir Depo gerekli.",
+  "depot-occupied": "Bağlı Depo düşman işgali altında; işgali kaldırın.",
+};
+
+const UNIT_HINT = "F: Saldırı-Hareket · H: Pozisyonu Koru · G: Serbest · X: Dur";
+const WORKER_HINT = "Sağ tık: inşaata veya üretim yapısına ata · X: Görevi bırak";
+const STRUCTURE_HINT = "Sağ tık: seçili işçileri bu yapıya ata";
+
+/** Above this an attacker is meaningfully strong; below its mirror, weak. */
+const STRONG_MULTIPLIER = 1.1;
+const WEAK_MULTIPLIER = 0.9;
+
+/** The panel's whole answer for one selection. Null when nothing is selected. */
+export function describeSelection(view: RtsSelectionView): SelectionPanelContent | null {
+  if (view.kind === "none") return null;
+  if (view.kind === "units") {
+    return view.units.length === 0 ? null : describeUnits(view.units);
+  }
+  return describeStructure(view.structure);
+}
+
+function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelContent {
+  const counts = new Map<UnitRoleId, number>();
+  for (const unit of units) counts.set(unit.role, (counts.get(unit.role) ?? 0) + 1);
+  const health = units.reduce((total, unit) => total + unit.health, 0);
+  const maxHealth = units.reduce((total, unit) => total + unit.maxHealth, 0);
+  const summary = `${[...counts]
+    .map(([role, count]) => `${count} ${labelFor(units, role)}`)
+    .join(" · ")} — Can: ${Math.ceil(health)}/${Math.ceil(maxHealth)}`;
+
+  // A selection of nothing but workers is an economy question, and the army
+  // panel has no answer to it: a Worker has no matchup and no stance. §51 lists
+  // the worker panel separately for exactly this reason.
+  const workersOnly = units.every((unit) => unit.role === "worker");
+  if (workersOnly) {
+    return {
+      title: "İşçi",
+      summary,
+      lines: [ROLE_DESCRIPTION.worker, `Görev: ${jobBreakdown(units)}`],
+      hint: WORKER_HINT,
+      tooltip: "Boşta bir işçi, oyuncunun oyuna borçlu olduğu bir karardır.",
+    };
+  }
+
+  // The role shown is the most numerous *combat* role. Workers only describe the
+  // selection when it is purely economic (handled above): dragging a box over a
+  // mixed group is a question about the army, and answering "İşçi" because five
+  // labourers outnumbered four Guards tells the player nothing they wanted.
+  const ranked = [...counts].sort((left, right) => right[1] - left[1]);
+  const [dominantRole] = ranked.find(([role]) => role !== "worker") ?? ranked[0]!;
+  const sample = units.find((unit) => unit.role === dominantRole)!;
+  const stances = new Set(units.map((unit) => unit.stance));
+  return {
+    title: "Seçim",
+    summary,
+    lines: [
+      ROLE_DESCRIPTION[dominantRole],
+      counterText(sample.stats),
+      `Duruş: ${stances.size > 1 ? "Karışık" : STANCE_LABEL[[...stances][0] ?? "aggressive"]}`,
+    ],
+    hint: UNIT_HINT,
+    tooltip: null,
+  };
+}
+
+function describeStructure(structure: SelectedStructureView): SelectionPanelContent {
+  const { detail } = structure;
+  const summary = `Can: ${Math.ceil(structure.health)}/${Math.ceil(structure.maxHealth)}`;
+  const title = structure.level > 1 ? `${structure.label} T${structure.level}` : structure.label;
+  switch (detail.kind) {
+    case "construction":
+      return {
+        title,
+        summary,
+        lines: [
+          `İnşaat: %${Math.floor(detail.progress * 100)}`,
+          detail.assignedWorkers === 0
+            ? "İşçi yok — inşaat durdu."
+            : `${detail.assignedWorkers} işçi çalışıyor.`,
+        ],
+        hint: STRUCTURE_HINT,
+        tooltip: detail.assignedWorkers === 0
+          ? "Bir işçi seçip bu şantiyeye sağ tıklayın; işçisiz şantiye ilerlemez."
+          : "Daha fazla işçi atamak inşaatı doğrusal olarak hızlandırır.",
+      };
+    case "producer":
+      return describeProducer(title, summary, detail);
+    case "depot":
+      return {
+        title,
+        summary,
+        lines: [
+          `Ağ: ${detail.status === "linked" ? `bileşen #${detail.componentId}` : "yola bağlı değil"}`,
+          `Teslim eden yapı: ${detail.linkedProducers}`,
+          ...(detail.occupied ? ["Düşman işgali altında — teslimat durdu."] : []),
+        ],
+        hint: STRUCTURE_HINT,
+        tooltip: detail.occupied
+          ? "İşgali kaldırmadan bu Depoya bağlı üreticiler global stoğa aktaramaz."
+          : detail.status === "linked"
+            ? "Bu Depo, aynı yol ağındaki üreticilerin çıktısını global stoğa aktarır."
+            : "Depo footprint’ine temas eden bir yol hücresi kurun.",
+      };
+    case "outpost":
+      return {
+        title,
+        summary,
+        lines: [
+          `Kontrol yarıçapı: ${detail.roadConnected && detail.connectedControlRadius !== null
+            ? detail.connectedControlRadius
+            : detail.controlRadius}`,
+          detail.roadConnected
+            ? "Merkez yol ağına bağlı — tam alan açık."
+            : "Yol bağlantısı yok — yalnız küçük alan açık.",
+        ],
+        hint: STRUCTURE_HINT,
+        // "yerine" rather than a number + case suffix: Turkish suffixes follow
+        // the vowel of the *spoken* number (16 → "16’dan", 20 → "20’ye"), which
+        // a template cannot pick for a value it does not know at build time.
+        tooltip: detail.roadConnected
+          ? "Karakol yıkılırsa açtığı alan kapanır; alandaki yapılar yerinde kalır."
+          : `Merkeze yol çekin: bağlantı, kontrol yarıçapını ${detail.controlRadius} yerine ${detail.connectedControlRadius ?? detail.controlRadius} yapar.`,
+      };
+    case "military":
+      return describeMilitary(title, summary, detail);
+    case "passive":
+      return {
+        title,
+        summary,
+        lines: detail.populationCapacity > 0
+          ? [`Nüfus kapasitesi: +${detail.populationCapacity}`]
+          : ["Pasif yapı."],
+        hint: STRUCTURE_HINT,
+        tooltip: null,
+      };
+  }
+}
+
+function describeProducer(
+  title: string,
+  summary: string,
+  detail: ProducerDetailView,
+): SelectionPanelContent {
+  const { production, logistics } = detail;
+  return {
+    title,
+    summary,
+    lines: [
+      `İşçiler: ${production.assignedWorkers}/${production.workerCapacity} (${production.workingWorkers} çalışıyor)`,
+      `Üretim: ${production.productionPerMinute.toFixed(1)} ${resourceLabel(production.resourceId)}/dk`,
+      `Yerel tampon: ${production.localBuffer.toFixed(1)}/${production.localBufferCapacity}`,
+      ...(production.sourceRemaining === null
+        ? []
+        : [`Düğüm: ${production.sourceRemaining.toFixed(1)} kaldı`]),
+      `Durum: ${PRODUCTION_STATUS_LABEL[production.status]}`,
+      `Lojistik: ${logistics ? LOGISTICS_LABEL[logistics] : "Bekleniyor"}`,
+    ],
+    hint: STRUCTURE_HINT,
+    tooltip: logistics
+      ? LOGISTICS_REASON[logistics]
+      : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.",
+  };
+}
+
+function describeMilitary(
+  title: string,
+  summary: string,
+  detail: MilitaryDetailView,
+): SelectionPanelContent {
+  const { queue } = detail;
+  return {
+    title,
+    summary,
+    lines: [
+      `Kuyruk: ${queue.queued}/${queue.capacity}`,
+      queue.trainingLabel === null
+        ? "Üretim yok."
+        : `Üretiliyor: ${queue.trainingLabel} — ${Math.ceil(queue.trainingRemainingSeconds ?? 0)} sn`,
+      ...(queue.pendingLabels.length > 0 ? [`Sırada: ${queue.pendingLabels.join(", ")}`] : []),
+      `Toplanma noktası: ${detail.rallySet ? "belirlendi" : "yok"}`,
+      // The two things that stop a Barracks silently. Only shown when true: a
+      // healthy Barracks does not need a line saying nothing is wrong with it.
+      ...(detail.upgrading ? ["T2 yükseltmesi sürüyor — üretim duraklatıldı."] : []),
+      ...(detail.connected ? [] : ["Kontrol Dışı — bu Kışla birlik üretemez."]),
+    ],
+    hint: STRUCTURE_HINT,
+    tooltip: !detail.connected
+      ? "Kontrol alanı kaybedilen askerî yapı üretim yapamaz; alanı geri alın."
+      : detail.upgrading
+        ? "Yükseltme tamamlanınca kuyruk kaldığı yerden devam eder."
+        : "Yeni birlikler Toplanma Noktasına yürür; palet üzerinden belirleyin.",
+  };
+}
+
+function jobBreakdown(units: readonly SelectedUnitView[]): string {
+  const counts = new Map<WorkerJob, number>();
+  for (const unit of units) {
+    const job = unit.job ?? "idle";
+    counts.set(job, (counts.get(job) ?? 0) + 1);
+  }
+  // Fixed order, not insertion order: the same selection must read the same way
+  // twice, and a breakdown that reshuffles as workers change job is unreadable.
+  const order: readonly WorkerJob[] = ["idle", "moving", "building", "producing", "unreachable"];
+  return order
+    .filter((job) => (counts.get(job) ?? 0) > 0)
+    .map((job) => `${counts.get(job)} ${WORKER_JOB_LABEL[job]}`)
+    .join(" · ");
+}
+
+function labelFor(units: readonly SelectedUnitView[], role: UnitRoleId): string {
+  return units.find((unit) => unit.role === role)?.stats.label ?? role;
+}
+
+/** Read the §33 row straight off the unit's data rather than restating it. */
+function counterText(stats: UnitBalanceStats): string {
+  const entries = Object.entries(stats.damageMultipliers) as [UnitArmorClass, number][];
+  const strong = entries.filter(([, value]) => value >= STRONG_MULTIPLIER).map(([key]) => ARMOR_CLASS_LABEL[key]);
+  const weak = entries.filter(([, value]) => value <= WEAK_MULTIPLIER).map(([key]) => ARMOR_CLASS_LABEL[key]);
+  return [
+    strong.length > 0 ? `Güçlü: ${strong.join(", ")}` : null,
+    weak.length > 0 ? `Zayıf: ${weak.join(", ")}` : null,
+  ].filter((part): part is string => part !== null).join(" · ") || "Dengeli hasar.";
+}

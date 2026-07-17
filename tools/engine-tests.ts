@@ -115,6 +115,13 @@ import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionS
 import { formatInventoryAmount, formatResourceCost, resourceLabel } from "../src/game/rts/ui/resourceLabels";
 import { RtsNotificationCenter, MAX_ACTIVE_NOTIFICATIONS } from "../src/game/rts/ui/rtsNotifications";
 import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
+import {
+  describeSelection,
+  type SelectedUnitView,
+  type SelectionPanelContent,
+  type StructureDetailView,
+  type WorkerJob,
+} from "../src/game/rts/ui/rtsSelectionView";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
@@ -32304,6 +32311,154 @@ check("Faz 9 §51: surrender is a defeat with its own reason (plan §51)", () =>
   match.reset();
   assert.equal(match.outcome, "active");
   assert.equal(match.reason, null, "a restart carries no reason from the last match");
+});
+
+check("Faz 9 §51: the selection panel answers for an army, and for workers separately", () => {
+  const guard = (id: number, stance: "aggressive" | "hold" = "aggressive"): SelectedUnitView => ({
+    id, role: "guard", stats: RTS_TEST_UNIT_STATS, health: 80, maxHealth: 100, stance, job: null,
+  });
+  const worker = (id: number, job: WorkerJob): SelectedUnitView => ({
+    id, role: "worker", stats: RTS_TEST_WORKER_STATS, health: 50, maxHealth: 50, stance: "aggressive", job,
+  });
+
+  assert.equal(describeSelection({ kind: "none" }), null);
+  assert.equal(
+    describeSelection({ kind: "units", units: [] }),
+    null,
+    "an empty selection is not a panel with nothing in it",
+  );
+
+  const army = describeSelection({ kind: "units", units: [guard(1), guard(2)] })
+    ?? assert.fail("an army selection has a panel");
+  assert.equal(army.title, "Seçim");
+  assert.match(army.summary, /2 .* — Can: 160\/200/);
+  // §33: the matchup line is read off the same multipliers combat resolves
+  // against, so the panel cannot advertise a matchup the data does not give.
+  assert.match(army.lines.join(" | "), /Güçlü: ağır birim/);
+  assert.match(army.lines.join(" | "), /Duruş: Serbest/);
+
+  const mixedStance = describeSelection({ kind: "units", units: [guard(1), guard(2, "hold")] })
+    ?? assert.fail("panel missing");
+  assert.match(mixedStance.lines.join(" | "), /Duruş: Karışık/);
+
+  // A mixed box-drag is a question about the army: five workers must not
+  // outvote four Guards and answer "İşçi".
+  const mixed = describeSelection({
+    kind: "units",
+    units: [worker(1, "idle"), worker(2, "idle"), worker(3, "idle"), guard(4), guard(5)],
+  }) ?? assert.fail("panel missing");
+  assert.equal(mixed.title, "Seçim");
+  assert.match(mixed.lines[0] ?? "", /Ön hat/, "the dominant *combat* role describes a mixed group");
+
+  // §51 lists the worker panel separately: a Worker has no matchup and no
+  // stance, and the army panel has no answer for what it is doing instead.
+  const workers = describeSelection({
+    kind: "units",
+    units: [worker(1, "idle"), worker(2, "building"), worker(3, "producing"), worker(4, "building")],
+  }) ?? assert.fail("panel missing");
+  assert.equal(workers.title, "İşçi");
+  assert.equal(
+    workers.lines[1],
+    "Görev: 1 boşta · 2 inşaatta · 1 üretimde",
+    "the breakdown reads in a fixed order, whatever order the workers arrived in",
+  );
+  assert.ok(!workers.lines.join(" | ").includes("Duruş"), "a worker has no stance to report");
+});
+
+check("Faz 9 §51: every building kind explains itself, working or not", () => {
+  const structure = (detail: StructureDetailView, label = "Test", level = 1): SelectionPanelContent =>
+    describeSelection({
+      kind: "structure",
+      structure: { id: 1, label, level, health: 200, maxHealth: 400, detail },
+    }) ?? assert.fail("a structure selection has a panel");
+
+  // A T2 building says so in its title: level is the whole reason it cost twice.
+  assert.equal(structure({ kind: "passive", populationCapacity: 8 }, "Ev", 2).title, "Ev T2");
+  assert.equal(structure({ kind: "passive", populationCapacity: 5 }, "Ev").title, "Ev");
+  assert.match(structure({ kind: "passive", populationCapacity: 5 }, "Ev").summary, /Can: 200\/400/);
+
+  // §52 "bir yapı çalışmadığında nedeni gösteriliyor" — the stalled site names
+  // the fix, not just the state.
+  const stalled = structure({ kind: "construction", progress: 0.42, assignedWorkers: 0 });
+  assert.match(stalled.lines.join(" | "), /İnşaat: %42/);
+  assert.match(stalled.lines.join(" | "), /İşçi yok/);
+  assert.match(stalled.tooltip ?? "", /sağ tıklayın/);
+
+  const producer = structure({
+    kind: "producer",
+    logistics: "unlinked-depot",
+    production: {
+      structureId: 1, structureLabel: "Tarla", resourceId: "food",
+      assignedWorkers: 2, workingWorkers: 1, workerCapacity: 3,
+      perWorkerPerMinute: 7, productionPerMinute: 7,
+      localBuffer: 40, localBufferCapacity: 40,
+      lastProductionTick: 0, lastTransferTick: 0, totalProduced: 0, totalTransferred: 0,
+      sourceRemaining: null, status: "buffer-full",
+    },
+  });
+  assert.match(producer.lines.join(" | "), /İşçiler: 2\/3 \(1 çalışıyor\)/);
+  assert.match(producer.lines.join(" | "), /Üretim: 7\.0 Yiyecek\/dk/);
+  assert.match(producer.lines.join(" | "), /Yerel tampon: 40\.0\/40/);
+  // The status is a translated phrase, not the raw enum the Faz 3 palette leaked.
+  assert.match(producer.lines.join(" | "), /Durum: Tampon dolu/);
+  assert.match(producer.lines.join(" | "), /Lojistik: Depo Yok/);
+  assert.match(producer.tooltip ?? "", /Depo gerekli/, "the tooltip resolves the state it reports");
+
+  const depot = structure({
+    kind: "depot", status: "linked", componentId: 3, linkedProducers: 2, occupied: true,
+  }, "Depo");
+  assert.match(depot.lines.join(" | "), /Ağ: bileşen #3/);
+  assert.match(depot.lines.join(" | "), /Teslim eden yapı: 2/);
+  assert.match(depot.lines.join(" | "), /işgali altında/, "an occupied depot says why nothing arrives");
+
+  // §35: the connected radius is the outpost's whole reason to want a road, so
+  // an unroaded one is told what the road is worth.
+  const outpost = structure({
+    kind: "outpost", controlRadius: 16, connectedControlRadius: 20, roadConnected: false,
+  }, "Karakol");
+  assert.match(outpost.lines.join(" | "), /Kontrol yarıçapı: 16/);
+  assert.match(outpost.lines.join(" | "), /Yol bağlantısı yok/);
+  // Worded to avoid a number + case suffix: Turkish picks the suffix from the
+  // spoken number, so "16’dan 20’ye" cannot be templated over live radii.
+  assert.match(outpost.tooltip ?? "", /16 yerine 20 yapar/);
+  const roaded = structure({
+    kind: "outpost", controlRadius: 16, connectedControlRadius: 20, roadConnected: true,
+  }, "Karakol");
+  assert.match(roaded.lines.join(" | "), /Kontrol yarıçapı: 20/, "the connected radius is the live one");
+
+  const barracks = structure({
+    kind: "military",
+    rallySet: true,
+    connected: true,
+    upgrading: false,
+    queue: {
+      structureId: 1, queued: 3, capacity: 5,
+      trainingLabel: "Muhafız", trainingRemainingSeconds: 4.2,
+      pendingLabels: ["Okçu", "Okçu"],
+    },
+  }, "Kışla");
+  assert.match(barracks.lines.join(" | "), /Kuyruk: 3\/5/);
+  assert.match(barracks.lines.join(" | "), /Üretiliyor: Muhafız — 5 sn/);
+  assert.match(barracks.lines.join(" | "), /Sırada: Okçu, Okçu/);
+  assert.match(barracks.lines.join(" | "), /Toplanma noktası: belirlendi/);
+  // A healthy Barracks does not carry lines saying nothing is wrong with it.
+  assert.ok(!barracks.lines.join(" | ").includes("Kontrol Dışı"));
+  assert.ok(!barracks.lines.join(" | ").includes("yükseltmesi sürüyor"));
+
+  const severed = structure({
+    kind: "military",
+    rallySet: false,
+    connected: false,
+    upgrading: true,
+    queue: {
+      structureId: 1, queued: 0, capacity: 5,
+      trainingLabel: null, trainingRemainingSeconds: null, pendingLabels: [],
+    },
+  }, "Kışla");
+  assert.match(severed.lines.join(" | "), /Üretim yok/);
+  assert.match(severed.lines.join(" | "), /Kontrol Dışı/);
+  assert.match(severed.lines.join(" | "), /T2 yükseltmesi sürüyor/);
+  assert.match(severed.tooltip ?? "", /alanı geri alın/);
 });
 
 check("§69: the AI stops deciding once the match is over", () => {

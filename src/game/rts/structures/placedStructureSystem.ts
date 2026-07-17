@@ -8,7 +8,16 @@
  * command centres carried health, so the AI's §60 target scoring had exactly one
  * thing it could ever choose — see plan §37.2.
  */
-import { BoxGeometry, Group, Mesh, MeshStandardMaterial, type Object3D, type Vector3 } from "three";
+import {
+  BoxGeometry,
+  Color,
+  Group,
+  Mesh,
+  MeshStandardMaterial,
+  RingGeometry,
+  type Object3D,
+  type Vector3,
+} from "three";
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalanceStats } from "../../data/gameDataTypes";
@@ -40,6 +49,8 @@ export interface PlacedStructure {
    * it is placed, and progress-scaled durability is a Faz 7 combat concern.
    */
   readonly health: HealthComponent;
+  /** Faz 9 selection ring; the structure's counterpart to {@link Unit.setSelected}. */
+  readonly selectionRing: Mesh;
   /** {@link CombatTarget}: the same world position the object sits at. */
   readonly position: Vector3;
   /** {@link CombatTarget}: every building is the §33 table's "structure" column. */
@@ -89,6 +100,23 @@ export class PlacedStructureSystem {
     progressFill.position.set(0, 0.3, -stats.footprint.depth / 2 - 0.35);
     progressFill.scale.x = 0.001;
     object.add(progressFill);
+    // Sized from the footprint rather than a fixed radius: the ring's job is to
+    // say *which* building is selected, and a 6x6 depot and a 2x2 house cannot
+    // share one radius without the ring reading as a different building's.
+    const ringRadius = Math.max(stats.footprint.width, stats.footprint.depth) / 2 + 0.35;
+    const selectionRing = new Mesh(
+      new RingGeometry(ringRadius, ringRadius + 0.3, 32),
+      new MeshStandardMaterial({
+        color: new Color("#f2f27a"),
+        emissive: new Color("#8f8f20"),
+        roughness: 0.5,
+      }),
+    );
+    selectionRing.name = "rts-structure-selection-ring";
+    selectionRing.rotation.x = -Math.PI / 2;
+    selectionRing.position.y = 0.05;
+    selectionRing.visible = false;
+    object.add(selectionRing);
     this.root.add(object);
     const structure: PlacedStructure = {
       id,
@@ -101,6 +129,7 @@ export class PlacedStructureSystem {
       construction: new ConstructionComponent(stats.constructionSeconds),
       progressFill,
       health: new HealthComponent(stats.maxHealth),
+      selectionRing,
       position: object.position,
       armorClass: "structure",
       // The inscribed radius: a rectangular footprint is attackable from its
@@ -260,6 +289,15 @@ export class PlacedStructureSystem {
       this.pickObjects.delete(child.id);
     });
   }
+}
+
+/**
+ * The structure counterpart of `Unit.setSelected`. A free function rather than a
+ * method because {@link PlacedStructure} is data the systems share, not a class:
+ * the ring is the only piece of it selection owns.
+ */
+export function setStructureSelected(structure: PlacedStructure, selected: boolean): void {
+  structure.selectionRing.visible = selected;
 }
 
 function disposeObjectMeshes(root: Object3D): void {

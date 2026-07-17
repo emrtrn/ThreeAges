@@ -10,14 +10,18 @@
  * Age is the one deliberate overlap: the panel does not print the age, but it
  * still consumes the snapshot, because the T2 buttons' locked/unlocked state is
  * an age fact and reading it here is what keeps a button from lying about it.
+ *
+ * The Faz 3 production readout is also gone. It was a button list that made the
+ * player pick a Farm out of "Tarla #7, Tarla #12" — a list of ids standing in
+ * for the map, because at the time buildings could not be clicked. §51's
+ * selection slice made them clickable, so the same facts are now on
+ * {@link RtsSelectionPanel}, reached by clicking the building they describe.
  */
 import type { BuildingBalance, UnitBalanceStats } from "../../data/gameDataTypes";
 import { townUnlocksAvailable, type AgeSnapshot } from "../progression/ageSystem";
-import type { EconomyBuildingSnapshot } from "../economy/economyProductionSystem";
-import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
 import type { StructureUpgradeSnapshot } from "../structures/structureUpgradeSystem";
-import { formatResourceCost, resourceLabel } from "./resourceLabels";
+import { formatResourceCost } from "./resourceLabels";
 
 export class RtsBuildPalette {
   private readonly root = document.createElement("section");
@@ -30,14 +34,7 @@ export class RtsBuildPalette {
   private readonly townStructureUpgradeButtons = new Map<string, HTMLButtonElement>();
   private readonly structureUpgradeStates = new Map<string, StructureUpgradeSnapshot>();
   private townUnlocksAreAvailable = false;
-  private readonly producerPanel = document.createElement("section");
-  private readonly producerChoices = document.createElement("div");
-  private readonly producerDetails = document.createElement("p");
   private readonly actionMessage = document.createElement("p");
-  private selectedProducerId: number | null = null;
-  private producerSignature = "";
-  private producers: readonly EconomyBuildingSnapshot[] = [];
-  private readonly logisticsStatuses = new Map<number, ProducerLogisticsStatus>();
 
   constructor(
     buildings: BuildingBalance,
@@ -134,15 +131,6 @@ export class RtsBuildPalette {
     this.root.appendChild(choices);
     this.townUnlocks.className = "rts-build-age";
     this.root.appendChild(this.townUnlocks);
-    this.producerPanel.className = "rts-production-panel";
-    const producerTitle = document.createElement("strong");
-    producerTitle.textContent = "Üretim Yapısı";
-    this.producerPanel.appendChild(producerTitle);
-    this.producerChoices.className = "rts-production-choices";
-    this.producerPanel.appendChild(this.producerChoices);
-    this.producerDetails.className = "rts-production-details";
-    this.producerPanel.appendChild(this.producerDetails);
-    this.root.appendChild(this.producerPanel);
     this.actionMessage.className = "rts-build-action-message";
     this.root.appendChild(this.actionMessage);
     this.status.className = "rts-build-status";
@@ -204,36 +192,6 @@ export class RtsBuildPalette {
     this.refreshStructureUpgradeButtons();
   }
 
-  /** Render a compact, explicitly selectable view of completed production sites. */
-  setProductionBuildings(producers: readonly EconomyBuildingSnapshot[]): void {
-    this.producers = producers;
-    if (!producers.some((producer) => producer.structureId === this.selectedProducerId)) {
-      this.selectedProducerId = producers[0]?.structureId ?? null;
-    }
-    const signature = producers.map((producer) => `${producer.structureId}:${producer.structureLabel}`).join("|");
-    if (signature !== this.producerSignature) {
-      this.producerSignature = signature;
-      this.producerChoices.replaceChildren();
-      for (const producer of producers) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = `${producer.structureLabel} #${producer.structureId}`;
-        button.addEventListener("click", () => {
-          this.selectedProducerId = producer.structureId;
-          this.renderSelectedProducer();
-        });
-        this.producerChoices.appendChild(button);
-      }
-    }
-    this.renderSelectedProducer();
-  }
-
-  setProductionLogistics(statuses: ReadonlyMap<number, ProducerLogisticsStatus>): void {
-    this.logisticsStatuses.clear();
-    for (const [structureId, status] of statuses) this.logisticsStatuses.set(structureId, status);
-    this.renderSelectedProducer();
-  }
-
   /**
    * Render one button per Barracks-trainable unit. A locked unit stays visible
    * and disabled rather than hidden: the player needs to see that Barracks II
@@ -275,27 +233,6 @@ export class RtsBuildPalette {
     this.actionMessage.textContent = message ?? "";
   }
 
-  private renderSelectedProducer(): void {
-    const selected = this.producers.find((producer) => producer.structureId === this.selectedProducerId);
-    if (!selected) {
-      this.producerPanel.hidden = true;
-      return;
-    }
-    this.producerPanel.hidden = false;
-    for (const button of this.producerChoices.querySelectorAll("button")) {
-      button.setAttribute("aria-pressed", String(button.textContent === `${selected.structureLabel} #${selected.structureId}`));
-    }
-    this.producerDetails.textContent = [
-      `İşçiler: ${selected.assignedWorkers}/${selected.workerCapacity} (${selected.workingWorkers} çalışıyor)`,
-      `Üretim: ${selected.productionPerMinute.toFixed(1)} ${resourceLabel(selected.resourceId)}/dk`,
-      `Yerel tampon: ${selected.localBuffer.toFixed(1)}/${selected.localBufferCapacity}`,
-      selected.sourceRemaining === null ? null : `Düğüm: ${selected.sourceRemaining.toFixed(1)} kaldı`,
-      `Durum: ${selected.status}`,
-      `Lojistik: ${formatLogisticsStatus(this.logisticsStatuses.get(selected.structureId))}`,
-    ].filter((part): part is string => part !== null).join(" · ");
-    this.producerDetails.title = logisticsReason(this.logisticsStatuses.get(selected.structureId));
-  }
-
   dispose(): void {
     this.root.remove();
   }
@@ -316,25 +253,4 @@ export class RtsBuildPalette {
   }
 }
 
-function formatLogisticsStatus(status: ProducerLogisticsStatus | undefined): string {
-  const labels: Record<ProducerLogisticsStatus, string> = {
-    linked: "Bağlı",
-    "outside-control": "Kontrol Dışı",
-    "unlinked-road": "Yol Yok",
-    "unlinked-depot": "Depo Yok",
-    "depot-occupied": "Depo İşgal Altında",
-  };
-  return status ? labels[status] : "Bekleniyor";
-}
-
-function logisticsReason(status: ProducerLogisticsStatus | undefined): string {
-  const reasons: Record<ProducerLogisticsStatus, string> = {
-    linked: "Bu üretim yapısı, aynı yol ağındaki Depoya bağlı.",
-    "outside-control": "Kontrol alanı kaybedildi; Karakolu veya alanı geri alın.",
-    "unlinked-road": "Yapı footprint’ine temas eden bir yol hücresi gerekli.",
-    "unlinked-depot": "Aynı yol ağında tamamlanmış bir Depo gerekli.",
-    "depot-occupied": "Bağlı Depo düşman işgali altında; işgali kaldırın.",
-  };
-  return status ? reasons[status] : "Yapı tamamlanınca lojistik bağlantısı hesaplanır.";
-}
 

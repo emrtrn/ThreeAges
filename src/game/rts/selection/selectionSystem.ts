@@ -1,14 +1,23 @@
 /**
- * RTS selection system — Vertical Slice Plan v0.2 §21 ("Seçim ve komut").
+ * RTS selection system — Vertical Slice Plan v0.2 §21 ("Seçim ve komut"),
+ * extended by §51 ("Seçim panelleri").
  *
  * Turns pointer intents into a live selection of player units: a left click
  * raycasts one unit; a left box-drag selects every player unit whose projected
- * screen position falls inside the marquee. Selection rings are the unit's own
- * visual (Unit.setSelected), so this system only owns *which* units are chosen.
- * Enemy units are never player-selectable (plan §4.2: you command your army).
+ * screen position falls inside the marquee. Selection rings are the selected
+ * thing's own visual (`Unit.setSelected` / {@link setStructureSelected}), so
+ * this system only owns *which* things are chosen. Enemy units and enemy
+ * buildings are never player-selectable (plan §4.2: you command your kingdom).
+ *
+ * Faz 9 added a second selectable kind: one player structure. Units and a
+ * structure are mutually exclusive — the selection answers exactly one question,
+ * and a panel that had to describe "3 Guards and a Barracks" would answer
+ * neither. A structure is click-only: a marquee is an army gesture, and sweeping
+ * a box across the base to grab units should never also grab the buildings under
+ * them.
  *
  * The selection set is the command surface later steps read (right-click
- * move/attack in the next step), so it is exposed via {@link selected}.
+ * move/attack), so it is exposed via {@link selected}.
  */
 import { Raycaster, Vector2, Vector3, type PerspectiveCamera } from "three";
 
@@ -16,12 +25,18 @@ import type { RtsPointerHandler, RtsPointerRect } from "../input/rtsPointer";
 import type { MarqueeOverlay } from "./marqueeOverlay";
 import type { UnitSystem } from "../units/unitSystem";
 import type { Unit } from "../units/unit";
+import {
+  setStructureSelected,
+  type PlacedStructure,
+  type PlacedStructureSystem,
+} from "../structures/placedStructureSystem";
 
 /** Height above ground used when projecting a unit to screen (mid-body). */
 const PROJECT_HEIGHT = 1.0;
 
 export class SelectionSystem implements RtsPointerHandler {
   private readonly selectedUnits = new Set<Unit>();
+  private selectedStructureRef: PlacedStructure | null = null;
   private readonly raycaster = new Raycaster();
   private readonly ndc = new Vector2();
   private readonly scratch = new Vector3();
@@ -31,6 +46,7 @@ export class SelectionSystem implements RtsPointerHandler {
     private readonly camera: PerspectiveCamera,
     private readonly units: UnitSystem,
     private readonly marquee: MarqueeOverlay,
+    private readonly structures: PlacedStructureSystem,
   ) {}
 
   /** Currently selected player units (command surface for later steps). */
@@ -38,10 +54,30 @@ export class SelectionSystem implements RtsPointerHandler {
     return [...this.selectedUnits];
   }
 
+  /** The single selected player structure, if the selection is a building one. */
+  selectedStructure(): PlacedStructure | null {
+    return this.selectedStructureRef;
+  }
+
   /** Remove a unit that died or otherwise left the field from the live selection. */
   remove(unit: Unit): void {
     if (!this.selectedUnits.delete(unit)) return;
     unit.setSelected(false);
+  }
+
+  /**
+   * Drop a selected structure that has left the field. Called against the live
+   * list rather than per removal path because a building can leave in more than
+   * one way — razed by combat, or cancelled from the palette — and a selection
+   * that survived either would keep the panel describing a building that is not
+   * there. This is the reconcile-against-the-live-list rule the rest of the
+   * structure systems already follow.
+   */
+  reconcileStructures(live: readonly PlacedStructure[]): void {
+    if (!this.selectedStructureRef) return;
+    if (live.includes(this.selectedStructureRef)) return;
+    // No setStructureSelected: the ring left with the object it hung on.
+    this.selectedStructureRef = null;
   }
 
   /** Clear selection and transient marquee state for a match restart. */
@@ -57,7 +93,18 @@ export class SelectionSystem implements RtsPointerHandler {
       else this.replaceWith([unit]);
       return;
     }
-    // Clicked empty ground (or an enemy): clear unless additive.
+    // Units win the pick when both are under the cursor: a unit standing on its
+    // own foundation is the smaller, likelier target, and the building cannot
+    // walk out from under the cursor to be clicked again.
+    const structure = this.raycastStructure(x, y);
+    if (structure && structure.owner === "player") {
+      // Additive is an army gesture and has no meaning for a single building.
+      // Ignoring it (rather than clearing) keeps shift-click from silently
+      // throwing away a group the player is still assembling.
+      if (!additive) this.selectStructure(structure);
+      return;
+    }
+    // Clicked empty ground (or something enemy-owned): clear unless additive.
     if (!additive) this.clear();
   }
 
@@ -87,6 +134,7 @@ export class SelectionSystem implements RtsPointerHandler {
     this.marquee.hide();
     const inside = this.playerUnitsInRect(rect);
     if (additive) {
+      if (inside.length > 0) this.clearStructure();
       for (const unit of inside) {
         this.selectedUnits.add(unit);
         unit.setSelected(true);
@@ -116,6 +164,17 @@ export class SelectionSystem implements RtsPointerHandler {
     return first ? this.units.unitForObject(first.object) : null;
   }
 
+  private raycastStructure(x: number, y: number): PlacedStructure | null {
+    const { w, h } = this.viewport();
+    this.ndc.set((x / w) * 2 - 1, -(y / h) * 2 + 1);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    // Recursive: a completed building's pick targets are the meshes *inside* a
+    // loaded model, not the group registered for it.
+    const hits = this.raycaster.intersectObjects([...this.structures.targetMeshes()], true);
+    const first = hits[0];
+    return first ? this.structures.structureForObject(first.object) : null;
+  }
+
   private playerUnitsInRect(rect: RtsPointerRect): Unit[] {
     const { w, h } = this.viewport();
     const minX = Math.min(rect.x0, rect.x1);
@@ -136,6 +195,12 @@ export class SelectionSystem implements RtsPointerHandler {
     return result;
   }
 
+  private selectStructure(structure: PlacedStructure): void {
+    this.clear();
+    this.selectedStructureRef = structure;
+    setStructureSelected(structure, true);
+  }
+
   private replaceWith(units: readonly Unit[]): void {
     this.clear();
     for (const unit of units) {
@@ -145,6 +210,9 @@ export class SelectionSystem implements RtsPointerHandler {
   }
 
   private toggle(unit: Unit): void {
+    // Shift-clicking a unit while a building is selected starts an army
+    // selection; the building is not part of that answer.
+    this.clearStructure();
     if (this.selectedUnits.has(unit)) {
       this.selectedUnits.delete(unit);
       unit.setSelected(false);
@@ -157,5 +225,12 @@ export class SelectionSystem implements RtsPointerHandler {
   private clear(): void {
     for (const unit of this.selectedUnits) unit.setSelected(false);
     this.selectedUnits.clear();
+    this.clearStructure();
+  }
+
+  private clearStructure(): void {
+    if (!this.selectedStructureRef) return;
+    setStructureSelected(this.selectedStructureRef, false);
+    this.selectedStructureRef = null;
   }
 }

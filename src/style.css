@@ -489,16 +489,13 @@ body {
   font-weight: 700;
 }
 
-.rts-selection-role,
-.rts-selection-counters,
-.rts-selection-stance {
+/* Faz 9: the fixed role/counter/stance rows became a variable-length body, one
+   line per fact, because a Barracks and a Guard do not have the same number of
+   things worth saying. */
+.rts-selection-line {
   margin-top: 4px;
   color: #dce8be;
   font-size: 12px;
-}
-
-.rts-selection-counters {
-  color: #b8d6db;
 }
 
 .rts-selection-hints {
@@ -573,30 +570,9 @@ body {
   font-size: 12px;
 }
 
-/* The palette's resource/worker/population/income rows moved to .rts-hud-bar in
-   Faz 9; their rules left with the elements. */
-.rts-production-details {
-  margin-top: 4px;
-  color: #b8d6db;
-  font-size: 12px;
-}
-
-.rts-production-panel {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid rgb(220 232 190 / 28%);
-}
-
-.rts-production-choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 5px;
-}
-
-.rts-production-choices button[aria-pressed="true"] {
-  outline: 2px solid #dce8be;
-}
+/* The palette's resource/worker/population/income rows moved to .rts-hud-bar and
+   its production readout to .rts-selection-panel in Faz 9; their rules left with
+   the elements. */
 
 .rts-build-action-message {
   min-height: 1.35em;
