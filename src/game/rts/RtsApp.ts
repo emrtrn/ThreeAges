@@ -71,6 +71,7 @@ import { KingdomRegistry } from "./kingdom/kingdomRegistry";
 import { RoadConstructionService } from "./roads/roadConstructionService";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
+import { RtsWorldProgressOverlay, type RtsWorldProgressEntry } from "./ui/rtsWorldProgressOverlay";
 import {
   AGE_UP_ACTION,
   RALLY_ACTION,
@@ -85,7 +86,7 @@ import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
-import { AgeSystem, townUnlocksAvailable } from "./progression/ageSystem";
+import { AgeSystem } from "./progression/ageSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
@@ -214,6 +215,7 @@ export class RtsApp {
   private readonly roadPlacement: RoadPlacementSystem;
   private readonly buildPalette: RtsBuildPalette;
   private readonly selectionPanel = new RtsSelectionPanel((id) => this.runSelectionAction(id));
+  private readonly worldProgressOverlay = new RtsWorldProgressOverlay();
   private buildingLabelCache: ReadonlyMap<string, string> | null = null;
   private readonly projectiles = new ProjectileSystem();
   private readonly structureDefense = new StructureDefenseSystem();
@@ -266,7 +268,6 @@ export class RtsApp {
     this.structureUpgrades = new StructureUpgradeSystem(
       this.structures,
       this.kingdoms,
-      (owner) => this.ages.snapshot(owner).age === "town",
     );
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
@@ -565,8 +566,9 @@ export class RtsApp {
       },
     });
     this.buildScene();
+    // A freshly built structure always enters at level 1; levelling is a
+    // per-instance action from its own panel, so completion only swaps the model.
     this.structures.setCompletedVisualHandler((structure) => {
-      this.structureUpgrades.applyCompletedUpgrade(structure);
       this.applyStructureVisual(structure, true);
     });
     void this.loadBuildingVisuals();
@@ -619,6 +621,7 @@ export class RtsApp {
     this.unsubscribeWalletChanges?.();
     this.buildPalette.dispose();
     this.selectionPanel.dispose();
+    this.worldProgressOverlay.dispose();
     this.projectiles.dispose();
     this.roadControls.dispose();
     this.hudBar.dispose();
@@ -764,6 +767,7 @@ export class RtsApp {
     this.roadDebugView.refresh();
     this.commandMarkers.update(dt);
     this.structures.updateVisualAnimations(dt);
+    this.updateWorldProgressOverlay();
     // Presentation runs on the rendered-frame delta, not the simulation's: a
     // tracer and a health bar should look the same at any game speed.
     this.projectiles.update(dt);
@@ -776,6 +780,35 @@ export class RtsApp {
     this.notificationFeed.setNotifications(this.notifications.active());
     this.renderer.render(this.scene, this.cameraController.camera);
   };
+
+  /** Present construction and player worker training above all world geometry. */
+  private updateWorldProgressOverlay(): void {
+    const trainingSeconds = this.options.unitBalance[PLACEHOLDER_WORKER_ID]?.trainingSeconds ?? 1;
+    const entries: RtsWorldProgressEntry[] = this.structures.all()
+      .filter((structure) => !structure.construction.complete)
+      .map((structure) => ({
+        id: `construction-${structure.id}`,
+        x: structure.x,
+        y: 8,
+        z: structure.z,
+        progress: structure.construction.progress,
+        label: `İnşa %${Math.floor(structure.construction.progress * 100)}`,
+      }));
+    const center = this.centers.get(PLAYER_OWNER);
+    const queue = this.workerProduction.queueSnapshot(PLAYER_OWNER);
+    if (center && queue.trainingRemainingSeconds !== null) {
+      const duration = center.workerTrainingSeconds ?? trainingSeconds;
+      entries.push({
+        id: "player-worker-production",
+        x: center.position.x,
+        y: 9,
+        z: center.position.z,
+        progress: 1 - Math.min(1, queue.trainingRemainingSeconds / duration),
+        label: `İşçi üretiliyor · ${queue.queued}/${queue.capacity}`,
+      });
+    }
+    this.worldProgressOverlay.update(this.cameraController.camera, this.canvas.clientWidth, this.canvas.clientHeight, entries);
+  }
 
   /**
    * Drain this frame's edge-triggered orders. Attack-move needs a map position,
@@ -848,15 +881,15 @@ export class RtsApp {
         : "Merkez yıkıldığı için çağ yükseltmesi iptal edildi; kaynaklar iade edildi.");
     }
     for (const event of this.structureUpgrades.update(dt)) {
-      // The world consequences of a tier upgrade belong to whichever kingdom
-      // bought it — Faz 8 gave the AI the same research, and a T2 outpost of its
-      // own has to claim its wider radius exactly as the player's does.
+      // The world consequences of a level-up belong to whichever kingdom bought
+      // it — the AI levels the same way, and a Level 2 outpost of its own has to
+      // claim its wider radius exactly as the player's does.
       if (event.type === "completed") this.applyStructureVisual(event.structure);
       if (event.structure.stats.territory) this.territory.refresh();
       // Only the message is the player's; the AI has the debug panel instead.
       if (event.structure.owner !== PLAYER_OWNER) continue;
       this.buildPalette.setActionMessage(event.type === "completed"
-        ? `${event.structure.stats.label} T2 yükseltmesi tamamlandı.`
+        ? `${event.structure.stats.label} Lv${event.level} yükseltmesi tamamlandı.`
         : `${event.structure.stats.label} yıkıldığı için yükseltme iptal edildi; kaynaklar iade edildi.`);
     }
     // Acquisition before movement: a unit that picks up a target this tick
@@ -1196,7 +1229,6 @@ export class RtsApp {
     }
     const structure = this.selection.selectedStructure();
     if (structure) {
-      const upgrade = structure.stats.upgrade;
       return {
         kind: "structure",
         structure: {
@@ -1206,14 +1238,10 @@ export class RtsApp {
           health: structure.health.current,
           maxHealth: structure.health.max,
           detail: this.structureDetail(structure),
-          // Null when the data gives this building no T2 at all — the absence of
-          // an upgrade is the data's statement, not a UI decision.
-          upgrade: upgrade
-            ? {
-              snapshot: this.structureUpgrades.snapshot(structure.owner, structure.stats.id),
-              townUnlocked: townUnlocksAvailable(this.ages.snapshot(structure.owner)),
-              cost: upgrade.cost,
-            }
+          // Null when the data gives this building no `levels` at all — the
+          // absence of an upgrade path is the data's statement, not a UI decision.
+          upgrade: structure.stats.levels
+            ? { snapshot: this.structureUpgrades.snapshot(structure) }
             : null,
         },
       };
@@ -1265,10 +1293,10 @@ export class RtsApp {
       return;
     }
     if (id === UPGRADE_ACTION) {
-      // Routed by the selected building's *type*: the research is type-wide, so
-      // the button only says which type the player means.
+      // Levelling is per-instance (KR-01), so the button acts on exactly the
+      // building the player has selected — not every one of its type.
       const selected = this.selection.selectedStructure();
-      if (selected) this.startStructureUpgrade(selected.stats.id);
+      if (selected) this.startStructureUpgrade(selected);
       return;
     }
     if (id.startsWith(TRAIN_ACTION_PREFIX)) {
@@ -1580,27 +1608,28 @@ export class RtsApp {
   }
 
   /**
-   * Start a building type's T1->T2 research (plan §45).
+   * Start levelling one selected building to its next in-age level (plan KR-01).
    *
-   * One method, not the four near-identical copies this replaced: the only thing
-   * that differed between them was the building's own label, which the balance
-   * data already holds. The per-type flavour that mattered — a Barracks pausing
-   * its training, an Outpost growing its area once done — stays, keyed by id.
+   * The per-building flavour that mattered — a Barracks pausing its training, an
+   * Outpost growing its area once done — stays, keyed by id. The target level is
+   * the instance's own, so the message names the level it is climbing to.
    */
-  private startStructureUpgrade(buildingId: string): void {
-    const label = this.buildingLabels.get(buildingId) ?? buildingId;
-    const result = this.structureUpgrades.start(PLAYER_OWNER, buildingId);
+  private startStructureUpgrade(structure: PlacedStructure): void {
+    const label = structure.stats.label;
+    const nextLevel = structure.level + 1;
+    const result = this.structureUpgrades.start(structure);
     const startedNote: Record<string, string> = {
       barracks: " Birlik üretimi geçici olarak durur.",
       depot: " Yol bağlantısı korunur.",
       outpost: " Kontrol alanı tamamlanınca büyür.",
     };
     const message: Record<typeof result, string> = {
-      started: `${label} T2 yükseltmesi başladı.${startedNote[buildingId] ?? ""}`,
-      "no-eligible-structure": `Yükseltilecek tamamlanmış T1 ${label} yok.`,
-      "already-upgrading": `${label} T2 yükseltmesi zaten sürüyor.`,
-      "not-town": `${label} T2 için önce Kasaba Çağına geçin.`,
-      "insufficient-resources": `${label} T2 için kaynak yetersiz.`,
+      started: `${label} Lv${nextLevel} yükseltmesi başladı.${startedNote[structure.stats.id] ?? ""}`,
+      "no-eligible-structure": `Yükseltilecek ${label} yok.`,
+      "at-max-level": `${label} zaten en yüksek seviyede.`,
+      "under-construction": `${label} önce inşaatını tamamlamalı.`,
+      "already-upgrading": `${label} yükseltmesi zaten sürüyor.`,
+      "insufficient-resources": `${label} Lv${nextLevel} için kaynak yetersiz.`,
     };
     this.buildPalette.setActionMessage(message[result]);
   }

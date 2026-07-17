@@ -158,6 +158,12 @@ export interface BuildingLevelBalance {
   readonly cost: StartingResources;
   readonly durationSeconds: number;
   readonly maxHealth: number;
+  /**
+   * Absolute population capacity a housing building supplies once it reaches this
+   * level (not a delta). Only meaningful on buildings with a base
+   * {@link BuildingBalanceStats.populationCapacity}; must exceed the previous level's.
+   */
+  readonly populationCapacity?: number;
   /** Outposts can expand both their isolated and road-connected control area. */
   readonly territory?: Pick<TerritoryBuildingBalance, "controlRadius" | "connectedControlRadius">;
 }

@@ -108,6 +108,7 @@ export class CommandCenter {
     this.selectionRing.position.y = 0.05;
     this.selectionRing.visible = false;
     this.object.add(this.selectionRing);
+
   }
 
   get position() {

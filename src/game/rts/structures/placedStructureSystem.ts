@@ -61,11 +61,11 @@ export interface PlacedStructure {
   readonly armorClass: "structure";
   /** Melee units strike the footprint edge rather than walking into the blocker. */
   readonly combatRadius: number;
-  /** T1 at placement; data-owned upgrades may promote this to T2. */
+  /** Level 1 at placement; per-instance upgrades may raise it up to 3. */
   level: number;
-  /** T2 currently grants population only when its upgrade completes. */
+  /** Extra population a levelled housing building grants over its base capacity. */
   populationCapacityBonus: number;
-  /** Current territory values; T2 outposts promote these without replacing the site. */
+  /** Current territory values; levelled outposts promote these without replacing the site. */
   territoryControlRadius: number | null;
   territoryConnectedControlRadius: number | null;
 }
@@ -104,6 +104,9 @@ export class PlacedStructureSystem {
     progressFill.name = "rts-construction-progress";
     progressFill.position.set(0, 0.3, -stats.footprint.depth / 2 - 0.35);
     progressFill.scale.x = 0.001;
+    // Screen-projected DOM owns the player-facing construction indicator. Keep
+    // this mesh only as a stable pick target for the construction site.
+    progressFill.visible = false;
     object.add(progressFill);
     // Sized from the footprint rather than a fixed radius: the ring's job is to
     // say *which* building is selected, and a 6x6 depot and a 2x2 house cannot

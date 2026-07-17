@@ -28576,17 +28576,21 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
 
   const barracks = structures.ownedBy("player").find((structure) => structure.stats.id === "barracks")
     ?? assert.fail("Town prerequisite barracks missing");
+  // The derived legacy `upgrade` still mirrors the level-2 step for any reader
+  // not yet moved onto `levels`; the level-3 step lives only in `levels`.
   assert.deepEqual(barracks.stats.upgrade, { cost: { wood: 140, stone: 80 }, durationSeconds: 50, maxHealth: 900 });
+  assert.deepEqual(barracks.stats.levels?.map((step) => step.level), [2, 3]);
   kingdoms.get("player").wallet.credit("food", 60);
   kingdoms.get("player").wallet.credit("wood", 160);
   kingdoms.get("player").wallet.credit("stone", 80);
-  const upgrades = new StructureUpgradeSystem(structures, kingdoms, (owner) => ageSystem.snapshot(owner).age === "town");
+  // Instance-based (KR-01): no Town gate, and each building levels on its own.
+  const upgrades = new StructureUpgradeSystem(structures, kingdoms);
   const barracksProduction = new BarracksProductionSystem(
     units, structures, navigation, RTS_TEST_UNIT_BALANCE, kingdoms,
     (structure) => upgrades.isUpgrading(structure),
   );
   assert.equal(barracksProduction.queueGuard("player"), "queued");
-  assert.equal(upgrades.start("player", "barracks"), "started");
+  assert.equal(upgrades.start(barracks), "started");
   assert.deepEqual(barracksProduction.update(10), [], "paid Guard production pauses during the Barracks upgrade");
   assert.deepEqual(upgrades.update(49.9), []);
   assert.equal(barracks.level, 1);
@@ -28594,32 +28598,59 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.equal(barracks.level, 2);
   assert.equal(barracks.health.max, 900);
   assert.deepEqual(barracksProduction.update(RTS_TEST_UNIT_STATS.trainingSeconds).map((event) => event.type), ["completed"]);
+  // Level 2 -> 3 is a second, separate step from the same panel.
+  kingdoms.get("player").wallet.credit("wood", 200);
+  kingdoms.get("player").wallet.credit("stone", 120);
+  assert.equal(upgrades.start(barracks), "started");
+  assert.deepEqual(upgrades.update(60).map((event) => event.level), [3]);
+  assert.equal(barracks.level, 3);
+  assert.equal(barracks.health.max, 1200);
+  assert.equal(upgrades.start(barracks), "at-max-level", "a level-3 Barracks has no further step");
 
   const houseStats = buildings.house ?? assert.fail("house balance missing");
   assert.deepEqual(houseStats.upgrade, { cost: { wood: 70, stone: 40 }, durationSeconds: 35, maxHealth: 450 });
   const house = structures.place("player", houseStats, 80, 10);
   structures.advanceConstruction(house, houseStats.constructionSeconds);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 25, "a completed T1 House adds five population");
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 25, "a completed Level 1 House adds five population");
   const secondHouse = structures.place("player", houseStats, 90, 10);
   structures.advanceConstruction(secondHouse, houseStats.constructionSeconds);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 30, "each completed House contributes its own T1 capacity");
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 30, "each completed House contributes its own base capacity");
   kingdoms.get("player").wallet.credit("wood", 70);
   kingdoms.get("player").wallet.credit("stone", 40);
-  assert.equal(upgrades.start("player", "house"), "started");
-  assert.deepEqual(upgrades.snapshot("player", "house"), { completed: false, upgrading: true, remainingSeconds: 35 });
+  assert.deepEqual(upgrades.snapshot(house), {
+    level: 1, maxLevel: 3, upgrading: false, remainingSeconds: 0,
+    nextCost: { wood: 70, stone: 40 }, completed: false,
+  });
+  assert.equal(upgrades.start(house), "started");
+  assert.deepEqual(upgrades.snapshot(house), {
+    level: 1, maxLevel: 3, upgrading: true, remainingSeconds: 35,
+    nextCost: { wood: 70, stone: 40 }, completed: false,
+  });
   assert.deepEqual(upgrades.update(34.9), []);
-  assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed", "completed"],
-    "one type-wide upgrade promotes every completed house for its single research cost");
+  assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"],
+    "levelling one House leaves its neighbour untouched");
   assert.equal(house.level, 2);
-  assert.equal(secondHouse.level, 2);
+  assert.equal(secondHouse.level, 1, "the second House is a separate instance still at level 1");
   assert.equal(house.health.max, 450);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 36, "both T2 Houses raise their capacity from five to eight");
-  assert.deepEqual(upgrades.snapshot("player", "house"), { completed: true, upgrading: false, remainingSeconds: 0 });
-  const postUpgradeHouse = structures.place("player", houseStats, 100, 10);
-  structures.advanceConstruction(postUpgradeHouse, houseStats.constructionSeconds);
-  assert.equal(upgrades.applyCompletedUpgrade(postUpgradeHouse), true, "houses completed after the type upgrade inherit T2");
-  assert.equal(postUpgradeHouse.level, 2);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 44, "future T2 Houses add their full capacity once");
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 33, "only the levelled House rises from five to eight");
+  // Its neighbour levels independently, on its own cost.
+  kingdoms.get("player").wallet.credit("wood", 70);
+  kingdoms.get("player").wallet.credit("stone", 40);
+  assert.equal(upgrades.start(secondHouse), "started");
+  assert.deepEqual(upgrades.update(35).map((event) => event.type), ["completed"]);
+  assert.equal(secondHouse.level, 2);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 36, "both Level 2 Houses now supply eight");
+  // Level 2 -> 3 raises the same House again, capacity and all.
+  kingdoms.get("player").wallet.credit("wood", 110);
+  kingdoms.get("player").wallet.credit("stone", 80);
+  assert.equal(upgrades.start(house), "started");
+  assert.deepEqual(upgrades.update(45).map((event) => event.level), [3]);
+  assert.equal(house.level, 3);
+  assert.equal(house.health.max, 600);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 39, "a Level 3 House supplies eleven");
+  assert.deepEqual(upgrades.snapshot(house), {
+    level: 3, maxLevel: 3, upgrading: false, remainingSeconds: 0, nextCost: null, completed: true,
+  });
 
   const depotStats = buildings.depot ?? assert.fail("depot balance missing");
   const depot = structures.place("player", depotStats, 100, 10);
@@ -28627,12 +28658,15 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.deepEqual(depot.stats.upgrade, { cost: { wood: 90, stone: 40 }, durationSeconds: 45, maxHealth: 750 });
   kingdoms.get("player").wallet.credit("wood", 90);
   kingdoms.get("player").wallet.credit("stone", 40);
-  assert.equal(upgrades.start("player", "depot"), "started");
+  assert.equal(upgrades.start(depot), "started");
   assert.equal(depot.construction.complete, true, "a depot stays a completed logistics endpoint while upgrading");
   assert.deepEqual(upgrades.update(44.9), []);
   assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"]);
   assert.equal(depot.level, 2);
   assert.equal(depot.health.max, 750);
+  // An unbuilt site cannot be levelled — construction comes first.
+  const rawDepot = structures.place("player", depotStats, 110, 10);
+  assert.equal(upgrades.start(rawDepot), "under-construction");
 
   const outpost = structures.ownedBy("player").find((structure) => structure.stats.id === "outpost")
     ?? assert.fail("Town prerequisite outpost missing");
@@ -28647,10 +28681,10 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
     radius: outpost.territoryControlRadius ?? 0,
   }]);
   outpostTerritory.refresh();
-  assert.equal(outpostTerritory.ownerAt(18, 0), "neutral", "T1 outpost has its smaller radius");
+  assert.equal(outpostTerritory.ownerAt(18, 0), "neutral", "Level 1 outpost has its smaller radius");
   kingdoms.get("player").wallet.credit("wood", 110);
   kingdoms.get("player").wallet.credit("stone", 70);
-  assert.equal(upgrades.start("player", "outpost"), "started");
+  assert.equal(upgrades.start(outpost), "started");
   assert.deepEqual(upgrades.update(54.9), []);
   assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"]);
   assert.equal(outpost.level, 2);
@@ -28658,7 +28692,16 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.equal(outpost.territoryControlRadius, 20);
   assert.equal(outpost.territoryConnectedControlRadius, 24);
   outpostTerritory.refresh();
-  assert.equal(outpostTerritory.ownerAt(18, 0), "player", "T2 outpost expands control on completion");
+  assert.equal(outpostTerritory.ownerAt(18, 0), "player", "Level 2 outpost expands control on completion");
+  // Level 3 grows the outpost's control area again.
+  kingdoms.get("player").wallet.credit("wood", 160);
+  kingdoms.get("player").wallet.credit("stone", 110);
+  assert.equal(upgrades.start(outpost), "started");
+  assert.deepEqual(upgrades.update(65).map((event) => event.level), [3]);
+  assert.equal(outpost.level, 3);
+  assert.equal(outpost.health.max, 1350);
+  assert.equal(outpost.territoryControlRadius, 24);
+  assert.equal(outpost.territoryConnectedControlRadius, 28);
   outpostTerritory.dispose();
 });
 
@@ -30696,12 +30739,8 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
   );
   const ages = new AgeSystem(["player", "enemy"], ageBalance, centers, structures, kingdoms);
   const workerProduction = new WorkerProductionSystem(units, centers, navigation, worker, kingdoms);
-  // As in RtsApp: the tier research both kingdoms buy through, Town-gated.
-  const structureUpgrades = new StructureUpgradeSystem(
-    structures,
-    kingdoms,
-    (owner) => ages.snapshot(owner).age === "town",
-  );
+  // As in RtsApp: the per-instance level system both kingdoms upgrade through.
+  const structureUpgrades = new StructureUpgradeSystem(structures, kingdoms);
   // The full Faz 7 roster, and the same age-scaled Barracks tier gate RtsApp
   // applies — so an AI-2 composition may only queue Archers and Rams once its
   // Barracks is level 2, exactly as the player's panel does.
@@ -30740,11 +30779,8 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     balance: AI_TEST_BALANCE,
     profile: "normal",
   });
-  // As in RtsApp: a building finished after its type's research still gets the
-  // tier — otherwise a second Barracks would silently come out at level 1.
-  structures.setCompletedVisualHandler((structure) => {
-    structureUpgrades.applyCompletedUpgrade(structure);
-  });
+  // Instance-based (KR-01): a freshly built structure enters at level 1 and is
+  // levelled individually later, so completion needs no promotion hook here.
   /** Advance the world the way RtsApp's simulation loop does. */
   const step = (dt: number) => {
     kingdoms.advance(dt);
@@ -31640,19 +31676,20 @@ check("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () =>
   // missing executor rather than on a scoring rule.
   assert.equal(world.ai.snapshot().upgradeStep, "done", "§53: the AI finished the tier its ratio needs");
   const barracks = world.structures.ownedBy("enemy").filter((structure) => structure.stats.id === "barracks");
-  assert.ok(barracks.length > 0 && barracks.every((structure) => structure.level === 2), "its Barracks is tier 2");
+  // KR-01: levelling is per-instance, so the AI raises a *single* Barracks to
+  // level 2 — which is all `bestBarracksLevel` needs to unlock the Archer.
+  assert.ok(barracks.length > 0 && barracks.some((structure) => structure.level >= 2), "at least one Barracks is tier 2");
 
   assert.ok(board.armyComposition.guard > 0, "§53: Guards are still the line");
   assert.ok(board.armyComposition.archer > 0, "§53: and the AI actually diversifies into Archers");
 
-  // §4/§45: the gate stayed in the data. It paid the Town price for the tier out
-  // of the same wallet and the same upgrade system the player's button drives —
-  // there is no AI-only unlock.
-  assert.equal(world.ages.snapshot("enemy").age, "town", "§53: the tier is Town-gated for both kingdoms");
+  // §4/§45: the gate stayed in the data. The AI paid for the tier out of the same
+  // wallet and the same upgrade system the player's button drives — there is no
+  // AI-only unlock, and (KR-04) the level-up needs no age gate for either side.
   assert.equal(
-    world.structureUpgrades.snapshot("player", "barracks").completed,
+    world.structureUpgrades.typeSnapshot("player", "barracks").completed,
     false,
-    "the AI's research is its own; the player's Barracks is untouched",
+    "the AI's upgrade is its own; the player's Barracks is untouched",
   );
 
   // Known gap, recorded rather than asserted: the Ram is the one role §53 asks
@@ -33052,7 +33089,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   assert.match(action(town, "age-up").reason ?? "", /zaten tamamlandı/);
 });
 
-check("Faz 9 §51: the T2 button sits on the building and admits it is type-wide", () => {
+check("Faz 9 §51: the level-up button sits on the building and names the next level", () => {
   const panel = (upgrade: StructureUpgradeView | null, label = "Kışla"): SelectionPanelContent =>
     describeSelection({
       kind: "structure",
@@ -33065,34 +33102,31 @@ check("Faz 9 §51: the T2 button sits on the building and admits it is type-wide
   const upgradeOf = (content: SelectionPanelContent): SelectionAction | undefined =>
     content.actions.find((candidate) => candidate.id === "upgrade");
   const snapshot = (over: Partial<StructureUpgradeSnapshot> = {}): StructureUpgradeSnapshot =>
-    ({ completed: false, upgrading: false, remainingSeconds: 0, ...over });
+    ({ level: 1, maxLevel: 3, completed: false, upgrading: false, remainingSeconds: 0, nextCost: null, ...over });
 
-  // A building whose data declares no upgrade offers no button. The absence is
+  // A building whose data declares no `levels` offers no button. The absence is
   // the data's statement, not something the UI decides.
   assert.equal(upgradeOf(panel(null)), undefined);
 
-  const ready = panel({ snapshot: snapshot(), townUnlocked: true, cost: { wood: 100, stone: 60 } });
+  const ready = panel({ snapshot: snapshot({ nextCost: { wood: 100, stone: 60 } }) });
   const button = upgradeOf(ready) ?? assert.fail("no upgrade action");
   assert.equal(button.enabled, true);
   assert.equal(button.reason, null);
   assert.equal(button.cost, "100 Odun · 60 Taş");
-  // The research promotes *every* Barracks, including ones finished later, so a
-  // button on one instance has to say so — "Kışlayı T2 Yükselt" would imply the
-  // player is upgrading only the one they clicked.
-  assert.match(button.label, /^Tüm Kışla/);
+  // Per-instance (KR-01): the button names the exact next level of the selected
+  // building, not a type-wide promotion.
+  assert.equal(button.label, "Kışla Lv2'e Yükselt");
 
+  // KR-04: there is no age gate — a level-up in progress is the only "wait".
   assert.match(
-    upgradeOf(panel({ snapshot: snapshot(), townUnlocked: false, cost: {} }))?.reason ?? "",
-    /Kasaba Çağı gerekir/,
+    upgradeOf(panel({ snapshot: snapshot({ upgrading: true, remainingSeconds: 12.1 }) }))?.reason ?? "",
+    /Lv2 yükseltmesi sürüyor \(13 sn\)/,
   );
-  assert.match(
-    upgradeOf(panel({ snapshot: snapshot({ upgrading: true, remainingSeconds: 12.1 }), townUnlocked: true, cost: {} }))?.reason ?? "",
-    /sürüyor \(13 sn\)/,
-  );
-  assert.match(
-    upgradeOf(panel({ snapshot: snapshot({ completed: true }), townUnlocked: true, cost: {} }))?.reason ?? "",
-    /tamamlandı/,
-  );
+  // A maxed building shows a disabled "already top level" button.
+  const maxed = upgradeOf(panel({ snapshot: snapshot({ level: 3, completed: true }) })) ?? assert.fail("no button");
+  assert.equal(maxed.enabled, false);
+  assert.match(maxed.reason ?? "", /en yüksek seviyede/);
+  assert.match(maxed.label, /En Üst Seviyede/);
 
   // The button rides along with whatever the detail kind already offered rather
   // than replacing it: a Barracks keeps its roster and gains an upgrade.
@@ -33100,7 +33134,7 @@ check("Faz 9 §51: the T2 button sits on the building and admits it is type-wide
     kind: "structure",
     structure: {
       id: 1, label: "Kışla", level: 1, health: 650, maxHealth: 650,
-      upgrade: { snapshot: snapshot(), townUnlocked: true, cost: { wood: 100 } },
+      upgrade: { snapshot: snapshot({ nextCost: { wood: 100 } }) },
       detail: {
         kind: "military",
         rallySet: false,

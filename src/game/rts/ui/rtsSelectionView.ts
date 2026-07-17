@@ -149,15 +149,13 @@ export type StructureDetailView =
   | CenterDetailView;
 
 /**
- * The T1→T2 path, when the building's data declares one. It hangs off the
- * structure rather than off a detail kind because every kind of building can
- * have one — a House, a Depot and a Barracks all upgrade, and threading the same
- * four fields through five detail types would be four copies of one fact.
+ * The per-instance level-up path, when the building's data declares `levels`. It
+ * hangs off the structure rather than off a detail kind because every kind of
+ * building can have one — a House, a Depot and a Barracks all level up, and the
+ * next level's cost and state live entirely in {@link StructureUpgradeSnapshot}.
  */
 export interface StructureUpgradeView {
   readonly snapshot: StructureUpgradeSnapshot;
-  readonly townUnlocked: boolean;
-  readonly cost: Readonly<Record<string, number>>;
 }
 
 export interface SelectedStructureView {
@@ -325,30 +323,32 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
 }
 
 /**
- * The building's T1→T2 button, on the building. It used to live on the palette,
- * which read as a split: the Barracks' own panel said "T2 yükseltmesi sürüyor"
- * while the button that started it sat across the screen.
- *
- * The label says "Tüm …" because the underlying research is type-wide —
- * `StructureUpgradeSystem` promotes every building of the type, including ones
- * finished later. Putting a type-wide verb on one instance is only honest if the
- * button admits it; "Kışlayı T2 Yükselt" on one Barracks would imply otherwise.
+ * The building's level-up button, on the building itself. Levelling is
+ * per-instance now (plan KR-01): the button acts only on the selected building
+ * and names the exact next level, so "Kışla Lv2'ye Yükselt" is literal — no
+ * type-wide promotion, and no age gate (KR-04) stands between the player and it.
  */
 function upgradeAction(structure: SelectedStructureView): SelectionAction | null {
   const upgrade = structure.upgrade;
   if (!upgrade) return null;
   const { snapshot } = upgrade;
-  const reason = snapshot.completed
-    ? "Bu bina türünün T2 yükseltmesi tamamlandı."
-    : snapshot.upgrading
-      ? `T2 yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
-      : !upgrade.townUnlocked
-        ? "T2 yükseltmesi için Kasaba Çağı gerekir."
-        : null;
+  if (snapshot.completed) {
+    return {
+      id: UPGRADE_ACTION,
+      label: `${structure.label} En Üst Seviyede`,
+      cost: null,
+      enabled: false,
+      reason: `${structure.label} en yüksek seviyede (Lv${snapshot.level}).`,
+    };
+  }
+  const nextLevel = snapshot.level + 1;
+  const reason = snapshot.upgrading
+    ? `Lv${nextLevel} yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
+    : null;
   return {
     id: UPGRADE_ACTION,
-    label: `Tüm ${structure.label} Yapılarını T2 Yükselt`,
-    cost: formatResourceCost(upgrade.cost),
+    label: `${structure.label} Lv${nextLevel}'e Yükselt`,
+    cost: formatResourceCost(snapshot.nextCost ?? {}),
     enabled: reason === null,
     reason,
   };

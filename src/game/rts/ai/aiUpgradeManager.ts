@@ -8,9 +8,9 @@
  * Faz 8's acceptance criteria ("AI karışık ordu üretiyor", "AI yapı hedefleri
  * için kuşatma kullanıyor") both failed on exactly that missing step.
  *
- * The research runs through the same {@link StructureUpgradeSystem} the player's
- * palette button drives (§4), so the Town prerequisite, the cost and the
- * training pause during the upgrade are identical for both kingdoms.
+ * The upgrade runs through the same {@link StructureUpgradeSystem} the player's
+ * selection-panel button drives (§4), so the cost and the training pause during
+ * the upgrade are identical for both kingdoms.
  *
  * The trigger is deliberately not a rule of its own: the production manager
  * already asks for the role §53 wants and is told `requires-barracks-upgrade` by
@@ -44,22 +44,22 @@ export class AiUpgradeManager {
    * Advance the research by at most one step. `blocked` is the production
    * manager's report that the composition wants a unit this tier cannot train.
    *
-   * A refused start is never an error worth failing on: `not-town` and
-   * `insufficient-resources` are both "later", and the Town age and the
-   * stockpile are the economy's problem, not this executor's.
+   * A refused start is never an error worth failing on: `insufficient-resources`
+   * and `no-eligible-structure` are both "later", and the stockpile and having a
+   * completed Barracks standing are the economy's problem, not this executor's.
    */
   update(bb: AiBlackboard, blocked: boolean): AiUpgradeStep {
-    const snapshot = this.upgrades.snapshot(this.owner, this.buildingId);
+    const snapshot = this.upgrades.typeSnapshot(this.owner, this.buildingId);
     if (snapshot.completed) return this.enter("done", bb, `${this.buildingId} II tamamlandı`);
     if (snapshot.upgrading) return this.enter("researching", bb, `${this.buildingId} II yükseltiliyor`);
     if (!blocked) {
       this.step = "idle";
       return this.step;
     }
-    const result = this.upgrades.start(this.owner, this.buildingId);
+    const result = this.upgrades.startForType(this.owner, this.buildingId);
     if (result === "started") return this.enter("researching", bb, `${this.buildingId} II başlatıldı (§53 bileşimi)`);
-    // Everything else is a wait: the age has not arrived, the stockpile is short,
-    // or there is no completed Barracks standing to upgrade yet.
+    // Everything else is a wait: the stockpile is short, or there is no completed
+    // Barracks standing at a level below its max to upgrade yet.
     this.step = "saving";
     return this.step;
   }

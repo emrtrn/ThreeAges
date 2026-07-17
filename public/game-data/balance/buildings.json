@@ -18,7 +18,15 @@
         "level": 2,
         "cost": { "wood": 70, "stone": 40 },
         "durationSeconds": 35,
-        "maxHealth": 450
+        "maxHealth": 450,
+        "populationCapacity": 8
+      },
+      {
+        "level": 3,
+        "cost": { "wood": 110, "stone": 80 },
+        "durationSeconds": 45,
+        "maxHealth": 600,
+        "populationCapacity": 11
       }
     ]
   },
@@ -34,6 +42,12 @@
         "cost": { "wood": 90, "stone": 40 },
         "durationSeconds": 45,
         "maxHealth": 750
+      },
+      {
+        "level": 3,
+        "cost": { "wood": 140, "stone": 90 },
+        "durationSeconds": 55,
+        "maxHealth": 1050
       }
     ]
   },
@@ -65,6 +79,16 @@
           "controlRadius": 20,
           "connectedControlRadius": 24
         }
+      },
+      {
+        "level": 3,
+        "cost": { "wood": 160, "stone": 110 },
+        "durationSeconds": 65,
+        "maxHealth": 1350,
+        "territory": {
+          "controlRadius": 24,
+          "connectedControlRadius": 28
+        }
       }
     ]
   },
@@ -79,7 +103,21 @@
       "workerCapacity": 3,
       "perWorkerPerMinute": 7,
       "localBufferCapacity": 40
-    }
+    },
+    "levels": [
+      {
+        "level": 2,
+        "cost": { "wood": 60, "stone": 30 },
+        "durationSeconds": 30,
+        "maxHealth": 400
+      },
+      {
+        "level": 3,
+        "cost": { "wood": 100, "stone": 60 },
+        "durationSeconds": 40,
+        "maxHealth": 520
+      }
+    ]
   },
   "lumber_camp": {
     "label": "Oduncu Kampı",
@@ -134,6 +172,12 @@
         "cost": { "wood": 140, "stone": 80 },
         "durationSeconds": 50,
         "maxHealth": 900
+      },
+      {
+        "level": 3,
+        "cost": { "wood": 200, "stone": 120 },
+        "durationSeconds": 60,
+        "maxHealth": 1200
       }
     ]
   }

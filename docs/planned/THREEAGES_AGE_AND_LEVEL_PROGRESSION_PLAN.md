@@ -147,14 +147,30 @@ yukseltmesi bu binalarda kapali tutulur - Faz 2'de karara baglanacak).
 > `defendBase` yerine `assaultTarget` donuyordu. Test artik raider'i
 > `RTS_BLOCKOUT_MAP.enemyStart`'a gore koyuyor. Tum suite yesil (1025 check).
 
-### Faz 1 - Per-bina seviye yukseltme (cag ici)
+### Faz 1 - Per-bina seviye yukseltme (cag ici) - TAMAMLANDI
 
-- [ ] `structureUpgradeSystem.ts` instance bazli; `isTown` kapisi kalkti.
-- [ ] `level < 3` iken sonraki seviye baslatiliyor; bitince `level++` + kazanim.
-- [ ] Tamamlaninca gorsel `Level{n}` modeline yenileniyor.
-- [ ] `buildings.json`: Level3 girisleri ve seviyesiz binalara Lv2/Lv3 eklendi.
-- [ ] Ilgili engine testleri guncellendi/eklendi.
-- [ ] `tsc` + `test:engine` yesil.
+- [x] `structureUpgradeSystem.ts` instance bazli (`start/snapshot/isUpgrading`
+      artik `PlacedStructure` aliyor, anahtar `structure.id`); `isTown` kapisi ve
+      tip-geneli `completedUpgrades` semantigi kalkti. AI icin ince tip cephesi
+      eklendi (`startForType` / `typeSnapshot`).
+- [x] `level < 3` iken `nextStep` sonraki seviyeyi baslatiyor; bitince `promote`
+      `level++` + kazanim (can, ev nufusu, karakol alani) uyguluyor.
+- [x] Tamamlaninca `RtsApp` `applyStructureVisual` ile gorsel mevcut seviyenin
+      `Level{n}` modeline yenileniyor (cag ailesi Faz 2'ye kadar FirstAge).
+- [x] `buildings.json`: house/depot/outpost/barracks'a Level3, seviyesiz `farm`'a
+      Lv2/Lv3 eklendi. quarry/gold_mine/lumber_camp bilincli olarak Faz 2'ye
+      birakildi (level mesh'i yok - §4/§8 acik notu). `BuildingLevelBalance`'a
+      `populationCapacity` alani + validator dogrulamasi eklendi.
+- [x] Engine testleri instance-bazli akisa gore guncellendi (Faz 6 yukseltme
+      blogu, AI §53, seçim paneli); Level2->3 ve `at-max-level`/`under-construction`
+      sonuclari icin yeni assert'ler eklendi.
+- [x] `tsc --noEmit` temiz; `test:engine` 1025 check yesil.
+
+> Not: KR-04 geregi cag kapisi UI'dan da kalkti; secim panelindeki buton artik
+> per-bina "Lv{n+1}'e Yükselt" (veya en ust seviyede devre disi) diyor ve
+> `townUnlocked` alani `StructureUpgradeView`'dan cikarildi - Faz 3 UI diline
+> onden bir adim. Detay basligindaki `T{level}` etiketi ("Ev T2") ve `farm`
+> ekonomi carpani (level basi uretim) Faz 3 / sonraki fazlara birakildi.
 
 ### Faz 2 - Cag atlama -> tum binalar yeni cag Level1
 

@@ -424,6 +424,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       if (!Array.isArray(levelsRaw)) throw new GameDataError(`${levelsWhere}: must be an array`);
       const parsed: BuildingLevelBalance[] = [];
       let previousMaxHealth = maxHealth;
+      let previousPopulationCapacity = populationCapacity ?? 0;
       let expectedLevel = 2;
       levelsRaw.forEach((entryRaw, index) => {
         const entryWhere = `${levelsWhere}[${index}]`;
@@ -436,6 +437,19 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
         const entryMaxHealth = requireFiniteNumber(entryData, "maxHealth", entryWhere);
         if (durationSeconds <= 0 || entryMaxHealth <= previousMaxHealth) {
           throw new GameDataError(`${entryWhere}: durationSeconds must be > 0 and maxHealth must exceed the previous level`);
+        }
+        const entryPopulationRaw = entryData["populationCapacity"];
+        let entryPopulationCapacity: number | undefined;
+        if (entryPopulationRaw !== undefined) {
+          if (populationCapacity === undefined) {
+            throw new GameDataError(`${entryWhere}.populationCapacity requires a base populationCapacity`);
+          }
+          if (typeof entryPopulationRaw !== "number" || !Number.isInteger(entryPopulationRaw)
+            || entryPopulationRaw <= previousPopulationCapacity) {
+            throw new GameDataError(`${entryWhere}.populationCapacity: must be an integer greater than the previous level`);
+          }
+          entryPopulationCapacity = entryPopulationRaw;
+          previousPopulationCapacity = entryPopulationRaw;
         }
         const entryTerritoryRaw = entryData["territory"];
         let entryTerritory: BuildingLevelBalance["territory"];
@@ -456,6 +470,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
           cost: validateStartingResources(entryData["cost"] ?? {}, entryWhere),
           durationSeconds,
           maxHealth: entryMaxHealth,
+          ...(entryPopulationCapacity !== undefined ? { populationCapacity: entryPopulationCapacity } : {}),
           ...(entryTerritory ? { territory: entryTerritory } : {}),
         });
         previousMaxHealth = entryMaxHealth;
