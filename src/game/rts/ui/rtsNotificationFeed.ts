@@ -13,7 +13,12 @@ export class RtsNotificationFeed {
   private signature = " ";
 
   constructor() {
-    this.root.className = "rts-notification-feed ui-interactive";
+    // No `ui-interactive`: the feed has no controls, and its stylesheet rule
+    // already says "a notice must never swallow a click meant for the map". That
+    // rule was dead — `#ui-overlay .ui-interactive` (specificity 1,1,0) beat
+    // `.rts-notification-feed` (0,1,0), so the computed value was `auto` and the
+    // feed *was* eating map clicks, top-centre, exactly where it appears.
+    this.root.className = "rts-notification-feed";
     this.root.setAttribute("aria-label", "Bildirimler");
     this.root.setAttribute("aria-live", "polite");
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);

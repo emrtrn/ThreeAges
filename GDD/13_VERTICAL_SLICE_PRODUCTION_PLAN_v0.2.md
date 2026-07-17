@@ -1348,7 +1348,8 @@ Muhafız, Okçu ve Kuşatma arasında okunabilir bir karşıtlık sistemi oluşt
   `G` serbest duruşa döndürür.)
 - [x] Geri çekilme için normal hareket kullanımı (Normal hareket emri bir transit
   emridir: yol üzerindeki düşmanı hedef edinmez, bu yüzden geri çekilme
-  güvenilirdir.)
+  güvenilirdir; ancak bir Muhafız gerçekten hasar alırsa transit emrini bırakıp
+  saldırgana savunmayla karşılık verir.)
 - [x] Hedef ve komut göstergeleri (mevcut hedef halkası + saldırı-hareket için
   turuncu, toplanma noktası için yeşil komut işareti.)
 
@@ -1695,35 +1696,51 @@ seferde değil dilimler halinde üretiliyor.
 - **Dilim 1 — Ana HUD + Bildirimler: tamamlandı.**
 - **Dilim 2 — Maç akışı: tamamlandı.**
 - **Dilim 3 — Seçim panelleri: tamamlandı.**
-- Kalan: **yapı ve yol araçları**, **minimal ayarlar**.
+- **Dilim 3.1 — Eylemler panele taşındı, Merkez seçilebilir: tamamlandı.**
+- **Dilim 4 — Yapı ve yol araçları: tamamlandı.**
+- **Dilim 5 — Minimal ayarlar: kamera kadranları üretildi; ses ve ekran
+  sallantısı sistemleri olmadığı için bilerek üretilmedi (Faz 12 §67).**
 
-Kapı B değerlendirmesi §53 gereği ancak altı grup da bittiğinde yapılır.
+Altı grup da bitti. Kapı B değerlendirmesi §53'e göre yapılabilir; §52'nin açık
+kalan tek kutusu aşağıda gerekçesiyle duruyor.
 
-**Test notu — yeniden ölçüldü, teşhis tutmadı (Dilim 3).** Bu not eskiden
+**Test notu — teşhis doğruydu, flake düzeltildi (Dilim 4).** Bu not
 `tests/smoke/rts-building-placement.spec.ts` içindeki Faz 7 "box-selected group"
-testini **flaky** ilan ediyor (üç koşudan yaklaşık biri geçiyor) ve sebebi testin
-kurulumuna — 700 ms "s" panundan sonra sabit marquee dikdörtgenine (420,520 →
-900,610) bel bağlamasına — bağlıyordu. Düzeltme Dilim 3'e havale edilmişti.
+testini **flaky** ilan ediyor ve sebebi olarak testin kurulumunu — 700 ms "s"
+panundan sonra sabit marquee dikdörtgenine (420,520 → 900,610) bel bağlamasını —
+gösteriyordu.
 
-Dilim 3 ölçtü ve **iddianın ikisi de doğrulanmadı**:
+**Ara kayıt düzeltmesi.** Dilim 3 bu teşhisi üç koşuluk bir ölçümle "tutmadı"
+diye kaydetmişti (3/3 geçti). O kayıt yanlıştı: üç koşu, üçte bir sıklıkta olan
+bir flake hakkında hüküm vermeye yetmez, ve Dilim 4 sırasında test tam olarak
+teşhis edilen yerde — marquee sonrası seçim iddiasında — düştü. Az sayıda yeşil
+koşu, yokluk kanıtı değildir.
 
-- Test 1280×720'de (Playwright varsayılanı) `--repeat-each=3` ile **3/3 geçti**.
-- Şüpheli adım ayrıca izole edildi: pandan sonra *orijinal* dikdörtgen üç
-  koşudan üçünde de tam olarak `4 Muhafız — Can: 440/440` seçti. Yani seçim
-  kurulumu kararlı; not'un işaret ettiği yer sorunun kaynağı değil.
-- Aynı ölçüm başka bir şeyi de gösterdi: pansız tam-ekran marquee üç koşuda da
-  yalnız `5 İşçi` yakalıyor — Muhafızlar açılış kamerasında ekranın altında
-  kalıyor. Yani pan gereksiz bir süsleme değil, testin ön koşulu.
+**Düzeltme — seçim.** Sabit dikdörtgen kaldırıldı. Önce bir Muhafız aranıyor,
+sonra oyunun kendi §21 jesti (`çift tıkla aynı savaş birimi türünü seç`) tam
+olarak Muhafız hattını seçiyor — nerede durdukları önemsiz. Geniş bir marquee de
+flake'i çözüyordu ama testi *değiştiriyordu*: beş İşçiyi de yakalayıp Faz 7 kabul
+kriterinin hiç konuşmadığı dokuz birimlik bir senaryo üretiyordu. İddia da
+düzeltildi: `toBeVisible()` boş seçimde hiçbir şey söylemeden düşüyordu; artık
+`toContainText(/[2-9] Muhafız/)` — test neyi yakaladığını adlandırıyor.
+`--repeat-each=5` ile seçim adımı **5/5**.
 
-Geriye kalan tek aday, seçim değil testin *son* iddiası:
+**Kalan flake seçimde değil — §46'da.** Seçim sabitlendikten sonra test hâlâ
+beşte bir düşüyor ve *son* iddiada düşüyor:
 `await expect(overlay).not.toContainText(/yol:\d+/, { timeout: 30_000 })` — yani
-grubun emri 30 sn içinde **bitirmesi**. Bu §46'nın "kalıcı sıkışma oluşmuyor"
-kriteri; flake gerçekse orada, kalabalık ayrışmasında veya sıkışma zaman
-aşımındadır, kamerada değil.
+grup emrini 30 sn içinde **bitiremiyor**. Bu bir test kurulumu sorunu değil,
+§46 / Kapı B'nin "kalıcı grup sıkışması oluşmuyor" kriteridir: emir Merkez'in
+footprint'inin dibine veriliyor ve bazı koşularda birimler orada oturup emri
+düşürmüyor.
 
-Geçen bir test, çürütülmüş bir teşhise dayanarak yeniden yazılmadı. Flake tekrar
-görülürse doğru yer yukarıdaki son iddiadır; bu not o zamana kadar ölçüm olarak
-kalsın.
+Test yeşile boyanmadı. Sağ tık hedefini açık zemine kaydırmak testi geçirirdi ama
+sinyali de gizlerdi — ve bu sinyal tam olarak Kapı B'nin sorduğu şey
+("maçların en az %80'i teknik hata olmadan bitiyor"). Faz 9 UI fazıdır; bu
+hareket/sıkışma işidir ve Kapı B oynanış testinden **önce** bakılmalıdır.
+
+Ölçüm bir şeyi daha gösterdi ve korundu: pansız tam-ekran marquee yalnız
+`5 İşçi` yakalıyor — Muhafızlar açılış kamerasında ekranın altında. Yani pan
+süsleme değil, testin ön koşulu.
 
 ### Ana HUD
 
@@ -1867,11 +1884,64 @@ düzeltme, Dilim 1'e ait.
 
 ### Yapı ve yol araçları
 
-- [ ] Yapı kategorileri
-- [ ] Maliyet ve kilit durumu
-- [ ] Yerleştirme nedeni
-- [ ] Yol rota ve maliyet önizlemesi
-- [ ] Karakol kontrol alanı önizlemesi
+**Dilim 4 — tamamlandı.** Bu grubun sonunda palet tek bir şey oldu: *yerleştirme*.
+Bir binanın veya birimin yaptığı her şey onu yapan şeyin üzerine taşındı; palet
+sahip olmadığın binayı satın aldığın yerdir, sahip olduklarını komuta ettiğin yer
+değil.
+
+- [x] Yapı kategorileri (Ekonomi / Lojistik / Yerleşim / Askerî. Oyuncunun sorduğu
+  soruya göre gruplanmış — verinin şekline göre değil. Kategoriler kodda yazılı,
+  `economy`/`territory` alanlarından türetilmiyor: kategori bir binaya *neden*
+  uzandığına dair editoryal bir iddia, ve Depo'nun `economy` bloğu olmadığı halde
+  Tarla'nın ödemesinin sebebi olması türetmenin onu ait olduğu karardan
+  ayıracağını gösteriyor. Kategorilere girmeyen yeni bir bina kaybolmuyor,
+  `Diğer`e düşüyor.)
+- [x] Maliyet ve kilit durumu (`canAffordCost`: saf, `resourceLabels` içinde ve
+  `test:engine` altında. Kilit **işaretleniyor, düğme kapatılmıyor** — stok her
+  tick değişir ve uzanan elin altında grileşen düğme, cevap veren düğmeden
+  kötüdür; çağ düğmesiyle aynı karar. Kilit stoğu HUD'ın yazdığı gibi
+  yuvarlıyor: "79 Odun" gören oyuncuya 80'i ödeyebileceğini söylemek şeritle
+  paleti oyuncunun gözü önünde çeliştirirdi.)
+- [x] Yerleştirme nedeni (Faz 2'den beri var: `outside-map` / `outside-control` /
+  `insufficient-resources` / `missing-resource-node` / çakışma. Bu dilim yalnız
+  doğruladı.)
+- [x] Yol rota ve maliyet önizlemesi (Faz 4'te üretilmişti, kutusu işaretsiz
+  kalmıştı: `RoadPlacementSystem` hayalet karo zincirini geçerli/geçersiz renkle
+  çiziyor, `RtsRoadControls` `Rota: N yeni hücre · Maliyet: X Odun` yazıyor.)
+- [x] Karakol kontrol alanı önizlemesi (Yerleştirme sırasında açılacak alanın
+  diski çiziliyor; ghost'un verdiği hükümle aynı renkte — kırmızı disk "bu zemini
+  almıyorsun" demek, ki reddedilen yerleştirme için tam olarak doğru. Bilerek
+  **yalıtılmış** yarıçap gösteriliyor, bağlı olan değil: bağlı yarıçap henüz var
+  olmayan bir yola bağlı, ve binanın tek başına açmayacağı zemini vaat etmek
+  önizlemenin var oluş sebebi olan kararda yalan söylemesi olurdu.)
+
+**T2 yükseltmeleri de binaya taşındı.** Dilim 3.1'de "tür-geneli araştırma"
+gerekçesiyle palette bırakılmıştı ve bölünmüş okunuyordu: Kışla'nın paneli
+`T2 yükseltmesi sürüyor` derken düğmesi ekranın öbür ucundaydı. Artık binanın
+kendi panelinde, ve etiketi tür-geneli olduğunu **itiraf ediyor**
+(`Tüm Kışla Yapılarını T2 Yükselt`) — tek bir örneğin üzerindeki tür-geneli bir
+fiil ancak bunu söylerse dürüst olur. Dört adet birbirinin kopyası
+`startBarracksUpgrade`/`startHouse…`/`startDepot…`/`startOutpost…` tek bir
+`startStructureUpgrade(buildingId)` oldu; aralarındaki tek fark binanın zaten
+veride duran etiketiydi.
+
+**§52'nin palet ölçüsü.** Kriter paleti adıyla suçluyordu: "sağ sütunun tamamını
+(1366×768'de 647px) kaplayan Faz 2 yığını". Ölçüldü: **462px, ekranın %14.1'i** —
+üstünde 306px harita açıldı. Playwright artık bunu ölçüyor, yani fiiller palete
+geri sızarsa test kırılır.
+
+**Bu dilimde bulunan ve düzeltilen iki hata.**
+
+1. **Ayar menüsü kamerayı sessizce yeniden ayarlıyordu.** İlk kadran aralığı
+   12..52 idi; ortası 32, oysa authored `panSpeed` 26. Yani ayarları hiç açmayan
+   her oyuncunun kamerası değişmişti. Aralıklar authored değerin *etrafına*
+   ortalandı (12..40 → orta 26; zoom 4..20 → orta 12) ve `test:engine` kadranın
+   ortasını config'e sabitliyor. Sabit 700 ms pan yapan bir Playwright testi
+   yakaladı — haritanın beklenenden başka bir yere gelmesiyle.
+2. **Kategoriler paleti uzatınca test yardımcısı bina düğmesine tıklıyordu.**
+   "Boş yere tıkla" adımı (1150,200) artık palete denk geliyor ve yerleştirme
+   moduna giriyordu. Adım kaldırıldı: klavye zaten window'a gidiyor, o tıklama
+   hiçbir işe yaramıyordu.
 
 ### Bildirimler
 
@@ -1967,27 +2037,52 @@ fazı ikinci bir gerçek kopyası olurdu — ve iki kopya anlaşmazlığa düşe
 
 ### Minimal ayarlar
 
-- [ ] Ana ses seviyesi
-- [ ] Kamera hızı
-- [ ] Kamera yumuşatma
-- [ ] Ekran sallantısı
+**Dilim 5 — iki kalem üretildi, iki kalem bilerek üretilmedi.** Ayarlar duraklatma
+menüsünde: ender ve bilinçli bir ziyaret, ve kart zaten oyuncunun *durup düşünmek*
+için açtığı tek yüzey. Kadranlar `input` olayında uygulanıyor (`change` değil):
+kamera kartın arkasında çalışmaya devam ediyor ve oyuncu değişikliği haritayı
+izleyerek yargılıyor, yani sürüklerken hareket etmeli.
+
+- [ ] **Ana ses seviyesi — sistemi yok, bilerek eklenmedi.** RTS hiç ses
+  çalmıyor (`engine/audio/audioBus` var, ama RTS'i besleyen hiçbir şey yok). Ses
+  Faz 12 §67 "VFX ve Ses" kalemidir. Var olmayan bir sisteme bağlı kaydırıcı,
+  oyuncunun sürüklerken hiçbir şey olmadığı bir kontroldür — yokluğundan kötüdür
+  ve §13'ün yasakladığı "yarım sistem"in tam tanımıdır. Sistemi geldiğinde gelir.
+- [x] Kamera hızı (`RtsCameraSettings.panSpeed`; 0..1 kadran → 12..40 dünya
+  birimi/sn. Kadran ham dünya sayısı değil: "Kamera hızı" etiketli bir kaydırıcı
+  oyuncuya saniyede 26 dünya biriminin ne demek olduğunu sormamalı, ve kadran
+  uzayında kırpmak saklanmış bir değerin kullanılamaz kamera üretmesini önler.)
+- [x] Kamera yumuşatma (`smoothing`; zoom'un hedefe yumuşaması. Lerp oranına
+  karşı ters çevrilmiş — daha çok yumuşatma = daha yavaş yaklaşma.)
+- [ ] **Ekran sallantısı — sistemi yok, bilerek eklenmedi.** Oyunda ekran
+  sallantısı diye bir şey yok; kapatılacak bir şey yok. Faz 12'nin VFX işiyle
+  birlikte gelir. Şimdi eklemek, bir Faz 9 ayarını doyurmak için bir Faz 12
+  özelliği üretmek olurdu.
+
+**Kadranın ortası authored kamerayı üretmek zorunda.** Bkz. "Yapı ve yol
+araçları" dilimindeki hata kaydı: aralık authored değerin etrafına ortalanmazsa
+ayar menüsü, onu hiç açmayan oyuncuların kamerasını sessizce değiştirir.
 
 ---
 
 ## 52. Kabul Kriterleri
 
-Dilim 3 sonrası durum. Kalan kutular kapsamı henüz üretilmemiş dilimlere ait;
-Kapı B değerlendirmesi §53 gereği ancak altı grup da bittiğinde yapılır.
+Altı grup sonrası durum.
 
-- [ ] UI haritanın kritik alanlarını aşırı kapatmıyor. **Kısmen:** şerit ekran
-  yüksekliğinin %10'undan azını alıyor ve feed sınırlı (`MAX_ACTIVE_NOTIFICATIONS`
-  = 4, en eskisini düşürüyor — aşağı doğru harita üzerine büyümüyor); ikisi de
-  Playwright ile iki çözünürlükte ölçülüyor. **Ama** kriter bütün UI'ı kapsıyor ve
-  Dilim 3 bu kutuya iki yeni borç ekledi: yapı paleti hâlâ sağ sütunun tamamını
-  (1366×768'de 647px) kaplayan Faz 2 yığını, ve seçim paneli alt-ortada 420×130'luk
-  bir alanda harita tıklamasını yutuyor (§51'e bakın — salt-okunur olduğu halde
-  `ui-interactive`). İkisi de "Yapı ve yol araçları" diliminin işi; ikisi de aynı
-  alt şerit tasarımıyla çözülmeli.
+- [x] UI haritanın kritik alanlarını aşırı kapatmıyor. (Şerit ekran yüksekliğinin
+  %10'undan azını alıyor; feed sınırlı (`MAX_ACTIVE_NOTIFICATIONS` = 4, en
+  eskisini düşürüyor). Dilim 3'ün açtığı iki borç da kapandı ve **ölçülüyor**:
+  palet 647px → **462px (%14.1)**, üstünde 306px harita açık; seçim paneli artık
+  `ui-interactive` **değil** — kök tıklama geçirgen, yalnız gerçekten işaretçi
+  gereken iki parça (tooltip'i taşıyan gövde ve düğme sırası) olayı alıyor.
+  **Kalan, bilinen artık:** gövde (394×56) hâlâ altındaki haritayı yutuyor, çünkü
+  §51'in istediği "bağlantı nedeni tooltip'i" hover ister. Düğmelerin tıklama
+  alması ise ölü bölge değil, UI'ın kendisidir.
+  **Bu kutuda düzeltilen, ilgisiz ve önceden var olan hata:** bildirim feed'i
+  `ui-interactive` taşıyordu; `#ui-overlay .ui-interactive` (özgüllük 1,1,0)
+  feed'in kendi `pointer-events: none` kuralını (0,1,0) eziyordu — yani "a notice
+  must never swallow a click meant for the map" yorumunun tersine, feed üst-ortada
+  harita tıklaması yutuyordu. Sınıf kaldırıldı.)
 - [x] Bir yapı çalışmadığında nedeni gösteriliyor. (Dilim 3. Her bina türü kendini
   anlatıyor ve *nedeni* söylüyor: işçisiz şantiye, yola bağlanmamış üretici,
   yolsuz Depo, işgal altındaki Depo, Kontrol Dışı Kışla. `test:engine` metni
@@ -1998,9 +2093,13 @@ Kapı B değerlendirmesi §53 gereği ancak altı grup da bittiğinde yapılır.
   tick post edilen `population-full` tek satır kalıyor, sonra süresi dolup
   cooldown'a giriyor. Gerçek maçta doğrulandı: yola bağlanmamış tarla 378 kez
   yoklandı, feed'de tek satır çıktı.)
-- [ ] Oyuncu yol ve karakol araçlarını dış açıklama olmadan kullanabiliyor.
-  (Kapsam: "Yapı ve yol araçları" dilimi — yol rota/maliyet önizlemesi ve karakol
-  kontrol alanı önizlemesi henüz yok.)
+- [x] Oyuncu yol ve karakol araçlarını dış açıklama olmadan kullanabiliyor.
+  (Dilim 4. Yol: hayalet rota + `Rota: N yeni hücre · Maliyet: X Odun` +
+  geçersiz rota gerekçesi. Karakol: açılacak kontrol diski yerleştirme anında
+  çiziliyor ve `Karakolu kontrol alanının hemen dışındaki nötr bir konuma
+  yerleştirin` reddin nedenini söylüyor. **Not:** bu kriter son tahlilde bir
+  oyuncu iddiasıdır; §36'nın test soruları hâlâ gerçek bir test oyuncusuyla
+  sorulmalı — burada işaretlenen, aracın kendini açıklamasıdır.)
 - [x] Maç başlatma, bitirme ve yeniden başlatma güvenilir. (Dilim 2. Playwright
   tam turu sürüyor: başlatma ekranı → Escape ile duraklat/devam → yerleştirme
   varken Escape'in önceliği → teslim ol (onaylı) → "Teslim oldunuz." yenilgisi →
@@ -2021,6 +2120,20 @@ Kapı B değerlendirmesi §53 gereği ancak altı grup da bittiğinde yapılır.
 Faz 9 sonunda Ürün B tamamlanır.
 
 Kapı B değerlendirmesi yapılır.
+
+**Durum: Faz 9'un altı görev grubu bitti; Kapı B henüz geçilmedi.** İkisi aynı şey
+değildir ve §7 bunu zaten söylüyor: bir sonraki aşamaya geçmek için teknik kabul
+kriterlerinin tamamlanması *yetmez*, oynanış testinin de ana soruya olumlu cevap
+vermesi gerekir. §9'un kutuları büyük ölçüde **oynanış** iddialarıdır — "dört
+kaynak farklı kararlar üretiyor", "iki çağ arasında anlamlı fırsat maliyeti var",
+"askerî zafer çoğu maçta 12–25 dakika içinde gerçekleşiyor", "en az 15 tam maç
+tamamlandı", "maçların en az %80'i teknik hata olmadan bitiyor" — ve bunlar kod
+yazarak değil, maç oynayarak kanıtlanır. Hiçbiri bu fazın çıktısına bakılarak
+işaretlenemez.
+
+Yani Kapı B artık **engellenmiş değil, açık**: UI tarafı ("oyuncu dış açıklama
+olmadan temel maçı yönetebilsin" — §50) bu fazın işiydi ve bitti. Sıradaki adım
+kod değil, §9'un listesiyle 15 tam maç ve §36 tarzı test soruları.
 
 Kapı B geçilmeden:
 

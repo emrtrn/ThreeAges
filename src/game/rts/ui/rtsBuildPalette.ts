@@ -7,29 +7,55 @@
  * what the name always promised: the actions, their costs, their locks, and the
  * reason an action is refused. State the player only *reads* belongs to the bar.
  *
- * Age is the one deliberate overlap: the panel does not print the age, but it
- * still consumes the snapshot, because the T2 buttons' locked/unlocked state is
- * an age fact and reading it here is what keeps a button from lying about it.
+ * By the end of Faz 9 this is one thing: *placement*. Everything a building or a
+ * unit does moved onto the thing that does it ({@link RtsSelectionPanel}) — the
+ * production readout that made the player pick "Tarla #7" from a list of ids
+ * standing in for the map, the training verbs, the age, and the T2 upgrades. A
+ * palette is where you buy a building you do not have yet; it is not where you
+ * command the ones you do.
  *
- * The Faz 3 production readout is also gone. It was a button list that made the
- * player pick a Farm out of "Tarla #7, Tarla #12" — a list of ids standing in
- * for the map, because at the time buildings could not be clicked. §51's
- * selection slice made them clickable, so the same facts are now on
- * {@link RtsSelectionPanel}, reached by clicking the building they describe.
+ * The age snapshot is the one thing left that is not placement, and it earns its
+ * place: it states the Town gate *before* the player owns any T2-capable
+ * building to click, which no building's own panel can do.
  */
-import type { BuildingBalance } from "../../data/gameDataTypes";
+import type { BuildingBalance, StartingResources } from "../../data/gameDataTypes";
 import { townUnlocksAvailable, type AgeSnapshot } from "../progression/ageSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
-import type { StructureUpgradeSnapshot } from "../structures/structureUpgradeSystem";
-import { formatResourceCost } from "./resourceLabels";
+
+import { canAffordCost, formatResourceCost } from "./resourceLabels";
+
+/**
+ * §51 "Yapı kategorileri". Grouped by the question the player is asking — "I
+ * need income", "I need to move it", "I need soldiers" — not by the data's
+ * shape. A flat pile of nine buildings made every choice a scan of the whole
+ * list; the categories are what let the eye skip the four it does not want.
+ *
+ * Authored here rather than derived from the balance fields (`economy`,
+ * `territory`, …) because a category is an editorial claim about *why* a player
+ * reaches for a building. A Depot has no `economy` block but is the reason a
+ * Farm pays: deriving would have filed it away from the decision it belongs to.
+ */
+interface BuildCategory {
+  readonly title: string;
+  readonly buildingIds: readonly string[];
+}
+
+const BUILD_CATEGORIES: readonly BuildCategory[] = [
+  { title: "Ekonomi", buildingIds: ["farm", "lumber_camp", "quarry", "gold_mine"] },
+  { title: "Lojistik", buildingIds: ["depot", "outpost"] },
+  { title: "Yerleşim", buildingIds: ["house"] },
+  { title: "Askerî", buildingIds: ["barracks"] },
+];
 
 export class RtsBuildPalette {
   private readonly root = document.createElement("section");
   private readonly status = document.createElement("p");
   private readonly townUnlocks = document.createElement("p");
-  private readonly townStructureUpgradeButtons = new Map<string, HTMLButtonElement>();
-  private readonly structureUpgradeStates = new Map<string, StructureUpgradeSnapshot>();
-  private townUnlocksAreAvailable = false;
+  private readonly buildButtons = new Map<
+    string,
+    { readonly button: HTMLButtonElement; readonly cost: HTMLSpanElement; readonly price: StartingResources }
+  >();
+  private affordabilitySignature = "";
   private readonly actionMessage = document.createElement("p");
 
   constructor(
@@ -37,72 +63,65 @@ export class RtsBuildPalette {
     private readonly onChoose: (id: string) => void,
     private readonly onCancel: () => void,
     private readonly onCancelLatest: () => void,
-    private readonly onUpgradeBarracks: () => void,
-    private readonly onUpgradeHouse: () => void,
-    private readonly onUpgradeDepot: () => void,
-    private readonly onUpgradeOutpost: () => void,
   ) {
     this.root.className = "rts-build-palette ui-interactive";
     this.root.setAttribute("aria-label", "Yapı yerleştirme");
     const title = document.createElement("strong");
     title.textContent = "Yapı Kur";
     this.root.appendChild(title);
-    const choices = document.createElement("div");
-    choices.className = "rts-build-choices";
-    for (const [id, stats] of Object.entries(buildings)) {
-      if (id === "command_center") continue;
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "rts-build-choice";
-      button.dataset.rtsBuilding = id;
-      // Keep the action's accessible name concise while the visual label shows
-      // the explicit resource cost needed for faster purchase decisions.
-      button.setAttribute("aria-label", stats.label);
-      const label = document.createElement("span");
-      label.className = "rts-build-choice-label";
-      label.textContent = stats.label;
-      const cost = document.createElement("span");
-      cost.className = "rts-build-choice-cost";
-      cost.textContent = formatResourceCost(stats.cost);
-      button.append(label, cost);
-      button.addEventListener("click", () => this.onChoose(id));
-      choices.appendChild(button);
+    // Anything the categories do not name still has to reach the player: a new
+    // building added to the data must not vanish from the palette because nobody
+    // filed it. It lands under "Diğer" instead.
+    const categorised = new Set(BUILD_CATEGORIES.flatMap((category) => category.buildingIds));
+    const uncategorised = Object.keys(buildings)
+      .filter((id) => id !== "command_center" && !categorised.has(id));
+    const groups: readonly BuildCategory[] = uncategorised.length > 0
+      ? [...BUILD_CATEGORIES, { title: "Diğer", buildingIds: uncategorised }]
+      : BUILD_CATEGORIES;
+    for (const category of groups) {
+      const ids = category.buildingIds.filter((id) => buildings[id]);
+      if (ids.length === 0) continue;
+      const heading = document.createElement("p");
+      heading.className = "rts-build-category";
+      heading.textContent = category.title;
+      this.root.appendChild(heading);
+      const choices = document.createElement("div");
+      choices.className = "rts-build-choices";
+      for (const id of ids) {
+        const stats = buildings[id]!;
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "rts-build-choice";
+        button.dataset.rtsBuilding = id;
+        // Keep the action's accessible name concise while the visual label shows
+        // the explicit resource cost needed for faster purchase decisions.
+        button.setAttribute("aria-label", stats.label);
+        const label = document.createElement("span");
+        label.className = "rts-build-choice-label";
+        label.textContent = stats.label;
+        const cost = document.createElement("span");
+        cost.className = "rts-build-choice-cost";
+        cost.textContent = formatResourceCost(stats.cost);
+        button.append(label, cost);
+        button.addEventListener("click", () => this.onChoose(id));
+        this.buildButtons.set(id, { button, cost, price: stats.cost });
+        choices.appendChild(button);
+      }
+      this.root.appendChild(choices);
     }
+    const controls = document.createElement("div");
+    controls.className = "rts-build-choices";
     const cancel = document.createElement("button");
     cancel.type = "button";
     cancel.textContent = "İptal";
     cancel.addEventListener("click", this.onCancel);
-    choices.appendChild(cancel);
+    controls.appendChild(cancel);
     const cancelLatest = document.createElement("button");
     cancelLatest.type = "button";
     cancelLatest.textContent = "Son İnşaatı İptal";
     cancelLatest.addEventListener("click", this.onCancelLatest);
-    choices.appendChild(cancelLatest);
-    const barracksUpgrade = document.createElement("button");
-    barracksUpgrade.type = "button";
-    barracksUpgrade.textContent = "Kışlayı T2 Yükselt";
-    barracksUpgrade.addEventListener("click", this.onUpgradeBarracks);
-    this.townStructureUpgradeButtons.set("barracks", barracksUpgrade);
-    choices.appendChild(barracksUpgrade);
-    const houseUpgrade = document.createElement("button");
-    houseUpgrade.type = "button";
-    houseUpgrade.textContent = "Evi T2 Yükselt";
-    houseUpgrade.addEventListener("click", this.onUpgradeHouse);
-    this.townStructureUpgradeButtons.set("house", houseUpgrade);
-    choices.appendChild(houseUpgrade);
-    const depotUpgrade = document.createElement("button");
-    depotUpgrade.type = "button";
-    depotUpgrade.textContent = "Depoyu T2 Yükselt";
-    depotUpgrade.addEventListener("click", this.onUpgradeDepot);
-    this.townStructureUpgradeButtons.set("depot", depotUpgrade);
-    choices.appendChild(depotUpgrade);
-    const outpostUpgrade = document.createElement("button");
-    outpostUpgrade.type = "button";
-    outpostUpgrade.textContent = "Karakolu T2 Yükselt";
-    outpostUpgrade.addEventListener("click", this.onUpgradeOutpost);
-    this.townStructureUpgradeButtons.set("outpost", outpostUpgrade);
-    choices.appendChild(outpostUpgrade);
-    this.root.appendChild(choices);
+    controls.appendChild(cancelLatest);
+    this.root.appendChild(controls);
     this.townUnlocks.className = "rts-build-age";
     this.root.appendChild(this.townUnlocks);
     this.actionMessage.className = "rts-build-action-message";
@@ -141,27 +160,42 @@ export class RtsBuildPalette {
   }
 
   /**
-   * Age drives which upgrades are legal, not what the age *is* — the bar prints
-   * that. This keeps the T2 buttons and their explanation on the same snapshot.
-   * "Kasaba Çağına Geç" itself left for the centre's own panel (§51): starting
-   * an age is something the Merkez does, and it is the one building that can.
+   * What the Town age opens. The T2 *buttons* left for the buildings themselves
+   * (§51) — an upgrade is started on the Barracks, not across the screen from it
+   * — so what remains here is the one thing the buildings cannot say: that the
+   * age is the gate, before the player owns any of them to click.
    */
   setAgeState(snapshot: Pick<AgeSnapshot, "age" | "upgrading">): void {
     const unlocked = townUnlocksAvailable(snapshot);
-    this.townUnlocksAreAvailable = unlocked;
-    this.refreshStructureUpgradeButtons();
     const text = unlocked
-      ? "Kasaba acilimlari: T2 Ev, Depo, Kisla ve Karakol kullanilabilir."
+      ? "Kasaba açılımları: T2 Ev, Depo, Kışla ve Karakol açık — yükseltmeyi binanın kendi panelinden başlatın."
       : snapshot.upgrading
-        ? "Kasaba acilimlari: yukseltme tamamlaninca T2 Ev, Depo, Kisla ve Karakol acilir."
-        : "Kasaba acilimlari: T2 Ev, Depo, Kisla ve Karakol icin Kasaba Cagi gerekir.";
+        ? "Kasaba açılımları: yükseltme tamamlanınca T2 Ev, Depo, Kışla ve Karakol açılır."
+        : "Kasaba açılımları: T2 Ev, Depo, Kışla ve Karakol için Kasaba Çağı gerekir.";
     if (this.townUnlocks.textContent !== text) this.townUnlocks.textContent = text;
   }
 
-  /** Reflect the type-wide T2 research state without hiding the available upgrade paths. */
-  setStructureUpgradeState(buildingId: string, snapshot: StructureUpgradeSnapshot): void {
-    this.structureUpgradeStates.set(buildingId, snapshot);
-    this.refreshStructureUpgradeButtons();
+  /**
+   * §51 "Maliyet ve kilit durumu": mark what the player cannot currently afford.
+   *
+   * Marked, not disabled. Stock moves every tick, and a button that greys out
+   * from under a reaching hand is worse than one that answers — the same call
+   * the age button makes. Picking an unaffordable building still starts the
+   * ghost and the placement status still says "Kaynak yetersiz", so the refusal
+   * is never silent; this only puts the fact where the choice is made.
+   */
+  setAffordability(stock: StartingResources): void {
+    const signature = [...this.buildButtons.values()]
+      .map((entry) => (canAffordCost(entry.price, stock) ? "1" : "0"))
+      .join("");
+    if (signature === this.affordabilitySignature) return;
+    this.affordabilitySignature = signature;
+    for (const entry of this.buildButtons.values()) {
+      const affordable = canAffordCost(entry.price, stock);
+      entry.button.classList.toggle("is-unaffordable", !affordable);
+      entry.cost.classList.toggle("is-unaffordable", !affordable);
+      entry.button.title = affordable ? "" : `Kaynak yetersiz: ${formatResourceCost(entry.price)} gerekir.`;
+    }
   }
 
   /** Persist completion/error feedback while placement hover state keeps changing. */
@@ -171,21 +205,6 @@ export class RtsBuildPalette {
 
   dispose(): void {
     this.root.remove();
-  }
-
-  private refreshStructureUpgradeButtons(): void {
-    for (const [buildingId, button] of this.townStructureUpgradeButtons) {
-      const snapshot = this.structureUpgradeStates.get(buildingId);
-      const disabled = !this.townUnlocksAreAvailable || snapshot?.upgrading === true || snapshot?.completed === true;
-      button.disabled = disabled;
-      button.title = !this.townUnlocksAreAvailable
-        ? "Kasaba Cagi tamamlandiktan sonra acilir."
-        : snapshot?.upgrading
-          ? "Bu bina turunun T2 yukseltmesi suruyor."
-          : snapshot?.completed
-            ? "Bu bina turunun T2 yukseltmesi tamamlandi."
-            : "";
-    }
   }
 }
 

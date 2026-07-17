@@ -47,6 +47,27 @@ export function formatResourceCost(cost: Readonly<Record<string, number>>): stri
     .join(" · ");
 }
 
+/**
+ * §51 "Maliyet ve kilit durumu": can this stock pay this price right now?
+ *
+ * Pure, and here rather than inside the palette, so `test:engine` can hold the
+ * lock to account without a browser — and so the answer cannot drift from
+ * {@link formatResourceCost}, which prints the very price being judged. It is
+ * only an *indication*: `ResourceWallet.reserve` remains the authority that
+ * actually takes the money, and this must agree with it, never replace it.
+ */
+export function canAffordCost(
+  cost: Readonly<Record<string, number>>,
+  stock: Readonly<Record<string, number>>,
+): boolean {
+  return Object.entries(cost).every(([resourceId, amount]) => {
+    if (!(amount > 0)) return true;
+    // Floors the stock the same way the HUD prints it: a player shown "79 Odun"
+    // must not be told they can afford 80 because the float is 79.6.
+    return formatInventoryAmount(stock[resourceId] ?? 0) >= amount;
+  });
+}
+
 function resourceRank(resourceId: string): number {
   const index = RESOURCE_ORDER.indexOf(resourceId);
   return index === -1 ? RESOURCE_ORDER.length : index;

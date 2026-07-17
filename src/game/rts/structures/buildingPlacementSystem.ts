@@ -11,9 +11,11 @@ import {
   Color,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Plane,
   Raycaster,
+  RingGeometry,
   Vector2,
   Vector3,
   type PerspectiveCamera,
@@ -40,6 +42,14 @@ export class BuildingPlacementSystem {
   private readonly hit = new Vector3();
   private active: { id: string; stats: BuildingBalanceStats } | null = null;
   private ghost: Mesh | null = null;
+  /**
+   * §51 "Karakol kontrol alanı önizlemesi". An outpost is bought for the ground
+   * it opens, and that ground is invisible until the moment it is too late to
+   * move the building — so the radius is drawn where the decision is made.
+   * Only structures whose data declares a `territory` block get one, which is
+   * the same fact `TerritoryControlSystem` reads.
+   */
+  private territoryPreview: Mesh | null = null;
   private result: PlacementResult | null = null;
 
   constructor(
@@ -68,6 +78,7 @@ export class BuildingPlacementSystem {
     this.active = { id: buildingId, stats };
     this.result = null;
     this.rebuildGhost(stats);
+    this.rebuildTerritoryPreview(stats);
     this.root.visible = true;
     return true;
   }
@@ -115,8 +126,12 @@ export class BuildingPlacementSystem {
     this.ghost?.geometry.dispose();
     const material = this.ghost?.material;
     if (material instanceof MeshStandardMaterial) material.dispose();
+    this.territoryPreview?.geometry.dispose();
+    const territory = this.territoryPreview?.material;
+    if (territory instanceof MeshBasicMaterial) territory.dispose();
     this.root.clear();
     this.ghost = null;
+    this.territoryPreview = null;
   }
 
   private groundPoint(screenX: number, screenY: number): Vector3 | null {
@@ -149,10 +164,50 @@ export class BuildingPlacementSystem {
     this.root.add(this.ghost);
   }
 
+  /**
+   * The disc an outpost would open, drawn at its *isolated* radius — the area it
+   * opens the instant it completes. The larger connected radius is deliberately
+   * not shown: it depends on a road that does not exist yet at placement time,
+   * and promising ground the building will not open on its own would be the
+   * preview lying about the very decision it exists to inform.
+   */
+  private rebuildTerritoryPreview(stats: BuildingBalanceStats): void {
+    if (this.territoryPreview) {
+      this.root.remove(this.territoryPreview);
+      this.territoryPreview.geometry.dispose();
+      const material = this.territoryPreview.material;
+      if (material instanceof MeshBasicMaterial) material.dispose();
+      this.territoryPreview = null;
+    }
+    const radius = stats.territory?.controlRadius;
+    if (radius === undefined || radius <= 0) return;
+    const preview = new Mesh(
+      new RingGeometry(radius - 0.4, radius, 64),
+      new MeshBasicMaterial({
+        color: VALID_COLOR,
+        transparent: true,
+        opacity: 0.5,
+        depthWrite: false,
+      }),
+    );
+    preview.name = "rts-territory-preview";
+    preview.rotation.x = -Math.PI / 2;
+    preview.position.y = 0.06;
+    this.territoryPreview = preview;
+    this.root.add(preview);
+  }
+
   private setGhostValid(valid: boolean): void {
     const material = this.ghost?.material;
-    if (!(material instanceof MeshStandardMaterial)) return;
-    material.color.copy(valid ? VALID_COLOR : INVALID_COLOR);
-    material.emissive.copy(valid ? VALID_COLOR : INVALID_COLOR);
+    if (material instanceof MeshStandardMaterial) {
+      material.color.copy(valid ? VALID_COLOR : INVALID_COLOR);
+      material.emissive.copy(valid ? VALID_COLOR : INVALID_COLOR);
+    }
+    // The radius follows the ghost's verdict: a red disc reads as "this ground
+    // is not what you would get", which is exactly true of a refused placement.
+    const territory = this.territoryPreview?.material;
+    if (territory instanceof MeshBasicMaterial) {
+      territory.color.copy(valid ? VALID_COLOR : INVALID_COLOR);
+    }
   }
 }

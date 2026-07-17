@@ -41,11 +41,12 @@ import { createRtsGround } from "./world/rtsGround";
 import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
 import { RtsMapArt } from "./world/rtsMapArt";
 import { UnitSystem } from "./units/unitSystem";
+import { Unit } from "./units/unit";
 import { updateUnitMovement } from "./units/unitMovement";
 import { updateUnitSeparation } from "./units/unitSeparation";
 import { updateUnitCombat } from "./units/unitCombat";
 import { updateUnitDeaths } from "./units/unitDeath";
-import { updateUnitEngagement } from "./combat/engagementSystem";
+import { retaliateAgainstAttack, updateUnitEngagement } from "./combat/engagementSystem";
 import { ProjectileSystem } from "./combat/projectileSystem";
 import { StructureDefenseSystem } from "./combat/structureDefenseSystem";
 import { RtsNavigation } from "./navigation/rtsNavigation";
@@ -73,6 +74,7 @@ import {
   RALLY_ACTION,
   TRAIN_ACTION_PREFIX,
   TRAIN_WORKER_ACTION,
+  UPGRADE_ACTION,
   type RtsSelectionView,
   type StructureDetailView,
   type WorkerJob,
@@ -81,14 +83,14 @@ import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
-import { AgeSystem } from "./progression/ageSystem";
+import { AgeSystem, townUnlocksAvailable } from "./progression/ageSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
-import type { Unit, UnitOwner } from "./units/unit";
+import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "./structures/structureUpgradeSystem";
@@ -425,10 +427,6 @@ export class RtsApp {
         this.buildPalette.setActionMessage(null);
         this.syncPlacementUi();
       },
-      () => this.startBarracksUpgrade(),
-      () => this.startHouseUpgrade(),
-      () => this.startDepotUpgrade(),
-      () => this.startOutpostUpgrade(),
     );
     this.roadControls = new RtsRoadControls(
       () => {
@@ -456,6 +454,9 @@ export class RtsApp {
       onResume: this.resumeMatch,
       onRestart: this.restartMatch,
       onSurrender: this.surrenderMatch,
+      // Applied live while the card is up: §51's pause deliberately keeps the
+      // camera running, so the player can judge the dial by moving the map.
+      onCameraSettings: (settings) => this.cameraController.setSettings(settings),
     });
     this.debugOverlay = this.options.debug ? new RtsDebugOverlay() : null;
     if (this.options.prosperityDebugEnabled) {
@@ -555,7 +556,6 @@ export class RtsApp {
     this.spawnStartingUnits();
     this.syncPlacementUi();
     this.syncAgeUi();
-    this.syncStructureUpgradeUi();
     this.syncRoadUi();
   }
 
@@ -863,7 +863,6 @@ export class RtsApp {
     this.ai.update(dt);
     this.syncHudBar();
     this.syncAgeUi();
-    this.syncStructureUpgradeUi();
     this.syncEconomyUi();
     this.syncNotifications();
     updateUnitCombat(
@@ -872,6 +871,9 @@ export class RtsApp {
       (hit) => {
         this.debugOverlay?.recordHit(hit);
         if (hit.ranged) this.projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
+        if (hit.target instanceof Unit) {
+          retaliateAgainstAttack(hit.target, hit.attacker, this.navigation);
+        }
       },
     );
     this.structureDefense.update(this.structures.all(), this.combatTargets(), dt, (hit) => {
@@ -1091,6 +1093,7 @@ export class RtsApp {
 
   private syncPlacementUi(): void {
     this.buildPalette.setState(this.placement.state());
+    this.buildPalette.setAffordability(this.playerKingdom.wallet.snapshot());
     // The roster left with the palette's train buttons (§51): it is pushed to
     // the Barracks' own panel now, and only while that Barracks is selected.
     this.syncHudBar();
@@ -1153,6 +1156,7 @@ export class RtsApp {
     }
     const structure = this.selection.selectedStructure();
     if (structure) {
+      const upgrade = structure.stats.upgrade;
       return {
         kind: "structure",
         structure: {
@@ -1162,6 +1166,15 @@ export class RtsApp {
           health: structure.health.current,
           maxHealth: structure.health.max,
           detail: this.structureDetail(structure),
+          // Null when the data gives this building no T2 at all — the absence of
+          // an upgrade is the data's statement, not a UI decision.
+          upgrade: upgrade
+            ? {
+              snapshot: this.structureUpgrades.snapshot(structure.owner, structure.stats.id),
+              townUnlocked: townUnlocksAvailable(this.ages.snapshot(structure.owner)),
+              cost: upgrade.cost,
+            }
+            : null,
         },
       };
     }
@@ -1183,6 +1196,8 @@ export class RtsApp {
           workerStats: this.options.unitBalance["worker_placeholder"]!,
           requiredBuildingLabels: this.buildingLabels,
         },
+        // The centre's own T2 rides on the age, not on a per-type research.
+        upgrade: null,
       },
     };
   }
@@ -1207,6 +1222,13 @@ export class RtsApp {
       this.roadPlacement.cancel();
       this.rallyPointPending = true;
       this.buildPalette.setActionMessage("Toplanma noktası için haritada bir konum seçin.");
+      return;
+    }
+    if (id === UPGRADE_ACTION) {
+      // Routed by the selected building's *type*: the research is type-wide, so
+      // the button only says which type the player means.
+      const selected = this.selection.selectedStructure();
+      if (selected) this.startStructureUpgrade(selected.stats.id);
       return;
     }
     if (id.startsWith(TRAIN_ACTION_PREFIX)) {
@@ -1469,69 +1491,37 @@ export class RtsApp {
       "insufficient-resources": "Kasaba Çağı için kaynak yetersiz.",
     };
     this.buildPalette.setActionMessage(message[result]);
-    this.syncStructureUpgradeUi();
     this.syncAgeUi();
   }
 
-  private startBarracksUpgrade(): void {
-    const result = this.structureUpgrades.start(PLAYER_OWNER, "barracks");
+  /**
+   * Start a building type's T1->T2 research (plan §45).
+   *
+   * One method, not the four near-identical copies this replaced: the only thing
+   * that differed between them was the building's own label, which the balance
+   * data already holds. The per-type flavour that mattered — a Barracks pausing
+   * its training, an Outpost growing its area once done — stays, keyed by id.
+   */
+  private startStructureUpgrade(buildingId: string): void {
+    const label = this.buildingLabels.get(buildingId) ?? buildingId;
+    const result = this.structureUpgrades.start(PLAYER_OWNER, buildingId);
+    const startedNote: Record<string, string> = {
+      barracks: " Birlik üretimi geçici olarak durur.",
+      depot: " Yol bağlantısı korunur.",
+      outpost: " Kontrol alanı tamamlanınca büyür.",
+    };
     const message: Record<typeof result, string> = {
-      started: "Kışla T2 yükseltmesi başladı; Muhafız üretimi geçici olarak durur.",
-      "no-eligible-structure": "Yükseltilecek tamamlanmış T1 Kışla yok.",
-      "already-upgrading": "Kışla T2 yükseltmesi zaten sürüyor.",
-      "not-town": "Kışlayı T2 yükseltmek için önce Kasaba Çağına geçin.",
-      "insufficient-resources": "Kışla T2 için kaynak yetersiz.",
+      started: `${label} T2 yükseltmesi başladı.${startedNote[buildingId] ?? ""}`,
+      "no-eligible-structure": `Yükseltilecek tamamlanmış T1 ${label} yok.`,
+      "already-upgrading": `${label} T2 yükseltmesi zaten sürüyor.`,
+      "not-town": `${label} T2 için önce Kasaba Çağına geçin.`,
+      "insufficient-resources": `${label} T2 için kaynak yetersiz.`,
     };
     this.buildPalette.setActionMessage(message[result]);
-    this.syncStructureUpgradeUi();
-  }
-
-  private startHouseUpgrade(): void {
-    const result = this.structureUpgrades.start(PLAYER_OWNER, "house");
-    const message: Record<typeof result, string> = {
-      started: "Ev T2 yükseltmesi başladı.",
-      "no-eligible-structure": "Yükseltilecek tamamlanmış T1 Ev yok.",
-      "already-upgrading": "Ev T2 yükseltmesi zaten sürüyor.",
-      "not-town": "Evi T2 yükseltmek için önce Kasaba Çağına geçin.",
-      "insufficient-resources": "Ev T2 için kaynak yetersiz.",
-    };
-    this.buildPalette.setActionMessage(message[result]);
-    this.syncStructureUpgradeUi();
-  }
-
-  private startDepotUpgrade(): void {
-    const result = this.structureUpgrades.start(PLAYER_OWNER, "depot");
-    const message: Record<typeof result, string> = {
-      started: "Depo T2 yükseltmesi başladı; yol bağlantısı korunur.",
-      "no-eligible-structure": "Yükseltilecek tamamlanmış T1 Depo yok.",
-      "already-upgrading": "Depo T2 yükseltmesi zaten sürüyor.",
-      "not-town": "Depoyu T2 yükseltmek için önce Kasaba Çağına geçin.",
-      "insufficient-resources": "Depo T2 için kaynak yetersiz.",
-    };
-    this.buildPalette.setActionMessage(message[result]);
-    this.syncStructureUpgradeUi();
-  }
-
-  private startOutpostUpgrade(): void {
-    const result = this.structureUpgrades.start(PLAYER_OWNER, "outpost");
-    const message: Record<typeof result, string> = {
-      started: "Karakol T2 yükseltmesi başladı; kontrol alanı tamamlanınca büyür.",
-      "no-eligible-structure": "Yükseltilecek tamamlanmış T1 Karakol yok.",
-      "already-upgrading": "Karakol T2 yükseltmesi zaten sürüyor.",
-      "not-town": "Karakolu T2 yükseltmek için önce Kasaba Çağına geçin.",
-      "insufficient-resources": "Karakol T2 için kaynak yetersiz.",
-    };
-    this.buildPalette.setActionMessage(message[result]);
-    this.syncStructureUpgradeUi();
   }
 
   private syncAgeUi(): void {
     this.buildPalette.setAgeState(this.ages.snapshot(PLAYER_OWNER));
   }
 
-  private syncStructureUpgradeUi(): void {
-    for (const buildingId of ["barracks", "house", "depot", "outpost"]) {
-      this.buildPalette.setStructureUpgradeState(buildingId, this.structureUpgrades.snapshot(PLAYER_OWNER, buildingId));
-    }
-  }
 }

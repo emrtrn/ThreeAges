@@ -31,11 +31,18 @@ export class RtsSelectionPanel {
   private signature = " ";
 
   constructor(private readonly onAction: (id: string) => void) {
-    this.root.className = "rts-selection-panel ui-interactive";
+    // Deliberately *not* `ui-interactive`. The panel is a readout sitting in the
+    // bottom-centre of a fullscreen map, and Faz 9 measured what that costs: it
+    // swallowed map clicks in a 420x130 box — a Depot placed there failed
+    // silently. Only the two parts that genuinely need a pointer take one: the
+    // buttons, and the body that carries the reason tooltip. Everything else —
+    // title, summary, hints, padding — lets the click through to the map, the
+    // same rule the notification feed states for itself.
+    this.root.className = "rts-selection-panel";
     this.root.setAttribute("aria-label", "Seçim");
     this.summary.className = "rts-selection-summary";
-    this.body.className = "rts-selection-body";
-    this.actionRow.className = "rts-selection-actions";
+    this.body.className = "rts-selection-body ui-interactive";
+    this.actionRow.className = "rts-selection-actions ui-interactive";
     this.hints.className = "rts-selection-hints";
     this.root.append(this.title, this.summary, this.body, this.actionRow, this.hints);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);

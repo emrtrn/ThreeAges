@@ -11,6 +11,7 @@
  * Presentation only. It decides nothing about the match; `RtsApp` owns the
  * transitions and tells this what to show.
  */
+import { DEFAULT_RTS_CAMERA_SETTINGS, type RtsCameraSettings } from "../camera/rtsCameraConfig";
 import type { RtsMatchEndReason, RtsMatchOutcome } from "./rtsMatchState";
 
 export interface RtsMatchOverlayHandlers {
@@ -18,7 +19,30 @@ export interface RtsMatchOverlayHandlers {
   readonly onResume: () => void;
   readonly onRestart: () => void;
   readonly onSurrender: () => void;
+  /** §51 "Minimal ayarlar": camera feel, changed live behind the pause card. */
+  readonly onCameraSettings: (settings: RtsCameraSettings) => void;
 }
+
+/**
+ * §51 lists four settings; two of them are built here and two are deliberately
+ * absent.
+ *
+ * "Ana ses seviyesi" and "Ekran sallantısı" have nothing to control: the RTS
+ * plays no audio and has no screen shake — both arrive with Faz 12's "VFX ve
+ * Ses" (§67). A slider wired to a system that does not exist is a control the
+ * player drags while nothing happens, which is worse than an absent one and is
+ * exactly the "yarım sistem" §13 forbids. They land when their systems do.
+ */
+interface SettingRow {
+  readonly key: keyof RtsCameraSettings;
+  readonly label: string;
+  readonly hint: string;
+}
+
+const CAMERA_SETTING_ROWS: readonly SettingRow[] = [
+  { key: "panSpeed", label: "Kamera hızı", hint: "WASD ile kaydırma hızı." },
+  { key: "smoothing", label: "Kamera yumuşatma", hint: "Zoom'un hedefe yumuşama miktarı." },
+];
 
 interface ResultText {
   readonly title: string;
@@ -58,6 +82,8 @@ export class RtsMatchOverlay {
    * would put a UI affordance into the simulation's state.
    */
   private surrenderArmed = false;
+  private readonly settings = document.createElement("div");
+  private cameraSettings: RtsCameraSettings = DEFAULT_RTS_CAMERA_SETTINGS;
 
   constructor(private readonly handlers: RtsMatchOverlayHandlers) {
     this.root.className = "rts-match-overlay ui-interactive";
@@ -67,9 +93,45 @@ export class RtsMatchOverlay {
     this.title.dataset.rtsResultTitle = "";
     this.detail.dataset.rtsResultDetail = "";
     this.actions.className = "rts-match-actions";
-    this.card.append(this.title, this.detail, this.actions);
+    this.buildSettings();
+    this.card.append(this.title, this.detail, this.actions, this.settings);
     this.root.appendChild(this.card);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
+  }
+
+  /**
+   * Settings live in the pause menu rather than on a panel of their own: they are
+   * a rare, deliberate visit, and the card is already the one surface a player
+   * opens to *stop and think*. Built once and shown or hidden — a result screen
+   * is not the place to be adjusting the camera.
+   */
+  private buildSettings(): void {
+    this.settings.className = "rts-match-settings";
+    const heading = document.createElement("strong");
+    heading.textContent = "Ayarlar";
+    this.settings.appendChild(heading);
+    for (const row of CAMERA_SETTING_ROWS) {
+      const wrapper = document.createElement("label");
+      wrapper.className = "rts-match-setting";
+      wrapper.title = row.hint;
+      const label = document.createElement("span");
+      label.textContent = row.label;
+      const slider = document.createElement("input");
+      slider.type = "range";
+      slider.min = "0";
+      slider.max = "1";
+      slider.step = "0.05";
+      slider.value = String(this.cameraSettings[row.key]);
+      slider.dataset.rtsSetting = row.key;
+      // `input`, not `change`: the camera is behind the card and the player is
+      // judging the change by watching it, so it has to move as they drag.
+      slider.addEventListener("input", () => {
+        this.cameraSettings = { ...this.cameraSettings, [row.key]: Number(slider.value) };
+        this.handlers.onCameraSettings(this.cameraSettings);
+      });
+      wrapper.append(label, slider);
+      this.settings.appendChild(wrapper);
+    }
   }
 
   /** §51: a simple start screen, deliberately not a main menu. */
@@ -89,7 +151,7 @@ export class RtsMatchOverlay {
       this.surrenderArmed
         ? { label: "Teslim olmayı onayla", action: this.handlers.onSurrender, key: "surrender", danger: true }
         : { label: "Teslim Ol", action: this.armSurrender, key: "surrender" },
-    ], "neutral");
+    ], "neutral", true);
   }
 
   /** Present a decided match. `active` is not a result and never reaches here. */
@@ -122,7 +184,9 @@ export class RtsMatchOverlay {
     detail: string,
     buttons: readonly OverlayButton[],
     tone: OverlayTone,
+    showSettings = false,
   ): void {
+    this.settings.hidden = !showSettings;
     this.card.dataset.tone = tone;
     this.title.textContent = title;
     this.detail.textContent = detail;

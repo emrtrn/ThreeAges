@@ -25,7 +25,6 @@ async function openMatch(page: Page, route: string): Promise<void> {
  */
 async function selectCommandCenter(page: Page): Promise<void> {
   const canvas = page.locator("#game-canvas");
-  await canvas.click({ position: { x: 1150, y: 200 } });
   await page.keyboard.down("s");
   await page.waitForTimeout(700);
   await page.keyboard.up("s");
@@ -239,6 +238,55 @@ test("RTS Phase 9 pause actually stops the simulation", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("RTS Phase 9 build tools: categories, the affordability lock, and settings that move the camera", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openMatch(page, "/?rts&debug");
+
+  // §51 "Yapı kategorileri": grouped by the question the player is asking.
+  await expect(page.locator(".rts-build-category")).toHaveText([
+    "Ekonomi", "Lojistik", "Yerleşim", "Askerî",
+  ]);
+
+  // §51 "Maliyet ve kilit durumu": every building shows its price, and the
+  // opening stock affords all of them. (Draining the wallet to see the lock
+  // appear needs 11 Houses' worth of successful placements — too fragile to
+  // stake a smoke test on, so `canAffordCost` is held to account in
+  // `test:engine` instead. This is the half a browser is needed for.)
+  await expect(page.locator(".rts-build-choice.is-unaffordable")).toHaveCount(0);
+  await expect(page.locator('[data-rts-building="gold_mine"]')).toContainText("140 Odun");
+
+  // §51 "Karakol kontrol alanı önizlemesi": the disc an outpost would open is
+  // drawn while it is still being aimed, and the placement reason reads with it.
+  await page.getByRole("button", { name: "Karakol", exact: true }).click();
+  await expect(page.locator(".rts-build-status")).toHaveText(
+    "Karakolu kontrol alanının hemen dışındaki nötr bir konuma yerleştirin.",
+  );
+  await page.locator("#game-canvas").hover({ position: { x: 400, y: 560 } });
+  await expect(page.locator(".rts-build-status")).toContainText(/Geçerli konum|Geçersiz konum/);
+  await page.getByRole("button", { name: "İptal", exact: true }).click();
+
+  // §52 "UI haritanın kritik alanlarını aşırı kapatmıyor". The criterion named
+  // the palette by name: a Faz 2 pile 647px tall, the whole right column. Faz 9
+  // moved every non-placement verb onto the building that performs it, and this
+  // is the measurement that keeps them from drifting back.
+  const palette = await page.locator(".rts-build-palette").boundingBox();
+  if (!palette) throw new Error("no palette");
+  expect(palette.height, "the palette may not reclaim the column").toBeLessThan(768 * 0.7);
+  expect((palette.width * palette.height) / (1366 * 768)).toBeLessThan(0.16);
+
+  // §51 "Minimal ayarlar" lives in the pause menu, and only the two settings
+  // whose systems exist. A slider for audio the game does not play would be a
+  // control the player drags while nothing happens (§13's "yarım sistem").
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
+  await expect(page.locator(".rts-match-setting")).toHaveText(["Kamera hızı", "Kamera yumuşatma"]);
+  await expect(page.locator("[data-rts-setting]")).toHaveCount(2);
+
+  expect(errors).toEqual([]);
+});
+
 test("RTS Phase 9 the Barracks panel gates the Archer and the Ram behind a tier-2 Barracks", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -302,22 +350,42 @@ test("RTS Phase 7 a box-selected group takes a move order and every unit finishe
   const overlay = page.locator(".rts-debug-overlay");
   await expect(overlay).toContainText("birimler:");
 
-  // Pan the starting Guards up off the bottom edge so the marquee below can be
-  // drawn over them without crossing the build palette or the debug overlay.
-  await canvas.click({ position: { x: 640, y: 400 } });
+  // Pan the starting Guards up off the bottom edge: they stand below the opening
+  // camera, and no marquee can select what is not on screen.
   await page.keyboard.down("s");
   await page.waitForTimeout(700);
   await page.keyboard.up("s");
 
-  // Box-select the Guard line, then send it somewhere as one group. This is the
-  // plan §45 group-movement path end to end — slot distribution, path following,
-  // crowd separation and the congestion timeout all run together here, which the
+  // Select the Guard line, then send it somewhere as one group. This is the plan
+  // §45 group-movement path end to end — slot distribution, path following, crowd
+  // separation and the congestion timeout all run together here, which the
   // headless suite only exercises one system at a time.
-  await page.mouse.move(420, 520);
-  await page.mouse.down();
-  await page.mouse.move(900, 610, { steps: 8 });
-  await page.mouse.up();
-  await expect(page.locator(".rts-selection-panel")).toBeVisible();
+  //
+  // Finding the line is deliberately not a fixed marquee any more. That box
+  // (420,520 → 900,610) was the flake §51 recorded: how far a 700 ms pan travels
+  // depends on the frame rate, so the Guards fell inside it only some of the
+  // time. A wide sweep fixes *that* but changes the test — it also catches the
+  // five Workers, making this a nine-unit scenario the Faz 7 acceptance was never
+  // written about. So: find one Guard, then let the game's own §21 gesture
+  // ("çift tıkla aynı savaş birimi türünü seç") select exactly the Guards,
+  // wherever they ended up.
+  const panel = page.locator(".rts-selection-panel");
+  const { width, height } = page.viewportSize() ?? { width: 1280, height: 720 };
+  let guard: { x: number; y: number } | null = null;
+  for (const fy of [0.72, 0.66, 0.78, 0.6, 0.84]) {
+    for (const fx of [0.5, 0.42, 0.58, 0.34, 0.66]) {
+      const point = { x: Math.round(width * fx), y: Math.round(height * fy) };
+      await canvas.click({ position: point });
+      if (await panel.isVisible() && (await panel.innerText()).includes("Muhafız")) {
+        guard = point;
+        break;
+      }
+    }
+    if (guard) break;
+  }
+  if (!guard) throw new Error("the pan must leave a Muhafız on screen to select");
+  await canvas.dblclick({ position: guard });
+  await expect(panel, "the double-click selects the whole Guard line").toContainText(/[2-9] Muhafız/);
 
   await canvas.click({ button: "right", position: { x: 640, y: 300 } });
   await expect(overlay).toContainText(/yol:\d+/);

@@ -25,6 +25,7 @@ import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSyst
 import type { DepotNodeStatus } from "../economy/depotLogisticsSystem";
 import type { BarracksQueueSnapshot } from "../structures/barracksProductionSystem";
 import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
+import type { StructureUpgradeSnapshot } from "../structures/structureUpgradeSystem";
 import type { AgeSnapshot } from "../progression/ageSystem";
 import { formatResourceCost, resourceLabel } from "./resourceLabels";
 
@@ -147,6 +148,18 @@ export type StructureDetailView =
   | PassiveDetailView
   | CenterDetailView;
 
+/**
+ * The T1→T2 path, when the building's data declares one. It hangs off the
+ * structure rather than off a detail kind because every kind of building can
+ * have one — a House, a Depot and a Barracks all upgrade, and threading the same
+ * four fields through five detail types would be four copies of one fact.
+ */
+export interface StructureUpgradeView {
+  readonly snapshot: StructureUpgradeSnapshot;
+  readonly townUnlocked: boolean;
+  readonly cost: Readonly<Record<string, number>>;
+}
+
 export interface SelectedStructureView {
   readonly id: number;
   readonly label: string;
@@ -154,6 +167,8 @@ export interface SelectedStructureView {
   readonly health: number;
   readonly maxHealth: number;
   readonly detail: StructureDetailView;
+  /** Null when the data gives this building no upgrade at all. */
+  readonly upgrade: StructureUpgradeView | null;
 }
 
 export type RtsSelectionView =
@@ -181,6 +196,7 @@ export const TRAIN_ACTION_PREFIX = "train:";
 export const TRAIN_WORKER_ACTION = "train-worker";
 export const AGE_UP_ACTION = "age-up";
 export const RALLY_ACTION = "rally";
+export const UPGRADE_ACTION = "upgrade";
 
 /** GDD 06 §6–§9 role summaries, in the player's language. */
 const ROLE_DESCRIPTION: Record<UnitRoleId, string> = {
@@ -302,6 +318,42 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
 }
 
 function describeStructure(structure: SelectedStructureView): SelectionPanelContent {
+  const base = describeStructureDetail(structure);
+  const upgrade = upgradeAction(structure);
+  return upgrade ? { ...base, actions: [...base.actions, upgrade] } : base;
+}
+
+/**
+ * The building's T1→T2 button, on the building. It used to live on the palette,
+ * which read as a split: the Barracks' own panel said "T2 yükseltmesi sürüyor"
+ * while the button that started it sat across the screen.
+ *
+ * The label says "Tüm …" because the underlying research is type-wide —
+ * `StructureUpgradeSystem` promotes every building of the type, including ones
+ * finished later. Putting a type-wide verb on one instance is only honest if the
+ * button admits it; "Kışlayı T2 Yükselt" on one Barracks would imply otherwise.
+ */
+function upgradeAction(structure: SelectedStructureView): SelectionAction | null {
+  const upgrade = structure.upgrade;
+  if (!upgrade) return null;
+  const { snapshot } = upgrade;
+  const reason = snapshot.completed
+    ? "Bu bina türünün T2 yükseltmesi tamamlandı."
+    : snapshot.upgrading
+      ? `T2 yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
+      : !upgrade.townUnlocked
+        ? "T2 yükseltmesi için Kasaba Çağı gerekir."
+        : null;
+  return {
+    id: UPGRADE_ACTION,
+    label: `Tüm ${structure.label} Yapılarını T2 Yükselt`,
+    cost: formatResourceCost(upgrade.cost),
+    enabled: reason === null,
+    reason,
+  };
+}
+
+function describeStructureDetail(structure: SelectedStructureView): SelectionPanelContent {
   const { detail } = structure;
   const summary = `Can: ${Math.ceil(structure.health)}/${Math.ceil(structure.maxHealth)}`;
   const title = structure.level > 1 ? `${structure.label} T${structure.level}` : structure.label;

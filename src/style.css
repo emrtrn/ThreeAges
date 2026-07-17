@@ -144,6 +144,35 @@ body {
   margin-top: 20px;
 }
 
+/* §51 minimal settings: a quiet block under the pause menu's actions — a visit,
+   not the reason the card is up. */
+.rts-match-settings {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid rgb(220 232 190 / 24%);
+  text-align: left;
+}
+
+.rts-match-settings[hidden] {
+  display: none;
+}
+
+.rts-match-setting {
+  display: grid;
+  grid-template-columns: 1fr 160px;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+  color: #dce8be;
+  font-size: 13px;
+}
+
+.rts-match-setting input[type="range"] {
+  width: 100%;
+  accent-color: #cddd8d;
+  cursor: pointer;
+}
+
 .rts-match-card button {
   padding: 9px 16px;
   color: #18220f;
@@ -561,11 +590,33 @@ body {
   box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
 }
 
+/* §51 build categories: a label the eye can skip past, not a section header
+   competing with the panel's own title. */
+.rts-build-category {
+  margin-top: 8px;
+  color: #93a68a;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .rts-build-choices {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
+  margin-top: 5px;
+}
+
+/* Affordable is the default; the lock is what needs saying. Kept legible rather
+   than faded to near-nothing — the player still has to read the price to know
+   how far off it is. */
+.rts-build-choice.is-unaffordable {
+  background: #8c9a63;
+}
+
+.rts-build-choice-cost.is-unaffordable {
+  color: #7a2f28;
 }
 
 .rts-build-choices button {

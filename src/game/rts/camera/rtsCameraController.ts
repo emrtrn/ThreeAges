@@ -14,7 +14,13 @@
 import { MathUtils, PerspectiveCamera, Vector3 } from "three";
 
 import type { RtsInput } from "../input/rtsInput";
-import { DEFAULT_RTS_CAMERA_CONFIG, type RtsCameraConfig } from "./rtsCameraConfig";
+import {
+  cameraSettingsToFeel,
+  DEFAULT_RTS_CAMERA_CONFIG,
+  DEFAULT_RTS_CAMERA_SETTINGS,
+  type RtsCameraConfig,
+  type RtsCameraSettings,
+} from "./rtsCameraConfig";
 
 export class RtsCameraController {
   readonly camera: PerspectiveCamera;
@@ -27,13 +33,31 @@ export class RtsCameraController {
   private targetDistance: number;
   private viewportW = 1;
   private viewportH = 1;
+  /**
+   * §51 "Minimal ayarlar": pan speed and zoom smoothing are the two pieces of
+   * camera feel the player owns, so they are live fields rather than the frozen
+   * config. The rest of the config stays authored — a player has no business
+   * setting the map bounds.
+   */
+  private panSpeed: number;
+  private zoomLerpRate: number;
 
   constructor(config: RtsCameraConfig = DEFAULT_RTS_CAMERA_CONFIG) {
     this.config = config;
     this.distance = config.startDistance;
     this.targetDistance = config.startDistance;
+    const feel = cameraSettingsToFeel(DEFAULT_RTS_CAMERA_SETTINGS);
+    this.panSpeed = feel.panSpeed;
+    this.zoomLerpRate = feel.zoomLerpRate;
     this.camera = new PerspectiveCamera(config.fovDeg, 1, 0.5, 2000);
     this.applyTransform();
+  }
+
+  /** Apply the player's camera dials (plan §51). */
+  setSettings(settings: RtsCameraSettings): void {
+    const feel = cameraSettingsToFeel(settings);
+    this.panSpeed = feel.panSpeed;
+    this.zoomLerpRate = feel.zoomLerpRate;
   }
 
   /** Recompute aspect + projection when the drawing buffer resizes. */
@@ -62,12 +86,7 @@ export class RtsCameraController {
         this.config.maxDistance,
       );
     }
-    this.distance = MathUtils.damp(
-      this.distance,
-      this.targetDistance,
-      this.config.zoomLerpRate,
-      dt,
-    );
+    this.distance = MathUtils.damp(this.distance, this.targetDistance, this.zoomLerpRate, dt);
 
     // Pan: screen-relative, scaled by zoom so the map feels consistent.
     const intent = input.panIntent();
@@ -79,8 +98,7 @@ export class RtsCameraController {
       pz += edge.z;
     }
     if (px !== 0 || pz !== 0) {
-      const speed =
-        this.config.panSpeed * (this.distance / this.config.panReferenceDistance) * dt;
+      const speed = this.panSpeed * (this.distance / this.config.panReferenceDistance) * dt;
       // Screen forward (pz = +1) moves the focus away from the camera → world -Z.
       this.focus.x += px * speed;
       this.focus.z += -pz * speed;

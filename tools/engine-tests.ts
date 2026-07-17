@@ -70,6 +70,11 @@ import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
 import { CommandCenterSystem } from "../src/game/rts/structures/commandCenterSystem";
 import { RtsMatchState } from "../src/game/rts/match/rtsMatchState";
 import { RtsMatchFlow } from "../src/game/rts/match/rtsMatchFlow";
+import {
+  cameraSettingsToFeel,
+  DEFAULT_RTS_CAMERA_CONFIG,
+  DEFAULT_RTS_CAMERA_SETTINGS,
+} from "../src/game/rts/camera/rtsCameraConfig";
 import { HealthComponent } from "../src/game/rts/units/health";
 import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
 import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
@@ -112,7 +117,12 @@ import type { AiBlackboard } from "../src/game/rts/ai/aiBlackboard";
 import { updateStructureDestruction } from "../src/game/rts/structures/structureDestruction";
 import { StructureConstructionService } from "../src/game/rts/structures/structureConstructionService";
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
-import { formatInventoryAmount, formatResourceCost, resourceLabel } from "../src/game/rts/ui/resourceLabels";
+import {
+  canAffordCost,
+  formatInventoryAmount,
+  formatResourceCost,
+  resourceLabel,
+} from "../src/game/rts/ui/resourceLabels";
 import { RtsNotificationCenter, MAX_ACTIVE_NOTIFICATIONS } from "../src/game/rts/ui/rtsNotifications";
 import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
 import {
@@ -122,8 +132,10 @@ import {
   type SelectionAction,
   type SelectionPanelContent,
   type StructureDetailView,
+  type StructureUpgradeView,
   type WorkerJob,
 } from "../src/game/rts/ui/rtsSelectionView";
+import type { StructureUpgradeSnapshot } from "../src/game/rts/structures/structureUpgradeSystem";
 import { ConstructionComponent } from "../src/game/rts/structures/constructionComponent";
 import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "../src/game/rts/structures/barracksProductionSystem";
 import { WorkerConstructionSystem } from "../src/game/rts/units/workerConstructionSystem";
@@ -142,13 +154,13 @@ import { congestionSeconds, updateUnitMovement } from "../src/game/rts/units/uni
 import { updateUnitSeparation } from "../src/game/rts/units/unitSeparation";
 import { assignGroupDestinations } from "../src/game/rts/units/groupOrders";
 import { issueAttackOrder } from "../src/game/rts/units/attackPathing";
-import { updateUnitEngagement } from "../src/game/rts/combat/engagementSystem";
+import { retaliateAgainstAttack, updateUnitEngagement } from "../src/game/rts/combat/engagementSystem";
 import { resolveDamage } from "../src/game/rts/combat/damageResolution";
 import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
 import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import type { CombatTarget } from "../src/game/rts/combat/combatTarget";
 import type { UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
-import type { Unit } from "../src/game/rts/units/unit";
+import { Unit } from "../src/game/rts/units/unit";
 import { UnitSystem } from "../src/game/rts/units/unitSystem";
 import { SelectionSystem } from "../src/game/rts/selection/selectionSystem";
 import type { MarqueeOverlay } from "../src/game/rts/selection/marqueeOverlay";
@@ -28941,6 +28953,25 @@ check("Faz 7 a plain Move is not derailed, but an attack-move stops and resumes"
   assert.equal(mover.attackMoveTarget, null, "arrival ends the order");
 });
 
+check("Faz 7 a Guard abandons a plain Move only after an enemy actually hits it", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const defender = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const attacker = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
+  const route = navigation.plan(defender.position, new Vector3(12, 0, 0)) ?? assert.fail("route missing");
+  defender.setMovePath(route);
+  attacker.setAttackTarget(defender);
+
+  updateUnitCombat([attacker], 0, (hit) => {
+    if (hit.target instanceof Unit) retaliateAgainstAttack(hit.target, hit.attacker, navigation);
+  });
+
+  assert.equal(defender.attackTarget, attacker, "a received hit breaks the transit order into defense");
+  assert.equal(defender.autoAcquired, true, "retaliation uses the normal leashed defense behaviour");
+  updateUnitCombat([defender], 0);
+  assert.ok(attacker.health.current < attacker.health.max, "the Guard can answer immediately once hit");
+});
+
 check("Faz 7 the chase leash returns a baited defender, but never abandons an ordered target", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();
@@ -32279,6 +32310,58 @@ check("either kingdom can win: a destroyed player centre is a defeat (plan §39)
   assert.equal(match.outcome, "active");
 });
 
+check("Faz 9 §51: the build lock agrees with the wallet that takes the money", () => {
+  assert.equal(canAffordCost({ wood: 80 }, { wood: 80 }), true, "exact change buys it");
+  assert.equal(canAffordCost({ wood: 80 }, { wood: 79 }), false);
+  assert.equal(canAffordCost({}, {}), true, "a free building is never locked");
+  assert.equal(canAffordCost({ wood: 0 }, {}), true, "a zero line is not a price");
+
+  // Multi-resource: every line must clear, not the total.
+  assert.equal(canAffordCost({ wood: 140, stone: 100 }, { wood: 500, stone: 99 }), false);
+  assert.equal(canAffordCost({ wood: 140, stone: 100 }, { wood: 140, stone: 100 }), true);
+  // A resource the player has never earned reads as zero, not as absent.
+  assert.equal(canAffordCost({ gold: 1 }, {}), false);
+
+  // The lock floors the stock exactly as the HUD prints it. Stocks accumulate as
+  // floats: telling a player who is shown "79 Odun" that they can afford 80
+  // would make the bar and the palette disagree in front of them.
+  assert.equal(canAffordCost({ wood: 80 }, { wood: 79.999 }), false);
+  assert.equal(canAffordCost({ wood: 80 }, { wood: 80.4 }), true);
+});
+
+check("Faz 9 §51: the camera dials map to a usable camera at every value", () => {
+  const slow = cameraSettingsToFeel({ panSpeed: 0, smoothing: 0 });
+  const fast = cameraSettingsToFeel({ panSpeed: 1, smoothing: 1 });
+  const mid = cameraSettingsToFeel(DEFAULT_RTS_CAMERA_SETTINGS);
+
+  // The dial's default must reproduce the *authored* camera, not re-tune it.
+  // The first cut of these ranges silently moved the default pan from 26 to 32
+  // for every player who never opened the settings menu.
+  assert.equal(mid.panSpeed, DEFAULT_RTS_CAMERA_CONFIG.panSpeed, "a default dial is the authored feel");
+  assert.equal(mid.zoomLerpRate, DEFAULT_RTS_CAMERA_CONFIG.zoomLerpRate);
+
+  // A dial at zero must still produce a camera that moves: "slowest" is a speed,
+  // not a stuck camera, and a settings menu must not be able to break the game.
+  assert.ok(slow.panSpeed > 0, "the slowest pan is still a pan");
+  assert.ok(fast.panSpeed > slow.panSpeed, "the dial runs the way it reads");
+  assert.ok(mid.panSpeed > slow.panSpeed && mid.panSpeed < fast.panSpeed);
+
+  // Smoothing is inverted against the lerp rate: more smoothing = slower ease.
+  assert.ok(fast.zoomLerpRate < slow.zoomLerpRate, "more smoothing eases more slowly");
+  assert.ok(fast.zoomLerpRate > 0, "the heaviest smoothing still reaches its target");
+
+  // Values from outside the slider cannot produce a broken camera: a stored or
+  // hand-edited setting is untrusted input like any other.
+  assert.deepEqual(cameraSettingsToFeel({ panSpeed: 5, smoothing: -3 }), fast_min());
+  const nan = cameraSettingsToFeel({ panSpeed: Number.NaN, smoothing: Number.NaN });
+  assert.deepEqual(nan, mid, "a non-finite dial falls back to the default, not to zero");
+
+  function fast_min() {
+    // panSpeed clamps to 1 (fastest), smoothing clamps to 0 (no smoothing).
+    return { panSpeed: fast.panSpeed, zoomLerpRate: slow.zoomLerpRate };
+  }
+});
+
 check("Faz 9 §51: the match flow gates the simulation without owning the result", () => {
   const flow = new RtsMatchFlow();
 
@@ -32617,6 +32700,75 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   const town = centerPanel({ age: "town" });
   assert.equal(action(town, "train-worker").enabled, true, "a Town centre still trains workers");
   assert.match(action(town, "age-up").reason ?? "", /zaten tamamlandı/);
+});
+
+check("Faz 9 §51: the T2 button sits on the building and admits it is type-wide", () => {
+  const panel = (upgrade: StructureUpgradeView | null, label = "Kışla"): SelectionPanelContent =>
+    describeSelection({
+      kind: "structure",
+      structure: {
+        id: 1, label, level: 1, health: 650, maxHealth: 650,
+        upgrade,
+        detail: { kind: "passive", populationCapacity: 0 },
+      },
+    }) ?? assert.fail("panel missing");
+  const upgradeOf = (content: SelectionPanelContent): SelectionAction | undefined =>
+    content.actions.find((candidate) => candidate.id === "upgrade");
+  const snapshot = (over: Partial<StructureUpgradeSnapshot> = {}): StructureUpgradeSnapshot =>
+    ({ completed: false, upgrading: false, remainingSeconds: 0, ...over });
+
+  // A building whose data declares no upgrade offers no button. The absence is
+  // the data's statement, not something the UI decides.
+  assert.equal(upgradeOf(panel(null)), undefined);
+
+  const ready = panel({ snapshot: snapshot(), townUnlocked: true, cost: { wood: 100, stone: 60 } });
+  const button = upgradeOf(ready) ?? assert.fail("no upgrade action");
+  assert.equal(button.enabled, true);
+  assert.equal(button.reason, null);
+  assert.equal(button.cost, "100 Odun · 60 Taş");
+  // The research promotes *every* Barracks, including ones finished later, so a
+  // button on one instance has to say so — "Kışlayı T2 Yükselt" would imply the
+  // player is upgrading only the one they clicked.
+  assert.match(button.label, /^Tüm Kışla/);
+
+  assert.match(
+    upgradeOf(panel({ snapshot: snapshot(), townUnlocked: false, cost: {} }))?.reason ?? "",
+    /Kasaba Çağı gerekir/,
+  );
+  assert.match(
+    upgradeOf(panel({ snapshot: snapshot({ upgrading: true, remainingSeconds: 12.1 }), townUnlocked: true, cost: {} }))?.reason ?? "",
+    /sürüyor \(13 sn\)/,
+  );
+  assert.match(
+    upgradeOf(panel({ snapshot: snapshot({ completed: true }), townUnlocked: true, cost: {} }))?.reason ?? "",
+    /tamamlandı/,
+  );
+
+  // The button rides along with whatever the detail kind already offered rather
+  // than replacing it: a Barracks keeps its roster and gains an upgrade.
+  const barracks = describeSelection({
+    kind: "structure",
+    structure: {
+      id: 1, label: "Kışla", level: 1, health: 650, maxHealth: 650,
+      upgrade: { snapshot: snapshot(), townUnlocked: true, cost: { wood: 100 } },
+      detail: {
+        kind: "military",
+        rallySet: false,
+        connected: true,
+        upgrading: false,
+        roster: [{ id: "guard_placeholder", stats: RTS_TEST_UNIT_STATS, unlocked: true }],
+        queue: {
+          structureId: 1, queued: 0, capacity: 5,
+          trainingLabel: null, trainingRemainingSeconds: null, pendingLabels: [],
+        },
+      },
+    },
+  }) ?? assert.fail("panel missing");
+  assert.deepEqual(
+    barracks.actions.map((a) => a.id),
+    ["train:guard_placeholder", "rally", "upgrade"],
+    "the upgrade is appended to the building's own verbs, not instead of them",
+  );
 });
 
 check("§69: the AI stops deciding once the match is over", () => {
