@@ -28224,7 +28224,7 @@ check("RTS test-force layout supports the Phase 1 twenty-unit selection target",
   assert.equal(units.unitsOf("player").length, 20);
 });
 
-check("RTS double-click selects combat roles and a worker click selects every player worker", () => {
+check("RTS single-click selects one unit and double-click selects every matching role", () => {
   const units = new UnitSystem();
   const guards = [
     units.spawn("player", -3, 0, RTS_TEST_UNIT_STATS),
@@ -28265,8 +28265,9 @@ check("RTS double-click selects combat roles and a worker click selects every pl
 
   const workerPoint = screenPointFor(workers[0]!);
   selection.onSelectClick(workerPoint.x, workerPoint.y, false);
+  assert.deepEqual(new Set(selection.selected()), new Set([workers[0]]), "a worker click selects only that worker");
   selection.onSelectDoubleClick(workerPoint.x, workerPoint.y, false);
-  assert.deepEqual(new Set(selection.selected()), new Set(workers), "a worker click selects the whole worker line");
+  assert.deepEqual(new Set(selection.selected()), new Set(workers), "a worker double-click selects the whole worker line");
 });
 
 check("RTS health clamps damage and healing while exposing current/max/ratio", () => {
@@ -28859,7 +28860,7 @@ check("RTS lumber camps require individual trees and workers carry wood back to 
   const camp = buildings.lumber_camp ?? assert.fail("lumber camp definition missing");
   assert.equal(camp.economy?.requiresForest, true);
   const forests = new ForestSystem([
-    { id: "test-tree", forestId: "test-grove", x: 8, z: 0, capacity: 6, variant: "pine" },
+    { id: "test-tree", forestId: "test-grove", x: 8, z: 0, capacity: 20, variant: "pine" },
   ]);
   const units = new UnitSystem();
   const structures = new PlacedStructureSystem();
@@ -28882,11 +28883,12 @@ check("RTS lumber camps require individual trees and workers carry wood back to 
     () => {},
     () => {},
     (stats, x, z) => stats.economy?.requiresForest
-      && !forests.hasLiveTreeNear(x, z, stats.economy.gatherRadius ?? 0)
+      && !forests.hasLiveTreeNear(x, z, stats.economy.gatherRadius ?? 0, stats.footprint)
       ? "missing-forest"
       : null,
   );
-  assert.equal(construction.validate("player", "lumber_camp", -10, 0)?.reason, "missing-forest");
+  assert.equal(construction.validate("player", "lumber_camp", -10, 0)?.valid, true, "a camp may be built away from its forest");
+  assert.equal(construction.validate("player", "lumber_camp", 8, 0)?.reason, "missing-forest", "a camp cannot bury its only work tree");
   const built = construction.build("player", "lumber_camp", 0, 0);
   assert.ok(built.built, "a camp is legal near a live individual tree");
   if (!built.built) return assert.fail("lumber camp construction unexpectedly failed");
@@ -28901,10 +28903,42 @@ check("RTS lumber camps require individual trees and workers carry wood back to 
   const snapshot = production.snapshots("player")[0] ?? assert.fail("lumber producer missing");
   assert.equal(forests.snapshots()[0]?.depleted, true, "only the harvested tree becomes depleted");
   assert.equal(snapshot.sourceRemaining, 0);
-  assert.ok(Math.abs(snapshot.totalProduced - 6) < 0.0001, "wood enters the camp buffer only after the return trip");
+  assert.ok(Math.abs(snapshot.totalProduced - 20) < 0.0001, "one 20-wood tree reaches camp in four 5-wood deliveries");
   assert.equal(snapshot.status, "source-depleted");
   assert.equal(production.isAssigned(worker), false, "a worker is released after its grove is exhausted");
   territory.dispose();
+});
+
+check("RTS wood workers switch to a nearer camp after delivering their exhausted tree", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const camp = buildings.lumber_camp ?? assert.fail("lumber camp definition missing");
+  const forests = new ForestSystem([
+    { id: "old-tree", forestId: "old-grove", x: 8, z: 0, capacity: 5, variant: "pine" },
+    { id: "new-tree", forestId: "new-grove", x: 40, z: 0, capacity: 5, variant: "tree1" },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const oldCamp = structures.place("player", camp, 0, 0);
+  const newCamp = structures.place("player", camp, 36, 0);
+  structures.advanceConstruction(oldCamp, camp.constructionSeconds);
+  structures.advanceConstruction(newCamp, camp.constructionSeconds);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  units.spawn("player", 3, 0, RTS_TEST_WORKER_STATS);
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false, undefined, forests);
+
+  for (let tick = 0; tick < 600; tick += 1) {
+    updateUnitMovement(units.all(), 0.5);
+    production.update(0.5);
+  }
+  const snapshots = production.snapshots("player");
+  const oldSnapshot = snapshots.find((snapshot) => snapshot.structureId === oldCamp.id) ?? assert.fail("old camp missing");
+  const newSnapshot = snapshots.find((snapshot) => snapshot.structureId === newCamp.id) ?? assert.fail("new camp missing");
+  assert.ok(Math.abs(oldSnapshot.totalProduced - 5) < 0.0001, "the first tree is delivered to its original camp");
+  assert.ok(Math.abs(newSnapshot.totalProduced - 5) < 0.0001, "the next tree is delivered to the new nearby camp");
+  assert.equal(forests.snapshots().every((tree) => tree.depleted), true);
 });
 
 check("RTS economy producers report income, survive a ten-minute run, and stop at their local buffer capacity", () => {

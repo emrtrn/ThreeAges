@@ -18,7 +18,7 @@ export interface RtsPointerRect {
 export interface RtsPointerHandler {
   /** Left button released without dragging (single select / deselect). */
   onSelectClick(x: number, y: number, additive: boolean): void;
-  /** Left double-clicked without dragging (select the matching combat group). */
+  /** Left double-clicked without dragging (select the matching unit group). */
   onSelectDoubleClick?(x: number, y: number, additive: boolean): void;
   /** Left drag crossed the threshold — live marquee update (may fire often). */
   onSelectDrag(rect: RtsPointerRect): void;

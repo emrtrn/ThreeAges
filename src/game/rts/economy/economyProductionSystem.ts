@@ -125,7 +125,12 @@ export class EconomyProductionSystem {
           totalProduced: producer.totalProduced,
           totalTransferred: producer.totalTransferred,
           sourceRemaining: economy.requiresForest
-            ? this.forests?.remainingNear(producer.structure.x, producer.structure.z, economy.gatherRadius ?? 0) ?? null
+            ? this.forests?.remainingNear(
+              producer.structure.x,
+              producer.structure.z,
+              economy.gatherRadius ?? 0,
+              producer.structure.stats.footprint,
+            ) ?? null
             : economy.requiresResourceNode
             ? this.resourceNodes?.remainingAt(
               economy.resourceId,
@@ -319,7 +324,12 @@ export class EconomyProductionSystem {
       producer.status = "missing-forest";
       return;
     }
-    const hasLiveTree = this.forests.hasLiveTreeNear(producer.structure.x, producer.structure.z, economy.gatherRadius);
+    const hasLiveTree = this.forests.hasLiveTreeNear(
+      producer.structure.x,
+      producer.structure.z,
+      economy.gatherRadius,
+      producer.structure.stats.footprint,
+    );
     if (!hasLiveTree && producer.assignments.size === 0) {
       producer.status = "source-depleted";
       return;
@@ -369,7 +379,17 @@ export class EconomyProductionSystem {
         producer.localBuffer += unloaded;
         if (assignment.cargoAmount > 0) continue;
         this.forests.releaseReservation(assignment.worker.id);
-        if (!this.moveWorkerToTree(assignment, producer.structure, economy.gatherRadius)) {
+        const nextProducer = assignment.source === "automatic"
+          ? this.preferredForestProducer(producer, assignment.worker)
+          : producer;
+        if (nextProducer !== producer) {
+          producer.assignments.delete(assignment.worker.id);
+          nextProducer.assignments.set(assignment.worker.id, assignment);
+          this.assignmentByWorker.set(assignment.worker.id, nextProducer);
+        }
+        const nextEconomy = nextProducer.structure.stats.economy;
+        if (!nextEconomy?.requiresForest || nextEconomy.gatherRadius === undefined
+          || !this.moveWorkerToTree(assignment, nextProducer.structure, nextEconomy.gatherRadius)) {
           this.release(assignment.worker);
         }
       }
@@ -433,22 +453,16 @@ export class EconomyProductionSystem {
     const economy = producer.structure.stats.economy;
     if (!economy || producer.assignments.size >= economy.workerCapacity) return false;
     if (economy.requiresForest) {
-      if (!this.forests || economy.gatherRadius === undefined) return false;
-      const tree = this.forests.reserveNearest(worker.id, producer.structure.x, producer.structure.z, economy.gatherRadius);
-      if (!tree) return false;
-      const approach = new Vector3(tree.x, 0, tree.z);
-      const path = this.navigation.plan(worker.position, approach);
-      if (!path) {
-        this.forests.releaseReservation(worker.id);
-        return false;
-      }
-      worker.setMovePath(path);
+      if (economy.gatherRadius === undefined) return false;
+      const target = this.findReachableTree(worker, producer.structure, economy.gatherRadius);
+      if (!target) return false;
+      worker.setMovePath(target.path);
       const assignment: WorkerAssignment = {
         worker,
-        approach,
+        approach: target.approach,
         source,
         state: "moving-to-tree",
-        treeId: tree.id,
+        treeId: target.treeId,
         cargoAmount: 0,
       };
       producer.assignments.set(worker.id, assignment);
@@ -477,20 +491,78 @@ export class EconomyProductionSystem {
   }
 
   private moveWorkerToTree(assignment: WorkerAssignment, structure: PlacedStructure, gatherRadius: number): boolean {
-    if (!this.forests) return false;
-    const tree = this.forests.reserveNearest(assignment.worker.id, structure.x, structure.z, gatherRadius);
-    if (!tree) return false;
-    const approach = new Vector3(tree.x, 0, tree.z);
-    const path = this.navigation.plan(assignment.worker.position, approach);
-    if (!path) {
-      this.forests.releaseReservation(assignment.worker.id);
-      return false;
-    }
-    assignment.treeId = tree.id;
-    assignment.approach = approach;
-    assignment.worker.setMovePath(path);
+    const target = this.findReachableTree(assignment.worker, structure, gatherRadius);
+    if (!target) return false;
+    assignment.treeId = target.treeId;
+    assignment.approach = target.approach;
+    assignment.worker.setMovePath(target.path);
     assignment.state = "moving-to-tree";
     return true;
+  }
+
+  /** After delivering, automatic gatherers prefer the camp with the shortest next tree-to-camp trip. */
+  private preferredForestProducer(current: ProducerRecord, worker: Unit): ProducerRecord {
+    if (!this.forests) return current;
+    const candidates = [...this.producers.values()]
+      .filter((producer) => {
+        const economy = producer.structure.stats.economy;
+        return producer.structure.owner === worker.owner
+          && economy?.requiresForest === true
+          && economy.gatherRadius !== undefined
+          && (producer === current || producer.assignments.size < economy.workerCapacity)
+          && this.forests!.hasLiveTreeNear(
+            producer.structure.x,
+            producer.structure.z,
+            economy.gatherRadius,
+            producer.structure.stats.footprint,
+          );
+      });
+    let best = current;
+    let bestDistance = this.forestDistanceForCamp(current);
+    for (const candidate of candidates) {
+      const distance = this.forestDistanceForCamp(candidate);
+      if (distance >= bestDistance) continue;
+      best = candidate;
+      bestDistance = distance;
+    }
+    return best;
+  }
+
+  private forestDistanceForCamp(producer: ProducerRecord): number {
+    const economy = producer.structure.stats.economy;
+    if (!this.forests || !economy?.requiresForest || economy.gatherRadius === undefined) return Number.POSITIVE_INFINITY;
+    return this.forests.nearestLiveTreeDistanceSquared(
+      producer.structure.x,
+      producer.structure.z,
+      economy.gatherRadius,
+      producer.structure.stats.footprint,
+    );
+  }
+
+  /** A live tree may still be unreachable because a player built around it. Try its neighbours before giving up. */
+  private findReachableTree(
+    worker: Unit,
+    structure: PlacedStructure,
+    gatherRadius: number,
+  ): { readonly treeId: string; readonly approach: Vector3; readonly path: readonly Vector3[] } | null {
+    if (!this.forests) return null;
+    const rejected = new Set<string>();
+    while (true) {
+      const tree = this.forests.reserveNearest(
+        worker.id,
+        structure.x,
+        structure.z,
+        gatherRadius,
+        structure.stats.footprint,
+        rejected,
+      );
+      if (!tree) return null;
+      const approach = new Vector3(tree.x, 0, tree.z);
+      const path = this.navigation.plan(worker.position, approach);
+      if (path) return { treeId: tree.id, approach, path };
+      this.forests.releaseReservation(worker.id);
+      rejected.add(tree.id);
+    }
   }
 
   private findReachableApproach(worker: Unit, structure: PlacedStructure): Vector3 | null {

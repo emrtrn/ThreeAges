@@ -368,7 +368,12 @@ export class RtsApp {
         )
         ? "missing-resource-node"
         : stats.economy?.requiresForest
-          && !this.forests.hasLiveTreeNear(x, z, stats.economy.gatherRadius ?? 0)
+          && !this.forests.hasLiveTreeNear(
+            x,
+            z,
+            stats.economy.gatherRadius ?? 0,
+            stats.footprint,
+          )
           ? "missing-forest"
           : null,
       () => this.roads.occupancyBlockers(),

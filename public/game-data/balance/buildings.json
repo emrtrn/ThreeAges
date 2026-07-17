@@ -131,7 +131,7 @@
       "perWorkerPerMinute": 6,
       "localBufferCapacity": 40,
       "requiresForest": true,
-      "gatherRadius": 12,
+      "gatherRadius": 200,
       "carryCapacity": 5
     }
   },

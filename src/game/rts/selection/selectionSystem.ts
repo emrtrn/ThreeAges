@@ -107,7 +107,7 @@ export class SelectionSystem implements RtsPointerHandler {
     const unit = this.raycastUnit(x, y);
     if (unit && unit.owner === "player") {
       if (additive) this.toggle(unit);
-      else this.replaceWith(unit.role === "worker" ? this.units.workersOf("player") : [unit]);
+      else this.replaceWith([unit]);
       return;
     }
     // Units win the pick when both are under the cursor: a unit standing on its
@@ -132,12 +132,11 @@ export class SelectionSystem implements RtsPointerHandler {
   }
 
   /**
-   * Double-clicking a combat unit selects every live player unit of its role.
-   * A normal worker click already selects the whole worker line.
+   * Double-clicking a unit selects every live player unit of its role.
    */
   onSelectDoubleClick(x: number, y: number, additive: boolean): void {
     const unit = this.raycastUnit(x, y);
-    if (!unit || unit.owner !== "player" || unit.role === "worker") return;
+    if (!unit || unit.owner !== "player") return;
     const matching = this.units.unitsOf("player").filter((candidate) => candidate.role === unit.role);
     if (!additive) {
       this.replaceWith(matching);

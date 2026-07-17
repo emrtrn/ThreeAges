@@ -20,6 +20,11 @@ export interface TreeSnapshot extends RtsTreeDefinition {
   readonly reservedByWorkerId: number | null;
 }
 
+export interface ForestSearchArea {
+  readonly width: number;
+  readonly depth: number;
+}
+
 interface TreeRecord {
   readonly definition: RtsTreeDefinition;
   remaining: number;
@@ -41,24 +46,39 @@ export class ForestSystem {
     }
   }
 
-  hasLiveTreeNear(x: number, z: number, radius: number): boolean {
-    return this.liveTreesNear(x, z, radius).length > 0;
+  hasLiveTreeNear(x: number, z: number, radius: number, excludedFootprint?: ForestSearchArea): boolean {
+    return this.liveTreesNear(x, z, radius, excludedFootprint).length > 0;
   }
 
-  remainingNear(x: number, z: number, radius: number): number {
-    return this.liveTreesNear(x, z, radius).reduce((total, tree) => total + tree.remaining, 0);
+  remainingNear(x: number, z: number, radius: number, excludedFootprint?: ForestSearchArea): number {
+    return this.liveTreesNear(x, z, radius, excludedFootprint).reduce((total, tree) => total + tree.remaining, 0);
+  }
+
+  /** Squared camp-to-tree distance for choosing the best delivery point without a renderer query. */
+  nearestLiveTreeDistanceSquared(x: number, z: number, radius: number, excludedFootprint?: ForestSearchArea): number {
+    const nearest = this.liveTreesNear(x, z, radius, excludedFootprint)
+      .sort((a, b) => this.distanceSquared(a.definition, x, z) - this.distanceSquared(b.definition, x, z))[0];
+    return nearest ? this.distanceSquared(nearest.definition, x, z) : Number.POSITIVE_INFINITY;
   }
 
   /** Reserve the closest free live tree, keeping one worker from crowding another. */
-  reserveNearest(workerId: number, x: number, z: number, radius: number): TreeSnapshot | null {
+  reserveNearest(
+    workerId: number,
+    x: number,
+    z: number,
+    radius: number,
+    excludedFootprint?: ForestSearchArea,
+    excludedTreeIds: ReadonlySet<string> = new Set(),
+  ): TreeSnapshot | null {
     const currentId = this.treeIdByWorkerId.get(workerId);
     const current = currentId ? this.trees.get(currentId) : null;
-    if (current && current.remaining > 0 && this.inRange(current.definition, x, z, radius)) {
+    if (current && !excludedTreeIds.has(current.definition.id) && current.remaining > 0 && this.inRange(current.definition, x, z, radius)
+      && this.outsideFootprint(current.definition, x, z, excludedFootprint)) {
       return this.snapshot(current);
     }
     this.releaseReservation(workerId);
-    const next = this.liveTreesNear(x, z, radius)
-      .filter((tree) => tree.reservedByWorkerId === null)
+    const next = this.liveTreesNear(x, z, radius, excludedFootprint)
+      .filter((tree) => tree.reservedByWorkerId === null && !excludedTreeIds.has(tree.definition.id))
       .sort((a, b) => this.distanceSquared(a.definition, x, z) - this.distanceSquared(b.definition, x, z))[0];
     if (!next) return null;
     next.reservedByWorkerId = workerId;
@@ -105,9 +125,11 @@ export class ForestSystem {
       .sort((a, b) => a.id.localeCompare(b.id));
   }
 
-  private liveTreesNear(x: number, z: number, radius: number): TreeRecord[] {
+  private liveTreesNear(x: number, z: number, radius: number, excludedFootprint?: ForestSearchArea): TreeRecord[] {
     if (!Number.isFinite(radius) || radius < 0) throw new RangeError("Forest search radius must be non-negative and finite");
-    return [...this.trees.values()].filter((tree) => tree.remaining > 0 && this.inRange(tree.definition, x, z, radius));
+    return [...this.trees.values()].filter((tree) => tree.remaining > 0
+      && this.inRange(tree.definition, x, z, radius)
+      && this.outsideFootprint(tree.definition, x, z, excludedFootprint));
   }
 
   private inRange(tree: RtsTreeDefinition, x: number, z: number, radius: number): boolean {
@@ -118,6 +140,13 @@ export class ForestSystem {
     const dx = tree.x - x;
     const dz = tree.z - z;
     return dx * dx + dz * dz;
+  }
+
+  /** Camps are built beside trees; a source buried under their footprint has no work point. */
+  private outsideFootprint(tree: RtsTreeDefinition, x: number, z: number, footprint: ForestSearchArea | undefined): boolean {
+    if (!footprint) return true;
+    return tree.x < x - footprint.width / 2 || tree.x > x + footprint.width / 2
+      || tree.z < z - footprint.depth / 2 || tree.z > z + footprint.depth / 2;
   }
 
   private snapshot(tree: TreeRecord): TreeSnapshot {
