@@ -83,6 +83,19 @@ export class HealthComponent {
     this.maxValue = nextMax;
   }
 
+  /**
+   * Set a new maximum in either direction and clamp current health into range.
+   * Unlike {@link upgradeMax} this may *lower* the ceiling — used when an age
+   * transition resets a levelled building back to its base Level 1 durability.
+   */
+  setMax(nextMax: number): void {
+    if (!Number.isFinite(nextMax) || nextMax <= 0) {
+      throw new RangeError("Health maximum must be a positive finite number");
+    }
+    this.maxValue = nextMax;
+    if (this.currentValue > nextMax) this.currentValue = nextMax;
+  }
+
   private assertAmount(amount: number, label: string): void {
     if (!Number.isFinite(amount) || amount < 0) {
       throw new RangeError(`${label} must be a non-negative finite number`);

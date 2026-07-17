@@ -422,7 +422,7 @@ export class RtsApp {
       PLAYER_OWNER,
     );
     this.placement.setPreviewFactory((buildingId, width, depth) =>
-      this.buildingVisuals.createPreviewForBuilding(buildingId, width, depth));
+      this.buildingVisuals.createPreviewForBuilding(buildingId, width, depth, this.ageOf(PLAYER_OWNER)));
     this.roadPlacement = new RoadPlacementSystem(
       canvas,
       this.cameraController.camera,
@@ -653,8 +653,8 @@ export class RtsApp {
       await this.buildingVisuals.load();
       if (this.disposed) return;
       this.placement.setPreviewFactory((buildingId, width, depth) =>
-        this.buildingVisuals.createPreviewForBuilding(buildingId, width, depth));
-      for (const center of this.centers.all()) this.buildingVisuals.applyToCenter(center);
+        this.buildingVisuals.createPreviewForBuilding(buildingId, width, depth, this.ageOf(PLAYER_OWNER)));
+      for (const center of this.centers.all()) this.buildingVisuals.applyToCenter(center, this.ageOf(center.owner));
       for (const structure of this.structures.all()) {
         if (structure.construction.complete) this.applyStructureVisual(structure);
         else this.applyConstructionVisual(structure);
@@ -861,8 +861,12 @@ export class RtsApp {
     this.kingdoms.advance(dt);
     for (const event of this.ages.update(dt)) {
       if (event.type === "completed") {
+        // KR-03: the age is the milestone. Every one of the owner's buildings
+        // drops to Level 1 and re-skins into the new age family (Settlement ->
+        // First Age, Town -> Second Age), and any in-flight level-up is refunded.
+        this.rebuildForAge(event.owner);
         const center = this.centers.get(event.owner);
-        if (center) this.buildingVisuals.applyToCenter(center);
+        if (center) this.buildingVisuals.applyToCenter(center, this.ageOf(center.owner));
         this.territory.refresh();
       }
       // §51 wants the AI's age-up called out, and only this event knows it: the
@@ -1003,19 +1007,38 @@ export class RtsApp {
       ENEMY_CENTER_POSITION.z,
       maxHealth,
     );
-    this.buildingVisuals.applyToCenter(playerCenter);
-    this.buildingVisuals.applyToCenter(enemyCenter);
+    this.buildingVisuals.applyToCenter(playerCenter, this.ageOf(playerCenter.owner));
+    this.buildingVisuals.applyToCenter(enemyCenter, this.ageOf(enemyCenter.owner));
+  }
+
+  /** The art family a kingdom's buildings currently belong to (Settlement/Town). */
+  private ageOf(owner: UnitOwner) {
+    return this.ages.snapshot(owner).age;
+  }
+
+  /**
+   * Age transition consequence (KR-03): reset every owned building to Level 1
+   * (stats included) and rebuild its model in the new age family. Only completed
+   * buildings get a finished model; sites still under construction keep their
+   * translucent construction visual, which is now the new age's Level 1 mesh.
+   */
+  private rebuildForAge(owner: UnitOwner): void {
+    this.structureUpgrades.resetOwner(owner);
+    for (const structure of this.structures.ownedBy(owner)) {
+      if (structure.construction.complete) this.applyStructureVisual(structure);
+      else this.applyConstructionVisual(structure);
+    }
   }
 
   private applyStructureVisual(structure: PlacedStructure, animate = false): void {
-    const visual = this.buildingVisuals.createForStructure(structure);
+    const visual = this.buildingVisuals.createForStructure(structure, this.ageOf(structure.owner));
     if (!visual) return;
     if (animate) this.structures.setCompletedVisualWithDrop(structure, visual);
     else this.structures.setCompletedVisual(structure, visual);
   }
 
   private applyConstructionVisual(structure: PlacedStructure): void {
-    const visual = this.buildingVisuals.createConstructionVisual(structure);
+    const visual = this.buildingVisuals.createConstructionVisual(structure, this.ageOf(structure.owner));
     if (visual) this.structures.setConstructionVisual(structure, visual);
   }
 

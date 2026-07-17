@@ -28288,6 +28288,17 @@ check("RTS health clamps damage and healing while exposing current/max/ratio", (
   assert.deepEqual(healed, { applied: 100, previous: 0, current: 100, depleted: false });
   assert.throws(() => health.damage(-1), RangeError);
   assert.throws(() => new HealthComponent(0), RangeError);
+
+  // upgradeMax only raises and never restores damage; setMax may lower and clamps.
+  health.damage(30);
+  health.upgradeMax(160);
+  assert.deepEqual([health.current, health.max], [70, 160], "a raised ceiling keeps the damage already taken");
+  assert.throws(() => health.upgradeMax(150), RangeError, "upgradeMax refuses to lower the maximum");
+  health.setMax(50);
+  assert.deepEqual([health.current, health.max], [50, 50], "setMax lowers the ceiling and clamps current into range");
+  health.setMax(120);
+  assert.deepEqual([health.current, health.max], [50, 120], "raising the ceiling again does not heal");
+  assert.throws(() => health.setMax(0), RangeError);
 });
 
 check("unit balance validates combat stats for stable unit ids", () => {
@@ -28704,6 +28715,77 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.equal(outpost.territoryControlRadius, 24);
   assert.equal(outpost.territoryConnectedControlRadius, 28);
   outpostTerritory.dispose();
+});
+
+check("Faz 2 KR-03: an age transition resets every owned building to its base Level 1", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { wood: 1000, stone: 1000 }, 20);
+  const upgrades = new StructureUpgradeSystem(structures, kingdoms);
+  const complete = (id: string, x: number) => {
+    const stats = buildings[id] ?? assert.fail(`${id} balance missing`);
+    const structure = structures.place("player", stats, x, 0);
+    structures.advanceConstruction(structure, stats.constructionSeconds);
+    return structure;
+  };
+  const levelUp = (structure: ReturnType<typeof complete>) => {
+    assert.equal(upgrades.start(structure), "started");
+    const step = structure.stats.levels?.find((entry) => entry.level === structure.level + 1)
+      ?? assert.fail("no next level step");
+    upgrades.update(step.durationSeconds);
+  };
+
+  // Climb a House to Level 3 and an Outpost to Level 2, so both carry real gains.
+  const house = complete("house", 0);
+  levelUp(house);
+  levelUp(house);
+  assert.equal(house.level, 3);
+  assert.equal(house.health.max, 600);
+  const populationAtLevel3 = kingdoms.get("player").population.snapshot().capacity;
+
+  const outpost = complete("outpost", 40);
+  levelUp(outpost);
+  assert.equal(outpost.level, 2);
+  assert.equal(outpost.territoryControlRadius, 20);
+
+  // A third building with a level-up still in flight — its reservation must return.
+  const depot = complete("depot", 80);
+  const woodBeforeReserve = kingdoms.get("player").wallet.amount("wood");
+  assert.equal(upgrades.start(depot), "started");
+  assert.ok(kingdoms.get("player").wallet.amount("wood") < woodBeforeReserve, "an in-flight upgrade reserves wood");
+
+  upgrades.resetOwner("player");
+
+  assert.equal(house.level, 1);
+  assert.equal(house.health.max, buildings.house?.maxHealth, "the House drops to its base durability");
+  assert.equal(house.populationCapacityBonus, 0, "and to its base population capacity");
+  assert.equal(outpost.level, 1);
+  assert.equal(outpost.health.max, buildings.outpost?.maxHealth);
+  assert.equal(outpost.territoryControlRadius, buildings.outpost?.territory?.controlRadius);
+  assert.equal(outpost.territoryConnectedControlRadius, buildings.outpost?.territory?.connectedControlRadius);
+  assert.equal(depot.level, 1);
+  assert.equal(upgrades.isUpgrading(depot), false, "the in-flight upgrade is cancelled by the age transition");
+  assert.equal(kingdoms.get("player").wallet.amount("wood"), woodBeforeReserve, "its reservation is refunded");
+  assert.ok(
+    kingdoms.get("player").population.snapshot().capacity < populationAtLevel3,
+    "resetting the House to Level 1 lowers the kingdom's population capacity",
+  );
+});
+
+check("Faz 2: the art resolver maps the two ages to their families and keeps fixed camps age-agnostic", () => {
+  // Town -> Second Age: the SecondAge meshes reach the field for the first time.
+  assert.equal(buildingMeshPath("house", "town", 1), `${STATIC_MESH_ROOT}/Houses_SecondAge_1_Level1.gltf`);
+  assert.equal(buildingMeshPath("barracks", "town", 1), `${STATIC_MESH_ROOT}/Barracks_SecondAge_Level1.gltf`);
+  assert.equal(buildingMeshPath("command_center", "town", 2), `${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level2.gltf`);
+  // Settlement -> First Age, unchanged.
+  assert.equal(buildingMeshPath("house", "settlement", 1), `${STATIC_MESH_ROOT}/Houses_FirstAge_1_Level1.gltf`);
+  // KR-04/§8: resource camps ship one mesh and ignore both age and level.
+  assert.equal(buildingMeshPath("lumber_camp", "town", 3), `${STATIC_MESH_ROOT}/Resource_Tree_Group_Cut.gltf`);
+  assert.equal(buildingMeshPath("quarry", "town", 2), buildingMeshPath("quarry", "settlement", 1));
+  assert.equal(buildingMeshPath("gold_mine", "town", 2), buildingMeshPath("gold_mine", "settlement", 1));
 });
 
 check("Faz 6 quarry uses its finite stone node and cannot be placed away from one", () => {

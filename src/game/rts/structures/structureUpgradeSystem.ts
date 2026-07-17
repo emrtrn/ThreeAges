@@ -124,6 +124,30 @@ export class StructureUpgradeSystem {
   }
 
   /**
+   * Age transition (KR-03): every one of an owner's buildings drops back to its
+   * base Level 1 — stats and all — so the new age's ladder is climbed afresh. Any
+   * level-up in flight for that owner is cancelled and its reservation refunded.
+   */
+  resetOwner(owner: UnitOwner): void {
+    for (const [id, state] of this.upgrades) {
+      if (state.structure.owner !== owner) continue;
+      this.kingdoms.get(owner).wallet.refund(state.reservation);
+      this.upgrades.delete(id);
+    }
+    for (const structure of this.structures.ownedBy(owner)) this.demoteToBase(structure);
+  }
+
+  /** Undo every level gain, returning a structure to its data's Level 1 baseline. */
+  private demoteToBase(structure: PlacedStructure): void {
+    if (structure.level === 1) return;
+    structure.level = 1;
+    structure.health.setMax(structure.stats.maxHealth);
+    structure.populationCapacityBonus = 0;
+    structure.territoryControlRadius = structure.stats.territory?.controlRadius ?? null;
+    structure.territoryConnectedControlRadius = structure.stats.territory?.connectedControlRadius ?? null;
+  }
+
+  /**
    * AI facade: start the next level on the first eligible building of a type.
    * The §53 tier gate only needs *one* instance of the type at the target level,
    * so this promotes a single Barracks rather than the whole type.

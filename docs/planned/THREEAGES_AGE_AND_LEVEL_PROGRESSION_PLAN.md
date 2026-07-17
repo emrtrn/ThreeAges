@@ -172,16 +172,30 @@ yukseltmesi bu binalarda kapali tutulur - Faz 2'de karara baglanacak).
 > onden bir adim. Detay basligindaki `T{level}` etiketi ("Ev T2") ve `farm`
 > ekonomi carpani (level basi uretim) Faz 3 / sonraki fazlara birakildi.
 
-### Faz 2 - Cag atlama -> tum binalar yeni cag Level1
+### Faz 2 - Cag atlama -> tum binalar yeni cag Level1 - TAMAMLANDI
 
-- [ ] `RtsApp` cag-tamamlanma handler'i sahibin tum binalarini Level1'e
-      sifirliyor + yeni cag ailesiyle model yeniden kuruyor.
-- [ ] `structureUpgrades` durumu owner icin sifirlaniyor.
-- [ ] `settlement` -> FirstAge, `town` -> SecondAge esleme calisiyor
-      (SecondAge modelleri ilk kez gorunur).
-- [ ] Cag/level varyanti olmayan binalarin (Mine, lumber_camp) davranisi
-      karara baglandi ve uygulandi.
-- [ ] `tsc` + `test:engine` yesil.
+- [x] `RtsApp` cag-tamamlanma handler'i `rebuildForAge(owner)` ile sahibin tum
+      binalarini Level1'e sifirliyor + yeni cag ailesiyle model yeniden kuruyor
+      (tamamlanmislar bitmis model, insaattakiler yeni cag translucent modeli).
+- [x] `structureUpgrades.resetOwner(owner)`: sahibin ucusundaki yukseltmeleri
+      iade edip siliyor ve her binayi taban Level1'e (`demoteToBase`) cekiyor -
+      can (`HealthComponent.setMax` ile asagi da inebiliyor), ev nufusu ve karakol
+      alani taban degerlere donuyor.
+- [x] Gorseller cag-duyarli: `applyStructureVisual` / `applyConstructionVisual` /
+      `applyToCenter` / yerlestirme onizlemesi sahibin cari cagini geciriyor.
+      `settlement` -> FirstAge, `town` -> SecondAge; SecondAge modelleri ilk kez
+      sahaya cikiyor.
+- [x] Cag/level varyanti olmayan binalar (quarry/gold_mine `Mine`, lumber_camp
+      stand-in) `fixed` cozumleyici ile cag ve seviyeden bagimsiz tek mesh'te
+      kaliyor; `levels` tanimlari olmadigi icin per-bina seviye butonlari da yok.
+- [x] Yeni engine testleri: `resetOwner` taban-sifirlama + iade, `setMax`
+      asagi/yukari sinir, ve cag->aile mesh cozumleme (SecondAge + sabit kamplar).
+- [x] `tsc --noEmit` temiz; `test:engine` 1028 check yesil.
+
+> Not: Merkez (CommandCenter) per-bina seviye sistemine dahil degil; `level`'i cag
+> katmani (settlement=1, town=2) olarak kaliyor ve modeli `TownCenter_SecondAge_
+> Level2` olarak cozuluyor (yine bir SecondAge modeli). Cag-up bildirim/panel
+> metinleri ("T2 yükseltmeleri açıldı" vb.) hala eski dilde - Faz 3'e birakildi.
 
 ### Faz 3 - UI ve mesajlar
 
