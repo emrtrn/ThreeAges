@@ -465,9 +465,13 @@ export class RtsApp {
         "Refah: bilgi metriği etkin; çağ ve üretim için gereksinim değildir.",
       ]);
     }
-    this.unsubscribeWalletChanges = this.debugOverlay
-      ? this.playerKingdom.wallet.subscribe((change: ResourceChange) => this.debugOverlay?.recordResourceChange(change))
-      : null;
+    // Affordability is a live wallet-derived UI state. Previously this listener
+    // existed only for the optional debug log, so a card could remain faded
+    // after income arrived until any palette click happened to refresh it.
+    this.unsubscribeWalletChanges = this.playerKingdom.wallet.subscribe((change: ResourceChange) => {
+      this.debugOverlay?.recordResourceChange(change);
+      this.buildPalette.setAffordability(this.playerKingdom.wallet.snapshot());
+    });
     // Composite pointer handler: left button drives selection, while right
     // button cancels active building placement or issues commands otherwise.
     // Keeps the systems decoupled (neither imports the other); this composition
