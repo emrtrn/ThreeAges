@@ -12,6 +12,7 @@
  * transitions and tells this what to show.
  */
 import { DEFAULT_RTS_CAMERA_SETTINGS, type RtsCameraSettings } from "../camera/rtsCameraConfig";
+import { formatMatchDuration } from "./rtsMatchClock";
 import type { RtsMatchEndReason, RtsMatchOutcome } from "./rtsMatchState";
 
 export interface RtsMatchOverlayHandlers {
@@ -74,6 +75,8 @@ export class RtsMatchOverlay {
   private readonly card = document.createElement("section");
   private readonly title = document.createElement("h1");
   private readonly detail = document.createElement("p");
+  /** §53: match length, shown on the result card only. */
+  private readonly duration = document.createElement("p");
   private readonly actions = document.createElement("div");
   /**
    * Surrender is one click from throwing the match away, and it sits next to
@@ -92,9 +95,11 @@ export class RtsMatchOverlay {
     this.card.setAttribute("aria-live", "polite");
     this.title.dataset.rtsResultTitle = "";
     this.detail.dataset.rtsResultDetail = "";
+    this.duration.dataset.rtsResultDuration = "";
+    this.duration.className = "rts-match-duration";
     this.actions.className = "rts-match-actions";
     this.buildSettings();
-    this.card.append(this.title, this.detail, this.actions, this.settings);
+    this.card.append(this.title, this.detail, this.duration, this.actions, this.settings);
     this.root.appendChild(this.card);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
   }
@@ -154,14 +159,26 @@ export class RtsMatchOverlay {
     ], "neutral", true);
   }
 
-  /** Present a decided match. `active` is not a result and never reaches here. */
-  showResult(outcome: Exclude<RtsMatchOutcome, "active">, reason: RtsMatchEndReason): void {
+  /**
+   * Present a decided match. `active` is not a result and never reaches here.
+   *
+   * `durationSeconds` is simulation time, not wall time (§53) — the number Kapı
+   * B's "12–25 dakika" box is read against, reported at the one moment the match
+   * has a final length.
+   */
+  showResult(
+    outcome: Exclude<RtsMatchOutcome, "active">,
+    reason: RtsMatchEndReason,
+    durationSeconds: number,
+  ): void {
     const text = RESULT_TEXT[outcome][reason];
     this.render(
       text.title,
       text.detail,
       [{ label: "Yeniden Başlat", action: this.handlers.onRestart, primary: true, key: "restart" }],
       outcome,
+      false,
+      durationSeconds,
     );
   }
 
@@ -185,11 +202,17 @@ export class RtsMatchOverlay {
     buttons: readonly OverlayButton[],
     tone: OverlayTone,
     showSettings = false,
+    durationSeconds: number | null = null,
   ): void {
     this.settings.hidden = !showSettings;
     this.card.dataset.tone = tone;
     this.title.textContent = title;
     this.detail.textContent = detail;
+    // Its own line rather than a clause tacked onto the detail: the detail says
+    // *how* the match ended, this says how long it took, and a reader comparing
+    // fifteen matches (§53.3) should find the number in the same place each time.
+    this.duration.hidden = durationSeconds === null;
+    this.duration.textContent = durationSeconds === null ? "" : `Süre: ${formatMatchDuration(durationSeconds)}`;
     this.actions.replaceChildren(...buttons.map((button) => {
       const element = document.createElement("button");
       element.type = "button";

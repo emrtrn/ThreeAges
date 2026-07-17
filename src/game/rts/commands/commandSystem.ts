@@ -69,7 +69,7 @@ export class CommandSystem {
 
     this.clearWorkerTasks(selected);
     for (const { unit, path } of assignGroupDestinations(selected, point, this.navigation)) {
-      if (path) unit.setMovePath(path);
+      if (path) unit.setPlayerMovePath(path);
       else unit.stop();
     }
     this.markers.spawn(point);

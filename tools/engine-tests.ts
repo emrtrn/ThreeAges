@@ -70,6 +70,7 @@ import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
 import { CommandCenterSystem } from "../src/game/rts/structures/commandCenterSystem";
 import { RtsMatchState } from "../src/game/rts/match/rtsMatchState";
 import { RtsMatchFlow } from "../src/game/rts/match/rtsMatchFlow";
+import { formatMatchDuration, RtsMatchClock } from "../src/game/rts/match/rtsMatchClock";
 import {
   cameraSettingsToFeel,
   DEFAULT_RTS_CAMERA_CONFIG,
@@ -146,7 +147,7 @@ import {
   COMMAND_CENTER_CONTROL_RADIUS,
   TerritoryControlSystem,
 } from "../src/game/rts/territory/territoryControlSystem";
-import { simulationSteps } from "../src/game/rts/simulation/simulationSpeed";
+import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
@@ -28076,6 +28077,31 @@ check("RTS contextual right-click assigns an enemy attack target", () => {
   assert.equal(player.moveTarget, null);
 });
 
+check("RTS player ground orders outrank defensive retaliation", () => {
+  const units = new UnitSystem();
+  const guard = units.spawn("player", 4, 4, RTS_TEST_UNIT_STATS);
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 10, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const commands = new CommandSystem(
+    { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
+    camera,
+    { selected: () => [guard] } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem,
+    units,
+    new CommandCenterSystem(),
+    new RtsNavigation(),
+    new CommandMarkerSystem(),
+  );
+
+  commands.issueAt(50, 50);
+  assert.equal(guard.hasPlayerMoveOrder, true, "a ground right-click records a player-priority route");
+  const attacker = units.spawn("enemy", 4.5, 4, RTS_TEST_UNIT_STATS);
+  assert.equal(retaliateAgainstAttack(guard, attacker, new RtsNavigation()), false);
+  assert.equal(guard.attackTarget, null, "taking a hit does not replace the clicked destination with pursuit");
+  assert.ok(guard.pathTarget, "the direct route remains active");
+});
+
 check("RTS contextual right-click routes selected workers to a friendly structure job", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -29888,6 +29914,39 @@ check("RTS construction names missing-worker and unreachable placement errors", 
   navigation.setBlockers([{ min: [-20, -1, -20], max: [20, 3, 20] }]);
   const blocked = new WorkerConstructionSystem(units, structures, navigation);
   assert.deepEqual(blocked.assignNearest(site), { assigned: false, reason: "unreachable" });
+  structures.clear();
+  units.clear();
+});
+
+check("RTS player move orders keep workers out of automatic construction and production", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const farm = buildings.farm ?? assert.fail("farm definition missing");
+  const units = new UnitSystem();
+  const builder = units.spawn("player", 0, 0, RTS_TEST_WORKER_STATS);
+  const gatherer = units.spawn("player", 0, 8, RTS_TEST_WORKER_STATS);
+  const structures = new PlacedStructureSystem();
+  const foundation = structures.place("player", house, 8, 0);
+  const completedFarm = structures.place("player", farm, 8, 8);
+  structures.advanceConstruction(completedFarm, farm.constructionSeconds);
+  const navigation = new RtsNavigation();
+  const construction = new WorkerConstructionSystem(units, structures, navigation);
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+
+  assert.deepEqual(construction.assignNearest(foundation), { assigned: true });
+  assert.equal(construction.release(builder), true);
+  builder.setPlayerMovePath([new Vector3(-8, 0, 0)]);
+  construction.update(0);
+  assert.equal(construction.stateFor(builder), "idle", "an abandoned foundation cannot reclaim a commanded worker");
+
+  production.update(0);
+  assert.equal(production.isAssigned(gatherer), true, "the farm initially receives an automatic worker");
+  assert.equal(production.release(gatherer), true);
+  gatherer.setPlayerMovePath([new Vector3(-8, 0, 8)]);
+  production.update(0);
+  assert.equal(production.isAssigned(gatherer), false, "a commanded worker is not immediately returned to gathering");
   structures.clear();
   units.clear();
 });
@@ -32452,6 +32511,100 @@ check("Faz 9 §51: the match flow gates the simulation without owning the result
   flow.pause();
   flow.restart();
   assert.equal(flow.running, true, "restarting from the pause menu leaves it playing");
+});
+
+check("Kapı B §53: the match clock counts simulation time, not the wall clock", () => {
+  const clock = new RtsMatchClock();
+  assert.equal(clock.seconds, 0, "a match starts at zero");
+
+  // RtsApp's loop, reduced to the part that matters: the clock is aged by the
+  // very steps the systems are aged by, at the frame clamp the app uses.
+  const frame = (wallSeconds: number, speed: RtsSimulationSpeed): void => {
+    for (const step of simulationSteps(wallSeconds, speed, 1 / 15)) clock.advance(step);
+  };
+  const wallMinuteAt = (speed: RtsSimulationSpeed): void => {
+    for (let i = 0; i < 60 * 60; i += 1) frame(1 / 60, speed);
+  };
+
+  wallMinuteAt(1);
+  assert.ok(Math.abs(clock.seconds - 60) < 1e-6, `1X: a wall minute is a match minute (${clock.seconds})`);
+
+  // §53's whole argument for why a stopwatch cannot answer Kapı B: at 8X, five
+  // wall minutes are forty match minutes. A stopwatch would report five.
+  clock.reset();
+  for (let i = 0; i < 5; i += 1) wallMinuteAt(8);
+  assert.ok(
+    Math.abs(clock.seconds - 40 * 60) < 1e-6,
+    `8X: five wall minutes are a forty-minute match (${(clock.seconds / 60).toFixed(2)} dk)`,
+  );
+
+  // And the case §53 says breaks the arithmetic outright — a speed changed in the
+  // middle. No single multiplier applied afterwards can recover this number; only
+  // a clock that was there for both halves knows it.
+  clock.reset();
+  wallMinuteAt(1);
+  wallMinuteAt(4);
+  wallMinuteAt(2);
+  assert.ok(
+    Math.abs(clock.seconds - (60 + 240 + 120)) < 1e-6,
+    `a mid-match speed change still totals correctly (${clock.seconds})`,
+  );
+
+  clock.reset();
+  assert.equal(clock.seconds, 0, "a restarted match is timed from zero, not carried over");
+});
+
+check("Kapı B §53: the clock stops with the simulation it is ticked from", () => {
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 22);
+  centers.spawn("enemy", 0, -26);
+  const clock = new RtsMatchClock();
+  const flow = new RtsMatchFlow();
+  const match = new RtsMatchState();
+
+  // RtsApp gates the simulation on exactly this pair, and the clock ticks inside
+  // that gate. Pausing therefore stops the clock as a consequence of where it
+  // lives — there is no second pause rule here that could drift out of step.
+  const frame = (): void => {
+    if (!match.active || !flow.running) return;
+    for (const step of simulationSteps(1 / 60, 1, 1 / 15)) clock.advance(step);
+  };
+
+  // The start screen is not a running match: §51 holds the opening until asked.
+  for (let i = 0; i < 60; i += 1) frame();
+  assert.equal(clock.seconds, 0, "the clock does not run behind the start card");
+
+  flow.begin();
+  for (let i = 0; i < 60; i += 1) frame();
+  const played = clock.seconds;
+  assert.ok(played > 0.99 && played < 1.01, `a played second is a counted second (${played})`);
+
+  flow.pause();
+  for (let i = 0; i < 600; i += 1) frame();
+  assert.equal(clock.seconds, played, "ten wall seconds behind the pause card add nothing");
+
+  flow.resume();
+  for (let i = 0; i < 60; i += 1) frame();
+  assert.ok(clock.seconds > played, "and it picks up again on resume");
+
+  // A decided match stops accruing: the result screen reports a final length, so
+  // the number must not keep climbing while the card is up.
+  const surrendered = clock.seconds;
+  match.surrender();
+  for (let i = 0; i < 600; i += 1) frame();
+  assert.equal(clock.seconds, surrendered, "a decided match has a final duration");
+});
+
+check("Kapı B §53: the duration reads against '12–25 dakika' without arithmetic", () => {
+  assert.equal(formatMatchDuration(0), "0:00");
+  assert.equal(formatMatchDuration(9), "0:09", "seconds are padded so the field never jumps");
+  assert.equal(formatMatchDuration(754), "12:34");
+  // Minutes do not roll into an hour field: this is read against "12–25 dakika",
+  // so a long match must answer in minutes rather than make the reader add 60.
+  assert.equal(formatMatchDuration(4335), "72:15");
+  // An instrument reports something rather than crashing the result screen.
+  assert.equal(formatMatchDuration(-1), "0:00");
+  assert.equal(formatMatchDuration(Number.NaN), "0:00");
 });
 
 check("Faz 9 §51: surrender is a defeat with its own reason (plan §51)", () => {

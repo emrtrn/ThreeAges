@@ -136,6 +136,20 @@ body {
   font-size: 13px;
 }
 
+/*
+ * §53: a measurement, not prose — quieter than the detail above it and set in
+ * tabular figures, because its reader is comparing it against "12–25 dakika"
+ * across fifteen matches rather than reading it once.
+ */
+.rts-match-duration {
+  color: #9eaf75;
+  font-variant-numeric: tabular-nums;
+}
+
+.rts-match-duration[hidden] {
+  display: none;
+}
+
 .rts-match-actions {
   display: flex;
   flex-wrap: wrap;

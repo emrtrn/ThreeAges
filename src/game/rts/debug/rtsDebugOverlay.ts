@@ -1,4 +1,5 @@
 /** Compact Faz 1 diagnostics, shown only by the `?debug` RTS route. */
+import { formatMatchDuration } from "../match/rtsMatchClock";
 import type { RtsMatchOutcome } from "../match/rtsMatchState";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { UnitSystem } from "../units/unitSystem";
@@ -21,6 +22,7 @@ export class RtsDebugOverlay {
   private readonly resourceLines: string[] = [];
   private aiLines: readonly string[] = [];
   private progressionLines: readonly string[] = [];
+  private elapsedSeconds = 0;
 
   constructor() {
     this.root.className = "rts-debug-overlay";
@@ -44,6 +46,19 @@ export class RtsDebugOverlay {
     this.progressionLines = lines;
   }
 
+  /**
+   * §53: simulation seconds elapsed. A setter rather than another `update`
+   * parameter — that list is already ten long, and this follows the AI/
+   * progression lines above.
+   *
+   * The clock is here and not in the main HUD on purpose: §51's HUD list has no
+   * clock, so it stays out of Faz 9's scope. It is Kapı B's instrument, and
+   * `?rts&debug` is where §53.3 says the fifteen matches get watched from.
+   */
+  setElapsedSeconds(seconds: number): void {
+    this.elapsedSeconds = seconds;
+  }
+
   recordResourceChange(change: ResourceChange): void {
     if (change.kind === "reset") return;
     const sign = change.delta > 0 ? "+" : "";
@@ -63,7 +78,7 @@ export class RtsDebugOverlay {
     depots: DepotLogisticsSystem,
     productionLogistics: ProductionLogisticsSystem,
   ): void {
-    const lines = [`maç: ${outcome}`];
+    const lines = [`maç: ${outcome} · süre ${formatMatchDuration(this.elapsedSeconds)}`];
     for (const center of centers.all()) {
       lines.push(`merkez ${center.owner}: ${center.health.current}/${center.health.max}`);
     }

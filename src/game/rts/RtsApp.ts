@@ -60,6 +60,7 @@ import { RtsBuildingVisuals } from "./structures/rtsBuildingVisuals";
 import { updateStructureDestruction } from "./structures/structureDestruction";
 import { RtsMatchState } from "./match/rtsMatchState";
 import { RtsMatchFlow } from "./match/rtsMatchFlow";
+import { RtsMatchClock } from "./match/rtsMatchClock";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import { PlacedStructureSystem, type PlacedStructure } from "./structures/placedStructureSystem";
@@ -199,6 +200,8 @@ export class RtsApp {
   private readonly match = new RtsMatchState();
   /** §51: whether the simulation should be running; `match` owns who won. */
   private readonly flow = new RtsMatchFlow();
+  /** §53: how long it has been running, in simulation time — Kapı B's instrument. */
+  private readonly clock = new RtsMatchClock();
   private readonly matchOverlay: RtsMatchOverlay;
   private readonly debugOverlay: RtsDebugOverlay | null;
   private readonly navigation = new RtsNavigation();
@@ -722,6 +725,7 @@ export class RtsApp {
       }
     }
     if (this.debugOverlay) {
+      this.debugOverlay.setElapsedSeconds(this.clock.seconds);
       this.debugOverlay.setAiLines(
         formatRtsAiDebug(
           this.ai.snapshot(),
@@ -793,6 +797,10 @@ export class RtsApp {
 
   /** Advance match systems; camera and UI keep the unscaled rendered-frame delta. */
   private updateSimulation(dt: number): void {
+    // Aged on the same step as the systems below, which is what makes it a
+    // simulation clock rather than a stopwatch: it scales with §38's speed and
+    // stops on pause because it is only ever ticked from here (§53).
+    this.clock.advance(dt);
     this.kingdoms.advance(dt);
     for (const event of this.ages.update(dt)) {
       if (event.type === "completed") {
@@ -1007,7 +1015,9 @@ export class RtsApp {
     const outcome = this.match.outcome;
     const reason = this.match.reason;
     if (outcome === "active" || reason === null) return;
-    this.matchOverlay.showResult(outcome, reason);
+    // §53: the result screen is where the duration is actually read — it is the
+    // one moment the match has a final length to report.
+    this.matchOverlay.showResult(outcome, reason, this.clock.seconds);
   }
 
   /** Restore all Faz 1 match-owned systems without reloading the browser route. */
@@ -1039,6 +1049,7 @@ export class RtsApp {
     this.notificationFeed.setNotifications([]);
     this.attackWatch.reset();
     this.match.reset();
+    this.clock.reset();
     // "Yeniden Başlat" is reachable from the pause menu as well as the result
     // screen, so the flow has to be told too — otherwise restarting a paused
     // match would rebuild the world and leave it frozen behind a hidden menu.

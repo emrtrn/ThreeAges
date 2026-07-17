@@ -158,7 +158,9 @@ test("RTS Phase 9 match flow: start, pause, surrender, and restart back into pla
   // that nothing is being simulated behind the card.
   await page.goto("/?rts&debug");
   await expect(overlay).toHaveClass(/is-visible/);
-  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+  // §53's clock is part of that witness: an opening spent behind the card would
+  // show up here as time already on the board.
+  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active · süre 0:00");
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
   await expect(overlay).not.toHaveClass(/is-visible/);
 
@@ -191,6 +193,11 @@ test("RTS Phase 9 match flow: start, pause, surrender, and restart back into pla
   await expect(page.locator("[data-rts-result-title]")).toHaveText("Yenilgi");
   await expect(page.locator("[data-rts-result-detail]")).toHaveText("Teslim oldunuz.");
   await expect(page.locator(".rts-debug-overlay")).toContainText("maç: defeat");
+  // §53: the result screen reports how long the match took — the number Kapı B's
+  // "12–25 dakika" box is read against. Asserted as a shape, not a value: what
+  // this can prove is that a real duration reaches the card, and a clock wired to
+  // nothing would surface here as an empty or `NaN:aN` field.
+  await expect(page.locator("[data-rts-result-duration]")).toHaveText(/^Süre: \d+:[0-5]\d$/);
 
   // Restart returns to a *running* match, not the start screen.
   await page.getByRole("button", { name: "Yeniden Başlat", exact: true }).click();
@@ -225,10 +232,26 @@ test("RTS Phase 9 pause actually stops the simulation", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
 
+  // §53: the clock is a simulation clock, and this is the one place the real app
+  // can be made to say so. It has been running at 8X, so it must already be well
+  // past the handful of wall seconds this test has taken — a wall-clock
+  // stopwatch could not be here yet.
+  const clockLine = async (): Promise<string> => {
+    const text = await page.locator(".rts-debug-overlay").innerText();
+    return text.split("\n")[0] ?? "";
+  };
+  const atPause = await clockLine();
+  const pausedSeconds = Number(/süre (\d+):(\d\d)/.exec(atPause)?.[1] ?? -1) * 60
+    + Number(/süre (\d+):(\d\d)/.exec(atPause)?.[2] ?? -1);
+  expect(pausedSeconds, `8X must outrun the wall clock (${atPause})`).toBeGreaterThan(10);
+
   // Twice the time the order needs. If pause were cosmetic, the worker would
   // have arrived here and the count would read 6.
   await page.waitForTimeout(6000);
   await expect(idle, "a paused match trains nothing").toHaveText("Boşta işçi: 5");
+  // And the clock is frozen with it: six wall seconds — 48 at this speed — add
+  // nothing, because a paused match is not ticked at all.
+  expect(await clockLine(), "a paused match ages no clock").toBe(atPause);
 
   await page.keyboard.press("Escape");
   await expect(idle, "and resuming finishes the order it was holding").toHaveText(

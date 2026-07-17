@@ -305,7 +305,8 @@ export class EconomyProductionSystem {
     const economy = producer.structure.stats.economy;
     if (!economy) return;
     const candidates = this.units.workersOf(producer.structure.owner)
-      .filter((worker) => !this.assignmentByWorker.has(worker.id) && !this.isWorkerConstructing(worker))
+      .filter((worker) => !this.assignmentByWorker.has(worker.id)
+        && !worker.hasPlayerMoveOrder && !this.isWorkerConstructing(worker))
       .sort((a, b) => a.position.distanceToSquared(producer.structure.object.position)
         - b.position.distanceToSquared(producer.structure.object.position));
     for (const worker of candidates) {

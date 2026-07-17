@@ -105,6 +105,13 @@ export class Unit {
   private readonly targetRing: Mesh;
   private readonly healthBar: HealthBar;
   private movePath: Vector3[] = [];
+  /**
+   * A ground route explicitly issued by the player. Automation and defensive
+   * retaliation must leave this route alone until it ends: a right-click is a
+   * direct instruction, not a suggestion that a worker may immediately replace
+   * with its old job or a Guard may abandon after taking one hit.
+   */
+  private playerMoveOrder = false;
   private selectedFlag = false;
   private targeterCount = 0;
   private deathElapsed: number | null = null;
@@ -214,15 +221,31 @@ export class Unit {
     this.setAttackTarget(null);
     this.attackMoveTarget = null;
     this.movePath = [];
+    this.playerMoveOrder = false;
     this.moveTarget = new Vector3(x, 0, z);
   }
 
   /** Replace the current movement order with a planned ground waypoint path. */
   setMovePath(points: readonly Vector3[]): void {
+    this.replaceMovePath(points, false);
+  }
+
+  /** Set a player-issued ground route that automation must not preempt. */
+  setPlayerMovePath(points: readonly Vector3[]): void {
+    this.replaceMovePath(points, true);
+  }
+
+  /** Whether an active player-issued ground route still owns this unit. */
+  get hasPlayerMoveOrder(): boolean {
+    return this.playerMoveOrder && (this.movePath.length > 0 || this.moveTarget !== null);
+  }
+
+  private replaceMovePath(points: readonly Vector3[], playerMoveOrder: boolean): void {
     this.setAttackTarget(null);
     this.attackMoveTarget = null;
     this.moveTarget = null;
     this.movePath = points.map((point) => point.clone());
+    this.playerMoveOrder = playerMoveOrder;
   }
 
   /**
@@ -235,6 +258,7 @@ export class Unit {
     this.moveTarget = null;
     this.movePath = points.map((point) => point.clone());
     this.attackMoveTarget = destination.clone();
+    this.playerMoveOrder = false;
   }
 
   /**
@@ -265,6 +289,7 @@ export class Unit {
   /** Drop the current waypoint after reaching it. */
   advancePath(): void {
     this.movePath.shift();
+    if (this.movePath.length === 0) this.playerMoveOrder = false;
   }
 
   /** Immediately clear movement, attack-move and explicit attack intent. */
@@ -273,6 +298,7 @@ export class Unit {
     this.attackMoveTarget = null;
     this.moveTarget = null;
     this.movePath = [];
+    this.playerMoveOrder = false;
   }
 
   /**
@@ -308,6 +334,7 @@ export class Unit {
     this.chaseOrigin = target !== null && auto ? this.position.clone() : null;
     this.moveTarget = null;
     this.movePath = [];
+    if (target) this.playerMoveOrder = false;
     target?.setTargetedBy?.(1);
   }
 

@@ -1711,11 +1711,11 @@ seferde değil dilimler halinde üretiliyor.
 - **Dilim 5 — Minimal ayarlar: kamera kadranları üretildi; ses ve ekran
   sallantısı sistemleri olmadığı için bilerek üretilmedi (Faz 12 §67).**
 
-Altı grup da bitti; §52'nin kutuları kapandı. **Ama Kapı B henüz geçilmedi ve
-önünde iki iş var — bkz. §53 "Kapı B öncesi yapılacaklar":** maç saati (Kapı B'nin
-merkezî kriteri şu an ölçülemiyor) ve 15 tam maç. İlki kod, ikincisi değil.
-Üçüncü iş — §46 sıkışma sinyali — çözüldü: sebep §45'in tıkanma kaçışının hiç
-çalışmamasıydı (aşağıda "Sinyal çözüldü").
+Altı grup da bitti; §52'nin kutuları kapandı. **Kapı B henüz geçilmedi ama
+önündeki iki kod işi de bitti — bkz. §53 "Kapı B öncesi yapılacaklar":** §46
+sıkışma sinyali çözüldü (sebep §45'in tıkanma kaçışının hiç çalışmamasıydı —
+aşağıda "Sinyal çözüldü") ve maç saati eklendi (Kapı B'nin merkezî kriteri artık
+ölçülebiliyor). Kalan tek iş 15 tam maç, ve o kodun işi değil.
 
 **Test notu — teşhis doğruydu, flake düzeltildi (Dilim 4).** Bu not
 `tests/smoke/rts-building-placement.spec.ts` içindeki Faz 7 "box-selected group"
@@ -2176,7 +2176,8 @@ kod değil, §9'un listesiyle 15 tam maç ve §36 tarzı test soruları.
 
 Aşağıdaki üçü bir önceki oturumda tespit edildi. **Sıra önemli:** ölçemediğin bir
 kriteri, bilinen bir hatanın gürültüsü altında test etmek 15 maçı boşa
-oynamaktır. 1 çözüldü; kalan sıra 2 → 3.
+oynamaktır. 1 ve 2 bitti — yani sıra artık 3'te: bilinen hata düzeltildi ve
+ölçüm aleti var.
 
 - [x] **1. §46 sıkışma sinyalini çöz (blocker adayı).** Merkez footprint'inin
   dibine verilen grup emri ~5 koşuda 1 bitmiyordu; `yol:N` sıfırlanmıyordu.
@@ -2192,17 +2193,30 @@ oynamaktır. 1 çözüldü; kalan sıra 2 → 3.
   **Kapsam notu:** bu Faz 9 (UI) işi değildi, Faz 7'nin hareket/sıkışma
   sistemiydi — §45'in "tıkanma timeout ve fallback" kalemi.
 
-- [ ] **2. Maç saati ekle (ölçüm aleti).** Kapı B'nin merkezî kutusu "askerî
-  zafer çoğu maçta 12–25 dakika içinde gerçekleşiyor" — ve bu süre **şu an hiçbir
-  yerde ölçülemiyor**: ne HUD'da, ne debug overlay'de, ne `RtsMatchState`'te bir
-  saat var. Kronometre de çözmez, çünkü 2X/4X/8X hız kontrolü duvar saatiyle maç
-  süresini ayırıyor (8X'te 5 dk duvar = 40 dk maç) ve hız ortada değişirse hesap
-  büsbütün kayar. Gereken: simülasyon zamanını sayan bir saat (hızla ölçeklenen,
-  duraklamada duran) ve sonuç ekranında süre.
+- [x] **2. Maç saati ekle (ölçüm aleti).** Kapı B'nin merkezî kutusu "askerî
+  zafer çoğu maçta 12–25 dakika içinde gerçekleşiyor" — ve bu süre hiçbir yerde
+  ölçülemiyordu. Kronometre çözmezdi, çünkü 2X/4X/8X hız kontrolü duvar saatiyle
+  maç süresini ayırıyor ve hız ortada değişirse hesap büsbütün kayar.
+  **Yapıldı:** `RtsMatchClock` (`match/rtsMatchClock.ts`) simülasyon saniyesi
+  sayar. Hızla ölçeklenmesi ve duraklamada durması *uyguladığı özellikler değil,
+  nerede tiklendiğinin sonucudur*: saat `updateSimulation`'ın içinde, sistemlerin
+  yaşlandığı adımın ta kendisiyle ilerletilir — tik yoksa zaman yok. Böylece
+  saatin sistemlerle "maç ne kadar sürdü" konusunda anlaşmazlığa düşmesi yapı
+  gereği imkânsız. `RtsMatchState` ("kim kazandı") ve `RtsMatchFlow` ("çalışıyor
+  mu") ile aynı gerekçeyle ayrı tutuldu: üçüncü bir olgu, ve hiçbiri diğerinin
+  doğrusunun ikinci kopyasını tutmuyor.
+  Süre iki yerde: sonuç ekranında (`Süre: 12:34`) ve `?rts&debug` başlığında
+  (`maç: active · süre 12:34`). Biçim `d:ss` ve dakika saate yuvarlanmıyor —
+  72 dakikalık maç `72:15` der, çünkü bu sayı "12–25 dakika"ya karşı okunuyor.
+  **Doğrulama:** `test:engine` üç check (1X/8X ölçekleme, maç ortası hız
+  değişimi, duraklama/karar sonrası donma, biçim) + gerçek tarayıcıda ölçüldü:
+  8X'te ~2 duvar saniyesi → `0:15`; duraklamada 6 duvar saniyesi (8X'te 48
+  simülasyon saniyesi) → `0:17` sabit; devam → `0:29`. Kronometre `0:02` derdi.
   **Kapsam notu:** §51'in Ana HUD listesinde saat yok, yani bu Faz 9 kapsamının
-  dışıdır — Kapı B'nin aletidir. §71 "Minimum Telemetri" (Faz 13) ile
-  karıştırılmamalı: o, maç *istatistiği* toplamaktır; bu, tek bir sayıyı görünür
-  kılmaktır.
+  dışıdır — Kapı B'nin aletidir, o yüzden Ana HUD'a değil debug overlay'e kondu
+  (§53.3 maçları zaten `?rts&debug` ile izlemeyi söylüyor). §71 "Minimum
+  Telemetri" (Faz 13) ile karıştırılmamalı: o, maç *istatistiği* toplamaktır; bu,
+  tek bir sayıyı görünür kılmaktır.
 
 - [ ] **3. 15 tam maç (bu iş kodun değil).** §9'un listesiyle oynanır. Maç başına
   tutulacak asgari kayıt: süre + sonuç, blocker var mıydı (blocker'ı "sinir

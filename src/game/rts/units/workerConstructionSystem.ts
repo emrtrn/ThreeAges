@@ -129,7 +129,7 @@ export class WorkerConstructionSystem {
 
   private candidatesFor(structure: PlacedStructure, extra: (worker: Unit) => boolean): Unit[] {
     return this.units.workersOf(structure.owner)
-      .filter((worker) => !this.assignments.has(worker.id) && extra(worker))
+      .filter((worker) => !this.assignments.has(worker.id) && !worker.hasPlayerMoveOrder && extra(worker))
       .sort((a, b) => a.position.distanceToSquared(structure.object.position)
         - b.position.distanceToSquared(structure.object.position));
   }

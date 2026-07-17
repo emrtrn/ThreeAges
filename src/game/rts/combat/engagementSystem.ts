@@ -39,15 +39,16 @@ export function updateUnitEngagement(units: readonly Unit[], options: Engagement
 /**
  * Turn an actual hostile hit into a defensive response.
  *
- * A plain Move still ignores enemies it merely passes (§23), but a combat unit
- * that has already taken damage must not keep marching as if nothing happened.
- * Existing attack intent wins: this is a fallback for an otherwise unengaged
- * defender, not a hidden retargeting rule. Workers remain outside combat.
+ * A plain Move ignores enemies it merely passes, and a player-issued ground
+ * route also survives actual damage: the clicked
+ * destination outranks an automatic defensive chase. System-issued transit can
+ * still defend after taking damage. Existing attack intent wins; this remains
+ * a fallback for an otherwise unengaged defender. Workers remain outside combat.
  */
 export function retaliateAgainstAttack(defender: Unit, attacker: Unit, navigation: RtsNavigation): boolean {
   if (defender.role === "worker" || defender.health.depleted || defender.dying
     || attacker.health.depleted || attacker.dying || defender.owner === attacker.owner
-    || defender.attackTarget !== null) return false;
+    || defender.attackTarget !== null || defender.hasPlayerMoveOrder) return false;
   // Hold Position can answer a nearby attacker, but it must never turn a ranged
   // hit into a chase order that its stance will immediately refuse to follow.
   if (defender.stance === "hold" && combatDistance(defender.position, attacker) > defender.attack.range) {
