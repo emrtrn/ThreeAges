@@ -129,7 +129,10 @@
       "resourceId": "wood",
       "workerCapacity": 3,
       "perWorkerPerMinute": 6,
-      "localBufferCapacity": 40
+      "localBufferCapacity": 40,
+      "requiresForest": true,
+      "gatherRadius": 12,
+      "carryCapacity": 5
     }
   },
   "quarry": {

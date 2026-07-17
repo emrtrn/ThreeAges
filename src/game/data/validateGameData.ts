@@ -360,6 +360,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       const perWorkerPerMinute = requireFiniteNumber(economyData, "perWorkerPerMinute", economyWhere);
       const localBufferCapacity = requireFiniteNumber(economyData, "localBufferCapacity", economyWhere);
       const requiresResourceNode = economyData["requiresResourceNode"];
+      const requiresForest = economyData["requiresForest"];
       if (!Number.isInteger(workerCapacity) || workerCapacity <= 0) {
         throw new GameDataError(`${economyWhere}.workerCapacity: must be a positive integer`);
       }
@@ -369,12 +370,23 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       if (requiresResourceNode !== undefined && typeof requiresResourceNode !== "boolean") {
         throw new GameDataError(`${economyWhere}.requiresResourceNode: must be a boolean`);
       }
+      if (requiresForest !== undefined && typeof requiresForest !== "boolean") {
+        throw new GameDataError(`${economyWhere}.requiresForest: must be a boolean`);
+      }
+      const forestSettings = requiresForest === true ? {
+        gatherRadius: requireFiniteNumber(economyData, "gatherRadius", economyWhere),
+        carryCapacity: requireFiniteNumber(economyData, "carryCapacity", economyWhere),
+      } : null;
+      if (forestSettings && (forestSettings.gatherRadius <= 0 || forestSettings.carryCapacity <= 0)) {
+        throw new GameDataError(`${economyWhere}: forest gatherRadius and carryCapacity must be > 0`);
+      }
       economy = {
         resourceId,
         workerCapacity,
         perWorkerPerMinute,
         localBufferCapacity,
         ...(requiresResourceNode === true ? { requiresResourceNode: true } : {}),
+        ...(forestSettings ? { requiresForest: true, ...forestSettings } : {}),
       };
     }
     const territoryRaw = stats["territory"];

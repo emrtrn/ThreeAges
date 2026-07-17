@@ -229,6 +229,7 @@ const PRODUCTION_STATUS_LABEL: Record<EconomyProductionStatus, string> = {
   producing: "Üretiyor",
   "buffer-full": "Tampon dolu",
   "missing-resource-node": "Kaynak düğümü yok",
+  "missing-forest": "Yakında orman yok",
   "source-depleted": "Kaynak tükendi",
 };
 

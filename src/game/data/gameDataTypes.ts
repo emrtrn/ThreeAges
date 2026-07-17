@@ -184,6 +184,12 @@ export interface EconomyProductionBalance {
   readonly localBufferCapacity: number;
   /** Stone/gold buildings must cover a live matching finite deposit. */
   readonly requiresResourceNode?: boolean;
+  /** Lumber camps need at least one live tree in this radius to be placed. */
+  readonly requiresForest?: boolean;
+  /** Camp-centre radius in which a worker may reserve and harvest a tree. */
+  readonly gatherRadius?: number;
+  /** Maximum wood a worker carries from one tree back to the camp. */
+  readonly carryCapacity?: number;
 }
 
 /** Territory source and bounded expansion rule supplied by a completed structure. */

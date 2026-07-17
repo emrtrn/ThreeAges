@@ -88,6 +88,7 @@ import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructur
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
+import { ForestSystem } from "../src/game/rts/economy/forestSystem";
 import { AgeSystem, townUnlocksAvailable } from "../src/game/rts/progression/ageSystem";
 import {
   DepotLogisticsSystem,
@@ -28766,6 +28767,61 @@ check("Faz 6 quarry uses its finite stone node and cannot be placed away from on
   assert.equal(snapshot.status, "source-depleted");
   assert.ok(Math.abs(withdrawn - 1) < 0.0001, "a finite node never pays more material than it holds");
   assert.equal(production.isAssigned(worker), false, "workers are released once their source is exhausted");
+  territory.dispose();
+});
+
+check("RTS lumber camps require individual trees and workers carry wood back to camp", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const camp = buildings.lumber_camp ?? assert.fail("lumber camp definition missing");
+  assert.equal(camp.economy?.requiresForest, true);
+  const forests = new ForestSystem([
+    { id: "test-tree", forestId: "test-grove", x: 8, z: 0, capacity: 6, variant: "pine" },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 10);
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(centers.navigationBlockers());
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 500 }, 20);
+  const territory = new TerritoryControlSystem(() => centers.all().map((center) => ({
+    owner: center.owner, x: center.position.x, z: center.position.z, radius: COMMAND_CENTER_CONTROL_RADIUS,
+  })));
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => [...centers.navigationBlockers(), ...structures.navigationBlockers()],
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => stats.economy?.requiresForest
+      && !forests.hasLiveTreeNear(x, z, stats.economy.gatherRadius ?? 0)
+      ? "missing-forest"
+      : null,
+  );
+  assert.equal(construction.validate("player", "lumber_camp", -10, 0)?.reason, "missing-forest");
+  const built = construction.build("player", "lumber_camp", 0, 0);
+  assert.ok(built.built, "a camp is legal near a live individual tree");
+  if (!built.built) return assert.fail("lumber camp construction unexpectedly failed");
+  structures.advanceConstruction(built.structure, camp.constructionSeconds);
+
+  const worker = units.spawn("player", 3, 0, RTS_TEST_WORKER_STATS);
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false, undefined, forests);
+  for (let tick = 0; tick < 600; tick += 1) {
+    updateUnitMovement(units.all(), 0.5);
+    production.update(0.5);
+  }
+  const snapshot = production.snapshots("player")[0] ?? assert.fail("lumber producer missing");
+  assert.equal(forests.snapshots()[0]?.depleted, true, "only the harvested tree becomes depleted");
+  assert.equal(snapshot.sourceRemaining, 0);
+  assert.ok(Math.abs(snapshot.totalProduced - 6) < 0.0001, "wood enters the camp buffer only after the return trip");
+  assert.equal(snapshot.status, "source-depleted");
+  assert.equal(production.isAssigned(worker), false, "a worker is released after its grove is exhausted");
   territory.dispose();
 });
 

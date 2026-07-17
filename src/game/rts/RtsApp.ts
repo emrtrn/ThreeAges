@@ -86,6 +86,7 @@ import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
+import { ForestSystem } from "./economy/forestSystem";
 import { AgeSystem } from "./progression/ageSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
@@ -191,6 +192,7 @@ export class RtsApp {
   private readonly workerConstruction: WorkerConstructionSystem;
   private economyProduction: EconomyProductionSystem | null = null;
   private readonly resourceNodes: ResourceNodeSystem;
+  private readonly forests: ForestSystem;
   private readonly depotLogistics: DepotLogisticsSystem;
   private readonly productionLogistics: ProductionLogisticsSystem;
   private readonly logisticsOccupation: LogisticsOccupationSystem;
@@ -257,6 +259,7 @@ export class RtsApp {
     this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
     this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
     this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, RTS_BLOCKOUT_MAP.resourceNodes);
+    this.forests = new ForestSystem(RTS_BLOCKOUT_MAP.trees);
     this.kingdoms = new KingdomRegistry(
       KINGDOM_OWNERS,
       this.units,
@@ -310,6 +313,7 @@ export class RtsApp {
       this.navigation,
       (worker) => this.workerConstruction.stateFor(worker) !== "idle",
       this.resourceNodes,
+      this.forests,
     );
     this.logisticsTransfers = new LogisticsTransferSystem(
       this.economyProduction,
@@ -363,7 +367,10 @@ export class RtsApp {
           stats.footprint.depth,
         )
         ? "missing-resource-node"
-        : null,
+        : stats.economy?.requiresForest
+          && !this.forests.hasLiveTreeNear(x, z, stats.economy.gatherRadius ?? 0)
+          ? "missing-forest"
+          : null,
       () => this.roads.occupancyBlockers(),
     );
     this.roadConstruction = new RoadConstructionService(
@@ -904,6 +911,7 @@ export class RtsApp {
     updateUnitSeparation(this.units.all(), dt, { navigation: this.navigation });
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
+    this.mapArt.syncForest(this.forests);
     this.logisticsTransfers.update();
     // Only the human kingdom's production narrates into the build palette; the
     // AI's own queue events are surfaced by its decision log in a later slice.
@@ -1013,7 +1021,7 @@ export class RtsApp {
 
   private async loadMapArt(blockout: import("three").Group): Promise<void> {
     try {
-      await this.mapArt.apply(blockout, RTS_BLOCKOUT_MAP);
+      await this.mapArt.apply(blockout, RTS_BLOCKOUT_MAP, this.forests);
     } catch (error) {
       this.log.warn("RTS map art could not be loaded", error);
     }
@@ -1098,6 +1106,7 @@ export class RtsApp {
     this.structureConstruction.resetReservations();
     this.kingdoms.reset();
     this.resourceNodes.reset();
+    this.forests.reset();
     this.commandMarkers.clear();
     // A restart is a new match, not a continuation: carrying a cooldown over
     // would mute a real notice in the first seconds of the next game, and a

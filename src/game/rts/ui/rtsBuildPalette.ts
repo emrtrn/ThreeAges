@@ -154,6 +154,8 @@ export class RtsBuildPalette {
         ? "Geçersiz konum: bu alanın kontrolü sizde değil."
       : state.result.reason === "insufficient-resources"
         ? "Kaynak yetersiz: inşaat maliyeti ayrılmadı."
+        : state.result.reason === "missing-forest"
+          ? "Oduncu Kampı için yakında kesilebilir ağaç gerekir."
         : state.result.reason === "missing-resource-node"
           ? "Geçersiz konum: Taş Ocağı veya Altın Madeni uygun kaynak düğümünü örtmeli."
         : "Geçersiz konum: engel veya yapı ile çakışıyor.";
@@ -207,5 +209,4 @@ export class RtsBuildPalette {
     this.root.remove();
   }
 }
-
 

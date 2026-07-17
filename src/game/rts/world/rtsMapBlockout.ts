@@ -11,6 +11,7 @@ import { BoxGeometry, CircleGeometry, Color, Group, Mesh, MeshStandardMaterial }
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
+import type { RtsTreeDefinition } from "../economy/forestSystem";
 import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 
 export interface RtsMapPoint {
@@ -103,6 +104,8 @@ export interface RtsMapBlockout {
   readonly enemyExpansions: readonly RtsExpansionRegion[];
   /** Faz 6's finite safe and external stone/gold deposits. */
   readonly resourceNodes: readonly RtsResourceNodeDefinition[];
+  /** Individually harvestable wood sources; no forest group mesh owns gameplay. */
+  readonly trees: readonly RtsTreeDefinition[];
   /** Static obstacle footprints consumed by `RtsNavigation`. */
   readonly navigationBlockers: readonly NavBlocker[];
 }
@@ -232,6 +235,20 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     { id: "enemy_safe_gold", resourceId: "gold", kind: "safe", x: 42, z: -26 },
     { id: "external_stone", resourceId: "stone", kind: "external", x: -34, z: 16 },
     { id: "external_gold", resourceId: "gold", kind: "external", x: 34, z: 16 },
+  ],
+  trees: [
+    { id: "player-wood-1", forestId: "player-grove", x: -50, z: 34, capacity: 45, variant: "pine" },
+    { id: "player-wood-2", forestId: "player-grove", x: -48, z: 30, capacity: 45, variant: "tree1" },
+    { id: "player-wood-3", forestId: "player-grove", x: -54, z: 30, capacity: 45, variant: "tree2" },
+    { id: "player-wood-4", forestId: "player-grove", x: -52, z: 26, capacity: 45, variant: "pine" },
+    { id: "enemy-wood-1", forestId: "enemy-grove", x: 50, z: -32, capacity: 45, variant: "pine" },
+    { id: "enemy-wood-2", forestId: "enemy-grove", x: 54, z: -34, capacity: 45, variant: "tree1" },
+    { id: "enemy-wood-3", forestId: "enemy-grove", x: 46, z: -42, capacity: 45, variant: "tree2" },
+    { id: "enemy-wood-4", forestId: "enemy-grove", x: 54, z: -42, capacity: 45, variant: "pine" },
+    { id: "enemy-expansion-wood-1", forestId: "enemy-east-grove", x: 66, z: -20, capacity: 70, variant: "pine" },
+    { id: "enemy-expansion-wood-2", forestId: "enemy-east-grove", x: 70, z: -22, capacity: 70, variant: "tree1" },
+    { id: "enemy-expansion-wood-3", forestId: "enemy-east-grove", x: 68, z: -30, capacity: 70, variant: "tree2" },
+    { id: "enemy-expansion-wood-4", forestId: "enemy-east-grove", x: 72, z: -26, capacity: 70, variant: "pine" },
   ],
   navigationBlockers: [
     { min: [-12, -1, -4], max: [12, 4, 4] },

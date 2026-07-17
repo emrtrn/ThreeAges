@@ -26,7 +26,8 @@ export type StructureBuildFailure =
   | "outside-control"
   | "blocked"
   | "insufficient-resources"
-  | "missing-resource-node";
+  | "missing-resource-node"
+  | "missing-forest";
 
 export type StructureBuildResult =
   | { readonly built: true; readonly structure: PlacedStructure; readonly result: PlacementResult }
