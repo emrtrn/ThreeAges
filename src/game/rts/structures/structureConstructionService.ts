@@ -46,6 +46,8 @@ export class StructureConstructionService {
     private readonly onStructureCancelled: (structure: PlacedStructure) => void,
     /** Optional world-specific requirement, e.g. Faz 6 extractors covering a deposit. */
     private readonly additionalPlacementFailure?: (stats: BuildingBalanceStats, x: number, z: number) => PlacementResult["reason"],
+    /** Walkable world features, such as roads, that still reserve build space. */
+    private readonly placementBlockers: () => readonly NavBlocker[] = () => [],
   ) {}
 
   /**
@@ -55,7 +57,10 @@ export class StructureConstructionService {
   validate(owner: UnitOwner, buildingId: string, x: number, z: number): PlacementResult | null {
     const stats = this.buildings[buildingId];
     if (!stats || buildingId === "command_center") return null;
-    const result = validateBuildingPlacement(stats, x, z, this.occupiedBlockers(), {
+    const result = validateBuildingPlacement(stats, x, z, [
+      ...this.occupiedBlockers(),
+      ...this.placementBlockers(),
+    ], {
       owner,
       ownsFootprint: this.territory.ownsFootprint.bind(this.territory),
       canPlaceExpansion: this.territory.canPlaceExpansion.bind(this.territory),

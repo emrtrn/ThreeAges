@@ -102,6 +102,15 @@ export class RoadGraph {
       .sort((a, b) => a.x - b.x || a.z - b.z);
   }
 
+  /** Roads reserve build space while remaining walkable for units. */
+  occupancyBlockers(): readonly NavBlocker[] {
+    const half = this.balance.cellSize / 2;
+    return [...this.cells.values()].map((cell) => ({
+      min: [cell.x - half, 0, cell.z - half],
+      max: [cell.x + half, 3, cell.z + half],
+    }));
+  }
+
   /** True if two road cells share any connected component, including loops. */
   connected(a: RoadCell, b: RoadCell): boolean {
     const start = this.snap(a);

@@ -15,7 +15,7 @@
     "upgradeSeconds": 105,
     "commandCenter": {
       "maxHealth": 450,
-      "controlRadius": 22,
+      "controlRadius": 32,
       "workerTrainingSeconds": 9
     },
     "requiredBuildingIds": [

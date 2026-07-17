@@ -23,7 +23,8 @@ export interface RtsGroundOptions {
 }
 
 /** Shared square world extent for the Phase 1 ground and navigation bounds. */
-export const RTS_WORLD_HALF_EXTENT = 60;
+/** Shared terrain, navigation, territory, road and placement half-extent. */
+export const RTS_WORLD_HALF_EXTENT = 70;
 
 export const DEFAULT_RTS_GROUND_OPTIONS: RtsGroundOptions = {
   halfExtent: RTS_WORLD_HALF_EXTENT,

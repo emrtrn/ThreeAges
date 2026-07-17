@@ -1399,7 +1399,15 @@ setini gerektirdi ve Faz 7 savaş kadrosunun kabulünü bloke etmedi.
   2 birimden yakınsa varmış sayılır, değilse emir düşer. Böylece hiçbir stall
   kalıcı olmaz. `test:engine` aynı noktaya gönderilen altı birimin hedefte
   toplanıp emirlerini bitirdiğini, ilerleyen birimin ise emrini koruduğunu
-  doğrular.)
+  doğrular.
+  **Faz 9 düzeltmesi — bu kalem yazıldığında çalışmıyordu.** İlerleme adımın
+  içinde ölçülüyordu; birimin adımını hiçbir şey reddedemediği için timeout hiç
+  ateşlenmedi ve yukarıdaki garantinin tamamı ölü koddu. Buradaki üç testin
+  hiçbiri de o yola uğramıyordu (ölçülen stall 0.00 sn, replan 0) — geçmelerinin
+  sebebi birimlerin gerçekten varmasıydı. İlerleme artık kare-arası net kazançla
+  ölçülür (hareket + `unitSeparation` birlikte), replan bütçesi kendi
+  harcanmasıyla iade edilmez ve kalabalığın yer vermediği birimi doğrudan sınayan
+  bir regresyon testi eklendi. Bkz. §51 "Sinyal çözüldü".)
 - [x] Kalabalık ayrımı. (`unitSeparation`: hareket sonrası çakışan gövdeler
   birbirini iter; itme birimin kendi hızının %55'iyle sınırlıdır ve navigasyon
   gridi yürünemez zemine itmeyi veto eder. Komşu taraması uniform hash ile
@@ -1435,7 +1443,9 @@ setini gerektirdi ve Faz 7 savaş kadrosunun kabulünü bloke etmedi.
   geri sızarsa yakalayan regresyon kapısıdır.)
 - [x] Köprüde kalıcı sıkışma oluşmuyor. (`test:engine` köprü testi: dar geçitte
   karşılıklı iki kol; her emir ya varışla ya durmayla sonlanır — tıkanma
-  timeout'u kalıcı stall'u yapı gereği imkânsız kılar.)
+  timeout'u kalıcı stall'u yapı gereği imkânsız kılar. **Faz 9 notu:** bu
+  gerekçe yazıldığı anda geçersizdi; timeout hiç ateşlenmiyordu ve köprü testi
+  onu hiç çağırmıyordu. Kutu artık gerçekten timeout'a dayanıyor — bkz. §45.)
 - [x] Oyuncu birim rollerini görsel ve UI üzerinden anlayabiliyor. (Rol başına
   ayrı siluet + `RtsSelectionPanel` rol/güçlü/zayıf satırları; tarayıcı
   doğrulaması: karışık seçimde "Güçlü: ağır birim · Zayıf: yapı".)
@@ -1701,8 +1711,11 @@ seferde değil dilimler halinde üretiliyor.
 - **Dilim 5 — Minimal ayarlar: kamera kadranları üretildi; ses ve ekran
   sallantısı sistemleri olmadığı için bilerek üretilmedi (Faz 12 §67).**
 
-Altı grup da bitti. Kapı B değerlendirmesi §53'e göre yapılabilir; §52'nin açık
-kalan tek kutusu aşağıda gerekçesiyle duruyor.
+Altı grup da bitti; §52'nin kutuları kapandı. **Ama Kapı B henüz geçilmedi ve
+önünde iki iş var — bkz. §53 "Kapı B öncesi yapılacaklar":** maç saati (Kapı B'nin
+merkezî kriteri şu an ölçülemiyor) ve 15 tam maç. İlki kod, ikincisi değil.
+Üçüncü iş — §46 sıkışma sinyali — çözüldü: sebep §45'in tıkanma kaçışının hiç
+çalışmamasıydı (aşağıda "Sinyal çözüldü").
 
 **Test notu — teşhis doğruydu, flake düzeltildi (Dilim 4).** Bu not
 `tests/smoke/rts-building-placement.spec.ts` içindeki Faz 7 "box-selected group"
@@ -1737,6 +1750,30 @@ Test yeşile boyanmadı. Sağ tık hedefini açık zemine kaydırmak testi geçi
 sinyali de gizlerdi — ve bu sinyal tam olarak Kapı B'nin sorduğu şey
 ("maçların en az %80'i teknik hata olmadan bitiyor"). Faz 9 UI fazıdır; bu
 hareket/sıkışma işidir ve Kapı B oynanış testinden **önce** bakılmalıdır.
+
+**Sinyal çözüldü — sebep §45'in tıkanma kaçışının hiç çalışmamasıydı.** Sinyali
+saklamamak doğru karardı: `unitMovement.trackCongestion` ilerlemeyi *adımın
+içinde* ölçüyordu (`distanceBefore - distanceAfter`). Ama birimin adımını bu
+sistemde hiçbir şey reddedemez — adım her kare tam olarak `step` kadar atılır,
+yani `progressed` her karede koşulsuz `true` olur. Zemini geri alan şey bir kare
+*sonra* çalışan `unitSeparation`'dır ve bu ölçüme hiç girmiyordu. Sonuç:
+`CONGESTION_TIMEOUT` hiç ateşlenmedi, `MAX_REPLANS` hiç harcanmadı, "her stall
+biter" garantisinin tamamı ölü koddu. §45/§46'nın "tıkanma timeout'u kalıcı
+stall'u yapı gereği imkânsız kılar" iddiası kodda karşılığı olmayan bir iddiaydı.
+
+Mevcut testler bunu yakalayamazdı: ölçüldü, koridor/köprü/kalabalık testlerinde
+biriken stall **0.00 sn** ve replan sayısı **0** — hepsi geçiyordu çünkü birimler
+gerçekten varıyordu, kaçış mekanizmasına hiç uğramadan. Yani mekanizma
+yazıldığı günden beri hiç test edilmemişti.
+
+Düzeltme üç parçadır: (1) ilerleme kare-arası net kazanç olarak ölçülür
+(hareket + separation birlikte), (2) replan bütçesi kendi harcanmasıyla
+sıfırlanmaz (`replanned` bayrağı), (3) ara waypoint'e varmak bütçeyi iade etmez —
+bookkeeping yalnız emir bittiğinde bırakılır. Yeni regresyon testi
+(`test:engine`: "a unit the crowd gives no ground") kalabalığın yer vermediği
+birimi doğrudan sınar: emir ~4.5 sn içinde düşer ve tam 2 replan harcanır.
+Düzeltme geri alındığında test kırmızıya döner. Smoke `--repeat-each` ile tekrar
+koşuldu.
 
 Ölçüm bir şeyi daha gösterdi ve korundu: pansız tam-ekran marquee yalnız
 `5 İşçi` yakalıyor — Muhafızlar açılış kamerasında ekranın altında. Yani pan
@@ -2134,6 +2171,50 @@ işaretlenemez.
 Yani Kapı B artık **engellenmiş değil, açık**: UI tarafı ("oyuncu dış açıklama
 olmadan temel maçı yönetebilsin" — §50) bu fazın işiydi ve bitti. Sıradaki adım
 kod değil, §9'un listesiyle 15 tam maç ve §36 tarzı test soruları.
+
+### Kapı B öncesi yapılacaklar
+
+Aşağıdaki üçü bir önceki oturumda tespit edildi. **Sıra önemli:** ölçemediğin bir
+kriteri, bilinen bir hatanın gürültüsü altında test etmek 15 maçı boşa
+oynamaktır. 1 çözüldü; kalan sıra 2 → 3.
+
+- [x] **1. §46 sıkışma sinyalini çöz (blocker adayı).** Merkez footprint'inin
+  dibine verilen grup emri ~5 koşuda 1 bitmiyordu; `yol:N` sıfırlanmıyordu.
+  Kapı B'nin **iki** kutusunu birden vuruyordu: "köprü ve dar rotalarda kalıcı
+  grup sıkışması oluşmuyor" ve "maçların en az %80'i teknik hata olmadan
+  bitiyor". Sinyali gizlemeyip kovalamak doğru karardı: sebep test kurulumu
+  değil, §45'in tıkanma kaçışının **hiç çalışmıyor** olmasıydı — ilerleme adımın
+  içinde ölçüldüğü için `progressed` her karede koşulsuz `true` dönüyor,
+  `CONGESTION_TIMEOUT` hiç ateşlenmiyordu. Kalabalığın tuttuğu bir birim emrini
+  sonsuza kadar taşıyordu. Ayrıntı ve düzeltmenin üç parçası için bkz. §51
+  "Sinyal çözüldü". Regresyon testi eklendi; mevcut testlerin bu kod yoluna hiç
+  uğramadığı ölçümle gösterildi.
+  **Kapsam notu:** bu Faz 9 (UI) işi değildi, Faz 7'nin hareket/sıkışma
+  sistemiydi — §45'in "tıkanma timeout ve fallback" kalemi.
+
+- [ ] **2. Maç saati ekle (ölçüm aleti).** Kapı B'nin merkezî kutusu "askerî
+  zafer çoğu maçta 12–25 dakika içinde gerçekleşiyor" — ve bu süre **şu an hiçbir
+  yerde ölçülemiyor**: ne HUD'da, ne debug overlay'de, ne `RtsMatchState`'te bir
+  saat var. Kronometre de çözmez, çünkü 2X/4X/8X hız kontrolü duvar saatiyle maç
+  süresini ayırıyor (8X'te 5 dk duvar = 40 dk maç) ve hız ortada değişirse hesap
+  büsbütün kayar. Gereken: simülasyon zamanını sayan bir saat (hızla ölçeklenen,
+  duraklamada duran) ve sonuç ekranında süre.
+  **Kapsam notu:** §51'in Ana HUD listesinde saat yok, yani bu Faz 9 kapsamının
+  dışıdır — Kapı B'nin aletidir. §71 "Minimum Telemetri" (Faz 13) ile
+  karıştırılmamalı: o, maç *istatistiği* toplamaktır; bu, tek bir sayıyı görünür
+  kılmaktır.
+
+- [ ] **3. 15 tam maç (bu iş kodun değil).** §9'un listesiyle oynanır. Maç başına
+  tutulacak asgari kayıt: süre + sonuç, blocker var mıydı (blocker'ı "sinir
+  bozucu"dan ayırın — kutu blocker sayıyor), oyuncu ve AI genişledi mi, AI çağ
+  atladı mı, hangi kaynak oyuncuyu tuttu, sıkışma görüldü mü ve nerede.
+  `?rts&debug` AI'ın niyetini *ve gerekçesini* yazıyor: "AI durdu" yerine
+  raporladığı darboğazı (`no-food-production`, `disconnected-production`)
+  kaydetmek düzeltmeyi yönlendirir.
+  **Ön koşul doğrulandı:** `balance/ai.json` içinde `expand: 0.9` ve
+  `ageUp: 1.1` açık — Faz 5'in "expand niyeti veriyle kapalı" notu artık
+  geçersiz (Faz 8 açtı). Yani "AI en az bir kez genişliyor" ve "iki çağ"
+  kutuları veriyle baştan ölü değil; oynanarak sınanabilir.
 
 Kapı B geçilmeden:
 

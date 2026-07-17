@@ -28406,7 +28406,7 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   );
   assert.deepEqual(ages.town.cost, { food: 600, wood: 350, stone: 150, gold: 150 });
   assert.equal(ages.town.upgradeSeconds, 105);
-  assert.deepEqual(ages.town.commandCenter, { maxHealth: 450, controlRadius: 22, workerTrainingSeconds: 9 });
+  assert.deepEqual(ages.town.commandCenter, { maxHealth: 450, controlRadius: 32, workerTrainingSeconds: 9 });
   const invalid = JSON.parse(readFileSync("public/game-data/balance/ages.json", "utf8")) as Record<string, unknown>;
   assert.throws(() => validateAgeBalance({
     ...invalid,
@@ -28456,7 +28456,7 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   const townCenter = centers.get("player") ?? assert.fail("player center missing after Town upgrade");
   assert.equal(townCenter.level, 2);
   assert.equal(townCenter.health.max, 450);
-  assert.equal(townCenter.controlRadius, 22);
+  assert.equal(townCenter.controlRadius, 32);
   assert.equal(townCenter.workerTrainingSeconds, 9);
   kingdoms.get("player").wallet.credit("food", 50);
   assert.equal(workerProduction.queueWorker("player"), "queued", "Town centres accept an additional waiting worker order");
@@ -29283,6 +29283,45 @@ check("Faz 7 units contesting one spot time out into arrival instead of shoving 
   assert.equal(congestionSeconds(free), 0, "and never accrues a stall");
 });
 
+check("Faz 7 a unit the crowd gives no ground gives its order up instead of grinding on it", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const dt = 1 / 30;
+
+  // §46's jam reduced to one body. A unit's step is never refused — nothing in
+  // movement can refuse it — so the only thing that ever holds a unit still is
+  // `unitSeparation` handing the ground back to the crowd afterwards. This pins
+  // the unit to model exactly that, because the emergent version (a squad packed
+  // against the Merkez footprint) jams roughly one run in five and cannot be
+  // asserted on. The tests above never reach this code at all: they pass because
+  // their units genuinely arrive, so the escape hatch below is only covered here.
+  const unit = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const route = navigation.plan(unit.position, new Vector3(0, 0, -30)) ?? assert.fail("route missing");
+  unit.setMovePath(route);
+
+  // Open ground always has a route, so the navigator answers every time it is
+  // asked: the re-plan budget is the only thing that can end this order.
+  let plans = 0;
+  const spy: RtsNavigation = Object.assign(Object.create(navigation) as RtsNavigation, {
+    plan: (start: Vector3, goal: Vector3) => {
+      plans += 1;
+      return navigation.plan(start, goal);
+    },
+  });
+
+  for (let i = 0; i < 30 * 20; i += 1) {
+    const pinnedX = unit.position.x;
+    const pinnedZ = unit.position.z;
+    updateUnitMovement([unit], dt, { navigation: spy });
+    unit.position.x = pinnedX;
+    unit.position.z = pinnedZ;
+  }
+
+  assert.equal(unit.pathTarget, null, "plan §45: a stall ends in a stop; no order outlives the jam");
+  assert.ok(plans > 0, "the stall was noticed at all — progress is measured per frame, not per step");
+  assert.ok(plans <= 2, `and the re-plan budget is spent rather than refunded (${plans} re-plans)`);
+});
+
 check("Faz 7 a group order onto unreachable ground stops the unit instead of walking it into rock", () => {
   const units = new UnitSystem();
   const navigation = new RtsNavigation();
@@ -29387,6 +29426,10 @@ check("RTS grid navigation routes a unit around a static blocker", () => {
 });
 
 check("RTS Faz 2 blockout keeps both flanks reachable around the central ridge", () => {
+  assert.deepEqual(RTS_BLOCKOUT_MAP.playerStart, { x: -38, z: 38 }, "player starts in the south-west corner");
+  assert.deepEqual(RTS_BLOCKOUT_MAP.enemyStart, { x: 38, z: -38 }, "enemy starts in the north-east corner");
+  assert.equal(RTS_WORLD_HALF_EXTENT, 70, "the playable field is larger than the original 120-unit square");
+  assert.equal(COMMAND_CENTER_CONTROL_RADIUS, 28, "starting territory leaves a larger construction ring");
   const navigation = new RtsNavigation();
   navigation.setBlockers(RTS_BLOCKOUT_MAP.navigationBlockers);
   const start = new Vector3(RTS_BLOCKOUT_MAP.playerStart.x, 0, RTS_BLOCKOUT_MAP.playerStart.z);
@@ -29410,7 +29453,7 @@ check("RTS attack pursuit routes around the central ridge instead of crossing it
   issueAttackOrder(attacker, target, navigation);
 
   assert.ok(attacker.pathWaypointCount > 2, "attack order receives a flank route");
-  for (let frame = 0; frame < 1_200; frame += 1) {
+  for (let frame = 0; frame < 2_400; frame += 1) {
     updateUnitMovement([attacker], 1 / 60);
     const insideRidge = attacker.position.x > -12.5 && attacker.position.x < 12.5
       && attacker.position.z > -4.5 && attacker.position.z < 4.5;
@@ -30136,6 +30179,12 @@ check("RTS headless structure construction builds for either kingdom under the s
   ]);
   territory.refresh();
   const placed: string[] = [];
+  const roads = new RoadGraph(validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  ));
+  const roadPlan = roads.plan({ x: 40, z: 0 }, { x: 40, z: 0 }, []);
+  assert.ok(roadPlan);
+  roads.commit(roadPlan);
   const construction = new StructureConstructionService(
     buildings,
     structures,
@@ -30145,11 +30194,18 @@ check("RTS headless structure construction builds for either kingdom under the s
     territory,
     (structure) => placed.push(`${structure.owner}:${structure.stats.id}`),
     () => {},
+    undefined,
+    () => roads.occupancyBlockers(),
   );
+
+  const roadBlocked = construction.build("enemy", "house", 40, 0);
+  assert.equal(roadBlocked.built, false);
+  assert.equal(roadBlocked.built === false && roadBlocked.reason, "blocked");
+  assert.equal(kingdoms.get("enemy").wallet.amount("wood"), 300);
 
   // The AI builds with no pointer, no ghost, no camera — the same call the
   // player's palette makes underneath.
-  const enemyBuild = construction.build("enemy", "house", 40, 0);
+  const enemyBuild = construction.build("enemy", "house", 46, 0);
   assert.equal(enemyBuild.built, true, "enemy can build inside its own territory");
   assert.ok(enemyBuild.built && enemyBuild.structure.owner === "enemy");
   assert.deepEqual(placed, ["enemy:house"]);
@@ -30366,8 +30422,8 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
   const units = new UnitSystem();
   const structures = new PlacedStructureSystem();
   const centers = new CommandCenterSystem();
-  centers.spawn("player", 0, 22);
-  centers.spawn("enemy", 0, -26);
+  centers.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x, RTS_BLOCKOUT_MAP.playerStart.z);
+  centers.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x, RTS_BLOCKOUT_MAP.enemyStart.z);
   const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, startingResources, 20);
   const navigation = new RtsNavigation();
   navigation.setBlockers(centers.navigationBlockers());
@@ -30571,7 +30627,7 @@ function spawnPlayerDefence(
   count = 10,
 ): void {
   for (let index = 0; index < count; index += 1) {
-    world.units.spawn("player", -12 + index * 3, 29, guard);
+    world.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 12 + index * 3, RTS_BLOCKOUT_MAP.playerStart.z + 7, guard);
   }
 }
 
@@ -31070,9 +31126,9 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
 
   const opener = aiTestWorld({ food: 400, wood: 600 });
   // The match-start force: workers only, no army — exactly what RtsApp spawns.
-  for (let index = 0; index < 5; index += 1) opener.units.spawn("enemy", -4 + index * 2, -18, worker);
+  for (let index = 0; index < 5; index += 1) opener.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
   // The player fields a standing defence the AI can see.
-  for (let index = 0; index < 4; index += 1) opener.units.spawn("player", -4 + index * 3, 29, guard);
+  for (let index = 0; index < 4; index += 1) opener.units.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x - 4 + index * 3, RTS_BLOCKOUT_MAP.playerStart.z + 7, guard);
 
   // §34's opening window (~2 min): an army-less AI builds. It must not rush —
   // with no Barracks yet it has nothing to attack with, and its workers must
@@ -31127,7 +31183,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   // depot and road exist (Faz 4 logistics), so a starting stockpile stands in
   // for the income the Genişleme group will unlock.
   const housed = aiTestWorld({ food: 4000, wood: 4000 });
-  for (let index = 0; index < 5; index += 1) housed.units.spawn("enemy", -4 + index * 2, -18, worker);
+  for (let index = 0; index < 5; index += 1) housed.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
   spawnPlayerDefence(housed, guard);
   for (let index = 0; index < 1600; index += 1) housed.step(0.5);
   const housedBoard = housed.ai.snapshot().blackboard ?? assert.fail("blackboard missing");
@@ -31146,7 +31202,7 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
   // §38: a broke AI waits and re-evaluates instead of spinning on a build it
   // cannot afford — and never drives its wallet negative.
   const broke = aiTestWorld({ food: 0, wood: 0 });
-  for (let index = 0; index < 3; index += 1) broke.units.spawn("enemy", -2 + index * 2, -18, worker);
+  for (let index = 0; index < 3; index += 1) broke.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 2 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
   for (let index = 0; index < 200; index += 1) broke.step(0.5);
   assert.equal(broke.structures.ownedBy("enemy").length, 0, "nothing is built without resources");
   assert.equal(broke.kingdoms.get("enemy").wallet.amount("wood"), 0, "a blocked AI never overdraws");
@@ -31209,7 +31265,7 @@ check("AI expansion runs the §47 recipe end to end and finally earns income", (
   const region = AI_TEST_PRIMARY_REGION;
 
   const world = aiTestWorld({ food: 4000, wood: 4000 });
-  for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", -4 + index * 2, -18, worker);
+  for (let index = 0; index < 5; index += 1) world.units.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x - 4 + index * 2, RTS_BLOCKOUT_MAP.enemyStart.z + 8, worker);
   // Expansion is what a *contested* AI does with the economy it cannot yet win
   // with; an unopposed one rightly marches out instead.
   spawnPlayerDefence(world, guard);
@@ -31227,7 +31283,13 @@ check("AI expansion runs the §47 recipe end to end and finally earns income", (
   // §26: the outpost is wired to the main network, which is the only reason the
   // depot and farm were ever legal — they sit outside its unconnected radius.
   const outpostCell = roadCellTouchingFootprint(world.roads, region.outpost.x, region.outpost.z, 6, 6);
-  const centerCell = roadCellTouchingFootprint(world.roads, 0, -26, 8, 8);
+  const centerCell = roadCellTouchingFootprint(
+    world.roads,
+    RTS_BLOCKOUT_MAP.enemyStart.x,
+    RTS_BLOCKOUT_MAP.enemyStart.z,
+    8,
+    8,
+  );
   assert.ok(outpostCell && centerCell, "the corridor touches both the outpost and the centre");
   assert.ok(
     outpostCell && centerCell && world.roads.connected(outpostCell, centerCell),
@@ -32663,7 +32725,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
             missingBuildingIds: [],
             ...age,
           },
-          controlRadius: 18,
+          controlRadius: 28,
           workerStats: RTS_TEST_WORKER_STATS,
           requiredBuildingLabels: labels,
         },

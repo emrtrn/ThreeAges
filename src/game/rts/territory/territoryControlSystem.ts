@@ -43,7 +43,7 @@ const OVERLAY_COLOR: Record<UnitOwner, Color> = {
 };
 
 /** Default phase-four starting territory radius, measured in world units. */
-export const COMMAND_CENTER_CONTROL_RADIUS = 18;
+export const COMMAND_CENTER_CONTROL_RADIUS = 28;
 
 export class TerritoryControlSystem {
   readonly root = new Group();

@@ -51,6 +51,18 @@ interface CongestionState {
   replans: number;
   /** Waypoint the stall is being measured against; a new one resets the stall. */
   waypoint: Vector3 | null;
+  /**
+   * Distance to {@link waypoint} at the previous frame's check, so progress is
+   * measured over a whole frame — the step *and* the shove `unitSeparation` puts
+   * back afterwards. Measuring inside the step instead reports the step itself,
+   * which is always taken, and never sees a stall at all.
+   */
+  lastDistance: number;
+  /**
+   * Set when the next waypoint change is one we handed the unit ourselves. Such a
+   * change is not progress, and must not refund {@link MAX_REPLANS}.
+   */
+  replanned: boolean;
 }
 
 /**
@@ -106,7 +118,11 @@ export function updateUnitMovement(
     if (dist <= ARRIVAL_RADIUS) {
       if (unit.pathTarget) unit.advancePath();
       else if (!unit.attackTarget) unit.moveTarget = null;
-      congestion.delete(unit);
+      // The stall bookkeeping is released when the *order* ends, one frame from
+      // now by the `!target` branch above — not here. Reaching one waypoint of
+      // many is not the end of anything, and a re-planned route always begins on
+      // the unit's own feet, so releasing here would refund the re-plan budget
+      // every time it was spent.
       continue;
     }
 
@@ -123,8 +139,14 @@ export function updateUnitMovement(
 }
 
 /**
- * Measure whether this frame's step actually bought ground, and escalate when it
+ * Measure whether the unit actually bought ground, and escalate when it
  * repeatedly did not: re-plan first, and only then give the destination up.
+ *
+ * Progress is the ground gained since the previous frame's check, never the step
+ * taken inside this one. A unit always takes its step — nothing in this system
+ * can refuse it — and it is `unitSeparation`, running afterwards, that takes the
+ * ground back when the crowd has none to give. Only the frame-to-frame delta can
+ * see that, and so only it can see a stall.
  */
 function trackCongestion(
   unit: Unit,
@@ -134,19 +156,24 @@ function trackCongestion(
   dt: number,
   navigation: RtsNavigation | undefined,
 ): void {
-  const state = congestion.get(unit) ?? { seconds: 0, replans: 0, waypoint: null };
+  const state = congestion.get(unit)
+    ?? { seconds: 0, replans: 0, waypoint: null, lastDistance: distanceBefore, replanned: false };
+  congestion.set(unit, state);
   if (state.waypoint !== waypoint) {
-    // Reaching a new waypoint is progress by definition, and the replan budget
-    // belongs to the leg, not to the whole route.
     state.waypoint = waypoint;
     state.seconds = 0;
-    state.replans = 0;
+    state.lastDistance = distanceBefore;
+    // A waypoint the unit reached under its own feet is progress and earns a
+    // fresh budget; one this function handed it does not, or MAX_REPLANS would
+    // be refunded as fast as it is spent and the give-up below unreachable.
+    if (state.replanned) state.replanned = false;
+    else state.replans = 0;
+    return;
   }
-  congestion.set(unit, state);
 
-  const distanceAfter = Math.hypot(waypoint.x - unit.position.x, waypoint.z - unit.position.z);
-  const progressed = distanceBefore - distanceAfter >= step * PROGRESS_FRACTION;
-  if (progressed) {
+  const gained = state.lastDistance - distanceBefore;
+  state.lastDistance = distanceBefore;
+  if (gained >= step * PROGRESS_FRACTION) {
     state.seconds = 0;
     return;
   }
@@ -161,6 +188,7 @@ function trackCongestion(
     if (path && path.length > 0) {
       unit.replanPath(path);
       state.waypoint = null;
+      state.replanned = true;
       return;
     }
   }

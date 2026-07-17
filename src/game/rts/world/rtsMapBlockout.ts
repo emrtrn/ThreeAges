@@ -11,6 +11,7 @@ import { BoxGeometry, CircleGeometry, Color, Group, Mesh, MeshStandardMaterial }
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RtsResourceNodeDefinition } from "../economy/resourceNodeSystem";
+import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
 
 export interface RtsMapPoint {
   readonly x: number;
@@ -111,50 +112,60 @@ export interface RtsMapBlockout {
  * open west/east flanks, yielding two readable approach routes without making
  * the early map depend on road or territory systems.
  */
+const PLAYER_START: RtsMapPoint = { x: -38, z: 38 };
+const ENEMY_START: RtsMapPoint = { x: 38, z: -38 };
+
+const atEnemyBase = (x: number, z: number): RtsMapPoint => ({
+  x: ENEMY_START.x + x,
+  z: ENEMY_START.z + z,
+});
+
 export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
-  playerStart: { x: 0, z: 22 },
-  enemyStart: { x: 0, z: -26 },
+  playerStart: PLAYER_START,
+  enemyStart: ENEMY_START,
   centralExpansion: { x: 0, z: 0 },
   externalResource: { x: 27, z: 13 },
-  // Authored around the enemy centre at (0, -26): every slot is grid-snapped,
+  // Authored around the north-east enemy centre at (38, -38): every slot is grid-snapped,
   // clear of the 8x8 centre footprint and of its neighbours, and inside the
   // 18-unit starting control radius. §41 orders economy near the centre and the
   // Barracks between the centre and the front (here: the player's side is +z,
   // so the Barracks sits at -38, behind the base, matching §41's "merkez ile
   // sınır arasında" once the army rallies northward).
+  // All offsets below move with ENEMY_START and remain within the enlarged
+  // starting territory, so the AI opens from its actual new corner position.
   enemyBaseAnchors: [
-    { buildingId: "farm", x: -12, z: -26 },
-    { buildingId: "lumber_camp", x: 12, z: -26 },
+    { buildingId: "farm", ...atEnemyBase(-12, 0) },
+    { buildingId: "lumber_camp", ...atEnemyBase(12, 0) },
     // Faz 8: the Town age requires a quarry and a gold mine, and both must cover
     // a live deposit. The two enemy-side safe nodes sit at (-4,-14) and (4,-14),
     // so these are the only two slots on this map that can ever satisfy it — the
     // 6-wide footprint reaches a node up to 3 units off centre.
-    { buildingId: "quarry", x: -6, z: -14 },
-    { buildingId: "gold_mine", x: 6, z: -14 },
+    { buildingId: "quarry", ...atEnemyBase(-6, 12) },
+    { buildingId: "gold_mine", ...atEnemyBase(6, 12) },
     // The base depot sits in the gap the two extractors leave, where the spine
     // can touch all three from the z=-18 leg.
-    { buildingId: "depot", x: 0, z: -14 },
-    { buildingId: "barracks", x: 0, z: -38 },
+    { buildingId: "depot", ...atEnemyBase(0, 12) },
+    { buildingId: "barracks", ...atEnemyBase(0, -12) },
     // Housing moved behind the base: the two former slots at (±12,-20) stood on
     // what is now the spine's branch down to the farm and lumber camp.
-    { buildingId: "house", x: -12, z: -32 },
-    { buildingId: "house", x: 12, z: -32 },
-    { buildingId: "house", x: -16, z: -32 },
-    { buildingId: "house", x: 16, z: -32 },
-    { buildingId: "house", x: -12, z: -36 },
-    { buildingId: "house", x: 12, z: -36 },
+    { buildingId: "house", ...atEnemyBase(-12, -6) },
+    { buildingId: "house", ...atEnemyBase(12, -6) },
+    { buildingId: "house", ...atEnemyBase(-16, -6) },
+    { buildingId: "house", ...atEnemyBase(16, -6) },
+    { buildingId: "house", ...atEnemyBase(-12, -10) },
+    { buildingId: "house", ...atEnemyBase(12, -10) },
   ],
   // Spur to the centre, spine across the base, then a branch down to each of the
   // two starting producers. The leg back along z=-18 is retraced on purpose:
   // segments are idempotent, so one polyline can express a branching network.
   enemyBaseRoute: [
-    { x: 0, z: -20 },
-    { x: 0, z: -18 },
-    { x: -12, z: -18 },
-    { x: -12, z: -22 },
-    { x: -12, z: -18 },
-    { x: 12, z: -18 },
-    { x: 12, z: -22 },
+    atEnemyBase(0, 6),
+    atEnemyBase(0, 8),
+    atEnemyBase(-12, 8),
+    atEnemyBase(-12, 4),
+    atEnemyBase(-12, 8),
+    atEnemyBase(12, 8),
+    atEnemyBase(12, 4),
   ],
   // West then east flank. Each outpost sits in neutral land just within the
   // 12-unit expansion reach of the enemy's starting territory; the depot and
@@ -165,60 +176,60 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   enemyExpansions: [
     {
       id: "enemy_west",
-      outpost: { buildingId: "outpost", x: -28, z: -20 },
-      depot: { buildingId: "depot", x: -28, z: -28 },
-      production: { buildingId: "farm", x: -28, z: -12 },
+      outpost: { buildingId: "outpost", ...atEnemyBase(-28, 6) },
+      depot: { buildingId: "depot", ...atEnemyBase(-28, -2) },
+      production: { buildingId: "farm", ...atEnemyBase(-28, 14) },
       routes: [
         // Joins the base spine at its west end, runs out along z = -18, then
         // covers the x = -24 corridor, which touches all three region slots. It
         // used to leave the centre up the x = -6 line; Faz 8's quarry now stands
         // there, and a road cell may never overlap a footprint.
         [
-          { x: -12, z: -18 },
-          { x: -24, z: -18 },
-          { x: -24, z: -12 },
-          { x: -24, z: -28 },
+          atEnemyBase(-12, 8),
+          atEnemyBase(-24, 8),
+          atEnemyBase(-24, 14),
+          atEnemyBase(-24, -2),
         ],
         // Fallback: leave the base northward and come at the corridor along
         // z = -8, clear of the z = -18 leg entirely. Nothing is authored on this
         // line, so an obstruction on the direct corridor does not retire the
         // region (§49 "yol rota fallback'i").
         [
-          { x: -12, z: -18 },
-          { x: -12, z: -8 },
-          { x: -24, z: -8 },
-          { x: -24, z: -12 },
-          { x: -24, z: -28 },
+          atEnemyBase(-12, 8),
+          atEnemyBase(-12, 18),
+          atEnemyBase(-24, 18),
+          atEnemyBase(-24, 14),
+          atEnemyBase(-24, -2),
         ],
       ],
     },
     {
       id: "enemy_east",
-      outpost: { buildingId: "outpost", x: 28, z: -20 },
-      depot: { buildingId: "depot", x: 28, z: -28 },
-      production: { buildingId: "lumber_camp", x: 28, z: -12 },
+      outpost: { buildingId: "outpost", ...atEnemyBase(28, 6) },
+      depot: { buildingId: "depot", ...atEnemyBase(28, -2) },
+      production: { buildingId: "lumber_camp", ...atEnemyBase(28, 14) },
       routes: [
         [
-          { x: 12, z: -18 },
-          { x: 24, z: -18 },
-          { x: 24, z: -12 },
-          { x: 24, z: -28 },
+          atEnemyBase(12, 8),
+          atEnemyBase(24, 8),
+          atEnemyBase(24, 14),
+          atEnemyBase(24, -2),
         ],
         [
-          { x: 12, z: -18 },
-          { x: 12, z: -8 },
-          { x: 24, z: -8 },
-          { x: 24, z: -12 },
-          { x: 24, z: -28 },
+          atEnemyBase(12, 8),
+          atEnemyBase(12, 18),
+          atEnemyBase(24, 18),
+          atEnemyBase(24, 14),
+          atEnemyBase(24, -2),
         ],
       ],
     },
   ],
   resourceNodes: [
-    { id: "player_safe_stone", resourceId: "stone", kind: "safe", x: -4, z: 10 },
-    { id: "player_safe_gold", resourceId: "gold", kind: "safe", x: 4, z: 10 },
-    { id: "enemy_safe_stone", resourceId: "stone", kind: "safe", x: -4, z: -14 },
-    { id: "enemy_safe_gold", resourceId: "gold", kind: "safe", x: 4, z: -14 },
+    { id: "player_safe_stone", resourceId: "stone", kind: "safe", x: -42, z: 26 },
+    { id: "player_safe_gold", resourceId: "gold", kind: "safe", x: -34, z: 26 },
+    { id: "enemy_safe_stone", resourceId: "stone", kind: "safe", x: 34, z: -26 },
+    { id: "enemy_safe_gold", resourceId: "gold", kind: "safe", x: 42, z: -26 },
     { id: "external_stone", resourceId: "stone", kind: "external", x: -34, z: 16 },
     { id: "external_gold", resourceId: "gold", kind: "external", x: 34, z: 16 },
   ],
@@ -293,17 +304,18 @@ function createRockRidge(blocker: NavBlocker): Mesh {
 /** Visual-only boundary rocks; `RtsNavigation` world bounds enforce the edge. */
 function createBoundaryPlaceholders(): Mesh[] {
   const material = new MeshStandardMaterial({ color: "#3f4934", roughness: 1 });
-  const geometry = new BoxGeometry(120, 4, 3);
+  const size = RTS_WORLD_HALF_EXTENT * 2;
+  const geometry = new BoxGeometry(size, 4, 3);
   const north = new Mesh(geometry, material);
   north.name = "rts-natural-boundary";
-  north.position.set(0, 2, -58.5);
+  north.position.set(0, 2, -RTS_WORLD_HALF_EXTENT + 1.5);
   const south = north.clone();
-  south.position.z = 58.5;
-  const sideGeometry = new BoxGeometry(3, 4, 114);
+  south.position.z = RTS_WORLD_HALF_EXTENT - 1.5;
+  const sideGeometry = new BoxGeometry(3, 4, size - 6);
   const west = new Mesh(sideGeometry, material);
   west.name = "rts-natural-boundary";
-  west.position.set(-58.5, 2, 0);
+  west.position.set(-RTS_WORLD_HALF_EXTENT + 1.5, 2, 0);
   const east = west.clone();
-  east.position.x = 58.5;
+  east.position.x = RTS_WORLD_HALF_EXTENT - 1.5;
   return [north, south, west, east];
 }

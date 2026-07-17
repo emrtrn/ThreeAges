@@ -24,7 +24,8 @@ import type { NavBlocker } from "@engine/navigation/gridNavigation";
 
 /** Temporary Faz 1 centre durability; building balance data arrives in Faz 2. */
 export const COMMAND_CENTER_MAX_HEALTH = 300;
-export const COMMAND_CENTER_CONTROL_RADIUS = 18;
+/** Initial buildable territory around a newly placed command centre. */
+export const COMMAND_CENTER_CONTROL_RADIUS = 28;
 const COMMAND_CENTER_FOOTPRINT = 7;
 
 const CENTER_TEAM_COLOR: Record<UnitOwner, string> = {

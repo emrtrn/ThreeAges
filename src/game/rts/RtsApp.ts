@@ -353,6 +353,7 @@ export class RtsApp {
         )
         ? "missing-resource-node"
         : null,
+      () => this.roads.occupancyBlockers(),
     );
     this.roadConstruction = new RoadConstructionService(
       this.roads,
@@ -692,8 +693,8 @@ export class RtsApp {
       this.units.spawn("player", x, z, guard);
     }
     for (let i = 0; i < STARTING_WORKER_COUNT; i++) {
-      this.units.spawn("player", -4 + i * 2, PLAYER_CENTER_POSITION.z - 8, worker);
-      this.units.spawn("enemy", -4 + i * 2, ENEMY_CENTER_POSITION.z + 8, worker);
+      this.units.spawn("player", PLAYER_CENTER_POSITION.x - 4 + i * 2, PLAYER_CENTER_POSITION.z - 8, worker);
+      this.units.spawn("enemy", ENEMY_CENTER_POSITION.x - 4 + i * 2, ENEMY_CENTER_POSITION.z + 8, worker);
     }
   }
 

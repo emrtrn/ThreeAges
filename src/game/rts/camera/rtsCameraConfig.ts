@@ -91,14 +91,14 @@ function clamp01(value: number): number {
 
 export const DEFAULT_RTS_CAMERA_CONFIG: RtsCameraConfig = {
   pitchDeg: 55,
-  minDistance: 12,
-  maxDistance: 60,
-  startDistance: 34,
+  minDistance: 16,
+  maxDistance: 95,
+  startDistance: 44,
   panSpeed: 26,
   panReferenceDistance: 34,
   zoomStep: 0.15,
   zoomLerpRate: 12,
-  bounds: { minX: -60, maxX: 60, minZ: -60, maxZ: 60 },
+  bounds: { minX: -70, maxX: 70, minZ: -70, maxZ: 70 },
   edgeScroll: { enabled: false, marginPx: 12 },
   fovDeg: 50,
 };
