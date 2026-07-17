@@ -389,6 +389,29 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       }
       territory = { controlRadius, connectedControlRadius, expansionPlacementRange };
     }
+    const defenseRaw = stats["defense"];
+    let defense: BuildingBalance["string"]["defense"];
+    if (defenseRaw !== undefined) {
+      const defenseWhere = `${statsWhere}.defense`;
+      const defenseData = asObject(defenseRaw, defenseWhere);
+      const attackDamage = requireFiniteNumber(defenseData, "attackDamage", defenseWhere);
+      const attackCooldown = requireFiniteNumber(defenseData, "attackCooldown", defenseWhere);
+      const attackRange = requireFiniteNumber(defenseData, "attackRange", defenseWhere);
+      const arrowsPerVolley = requireFiniteNumber(defenseData, "arrowsPerVolley", defenseWhere);
+      if (attackDamage <= 0 || attackCooldown <= 0 || attackRange <= 0) {
+        throw new GameDataError(`${defenseWhere}: damage, cooldown and range must be > 0`);
+      }
+      if (!Number.isInteger(arrowsPerVolley) || arrowsPerVolley <= 0) {
+        throw new GameDataError(`${defenseWhere}.arrowsPerVolley: must be a positive integer`);
+      }
+      defense = {
+        attackDamage,
+        attackCooldown,
+        attackRange,
+        arrowsPerVolley,
+        damageMultipliers: validateDamageMultipliers(defenseData["damageMultipliers"], `${defenseWhere}.damageMultipliers`),
+      };
+    }
     const upgradeRaw = stats["upgrade"];
     let upgrade: BuildingBalance["string"]["upgrade"];
     if (upgradeRaw !== undefined) {
@@ -430,6 +453,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       ...(populationCapacity ? { populationCapacity } : {}),
       ...(economy ? { economy } : {}),
       ...(territory ? { territory } : {}),
+      ...(defense ? { defense } : {}),
       ...(upgrade ? { upgrade } : {}),
     };
   }

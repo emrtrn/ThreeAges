@@ -47,6 +47,7 @@ import { updateUnitCombat } from "./units/unitCombat";
 import { updateUnitDeaths } from "./units/unitDeath";
 import { updateUnitEngagement } from "./combat/engagementSystem";
 import { ProjectileSystem } from "./combat/projectileSystem";
+import { StructureDefenseSystem } from "./combat/structureDefenseSystem";
 import { RtsNavigation } from "./navigation/rtsNavigation";
 import { MarqueeOverlay } from "./selection/marqueeOverlay";
 import { SelectionSystem } from "./selection/selectionSystem";
@@ -67,7 +68,15 @@ import { KingdomRegistry } from "./kingdom/kingdomRegistry";
 import { RoadConstructionService } from "./roads/roadConstructionService";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
-import type { RtsSelectionView, StructureDetailView, WorkerJob } from "./ui/rtsSelectionView";
+import {
+  AGE_UP_ACTION,
+  RALLY_ACTION,
+  TRAIN_ACTION_PREFIX,
+  TRAIN_WORKER_ACTION,
+  type RtsSelectionView,
+  type StructureDetailView,
+  type WorkerJob,
+} from "./ui/rtsSelectionView";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
@@ -199,8 +208,10 @@ export class RtsApp {
   private readonly placement: BuildingPlacementSystem;
   private readonly roadPlacement: RoadPlacementSystem;
   private readonly buildPalette: RtsBuildPalette;
-  private readonly selectionPanel = new RtsSelectionPanel();
+  private readonly selectionPanel = new RtsSelectionPanel((id) => this.runSelectionAction(id));
+  private buildingLabelCache: ReadonlyMap<string, string> | null = null;
   private readonly projectiles = new ProjectileSystem();
+  private readonly structureDefense = new StructureDefenseSystem();
   private readonly roadControls: RtsRoadControls;
   private readonly hudBar = new RtsHudBar();
   private readonly notifications = new RtsNotificationCenter();
@@ -257,6 +268,7 @@ export class RtsApp {
       this.units,
       this.marquee,
       this.structures,
+      this.centers,
     );
     this.commands = new CommandSystem(
       canvas,
@@ -413,17 +425,6 @@ export class RtsApp {
         this.buildPalette.setActionMessage(null);
         this.syncPlacementUi();
       },
-      (unitId) => this.queueUnit(unitId),
-      () => this.queueWorker(),
-      () => {
-        this.placement.cancel();
-        this.roadPlacement.cancel();
-        this.rallyPointPending = true;
-        this.buildPalette.setActionMessage("Toplanma noktası için haritada bir konum seçin.");
-        this.syncPlacementUi();
-        this.syncRoadUi();
-      },
-      () => this.startTownUpgrade(),
       () => this.startBarracksUpgrade(),
       () => this.startHouseUpgrade(),
       () => this.startDepotUpgrade(),
@@ -561,6 +562,14 @@ export class RtsApp {
   /** The human kingdom's economy — everything the HUD reads and writes. */
   private get playerKingdom() {
     return this.kingdoms.get(PLAYER_OWNER);
+  }
+
+  /** Building id → player-facing label, built once from the balance data. */
+  private get buildingLabels(): ReadonlyMap<string, string> {
+    this.buildingLabelCache ??= new Map(
+      Object.entries(this.options.buildingBalance).map(([id, stats]) => [id, stats.label]),
+    );
+    return this.buildingLabelCache;
   }
 
   start(): void {
@@ -865,6 +874,17 @@ export class RtsApp {
         if (hit.ranged) this.projectiles.spawn(hit.attacker.owner, hit.attacker.position, hit.target.position);
       },
     );
+    this.structureDefense.update(this.structures.all(), this.combatTargets(), dt, (hit) => {
+      // A completed Karakol is two Archer attacks at once. Offset the two
+      // tracers very slightly so the volley reads as two arrows rather than one.
+      this.projectiles.spawn(
+        hit.attacker.owner,
+        hit.attacker.position,
+        hit.target.position,
+        3.2,
+        hit.arrowIndex === 0 ? -0.14 : 0.14,
+      );
+    });
     updateUnitDeaths(this.units, this.selection, dt);
     this.destroyRuinedStructures();
     const outcome = this.match.update(this.centers);
@@ -1071,7 +1091,8 @@ export class RtsApp {
 
   private syncPlacementUi(): void {
     this.buildPalette.setState(this.placement.state());
-    this.buildPalette.setTrainableUnits(this.barracksProduction.trainableUnits(PLAYER_OWNER));
+    // The roster left with the palette's train buttons (§51): it is pushed to
+    // the Barracks' own panel now, and only while that Barracks is selected.
     this.syncHudBar();
     this.syncEconomyUi();
   }
@@ -1131,18 +1152,70 @@ export class RtsApp {
       };
     }
     const structure = this.selection.selectedStructure();
-    if (!structure) return { kind: "none" };
+    if (structure) {
+      return {
+        kind: "structure",
+        structure: {
+          id: structure.id,
+          label: structure.stats.label,
+          level: structure.level,
+          health: structure.health.current,
+          maxHealth: structure.health.max,
+          detail: this.structureDetail(structure),
+        },
+      };
+    }
+    const center = this.selection.selectedCenter();
+    if (!center) return { kind: "none" };
     return {
       kind: "structure",
       structure: {
-        id: structure.id,
-        label: structure.stats.label,
-        level: structure.level,
-        health: structure.health.current,
-        maxHealth: structure.health.max,
-        detail: this.structureDetail(structure),
+        id: 0,
+        label: this.options.buildingBalance["command_center"]?.label ?? "Merkez",
+        level: center.level,
+        health: center.health.current,
+        maxHealth: center.health.max,
+        detail: {
+          kind: "center",
+          queue: this.workerProduction.queueSnapshot(PLAYER_OWNER),
+          age: this.ages.snapshot(PLAYER_OWNER),
+          controlRadius: center.controlRadius,
+          workerStats: this.options.unitBalance["worker_placeholder"]!,
+          requiredBuildingLabels: this.buildingLabels,
+        },
       },
     };
+  }
+
+  /**
+   * Run a button the selection panel offered. The panel hands back an id and
+   * nothing else: the verbs, and the messages they answer with, stay here next
+   * to every other command path — which is what keeps a panel button and the
+   * same order issued any other way from drifting into two behaviours.
+   */
+  private runSelectionAction(id: string): void {
+    if (id === TRAIN_WORKER_ACTION) {
+      this.queueWorker();
+      return;
+    }
+    if (id === AGE_UP_ACTION) {
+      this.startTownUpgrade();
+      return;
+    }
+    if (id === RALLY_ACTION) {
+      this.placement.cancel();
+      this.roadPlacement.cancel();
+      this.rallyPointPending = true;
+      this.buildPalette.setActionMessage("Toplanma noktası için haritada bir konum seçin.");
+      return;
+    }
+    if (id.startsWith(TRAIN_ACTION_PREFIX)) {
+      this.queueUnit(id.slice(TRAIN_ACTION_PREFIX.length));
+      return;
+    }
+    // An unknown id means the view offered a button nothing implements: that is
+    // a wiring bug, and swallowing it would present the player a dead button.
+    throw new Error(`Unhandled selection action: ${id}`);
   }
 
   /**
@@ -1206,6 +1279,9 @@ export class RtsApp {
         // centre point would call a working Barracks "Kontrol Dışı".
         connected: this.territory.ownerAt(structure.x, structure.z) === structure.owner,
         upgrading: this.structureUpgrades.isUpgrading(structure),
+        // The tier gate comes from the system that enforces it, never from a
+        // level check written again here (plan §45: the gate lives in data).
+        roster: this.barracksProduction.trainableUnits(structure.owner),
       };
     }
     // Population is the only thing a House does, and the panel reads it the same

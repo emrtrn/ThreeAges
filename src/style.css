@@ -504,12 +504,47 @@ body {
   font-size: 11px;
 }
 
-/* Faz 7 unit training sits on its own row so the roster reads as one group. */
-.rts-train-choices {
+/* Faz 9 §51: what the selected thing can *do*. Wraps, because a Barracks offers
+   the whole roster while a House offers nothing. */
+.rts-selection-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  width: 100%;
+  margin-top: 8px;
+}
+
+.rts-selection-actions[hidden] {
+  display: none;
+}
+
+.rts-selection-action {
+  display: grid;
+  gap: 2px;
+  padding: 5px 9px;
+  color: #1d2b1b;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  background: #cddd8d;
+  border: 0;
+  border-radius: 3px;
+}
+
+.rts-selection-action:disabled {
+  opacity: 0.48;
+  cursor: default;
+}
+
+.rts-selection-action-label {
+  line-height: 1.1;
+}
+
+.rts-selection-action-cost {
+  color: #56632f;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.1;
 }
 
 /* Faz 2 placement controls: intentionally small until the full RTS HUD lands. */

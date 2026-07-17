@@ -13,6 +13,7 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  RingGeometry,
   type Object3D,
 } from "three";
 
@@ -35,6 +36,12 @@ export class CommandCenter {
   readonly object = new Group();
   /** Shared bounded-health contract used by units and structures. */
   readonly health: HealthComponent;
+  /**
+   * Faz 9 §51 selection ring. Held on the centre rather than inside its swappable
+   * visual: {@link setVisual} replaces the placeholder with a loaded model, and a
+   * ring living in there would be disposed with it.
+   */
+  private readonly selectionRing: Mesh;
   level = 1;
   controlRadius = COMMAND_CENTER_CONTROL_RADIUS;
   workerTrainingSeconds: number | null = null;
@@ -85,10 +92,30 @@ export class CommandCenter {
     roof.name = "rts-command-center-roof";
     placeholder.add(roof);
     this.object.add(placeholder);
+
+    const ringRadius = COMMAND_CENTER_FOOTPRINT / 2 + 0.35;
+    this.selectionRing = new Mesh(
+      new RingGeometry(ringRadius, ringRadius + 0.3, 32),
+      new MeshStandardMaterial({
+        color: new Color("#f2f27a"),
+        emissive: new Color("#8f8f20"),
+        roughness: 0.5,
+      }),
+    );
+    this.selectionRing.name = "rts-command-center-selection-ring";
+    this.selectionRing.rotation.x = -Math.PI / 2;
+    this.selectionRing.position.y = 0.05;
+    this.selectionRing.visible = false;
+    this.object.add(this.selectionRing);
   }
 
   get position() {
     return this.object.position;
+  }
+
+  /** The centre's counterpart of `Unit.setSelected` (plan §51). */
+  setSelected(selected: boolean): void {
+    this.selectionRing.visible = selected;
   }
 
   /** Apply the data-owned Town benefit after a completed Settlement upgrade. */

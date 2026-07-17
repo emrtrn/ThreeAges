@@ -12,6 +12,32 @@ async function openMatch(page: Page, route: string): Promise<void> {
   await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
 }
 
+/**
+ * Faz 9 §51 moved the centre's verbs — worker training and the age — off the
+ * palette and onto the centre's own panel, so reaching them now means selecting
+ * the building, exactly as a player does. The centre starts below the opening
+ * camera, hence the pan.
+ *
+ * The click sweeps candidates instead of trusting one point: where the centre
+ * lands on screen depends on the viewport, and a single hard-coded point silently
+ * selects *nothing* the moment a test sets a different size. Success is defined
+ * by what the panel says, not by the coordinate that happened to work.
+ */
+async function selectCommandCenter(page: Page): Promise<void> {
+  const canvas = page.locator("#game-canvas");
+  await canvas.click({ position: { x: 1150, y: 200 } });
+  await page.keyboard.down("s");
+  await page.waitForTimeout(700);
+  await page.keyboard.up("s");
+  const panel = page.locator(".rts-selection-panel");
+  const { width, height } = page.viewportSize() ?? { width: 1280, height: 720 };
+  for (const offset of [0.47, 0.42, 0.53, 0.58]) {
+    await canvas.click({ position: { x: Math.round(width / 2), y: Math.round(height * offset) } });
+    if (await panel.isVisible() && (await panel.innerText()).includes("Merkez")) break;
+  }
+  await expect(panel, "the pan must leave the Merkez clickable").toContainText("Merkez");
+}
+
 test("RTS Phase 4 build palette exposes territory-gated economy structures without runtime errors", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -33,7 +59,9 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await expect(page.locator('[data-rts-building="house"]')).toContainText("80 Odun");
   await expect(page.locator('[data-rts-building="depot"]')).toContainText("120 Odun");
   await expect(page.locator('[data-rts-building="outpost"]')).toContainText("140 Odun");
-  await expect(page.getByRole("button", { name: "İşçi Üret", exact: true })).toBeVisible();
+  // §51: the palette is the *placement* surface now. Training a worker is
+  // something the Merkez does, so its button left with the building.
+  await expect(page.getByRole("button", { name: "İşçi Üret", exact: true })).toHaveCount(0);
   await expect(page.locator(".rts-hud-population")).toHaveText("Nüfus: 9/20");
   await expect(page.locator(".rts-hud-age")).toHaveText("Çağ: Yerleşim");
   await expect(page.locator(".rts-hud-idle-workers")).toHaveText("Boşta işçi: 5");
@@ -75,6 +103,7 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await page.getByRole("button", { name: "Tarla", exact: true }).click();
   await expect(page.locator(".rts-build-status")).toHaveText("Haritada konum seçin.");
   await page.getByRole("button", { name: "İptal", exact: true }).click();
+  await selectCommandCenter(page);
   await page.getByRole("button", { name: "İşçi Üret", exact: true }).click();
   // The match runs at 4X here, so the order can finish before this assertion:
   // accept either side of that race rather than depending on the timing.
@@ -184,6 +213,9 @@ test("RTS Phase 9 pause actually stops the simulation", async ({ page }) => {
   await openMatch(page, "/?rts&debug");
   const idle = page.locator(".rts-hud-idle-workers");
   await expect(idle).toHaveText("Boşta işçi: 5");
+  // Selected before the speed-up: the helper pans for 700ms of real time, which
+  // at 8X would be nearly a minute of match the test never meant to spend.
+  await selectCommandCenter(page);
   await page.getByRole("button", { name: "8X", exact: true }).click();
 
   // A worker takes 25s to train, so at 8X it lands in ~3s. Population cannot be
@@ -207,29 +239,56 @@ test("RTS Phase 9 pause actually stops the simulation", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test("RTS Phase 7 palette gates the Archer and the Ram behind a tier-2 Barracks", async ({ page }) => {
+test("RTS Phase 9 the Barracks panel gates the Archer and the Ram behind a tier-2 Barracks", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
-  await openMatch(page, "/?rts");
+  // Pinned: the build point below has to miss both the palette's column and the
+  // selection panel's own box, and both are sized off the viewport. At the 1280
+  // default the palette starts at x=948 and swallows this click.
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await openMatch(page, "/?rts&debug");
   await expect(page.locator(".rts-build-palette")).toBeVisible();
 
-  // Plan §45: the whole core roster is visible from the start. A locked unit
-  // stays on screen and explains itself — that is what makes Barracks II read
-  // as a decision rather than a surprise.
+  // §51: training is what a Barracks does, so the roster left the palette with
+  // it. Nothing selected means no roster anywhere.
+  await expect(page.locator(".rts-selection-panel")).toBeHidden();
+  await expect(page.locator("[data-rts-action^='train:']")).toHaveCount(0);
+
+  // Build one, then ask it what it can train.
+  await page.getByRole("button", { name: "8X", exact: true }).click();
+  await page.getByRole("button", { name: "Kışla", exact: true }).click();
+  const site = { x: 950, y: 660 };
+  await page.locator("#game-canvas").hover({ position: site });
+  await expect(page.locator(".rts-build-status")).toHaveText("Geçerli konum — yerleştirmek için tıklayın.");
+  await page.locator("#game-canvas").click({ position: site });
+  await page.locator("#game-canvas").click({ button: "right", position: site });
+  // Wait out construction, then select it. Retried rather than slept: the site
+  // reads as a construction panel until it finishes, and "Kuyruk:" is the first
+  // thing only a finished Barracks says.
+  await expect(async () => {
+    await page.locator("#game-canvas").click({ position: site });
+    await expect(page.locator(".rts-selection-panel")).toContainText("Kuyruk:");
+  }).toPass({ timeout: 40_000 });
+
+  // Plan §45: the whole core roster is on it, locked entries included. A locked
+  // unit stays on screen and explains itself — that is what makes Barracks II
+  // read as a decision rather than a surprise. It now says so on the building
+  // where the decision is made, and at the first moment it can be acted on.
   for (const unitId of ["guard_placeholder", "archer_placeholder", "siege_placeholder"]) {
-    await expect(page.locator(`[data-rts-unit="${unitId}"]`)).toBeVisible();
+    await expect(page.locator(`[data-rts-action="train:${unitId}"]`)).toBeVisible();
   }
-  await expect(page.locator('[data-rts-unit="archer_placeholder"]')).toContainText("Okçu Üret");
-  await expect(page.locator('[data-rts-unit="siege_placeholder"]')).toContainText("Koçbaşı Üret");
-  await expect(page.locator('[data-rts-unit="archer_placeholder"]')).toHaveAttribute(
+  await expect(page.locator('[data-rts-action="train:archer_placeholder"]')).toContainText("Okçu Üret");
+  await expect(page.locator('[data-rts-action="train:siege_placeholder"]')).toContainText("Koçbaşı Üret");
+  await expect(page.locator('[data-rts-action="train:archer_placeholder"]')).toHaveAttribute(
     "title",
     /Kışla T2 gerekir/,
   );
-  // With no Barracks standing, nothing is trainable yet.
-  await expect(page.locator('[data-rts-unit="guard_placeholder"]')).toBeDisabled();
+  await expect(page.locator('[data-rts-action="train:archer_placeholder"]')).toBeDisabled();
+  // A T1 Barracks trains the Guard, and a legal action carries no excuse.
+  await expect(page.locator('[data-rts-action="train:guard_placeholder"]')).toBeEnabled();
+  await expect(page.locator('[data-rts-action="train:guard_placeholder"]')).toHaveAttribute("title", "");
 
-  await expect(page.locator(".rts-selection-panel")).toBeHidden();
   expect(errors).toEqual([]);
 });
 

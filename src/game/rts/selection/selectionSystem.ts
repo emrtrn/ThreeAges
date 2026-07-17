@@ -30,6 +30,8 @@ import {
   type PlacedStructure,
   type PlacedStructureSystem,
 } from "../structures/placedStructureSystem";
+import type { CommandCenter } from "../structures/commandCenter";
+import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 
 /** Height above ground used when projecting a unit to screen (mid-body). */
 const PROJECT_HEIGHT = 1.0;
@@ -37,6 +39,7 @@ const PROJECT_HEIGHT = 1.0;
 export class SelectionSystem implements RtsPointerHandler {
   private readonly selectedUnits = new Set<Unit>();
   private selectedStructureRef: PlacedStructure | null = null;
+  private selectedCenterRef: CommandCenter | null = null;
   private readonly raycaster = new Raycaster();
   private readonly ndc = new Vector2();
   private readonly scratch = new Vector3();
@@ -47,6 +50,7 @@ export class SelectionSystem implements RtsPointerHandler {
     private readonly units: UnitSystem,
     private readonly marquee: MarqueeOverlay,
     private readonly structures: PlacedStructureSystem,
+    private readonly centers: CommandCenterSystem,
   ) {}
 
   /** Currently selected player units (command surface for later steps). */
@@ -57,6 +61,14 @@ export class SelectionSystem implements RtsPointerHandler {
   /** The single selected player structure, if the selection is a building one. */
   selectedStructure(): PlacedStructure | null {
     return this.selectedStructureRef;
+  }
+
+  /** The selected command centre. Kept apart from {@link selectedStructure}
+   * because the centre is a `CommandCenter`, not a `PlacedStructure` — it is
+   * spawned by the match rather than built, so it has no construction, no
+   * footprint data and no owner-paid cost. */
+  selectedCenter(): CommandCenter | null {
+    return this.selectedCenterRef;
   }
 
   /** Remove a unit that died or otherwise left the field from the live selection. */
@@ -96,12 +108,18 @@ export class SelectionSystem implements RtsPointerHandler {
     // Units win the pick when both are under the cursor: a unit standing on its
     // own foundation is the smaller, likelier target, and the building cannot
     // walk out from under the cursor to be clicked again.
+    //
+    // Additive is an army gesture and has no meaning for a single building.
+    // Ignoring it (rather than clearing) keeps shift-click from silently
+    // throwing away a group the player is still assembling.
     const structure = this.raycastStructure(x, y);
     if (structure && structure.owner === "player") {
-      // Additive is an army gesture and has no meaning for a single building.
-      // Ignoring it (rather than clearing) keeps shift-click from silently
-      // throwing away a group the player is still assembling.
       if (!additive) this.selectStructure(structure);
+      return;
+    }
+    const center = this.raycastCenter(x, y);
+    if (center && center.owner === "player") {
+      if (!additive) this.selectCenter(center);
       return;
     }
     // Clicked empty ground (or something enemy-owned): clear unless additive.
@@ -195,10 +213,25 @@ export class SelectionSystem implements RtsPointerHandler {
     return result;
   }
 
+  private raycastCenter(x: number, y: number): CommandCenter | null {
+    const { w, h } = this.viewport();
+    this.ndc.set((x / w) * 2 - 1, -(y / h) * 2 + 1);
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    const hits = this.raycaster.intersectObjects([...this.centers.targetMeshes()], true);
+    const first = hits[0];
+    return first ? this.centers.centerForObject(first.object) : null;
+  }
+
   private selectStructure(structure: PlacedStructure): void {
     this.clear();
     this.selectedStructureRef = structure;
     setStructureSelected(structure, true);
+  }
+
+  private selectCenter(center: CommandCenter): void {
+    this.clear();
+    this.selectedCenterRef = center;
+    center.setSelected(true);
   }
 
   private replaceWith(units: readonly Unit[]): void {
@@ -228,9 +261,15 @@ export class SelectionSystem implements RtsPointerHandler {
     this.clearStructure();
   }
 
+  /** Both building kinds are the same answer to the player, so they clear together. */
   private clearStructure(): void {
-    if (!this.selectedStructureRef) return;
-    setStructureSelected(this.selectedStructureRef, false);
-    this.selectedStructureRef = null;
+    if (this.selectedStructureRef) {
+      setStructureSelected(this.selectedStructureRef, false);
+      this.selectedStructureRef = null;
+    }
+    if (this.selectedCenterRef) {
+      this.selectedCenterRef.setSelected(false);
+      this.selectedCenterRef = null;
+    }
   }
 }

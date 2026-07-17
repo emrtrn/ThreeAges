@@ -1694,19 +1694,36 @@ seferde değil dilimler halinde üretiliyor.
 
 - **Dilim 1 — Ana HUD + Bildirimler: tamamlandı.**
 - **Dilim 2 — Maç akışı: tamamlandı.**
-- Kalan: **seçim panelleri**, **yapı ve yol araçları**, **minimal ayarlar**.
+- **Dilim 3 — Seçim panelleri: tamamlandı.**
+- Kalan: **yapı ve yol araçları**, **minimal ayarlar**.
 
 Kapı B değerlendirmesi §53 gereği ancak altı grup da bittiğinde yapılır.
 
-**Test notu (Faz 9 kapsamı dışı, ama sonraki dilimleri rahatsız edecek).**
+**Test notu — yeniden ölçüldü, teşhis tutmadı (Dilim 3).** Bu not eskiden
 `tests/smoke/rts-building-placement.spec.ts` içindeki Faz 7 "box-selected group"
-testi **flaky**: ölçüldü, üç koşudan yaklaşık biri geçiyor. Faz 9'dan önce de
-(temiz `main`'de, `git stash` ile doğrulandı) başarısız oluyordu — yani bir
-regresyon değil. Sebep testin kendi kurulumunda: kamerayı 700 ms "s" tuşuyla
-kaydırıp birimlerin sabit bir marquee dikdörtgeninin (420,520 → 900,610) içine
-düşmesine bel bağlıyor. Seçim panelleri dilimi bu dosyaya dokunacak; testin
-kamera kaydırma yerine deterministik bir seçim yoluna geçirilmesi o dilimin
-işine dahil edilmeli.
+testini **flaky** ilan ediyor (üç koşudan yaklaşık biri geçiyor) ve sebebi testin
+kurulumuna — 700 ms "s" panundan sonra sabit marquee dikdörtgenine (420,520 →
+900,610) bel bağlamasına — bağlıyordu. Düzeltme Dilim 3'e havale edilmişti.
+
+Dilim 3 ölçtü ve **iddianın ikisi de doğrulanmadı**:
+
+- Test 1280×720'de (Playwright varsayılanı) `--repeat-each=3` ile **3/3 geçti**.
+- Şüpheli adım ayrıca izole edildi: pandan sonra *orijinal* dikdörtgen üç
+  koşudan üçünde de tam olarak `4 Muhafız — Can: 440/440` seçti. Yani seçim
+  kurulumu kararlı; not'un işaret ettiği yer sorunun kaynağı değil.
+- Aynı ölçüm başka bir şeyi de gösterdi: pansız tam-ekran marquee üç koşuda da
+  yalnız `5 İşçi` yakalıyor — Muhafızlar açılış kamerasında ekranın altında
+  kalıyor. Yani pan gereksiz bir süsleme değil, testin ön koşulu.
+
+Geriye kalan tek aday, seçim değil testin *son* iddiası:
+`await expect(overlay).not.toContainText(/yol:\d+/, { timeout: 30_000 })` — yani
+grubun emri 30 sn içinde **bitirmesi**. Bu §46'nın "kalıcı sıkışma oluşmuyor"
+kriteri; flake gerçekse orada, kalabalık ayrışmasında veya sıkışma zaman
+aşımındadır, kamerada değil.
+
+Geçen bir test, çürütülmüş bir teşhise dayanarak yeniden yazılmadı. Flake tekrar
+görülürse doğru yer yukarıdaki son iddiadır; bu not o zamana kadar ölçüm olarak
+kalsın.
 
 ### Ana HUD
 
@@ -1736,12 +1753,117 @@ tuttu. Şerit hiçbir karar vermiyor: bütün değerler `RtsApp`ten push ediliyo
 
 ### Seçim panelleri
 
-- [ ] İşçi paneli
-- [ ] Üretim yapısı paneli
-- [ ] Depo paneli
-- [ ] Karakol paneli
-- [ ] Askerî yapı paneli
-- [ ] Birim paneli
+**Dilim 3 — tamamlandı.** Altı panel, altı bileşen değil: tek panel
+(`ui/rtsSelectionPanel.ts`), altı cevap. Seçim tek bir soru sorar — ya ordu, ya
+bina — ve "3 Muhafız ile bir Kışla"yı anlatmak zorunda kalan bir panel ikisini de
+cevaplayamazdı. `SelectionSystem` bu yüzden ikisini karşılıklı dışlıyor.
+
+**Bu dilimin asıl işi paneller değil, seçimdi.** Faz 2'den beri bina *tıklanamıyordu*;
+`PlacedStructureSystem`'in pick hedefleri yalnız işçinin sağ tık emri içindi. Sol
+tık artık birimi bulamazsa binaya düşüyor (birim önce: kendi temelinin üstündeki
+işçi daha küçük ve daha olası hedef, üstelik bina imleçten kaçamaz). Kutu seçimi
+binaya hiç uzanmıyor: marquee bir ordu jesti, ve üssün üzerinden geçen bir kutu
+altındaki binaları da toplamamalı.
+
+**Panelin metni saf, DOM'u değil.** İçerik `ui/rtsSelectionView.ts` içinde saf veri
+olarak hesaplanıyor; §52'nin "bir yapı çalışmadığında nedeni gösteriliyor" kriteri
+*metin* hakkında bir iddia ve `test:engine` metni tarayıcısız hesap sorabiliyor
+(§82'de `formatRtsAiDebug`'ın, Dilim 1'de `RtsNotificationCenter`'ın kurduğu kalıp).
+Panel — `RtsHudBar` gibi — hiçbir karar vermiyor.
+
+- [x] İşçi paneli (Yalnız işçiden oluşan seçim ekonomik bir sorudur ve ordu
+  panelinin ona cevabı yok: işçinin ne duruşu ne eşleşmesi var. `Görev: 2 boşta ·
+  1 inşaatta` sabit sırayla okunuyor — işçiler görev değiştirdikçe yeniden
+  dizilen bir döküm okunamaz. Karışık seçim yine orduyu anlatır: beş işçi dört
+  Muhafız'ı oylayıp "İşçi" cevabını verdiremez.)
+- [x] Üretim yapısı paneli (İşçi, hız, tampon, düğüm, durum ve lojistik + her
+  lojistik durumunun çözümünü söyleyen tooltip. Durum artık çevrilmiş bir ifade:
+  Faz 3 paleti ham enum'u — `buffer-full` — ekrana sızdırıyordu.)
+- [x] Depo paneli (Ağ bileşeni, teslim eden yapı sayısı ve işgal durumu.)
+- [x] Karakol paneli (Yaşayan yarıçap ve yol bağlantısı; bağlantısız Karakol'a
+  yolun ne kazandıracağı tooltip'te söyleniyor — §35'in Karakol'a yol çektirme
+  sebebi bu.)
+- [x] Askerî yapı paneli (`BarracksProductionSystem.queueSnapshot`: kuyruk, üretilen
+  birim ve kalan saniye, sıradakiler, toplanma noktası. Krallık geneli
+  `queuedCount` yetmezdi — *bu* Kışla'ya tıklayan oyuncuya başka Kışla'nın
+  siparişlerini yazardı. Sağlıklı Kışla "sorun yok" satırı taşımıyor; `Kontrol
+  Dışı` ve `T2 sürüyor` yalnız doğruyken çıkıyor.)
+- [x] Birim paneli (Faz 7'nin içeriği korundu; eşleşme satırı hâlâ savaşın
+  çözdüğü `damageMultipliers`'tan okunuyor, yani panel veride olmayan bir
+  eşleşmeyi reklam edemez.)
+
+**Palet artık yalnız eylem.** Faz 3'ün üretim okuması palette bir düğme listesiydi
+ve oyuncuya haritanın yerine "Tarla #7, Tarla #12" arasından seçim yaptırıyordu —
+çünkü o zaman bina tıklanamıyordu. Aynı gerçekler artık anlattıkları binaya
+tıklayarak okunuyor; liste ve CSS'i silindi.
+
+**Dilimde bulunan ve düzeltilen hata.** Karakol tooltip'i yarıçapı
+`${controlRadius}’dan ${connected}’a` diye kuruyordu; Türkçe ek *söylenen* sayının
+ünlüsüne uyar (16 → "16’dan", 20 → "20’ye"), yani çalışma anında bilinmeyen bir
+sayıya şablonla ek getirilemez. "16 yerine 20 yapar" olarak yeniden yazıldı.
+`test:engine` yakaladı; motor testi tarayıcıdan önce dilbilgisi hatası buldu.
+
+**Dilim 3.1 — eylemler panele taşındı, Merkez seçilebilir oldu.** Dilim 3 panelleri
+salt-okunur bırakmıştı: Kışla'ya tıklayıp ekranın öbür ucundaki düğmeden birim
+üretmek tuhaf okunuyordu. Kapsam genişletildi ve eylemler ait oldukları yere gitti.
+
+- **Merkez artık seçilebiliyor** (`CommandCenter.setSelected`; halka, `setVisual`
+  onu değiştirdiği için swappable görselin *içinde* değil, Merkez'in kendisinde
+  duruyor). Paneli işçi kuyruğunu, çağı ve kontrol yarıçapını gösteriyor —
+  Dilim 3'te yazılmış `WorkerProductionSystem.queueSnapshot` nihayet bağlandı.
+- **Palet artık yalnız yerleştirme + T2 araştırması.** `İşçi Üret`,
+  `Kasaba Çağına Geç` ve roster (`Muhafız/Okçu/Koçbaşı Üret`) ile
+  `Toplanma Noktası` paletten silindi; hiçbiri kopyalanmadı — taşındı.
+- **Eylemler bildirimsel** (`SelectionAction`: id, etiket, maliyet, enabled,
+  reason). Panel id'yi geri veriyor, fiili `RtsApp` yürütüyor; böylece bir
+  düğmenin *ne dediği* ve *neden reddettiği* satırlar gibi `test:engine` altında
+  kalıyor. `enabled` asla UI'da hesaplanmıyor: her kural zaten bir sistemin
+  (`trainableUnits` kademe kapısını, `AgeSnapshot` çağ kapısını) — kuralı UI'da
+  yeniden türetmek, düğmenin iddia ettiği kural hakkında yalan söylemeye başlaması
+  demek.
+- **Red sırası sistemin sırasını yansıtıyor.** Roster düğmesi
+  `BarracksProductionSystem.queueUnit` gibi önce kademe kapısını bildiriyor:
+  birimi *hiç* üretemeyecek oyuncuya bunu söylemek, zeminini kaybettiğini
+  söylemekten yeğdir.
+
+**§45 çatışması ve çözümü.** §45'in "roster baştan görünsün, kilitli birim kendini
+açıklasın" gerekçesi (paletin docstring'i ve testi) roster paletten gidince
+tehlikeye giriyordu. Ama o gerekçenin amacı — "Kışla II bir karar gibi okunsun" —
+roster'ı Kışla'nın panelinde kilitli göstererek tam olarak korunuyor, üstelik
+kararın gerçekten alınabilir olduğu ilk anda. Kışla'sı olmayan oyuncu zaten hiçbir
+birim üretemez. Playwright testi bu davranışı yeni yerinde sürüyor.
+
+**Gerçek maçta bulunan ve düzeltilen hata — yalan söyleyen düğme.**
+`Kasaba Çağına Geç` etkin görünüyor, mazeret taşımıyor, sonra tıklanınca
+`Kasaba Çağı için eksik yapılar: farm, lumber_camp, ...` diye reddediyordu. Eski
+palet de aynısını yapıyordu (yalnız `upgrading`/`town` kapatıyordu), ama panelin
+kuralı "yasal eylem mazeret taşımaz" — yani düğme yalan söylüyordu. Önkoşul zaten
+`AgeSnapshot.missingBuildingIds` içinde duruyordu: düğme artık baştan kapalı ve
+nedenini oyuncunun diliyle söylüyor — `Önce şu yapılar gerekir: Tarla, Oduncu
+Kampı, Taş Ocağı, Altın Madeni, Kışla, Karakol.` (Ham id listesi veri modelinin
+konuşmasıydı, oyunun değil.) Maliyet bilerek tıklamaya bırakıldı: cüzdan iki kare
+arasında değişebilir ve elin altında grileşen düğme, cevap veren düğmeden kötüdür.
+
+**Bilinen sınır — T2 yükseltmeleri palette kaldı.** `Kışlayı/Evi/Depoyu/Karakolu
+T2 Yükselt` tür-geneli araştırma (`StructureUpgradeSystem.start(owner, buildingId)`),
+tek bir binanın eylemi değil; bu yüzden taşınmadı. Yine de Kışla paneli
+`T2 yükseltmesi sürüyor` derken düğmenin palette olması bölünmüş okunuyor.
+
+**Gerçek maçta bulunan, sonraki dilime devredilen hata.** Panel salt-okunur olduğu
+halde `ui-interactive` taşıyor (Faz 7'den miras), yani 1366×768'de alt-ortada
+`473,626 → 893,756` kutusunda **harita tıklamasını yutuyor** — doğrulama sırasında
+oraya konan Depo sessizce kurulamadı. Dilim bunu kötüleştirdi: panel artık *bina*
+seçilince de açılıyor, yani tam oyuncunun ekranın altındaki üssüyle uğraştığı anda.
+Dürüst çözüm (`pointer-events: none`) §51'in istediği "bağlantı nedeni tooltip'ini"
+öldürür; bu yüzden alt şeridi zaten yeniden düzenleyecek olan "Yapı ve yol
+araçları" dilimine bırakıldı — alt şeridi iki kez tasarlamamak için.
+
+**İlgisiz, önceden var olan hata (not).** `rtsNotificationFeed.ts` kök elemana
+`ui-interactive` veriyor; `#ui-overlay .ui-interactive` (özgüllük 1,1,0)
+`.rts-notification-feed { pointer-events: none }` kuralını (0,1,0) eziyor. Yani
+feed'in kendi yorumunun ("Read-only: a notice must never swallow a click meant for
+the map") tersine, bildirim şeridi bugün harita tıklaması yutuyor. Tek satırlık
+düzeltme, Dilim 1'e ait.
 
 ### Yapı ve yol araçları
 
@@ -1854,18 +1976,24 @@ fazı ikinci bir gerçek kopyası olurdu — ve iki kopya anlaşmazlığa düşe
 
 ## 52. Kabul Kriterleri
 
-Dilim 1 sonrası durum. Kalan kutular kapsamı henüz üretilmemiş dilimlere ait;
+Dilim 3 sonrası durum. Kalan kutular kapsamı henüz üretilmemiş dilimlere ait;
 Kapı B değerlendirmesi §53 gereği ancak altı grup da bittiğinde yapılır.
 
 - [ ] UI haritanın kritik alanlarını aşırı kapatmıyor. **Kısmen:** şerit ekran
   yüksekliğinin %10'undan azını alıyor ve feed sınırlı (`MAX_ACTIVE_NOTIFICATIONS`
   = 4, en eskisini düşürüyor — aşağı doğru harita üzerine büyümüyor); ikisi de
-  Playwright ile iki çözünürlükte ölçülüyor. **Ama** kriter bütün UI'ı kapsıyor:
-  yapı paleti hâlâ sağ sütunun tamamını (1366×768'de 647px) kaplayan Faz 2
-  yığını. Bu, "Seçim panelleri" + "Yapı ve yol araçları" dilimlerinin işi.
-- [ ] Bir yapı çalışmadığında nedeni gösteriliyor. **Kısmen:** lojistik kesintisi
-  hem şeritte hem feed'de nedeniyle okunuyor; seçili üretim yapısının paneli
-  durum + neden veriyor. Tam kapsam "Seçim panelleri" dilimine bağlı.
+  Playwright ile iki çözünürlükte ölçülüyor. **Ama** kriter bütün UI'ı kapsıyor ve
+  Dilim 3 bu kutuya iki yeni borç ekledi: yapı paleti hâlâ sağ sütunun tamamını
+  (1366×768'de 647px) kaplayan Faz 2 yığını, ve seçim paneli alt-ortada 420×130'luk
+  bir alanda harita tıklamasını yutuyor (§51'e bakın — salt-okunur olduğu halde
+  `ui-interactive`). İkisi de "Yapı ve yol araçları" diliminin işi; ikisi de aynı
+  alt şerit tasarımıyla çözülmeli.
+- [x] Bir yapı çalışmadığında nedeni gösteriliyor. (Dilim 3. Her bina türü kendini
+  anlatıyor ve *nedeni* söylüyor: işçisiz şantiye, yola bağlanmamış üretici,
+  yolsuz Depo, işgal altındaki Depo, Kontrol Dışı Kışla. `test:engine` metni
+  doğruluyor — "Faz 9 §51: every building kind explains itself, working or not".
+  Gerçek maçta altı panelin altısı da doğrulandı: Tarla `Lojistik: Yol Yok` +
+  tooltip `Yapı footprint’ine temas eden bir yol hücresi gerekli.`)
 - [x] Aynı uyarı sürekli spam oluşturmuyor. (`test:engine`: 60 kare boyunca her
   tick post edilen `population-full` tek satır kalıyor, sonra süresi dolup
   cooldown'a giriyor. Gerçek maçta doğrulandı: yola bağlanmamış tarla 378 kez

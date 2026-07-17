@@ -136,6 +136,8 @@ export interface BuildingBalanceStats {
   readonly economy?: EconomyProductionBalance;
   /** Present on structures which extend the control area once complete. */
   readonly territory?: TerritoryBuildingBalance;
+  /** Optional stationary ranged defense, fired only after construction completes. */
+  readonly defense?: BuildingDefenseBalance;
   /** Optional Town-era T1 -> T2 path; absent buildings stay single-level. */
   readonly upgrade?: BuildingUpgradeBalance;
 }
@@ -166,6 +168,20 @@ export interface TerritoryBuildingBalance {
   readonly connectedControlRadius: number;
   /** Maximum gap from friendly territory when this special structure is placed. */
   readonly expansionPlacementRange: number;
+}
+
+/** Data-owned stationary ranged attack for a completed defensive structure. */
+export interface BuildingDefenseBalance {
+  /** Damage of one arrow before the target armour multiplier. */
+  readonly attackDamage: number;
+  /** Seconds between volleys. */
+  readonly attackCooldown: number;
+  /** Maximum ground-plane distance from which the structure can fire. */
+  readonly attackRange: number;
+  /** Number of arrows fired at its chosen target in one volley. */
+  readonly arrowsPerVolley: number;
+  /** The same soft-counter table used by mobile ranged attackers. */
+  readonly damageMultipliers: UnitDamageMultipliers;
 }
 
 /** `public/game-data/balance/buildings.json` — keyed by stable building id. */

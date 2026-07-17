@@ -117,7 +117,9 @@ import { RtsNotificationCenter, MAX_ACTIVE_NOTIFICATIONS } from "../src/game/rts
 import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
 import {
   describeSelection,
+  type MilitaryDetailView,
   type SelectedUnitView,
+  type SelectionAction,
   type SelectionPanelContent,
   type StructureDetailView,
   type WorkerJob,
@@ -143,6 +145,7 @@ import { issueAttackOrder } from "../src/game/rts/units/attackPathing";
 import { updateUnitEngagement } from "../src/game/rts/combat/engagementSystem";
 import { resolveDamage } from "../src/game/rts/combat/damageResolution";
 import { ProjectileSystem } from "../src/game/rts/combat/projectileSystem";
+import { StructureDefenseSystem } from "../src/game/rts/combat/structureDefenseSystem";
 import type { CombatTarget } from "../src/game/rts/combat/combatTarget";
 import type { UnitBalance, UnitBalanceStats } from "../src/game/data/gameDataTypes";
 import type { Unit } from "../src/game/rts/units/unit";
@@ -28308,6 +28311,13 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
     perWorkerPerMinute: 7,
     localBufferCapacity: 40,
   });
+  assert.deepEqual(buildings.outpost?.defense, {
+    attackDamage: 10,
+    attackCooldown: 1.6,
+    attackRange: 7,
+    arrowsPerVolley: 2,
+    damageMultipliers: { light: 1.2, heavy: 0.8, structure: 0.25 },
+  });
   assert.throws(
     () => validateBuildingBalance({ house: { label: "Ev", footprint: { width: 0, depth: 4 }, cost: {}, constructionSeconds: 25 } }),
     GameDataError,
@@ -28735,6 +28745,35 @@ check("RTS melee attacks can damage an enemy command center", () => {
   const perHit = RTS_TEST_UNIT_STATS.attackDamage * RTS_TEST_UNIT_STATS.damageMultipliers.structure;
   assert.equal(enemyCenter.health.current, 300 - perHit);
   assert.deepEqual(hits, [{ damage: perHit, targetOwner: "enemy" }]);
+});
+
+check("a completed outpost fires two Archer-strength arrows at hostile units in range", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const outpostStats = buildings.outpost ?? assert.fail("outpost definition missing");
+  const defense = outpostStats.defense ?? assert.fail("outpost defense missing");
+  const structures = new PlacedStructureSystem();
+  const outpost = structures.place("player", outpostStats, 0, 0);
+  structures.advanceConstruction(outpost, outpostStats.constructionSeconds);
+  const units = new UnitSystem();
+  const enemy = units.spawn("enemy", 6, 0, RTS_TEST_UNIT_STATS);
+  const friendly = units.spawn("player", 2, 0, RTS_TEST_UNIT_STATS);
+  const defenseSystem = new StructureDefenseSystem();
+  const arrows: number[] = [];
+
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], 0, (hit) => {
+    arrows.push(hit.arrowIndex);
+  });
+
+  const damagePerArrow = defense.attackDamage * defense.damageMultipliers.heavy;
+  assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * 2);
+  assert.equal(friendly.health.current, friendly.health.max, "outpost never fires on its owner");
+  assert.deepEqual(arrows, [0, 1], "one volley visibly contains two arrows");
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], defense.attackCooldown / 2);
+  assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * 2, "volley respects Archer cadence");
+  defenseSystem.update(structures.all(), [...units.all(), ...structures.all()], defense.attackCooldown / 2);
+  assert.equal(enemy.health.current, enemy.health.max - damagePerArrow * 4);
 });
 
 check("RTS match enters victory when the enemy command center is depleted", () => {
@@ -32426,11 +32465,16 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   }, "Karakol");
   assert.match(roaded.lines.join(" | "), /Kontrol yarıçapı: 20/, "the connected radius is the live one");
 
+  const roster = [
+    { id: "guard_placeholder", stats: RTS_TEST_UNIT_STATS, unlocked: true },
+    { id: "archer_placeholder", stats: RTS_TEST_ARCHER_STATS, unlocked: false },
+  ];
   const barracks = structure({
     kind: "military",
     rallySet: true,
     connected: true,
     upgrading: false,
+    roster,
     queue: {
       structureId: 1, queued: 3, capacity: 5,
       trainingLabel: "Muhafız", trainingRemainingSeconds: 4.2,
@@ -32450,6 +32494,7 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
     rallySet: false,
     connected: false,
     upgrading: true,
+    roster,
     queue: {
       structureId: 1, queued: 0, capacity: 5,
       trainingLabel: null, trainingRemainingSeconds: null, pendingLabels: [],
@@ -32459,6 +32504,119 @@ check("Faz 9 §51: every building kind explains itself, working or not", () => {
   assert.match(severed.lines.join(" | "), /Kontrol Dışı/);
   assert.match(severed.lines.join(" | "), /T2 yükseltmesi sürüyor/);
   assert.match(severed.tooltip ?? "", /alanı geri alın/);
+});
+
+check("Faz 9 §51: a selection's buttons state their own gate, in the system's order", () => {
+  const militaryPanel = (detail: Partial<MilitaryDetailView> = {}): SelectionPanelContent =>
+    describeSelection({
+      kind: "structure",
+      structure: {
+        id: 1, label: "Kışla", level: 1, health: 650, maxHealth: 650,
+        detail: {
+          kind: "military",
+          rallySet: false,
+          connected: true,
+          upgrading: false,
+          roster: [
+            { id: "guard_placeholder", stats: RTS_TEST_UNIT_STATS, unlocked: true },
+            { id: "archer_placeholder", stats: RTS_TEST_ARCHER_STATS, unlocked: false },
+          ],
+          queue: {
+            structureId: 1, queued: 0, capacity: 5,
+            trainingLabel: null, trainingRemainingSeconds: null, pendingLabels: [],
+          },
+          ...detail,
+        },
+      },
+    }) ?? assert.fail("panel missing");
+  const action = (content: SelectionPanelContent, id: string): SelectionAction =>
+    content.actions.find((candidate) => candidate.id === id) ?? assert.fail(`no ${id} action`);
+
+  // §45's reason for showing a locked unit rather than hiding it: seeing that an
+  // Archer costs Kışla II is what makes the upgrade read as a decision. The
+  // roster moved to the Barracks, so that must still hold here.
+  const healthy = militaryPanel();
+  assert.equal(action(healthy, "train:guard_placeholder").enabled, true);
+  assert.equal(action(healthy, "train:guard_placeholder").reason, null, "a legal action carries no excuse");
+  assert.match(action(healthy, "train:guard_placeholder").cost ?? "", /50 Yiyecek · 1 Nüfus/);
+  const locked = action(healthy, "train:archer_placeholder");
+  assert.equal(locked.enabled, false);
+  assert.match(locked.reason ?? "", /Kışla T2 gerekir/);
+  assert.ok(action(healthy, "rally"), "a Barracks can always be given a rally point");
+
+  // The refusal order mirrors BarracksProductionSystem.queueUnit: a player who
+  // cannot build the unit at all is told *that*, not that their ground was taken.
+  const severed = militaryPanel({ connected: false });
+  assert.match(action(severed, "train:guard_placeholder").reason ?? "", /Kontrol Dışı/);
+  assert.match(
+    action(severed, "train:archer_placeholder").reason ?? "",
+    /Kışla T2 gerekir/,
+    "the tier gate outranks the territory gate, as the production system reports it",
+  );
+
+  const full = militaryPanel({
+    queue: {
+      structureId: 1, queued: 5, capacity: 5,
+      trainingLabel: "Muhafız", trainingRemainingSeconds: 2, pendingLabels: [],
+    },
+  });
+  assert.match(action(full, "train:guard_placeholder").reason ?? "", /Kuyruk dolu \(5\/5\)/);
+
+  // The centre: its two verbs, gated by the rules AgeSystem actually enforces.
+  const labels = new Map([["farm", "Tarla"], ["barracks", "Kışla"]]);
+  const centerPanel = (age: Partial<AgeSnapshot>): SelectionPanelContent =>
+    describeSelection({
+      kind: "structure",
+      structure: {
+        id: 0, label: "Merkez", level: 1, health: 300, maxHealth: 300,
+        detail: {
+          kind: "center",
+          queue: { queued: 1, capacity: 5, trainingRemainingSeconds: 12.3 },
+          age: {
+            owner: "player",
+            age: "settlement",
+            upgrading: false,
+            remainingSeconds: 0,
+            missingBuildingIds: [],
+            ...age,
+          },
+          controlRadius: 18,
+          workerStats: RTS_TEST_WORKER_STATS,
+          requiredBuildingLabels: labels,
+        },
+      },
+    }) ?? assert.fail("panel missing");
+
+  const ready = centerPanel({});
+  assert.match(ready.lines.join(" | "), /Kuyruk: 1\/5/);
+  assert.match(ready.lines.join(" | "), /Üretiliyor: Test İşçisi — 13 sn/);
+  assert.match(ready.lines.join(" | "), /Çağ: Yerleşim/);
+  assert.equal(action(ready, "train-worker").enabled, true);
+  assert.equal(action(ready, "age-up").enabled, true);
+
+  // Found in a real match: the button rendered enabled and carried no excuse,
+  // then the age system refused the click with "eksik yapılar: farm, ...". The
+  // prerequisite is in the snapshot, so the button states it up front — and in
+  // the player's words, not the data model's ids.
+  const blocked = centerPanel({ missingBuildingIds: ["farm", "barracks"] });
+  assert.equal(action(blocked, "age-up").enabled, false);
+  assert.equal(action(blocked, "age-up").reason, "Önce şu yapılar gerekir: Tarla, Kışla.");
+  assert.equal(
+    action(blocked, "train-worker").enabled,
+    true,
+    "a missing Tarla stops the age, not the centre's worker line",
+  );
+  // An id with no label still reaches the player rather than vanishing.
+  const unlabelled = centerPanel({ missingBuildingIds: ["mythril_forge"] });
+  assert.match(action(unlabelled, "age-up").reason ?? "", /mythril_forge/);
+
+  const upgrading = centerPanel({ upgrading: true });
+  assert.equal(action(upgrading, "train-worker").enabled, false, "an upgrading centre trains nothing");
+  assert.match(action(upgrading, "age-up").reason ?? "", /sürüyor/);
+
+  const town = centerPanel({ age: "town" });
+  assert.equal(action(town, "train-worker").enabled, true, "a Town centre still trains workers");
+  assert.match(action(town, "age-up").reason ?? "", /zaten tamamlandı/);
 });
 
 check("§69: the AI stops deciding once the match is over", () => {

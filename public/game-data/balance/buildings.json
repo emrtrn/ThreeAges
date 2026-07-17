@@ -42,6 +42,13 @@
       "connectedControlRadius": 20,
       "expansionPlacementRange": 12
     },
+    "defense": {
+      "attackDamage": 10,
+      "attackCooldown": 1.6,
+      "attackRange": 7,
+      "arrowsPerVolley": 2,
+      "damageMultipliers": { "light": 1.2, "heavy": 0.8, "structure": 0.25 }
+    },
     "upgrade": {
       "cost": { "wood": 110, "stone": 70 },
       "durationSeconds": 55,

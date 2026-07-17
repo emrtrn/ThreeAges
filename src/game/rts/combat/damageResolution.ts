@@ -18,7 +18,9 @@ import type { CombatTarget } from "./combatTarget";
  * lets a Ram read as anti-building (2.50 vs structure) while its raw 28 damage
  * stays weak against troops.
  */
-export function resolveDamage(attacker: UnitBalanceStats, target: CombatTarget): number {
+type DamageSourceStats = Pick<UnitBalanceStats, "attackDamage" | "damageMultipliers">;
+
+export function resolveDamage(attacker: DamageSourceStats, target: CombatTarget): number {
   return attacker.attackDamage * attacker.damageMultipliers[target.armorClass];
 }
 

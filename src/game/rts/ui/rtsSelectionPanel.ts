@@ -3,10 +3,14 @@
  *
  * Renders whatever {@link describeSelection} decided; it makes no decisions of
  * its own. Faz 7 shipped this as an army-only readout that reached into `Unit`
- * and formatted inline; Faz 9 needed the same panel to answer for five kinds of
- * building too, and five more formatting branches in a DOM component is how a
+ * and formatted inline; Faz 9 needed the same panel to answer for six kinds of
+ * building too, and six more formatting branches in a DOM component is how a
  * panel stops being testable. The content moved to {@link rtsSelectionView};
  * what stayed here is the one rule a view *should* own: which node to touch when.
+ *
+ * The action row follows the same split. The panel knows an action has an id, a
+ * label and whether it is enabled — it does not know what any of them *mean*.
+ * It hands the id back and lets `RtsApp` own the verb.
  */
 import { describeSelection, type RtsSelectionView, type SelectionPanelContent } from "./rtsSelectionView";
 
@@ -16,6 +20,8 @@ export class RtsSelectionPanel {
   private readonly summary = document.createElement("p");
   private readonly body = document.createElement("div");
   private readonly lines: HTMLParagraphElement[] = [];
+  private readonly actionRow = document.createElement("div");
+  private readonly actionButtons = new Map<string, HTMLButtonElement>();
   private readonly hints = document.createElement("p");
   /**
    * Last rendered content. The sentinel matters: an empty selection's own
@@ -24,13 +30,14 @@ export class RtsSelectionPanel {
    */
   private signature = " ";
 
-  constructor() {
+  constructor(private readonly onAction: (id: string) => void) {
     this.root.className = "rts-selection-panel ui-interactive";
     this.root.setAttribute("aria-label", "Seçim");
     this.summary.className = "rts-selection-summary";
     this.body.className = "rts-selection-body";
+    this.actionRow.className = "rts-selection-actions";
     this.hints.className = "rts-selection-hints";
-    this.root.append(this.title, this.summary, this.body, this.hints);
+    this.root.append(this.title, this.summary, this.body, this.actionRow, this.hints);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setSelection({ kind: "none" });
   }
@@ -71,5 +78,48 @@ export class RtsSelectionPanel {
       if (line.textContent !== text) line.textContent = text;
     }
     this.body.title = content.tooltip ?? "";
+    this.renderActions(content);
+  }
+
+  /**
+   * Rebuild the row only when the *set* of actions changes; a button's enabled
+   * state and reason are refreshed in place. Replacing the nodes every frame
+   * would cancel the press the player is in the middle of making.
+   */
+  private renderActions(content: SelectionPanelContent): void {
+    const wanted = content.actions.map((action) => action.id).join("|");
+    if (this.actionRow.dataset.rtsActions !== wanted) {
+      this.actionRow.dataset.rtsActions = wanted;
+      this.actionRow.replaceChildren();
+      this.actionButtons.clear();
+      for (const action of content.actions) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "rts-selection-action";
+        button.dataset.rtsAction = action.id;
+        button.setAttribute("aria-label", action.label);
+        const label = document.createElement("span");
+        label.className = "rts-selection-action-label";
+        label.textContent = action.label;
+        button.appendChild(label);
+        if (action.cost !== null) {
+          const cost = document.createElement("span");
+          cost.className = "rts-selection-action-cost";
+          cost.textContent = action.cost;
+          button.appendChild(cost);
+        }
+        button.addEventListener("click", () => this.onAction(action.id));
+        this.actionButtons.set(action.id, button);
+        this.actionRow.appendChild(button);
+      }
+    }
+    this.actionRow.hidden = content.actions.length === 0;
+    for (const action of content.actions) {
+      const button = this.actionButtons.get(action.id);
+      if (!button) continue;
+      button.disabled = !action.enabled;
+      // A legal action carries no excuse; a refused one always names its rule.
+      button.title = action.reason ?? "";
+    }
   }
 }

@@ -57,9 +57,17 @@ export class ProjectileSystem {
   }
 
   /** Show one shot travelling from an attacker to where its target stood. */
-  spawn(owner: UnitOwner, from: Vector3, to: Vector3): void {
-    const start = new Vector3(from.x, LAUNCH_HEIGHT, from.z);
-    const end = new Vector3(to.x, LAUNCH_HEIGHT, to.z);
+  spawn(owner: UnitOwner, from: Vector3, to: Vector3, launchHeight = LAUNCH_HEIGHT, lateralOffset = 0): void {
+    const start = new Vector3(from.x, from.y + launchHeight, from.z);
+    const end = new Vector3(to.x, to.y + LAUNCH_HEIGHT, to.z);
+    if (lateralOffset !== 0) {
+      const side = new Vector3(-(end.z - start.z), 0, end.x - start.x);
+      if (side.lengthSq() > 0) {
+        side.normalize().multiplyScalar(lateralOffset);
+        start.add(side);
+        end.add(side);
+      }
+    }
     const distance = start.distanceTo(end);
     // A point-blank shot has nothing to animate; skipping it also avoids a
     // zero-length flight dividing by zero below.
