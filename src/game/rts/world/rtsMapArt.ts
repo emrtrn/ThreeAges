@@ -41,10 +41,25 @@ export class RtsMapArt {
   }
 
   /** Presentation follows the authoritative source state; no visual owns depletion. */
-  syncForest(forests: ForestSystem): void {
+  /**
+   * @param isRevealed §59: whether the observing kingdom has scouted a point.
+   *   Omitted (the `fogOfWar` flag off) leaves every standing tree visible.
+   *
+   * The fog test lives *here*, inside the one loop that already owns
+   * `tree.visible`, rather than in `FogVisibilityBinder` beside the other hidden
+   * world props. A second writer would fight this one every tick and the trees
+   * would flicker at whichever rate the two ran at. One writer, both reasons a
+   * tree can be invisible — depleted, or never scouted.
+   *
+   * Keyed off `isExplored` rather than `isVisible`, matching the resource
+   * deposits: GDD 08 §40 keeps permanent natural elements on the map once seen.
+   * A forest you walked through does not vanish when the scout leaves.
+   */
+  syncForest(forests: ForestSystem, isRevealed?: (x: number, z: number) => boolean): void {
     for (const tree of forests.snapshots()) {
       const object = this.treeObjects.get(tree.id);
-      if (object) object.visible = !tree.depleted;
+      if (!object) continue;
+      object.visible = isTreeVisible(tree, isRevealed);
     }
   }
 
@@ -140,11 +155,10 @@ function disposeModel(root: Object3D): void {
  * returns the resource deposits and the central ridge, whole groups at a time,
  * keyed off each group's own world position.
  *
- * Trees are deliberately excluded even though they are also world props. The
- * forest system already owns `visible` on every tree object (it clears it as a
- * tree is depleted and re-syncs each tick), so a second writer would fight it
- * and the loser would flicker. Hiding the forest under fog needs the forest
- * system to own the fog test too, which is its own change rather than this one.
+ * Trees are excluded here but *are* hidden under fog — they go through
+ * {@link RtsMapArt.syncForest} instead, because that loop already owns
+ * `tree.visible` for depletion and two writers would flicker against each other.
+ * Same rule, different owner.
  */
 export function collectWorldProps(blockout: Group): Object3D[] {
   const props: Object3D[] = [];
@@ -153,4 +167,23 @@ export function collectWorldProps(blockout: Group): Object3D[] {
     if (group) props.push(group);
   }
   return props;
+}
+
+/**
+ * Whether one tree is drawn — the whole of §59's forest rule, extracted so it
+ * can be tested for real.
+ *
+ * {@link RtsMapArt} needs a WebGLRenderer to construct, so a test driving
+ * `syncForest` directly would need a GL context; a test that re-implemented the
+ * condition instead would pass happily while the shipped rule rotted. Keeping
+ * the decision here means `syncForest` is a loop over this, and this is what
+ * `test:engine` exercises.
+ */
+export function isTreeVisible(
+  tree: { readonly x: number; readonly z: number; readonly depleted: boolean },
+  isRevealed?: (x: number, z: number) => boolean,
+): boolean {
+  if (tree.depleted) return false;
+  // No predicate = the `fogOfWar` flag is off; every standing tree is drawn.
+  return !isRevealed || isRevealed(tree.x, tree.z);
 }

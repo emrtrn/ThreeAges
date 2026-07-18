@@ -21,6 +21,7 @@ import type { UnitOwner } from "../units/unit";
 import type {
   BuildingBalanceStats,
   EconomyProductionBalance,
+  StartingResources,
   TownAgeBalance,
 } from "../../data/gameDataTypes";
 import { HealthComponent } from "../units/health";
@@ -71,6 +72,7 @@ export class CommandCenter implements UpgradableStructure {
   economy: EconomyProductionBalance | null = null;
   defenseAttackDamage: number | null = null;
   marketCommission: number | null = null;
+  storageCapacity: StartingResources | null = null;
   territoryConnectedControlRadius: number | null = null;
 
   /**

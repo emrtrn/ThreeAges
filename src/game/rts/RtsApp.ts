@@ -99,6 +99,7 @@ import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
+import { ResourceCapacitySystem } from "./economy/resourceCapacitySystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import type { UnitOwner } from "./units/unit";
@@ -259,6 +260,7 @@ export class RtsApp {
   private readonly depotLogistics: DepotLogisticsSystem;
   private readonly productionLogistics: ProductionLogisticsSystem;
   private readonly logisticsOccupation: LogisticsOccupationSystem;
+  private readonly resourceCapacity: ResourceCapacitySystem;
   private readonly logisticsTransfers: LogisticsTransferSystem;
   private readonly barracksProduction: BarracksProductionSystem;
   private readonly marketTrade: MarketTradeSystem;
@@ -337,6 +339,7 @@ export class RtsApp {
     this.roadOverlayVisible = Boolean(this.options.debug);
     this.roadDebugView.root.visible = this.roadOverlayVisible;
     this.depotLogistics = new DepotLogisticsSystem(this.structures, this.roads);
+    this.resourceCapacity = new ResourceCapacitySystem(this.structures);
     this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
     this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
     this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, RTS_BLOCKOUT_MAP.resourceNodes);
@@ -390,6 +393,7 @@ export class RtsApp {
         this.vision,
         this.units,
         this.structures,
+        this.centers,
         PLAYER_OWNER,
       );
     } else {
@@ -457,6 +461,7 @@ export class RtsApp {
       this.economyProduction,
       this.productionLogistics,
       this.kingdoms,
+      this.resourceCapacity,
     );
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
     const worker = this.options.unitBalance[PLACEHOLDER_WORKER_ID];
@@ -483,6 +488,7 @@ export class RtsApp {
       // once here so a besieged Market and a besieged Barracks cannot disagree
       // about what "Kontrol Dışı" means.
       (structure) => this.territory.ownerAt(structure.x, structure.z) === structure.owner,
+      this.resourceCapacity,
     );
     this.workerProduction = new WorkerProductionSystem(
       this.units,
@@ -586,7 +592,13 @@ export class RtsApp {
       PLAYER_OWNER,
     );
     this.placement.setPreviewFactory((buildingId, width, depth) =>
-      this.buildingVisuals.createPreviewForBuilding(buildingId, width, depth, this.ageOf(PLAYER_OWNER)));
+      this.buildingVisuals.createPreviewForBuilding(
+        buildingId,
+        width,
+        depth,
+        this.ageOf(PLAYER_OWNER),
+        this.structureUpgrades.levelFor(PLAYER_OWNER, buildingId),
+      ));
     this.roadPlacement = new RoadPlacementSystem(
       canvas,
       this.cameraController.camera,
@@ -750,6 +762,16 @@ export class RtsApp {
     });
     void this.loadBuildingVisuals();
     this.spawnStartingUnits();
+    // §59: one fog pass before the first frame is drawn.
+    //
+    // `updateFogOfWar` otherwise only runs from `updateSimulation`, which is
+    // gated on `match.active && flow.running` — so on the start screen it had
+    // never run at all, and the world rendered in an inconsistent half-state:
+    // the fog texture still held its initial all-unknown fill (black ground)
+    // while the visibility binder had hidden nothing, leaving the enemy's base
+    // and the whole forest legible on top of it. The player could read the map
+    // before pressing "Maçı Başlat".
+    this.updateFogOfWar();
     this.syncPlacementUi();
     this.syncAgeUi();
     this.syncRoadUi();
@@ -1002,10 +1024,17 @@ export class RtsApp {
     this.renderer.render(this.scene, this.cameraController.camera);
   };
 
-  /** Present construction and player worker training above all world geometry. */
+  /** Present player construction, training, and damaged-building health above all world geometry. */
   private updateWorldProgressOverlay(): void {
     const trainingSeconds = this.options.unitBalance[PLACEHOLDER_WORKER_ID]?.trainingSeconds ?? 1;
     const entries: RtsWorldProgressEntry[] = this.structures.all()
+      // Own sites only. This bar answers "how far along is my build" — the two
+      // entries below it are already player-scoped — but it carried no owner
+      // filter, so it drew the enemy's construction progress as well. That was a
+      // leak before §59 and a hard one after: the overlay is screen-space DOM,
+      // so hiding the building's scene object does nothing to the label floating
+      // above it, and the enemy's build timings stayed legible through the fog.
+      .filter((structure) => structure.owner === PLAYER_OWNER)
       .filter((structure) => !structure.construction.complete)
       .map((structure) => ({
         id: `construction-${structure.id}`,
@@ -1031,6 +1060,48 @@ export class RtsApp {
         label: age.upgrading
           ? `İşçi duraklatıldı · ${queue.queued}/${queue.capacity}`
           : `İşçi üretiliyor · ${queue.queued}/${queue.capacity}`,
+      });
+    }
+    for (const structure of this.structures.all()) {
+      // The overlay is screen-space, so it must keep the same ownership boundary
+      // as construction progress: enemy damage or production cannot be read
+      // through fog merely because its DOM node is not occluded by the world.
+      if (structure.owner !== PLAYER_OWNER) continue;
+
+      const queue = this.barracksProduction.queueSnapshot(structure);
+      if (structure.construction.complete && queue.trainingRemainingSeconds !== null && queue.trainingDurationSeconds !== null) {
+        entries.push({
+          id: `military-production-${structure.id}`,
+          x: structure.x,
+          y: 8.5,
+          z: structure.z,
+          progress: 1 - Math.min(1, queue.trainingRemainingSeconds / queue.trainingDurationSeconds),
+          label: `${queue.trainingLabel ?? "Asker"} üretiliyor · ${queue.queued}/${queue.capacity}`,
+        });
+      }
+      // Buildings do not regenerate, so a damaged bar remains available until
+      // repaired or destroyed instead of vanishing while the player responds.
+      if (!structure.health.depleted && structure.health.ratio < 1) {
+        entries.push({
+          id: `structure-health-${structure.id}`,
+          x: structure.x,
+          y: queue.trainingRemainingSeconds !== null ? 7 : 8.5,
+          z: structure.z,
+          progress: structure.health.ratio,
+          label: `Can ${Math.ceil(structure.health.current)}/${Math.ceil(structure.health.max)}`,
+          variant: "health",
+        });
+      }
+    }
+    if (center && !center.health.depleted && center.health.ratio < 1) {
+      entries.push({
+        id: "player-command-center-health",
+        x: center.position.x,
+        y: age.upgrading ? 7 : queue.trainingRemainingSeconds !== null ? 7.5 : 9,
+        z: center.position.z,
+        progress: center.health.ratio,
+        label: `Can ${Math.ceil(center.health.current)}/${Math.ceil(center.health.max)}`,
+        variant: "health",
       });
     }
     // The age is the longest thing the player ever waits on and the only one
@@ -1153,7 +1224,7 @@ export class RtsApp {
     updateUnitSeparation(this.units.all(), dt, { navigation: this.navigation });
     this.workerConstruction.update(dt);
     this.economyProduction?.update(dt);
-    this.mapArt.syncForest(this.forests);
+    this.syncForestVisibility();
     this.logisticsTransfers.update();
     // Only the human kingdom's production narrates into the build palette; the
     // AI's own queue events are surfaced by its decision log in a later slice.
@@ -1463,9 +1534,29 @@ export class RtsApp {
       // construction because the art loads asynchronously — at construction time
       // there is nothing to hide yet.
       this.fogVisibility?.trackWorldProps(collectWorldProps(blockout));
+      // The art arrives after setup's fog pass, and on the start screen there is
+      // no simulation tick coming to catch it up — so the newly built props and
+      // forest get their first fog pass here, or they would render unfogged
+      // until the player pressed "Maçı Başlat".
+      this.updateFogOfWar();
+      this.syncForestVisibility();
     } catch (error) {
       this.log.warn("RTS map art could not be loaded", error);
     }
+  }
+
+  /**
+   * §59: tree visibility, through the forest's own single writer.
+   *
+   * Shared by the simulation tick and the two setup paths so all three apply the
+   * identical rule — the predicate is `undefined` while the flag is off, which is
+   * what keeps a fogless build's forest exactly as it was.
+   */
+  private syncForestVisibility(): void {
+    this.mapArt.syncForest(
+      this.forests,
+      this.vision ? (x, z) => this.vision!.isExplored(PLAYER_OWNER, x, z) : undefined,
+    );
   }
 
   /** §51: leave the start screen and let the simulation run. */
@@ -1582,6 +1673,11 @@ export class RtsApp {
     this.territory.refresh();
     this.refreshNavigationBlockers();
     this.spawnStartingUnits();
+    // §59: the reset above cleared the explored latch, so the fresh world needs
+    // its first fog pass here too — a restart from the pause menu goes straight
+    // back to a running match, but one from the result screen does not.
+    this.updateFogOfWar();
+    this.syncForestVisibility();
     this.placement.cancel();
     this.syncPlacementUi();
     this.syncAgeUi();
@@ -1642,7 +1738,11 @@ export class RtsApp {
 
   /** Push the §51 readouts. The bar decides nothing; it only diffs its cells. */
   private syncHudBar(): void {
-    this.hudBar.setResources(this.playerKingdom.wallet.snapshot(), this.playerIncomeRates());
+    this.hudBar.setResources(
+      this.playerKingdom.wallet.snapshot(),
+      this.playerIncomeRates(),
+      this.resourceCapacity.capacityFor(PLAYER_OWNER),
+    );
     this.hudBar.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
     const population = this.playerKingdom.population.snapshot();
     this.hudBar.setPopulation(population.used, population.capacity);
@@ -1764,6 +1864,7 @@ export class RtsApp {
           carryCapacity: nextTier?.economy?.carryCapacity ?? null,
           attackDamage: nextTier?.defense?.attackDamage ?? null,
           queueCapacity: nextTier?.queueCapacity ?? null,
+          storageCapacity: nextTier?.storageCapacity ?? null,
         }
       : null;
     // While upgrading, `next` is the in-flight step (level is bumped only on
@@ -1900,6 +2001,9 @@ export class RtsApp {
         linkedProducers: this.productionLogistics.snapshots()
           .filter((producer) => producer.depotStructureId === structure.id).length,
         occupied: this.logisticsOccupation.occupierFor(structure.id) !== null,
+        contribution: structure.storageCapacity ?? {},
+        capacity: this.resourceCapacity.capacityFor(structure.owner),
+        stock: this.kingdoms.get(structure.owner).wallet.snapshot(),
       };
     }
     if (structure.stats.territory) {
@@ -2139,6 +2243,7 @@ export class RtsApp {
       disconnected: "Pazar kontrol alanınızın dışında kaldı; ticaret durdu.",
       "insufficient-gold": `${lot} ${label} için ${quote?.buyPrice ?? 0} altın gerekir.`,
       "insufficient-resources": `Satmak için ${lot} ${label} gerekir.`,
+      "storage-full": "Depolama kapasitesi dolu; Depo kurun veya yükseltin.",
     };
     this.buildPalette.setActionMessage(message[result]);
     this.syncPlacementUi();

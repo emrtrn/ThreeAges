@@ -73,14 +73,16 @@ ve taşıma kapasitesi ile verilir.
 | Sistem | Y1 | Y2 | Y3 | K1 | K2 | K3 |
 |---|---:|---:|---:|---:|---:|---:|
 | Okçuluk Alanı | yok | yok | yok | 600 can, sıra 20, Okçu | 850 can, sıra 25 | 1100 can, sıra 30 |
-| Merkez: can | 300 | 300 | 300 | 450 | 450 | 450 |
+| Merkez: can | 300 | 400 | 500 | 650 | 800 | 1000 |
 | Merkez: kontrol yarıçapı | 28 | 28 | 28 | 32 | 32 | 32 |
 | Merkez: işçi eğitimi | 25 sn | 25 sn | 25 sn | 9 sn | 9 sn | 9 sn |
-| Merkez: işçi sıra kapasitesi | 5 | 5 | 5 | 10 | 10 | 10 |
+| Merkez: işçi sıra kapasitesi | 5 | 7 | 9 | 12 | 16 | 20 |
 
-Merkez normal yapı merdivenine katılmaz; çağın iki ana eşiğini temsil eder.
-Altı kademe, normal yapıların ilerlemesidir. Üçüncü çağ eklenirse Merkez için
-ayrı bir üçüncü yaş eşiği tanımlanır.
+Merkez, çağın ana eşiği olmaya devam eder fakat diğer yapılarla aynı owner + yapı
+türü araştırma sözleşmesinde Lv1-Lv3 ilerler. Kasaba geçişi yeni bir Lv1 tabanı
+uygular; Merkez K1'de 650 can ve 12 işçi sırası ile Y3'ün üstündedir. Kontrol
+yarıçapı ve işçi eğitim süresi çağ kazanımlarıdır; in-age seviye araştırması
+yalnızca Merkez'in canını, işçi sırasını ve model seviyesini ilerletir.
 
 ## 3. Veri ve runtime tasarımı
 
@@ -149,15 +151,15 @@ Gerekli runtime dilimleri:
 ### Faz 3 - UI, görsel ve AI
 
 - [x] Çağ + seviye başlıkları ve hedef kademe kazançlarını göster.
-- [ ] Hayalet, şantiye ve bitmiş modelin aktif tier ile eşleştiğini doğrula.
-- [ ] AI'nin K1 ekonomik artışını kullanmasını ve Koçbaşı için K2'ye yatırım
+- [x] Hayalet, şantiye ve bitmiş modelin aktif tier ile eşleştiğini doğrula.
+- [x] AI'nin K1 ekonomik artışını kullanmasını ve Koçbaşı için K2'ye yatırım
   yapmasını sağla.
 
 ### Faz 4 - Doğrulama ve denge testi
 
-- [ ] Her yapı için Y1..K3 veri/runtime tablosunu test ile sabitle.
-- [ ] Ev Y3 -> K1 geçişinin 11 -> 14 nüfus verdiğini doğrula.
-- [ ] Çoklu aynı yapı, sonradan tamamlanan yapı ve çağ geçişi senaryolarını test et.
+- [x] Her yapı için Y1..K3 veri/runtime tablosunu test ile sabitle.
+- [x] Ev Y3 -> K1 geçişinin 11 -> 14 nüfus verdiğini doğrula.
+- [x] Çoklu aynı yapı, sonradan tamamlanan yapı ve çağ geçişi senaryolarını test et.
 - [ ] En az beş gerçek maçta nüfus tıkanması, kaynak akışı ve Koçbaşı zamanlamasını ölç.
 
 ## 6. Başarı ölçütleri

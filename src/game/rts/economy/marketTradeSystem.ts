@@ -30,6 +30,7 @@ import type { PlacedStructure, PlacedStructureSystem } from "../structures/place
 import type { UnitOwner } from "../units/unit";
 
 import { MarketPrices, NUMERAIRE_RESOURCE_ID, type MarketPriceSnapshot } from "./marketPricing";
+import type { ResourceCapacitySystem } from "./resourceCapacitySystem";
 
 /**
  * Why a trade did or did not happen. Distinct causes rather than a boolean: the
@@ -42,7 +43,8 @@ export type MarketTradeResult =
   | "no-completed-market"
   | "disconnected"
   | "insufficient-gold"
-  | "insufficient-resources";
+  | "insufficient-resources"
+  | "storage-full";
 
 /** A market's live rates plus the terms they were quoted under. */
 export interface MarketTradeSnapshot {
@@ -79,6 +81,7 @@ export class MarketTradeSystem {
     private readonly kingdoms: KingdomRegistry,
     /** KR-M4: the same control-area predicate the Barracks is severed by. */
     private readonly isStructureConnected: (structure: PlacedStructure) => boolean = () => true,
+    private readonly capacity?: ResourceCapacitySystem,
   ) {
     // First trading building wins. The template ships exactly one; a project
     // that wants two markets with different rates needs a per-building table,
@@ -133,6 +136,9 @@ export class MarketTradeSystem {
     const price = prices.buyPrice(resourceId, this.commissionFor(owner));
     if (price === null) return "untraded-resource";
     const { wallet } = this.kingdoms.get(owner);
+    if (this.capacity && this.capacity.availableFor(owner, resourceId, wallet.amount(resourceId)) < prices.lotSize) {
+      return "storage-full";
+    }
     if (!wallet.exchange(NUMERAIRE_RESOURCE_ID, price, resourceId, prices.lotSize)) {
       return "insufficient-gold";
     }
@@ -149,6 +155,9 @@ export class MarketTradeSystem {
     const price = prices.sellPrice(resourceId, this.commissionFor(owner));
     if (price === null) return "untraded-resource";
     const { wallet } = this.kingdoms.get(owner);
+    if (this.capacity && this.capacity.availableFor(owner, NUMERAIRE_RESOURCE_ID, wallet.amount(NUMERAIRE_RESOURCE_ID)) < price) {
+      return "storage-full";
+    }
     if (!wallet.exchange(resourceId, prices.lotSize, NUMERAIRE_RESOURCE_ID, price)) {
       return "insufficient-resources";
     }

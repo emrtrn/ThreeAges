@@ -103,6 +103,7 @@ import { AiExpansionCoordinator, AI_MAX_EXPANSION_PLANS } from "../src/game/rts/
 import { ProductionLogisticsSystem } from "../src/game/rts/economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "../src/game/rts/economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "../src/game/rts/economy/logisticsOccupationSystem";
+import { ResourceCapacitySystem } from "../src/game/rts/economy/resourceCapacitySystem";
 import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
 import { AiController, type AiControllerSnapshot } from "../src/game/rts/ai/aiController";
@@ -177,6 +178,8 @@ import {
   type ObservableStructure,
 } from "../src/game/rts/vision/enemyMemorySystem";
 import { VisionSystemAiFilter } from "../src/game/rts/ai/aiVisionFilter";
+import { FogVisibilityBinder } from "../src/game/rts/vision/fogVisibilityBinder";
+import { isTreeVisible } from "../src/game/rts/world/rtsMapArt";
 import type { RtsStrategicPoint } from "../src/game/rts/world/rtsMapBlockout";
 import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
@@ -28689,6 +28692,25 @@ check("KR-03: the command centre levels on the same in-age ladder as every other
   assert.equal(center.queueCapacity, 12);
   assert.equal(buildingMeshPath("command_center", age, center.level),
     `${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level1.gltf`);
+
+  kingdoms.get("player").wallet.credit("food", 150);
+  kingdoms.get("player").wallet.credit("wood", 150);
+  assert.equal(upgrades.start(center), "started");
+  assert.deepEqual(upgrades.update(45).map((event) => event.level), [2]);
+  assert.equal(center.health.max, 800);
+  assert.equal(center.queueCapacity, 16);
+  assert.equal(buildingMeshPath("command_center", age, center.level),
+    `${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level2.gltf`, "Town Lv2 research keeps the existing centre art ladder");
+
+  kingdoms.get("player").wallet.credit("food", 250);
+  kingdoms.get("player").wallet.credit("wood", 250);
+  kingdoms.get("player").wallet.credit("gold", 60);
+  assert.equal(upgrades.start(center), "started");
+  assert.deepEqual(upgrades.update(60).map((event) => event.level), [3]);
+  assert.equal(center.health.max, 1000);
+  assert.equal(center.queueCapacity, 20);
+  assert.equal(buildingMeshPath("command_center", age, center.level),
+    `${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level3.gltf`);
 });
 
 check("Faz M1 the Market is buildable and every balance building has art wired", () => {
@@ -29025,6 +29047,26 @@ check("Faz 1: the six-tier building matrix preserves the Y3 -> K1 power floor", 
     () => validateBuildingBalance(invalid),
     (error: unknown) => error instanceof GameDataError && /may not regress below Settlement Lv3/.test(error.message),
   );
+});
+
+check("Faz 4: every progression-enabled building declares a complete, non-regressing six-tier table", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  for (const [id, stats] of Object.entries(buildings)) {
+    const progression = stats.progression;
+    if (!progression) continue;
+    const settlement = progression.settlement;
+    const town = progression.town;
+    if (settlement.length === 0) {
+      assert.equal(stats.requiredAge, "town", `${id} may omit Settlement tiers only when Town-only`);
+      assert.deepEqual(town.map((tier) => tier.level), [1, 2, 3], `${id} declares all Town tiers`);
+      continue;
+    }
+    assert.deepEqual(settlement.map((tier) => tier.level), [1, 2, 3], `${id} declares Y1..Y3`);
+    assert.deepEqual(town.map((tier) => tier.level), [1, 2, 3], `${id} declares K1..K3`);
+    assert.ok(town[0]!.maxHealth > settlement[2]!.maxHealth, `${id} K1 health exceeds Y3`);
+  }
 });
 
 check("Faz 2: an age transition applies every completed building's Town Lv1 tier", () => {
@@ -29733,6 +29775,79 @@ check("§59: the AI's vision filter reports only what its kingdom can see", () =
   // must not inherit the AI's sightings.
   const playerFilter = new VisionSystemAiFilter(world.vision, world.memory, "player");
   assert.equal(playerFilter.canSee(-10, 0), false, "the AI's scouting is not the player's");
+});
+
+check("§59: the binder hides every enemy render object, command centre included", () => {
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  let sources: VisionSource[] = [];
+  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 40 });
+
+  // The player sees only its own corner; the enemy base sits well outside it.
+  sources = [{ owner: "player", x: -30, z: -30, radius: 8 }];
+  const ownCenter = centers.spawn("player", -30, -30, 300);
+  const enemyCenter = centers.spawn("enemy", 30, 30, 300);
+  const mine = units.spawn("player", -30, -30, RTS_TEST_UNIT_STATS);
+  const theirs = units.spawn("enemy", 30, 30, RTS_TEST_UNIT_STATS);
+
+  const binder = new FogVisibilityBinder(vision, units, structures, centers, "player");
+  vision.refresh();
+  binder.refresh();
+
+  assert.equal(mine.object.visible, true, "your own units are never touched");
+  assert.equal(ownCenter.object.visible, true, "nor your own centre");
+  assert.equal(theirs.object.visible, false, "an unseen enemy unit is hidden");
+  // The centre lives in its own registry, so iterating placed structures alone
+  // leaves the most informative building on the map permanently visible.
+  assert.equal(enemyCenter.object.visible, false, "and so is the enemy command centre");
+
+  // Push vision over the enemy base: both come back.
+  sources = [{ owner: "player", x: 30, z: 30, radius: 8 }];
+  vision.refresh();
+  binder.refresh();
+  assert.equal(theirs.object.visible, true, "what you can see, you see");
+  assert.equal(enemyCenter.object.visible, true);
+
+  // Teardown must not leave anything hidden in the scene graph.
+  sources = [];
+  vision.refresh();
+  binder.refresh();
+  assert.equal(enemyCenter.object.visible, false);
+  binder.revealAll();
+  assert.equal(enemyCenter.object.visible, true, "revealAll restores the centre too");
+  assert.equal(theirs.object.visible, true);
+
+  units.clear();
+  centers.clear();
+});
+
+check("§59: an unscouted forest is hidden, and stays drawn once explored", () => {
+  // isTreeVisible is the rule syncForest loops over, so this drives the shipped
+  // decision rather than a copy of it.
+  let sources: VisionSource[] = [{ owner: "player", x: -30, z: -30, radius: 8 }];
+  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 40 });
+  vision.refresh();
+  const revealed = (x: number, z: number): boolean => vision.isExplored("player", x, z);
+
+  const near = { x: -30, z: -30, depleted: false };
+  const far = { x: 30, z: 30, depleted: false };
+  const stump = { x: -30, z: -28, depleted: true };
+
+  assert.equal(isTreeVisible(near, revealed), true, "a scouted tree is drawn");
+  assert.equal(isTreeVisible(far, revealed), false, "an unscouted forest is not on the map");
+  assert.equal(isTreeVisible(stump, revealed), false, "depletion still hides a tree in plain sight");
+
+  // §40: permanent natural elements stay once seen. The scout leaves; the forest
+  // it walked through must not vanish behind it.
+  sources = [];
+  vision.refresh();
+  assert.equal(isTreeVisible(near, revealed), true, "explored forest survives the scout leaving");
+  assert.equal(isTreeVisible(far, revealed), false, "but the unvisited half is still unknown");
+
+  // Flag off: no predicate, so only depletion decides and the map reads as before.
+  assert.equal(isTreeVisible(far, undefined), true, "no fog means every standing tree is drawn");
+  assert.equal(isTreeVisible(stump, undefined), false);
 });
 
 check("§59: a fogged unit is not selectable or attackable", () => {
@@ -30568,6 +30683,89 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   }
   assert.equal(redundant.remove([{ x: 0, z: 0 }]), 1);
   assert.equal(redundant.connected({ x: -4, z: 0 }, { x: 4, z: 0 }), true, "an alternate branch preserves connectivity after a road cut");
+});
+
+check("RTS depot age and level tiers provide four-resource global storage capacity", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  assert.deepEqual(depotStats.progression?.settlement.map((tier) => tier.storageCapacity), [
+    { food: 500, wood: 500, stone: 300, gold: 300 },
+    { food: 750, wood: 750, stone: 450, gold: 450 },
+    { food: 1000, wood: 1000, stone: 600, gold: 600 },
+  ]);
+  assert.deepEqual(depotStats.progression?.town.map((tier) => tier.storageCapacity), [
+    { food: 1400, wood: 1400, stone: 900, gold: 900 },
+    { food: 1800, wood: 1800, stone: 1200, gold: 1200 },
+    { food: 2400, wood: 2400, stone: 1600, gold: 1600 },
+  ]);
+
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { wood: 1000, stone: 1000 }, 20);
+  let age: "settlement" | "town" = "settlement";
+  const upgrades = new StructureUpgradeSystem(structures, kingdoms, () => age);
+  const capacity = new ResourceCapacitySystem(structures);
+  const depot = structures.place("player", depotStats, 0, 0);
+  structures.advanceConstruction(depot, depotStats.constructionSeconds);
+  assert.equal(upgrades.applyCompletedUpgrade(depot), true);
+  assert.deepEqual(depot.storageCapacity, { food: 500, wood: 500, stone: 300, gold: 300 });
+  assert.deepEqual(capacity.capacityFor("player"), { food: 1000, wood: 1000, stone: 600, gold: 600 });
+
+  assert.equal(upgrades.start(depot), "started");
+  upgrades.update(45);
+  assert.deepEqual(depot.storageCapacity, { food: 750, wood: 750, stone: 450, gold: 450 });
+  assert.deepEqual(capacity.capacityFor("player"), { food: 1250, wood: 1250, stone: 750, gold: 750 });
+
+  age = "town";
+  upgrades.resetOwner("player");
+  assert.deepEqual(depot.storageCapacity, { food: 1400, wood: 1400, stone: 900, gold: 900 });
+  assert.equal(capacity.availableFor("player", "food", 1900), 0, "a full global store refuses further delivery");
+  assert.equal(capacity.availableFor("player", "food", 1850), 50);
+  structures.clear();
+});
+
+check("RTS full storage leaves linked production in its local buffer until capacity is freed", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const roadBalance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const depotStats = buildings.depot ?? assert.fail("depot definition missing");
+  const farmStats = buildings.farm ?? assert.fail("farm definition missing");
+  const units = new UnitSystem();
+  for (let index = 0; index < 3; index += 1) units.spawn("player", -2 + index * 2, 17, RTS_TEST_WORKER_STATS);
+  const structures = new PlacedStructureSystem();
+  const depot = structures.place("player", depotStats, 0, 0);
+  const farm = structures.place("player", farmStats, 0, 10);
+  structures.advanceConstruction(depot, depotStats.constructionSeconds);
+  structures.advanceConstruction(farm, farmStats.constructionSeconds);
+  depot.storageCapacity = depotStats.progression?.settlement[0]?.storageCapacity ?? null;
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(structures.navigationBlockers());
+  const production = new EconomyProductionSystem(units, structures, navigation, () => false);
+  const roads = new RoadGraph(roadBalance);
+  const route = roads.plan({ x: 4, z: 0 }, { x: 4, z: 10 }, []);
+  assert.ok(route);
+  roads.commit(route);
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 999 }, 20);
+  const transfers = new LogisticsTransferSystem(
+    production,
+    new ProductionLogisticsSystem(structures, roads, new DepotLogisticsSystem(structures, roads)),
+    kingdoms,
+    new ResourceCapacitySystem(structures),
+  );
+  for (let frame = 0; frame < 900; frame += 1) {
+    updateUnitMovement(units.all(), 1 / 60);
+    production.update(1 / 60);
+    transfers.update();
+  }
+  assert.equal(kingdoms.get("player").wallet.amount("food"), 1000, "delivery stops at the depot-backed limit");
+  assert.ok((production.snapshots("player")[0]?.localBuffer ?? 0) > 0, "excess output remains locally buffered");
+  structures.clear();
+  units.clear();
 });
 
 check("RTS completed depots become road-graph nodes only when a road touches their footprint", () => {

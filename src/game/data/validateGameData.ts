@@ -615,6 +615,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     const progression = progressionRaw === undefined ? undefined : validateBuildingProgression(
       progressionRaw,
       `${statsWhere}.progression`,
+      id,
       {
         maxHealth,
         ...(populationCapacity !== undefined ? { populationCapacity } : {}),
@@ -658,6 +659,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
 function validateBuildingProgression(
   value: unknown,
   where: string,
+  buildingId: string,
   base: Pick<BuildingBalance["string"], "maxHealth" | "populationCapacity" | "economy" | "territory" | "market" | "defense" | "requiredAge">,
 ): BuildingProgressionBalance {
   const data = asObject(value, where);
@@ -689,6 +691,7 @@ function validateBuildingProgression(
     let previousCommission = 1;
     let previousDamage = 0;
     let previousQueueCapacity = 0;
+    let previousStorage: Readonly<Record<string, number>> | null = null;
     const entries: BuildingProgressionTier[] = entriesRaw.map((entryRaw, index) => {
       const entryWhere = `${ageWhere}[${index}]`;
       const entry = asObject(entryRaw, entryWhere);
@@ -789,7 +792,22 @@ function validateBuildingProgression(
         queueCapacity = queueRaw;
         previousQueueCapacity = queueRaw;
       }
-      return { level: expectedLevel as 1 | 2 | 3, maxHealth, ...(populationCapacity !== undefined ? { populationCapacity } : {}), ...(economy ? { economy } : {}), ...(territory ? { territory } : {}), ...(tradeCommission !== undefined ? { tradeCommission } : {}), ...(defense ? { defense } : {}), ...(queueCapacity !== undefined ? { queueCapacity } : {}) };
+      const storageRaw = entry["storageCapacity"];
+      let storageCapacity: Readonly<Record<string, number>> | undefined;
+      if (storageRaw !== undefined) {
+        if (buildingId !== "depot") {
+          throw new GameDataError(`${entryWhere}.storageCapacity: only a depot may provide global storage`);
+        }
+        storageCapacity = validateStorageCapacity(storageRaw, `${entryWhere}.storageCapacity`);
+        if (previousStorage && Object.keys(storageCapacity).some((resourceId) =>
+          (storageCapacity![resourceId] ?? 0) <= (previousStorage![resourceId] ?? 0))) {
+          throw new GameDataError(`${entryWhere}.storageCapacity: every resource must increase by tier`);
+        }
+        previousStorage = storageCapacity;
+      } else if (buildingId === "depot") {
+        throw new GameDataError(`${entryWhere}.storageCapacity: every depot tier must define food, wood, stone and gold capacity`);
+      }
+      return { level: expectedLevel as 1 | 2 | 3, maxHealth, ...(populationCapacity !== undefined ? { populationCapacity } : {}), ...(economy ? { economy } : {}), ...(territory ? { territory } : {}), ...(tradeCommission !== undefined ? { tradeCommission } : {}), ...(defense ? { defense } : {}), ...(queueCapacity !== undefined ? { queueCapacity } : {}), ...(storageCapacity ? { storageCapacity } : {}) };
     });
     byAge[age] = entries;
   }
@@ -808,10 +826,31 @@ function validateBuildingProgression(
   assertTownTierDoesNotRegress(where, "territory.connectedControlRadius", townFirst.territory?.connectedControlRadius, settlementLast.territory?.connectedControlRadius);
   assertTownTierDoesNotRegress(where, "defense.attackDamage", townFirst.defense?.attackDamage, settlementLast.defense?.attackDamage);
   assertTownTierDoesNotRegress(where, "queueCapacity", townFirst.queueCapacity, settlementLast.queueCapacity);
+  if (townFirst.storageCapacity !== undefined && settlementLast.storageCapacity !== undefined) {
+    for (const resourceId of Object.keys(settlementLast.storageCapacity)) {
+      if ((townFirst.storageCapacity[resourceId] ?? 0) < (settlementLast.storageCapacity[resourceId] ?? 0)) {
+        throw new GameDataError(`${where}.town[0].storageCapacity.${resourceId}: Town Lv1 may not regress below Settlement Lv3`);
+      }
+    }
+  }
   if (townFirst.tradeCommission !== undefined && settlementLast.tradeCommission !== undefined && townFirst.tradeCommission >= settlementLast.tradeCommission) {
     throw new GameDataError(`${where}.town[0].tradeCommission: Town Lv1 must improve on Settlement Lv3`);
   }
   return byAge;
+}
+
+function validateStorageCapacity(value: unknown, where: string): Readonly<Record<string, number>> {
+  const data = asObject(value, where);
+  const resourceIds = ["food", "wood", "stone", "gold"];
+  const actualIds = Object.keys(data).sort();
+  if (actualIds.length !== resourceIds.length || actualIds.some((id, index) => id !== [...resourceIds].sort()[index])) {
+    throw new GameDataError(`${where}: must define exactly food, wood, stone and gold`);
+  }
+  return Object.fromEntries(resourceIds.map((resourceId) => {
+    const amount = requireFiniteNumber(data, resourceId, where);
+    if (amount <= 0) throw new GameDataError(`${where}.${resourceId}: must be > 0`);
+    return [resourceId, amount];
+  }));
 }
 
 function assertTownTierDoesNotRegress(

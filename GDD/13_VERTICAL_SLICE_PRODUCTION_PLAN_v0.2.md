@@ -156,7 +156,7 @@ Kaynak üret
 
 - Taş
 - Altın
-- İkinci ve üçüncü çağ
+- İkinci çağ
 - Okçu
 - Kuşatma
 - Süvari
@@ -276,7 +276,7 @@ Oyunun nihai vizyonunu yeterli ölçüde temsil eden, dışarıdan bir oyuncuya 
 
 - `İki Nehir Arası` tamamlanmış harita
 - Dört kaynak
-- Üç çağ
+- İki çağ × üç seviye
 - İşçi, Muhafız, Okçu ve Kuşatma
 - Karakol ve yol tabanlı genişleme
 - Yerel tampon ve alternatif lojistik rotalar
@@ -403,9 +403,8 @@ Başarısızsa:
 Release Candidate öncesi:
 
 - [ ] 20–30 dakikalık hedef maç düzenli oluşuyor.
-- [ ] Üç çağ görsel ve mekanik olarak ayrılıyor. (**Şu an ulaşılamaz:**
-      ThirdAge bina modeli yok — `SL-007`. İki çağ ayrışıyor: FirstAge/SecondAge
-      aileleri + her çağda Lv1–3 merdiveni.)
+- [ ] İki çağ görsel ve mekanik olarak ayrılıyor: FirstAge/SecondAge sanat
+      aileleri + her çağda Lv1–3 merdiveni (kapsam kararı 2026-07-18, `SL-007`).
 - [ ] AI en az Normal profilde geçerli rakip sunuyor.
 - [ ] Bir maç baştan sona açıklama gerektirmeden oynanabiliyor.
 - [ ] Kritik durumların nedenleri UI üzerinden okunuyor.
@@ -2335,7 +2334,6 @@ oynamaktır. 1 ve 2 bitti — yani sıra artık 3'te: bilinen hata düzeltildi v
 
 Kapı B geçildiğine göre aşağıdakiler artık ana üretim hattına alınabilir (Faz 10+):
 
-- üçüncü çağ,
 - bölgesel zafer,
 - fog,
 - minimap,
@@ -2346,50 +2344,46 @@ Erken oyun saldırmazlık süresi (4. madde) bunlardan bağımsızdı ve tamamla
 çeşitliliğinin gerçekten geri geldiğini görmek için yeni bir maç turu gerekiyor
 (§70 denge önceliklerine bağlanmalı).
 
-**Üçüncü çağ için uyarı.** Yukarıdaki listenin ilk maddesi artık kodla değil,
-**sanatla** bloklu: arşivde ThirdAge bina modeli yok (`SL-007`). Sistem N-çağa
-hazır kuruldu — çağ→aile eşlemesi veriden çözülüyor — ama üçüncü çağ ancak sanat
-kaynağı netleşince bağlanabilir.
+**Üçüncü çağ kapsam dışı (karar: 2026-07-18, `SL-007`).** Arşivde `ThirdAge`
+bina modeli yok ve üretilmeyecek. Slice **iki çağ × üç seviye** olarak
+kesinleşti: `FirstAge` ve `SecondAge` sanat aileleri, her biri Lv1–3. Kod tarafı
+N-çağa hazır kaldı (`rtsBuildingArt.ts` çağ→aile eşlemesini veriden çözer), yani
+karar sonradan geri alınırsa bağlama işi küçüktür; ama plan, tempo hedefleri ve
+kabul kriterleri artık iki çağa göre yazılıdır. Eski Faz 10 "Krallık çağı"
+kalemleri kaldırıldı, maç sonlandırma baskısı kalemleri korundu.
 
 ---
 
-# BÖLÜM N — FAZ 10: ÜÇÜNCÜ ÇAĞ VE MAÇI BİTİRME
+# BÖLÜM N — FAZ 10: GEÇ OYUN VE MAÇI BİTİRME
 
 ## 54. Amaç
 
-Üçüncü çağın yalnızca güç artışı değil, maçı sonlandırma aşaması olmasını sağlamak.
+İkinci çağın (Kasaba) geç bölümünün yalnızca güç artışı değil, maçı sonlandırma
+aşaması olmasını sağlamak.
 
 ---
 
 ## 55. Görevler
 
-### Krallık çağı
+### Geç Kasaba çağı
 
-> **Ön koşul — sanat (2026-07-18).** Bu faz kodla değil, **asset ile**
-> bloklu: arşivde `ThirdAge` bina modeli yok (`SL-007`). Çağ sistemi N-çağa
-> hazır (`rtsBuildingArt.ts` çağ→aile eşlemesini veriden çözer), yani bağlama
-> işi küçük; eksik olan modellerin kendisi. Bu karar verilmeden aşağıdaki
-> kutuların hiçbiri başlatılmamalıdır.
->
-> Ayrıca kalemler yeni ilerleme modeline göre yeniden yazıldı: "Merkez T3" ve
-> "Karakol T3" eski tek-eksenli modelin (çağ = seviye) kalıntılarıydı. Üçüncü
-> çağ artık `T3` demek değil, **`ThirdAge` sanat ailesi + o ailenin Lv1–3
-> merdiveni** demektir.
+> **Kapsam kararı (2026-07-18, `SL-007`).** Üçüncü çağ slice'tan çıkarıldı;
+> arşivde `ThirdAge` bina modeli yok ve üretilmeyecek. Slice **iki çağ × üç
+> seviye**: `FirstAge` ve `SecondAge`, her biri Lv1–3. Eski "Krallık çağı"
+> kalemleri (üçüncü `ages.json` girişi, `TownCenter_ThirdAge_Level3`, ThirdAge
+> model matrisi) kaldırıldı. Sonlandırma baskısı artık üçüncü bir çağın değil,
+> **SecondAge Lv3 merdiveninin** işidir.
 
-- [ ] ThirdAge asset kararı (üret / satın al / SecondAge varyantıyla idare et)
-- [ ] Krallık çağ gereksinimleri (`ages.json` üçüncü giriş)
-- [ ] Merkez'in Krallık katmanı (`level = 3`, `TownCenter_ThirdAge_Level3`)
-- [ ] ThirdAge Lv1–3 model matrisi (bina başına 3 model)
-- [ ] Nüfus üst sınırı artışı
-- [ ] Üst seviye üretim değerleri
+- [ ] SecondAge Lv3 üst seviye üretim değerleri
+- [ ] Nüfus üst sınırı artışı (SecondAge Lv3'e bağlı)
 - [ ] Kuşatma erişimi, daha önce açılmadıysa
-- [ ] Çağ başı stat ölçeklemesi (`KR-06` ile ertelenmişti — üçüncü çağ eklenirken
+- [ ] Çağ başı stat ölçeklemesi (`KR-06` ile ertelenmişti — iki çağlı modelde
       yeniden değerlendirilmeli; şu an çağ atlama stat kazancı vermiyor, kazanımı
       seviye adımları taşıyor)
 
 ### Maç sonlandırma baskısı
 
-- [ ] Krallık çağında ordu üretim temposu
+- [ ] Geç Kasaba çağında ordu üretim temposu
 - [ ] Merkeze karşı kuşatma gereksinimi
 - [ ] AI Finish Game davranışı
 - [ ] Uzayan maç uyarısı ve denge ölçümü
@@ -2403,11 +2397,11 @@ Seçenekler:
 
 1. Yalnızca yerleşim sağlığı göstergesi
 2. Bazı küçük bonusların kaynağı
-3. Krallık çağının yumuşak gereksinimi
+3. Kasaba çağının yumuşak gereksinimi
 
 Varsayılan karar:
 
-> Refah, Krallık çağını tek başına bloke etmeyecektir.
+> Refah, çağ geçişini tek başına bloke etmeyecektir.
 
 - [ ] Test sonucu olmadan sert kilit ekleme.
 - [ ] Refah nedenlerini UI’da göster, aktifse.
@@ -2416,10 +2410,10 @@ Varsayılan karar:
 
 ## 56. Kabul Kriterleri
 
-- [ ] Krallık çağı maçı gereksiz yere uzatmıyor.
-- [ ] Üçüncü çağdan sonra zafer baskısı belirgin artıyor.
-- [ ] Krallık yalnızca daha yüksek sayılar sunmuyor.
-- [ ] AI Krallık çağına ulaşıp maçı bitirmeye çalışıyor.
+- [ ] Geç Kasaba çağı maçı gereksiz yere uzatmıyor.
+- [ ] SecondAge Lv3'ten sonra zafer baskısı belirgin artıyor.
+- [ ] Geç oyun yalnızca daha yüksek sayılar sunmuyor.
+- [ ] AI Kasaba çağına ulaşıp maçı bitirmeye çalışıyor.
 - [ ] Hedef maçların çoğu 20–30 dakika içinde bitiyor.
 
 ---
@@ -2479,14 +2473,19 @@ gerileme, uyarı bandı, maç sonucu önceliği, AI contest davranışı);
 
 ### Kabul kriterleri
 
-Dördü de **playtest gerektirir** — kod tarafı hazır, ölçüm yapılmadı:
+Dördü de playtest gerektiriyordu; **playtest yapıldı (2026-07-18) ve dördü de
+kabul edildi:**
 
-- [ ] Bölgesel zafer merkez savunmasına kapanmayı azaltıyor.
-- [ ] Sayaç sürpriz yenilgi yaratmıyor.
-- [ ] AI sayacı durdurmak için tepki veriyor.
-- [ ] İkinci zafer türü askerî zaferi gereksiz hale getirmiyor.
+- [x] Bölgesel zafer merkez savunmasına kapanmayı azaltıyor.
+- [x] Sayaç sürpriz yenilgi yaratmıyor.
+- [x] AI sayacı durdurmak için tepki veriyor. (Doğrudan gözlendi: AI birlikleri
+      kontrol edilen noktaya girdi, halka sarıya döndü ve sayaç `stalled`'a
+      geçti; birlikler temizlenince sayaç `holding`'e döndü ve maç gereken
+      sürede tamamlandı.)
+- [x] İkinci zafer türü askerî zaferi gereksiz hale getirmiyor.
 
-Başarısızsa sistem feature flag arkasında kapatılır.
+Sistem kabul edildiği için §78.1 (maç kurulum ekranında zafer koşulu seçimi)
+artık ön koşulunu karşılıyor.
 
 > **Ayarlanacak sayılar** (`DEFAULT_REGIONAL_VICTORY_SETTINGS`): gereken süre
 > 180 sn, gerileme 1/3, uyarı bandı 60 sn. Şu an kodda sabit; playtest bunları
@@ -2570,17 +2569,42 @@ bayraksız boot'u ve iki krallığın simetrisini sürüyor.
 
 ### Kabul kriterleri
 
-Üçü de **playtest gerektirir** — kod tarafı hazır, ölçüm yapılmadı:
+Üçü de playtest gerektiriyordu; **playtest yapıldı (2026-07-18) ve üçü de
+kabul edildi:**
 
-- [ ] Fog oyuncuyu gerekli bilgiden tamamen mahrum bırakmıyor.
-- [ ] AI görünmeyen birimlerin gerçek konumunu bilmiyor.
-- [ ] Görüş güncellemesi performans sorunu oluşturmuyor.
+- [x] Fog oyuncuyu gerekli bilgiden tamamen mahrum bırakmıyor.
+- [x] AI görünmeyen birimlerin gerçek konumunu bilmiyor.
+- [x] Görüş güncellemesi performans sorunu oluşturmuyor.
 
-> **Bilinen kapsam sınırı:** GDD 08 §39 uyarınca kaynak yatakları ve merkez sırt
-> keşfedilmemiş alanda gizleniyor, ancak **ağaçlar gizlenmiyor**. Orman sistemi
-> her tick her ağacın `visible` alanını kendisi yazıyor; ikinci bir yazar onunla
-> çakışır ve ağaç titrer. Ormanı fog'a sokmak, fog testinin sahipliğini orman
-> sistemine vermeyi gerektiriyor — ayrı bir değişiklik.
+> **Sızıntı olarak bulunan iki hata daha** (yine ekrana bakarak, testler
+> geçerken): **komuta merkezleri** `CommandCenterSystem`'de ayrı durduğu için
+> `PlacedStructureSystem`'i gezen binder onları hiç gizlemiyordu — haritanın en
+> bilgilendirici binası hiç keşfedilmemiş alanda parlıyordu. Ve **inşa ilerleme
+> çubuğu** sahip filtresi taşımıyordu (`updateWorldProgressOverlay`); bu fog'dan
+> önce de bir sızıntıydı, sonrasında sertleşti: overlay ekran-uzayı DOM olduğu
+> için binanın sahne objesini gizlemek üstünde yüzen etiketi susturmuyor.
+> İkisi de `§59: the binder hides every enemy render object` testiyle sabitlendi.
+>
+> **Dördüncüsü: başlangıç ekranı hiç sisli değildi.** `updateFogOfWar` yalnızca
+> `updateSimulation`'dan çağrılıyor, o da `match.active && flow.running`'e
+> bağlı — yani "Maçı Başlat"a basılmadan önce hiç çalışmamıştı. Dünya tutarsız
+> bir yarı-durumda çiziliyordu: fog dokusu başlangıçtaki "her yer bilinmeyen"
+> dolgusunda (zemin siyah), ama binder hiçbir şeyi gizlememiş — düşman üssü ve
+> tüm orman siyahın üstünde okunabilir. Oyuncu maçı başlatmadan haritayı
+> okuyabiliyordu. Kurulumda, harita sanatı yüklendiğinde ve yeniden başlatmada
+> birer geçiş eklendi.
+>
+> **Dünya nesneleri:** kaynak yatakları ve merkez sırt `collectWorldProps` ile,
+> **ağaçlar** ise `RtsMapArt.syncForest` ile gizleniyor. Bölünme kasıtlı: orman
+> döngüsü zaten her tick `tree.visible`'ı tüketilme için yazıyor, ikinci bir
+> yazar onunla çakışır ve ağaç titrerdi. Bu yüzden fog testi de o döngüye verildi
+> — tek yazar, bir ağacın görünmez olmasının iki sebebi. Karar `isTreeVisible`
+> saf fonksiyonuna çıkarıldı: `RtsMapArt` kurulmak için WebGLRenderer istiyor,
+> yani `syncForest`'ı doğrudan süren bir test GL bağlamı gerektirirdi, koşulu
+> yeniden yazan bir test ise sevkiyattaki kural çürürken mutlu mesut geçerdi.
+>
+> Üçü de `isExplored`'a bakıyor, `isVisible`'a değil (§40: kalıcı doğal öğeler
+> bir kez görüldükten sonra haritada kalır) — düşman birim ve yapılarının aksine.
 >
 > **Ayarlanacak sayılar**: `visionRadius` değerleri artık `balance/` altındaki
 > JSON'larda (birim 7–14, yapı 8–30). Fog katman alfaları ve hayalet solma süresi
@@ -2614,7 +2638,7 @@ Kanıtlanmış oynanış sistemlerini Quaternius assetleriyle sunulabilir hale g
 
 - [ ] Paket içindeki bina modellerini listele.
 - [ ] Birim modellerini ve animasyonlarını listele.
-- [ ] Üç çağ için kullanılabilecek bina eşleşmelerini belirle.
+- [ ] İki çağ için kullanılabilecek bina eşleşmelerini belirle.
 - [ ] Eksik model rollerini belirle.
 - [ ] Kullanılmayacak assetleri işaretle.
 - [ ] Lisans bilgisini proje belgelerine ekle.
@@ -2651,7 +2675,6 @@ Görevler:
 
 - [x] FirstAge Lv1–3 modelleri (`{Bina}_FirstAge_Level{1..3}`)
 - [x] SecondAge Lv1–3 modelleri (`{Bina}_SecondAge_Level{1..3}`)
-- [ ] ThirdAge Lv1–3 modelleri — **asset yok**, bkz. §55 / `SL-007`
 - [ ] Takım renkleri
 - [ ] Seçim ve sağlık göstergeleri
 - [ ] İnşaat placeholder geçişi
@@ -2659,9 +2682,10 @@ Görevler:
 - [ ] Yıkım geçişi
 
 **Model matrisi tek eksenli üçlü değil, çağ × seviye çarpımıdır** (`02 §25.3`):
-bina başına **çağ sayısı × 3** model. İki çağ bağlı olduğu için bugün altı model
-kullanılıyor. Taş Ocağı, Altın Madeni ve Oduncu Kampı bu matrisin dışında —
-çağdan ve seviyeden bağımsız tek mesh kullanırlar.
+slice kapsamı **iki çağ × üç seviye**, yani bina başına altı model
+(`{Bina}_FirstAge_Level{1..3}` + `{Bina}_SecondAge_Level{1..3}`). Üçüncü çağ
+kapsam dışıdır (`SL-007`, bkz. §55). Taş Ocağı, Altın Madeni ve Oduncu Kampı bu
+matrisin dışında — çağdan ve seviyeden bağımsız tek mesh kullanırlar.
 
 Her yapının her seviye için özel modeli bulunmak zorunda değildir. Gerekirse:
 
@@ -2768,7 +2792,7 @@ Her maç için şu değerler kaydedilir:
 - İlk karakol zamanı
 - İlk askerî temas zamanı
 - Kasaba çağı zamanı
-- Krallık çağı zamanı
+- Kasaba Lv3 zamanı
 - İlk büyük çatışma zamanı
 - Üretilen toplam işçi
 - Üretilen birim türleri
@@ -2844,7 +2868,7 @@ belirlemelidir.
 | İlk askerî temas | 5–9 dk |
 | İlk karakol | 5–9 dk |
 | Kasaba geçişi | 7–12 dk |
-| Krallık geçişi | 17–23 dk |
+| Kasaba Lv3 (geç oyun) girişi | 17–23 dk |
 | Blocker olmadan biten RC maçları | %90+ |
 | 40 dakikayı aşan final maç | <%20 |
 | Kalıcı birim sıkışması | 0 |
@@ -2913,6 +2937,56 @@ Yeni özellik eklemeden mevcut vertical slice’ı kararlı, okunabilir ve sunul
 
 ---
 
+## 78.1. Maç Kurulum Ekranı — Koşullu
+
+§76 "yeni özellik eklemeden" der; bu kalem bir istisna olarak buraya yazılıyor
+çünkü eklediği şey yeni bir *sistem* değil, hâlihazırda çalışan bir sistemin
+erişim yolu. Faz 11 sonunda §58 Bölgesel Zafer tamamen `regionalVictory` bayrağı
+arkasında ve ona ulaşmanın tek yolu `?flags=regionalVictory` veya §72 test
+preset'i — yani bir URL parametresi. Vertical slice sunulabilir sayılacaksa
+oyuncunun zafer koşulunu seçebilmesi gerekir; aksi halde ikinci zafer türü
+üretilmiş ama oyuna hiç girmemiş olur.
+
+**Neden Faz 11'de değil, burada.** §58'in dört kabul kriteri Faz 13'te ölçülüyor
+ve plan başarısızlık halinde sistemin "feature flag arkasında kapatılır"
+demesine izin veriyor (§58). Onaylanmadan menü yüzeyi inşa etmek, sökülme
+ihtimali olan iş demektir. Sıra bu yüzden ölçümün *sonrası*.
+
+**Neden yeni bir ekran değil.** §50 bilinçli olarak "ana menü yerine basit
+başlatma ekranı" seçti ve altı akış kalemini tek bir modalda birleştirdi
+(`match/rtsMatchOverlay.ts`). Bu kalem o kararı geri almaz: seçim, zaten var olan
+başlatma kartına eklenir. İkinci bir modal, §50'nin kaçındığı "ikisinin aynı anda
+ekranda olması" riskini geri getirirdi.
+
+### Ön koşul
+
+- [ ] §58'in dört kabul kriteri Faz 13'te ölçülmüş ve sistem kabul edilmiş.
+      Reddedilirse bu bölüm tamamen düşer ve §60'ın "Kapsamdan Çıkarıldı"
+      formatında kapatılır.
+
+### Görevler
+
+- [ ] Başlatma kartına zafer koşulu seçimi ekle (Askerî / Askerî + Bölgesel).
+      Varsayılan yalnız askerî: §58 ikinci bir *rota*, oyuncunun sormadan
+      karşılaştığı bir kural değil.
+- [ ] Seçimi `regionalVictory` bayrağına bağla. Bayrak §13 uyarınca maç
+      başladıktan sonra salt-okunur kalmalı — seçim maç *kurulurken* çözülür,
+      duraklatma menüsünde değiştirilemez.
+- [ ] Seçenek kapalıyken ekranda hiçbir iz bırakma (§60 ve §80'deki "yarım veya
+      kapalı özellik UI'da görünmüyor" maddesi).
+- [ ] Bölgesel zafer seçiliyken kısa bir açıklama göster: nokta yol bağlantılı
+      karakolun kontrol alanıyla alınır, birlik göndererek değil. Bu kural
+      `strategicPointSystem.ts` içinde doğru çalışıyor ama hiçbir yerde
+      oyuncuya söylenmiyor; keşfedilemez bir kural sürpriz yenilgi üretir.
+
+### Kabul kriterleri
+
+- [ ] Oyuncu URL düzenlemeden bölgesel zaferi açıp bir maç oynayabiliyor.
+- [ ] Seçenek kapalıyken §58'in hiçbir UI ögesi görünmüyor.
+- [ ] Maç ortasında zafer koşulu değişmiyor.
+
+---
+
 ## 79. Stabilite
 
 - [ ] Uzun süreli maç testi
@@ -2933,13 +3007,15 @@ Yeni özellik eklemeden mevcut vertical slice’ı kararlı, okunabilir ve sunul
 
 - [ ] Tek harita baştan sona oynanabiliyor.
 - [ ] Oyuncu dört kaynak kullanabiliyor.
-- [ ] Oyuncu üç çağdan geçebiliyor.
+- [ ] Oyuncu iki çağdan ve her çağın üç seviyesinden geçebiliyor.
 - [ ] Karakol ve yol ile genişleme zorunlu ve anlaşılır.
 - [ ] Dış ekonomi savunulabilir ve saldırılabilir.
 - [ ] Dört birim rolü çalışıyor.
 - [ ] AI ekonomi kuruyor, genişliyor, savunuyor ve saldırıyor.
 - [ ] Askerî zafer güvenilir çalışıyor.
 - [ ] Bölgesel zafer yalnız kabul edildiyse güvenilir çalışıyor.
+- [ ] Bölgesel zafer kabul edildiyse oyuncu onu URL düzenlemeden seçebiliyor
+      (§78.1); reddedildiyse hiçbir yerde görünmüyor.
 - [ ] Maçların en az %90’ı blocker olmadan tamamlanıyor.
 - [ ] Hedef maç süresi çoğunlukla 20–30 dakika.
 - [ ] Yarım veya kapalı özellik UI’da görünmüyor.
@@ -3081,7 +3157,7 @@ Build ve veri temeli
 → Okçu ve kuşatma
 → AI-2
 → Çekirdek Maç Kapısı
-→ Üçüncü çağ
+→ Geç oyun bitirme baskısı
 → Asset entegrasyonu
 → Denge ve RC
 ```
@@ -3260,7 +3336,7 @@ Belirti:
 
 - güvenli kaynakları sınırlama,
 - Kasaba aşamasını ana çatışma dönemi yapma,
-- Krallık çağını bitirici hale getirme,
+- geç Kasaba çağını bitirici hale getirme,
 - AI Finish Game davranışı,
 - kuşatmayı erişilebilir tutma,
 - bölgesel zaferi yalnız çıkmaz varsa ekleme.
@@ -3487,7 +3563,6 @@ Aşağıdakiler blocker kabul edilir:
 
 İçerik:
 
-- Üçüncü çağ
 - Geç oyun bitirme baskısı
 - Final yapı ve birim dengesi
 - Koşullu stratejik sistem kararları
@@ -3558,7 +3633,7 @@ Vertical slice tamamlanmıştır yalnızca:
 - [ ] Tek harita tamamlanmış.
 - [ ] Tek AI rakip çalışıyor.
 - [ ] Dört kaynak kullanılıyor.
-- [ ] Üç çağ oynanıyor.
+- [ ] İki çağ × üç seviye oynanıyor.
 - [ ] Yol ve karakol genişlemenin merkezinde.
 - [ ] Yerel tampon ve bağlantı kesintisi çalışıyor.
 - [ ] İşçi, Muhafız, Okçu ve Kuşatma çalışıyor.
@@ -3700,8 +3775,7 @@ Vertical slice tamamlanmıştır yalnızca:
 
 ### İlerleme
 
-- [ ] ThirdAge asset kararı (`SL-007` — Krallık çağının ön koşulu)
-- [ ] Krallık çağı
+- [x] Çağ kapsamı kararı — iki çağ × üç seviye (`SL-007`, 2026-07-18)
 - [ ] Geç oyun bitirme baskısı
 
 ### Koşullu
@@ -3765,7 +3839,7 @@ Vertical slice tamamlanmıştır yalnızca:
 - [x] Minimap gerekli değil; küçük sahne ölçeği için kapsamdan çıkarıldı. (`SCOPE_LOG.md` SL-006)
 - [ ] Refah hangi rolde kalmalı?
 - [ ] Kule çekirdek savaşa katkı sağlıyor mu?
-- [ ] Krallık çağında hangi yeni karar açılmalı?
+- [ ] Geç Kasaba çağında (SecondAge Lv3) hangi yeni karar açılmalı?
 
 ---
 

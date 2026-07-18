@@ -14,6 +14,8 @@ export interface RtsWorldProgressEntry {
   readonly z: number;
   readonly progress: number;
   readonly label: string;
+  /** Health uses a separate fill treatment but shares the same world anchor. */
+  readonly variant?: "progress" | "health";
 }
 
 interface MountedEntry {
@@ -76,6 +78,7 @@ export class RtsWorldProgressOverlay {
     const y = (-this.scratch.y * 0.5 + 0.5) * height;
     mounted.root.hidden = false;
     mounted.root.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+    mounted.root.classList.toggle("rts-world-health", entry.variant === "health");
     mounted.label.textContent = entry.label;
     mounted.fill.style.width = `${(Math.max(0, Math.min(1, entry.progress)) * 100).toFixed(1)}%`;
   }

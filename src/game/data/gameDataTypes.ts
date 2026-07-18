@@ -251,6 +251,8 @@ export interface BuildingProgressionTier {
   readonly defense?: Pick<BuildingDefenseBalance, "attackDamage">;
   /** Queue capacity supplied by military production structures at this tier. */
   readonly queueCapacity?: number;
+  /** Global stock capacity this completed depot contributes, keyed by resource id. */
+  readonly storageCapacity?: StartingResources;
 }
 
 export interface BuildingUpgradeBalance {

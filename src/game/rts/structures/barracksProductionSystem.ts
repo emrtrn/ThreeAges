@@ -67,6 +67,8 @@ export interface BarracksQueueSnapshot {
   readonly capacity: number;
   readonly trainingLabel: string | null;
   readonly trainingRemainingSeconds: number | null;
+  /** Total duration of the unit currently leaving this building. */
+  readonly trainingDurationSeconds: number | null;
   /** Order labels behind the one in progress, in the order they will train. */
   readonly pendingLabels: readonly string[];
 }
@@ -237,6 +239,7 @@ export class BarracksProductionSystem {
       capacity: this.capacityForStructure(structure),
       trainingLabel: training?.stats.label ?? null,
       trainingRemainingSeconds: training?.remainingSeconds ?? null,
+      trainingDurationSeconds: training?.stats.trainingSeconds ?? null,
       pendingLabels: pending.map((order) => order.stats.label),
     };
   }

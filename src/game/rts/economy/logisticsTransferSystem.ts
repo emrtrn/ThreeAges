@@ -3,6 +3,7 @@ import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { UnitOwner } from "../units/unit";
 import type { EconomyProductionSystem } from "./economyProductionSystem";
 import type { ProductionLogisticsSystem } from "./productionLogisticsSystem";
+import type { ResourceCapacitySystem } from "./resourceCapacitySystem";
 
 export interface LogisticsTransferSnapshot {
   readonly structureId: number;
@@ -20,6 +21,7 @@ export class LogisticsTransferSystem {
     private readonly production: EconomyProductionSystem,
     private readonly links: ProductionLogisticsSystem,
     private readonly kingdoms: KingdomRegistry,
+    private readonly capacity?: ResourceCapacitySystem,
   ) {}
 
   update(): void {
@@ -27,12 +29,16 @@ export class LogisticsTransferSystem {
     for (const link of this.links.snapshots()) {
       if (link.status !== "linked") continue;
       linkedIds.add(link.structureId);
-      const transfer = this.production.withdrawBuffered(link.structureId);
+      const wallet = this.kingdoms.get(link.owner).wallet;
+      const transfer = this.production.withdrawBuffered(
+        link.structureId,
+        this.capacity?.availableFor(link.owner, link.resourceId, wallet.amount(link.resourceId)),
+      );
       if (!transfer) {
         this.record(link.structureId, link.owner, link.resourceId, 0);
         continue;
       }
-      this.kingdoms.get(link.owner).wallet.credit(transfer.resourceId, transfer.amount);
+      wallet.credit(transfer.resourceId, transfer.amount);
       this.record(link.structureId, link.owner, transfer.resourceId, transfer.amount);
     }
     for (const [structureId, snapshot] of this.transfers) {

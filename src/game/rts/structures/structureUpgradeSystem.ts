@@ -17,6 +17,7 @@ import type {
   BuildingLevelBalance,
   EconomyProductionBalance,
   SettlementAge,
+  StartingResources,
 } from "../../data/gameDataTypes";
 
 /**
@@ -41,6 +42,7 @@ export interface UpgradableStructure {
   defenseAttackDamage: number | null;
   marketCommission: number | null;
   queueCapacity: number | null;
+  storageCapacity: StartingResources | null;
 }
 
 export type StructureUpgradeResult =
@@ -272,6 +274,7 @@ export class StructureUpgradeSystem {
         structure.defenseAttackDamage = structure.stats.defense?.attackDamage ?? null;
         structure.marketCommission = structure.stats.market?.commission ?? null;
         structure.queueCapacity = null;
+        structure.storageCapacity = null;
       }
       return false;
     }
@@ -289,6 +292,7 @@ export class StructureUpgradeSystem {
     structure.defenseAttackDamage = tier.defense?.attackDamage ?? structure.stats.defense?.attackDamage ?? null;
     structure.marketCommission = tier.tradeCommission ?? structure.stats.market?.commission ?? null;
     structure.queueCapacity = tier.queueCapacity ?? null;
+    structure.storageCapacity = tier.storageCapacity ?? null;
     return true;
   }
 

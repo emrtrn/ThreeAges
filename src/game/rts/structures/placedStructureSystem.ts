@@ -21,7 +21,7 @@ import {
 } from "three";
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import type { BuildingBalanceStats, EconomyProductionBalance } from "../../data/gameDataTypes";
+import type { BuildingBalanceStats, EconomyProductionBalance, StartingResources } from "../../data/gameDataTypes";
 import type { UnitOwner } from "../units/unit";
 import { HealthComponent } from "../units/health";
 import { buildingFootprintBlocker } from "./placementGrid";
@@ -76,6 +76,8 @@ export interface PlacedStructure {
   marketCommission: number | null;
   /** Active military production queue capacity for the current tier. */
   queueCapacity: number | null;
+  /** Active global stock capacity contributed by this depot's current tier. */
+  storageCapacity: StartingResources | null;
 }
 
 export class PlacedStructureSystem {
@@ -161,6 +163,7 @@ export class PlacedStructureSystem {
       // structure is completed and the active progression tier is applied.
       marketCommission: null,
       queueCapacity: null,
+      storageCapacity: null,
     };
     this.structures.push(structure);
     this.registerPickTargets(structure, progressFill);

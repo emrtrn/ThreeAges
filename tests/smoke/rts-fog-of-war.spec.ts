@@ -27,6 +27,25 @@ test("§59: fog builds into the match behind its flag and leaves no trace withou
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
 
+  // The start screen first, before anything is clicked. Fog is otherwise only
+  // computed from the simulation tick, which is gated on a running match — so
+  // this screen once rendered the fog texture's initial all-unknown fill with
+  // nothing hidden on top of it, and the whole map was readable before the
+  // player pressed the button.
+  await page.goto("/?rts&debug&flags=fogOfWar");
+  await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
+  const beforeStart = page.locator(".rts-debug-overlay");
+  await expect(beforeStart).toContainText("görüş:");
+  const openingText = await beforeStart.textContent();
+  const openingPercents = [...(openingText ?? "").matchAll(/keşfedilmiş %([\d.]+)/g)]
+    .map((match) => Number(match[1]));
+  expect(openingPercents, "both kingdoms are already fogged on the start screen")
+    .toHaveLength(2);
+  for (const percent of openingPercents) {
+    expect(percent, "a base is revealed before the match begins").toBeGreaterThan(0);
+    expect(percent, "but only a base — the map is not open").toBeLessThan(60);
+  }
+
   await openMatch(page, "/?rts&debug&flags=fogOfWar");
 
   const overlay = page.locator(".rts-debug-overlay");

@@ -128,6 +128,10 @@ body {
   transition: width 80ms linear;
 }
 
+.rts-world-health .rts-world-progress-fill {
+  background: linear-gradient(90deg, #b83732, #e56e50);
+}
+
 /*
  * The Faz 9 match modal: the start screen, the pause menu and the result screen
  * are one card in one place (see rtsMatchOverlay.ts). It blocks the field

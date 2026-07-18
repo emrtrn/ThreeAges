@@ -108,9 +108,13 @@ export class RtsHudBar {
   setResources(
     stock: Readonly<Record<string, number>>,
     income: Readonly<Record<string, number>>,
+    capacity: Readonly<Record<string, number>> = {},
   ): void {
     for (const [resourceId, cell] of this.resourceCells) {
-      const amount = String(formatInventoryAmount(stock[resourceId] ?? 0));
+      const limit = capacity[resourceId];
+      const amount = limit === undefined
+        ? String(formatInventoryAmount(stock[resourceId] ?? 0))
+        : `${formatInventoryAmount(stock[resourceId] ?? 0)}/${formatInventoryAmount(limit)}`;
       if (cell.amount.textContent !== amount) cell.amount.textContent = amount;
       const rate = income[resourceId] ?? 0;
       const rateText = `+${rate.toFixed(1)}/dk`;

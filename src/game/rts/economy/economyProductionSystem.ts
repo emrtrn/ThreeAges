@@ -212,12 +212,13 @@ export class EconomyProductionSystem {
   }
 
   /** Remove buffered output for a connected logistics transfer, never below zero. */
-  withdrawBuffered(structureId: number): { resourceId: string; amount: number } | null {
+  withdrawBuffered(structureId: number, maximumAmount = Number.POSITIVE_INFINITY): { resourceId: string; amount: number } | null {
     const producer = this.producers.get(structureId);
     const economy = producer?.structure.economy;
-    if (!producer || !economy || producer.localBuffer <= 0) return null;
-    const amount = producer.localBuffer;
-    producer.localBuffer = 0;
+    if (!producer || !economy || producer.localBuffer <= 0 || !Number.isFinite(maximumAmount) && maximumAmount !== Number.POSITIVE_INFINITY) return null;
+    const amount = Math.min(producer.localBuffer, Math.max(0, maximumAmount));
+    if (amount <= 0) return null;
+    producer.localBuffer -= amount;
     producer.lastTransferTick = amount;
     producer.totalTransferred += amount;
     return { resourceId: economy.resourceId, amount };

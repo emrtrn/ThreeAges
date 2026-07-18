@@ -23,6 +23,7 @@
  */
 import type { Object3D } from "three";
 
+import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
@@ -44,6 +45,7 @@ export class FogVisibilityBinder {
     private readonly vision: VisionSystem,
     private readonly units: UnitSystem,
     private readonly structures: PlacedStructureSystem,
+    private readonly centers: CommandCenterSystem,
     /** The kingdom whose eyes the screen shows — the human player. */
     private readonly observer: UnitOwner,
   ) {}
@@ -79,6 +81,18 @@ export class FogVisibilityBinder {
       if (structure.owner === this.observer) continue;
       structure.object.visible = this.vision.isVisible(this.observer, structure.x, structure.z);
     }
+    // Command centres live in their own registry rather than the placed-structure
+    // one, so iterating `structures` alone leaves the single most informative
+    // building on the map permanently visible — the enemy's town hall, glowing
+    // in ground the player has never scouted.
+    for (const center of this.centers.all()) {
+      if (center.owner === this.observer) continue;
+      center.object.visible = this.vision.isVisible(
+        this.observer,
+        center.position.x,
+        center.position.z,
+      );
+    }
   }
 
   /**
@@ -89,6 +103,7 @@ export class FogVisibilityBinder {
   revealAll(): void {
     for (const unit of this.units.all()) unit.object.visible = true;
     for (const structure of this.structures.all()) structure.object.visible = true;
+    for (const center of this.centers.all()) center.object.visible = true;
     for (const prop of this.hiddenProps) prop.visible = true;
     this.hiddenProps = [];
   }

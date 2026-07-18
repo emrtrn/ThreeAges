@@ -94,6 +94,9 @@ export interface DepotDetailView {
   /** Producers currently delivering here — the depot's whole reason to exist. */
   readonly linkedProducers: number;
   readonly occupied: boolean;
+  readonly contribution?: Readonly<Record<string, number>>;
+  readonly capacity?: Readonly<Record<string, number>>;
+  readonly stock?: Readonly<Record<string, number>>;
 }
 
 export interface OutpostDetailView {
@@ -203,6 +206,7 @@ export interface UpgradeGain {
   readonly carryCapacity?: number | null;
   readonly attackDamage?: number | null;
   readonly queueCapacity?: number | null;
+  readonly storageCapacity?: Readonly<Record<string, number>> | null;
 }
 
 /**
@@ -450,6 +454,9 @@ function upgradeGainLine(structure: SelectedStructureView): string | null {
   if (gain.carryCapacity != null) parts.push(`${gain.carryCapacity} taşıma`);
   if (gain.attackDamage != null) parts.push(`${gain.attackDamage} ok hasarı`);
   if (gain.queueCapacity != null) parts.push(`${gain.queueCapacity} sıra kapasitesi`);
+  if (gain.storageCapacity != null) {
+    parts.push(`Depo +${Object.entries(gain.storageCapacity).map(([resourceId, amount]) => `${amount} ${resourceLabel(resourceId)}`).join(", ")}`);
+  }
   return `Lv${nextLevel}: ${parts.join(" · ")}`;
 }
 
@@ -521,6 +528,8 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
         lines: [
           `Ağ: ${detail.status === "linked" ? `bileşen #${detail.componentId}` : "yola bağlı değil"}`,
           `Teslim eden yapı: ${detail.linkedProducers}`,
+          `Depo katkısı: ${formatStorageCapacity(detail.contribution ?? {})}`,
+          `Global stok: ${formatStorageStock(detail.stock ?? {}, detail.capacity ?? {})}`,
           ...(detail.occupied ? ["Düşman işgali altında — teslimat durdu."] : []),
         ],
         actions: [],
@@ -570,6 +579,21 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
         tooltip: null,
       };
   }
+}
+
+function formatStorageCapacity(capacity: Readonly<Record<string, number>>): string {
+  return ["food", "wood", "stone", "gold"]
+    .map((resourceId) => `${resourceLabel(resourceId)} ${capacity[resourceId] ?? 0}`)
+    .join(" · ");
+}
+
+function formatStorageStock(
+  stock: Readonly<Record<string, number>>,
+  capacity: Readonly<Record<string, number>>,
+): string {
+  return ["food", "wood", "stone", "gold"]
+    .map((resourceId) => `${resourceLabel(resourceId)} ${Math.floor(stock[resourceId] ?? 0)}/${capacity[resourceId] ?? 0}`)
+    .join(" · ");
 }
 
 function describeCenter(
