@@ -4,8 +4,78 @@
   "loadGroups": [],
   "instances": [
     {
-      "assetId": "shape:plane",
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "name": "Player Start",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1,
+          "metadata": {
+            "spawnTag": "arrival"
+          }
+        }
+      ]
+    },
+    {
+      "assetId": "archery-firstage-level1",
       "placements": []
+    },
+    {
+      "assetId": "archery-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "resource-tree-group",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "towncenter-secondage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "watchtower-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "watchtower-secondage-level2",
+      "placements": []
+    },
+    {
+      "assetId": "watchtower-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "farm-secondage-level3",
+      "placements": []
+    },
+    {
+      "assetId": "floor-400x400",
+      "placements": [
+        {
+          "position": [
+            0,
+            0,
+            0
+          ],
+          "rotationYDeg": 0,
+          "scale": 3,
+          "scaleLocked": true
+        }
+      ]
     },
     {
       "assetId": "shape:cube",
@@ -32,422 +102,51 @@
           }
         }
       ]
-    },
-    {
-      "assetId": "marker:playerStart",
-      "placements": [
-        {
-          "position": [
-            0,
-            0,
-            0
-          ],
-          "name": "Player Start",
-          "collision": false,
-          "rotationYDeg": 0,
-          "scale": 1,
-          "metadata": {
-            "spawnTag": "arrival"
-          }
-        }
-      ]
-    },
-    {
-      "assetId": "starter-sm-wall",
-      "placements": []
-    },
-    {
-      "assetId": "starter-sm-crate",
-      "placements": []
-    },
-    {
-      "assetId": "starter-sm-platform",
-      "placements": []
-    },
-    {
-      "assetId": "starter-sm-ramp",
-      "placements": []
-    },
-    {
-      "assetId": "starter-sm-pillar",
-      "placements": []
-    },
-    {
-      "assetId": "starter-sm-sphere",
-      "placements": []
-    },
-    {
-      "assetId": "starter-sm-cube",
-      "placements": []
-    },
-    {
-      "assetId": "starter-sm-cylinder",
-      "placements": []
-    },
-    {
-      "assetId": "starter-sm-plane",
-      "placements": []
-    },
-    {
-      "assetId": "starter-sm-cone",
-      "placements": []
-    },
-    {
-      "assetId": "base-basic-pbr",
-      "placements": []
-    },
-    {
-      "assetId": "sm-pano",
-      "placements": []
-    },
-    {
-      "assetId": "sm-chair",
-      "placements": []
-    },
-    {
-      "assetId": "shape-cone",
-      "placements": []
-    },
-    {
-      "assetId": "shape-cube",
-      "placements": []
-    },
-    {
-      "assetId": "shape-cylender",
-      "placements": []
-    },
-    {
-      "assetId": "shape-cylinder",
-      "placements": []
-    },
-    {
-      "assetId": "shape-narrowcapsule",
-      "placements": []
-    },
-    {
-      "assetId": "shape-pipe-180",
-      "placements": []
-    },
-    {
-      "assetId": "shape-pipe-90",
-      "placements": []
-    },
-    {
-      "assetId": "shape-pipe",
-      "placements": []
-    },
-    {
-      "assetId": "shape-quadpyramid",
-      "placements": []
-    },
-    {
-      "assetId": "shape-sphere",
-      "placements": []
-    },
-    {
-      "assetId": "shape-plane",
-      "placements": []
-    },
-    {
-      "assetId": "floor-400x400",
-      "placements": [
-        {
-          "position": [
-            0,
-            0,
-            0
-          ],
-          "rotationYDeg": 0,
-          "scale": 3,
-          "scaleLocked": true
-        }
-      ]
-    },
-    {
-      "assetId": "wall-door-400x300",
-      "placements": []
-    },
-    {
-      "assetId": "wall-400x300",
-      "placements": [
-        {
-          "position": [
-            -4.18,
-            0,
-            -4.49
-          ],
-          "materialSlot": "white-material",
-          "groupId": "group-mrerp2ou-3ka",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -4.28,
-            0,
-            -8.59
-          ],
-          "navigationRole": "obstacleOnly",
-          "materialSlot": "white-material",
-          "groupId": "group-mrerp2ou-3ka",
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
-    },
-    {
-      "assetId": "wall-window-400x300",
-      "placements": [
-        {
-          "position": [
-            -4.28,
-            0,
-            -4.39
-          ],
-          "materialSlot": "white-material",
-          "groupId": "group-mrerp2ou-3ka",
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
-    },
-    {
-      "assetId": "sm-coin",
-      "placements": []
-    },
-    {
-      "assetId": "coin",
-      "placements": []
-    },
-    {
-      "assetId": "sm-pickup-health",
-      "placements": []
-    },
-    {
-      "assetId": "sm-pickup-coin",
-      "placements": []
-    },
-    {
-      "assetId": "sm-picku-health",
-      "placements": []
-    },
-    {
-      "assetId": "sm-trigger-pad",
-      "placements": []
-    },
-    {
-      "assetId": "axe",
-      "placements": []
-    },
-    {
-      "assetId": "archery-firstage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "archery-firstage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "archery-firstage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "ar-1",
-      "placements": []
-    },
-    {
-      "assetId": "marker:ambientSound",
-      "placements": []
-    },
-    {
-      "assetId": "sm-leftarm",
-      "placements": []
-    },
-    {
-      "assetId": "sm-bump",
-      "placements": []
-    },
-    {
-      "assetId": "sm-linearstair",
-      "placements": []
-    },
-    {
-      "assetId": "sm-ramp",
-      "placements": [
-        {
-          "position": [
-            -6.28,
-            -2.17,
-            1.91
-          ],
-          "navigationRole": "walkable",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -10.48,
-            -1.38,
-            -0.09
-          ],
-          "navigationRole": "walkable",
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -8.48,
-            -0.58,
-            -4.29
-          ],
-          "navigationRole": "walkable",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -6.28,
-            0.22,
-            -4.29
-          ],
-          "navigationRole": "walkable",
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
-    },
-    {
-      "assetId": "sm-rightarm",
-      "placements": []
-    },
-    {
-      "assetId": "sm-chair-ktx2",
-      "placements": []
-    },
-    {
-      "assetId": "test",
-      "placements": []
-    },
-    {
-      "assetId": "wall-400x400",
-      "placements": []
-    },
-    {
-      "assetId": "wall-500x500",
-      "placements": []
-    },
-    {
-      "assetId": "sm-assetplatform",
-      "placements": []
-    },
-    {
-      "assetId": "pillar-50x500",
-      "placements": []
-    },
-    {
-      "assetId": "wall-400x200",
-      "placements": []
-    },
-    {
-      "assetId": "highpolyplane",
-      "placements": []
     }
   ],
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "backgroundColor": "#ffffff",
-    "killZ": -10,
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
-    "locale": "en",
-    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json"
+    "locale": "en"
   },
   "skyAtmosphere": {
     "rayleigh": 1,
     "turbidity": 1,
     "mie": 0.002,
     "mieDirectionalG": 0.8,
-    "exposure": 1,
     "skyLightCapture": {
-      "intensity": 0.6
+      "intensity": 1
     }
   },
-  "cloudLayer": {
-    "color": "#ffffff",
-    "coverage": 0.4,
-    "density": 0.4,
-    "softness": 0.4,
-    "scale": 4,
-    "speed": 0.2
-  },
   "postProcess": {
-    "toneMapping": "aces",
     "antialias": "smaa",
-    "exposure": 1,
     "bloom": {
       "enabled": true,
       "threshold": 1,
       "intensity": 1,
       "radius": 1
-    },
-    "vignette": {
-      "intensity": 1,
-      "offset": 1
-    },
-    "chromaticAberration": {
-      "amount": 0.05
-    },
-    "grain": {
-      "intensity": 0.5
-    },
-    "dof": {
-      "focusDistance": 10,
-      "aperture": 1,
-      "maxBlur": 1
-    },
-    "ao": {
-      "enabled": true,
-      "radius": 1,
-      "intensity": 1
-    },
-    "saturation": 1,
-    "contrast": 1,
-    "temperature": 0,
-    "tint": 0
+    }
   },
   "lights": [
     {
       "id": "sun",
       "type": "directional",
       "position": [
-        -1.87,
-        4,
-        -3.35
+        3,
+        9,
+        4
       ],
       "name": "Sun",
       "rotation": [
-        -30,
-        0,
+        -55,
+        35,
         0
       ],
       "color": "#ffffff",
-      "intensity": 5,
+      "intensity": 3,
       "castShadow": true
     }
   ],
@@ -455,37 +154,38 @@
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "aiNavigationVolumes": [
+  "aiNavigationVolumes": [],
+  "targetPoints": [
     {
-      "id": "ai-navigation-volume-1",
+      "id": "target-point-1",
       "position": [
-        -2.73,
-        2.44,
-        -3.1
+        0,
+        0,
+        0
       ],
-      "name": "AI Navigation Volume",
-      "scale": 1,
-      "size": [
-        20,
-        5,
-        20
+      "name": "Target Point"
+    },
+    {
+      "id": "target-point-2",
+      "position": [
+        0,
+        0,
+        0
       ],
-      "agentRadius": 0.1,
-      "clearancePadding": 0.1
+      "name": "Target Point 2"
     }
   ],
-  "targetPoints": [],
   "splines": [
     {
       "id": "spline-1",
       "position": [
-        -1.59,
         0,
-        -1.9
+        0,
+        0
       ],
       "spline": {
         "schema": 1,
-        "closed": true,
+        "closed": false,
         "defaultUp": [
           0,
           1,
@@ -496,55 +196,66 @@
           {
             "id": "spline-point-1",
             "position": [
-              -0.8,
               0,
-              -0.34
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-2",
-            "position": [
-              4.17,
               0,
-              -1.06
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-3",
-            "position": [
-              6.24,
-              0,
-              2.89
+              0
             ],
             "pointType": "curveAuto"
           },
           {
             "id": "spline-point-4",
             "position": [
-              2.18,
+              2,
               0,
-              6.85
+              0
             ],
             "pointType": "curveAuto"
           },
           {
-            "id": "spline-point-5",
+            "id": "spline-point-2",
             "position": [
-              -1.83,
+              4,
               0,
-              4.55
+              0
             ],
             "pointType": "curveAuto"
+          },
+          {
+            "id": "spline-point-3",
+            "position": [
+              8,
+              0,
+              0
+            ],
+            "pointType": "curveCustom",
+            "arriveTangent": [
+              4,
+              0,
+              0
+            ],
+            "leaveTangent": [
+              4,
+              0,
+              0
+            ],
+            "tangentsLinked": false
           }
         ]
       },
       "name": "Spline",
+      "generators": [
+        {
+          "id": "rigid-segments",
+          "type": "rigidSegments",
+          "meshAsset": "",
+          "segmentLength": 2
+        }
+      ],
       "debug": {
         "visible": true,
+        "showPointIds": true,
         "color": "#ffffff",
-        "resolution": 32
+        "resolution": 16
       }
     }
   ],

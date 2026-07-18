@@ -173,8 +173,10 @@ export class RtsSelectionPanel {
         button.appendChild(cost);
       }
       button.disabled = !action.enabled;
-      // A legal action carries no excuse; a refused one always names its rule.
-      button.title = action.reason ?? "";
+      // A refused action always names its rule. A legal one carries no excuse,
+      // but may still have something to say about its price — which is the only
+      // place the player can read it before committing to the click.
+      button.title = action.reason ?? action.hint ?? "";
     }
   }
 }

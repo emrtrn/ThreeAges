@@ -2545,6 +2545,29 @@ latch, hafızanın düzeltilme kuralı, AI filtresi, gizli birimin raycast'ten
 düşmesi, veri değişmezleri); `tests/smoke/rts-fog-of-war.spec.ts` bayraklı/
 bayraksız boot'u ve iki krallığın simetrisini sürüyor.
 
+> **Testlerin yakalayamadığı üç hata**, uygulama çalıştırılıp ekrana bakılarak
+> bulundu — üçünde de bütün birim testleri geçiyordu:
+>
+> 1. **Fog hiç çizilmiyordu.** three'nin `alphaMap`'i *yeşil* kanaldan okuyor
+>    (`texture2D(alphaMap, uv).g`); `RedFormat` dokuda yeşil daima 0, yani alfa
+>    her yerde 0. Doku RGBA'ya çevrildi.
+> 2. **Fog Z ekseninde aynalanmıştı.** Grid satır 0 = dünya −Z tutuyor, ama
+>    `rotateX(-π/2)` uygulanmış `PlaneGeometry`'de yerel +Y dünya −Z'ye gidiyor;
+>    `DataTexture`'ın varsayılan `flipY = false`'ı ikisini ters çeviriyordu. Açık
+>    daire (-38, **-38**)'de çiziliyordu, üs ise (-38, **+38**)'de — yani
+>    oyuncunun kendi kasabası sisin altındaydı. `flipY = true`.
+> 3. **Kamera oyuncunun üssüne bakmıyordu.** `setFocus` hiç çağrılmıyordu, kamera
+>    (0,0)'da — haritanın ortasında, iki üsten de ~54 birim uzakta — başlıyordu.
+>    Fog kapalıyken yalnızca tuhaf duruyordu; fog açıkken maç siyah ekranla
+>    açılıyordu.
+>
+> Üçüncüsünün düzeltmesi ilk denemede fazla geldi: doğrudan `playerStart`'a
+> odaklanmak kamerayı harita kenarına 32 birim yaklaştırıyor ve varsayılan 44
+> birimlik mesafede zemin düzlemi kadrajın *içinde* bitiyor — oyuncu iki bant
+> boşlukla açılıyordu. Açılış odağı bu yüzden üssün tam üstünde değil, üsten
+> harita merkezine doğru %15 çekilmiş bir noktada (`OPENING_FOCUS`). Yalnızca
+> *açılış* odağı; kamera sınırları değişmedi, köşeye pan etmek hâlâ serbest.
+
 ### Kabul kriterleri
 
 Üçü de **playtest gerektirir** — kod tarafı hazır, ölçüm yapılmadı:

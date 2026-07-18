@@ -71,6 +71,14 @@ export class FogView {
     );
     this.texture.magFilter = LinearFilter;
     this.texture.minFilter = LinearFilter;
+    // The grid is stored row 0 = world -Z, but the plane is a PlaneGeometry
+    // turned by `rotateX(-PI/2)`, which sends local +Y to world -Z — so with
+    // DataTexture's default `flipY = false` the fog renders mirrored along Z.
+    // The symptom is subtle and easy to misread as a vision bug: the revealed
+    // circle appears at (-38, -38) while the base that earned it sits at
+    // (-38, +38), so the player's own town is fogged and an empty corner is
+    // clear. Every unit test still passes, because the grid itself is correct.
+    this.texture.flipY = true;
     this.texture.needsUpdate = true;
 
     const { worldHalfExtent } = vision.gridOptions;

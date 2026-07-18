@@ -28,7 +28,7 @@ import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { StructureUpgradeSnapshot } from "../structures/structureUpgradeSystem";
 import { centerLevelReadyForTown, type AgeSnapshot } from "../progression/ageSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
-import { formatResourceCost, resourceLabel } from "./resourceLabels";
+import { formatCostShortfall, formatResourceCost, resourceLabel } from "./resourceLabels";
 
 /**
  * A button the selected thing offers. Declarative on purpose: the panel maps
@@ -48,6 +48,16 @@ export interface SelectionAction {
   readonly enabled: boolean;
   /** Why it is refused. Null when enabled — a legal action needs no excuse. */
   readonly reason: string | null;
+  /**
+   * Tooltip text for a button that is *not* refused — what pressing it will
+   * cost, or what the player is still short of.
+   *
+   * Separate from {@link reason} because `enabled` is defined as
+   * `reason === null`: writing "you are 120 stone short" there would disable the
+   * button, and a price the wallet cannot meet this frame is information, not a
+   * refusal. Ignored when `reason` is set; a refusal outranks a hint.
+   */
+  readonly hint?: string | null;
 }
 
 /** What a selected worker is doing; the union of the two systems that own workers. */
@@ -132,6 +142,10 @@ export interface CenterDetailView {
    * the data model talking, not the game.
    */
   readonly requiredBuildingLabels: ReadonlyMap<string, string>;
+  /** The age's four-resource price, so the button can quote it before the click. */
+  readonly ageCost: Readonly<Record<string, number>>;
+  /** The owner's live stock, for naming what {@link ageCost} is still short of. */
+  readonly stock: Readonly<Record<string, number>>;
 }
 
 /**
@@ -183,6 +197,12 @@ export interface UpgradeGain {
    * building's other gains are health, and health is not why a Market is built.
    */
   readonly tradeCommission: number | null;
+  readonly workerCapacity?: number | null;
+  readonly perWorkerPerMinute?: number | null;
+  readonly localBufferCapacity?: number | null;
+  readonly carryCapacity?: number | null;
+  readonly attackDamage?: number | null;
+  readonly queueCapacity?: number | null;
 }
 
 /**
@@ -201,12 +221,20 @@ export interface StructureUpgradeView {
   readonly progress: number;
   /** A broader progression action temporarily blocks new structure research. */
   readonly lockedReason?: string | null;
+  /**
+   * The owner's live stock, for naming what the next level's cost is short of.
+   * Like the age button, affordability never disables the level-up — it only
+   * decides what the tooltip and the click's answer say.
+   */
+  readonly stock?: Readonly<Record<string, number>>;
 }
 
 export interface SelectedStructureView {
   readonly id: number;
   readonly label: string;
   readonly level: number;
+  /** Current age family, supplied by the runtime because the UI does not own age state. */
+  readonly ageLabel?: string;
   readonly health: number;
   readonly maxHealth: number;
   readonly detail: StructureDetailView;
@@ -416,6 +444,12 @@ function upgradeGainLine(structure: SelectedStructureView): string | null {
   if (gain.populationCapacity !== null) parts.push(`${gain.populationCapacity} nüfus`);
   if (gain.controlRadius !== null) parts.push(`${gain.controlRadius} kontrol yarıçapı`);
   if (gain.tradeCommission !== null) parts.push(`%${Math.round(gain.tradeCommission * 100)} komisyon`);
+  if (gain.workerCapacity != null) parts.push(`${gain.workerCapacity} işçi`);
+  if (gain.perWorkerPerMinute != null) parts.push(`${gain.perWorkerPerMinute}/dk işçi başı üretim`);
+  if (gain.localBufferCapacity != null) parts.push(`${gain.localBufferCapacity} yerel tampon`);
+  if (gain.carryCapacity != null) parts.push(`${gain.carryCapacity} taşıma`);
+  if (gain.attackDamage != null) parts.push(`${gain.attackDamage} ok hasarı`);
+  if (gain.queueCapacity != null) parts.push(`${gain.queueCapacity} sıra kapasitesi`);
   return `Lv${nextLevel}: ${parts.join(" · ")}`;
 }
 
@@ -442,19 +476,25 @@ function upgradeAction(structure: SelectedStructureView): SelectionAction | null
     ?? (snapshot.upgrading
       ? `Lv${nextLevel} yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
       : null);
+  const nextCost = snapshot.nextCost ?? {};
+  const cost = formatResourceCost(nextCost);
+  const shortfall = upgrade.stock ? formatCostShortfall(nextCost, upgrade.stock) : null;
   return {
     id: UPGRADE_ACTION,
     label: `Lv${nextLevel}'ye Yükselt`,
-    cost: formatResourceCost(snapshot.nextCost ?? {}),
+    cost,
     enabled: reason === null,
     reason,
+    hint: shortfall ? `Eksik: ${shortfall}. Toplam maliyet: ${cost}.` : `Maliyet: ${cost}.`,
   };
 }
 
 function describeStructureDetail(structure: SelectedStructureView): SelectionPanelContent {
   const { detail } = structure;
   const summary = `Can: ${Math.ceil(structure.health)}/${Math.ceil(structure.maxHealth)}`;
-  const title = structure.level > 1 ? `${structure.label} Lv${structure.level}` : structure.label;
+  const title = structure.ageLabel
+    ? `${structure.label} · ${structure.ageLabel} Lv${structure.level}`
+    : structure.level > 1 ? `${structure.label} Lv${structure.level}` : structure.label;
   switch (detail.kind) {
     case "construction":
       return {
@@ -567,7 +607,7 @@ function describeCenter(
         enabled: !age.upgrading,
         reason: age.upgrading ? "Kasaba Çağı yükseltmesi sürerken Merkez üretim yapamaz." : null,
       },
-      ...(centerReady ? [ageUpAction(age, detail.requiredBuildingLabels)] : []),
+      ...(centerReady ? [ageUpAction(age, detail)] : []),
     ],
     hint: STRUCTURE_HINT,
     tooltip: age.upgrading
@@ -723,11 +763,16 @@ function tradeAction(
  * the prerequisite comes from `AgeSnapshot.missingBuildingIds` — the system
  * already computes exactly which buildings are missing, so the button names them
  * instead of failing only once the player has pressed it (§52: a thing that will
- * not work says why). Cost is left to the click: the wallet can change between
+ * not work says why).
+ *
+ * Affordability deliberately does *not* gate it: the wallet can change between
  * frames, and a button that greys out mid-reach is worse than one that answers.
+ * So the price rides on the button and the shortfall rides in its tooltip —
+ * the player learns what it costs, and what they are short of, without the
+ * button ever lying about whether the age is open to them.
  */
-function ageUpAction(age: AgeSnapshot, labels: ReadonlyMap<string, string>): SelectionAction {
-  const missing = age.missingBuildingIds.map((id) => labels.get(id) ?? id);
+function ageUpAction(age: AgeSnapshot, detail: CenterDetailView): SelectionAction {
+  const missing = age.missingBuildingIds.map((id) => detail.requiredBuildingLabels.get(id) ?? id);
   const reason = age.age === "town"
     ? "Kasaba Çağı zaten tamamlandı."
     : age.upgrading
@@ -735,12 +780,15 @@ function ageUpAction(age: AgeSnapshot, labels: ReadonlyMap<string, string>): Sel
       : missing.length > 0
         ? `Önce şu yapılar gerekir: ${missing.join(", ")}.`
         : null;
+  const cost = formatResourceCost(detail.ageCost);
+  const shortfall = formatCostShortfall(detail.ageCost, detail.stock);
   return {
     id: AGE_UP_ACTION,
     label: "Kasaba Çağına Geç",
-    cost: null,
+    cost,
     enabled: reason === null,
     reason,
+    hint: shortfall ? `Eksik: ${shortfall}. Toplam maliyet: ${cost}.` : `Maliyet: ${cost}.`,
   };
 }
 

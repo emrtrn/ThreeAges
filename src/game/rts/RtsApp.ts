@@ -114,7 +114,7 @@ import { RtsHudBar } from "./ui/rtsHudBar";
 import { RtsNotificationCenter } from "./ui/rtsNotifications";
 import { RtsNotificationFeed } from "./ui/rtsNotificationFeed";
 import { RtsAttackWatch } from "./ui/rtsAttackWatch";
-import { resourceLabel, RESOURCE_ORDER } from "./ui/resourceLabels";
+import { formatCostShortfall, formatResourceCost, resourceLabel, RESOURCE_ORDER } from "./ui/resourceLabels";
 import { TerritoryControlSystem } from "./territory/territoryControlSystem";
 import { StrategicPointSystem } from "./objectives/strategicPointSystem";
 import { StrategicPointView } from "./objectives/strategicPointView";
@@ -151,6 +151,27 @@ const STARTING_WORKER_COUNT = 5;
 const SETTLEMENT_POPULATION_CAPACITY = 20;
 const PLAYER_CENTER_POSITION = RTS_BLOCKOUT_MAP.playerStart;
 const ENEMY_CENTER_POSITION = RTS_BLOCKOUT_MAP.enemyStart;
+/**
+ * Where the camera opens a match.
+ *
+ * Not the player's centre itself, and not the world origin either — both are
+ * wrong for opposite reasons. The origin (the old default, which was simply
+ * never set) leaves the player's town off-frame entirely; that only looked odd
+ * while the whole map was lit, but under §59's fog the match opened on a black
+ * screen. Framing the centre exactly instead puts the camera 32 units from the
+ * world edge, and at the default 44-unit distance the ground plane runs out
+ * inside the frame — the player opens on two bands of void.
+ *
+ * So the opening focus sits on the line from the base toward the middle of the
+ * map, far enough in that the edge stays out of shot while the town still reads
+ * as the subject. It is only the *opening* focus: the camera's own bounds are
+ * unchanged, and panning back to the corner is still allowed.
+ */
+const OPENING_FOCUS_PULL_TOWARD_CENTER = 0.15;
+const OPENING_FOCUS = {
+  x: PLAYER_CENTER_POSITION.x * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
+  z: PLAYER_CENTER_POSITION.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
+};
 /** Faz 5.0: both kingdoms run the same economy; only this one has a UI. */
 const KINGDOM_OWNERS: readonly UnitOwner[] = ["player", "enemy"];
 const PLAYER_OWNER: UnitOwner = "player";
@@ -849,6 +870,7 @@ export class RtsApp {
     this.scene.add(blockout);
     void this.loadMapArt(blockout);
     this.spawnCenters();
+    this.cameraController.setFocus(OPENING_FOCUS.x, OPENING_FOCUS.z);
     this.territory.refresh();
     this.refreshNavigationBlockers();
     this.scene.add(this.centers.root);
@@ -994,6 +1016,7 @@ export class RtsApp {
         label: `İnşa %${Math.floor(structure.construction.progress * 100)}`,
       }));
     const center = this.centers.get(PLAYER_OWNER);
+    const age = this.ages.snapshot(PLAYER_OWNER);
     const queue = this.workerProduction.queueSnapshot(PLAYER_OWNER);
     if (center && queue.trainingRemainingSeconds !== null) {
       const duration = center.workerTrainingSeconds ?? trainingSeconds;
@@ -1003,7 +1026,27 @@ export class RtsApp {
         y: 9,
         z: center.position.z,
         progress: 1 - Math.min(1, queue.trainingRemainingSeconds / duration),
-        label: `İşçi üretiliyor · ${queue.queued}/${queue.capacity}`,
+        // The age upgrade pauses this queue, so its bar would otherwise sit
+        // frozen under the age's with nothing to explain why it stopped.
+        label: age.upgrading
+          ? `İşçi duraklatıldı · ${queue.queued}/${queue.capacity}`
+          : `İşçi üretiliyor · ${queue.queued}/${queue.capacity}`,
+      });
+    }
+    // The age is the longest thing the player ever waits on and the only one
+    // with no field presence at all — it ran for 105 seconds visible nowhere
+    // but the selection panel, which is closed whenever they are doing anything
+    // else. It sits above the worker bar because it outranks it: it is what
+    // paused it.
+    if (center && age.upgrading) {
+      const duration = this.options.ageBalance.town.upgradeSeconds;
+      entries.push({
+        id: "player-age-upgrade",
+        x: center.position.x,
+        y: 11,
+        z: center.position.z,
+        progress: duration > 0 ? 1 - Math.min(1, age.remainingSeconds / duration) : 0,
+        label: `Kasaba Çağı · ${Math.ceil(age.remainingSeconds)} sn`,
       });
     }
     this.worldProgressOverlay.update(this.cameraController.camera, this.canvas.clientWidth, this.canvas.clientHeight, entries);
@@ -1532,6 +1575,10 @@ export class RtsApp {
     // match would rebuild the world and leave it frozen behind a hidden menu.
     this.flow.restart();
     this.spawnCenters();
+    // A restart is a fresh match, so the view returns to the opening framing too
+    // — otherwise the player restarts into wherever they had scrolled to, which
+    // under fog is very likely unexplored ground.
+    this.cameraController.setFocus(OPENING_FOCUS.x, OPENING_FOCUS.z);
     this.territory.refresh();
     this.refreshNavigationBlockers();
     this.spawnStartingUnits();
@@ -1655,6 +1702,7 @@ export class RtsApp {
           id: structure.id,
           label: structure.stats.label,
           level: structure.level,
+          ageLabel: this.ageOf(structure.owner) === "town" ? "Kasaba" : "Yerleşim",
           health: structure.health.current,
           maxHealth: structure.health.max,
           detail: this.structureDetail(structure),
@@ -1672,6 +1720,7 @@ export class RtsApp {
         id: 0,
         label: this.options.buildingBalance["command_center"]?.label ?? "Merkez",
         level: center.level,
+        ageLabel: this.ageOf(center.owner) === "town" ? "Kasaba" : "Yerleşim",
         health: center.health.current,
         maxHealth: center.health.max,
         detail: {
@@ -1681,6 +1730,8 @@ export class RtsApp {
           controlRadius: center.controlRadius,
           workerStats: this.options.unitBalance["worker_placeholder"]!,
           requiredBuildingLabels: this.buildingLabels,
+          ageCost: this.options.ageBalance.town.cost,
+          stock: this.kingdoms.get(PLAYER_OWNER).wallet.snapshot(),
         },
         // The centre's radius and worker speed still ride on the age, but its
         // in-age Lv1→3 ladder is the same research every other building runs.
@@ -1698,13 +1749,21 @@ export class RtsApp {
     if (!structure.stats.levels) return null;
     const snapshot = this.structureUpgrades.snapshot(structure);
     const next = structure.stats.levels.find((entry) => entry.level === snapshot.level + 1);
-    const gain: UpgradeGain | null = next
+    const nextTier = structure.stats.progression?.[this.ageOf(structure.owner)]
+      .find((entry) => entry.level === snapshot.level + 1);
+    const gain: UpgradeGain | null = next || nextTier
       ? {
-          maxHealth: next.maxHealth,
-          maxHealthDelta: next.maxHealth - structure.health.max,
-          populationCapacity: next.populationCapacity ?? null,
-          controlRadius: next.territory?.controlRadius ?? null,
-          tradeCommission: next.tradeCommission ?? null,
+          maxHealth: nextTier?.maxHealth ?? next!.maxHealth,
+          maxHealthDelta: (nextTier?.maxHealth ?? next!.maxHealth) - structure.health.max,
+          populationCapacity: nextTier?.populationCapacity ?? next?.populationCapacity ?? null,
+          controlRadius: nextTier?.territory?.controlRadius ?? next?.territory?.controlRadius ?? null,
+          tradeCommission: nextTier?.tradeCommission ?? next?.tradeCommission ?? null,
+          workerCapacity: nextTier?.economy?.workerCapacity ?? null,
+          perWorkerPerMinute: nextTier?.economy?.perWorkerPerMinute ?? null,
+          localBufferCapacity: nextTier?.economy?.localBufferCapacity ?? null,
+          carryCapacity: nextTier?.economy?.carryCapacity ?? null,
+          attackDamage: nextTier?.defense?.attackDamage ?? null,
+          queueCapacity: nextTier?.queueCapacity ?? null,
         }
       : null;
     // While upgrading, `next` is the in-flight step (level is bumped only on
@@ -1719,6 +1778,7 @@ export class RtsApp {
       lockedReason: this.ages.isUpgrading(structure.owner)
         ? "Kasaba Çağına geçiliyor; çağ tamamlanana kadar yapı yükseltmeleri kapalı."
         : null,
+      stock: this.kingdoms.get(structure.owner).wallet.snapshot(),
     };
   }
 
@@ -2101,6 +2161,10 @@ export class RtsApp {
   }
 
   private startTownUpgrade(): void {
+    // Read before the call: a started upgrade has already reserved the cost, and
+    // a shortfall computed after it would be measuring the wrong wallet.
+    const cost = this.options.ageBalance.town.cost;
+    const shortfall = formatCostShortfall(cost, this.kingdoms.get(PLAYER_OWNER).wallet.snapshot());
     const result = this.ages.startTownUpgrade(PLAYER_OWNER);
     const snapshot = this.ages.snapshot(PLAYER_OWNER);
     const message: Record<typeof result, string> = {
@@ -2111,7 +2175,9 @@ export class RtsApp {
       "command-center-level":
         `Kasaba Çağı için Merkez Lv${snapshot.requiredCenterLevel} gerekir (şu an Lv${snapshot.centerLevel}).`,
       "missing-requirements": `Kasaba Çağı için eksik yapılar: ${snapshot.missingBuildingIds.join(", ")}.`,
-      "insufficient-resources": "Kasaba Çağı için kaynak yetersiz.",
+      "insufficient-resources": shortfall
+        ? `Kasaba Çağı için ${shortfall} daha gerekli (toplam ${formatResourceCost(cost)}).`
+        : `Kasaba Çağı için kaynak yetersiz (${formatResourceCost(cost)}).`,
     };
     this.buildPalette.setActionMessage(message[result]);
     this.syncAgeUi();
@@ -2130,6 +2196,10 @@ export class RtsApp {
     }
     const label = structure.stats.label;
     const nextLevel = structure.level + 1;
+    // Read before the call, for the same reason the age button does: a started
+    // research has already reserved its cost out of this wallet.
+    const nextCost = this.structureUpgrades.snapshot(structure).nextCost ?? {};
+    const shortfall = formatCostShortfall(nextCost, this.kingdoms.get(structure.owner).wallet.snapshot());
     const result = this.structureUpgrades.start(structure);
     const startedNote: Record<string, string> = {
       barracks: " Birlik üretimi geçici olarak durur.",
@@ -2142,7 +2212,9 @@ export class RtsApp {
       "at-max-level": `${label} zaten en yüksek seviyede.`,
       "under-construction": `${label} önce inşaatını tamamlamalı.`,
       "already-upgrading": `${label} yükseltmesi zaten sürüyor.`,
-      "insufficient-resources": `${label} Lv${nextLevel} için kaynak yetersiz.`,
+      "insufficient-resources": shortfall
+        ? `${label} Lv${nextLevel} için ${shortfall} daha gerekli (toplam ${formatResourceCost(nextCost)}).`
+        : `${label} Lv${nextLevel} için kaynak yetersiz.`,
     };
     this.buildPalette.setActionMessage(message[result]);
   }

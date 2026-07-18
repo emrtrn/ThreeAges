@@ -68,6 +68,31 @@ export function canAffordCost(
   });
 }
 
+/**
+ * What is still missing to pay this price, and how much of it — "120 Taş · 40
+ * Altın". Null when the stock covers the cost.
+ *
+ * The counterpart of {@link canAffordCost}, and here beside it for the same
+ * reason: "you cannot afford this" and "you are 120 stone short" are the same
+ * judgement said twice, and a refusal that names no number is the defect this
+ * replaces. Only shortfalls appear — a resource the player already has enough
+ * of is not what is stopping them, and listing it buries the one that is.
+ */
+export function formatCostShortfall(
+  cost: Readonly<Record<string, number>>,
+  stock: Readonly<Record<string, number>>,
+): string | null {
+  const missing = Object.entries(cost)
+    .filter(([, amount]) => amount > 0)
+    // Floored like the HUD prints it, so the shortfall agrees with the number
+    // the player is looking at rather than with the float behind it.
+    .map(([resourceId, amount]) => [resourceId, amount - formatInventoryAmount(stock[resourceId] ?? 0)] as const)
+    .filter(([, short]) => short > 0)
+    .sort(([left], [right]) => resourceRank(left) - resourceRank(right));
+  if (missing.length === 0) return null;
+  return missing.map(([resourceId, short]) => `${short} ${resourceLabel(resourceId)}`).join(" · ");
+}
+
 function resourceRank(resourceId: string): number {
   const index = RESOURCE_ORDER.indexOf(resourceId);
   return index === -1 ? RESOURCE_ORDER.length : index;

@@ -126,6 +126,7 @@ import { StructureConstructionService } from "../src/game/rts/structures/structu
 import { RoadConstructionService } from "../src/game/rts/roads/roadConstructionService";
 import {
   canAffordCost,
+  formatCostShortfall,
   formatInventoryAmount,
   formatResourceCost,
   resourceLabel,
@@ -34105,7 +34106,10 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
 
   // The centre: its two verbs, gated by the rules AgeSystem actually enforces.
   const labels = new Map([["farm", "Tarla"], ["barracks", "Kışla"]]);
-  const centerPanel = (age: Partial<AgeSnapshot>): SelectionPanelContent =>
+  const centerPanel = (
+    age: Partial<AgeSnapshot>,
+    stockOverride?: Readonly<Record<string, number>>,
+  ): SelectionPanelContent =>
     describeSelection({
       kind: "structure",
       structure: {
@@ -34128,6 +34132,10 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
           controlRadius: 28,
           workerStats: RTS_TEST_WORKER_STATS,
           requiredBuildingLabels: labels,
+          ageCost: { food: 600, wood: 350, stone: 150, gold: 150 },
+          // Default to a stock that covers the age, so each case below isolates
+          // the one rule it is about.
+          stock: stockOverride ?? { food: 600, wood: 350, stone: 150, gold: 150 },
         },
       },
     }) ?? assert.fail("panel missing");
@@ -34175,6 +34183,48 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
     "an under-levelled centre still trains workers");
   // And it reappears the moment the last level lands.
   assert.equal(action(centerPanel({ centerLevel: 3 }), "age-up").enabled, true);
+
+  // The age's price is on the button rather than waiting for the click. Found
+  // in a real match: the button said nothing about cost, the player pressed it
+  // and was told only "kaynak yetersiz" — a refusal with no number in it.
+  assert.equal(action(ready, "age-up").cost, "600 Yiyecek · 350 Odun · 150 Taş · 150 Altın");
+  assert.match(action(ready, "age-up").hint ?? "", /^Maliyet: /,
+    "an affordable age quotes its price and nothing else");
+
+  // Short of it, the tooltip names what is missing and by how much — while the
+  // button stays enabled, because the wallet can fill between now and the click.
+  const poor = centerPanel({}, { food: 600, wood: 350, stone: 30, gold: 0 });
+  assert.equal(action(poor, "age-up").enabled, true, "affordability never disables the age button");
+  assert.equal(action(poor, "age-up").reason, null);
+  assert.match(action(poor, "age-up").hint ?? "", /Eksik: 120 Taş · 150 Altın/);
+  // A refusal outranks a hint: the panel shows one tooltip, and "you have not
+  // built a Tarla" is more use than "you are 120 stone short" when both hold.
+  const poorAndBlocked = centerPanel({ missingBuildingIds: ["farm"] }, { food: 0, wood: 0 });
+  assert.match(poorAndBlocked.actions.find((entry) => entry.id === "age-up")?.reason ?? "", /Tarla/);
+});
+
+check("Faz 9 §51: a price the wallet cannot meet is named, not just refused", () => {
+  // The shortfall lists only what is actually missing, in HUD order, and by the
+  // amount still owed rather than the amount the price asks for.
+  assert.equal(
+    formatCostShortfall({ food: 100, wood: 50, stone: 40 }, { food: 100, wood: 10, stone: 0 }),
+    "40 Odun · 40 Taş",
+  );
+  assert.equal(formatCostShortfall({ wood: 50 }, { wood: 50 }), null, "a covered price is not a shortfall");
+  assert.equal(formatCostShortfall({}, {}), null);
+  assert.equal(formatCostShortfall({ wood: 50 }, {}), "50 Odun", "an absent resource is wholly missing");
+  // Floored exactly as the HUD prints the stock: a player shown "79 Odun" is one
+  // short of 80, and must not be told they are zero short because the float is 79.6.
+  assert.equal(formatCostShortfall({ wood: 80 }, { wood: 79.6 }), "1 Odun");
+  // canAffordCost and this must never disagree — they are one judgement, and the
+  // whole reason both live in resourceLabels.ts is so they cannot drift apart.
+  for (const stock of [{ wood: 79.6 }, { wood: 80 }, {}, { wood: 200 }]) {
+    assert.equal(
+      canAffordCost({ wood: 80 }, stock),
+      formatCostShortfall({ wood: 80 }, stock) === null,
+      `affordability and shortfall agree for ${JSON.stringify(stock)}`,
+    );
+  }
 });
 
 check("Faz 9 §51: the level-up button sits on the building and names the next level", () => {
@@ -34212,6 +34262,16 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
   // while the action label stays compact because the panel already names it.
   assert.equal(button.label, "Lv2'ye Yükselt");
 
+  const townHouse = describeSelection({
+    kind: "structure",
+    structure: {
+      id: 1, label: "Ev", ageLabel: "Kasaba", level: 1, health: 750, maxHealth: 750,
+      upgrade: null,
+      detail: { kind: "passive", populationCapacity: 14 },
+    },
+  }) ?? assert.fail("Town House panel missing");
+  assert.equal(townHouse.title, "Ev · Kasaba Lv1");
+
   // Faz 3: the gain rides next to the cost, so a level-up reads as a decision —
   // health as a total plus its delta, and each stat the step grants.
   const withGain = panel(view(
@@ -34226,6 +34286,14 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
     { maxHealth: 750, maxHealthDelta: 250, populationCapacity: null, controlRadius: null, tradeCommission: 0.12 },
   ));
   assert.match(marketGain.lines.join(" | "), /Lv2: 750 can \(\+250\) · %12 komisyon/);
+  const economyGain = panel(view(
+    { nextCost: { wood: 60, stone: 30 } },
+    {
+      maxHealth: 400, maxHealthDelta: 100, populationCapacity: null, controlRadius: null, tradeCommission: null,
+      workerCapacity: 3, perWorkerPerMinute: 8, localBufferCapacity: 50,
+    },
+  ));
+  assert.match(economyGain.lines.join(" | "), /3 işçi.*8\/dk işçi başı üretim.*50 yerel tampon/);
   // No gain line once the building is at max, even if one is somehow supplied.
   assert.ok(
     !panel(view({ level: 3, completed: true }, {

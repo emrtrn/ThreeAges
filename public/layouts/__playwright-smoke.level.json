@@ -1,24 +1,16 @@
 {
   "schema": 1,
-  "name": "playground",
+  "name": "__playwright-smoke",
   "loadGroups": [],
   "instances": [
-    {
-      "assetId": "shape:plane",
-      "placements": []
-    },
-    {
-      "assetId": "shape:cube",
-      "placements": []
-    },
     {
       "assetId": "marker:playerStart",
       "placements": [
         {
           "position": [
-            -1.04,
             0,
-            0.29
+            0,
+            0
           ],
           "name": "Player Start",
           "collision": false,
@@ -28,99 +20,43 @@
       ]
     },
     {
-      "assetId": "starter-sm-wall",
+      "assetId": "archery-firstage-level1",
       "placements": []
     },
     {
-      "assetId": "starter-sm-crate",
+      "assetId": "archery-secondage-level1",
       "placements": []
     },
     {
-      "assetId": "starter-sm-platform",
+      "assetId": "resource-tree-group",
       "placements": []
     },
     {
-      "assetId": "starter-sm-ramp",
+      "assetId": "towncenter-secondage-level3",
       "placements": []
     },
     {
-      "assetId": "starter-sm-pillar",
+      "assetId": "towncenter-secondage-level1",
       "placements": []
     },
     {
-      "assetId": "starter-sm-sphere",
+      "assetId": "towncenter-secondage-level2",
       "placements": []
     },
     {
-      "assetId": "starter-sm-cube",
+      "assetId": "watchtower-secondage-level1",
       "placements": []
     },
     {
-      "assetId": "starter-sm-cylinder",
+      "assetId": "watchtower-secondage-level2",
       "placements": []
     },
     {
-      "assetId": "starter-sm-plane",
+      "assetId": "watchtower-secondage-level3",
       "placements": []
     },
     {
-      "assetId": "starter-sm-cone",
-      "placements": []
-    },
-    {
-      "assetId": "base-basic-pbr",
-      "placements": []
-    },
-    {
-      "assetId": "sm-pano",
-      "placements": []
-    },
-    {
-      "assetId": "sm-chair",
-      "placements": []
-    },
-    {
-      "assetId": "shape-cone",
-      "placements": []
-    },
-    {
-      "assetId": "shape-cube",
-      "placements": []
-    },
-    {
-      "assetId": "shape-cylender",
-      "placements": []
-    },
-    {
-      "assetId": "shape-cylinder",
-      "placements": []
-    },
-    {
-      "assetId": "shape-narrowcapsule",
-      "placements": []
-    },
-    {
-      "assetId": "shape-pipe-180",
-      "placements": []
-    },
-    {
-      "assetId": "shape-pipe-90",
-      "placements": []
-    },
-    {
-      "assetId": "shape-pipe",
-      "placements": []
-    },
-    {
-      "assetId": "shape-quadpyramid",
-      "placements": []
-    },
-    {
-      "assetId": "shape-sphere",
-      "placements": []
-    },
-    {
-      "assetId": "shape-plane",
+      "assetId": "farm-secondage-level3",
       "placements": []
     },
     {
@@ -128,250 +64,101 @@
       "placements": [
         {
           "position": [
-            -4.28,
-            3.18,
-            -4.29
-          ],
-          "navigationRole": "walkable",
-          "materialSlot": "white-material",
-          "groupId": "group-mrerp2ou-3ka",
-          "rotationYDeg": 0,
-          "rotation": [
             0,
-            90,
-            0
+            0,
+            -1.5
           ],
-          "scale": [
-            1.1,
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "shape:cube",
+      "placements": [
+        {
+          "position": [
+            0,
             1,
-            1
+            -4
+          ],
+          "name": "Smoke Checkpoint",
+          "collisionPreset": "trigger",
+          "sensor": true,
+          "behavior": {
+            "script": "checkpoint",
+            "params": {
+              "slot": "quick"
+            }
+          },
+          "scale": [
+            12,
+            4,
+            3
           ]
         },
         {
           "position": [
-            -13.21,
             0,
-            -13.74
-          ],
-          "rotationYDeg": 0,
-          "scale": [
-            5,
             1,
-            5
+            -6
+          ],
+          "name": "Smoke Interact",
+          "collisionPreset": "trigger",
+          "sensor": true,
+          "behavior": {
+            "script": "interact"
+          },
+          "interaction": {
+            "action": "activate",
+            "prompt": "Activate"
+          },
+          "scale": [
+            12,
+            4,
+            2
           ]
-        }
-      ]
-    },
-    {
-      "assetId": "wall-door-400x300",
-      "placements": []
-    },
-    {
-      "assetId": "wall-400x300",
-      "placements": [
-        {
-          "position": [
-            -4.18,
-            0,
-            -4.49
-          ],
-          "materialSlot": "white-material",
-          "groupId": "group-mrerp2ou-3ka",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": 1
         },
         {
           "position": [
-            -4.28,
             0,
-            -8.59
+            1,
+            -10
           ],
-          "navigationRole": "obstacleOnly",
-          "materialSlot": "white-material",
-          "groupId": "group-mrerp2ou-3ka",
+          "name": "Smoke Portal",
+          "collisionPreset": "trigger",
+          "sensor": true,
+          "behavior": {
+            "script": "level-travel",
+            "params": {
+              "targetLevel": "layouts/__playwright-smoke-target.level.json",
+              "targetSpawn": "arrival"
+            }
+          },
+          "scale": [
+            12,
+            4,
+            3
+          ]
+        },
+        {
+          "position": [
+            2,
+            0.25,
+            -0.71
+          ],
+          "name": "Cube",
           "rotationYDeg": 0,
           "scale": 1
         }
       ]
-    },
-    {
-      "assetId": "wall-window-400x300",
-      "placements": [
-        {
-          "position": [
-            -4.28,
-            0,
-            -4.39
-          ],
-          "materialSlot": "white-material",
-          "groupId": "group-mrerp2ou-3ka",
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
-    },
-    {
-      "assetId": "sm-coin",
-      "placements": []
-    },
-    {
-      "assetId": "coin",
-      "placements": []
-    },
-    {
-      "assetId": "sm-pickup-health",
-      "placements": []
-    },
-    {
-      "assetId": "sm-pickup-coin",
-      "placements": []
-    },
-    {
-      "assetId": "sm-picku-health",
-      "placements": []
-    },
-    {
-      "assetId": "sm-trigger-pad",
-      "placements": []
-    },
-    {
-      "assetId": "axe",
-      "placements": []
-    },
-    {
-      "assetId": "archery-firstage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "archery-firstage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "archery-firstage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "ar-1",
-      "placements": []
-    },
-    {
-      "assetId": "marker:ambientSound",
-      "placements": []
-    },
-    {
-      "assetId": "sm-leftarm",
-      "placements": []
-    },
-    {
-      "assetId": "sm-bump",
-      "placements": []
-    },
-    {
-      "assetId": "sm-linearstair",
-      "placements": []
-    },
-    {
-      "assetId": "sm-ramp",
-      "placements": [
-        {
-          "position": [
-            -6.28,
-            -2.17,
-            1.91
-          ],
-          "navigationRole": "walkable",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -10.48,
-            -1.38,
-            -0.09
-          ],
-          "navigationRole": "walkable",
-          "rotationYDeg": 0,
-          "scale": 1
-        },
-        {
-          "position": [
-            -8.48,
-            -0.58,
-            -4.29
-          ],
-          "navigationRole": "walkable",
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 1
-        },
-        {
-          "position": [
-            -6.28,
-            0.22,
-            -4.29
-          ],
-          "navigationRole": "walkable",
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
-    },
-    {
-      "assetId": "sm-rightarm",
-      "placements": []
-    },
-    {
-      "assetId": "sm-chair-ktx2",
-      "placements": []
-    },
-    {
-      "assetId": "test",
-      "placements": []
-    },
-    {
-      "assetId": "wall-400x400",
-      "placements": []
-    },
-    {
-      "assetId": "wall-500x500",
-      "placements": []
-    },
-    {
-      "assetId": "sm-assetplatform",
-      "placements": []
-    },
-    {
-      "assetId": "pillar-50x500",
-      "placements": []
-    },
-    {
-      "assetId": "wall-400x200",
-      "placements": []
-    },
-    {
-      "assetId": "highpolyplane",
-      "placements": []
     }
   ],
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "backgroundColor": "#ffffff",
-    "killZ": -10,
+    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"
@@ -381,71 +168,36 @@
     "turbidity": 1,
     "mie": 0.002,
     "mieDirectionalG": 0.8,
-    "exposure": 1,
     "skyLightCapture": {
-      "intensity": 0.6
+      "intensity": 1
     }
   },
-  "cloudLayer": {
-    "color": "#ffffff",
-    "coverage": 0.4,
-    "density": 0.4,
-    "softness": 0.4,
-    "scale": 4,
-    "speed": 0.2
-  },
   "postProcess": {
-    "toneMapping": "aces",
     "antialias": "smaa",
-    "exposure": 1,
     "bloom": {
       "enabled": true,
       "threshold": 1,
       "intensity": 1,
       "radius": 1
-    },
-    "vignette": {
-      "intensity": 1,
-      "offset": 1
-    },
-    "chromaticAberration": {
-      "amount": 0.05
-    },
-    "grain": {
-      "intensity": 0.5
-    },
-    "dof": {
-      "focusDistance": 10,
-      "aperture": 1,
-      "maxBlur": 1
-    },
-    "ao": {
-      "enabled": true,
-      "radius": 1,
-      "intensity": 1
-    },
-    "saturation": 1,
-    "contrast": 1,
-    "temperature": 0,
-    "tint": 0
+    }
   },
   "lights": [
     {
       "id": "sun",
       "type": "directional",
       "position": [
-        -1.87,
-        4,
-        -3.35
+        3,
+        9,
+        4
       ],
       "name": "Sun",
       "rotation": [
-        -30,
-        0,
+        -55,
+        35,
         0
       ],
       "color": "#ffffff",
-      "intensity": 5,
+      "intensity": 3,
       "castShadow": true
     }
   ],
@@ -457,115 +209,22 @@
     {
       "id": "ai-navigation-volume-1",
       "position": [
-        -2.73,
-        2.44,
-        -3.1
+        0,
+        2,
+        0
       ],
       "name": "AI Navigation Volume",
-      "scale": 1,
       "size": [
-        20,
-        5,
-        20
-      ],
-      "agentRadius": 0.1,
-      "clearancePadding": 0.1
+        10,
+        4,
+        10
+      ]
     }
   ],
   "targetPoints": [],
   "splines": [
     {
       "id": "spline-1",
-      "position": [
-        3.98,
-        0,
-        -9.99
-      ],
-      "spline": {
-        "schema": 1,
-        "closed": false,
-        "defaultUp": [
-          0,
-          1,
-          0
-        ],
-        "reparamStepsPerSegment": 8,
-        "points": [
-          {
-            "id": "spline-point-1",
-            "position": [
-              0,
-              0,
-              0
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-2",
-            "position": [
-              4,
-              0,
-              0
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-3",
-            "position": [
-              8,
-              0,
-              0
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-4",
-            "position": [
-              12,
-              0,
-              0
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-5",
-            "position": [
-              14,
-              0,
-              1.53
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-6",
-            "position": [
-              14.52,
-              0,
-              4.5
-            ],
-            "pointType": "curveAuto"
-          },
-          {
-            "id": "spline-point-7",
-            "position": [
-              14.47,
-              0,
-              15
-            ],
-            "pointType": "curveAuto"
-          }
-        ]
-      },
-      "name": "Spline",
-      "rotation": [
-        0,
-        -90,
-        0
-      ],
-      "scale": 1
-    },
-    {
-      "id": "spline-2",
       "position": [
         0,
         0,
@@ -630,7 +289,7 @@
           }
         ]
       },
-      "name": "Spline 2",
+      "name": "Spline",
       "generators": [
         {
           "id": "rigid-segments",

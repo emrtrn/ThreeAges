@@ -148,7 +148,7 @@ Gerekli runtime dilimleri:
 
 ### Faz 3 - UI, görsel ve AI
 
-- [ ] Çağ + seviye başlıkları ve hedef kademe kazançlarını göster.
+- [x] Çağ + seviye başlıkları ve hedef kademe kazançlarını göster.
 - [ ] Hayalet, şantiye ve bitmiş modelin aktif tier ile eşleştiğini doğrula.
 - [ ] AI'nin K1 ekonomik artışını kullanmasını ve Koçbaşı için K2'ye yatırım
   yapmasını sağla.
