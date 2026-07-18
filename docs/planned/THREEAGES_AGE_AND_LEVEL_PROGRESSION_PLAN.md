@@ -1,7 +1,7 @@
 # ThreeAges Cag ve Bina Seviye Ilerlemesi Plani
 
 Olusturulma tarihi: 2026-07-17
-Durum: Planlandi - uygulama baslamadi
+Durum: Uygulandi (Faz 0-4 tamamlandi, 2026-07-18)
 Kapsam: Cag (`settlement`/`town`) ve bina seviye (1->2->3) sistemlerinin
 birbirinden ayrilmasi, SecondAge modellerinin devreye alinmasi, per-bina
 seviye yukseltme ve cag atlaninca tum binalarin yeni cag Level1 modeline
@@ -226,12 +226,28 @@ yukseltmesi bu binalarda kapali tutulur - Faz 2'de karara baglanacak).
 > (950,660) kontrol alani disina kaydirmasi nedeniyle yerlestirme adiminda
 > takiliyor (Faz 3 metnine ulasmadan); bu Faz 3 kapsaminda degil.
 
-### Faz 4 - AI uyumu ve kapanis
+### Faz 4 - AI uyumu ve kapanis - TAMAMLANDI
 
-- [ ] `aiUpgradeManager` yeni API ile calisiyor (veya bilincli sadelestirilmis).
-- [ ] AI cag atlaninca ayni model/level reset davranisini aliyor.
-- [ ] `npm run build:verify` yesil.
-- [ ] Bu dokuman "Durum: Uygulandi" olarak guncellendi.
+- [x] `aiUpgradeManager` yeni API ile calisiyor: Faz 1'de eklenen ince tip cephesi
+      (`startForType` / `typeSnapshot`) uzerinden instance-bazli sisteme baglaniyor.
+      Tetikleyici hala veri kapisinin kendisi (`requires-barracks-upgrade`), yani
+      tier kapisinin ikinci bir kopyasi AI'da yasamiyor.
+- [x] AI cag atlaninca ayni model/level reset davranisini aliyor: `RtsApp` cag
+      tamamlanma dongusunde `rebuildForAge(event.owner)` sahip ayrimi *oncesinde*
+      cagriliyor, dolayisiyla AI'nin binalari da Level1'e donuyor ve yeni cag
+      ailesiyle yeniden kuruluyor. Upgrade manager durumu canli `typeSnapshot`
+      okudugu icin yeni cagda merdiveni bastan tirmaniyor (ayrica reset gerekmiyor).
+- [x] `npm run build:verify` yesil (verify:imports + tsc + vite build +
+      test:engine 1029 check + verify:dist --strict).
+- [x] Bu dokuman "Durum: Uygulandi" olarak guncellendi.
+
+> Ek (plan disi, kullanici istegi): Seviye yukseltmesi artik ilerleme cubugu ile
+> gosteriliyor. `SelectionProgress` tipi + `SelectionPanelContent.progress` alani
+> eklendi; `StructureUpgradeView.progress` (0..1) `RtsApp.structureUpgradeView`
+> icinde adimin `durationSeconds` degeri ile `remainingSeconds`'tan hesaplaniyor.
+> Panel `.rts-selection-progress` (etiket + kalan sn + dolan cubuk) render ediyor,
+> yalnizca yukseltme surerken gorunur. Cubuk mekanizmasi genel: ileride insaat
+> ilerlemesi de ayni alana baglanabilir.
 
 ## 7. Dogrulama Stratejisi
 

@@ -28,6 +28,7 @@ import type {
   RoadBalance,
   SettlementAge,
   StartingResources,
+  StartingUnits,
   UnitArmorClass,
   UnitAttackType,
   UnitBalance,
@@ -137,6 +138,22 @@ function validateStartingResources(
   return out;
 }
 
+function validateStartingUnits(value: unknown, where: string): StartingUnits {
+  const obj = asObject(value, `${where}.startingUnits`);
+  const out: { guard?: number; worker?: number } = {};
+  for (const key of ["guard", "worker"] as const) {
+    const raw = obj[key];
+    if (raw === undefined) continue;
+    if (typeof raw !== "number" || !Number.isInteger(raw) || raw < 0) {
+      throw new GameDataError(
+        `${where}.startingUnits."${key}": must be a non-negative integer`,
+      );
+    }
+    out[key] = raw;
+  }
+  return out;
+}
+
 /**
  * Validate a preset. When `expectedId` is given (the file name), it must match
  * the preset's `id` field — a reference check that keeps files self-describing.
@@ -175,6 +192,23 @@ export function validateGamePreset(
       obj["startingResources"] ?? {},
       where,
     ),
+    startingUnits: validateStartingUnits(obj["startingUnits"] ?? {}, where),
+    ...(obj["enemyStartingResources"] !== undefined
+      ? {
+          enemyStartingResources: validateStartingResources(
+            obj["enemyStartingResources"],
+            `${where}.enemy`,
+          ),
+        }
+      : {}),
+    ...(obj["enemyStartingUnits"] !== undefined
+      ? {
+          enemyStartingUnits: validateStartingUnits(
+            obj["enemyStartingUnits"],
+            `${where}.enemy`,
+          ),
+        }
+      : {}),
     gameSpeed,
     // mapState is intentionally allowed empty until a blockout exists (Faz 2).
     mapState: requireStringAllowEmpty(obj, "mapState", where),

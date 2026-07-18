@@ -25,6 +25,12 @@ export type AiProfile = "easy" | "normal" | "hard";
  *  Ürün A economy uses food/wood/population, later products add stone/gold. */
 export type StartingResources = Readonly<Record<string, number>>;
 
+/** Per-kingdom opening forces a preset may override (see `GamePreset`). */
+export interface StartingUnits {
+  readonly guard?: number;
+  readonly worker?: number;
+}
+
 /**
  * A test preset — `public/game-data/presets/<id>.json` (plan §72).
  * Presets decide feature flags, starting resources, game speed, map state and
@@ -39,6 +45,19 @@ export interface GamePreset {
   flags: Partial<Record<FeatureFlag, boolean>>;
   /** Resources granted at match start. */
   startingResources: StartingResources;
+  /**
+   * Units each kingdom fields at match start. Omitted keys fall back to the
+   * runtime defaults.
+   */
+  startingUnits: StartingUnits;
+  /**
+   * Enemy-only overrides. Unset means the AI opens identically to the player —
+   * the fair default, and the only setting a balance preset should use. Test
+   * presets set these to handicap the AI (e.g. no opening army) so a scenario
+   * can be exercised without fighting; never ship a balance preset with them.
+   */
+  enemyStartingResources?: StartingResources;
+  enemyStartingUnits?: StartingUnits;
   /** Simulation speed multiplier (1 = real time; debug_fast raises it). */
   gameSpeed: number;
   /** Map/level this preset boots into (blockout id; empty until Faz 2). */

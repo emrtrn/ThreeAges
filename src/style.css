@@ -618,6 +618,46 @@ body {
   font-size: 11px;
 }
 
+/* Faz 3/4: a level-up in flight reads as a filling bar, not just a disabled
+   button. Shown only while the upgrade is running. */
+.rts-selection-progress {
+  margin-top: 8px;
+}
+
+.rts-selection-progress[hidden] {
+  display: none;
+}
+
+.rts-selection-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #e5d675;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.rts-selection-progress-time {
+  color: #cddd8d;
+  font-weight: 600;
+}
+
+.rts-selection-progress-track {
+  margin-top: 3px;
+  height: 6px;
+  background: rgb(0 0 0 / 34%);
+  border: 1px solid rgb(183 206 130 / 35%);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.rts-selection-progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #9fd15a, #e5d675);
+  transition: width 120ms linear;
+}
+
 /* Faz 9 §51: what the selected thing can *do*. Wraps, because a Barracks offers
    the whole roster while a House offers nothing. */
 .rts-selection-actions {

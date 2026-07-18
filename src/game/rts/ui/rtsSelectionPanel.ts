@@ -20,6 +20,10 @@ export class RtsSelectionPanel {
   private readonly summary = document.createElement("p");
   private readonly body = document.createElement("div");
   private readonly lines: HTMLParagraphElement[] = [];
+  private readonly progress = document.createElement("div");
+  private readonly progressLabel = document.createElement("span");
+  private readonly progressTime = document.createElement("span");
+  private readonly progressFill = document.createElement("div");
   private readonly actionRow = document.createElement("div");
   private readonly actionButtons = new Map<string, HTMLButtonElement>();
   private readonly hints = document.createElement("p");
@@ -44,7 +48,20 @@ export class RtsSelectionPanel {
     this.body.className = "rts-selection-body ui-interactive";
     this.actionRow.className = "rts-selection-actions ui-interactive";
     this.hints.className = "rts-selection-hints";
-    this.root.append(this.title, this.summary, this.body, this.actionRow, this.hints);
+    // A labelled fill bar for a running timed job (a level-up). Assembled once
+    // and shown/hidden per frame; only the label, seconds and fill width move.
+    this.progress.className = "rts-selection-progress";
+    const head = document.createElement("div");
+    head.className = "rts-selection-progress-head";
+    this.progressLabel.className = "rts-selection-progress-label";
+    this.progressTime.className = "rts-selection-progress-time";
+    head.append(this.progressLabel, this.progressTime);
+    const track = document.createElement("div");
+    track.className = "rts-selection-progress-track";
+    this.progressFill.className = "rts-selection-progress-fill";
+    track.appendChild(this.progressFill);
+    this.progress.append(head, track);
+    this.root.append(this.title, this.summary, this.body, this.progress, this.actionRow, this.hints);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setSelection({ kind: "none" });
   }
@@ -85,7 +102,20 @@ export class RtsSelectionPanel {
       if (line.textContent !== text) line.textContent = text;
     }
     this.body.title = content.tooltip ?? "";
+    this.renderProgress(content);
     this.renderActions(content);
+  }
+
+  /** Show the fill bar only while a timed job is running; hide it otherwise. */
+  private renderProgress(content: SelectionPanelContent): void {
+    const progress = content.progress ?? null;
+    this.progress.hidden = progress === null;
+    if (!progress) return;
+    this.progressLabel.textContent = progress.label;
+    this.progressTime.textContent = `${Math.ceil(progress.remainingSeconds)} sn`;
+    const percent = Math.round(Math.min(1, Math.max(0, progress.value)) * 100);
+    this.progressFill.style.width = `${percent}%`;
+    this.progress.setAttribute("aria-label", `${progress.label} %${percent}`);
   }
 
   /**

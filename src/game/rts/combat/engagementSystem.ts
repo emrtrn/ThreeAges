@@ -43,12 +43,16 @@ export function updateUnitEngagement(units: readonly Unit[], options: Engagement
  * route also survives actual damage: the clicked
  * destination outranks an automatic defensive chase. System-issued transit can
  * still defend after taking damage. Existing attack intent wins; this remains
- * a fallback for an otherwise unengaged defender. Workers remain outside combat.
+ * a fallback for an otherwise unengaged defender. Workers never independently
+ * enter combat, but may answer a hit through this defensive path.
  */
 export function retaliateAgainstAttack(defender: Unit, attacker: Unit, navigation: RtsNavigation): boolean {
-  if (defender.role === "worker" || defender.health.depleted || defender.dying
-    || attacker.health.depleted || attacker.dying || defender.owner === attacker.owner
-    || defender.attackTarget !== null || defender.hasPlayerMoveOrder) return false;
+  if (defender.health.depleted || defender.dying || attacker.health.depleted || attacker.dying
+    || defender.owner === attacker.owner || defender.attackTarget !== null) return false;
+  // Workers never acquire enemies and player attack commands still do no damage.
+  // A received hit is their one defensive exception; unlike a Guard's transit
+  // order, it must not be suppressed by the work/move order that put them here.
+  if (defender.role !== "worker" && defender.hasPlayerMoveOrder) return false;
   // Hold Position can answer a nearby attacker, but it must never turn a ranged
   // hit into a chase order that its stance will immediately refuse to follow.
   if (defender.stance === "hold" && combatDistance(defender.position, attacker) > defender.attack.range) {

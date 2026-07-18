@@ -80,6 +80,10 @@ export class CommandSystem {
     this.clearWorkerTasks(selected);
     for (const { unit, path } of assignGroupDestinations(selected, point, this.navigation)) {
       if (path) {
+        // A direct ground order is an explicit request to leave the current
+        // spot. "Hold position" must not leave a valid player route silently
+        // inert; it remains available until the player next issues movement.
+        if (unit.role !== "worker") unit.setStance("aggressive");
         unit.setPlayerMovePath(path);
         if (unit.role === "worker") unit.waitBeforeReturningToWork();
       }

@@ -28110,6 +28110,30 @@ check("RTS player ground orders outrank defensive retaliation", () => {
   assert.ok(guard.pathTarget, "the direct route remains active");
 });
 
+check("RTS player ground orders release combat units from hold position", () => {
+  const units = new UnitSystem();
+  const guard = units.spawn("player", 4, 4, RTS_TEST_UNIT_STATS);
+  guard.setStance("hold");
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 10, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const commands = new CommandSystem(
+    { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
+    camera,
+    { selected: () => [guard] } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem,
+    units,
+    new CommandCenterSystem(),
+    new RtsNavigation(),
+    new CommandMarkerSystem(),
+  );
+
+  commands.issueAt(50, 50);
+
+  assert.equal(guard.stance, "aggressive");
+  assert.equal(guard.hasPlayerMoveOrder, true);
+});
+
 check("RTS contextual right-click routes selected workers to a friendly structure job", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -30163,7 +30187,7 @@ check("RTS outpost loss cuts logistics for an otherwise road-and-depot-linked pr
   structures.clear();
 });
 
-check("RTS worker reaches a foundation, builds it, and never enters combat", () => {
+check("RTS worker reaches a foundation and only retaliates after receiving a hit", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
@@ -30173,7 +30197,20 @@ check("RTS worker reaches a foundation, builds it, and never enters combat", () 
   const enemy = units.spawn("enemy", 1, 0, RTS_TEST_UNIT_STATS);
   worker.setAttackTarget(enemy);
   updateUnitCombat([worker], 1);
-  assert.equal(enemy.health.current, enemy.health.max, "workers do not resolve melee attacks");
+  assert.equal(enemy.health.current, enemy.health.max, "a player-issued attack order does not arm a worker");
+
+  worker.setAttackTarget(null);
+  enemy.setAttackTarget(worker);
+  updateUnitCombat([enemy], 0, (hit) => {
+    if (hit.target instanceof Unit) retaliateAgainstAttack(hit.target, hit.attacker, new RtsNavigation());
+  });
+  assert.equal(worker.autoAcquired, true, "a struck worker takes a defensive target automatically");
+  updateUnitCombat([worker], 0);
+  assert.equal(
+    enemy.health.current,
+    enemy.health.max - RTS_TEST_WORKER_STATS.attackDamage * RTS_TEST_WORKER_STATS.damageMultipliers.heavy,
+    "the automatic retaliation inflicts the worker's small heavy-target damage",
+  );
 
   const structures = new PlacedStructureSystem();
   const site = structures.place("player", { ...house, constructionSeconds: 0.5 }, 10, 0);
@@ -33276,8 +33313,12 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
     content.actions.find((candidate) => candidate.id === "upgrade");
   const snapshot = (over: Partial<StructureUpgradeSnapshot> = {}): StructureUpgradeSnapshot =>
     ({ level: 1, maxLevel: 3, completed: false, upgrading: false, remainingSeconds: 0, nextCost: null, ...over });
-  const view = (over: Partial<StructureUpgradeSnapshot> = {}, gain: UpgradeGain | null = null): StructureUpgradeView =>
-    ({ snapshot: snapshot(over), gain });
+  const view = (
+    over: Partial<StructureUpgradeSnapshot> = {},
+    gain: UpgradeGain | null = null,
+    progress = 0,
+  ): StructureUpgradeView =>
+    ({ snapshot: snapshot(over), gain, progress });
 
   // A building whose data declares no `levels` offers no button. The absence is
   // the data's statement, not something the UI decides.
@@ -33307,10 +33348,16 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
   );
 
   // KR-04: there is no age gate — a level-up in progress is the only "wait".
+  const inFlight = panel(view({ upgrading: true, remainingSeconds: 12.1 }, null, 0.6));
   assert.match(
-    upgradeOf(panel(view({ upgrading: true, remainingSeconds: 12.1 })))?.reason ?? "",
+    upgradeOf(inFlight)?.reason ?? "",
     /Lv2 yükseltmesi sürüyor \(13 sn\)/,
   );
+  // Faz 4: an upgrade in flight also drives a labelled progress bar, so the wait
+  // reads as a filling bar and not only a disabled button.
+  assert.deepEqual(inFlight.progress, { label: "Lv2 yükseltmesi", value: 0.6, remainingSeconds: 12.1 });
+  // A building that is not upgrading shows no bar at all.
+  assert.equal(panel(view({ nextCost: { wood: 100 } })).progress ?? null, null);
   // A maxed building shows a disabled "already top level" button.
   const maxed = upgradeOf(panel(view({ level: 3, completed: true }))) ?? assert.fail("no button");
   assert.equal(maxed.enabled, false);

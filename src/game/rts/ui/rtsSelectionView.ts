@@ -173,10 +173,12 @@ export interface UpgradeGain {
  *
  * {@link gain} is the next step's benefits, or null at max level — it rides
  * alongside the snapshot so the panel can name what the cost is buying.
+ * {@link progress} is how far the in-flight level-up has run (0..1), 0 when idle.
  */
 export interface StructureUpgradeView {
   readonly snapshot: StructureUpgradeSnapshot;
   readonly gain: UpgradeGain | null;
+  readonly progress: number;
 }
 
 export interface SelectedStructureView {
@@ -195,6 +197,16 @@ export type RtsSelectionView =
   | { readonly kind: "units"; readonly units: readonly SelectedUnitView[] }
   | { readonly kind: "structure"; readonly structure: SelectedStructureView };
 
+/** A timed job the selection is running, rendered as a labelled progress bar. */
+export interface SelectionProgress {
+  /** What is progressing, e.g. "Lv2 yükseltmesi". */
+  readonly label: string;
+  /** Fraction complete, 0..1. */
+  readonly value: number;
+  /** Seconds left, shown next to the label. */
+  readonly remainingSeconds: number;
+}
+
 /** What the panel shows. `lines` is the panel's body, one fact per line. */
 export interface SelectionPanelContent {
   readonly title: string;
@@ -205,6 +217,8 @@ export interface SelectionPanelContent {
   readonly hint: string;
   /** Hover explanation for the panel body; null when there is nothing to resolve. */
   readonly tooltip: string | null;
+  /** A running timed job (e.g. a level-up), or null/absent when nothing is timed. */
+  readonly progress?: SelectionProgress | null;
 }
 
 /**
@@ -344,7 +358,23 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
   const gainLine = upgradeGainLine(structure);
   const lines = gainLine ? [...base.lines, gainLine] : base.lines;
   const actions = upgrade ? [...base.actions, upgrade] : base.actions;
-  return { ...base, lines, actions };
+  return { ...base, lines, actions, progress: upgradeProgress(structure) };
+}
+
+/**
+ * The level-up progress bar. Present only while a level-up is actually in flight
+ * — a completed or never-started upgrade is a button, not a bar — and it names
+ * the level it is climbing to so the bar reads as "Lv2 yükseltmesi", not just a
+ * fill. The fraction comes straight from {@link StructureUpgradeView.progress}.
+ */
+function upgradeProgress(structure: SelectedStructureView): SelectionProgress | null {
+  const upgrade = structure.upgrade;
+  if (!upgrade || !upgrade.snapshot.upgrading) return null;
+  return {
+    label: `Lv${upgrade.snapshot.level + 1} yükseltmesi`,
+    value: upgrade.progress,
+    remainingSeconds: upgrade.snapshot.remainingSeconds,
+  };
 }
 
 /**

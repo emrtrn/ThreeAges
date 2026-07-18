@@ -17,6 +17,15 @@ import type { UnitSystem } from "../units/unitSystem";
 import { PopulationSystem } from "../economy/populationSystem";
 import { ResourceWallet } from "../economy/resourceWallet";
 
+/**
+ * Match-start stockpile per kingdom. A plain record gives every kingdom the same
+ * opening (the fair default); a resolver lets a preset hand one side a different
+ * stockpile — used by test presets that deliberately starve the AI.
+ */
+export type StartingResourcesSource =
+  | StartingResources
+  | ((owner: UnitOwner) => StartingResources);
+
 export interface Kingdom {
   readonly owner: UnitOwner;
   readonly wallet: ResourceWallet;
@@ -31,16 +40,22 @@ export class KingdomRegistry {
     owners: readonly UnitOwner[],
     units: UnitSystem,
     structures: PlacedStructureSystem,
-    private readonly startingResources: StartingResources,
+    private readonly startingResources: StartingResourcesSource,
     basePopulationCapacity: number,
   ) {
     for (const owner of owners) {
       this.kingdoms.set(owner, {
         owner,
-        wallet: new ResourceWallet(startingResources),
+        wallet: new ResourceWallet(this.startingFor(owner)),
         population: new PopulationSystem(owner, units, structures, basePopulationCapacity),
       });
     }
+  }
+
+  private startingFor(owner: UnitOwner): StartingResources {
+    return typeof this.startingResources === "function"
+      ? this.startingResources(owner)
+      : this.startingResources;
   }
 
   /** Throws rather than silently spending from the wrong kingdom's stockpile. */
@@ -57,7 +72,7 @@ export class KingdomRegistry {
   /** Restore every kingdom to its match-start economy. */
   reset(): void {
     for (const kingdom of this.kingdoms.values()) {
-      kingdom.wallet.reset(this.startingResources);
+      kingdom.wallet.reset(this.startingFor(kingdom.owner));
       kingdom.population.reset();
     }
   }

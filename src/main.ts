@@ -102,6 +102,14 @@ async function main(): Promise<void> {
       // A bad preset must not turn the fallback RTS route into an unwinnable
       // no-build state; mirror the standard core-match stockpile.
       startingResources: preset?.startingResources ?? { food: 500, wood: 500 },
+      startingUnits: preset?.startingUnits ?? {},
+      // Enemy handicaps are opt-in: without them the AI mirrors the player.
+      ...(preset?.enemyStartingResources
+        ? { enemyStartingResources: preset.enemyStartingResources }
+        : {}),
+      ...(preset?.enemyStartingUnits
+        ? { enemyStartingUnits: preset.enemyStartingUnits }
+        : {}),
     });
     rts.start();
     return;

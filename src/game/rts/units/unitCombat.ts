@@ -26,7 +26,11 @@ export function updateUnitCombat(
   onHit?: (hit: CombatHit) => void,
 ): void {
   for (const unit of units) {
-    if (unit.role === "worker") continue;
+    // Workers cannot receive an attack command or acquire targets themselves.
+    // `retaliateAgainstAttack` may nevertheless give a struck worker one
+    // auto-acquired target, so a crowd cannot be defeated by an effectively
+    // invulnerable last Guard.
+    if (unit.role === "worker" && !unit.autoAcquired) continue;
     unit.attack.update(dt);
     if (unit.health.depleted) {
       unit.stop();

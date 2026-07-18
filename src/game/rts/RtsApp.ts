@@ -30,6 +30,7 @@ import type {
   ResourceBalance,
   RoadBalance,
   StartingResources,
+  StartingUnits,
   UnitBalance,
 } from "@/game/data/gameDataTypes";
 import { AiController } from "./ai/aiController";
@@ -80,6 +81,7 @@ import {
   UPGRADE_ACTION,
   type RtsSelectionView,
   type StructureDetailView,
+  type StructureUpgradeView,
   type UpgradeGain,
   type WorkerJob,
 } from "./ui/rtsSelectionView";
@@ -150,6 +152,11 @@ export interface RtsAppOptions {
   readonly ageBalance: AgeBalance;
   /** Preset-owned initial stockpile for Phase 2 construction reservations. */
   readonly startingResources: StartingResources;
+  /** Preset override for the opening forces; unset keys keep the defaults. */
+  readonly startingUnits?: StartingUnits;
+  /** Test-preset handicap: enemy-only stockpile/forces (see `GamePreset`). */
+  readonly enemyStartingResources?: StartingResources;
+  readonly enemyStartingUnits?: StartingUnits;
   /** Data-owned grid and wood cost for the Phase 4 road graph. */
   readonly roadBalance: RoadBalance;
   /** Data-owned AI cadences, thresholds and intent weights (Faz 5). */
@@ -265,7 +272,10 @@ export class RtsApp {
       KINGDOM_OWNERS,
       this.units,
       this.structures,
-      this.options.startingResources,
+      (owner) =>
+        owner === "enemy" && this.options.enemyStartingResources
+          ? this.options.enemyStartingResources
+          : this.options.startingResources,
       SETTLEMENT_POPULATION_CAPACITY,
     );
     this.ages = new AgeSystem(KINGDOM_OWNERS, this.options.ageBalance, this.centers, this.structures, this.kingdoms);
@@ -708,8 +718,9 @@ export class RtsApp {
   /**
    * Match-start forces.
    *
-   * Each side begins with the same workers and three Guards. Further military
-   * strength must come from a Barracks each kingdom builds and pays for.
+   * Both sides open identically unless the preset hands the enemy its own
+   * `enemyStartingUnits` handicap. Further military strength must come from a
+   * Barracks each kingdom builds and pays for.
    */
   private spawnStartingUnits(): void {
     const guard = this.options.unitBalance[PLACEHOLDER_GUARD_ID];
@@ -717,22 +728,33 @@ export class RtsApp {
     if (!guard || !worker) {
       throw new Error(`Missing unit balance definition "${PLACEHOLDER_GUARD_ID}"`);
     }
+    const player = this.options.startingUnits ?? {};
+    const enemy = this.options.enemyStartingUnits ?? player;
+    // Rows of `cols`, so a preset with a wide opening does not string units out
+    // in one long line across the map.
     const cols = 5;
-    for (let i = 0; i < STARTING_GUARD_COUNT; i++) {
-      const x = PLAYER_CENTER_POSITION.x - 6 + (i % cols) * 3;
-      const z = PLAYER_CENTER_POSITION.z + 7 + Math.floor(i / cols) * 3;
-      this.units.spawn("player", x, z, guard);
-      this.units.spawn(
-        "enemy",
-        ENEMY_CENTER_POSITION.x - 6 + (i % cols) * 3,
-        ENEMY_CENTER_POSITION.z - 7 - Math.floor(i / cols) * 3,
-        guard,
-      );
-    }
-    for (let i = 0; i < STARTING_WORKER_COUNT; i++) {
-      this.units.spawn("player", PLAYER_CENTER_POSITION.x - 4 + i * 2, PLAYER_CENTER_POSITION.z - 8, worker);
-      this.units.spawn("enemy", ENEMY_CENTER_POSITION.x - 4 + i * 2, ENEMY_CENTER_POSITION.z + 8, worker);
-    }
+    const spawnSide = (
+      owner: UnitOwner,
+      counts: StartingUnits,
+      center: { x: number; z: number },
+      /** +1 spawns away from the player camp, -1 towards it. */
+      facing: 1 | -1,
+    ): void => {
+      const guardCount = counts.guard ?? STARTING_GUARD_COUNT;
+      const workerCount = counts.worker ?? STARTING_WORKER_COUNT;
+      for (let i = 0; i < guardCount; i++) {
+        const x = center.x - 6 + (i % cols) * 3;
+        const z = center.z + facing * (7 + Math.floor(i / cols) * 3);
+        this.units.spawn(owner, x, z, guard);
+      }
+      for (let i = 0; i < workerCount; i++) {
+        const x = center.x - 4 + (i % cols) * 2;
+        const z = center.z - facing * (8 + Math.floor(i / cols) * 2);
+        this.units.spawn(owner, x, z, worker);
+      }
+    };
+    spawnSide("player", player, PLAYER_CENTER_POSITION, 1);
+    spawnSide("enemy", enemy, ENEMY_CENTER_POSITION, -1);
   }
 
   private readonly onFrame = (now: number): void => {
@@ -1278,12 +1300,7 @@ export class RtsApp {
           detail: this.structureDetail(structure),
           // Null when the data gives this building no `levels` at all — the
           // absence of an upgrade path is the data's statement, not a UI decision.
-          upgrade: structure.stats.levels
-            ? {
-                snapshot: this.structureUpgrades.snapshot(structure),
-                gain: this.structureUpgradeGain(structure),
-              }
-            : null,
+          upgrade: this.structureUpgradeView(structure),
         },
       };
     }
@@ -1312,20 +1329,28 @@ export class RtsApp {
   }
 
   /**
-   * What the selected building's next level buys, for the panel's gain line
-   * (plan Faz 3). Read from the data step that promotes it — the same step
-   * {@link StructureUpgradeSystem} will apply — with the health delta measured
-   * against the building's live maximum. Null once it is at its top level.
+   * The selected building's level-up view: the system snapshot, what the next
+   * level buys (gain line), and how far an in-flight upgrade has run (progress
+   * bar). Null when the data gives the building no `levels` at all.
    */
-  private structureUpgradeGain(structure: PlacedStructure): UpgradeGain | null {
-    const next = structure.stats.levels?.find((entry) => entry.level === structure.level + 1);
-    if (!next) return null;
-    return {
-      maxHealth: next.maxHealth,
-      maxHealthDelta: next.maxHealth - structure.health.max,
-      populationCapacity: next.populationCapacity ?? null,
-      controlRadius: next.territory?.controlRadius ?? null,
-    };
+  private structureUpgradeView(structure: PlacedStructure): StructureUpgradeView | null {
+    if (!structure.stats.levels) return null;
+    const snapshot = this.structureUpgrades.snapshot(structure);
+    const next = structure.stats.levels.find((entry) => entry.level === structure.level + 1);
+    const gain: UpgradeGain | null = next
+      ? {
+          maxHealth: next.maxHealth,
+          maxHealthDelta: next.maxHealth - structure.health.max,
+          populationCapacity: next.populationCapacity ?? null,
+          controlRadius: next.territory?.controlRadius ?? null,
+        }
+      : null;
+    // While upgrading, `next` is the in-flight step (level is bumped only on
+    // completion), so its duration is the total the remaining time counts down.
+    const progress = snapshot.upgrading && next && next.durationSeconds > 0
+      ? Math.min(1, Math.max(0, (next.durationSeconds - snapshot.remainingSeconds) / next.durationSeconds))
+      : 0;
+    return { snapshot, gain, progress };
   }
 
   /**

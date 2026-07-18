@@ -4,7 +4,23 @@
   "flags": {},
   "startingResources": {
     "food": 1000,
-    "wood": 1000
+    "wood": 1000,
+    "stone": 1000,
+    "gold": 1000
+  },
+  "startingUnits": {
+    "guard": 10,
+    "worker": 10
+  },
+  "enemyStartingResources": {
+    "food": 500,
+    "wood": 500,
+    "stone": 0,
+    "gold": 0
+  },
+  "enemyStartingUnits": {
+    "guard": 0,
+    "worker": 5
   },
   "gameSpeed": 1,
   "mapState": "two_flanks_blockout",
