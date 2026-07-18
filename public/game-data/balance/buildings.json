@@ -77,7 +77,7 @@
       "wood": 80
     },
     "constructionSeconds": 25,
-    "maxHealth": 300,
+    "maxHealth": 100,
     "visionRadius": 8,
     "populationCapacity": 5,
     "levels": [
@@ -88,7 +88,7 @@
           "stone": 40
         },
         "durationSeconds": 35,
-        "maxHealth": 450,
+        "maxHealth": 150,
         "populationCapacity": 6
       },
       {
@@ -98,7 +98,7 @@
           "stone": 80
         },
         "durationSeconds": 45,
-        "maxHealth": 600,
+        "maxHealth": 200,
         "populationCapacity": 7
       }
     ],
@@ -106,34 +106,34 @@
       "settlement": [
         {
           "level": 1,
-          "maxHealth": 300,
+          "maxHealth": 100,
           "populationCapacity": 5
         },
         {
           "level": 2,
-          "maxHealth": 450,
+          "maxHealth": 150,
           "populationCapacity": 6
         },
         {
           "level": 3,
-          "maxHealth": 600,
+          "maxHealth": 200,
           "populationCapacity": 7
         }
       ],
       "town": [
         {
           "level": 1,
-          "maxHealth": 750,
+          "maxHealth": 250,
           "populationCapacity": 8
         },
         {
           "level": 2,
-          "maxHealth": 900,
+          "maxHealth": 300,
           "populationCapacity": 9
         },
         {
           "level": 3,
-          "maxHealth": 1050,
+          "maxHealth": 350,
           "populationCapacity": 10
         }
       ]
