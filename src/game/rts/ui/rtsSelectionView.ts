@@ -236,6 +236,8 @@ export interface StructureUpgradeView {
 export interface SelectedStructureView {
   readonly id: number;
   readonly label: string;
+  /** Data-owned selection artwork; panels never derive it from a structure id. */
+  readonly portrait?: string | undefined;
   readonly level: number;
   /** Current age family, supplied by the runtime because the UI does not own age state. */
   readonly ageLabel?: string;
@@ -273,6 +275,10 @@ export interface SelectionPanelContent {
   readonly hint: string;
   /** Hover explanation for the panel body; null when there is nothing to resolve. */
   readonly tooltip: string | null;
+  /** Visual metadata consumed by the fixed Faz D frame. */
+  readonly portrait?: string | null;
+  readonly selectionCount?: number;
+  readonly health?: { readonly current: number; readonly max: number } | null;
   /** A running timed job (e.g. a level-up), or null/absent when nothing is timed. */
   readonly progress?: SelectionProgress | null;
 }
@@ -352,11 +358,21 @@ const OUTPOST_HINT = "Sağ tık: menzildeki düşmana saldırı emri ver";
 const STRONG_MULTIPLIER = 1.1;
 const WEAK_MULTIPLIER = 0.9;
 
-/** The panel's whole answer for one selection. Null when nothing is selected. */
-export function describeSelection(view: RtsSelectionView): SelectionPanelContent | null {
-  if (view.kind === "none") return null;
+/** The panel's whole answer for one selection, including its stable empty frame. */
+export function describeSelection(view: RtsSelectionView): SelectionPanelContent {
+  if (view.kind === "none") return {
+    title: "Seçim yok",
+    summary: "Haritada bir birlik veya yapı seçin.",
+    lines: [],
+    actions: [],
+    hint: "Sol tıkla seçin · çift tıkla aynı birlik türünü seçin.",
+    tooltip: null,
+    portrait: null,
+    selectionCount: 0,
+    health: null,
+  };
   if (view.kind === "units") {
-    return view.units.length === 0 ? null : describeUnits(view.units);
+    return view.units.length === 0 ? describeSelection({ kind: "none" }) : describeUnits(view.units);
   }
   return describeStructure(view.structure);
 }
@@ -374,6 +390,7 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
   // panel has no answer to it: a Worker has no matchup and no stance. §51 lists
   // the worker panel separately for exactly this reason.
   const workersOnly = units.every((unit) => unit.role === "worker");
+  const first = units[0]!;
   if (workersOnly) {
     return {
       title: "İşçi",
@@ -384,6 +401,9 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
       actions: [],
       hint: WORKER_HINT,
       tooltip: "Boşta bir işçi, oyuncunun oyuna borçlu olduğu bir karardır.",
+      portrait: first.stats.portrait ?? first.stats.icon ?? null,
+      selectionCount: units.length,
+      health: { current: health, max: maxHealth },
     };
   }
 
@@ -408,6 +428,9 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
     actions: [],
     hint: UNIT_HINT,
     tooltip: null,
+    portrait: sample.stats.portrait ?? sample.stats.icon ?? null,
+    selectionCount: units.length,
+    health: { current: health, max: maxHealth },
   };
 }
 
@@ -427,7 +450,15 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
     ...(upgrade ? [upgrade] : []),
     ...(structure.detail.kind === "center" ? [] : [demolishAction(structure)]),
   ];
-  return { ...base, lines, actions, progress: upgradeProgress(structure) };
+  return {
+    ...base,
+    lines,
+    actions,
+    progress: upgradeProgress(structure),
+    portrait: structure.portrait ?? null,
+    selectionCount: 1,
+    health: { current: structure.health, max: structure.maxHealth },
+  };
 }
 
 /**

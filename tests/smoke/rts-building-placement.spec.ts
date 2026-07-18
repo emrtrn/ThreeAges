@@ -323,9 +323,9 @@ test("RTS Phase 9 the Barracks panel gates the Archer and the Ram behind a tier-
   await openMatch(page, "/?rts&debug");
   await expect(page.locator(".rts-build-palette")).toBeVisible();
 
-  // §51: training is what a Barracks does, so the roster left the palette with
-  // it. Nothing selected means no roster anywhere.
-  await expect(page.locator(".rts-selection-panel")).toBeHidden();
+  // Faz D: the fixed selection frame remains in place when nothing is selected,
+  // but it must not imply a roster or consume an action.
+  await expect(page.locator(".rts-selection-panel")).toContainText("Seçim yok");
   await expect(page.locator("[data-rts-action^='train:']")).toHaveCount(0);
 
   // Build one, then ask it what it can train.

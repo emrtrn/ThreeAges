@@ -785,8 +785,13 @@ body {
   left: 50%;
   bottom: max(12px, env(safe-area-inset-bottom));
   transform: translateX(-50%);
-  width: min(420px, calc(100vw - 640px));
-  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) minmax(150px, 31%);
+  grid-template-rows: 62px minmax(52px, 1fr) 25px;
+  gap: 6px 10px;
+  width: min(620px, calc(100vw - 640px));
+  height: 175px;
+  padding: 9px 11px;
   color: var(--ta-ink);
   background: var(--ta-surface);
   border: 1px solid var(--ta-border);
@@ -794,15 +799,73 @@ body {
   box-shadow: var(--ta-panel-shadow);
 }
 
-.rts-selection-panel[hidden] {
-  display: none;
+.rts-selection-portrait {
+  position: relative;
+  grid-row: 1 / span 2;
+  overflow: hidden;
+  background: rgb(28 19 12 / 82%);
+  border: 1px solid var(--ta-border);
+  border-radius: 4px;
+}
+
+.rts-selection-portrait-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rts-selection-count {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  color: var(--ta-gold);
+  font-size: 16px;
+  font-weight: 800;
+  text-shadow: 0 1px 2px #000;
+}
+
+.rts-selection-header {
+  min-width: 0;
+}
+
+.rts-selection-header > strong {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rts-selection-health {
+  height: 7px;
+  margin-top: 7px;
+  overflow: hidden;
+  background: rgb(25 11 8 / 82%);
+  border: 1px solid var(--ta-border);
+  border-radius: 3px;
+}
+
+.rts-selection-health-fill {
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, #9e3931, #7fba58);
+  transition: width 120ms linear;
 }
 
 .rts-selection-summary {
-  margin-top: 8px;
+  margin-top: 3px;
   color: var(--ta-gold);
   font-size: 12px;
   font-weight: 700;
+}
+
+.rts-selection-details {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rts-selection-body {
+  max-height: 100%;
+  overflow: auto;
 }
 
 /* Faz 9: the fixed role/counter/stance rows became a variable-length body, one
@@ -815,7 +878,11 @@ body {
 }
 
 .rts-selection-hints {
-  margin-top: 8px;
+  grid-column: 1 / -1;
+  margin: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--ta-ink-muted);
   font-size: 11px;
 }
@@ -823,7 +890,7 @@ body {
 /* Faz 3/4: a level-up in flight reads as a filling bar, not just a disabled
    button. Shown only while the upgrade is running. */
 .rts-selection-progress {
-  margin-top: 8px;
+  margin-top: 5px;
 }
 
 .rts-selection-progress[hidden] {
@@ -864,9 +931,14 @@ body {
    the whole roster while a House offers nothing. */
 .rts-selection-actions {
   display: flex;
+  grid-row: 1 / span 2;
+  grid-column: 3;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
+  align-content: start;
+  max-height: 100%;
+  margin: 0;
+  overflow: auto;
 }
 
 .rts-selection-actions[hidden] {
@@ -879,7 +951,7 @@ body {
   padding: 5px 9px;
   color: var(--ta-btn-ink);
   font: inherit;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   background: var(--ta-btn-bg);

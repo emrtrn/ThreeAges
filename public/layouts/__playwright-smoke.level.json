@@ -68,9 +68,9 @@
             0,
             -1.5
           ],
-          "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 3
+          "scale": 3,
+          "scaleLocked": true
         }
       ]
     },
@@ -84,19 +84,19 @@
             -4
           ],
           "name": "Smoke Checkpoint",
-          "collisionPreset": "trigger",
+          "scale": [
+            12,
+            4,
+            3
+          ],
           "sensor": true,
+          "collisionPreset": "trigger",
           "behavior": {
             "script": "checkpoint",
             "params": {
               "slot": "quick"
             }
-          },
-          "scale": [
-            12,
-            4,
-            3
-          ]
+          }
         },
         {
           "position": [
@@ -105,20 +105,20 @@
             -6
           ],
           "name": "Smoke Interact",
-          "collisionPreset": "trigger",
+          "scale": [
+            12,
+            4,
+            2
+          ],
           "sensor": true,
+          "collisionPreset": "trigger",
           "behavior": {
             "script": "interact"
           },
           "interaction": {
             "action": "activate",
             "prompt": "Activate"
-          },
-          "scale": [
-            12,
-            4,
-            2
-          ]
+          }
         },
         {
           "position": [
@@ -127,30 +127,20 @@
             -10
           ],
           "name": "Smoke Portal",
-          "collisionPreset": "trigger",
+          "scale": [
+            12,
+            4,
+            3
+          ],
           "sensor": true,
+          "collisionPreset": "trigger",
           "behavior": {
             "script": "level-travel",
             "params": {
               "targetLevel": "layouts/__playwright-smoke-target.level.json",
               "targetSpawn": "arrival"
             }
-          },
-          "scale": [
-            12,
-            4,
-            3
-          ]
-        },
-        {
-          "position": [
-            2,
-            0.25,
-            -0.71
-          ],
-          "name": "Cube",
-          "rotationYDeg": 0,
-          "scale": 1
+          }
         }
       ]
     }
@@ -205,22 +195,7 @@
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "aiNavigationVolumes": [
-    {
-      "id": "ai-navigation-volume-1",
-      "position": [
-        0,
-        2,
-        0
-      ],
-      "name": "AI Navigation Volume",
-      "size": [
-        10,
-        4,
-        10
-      ]
-    }
-  ],
+  "aiNavigationVolumes": [],
   "targetPoints": [],
   "splines": [
     {

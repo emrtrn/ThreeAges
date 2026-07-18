@@ -141,6 +141,16 @@
             4,
             3
           ]
+        },
+        {
+          "position": [
+            2,
+            0.25,
+            -0.71
+          ],
+          "name": "Cube",
+          "rotationYDeg": 0,
+          "scale": 1
         }
       ]
     }
@@ -195,27 +205,23 @@
   "reflectiveSurfaces": [],
   "reflectionCaptures": [],
   "blockingVolumes": [],
-  "aiNavigationVolumes": [],
-  "targetPoints": [
+  "aiNavigationVolumes": [
     {
-      "id": "target-point-1",
+      "id": "ai-navigation-volume-1",
       "position": [
         0,
-        0,
+        2,
         0
       ],
-      "name": "Target Point"
-    },
-    {
-      "id": "target-point-2",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "name": "Target Point 2"
+      "name": "AI Navigation Volume",
+      "size": [
+        10,
+        4,
+        10
+      ]
     }
   ],
+  "targetPoints": [],
   "splines": [
     {
       "id": "spline-1",

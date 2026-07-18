@@ -1867,6 +1867,7 @@ export class RtsApp {
         structure: {
           id: structure.id,
           label: structure.stats.label,
+          portrait: structure.stats.portrait,
           level: structure.level,
           ageLabel: this.ageOf(structure.owner) === "town" ? "Kasaba" : "Yerleşim",
           health: structure.health.current,
@@ -1886,6 +1887,7 @@ export class RtsApp {
       structure: {
         id: 0,
         label: this.options.buildingBalance["command_center"]?.label ?? "Merkez",
+        portrait: this.options.buildingBalance["command_center"]?.portrait,
         level: center.level,
         ageLabel: this.ageOf(center.owner) === "town" ? "Kasaba" : "Yerleşim",
         health: center.health.current,

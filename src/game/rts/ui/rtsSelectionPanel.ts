@@ -16,8 +16,14 @@ import { describeSelection, type RtsSelectionView, type SelectionPanelContent } 
 
 export class RtsSelectionPanel {
   private readonly root = document.createElement("section");
+  private readonly portrait = document.createElement("div");
+  private readonly portraitImage = document.createElement("img");
+  private readonly selectionCount = document.createElement("span");
+  private readonly header = document.createElement("div");
   private readonly title = document.createElement("strong");
   private readonly summary = document.createElement("p");
+  private readonly health = document.createElement("div");
+  private readonly healthFill = document.createElement("div");
   private readonly body = document.createElement("div");
   private readonly lines: HTMLParagraphElement[] = [];
   private readonly progress = document.createElement("div");
@@ -44,7 +50,19 @@ export class RtsSelectionPanel {
     // same rule the notification feed states for itself.
     this.root.className = "rts-selection-panel";
     this.root.setAttribute("aria-label", "Seçim");
+    this.portrait.className = "rts-selection-portrait";
+    this.portraitImage.className = "rts-selection-portrait-image";
+    this.portraitImage.alt = "";
+    this.portraitImage.hidden = true;
+    this.selectionCount.className = "rts-selection-count";
+    this.portrait.append(this.portraitImage, this.selectionCount);
+    this.header.className = "rts-selection-header";
     this.summary.className = "rts-selection-summary";
+    this.health.className = "rts-selection-health";
+    this.health.setAttribute("aria-label", "Can");
+    this.healthFill.className = "rts-selection-health-fill";
+    this.health.appendChild(this.healthFill);
+    this.header.append(this.title, this.summary, this.health);
     this.body.className = "rts-selection-body ui-interactive";
     this.actionRow.className = "rts-selection-actions ui-interactive";
     this.hints.className = "rts-selection-hints";
@@ -61,7 +79,10 @@ export class RtsSelectionPanel {
     this.progressFill.className = "rts-selection-progress-fill";
     track.appendChild(this.progressFill);
     this.progress.append(head, track);
-    this.root.append(this.title, this.summary, this.body, this.progress, this.actionRow, this.hints);
+    const details = document.createElement("div");
+    details.className = "rts-selection-details";
+    details.append(this.body, this.progress);
+    this.root.append(this.portrait, this.header, details, this.actionRow, this.hints);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setSelection({ kind: "none" });
   }
@@ -69,14 +90,9 @@ export class RtsSelectionPanel {
   setSelection(view: RtsSelectionView): void {
     const content = describeSelection(view);
     // Selection is re-pushed every frame; only touch the DOM when it changed.
-    const signature = content === null ? "" : JSON.stringify(content);
+    const signature = JSON.stringify(content);
     if (signature === this.signature) return;
     this.signature = signature;
-    if (content === null) {
-      this.root.hidden = true;
-      return;
-    }
-    this.root.hidden = false;
     this.render(content);
   }
 
@@ -88,6 +104,20 @@ export class RtsSelectionPanel {
     this.title.textContent = content.title;
     this.summary.textContent = content.summary;
     this.hints.textContent = content.hint;
+    const portrait = content.portrait ?? null;
+    this.portraitImage.hidden = portrait === null;
+    if (portrait && this.portraitImage.src !== new URL(portrait, window.location.origin).href) {
+      this.portraitImage.src = portrait;
+    }
+    const count = content.selectionCount ?? 0;
+    this.selectionCount.textContent = count > 0 ? `×${count}` : "";
+    const health = content.health ?? null;
+    this.health.hidden = health === null;
+    if (health) {
+      const percent = Math.round(Math.min(1, Math.max(0, health.current / health.max)) * 100);
+      this.healthFill.style.width = `${percent}%`;
+      this.health.title = `Can: ${Math.ceil(health.current)}/${Math.ceil(health.max)}`;
+    }
     // Reuse the paragraphs rather than replaceChildren: the line count is stable
     // for a given selection, so the common re-render is a text swap.
     while (this.lines.length < content.lines.length) {

@@ -94,11 +94,15 @@ büyüyüp küçülüyor; hedef, üç bölgeli sabit iskelet:
   kullanılmayacak. Birlik seçiminde komutlar, aksiyon bölgesinde küçük çip
   satırı olarak gösterilir (`Saldırı-Hareket [F]` vb.); kısayol bağlama
   `RtsApp`'te kalır, panel sadece gösterir.
-- Açık karar (Faz D başında netleşecek): boş seçimde panel bugünkü gibi
-  tamamen gizlenir mi, yoksa "Seçim yok" yazısıyla soluk ve yerinde mi kalır
-  (mockup'taki öneri — ekran zıplamasını önler)?
+- Karar (2026-07-19): boş seçimde panel "Seçim yok" yazısıyla soluk ve yerinde
+  kalır; bu, mockup'taki öneriyi izler ve ekran zıplamasını önler.
 - Tıklama-geçirgenlik kuralı korunur: yalnızca butonlar ve tooltip taşıyan
   gövde `ui-interactive` olur, panelin geri kalanı harita tıklamasını yutmaz.
+
+**İlerleme (2026-07-19):** Sabit yükseklikli üç bölge iskeleti, boş seçim
+durumu, veri-güdümlü geçici portre, adet rozeti, HP çubuğu ve kendi alanında
+kayan bilgi/aksiyon bölgeleri uygulandı. Bir sonraki D dilimi, çoklu seçimde
+rol bazlı slot listesini ve birlik komutlarının kompakt çip satırını ekler.
 
 ### Faz F — Kategorili inşa paneli (sol alt)
 
