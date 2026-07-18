@@ -18,6 +18,7 @@ export type AgeUpgradeResult =
   | "already-town"
   | "already-upgrading"
   | "no-command-center"
+  | "command-center-level"
   | "missing-requirements"
   | "insufficient-resources";
 
@@ -27,6 +28,21 @@ export interface AgeSnapshot {
   readonly upgrading: boolean;
   readonly remainingSeconds: number;
   readonly missingBuildingIds: readonly string[];
+  /** In-age centre level the age demands (data), and the one the owner has. */
+  readonly requiredCenterLevel: number;
+  readonly centerLevel: number;
+}
+
+/**
+ * Whether this owner has researched the centre far enough to start the age.
+ *
+ * Exported because the panel hides the age button outright below it rather than
+ * greying it out: the age is not a thing the player is failing at yet, it is a
+ * thing that has not opened, and the centre's own level-up button — sitting
+ * right next to it — is the whole path to opening it.
+ */
+export function centerLevelReadyForTown(snapshot: AgeSnapshot): boolean {
+  return snapshot.centerLevel >= snapshot.requiredCenterLevel;
 }
 
 /** T2 structure actions are available only after the Town transition commits. */
@@ -70,6 +86,8 @@ export class AgeSystem {
       upgrading: state.upgrade !== null,
       remainingSeconds: state.upgrade?.remainingSeconds ?? 0,
       missingBuildingIds: state.age === "settlement" ? this.missingBuildings(owner) : [],
+      requiredCenterLevel: this.balance.town.requiredCommandCenterLevel,
+      centerLevel: this.centers.get(owner)?.level ?? 0,
     };
   }
 
@@ -82,7 +100,12 @@ export class AgeSystem {
     const state = this.stateFor(owner);
     if (state.age === "town") return "already-town";
     if (state.upgrade) return "already-upgrading";
-    if (!this.centers.get(owner)) return "no-command-center";
+    const center = this.centers.get(owner);
+    if (!center) return "no-command-center";
+    // The centre's own gate comes before the town-wide one, mirroring how the
+    // panel reads: this button lives on the centre, so what the centre itself
+    // still owes is the first thing it can be refused for.
+    if (center.level < this.balance.town.requiredCommandCenterLevel) return "command-center-level";
     if (this.missingBuildings(owner).length > 0) return "missing-requirements";
     const reservation = this.kingdoms.get(owner).wallet.reserve(this.balance.town.cost);
     if (!reservation) return "insufficient-resources";

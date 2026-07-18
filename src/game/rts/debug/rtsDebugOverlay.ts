@@ -22,6 +22,7 @@ export class RtsDebugOverlay {
   private readonly resourceLines: string[] = [];
   private aiLines: readonly string[] = [];
   private progressionLines: readonly string[] = [];
+  private visionLines: readonly string[] = [];
   private elapsedSeconds = 0;
 
   constructor() {
@@ -44,6 +45,11 @@ export class RtsDebugOverlay {
   /** Optional, static progression diagnostics such as the Phase 6 Refah flag. */
   setProgressionLines(lines: readonly string[]): void {
     this.progressionLines = lines;
+  }
+
+  /** §59 fog block, formatted by `formatVisionDebug`. Empty while the flag is off. */
+  setVisionLines(lines: readonly string[]): void {
+    this.visionLines = lines;
   }
 
   /**
@@ -129,6 +135,7 @@ export class RtsDebugOverlay {
     );
     lines.push("kaynak hareketleri:", ...(this.resourceLines.length ? this.resourceLines : ["- yok"]));
     if (this.progressionLines.length > 0) lines.push("", ...this.progressionLines);
+    if (this.visionLines.length > 0) lines.push("", ...this.visionLines);
     if (this.aiLines.length > 0) lines.push("", ...this.aiLines);
     this.root.textContent = lines.join("\n");
   }

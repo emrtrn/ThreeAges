@@ -75,6 +75,11 @@ export class BuildingPlacementSystem {
     if (this.active) this.rebuildGhost(this.active.id, this.active.stats);
   }
 
+  /** Rebuild an active ghost after its type's researched visual level changes. */
+  refreshPreview(): void {
+    if (this.active) this.rebuildGhost(this.active.id, this.active.stats);
+  }
+
   get isActive(): boolean {
     return this.active !== null;
   }

@@ -3,6 +3,7 @@ import { Group } from "three";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 
 import type { UnitOwner } from "../units/unit";
+import type { BuildingBalanceStats } from "../../data/gameDataTypes";
 import { CommandCenter } from "./commandCenter";
 
 export class CommandCenterSystem {
@@ -13,11 +14,17 @@ export class CommandCenterSystem {
     this.root.name = "rts-command-centers";
   }
 
-  spawn(owner: UnitOwner, x: number, z: number, maxHealth?: number): CommandCenter {
+  spawn(
+    owner: UnitOwner,
+    x: number,
+    z: number,
+    maxHealth?: number,
+    stats: BuildingBalanceStats | null = null,
+  ): CommandCenter {
     if (this.centers.has(owner)) {
       throw new Error(`Command center already exists for ${owner}`);
     }
-    const center = new CommandCenter(owner, x, z, maxHealth);
+    const center = new CommandCenter(owner, x, z, maxHealth, stats);
     this.centers.set(owner, center);
     this.root.add(center.object);
     return center;

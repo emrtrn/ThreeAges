@@ -154,6 +154,24 @@ export class RtsSelectionPanel {
     for (const action of content.actions) {
       const button = this.actionButtons.get(action.id);
       if (!button) continue;
+      // Action ids are stable commands (for example every building upgrade is
+      // `upgrade`), but their player-facing label and cost belong to the current
+      // selection. Refreshing only disabled/title left an old Depot label on an
+      // newly selected House whenever the action set itself did not change.
+      button.setAttribute("aria-label", action.label);
+      const label = button.querySelector<HTMLElement>(".rts-selection-action-label");
+      if (label) label.textContent = action.label;
+      const existingCost = button.querySelector<HTMLElement>(".rts-selection-action-cost");
+      if (action.cost === null) {
+        existingCost?.remove();
+      } else if (existingCost) {
+        existingCost.textContent = action.cost;
+      } else {
+        const cost = document.createElement("span");
+        cost.className = "rts-selection-action-cost";
+        cost.textContent = action.cost;
+        button.appendChild(cost);
+      }
       button.disabled = !action.enabled;
       // A legal action carries no excuse; a refused one always names its rule.
       button.title = action.reason ?? "";

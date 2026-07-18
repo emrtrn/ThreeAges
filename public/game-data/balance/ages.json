@@ -18,6 +18,7 @@
       "controlRadius": 32,
       "workerTrainingSeconds": 9
     },
+    "requiredCommandCenterLevel": 3,
     "requiredBuildingIds": [
       "farm",
       "lumber_camp",

@@ -157,10 +157,13 @@ export class WorkerConstructionSystem {
 
   update(deltaSeconds: number): void {
     this.restaffAbandonedSites();
-    for (const [workerId, assignment] of this.assignments) {
+    for (const assignment of [...this.assignments.values()]) {
       const { worker, structure } = assignment;
       if (worker.health.depleted || !this.structures.all().includes(structure)) {
-        this.assignments.delete(workerId);
+        // A destroyed/cancelled foundation must not leave its worker following
+        // a now-orphaned route. In particular, a later player move has to start
+        // from a genuinely clear unit state rather than a hidden assignment.
+        this.release(worker);
         continue;
       }
       if (assignment.state !== "moving") continue;
@@ -175,7 +178,7 @@ export class WorkerConstructionSystem {
       if (worker.pathTarget || worker.moveTarget) continue;
       const path = this.navigation.plan(worker.position, assignment.approach);
       if (path) worker.setMovePath(path);
-      else this.assignments.delete(workerId);
+      else this.release(worker);
     }
 
     const activeBuilders = new Map<PlacedStructure, number>();

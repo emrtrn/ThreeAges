@@ -1265,10 +1265,10 @@ Kapı A geçilmezse:
 > durumu anlatır; Faz 6'nın orijinal T2 araştırması artık kodda yoktur.
 > Karar kaydı: `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`.
 
-- [x] Per-bina seviye yükseltmesi. (`StructureUpgradeSystem` anahtarı
-  `structure.id`; `start/snapshot/isUpgrading` `PlacedStructure` alır. Aynı
-  türden iki bina farklı seviyelerde olabilir. Yükseltme düğmesi binanın kendi
-  seçim panelindedir, palette değil.)
+- [x] Tür-geneli seviye yükseltmesi. (`StructureUpgradeSystem` owner + bina tipi
+  anahtarıyla araştırma tutar. Yükseltme düğmesi seçili binanın panelindedir;
+  tamamlanınca aynı türdeki tüm tamamlanmış binaları yükseltir. Sonradan
+  tamamlananlar da araştırılmış seviyeyi devralır.)
 - [x] Çağ kapısı kaldırıldı (`KR-04`). (`isTown` şartı ve tür-geneli
   `completedUpgrades` semantiği silindi; seviye merdiveni her çağda açıktır.)
 - [x] Üç seviye. (`buildings.json` `levels: BuildingLevelBalance[]`; Ev, Depo,
@@ -2504,18 +2504,65 @@ Başarısızsa sistem feature flag arkasında kapatılır.
 
 ### Görevler
 
-- [ ] Görüş alanı sistemi
-- [ ] Keşfedilmiş alan
-- [ ] Şu anda görünür alan
-- [ ] Son bilinen yapı bilgisi
-- [ ] AI görüş kuralları
-- [ ] Görüş debug overlay’i
+- [x] Görüş alanı sistemi (`vision/visionSystem.ts`; sahip başına 71×71 hücrelik
+      grid, `balance/units.json` + `buildings.json` içindeki yeni `visionRadius`
+      alanından beslenir. Validator iki değişmezi zorluyor: görüş
+      `acquisitionRange`'ten küçük olamaz — yoksa birim göremediği hedefe ateş
+      ederdi — ve tek bir yapı haritanın yarısını açamaz (GDD 08 §42).)
+- [x] Keşfedilmiş alan (aynı sistem; `explored` bir *latch* — bir kez görülen
+      hücre maç boyunca sıfırlanmaz. GDD 08 §38'in üç katmanı iki bit olarak
+      saklanıyor, üçüncü bir durum tutarlı tutulmuyor.)
+- [x] Şu anda görünür alan (`visible`, her tick sıfırdan hesaplanır.)
+- [x] Son bilinen yapı bilgisi (`vision/enemyMemorySystem.ts` + §40 hayalet
+      işaretleri `vision/ghostStructureView.ts`. Kritik kural *ne zaman
+      düzeltildiği*: hatıra yalnızca hücre görünürken ve yapı orada değilken
+      silinir. Görülmeyen bir binayı yıkmak rakibin hayaletini sessizce
+      silmez — bakana kadar olmayan binaya karşı plan yapar.)
+- [x] AI görüş kuralları (`ai/aiVisionFilter.ts`. Simetrik: AI'ın *bütün* düşman
+      okumaları — `knownEnemyArmyPower`, `baseThreat`, `enemyCenterExists`, ordu
+      hedeflemesi ve en yakın düşman seçimi — oyuncunun ekranını çizen aynı
+      grid'den geçer. §20'nin bilgi sınırları gibi yapısal, söz değil.)
+- [x] Görüş debug overlay'i (`vision/formatVisionDebug.ts`; `?rts&debug` altında
+      **iki** krallığın keşif yüzdesi, bilinen/hayalet yapı sayısı ve en eski
+      inancın yaşı. Ekranda görülemeyen yarıyı raporlar — fog düzleminin kendisi
+      zaten görsel overlay.)
+
+Tamamı `fogOfWar` feature flag'i arkasında ve varsayılan **kapalı**: bayrak
+kapalıyken sistemler hiç kurulmaz ve AI filtresi `null` olduğu için düşman
+okumaları bayrak öncesiyle birebir aynı kalır (§13). `?rts&flags=fogOfWar` ile
+açılır.
+
+Render tarafı tek bir `DataTexture`'lı zemin düzlemi (`vision/fogView.ts`) —
+hücre başına mesh değil: 5041 hücre için mesh üretmek §59'un performans
+kriterinin yasakladığı maliyetin ta kendisi olurdu. Düz bir düzlem 3B gövdeleri
+gizleyemediği için birim/yapı görünürlüğü ayrı bir geçiş
+(`vision/fogVisibilityBinder.ts`), ve gizli birim `bodyMeshes()`'ten de düşer —
+three'nin raycaster'ı listeye açıkça konan objeyi `visible` false olsa da test
+eder, yani sadece gizlemek tıklanabilirliği kaldırmıyordu.
+
+Test durumu: `tools/engine-tests.ts` içinde beş `§59` kontrolü (üç katman +
+latch, hafızanın düzeltilme kuralı, AI filtresi, gizli birimin raycast'ten
+düşmesi, veri değişmezleri); `tests/smoke/rts-fog-of-war.spec.ts` bayraklı/
+bayraksız boot'u ve iki krallığın simetrisini sürüyor.
 
 ### Kabul kriterleri
+
+Üçü de **playtest gerektirir** — kod tarafı hazır, ölçüm yapılmadı:
 
 - [ ] Fog oyuncuyu gerekli bilgiden tamamen mahrum bırakmıyor.
 - [ ] AI görünmeyen birimlerin gerçek konumunu bilmiyor.
 - [ ] Görüş güncellemesi performans sorunu oluşturmuyor.
+
+> **Bilinen kapsam sınırı:** GDD 08 §39 uyarınca kaynak yatakları ve merkez sırt
+> keşfedilmemiş alanda gizleniyor, ancak **ağaçlar gizlenmiyor**. Orman sistemi
+> her tick her ağacın `visible` alanını kendisi yazıyor; ikinci bir yazar onunla
+> çakışır ve ağaç titrer. Ormanı fog'a sokmak, fog testinin sahipliğini orman
+> sistemine vermeyi gerektiriyor — ayrı bir değişiklik.
+>
+> **Ayarlanacak sayılar**: `visionRadius` değerleri artık `balance/` altındaki
+> JSON'larda (birim 7–14, yapı 8–30). Fog katman alfaları ve hayalet solma süresi
+> (`FULL_DECAY_SECONDS` 180 sn) şu an kodda sabit; playtest oynatmayı
+> gerektirirse veriye taşınmalıdır.
 
 ---
 

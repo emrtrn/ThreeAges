@@ -4,7 +4,7 @@
   "flags": {},
   "startingResources": {
     "food": 1000,
-    "wood": 2000,
+    "wood": 3000,
     "stone": 1000,
     "gold": 1000
   },

@@ -90,10 +90,20 @@ export class UnitSystem {
     return this.byBodyId.get(object.id) ?? null;
   }
 
-  /** Every body mesh, for raycasting against units. */
+  /**
+   * Every body mesh, for raycasting against units.
+   *
+   * Fogged units are excluded (§59). Three's raycaster tests an explicitly
+   * listed object even when `visible` is false, so hiding a unit's render object
+   * is not on its own enough to make it unclickable — without this filter a
+   * player could still box-select or right-click-attack a unit they cannot see,
+   * which is the omniscience the fog exists to remove. Both call sites
+   * (`selectionSystem`, `commandSystem`) come through here, so this is the one
+   * place it has to hold.
+   */
   bodyMeshes(): Object3D[] {
     return this.units
-      .filter((unit) => !unit.health.depleted)
+      .filter((unit) => !unit.health.depleted && unit.object.visible)
       .map((unit) => unit.object.children[0])
       .filter((o): o is Object3D => !!o);
   }

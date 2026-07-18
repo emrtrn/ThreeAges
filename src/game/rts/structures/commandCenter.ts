@@ -18,8 +18,13 @@ import {
 } from "three";
 
 import type { UnitOwner } from "../units/unit";
-import type { TownAgeBalance } from "../../data/gameDataTypes";
+import type {
+  BuildingBalanceStats,
+  EconomyProductionBalance,
+  TownAgeBalance,
+} from "../../data/gameDataTypes";
 import { HealthComponent } from "../units/health";
+import type { UpgradableStructure } from "./structureUpgradeSystem";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 
 /** Temporary Faz 1 centre durability; building balance data arrives in Faz 2. */
@@ -33,8 +38,19 @@ const CENTER_TEAM_COLOR: Record<UnitOwner, string> = {
   enemy: "#c0392b",
 };
 
-export class CommandCenter {
+export class CommandCenter implements UpgradableStructure {
   readonly object = new Group();
+  /**
+   * The centre's own row in `balance/buildings.json`. Held so it can go through
+   * the same {@link UpgradableStructure} level ladder as every other building
+   * rather than carrying a hand-written level of its own.
+   */
+  readonly stats: BuildingBalanceStats;
+  /**
+   * A centre is spawned, not built, so it is complete from its first frame —
+   * but the upgrade system asks every candidate this, so it answers.
+   */
+  readonly construction = { complete: true } as const;
   /** Shared bounded-health contract used by units and structures. */
   readonly health: HealthComponent;
   /**
@@ -43,9 +59,35 @@ export class CommandCenter {
    * ring living in there would be disposed with it.
    */
   private readonly selectionRing: Mesh;
+  /** In-age level (1..3), owned by `StructureUpgradeSystem` like every building. */
   level = 1;
   controlRadius = COMMAND_CENTER_CONTROL_RADIUS;
   workerTrainingSeconds: number | null = null;
+  /** Worker queue size supplied by the active age × level tier. */
+  queueCapacity: number | null = null;
+  // The centre has no housing, economy, market or defense data, but the tier
+  // applier writes every field it knows about, so they exist and stay null.
+  populationCapacityBonus = 0;
+  economy: EconomyProductionBalance | null = null;
+  defenseAttackDamage: number | null = null;
+  marketCommission: number | null = null;
+  territoryConnectedControlRadius: number | null = null;
+
+  /**
+   * The centre's control radius under the {@link UpgradableStructure} name.
+   *
+   * A null write is ignored on purpose: the radius is an *age* benefit applied
+   * by {@link applyTownUpgrade}, and the centre's tiers carry no `territory`
+   * block, so letting the tier applier's "no territory data" null through would
+   * erase a radius the age had already granted.
+   */
+  get territoryControlRadius(): number | null {
+    return this.controlRadius;
+  }
+
+  set territoryControlRadius(value: number | null) {
+    if (value !== null) this.controlRadius = value;
+  }
   /** Lets melee units strike the outer footprint without entering its nav blocker. */
   readonly combatRadius = COMMAND_CENTER_FOOTPRINT / 2;
   /** {@link CombatTarget}: the centre is a building, so siege is the answer to it. */
@@ -56,10 +98,12 @@ export class CommandCenter {
     x: number,
     z: number,
     maxHealth = COMMAND_CENTER_MAX_HEALTH,
+    stats: BuildingBalanceStats | null = null,
   ) {
     this.object.name = `rts-command-center-${owner}`;
     this.object.position.set(x, 0, z);
     this.health = new HealthComponent(maxHealth);
+    this.stats = stats ?? placeholderCenterStats(maxHealth);
     const placeholder = new Group();
     placeholder.name = "rts-command-center-placeholder";
 
@@ -120,10 +164,17 @@ export class CommandCenter {
     this.selectionRing.visible = selected;
   }
 
-  /** Apply the data-owned Town benefit after a completed Settlement upgrade. */
+  /**
+   * Apply the data-owned Town benefits after a completed Settlement upgrade.
+   *
+   * The level is deliberately not touched here. An age is not a level: like
+   * every other building the centre drops back to Lv1 in the new age (KR-03)
+   * and re-earns Lv2/Lv3 through research, so `StructureUpgradeSystem` owns
+   * `level` and — where the centre has `progression` tiers — its health too.
+   * Radius and worker training remain age-only benefits with no tier ladder.
+   */
   applyTownUpgrade(upgrade: TownAgeBalance["commandCenter"]): void {
-    this.level = 2;
-    this.health.upgradeMax(upgrade.maxHealth);
+    if (!this.stats.progression) this.health.upgradeMax(upgrade.maxHealth);
     this.controlRadius = upgrade.controlRadius;
     this.workerTrainingSeconds = upgrade.workerTrainingSeconds;
   }
@@ -154,6 +205,23 @@ export class CommandCenter {
     disposeObjectMeshes(this.object);
     this.object.clear();
   }
+}
+
+/**
+ * Stand-in row for callers that spawn a centre without the balance table (the
+ * engine tests). It carries no `levels`/`progression`, so such a centre simply
+ * has no upgrade path rather than inventing one.
+ */
+function placeholderCenterStats(maxHealth: number): BuildingBalanceStats {
+  return {
+    id: "command_center",
+    label: "Merkez",
+    footprint: { width: COMMAND_CENTER_FOOTPRINT, depth: COMMAND_CENTER_FOOTPRINT },
+    cost: {},
+    constructionSeconds: 0,
+    maxHealth,
+    visionRadius: 0,
+  };
 }
 
 function disposeObjectMeshes(root: Object3D): void {

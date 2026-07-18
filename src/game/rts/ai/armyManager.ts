@@ -25,6 +25,8 @@ import type { UnitSystem } from "../units/unitSystem";
 import { issueAttackOrder } from "../units/attackPathing";
 import { armyPower, type AiBlackboard } from "./aiBlackboard";
 import type { AiDecisionLog } from "./aiDecisionLog";
+import type { AiVisionFilter } from "./aiVisionFilter";
+import { commandCenterMemoryId } from "../vision/enemyMemorySystem";
 import {
   bestTarget,
   AI_HIGH_VALUE_TARGET_SCORE,
@@ -111,6 +113,12 @@ export class ArmyManager {
      * building an army manager that has never heard of objectives.
      */
     private readonly objectives: (() => AiObjectiveWatch | null) | null = null,
+    /**
+     * §59. Null whenever the `fogOfWar` flag is off — the same optional-parameter
+     * shape as `objectives` above, so pre-Faz-11 construction sites and tests
+     * keep building an army manager that sees the whole field.
+     */
+    private readonly vision: AiVisionFilter | null = null,
   ) {}
 
   get currentMission(): AiArmyMission | null {
@@ -255,12 +263,26 @@ export class ArmyManager {
     const origin = centroid(army);
     // §60 DefenseStrength counts every defender. Filtering to Guards would let
     // an Archer-screened target score as undefended and invite the army into it.
-    const enemyGuards = this.units.armyOf(opponent).filter((unit) => !unit.dying);
+    const enemyGuards = this.units.armyOf(opponent)
+      .filter((unit) => !unit.dying)
+      // §59: an unseen screen must not raise a target's DefenseStrength. The AI
+      // walking into a defence it could not see is the intended cost of fog.
+      .filter((unit) => !this.vision || this.vision.canSee(unit.position.x, unit.position.z));
     const candidates: AiTargetCandidate[] = [];
     const targets = new Map<string, CombatTarget>();
 
+    // §59: under fog the AI may only score what it *remembers* seeing. It still
+    // needs the live object to attack, so memory gates the candidate list while
+    // the live systems supply the CombatTarget. A remembered building that has
+    // since been razed simply yields no live target — the army marches there,
+    // finds nothing, and re-scores, which is the honest outcome.
+    const remembered = this.vision
+      ? new Set(this.vision.knownEnemyStructures().map((known) => known.structureId))
+      : null;
+
     const center = this.centers.get(opponent);
-    if (center && !center.health.depleted) {
+    if (center && !center.health.depleted
+      && (!remembered || remembered.has(commandCenterMemoryId(opponent)))) {
       const id = `center:${opponent}`;
       candidates.push(this.candidate(id, "center", center.position.x, center.position.z,
         center.health.ratio, origin, enemyGuards));
@@ -269,6 +291,7 @@ export class ArmyManager {
     for (const structure of this.structures.ownedBy(opponent)) {
       // §60 scores standing assets; a site with nothing in it yet is not one.
       if (!structure.construction.complete || structure.health.depleted) continue;
+      if (remembered && !remembered.has(structure.id)) continue;
       const id = `structure:${structure.id}`;
       candidates.push(this.candidate(id, targetKindFor(structure.stats), structure.x, structure.z,
         structure.health.ratio, origin, enemyGuards));
@@ -409,6 +432,9 @@ export class ArmyManager {
     let bestDistance = Number.POSITIVE_INFINITY;
     for (const candidate of this.units.unitsOf(opponent)) {
       if (candidate.dying) continue;
+      // §59: engaging a unit nobody in the kingdom can see would be the clearest
+      // possible tell that the AI is reading the field directly.
+      if (this.vision && !this.vision.canSee(candidate.position.x, candidate.position.z)) continue;
       const distance = unit.position.distanceToSquared(candidate.position);
       if (distance >= bestDistance) continue;
       best = candidate;

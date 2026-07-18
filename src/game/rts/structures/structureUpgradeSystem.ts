@@ -1,22 +1,47 @@
 /**
- * Per-instance, in-age building level upgrades (Level 1 -> 2 -> 3).
+ * Type-wide, in-age building level research (Level 1 -> 2 -> 3).
  *
- * This axis is independent of the Settlement -> Town age transition (see
- * `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`): each building is
- * levelled *individually*, from its own selection panel, paying its own cost and
- * running its own timer. Two Barracks of the same owner can sit at different
- * levels. There is no age gate — a level-up is always available in the current
- * age as long as the building's data still has a next step.
- *
- * The AI still reasons about a *type* reaching a tier (its §53 composition needs
- * one Barracks at level 2 to unlock Archers), so a thin type-oriented facade
- * ({@link startForType} / {@link typeSnapshot}) sits on top of the instance core.
+ * A completed upgrade belongs to an owner and building type, not to the one
+ * building whose panel started it. Every completed House, Depot, or Barracks of
+ * that owner receives the level, and a same-type building completed after the
+ * research immediately inherits the current type level. Age changes reset this
+ * research along with every building back to Level 1.
  */
 import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { UnitOwner } from "../units/unit";
-import type { PlacedStructure, PlacedStructureSystem } from "./placedStructureSystem";
+import type { PlacedStructureSystem } from "./placedStructureSystem";
+import type { HealthComponent } from "../units/health";
 import type { ResourceReservation } from "../economy/resourceWallet";
-import type { BuildingLevelBalance } from "../../data/gameDataTypes";
+import type {
+  BuildingBalanceStats,
+  BuildingLevelBalance,
+  EconomyProductionBalance,
+  SettlementAge,
+} from "../../data/gameDataTypes";
+
+/**
+ * What this system needs from a building to level it — deliberately narrower
+ * than `PlacedStructure`, which it used to take.
+ *
+ * The command centre is not a placed structure (it is spawned, never built) yet
+ * it owns the same in-age Lv1→3 ladder and the same art variants, so the ladder
+ * is expressed against the fields both shapes share rather than against one of
+ * them. `PlacedStructure` satisfies this structurally.
+ */
+export interface UpgradableStructure {
+  readonly owner: UnitOwner;
+  readonly stats: BuildingBalanceStats;
+  readonly construction: { readonly complete: boolean };
+  readonly health: HealthComponent;
+  level: number;
+  populationCapacityBonus: number;
+  territoryControlRadius: number | null;
+  territoryConnectedControlRadius: number | null;
+  economy: EconomyProductionBalance | null;
+  defenseAttackDamage: number | null;
+  marketCommission: number | null;
+  queueCapacity: number | null;
+}
 
 export type StructureUpgradeResult =
   | "started"
@@ -27,49 +52,68 @@ export type StructureUpgradeResult =
   | "insufficient-resources";
 
 export interface StructureUpgradeEvent {
-  readonly structure: PlacedStructure;
+  /** A representative affected structure, retained for existing callers. */
+  readonly structure: UpgradableStructure;
+  /** Every completed instance changed by this type-wide research. */
+  readonly structures: readonly UpgradableStructure[];
   readonly type: "completed" | "cancelled";
-  /** The level the structure holds after the event (post-promotion on completion). */
+  /** The researched level after the event. */
   readonly level: number;
 }
 
 export interface StructureUpgradeSnapshot {
-  /** Current in-age level of the instance (1..{@link maxLevel}). */
+  /** Current researched in-age level of this building type. */
   readonly level: number;
-  /** Highest level this building's data defines (1 when it has no `levels`). */
   readonly maxLevel: number;
   readonly upgrading: boolean;
   readonly remainingSeconds: number;
-  /** Cost of the next level step, or null when the instance is already at max. */
   readonly nextCost: Readonly<Record<string, number>> | null;
-  /** True when the instance can go no higher — the panel's "fully upgraded" state. */
   readonly completed: boolean;
 }
 
 interface UpgradeState {
-  readonly structure: PlacedStructure;
+  readonly owner: UnitOwner;
+  readonly buildingId: string;
   readonly step: BuildingLevelBalance;
   readonly reservation: ResourceReservation;
   remainingSeconds: number;
 }
 
 export class StructureUpgradeSystem {
-  /** Keyed by structure id so a destroyed-then-reused reference cannot collide. */
-  private readonly upgrades = new Map<number, UpgradeState>();
+  /** One active research per owner/building type. */
+  private readonly upgrades = new Map<string, UpgradeState>();
+  /** The level already researched for each owner/building type in this age. */
+  private readonly completedLevels = new Map<string, number>();
+
   constructor(
     private readonly structures: PlacedStructureSystem,
     private readonly kingdoms: KingdomRegistry,
+    private readonly ageForOwner: (owner: UnitOwner) => SettlementAge = () => "settlement",
+    /**
+     * Upgradables that are not placed structures — today the owner's command
+     * centre. Supplied as a lookup rather than a second registry so this system
+     * keeps one notion of "the owner's buildings" for research, reset and the
+     * type-wide promotion sweep alike.
+     */
+    private readonly externalStructures: (owner: UnitOwner) => readonly UpgradableStructure[] = () => [],
   ) {}
 
-  isUpgrading(structure: PlacedStructure): boolean {
-    return this.upgrades.has(structure.id);
+  isUpgrading(structure: UpgradableStructure): boolean {
+    return this.upgrades.has(this.keyFor(structure.owner, structure.stats.id));
   }
 
-  snapshot(structure: PlacedStructure): StructureUpgradeSnapshot {
-    const state = this.upgrades.get(structure.id);
-    const next = this.nextStep(structure);
+  /** The level a newly placed visual should show for this owner/building type. */
+  levelFor(owner: UnitOwner, buildingId: string): number {
+    return this.completedLevels.get(this.keyFor(owner, buildingId)) ?? 1;
+  }
+
+  snapshot(structure: UpgradableStructure): StructureUpgradeSnapshot {
+    const key = this.keyFor(structure.owner, structure.stats.id);
+    const state = this.upgrades.get(key);
+    const level = this.currentLevel(structure);
+    const next = this.nextStep(structure, level);
     return {
-      level: structure.level,
+      level,
       maxLevel: this.maxLevel(structure),
       upgrading: state !== undefined,
       remainingSeconds: state?.remainingSeconds ?? 0,
@@ -78,16 +122,18 @@ export class StructureUpgradeSystem {
     };
   }
 
-  /** Start levelling a single completed building to its next level. */
-  start(structure: PlacedStructure): StructureUpgradeResult {
-    if (this.upgrades.has(structure.id)) return "already-upgrading";
+  /** Start the next type-wide level research from any completed instance. */
+  start(structure: UpgradableStructure): StructureUpgradeResult {
+    const key = this.keyFor(structure.owner, structure.stats.id);
+    if (this.upgrades.has(key)) return "already-upgrading";
     if (!structure.construction.complete) return "under-construction";
-    const step = this.nextStep(structure);
+    const step = this.nextStep(structure, this.currentLevel(structure));
     if (!step) return "at-max-level";
     const reservation = this.kingdoms.get(structure.owner).wallet.reserve(step.cost);
     if (!reservation) return "insufficient-resources";
-    this.upgrades.set(structure.id, {
-      structure,
+    this.upgrades.set(key, {
+      owner: structure.owner,
+      buildingId: structure.stats.id,
       step,
       reservation,
       remainingSeconds: step.durationSeconds,
@@ -97,108 +143,170 @@ export class StructureUpgradeSystem {
 
   update(deltaSeconds: number): StructureUpgradeEvent[] {
     const events: StructureUpgradeEvent[] = [];
-    for (const [id, state] of this.upgrades) {
-      // A building razed mid-upgrade refunds its reservation, exactly as the
-      // type-wide research did when its last structure fell.
-      if (!this.structures.all().includes(state.structure)) {
-        this.kingdoms.get(state.structure.owner).wallet.refund(state.reservation);
-        this.upgrades.delete(id);
-        events.push({ structure: state.structure, type: "cancelled", level: state.structure.level });
+    for (const [key, state] of this.upgrades) {
+      const completed = this.completedOfType(state.owner, state.buildingId);
+      // A research needs a completed instance to represent it. If the whole type
+      // is razed while it is running, refund its reservation rather than silently
+      // completing an upgrade with no building left to receive it.
+      if (completed.length === 0) {
+        this.kingdoms.get(state.owner).wallet.refund(state.reservation);
+        this.upgrades.delete(key);
         continue;
       }
       state.remainingSeconds = Math.max(0, state.remainingSeconds - Math.max(0, deltaSeconds));
       if (state.remainingSeconds > 0) continue;
-      this.kingdoms.get(state.structure.owner).wallet.commit(state.reservation);
-      this.upgrades.delete(id);
-      this.promote(state.structure, state.step);
-      events.push({ structure: state.structure, type: "completed", level: state.structure.level });
+      this.kingdoms.get(state.owner).wallet.commit(state.reservation);
+      this.completedLevels.set(key, state.step.level);
+      this.upgrades.delete(key);
+      const promoted = completed.filter((structure) => this.promote(structure, state.step));
+      events.push({
+        structure: promoted[0] ?? completed[0]!,
+        structures: promoted,
+        type: "completed",
+        level: state.step.level,
+      });
     }
     return events;
   }
 
   reset(): void {
     for (const state of this.upgrades.values()) {
-      this.kingdoms.get(state.structure.owner).wallet.refund(state.reservation);
+      this.kingdoms.get(state.owner).wallet.refund(state.reservation);
     }
     this.upgrades.clear();
+    this.completedLevels.clear();
   }
 
   /**
-   * Age transition (KR-03): every one of an owner's buildings drops back to its
-   * base Level 1 — stats and all — so the new age's ladder is climbed afresh. Any
-   * level-up in flight for that owner is cancelled and its reservation refunded.
+   * Age transition: cancel this owner's type research, refund it, and return all
+   * of the owner's buildings to their Level 1 baseline for the next age.
    */
   resetOwner(owner: UnitOwner): void {
-    for (const [id, state] of this.upgrades) {
-      if (state.structure.owner !== owner) continue;
+    for (const [key, state] of this.upgrades) {
+      if (state.owner !== owner) continue;
       this.kingdoms.get(owner).wallet.refund(state.reservation);
-      this.upgrades.delete(id);
+      this.upgrades.delete(key);
     }
-    for (const structure of this.structures.ownedBy(owner)) this.demoteToBase(structure);
+    for (const key of this.completedLevels.keys()) {
+      if (key.startsWith(`${owner}:`)) this.completedLevels.delete(key);
+    }
+    for (const structure of this.ownedBy(owner)) this.demoteToBase(structure);
   }
 
-  /** Undo every level gain, returning a structure to its data's Level 1 baseline. */
-  private demoteToBase(structure: PlacedStructure): void {
-    if (structure.level === 1) return;
-    structure.level = 1;
-    structure.health.setMax(structure.stats.maxHealth);
-    structure.populationCapacityBonus = 0;
-    structure.territoryControlRadius = structure.stats.territory?.controlRadius ?? null;
-    structure.territoryConnectedControlRadius = structure.stats.territory?.connectedControlRadius ?? null;
-  }
-
-  /**
-   * AI facade: start the next level on the first eligible building of a type.
-   * The §53 tier gate only needs *one* instance of the type at the target level,
-   * so this promotes a single Barracks rather than the whole type.
-   */
+  /** AI facade: start the next type-wide level from the first eligible building. */
   startForType(owner: UnitOwner, buildingId: string): StructureUpgradeResult {
-    const structure = this.structures.ownedBy(owner).find((item) =>
+    const structure = this.ownedBy(owner).find((item) =>
       item.stats.id === buildingId
       && item.construction.complete
-      && !this.upgrades.has(item.id)
-      && this.nextStep(item) !== null);
+      && !this.upgrades.has(this.keyFor(owner, buildingId))
+      && this.nextStep(item, this.currentLevel(item)) !== null);
     if (!structure) return "no-eligible-structure";
     return this.start(structure);
   }
 
-  /**
-   * AI facade: whether any building of a type has reached level 2 (`completed`)
-   * or is being levelled right now (`upgrading`). Mirrors what the barracks tier
-   * gate reads off `structure.level`.
-   */
+  /** AI facade: type-level state for tier gates and upgrade scheduling. */
   typeSnapshot(owner: UnitOwner, buildingId: string): { readonly completed: boolean; readonly upgrading: boolean } {
-    const owned = this.structures.ownedBy(owner).filter((item) => item.stats.id === buildingId);
+    const key = this.keyFor(owner, buildingId);
     return {
-      completed: owned.some((item) => item.level >= 2),
-      upgrading: owned.some((item) => this.upgrades.has(item.id)),
+      completed: (this.completedLevels.get(key) ?? 1) >= 2,
+      upgrading: this.upgrades.has(key),
     };
   }
 
-  /** The data step that promotes this structure to its next level, or null at max. */
-  private nextStep(structure: PlacedStructure): BuildingLevelBalance | null {
-    const levels = structure.stats.levels;
-    if (!levels) return null;
-    return levels.find((entry) => entry.level === structure.level + 1) ?? null;
+  /** Apply a type's completed research to a building that just finished construction. */
+  applyCompletedUpgrade(structure: UpgradableStructure): boolean {
+    if (!structure.construction.complete) return false;
+    const level = this.completedLevels.get(this.keyFor(structure.owner, structure.stats.id)) ?? 1;
+    if (level > structure.level) {
+      const step = structure.stats.levels?.find((entry) => entry.level === level);
+      if (step) return this.promote(structure, step);
+    }
+    // A newly completed Town building has no in-age research yet, but it still
+    // needs the Town Lv1 tier instead of inheriting the Settlement baseline.
+    return this.applyProgressionTier(structure);
   }
 
-  private maxLevel(structure: PlacedStructure): number {
+  private demoteToBase(structure: UpgradableStructure): void {
+    structure.level = 1;
+    this.applyProgressionTier(structure, true);
+  }
+
+  private nextStep(structure: UpgradableStructure, level: number): BuildingLevelBalance | null {
+    const levels = structure.stats.levels;
+    if (!levels) return null;
+    return levels.find((entry) => entry.level === level + 1) ?? null;
+  }
+
+  private maxLevel(structure: UpgradableStructure): number {
     const levels = structure.stats.levels;
     if (!levels || levels.length === 0) return 1;
     return Math.max(structure.level, ...levels.map((entry) => entry.level));
   }
 
-  private promote(structure: PlacedStructure, step: BuildingLevelBalance): void {
+  private promote(structure: UpgradableStructure, step: BuildingLevelBalance): boolean {
+    if (structure.level >= step.level) return false;
     structure.level = step.level;
+    if (this.applyProgressionTier(structure)) return true;
     structure.health.upgradeMax(step.maxHealth);
     if (step.populationCapacity !== undefined) {
-      // The panel and PopulationSystem read base + bonus, so a level's absolute
-      // capacity becomes the delta over the building's base figure.
       structure.populationCapacityBonus = step.populationCapacity - (structure.stats.populationCapacity ?? 0);
     }
     if (step.territory) {
       structure.territoryControlRadius = step.territory.controlRadius;
       structure.territoryConnectedControlRadius = step.territory.connectedControlRadius;
     }
+    return true;
+  }
+
+  /** Apply every runtime-facing absolute value from one active age × level tier. */
+  private applyProgressionTier(structure: UpgradableStructure, resetHealth = false): boolean {
+    const tier = structure.stats.progression?.[this.ageForOwner(structure.owner)]
+      .find((entry) => entry.level === structure.level);
+    if (!tier) {
+      if (resetHealth) {
+        structure.health.setMax(structure.stats.maxHealth);
+        structure.populationCapacityBonus = 0;
+        structure.territoryControlRadius = structure.stats.territory?.controlRadius ?? null;
+        structure.territoryConnectedControlRadius = structure.stats.territory?.connectedControlRadius ?? null;
+        structure.economy = structure.stats.economy ?? null;
+        structure.defenseAttackDamage = structure.stats.defense?.attackDamage ?? null;
+        structure.marketCommission = structure.stats.market?.commission ?? null;
+        structure.queueCapacity = null;
+      }
+      return false;
+    }
+    if (resetHealth) structure.health.setMax(tier.maxHealth);
+    else structure.health.upgradeMax(tier.maxHealth);
+    structure.populationCapacityBonus = tier.populationCapacity === undefined
+      ? 0
+      : tier.populationCapacity - (structure.stats.populationCapacity ?? 0);
+    structure.territoryControlRadius = tier.territory?.controlRadius ?? structure.stats.territory?.controlRadius ?? null;
+    structure.territoryConnectedControlRadius = tier.territory?.connectedControlRadius
+      ?? structure.stats.territory?.connectedControlRadius ?? null;
+    structure.economy = structure.stats.economy
+      ? { ...structure.stats.economy, ...tier.economy }
+      : null;
+    structure.defenseAttackDamage = tier.defense?.attackDamage ?? structure.stats.defense?.attackDamage ?? null;
+    structure.marketCommission = tier.tradeCommission ?? structure.stats.market?.commission ?? null;
+    structure.queueCapacity = tier.queueCapacity ?? null;
+    return true;
+  }
+
+  private currentLevel(structure: UpgradableStructure): number {
+    return Math.max(structure.level, this.levelFor(structure.owner, structure.stats.id));
+  }
+
+  private completedOfType(owner: UnitOwner, buildingId: string): UpgradableStructure[] {
+    return this.ownedBy(owner).filter((structure) =>
+      structure.stats.id === buildingId && structure.construction.complete);
+  }
+
+  /** Every building this owner can level, placed or not. */
+  private ownedBy(owner: UnitOwner): readonly UpgradableStructure[] {
+    return [...this.structures.ownedBy(owner), ...this.externalStructures(owner)];
+  }
+
+  private keyFor(owner: UnitOwner, buildingId: string): string {
+    return `${owner}:${buildingId}`;
   }
 }

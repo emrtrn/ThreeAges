@@ -11,12 +11,20 @@
     "attackRange": 1.2,
     "acquisitionRange": 9,
     "chaseRange": 14,
-    "damageMultipliers": { "light": 1, "heavy": 1.2, "structure": 0.35 },
+    "visionRadius": 11,
+    "damageMultipliers": {
+      "light": 1,
+      "heavy": 1.2,
+      "structure": 0.35
+    },
     "trainingSeconds": 28,
     "productionBuildingId": "barracks",
     "requiredAge": "settlement",
     "requiredBuildingLevel": 1,
-    "cost": { "food": 60, "wood": 20 },
+    "cost": {
+      "food": 60,
+      "wood": 20
+    },
     "populationCost": 1
   },
   "archer_placeholder": {
@@ -31,12 +39,20 @@
     "attackRange": 7,
     "acquisitionRange": 9,
     "chaseRange": 11,
-    "damageMultipliers": { "light": 1.2, "heavy": 0.8, "structure": 0.25 },
+    "visionRadius": 14,
+    "damageMultipliers": {
+      "light": 1.2,
+      "heavy": 0.8,
+      "structure": 0.25
+    },
     "trainingSeconds": 34,
     "productionBuildingId": "archery_range",
     "requiredAge": "town",
     "requiredBuildingLevel": 1,
-    "cost": { "food": 50, "wood": 40 },
+    "cost": {
+      "food": 50,
+      "wood": 40
+    },
     "populationCost": 1
   },
   "siege_placeholder": {
@@ -51,12 +67,21 @@
     "attackRange": 2.6,
     "acquisitionRange": 7,
     "chaseRange": 8,
-    "damageMultipliers": { "light": 0.35, "heavy": 0.3, "structure": 2.5 },
+    "visionRadius": 9,
+    "damageMultipliers": {
+      "light": 0.35,
+      "heavy": 0.3,
+      "structure": 2.5
+    },
     "trainingSeconds": 75,
     "productionBuildingId": "barracks",
     "requiredAge": "town",
     "requiredBuildingLevel": 2,
-    "cost": { "wood": 140, "stone": 100, "gold": 60 },
+    "cost": {
+      "wood": 140,
+      "stone": 100,
+      "gold": 60
+    },
     "populationCost": 3
   },
   "worker_placeholder": {
@@ -71,12 +96,19 @@
     "attackRange": 1,
     "acquisitionRange": 0,
     "chaseRange": 0,
-    "damageMultipliers": { "light": 1, "heavy": 1, "structure": 1 },
+    "visionRadius": 7,
+    "damageMultipliers": {
+      "light": 1,
+      "heavy": 1,
+      "structure": 1
+    },
     "trainingSeconds": 25,
     "productionBuildingId": "command_center",
     "requiredAge": "settlement",
     "requiredBuildingLevel": 1,
-    "cost": { "food": 50 },
+    "cost": {
+      "food": 50
+    },
     "populationCost": 1
   }
 }

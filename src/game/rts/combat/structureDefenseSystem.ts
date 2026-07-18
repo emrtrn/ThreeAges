@@ -25,7 +25,7 @@ export class StructureDefenseSystem {
 
   /** Direct a completed defensive structure to prioritize one enemy in its range. */
   orderAttack(structure: PlacedStructure, target: CombatTarget): StructureAttackOrderResult {
-    const defense = structure.stats.defense;
+    const defense = effectiveDefense(structure);
     if (!defense) return "not-defensive";
     if (!structure.construction.complete || structure.health.depleted) return "incomplete";
     if (target.owner === structure.owner || target.health.depleted) return "out-of-range";
@@ -43,7 +43,7 @@ export class StructureDefenseSystem {
     const liveIds = new Set<number>();
     for (const structure of structures) {
       liveIds.add(structure.id);
-      const defense = structure.stats.defense;
+      const defense = effectiveDefense(structure);
       if (!defense || !structure.construction.complete || structure.health.depleted) {
         this.cooldowns.delete(structure.id);
         this.orderedTargets.delete(structure.id);
@@ -85,6 +85,11 @@ export class StructureDefenseSystem {
       if (!liveIds.has(id)) this.orderedTargets.delete(id);
     }
   }
+}
+
+function effectiveDefense(structure: PlacedStructure) {
+  const defense = structure.stats.defense;
+  return defense ? { ...defense, attackDamage: structure.defenseAttackDamage ?? defense.attackDamage } : null;
 }
 
 /** Prefer enemy troops over buildings, then choose the nearest valid target. */

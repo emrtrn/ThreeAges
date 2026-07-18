@@ -1,62 +1,219 @@
 {
   "command_center": {
     "label": "Merkez",
-    "footprint": { "width": 8, "depth": 8 },
+    "footprint": {
+      "width": 8,
+      "depth": 8
+    },
     "cost": {},
     "constructionSeconds": 1,
-    "maxHealth": 300
+    "maxHealth": 300,
+    "visionRadius": 26,
+    "levels": [
+      {
+        "level": 2,
+        "cost": {
+          "food": 150,
+          "wood": 150
+        },
+        "durationSeconds": 45,
+        "maxHealth": 400
+      },
+      {
+        "level": 3,
+        "cost": {
+          "food": 250,
+          "wood": 250,
+          "gold": 60
+        },
+        "durationSeconds": 60,
+        "maxHealth": 500
+      }
+    ],
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 300,
+          "queueCapacity": 5
+        },
+        {
+          "level": 2,
+          "maxHealth": 400,
+          "queueCapacity": 7
+        },
+        {
+          "level": 3,
+          "maxHealth": 500,
+          "queueCapacity": 9
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 650,
+          "queueCapacity": 12
+        },
+        {
+          "level": 2,
+          "maxHealth": 800,
+          "queueCapacity": 16
+        },
+        {
+          "level": 3,
+          "maxHealth": 1000,
+          "queueCapacity": 20
+        }
+      ]
+    }
   },
   "house": {
     "label": "Ev",
-    "footprint": { "width": 4, "depth": 4 },
-    "cost": { "wood": 80 },
+    "footprint": {
+      "width": 4,
+      "depth": 4
+    },
+    "cost": {
+      "wood": 80
+    },
     "constructionSeconds": 25,
     "maxHealth": 300,
+    "visionRadius": 8,
     "populationCapacity": 5,
     "levels": [
       {
         "level": 2,
-        "cost": { "wood": 70, "stone": 40 },
+        "cost": {
+          "wood": 70,
+          "stone": 40
+        },
         "durationSeconds": 35,
         "maxHealth": 450,
         "populationCapacity": 8
       },
       {
         "level": 3,
-        "cost": { "wood": 110, "stone": 80 },
+        "cost": {
+          "wood": 110,
+          "stone": 80
+        },
         "durationSeconds": 45,
         "maxHealth": 600,
         "populationCapacity": 11
       }
-    ]
+    ],
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 300,
+          "populationCapacity": 5
+        },
+        {
+          "level": 2,
+          "maxHealth": 450,
+          "populationCapacity": 8
+        },
+        {
+          "level": 3,
+          "maxHealth": 600,
+          "populationCapacity": 11
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 750,
+          "populationCapacity": 14
+        },
+        {
+          "level": 2,
+          "maxHealth": 900,
+          "populationCapacity": 17
+        },
+        {
+          "level": 3,
+          "maxHealth": 1050,
+          "populationCapacity": 20
+        }
+      ]
+    }
   },
   "depot": {
     "label": "Depo",
-    "footprint": { "width": 6, "depth": 6 },
-    "cost": { "wood": 120 },
+    "footprint": {
+      "width": 6,
+      "depth": 6
+    },
+    "cost": {
+      "wood": 120
+    },
     "constructionSeconds": 45,
     "maxHealth": 500,
+    "visionRadius": 10,
     "levels": [
       {
         "level": 2,
-        "cost": { "wood": 90, "stone": 40 },
+        "cost": {
+          "wood": 90,
+          "stone": 40
+        },
         "durationSeconds": 45,
         "maxHealth": 750
       },
       {
         "level": 3,
-        "cost": { "wood": 140, "stone": 90 },
+        "cost": {
+          "wood": 140,
+          "stone": 90
+        },
         "durationSeconds": 55,
         "maxHealth": 1050
       }
-    ]
+    ],
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 500
+        },
+        {
+          "level": 2,
+          "maxHealth": 750
+        },
+        {
+          "level": 3,
+          "maxHealth": 1050
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 1300
+        },
+        {
+          "level": 2,
+          "maxHealth": 1600
+        },
+        {
+          "level": 3,
+          "maxHealth": 1900
+        }
+      ]
+    }
   },
   "outpost": {
     "label": "Karakol",
-    "footprint": { "width": 6, "depth": 6 },
-    "cost": { "wood": 140 },
+    "footprint": {
+      "width": 6,
+      "depth": 6
+    },
+    "cost": {
+      "wood": 140
+    },
     "constructionSeconds": 45,
     "maxHealth": 700,
+    "visionRadius": 30,
     "territory": {
       "controlRadius": 16,
       "connectedControlRadius": 20,
@@ -65,14 +222,21 @@
     "defense": {
       "attackDamage": 10,
       "attackCooldown": 1.6,
-        "attackRange": 12,
+      "attackRange": 12,
       "arrowsPerVolley": 2,
-      "damageMultipliers": { "light": 1.2, "heavy": 0.8, "structure": 0.25 }
+      "damageMultipliers": {
+        "light": 1.2,
+        "heavy": 0.8,
+        "structure": 0.25
+      }
     },
     "levels": [
       {
         "level": 2,
-        "cost": { "wood": 110, "stone": 70 },
+        "cost": {
+          "wood": 110,
+          "stone": 70
+        },
         "durationSeconds": 55,
         "maxHealth": 1000,
         "territory": {
@@ -82,7 +246,10 @@
       },
       {
         "level": 3,
-        "cost": { "wood": 160, "stone": 110 },
+        "cost": {
+          "wood": 160,
+          "stone": 110
+        },
         "durationSeconds": 65,
         "maxHealth": 1350,
         "territory": {
@@ -90,14 +257,92 @@
           "connectedControlRadius": 28
         }
       }
-    ]
+    ],
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 700,
+          "territory": {
+            "controlRadius": 16,
+            "connectedControlRadius": 20
+          },
+          "defense": {
+            "attackDamage": 10
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 1000,
+          "territory": {
+            "controlRadius": 20,
+            "connectedControlRadius": 24
+          },
+          "defense": {
+            "attackDamage": 11
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 1350,
+          "territory": {
+            "controlRadius": 24,
+            "connectedControlRadius": 28
+          },
+          "defense": {
+            "attackDamage": 12
+          }
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 1700,
+          "territory": {
+            "controlRadius": 28,
+            "connectedControlRadius": 32
+          },
+          "defense": {
+            "attackDamage": 14
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 2100,
+          "territory": {
+            "controlRadius": 32,
+            "connectedControlRadius": 36
+          },
+          "defense": {
+            "attackDamage": 16
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 2550,
+          "territory": {
+            "controlRadius": 36,
+            "connectedControlRadius": 40
+          },
+          "defense": {
+            "attackDamage": 18
+          }
+        }
+      ]
+    }
   },
   "farm": {
     "label": "Tarla",
-    "footprint": { "width": 6, "depth": 6 },
-    "cost": { "wood": 80 },
+    "footprint": {
+      "width": 6,
+      "depth": 6
+    },
+    "cost": {
+      "wood": 80
+    },
     "constructionSeconds": 35,
     "maxHealth": 300,
+    "visionRadius": 8,
     "economy": {
       "resourceId": "food",
       "workerCapacity": 3,
@@ -107,24 +352,96 @@
     "levels": [
       {
         "level": 2,
-        "cost": { "wood": 60, "stone": 30 },
+        "cost": {
+          "wood": 60,
+          "stone": 30
+        },
         "durationSeconds": 30,
         "maxHealth": 400
       },
       {
         "level": 3,
-        "cost": { "wood": 100, "stone": 60 },
+        "cost": {
+          "wood": 100,
+          "stone": 60
+        },
         "durationSeconds": 40,
         "maxHealth": 520
       }
-    ]
+    ],
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 300,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 7,
+            "localBufferCapacity": 40
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 400,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 8,
+            "localBufferCapacity": 50
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 520,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 9,
+            "localBufferCapacity": 60
+          }
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 650,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 10,
+            "localBufferCapacity": 80
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 800,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 11,
+            "localBufferCapacity": 100
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 960,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 12,
+            "localBufferCapacity": 120
+          }
+        }
+      ]
+    }
   },
   "lumber_camp": {
     "label": "Oduncu Kampı",
-    "footprint": { "width": 6, "depth": 6 },
-    "cost": { "wood": 100 },
+    "footprint": {
+      "width": 6,
+      "depth": 6
+    },
+    "cost": {
+      "wood": 100
+    },
     "constructionSeconds": 35,
     "maxHealth": 300,
+    "visionRadius": 9,
     "economy": {
       "resourceId": "wood",
       "workerCapacity": 3,
@@ -133,45 +450,253 @@
       "requiresForest": true,
       "gatherRadius": 200,
       "carryCapacity": 10
+    },
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 300,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 6,
+            "localBufferCapacity": 40,
+            "carryCapacity": 10
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 400,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 7,
+            "localBufferCapacity": 50,
+            "carryCapacity": 12
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 520,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 8,
+            "localBufferCapacity": 60,
+            "carryCapacity": 14
+          }
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 650,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 9,
+            "localBufferCapacity": 80,
+            "carryCapacity": 16
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 800,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 10,
+            "localBufferCapacity": 100,
+            "carryCapacity": 18
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 960,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 11,
+            "localBufferCapacity": 120,
+            "carryCapacity": 20
+          }
+        }
+      ]
     }
   },
   "quarry": {
     "label": "Taş Ocağı",
-    "footprint": { "width": 6, "depth": 6 },
-    "cost": { "wood": 120 },
+    "footprint": {
+      "width": 6,
+      "depth": 6
+    },
+    "cost": {
+      "wood": 120
+    },
     "constructionSeconds": 40,
     "maxHealth": 450,
+    "visionRadius": 9,
     "economy": {
       "resourceId": "stone",
       "workerCapacity": 3,
       "perWorkerPerMinute": 5,
       "localBufferCapacity": 40,
       "requiresResourceNode": true
+    },
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 450,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 5,
+            "localBufferCapacity": 40
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 600,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 6,
+            "localBufferCapacity": 50
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 780,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 7,
+            "localBufferCapacity": 60
+          }
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 1000,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 8,
+            "localBufferCapacity": 80
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 1250,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 9,
+            "localBufferCapacity": 100
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 1500,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 10,
+            "localBufferCapacity": 120
+          }
+        }
+      ]
     }
   },
   "gold_mine": {
     "label": "Altın Madeni",
-    "footprint": { "width": 6, "depth": 6 },
-    "cost": { "wood": 140 },
+    "footprint": {
+      "width": 6,
+      "depth": 6
+    },
+    "cost": {
+      "wood": 140
+    },
     "constructionSeconds": 45,
     "maxHealth": 450,
+    "visionRadius": 9,
     "economy": {
       "resourceId": "gold",
       "workerCapacity": 3,
       "perWorkerPerMinute": 3,
       "localBufferCapacity": 40,
       "requiresResourceNode": true
+    },
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 450,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 3,
+            "localBufferCapacity": 40
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 600,
+          "economy": {
+            "workerCapacity": 3,
+            "perWorkerPerMinute": 4,
+            "localBufferCapacity": 50
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 780,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 5,
+            "localBufferCapacity": 60
+          }
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 1000,
+          "economy": {
+            "workerCapacity": 4,
+            "perWorkerPerMinute": 6,
+            "localBufferCapacity": 80
+          }
+        },
+        {
+          "level": 2,
+          "maxHealth": 1250,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 7,
+            "localBufferCapacity": 100
+          }
+        },
+        {
+          "level": 3,
+          "maxHealth": 1500,
+          "economy": {
+            "workerCapacity": 5,
+            "perWorkerPerMinute": 8,
+            "localBufferCapacity": 120
+          }
+        }
+      ]
     }
   },
   "market": {
     "label": "Pazar",
-    "footprint": { "width": 8, "depth": 8 },
-    "cost": { "wood": 150 },
+    "footprint": {
+      "width": 8,
+      "depth": 8
+    },
+    "cost": {
+      "wood": 150
+    },
     "constructionSeconds": 50,
     "maxHealth": 500,
+    "visionRadius": 12,
     "market": {
       "lotSize": 100,
-      "basePrice": { "food": 100, "wood": 100, "stone": 100 },
+      "basePrice": {
+        "food": 100,
+        "wood": 100,
+        "stone": 100
+      },
       "priceStep": 0.02,
       "indexMin": 0.3,
       "indexMax": 4,
@@ -180,61 +705,184 @@
     "levels": [
       {
         "level": 2,
-        "cost": { "wood": 120, "stone": 60 },
+        "cost": {
+          "wood": 120,
+          "stone": 60
+        },
         "durationSeconds": 45,
         "maxHealth": 750,
         "tradeCommission": 0.12
       },
       {
         "level": 3,
-        "cost": { "wood": 170, "stone": 100 },
+        "cost": {
+          "wood": 170,
+          "stone": 100
+        },
         "durationSeconds": 55,
         "maxHealth": 1000,
         "tradeCommission": 0.09
       }
-    ]
+    ],
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 500,
+          "tradeCommission": 0.15
+        },
+        {
+          "level": 2,
+          "maxHealth": 750,
+          "tradeCommission": 0.12
+        },
+        {
+          "level": 3,
+          "maxHealth": 1000,
+          "tradeCommission": 0.09
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 1250,
+          "tradeCommission": 0.08
+        },
+        {
+          "level": 2,
+          "maxHealth": 1500,
+          "tradeCommission": 0.07
+        },
+        {
+          "level": 3,
+          "maxHealth": 1800,
+          "tradeCommission": 0.06
+        }
+      ]
+    }
   },
   "barracks": {
     "label": "Kışla",
-    "footprint": { "width": 8, "depth": 8 },
-    "cost": { "wood": 160 },
+    "footprint": {
+      "width": 8,
+      "depth": 8
+    },
+    "cost": {
+      "wood": 160
+    },
     "constructionSeconds": 55,
     "maxHealth": 650,
+    "visionRadius": 12,
     "levels": [
       {
         "level": 2,
-        "cost": { "wood": 140, "stone": 80 },
+        "cost": {
+          "wood": 140,
+          "stone": 80
+        },
         "durationSeconds": 50,
         "maxHealth": 900
       },
       {
         "level": 3,
-        "cost": { "wood": 200, "stone": 120 },
+        "cost": {
+          "wood": 200,
+          "stone": 120
+        },
         "durationSeconds": 60,
         "maxHealth": 1200
       }
-    ]
+    ],
+    "progression": {
+      "settlement": [
+        {
+          "level": 1,
+          "maxHealth": 650,
+          "queueCapacity": 5
+        },
+        {
+          "level": 2,
+          "maxHealth": 900,
+          "queueCapacity": 10
+        },
+        {
+          "level": 3,
+          "maxHealth": 1200,
+          "queueCapacity": 15
+        }
+      ],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 1500,
+          "queueCapacity": 20
+        },
+        {
+          "level": 2,
+          "maxHealth": 1850,
+          "queueCapacity": 25
+        },
+        {
+          "level": 3,
+          "maxHealth": 2250,
+          "queueCapacity": 30
+        }
+      ]
+    }
   },
   "archery_range": {
     "label": "Okçuluk Alanı",
-    "footprint": { "width": 8, "depth": 8 },
-    "cost": { "wood": 160, "stone": 40 },
+    "footprint": {
+      "width": 8,
+      "depth": 8
+    },
+    "cost": {
+      "wood": 160,
+      "stone": 40
+    },
     "constructionSeconds": 55,
     "requiredAge": "town",
     "maxHealth": 600,
+    "visionRadius": 14,
     "levels": [
       {
         "level": 2,
-        "cost": { "wood": 120, "stone": 60 },
+        "cost": {
+          "wood": 120,
+          "stone": 60
+        },
         "durationSeconds": 50,
         "maxHealth": 850
       },
       {
         "level": 3,
-        "cost": { "wood": 180, "stone": 100 },
+        "cost": {
+          "wood": 180,
+          "stone": 100
+        },
         "durationSeconds": 60,
         "maxHealth": 1100
       }
-    ]
+    ],
+    "progression": {
+      "settlement": [],
+      "town": [
+        {
+          "level": 1,
+          "maxHealth": 600,
+          "queueCapacity": 20
+        },
+        {
+          "level": 2,
+          "maxHealth": 850,
+          "queueCapacity": 25
+        },
+        {
+          "level": 3,
+          "maxHealth": 1100,
+          "queueCapacity": 30
+        }
+      ]
+    }
   }
 }

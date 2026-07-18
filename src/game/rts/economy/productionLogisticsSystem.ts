@@ -43,9 +43,9 @@ export class ProductionLogisticsSystem {
       if (existing === undefined || depot.structureId < existing) depotByComponent.set(key, depot.structureId);
     }
     return this.structures.all()
-      .filter((structure) => structure.construction.complete && structure.stats.economy)
+      .filter((structure) => structure.construction.complete && structure.economy)
       .map((structure) => {
-        const economy = structure.stats.economy;
+        const economy = structure.economy;
         if (!economy) throw new Error("Completed producer missing economy balance");
         const roadCell = roadCellTouchingFootprint(
           this.roads,

@@ -59,6 +59,7 @@ export interface MarketTradeSnapshot {
  * steps and not others without opening a gap.
  */
 export function marketCommission(structure: PlacedStructure, baseCommission: number): number {
+  if (structure.marketCommission !== null) return structure.marketCommission;
   let commission = structure.stats.market?.commission ?? baseCommission;
   for (const step of structure.stats.levels ?? []) {
     if (step.level > structure.level) break;

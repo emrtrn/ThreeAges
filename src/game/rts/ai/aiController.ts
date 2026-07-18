@@ -35,6 +35,7 @@ import { AiProductionManager } from "./aiProductionManager";
 import { AiTradeManager, type AiTradeStep } from "./aiTradeManager";
 import { AiUpgradeManager, type AiUpgradeStep } from "./aiUpgradeManager";
 import { ArmyManager, type AiObjectiveWatch, type AiRetreatReason } from "./armyManager";
+import type { AiVisionFilter } from "./aiVisionFilter";
 import { KingdomDirector } from "./kingdomDirector";
 import type { AiTargetScore } from "./armyTargeting";
 import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } from "./aiTypes";
@@ -66,6 +67,13 @@ export interface AiControllerOptions extends AiBlackboardSources {
    * rather than forget them into existence.
    */
   readonly objectives: (() => AiObjectiveWatch | null) | null;
+  /**
+   * §59: the information limit every enemy read is routed through. Explicitly
+   * `null` — not optional — whenever the `fogOfWar` flag is off, for the same
+   * reason as {@link objectives} above: a caller has to *decide* the AI sees
+   * everything rather than arrive there by forgetting a field.
+   */
+  readonly vision: AiVisionFilter | null;
   readonly construction: StructureConstructionService;
   readonly roadConstruction: RoadConstructionService;
   readonly workerProduction: WorkerProductionSystem;
@@ -149,7 +157,7 @@ export class AiController {
   constructor(private readonly options: AiControllerOptions) {
     this.reader = new AiBlackboardReader(options, options.balance);
     this.director = new KingdomDirector(options.balance, this.log);
-    this.age = new AiAgeManager(options.owner, options.ages, this.log);
+    this.age = new AiAgeManager(options.owner, options.ages, this.log, options.structureUpgrades);
     this.army = new ArmyManager(
       options.owner,
       options.units,
@@ -159,6 +167,7 @@ export class AiController {
       options.balance,
       this.log,
       options.objectives ?? null,
+      options.vision ?? null,
     );
     this.builds = new AiBuildManager(
       options.owner,

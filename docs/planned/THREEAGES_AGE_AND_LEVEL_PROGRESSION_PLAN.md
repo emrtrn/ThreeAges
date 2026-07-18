@@ -1,9 +1,9 @@
 # ThreeAges Cag ve Bina Seviye Ilerlemesi Plani
 
 Olusturulma tarihi: 2026-07-17
-Durum: Uygulandi (Faz 0-4 tamamlandi, 2026-07-18)
+Durum: Uygulandi (Faz 0-4 tamamlandi; tur-geneli seviye davranisi revize edildi, 2026-07-18)
 Kapsam: Cag (`settlement`/`town`) ve bina seviye (1->2->3) sistemlerinin
-birbirinden ayrilmasi, SecondAge modellerinin devreye alinmasi, per-bina
+birbirinden ayrilmasi, SecondAge modellerinin devreye alinmasi, tur-geneli
 seviye yukseltme ve cag atlaninca tum binalarin yeni cag Level1 modeline
 gecmesi.
 
@@ -49,8 +49,9 @@ esler ve arsivdeki SecondAge + Level3 modelleri ilk kez oyuna girer.
 
 ## 3. Kilit Kararlar
 
-- **KR-01 - Per-bina seviye:** Seviye yukseltme tip bazinda degil, bina
-  instance bazinda olur. Ayni tipteki binalar farkli seviyelerde olabilir.
+- **KR-01 - Tur-geneli seviye:** Seviye yukseltme owner + bina tipi bazinda
+  arastirmadir. Ayni tipteki tamamlanmis binalar birlikte seviyelenir; sonradan
+  tamamlananlar da arastirilmis seviyeyi devralir.
 - **KR-02 - 3 seviye:** Her cagda Level 1/2/3 (iki yukseltme adimi). Arsivdeki
   tum Level modelleri kullanilir.
 - **KR-03 - Cag atlama agir milestone kalir:** Mevcut sart yapisi korunur;
@@ -147,12 +148,12 @@ yukseltmesi bu binalarda kapali tutulur - Faz 2'de karara baglanacak).
 > `defendBase` yerine `assaultTarget` donuyordu. Test artik raider'i
 > `RTS_BLOCKOUT_MAP.enemyStart`'a gore koyuyor. Tum suite yesil (1025 check).
 
-### Faz 1 - Per-bina seviye yukseltme (cag ici) - TAMAMLANDI
+### Faz 1 - Tur-geneli seviye yukseltme (cag ici) - TAMAMLANDI
 
-- [x] `structureUpgradeSystem.ts` instance bazli (`start/snapshot/isUpgrading`
-      artik `PlacedStructure` aliyor, anahtar `structure.id`); `isTown` kapisi ve
-      tip-geneli `completedUpgrades` semantigi kalkti. AI icin ince tip cephesi
-      eklendi (`startForType` / `typeSnapshot`).
+- [x] `structureUpgradeSystem.ts` owner + bina tipi bazli arastirma tutar.
+      Secili `PlacedStructure` yalnizca baslatma yuzeyidir; tamamlaninca ayni
+      tipteki tum tamamlanmis binalar seviyeyi alir ve yenileri devralir. AI
+      ayni tip cephesini kullanir (`startForType` / `typeSnapshot`).
 - [x] `level < 3` iken `nextStep` sonraki seviyeyi baslatiyor; bitince `promote`
       `level++` + kazanim (can, ev nufusu, karakol alani) uyguluyor.
 - [x] Tamamlaninca `RtsApp` `applyStructureVisual` ile gorsel mevcut seviyenin
@@ -161,13 +162,13 @@ yukseltmesi bu binalarda kapali tutulur - Faz 2'de karara baglanacak).
       Lv2/Lv3 eklendi. quarry/gold_mine/lumber_camp bilincli olarak Faz 2'ye
       birakildi (level mesh'i yok - §4/§8 acik notu). `BuildingLevelBalance`'a
       `populationCapacity` alani + validator dogrulamasi eklendi.
-- [x] Engine testleri instance-bazli akisa gore guncellendi (Faz 6 yukseltme
-      blogu, AI §53, seçim paneli); Level2->3 ve `at-max-level`/`under-construction`
-      sonuclari icin yeni assert'ler eklendi.
+- [x] Engine testleri tur-geneli akisa gore guncellendi (Faz 6 yukseltme blogu,
+      AI §53, secim paneli); coklu Ev, sonradan tamamlanan Ev, Level2->3 ve
+      `at-max-level`/`under-construction` sonuclari icin assert'ler eklendi.
 - [x] `tsc --noEmit` temiz; `test:engine` 1025 check yesil.
 
 > Not: KR-04 geregi cag kapisi UI'dan da kalkti; secim panelindeki buton artik
-> per-bina "Lv{n+1}'e Yükselt" (veya en ust seviyede devre disi) diyor ve
+> tur-geneli "Tum ... yapilarini Lv{n+1}'e Yükselt" (veya en ust seviyede devre disi) diyor ve
 > `townUnlocked` alani `StructureUpgradeView`'dan cikarildi - Faz 3 UI diline
 > onden bir adim. Detay basligindaki `T{level}` etiketi ("Ev T2") ve `farm`
 > ekonomi carpani (level basi uretim) Faz 3 / sonraki fazlara birakildi.
@@ -199,7 +200,7 @@ yukseltmesi bu binalarda kapali tutulur - Faz 2'de karara baglanacak).
 
 ### Faz 3 - UI ve mesajlar - TAMAMLANDI
 
-- [x] `rtsSelectionView`: per-bina "Lv{n+1}'e Yukselt" butonu artik seviye +
+- [x] `rtsSelectionView`: tur-geneli "Tum ... yapilarini Lv{n+1}'e Yukselt" butonu artik seviye +
       maliyet + kazanimi birlikte gosteriyor. Yeni `UpgradeGain` view alani
       (`RtsApp.structureUpgradeGain` ile veriden hesaplanir) panele
       "Lv{n}: {can} can (+{delta})" satirini ve varsa nufus/kontrol yaricapi
@@ -229,7 +230,7 @@ yukseltmesi bu binalarda kapali tutulur - Faz 2'de karara baglanacak).
 ### Faz 4 - AI uyumu ve kapanis - TAMAMLANDI
 
 - [x] `aiUpgradeManager` yeni API ile calisiyor: Faz 1'de eklenen ince tip cephesi
-      (`startForType` / `typeSnapshot`) uzerinden instance-bazli sisteme baglaniyor.
+      (`startForType` / `typeSnapshot`) uzerinden tur-geneli sisteme baglaniyor.
       Tetikleyici hala veri kapisinin kendisi (`requires-barracks-upgrade`), yani
       tier kapisinin ikinci bir kopyasi AI'da yasamiyor.
 - [x] AI cag atlaninca ayni model/level reset davranisini aliyor: `RtsApp` cag
@@ -248,6 +249,12 @@ yukseltmesi bu binalarda kapali tutulur - Faz 2'de karara baglanacak).
 > Panel `.rts-selection-progress` (etiket + kalan sn + dolan cubuk) render ediyor,
 > yalnizca yukseltme surerken gorunur. Cubuk mekanizmasi genel: ileride insaat
 > ilerlemesi de ayni alana baglanabilir.
+
+> Ek (2026-07-18): Tur-geneli yukseltme dugmesinin etiketi, secili panel zaten
+> yapi turunu adlandirdigi icin `Lv{n}'ye Yukselt` olarak kisaltildi. Yeni bir
+> yapinin hayaleti ve yari-opak insaat modeli, tamamlanmadan once o tur icin
+> arastirilmis seviyenin modelini kullanir. Kasaba Cagina gecis surerken yeni
+> yapi seviye arastirmalari kapatilir ve panel nedeni aciklar.
 
 ## 7. Dogrulama Stratejisi
 

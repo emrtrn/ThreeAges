@@ -21,7 +21,7 @@ import {
 } from "three";
 
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import type { BuildingBalanceStats } from "../../data/gameDataTypes";
+import type { BuildingBalanceStats, EconomyProductionBalance } from "../../data/gameDataTypes";
 import type { UnitOwner } from "../units/unit";
 import { HealthComponent } from "../units/health";
 import { buildingFootprintBlocker } from "./placementGrid";
@@ -68,6 +68,14 @@ export interface PlacedStructure {
   /** Current territory values; levelled outposts promote these without replacing the site. */
   territoryControlRadius: number | null;
   territoryConnectedControlRadius: number | null;
+  /** Active absolute economy stats after the current age × level tier resolves. */
+  economy: EconomyProductionBalance | null;
+  /** Active per-arrow damage; range/cooldown remain on the static defense block. */
+  defenseAttackDamage: number | null;
+  /** Active Market commission for the current tier. */
+  marketCommission: number | null;
+  /** Active military production queue capacity for the current tier. */
+  queueCapacity: number | null;
 }
 
 export class PlacedStructureSystem {
@@ -147,6 +155,12 @@ export class PlacedStructureSystem {
       populationCapacityBonus: 0,
       territoryControlRadius: stats.territory?.controlRadius ?? null,
       territoryConnectedControlRadius: stats.territory?.connectedControlRadius ?? null,
+      economy: stats.economy ?? null,
+      defenseAttackDamage: stats.defense?.attackDamage ?? null,
+      // The market system retains its legacy level ladder fallback until this
+      // structure is completed and the active progression tier is applied.
+      marketCommission: null,
+      queueCapacity: null,
     };
     this.structures.push(structure);
     this.registerPickTargets(structure, progressFill);

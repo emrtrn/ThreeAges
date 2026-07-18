@@ -9,6 +9,15 @@
  */
 import { isFeatureFlag } from "../core/featureFlags";
 import { AI_TARGET_WEIGHTS } from "./gameDataTypes";
+
+/**
+ * Mirrors `RTS_WORLD_HALF_EXTENT` (`rts/world/rtsGround.ts`), duplicated rather
+ * than imported because that module pulls in three.js and this validator is
+ * pure TS on purpose (CLAUDE.md / TD-002). Only the §42 vision ceiling below
+ * reads it; if the map ever grows, that check loosens — it never silently
+ * passes bad data.
+ */
+const WORLD_HALF_EXTENT_FOR_VISION_CHECK = 70;
 import type {
   AiAgeUpScoring,
   AiArmyComposition,
@@ -22,6 +31,8 @@ import type {
   AiTargetWeights,
   BuildingBalance,
   BuildingLevelBalance,
+  BuildingProgressionBalance,
+  BuildingProgressionTier,
   GamePreset,
   GameVersion,
   MarketBalance,
@@ -309,6 +320,16 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (acquisitionRange > 0 && acquisitionRange < attackRange) {
       throw new GameDataError(`${statsWhere}.acquisitionRange: must be >= attackRange`);
     }
+    const visionRadius = requireFiniteNumber(stats, "visionRadius", statsWhere);
+    if (visionRadius <= 0) {
+      throw new GameDataError(`${statsWhere}.visionRadius: must be > 0`);
+    }
+    // Vision is what fog reveals; acquisition is what the unit shoots at. If
+    // acquisition reached further, a unit would auto-attack an enemy its own
+    // kingdom cannot see — the exact omniscience §59 exists to remove.
+    if (visionRadius < acquisitionRange) {
+      throw new GameDataError(`${statsWhere}.visionRadius: must be >= acquisitionRange`);
+    }
     const trainingSeconds = requireFiniteNumber(stats, "trainingSeconds", statsWhere);
     if (trainingSeconds <= 0) {
       throw new GameDataError(`${statsWhere}.trainingSeconds: must be > 0`);
@@ -341,6 +362,7 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       attackRange,
       acquisitionRange,
       chaseRange,
+      visionRadius,
       damageMultipliers: validateDamageMultipliers(
         stats["damageMultipliers"],
         `${statsWhere}.damageMultipliers`,
@@ -388,6 +410,19 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     const maxHealth = requireFiniteNumber(stats, "maxHealth", statsWhere);
     if (maxHealth <= 0) {
       throw new GameDataError(`${statsWhere}.maxHealth: must be > 0`);
+    }
+    const visionRadius = requireFiniteNumber(stats, "visionRadius", statsWhere);
+    if (visionRadius <= 0) {
+      throw new GameDataError(`${statsWhere}.visionRadius: must be > 0`);
+    }
+    // GDD 08 §42: the Outpost is meant to be the wide one, but "must not open
+    // most of the map by itself" is a real constraint, so it is enforced rather
+    // than trusted. A quarter of the world's half-extent keeps any single
+    // structure's reveal well under a third of the play area.
+    if (visionRadius > WORLD_HALF_EXTENT_FOR_VISION_CHECK / 2) {
+      throw new GameDataError(
+        `${statsWhere}.visionRadius: must be <= ${WORLD_HALF_EXTENT_FOR_VISION_CHECK / 2} (GDD 08 §42)`,
+      );
     }
     const populationCapacityRaw = stats["populationCapacity"];
     let populationCapacity: number | undefined;
@@ -576,6 +611,20 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
         ...(levelTwo.territory ? { territory: levelTwo.territory } : {}),
       };
     }
+    const progressionRaw = stats["progression"];
+    const progression = progressionRaw === undefined ? undefined : validateBuildingProgression(
+      progressionRaw,
+      `${statsWhere}.progression`,
+      {
+        maxHealth,
+        ...(populationCapacity !== undefined ? { populationCapacity } : {}),
+        ...(economy ? { economy } : {}),
+        ...(territory ? { territory } : {}),
+        ...(market ? { market } : {}),
+        ...(defense ? { defense } : {}),
+        ...(requiredAge ? { requiredAge } : {}),
+      },
+    );
     buildings[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
@@ -584,12 +633,14 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       constructionSeconds,
       ...(requiredAge ? { requiredAge } : {}),
       maxHealth,
+      visionRadius,
       ...(populationCapacity ? { populationCapacity } : {}),
       ...(economy ? { economy } : {}),
       ...(territory ? { territory } : {}),
       ...(market ? { market } : {}),
       ...(defense ? { defense } : {}),
       ...(levels ? { levels } : {}),
+      ...(progression ? { progression } : {}),
       ...(upgrade ? { upgrade } : {}),
     };
   }
@@ -597,6 +648,181 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     throw new GameDataError(`${where}: must define at least one building`);
   }
   return buildings;
+}
+
+/**
+ * Validates the staged six-tier matrix.  It deliberately has no upgrade cost
+ * fields yet: the legacy `levels` ladder remains the authoritative research
+ * cost/timer source during the Phase 1 → Phase 2 migration.
+ */
+function validateBuildingProgression(
+  value: unknown,
+  where: string,
+  base: Pick<BuildingBalance["string"], "maxHealth" | "populationCapacity" | "economy" | "territory" | "market" | "defense" | "requiredAge">,
+): BuildingProgressionBalance {
+  const data = asObject(value, where);
+  const byAge = {} as Record<SettlementAge, readonly BuildingProgressionTier[]>;
+  for (const age of SETTLEMENT_AGES) {
+    const entriesRaw = data[age];
+    const ageWhere = `${where}.${age}`;
+    if (!Array.isArray(entriesRaw)) {
+      throw new GameDataError(`${ageWhere}: must be an array`);
+    }
+    if (entriesRaw.length === 0) {
+      if (base.requiredAge !== "town" || age !== "settlement") {
+        throw new GameDataError(`${ageWhere}: only a Town-only building may omit Settlement tiers`);
+      }
+      byAge[age] = [];
+      continue;
+    }
+    if (entriesRaw.length !== 3) {
+      throw new GameDataError(`${ageWhere}: must define exactly Lv1, Lv2 and Lv3`);
+    }
+    let previousHealth = 0;
+    let previousPopulation = 0;
+    let previousWorkerCapacity = 0;
+    let previousRate = 0;
+    let previousBuffer = 0;
+    let previousCarry = 0;
+    let previousControlRadius = 0;
+    let previousConnectedRadius = 0;
+    let previousCommission = 1;
+    let previousDamage = 0;
+    let previousQueueCapacity = 0;
+    const entries: BuildingProgressionTier[] = entriesRaw.map((entryRaw, index) => {
+      const entryWhere = `${ageWhere}[${index}]`;
+      const entry = asObject(entryRaw, entryWhere);
+      const expectedLevel = index + 1;
+      const level = requireFiniteNumber(entry, "level", entryWhere);
+      if (level !== expectedLevel) {
+        throw new GameDataError(`${entryWhere}.level: expected ${expectedLevel}`);
+      }
+      const maxHealth = requireFiniteNumber(entry, "maxHealth", entryWhere);
+      if (maxHealth <= previousHealth) {
+        throw new GameDataError(`${entryWhere}.maxHealth: must exceed the previous tier`);
+      }
+      previousHealth = maxHealth;
+
+      const populationRaw = entry["populationCapacity"];
+      let populationCapacity: number | undefined;
+      if (populationRaw !== undefined) {
+        if (base.populationCapacity === undefined || !Number.isInteger(populationRaw) || typeof populationRaw !== "number"
+          || populationRaw <= previousPopulation) {
+          throw new GameDataError(`${entryWhere}.populationCapacity: requires housing and must increase by tier`);
+        }
+        populationCapacity = populationRaw;
+        previousPopulation = populationRaw;
+      }
+
+      const economyRaw = entry["economy"];
+      let economy: BuildingProgressionTier["economy"];
+      if (economyRaw !== undefined) {
+        if (!base.economy) throw new GameDataError(`${entryWhere}.economy: requires a base economy definition`);
+        const economyData = asObject(economyRaw, `${entryWhere}.economy`);
+        const workerCapacity = requireFiniteNumber(economyData, "workerCapacity", `${entryWhere}.economy`);
+        const perWorkerPerMinute = requireFiniteNumber(economyData, "perWorkerPerMinute", `${entryWhere}.economy`);
+        const localBufferCapacity = requireFiniteNumber(economyData, "localBufferCapacity", `${entryWhere}.economy`);
+        if (!Number.isInteger(workerCapacity) || workerCapacity < previousWorkerCapacity
+          || perWorkerPerMinute < previousRate || localBufferCapacity < previousBuffer
+          || (workerCapacity === previousWorkerCapacity
+            && perWorkerPerMinute === previousRate
+            && localBufferCapacity === previousBuffer)) {
+          throw new GameDataError(`${entryWhere}.economy: no value may shrink and at least one core value must increase by tier`);
+        }
+        const carryRaw = economyData["carryCapacity"];
+        let carryCapacity: number | undefined;
+        if (carryRaw !== undefined) {
+          if (typeof carryRaw !== "number" || !Number.isFinite(carryRaw) || carryRaw < previousCarry) {
+            throw new GameDataError(`${entryWhere}.economy.carryCapacity: may not shrink by tier`);
+          }
+          carryCapacity = carryRaw;
+          previousCarry = carryRaw;
+        }
+        previousWorkerCapacity = workerCapacity;
+        previousRate = perWorkerPerMinute;
+        previousBuffer = localBufferCapacity;
+        economy = { workerCapacity, perWorkerPerMinute, localBufferCapacity, ...(carryCapacity !== undefined ? { carryCapacity } : {}) };
+      }
+
+      const territoryRaw = entry["territory"];
+      let territory: BuildingProgressionTier["territory"];
+      if (territoryRaw !== undefined) {
+        if (!base.territory) throw new GameDataError(`${entryWhere}.territory: requires a base territory definition`);
+        const territoryData = asObject(territoryRaw, `${entryWhere}.territory`);
+        const controlRadius = requireFiniteNumber(territoryData, "controlRadius", `${entryWhere}.territory`);
+        const connectedControlRadius = requireFiniteNumber(territoryData, "connectedControlRadius", `${entryWhere}.territory`);
+        if (controlRadius <= previousControlRadius || connectedControlRadius <= previousConnectedRadius || connectedControlRadius < controlRadius) {
+          throw new GameDataError(`${entryWhere}.territory: both radii must increase by tier`);
+        }
+        previousControlRadius = controlRadius;
+        previousConnectedRadius = connectedControlRadius;
+        territory = { controlRadius, connectedControlRadius };
+      }
+
+      const tradeRaw = entry["tradeCommission"];
+      let tradeCommission: number | undefined;
+      if (tradeRaw !== undefined) {
+        if (!base.market || typeof tradeRaw !== "number" || !Number.isFinite(tradeRaw) || !(tradeRaw > 0) || tradeRaw >= previousCommission) {
+          throw new GameDataError(`${entryWhere}.tradeCommission: requires Market and must fall by tier`);
+        }
+        assertNoArbitrage(base.market.priceStep, base.market.indexMin, tradeRaw, `${entryWhere}.tradeCommission`);
+        tradeCommission = tradeRaw;
+        previousCommission = tradeRaw;
+      }
+
+      const defenseRaw = entry["defense"];
+      let defense: BuildingProgressionTier["defense"];
+      if (defenseRaw !== undefined) {
+        if (!base.defense) throw new GameDataError(`${entryWhere}.defense: requires a base defense definition`);
+        const attackDamage = requireFiniteNumber(asObject(defenseRaw, `${entryWhere}.defense`), "attackDamage", `${entryWhere}.defense`);
+        if (attackDamage <= previousDamage) throw new GameDataError(`${entryWhere}.defense.attackDamage: must increase by tier`);
+        defense = { attackDamage };
+        previousDamage = attackDamage;
+      }
+
+      const queueRaw = entry["queueCapacity"];
+      let queueCapacity: number | undefined;
+      if (queueRaw !== undefined) {
+        if (!Number.isInteger(queueRaw) || typeof queueRaw !== "number" || queueRaw <= previousQueueCapacity) {
+          throw new GameDataError(`${entryWhere}.queueCapacity: must be a positive integer that increases by tier`);
+        }
+        queueCapacity = queueRaw;
+        previousQueueCapacity = queueRaw;
+      }
+      return { level: expectedLevel as 1 | 2 | 3, maxHealth, ...(populationCapacity !== undefined ? { populationCapacity } : {}), ...(economy ? { economy } : {}), ...(territory ? { territory } : {}), ...(tradeCommission !== undefined ? { tradeCommission } : {}), ...(defense ? { defense } : {}), ...(queueCapacity !== undefined ? { queueCapacity } : {}) };
+    });
+    byAge[age] = entries;
+  }
+  const settlementLast = byAge.settlement[2];
+  const townFirst = byAge.town[0]!;
+  if (settlementLast === undefined) return byAge;
+  if (townFirst.maxHealth <= settlementLast.maxHealth) {
+    throw new GameDataError(`${where}.town[0].maxHealth: Town Lv1 must exceed Settlement Lv3`);
+  }
+  assertTownTierDoesNotRegress(where, "populationCapacity", townFirst.populationCapacity, settlementLast.populationCapacity);
+  assertTownTierDoesNotRegress(where, "economy.workerCapacity", townFirst.economy?.workerCapacity, settlementLast.economy?.workerCapacity);
+  assertTownTierDoesNotRegress(where, "economy.perWorkerPerMinute", townFirst.economy?.perWorkerPerMinute, settlementLast.economy?.perWorkerPerMinute);
+  assertTownTierDoesNotRegress(where, "economy.localBufferCapacity", townFirst.economy?.localBufferCapacity, settlementLast.economy?.localBufferCapacity);
+  assertTownTierDoesNotRegress(where, "economy.carryCapacity", townFirst.economy?.carryCapacity, settlementLast.economy?.carryCapacity);
+  assertTownTierDoesNotRegress(where, "territory.controlRadius", townFirst.territory?.controlRadius, settlementLast.territory?.controlRadius);
+  assertTownTierDoesNotRegress(where, "territory.connectedControlRadius", townFirst.territory?.connectedControlRadius, settlementLast.territory?.connectedControlRadius);
+  assertTownTierDoesNotRegress(where, "defense.attackDamage", townFirst.defense?.attackDamage, settlementLast.defense?.attackDamage);
+  assertTownTierDoesNotRegress(where, "queueCapacity", townFirst.queueCapacity, settlementLast.queueCapacity);
+  if (townFirst.tradeCommission !== undefined && settlementLast.tradeCommission !== undefined && townFirst.tradeCommission >= settlementLast.tradeCommission) {
+    throw new GameDataError(`${where}.town[0].tradeCommission: Town Lv1 must improve on Settlement Lv3`);
+  }
+  return byAge;
+}
+
+function assertTownTierDoesNotRegress(
+  where: string,
+  field: string,
+  townValue: number | undefined,
+  settlementValue: number | undefined,
+): void {
+  if (townValue !== undefined && settlementValue !== undefined && townValue < settlementValue) {
+    throw new GameDataError(`${where}.town[0].${field}: Town Lv1 may not regress below Settlement Lv3`);
+  }
 }
 
 /**
@@ -734,6 +960,10 @@ export function validateAgeBalance(value: unknown): AgeBalance {
     || new Set(requirements).size !== requirements.length) {
     throw new GameDataError(`${where}.town.requiredBuildingIds: must be a non-empty unique building-id array`);
   }
+  const requiredCommandCenterLevel = requireFiniteNumber(town, "requiredCommandCenterLevel", `${where}.town`);
+  if (!Number.isInteger(requiredCommandCenterLevel) || requiredCommandCenterLevel < 1 || requiredCommandCenterLevel > 3) {
+    throw new GameDataError(`${where}.town.requiredCommandCenterLevel: must be an integer in 1..3`);
+  }
   const commandCenterWhere = `${where}.town.commandCenter`;
   const commandCenter = asObject(town["commandCenter"], commandCenterWhere);
   const commandCenterMaxHealth = requireFiniteNumber(commandCenter, "maxHealth", commandCenterWhere);
@@ -750,6 +980,7 @@ export function validateAgeBalance(value: unknown): AgeBalance {
       cost,
       upgradeSeconds,
       requiredBuildingIds: [...requirements] as string[],
+      requiredCommandCenterLevel,
       commandCenter: {
         maxHealth: commandCenterMaxHealth,
         controlRadius: commandCenterControlRadius,

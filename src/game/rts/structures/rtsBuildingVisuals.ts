@@ -58,16 +58,18 @@ export class RtsBuildingVisuals {
     footprintWidth: number,
     footprintDepth: number,
     age: SettlementAge = "settlement",
+    level = 1,
   ): Group | null {
-    const path = buildingMeshPath(buildingId, age, 1);
+    const path = buildingMeshPath(buildingId, age, level);
     return path ? this.create(path, footprintWidth, footprintDepth) : null;
   }
 
   createConstructionVisual(
     structure: Pick<PlacedStructure, "stats">,
     age: SettlementAge = "settlement",
+    level = 1,
   ): Group | null {
-    const path = buildingMeshPath(structure.stats.id, age, 1);
+    const path = buildingMeshPath(structure.stats.id, age, level);
     return path ? this.create(path, structure.stats.footprint.width, structure.stats.footprint.depth) : null;
   }
 

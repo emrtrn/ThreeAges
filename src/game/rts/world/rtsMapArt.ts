@@ -131,3 +131,26 @@ function disposeModel(root: Object3D): void {
     for (const material of materials) material.dispose();
   });
 }
+
+/**
+ * The map-art subtrees §59 hides until their ground has been scouted.
+ *
+ * GDD 08 §39 names *resources* and *strategic detail* as what unknown ground
+ * must not reveal, and §40 allows terrain form to stay readable — so this
+ * returns the resource deposits and the central ridge, whole groups at a time,
+ * keyed off each group's own world position.
+ *
+ * Trees are deliberately excluded even though they are also world props. The
+ * forest system already owns `visible` on every tree object (it clears it as a
+ * tree is depleted and re-syncs each tick), so a second writer would fight it
+ * and the loser would flicker. Hiding the forest under fog needs the forest
+ * system to own the fog test too, which is its own change rather than this one.
+ */
+export function collectWorldProps(blockout: Group): Object3D[] {
+  const props: Object3D[] = [];
+  for (const name of ["rts-external-resource-art", "rts-central-ridge-art"]) {
+    const group = blockout.getObjectByName(name);
+    if (group) props.push(group);
+  }
+  return props;
+}

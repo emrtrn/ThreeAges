@@ -38,9 +38,10 @@ import { formatRtsAiDebug } from "./ai/aiDebugView";
 import { RtsCameraController } from "./camera/rtsCameraController";
 import { RtsInput } from "./input/rtsInput";
 import { RtsPointer } from "./input/rtsPointer";
-import { createRtsGround } from "./world/rtsGround";
+import { createRtsGround, RTS_WORLD_HALF_EXTENT } from "./world/rtsGround";
+import { RTS_PLACEMENT_GRID_SIZE } from "./structures/placementGrid";
 import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
-import { RtsMapArt } from "./world/rtsMapArt";
+import { RtsMapArt, collectWorldProps } from "./world/rtsMapArt";
 import { UnitSystem } from "./units/unitSystem";
 import { Unit } from "./units/unit";
 import { updateUnitMovement } from "./units/unitMovement";
@@ -57,7 +58,7 @@ import { SelectionSystem } from "./selection/selectionSystem";
 import { CommandMarkerSystem } from "./commands/commandMarker";
 import { CommandSystem } from "./commands/commandSystem";
 import { CommandCenterSystem } from "./structures/commandCenterSystem";
-import { COMMAND_CENTER_MAX_HEALTH } from "./structures/commandCenter";
+import { COMMAND_CENTER_MAX_HEALTH, CommandCenter } from "./structures/commandCenter";
 import { RtsBuildingVisuals } from "./structures/rtsBuildingVisuals";
 import { updateStructureDestruction } from "./structures/structureDestruction";
 import { RtsMatchState } from "./match/rtsMatchState";
@@ -103,7 +104,7 @@ import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, unitQueueCapacityForBuildingLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
-import { StructureUpgradeSystem } from "./structures/structureUpgradeSystem";
+import { StructureUpgradeSystem, type UpgradableStructure } from "./structures/structureUpgradeSystem";
 import { RoadGraph } from "./roads/roadGraph";
 import { RoadDebugView } from "./roads/roadDebugView";
 import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
@@ -118,6 +119,17 @@ import { TerritoryControlSystem } from "./territory/territoryControlSystem";
 import { StrategicPointSystem } from "./objectives/strategicPointSystem";
 import { StrategicPointView } from "./objectives/strategicPointView";
 import { RegionalVictorySystem } from "./objectives/regionalVictorySystem";
+import { VisionSystem, type VisionSource } from "./vision/visionSystem";
+import {
+  EnemyMemorySystem,
+  commandCenterMemoryId,
+  type ObservableStructure,
+} from "./vision/enemyMemorySystem";
+import { FogView } from "./vision/fogView";
+import { GhostStructureView } from "./vision/ghostStructureView";
+import { FogVisibilityBinder } from "./vision/fogVisibilityBinder";
+import { VisionSystemAiFilter } from "./ai/aiVisionFilter";
+import { formatVisionDebug } from "./vision/formatVisionDebug";
 import { RtsObjectiveTracker } from "./ui/rtsObjectiveTracker";
 import type { AiObjectiveWatch } from "./ai/armyManager";
 
@@ -159,6 +171,11 @@ export interface RtsAppOptions {
    * empty space on screen).
    */
   readonly regionalVictoryEnabled?: boolean;
+  /**
+   * `?flags=fogOfWar` (§59, Faz 11): unknown / explored / visible layers, for
+   * both kingdoms. Symmetric on purpose — see `ai/aiVisionFilter.ts`.
+   */
+  readonly fogOfWarEnabled?: boolean;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
   readonly unitBalance: UnitBalance;
   /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
@@ -236,6 +253,12 @@ export class RtsApp {
   private readonly strategicPoints: StrategicPointSystem | null;
   private readonly regionalVictory: RegionalVictorySystem | null;
   private readonly strategicPointView: StrategicPointView | null;
+  /** §59 fog of war; all null while the `fogOfWar` flag is off. */
+  private readonly vision: VisionSystem | null;
+  private readonly enemyMemory: EnemyMemorySystem | null;
+  private readonly fogView: FogView | null;
+  private readonly ghostStructures: GhostStructureView | null;
+  private readonly fogVisibility: FogVisibilityBinder | null;
   private readonly objectiveTracker: RtsObjectiveTracker | null;
   private readonly match = new RtsMatchState();
   /** §51: whether the simulation should be running; `match` owns who won. */
@@ -331,9 +354,40 @@ export class RtsApp {
       this.strategicPointView = null;
       this.objectiveTracker = null;
     }
+    // §59. Same construction rule as §58 above: the flag off means these five
+    // are null and nothing downstream ever asks them anything, so a disabled
+    // fog costs nothing at runtime (plan §13).
+    if (this.options.fogOfWarEnabled) {
+      this.vision = new VisionSystem(
+        () => this.collectVisionSources(),
+        { cellSize: RTS_PLACEMENT_GRID_SIZE, worldHalfExtent: RTS_WORLD_HALF_EXTENT },
+      );
+      this.enemyMemory = new EnemyMemorySystem(this.vision, () => this.collectObservableStructures());
+      this.fogView = new FogView(this.vision, PLAYER_OWNER);
+      this.ghostStructures = new GhostStructureView(this.enemyMemory, PLAYER_OWNER);
+      this.fogVisibility = new FogVisibilityBinder(
+        this.vision,
+        this.units,
+        this.structures,
+        PLAYER_OWNER,
+      );
+    } else {
+      this.vision = null;
+      this.enemyMemory = null;
+      this.fogView = null;
+      this.ghostStructures = null;
+      this.fogVisibility = null;
+    }
     this.structureUpgrades = new StructureUpgradeSystem(
       this.structures,
       this.kingdoms,
+      (owner) => this.ages.snapshot(owner).age,
+      // The centre levels on the same ladder as every other building; it is just
+      // not a placed structure, so the system has to be told where to find it.
+      (owner) => {
+        const center = this.centers.get(owner);
+        return center ? [center] : [];
+      },
     );
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
@@ -393,7 +447,7 @@ export class RtsApp {
       this.options.unitBalance,
       this.kingdoms,
       (structure) => this.structureUpgrades.isUpgrading(structure),
-      (structure) => unitQueueCapacityForBuildingLevel(structure.level),
+      (structure) => structure.queueCapacity ?? unitQueueCapacityForBuildingLevel(structure.level),
       // Plan §45: a Barracks whose ground has been taken stops training, the
       // same severance rule the economy's producers already live under.
       (structure) => this.territory.ownerAt(structure.x, structure.z) === structure.owner,
@@ -417,7 +471,7 @@ export class RtsApp {
       this.kingdoms,
       (owner) => this.ages.isUpgrading(owner),
       (owner) => this.centers.get(owner)?.workerTrainingSeconds ?? worker.trainingSeconds,
-      (owner) => workerQueueCapacityForCenterLevel(this.centers.get(owner)?.level ?? 1),
+      (owner) => this.workerQueueCapacity(owner),
     );
     this.structureConstruction = new StructureConstructionService(
       this.options.buildingBalance,
@@ -486,6 +540,11 @@ export class RtsApp {
       // a null provider and never spends a tick on objectives that do not exist.
       objectives: this.regionalVictory && this.strategicPoints
         ? () => this.aiObjectiveWatch()
+        : null,
+      // §59: same shape as `objectives`. Null while the flag is off, which is
+      // what keeps the AI's enemy reads byte-for-byte unchanged by default.
+      vision: this.vision && this.enemyMemory
+        ? new VisionSystemAiFilter(this.vision, this.enemyMemory, AI_OWNER)
         : null,
       anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
       baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
@@ -662,9 +721,10 @@ export class RtsApp {
       },
     });
     this.buildScene();
-    // A freshly built structure always enters at level 1; levelling is a
-    // per-instance action from its own panel, so completion only swaps the model.
+    // A completed type-wide research also applies to buildings that finish
+    // afterwards; the visual must be created at that inherited level.
     this.structures.setCompletedVisualHandler((structure) => {
+      this.structureUpgrades.applyCompletedUpgrade(structure);
       this.applyStructureVisual(structure, true);
     });
     void this.loadBuildingVisuals();
@@ -728,6 +788,12 @@ export class RtsApp {
     this.roadDebugView.dispose();
     this.territory.dispose();
     this.strategicPointView?.dispose();
+    // Reveal before disposing: the binder set `visible = false` on live scene
+    // objects, and tearing the fog down without undoing that would leave them
+    // permanently invisible to whatever renders next.
+    this.fogVisibility?.revealAll();
+    this.fogView?.dispose();
+    this.ghostStructures?.dispose();
     this.objectiveTracker?.dispose();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
@@ -744,7 +810,13 @@ export class RtsApp {
       await this.buildingVisuals.load();
       if (this.disposed) return;
       this.placement.setPreviewFactory((buildingId, width, depth) =>
-        this.buildingVisuals.createPreviewForBuilding(buildingId, width, depth, this.ageOf(PLAYER_OWNER)));
+        this.buildingVisuals.createPreviewForBuilding(
+          buildingId,
+          width,
+          depth,
+          this.ageOf(PLAYER_OWNER),
+          this.structureUpgrades.levelFor(PLAYER_OWNER, buildingId),
+        ));
       for (const center of this.centers.all()) this.buildingVisuals.applyToCenter(center, this.ageOf(center.owner));
       for (const structure of this.structures.all()) {
         if (structure.construction.complete) this.applyStructureVisual(structure);
@@ -786,6 +858,11 @@ export class RtsApp {
     this.scene.add(this.roadDebugView.root);
     this.scene.add(this.territory.root);
     if (this.strategicPointView) this.scene.add(this.strategicPointView.root);
+    // §59, after the ground overlays it has to cover and before the units it
+    // must not: fogged units are hidden outright by the visibility binder, not
+    // occluded by this plane.
+    if (this.fogView) this.scene.add(this.fogView.root);
+    if (this.ghostStructures) this.scene.add(this.ghostStructures.root);
     this.scene.add(this.units.root);
     this.scene.add(this.projectiles.root);
     this.scene.add(this.commandMarkers.root);
@@ -855,6 +932,16 @@ export class RtsApp {
     }
     if (this.debugOverlay) {
       this.debugOverlay.setElapsedSeconds(this.clock.seconds);
+      // §59. Recomputing the source list here costs one array build per rendered
+      // frame, which is why it only happens when the overlay is actually up.
+      if (this.vision && this.enemyMemory) {
+        this.debugOverlay.setVisionLines(formatVisionDebug(
+          this.vision,
+          this.enemyMemory,
+          this.collectVisionSources().length,
+          this.clock.seconds,
+        ));
+      }
       this.debugOverlay.setAiLines(
         formatRtsAiDebug(
           this.ai.snapshot(),
@@ -989,7 +1076,7 @@ export class RtsApp {
       if (event.type === "completed") {
         this.notifications.post({
           kind: "age-upgraded",
-          text: `${this.options.ageBalance.town.label} Çağı tamamlandı: tüm binalarınız yeni çağ modeline geçti ve seviye 1'e döndü.`,
+          text: `${this.options.ageBalance.town.label} Çağı tamamlandı: tüm binalarınız Kasaba Lv1 değerlerine yükseldi.`,
         });
       }
       this.buildPalette.setActionMessage(event.type === "completed"
@@ -1000,8 +1087,11 @@ export class RtsApp {
       // The world consequences of a level-up belong to whichever kingdom bought
       // it — the AI levels the same way, and a Level 2 outpost of its own has to
       // claim its wider radius exactly as the player's does.
-      if (event.type === "completed") this.applyStructureVisual(event.structure);
-      if (event.structure.stats.territory) this.territory.refresh();
+      if (event.type === "completed") {
+        for (const structure of event.structures) this.applyUpgradedVisual(structure);
+        this.placement.refreshPreview();
+      }
+      if (event.structures.some((structure) => structure.stats.territory)) this.territory.refresh();
       // Only the message is the player's; the AI has the debug panel instead.
       if (event.structure.owner !== PLAYER_OWNER) continue;
       this.buildPalette.setActionMessage(event.type === "completed"
@@ -1069,6 +1159,12 @@ export class RtsApp {
     });
     updateUnitDeaths(this.units, this.selection, dt);
     this.destroyRuinedStructures();
+    // §59, before the objectives below and before anything reads the AI: fog is
+    // the lens every other system's enemy reads pass through this tick, so it
+    // has to be current first. It runs after the deaths/demolitions above for
+    // the same reason §58 does — a dead scout stops revealing on the tick it
+    // dies, not the tick after.
+    this.updateFogOfWar();
     // §58, after the deaths and demolitions this tick: a point whose holding
     // outpost just fell has already stopped being held by the time it is scored.
     this.updateRegionalVictory(dt);
@@ -1080,6 +1176,95 @@ export class RtsApp {
       this.log.info(`Match ended: ${this.match.outcome} (${this.match.reason})`);
       this.showMatchResult();
     }
+  }
+
+  /**
+   * §59: refresh the vision grid, reconcile each kingdom's memory, then push the
+   * result to the three view layers.
+   *
+   * Order is load-bearing. Memory asks vision what is visible, the ghost view
+   * asks memory what is remembered, and the visibility binder asks vision what
+   * to hide — running these in any other order shows the player one frame of
+   * last tick's world.
+   */
+  private updateFogOfWar(): void {
+    const vision = this.vision;
+    if (!vision) return;
+    vision.refresh();
+    this.enemyMemory?.refresh(this.clock.seconds);
+    this.fogView?.refresh();
+    this.ghostStructures?.refresh(this.clock.seconds);
+    this.fogVisibility?.refresh();
+  }
+
+  /**
+   * §59/GDD 08 §41: every unit and structure reveals for its own kingdom.
+   *
+   * Construction sites count from placement rather than completion — an
+   * unfinished building the enemy could walk up to unseen would be a blind spot
+   * inside one's own base — which is why this reads `structures.all()` without
+   * a `construction.complete` gate.
+   */
+  private collectVisionSources(): readonly VisionSource[] {
+    const sources: VisionSource[] = [];
+    for (const unit of this.units.all()) {
+      if (unit.health.depleted) continue;
+      sources.push({
+        owner: unit.owner,
+        x: unit.position.x,
+        z: unit.position.z,
+        radius: unit.stats.visionRadius,
+      });
+    }
+    for (const structure of this.structures.all()) {
+      if (structure.health.depleted) continue;
+      sources.push({
+        owner: structure.owner,
+        x: structure.x,
+        z: structure.z,
+        radius: structure.stats.visionRadius,
+      });
+    }
+    for (const center of this.centers.all()) {
+      if (center.health.depleted) continue;
+      sources.push({
+        owner: center.owner,
+        x: center.position.x,
+        z: center.position.z,
+        radius: this.options.buildingBalance["command_center"]?.visionRadius ?? 0,
+      });
+    }
+    return sources;
+  }
+
+  /** The structure feed §40's memory reconciles against, centres included. */
+  private collectObservableStructures(): readonly ObservableStructure[] {
+    const observable: ObservableStructure[] = [];
+    for (const structure of this.structures.all()) {
+      if (structure.health.depleted) continue;
+      observable.push({
+        id: structure.id,
+        owner: structure.owner,
+        buildingId: structure.stats.id,
+        x: structure.x,
+        z: structure.z,
+        level: structure.level,
+        healthRatio: structure.health.ratio,
+      });
+    }
+    for (const center of this.centers.all()) {
+      if (center.health.depleted) continue;
+      observable.push({
+        id: commandCenterMemoryId(center.owner),
+        owner: center.owner,
+        buildingId: "command_center",
+        x: center.position.x,
+        z: center.position.z,
+        level: 1,
+        healthRatio: center.health.ratio,
+      });
+    }
+    return observable;
   }
 
   /**
@@ -1147,22 +1332,36 @@ export class RtsApp {
   private spawnCenters(): void {
     // Faz 5.1: every structure's durability is data now, the centre included, so
     // there is one place to tune a match's length rather than two.
-    const maxHealth = this.options.buildingBalance["command_center"]?.maxHealth
-      ?? COMMAND_CENTER_MAX_HEALTH;
+    const stats = this.options.buildingBalance["command_center"] ?? null;
+    const maxHealth = stats?.maxHealth ?? COMMAND_CENTER_MAX_HEALTH;
     const playerCenter = this.centers.spawn(
       "player",
       PLAYER_CENTER_POSITION.x,
       PLAYER_CENTER_POSITION.z,
       maxHealth,
+      stats,
     );
     const enemyCenter = this.centers.spawn(
       "enemy",
       ENEMY_CENTER_POSITION.x,
       ENEMY_CENTER_POSITION.z,
       maxHealth,
+      stats,
     );
+    // Settlement Lv1 tier values (worker queue capacity today) before any research.
+    for (const center of this.centers.all()) this.structureUpgrades.applyCompletedUpgrade(center);
     this.buildingVisuals.applyToCenter(playerCenter, this.ageOf(playerCenter.owner));
     this.buildingVisuals.applyToCenter(enemyCenter, this.ageOf(enemyCenter.owner));
+  }
+
+  /**
+   * Worker queue size for a kingdom's centre. The active age × level tier owns
+   * it; the hard-coded ladder remains only for a centre spawned without balance
+   * data, which has no tiers to read.
+   */
+  private workerQueueCapacity(owner: UnitOwner): number {
+    const center = this.centers.get(owner);
+    return center?.queueCapacity ?? workerQueueCapacityForCenterLevel(center?.level ?? 1);
   }
 
   /** The art family a kingdom's buildings currently belong to (Settlement/Town). */
@@ -1172,9 +1371,9 @@ export class RtsApp {
 
   /**
    * Age transition consequence (KR-03): reset every owned building to Level 1
-   * (stats included) and rebuild its model in the new age family. Only completed
-   * buildings get a finished model; sites still under construction keep their
-   * translucent construction visual, which is now the new age's Level 1 mesh.
+   * and applies the new age's Lv1 stats before rebuilding its model. Only completed
+   * buildings get a finished model; sites keep the translucent model at their
+   * type's currently researched level (which is Level 1 after this reset).
    */
   private rebuildForAge(owner: UnitOwner): void {
     this.structureUpgrades.resetOwner(owner);
@@ -1182,6 +1381,19 @@ export class RtsApp {
       if (structure.construction.complete) this.applyStructureVisual(structure);
       else this.applyConstructionVisual(structure);
     }
+  }
+
+  /**
+   * Re-skin one levelled building. The centre and a placed structure hold their
+   * model in different places, so the level-up sweep — which now covers both —
+   * routes through here rather than assuming a {@link PlacedStructure}.
+   */
+  private applyUpgradedVisual(structure: UpgradableStructure): void {
+    if (structure instanceof CommandCenter) {
+      this.buildingVisuals.applyToCenter(structure, this.ageOf(structure.owner));
+      return;
+    }
+    this.applyStructureVisual(structure as PlacedStructure);
   }
 
   private applyStructureVisual(structure: PlacedStructure, animate = false): void {
@@ -1192,13 +1404,22 @@ export class RtsApp {
   }
 
   private applyConstructionVisual(structure: PlacedStructure): void {
-    const visual = this.buildingVisuals.createConstructionVisual(structure, this.ageOf(structure.owner));
+    const visual = this.buildingVisuals.createConstructionVisual(
+      structure,
+      this.ageOf(structure.owner),
+      this.structureUpgrades.levelFor(structure.owner, structure.stats.id),
+    );
     if (visual) this.structures.setConstructionVisual(structure, visual);
   }
 
   private async loadMapArt(blockout: import("three").Group): Promise<void> {
     try {
       await this.mapArt.apply(blockout, RTS_BLOCKOUT_MAP, this.forests);
+      // §59/GDD 08 §39: resource deposits, ridges and trees must not be readable
+      // in ground the player has never scouted. Registered here rather than at
+      // construction because the art loads asynchronously — at construction time
+      // there is nothing to hide yet.
+      this.fogVisibility?.trackWorldProps(collectWorldProps(blockout));
     } catch (error) {
       this.log.warn("RTS map art could not be loaded", error);
     }
@@ -1300,6 +1521,12 @@ export class RtsApp {
     // fresh game part-way to a regional loss the player never played.
     this.strategicPoints?.reset();
     this.regionalVictory?.reset();
+    // §59: likewise the explored latch and every remembered building. A restart
+    // that kept the old map revealed would hand the player a scouting report
+    // for a match they have not played.
+    this.vision?.reset();
+    this.enemyMemory?.reset();
+    this.fogVisibility?.revealAll();
     // "Yeniden Başlat" is reachable from the pause menu as well as the result
     // screen, so the flow has to be told too — otherwise restarting a paused
     // match would rebuild the world and leave it frozen behind a hidden menu.
@@ -1455,8 +1682,9 @@ export class RtsApp {
           workerStats: this.options.unitBalance["worker_placeholder"]!,
           requiredBuildingLabels: this.buildingLabels,
         },
-        // The centre's own T2 rides on the age, not on a per-type research.
-        upgrade: null,
+        // The centre's radius and worker speed still ride on the age, but its
+        // in-age Lv1→3 ladder is the same research every other building runs.
+        upgrade: this.structureUpgradeView(center),
       },
     };
   }
@@ -1466,10 +1694,10 @@ export class RtsApp {
    * level buys (gain line), and how far an in-flight upgrade has run (progress
    * bar). Null when the data gives the building no `levels` at all.
    */
-  private structureUpgradeView(structure: PlacedStructure): StructureUpgradeView | null {
+  private structureUpgradeView(structure: UpgradableStructure): StructureUpgradeView | null {
     if (!structure.stats.levels) return null;
     const snapshot = this.structureUpgrades.snapshot(structure);
-    const next = structure.stats.levels.find((entry) => entry.level === structure.level + 1);
+    const next = structure.stats.levels.find((entry) => entry.level === snapshot.level + 1);
     const gain: UpgradeGain | null = next
       ? {
           maxHealth: next.maxHealth,
@@ -1484,7 +1712,14 @@ export class RtsApp {
     const progress = snapshot.upgrading && next && next.durationSeconds > 0
       ? Math.min(1, Math.max(0, (next.durationSeconds - snapshot.remainingSeconds) / next.durationSeconds))
       : 0;
-    return { snapshot, gain, progress };
+    return {
+      snapshot,
+      gain,
+      progress,
+      lockedReason: this.ages.isUpgrading(structure.owner)
+        ? "Kasaba Çağına geçiliyor; çağ tamamlanana kadar yapı yükseltmeleri kapalı."
+        : null,
+    };
   }
 
   /**
@@ -1510,9 +1745,9 @@ export class RtsApp {
       return;
     }
     if (id === UPGRADE_ACTION) {
-      // Levelling is per-instance (KR-01), so the button acts on exactly the
-      // building the player has selected — not every one of its type.
-      const selected = this.selection.selectedStructure();
+      // The selected building identifies a type-wide research; all completed
+      // structures of that type receive the level together.
+      const selected = this.selection.selectedStructure() ?? this.selection.selectedCenter();
       if (selected) this.startStructureUpgrade(selected);
       return;
     }
@@ -1852,7 +2087,7 @@ export class RtsApp {
   private queueWorker(): void {
     const result = this.workerProduction.queueWorker(PLAYER_OWNER);
     const queuedCount = this.workerProduction.queuedCount(PLAYER_OWNER);
-    const queueCapacity = workerQueueCapacityForCenterLevel(this.centers.get(PLAYER_OWNER)?.level ?? 1);
+    const queueCapacity = this.workerQueueCapacity(PLAYER_OWNER);
     const message: Record<typeof result, string> = {
       queued: `İşçi üretim kuyruğa alındı (${queuedCount}/${queueCapacity}).`,
       "queue-full": `İşçi üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
@@ -1873,6 +2108,8 @@ export class RtsApp {
       "already-town": "Zaten Kasaba Çağındasınız.",
       "already-upgrading": `Kasaba Çağı yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`,
       "no-command-center": "Kasaba Çağı için Merkez gerekli.",
+      "command-center-level":
+        `Kasaba Çağı için Merkez Lv${snapshot.requiredCenterLevel} gerekir (şu an Lv${snapshot.centerLevel}).`,
       "missing-requirements": `Kasaba Çağı için eksik yapılar: ${snapshot.missingBuildingIds.join(", ")}.`,
       "insufficient-resources": "Kasaba Çağı için kaynak yetersiz.",
     };
@@ -1881,13 +2118,16 @@ export class RtsApp {
   }
 
   /**
-   * Start levelling one selected building to its next in-age level (plan KR-01).
+   * Start the selected building type's next in-age level research.
    *
-   * The per-building flavour that mattered — a Barracks pausing its training, an
-   * Outpost growing its area once done — stays, keyed by id. The target level is
-   * the instance's own, so the message names the level it is climbing to.
+   * The selected instance is only the command surface: House/Depot/Barracks
+   * research applies its completed level to every completed matching structure.
    */
-  private startStructureUpgrade(structure: PlacedStructure): void {
+  private startStructureUpgrade(structure: UpgradableStructure): void {
+    if (this.ages.isUpgrading(structure.owner)) {
+      this.buildPalette.setActionMessage("Kasaba Çağına geçiliyor; çağ tamamlanana kadar yapı yükseltmeleri kapalı.");
+      return;
+    }
     const label = structure.stats.label;
     const nextLevel = structure.level + 1;
     const result = this.structureUpgrades.start(structure);
@@ -1897,7 +2137,7 @@ export class RtsApp {
       outpost: " Kontrol alanı tamamlanınca büyür.",
     };
     const message: Record<typeof result, string> = {
-      started: `${label} Lv${nextLevel} yükseltmesi başladı.${startedNote[structure.stats.id] ?? ""}`,
+      started: `Tüm ${label} yapıları için Lv${nextLevel} yükseltmesi başladı.${startedNote[structure.stats.id] ?? ""}`,
       "no-eligible-structure": `Yükseltilecek ${label} yok.`,
       "at-max-level": `${label} zaten en yüksek seviyede.`,
       "under-construction": `${label} önce inşaatını tamamlamalı.`,

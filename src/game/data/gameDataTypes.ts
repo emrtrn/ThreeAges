@@ -118,6 +118,13 @@ export interface UnitBalanceStats {
    * it gives up and returns (GDD 06 §39). Explicit orders ignore this leash.
    */
   readonly chaseRange: number;
+  /**
+   * How far this unit reveals fog for its kingdom (GDD 08 §41/§42, plan §59).
+   * Required rather than optional: a unit with no vision would be a scout that
+   * reveals nothing, and the validator can only enforce "sees at least as far as
+   * it shoots" when every unit states a number.
+   */
+  readonly visionRadius: number;
   readonly damageMultipliers: UnitDamageMultipliers;
   /** Seconds a completed production building needs to train this unit. */
   trainingSeconds: number;
@@ -155,6 +162,14 @@ export interface BuildingBalanceStats {
    * exists to prevent.
    */
   readonly maxHealth: number;
+  /**
+   * How far this structure reveals fog for its kingdom (GDD 08 §41/§42, plan
+   * §59). Applies from the moment the foundation is placed, not on completion:
+   * a construction site the enemy can walk up to unseen would be a blind spot
+   * inside one's own base. §42 caps the Outpost here — it is meant to be the
+   * wide one without opening most of the map by itself.
+   */
+  readonly visionRadius: number;
   /** Capacity supplied while this completed structure is standing. */
   readonly populationCapacity?: number;
   /** Present only on structures which turn assigned workers into a resource. */
@@ -171,6 +186,16 @@ export interface BuildingBalanceStats {
    * single-level. See `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`.
    */
   readonly levels?: readonly BuildingLevelBalance[];
+  /**
+   * Complete age × level balance matrix.  Unlike the legacy {@link levels}
+   * ladder, every entry is an absolute value for one of the six playable
+   * tiers (Settlement 1–3, Town 1–3).
+   *
+   * The matrix is introduced ahead of its runtime migration: until every
+   * consumer resolves an active tier, {@link levels} remains authoritative
+   * for the live upgrade flow.
+   */
+  readonly progression?: BuildingProgressionBalance;
   /**
    * Legacy single-step Town upgrade, derived from `levels` (the level-2 entry)
    * by the loader so pre-per-level systems keep reading one shape. Removed once
@@ -204,6 +229,28 @@ export interface BuildingLevelBalance {
    * trip lose money, so shrinking it is exactly how a market starts minting gold.
    */
   readonly tradeCommission?: number;
+}
+
+/** Full absolute balance matrix for the two currently playable settlement ages. */
+/** An empty age array means the building is not available in that age. */
+export type BuildingProgressionBalance = Readonly<Record<SettlementAge, readonly BuildingProgressionTier[]>>;
+
+/**
+ * One absolute building tier in {@link BuildingProgressionBalance}.
+ * Lv1 has no research cost; Lv2/Lv3 research prices remain in the legacy
+ * ladder until the simulation migration consumes this matrix directly.
+ */
+export interface BuildingProgressionTier {
+  readonly level: 1 | 2 | 3;
+  readonly maxHealth: number;
+  readonly populationCapacity?: number;
+  readonly economy?: Pick<EconomyProductionBalance,
+    "workerCapacity" | "perWorkerPerMinute" | "localBufferCapacity" | "carryCapacity">;
+  readonly territory?: Pick<TerritoryBuildingBalance, "controlRadius" | "connectedControlRadius">;
+  readonly tradeCommission?: number;
+  readonly defense?: Pick<BuildingDefenseBalance, "attackDamage">;
+  /** Queue capacity supplied by military production structures at this tier. */
+  readonly queueCapacity?: number;
 }
 
 export interface BuildingUpgradeBalance {
@@ -321,6 +368,12 @@ export interface TownAgeBalance {
   readonly upgradeSeconds: number;
   /** Completed structures that prove the economy and defence are established. */
   readonly requiredBuildingIds: readonly string[];
+  /**
+   * In-age command-centre level the kingdom must have researched before the age
+   * may start. The buildings list proves breadth; this proves the kingdom has
+   * actually invested in its capital rather than throwing up one of everything.
+   */
+  readonly requiredCommandCenterLevel: number;
   /** The command centre's concrete T2 gains, applied when the age completes. */
   readonly commandCenter: {
     readonly maxHealth: number;

@@ -22,6 +22,7 @@ import type { AgeSystem } from "../progression/ageSystem";
 import type { EconomyProductionSystem } from "../economy/economyProductionSystem";
 import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
 import type { AiArmyMission, AiExpansionStep, AiIntent, AiPlan } from "./aiTypes";
+import type { AiVisionFilter } from "./aiVisionFilter";
 
 /**
  * §19 ResourceIncome: the four Faz 6 resources. Read as a fixed list rather than
@@ -118,6 +119,12 @@ export interface AiBlackboardSources {
   readonly townRequiredBuildingIds: readonly string[];
   /** True while a worker is already building or gathering (§19 IdleWorkerCount). */
   readonly isWorkerBusy: (worker: Unit) => boolean;
+  /**
+   * §59: when present, every enemy read below is restricted to what this
+   * kingdom can currently see. Absent (the `fogOfWar` flag off) keeps the
+   * original omniscient reads, so the flag costs nothing when disabled.
+   */
+  readonly vision?: AiVisionFilter | null;
 }
 
 /** Recomputes the blackboard from live world state; holds no state of its own. */
@@ -151,8 +158,18 @@ export class AiBlackboardReader {
     const ownArmy = units.armyOf(owner);
     const ownArmyPower = power(ownArmy);
     const center = centers.get(owner);
+    // §59: the one gate every enemy-unit read below passes through. Without a
+    // filter this is the identity function and the AI reads the field as before.
+    const vision = this.sources.vision;
+    const seenEnemyArmy = vision
+      ? units.armyOf(opponent).filter((unit) => vision.canSee(unit.position.x, unit.position.z))
+      : units.armyOf(opponent);
+    // Threat is measured inside AI_BASE_THREAT_RADIUS (24) while the centre
+    // itself reveals 26, so in practice a raid on the base is always visible —
+    // filtering here is correct rather than a nerf, and base defence does not
+    // change behaviour when the flag comes on.
     const baseThreat = center
-      ? power(units.armyOf(opponent).filter((unit) =>
+      ? power(seenEnemyArmy.filter((unit) =>
         Math.hypot(unit.position.x - center.position.x, unit.position.z - center.position.z)
           <= AI_BASE_THREAT_RADIUS))
       : 0;
@@ -202,10 +219,16 @@ export class AiBlackboardReader {
       armyComposition: composition(ownArmy),
       armyPopulation: ownArmy.reduce((total, unit) => total + unit.stats.populationCost, 0),
       ownArmyPower,
-      knownEnemyArmyPower: power(units.armyOf(opponent)),
+      // The field name always said "known"; under fog it finally is.
+      knownEnemyArmyPower: power(seenEnemyArmy),
       baseThreat,
       ownCenterHealthRatio: center ? center.health.ratio : 0,
-      enemyCenterExists: centers.get(opponent) !== null,
+      // §59: "the enemy still has a centre" becomes a belief rather than a fact.
+      // A razed centre the AI has not looked at keeps reading as standing, which
+      // is the correct consequence of remembering instead of knowing.
+      enemyCenterExists: vision
+        ? vision.knownEnemyStructures().some((known) => known.buildingId === "command_center")
+        : centers.get(opponent) !== null,
       currentIntent: context.currentIntent,
       currentPlan: context.currentPlan,
       planRunningSeconds: context.currentPlan ? Math.max(0, context.now - context.currentPlan.startedAt) : 0,

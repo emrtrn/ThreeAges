@@ -14,6 +14,7 @@
  * following a separate age script.
  */
 import type { AgeSystem, AgeUpgradeResult } from "../progression/ageSystem";
+import type { StructureUpgradeSystem } from "../structures/structureUpgradeSystem";
 import type { UnitOwner } from "../units/unit";
 import type { AiBlackboard } from "./aiBlackboard";
 import type { AiDecisionLog } from "./aiDecisionLog";
@@ -33,6 +34,13 @@ export class AiAgeManager {
     private readonly owner: UnitOwner,
     private readonly ages: AgeSystem,
     private readonly log: AiDecisionLog,
+    /**
+     * The centre's level research. Unlike the age's building list, this is *not*
+     * something another executor produces as a side effect of playing well — no
+     * other manager ever levels the centre — so the age executor has to buy the
+     * step itself or the AI could never leave the Settlement age.
+     */
+    private readonly upgrades: StructureUpgradeSystem,
   ) {}
 
   /** Try to advance the age by one step. Called while the intent is AgeUp. */
@@ -54,6 +62,25 @@ export class AiAgeManager {
   }
 
   /**
+   * Buy the next centre level the age is waiting on, through the same research
+   * the player's panel button drives (§4). Always a wait, never a failure: a
+   * refused start means the stockpile is short or a level is already running,
+   * and both resolve on a later tick without the director leaving the plan.
+   */
+  private researchCenterLevel(bb: AiBlackboard): AiAgeOutcome {
+    const result = this.upgrades.startForType(this.owner, "command_center");
+    if (result === "started") {
+      this.log.record({
+        at: bb.now,
+        kind: "intent-selected",
+        intent: "ageUp",
+        reason: "kasaba için merkez seviyesi yükseltiliyor",
+      });
+    }
+    return { kind: "waiting", reason: "insufficient-resources" };
+  }
+
+  /**
    * §43: name the reason rather than retrying blindly. Only a genuinely
    * unrecoverable state fails the plan — a missing requirement or an empty
    * stockpile is a wait, because the economy executor is what fixes both and it
@@ -63,6 +90,7 @@ export class AiAgeManager {
     switch (result) {
       case "already-town": return { kind: "done" };
       case "already-upgrading": return { kind: "upgrading" };
+      case "command-center-level": return this.researchCenterLevel(bb);
       case "missing-requirements": return { kind: "waiting", reason: "required-node-missing" };
       case "insufficient-resources": return { kind: "waiting", reason: "insufficient-resources" };
       case "no-command-center":

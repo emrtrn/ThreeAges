@@ -93,7 +93,7 @@ import { MarketTradeSystem } from "../src/game/rts/economy/marketTradeSystem";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
-import { AgeSystem, townUnlocksAvailable } from "../src/game/rts/progression/ageSystem";
+import { AgeSystem, centerLevelReadyForTown, townUnlocksAvailable } from "../src/game/rts/progression/ageSystem";
 import {
   DepotLogisticsSystem,
   roadCellTouchingFootprint,
@@ -170,6 +170,12 @@ import {
   DEFAULT_REGIONAL_VICTORY_SETTINGS,
   RegionalVictorySystem,
 } from "../src/game/rts/objectives/regionalVictorySystem";
+import { VisionSystem, type VisionSource } from "../src/game/rts/vision/visionSystem";
+import {
+  EnemyMemorySystem,
+  type ObservableStructure,
+} from "../src/game/rts/vision/enemyMemorySystem";
+import { VisionSystemAiFilter } from "../src/game/rts/ai/aiVisionFilter";
 import type { RtsStrategicPoint } from "../src/game/rts/world/rtsMapBlockout";
 import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
@@ -1120,6 +1126,7 @@ const RTS_TEST_UNIT_STATS = {
   attackRange: 1.2,
   acquisitionRange: 9,
   chaseRange: 14,
+  visionRadius: 11,
   damageMultipliers: { light: 1, heavy: 1.2, structure: 0.35 },
   trainingSeconds: 0.25,
   productionBuildingId: "barracks",
@@ -28617,6 +28624,72 @@ check("Faz 0 building mesh paths resolve by age family and in-age level", () => 
   assert.equal(hasBuildingArt("nonexistent"), false);
 });
 
+check("KR-03: the command centre levels on the same in-age ladder as every other building", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const stats = buildings["command_center"] ?? assert.fail("command_center balance missing");
+  // The regression this test exists for: the centre used to carry a hand-written
+  // level (1, then a flat 2 on the age change), so it never asked the art pack
+  // for TownCenter_*_Level2/3 even though the pack ships them.
+  assert.deepEqual(stats.levels?.map((step) => step.level), [2, 3]);
+  assert.deepEqual(stats.progression?.settlement.map((tier) => tier.level), [1, 2, 3]);
+
+  const structures = new PlacedStructureSystem();
+  const centers = new CommandCenterSystem();
+  const units = new UnitSystem();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, {}, 20);
+  let age: SettlementAge = "settlement";
+  const upgrades = new StructureUpgradeSystem(
+    structures,
+    kingdoms,
+    () => age,
+    (owner) => {
+      const found = centers.get(owner);
+      return found ? [found] : [];
+    },
+  );
+  const center = centers.spawn("player", 0, 0, stats.maxHealth, stats);
+  upgrades.applyCompletedUpgrade(center);
+  assert.equal(center.level, 1);
+  assert.equal(center.queueCapacity, 5, "the Settlement Lv1 tier supplies the worker queue size");
+  assert.equal(buildingMeshPath("command_center", age, center.level),
+    `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level1.gltf`);
+
+  kingdoms.get("player").wallet.credit("food", 150);
+  kingdoms.get("player").wallet.credit("wood", 150);
+  assert.equal(upgrades.start(center), "started");
+  assert.deepEqual(upgrades.update(45).map((event) => event.level), [2]);
+  assert.equal(center.level, 2);
+  assert.equal(center.health.max, 400);
+  assert.equal(center.queueCapacity, 7);
+  assert.equal(buildingMeshPath("command_center", age, center.level),
+    `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level2.gltf`, "Lv2 research reaches the Lv2 model");
+
+  kingdoms.get("player").wallet.credit("food", 250);
+  kingdoms.get("player").wallet.credit("wood", 250);
+  kingdoms.get("player").wallet.credit("gold", 60);
+  assert.equal(upgrades.start(center), "started");
+  assert.deepEqual(upgrades.update(60).map((event) => event.level), [3]);
+  assert.equal(center.level, 3);
+  assert.equal(center.queueCapacity, 9);
+  assert.equal(upgrades.start(center), "at-max-level");
+  assert.equal(buildingMeshPath("command_center", age, center.level),
+    `${STATIC_MESH_ROOT}/TownCenter_FirstAge_Level3.gltf`);
+
+  // An age is a fresh ladder, not a fourth level: the centre re-enters at Lv1
+  // on the Town tier and climbs again, exactly like a House or a Barracks.
+  age = "town";
+  center.applyTownUpgrade({ maxHealth: 450, controlRadius: 32, workerTrainingSeconds: 9 });
+  upgrades.resetOwner("player");
+  assert.equal(center.level, 1);
+  assert.equal(center.health.max, 650, "the Town Lv1 tier owns the centre's health, not the age entry");
+  assert.equal(center.controlRadius, 32, "a tier with no territory block may not erase the age's radius");
+  assert.equal(center.queueCapacity, 12);
+  assert.equal(buildingMeshPath("command_center", age, center.level),
+    `${STATIC_MESH_ROOT}/TownCenter_SecondAge_Level1.gltf`);
+});
+
 check("Faz M1 the Market is buildable and every balance building has art wired", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -28668,7 +28741,7 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   const units = new UnitSystem();
   const structures = new PlacedStructureSystem();
   const centers = new CommandCenterSystem();
-  centers.spawn("player", 0, 0);
+  const center = centers.spawn("player", 0, 0);
   const navigation = new RtsNavigation();
   const kingdoms = new KingdomRegistry(
     ["player"], units, structures,
@@ -28676,6 +28749,14 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   );
   const ageSystem = new AgeSystem(["player"], ages, centers, structures, kingdoms);
   assert.equal(townUnlocksAvailable(ageSystem.snapshot("player")), false, "Settlement does not expose Town structure upgrades");
+  // The centre's own level is the first gate, ahead of the town-wide building
+  // list: a Lv1 centre is refused before it is ever told what it has not built.
+  assert.equal(ages.town.requiredCommandCenterLevel, 3);
+  assert.equal(ageSystem.startTownUpgrade("player"), "command-center-level");
+  assert.equal(centerLevelReadyForTown(ageSystem.snapshot("player")), false,
+    "the panel hides the age button while the centre is under-levelled");
+  center.level = ages.town.requiredCommandCenterLevel;
+  assert.equal(centerLevelReadyForTown(ageSystem.snapshot("player")), true);
   assert.equal(ageSystem.startTownUpgrade("player"), "missing-requirements");
   assert.equal(kingdoms.get("player").wallet.amount("food"), 650, "failed prerequisites do not spend");
 
@@ -28703,10 +28784,15 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.deepEqual(ageSystem.update(ages.town.upgradeSeconds), [{ owner: "player", type: "completed" }]);
   assert.deepEqual(ageSystem.snapshot("player"), {
     owner: "player", age: "town", upgrading: false, remainingSeconds: 0, missingBuildingIds: [],
+    requiredCenterLevel: 3, centerLevel: 3,
   });
   assert.equal(townUnlocksAvailable(ageSystem.snapshot("player")), true, "Town completion exposes the T2 structure upgrades");
   const townCenter = centers.get("player") ?? assert.fail("player center missing after Town upgrade");
-  assert.equal(townCenter.level, 2);
+  // An age is not a level. The transition itself no longer writes `level` at
+  // all — it stays at the 3 that opened the age here, and the KR-03 reset back
+  // to Lv1 is `StructureUpgradeSystem.resetOwner`'s job, covered by its own
+  // check ("the command centre levels on the same in-age ladder ...").
+  assert.equal(townCenter.level, 3);
   assert.equal(townCenter.health.max, 450);
   assert.equal(townCenter.controlRadius, 32);
   assert.equal(townCenter.workerTrainingSeconds, 9);
@@ -28730,7 +28816,8 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   kingdoms.get("player").wallet.credit("food", 60);
   kingdoms.get("player").wallet.credit("wood", 160);
   kingdoms.get("player").wallet.credit("stone", 80);
-  // Instance-based (KR-01): no Town gate, and each building levels on its own.
+  // Type-wide: no Town gate, and every completed matching building receives a
+  // researched level together.
   const upgrades = new StructureUpgradeSystem(structures, kingdoms);
   const barracksProduction = new BarracksProductionSystem(
     units, structures, navigation, RTS_TEST_UNIT_BALANCE, kingdoms,
@@ -28774,30 +28861,36 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
     nextCost: { wood: 70, stone: 40 }, completed: false,
   });
   assert.deepEqual(upgrades.update(34.9), []);
-  assert.deepEqual(upgrades.update(0.2).map((event) => event.type), ["completed"],
-    "levelling one House leaves its neighbour untouched");
+  const houseLevel2Events = upgrades.update(0.2);
+  assert.deepEqual(houseLevel2Events.map((event) => event.type), ["completed"]);
+  assert.deepEqual(houseLevel2Events[0]?.structures, [house, secondHouse],
+    "a House research promotes every completed House of the owner");
   assert.equal(house.level, 2);
-  assert.equal(secondHouse.level, 1, "the second House is a separate instance still at level 1");
+  assert.equal(secondHouse.level, 2, "the second House inherits the same type level");
   assert.equal(house.health.max, 450);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 33, "only the levelled House rises from five to eight");
-  // Its neighbour levels independently, on its own cost.
-  kingdoms.get("player").wallet.credit("wood", 70);
-  kingdoms.get("player").wallet.credit("stone", 40);
-  assert.equal(upgrades.start(secondHouse), "started");
-  assert.deepEqual(upgrades.update(35).map((event) => event.type), ["completed"]);
-  assert.equal(secondHouse.level, 2);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 36, "both Level 2 Houses now supply eight");
-  // Level 2 -> 3 raises the same House again, capacity and all.
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 36, "both Level 2 Houses supply eight");
+  // The next research raises the whole type again, once, at the Level 3 cost.
   kingdoms.get("player").wallet.credit("wood", 110);
   kingdoms.get("player").wallet.credit("stone", 80);
-  assert.equal(upgrades.start(house), "started");
-  assert.deepEqual(upgrades.update(45).map((event) => event.level), [3]);
+  assert.equal(upgrades.start(secondHouse), "started");
+  const houseLevel3Events = upgrades.update(45);
+  assert.deepEqual(houseLevel3Events.map((event) => event.level), [3]);
   assert.equal(house.level, 3);
+  assert.equal(secondHouse.level, 3);
   assert.equal(house.health.max, 600);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 39, "a Level 3 House supplies eleven");
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 42, "both Level 3 Houses supply eleven");
   assert.deepEqual(upgrades.snapshot(house), {
     level: 3, maxLevel: 3, upgrading: false, remainingSeconds: 0, nextCost: null, completed: true,
   });
+  // Buildings completed after the research inherit the type level as well.
+  const laterHouse = structures.place("player", houseStats, 95, 10);
+  structures.advanceConstruction(laterHouse, houseStats.constructionSeconds);
+  assert.equal(upgrades.applyCompletedUpgrade(laterHouse), true);
+  assert.equal(laterHouse.level, 3);
+  assert.equal(laterHouse.health.max, 600);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 53);
+  assert.equal(upgrades.levelFor("player", "house"), 3,
+    "new House previews resolve to the research level before construction finishes");
 
   const depotStats = buildings.depot ?? assert.fail("depot balance missing");
   const depot = structures.place("player", depotStats, 100, 10);
@@ -28908,6 +29001,78 @@ check("Faz 2 KR-03: an age transition resets every owned building to its base Le
     kingdoms.get("player").population.snapshot().capacity < populationAtLevel3,
     "resetting the House to Level 1 lowers the kingdom's population capacity",
   );
+});
+
+check("Faz 1: the six-tier building matrix preserves the Y3 -> K1 power floor", () => {
+  const raw = JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as Record<string, unknown>;
+  const buildings = validateBuildingBalance(raw);
+  const house = buildings.house ?? assert.fail("house balance missing");
+  const farm = buildings.farm ?? assert.fail("farm balance missing");
+  const outpost = buildings.outpost ?? assert.fail("outpost balance missing");
+  const archeryRange = buildings.archery_range ?? assert.fail("archery range balance missing");
+
+  assert.deepEqual(house.progression?.settlement.map((tier) => tier.populationCapacity), [5, 8, 11]);
+  assert.deepEqual(house.progression?.town.map((tier) => tier.populationCapacity), [14, 17, 20]);
+  assert.deepEqual(farm.progression?.town.map((tier) => tier.economy?.perWorkerPerMinute), [10, 11, 12]);
+  assert.deepEqual(outpost.progression?.town.map((tier) => tier.defense?.attackDamage), [14, 16, 18]);
+  assert.deepEqual(archeryRange.progression?.settlement, [], "Town-only structures declare no unavailable Settlement tiers");
+  assert.deepEqual(archeryRange.progression?.town.map((tier) => tier.queueCapacity), [20, 25, 30]);
+
+  const invalid = JSON.parse(JSON.stringify(raw)) as Record<string, any>;
+  invalid.house.progression.town[0].populationCapacity = 10;
+  assert.throws(
+    () => validateBuildingBalance(invalid),
+    (error: unknown) => error instanceof GameDataError && /may not regress below Settlement Lv3/.test(error.message),
+  );
+});
+
+check("Faz 2: an age transition applies every completed building's Town Lv1 tier", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { wood: 200, stone: 120 }, 20);
+  let age: SettlementAge = "settlement";
+  const upgrades = new StructureUpgradeSystem(structures, kingdoms, () => age);
+  const complete = (id: string, x: number) => {
+    const stats = buildings[id] ?? assert.fail(`${id} balance missing`);
+    const structure = structures.place("player", stats, x, 0);
+    structures.advanceConstruction(structure, stats.constructionSeconds);
+    upgrades.applyCompletedUpgrade(structure);
+    return structure;
+  };
+  const house = complete("house", 0);
+  const farm = complete("farm", 20);
+  const outpost = complete("outpost", 40);
+  const barracks = complete("barracks", 60);
+  assert.equal(house.health.max, 300);
+  assert.equal(farm.economy?.perWorkerPerMinute, 7);
+  assert.equal(outpost.defenseAttackDamage, 10);
+
+  assert.equal(upgrades.start(house), "started");
+  upgrades.update(35);
+  assert.equal(upgrades.start(house), "started");
+  upgrades.update(45);
+  assert.equal(house.populationCapacityBonus, 6, "Settlement Lv3 House supplies eleven population");
+
+  age = "town";
+  upgrades.resetOwner("player");
+  assert.equal(house.level, 1);
+  assert.equal(house.health.max, 750);
+  assert.equal(house.populationCapacityBonus, 9, "Town Lv1 House is 14 population over its base five, above Settlement Lv3's eleven");
+  assert.deepEqual(farm.economy && {
+    workerCapacity: farm.economy.workerCapacity,
+    perWorkerPerMinute: farm.economy.perWorkerPerMinute,
+    localBufferCapacity: farm.economy.localBufferCapacity,
+  }, { workerCapacity: 4, perWorkerPerMinute: 10, localBufferCapacity: 80 });
+  assert.equal(outpost.defenseAttackDamage, 14);
+  assert.equal(outpost.territoryControlRadius, 28);
+  assert.equal(barracks.queueCapacity, 20);
+
+  const laterHouse = complete("house", 90);
+  assert.equal(laterHouse.health.max, 750, "a later Town House starts at the active Town Lv1 tier");
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, 48, "two Town Lv1 Houses supply 14 population each");
 });
 
 check("Faz 2: the art resolver maps the two ages to their families and keeps fixed camps age-agnostic", () => {
@@ -29437,6 +29602,202 @@ check("§58: a completed regional counter ends the match, and never re-ends a de
   assert.equal(razed.outcome, "victory");
   assert.equal(razed.reason, "center-destroyed");
   centers.clear();
+});
+
+/**
+ * §59 fixture: a small world with an explicit source list, so every test states
+ * exactly who can see what rather than inheriting it from a spawn helper.
+ */
+function fogTestWorld() {
+  let sources: VisionSource[] = [];
+  let structures: ObservableStructure[] = [];
+  const vision = new VisionSystem(() => sources, { cellSize: 2, worldHalfExtent: 20 });
+  const memory = new EnemyMemorySystem(vision, () => structures);
+  const see = (next: VisionSource[]): void => {
+    sources = next;
+  };
+  const place = (next: ObservableStructure[]): void => {
+    structures = next;
+  };
+  /** Advance both the way `RtsApp.updateFogOfWar` does: vision, then memory. */
+  const tick = (now: number): void => {
+    vision.refresh();
+    memory.refresh(now);
+  };
+  return { vision, memory, see, place, tick };
+}
+
+check("§59: vision resolves the three GDD 08 §38 layers and explored never un-latches", () => {
+  const world = fogTestWorld();
+
+  world.tick(0);
+  assert.equal(world.vision.stateAt("player", 0, 0), "unknown", "no sources means no knowledge");
+
+  world.see([{ owner: "player", x: 0, z: 0, radius: 6 }]);
+  world.tick(1);
+  assert.equal(world.vision.stateAt("player", 0, 0), "visible");
+  assert.equal(world.vision.stateAt("player", 4, 0), "visible", "inside the radius");
+  assert.equal(world.vision.stateAt("player", 12, 0), "unknown", "outside the radius");
+  // The grid is per kingdom: one side's scout must never reveal for the other.
+  assert.equal(world.vision.stateAt("enemy", 0, 0), "unknown", "vision is not shared");
+
+  // The scout walks away: what it saw stays explored, but stops being visible.
+  world.see([{ owner: "player", x: 16, z: 16, radius: 4 }]);
+  world.tick(2);
+  assert.equal(world.vision.stateAt("player", 0, 0), "explored", "§40: seen ground is remembered");
+  assert.equal(world.vision.isVisible("player", 0, 0), false);
+  assert.equal(world.vision.isExplored("player", 0, 0), true);
+
+  // Every source gone: still explored. The latch is what makes it memory.
+  world.see([]);
+  world.tick(3);
+  assert.equal(world.vision.stateAt("player", 0, 0), "explored");
+  assert.ok(world.vision.exploredFraction("player") > 0);
+  assert.equal(world.vision.exploredFraction("enemy"), 0);
+
+  // A restart is a new match; the latch has to go with it.
+  world.vision.reset();
+  assert.equal(world.vision.stateAt("player", 0, 0), "unknown", "restart forgets the map");
+  assert.equal(world.vision.exploredFraction("player"), 0);
+});
+
+check("§59/GDD 08 §40: a remembered building survives under fog and is corrected only by looking", () => {
+  const world = fogTestWorld();
+  const base: ObservableStructure = {
+    id: 7, owner: "enemy", buildingId: "barracks", x: 10, z: 0, level: 1, healthRatio: 1,
+  };
+  world.place([base]);
+
+  // Never scouted: no belief at all.
+  world.tick(0);
+  assert.equal(world.memory.known("player").length, 0, "unseen is not remembered");
+
+  // A scout reaches it.
+  world.see([{ owner: "player", x: 10, z: 0, radius: 6 }]);
+  world.tick(10);
+  const seen = world.memory.known("player");
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0]?.buildingId, "barracks");
+  assert.equal(seen[0]?.currentlyVisible, true, "in sight is not a ghost");
+  assert.equal(world.memory.ghosts("player").length, 0);
+
+  // The scout dies. The building falls under fog and becomes a ghost.
+  world.see([]);
+  world.tick(20);
+  const ghosts = world.memory.ghosts("player");
+  assert.equal(ghosts.length, 1, "§40: a scouted building stays on the map");
+  assert.equal(ghosts[0]?.lastSeenAt, 10, "the belief keeps the age of the sighting");
+  assert.equal(world.memory.ageOf(ghosts[0]!, 70), 60, "and reports how stale it is");
+
+  // The building is razed while unseen. The belief must NOT quietly vanish —
+  // that is the whole difference between remembering and knowing.
+  world.place([]);
+  world.tick(30);
+  assert.equal(world.memory.ghosts("player").length, 1, "razing under fog does not update the enemy");
+
+  // Look again: now the memory is corrected.
+  world.see([{ owner: "player", x: 10, z: 0, radius: 6 }]);
+  world.tick(40);
+  assert.equal(world.memory.known("player").length, 0, "seeing the empty ground forgets the building");
+
+  world.memory.reset();
+  assert.equal(world.memory.known("player").length, 0);
+});
+
+check("§59: the AI's vision filter reports only what its kingdom can see", () => {
+  const world = fogTestWorld();
+  world.place([
+    { id: 1, owner: "player", buildingId: "depot", x: -10, z: 0, level: 1, healthRatio: 1 },
+  ]);
+  // The AI's own centre is the only thing revealing for it.
+  world.see([{ owner: "enemy", x: 0, z: 0, radius: 6 }]);
+  world.tick(0);
+
+  const filter = new VisionSystemAiFilter(world.vision, world.memory, "enemy");
+  assert.equal(filter.canSee(0, 0), true, "its own ground");
+  assert.equal(filter.canSee(-10, 0), false, "the player's depot is out of range");
+  assert.equal(filter.knownEnemyStructures().length, 0, "and therefore unknown");
+
+  // Push the AI's vision over the depot: now it is known.
+  world.see([{ owner: "enemy", x: -10, z: 0, radius: 6 }]);
+  world.tick(5);
+  assert.equal(filter.canSee(-10, 0), true);
+  assert.deepEqual(
+    filter.knownEnemyStructures().map((known) => known.buildingId),
+    ["depot"],
+    "§59: the AI plans against what it scouted",
+  );
+
+  // The filter is per kingdom — the player's filter over the same systems
+  // must not inherit the AI's sightings.
+  const playerFilter = new VisionSystemAiFilter(world.vision, world.memory, "player");
+  assert.equal(playerFilter.canSee(-10, 0), false, "the AI's scouting is not the player's");
+});
+
+check("§59: a fogged unit is not selectable or attackable", () => {
+  const units = new UnitSystem();
+  const mine = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const hidden = units.spawn("enemy", 20, 0, RTS_TEST_UNIT_STATS);
+
+  assert.equal(units.bodyMeshes().length, 2, "both are clickable with no fog");
+
+  // What FogVisibilityBinder does to a unit outside the player's vision.
+  hidden.object.visible = false;
+  const meshes = units.bodyMeshes();
+  assert.equal(meshes.length, 1, "a hidden unit leaves the raycast set entirely");
+  assert.equal(units.unitForObject(meshes[0]!), mine);
+
+  hidden.object.visible = true;
+  assert.equal(units.bodyMeshes().length, 2, "and returns when it is seen again");
+  units.clear();
+});
+
+check("§59: vision data must cover what a unit shoots at and must not open the map alone", () => {
+  const unitsJson = JSON.parse(
+    readFileSync("public/game-data/balance/units.json", "utf8"),
+  ) as Record<string, Record<string, unknown>>;
+  const buildingsJson = JSON.parse(
+    readFileSync("public/game-data/balance/buildings.json", "utf8"),
+  ) as Record<string, Record<string, unknown>>;
+
+  const units = validateUnitBalance(unitsJson);
+  for (const [id, stats] of Object.entries(units)) {
+    assert.ok(stats.visionRadius > 0, `${id} carries a data-owned vision radius`);
+    assert.ok(
+      stats.visionRadius >= stats.acquisitionRange,
+      `${id} can see at least as far as it auto-acquires`,
+    );
+  }
+  // The Archer is the roster's eyes: GDD 08 §42's "high vision" scout role.
+  assert.ok(
+    (units["archer_placeholder"]?.visionRadius ?? 0) > (units["worker_placeholder"]?.visionRadius ?? 0),
+    "a combat unit out-scouts a worker",
+  );
+
+  const buildings = validateBuildingBalance(buildingsJson);
+  assert.ok(
+    (buildings["outpost"]?.visionRadius ?? 0) > (buildings["house"]?.visionRadius ?? 0),
+    "GDD 08 §42: the outpost is the wide one",
+  );
+
+  // A unit that acquires further than it sees would shoot at what its own
+  // kingdom cannot see — the validator has to refuse it, not tune it.
+  const blindShooter = structuredClone(unitsJson);
+  blindShooter["guard_placeholder"]!["visionRadius"] = 1;
+  assert.throws(
+    () => validateUnitBalance(blindShooter),
+    /visionRadius/,
+    "vision under acquisition range is refused",
+  );
+
+  // §42: no single structure may reveal most of the map.
+  const allSeeingOutpost = structuredClone(buildingsJson);
+  allSeeingOutpost["outpost"]!["visionRadius"] = 200;
+  assert.throws(
+    () => validateBuildingBalance(allSeeingOutpost),
+    /visionRadius/,
+    "a map-opening structure is refused",
+  );
 });
 
 check("RTS death deselects, clears attackers, then removes the defeated unit", () => {
@@ -30565,6 +30926,44 @@ check("RTS construction names missing-worker and unreachable placement errors", 
   units.clear();
 });
 
+check("RTS cancelled worker job routes recover or release the worker", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const house = buildings.house ?? assert.fail("house definition missing");
+  const farm = buildings.farm ?? assert.fail("farm definition missing");
+
+  const constructionUnits = new UnitSystem();
+  const constructionWorker = constructionUnits.spawn("player", -8, 0, RTS_TEST_WORKER_STATS);
+  const constructionStructures = new PlacedStructureSystem();
+  const foundation = constructionStructures.place("player", house, 0, 0);
+  const constructionNavigation = new RtsNavigation();
+  const construction = new WorkerConstructionSystem(constructionUnits, constructionStructures, constructionNavigation);
+  assert.deepEqual(construction.assignNearest(foundation), { assigned: true });
+  constructionWorker.stop(); // A cancelled route must not reserve the worker forever.
+  constructionNavigation.setBlockers([{ min: [-20, -1, -20], max: [20, 3, 20] }]);
+  construction.update(0);
+  assert.equal(construction.stateFor(constructionWorker), "idle");
+  constructionStructures.clear();
+  constructionUnits.clear();
+
+  const economyUnits = new UnitSystem();
+  const economyWorker = economyUnits.spawn("player", -8, 0, RTS_TEST_WORKER_STATS);
+  const economyStructures = new PlacedStructureSystem();
+  const completedFarm = economyStructures.place("player", farm, 0, 0);
+  economyStructures.advanceConstruction(completedFarm, farm.constructionSeconds);
+  const economyNavigation = new RtsNavigation();
+  const production = new EconomyProductionSystem(economyUnits, economyStructures, economyNavigation, () => false);
+  production.update(0);
+  assert.equal(production.isAssigned(economyWorker), true);
+  economyWorker.stop();
+  economyNavigation.setBlockers([{ min: [-20, -1, -20], max: [20, 3, 20] }]);
+  production.update(0);
+  assert.equal(production.isAssigned(economyWorker), false, "an unreachable producer releases its worker");
+  economyStructures.clear();
+  economyUnits.clear();
+});
+
 check("RTS player move orders keep workers out of automatic construction and production", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -31166,8 +31565,12 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
   const units = new UnitSystem();
   const structures = new PlacedStructureSystem();
   const centers = new CommandCenterSystem();
-  centers.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x, RTS_BLOCKOUT_MAP.playerStart.z);
-  centers.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x, RTS_BLOCKOUT_MAP.enemyStart.z);
+  // As in RtsApp: the centre carries its own balance row, so it has the same
+  // Lv1→3 ladder the age gate now demands of it.
+  const centerStats = buildings["command_center"] ?? null;
+  const centerHealth = centerStats?.maxHealth;
+  centers.spawn("player", RTS_BLOCKOUT_MAP.playerStart.x, RTS_BLOCKOUT_MAP.playerStart.z, centerHealth, centerStats);
+  centers.spawn("enemy", RTS_BLOCKOUT_MAP.enemyStart.x, RTS_BLOCKOUT_MAP.enemyStart.z, centerHealth, centerStats);
   const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, startingResources, 20);
   const navigation = new RtsNavigation();
   navigation.setBlockers(centers.navigationBlockers());
@@ -31248,8 +31651,19 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
   );
   const ages = new AgeSystem(["player", "enemy"], ageBalance, centers, structures, kingdoms);
   const workerProduction = new WorkerProductionSystem(units, centers, navigation, worker, kingdoms);
-  // As in RtsApp: the per-instance level system both kingdoms upgrade through.
-  const structureUpgrades = new StructureUpgradeSystem(structures, kingdoms);
+  // As in RtsApp: the per-instance level system both kingdoms upgrade through,
+  // centres included — they are not placed structures, so it is told where to
+  // find them, and the age's Lv3 centre gate is reachable by the AI.
+  const structureUpgrades = new StructureUpgradeSystem(
+    structures,
+    kingdoms,
+    (owner) => ages.snapshot(owner).age,
+    (owner) => {
+      const found = centers.get(owner);
+      return found ? [found] : [];
+    },
+  );
+  for (const center of centers.all()) structureUpgrades.applyCompletedUpgrade(center);
   // The full Faz 7 roster, and the same age-scaled Barracks tier gate RtsApp
   // applies — so an AI-2 composition may only queue Archers and Rams once its
   // Barracks is level 2, exactly as the player's panel does.
@@ -33705,6 +34119,10 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
             upgrading: false,
             remainingSeconds: 0,
             missingBuildingIds: [],
+            // Default to a centre that has already earned the age's Lv3 gate, so
+            // each case below isolates the one rule it is about.
+            requiredCenterLevel: 3,
+            centerLevel: 3,
             ...age,
           },
           controlRadius: 28,
@@ -33744,6 +34162,19 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   const town = centerPanel({ age: "town" });
   assert.equal(action(town, "train-worker").enabled, true, "a Town centre still trains workers");
   assert.match(action(town, "age-up").reason ?? "", /zaten tamamlandı/);
+
+  // Below the age's centre-level gate the button is absent rather than greyed
+  // out: the age has not opened yet, and a disabled button would read as a
+  // check the player is failing. The requirement still reaches them as a line,
+  // and the centre's own level-up button — right beside it — is the way to it.
+  const underLevelled = centerPanel({ centerLevel: 1 });
+  assert.equal(underLevelled.actions.some((entry) => entry.id === "age-up"), false,
+    "the age button does not exist below the required centre level");
+  assert.match(underLevelled.lines.join(" | "), /Kasaba Çağı için Merkez Lv3 gerekir/);
+  assert.equal(action(underLevelled, "train-worker").enabled, true,
+    "an under-levelled centre still trains workers");
+  // And it reappears the moment the last level lands.
+  assert.equal(action(centerPanel({ centerLevel: 3 }), "age-up").enabled, true);
 });
 
 check("Faz 9 §51: the level-up button sits on the building and names the next level", () => {
@@ -33764,8 +34195,9 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
     over: Partial<StructureUpgradeSnapshot> = {},
     gain: UpgradeGain | null = null,
     progress = 0,
+    extra: Pick<StructureUpgradeView, "lockedReason"> = {},
   ): StructureUpgradeView =>
-    ({ snapshot: snapshot(over), gain, progress });
+    ({ snapshot: snapshot(over), gain, progress, ...extra });
 
   // A building whose data declares no `levels` offers no button. The absence is
   // the data's statement, not something the UI decides.
@@ -33776,9 +34208,9 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
   assert.equal(button.enabled, true);
   assert.equal(button.reason, null);
   assert.equal(button.cost, "100 Odun · 60 Taş");
-  // Per-instance (KR-01): the button names the exact next level of the selected
-  // building, not a type-wide promotion.
-  assert.equal(button.label, "Kışla Lv2'e Yükselt");
+  // The selected building starts research for every completed building of its type,
+  // while the action label stays compact because the panel already names it.
+  assert.equal(button.label, "Lv2'ye Yükselt");
 
   // Faz 3: the gain rides next to the cost, so a level-up reads as a decision —
   // health as a total plus its delta, and each stat the step grants.
@@ -33819,6 +34251,12 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
   assert.equal(maxed.enabled, false);
   assert.match(maxed.reason ?? "", /en yüksek seviyede/);
   assert.match(maxed.label, /En Üst Seviyede/);
+
+  const ageLocked = upgradeOf(panel(view({ nextCost: { wood: 100 } }, null, 0, {
+    lockedReason: "Kasaba Çağına geçiliyor; çağ tamamlanana kadar yapı yükseltmeleri kapalı.",
+  }))) ?? assert.fail("no age-locked upgrade action");
+  assert.equal(ageLocked.enabled, false);
+  assert.match(ageLocked.reason ?? "", /Kasaba Çağına geçiliyor/);
 
   // The button rides along with whatever the detail kind already offered rather
   // than replacing it: a Barracks keeps its roster and gains an upgrade.

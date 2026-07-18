@@ -26,7 +26,7 @@ import type { DepotNodeStatus } from "../economy/depotLogisticsSystem";
 import type { BarracksQueueSnapshot } from "../structures/barracksProductionSystem";
 import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { StructureUpgradeSnapshot } from "../structures/structureUpgradeSystem";
-import type { AgeSnapshot } from "../progression/ageSystem";
+import { centerLevelReadyForTown, type AgeSnapshot } from "../progression/ageSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
 import { formatResourceCost, resourceLabel } from "./resourceLabels";
 
@@ -186,10 +186,10 @@ export interface UpgradeGain {
 }
 
 /**
- * The per-instance level-up path, when the building's data declares `levels`. It
- * hangs off the structure rather than off a detail kind because every kind of
- * building can have one — a House, a Depot and a Barracks all level up, and the
- * next level's cost and state live entirely in {@link StructureUpgradeSnapshot}.
+ * The type-wide level-up path, when the building's data declares `levels`. It
+ * is started from one selected structure but upgrades every completed structure
+ * of that type for the owner; the next level's cost and state live entirely in
+ * {@link StructureUpgradeSnapshot}.
  *
  * {@link gain} is the next step's benefits, or null at max level — it rides
  * alongside the snapshot so the panel can name what the cost is buying.
@@ -199,6 +199,8 @@ export interface StructureUpgradeView {
   readonly snapshot: StructureUpgradeSnapshot;
   readonly gain: UpgradeGain | null;
   readonly progress: number;
+  /** A broader progression action temporarily blocks new structure research. */
+  readonly lockedReason?: string | null;
 }
 
 export interface SelectedStructureView {
@@ -418,10 +420,9 @@ function upgradeGainLine(structure: SelectedStructureView): string | null {
 }
 
 /**
- * The building's level-up button, on the building itself. Levelling is
- * per-instance now (plan KR-01): the button acts only on the selected building
- * and names the exact next level, so "Kışla Lv2'ye Yükselt" is literal — no
- * type-wide promotion, and no age gate (KR-04) stands between the player and it.
+ * The building's level-up button starts a type-wide research from the selected
+ * building. No age gate stands between the player and it; completion upgrades
+ * every completed matching structure for that owner.
  */
 function upgradeAction(structure: SelectedStructureView): SelectionAction | null {
   const upgrade = structure.upgrade;
@@ -430,19 +431,20 @@ function upgradeAction(structure: SelectedStructureView): SelectionAction | null
   if (snapshot.completed) {
     return {
       id: UPGRADE_ACTION,
-      label: `${structure.label} En Üst Seviyede`,
+      label: "En Üst Seviyede",
       cost: null,
       enabled: false,
-      reason: `${structure.label} en yüksek seviyede (Lv${snapshot.level}).`,
+      reason: `Tüm ${structure.label} yapıları en yüksek seviyede (Lv${snapshot.level}).`,
     };
   }
   const nextLevel = snapshot.level + 1;
-  const reason = snapshot.upgrading
-    ? `Lv${nextLevel} yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
-    : null;
+  const reason = upgrade.lockedReason
+    ?? (snapshot.upgrading
+      ? `Lv${nextLevel} yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
+      : null);
   return {
     id: UPGRADE_ACTION,
-    label: `${structure.label} Lv${nextLevel}'e Yükselt`,
+    label: `Lv${nextLevel}'ye Yükselt`,
     cost: formatResourceCost(snapshot.nextCost ?? {}),
     enabled: reason === null,
     reason,
@@ -537,6 +539,11 @@ function describeCenter(
 ): SelectionPanelContent {
   const { queue, age } = detail;
   const isTown = age.age === "town";
+  // The age button does not exist until the centre is levelled far enough. A
+  // greyed-out button would read as "you failed a check"; the truth is the age
+  // has not opened yet, so the panel says what opens it on a line instead and
+  // leaves the centre's own level-up button as the only thing to press.
+  const centerReady = centerLevelReadyForTown(age);
   return {
     title,
     summary,
@@ -547,6 +554,7 @@ function describeCenter(
         : `Üretiliyor: ${detail.workerStats.label} — ${Math.ceil(queue.trainingRemainingSeconds)} sn`,
       `Çağ: ${isTown ? "Kasaba" : "Yerleşim"}${age.upgrading ? " (yükseltiliyor)" : ""}`,
       `Kontrol yarıçapı: ${detail.controlRadius}`,
+      ...(centerReady ? [] : [`Kasaba Çağı için Merkez Lv${age.requiredCenterLevel} gerekir.`]),
     ],
     actions: [
       {
@@ -559,7 +567,7 @@ function describeCenter(
         enabled: !age.upgrading,
         reason: age.upgrading ? "Kasaba Çağı yükseltmesi sürerken Merkez üretim yapamaz." : null,
       },
-      ageUpAction(age, detail.requiredBuildingLabels),
+      ...(centerReady ? [ageUpAction(age, detail.requiredBuildingLabels)] : []),
     ],
     hint: STRUCTURE_HINT,
     tooltip: age.upgrading

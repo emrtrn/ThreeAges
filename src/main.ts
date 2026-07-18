@@ -42,6 +42,12 @@ interface BootFoundationResult {
    * criteria are met in playtesting: `?flags=regionalVictory`.
    */
   readonly regionalVictoryEnabled: boolean;
+  /**
+   * §59's fog of war (Faz 11). Also a gameplay gate rather than a debug view —
+   * it changes what *both* kingdoms know — so it stays behind a flag until §59's
+   * acceptance criteria are measured: `?flags=fogOfWar`.
+   */
+  readonly fogOfWarEnabled: boolean;
 }
 
 async function bootFoundation(): Promise<BootFoundationResult> {
@@ -74,11 +80,13 @@ async function bootFoundation(): Promise<BootFoundationResult> {
     preset,
     prosperityDebugEnabled: config.flags.prosperity,
     regionalVictoryEnabled: config.flags.regionalVictory,
+    fogOfWarEnabled: config.flags.fogOfWar,
   };
 }
 
 async function main(): Promise<void> {
-  const { preset, prosperityDebugEnabled, regionalVictoryEnabled } = await bootFoundation();
+  const { preset, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
+    await bootFoundation();
 
   const params = new URLSearchParams(location.search);
   const canvas = requireElement<HTMLCanvasElement>("game-canvas");
@@ -102,6 +110,7 @@ async function main(): Promise<void> {
       debug: params.has("debug"),
       prosperityDebugEnabled,
       regionalVictoryEnabled,
+      fogOfWarEnabled,
       unitBalance,
       buildingBalance,
       resourceBalance,
