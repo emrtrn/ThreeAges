@@ -241,6 +241,8 @@ export interface SelectedStructureView {
   readonly ageLabel?: string;
   readonly health: number;
   readonly maxHealth: number;
+  /** True once the player has clicked "Yık" and the panel is asking to confirm. */
+  readonly demolishArmed?: boolean;
   readonly detail: StructureDetailView;
   /** Null when the data gives this building no upgrade at all. */
   readonly upgrade: StructureUpgradeView | null;
@@ -284,6 +286,7 @@ export const TRAIN_WORKER_ACTION = "train-worker";
 export const AGE_UP_ACTION = "age-up";
 export const RALLY_ACTION = "rally";
 export const UPGRADE_ACTION = "upgrade";
+export const DEMOLISH_ACTION = "demolish";
 export const TRADE_BUY_ACTION_PREFIX = "trade-buy:";
 export const TRADE_SELL_ACTION_PREFIX = "trade-sell:";
 
@@ -413,8 +416,54 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
   const upgrade = upgradeAction(structure);
   const gainLine = upgradeGainLine(structure);
   const lines = gainLine ? [...base.lines, gainLine] : base.lines;
-  const actions = upgrade ? [...base.actions, upgrade] : base.actions;
+  // Demolish sits last on every building panel, after the upgrade: the row reads
+  // left-to-right from what the building can become to what removes it.
+  // The centre reaches here wrapped as a structure (`detail.kind === "center"`),
+  // so demolish has to be excluded on the detail, not on the outer kind: razing
+  // your own centre is the defeat condition, which is a thing you lose, not a
+  // thing you order.
+  const actions = [
+    ...base.actions,
+    ...(upgrade ? [upgrade] : []),
+    ...(structure.detail.kind === "center" ? [] : [demolishAction(structure)]),
+  ];
   return { ...base, lines, actions, progress: upgradeProgress(structure) };
+}
+
+/**
+ * Razing one of your own buildings — the player's counterpart to combat
+ * destruction. Offered on every placed building because the reasons to want it
+ * are structural rather than per-type: a misplaced building blocking a road, a
+ * depot on the wrong side of a front, population freed for a different army.
+ *
+ * Two-step by design. It is irreversible and refunds nothing, and the button
+ * lives in the same row as "produce" and "upgrade" — one stray click next to
+ * them should not cost a finished building. The armed state is owned by the
+ * runtime and cleared when the selection changes, so it cannot outlive the
+ * building it was aimed at.
+ *
+ * The command centre has no demolish: razing it is the defeat condition, which
+ * is a thing you lose, not a thing you order.
+ */
+function demolishAction(structure: SelectedStructureView): SelectionAction {
+  if (structure.demolishArmed) {
+    return {
+      id: DEMOLISH_ACTION,
+      label: "Yıkımı Onayla",
+      cost: null,
+      enabled: true,
+      reason: null,
+      hint: `${structure.label} kalıcı olarak yıkılacak. Harcanan kaynaklar geri gelmez.`,
+    };
+  }
+  return {
+    id: DEMOLISH_ACTION,
+    label: "Yık",
+    cost: null,
+    enabled: true,
+    reason: null,
+    hint: "Bu yapıyı kaldırır. Onay ister; kaynak iadesi yoktur.",
+  };
 }
 
 /**

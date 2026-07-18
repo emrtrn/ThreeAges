@@ -36,6 +36,16 @@ const COMPLETED_COLOR: Record<UnitOwner, { readonly territory: string; readonly 
 const CONSTRUCTION_OPACITY = 0.5;
 const COMPLETION_DROP_DURATION = 0.2;
 const COMPLETION_DROP_HEIGHT = 2.5;
+/**
+ * How long a razed building's husk sinks and fades for. Presentation only: the
+ * structure leaves the simulation on the frame its health runs out, so its
+ * footprint stops blocking navigation and its territory is recomputed
+ * immediately. Letting the husk outlive the record is the whole point — a
+ * building that vanished between two frames read as a rendering glitch rather
+ * than as the thing the player just lost.
+ */
+const COLLAPSE_DURATION = 0.9;
+const COLLAPSE_SINK_DEPTH = 2.2;
 
 export interface PlacedStructure {
   readonly id: number;
@@ -89,6 +99,13 @@ export class PlacedStructureSystem {
   private nextId = 1;
   private completedVisualHandler: ((structure: PlacedStructure) => void) | null = null;
   private readonly dropAnimations = new Map<PlacedStructure, { readonly visual: Object3D; elapsed: number }>();
+  /**
+   * Husks of razed buildings, detached from {@link structures} and owned only by
+   * this list. Keyed by object rather than structure because the structure record
+   * is gone by the time these animate — nothing may resolve a husk back to a
+   * building that no longer exists.
+   */
+  private readonly collapses: { readonly object: Object3D; elapsed: number }[] = [];
 
   constructor() {
     this.root.name = "rts-placed-structures";
@@ -199,6 +216,21 @@ export class PlacedStructureSystem {
       animation.visual.position.y = COMPLETION_DROP_HEIGHT * (1 - progress);
       if (progress >= 1) this.dropAnimations.delete(structure);
     }
+    for (let i = this.collapses.length - 1; i >= 0; i -= 1) {
+      const collapse = this.collapses[i];
+      if (!collapse) continue;
+      collapse.elapsed = Math.min(COLLAPSE_DURATION, collapse.elapsed + Math.max(0, deltaSeconds));
+      const progress = collapse.elapsed / COLLAPSE_DURATION;
+      // Eased so the building hesitates before it goes: a linear sink reads as
+      // an elevator, not a collapse.
+      collapse.object.position.y = -COLLAPSE_SINK_DEPTH * progress * progress;
+      fadeObject(collapse.object, 1 - progress);
+      if (progress >= 1) {
+        this.root.remove(collapse.object);
+        disposeObjectMeshes(collapse.object);
+        this.collapses.splice(i, 1);
+      }
+    }
   }
 
   all(): readonly PlacedStructure[] {
@@ -273,12 +305,17 @@ export class PlacedStructureSystem {
     return structure;
   }
 
-  /** Remove a completed or unfinished structure; combat uses this destruction hook. */
+  /**
+   * Remove a completed or unfinished structure; combat and player demolition use
+   * this hook. The record leaves the simulation now — callers that rebuild
+   * navigation and territory from `all()` are correct on the very next frame —
+   * while the visual husk sinks out of the world over {@link COLLAPSE_DURATION}.
+   */
   destroy(structure: PlacedStructure): boolean {
     const index = this.structures.indexOf(structure);
     if (index < 0) return false;
     this.structures.splice(index, 1);
-    this.disposeStructure(structure);
+    this.beginCollapse(structure);
     return true;
   }
 
@@ -286,14 +323,33 @@ export class PlacedStructureSystem {
     for (const structure of this.structures) this.disposeStructure(structure);
     this.structures.length = 0;
     this.dropAnimations.clear();
+    // A restart takes the husks with it: they belong to the finished match.
+    for (const collapse of this.collapses) {
+      this.root.remove(collapse.object);
+      disposeObjectMeshes(collapse.object);
+    }
+    this.collapses.length = 0;
+  }
+
+  /**
+   * Hand a razed building's object over to the husk list. It stops being
+   * pickable and selectable at once — a building the player can still click
+   * after losing it is worse than one that disappears — but keeps its place in
+   * the scene so the collapse is visible.
+   */
+  private beginCollapse(structure: PlacedStructure): void {
+    this.unregisterPickTargets(structure.object);
+    this.dropAnimations.delete(structure);
+    structure.selectionRing.visible = false;
+    // Completed models share materials with every other building of their type,
+    // so the husk needs its own copies before anything fades them. This clones
+    // once; the per-frame fade then mutates those copies in place.
+    setObjectOpacity(structure.object, 1);
+    this.collapses.push({ object: structure.object, elapsed: 0 });
   }
 
   private disposeStructure(structure: PlacedStructure): void {
-    for (const [objectId, pickStructure] of this.structureByPickObjectId) {
-      if (pickStructure !== structure) continue;
-      this.structureByPickObjectId.delete(objectId);
-      this.pickObjects.delete(objectId);
-    }
+    this.unregisterPickTargets(structure.object);
     this.root.remove(structure.object);
     this.dropAnimations.delete(structure);
     structure.object.traverse((child) => {
@@ -388,6 +444,19 @@ function setObjectOpacity(root: Object3D, opacity: number): void {
     child.material = Array.isArray(child.material)
       ? child.material.map(clone)
       : clone(child.material);
+  });
+}
+
+/**
+ * Set opacity on materials {@link setObjectOpacity} has already cloned. Separate
+ * because cloning per frame would leak a material set per frame; this only
+ * mutates what the husk already owns.
+ */
+function fadeObject(root: Object3D, opacity: number): void {
+  root.traverse((child) => {
+    if (!(child instanceof Mesh)) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    for (const material of materials) material.opacity = opacity;
   });
 }
 

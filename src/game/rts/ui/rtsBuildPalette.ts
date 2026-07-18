@@ -167,6 +167,8 @@ export class RtsBuildPalette {
         ? "Kaynak yetersiz: inşaat maliyeti ayrılmadı."
         : state.result.reason === "missing-forest"
           ? "Oduncu Kampı için yakında kesilebilir ağaç gerekir."
+        : state.result.reason === "enemy-occupied"
+          ? "Geçersiz konum: alanda düşman birlikleri var."
         : state.result.reason === "missing-resource-node"
           ? "Geçersiz konum: Taş Ocağı veya Altın Madeni uygun kaynak düğümünü örtmeli."
         : "Geçersiz konum: engel veya yapı ile çakışıyor.";

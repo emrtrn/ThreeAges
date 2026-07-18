@@ -76,6 +76,7 @@ import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
 import { RtsWorldProgressOverlay, type RtsWorldProgressEntry } from "./ui/rtsWorldProgressOverlay";
 import {
   AGE_UP_ACTION,
+  DEMOLISH_ACTION,
   RALLY_ACTION,
   TRADE_BUY_ACTION_PREFIX,
   TRADE_SELL_ACTION_PREFIX,
@@ -176,6 +177,14 @@ const OPENING_FOCUS = {
 /** Faz 5.0: both kingdoms run the same economy; only this one has a UI. */
 const KINGDOM_OWNERS: readonly UnitOwner[] = ["player", "enemy"];
 const PLAYER_OWNER: UnitOwner = "player";
+/** How long a building's health bar stays up after the last hit it took. */
+const HEALTH_BAR_LINGER_SECONDS = 6;
+/**
+ * Linger key for the command centre. Negative because {@link PlacedStructureSystem}
+ * hands out positive ids, so the centre can share the map without colliding with
+ * a building.
+ */
+const CENTER_HEALTH_BAR_KEY = -1;
 /** Faz 5: the kingdom the AI opponent plays (plan §37). */
 const AI_OWNER: UnitOwner = "enemy";
 
@@ -300,6 +309,10 @@ export class RtsApp {
   private readonly roadPlacement: RoadPlacementSystem;
   private readonly buildPalette: RtsBuildPalette;
   private readonly selectionPanel = new RtsSelectionPanel((id) => this.runSelectionAction(id));
+  /** The building whose demolish is armed and awaiting its confirm click. */
+  private demolishArmed: PlacedStructure | null = null;
+  /** Per-building last-seen health and how long its bar still has to live. */
+  private readonly healthBarLinger = new Map<number, { health: number; remaining: number }>();
   private readonly worldProgressOverlay = new RtsWorldProgressOverlay();
   private buildingLabelCache: ReadonlyMap<string, string> | null = null;
   private readonly projectiles = new ProjectileSystem();
@@ -531,6 +544,7 @@ export class RtsApp {
           ? "missing-forest"
           : null,
       () => this.roads.occupancyBlockers(),
+      () => this.units.all(),
     );
     this.roadConstruction = new RoadConstructionService(
       this.roads,
@@ -1010,6 +1024,7 @@ export class RtsApp {
     this.roadDebugView.refresh();
     this.commandMarkers.update(dt);
     this.structures.updateVisualAnimations(dt);
+    this.updateHealthBarLinger(dt);
     this.updateWorldProgressOverlay();
     // Presentation runs on the rendered-frame delta, not the simulation's: a
     // tracer and a health bar should look the same at any game speed.
@@ -1025,6 +1040,50 @@ export class RtsApp {
   };
 
   /** Present player construction, training, and damaged-building health above all world geometry. */
+  /**
+   * Keep a building's health bar up for a few seconds after it is hit, then let
+   * it go (plan §64 "seçim ve sağlık göstergeleri").
+   *
+   * Bars used to stay up for as long as a building was below full health, on the
+   * reasoning that buildings do not regenerate so the information stays true.
+   * True, but it made a besieged base indistinguishable from one that took a
+   * stray arrow an hour ago: a dozen permanent bars, none of them urgent. A bar
+   * that appears when a building is *being hit* is the thing the player has to
+   * react to, and the standing health figure is still one click away in the
+   * selection panel.
+   *
+   * Damage is detected by watching health fall rather than by a combat hook,
+   * because every source that can hurt a building — siege, defence fire, a razed
+   * neighbour — already lands on the same value, and one observer cannot miss a
+   * path the way a set of call sites can. Real seconds, not simulation ones, for
+   * the reason the surrounding presentation code gives: at 8x a warning that
+   * expired eight times faster would be unreadable when it matters most.
+   */
+  private updateHealthBarLinger(dt: number): void {
+    const seen = new Set<number>();
+    const observe = (key: number, current: number): void => {
+      seen.add(key);
+      const previous = this.healthBarLinger.get(key);
+      const remaining = previous && current < previous.health
+        ? HEALTH_BAR_LINGER_SECONDS
+        : Math.max(0, (previous?.remaining ?? 0) - dt);
+      this.healthBarLinger.set(key, { health: current, remaining });
+    };
+    for (const structure of this.structures.all()) observe(structure.id, structure.health.current);
+    const center = this.centers.get(PLAYER_OWNER);
+    if (center) observe(CENTER_HEALTH_BAR_KEY, center.health.current);
+    // Drop razed buildings so a rebuilt one on a recycled id cannot inherit a
+    // stale bar — and so the map does not grow for a whole match.
+    for (const key of [...this.healthBarLinger.keys()]) {
+      if (!seen.has(key)) this.healthBarLinger.delete(key);
+    }
+  }
+
+  /** True while a building was hit recently enough to still warrant a bar. */
+  private healthBarVisible(key: number): boolean {
+    return (this.healthBarLinger.get(key)?.remaining ?? 0) > 0;
+  }
+
   private updateWorldProgressOverlay(): void {
     const trainingSeconds = this.options.unitBalance[PLACEHOLDER_WORKER_ID]?.trainingSeconds ?? 1;
     const entries: RtsWorldProgressEntry[] = this.structures.all()
@@ -1079,9 +1138,7 @@ export class RtsApp {
           label: `${queue.trainingLabel ?? "Asker"} üretiliyor · ${queue.queued}/${queue.capacity}`,
         });
       }
-      // Buildings do not regenerate, so a damaged bar remains available until
-      // repaired or destroyed instead of vanishing while the player responds.
-      if (!structure.health.depleted && structure.health.ratio < 1) {
+      if (!structure.health.depleted && structure.health.ratio < 1 && this.healthBarVisible(structure.id)) {
         entries.push({
           id: `structure-health-${structure.id}`,
           x: structure.x,
@@ -1093,7 +1150,7 @@ export class RtsApp {
         });
       }
     }
-    if (center && !center.health.depleted && center.health.ratio < 1) {
+    if (center && !center.health.depleted && center.health.ratio < 1 && this.healthBarVisible(CENTER_HEALTH_BAR_KEY)) {
       entries.push({
         id: "player-command-center-health",
         x: center.position.x,
@@ -1779,6 +1836,12 @@ export class RtsApp {
    * asserting it twice.
    */
   private selectionView(): RtsSelectionView {
+    // A pending demolish belongs to the building it was aimed at. Selecting
+    // anything else disarms it, so the confirm step can never be inherited by a
+    // building the player never armed.
+    if (this.demolishArmed && this.selection.selectedStructure() !== this.demolishArmed) {
+      this.demolishArmed = null;
+    }
     const units = this.selection.selected();
     if (units.length > 0) {
       return {
@@ -1805,6 +1868,7 @@ export class RtsApp {
           ageLabel: this.ageOf(structure.owner) === "town" ? "Kasaba" : "Yerleşim",
           health: structure.health.current,
           maxHealth: structure.health.max,
+          demolishArmed: this.demolishArmed === structure,
           detail: this.structureDetail(structure),
           // Null when the data gives this building no `levels` at all — the
           // absence of an upgrade path is the data's statement, not a UI decision.
@@ -1889,6 +1953,30 @@ export class RtsApp {
    * to every other command path — which is what keeps a panel button and the
    * same order issued any other way from drifting into two behaviours.
    */
+  /**
+   * Player-ordered demolition of one of their own buildings (plan §64).
+   *
+   * First click arms, second click razes. The razing itself is expressed as
+   * lethal damage rather than a direct `structures.destroy` call: that routes it
+   * through {@link updateStructureDestruction}, the one place a depleted
+   * structure is removed, so territory refresh, navigation blockers, selection
+   * reconciliation and the log entry all happen exactly as they do when siege
+   * takes the same building down. A second removal path would have to restate
+   * every one of those and could drift from them.
+   */
+  private demolishSelectedStructure(): void {
+    const structure = this.selection.selectedStructure();
+    if (!structure || structure.owner !== PLAYER_OWNER) return;
+    if (this.demolishArmed !== structure) {
+      this.demolishArmed = structure;
+      this.buildPalette.setActionMessage(`${structure.stats.label} yıkılacak. Onaylamak için tekrar basın.`);
+      return;
+    }
+    this.demolishArmed = null;
+    structure.health.damage(structure.health.max);
+    this.buildPalette.setActionMessage(`${structure.stats.label} yıkıldı.`);
+  }
+
   private runSelectionAction(id: string): void {
     if (id === TRAIN_WORKER_ACTION) {
       this.queueWorker();
@@ -1903,6 +1991,10 @@ export class RtsApp {
       this.roadPlacement.cancel();
       this.rallyPointPending = true;
       this.buildPalette.setActionMessage("Toplanma noktası için haritada bir konum seçin.");
+      return;
+    }
+    if (id === DEMOLISH_ACTION) {
+      this.demolishSelectedStructure();
       return;
     }
     if (id === UPGRADE_ACTION) {

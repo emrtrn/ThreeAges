@@ -2675,11 +2675,27 @@ Görevler:
 
 - [x] FirstAge Lv1–3 modelleri (`{Bina}_FirstAge_Level{1..3}`)
 - [x] SecondAge Lv1–3 modelleri (`{Bina}_SecondAge_Level{1..3}`)
-- [ ] Takım renkleri
-- [ ] Seçim ve sağlık göstergeleri
-- [ ] İnşaat placeholder geçişi
-- [ ] Hasar efekti
-- [ ] Yıkım geçişi
+- [x] Takım renkleri — zemin halkası (`team/teamColors.ts`), player cyan /
+      enemy kırmızı; birim, yapı ve merkeze bağlı. Model materyali tint
+      edilmedi: bayrak uzak kamerada okunmuyor.
+- [x] Seçim ve sağlık göstergeleri — seçim halkaları birim/yapı/merkezde
+      (`selectionSystem.ts`); can çubukları birimde mesh olarak
+      (`units/healthBar.ts`), yapı ve merkezde ekran-uzayı overlay olarak
+      (`ui/rtsWorldProgressOverlay.ts` `variant: "health"`, `RtsApp` besler).
+      Yapı çubuğu yalnızca hasarlıyken görünür ve onarılana kadar kalır.
+- [x] İnşaat placeholder geçişi — şantiye, tipin araştırılmış seviyesindeki
+      yarı saydam modeli taşır; tamamlanınca `setCompletedVisualWithDrop` ile
+      bitmiş modele geçer (`RtsApp.applyConstructionVisual` /
+      `applyStructureVisual`). Çağ atlayınca `rebuildForAge` ikisini de yeniler.
+- [ ] Hasar efekti — **§67'ye bağlı**, hiç VFX sistemi yok. §64'ten önce §67
+      başlamalı.
+- [x] Yıkım geçişi — yıkılan yapı simülasyondan aynı karede çıkar (navigasyon
+      ve territory anında doğru), görsel kabuk 0.9 sn batıp saydamlaşır
+      (`placedStructureSystem` `beginCollapse` / `collapses`).
+- [x] Oyuncunun kendi yapısını yıkması — seçim panelinde iki adımlı "Yık →
+      Yıkımı Onayla". Ölümcül hasar olarak ifade edilir, yani kuşatmanın
+      kullandığı tek kaldırma yolundan geçer. Merkez hariç (yıkılması yenilgi
+      koşulu). Kaynak iadesi yok.
 
 **Model matrisi tek eksenli üçlü değil, çağ × seviye çarpımıdır** (`02 §25.3`):
 slice kapsamı **iki çağ × üç seviye**, yani bina başına altı model

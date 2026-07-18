@@ -75,11 +75,23 @@ export class HealthComponent {
     this.currentValue = this.maxValue;
   }
 
-  /** Raise a live target's maximum without silently restoring damage it has taken. */
+  /**
+   * Raise a live target's maximum, carrying current health up by the same
+   * amount, so the damage it has taken is preserved as an absolute figure.
+   *
+   * The delta — not the ratio, and not a plain ceiling raise. Raising only the
+   * ceiling made an *undamaged* building damaged: a full 700/700 upgrading to a
+   * 1000 maximum became 700/1000 and read as having lost 300 hit points it never
+   * had, permanently, without ever being attacked. Preserving the ratio instead
+   * would silently heal a building that was under attack while it levelled.
+   * Carrying the delta does both correctly: 700/700 → 1000/1000, and a building
+   * 200 down at 500/700 → 800/1000, still 200 down.
+   */
   upgradeMax(nextMax: number): void {
     if (!Number.isFinite(nextMax) || nextMax < this.maxValue) {
       throw new RangeError("Health upgrades must be finite and may not lower the maximum");
     }
+    this.currentValue += nextMax - this.maxValue;
     this.maxValue = nextMax;
   }
 

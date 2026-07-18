@@ -17,6 +17,8 @@ import type { KingdomRegistry } from "../kingdom/kingdomRegistry";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { TerritoryControlSystem } from "../territory/territoryControlSystem";
 import type { UnitOwner } from "../units/unit";
+import type { Unit } from "../units/unit";
+import { enemyOccupiesFootprint, evictUnitsFromFootprint } from "./footprintEviction";
 import { type PlacementResult, validateBuildingPlacement } from "./placementGrid";
 import type { PlacedStructure, PlacedStructureSystem } from "./placedStructureSystem";
 
@@ -27,7 +29,8 @@ export type StructureBuildFailure =
   | "blocked"
   | "insufficient-resources"
   | "missing-resource-node"
-  | "missing-forest";
+  | "missing-forest"
+  | "enemy-occupied";
 
 export type StructureBuildResult =
   | { readonly built: true; readonly structure: PlacedStructure; readonly result: PlacementResult }
@@ -49,6 +52,13 @@ export class StructureConstructionService {
     private readonly additionalPlacementFailure?: (stats: BuildingBalanceStats, x: number, z: number) => PlacementResult["reason"],
     /** Walkable world features, such as roads, that still reserve build space. */
     private readonly placementBlockers: () => readonly NavBlocker[] = () => [],
+    /**
+     * Live units, for the §38 footprint rule: friendly units standing where a
+     * building is going are ordered clear of it, hostile ones refuse the
+     * placement. Omitted, both behaviours are simply off — the AI's headless
+     * tests build without a unit world.
+     */
+    private readonly liveUnits: () => readonly Unit[] = () => [],
   ) {}
 
   /**
@@ -68,7 +78,13 @@ export class StructureConstructionService {
     });
     if (!result.valid) return result;
     const reason = this.additionalPlacementFailure?.(stats, result.x, result.z) ?? null;
-    return reason ? { ...result, valid: false, reason } : result;
+    if (reason) return { ...result, valid: false, reason };
+    // Own units step aside (see footprintEviction); enemy units do not, or the
+    // build order becomes a way to shove a hostile army around for free.
+    if (enemyOccupiesFootprint(this.liveUnits(), owner, stats, result.x, result.z)) {
+      return { ...result, valid: false, reason: "enemy-occupied" };
+    }
+    return result;
   }
 
   /** Validate, reserve the owner's resources, and create the construction site. */
@@ -91,6 +107,10 @@ export class StructureConstructionService {
         result: { ...result, valid: false, reason: "insufficient-resources" },
       };
     }
+    // Clear the ground before the footprint starts blocking navigation below:
+    // routes planned after `setBlockers` would be routes out of a wall the unit
+    // is already standing inside, and there are none.
+    evictUnitsFromFootprint(this.liveUnits(), owner, stats, result.x, result.z, this.navigation);
     const structure = this.structures.place(owner, stats, result.x, result.z);
     this.reservations.set(structure.id, reservation);
     this.navigation.setBlockers(this.occupiedBlockers());

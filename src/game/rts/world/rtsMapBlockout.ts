@@ -354,8 +354,10 @@ export function createRtsMapBlockout(map: RtsMapBlockout = RTS_BLOCKOUT_MAP): Gr
   const root = new Group();
   root.name = "rts-map-blockout";
 
-  root.add(createZoneMarker("rts-player-start", map.playerStart, "#2d7fd6", 8));
-  root.add(createZoneMarker("rts-enemy-start", map.enemyStart, "#c0392b", 8));
+  // No start-position discs: the blockout drew a filled team-coloured circle
+  // under each command centre to say whose base this was. The §64 team rings now
+  // answer that on every unit and building, and the disc only added a coloured
+  // patch of ground the centre's own ring had to compete with.
   root.add(createZoneMarker("rts-central-expansion", map.centralExpansion, "#d7ad52", 7));
   root.add(createZoneMarker("rts-external-resource", map.externalResource, "#63a86e", 5));
   for (const node of map.resourceNodes) {
