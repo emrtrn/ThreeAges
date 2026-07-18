@@ -18,6 +18,7 @@ import {
 } from "three";
 
 import type { UnitOwner } from "../units/unit";
+import { TEAM_COLOR, createTeamRing } from "../team/teamColors";
 import type {
   BuildingBalanceStats,
   EconomyProductionBalance,
@@ -34,10 +35,6 @@ export const COMMAND_CENTER_MAX_HEALTH = 300;
 export const COMMAND_CENTER_CONTROL_RADIUS = 28;
 const COMMAND_CENTER_FOOTPRINT = 7;
 
-const CENTER_TEAM_COLOR: Record<UnitOwner, string> = {
-  player: "#2d7fd6",
-  enemy: "#c0392b",
-};
 
 export class CommandCenter implements UpgradableStructure {
   readonly object = new Group();
@@ -109,7 +106,7 @@ export class CommandCenter implements UpgradableStructure {
     const placeholder = new Group();
     placeholder.name = "rts-command-center-placeholder";
 
-    const teamColor = new Color(CENTER_TEAM_COLOR[owner]);
+    const teamColor = new Color(TEAM_COLOR[owner]);
     const base = new Mesh(
       new BoxGeometry(7, 0.8, 7),
       new MeshStandardMaterial({ color: "#6d6250", roughness: 0.9 }),
@@ -154,7 +151,10 @@ export class CommandCenter implements UpgradableStructure {
     this.selectionRing.position.y = 0.05;
     this.selectionRing.visible = false;
     this.object.add(this.selectionRing);
-
+    // Added to `object`, not to the placeholder: `setVisual` disposes the
+    // placeholder when the loaded model arrives, and a ring inside it would go
+    // with it — the same reason the selection ring lives out here.
+    this.object.add(createTeamRing(owner, ringRadius - 0.35));
   }
 
   get position() {

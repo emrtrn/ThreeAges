@@ -24,6 +24,7 @@ import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { BuildingBalanceStats, EconomyProductionBalance, StartingResources } from "../../data/gameDataTypes";
 import type { UnitOwner } from "../units/unit";
 import { HealthComponent } from "../units/health";
+import { createTeamRing } from "../team/teamColors";
 import { buildingFootprintBlocker } from "./placementGrid";
 import { ConstructionComponent } from "./constructionComponent";
 
@@ -135,6 +136,9 @@ export class PlacedStructureSystem {
     selectionRing.position.y = 0.05;
     selectionRing.visible = false;
     object.add(selectionRing);
+    // Team ring sits just inside the selection ring, on the same footprint-derived
+    // radius, so ownership reads at camera distance without a model tint.
+    object.add(createTeamRing(owner, ringRadius - 0.35));
     this.root.add(object);
     const structure: PlacedStructure = {
       id,

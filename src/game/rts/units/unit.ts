@@ -24,6 +24,9 @@ import {
 } from "three";
 import type { UnitBalanceStats, UnitRoleId } from "../../data/gameDataTypes";
 import type { CombatTarget } from "../combat/combatTarget";
+// Body tint and the ground ring read from one source, so a unit can never wear
+// one team's colour on its body and another's underneath it.
+import { TEAM_COLOR, createTeamRing } from "../team/teamColors";
 import { AttackComponent } from "./attackComponent";
 import { HealthComponent } from "./health";
 import { HealthBar } from "./healthBar";
@@ -39,11 +42,6 @@ export type UnitRole = UnitRoleId;
  * where it stands and never steps off its position.
  */
 export type UnitStance = "aggressive" | "hold";
-
-const TEAM_COLOR: Record<UnitOwner, string> = {
-  player: "#2d7fd6",
-  enemy: "#c0392b",
-};
 
 /** Gameplay footprint used by selection, commands and formation spacing. */
 export const UNIT_RADIUS = 0.5;
@@ -156,6 +154,11 @@ export class Unit {
     // Back-reference so a raycast hit on the body resolves to this unit.
     body.userData.unitId = this.id;
     this.object.add(body);
+
+    // Always on: this is the answer to "whose is that", which the player needs
+    // continuously, not on selection. It sits inside the selection ring's radius
+    // so both can be visible at once without reading as one thick band.
+    this.object.add(createTeamRing(owner, UNIT_RADIUS * 0.75));
 
     this.ring = new Mesh(
       new RingGeometry(UNIT_RADIUS * 1.25, UNIT_RADIUS * 1.55, 24),
