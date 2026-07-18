@@ -209,8 +209,22 @@ numeraire modelindeki tam karsiligi.
   > ve panelsiz, kurulabilir bir market** gosterirdi - plan §13'un reddettigi
   > "yarim sistem". Bu yuzden balance girisi M1'e tasindi; M0 saf sozlesme +
   > model olarak kaldi ve gercekten gorunur bir degisiklik uretmiyor.
-- **Faz M1 - Bina ve gorsel.** `market` binasi kurulabilir, sanat cozumleyiciye
-  baglanir, palette kategorisi. Ticaret UI'si yok.
+- **Faz M1 - Bina ve gorsel. - TAMAMLANDI**
+  - [x] `buildings.json`: `market` girisi ("Pazar", 8x8, 150 odun, 50 sn, 500 HP),
+        Lv2/Lv3 adimlari ve M0'da tanimlanan `market` ticaret blogu (§4.2'nin
+        onerilen degerleri). Komisyonun seviyeye gore dusmesi M3'e ait.
+  - [x] `rtsBuildingArt.ts`: tek satir `market` -> `Market_{family}_Level{n}`.
+        Cag ailesi ve seviye gorseli mevcut mekanizmadan bedavaya geliyor.
+  - [x] `rtsBuildPalette.ts`: "Ekonomi" kategorisi. Ayri bir "Ticaret" basligi
+        tek binalik bir liste olurdu; oyuncunun sordugu soru ("madenle
+        ulasamadigim tas/altin lazim") uretici binalarinkiyle ayni.
+  - [x] Testler: market'in her iki cag ailesinde ve 3 seviyede cozumlenmesi,
+        balance girisinin sekli, ve **balance'taki her binanin bir sanat
+        cozumleyicisi oldugu** invaryanti (unutulan satiri yakalar).
+  - [x] `npm run build:verify` yesil (1033 check).
+
+  > Bu fazdan sonra market kurulabilir ama secildiginde yalnizca genel
+  > ("passive") panel gosterir - ticaret butonlari M2'de geliyor.
 - **Faz M2 - Ticaret UI'si.** Market paneli: guncel al/sat fiyatlari, endeks
   gostergesi, 6 buton, yetersiz kaynak/kontrol disi gerekceleri. Cuzdanin
   `"trade"` yolu (§2.4).

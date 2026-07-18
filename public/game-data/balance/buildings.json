@@ -163,6 +163,35 @@
       "requiresResourceNode": true
     }
   },
+  "market": {
+    "label": "Pazar",
+    "footprint": { "width": 8, "depth": 8 },
+    "cost": { "wood": 150 },
+    "constructionSeconds": 50,
+    "maxHealth": 500,
+    "market": {
+      "lotSize": 100,
+      "basePrice": { "food": 100, "wood": 100, "stone": 100 },
+      "priceStep": 0.02,
+      "indexMin": 0.3,
+      "indexMax": 4,
+      "commission": 0.15
+    },
+    "levels": [
+      {
+        "level": 2,
+        "cost": { "wood": 120, "stone": 60 },
+        "durationSeconds": 45,
+        "maxHealth": 750
+      },
+      {
+        "level": 3,
+        "cost": { "wood": 170, "stone": 100 },
+        "durationSeconds": 55,
+        "maxHealth": 1000
+      }
+    ]
+  },
   "barracks": {
     "label": "Kışla",
     "footprint": { "width": 8, "depth": 8 },

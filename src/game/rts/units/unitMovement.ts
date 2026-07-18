@@ -41,6 +41,10 @@ const PROGRESS_FRACTION = 0.2;
  * is standing in, and must not spend the match trying.
  */
 const CONGESTION_ARRIVAL_RADIUS = 2;
+/** How far an unstick manoeuvre steps away from the current crowd. */
+const ESCAPE_DISTANCE = 2.5;
+/** A candidate needs this much breathing room before it becomes an escape route. */
+const ESCAPE_CLEARANCE = 0.2;
 
 const scratchDir = new Vector3();
 
@@ -135,7 +139,7 @@ export function updateUnitMovement(
     // meaningful once directional models replace the placeholder).
     unit.object.rotation.y = Math.atan2(scratchDir.x, scratchDir.z);
 
-    trackCongestion(unit, target, dist, step, dt, options.navigation);
+    trackCongestion(unit, target, dist, step, dt, units, options.navigation);
   }
 }
 
@@ -155,6 +159,7 @@ function trackCongestion(
   distanceBefore: number,
   step: number,
   dt: number,
+  units: readonly Unit[],
   navigation: RtsNavigation | undefined,
 ): void {
   const state = congestion.get(unit)
@@ -185,7 +190,11 @@ function trackCongestion(
   const destination = unit.pathDestination;
   if (navigation && destination && state.replans < MAX_REPLANS) {
     state.replans += 1;
-    const path = navigation.plan(unit.position, destination);
+    // Repeating a static-grid route cannot resolve a body-to-body deadlock:
+    // units intentionally are not baked into the static navigation grid. First
+    // create a short retreat/side-step, then join it back to the original goal.
+    const path = planCongestionEscape(unit, destination, units, navigation)
+      ?? navigation.plan(unit.position, destination);
     if (path && path.length > 0) {
       unit.replanPath(path);
       state.waypoint = null;
@@ -207,6 +216,53 @@ function trackCongestion(
     unit.stop();
   }
   congestion.delete(unit);
+}
+
+/** Find a walkable retreat or side-step, then continue to the original goal. */
+function planCongestionEscape(
+  unit: Unit,
+  destination: Vector3,
+  units: readonly Unit[],
+  navigation: RtsNavigation,
+): Vector3[] | null {
+  const dx = destination.x - unit.position.x;
+  const dz = destination.z - unit.position.z;
+  const length = Math.hypot(dx, dz);
+  if (length <= 1e-4) return null;
+  const forwardX = dx / length;
+  const forwardZ = dz / length;
+  // Unit id breaks a mirrored tie so stacked Guards do not pick the same flank.
+  const angles = unit.id % 2 === 0
+    ? [Math.PI, Math.PI * 0.5, -Math.PI * 0.5, Math.PI * 0.75, -Math.PI * 0.75]
+    : [Math.PI, -Math.PI * 0.5, Math.PI * 0.5, -Math.PI * 0.75, Math.PI * 0.75];
+  const candidates: Array<{ score: number; escape: Vector3 }> = [];
+  for (const angle of angles) {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    const offsetX = (forwardX * cos - forwardZ * sin) * ESCAPE_DISTANCE;
+    const offsetZ = (forwardX * sin + forwardZ * cos) * ESCAPE_DISTANCE;
+    const escape = new Vector3(unit.position.x + offsetX, 0, unit.position.z + offsetZ);
+    if (!navigation.isWalkable(escape.x, escape.z)) continue;
+
+    let clearance = Number.POSITIVE_INFINITY;
+    for (const other of units) {
+      if (other === unit || other.health.depleted || other.dying) continue;
+      clearance = Math.min(clearance, Math.hypot(escape.x - other.position.x, escape.z - other.position.z)
+        - unit.navRadius - other.navRadius);
+    }
+    if (clearance < ESCAPE_CLEARANCE) continue;
+    const progress = offsetX * forwardX + offsetZ * forwardZ;
+    candidates.push({ score: clearance * 10 + progress, escape });
+  }
+  candidates.sort((left, right) => right.score - left.score);
+  for (const { escape } of candidates) {
+    const escapePath = navigation.plan(unit.position, escape);
+    const onwardPath = navigation.plan(escape, destination);
+    if (escapePath && onwardPath && escapePath.length > 0 && onwardPath.length > 0) {
+      return [...escapePath, ...onwardPath.slice(1)];
+    }
+  }
+  return null;
 }
 
 /** Test/debug read of a unit's current stall, in seconds. */

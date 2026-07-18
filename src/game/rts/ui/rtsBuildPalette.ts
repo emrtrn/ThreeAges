@@ -35,6 +35,11 @@ import { canAffordCost, formatResourceCost } from "./resourceLabels";
  * `territory`, …) because a category is an editorial claim about *why* a player
  * reaches for a building. A Depot has no `economy` block but is the reason a
  * Farm pays: deriving would have filed it away from the decision it belongs to.
+ *
+ * The Market sits under "Ekonomi" for the same reason, not because it produces:
+ * it converts. The player reaching for it is asking "I need stone/gold I cannot
+ * mine", which is the same question the producers answer — a "Ticaret" category
+ * of one would split that decision across two lists to scan.
  */
 interface BuildCategory {
   readonly title: string;
@@ -42,7 +47,7 @@ interface BuildCategory {
 }
 
 const BUILD_CATEGORIES: readonly BuildCategory[] = [
-  { title: "Ekonomi", buildingIds: ["farm", "lumber_camp", "quarry", "gold_mine"] },
+  { title: "Ekonomi", buildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "market"] },
   { title: "Lojistik", buildingIds: ["depot", "outpost"] },
   { title: "Yerleşim", buildingIds: ["house"] },
   { title: "Askerî", buildingIds: ["barracks"] },

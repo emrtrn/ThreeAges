@@ -28532,6 +28532,28 @@ check("Faz 0 building mesh paths resolve by age family and in-age level", () => 
   assert.equal(hasBuildingArt("nonexistent"), false);
 });
 
+check("Faz M1 the Market is buildable and every balance building has art wired", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const market = buildings["market"];
+  assert.ok(market, "the market building exists in balance data");
+  assert.ok(market.cost.wood && market.cost.wood > 0, "the market is bought with wood the opening actually has");
+  // The trade tuning rides on the building entry so M2's panel has real data to
+  // read; the validator already refused it if the no-arbitrage rule were broken.
+  assert.equal(market.market?.lotSize, 100);
+  assert.deepEqual(Object.keys(market.market?.basePrice ?? {}).sort(), ["food", "stone", "wood"]);
+  // Both age families and all three levels resolve — the art pack ships all six.
+  assert.equal(buildingMeshPath("market", "settlement", 1), `${STATIC_MESH_ROOT}/Market_FirstAge_Level1.gltf`);
+  assert.equal(buildingMeshPath("market", "town", 3), `${STATIC_MESH_ROOT}/Market_SecondAge_Level3.gltf`);
+  // The invariant that would have caught a forgotten resolver line: a building
+  // the data can place but the art map does not know renders as a placeholder
+  // box, which looks like a bug rather than the missing wiring it is.
+  for (const id of Object.keys(buildings)) {
+    assert.ok(hasBuildingArt(id), `building "${id}" has no art resolver`);
+  }
+});
+
 check("Faz 0 preload set is deduplicated and every mesh file exists on disk", () => {
   const paths = allBuildingMeshPaths();
   assert.equal(new Set(paths).size, paths.length, "preload paths are deduplicated");
@@ -29673,10 +29695,10 @@ check("Faz 7 a unit the crowd gives no ground gives its order up instead of grin
 
   // Open ground always has a route, so the navigator answers every time it is
   // asked: the re-plan budget is the only thing that can end this order.
-  let plans = 0;
+  const goals: Vector3[] = [];
   const spy: RtsNavigation = Object.assign(Object.create(navigation) as RtsNavigation, {
     plan: (start: Vector3, goal: Vector3) => {
-      plans += 1;
+      goals.push(goal.clone());
       return navigation.plan(start, goal);
     },
   });
@@ -29688,6 +29710,13 @@ check("Faz 7 a unit the crowd gives no ground gives its order up instead of grin
     unit.position.x = pinnedX;
     unit.position.z = pinnedZ;
   }
+
+  const plans = goals.length / 2;
+  assert.ok(
+    goals.some((goal) => Math.hypot(goal.x, goal.z + 30) > 0.5),
+    "the recovery first probes a local retreat or side-step",
+  );
+  assert.ok(goals.length <= 4, `recovery path queries stay bounded (${goals.length})`);
 
   assert.equal(unit.pathTarget, null, "plan §45: a stall ends in a stop; no order outlives the jam");
   assert.ok(plans > 0, "the stall was noticed at all — progress is measured per frame, not per step");
