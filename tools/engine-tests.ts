@@ -88,6 +88,7 @@ import {
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
 import { MarketPrices } from "../src/game/rts/economy/marketPricing";
+import { MarketTradeSystem } from "../src/game/rts/economy/marketTradeSystem";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
@@ -131,6 +132,7 @@ import { RtsNotificationCenter, MAX_ACTIVE_NOTIFICATIONS } from "../src/game/rts
 import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
 import {
   describeSelection,
+  type MarketDetailView,
   type MilitaryDetailView,
   type SelectedUnitView,
   type SelectionAction,
@@ -28136,6 +28138,68 @@ check("RTS player ground orders release combat units from hold position", () => 
   assert.equal(guard.hasPlayerMoveOrder, true);
 });
 
+check("RTS group ground orders stop first and stagger each unit launch", () => {
+  const units = new UnitSystem();
+  const first = units.spawn("player", 8, 8, RTS_TEST_UNIT_STATS);
+  const second = units.spawn("player", 2, 2, RTS_TEST_UNIT_STATS);
+  first.setMoveTarget(10, 10);
+  second.setMoveTarget(10, 10);
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 10, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const commands = new CommandSystem(
+    { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
+    camera,
+    { selected: () => [first, second] } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem,
+    units,
+    new CommandCenterSystem(),
+    new RtsNavigation(),
+    new CommandMarkerSystem(),
+  );
+
+  commands.issueAt(50, 50);
+  assert.equal(second.hasPlayerMoveOrder, true, "the unit closest to the target receives the route first");
+  assert.equal(first.hasPlayerMoveOrder, false, "the farther unit is stopped before its staggered launch");
+
+  commands.update(0.17);
+  assert.equal(first.hasPlayerMoveOrder, false, "the cadence has not released the farther unit early");
+  commands.update(0.01);
+  assert.equal(first.hasPlayerMoveOrder, true, "the farther unit starts after the short delay");
+});
+
+check("RTS ground orders reserve an active Guard destination for later orders", () => {
+  const units = new UnitSystem();
+  const first = units.spawn("player", 4, 4, RTS_TEST_UNIT_STATS);
+  const second = units.spawn("player", 6, 4, RTS_TEST_UNIT_STATS);
+  let selected = [first];
+  const camera = new PerspectiveCamera(60, 1, 0.1, 100);
+  camera.position.set(0, 10, 10);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld(true);
+  const commands = new CommandSystem(
+    { clientWidth: 100, clientHeight: 100 } as HTMLCanvasElement,
+    camera,
+    { selected: () => selected } as unknown as import("../src/game/rts/selection/selectionSystem").SelectionSystem,
+    units,
+    new CommandCenterSystem(),
+    new RtsNavigation(),
+    new CommandMarkerSystem(),
+  );
+
+  commands.issueAt(50, 50);
+  const firstDestination = first.pathDestination?.clone() ?? assert.fail("first destination missing");
+  selected = [second];
+  commands.issueAt(50, 50);
+  const secondDestination = second.pathDestination ?? assert.fail("second destination missing");
+
+  assert.ok(
+    Math.hypot(firstDestination.x - secondDestination.x, firstDestination.z - secondDestination.z)
+      >= first.navRadius + second.navRadius,
+    "a later order claims a nearby free destination instead of the Guard's reserved endpoint",
+  );
+});
+
 check("RTS contextual right-click routes selected workers to a friendly structure job", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -29481,6 +29545,24 @@ function simulateSquad(
   }
   return { ticks };
 }
+
+check("Faz 7 exact unit stacks split onto legal ground in one separation pass", () => {
+  const units = new UnitSystem();
+  const navigation = new RtsNavigation();
+  const first = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  const second = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+
+  updateUnitSeparation([first, second], 1 / 60, { navigation });
+
+  const distance = Math.hypot(first.position.x - second.position.x, first.position.z - second.position.z);
+  assert.ok(
+    distance >= first.navRadius + second.navRadius,
+    "an exact stack is fully separated immediately instead of waiting for capped crowd pushes",
+  );
+  for (const unit of [first, second]) {
+    assert.equal(navigation.isWalkable(unit.position.x, unit.position.z), true, "hard recovery stays on legal ground");
+  }
+});
 
 check("Faz 7 a group order hands each unit its nearest slot, not its selection index", () => {
   const units = new UnitSystem();
@@ -33541,6 +33623,135 @@ check("Faz M0: the market validator refuses tunings that mint gold", () => {
   assert.throws(() => validateMarketBalance({ ...good, lotSize: 0 }, "test"), GameDataError);
   assert.throws(() => validateMarketBalance({ ...good, basePrice: {} }, "test"), GameDataError);
   assert.throws(() => validateMarketBalance({ ...good, basePrice: { wood: -5 } }, "test"), GameDataError);
+});
+
+check("Faz M2: trading moves stock and price, and never counts as production income", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const marketStats = buildings["market"] ?? assert.fail("the market building is missing");
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(
+    ["player"], units, structures,
+    { food: 0, wood: 500, stone: 0, gold: 200 }, 20,
+  );
+  let connected = true;
+  const trade = new MarketTradeSystem(buildings, structures, kingdoms, () => connected);
+  const wallet = kingdoms.get("player").wallet;
+  assert.equal(trade.enabled, true, "the template's data defines a trading building");
+
+  // KR-M4 and the gate order: owning no Market is reported before losing the
+  // ground under one, because they are different problems with different fixes.
+  assert.equal(trade.buy("player", "stone"), "no-completed-market");
+  const market = structures.place("player", marketStats, 0, 0);
+  assert.equal(trade.buy("player", "stone"), "no-completed-market", "a half-built Market does not trade");
+  structures.advanceConstruction(market, marketStats.constructionSeconds);
+  connected = false;
+  assert.equal(trade.buy("player", "stone"), "disconnected", "a besieged Market cannot trade");
+  assert.equal(wallet.amount("gold"), 200, "a refused trade spends nothing");
+  connected = true;
+
+  // A buy: gold out, a lot in, and the price of what was bought goes up.
+  assert.equal(trade.buy("player", "stone"), "traded");
+  assert.equal(wallet.amount("gold"), 85, "115 gold for one lot at the opening rate");
+  assert.equal(wallet.amount("stone"), 100);
+  const afterBuy = trade.snapshotFor("player")!.prices.find((price) => price.resourceId === "stone")!;
+  assert.ok(afterBuy.index > 1, "buying stone made stone dearer");
+
+  // §2.4, the defect this path exists to prevent: 100 stone bought with gold is
+  // not stone anyone mined, and must not show up in the HUD's "+X/dk" income.
+  wallet.advance(30);
+  assert.equal(wallet.incomePerMinute("stone"), 0, "a purchase is not production");
+  wallet.credit("stone", 5);
+  wallet.advance(30);
+  assert.ok(wallet.incomePerMinute("stone") > 0, "real production still registers");
+
+  // Refusals leave the market exactly as they found it — a broke player must not
+  // be able to move the price for free.
+  const before = trade.snapshotFor("player")!;
+  assert.equal(trade.buy("player", "food"), "insufficient-gold", "85 gold cannot pay 115");
+  assert.deepEqual(trade.snapshotFor("player"), before, "a refused buy moves neither stock nor price");
+  assert.equal(trade.sell("player", "food"), "insufficient-resources", "no food to sell");
+  assert.equal(trade.buy("player", "gold"), "untraded-resource", "gold is the numeraire, not a commodity");
+
+  // A sell: a lot out, gold in, and the price of what was sold goes down.
+  assert.equal(trade.sell("player", "wood"), "traded");
+  assert.equal(wallet.amount("wood"), 400);
+  assert.equal(wallet.amount("gold"), 85 + 85, "85 gold for one lot at the opening rate");
+  assert.ok(
+    trade.snapshotFor("player")!.prices.find((price) => price.resourceId === "wood")!.index < 1,
+    "selling wood made wood cheaper",
+  );
+
+  // KR-M2: one kingdom's spree does not move another kingdom's rates.
+  const twoKingdoms = new KingdomRegistry(
+    ["player", "enemy"], units, new PlacedStructureSystem(), { gold: 1000 }, 20,
+  );
+  const isolated = new MarketTradeSystem(buildings, structures, twoKingdoms, () => true);
+  assert.equal(
+    isolated.snapshotFor("enemy")!.prices.find((price) => price.resourceId === "stone")!.index,
+    1,
+    "the enemy still trades at the opening rate",
+  );
+
+  // A restart is a new market, not a continuation of the last one's spree.
+  trade.reset();
+  assert.deepEqual(trade.snapshotFor("player")!.prices.map((price) => price.index), [1, 1, 1]);
+});
+
+check("Faz M2: the Market panel quotes both rates, the index, and why it is refused", () => {
+  const marketPanel = (detail: Partial<MarketDetailView> = {}): SelectionPanelContent =>
+    describeSelection({
+      kind: "structure",
+      structure: {
+        id: 1, label: "Pazar", level: 1, health: 500, maxHealth: 500,
+        detail: {
+          kind: "market",
+          connected: true,
+          trade: {
+            lotSize: 100,
+            commission: 0.15,
+            prices: [
+              { resourceId: "wood", index: 1.2, buyPrice: 138, sellPrice: 102, atFloor: false, atCeiling: false },
+              { resourceId: "stone", index: 0.3, buyPrice: 35, sellPrice: 25, atFloor: true, atCeiling: false },
+            ],
+          },
+          ...detail,
+        },
+      },
+    }) ?? assert.fail("panel missing");
+  const action = (content: SelectionPanelContent, id: string): SelectionAction =>
+    content.actions.find((candidate) => candidate.id === id) ?? assert.fail(`no ${id} action`);
+
+  const healthy = marketPanel();
+  // Both rates and the index on one row: the decision the market exists to
+  // create ("sell now or wait?") cannot be made from a single price.
+  assert.match(healthy.lines.join(" | "), /Odun: al 138 \/ sat 102 altın · endeks ×1\.20/);
+  assert.match(healthy.lines.join(" | "), /Taş: al 35 \/ sat 25 altın · endeks ×0\.30 \(taban\)/);
+  assert.match(healthy.lines.join(" | "), /Lot: 100 birim · komisyon %15/);
+
+  // Two buttons per tradable resource, signed against the player's gold so the
+  // directions cannot be confused at a glance.
+  assert.equal(healthy.actions.length, 4);
+  assert.equal(action(healthy, "trade-buy:wood").label, "100 Odun Al");
+  assert.equal(action(healthy, "trade-buy:wood").cost, "-138 Altın");
+  assert.equal(action(healthy, "trade-sell:wood").label, "100 Odun Sat");
+  assert.equal(action(healthy, "trade-sell:wood").cost, "+102 Altın");
+  assert.equal(action(healthy, "trade-buy:wood").reason, null, "a legal action carries no excuse");
+  // Affordability is deliberately not a panel gate (the click answers it), for
+  // the same reason the age button leaves it: stock moves every tick.
+  assert.equal(action(healthy, "trade-buy:stone").enabled, true);
+
+  // KR-M4: the one gate the panel does state, because the system handed it over.
+  const severed = marketPanel({ connected: false });
+  assert.match(severed.lines.join(" | "), /Kontrol Dışı — bu Pazar ticaret yapamaz/);
+  assert.equal(action(severed, "trade-sell:wood").enabled, false);
+  assert.match(action(severed, "trade-sell:wood").reason ?? "", /Kontrol Dışı/);
+  assert.match(severed.tooltip ?? "", /alanı geri alın/);
+  // The commission has to be explained somewhere, or losing money on an instant
+  // round trip reads as a bug rather than the rule that stops infinite gold.
+  assert.match(healthy.tooltip ?? "", /komisyon/i);
 });
 
 check("§69: the AI stops deciding once the match is over", () => {

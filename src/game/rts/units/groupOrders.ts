@@ -20,6 +20,16 @@ export interface GroupDestination {
   readonly path: Vector3[] | null;
 }
 
+/** A destination already claimed by another active player order. */
+export interface DestinationReservation {
+  readonly position: Vector3;
+  readonly radius: number;
+}
+
+const DESTINATION_CLEARANCE = 0.2;
+const DESTINATION_SEARCH_STEP = 1.5;
+const DESTINATION_SEARCH_RINGS = 4;
+
 /**
  * Spread a group order over formation slots and plan each unit onto its slot.
  *
@@ -35,6 +45,7 @@ export function assignGroupDestinations(
   units: readonly Unit[],
   point: Vector3,
   navigation: RtsNavigation,
+  reservations: readonly DestinationReservation[] = [],
 ): GroupDestination[] {
   if (units.length === 0) return [];
 
@@ -62,9 +73,56 @@ export function assignGroupDestinations(
     assigned += 1;
   }
 
+  // The formation slots are already unique. Keep the established one-plan-per-
+  // unit fast path unless another *active order* has claimed a destination.
+  // The reservation search below is intentionally exceptional: its grid probes
+  // are only justified when a later command would otherwise stack units.
+  if (reservations.length === 0) {
+    return units.map((unit, u) => {
+      const slot = slots[slotForUnit[u] ?? 0] ?? point;
+      const path = navigation.plan(unit.position, slot) ?? navigation.plan(unit.position, point);
+      return { unit, destination: slot, path };
+    });
+  }
+
+  const occupied = [...reservations];
   return units.map((unit, u) => {
     const slot = slots[slotForUnit[u] ?? 0] ?? point;
-    const path = navigation.plan(unit.position, slot) ?? navigation.plan(unit.position, point);
-    return { unit, destination: slot, path };
+    const assigned = nearestAvailableDestination(unit, slot, navigation, occupied)
+      ?? nearestAvailableDestination(unit, point, navigation, occupied);
+    if (!assigned) return { unit, destination: slot, path: null };
+    occupied.push({ position: assigned.destination, radius: unit.navRadius });
+    return { unit, destination: assigned.destination, path: assigned.path };
   });
+}
+
+/** Find the closest walkable, unclaimed destination around the requested slot. */
+function nearestAvailableDestination(
+  unit: Unit,
+  desired: Vector3,
+  navigation: RtsNavigation,
+  occupied: readonly DestinationReservation[],
+): { destination: Vector3; path: Vector3[] } | null {
+  const candidates = [desired.clone()];
+  for (let ring = 1; ring <= DESTINATION_SEARCH_RINGS; ring += 1) {
+    const distance = ring * DESTINATION_SEARCH_STEP;
+    for (let step = 0; step < 8; step += 1) {
+      const angle = (step / 8) * Math.PI * 2;
+      candidates.push(new Vector3(
+        desired.x + Math.cos(angle) * distance,
+        0,
+        desired.z + Math.sin(angle) * distance,
+      ));
+    }
+  }
+  for (const candidate of candidates) {
+    if (!navigation.isWalkable(candidate.x, candidate.z)) continue;
+    if (occupied.some((reservation) => Math.hypot(
+      candidate.x - reservation.position.x,
+      candidate.z - reservation.position.z,
+    ) < unit.navRadius + reservation.radius + DESTINATION_CLEARANCE)) continue;
+    const path = navigation.plan(unit.position, candidate);
+    if (path) return { destination: path[path.length - 1]?.clone() ?? candidate, path };
+  }
+  return null;
 }

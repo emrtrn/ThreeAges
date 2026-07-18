@@ -187,6 +187,17 @@ export interface BuildingLevelBalance {
   readonly populationCapacity?: number;
   /** Outposts can expand both their isolated and road-connected control area. */
   readonly territory?: Pick<TerritoryBuildingBalance, "controlRadius" | "connectedControlRadius">;
+  /**
+   * The house's spread once a Market reaches this level (absolute, not a delta).
+   * Only meaningful on a building with a base {@link BuildingBalanceStats.market},
+   * and must be strictly lower than the previous level's — a level-up that made
+   * trading *worse* would be a cost with a penalty attached.
+   *
+   * The validator re-runs the no-arbitrage invariant against it, because a lower
+   * commission is the direction that breaks it: the spread is what makes a round
+   * trip lose money, so shrinking it is exactly how a market starts minting gold.
+   */
+  readonly tradeCommission?: number;
 }
 
 export interface BuildingUpgradeBalance {

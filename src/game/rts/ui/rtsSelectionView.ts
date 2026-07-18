@@ -27,6 +27,7 @@ import type { BarracksQueueSnapshot } from "../structures/barracksProductionSyst
 import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
 import type { StructureUpgradeSnapshot } from "../structures/structureUpgradeSystem";
 import type { AgeSnapshot } from "../progression/ageSystem";
+import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
 import { formatResourceCost, resourceLabel } from "./resourceLabels";
 
 /**
@@ -133,6 +134,18 @@ export interface CenterDetailView {
   readonly requiredBuildingLabels: ReadonlyMap<string, string>;
 }
 
+/**
+ * The Market — plan Faz M2. Everything here is quoted state: the rates come
+ * from {@link MarketTradeSystem}, which is the only thing allowed to compute
+ * them, so the panel cannot print a price the trade would not honour.
+ */
+export interface MarketDetailView {
+  readonly kind: "market";
+  readonly trade: MarketTradeSnapshot;
+  /** KR-M4: false when the control area under this Market has been taken. */
+  readonly connected: boolean;
+}
+
 /** A completed building with no ongoing job of its own (House, and future kin). */
 export interface PassiveDetailView {
   readonly kind: "passive";
@@ -145,6 +158,7 @@ export type StructureDetailView =
   | DepotDetailView
   | OutpostDetailView
   | MilitaryDetailView
+  | MarketDetailView
   | PassiveDetailView
   | CenterDetailView;
 
@@ -230,6 +244,8 @@ export const TRAIN_WORKER_ACTION = "train-worker";
 export const AGE_UP_ACTION = "age-up";
 export const RALLY_ACTION = "rally";
 export const UPGRADE_ACTION = "upgrade";
+export const TRADE_BUY_ACTION_PREFIX = "trade-buy:";
+export const TRADE_SELL_ACTION_PREFIX = "trade-sell:";
 
 /** GDD 06 §6–§9 role summaries, in the player's language. */
 const ROLE_DESCRIPTION: Record<UnitRoleId, string> = {
@@ -489,6 +505,8 @@ function describeStructureDetail(structure: SelectedStructureView): SelectionPan
       };
     case "military":
       return describeMilitary(title, summary, detail);
+    case "market":
+      return describeMarket(title, summary, detail);
     case "center":
       return describeCenter(title, summary, detail);
     case "passive":
@@ -609,6 +627,79 @@ function describeMilitary(
       : detail.upgrading
         ? "Yükseltme tamamlanınca kuyruk kaldığı yerden devam eder."
         : "Yeni birlikler Toplanma Noktasına yürür.",
+  };
+}
+
+/**
+ * The Market panel — plan Faz M2 ("güncel al/sat fiyatları, endeks göstergesi,
+ * 6 buton").
+ *
+ * One row per tradable resource carries both rates and the index, because the
+ * decision the market exists to create ("sell now, or wait for the price to
+ * recover?") cannot be made from a price alone: 128 gold means nothing without
+ * knowing it started at 115 and is climbing. The index is shown as a multiplier
+ * (×1.20) rather than a percentage — it is literally what the base price is
+ * multiplied by, and a percentage would invite reading it as a change.
+ *
+ * The gap between the buy and sell price is the house's commission and is
+ * stated outright: a player who does not know why buying back what they just
+ * sold loses money will read it as a bug rather than the rule that stops the
+ * market minting gold (§4.3).
+ */
+function describeMarket(
+  title: string,
+  summary: string,
+  detail: MarketDetailView,
+): SelectionPanelContent {
+  const { trade } = detail;
+  const commissionPercent = Math.round(trade.commission * 100);
+  return {
+    title,
+    summary,
+    lines: [
+      `Lot: ${trade.lotSize} birim · komisyon %${commissionPercent}`,
+      ...trade.prices.map((price) => {
+        const band = price.atCeiling ? " (tavan)" : price.atFloor ? " (taban)" : "";
+        return `${resourceLabel(price.resourceId)}: al ${price.buyPrice} / sat ${price.sellPrice} altın`
+          + ` · endeks ×${price.index.toFixed(2)}${band}`;
+      }),
+      ...(detail.connected ? [] : ["Kontrol Dışı — bu Pazar ticaret yapamaz."]),
+    ],
+    actions: trade.prices.flatMap((price) => [
+      tradeAction("buy", price.resourceId, price.buyPrice, trade.lotSize, detail.connected),
+      tradeAction("sell", price.resourceId, price.sellPrice, trade.lotSize, detail.connected),
+    ]),
+    hint: STRUCTURE_HINT,
+    tooltip: detail.connected
+      ? "Alım fiyatı yükseltir, satım düşürür. Komisyon yüzünden anlık al-sat her zaman zarardır."
+      : "Kontrol alanı kaybedilen Pazar ticaret yapamaz; alanı geri alın.",
+  };
+}
+
+/**
+ * One trade button. Only the control gate is decided here — that rule is a fact
+ * the trade system already handed over. Whether the player can *afford* it is
+ * deliberately left to the click, exactly as the age and worker buttons leave
+ * it: stock moves every tick, and a button that greys out from under a reaching
+ * hand is worse than one that answers with a reason.
+ */
+function tradeAction(
+  direction: "buy" | "sell",
+  resourceId: string,
+  price: number,
+  lotSize: number,
+  connected: boolean,
+): SelectionAction {
+  const buying = direction === "buy";
+  const goldLabel = resourceLabel("gold");
+  return {
+    id: `${buying ? TRADE_BUY_ACTION_PREFIX : TRADE_SELL_ACTION_PREFIX}${resourceId}`,
+    label: `${lotSize} ${resourceLabel(resourceId)} ${buying ? "Al" : "Sat"}`,
+    // Signed against the player's gold, so the two directions cannot be
+    // mistaken for each other at a glance.
+    cost: `${buying ? "-" : "+"}${price} ${goldLabel}`,
+    enabled: connected,
+    reason: connected ? null : "Kontrol Dışı: bu Pazar ticaret yapamaz.",
   };
 }
 

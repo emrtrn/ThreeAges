@@ -27,6 +27,11 @@ const PUSH_SPEED_FACTOR = 0.55;
  * 3x3 block around each unit instead of the whole army.
  */
 const CELL_SIZE = 3;
+/** Only a true stack gets snapped apart; ordinary crowd contact remains smooth. */
+const EXACT_STACK_DISTANCE = 0.05;
+/** Small clearance left between a recovered stack and other bodies. */
+const HARD_UNSTACK_CLEARANCE = 0.05;
+const HARD_UNSTACK_ANGLE_ATTEMPTS = 16;
 
 export interface UnitSeparationOptions {
   /** Vetoes pushes into unwalkable ground; without it, geometry is not respected. */
@@ -42,6 +47,13 @@ export function updateUnitSeparation(
   if (dt <= 0 || units.length < 2) return;
   const active = units.filter((unit) => !unit.health.depleted && !unit.dying);
   if (active.length < 2) return;
+
+  // The ordinary push is deliberately capped, so it looks like jostling. That
+  // is the wrong recovery when two units have collapsed to the same coordinate:
+  // their tiny per-frame pushes can be cancelled by a wall or the next movement
+  // step forever. Split an exact stack atomically onto legal neighbouring cells
+  // before normal separation resumes.
+  hardUnstackExactClusters(active, options.navigation);
 
   const buckets = new Map<string, Unit[]>();
   for (const unit of active) {
@@ -117,4 +129,68 @@ function* neighbours(buckets: Map<string, Unit[]>, unit: Unit): Generator<Unit> 
 function deterministicAxis(unit: Unit, other: Unit): [number, number] {
   const angle = ((unit.id + other.id) % 8) * (Math.PI / 4);
   return [Math.cos(angle), Math.sin(angle)];
+}
+
+/**
+ * Atomically split each exact-position cluster into a small ring of legal
+ * positions. The whole candidate ring is validated before any unit moves, so a
+ * recovery never pushes one Guard into scenery or through a bystander.
+ */
+function hardUnstackExactClusters(units: readonly Unit[], navigation: RtsNavigation | undefined): void {
+  if (!navigation) return;
+  const remaining = new Set(units);
+  while (remaining.size > 0) {
+    const seed = remaining.values().next().value as Unit | undefined;
+    if (!seed) return;
+    remaining.delete(seed);
+    const cluster = [seed];
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const candidate of [...remaining]) {
+        if (!cluster.some((member) => distanceBetween(member, candidate) <= EXACT_STACK_DISTANCE)) continue;
+        remaining.delete(candidate);
+        cluster.push(candidate);
+        expanded = true;
+      }
+    }
+    if (cluster.length < 2) continue;
+    placeUnstackedCluster(cluster, units, navigation);
+  }
+}
+
+function placeUnstackedCluster(cluster: readonly Unit[], allUnits: readonly Unit[], navigation: RtsNavigation): void {
+  const ordered = [...cluster].sort((left, right) => left.id - right.id);
+  const centerX = ordered.reduce((sum, unit) => sum + unit.position.x, 0) / ordered.length;
+  const centerZ = ordered.reduce((sum, unit) => sum + unit.position.z, 0) / ordered.length;
+  const largestRadius = Math.max(...ordered.map((unit) => unit.navRadius));
+  const ringRadius = (largestRadius * 2) / (2 * Math.sin(Math.PI / ordered.length))
+    + HARD_UNSTACK_CLEARANCE;
+  const phaseSeed = ordered.reduce((sum, unit) => sum + unit.id, 0) % HARD_UNSTACK_ANGLE_ATTEMPTS;
+  const outsiders = allUnits.filter((unit) => !cluster.includes(unit));
+
+  for (let attempt = 0; attempt < HARD_UNSTACK_ANGLE_ATTEMPTS; attempt += 1) {
+    const phase = ((phaseSeed + attempt) / HARD_UNSTACK_ANGLE_ATTEMPTS) * Math.PI * 2;
+    const positions = ordered.map((_, index) => {
+      const angle = phase + (index / ordered.length) * Math.PI * 2;
+      return { x: centerX + Math.cos(angle) * ringRadius, z: centerZ + Math.sin(angle) * ringRadius };
+    });
+    const legal = positions.every((position, index) => {
+      const unit = ordered[index]!;
+      if (!navigation.isWalkable(position.x, position.z)) return false;
+      return outsiders.every((other) => Math.hypot(position.x - other.position.x, position.z - other.position.z)
+        >= unit.navRadius + other.navRadius + HARD_UNSTACK_CLEARANCE);
+    });
+    if (!legal) continue;
+    positions.forEach((position, index) => {
+      const unit = ordered[index]!;
+      unit.position.x = position.x;
+      unit.position.z = position.z;
+    });
+    return;
+  }
+}
+
+function distanceBetween(left: Unit, right: Unit): number {
+  return Math.hypot(left.position.x - right.position.x, left.position.z - right.position.z);
 }

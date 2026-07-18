@@ -9,7 +9,7 @@ import { Plane, Raycaster, Vector2, Vector3, type PerspectiveCamera } from "thre
 
 import type { SelectionSystem } from "../selection/selectionSystem";
 import type { CommandMarkerSystem } from "./commandMarker";
-import { assignGroupDestinations } from "../units/groupOrders";
+import { assignGroupDestinations, type DestinationReservation } from "../units/groupOrders";
 import type { UnitSystem } from "../units/unitSystem";
 import { issueAttackOrder } from "../units/attackPathing";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
@@ -21,16 +21,26 @@ import type { PlacedStructure, PlacedStructureSystem } from "../structures/place
 
 /** The y = 0 walkable ground the runtime commands against. */
 const GROUND_PLANE = new Plane(new Vector3(0, 1, 0), 0);
+/** A short launch cadence keeps a large squad from collapsing into one cell. */
+const GROUP_MOVE_STAGGER_SECONDS = 0.18;
 
 /** RtsApp owns the actual economy/construction hand-off; commands only pick it. */
 export type WorkerStructureCommand = (workers: readonly Unit[], structure: PlacedStructure) => boolean;
 /** RtsApp owns stationary-defense validation and player feedback. */
 export type StructureAttackCommand = (structure: PlacedStructure, target: CombatTarget) => boolean;
 
+interface PendingGroundOrder {
+  readonly unit: Unit;
+  readonly path: readonly Vector3[];
+  readonly delay: number;
+}
+
 export class CommandSystem {
   private readonly raycaster = new Raycaster();
   private readonly ndc = new Vector2();
   private readonly hit = new Vector3();
+  private pendingGroundOrders: PendingGroundOrder[] = [];
+  private readonly destinationReservations = new Map<Unit, DestinationReservation>();
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -60,6 +70,8 @@ export class CommandSystem {
     }
 
     if (target && target.owner !== selected[0]?.owner) {
+      this.cancelPendingGroundOrders(selected);
+      this.releaseDestinationReservations(selected);
       this.clearWorkerTasks(selected);
       for (const unit of selected) issueAttackOrder(unit, target, this.navigation);
       this.markers.spawn(target.position, "#ff7468");
@@ -70,6 +82,8 @@ export class CommandSystem {
     const workers = selected.filter((unit) => unit.role === "worker");
     if (structure && workers.length > 0 && structure.owner === selected[0]?.owner
       && this.onWorkerStructureCommand?.(workers, structure)) {
+      this.cancelPendingGroundOrders(workers);
+      this.releaseDestinationReservations(workers);
       this.markers.spawn(structure.position, "#7ce08a");
       return;
     }
@@ -77,19 +91,58 @@ export class CommandSystem {
     const point = this.groundPoint(x, y);
     if (!point) return;
 
+    this.cancelPendingGroundOrders(selected);
+    this.releaseDestinationReservations(selected);
+    const destinations = assignGroupDestinations(
+      selected,
+      point,
+      this.navigation,
+      [...this.destinationReservations.values()],
+    );
     this.clearWorkerTasks(selected);
-    for (const { unit, path } of assignGroupDestinations(selected, point, this.navigation)) {
-      if (path) {
-        // A direct ground order is an explicit request to leave the current
-        // spot. "Hold position" must not leave a valid player route silently
-        // inert; it remains available until the player next issues movement.
-        if (unit.role !== "worker") unit.setStance("aggressive");
-        unit.setPlayerMovePath(path);
-        if (unit.role === "worker") unit.waitBeforeReturningToWork();
-      }
-      else unit.stop();
+    // Mirror the player's successful manual recovery: clear every current order
+    // first, then allow one unit at a time to leave the crowd.
+    for (const unit of selected) unit.stop();
+    const launchOrder = destinations
+      .filter((entry): entry is typeof entry & { path: Vector3[] } => entry.path !== null)
+      .sort((left, right) => {
+        const leftDistance = Math.hypot(left.unit.position.x - point.x, left.unit.position.z - point.z);
+        const rightDistance = Math.hypot(right.unit.position.x - point.x, right.unit.position.z - point.z);
+        return leftDistance - rightDistance || left.unit.id - right.unit.id;
+      });
+    let launchIndex = 0;
+    for (const { unit, destination, path } of launchOrder) {
+      this.pendingGroundOrders.push({
+        unit,
+        path,
+        delay: launchIndex * GROUP_MOVE_STAGGER_SECONDS,
+      });
+      this.destinationReservations.set(unit, { position: destination.clone(), radius: unit.navRadius });
+      launchIndex += 1;
     }
+    // The first unit starts now; later units are released from update(). This
+    // preserves immediate feedback for a one-unit order.
+    this.update(0);
     this.markers.spawn(point);
+  }
+
+  /** Release queued group movement in a short, deterministic cadence. */
+  update(dt: number): void {
+    const waiting: PendingGroundOrder[] = [];
+    for (const pending of this.pendingGroundOrders) {
+      const remaining = pending.delay - Math.max(0, dt);
+      if (remaining > 0) {
+        waiting.push({ ...pending, delay: remaining });
+        continue;
+      }
+      // A direct ground order is an explicit request to leave the current spot.
+      // "Hold position" cannot leave the released route silently inert.
+      if (pending.unit.role !== "worker") pending.unit.setStance("aggressive");
+      pending.unit.setPlayerMovePath(pending.path);
+      if (pending.unit.role === "worker") pending.unit.waitBeforeReturningToWork();
+    }
+    this.pendingGroundOrders = waiting;
+    this.releaseCompletedDestinationReservations();
   }
 
   /**
@@ -103,6 +156,8 @@ export class CommandSystem {
     const point = this.groundPoint(x, y);
     if (!point) return;
 
+    this.cancelPendingGroundOrders(selected);
+    this.releaseDestinationReservations(selected);
     for (const { unit, destination, path } of assignGroupDestinations(selected, point, this.navigation)) {
       if (path) unit.setAttackMovePath(path, destination);
       else unit.stop();
@@ -113,13 +168,18 @@ export class CommandSystem {
   /** Immediately stop every currently selected unit and clear attack pursuit. */
   issueStop(): void {
     const selected = this.selection.selected();
+    this.cancelPendingGroundOrders(selected);
+    this.releaseDestinationReservations(selected);
     this.clearWorkerTasks(selected);
     for (const unit of selected) unit.stop();
   }
 
   /** Set the stance of every selected combat unit (GDD 06 §26). */
   issueStance(stance: UnitStance): void {
-    for (const unit of this.selection.selected()) {
+    const selected = this.selection.selected();
+    this.cancelPendingGroundOrders(selected);
+    this.releaseDestinationReservations(selected);
+    for (const unit of selected) {
       if (unit.role !== "worker") unit.setStance(stance);
     }
   }
@@ -158,6 +218,23 @@ export class CommandSystem {
   private clearWorkerTasks(selected: readonly Unit[]): void {
     const workers = selected.filter((unit) => unit.role === "worker");
     if (workers.length > 0) this.onWorkerOrderCancelled?.(workers);
+  }
+
+  private cancelPendingGroundOrders(units: readonly Unit[]): void {
+    if (units.length === 0 || this.pendingGroundOrders.length === 0) return;
+    const cancelled = new Set(units);
+    this.pendingGroundOrders = this.pendingGroundOrders.filter((pending) => !cancelled.has(pending.unit));
+  }
+
+  private releaseDestinationReservations(units: readonly Unit[]): void {
+    for (const unit of units) this.destinationReservations.delete(unit);
+  }
+
+  private releaseCompletedDestinationReservations(): void {
+    const pending = new Set(this.pendingGroundOrders.map((order) => order.unit));
+    for (const unit of this.destinationReservations.keys()) {
+      if (!pending.has(unit) && !unit.pathTarget && !unit.moveTarget) this.destinationReservations.delete(unit);
+    }
   }
 
   /** Raycast a screen pixel onto the ground plane, or null if it misses. */

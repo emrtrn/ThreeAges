@@ -76,6 +76,8 @@ import { RtsWorldProgressOverlay, type RtsWorldProgressEntry } from "./ui/rtsWor
 import {
   AGE_UP_ACTION,
   RALLY_ACTION,
+  TRADE_BUY_ACTION_PREFIX,
+  TRADE_SELL_ACTION_PREFIX,
   TRAIN_ACTION_PREFIX,
   TRAIN_WORKER_ACTION,
   UPGRADE_ACTION,
@@ -88,6 +90,7 @@ import {
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
 import type { ResourceChange } from "./economy/resourceWallet";
 import { EconomyProductionSystem } from "./economy/economyProductionSystem";
+import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { ForestSystem } from "./economy/forestSystem";
 import { AgeSystem } from "./progression/ageSystem";
@@ -206,6 +209,7 @@ export class RtsApp {
   private readonly logisticsOccupation: LogisticsOccupationSystem;
   private readonly logisticsTransfers: LogisticsTransferSystem;
   private readonly barracksProduction: BarracksProductionSystem;
+  private readonly marketTrade: MarketTradeSystem;
   private readonly workerProduction: WorkerProductionSystem;
   private readonly structureUpgrades: StructureUpgradeSystem;
   private readonly match = new RtsMatchState();
@@ -346,6 +350,15 @@ export class RtsApp {
       // same severance rule the economy's producers already live under.
       (structure) => this.territory.ownerAt(structure.x, structure.z) === structure.owner,
       PLACEHOLDER_GUARD_ID,
+    );
+    this.marketTrade = new MarketTradeSystem(
+      this.options.buildingBalance,
+      this.structures,
+      this.kingdoms,
+      // KR-M4: the same control predicate the Barracks is severed by, written
+      // once here so a besieged Market and a besieged Barracks cannot disagree
+      // about what "Kontrol Dışı" means.
+      (structure) => this.territory.ownerAt(structure.x, structure.z) === structure.owner,
     );
     this.workerProduction = new WorkerProductionSystem(
       this.units,
@@ -773,6 +786,7 @@ export class RtsApp {
     if (this.match.active && this.flow.running) {
       for (const simulationDt of simulationSteps(dt, this.simulationSpeed, MAX_FRAME_SECONDS)) {
         if (!this.match.active) break;
+        this.commands.update(simulationDt);
         this.updateSimulation(simulationDt);
       }
     }
@@ -1156,6 +1170,9 @@ export class RtsApp {
     this.rallyPointPending = false;
     this.structureConstruction.resetReservations();
     this.kingdoms.reset();
+    // A new match opens at the base rate: carrying a wrecked price index over
+    // would price the first trade of a fresh game off the last one's spree.
+    this.marketTrade.reset();
     this.resourceNodes.reset();
     this.forests.reset();
     this.commandMarkers.clear();
@@ -1386,6 +1403,14 @@ export class RtsApp {
       this.queueUnit(id.slice(TRAIN_ACTION_PREFIX.length));
       return;
     }
+    if (id.startsWith(TRADE_BUY_ACTION_PREFIX)) {
+      this.trade("buy", id.slice(TRADE_BUY_ACTION_PREFIX.length));
+      return;
+    }
+    if (id.startsWith(TRADE_SELL_ACTION_PREFIX)) {
+      this.trade("sell", id.slice(TRADE_SELL_ACTION_PREFIX.length));
+      return;
+    }
     // An unknown id means the view offered a button nothing implements: that is
     // a wiring bug, and swallowing it would present the player a dead button.
     throw new Error(`Unhandled selection action: ${id}`);
@@ -1472,6 +1497,20 @@ export class RtsApp {
         connectedControlRadius: structure.territoryConnectedControlRadius,
         roadConnected: this.outpostConnectedToMainRoad(structure),
       };
+    }
+    // Keyed on the data, not on an id: a building trades because its balance
+    // declares a market block, which is the same rule `MarketTradeSystem` gates
+    // on. An id check here would let a renamed building show the panel and then
+    // be refused by the system.
+    if (structure.stats.market) {
+      const trade = this.marketTrade.snapshotFor(structure.owner);
+      if (trade) {
+        return {
+          kind: "market",
+          trade,
+          connected: this.territory.ownerAt(structure.x, structure.z) === structure.owner,
+        };
+      }
     }
     if (structure.stats.id === "barracks") {
       return {
@@ -1655,6 +1694,34 @@ export class RtsApp {
       "population-full": "Nüfus dolu: önce Ev kurun.",
       "structure-upgrading": `Kışla seviye yükseltmesi sürerken ${label} üretimi durur.`,
       disconnected: "Kışla kontrol alanınızın dışında kaldı; üretim durdu.",
+    };
+    this.buildPalette.setActionMessage(message[result]);
+    this.syncPlacementUi();
+  }
+
+  /**
+   * Trade one lot at the Market (plan Faz M2). The panel leaves affordability to
+   * the click, so this is where a player who cannot pay finds out — and the
+   * answer names the price they were short of rather than a generic refusal,
+   * since the price is the thing that moved since they last looked.
+   */
+  private trade(direction: "buy" | "sell", resourceId: string): void {
+    const label = resourceLabel(resourceId);
+    const snapshot = this.marketTrade.snapshotFor(PLAYER_OWNER);
+    const quote = snapshot?.prices.find((price) => price.resourceId === resourceId);
+    const lot = snapshot?.lotSize ?? 0;
+    const result = direction === "buy"
+      ? this.marketTrade.buy(PLAYER_OWNER, resourceId)
+      : this.marketTrade.sell(PLAYER_OWNER, resourceId);
+    const message: Record<MarketTradeResult, string> = {
+      traded: direction === "buy"
+        ? `${lot} ${label} alındı (${quote?.buyPrice ?? 0} altın).`
+        : `${lot} ${label} satıldı (+${quote?.sellPrice ?? 0} altın).`,
+      "untraded-resource": `${label} Pazar'da işlem görmüyor.`,
+      "no-completed-market": "Önce tamamlanmış bir Pazar kurun.",
+      disconnected: "Pazar kontrol alanınızın dışında kaldı; ticaret durdu.",
+      "insufficient-gold": `${lot} ${label} için ${quote?.buyPrice ?? 0} altın gerekir.`,
+      "insufficient-resources": `Satmak için ${lot} ${label} gerekir.`,
     };
     this.buildPalette.setActionMessage(message[result]);
     this.syncPlacementUi();

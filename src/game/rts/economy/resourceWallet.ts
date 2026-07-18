@@ -13,7 +13,7 @@ export interface ResourceReservation {
   readonly cost: StartingResources;
 }
 
-export type ResourceChangeKind = "income" | "reserve" | "refund" | "reset";
+export type ResourceChangeKind = "income" | "reserve" | "refund" | "reset" | "trade";
 
 export interface ResourceChange {
   readonly kind: ResourceChangeKind;
@@ -82,6 +82,50 @@ export class ResourceWallet {
       kind: "income",
       resourceId,
       delta: amount,
+      previousAmount,
+      amount: nextAmount,
+      elapsedSeconds: this.elapsedSeconds,
+    });
+  }
+
+  /**
+   * Swap one resource for another at a market — atomic, and deliberately *not*
+   * income (plan §2.4).
+   *
+   * The whole reason this is not `reserve` + `credit` is the income counter:
+   * `credit` feeds `incomePerMinute`, which the HUD prints as "+X/dk"
+   * *production*. A hundred wood bought with gold is not wood anyone produced,
+   * and routing it through `credit` would make the HUD overstate a lumber camp
+   * the player may not even own. So the trade path emits `"trade"` changes and
+   * writes no income sample: the stock moves, the production readout does not.
+   *
+   * Returns false without touching a single balance when the spend side cannot
+   * be paid, so a refused trade cannot half-execute.
+   */
+  exchange(spendResourceId: string, spendAmount: number, gainResourceId: string, gainAmount: number): boolean {
+    if (!spendResourceId || !gainResourceId || spendResourceId === gainResourceId) {
+      throw new RangeError("A trade must move between two different resources");
+    }
+    if (!Number.isFinite(spendAmount) || spendAmount <= 0 || !Number.isFinite(gainAmount) || gainAmount < 0) {
+      throw new RangeError("A trade spends a positive amount and gains a non-negative one");
+    }
+    if (this.amount(spendResourceId) < spendAmount) return false;
+    this.applyTradeDelta(spendResourceId, -spendAmount);
+    // A gain of zero is legal: at the price floor the commission can round a
+    // lot's proceeds down to nothing. The trade still happened — the player has
+    // paid the stock — so it must not be reported as a failure.
+    if (gainAmount > 0) this.applyTradeDelta(gainResourceId, gainAmount);
+    return true;
+  }
+
+  private applyTradeDelta(resourceId: string, delta: number): void {
+    const previousAmount = this.amount(resourceId);
+    const nextAmount = previousAmount + delta;
+    this.amounts.set(resourceId, nextAmount);
+    this.emit({
+      kind: "trade",
+      resourceId,
+      delta,
       previousAmount,
       amount: nextAmount,
       elapsedSeconds: this.elapsedSeconds,

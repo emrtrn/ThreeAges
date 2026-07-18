@@ -225,9 +225,31 @@ numeraire modelindeki tam karsiligi.
 
   > Bu fazdan sonra market kurulabilir ama secildiginde yalnizca genel
   > ("passive") panel gosterir - ticaret butonlari M2'de geliyor.
-- **Faz M2 - Ticaret UI'si.** Market paneli: guncel al/sat fiyatlari, endeks
-  gostergesi, 6 buton, yetersiz kaynak/kontrol disi gerekceleri. Cuzdanin
-  `"trade"` yolu (§2.4).
+- **Faz M2 - Ticaret UI'si. - TAMAMLANDI**
+  - [x] `marketTradeSystem.ts`: `MarketPrices`'i maca baglayan katman. KR-M2
+        (krallik basina fiyat tablosu) ve KR-M4 (kontrol alani sarti, Kisla ile
+        ayni predicate) burada. Hicbir yerde `market` id'si yazmiyor - bir bina
+        `market` blogu tanimladigi icin ticaret yapar.
+  - [x] `resourceWallet.exchange()` + `"trade"` degisim turu: atomik takas,
+        `incomeSamples`'a **yazmaz**. §2.4'un cozumu; ticaretle alinan kaynak
+        HUD'daki uretim sayacini sismiyor.
+  - [x] `MarketDetailView` + `describeMarket`: her kaynak icin al/sat fiyati ve
+        endeks (×1.20), lot/komisyon satiri, 6 buton (altina gore isaretli:
+        `-138 Altin` / `+102 Altin`), taban/tavan isareti.
+  - [x] `RtsApp`: sistem baglandi, `structureDetail` dali **veriye gore**
+        (`stats.market`), aksiyon handler'lari ve reddedilme mesajlari, mac
+        sifirlamasinda fiyat resetlemesi.
+  - [x] Testler (`test:engine`, 1038 check): kapi sirasi (pazar yok -> kusatma
+        altinda -> parasiz), reddedilen islemin ne stogu ne fiyati oynatmasi,
+        krallik izolasyonu, ve §2.4 - alinan kaynagin gelir sayacina girmemesi
+        ama gercek uretimin girmesi. Panel metinleri ayri bir check.
+
+  > **Acik nokta - tarayici dogrulamasi yapilamadi.** Bu faz icin bir Playwright
+  > smoke testi yazildi (pazar kur, sec, sat, altin/endeks degisimini gozle) ama
+  > **yerlestirme akisi su an main'de bozuk**: ekranin hicbir noktasi "Gecerli
+  > konum" vermiyor ve mevcut `Barracks panel gates` smoke testi de ayni sekilde
+  > cokuyor (degisikliklerim stash'lenmis haliyle de). Test suite'e kirmizi bir
+  > test birakmamak icin geri alindi; yerlestirme duzelince geri konmali.
 - **Faz M3 - Seviye entegrasyonu.** Komisyon Lv2/Lv3'te duser; Faz 3'te eklenen
   kazanim satiri bunu gosterir.
 - **Faz M4 - AI ve kapanis.** `AiTradeManager` (opsiyonel), `build:verify`,

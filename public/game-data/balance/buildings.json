@@ -182,13 +182,15 @@
         "level": 2,
         "cost": { "wood": 120, "stone": 60 },
         "durationSeconds": 45,
-        "maxHealth": 750
+        "maxHealth": 750,
+        "tradeCommission": 0.12
       },
       {
         "level": 3,
         "cost": { "wood": 170, "stone": 100 },
         "durationSeconds": 55,
-        "maxHealth": 1000
+        "maxHealth": 1000,
+        "tradeCommission": 0.09
       }
     ]
   },

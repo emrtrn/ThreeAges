@@ -44,6 +44,13 @@ export interface MarketPriceSnapshot {
 
 const OPENING_INDEX = 1;
 
+/**
+ * The unit of account. Everything is priced in it and it is never priced
+ * itself — `validateMarketBalance` refuses a `basePrice.gold` entry for exactly
+ * that reason, so this constant and that rule must name the same resource.
+ */
+export const NUMERAIRE_RESOURCE_ID = "gold";
+
 export class MarketPrices {
   /** Price index per tradable resource. Keyed by resource id. */
   private readonly indices = new Map<string, number>();

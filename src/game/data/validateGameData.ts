@@ -477,6 +477,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       const parsed: BuildingLevelBalance[] = [];
       let previousMaxHealth = maxHealth;
       let previousPopulationCapacity = populationCapacity ?? 0;
+      let previousTradeCommission = market?.commission ?? 0;
       let expectedLevel = 2;
       levelsRaw.forEach((entryRaw, index) => {
         const entryWhere = `${levelsWhere}[${index}]`;
@@ -503,6 +504,27 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
           entryPopulationCapacity = entryPopulationRaw;
           previousPopulationCapacity = entryPopulationRaw;
         }
+        // Faz M3: a Market level buys a narrower spread. Checked against the
+        // *previous* level rather than only the base, so a three-step ladder
+        // cannot quietly go 15% -> 9% -> 12%.
+        const entryCommissionRaw = entryData["tradeCommission"];
+        let entryTradeCommission: number | undefined;
+        if (entryCommissionRaw !== undefined) {
+          if (!market) {
+            throw new GameDataError(`${entryWhere}.tradeCommission requires a base market definition`);
+          }
+          if (typeof entryCommissionRaw !== "number" || !Number.isFinite(entryCommissionRaw)
+            || !(entryCommissionRaw > 0) || entryCommissionRaw >= previousTradeCommission) {
+            throw new GameDataError(
+              `${entryWhere}.tradeCommission: must be in (0, ${previousTradeCommission}) — a level must lower the spread`,
+            );
+          }
+          // The direction that breaks §4.3: the spread is what makes a round
+          // trip lose money, so shrinking it is how a market mints gold.
+          assertNoArbitrage(market.priceStep, market.indexMin, entryCommissionRaw, `${entryWhere}.tradeCommission`);
+          entryTradeCommission = entryCommissionRaw;
+          previousTradeCommission = entryCommissionRaw;
+        }
         const entryTerritoryRaw = entryData["territory"];
         let entryTerritory: BuildingLevelBalance["territory"];
         if (entryTerritoryRaw !== undefined) {
@@ -524,6 +546,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
           maxHealth: entryMaxHealth,
           ...(entryPopulationCapacity !== undefined ? { populationCapacity: entryPopulationCapacity } : {}),
           ...(entryTerritory ? { territory: entryTerritory } : {}),
+          ...(entryTradeCommission !== undefined ? { tradeCommission: entryTradeCommission } : {}),
         });
         previousMaxHealth = entryMaxHealth;
         expectedLevel += 1;
@@ -609,15 +632,23 @@ export function validateMarketBalance(value: unknown, where: string): MarketBala
   if (Object.keys(basePrice).length === 0) {
     throw new GameDataError(`${basePriceWhere}: must price at least one tradable resource`);
   }
-  // No-arbitrage: the worst case is at the price floor, where the spread earned
-  // by the house is smallest relative to the step the trade itself moves.
+  assertNoArbitrage(priceStep, indexMin, commission, where);
+  return { lotSize, basePrice, priceStep, indexMin, indexMax, commission };
+}
+
+/**
+ * The invariant of plan §4.3, in one place because two callers need it: the base
+ * tuning, and every level that lowers the commission (Faz M3). The worst case is
+ * at the price floor, where the spread earned by the house is smallest relative
+ * to the step the trade itself moves.
+ */
+function assertNoArbitrage(priceStep: number, indexMin: number, commission: number, where: string): void {
   if (priceStep * (1 + commission) >= 2 * indexMin * commission) {
     throw new GameDataError(
       `${where}: priceStep ${priceStep} and commission ${commission} allow a profitable round trip at indexMin `
       + `${indexMin} — require priceStep * (1 + commission) < 2 * indexMin * commission`,
     );
   }
-  return { lotSize, basePrice, priceStep, indexMin, indexMax, commission };
 }
 
 /** Validate Faz 6's finite stone/gold deposit profiles. */
