@@ -85,6 +85,9 @@ export function formatRtsAiDebug(
       lines.push(bb.ageMissingBuildingIds.length > 0
         ? `çağ gereksinimi: eksik ${bb.ageMissingBuildingIds.join(", ")}`
         : `çağ gereksinimi: tamam · kaynak ${bb.ageAffordable ? "yeterli" : "biriktiriliyor"}`);
+      // Faz M4: while the AI is saving for the age, whether it is *also* trading
+      // toward it is the difference between "slow" and "stuck".
+      lines.push(`pazar: ${snapshot.tradeStep}`);
     }
     lines.push(`tehdit: üs ${bb.baseThreat.toFixed(1)} · düşman ordu ${bb.knownEnemyArmyPower.toFixed(1)}`);
     if (bb.emergencyFlags.length > 0) lines.push(`acil: ${bb.emergencyFlags.join(", ")}`);

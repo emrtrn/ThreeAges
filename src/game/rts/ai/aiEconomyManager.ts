@@ -83,6 +83,10 @@ export function buildOrder(bb: AiBlackboard, balance: AiBalance): readonly strin
   // the base is never mining stone while it has nothing to defend itself with.
   if ((bb.buildingCounts["quarry"] ?? 0) === 0) order.push("quarry");
   if ((bb.buildingCounts["gold_mine"] ?? 0) === 0) order.push("gold_mine");
+  // Faz M4, last on purpose: the Market converts an economy, it does not make
+  // one. Ahead of the extractors it would have the AI buy the stone it could
+  // have mined, at a spread, while its deposits sat untouched.
+  if ((bb.buildingCounts["market"] ?? 0) === 0) order.push("market");
   return order;
 }
 

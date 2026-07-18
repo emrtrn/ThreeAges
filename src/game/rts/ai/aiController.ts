@@ -18,6 +18,7 @@ import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { StructureConstructionService } from "../structures/structureConstructionService";
 import type { StructureUpgradeSystem } from "../structures/structureUpgradeSystem";
 import type { WorkerProductionSystem } from "../structures/workerProductionSystem";
+import type { MarketTradeSystem } from "../economy/marketTradeSystem";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { RoadConstructionService } from "../roads/roadConstructionService";
 import type { RtsBuildAnchor, RtsExpansionRegion, RtsMapPoint } from "../world/rtsMapBlockout";
@@ -31,6 +32,7 @@ import { AiEconomyManager, type AiBottleneck } from "./aiEconomyManager";
 import { AiExpansionCoordinator, AI_MAX_EXPANSION_PLANS } from "./aiExpansionCoordinator";
 import { AiInfrastructureManager, type AiInfrastructureStep } from "./aiInfrastructureManager";
 import { AiProductionManager } from "./aiProductionManager";
+import { AiTradeManager, type AiTradeStep } from "./aiTradeManager";
 import { AiUpgradeManager, type AiUpgradeStep } from "./aiUpgradeManager";
 import { ArmyManager, type AiRetreatReason } from "./armyManager";
 import { KingdomDirector } from "./kingdomDirector";
@@ -69,6 +71,12 @@ export interface AiControllerOptions extends AiBlackboardSources {
   readonly structureUpgrades: StructureUpgradeSystem;
   /** §53: which unit id fills a combat role, read off `balance/units.json`. */
   readonly unitIdForRole: (role: UnitRoleId) => string | null;
+  /**
+   * Faz M4: the same market the player's panel trades at. Shared rather than
+   * mirrored, so the AI is bound by every rule the player is — the control-area
+   * gate, the commission, and a price its own buying moves.
+   */
+  readonly marketTrade: MarketTradeSystem;
 }
 
 /** Everything the debug panel needs (§82), in one read. */
@@ -97,6 +105,8 @@ export interface AiControllerSnapshot {
   readonly infrastructureStep: AiInfrastructureStep;
   /** §53: how far the Barracks tier research the composition needs has got. */
   readonly upgradeStep: AiUpgradeStep;
+  /** Faz M4: how the market rule last resolved — traded, saving, or no Market. */
+  readonly tradeStep: AiTradeStep;
   /**
    * §82 "Aktif yapı planı": the building id occupying the §42 build slot, or
    * null when it is free. This is what separates "saving up" from "stuck".
@@ -120,6 +130,7 @@ export class AiController {
   private readonly infrastructure: AiInfrastructureManager;
   private readonly production: AiProductionManager;
   private readonly upgrades: AiUpgradeManager;
+  private readonly trades: AiTradeManager;
   private readonly profileBalance;
   private now = 0;
   private directorAccumulator = 0;
@@ -188,6 +199,7 @@ export class AiController {
       options.structureUpgrades,
       this.log,
     );
+    this.trades = new AiTradeManager(options.owner, options.marketTrade, this.log);
     this.profileBalance = options.balance.profiles[options.profile];
   }
 
@@ -240,6 +252,11 @@ export class AiController {
       // researches Barracks II exactly when its own ratio is asking for a unit
       // the current tier refuses — and never merely because it could.
       this.upgrades.update(blackboard, this.production.upgradeGatedRole !== null);
+      // Faz M4: so is the market. A standing concern rather than the economy
+      // intent's business, for the same reason the age it trades for is: a
+      // kingdom whose stone deposit was lost mid-plan has to be able to convert
+      // its way out while the director is committed elsewhere.
+      this.trades.update(blackboard);
       // §37: so is the base link. A base whose producers cannot reach a depot
       // has no income at all, so this outranks the committed plan rather than
       // waiting for the economy intent to come back around — and because it runs
@@ -284,6 +301,7 @@ export class AiController {
       expansionPlanAvailable: this.expansion.planAvailable,
       infrastructureStep: this.infrastructure.currentStep,
       upgradeStep: this.upgrades.currentStep,
+      tradeStep: this.trades.currentStep,
       activeBuild: this.builds.activeStructure?.stats.id ?? null,
       blackboard: this.lastBlackboard,
     };
@@ -306,6 +324,9 @@ export class AiController {
     // The upgrade *system* is shared with the player and reset by the match, not
     // by one kingdom's AI; only this executor's own view of it resets here.
     this.upgrades.reset();
+    // Like the upgrade system, the market itself is shared with the player and
+    // reset by the match; only this executor's own view of it resets here.
+    this.trades.reset();
     this.log.clear();
   }
 

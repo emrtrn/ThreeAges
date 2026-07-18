@@ -429,6 +429,7 @@ export class RtsApp {
       townRequiredBuildingIds: this.options.ageBalance.town.requiredBuildingIds,
       unitIdForRole: (role) => Object.entries(this.options.unitBalance)
         .find(([, stats]) => stats.role === role)?.[0] ?? null,
+      marketTrade: this.marketTrade,
       isWorkerBusy: (unit) => this.workerConstruction.stateFor(unit) !== "idle"
         || (this.economyProduction?.isAssigned(unit) ?? false),
       navigation: this.navigation,

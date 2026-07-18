@@ -170,6 +170,11 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     // can touch all three from the z=-18 leg.
     { buildingId: "depot", ...atEnemyBase(0, 12) },
     { buildingId: "barracks", ...atEnemyBase(0, -12) },
+    // Faz M4: the AI's Market. Behind the Barracks, in the only 8x8 gap the base
+    // ring leaves — clear of the spine (z = 8) and both expansion corridors, and
+    // 22 units out, well inside the 28-unit starting control the trade rule
+    // (KR-M4) requires it to stand in.
+    { buildingId: "market", ...atEnemyBase(0, -22) },
     // Housing moved behind the base: the two former slots at (±12,-20) stood on
     // what is now the spine's branch down to the farm and lumber camp.
     { buildingId: "house", ...atEnemyBase(-12, -6) },

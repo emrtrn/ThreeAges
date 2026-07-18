@@ -63,6 +63,12 @@ export interface AiBlackboard {
   readonly ageMissingBuildingIds: readonly string[];
   /** True when the stockpile covers the Town cost right now. */
   readonly ageAffordable: boolean;
+  /**
+   * The Town transition's four-resource price. Faz M4 reads it: the age is the
+   * one expense with a fixed known cost, which is what lets the trade rule turn
+   * "how short am I" into a subtraction instead of a heuristic.
+   */
+  readonly ageCost: Readonly<Record<string, number>>;
   /** §52: live combat units per role, so §53 can read the army's shape. */
   readonly armyComposition: Readonly<Record<UnitRoleId, number>>;
   /**
@@ -192,6 +198,7 @@ export class AiBlackboardReader {
       ageMissingBuildingIds: ageSnapshot.missingBuildingIds,
       ageAffordable: Object.entries(this.sources.townCost)
         .every(([id, cost]) => (stocks[id] ?? 0) >= cost),
+      ageCost: this.sources.townCost,
       armyComposition: composition(ownArmy),
       armyPopulation: ownArmy.reduce((total, unit) => total + unit.stats.populationCost, 0),
       ownArmyPower,

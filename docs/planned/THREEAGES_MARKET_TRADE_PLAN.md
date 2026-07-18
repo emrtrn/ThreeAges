@@ -165,10 +165,11 @@ numeraire modelindeki tam karsiligi.
   kalan market ticaret yapamaz** (Kisla ile ayni kural), boylece kusatma anlamli.
 - **KR-M5 - Cag kapisi yok.** KR-04 ile tutarli: market Yerlesim caginda da
   kurulabilir; zaten en cok orada gerekli.
-- **KR-M6 - AI v1'de ticaret yapmaz.** Regresyon riski sifir. v2'de AI'nin
-  mevcut `incomeTargetsPerMinute` acigini (`stone: 10`, `gold: 6`) kapatmak icin
-  `AiTradeManager` eklenebilir - `AiUpgradeManager`'in "reddedilme cevabina gore
-  davran" desenini aynen izleyerek.
+- **KR-M6 - AI ticareti. (v1: hayir -> M4'te uygulandi.)** v1'de AI ticaret
+  yapmiyordu; Faz M4 `AiTradeManager`'i ekledi. `AiUpgradeManager`'in
+  "reddedilme cevabina gore davran" desenini izler ve **oyuncuyla ayni**
+  `MarketTradeSystem`'i kullanir - kontrol alani kurali, komisyon ve kendi
+  alimiyla kayan fiyat AI icin de aynen gecerlidir.
 
 ## 6. Dosya Bazli Degisiklikler
 
@@ -274,8 +275,28 @@ numeraire modelindeki tam karsiligi.
   > `marketPricing.ts` artik kasitli ceil/floor oncesi dokuzuncu haneye
   > yuvarliyor; duzeltme ~1e-9, invaryantin korudugu spread'den kat kat kucuk
   > (M0'in tum bant boyunca yurutulen arbitraj testi bunu dogruluyor).
-- **Faz M4 - AI ve kapanis.** `AiTradeManager` (opsiyonel), `build:verify`,
-  oyun ici dogrulama.
+- **Faz M4 - AI ve kapanis. - TAMAMLANDI**
+  - [x] `aiTradeManager.ts`: AI **yalniz Kasaba Cagi acigi icin** ticaret yapar.
+        Cag, dort kaynakli **sabit ve bilinen** fiyati olan tek gider; bu yuzden
+        "ne kadar eksigim" bir cikarma islemi ve kural acik kapaninca **kendi
+        kendine durur**. Belirsiz bir "daha cok tas iyidir" hedefi, AI'yi her
+        fikir degistirdiginde komisyon odeyerek ekonomisini cevirmeye iterdi.
+  - [x] Tick basina **tek lot**: her islem fiyati AI'nin aleyhine oynatir (§4.2),
+        dongu tek karede kendi merdivenini tirmanip giderek kotu kurdan alirdi.
+  - [x] Rezerv kurallari: cag maliyetinin altina satmaz, cagin kendi altinini
+        harcamaz - aksi halde acigi bir sutundan digerine tasimis olurdu.
+  - [x] `buildOrder`'a `market` **en sona** eklendi (pazar ekonomiyi cevirir,
+        uretmez) + haritaya AI ussu icin market anchor'i.
+  - [x] `aiDebugView`: `pazar: <adim>` satiri - "yavas" ile "tikandi" farki.
+  - [x] Testler (1040 check): pazar yokken/kusatilmisken `no-market`, altin
+        acigini satarak kapatma, tas acigini alarak kapatma, iki rezerv vakasi,
+        cag karsilanabilir olunca hicbir sey yapmamasi, ve **anchor'in gercek
+        haritada gecerli ve kontrol alaninda oldugu**.
+
+  > AI, oyuncuyla **ayni** `MarketTradeSystem`'i kullanir; ayri bir kopya degil.
+  > Kontrol alani sarti (KR-M4), komisyon ve kendi alimiyla kayan fiyat AI icin
+  > de gecerli - yani AI'ya gizli bir kur avantaji taninmiyor (§39 "gizli kaynak
+  > bonusu yok" ile tutarli).
 
 ## 8. Riskler ve Acik Noktalar
 

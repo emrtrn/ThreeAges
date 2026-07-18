@@ -83,6 +83,7 @@ import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
 import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
 import {
   RTS_PLACEMENT_GRID_SIZE,
+  buildingFootprintBlocker,
   validateBuildingPlacement,
 } from "../src/game/rts/structures/placementGrid";
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
@@ -106,6 +107,7 @@ import { PopulationSystem } from "../src/game/rts/economy/populationSystem";
 import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
 import { AiController, type AiControllerSnapshot } from "../src/game/rts/ai/aiController";
 import { AiDecisionLog } from "../src/game/rts/ai/aiDecisionLog";
+import { AiTradeManager } from "../src/game/rts/ai/aiTradeManager";
 import { ArmyManager } from "../src/game/rts/ai/armyManager";
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
 import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBuildManager";
@@ -30941,6 +30943,7 @@ function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
     ageRequiredBuildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "barracks", "outpost"],
     ageMissingBuildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "barracks", "outpost"],
     ageAffordable: false,
+    ageCost: { food: 600, wood: 350, stone: 150, gold: 150 },
     armyComposition: { guard: 0, archer: 0, siege: 0, worker: 0 },
     armyPopulation: 0,
     ownArmyPower: 0,
@@ -31099,6 +31102,14 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     workerProduction,
     barracksProduction,
     structureUpgrades,
+    // As in RtsApp: the same market the player trades at, so the AI is bound by
+    // every rule the player is (Faz M4).
+    marketTrade: new MarketTradeSystem(
+      buildings,
+      structures,
+      kingdoms,
+      (structure) => territory.ownerAt(structure.x, structure.z) === structure.owner,
+    ),
     balance: AI_TEST_BALANCE,
     profile: "normal",
   });
@@ -32385,9 +32396,19 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
     nextBuilding(bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, quarry: 1 } }), AI_TEST_BALANCE),
     "gold_mine",
   );
+  // Faz M4 extends the opening by one: the Market, last, because it converts an
+  // economy rather than making one — ahead of the extractors the AI would buy
+  // stone at a spread while its own deposits sat untouched.
   assert.equal(
     nextBuilding(
       bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, quarry: 1, gold_mine: 1 } }),
+      AI_TEST_BALANCE,
+    ),
+    "market",
+  );
+  assert.equal(
+    nextBuilding(
+      bb({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, quarry: 1, gold_mine: 1, market: 1 } }),
       AI_TEST_BALANCE,
     ),
     null,
@@ -32400,7 +32421,7 @@ check("AI opening order and bottleneck detection follow §34/§37", () => {
   // mine underneath it are never reached, so the Town age stays unreachable.
   assert.deepEqual(
     buildOrder(bb({ population: 19, populationCap: 20, buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1 } }), AI_TEST_BALANCE),
-    ["house", "quarry", "gold_mine"],
+    ["house", "quarry", "gold_mine", "market"],
     "a blocked priority still lets the ones below it through",
   );
   // §34: housing outranks the economy order, so a lock is never reached.
@@ -33707,6 +33728,107 @@ check("Faz M2: trading moves stock and price, and never counts as production inc
   // A restart is a new market, not a continuation of the last one's spree.
   trade.reset();
   assert.deepEqual(trade.snapshotFor("player")!.prices.map((price) => price.index), [1, 1, 1]);
+});
+
+check("Faz M4: the AI trades toward the age it is short for, and stops once it can pay", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const marketStats = buildings["market"] ?? assert.fail("the market building is missing");
+  const townCost = { food: 600, wood: 350, stone: 150, gold: 150 };
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const log = new AiDecisionLog();
+
+  const setup = (stocks: Record<string, number>, connected = true) => {
+    const kingdoms = new KingdomRegistry(["enemy"], units, new PlacedStructureSystem(), stocks, 20);
+    const trade = new MarketTradeSystem(buildings, structures, kingdoms, () => connected);
+    return { kingdoms, manager: new AiTradeManager("enemy", trade, log), trade };
+  };
+  const blackboard = (stocks: Record<string, number>): AiBlackboard => aiTestBlackboard({
+    resourceStocks: stocks,
+    ageCost: townCost,
+    ageAffordable: Object.entries(townCost).every(([id, cost]) => (stocks[id] ?? 0) >= cost),
+  });
+
+  // No Market standing: the rule reports the state rather than failing, and that
+  // report is the build order's cue — which is why "market" is in `buildOrder`.
+  const short = { food: 900, wood: 900, stone: 0, gold: 0 };
+  const noMarket = setup(short);
+  assert.equal(noMarket.manager.update(blackboard(short)), "no-market");
+  assert.ok(
+    buildOrder(
+      aiTestBlackboard({ buildingCounts: { farm: 1, lumber_camp: 1, barracks: 1, quarry: 1, gold_mine: 1 } }),
+      AI_TEST_BALANCE,
+    ).includes("market"),
+    "the economy manager's order can actually produce the Market the rule needs",
+  );
+  // ...and it is last: the Market converts an economy, it does not make one.
+  assert.equal(
+    buildOrder(aiTestBlackboard({ buildingCounts: {} }), AI_TEST_BALANCE).at(-1),
+    "market",
+  );
+
+  // The rule is worthless if the AI can never build the Market it needs, and an
+  // anchor is only a coordinate until something checks it. This is the one that
+  // would have caught a slot overlapping the base ring, a road, or the control
+  // edge — none of which the manager's own tests can see.
+  const anchor = RTS_BLOCKOUT_MAP.enemyBaseAnchors.find((slot) => slot.buildingId === "market")
+    ?? assert.fail("no market anchor authored for the AI base");
+  const enemyCenter = RTS_BLOCKOUT_MAP.enemyStart;
+  assert.ok(
+    Math.hypot(anchor.x - enemyCenter.x, anchor.z - enemyCenter.z) < COMMAND_CENTER_CONTROL_RADIUS,
+    "KR-M4: a Market outside its owner's control could never trade",
+  );
+  const occupied = RTS_BLOCKOUT_MAP.enemyBaseAnchors
+    .filter((slot) => slot !== anchor)
+    .map((slot) => buildingFootprintBlocker(buildings[slot.buildingId]!, slot.x, slot.z));
+  assert.equal(
+    validateBuildingPlacement(marketStats, anchor.x, anchor.z, occupied).valid,
+    true,
+    "the authored Market slot must not overlap the base ring or leave the map",
+  );
+
+  // With a Market: gold is the numeraire, so a gold shortfall is sold into — and
+  // it sells the resource it has most to spare, not the one it is also short of.
+  const market = structures.place("enemy", marketStats, 0, 0);
+  structures.advanceConstruction(market, marketStats.constructionSeconds);
+  const selling = setup(short);
+  assert.equal(selling.manager.update(blackboard(short)), "traded");
+  const wallet = selling.kingdoms.get("enemy").wallet;
+  assert.equal(wallet.amount("gold"), 85, "one lot sold at the opening rate");
+  assert.equal(wallet.amount("food") + wallet.amount("wood"), 1700, "exactly one lot left the stockpile");
+
+  // KR-M4 binds the AI exactly as it binds the player: a besieged Market trades
+  // for neither of them.
+  const besieged = setup(short, false);
+  assert.equal(besieged.manager.update(blackboard(short)), "no-market");
+  assert.equal(besieged.kingdoms.get("enemy").wallet.amount("gold"), 0);
+
+  // Gold covered but stone short: now it buys, and pays from gold it does not
+  // owe the age. Spending the age's own gold would only move the shortfall.
+  const buying = { food: 900, wood: 900, stone: 0, gold: 400 };
+  const buyer = setup(buying);
+  assert.equal(buyer.manager.update(blackboard(buying)), "traded");
+  assert.equal(buyer.kingdoms.get("enemy").wallet.amount("stone"), 100);
+  assert.equal(buyer.kingdoms.get("enemy").wallet.amount("gold"), 285, "115 gold for one lot");
+
+  // Gold spare is measured against the age cost, not the raw stock: 200 gold
+  // with 150 owed to the age leaves 50, which cannot buy a 115-gold lot.
+  const tight = { food: 900, wood: 900, stone: 0, gold: 200 };
+  assert.equal(setup(tight).manager.update(blackboard(tight)), "saving");
+
+  // Nothing spare to sell: the reserve keeps the AI from selling the food the
+  // same age cost demands, so it waits rather than trading in a circle.
+  const bare = { food: 600, wood: 350, stone: 0, gold: 0 };
+  assert.equal(setup(bare).manager.update(blackboard(bare)), "saving");
+
+  // And the rule stops on its own the moment the age is affordable — this is why
+  // it trades toward a *fixed known price* rather than "more stone is good".
+  const rich = { food: 900, wood: 900, stone: 900, gold: 900 };
+  const idle = setup(rich);
+  assert.equal(idle.manager.update(blackboard(rich)), "idle");
+  assert.equal(idle.kingdoms.get("enemy").wallet.amount("food"), 900, "an affordable age trades nothing");
 });
 
 check("Faz M3: a Market level narrows the spread, and the data cannot narrow it into arbitrage", () => {
