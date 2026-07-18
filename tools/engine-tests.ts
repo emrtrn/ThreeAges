@@ -33450,12 +33450,21 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
   // health as a total plus its delta, and each stat the step grants.
   const withGain = panel(view(
     { nextCost: { wood: 100 } },
-    { maxHealth: 900, maxHealthDelta: 250, populationCapacity: null, controlRadius: 22 },
+    { maxHealth: 900, maxHealthDelta: 250, populationCapacity: null, controlRadius: 22, tradeCommission: null },
   ));
   assert.match(withGain.lines.join(" | "), /Lv2: 900 can \(\+250\) · 22 kontrol yarıçapı/);
+  // Faz M3: on a Market the commission *is* the gain. Health is not why a Market
+  // is built, so a level-up that only said "750 can" would read as no reason.
+  const marketGain = panel(view(
+    { nextCost: { wood: 120, stone: 60 } },
+    { maxHealth: 750, maxHealthDelta: 250, populationCapacity: null, controlRadius: null, tradeCommission: 0.12 },
+  ));
+  assert.match(marketGain.lines.join(" | "), /Lv2: 750 can \(\+250\) · %12 komisyon/);
   // No gain line once the building is at max, even if one is somehow supplied.
   assert.ok(
-    !panel(view({ level: 3, completed: true }, { maxHealth: 900, maxHealthDelta: 0, populationCapacity: null, controlRadius: null }))
+    !panel(view({ level: 3, completed: true }, {
+      maxHealth: 900, maxHealthDelta: 0, populationCapacity: null, controlRadius: null, tradeCommission: null,
+    }))
       .lines.join(" | ").includes("Lv"),
     "a maxed building states no next-level gain",
   );
@@ -33698,6 +33707,99 @@ check("Faz M2: trading moves stock and price, and never counts as production inc
   // A restart is a new market, not a continuation of the last one's spree.
   trade.reset();
   assert.deepEqual(trade.snapshotFor("player")!.prices.map((price) => price.index), [1, 1, 1]);
+});
+
+check("Faz M3: a Market level narrows the spread, and the data cannot narrow it into arbitrage", () => {
+  const raw = JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as Record<string, unknown>;
+  const buildings = validateBuildingBalance(raw);
+  const marketStats = buildings["market"] ?? assert.fail("the market building is missing");
+  assert.deepEqual(
+    marketStats.levels?.map((step) => step.tradeCommission),
+    [0.12, 0.09],
+    "the level ladder is the commission ladder (plan §1: Lv1 15% -> Lv2 12% -> Lv3 9%)",
+  );
+
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(
+    ["player"], units, structures, { wood: 1000, gold: 1000 }, 20,
+  );
+  const trade = new MarketTradeSystem(buildings, structures, kingdoms, () => true);
+  const market = structures.place("player", marketStats, 0, 0);
+  structures.advanceConstruction(market, marketStats.constructionSeconds);
+
+  // Lv1: the base spread, and the prices the panel already quotes.
+  assert.equal(trade.commissionFor("player"), 0.15);
+  assert.equal(trade.snapshotFor("player")!.prices[0]!.buyPrice, 115);
+  assert.equal(trade.snapshotFor("player")!.prices[0]!.sellPrice, 85);
+
+  // The payoff: levelling buys a narrower spread on both sides at once.
+  market.level = 2;
+  assert.equal(trade.commissionFor("player"), 0.12);
+  assert.equal(trade.snapshotFor("player")!.prices[0]!.buyPrice, 112);
+  assert.equal(trade.snapshotFor("player")!.prices[0]!.sellPrice, 88);
+  market.level = 3;
+  assert.equal(trade.commissionFor("player"), 0.09);
+  assert.equal(trade.snapshotFor("player")!.prices[0]!.buyPrice, 109);
+  assert.equal(trade.snapshotFor("player")!.prices[0]!.sellPrice, 91);
+  // And a real trade is charged the level's rate, not the base one.
+  const wallet = kingdoms.get("player").wallet;
+  assert.equal(trade.sell("player", "wood"), "traded");
+  assert.equal(wallet.amount("gold"), 1091, "the Lv3 rate paid 91, not the Lv1 85");
+
+  // A kingdom that has paid for a Lv3 Market keeps that rate whichever of its
+  // Markets the panel happens to be open on.
+  const older = structures.place("player", marketStats, 40, 0);
+  structures.advanceConstruction(older, marketStats.constructionSeconds);
+  assert.equal(trade.commissionFor("player"), 0.09, "the best usable Market sets the rate");
+
+  // ...but only while it is usable: a besieged Lv3 hands the terms back to Lv1.
+  const connectedOnly = new MarketTradeSystem(
+    buildings, structures, kingdoms, (structure) => structure.id === older.id,
+  );
+  assert.equal(connectedOnly.commissionFor("player"), 0.15, "a severed Lv3 Market sets no rate");
+
+  // The invariant, at the level rate. This is the direction that breaks §4.3:
+  // the spread is what makes a round trip lose money, so shrinking it is how a
+  // market starts minting gold — and it must be refused in the data, not found
+  // in a play-test.
+  const withLevelCommission = (tradeCommission: number): unknown => ({
+    ...raw,
+    market: {
+      ...(raw["market"] as Record<string, unknown>),
+      levels: [
+        { ...((raw["market"] as { levels: unknown[] }).levels[0] as object), tradeCommission },
+        { ...((raw["market"] as { levels: unknown[] }).levels[1] as object), tradeCommission: 0.09 },
+      ],
+    },
+  });
+  assert.throws(
+    () => validateBuildingBalance(withLevelCommission(0.03)),
+    (error: unknown) => error instanceof GameDataError && /profitable round trip/.test((error as Error).message),
+    "a level commission small enough to round-trip profitably is refused",
+  );
+  // A level must *lower* the spread: raising it would be a cost with a penalty.
+  assert.throws(() => validateBuildingBalance(withLevelCommission(0.15)), GameDataError);
+  assert.throws(() => validateBuildingBalance(withLevelCommission(0.2)), GameDataError);
+  // And the ladder is checked step by step, not only against the base: 0.10 is
+  // below the base 0.15 but above the Lv3 0.09 that follows it.
+  assert.throws(
+    () => validateBuildingBalance(withLevelCommission(0.08)),
+    GameDataError,
+    "a Lv2 rate better than Lv3's makes the last step a downgrade",
+  );
+  // A commission on a building that does not trade is a data mistake, not a
+  // silently ignored field.
+  assert.throws(() => validateBuildingBalance({
+    ...raw,
+    house: {
+      ...(raw["house"] as Record<string, unknown>),
+      levels: [
+        { ...((raw["house"] as { levels: unknown[] }).levels[0] as object), tradeCommission: 0.1 },
+        (raw["house"] as { levels: unknown[] }).levels[1],
+      ],
+    },
+  }), GameDataError, "only a Market may declare a trade commission");
 });
 
 check("Faz M2: the Market panel quotes both rates, the index, and why it is refused", () => {

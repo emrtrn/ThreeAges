@@ -51,6 +51,18 @@ const OPENING_INDEX = 1;
  */
 export const NUMERAIRE_RESOURCE_ID = "gold";
 
+/**
+ * Binary floating point decides prices here, and it is off by ulps in ways a
+ * player sees: `100 * (1 + 0.12)` is 112.00000000000001, so ceiling it charges
+ * 113 gold for a 112-gold lot — a Market that quotes one price and takes
+ * another. Snapping to nine decimals before the deliberate ceil/floor removes
+ * the artefact without touching the intended rounding: the correction is ~1e-9
+ * against a spread the no-arbitrage invariant keeps orders of magnitude wider.
+ */
+function settle(value: number): number {
+  return Math.round(value * 1e9) / 1e9;
+}
+
 export class MarketPrices {
   /** Price index per tradable resource. Keyed by resource id. */
   private readonly indices = new Map<string, number>();
@@ -92,14 +104,14 @@ export class MarketPrices {
   buyPrice(resourceId: string, commission = this.balance.commission): number | null {
     const raw = this.rawPrice(resourceId);
     if (raw === null) return null;
-    return Math.ceil(raw * (1 + commission));
+    return Math.ceil(settle(raw * (1 + commission)));
   }
 
   /** Gold the player receives for one lot, commission deducted. Null when untraded. */
   sellPrice(resourceId: string, commission = this.balance.commission): number | null {
     const raw = this.rawPrice(resourceId);
     if (raw === null) return null;
-    return Math.max(0, Math.floor(raw * (1 - commission)));
+    return Math.max(0, Math.floor(settle(raw * (1 - commission))));
   }
 
   /**

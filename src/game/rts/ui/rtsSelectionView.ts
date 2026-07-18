@@ -177,6 +177,12 @@ export interface UpgradeGain {
   readonly populationCapacity: number | null;
   /** Control radius the next level supplies, or null when it grants none. */
   readonly controlRadius: number | null;
+  /**
+   * The Market spread the next level trades at, or null when the step does not
+   * touch it. Faz M3: this is what makes levelling a Market a decision — the
+   * building's other gains are health, and health is not why a Market is built.
+   */
+  readonly tradeCommission: number | null;
 }
 
 /**
@@ -407,6 +413,7 @@ function upgradeGainLine(structure: SelectedStructureView): string | null {
   const parts = [`${Math.round(gain.maxHealth)} can (+${Math.round(gain.maxHealthDelta)})`];
   if (gain.populationCapacity !== null) parts.push(`${gain.populationCapacity} nüfus`);
   if (gain.controlRadius !== null) parts.push(`${gain.controlRadius} kontrol yarıçapı`);
+  if (gain.tradeCommission !== null) parts.push(`%${Math.round(gain.tradeCommission * 100)} komisyon`);
   return `Lv${nextLevel}: ${parts.join(" · ")}`;
 }
 

@@ -52,6 +52,21 @@ export interface MarketTradeSnapshot {
   readonly prices: readonly MarketPriceSnapshot[];
 }
 
+/**
+ * The spread one Market charges at its current level. Walks the level ladder
+ * rather than indexing it, so a level that grants only health inherits the rate
+ * from the last level that named one — the data may set a commission on some
+ * steps and not others without opening a gap.
+ */
+export function marketCommission(structure: PlacedStructure, baseCommission: number): number {
+  let commission = structure.stats.market?.commission ?? baseCommission;
+  for (const step of structure.stats.levels ?? []) {
+    if (step.level > structure.level) break;
+    if (step.tradeCommission !== undefined) commission = step.tradeCommission;
+  }
+  return commission;
+}
+
 export class MarketTradeSystem {
   /** KR-M2: one price table per kingdom, created on first use. */
   private readonly pricesByOwner = new Map<UnitOwner, MarketPrices>();

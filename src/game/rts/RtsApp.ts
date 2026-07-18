@@ -1360,6 +1360,7 @@ export class RtsApp {
           maxHealthDelta: next.maxHealth - structure.health.max,
           populationCapacity: next.populationCapacity ?? null,
           controlRadius: next.territory?.controlRadius ?? null,
+          tradeCommission: next.tradeCommission ?? null,
         }
       : null;
     // While upgrading, `next` is the in-flight step (level is bumped only on

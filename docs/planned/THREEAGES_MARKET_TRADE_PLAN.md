@@ -250,8 +250,30 @@ numeraire modelindeki tam karsiligi.
   > konum" vermiyor ve mevcut `Barracks panel gates` smoke testi de ayni sekilde
   > cokuyor (degisikliklerim stash'lenmis haliyle de). Test suite'e kirmizi bir
   > test birakmamak icin geri alindi; yerlestirme duzelince geri konmali.
-- **Faz M3 - Seviye entegrasyonu.** Komisyon Lv2/Lv3'te duser; Faz 3'te eklenen
-  kazanim satiri bunu gosterir.
+- **Faz M3 - Seviye entegrasyonu. - TAMAMLANDI**
+  - [x] `BuildingLevelBalance.tradeCommission` + `buildings.json`: Lv2 %12,
+        Lv3 %9 (plan §1).
+  - [x] Validator: `tradeCommission` yalniz `market` blogu olan binada
+        tanimlanabilir, **her adim bir oncekinden dusuk** olmali, ve
+        **arbitraj invaryanti seviye orani icin yeniden kosulur**
+        (`assertNoArbitrage` iki cagirana ortak cikarildi). Komisyonu daraltmak
+        §4.3'u bozan yon oldugu icin bu kontrol M3'un kalbi.
+  - [x] `MarketTradeSystem.commissionFor()`: krallígin **en iyi kullanilabilir**
+        pazarinin orani. Lv3 pazari olan oyuncu, panelini eski bir Lv1 pazarda
+        actigi icin Lv1 sartlarina dusmez; kusatilmis Lv3 ise oran vermez.
+  - [x] `UpgradeGain.tradeCommission` -> kazanim satiri: `Lv2: 750 can (+250)
+        · %12 komisyon`. Pazarda kazanim **komisyondur**; yalniz can yazan bir
+        satir yukseltmeyi gerekcesiz gosterirdi.
+  - [x] Testler (1039 check): seviye merdiveni ve gercek islemin seviye
+        oranindan ucretlendirilmesi, en-iyi-pazar ve kusatma davranisi,
+        validator'in dort ret vakasi, kazanim satiri.
+
+  > **Yol boyunca bulunan gercek hata:** fiyatlar kayan nokta hatasiyla 1 altin
+  > zipliyordu - `100 * (1 + 0.12)` = 112.00000000000001, tavana yuvarlaninca
+  > 112'lik lot icin 113 altin. Pazar bir fiyat gosterip baskasini aliyordu.
+  > `marketPricing.ts` artik kasitli ceil/floor oncesi dokuzuncu haneye
+  > yuvarliyor; duzeltme ~1e-9, invaryantin korudugu spread'den kat kat kucuk
+  > (M0'in tum bant boyunca yurutulen arbitraj testi bunu dogruluyor).
 - **Faz M4 - AI ve kapanis.** `AiTradeManager` (opsiyonel), `build:verify`,
   oyun ici dogrulama.
 
