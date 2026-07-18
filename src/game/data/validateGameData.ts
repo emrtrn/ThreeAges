@@ -24,6 +24,7 @@ import type {
   BuildingLevelBalance,
   GamePreset,
   GameVersion,
+  MarketBalance,
   ResourceBalance,
   RoadBalance,
   SettlementAge,
@@ -436,6 +437,11 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       }
       territory = { controlRadius, connectedControlRadius, expansionPlacementRange };
     }
+    const marketRaw = stats["market"];
+    let market: BuildingBalance["string"]["market"];
+    if (marketRaw !== undefined) {
+      market = validateMarketBalance(marketRaw, `${statsWhere}.market`);
+    }
     const defenseRaw = stats["defense"];
     let defense: BuildingBalance["string"]["defense"];
     if (defenseRaw !== undefined) {
@@ -542,6 +548,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       ...(populationCapacity ? { populationCapacity } : {}),
       ...(economy ? { economy } : {}),
       ...(territory ? { territory } : {}),
+      ...(market ? { market } : {}),
       ...(defense ? { defense } : {}),
       ...(levels ? { levels } : {}),
       ...(upgrade ? { upgrade } : {}),
@@ -551,6 +558,66 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     throw new GameDataError(`${where}: must define at least one building`);
   }
   return buildings;
+}
+
+/**
+ * Validate a Market's trade tuning (plan `THREEAGES_MARKET_TRADE_PLAN.md` §4).
+ *
+ * The last check is the one that matters most and is not a shape check at all:
+ * a commission too small next to the price step makes an instant round trip
+ * profitable, so the market mints gold from nothing. That is a *balance* bug
+ * with no symptom until someone notices infinite money, so it is refused here
+ * rather than left to a play-test.
+ */
+export function validateMarketBalance(value: unknown, where: string): MarketBalance {
+  const data = asObject(value, where);
+  const lotSize = requireFiniteNumber(data, "lotSize", where);
+  if (!Number.isInteger(lotSize) || lotSize <= 0) {
+    throw new GameDataError(`${where}.lotSize: must be a positive integer`);
+  }
+  const priceStep = requireFiniteNumber(data, "priceStep", where);
+  const indexMin = requireFiniteNumber(data, "indexMin", where);
+  const indexMax = requireFiniteNumber(data, "indexMax", where);
+  const commission = requireFiniteNumber(data, "commission", where);
+  if (priceStep <= 0) {
+    throw new GameDataError(`${where}.priceStep: must be > 0`);
+  }
+  // The index starts at 1.0, so a band that excludes 1 would be unreachable.
+  if (!(indexMin > 0) || indexMin > 1 || indexMax < 1) {
+    throw new GameDataError(`${where}: indexMin must be in (0, 1] and indexMax must be >= 1`);
+  }
+  if (!(commission > 0) || commission >= 1) {
+    throw new GameDataError(`${where}.commission: must be in (0, 1)`);
+  }
+  const basePriceWhere = `${where}.basePrice`;
+  const basePriceData = asObject(data["basePrice"], basePriceWhere);
+  const basePrice: Record<string, number> = {};
+  for (const [resourceId, raw] of Object.entries(basePriceData)) {
+    if (!/^[a-z][a-z0-9_]*$/.test(resourceId)) {
+      throw new GameDataError(`${basePriceWhere}: invalid resource id "${resourceId}"`);
+    }
+    // Gold is the numeraire — pricing it against itself is meaningless, and a
+    // `gold` entry would silently create a gold-for-gold trade button.
+    if (resourceId === "gold") {
+      throw new GameDataError(`${basePriceWhere}: "gold" is the numeraire and cannot be traded against itself`);
+    }
+    if (typeof raw !== "number" || !Number.isFinite(raw) || raw <= 0) {
+      throw new GameDataError(`${basePriceWhere}."${resourceId}": must be a finite number > 0`);
+    }
+    basePrice[resourceId] = raw;
+  }
+  if (Object.keys(basePrice).length === 0) {
+    throw new GameDataError(`${basePriceWhere}: must price at least one tradable resource`);
+  }
+  // No-arbitrage: the worst case is at the price floor, where the spread earned
+  // by the house is smallest relative to the step the trade itself moves.
+  if (priceStep * (1 + commission) >= 2 * indexMin * commission) {
+    throw new GameDataError(
+      `${where}: priceStep ${priceStep} and commission ${commission} allow a profitable round trip at indexMin `
+      + `${indexMin} — require priceStep * (1 + commission) < 2 * indexMin * commission`,
+    );
+  }
+  return { lotSize, basePrice, priceStep, indexMin, indexMax, commission };
 }
 
 /** Validate Faz 6's finite stone/gold deposit profiles. */

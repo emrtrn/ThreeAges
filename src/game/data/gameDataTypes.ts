@@ -155,6 +155,8 @@ export interface BuildingBalanceStats {
   readonly economy?: EconomyProductionBalance;
   /** Present on structures which extend the control area once complete. */
   readonly territory?: TerritoryBuildingBalance;
+  /** Present only on the Market: what it trades and how its prices move. */
+  readonly market?: MarketBalance;
   /** Optional stationary ranged defense, fired only after construction completes. */
   readonly defense?: BuildingDefenseBalance;
   /**
@@ -209,6 +211,34 @@ export interface EconomyProductionBalance {
   readonly gatherRadius?: number;
   /** Maximum wood a worker carries from one tree back to the camp. */
   readonly carryCapacity?: number;
+}
+
+/**
+ * Data-owned trade tuning for a Market — see
+ * `docs/planned/THREEAGES_MARKET_TRADE_PLAN.md`.
+ *
+ * Gold is the numeraire: it has no price of its own, so "gold weakened" is
+ * expressed as every other resource's price index rising. Only the resources
+ * named in {@link basePrice} are tradable, and `gold` may not be one of them.
+ *
+ * {@link priceStep} and {@link commission} are not independent knobs: a
+ * commission too small next to the step makes an instant buy-then-sell round
+ * trip *profitable*, which mints gold from nothing. The validator enforces
+ * `priceStep * (1 + commission) < 2 * indexMin * commission` for exactly this.
+ */
+export interface MarketBalance {
+  /** Units of a resource moved by one trade action. */
+  readonly lotSize: number;
+  /** Gold price of one lot at price index 1.0, keyed by resource id. */
+  readonly basePrice: Readonly<Record<string, number>>;
+  /** How far one trade moves that resource's price index. */
+  readonly priceStep: number;
+  /** Price index floor; must be <= 1 (the index starts at 1.0). */
+  readonly indexMin: number;
+  /** Price index ceiling; must be >= 1. */
+  readonly indexMax: number;
+  /** Spread taken by the house at market level 1, 0..1. Levels lower it. */
+  readonly commission: number;
 }
 
 /** Territory source and bounded expansion rule supplied by a completed structure. */

@@ -61,6 +61,7 @@ import {
   validateBuildingBalance,
   validateGamePreset,
   validateGameVersion,
+  validateMarketBalance,
   validateResourceBalance,
   validateRoadBalance,
   validateUnitBalance,
@@ -86,6 +87,7 @@ import {
 } from "../src/game/rts/structures/placementGrid";
 import { PlacedStructureSystem } from "../src/game/rts/structures/placedStructureSystem";
 import { ResourceWallet } from "../src/game/rts/economy/resourceWallet";
+import { MarketPrices } from "../src/game/rts/economy/marketPricing";
 import { EconomyProductionSystem } from "../src/game/rts/economy/economyProductionSystem";
 import { ResourceNodeSystem } from "../src/game/rts/economy/resourceNodeSystem";
 import { ForestSystem } from "../src/game/rts/economy/forestSystem";
@@ -33389,6 +33391,127 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
     ["train:guard_placeholder", "rally", "upgrade"],
     "the upgrade is appended to the building's own verbs, not instead of them",
   );
+});
+
+check("Faz M0: market prices move with supply and demand, and cannot mint gold", () => {
+  const balance = {
+    lotSize: 100,
+    basePrice: { food: 100, wood: 100, stone: 100 },
+    priceStep: 0.02,
+    indexMin: 0.3,
+    indexMax: 4,
+    commission: 0.15,
+  };
+
+  // Opening rate: every tradable resource starts at index 1.0, and the spread is
+  // the house's — buying costs more than selling returns, from the first trade.
+  const prices = new MarketPrices(balance);
+  assert.deepEqual(prices.tradableResourceIds(), ["food", "wood", "stone"]);
+  assert.equal(prices.index("wood"), 1);
+  assert.equal(prices.buyPrice("wood"), 115, "buy pays base * index * (1 + commission), rounded up");
+  assert.equal(prices.sellPrice("wood"), 85, "sell returns base * index * (1 - commission), rounded down");
+
+  // Gold is the numeraire: it has no price, and asking for one is an explicit
+  // null rather than a plausible-looking number.
+  assert.equal(prices.buyPrice("gold"), null);
+  assert.equal(prices.sellPrice("gold"), null);
+  assert.equal(prices.trades("gold"), false);
+
+  // The user's sentence, as a test: keep buying wood and wood gets dearer.
+  for (let i = 0; i < 10; i += 1) prices.recordBuy("wood");
+  assert.ok(Math.abs(prices.index("wood") - 1.2) < 1e-9, "ten buys move the index by ten steps");
+  assert.equal(prices.buyPrice("wood"), 138, "the same gold now buys less wood");
+  assert.equal(prices.index("food"), 1, "trading wood leaves the other resources alone");
+
+  // Selling walks it back down.
+  for (let i = 0; i < 10; i += 1) prices.recordSell("wood");
+  assert.ok(Math.abs(prices.index("wood") - 1) < 1e-9, "ten sells undo ten buys");
+
+  // Clamping: the index cannot run away in either direction.
+  for (let i = 0; i < 500; i += 1) prices.recordSell("stone");
+  assert.equal(prices.index("stone"), balance.indexMin, "a dumped resource bottoms out at the floor");
+  const floored = prices.snapshot().find((entry) => entry.resourceId === "stone")!;
+  assert.equal(floored.atFloor, true);
+  assert.equal(floored.atCeiling, false);
+  for (let i = 0; i < 500; i += 1) prices.recordBuy("stone");
+  assert.equal(prices.index("stone"), balance.indexMax, "a hoarded resource tops out at the ceiling");
+
+  // THE invariant (plan §4.3). A round trip must lose gold at *every* reachable
+  // index, or the market is an infinite money press. Walked across the whole
+  // band in both directions rather than spot-checked, because the worst case
+  // sits at the floor and the two directions are not symmetric.
+  for (const resourceId of ["food", "wood", "stone"]) {
+    // Buy, then immediately sell back at the index the buy just pushed up.
+    const up = new MarketPrices(balance);
+    for (let i = 0; i < 500; i += 1) up.recordSell(resourceId);
+    while (up.index(resourceId) < balance.indexMax - 1e-9) {
+      const at = up.index(resourceId);
+      const pay = up.buyPrice(resourceId)!;
+      up.recordBuy(resourceId);
+      const receive = up.sellPrice(resourceId)!;
+      assert.ok(
+        receive - pay < 0,
+        `buy-then-sell must lose gold for ${resourceId} at index ${at} (paid ${pay}, got ${receive})`,
+      );
+    }
+    // And the mirror: sell, then buy back at the index the sell just pushed down.
+    const down = new MarketPrices(balance);
+    for (let i = 0; i < 500; i += 1) down.recordBuy(resourceId);
+    while (down.index(resourceId) > balance.indexMin + 1e-9) {
+      const at = down.index(resourceId);
+      const receive = down.sellPrice(resourceId)!;
+      down.recordSell(resourceId);
+      const pay = down.buyPrice(resourceId)!;
+      assert.ok(
+        receive - pay < 0,
+        `sell-then-buy must lose gold for ${resourceId} at index ${at} (got ${receive}, paid ${pay})`,
+      );
+    }
+  }
+
+  // A reset returns the whole board to the opening rate.
+  prices.reset();
+  assert.deepEqual(
+    prices.snapshot().map((entry) => entry.index),
+    [1, 1, 1],
+    "a new match trades at 1.0 across the board",
+  );
+});
+
+check("Faz M0: the market validator refuses tunings that mint gold", () => {
+  const good = {
+    lotSize: 100,
+    basePrice: { food: 100, wood: 100, stone: 100 },
+    priceStep: 0.02,
+    indexMin: 0.3,
+    indexMax: 4,
+    commission: 0.15,
+  };
+  assert.deepEqual(validateMarketBalance(good, "test"), good, "a sane tuning passes through unchanged");
+
+  // The arbitrage guard is the whole point: 3% commission against a 2% step is
+  // profitable to round-trip at the floor, and must not reach a match.
+  assert.throws(
+    () => validateMarketBalance({ ...good, commission: 0.03 }, "test"),
+    (error: unknown) => error instanceof GameDataError && /profitable round trip/.test((error as Error).message),
+    "a commission too small next to the step is refused",
+  );
+  // The recommended level-3 commission still clears it.
+  assert.doesNotThrow(() => validateMarketBalance({ ...good, commission: 0.09 }, "test"));
+
+  // Gold is the numeraire and cannot be priced against itself.
+  assert.throws(
+    () => validateMarketBalance({ ...good, basePrice: { ...good.basePrice, gold: 100 } }, "test"),
+    (error: unknown) => error instanceof GameDataError && /numeraire/.test((error as Error).message),
+  );
+  // The index band has to contain the 1.0 the index actually starts at.
+  assert.throws(() => validateMarketBalance({ ...good, indexMin: 1.5 }, "test"), GameDataError);
+  assert.throws(() => validateMarketBalance({ ...good, indexMax: 0.5 }, "test"), GameDataError);
+  assert.throws(() => validateMarketBalance({ ...good, commission: 0 }, "test"), GameDataError);
+  assert.throws(() => validateMarketBalance({ ...good, priceStep: 0 }, "test"), GameDataError);
+  assert.throws(() => validateMarketBalance({ ...good, lotSize: 0 }, "test"), GameDataError);
+  assert.throws(() => validateMarketBalance({ ...good, basePrice: {} }, "test"), GameDataError);
+  assert.throws(() => validateMarketBalance({ ...good, basePrice: { wood: -5 } }, "test"), GameDataError);
 });
 
 check("§69: the AI stops deciding once the match is over", () => {
