@@ -69,11 +69,43 @@ export interface RtsExpansionRegion {
   readonly routes: readonly (readonly RtsMapPoint[])[];
 }
 
+/**
+ * One authored capture objective for the §58 regional victory (Faz 11).
+ *
+ * Map data rather than a runtime spawn because §58's whole point is that the
+ * objectives pull play *away* from the two bases: where they sit is a statement
+ * about the map's shape, and only the author of the map can make it. The system
+ * that scores them never invents one.
+ */
+export interface RtsStrategicPoint {
+  readonly id: string;
+  /** Shown in the countdown UI and in notifications; §60 replaced the minimap
+   *  with "stratejik nokta isimleri", so this name is a navigation aid. */
+  readonly name: string;
+  readonly x: number;
+  readonly z: number;
+  /** World radius inside which an enemy unit contests the hold (§58). */
+  readonly captureRadius: number;
+}
+
 export interface RtsMapBlockout {
   readonly playerStart: RtsMapPoint;
   readonly enemyStart: RtsMapPoint;
   readonly centralExpansion: RtsMapPoint;
   readonly externalResource: RtsMapPoint;
+  /**
+   * §58's two capture objectives, live only behind the `regionalVictory` flag.
+   *
+   * Both sit on the line through the origin *perpendicular* to the base-to-base
+   * diagonal, which is the one placement that makes them exactly equidistant
+   * from (-38,38) and (38,-38): ~60.7 units each, against a 28-unit starting
+   * control radius. So neither kingdom owns one at match start and neither has a
+   * shorter walk to either — a regional victory has to be expanded toward, not
+   * inherited. They also straddle the central ridge (x -12..12, z -4..4) rather
+   * than sitting on it, which is what turns §58's "merkez savunmasına kapanmayı
+   * azaltıyor" into geometry: turtling at your own centre concedes both.
+   */
+  readonly strategicPoints: readonly RtsStrategicPoint[];
   /**
    * Base-interior build slots for the enemy kingdom, all inside its starting
    * control radius. Named for the kingdom rather than for "the AI": which side
@@ -149,6 +181,12 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
   enemyStart: ENEMY_START,
   centralExpansion: { x: 0, z: 0 },
   externalResource: { x: 27, z: 13 },
+  strategicPoints: [
+    // Named west/east: x reads the same for both kingdoms, while "north/south"
+    // would be the enemy's z convention worn by a label the player also reads.
+    { id: "west_pass", name: "Batı Geçidi", x: -20, z: -20, captureRadius: 10 },
+    { id: "east_pass", name: "Doğu Geçidi", x: 20, z: 20, captureRadius: 10 },
+  ],
   // Authored around the north-east enemy centre at (38, -38): every slot is grid-snapped,
   // clear of the 8x8 centre footprint and of its neighbours, and inside the
   // 18-unit starting control radius. §41 orders economy near the centre and the

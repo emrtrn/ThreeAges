@@ -55,6 +55,27 @@ export const RETREAT_REASON_TEXT: Readonly<Record<AiRetreatReason, string>> = {
  */
 export type AiRetreatReason = "outmatched" | "attrition";
 
+/**
+ * What the army needs to know about the §58 regional victory to answer it.
+ *
+ * A narrow read-only view rather than the objective systems themselves: the army
+ * manager must not be able to *move* the counter, and — because §58 is behind
+ * the `regionalVictory` flag — the whole feature has to be absent, not merely
+ * inert, when it is off. A null provider is that absence (plan §13: "a disabled
+ * flag must cost nothing at runtime").
+ */
+export interface AiObjectiveWatch {
+  /**
+   * True when the opponent's counter is close enough to completing that not
+   * answering it loses the match. Below this bar the army keeps playing its
+   * normal §60 game — an AI that abandoned every attack the moment an enemy
+   * touched a pass would be trivially baited off its own offensive.
+   */
+  readonly urgent: boolean;
+  /** Objectives the opponent currently holds; empty means nothing to contest. */
+  readonly contestable: readonly { readonly id: string; readonly name: string; readonly x: number; readonly z: number }[];
+}
+
 export interface ArmyManagerState {
   readonly mission: AiArmyMission | null;
   readonly unitCount: number;
@@ -72,6 +93,8 @@ export class ArmyManager {
   private target: CombatTarget | null = null;
   private targetScore: AiTargetScore | null = null;
   private retreatReason: AiRetreatReason | null = null;
+  /** §58: the objective the contest mission is marching on, else null. */
+  private contestPoint: AiObjectiveWatch["contestable"][number] | null = null;
 
   constructor(
     private readonly owner: UnitOwner,
@@ -81,6 +104,13 @@ export class ArmyManager {
     private readonly navigation: RtsNavigation,
     private readonly balance: AiBalance,
     private readonly log: AiDecisionLog,
+    /**
+     * §58 "AI Contest Objective davranışı". Null whenever the `regionalVictory`
+     * flag is off, which is also the default: the parameter is optional so every
+     * existing construction site — and every test written before Faz 11 — keeps
+     * building an army manager that has never heard of objectives.
+     */
+    private readonly objectives: (() => AiObjectiveWatch | null) | null = null,
   ) {}
 
   get currentMission(): AiArmyMission | null {
@@ -118,6 +148,7 @@ export class ArmyManager {
     this.target = null;
     this.targetScore = null;
     this.retreatReason = null;
+    this.contestPoint = null;
   }
 
   /** §51: every live combat unit belongs to the one field army. */
@@ -133,6 +164,24 @@ export class ArmyManager {
     // §57 level 3 / §65: our own base outranks anything the director wanted.
     if (blackboard.baseThreat > 0) return this.withoutTarget("defendBase");
     if (intent === "defend") return this.withoutTarget("defendBase");
+
+    // §58 "AI sayacı durdurmak için tepki veriyor", placed here on purpose:
+    // *below* base defence, because a razed centre loses the match outright and
+    // faster than any counter can; *above* the §60 attack logic, because that
+    // logic scores buildings and a strategic point is not one — left to itself
+    // the army would keep farming an outbuilding while the match was lost on a
+    // pass it never walked to.
+    //
+    // Only when `urgent`. Contesting is not free (it pulls the field army across
+    // the map), so it has to be the answer to actually losing, not a reflex.
+    const contested = this.contestable(army);
+    if (contested) {
+      this.contestPoint = contested;
+      this.target = null;
+      this.targetScore = null;
+      this.retreatReason = null;
+      return "contestObjective";
+    }
 
     const ratio = this.powerRatio(blackboard);
     if (this.attacking) {
@@ -161,6 +210,43 @@ export class ArmyManager {
     }
     this.targetScore = chosen;
     return chosen.candidate.kind === "center" ? "assaultTarget" : "harassEconomy";
+  }
+
+  /**
+   * §58: the objective to march on, or null when there is no reason to.
+   *
+   * Nearest to the army's centroid, ties broken on id so §80's determinism
+   * survives a symmetric map — and this map is deliberately symmetric, so the
+   * tie is reachable rather than theoretical.
+   */
+  private contestable(army: readonly Unit[]): AiObjectiveWatch["contestable"][number] | null {
+    const watch = this.objectives?.() ?? null;
+    if (!watch?.urgent || watch.contestable.length === 0) return null;
+    const origin = centroid(army);
+    return [...watch.contestable].sort((a, b) =>
+      Math.hypot(origin.x - a.x, origin.z - a.z) - Math.hypot(origin.x - b.x, origin.z - b.z)
+      || a.id.localeCompare(b.id))[0] ?? null;
+  }
+
+  /**
+   * §58: stand on the objective. Standing there *is* the mechanism —
+   * {@link StrategicPointSystem} counts an opponent inside the radius as
+   * contesting, which stalls the counter — so this issues no attack of its own
+   * and simply walks the army onto the point. Anything defending it is then
+   * engaged by the same rule the assault mission uses, because a defender in
+   * reach is a defender in reach regardless of why we came.
+   */
+  private contest(army: readonly Unit[]): void {
+    const point = this.contestPoint;
+    if (!point) return;
+    for (const unit of army) {
+      const defender = this.nearestEnemyUnit(unit, this.opponent);
+      if (defender && defender.position.distanceTo(unit.position) <= TARGET_DEFENSE_RADIUS) {
+        issueAttackOrder(unit, defender, this.navigation);
+        continue;
+      }
+      this.moveTo(unit, point.x, point.z);
+    }
   }
 
   /** §60: project the visible enemy into candidates, then take the best. */
@@ -226,6 +312,7 @@ export class ArmyManager {
     switch (mission) {
       case "assaultTarget":
       case "harassEconomy": return this.assault(army);
+      case "contestObjective": return this.contest(army);
       case "defendBase": return this.defendBase(army);
       case "regroup":
       default: return this.regroup(army);
@@ -299,14 +386,21 @@ export class ArmyManager {
     // Rally on the threatened side of the base rather than a fixed corner.
     const towardX = enemyCenter ? Math.sign(enemyCenter.position.x - center.position.x) : 0;
     const towardZ = enemyCenter ? Math.sign(enemyCenter.position.z - center.position.z) : 1;
-    const rallyX = center.position.x + towardX * REGROUP_OFFSET;
-    const rallyZ = center.position.z + towardZ * REGROUP_OFFSET;
-    if (Math.hypot(unit.position.x - rallyX, unit.position.z - rallyZ) <= ORDER_TOLERANCE) {
-      // Already holding the rally point; re-pathing here would jitter the unit.
+    this.moveTo(
+      unit,
+      center.position.x + towardX * REGROUP_OFFSET,
+      center.position.z + towardZ * REGROUP_OFFSET,
+    );
+  }
+
+  /** Walk a unit to a world position, leaving an already-moving unit alone. */
+  private moveTo(unit: Unit, x: number, z: number): void {
+    if (Math.hypot(unit.position.x - x, unit.position.z - z) <= ORDER_TOLERANCE) {
+      // Already holding the spot; re-pathing here would jitter the unit.
       return;
     }
     if (unit.pathWaypointCount > 0) return;
-    const path = this.navigation.plan(unit.position, new Vector3(rallyX, 0, rallyZ));
+    const path = this.navigation.plan(unit.position, new Vector3(x, 0, z));
     if (path) unit.setMovePath(path);
   }
 
@@ -352,6 +446,9 @@ export class ArmyManager {
   private withoutTarget(mission: AiArmyMission): AiArmyMission {
     this.target = null;
     this.targetScore = null;
+    // §58: likewise for the objective, or a mission that stopped contesting
+    // would still report the pass it walked away from.
+    this.contestPoint = null;
     // An army that regroups because it was never sent out did not retreat; only
     // the two §65 triggers may claim a reason, or the panel would explain a
     // stand-down that never happened.
@@ -376,6 +473,9 @@ export class ArmyManager {
   private missionReason(mission: AiArmyMission, blackboard: AiBlackboard): string {
     switch (mission) {
       case "defendBase": return `üs tehdit altında (${blackboard.baseThreat.toFixed(1)})`;
+      case "contestObjective": return this.contestPoint
+        ? `bölgesel zafer sayacı durduruluyor: ${this.contestPoint.name}`
+        : "stratejik nokta tartışmaya açıldı";
       case "assaultTarget":
       case "harassEconomy": return this.targetScore
         ? `${this.targetScore.reason} (puan ${this.targetScore.score.toFixed(2)}, güç ${blackboard.ownArmyPower.toFixed(1)} vs ${blackboard.knownEnemyArmyPower.toFixed(1)})`

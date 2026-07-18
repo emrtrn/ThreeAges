@@ -60,10 +60,14 @@ const RESULT_TEXT: Readonly<Record<Exclude<RtsMatchOutcome, "active">, Readonly<
     // Reachable only if a future rule lets the AI resign; saying "the enemy
     // centre fell" when it did not is the failure this branch exists to avoid.
     surrendered: { title: "Zafer", detail: "Düşman teslim oldu." },
+    // §58: names the condition, because a match that ended with both centres
+    // standing otherwise reads as an unexplained stop.
+    "regional-control": { title: "Zafer", detail: "Stratejik geçitleri elinde tuttun." },
   },
   defeat: {
     "center-destroyed": { title: "Yenilgi", detail: "Merkeziniz yıkıldı." },
     surrendered: { title: "Yenilgi", detail: "Teslim oldunuz." },
+    "regional-control": { title: "Yenilgi", detail: "Düşman stratejik geçitleri elinde tuttu." },
   },
 };
 

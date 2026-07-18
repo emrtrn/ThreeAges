@@ -34,7 +34,7 @@ import { AiInfrastructureManager, type AiInfrastructureStep } from "./aiInfrastr
 import { AiProductionManager } from "./aiProductionManager";
 import { AiTradeManager, type AiTradeStep } from "./aiTradeManager";
 import { AiUpgradeManager, type AiUpgradeStep } from "./aiUpgradeManager";
-import { ArmyManager, type AiRetreatReason } from "./armyManager";
+import { ArmyManager, type AiObjectiveWatch, type AiRetreatReason } from "./armyManager";
 import { KingdomDirector } from "./kingdomDirector";
 import type { AiTargetScore } from "./armyTargeting";
 import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } from "./aiTypes";
@@ -59,6 +59,13 @@ export interface AiControllerOptions extends AiBlackboardSources {
    * ({@link AI_MAX_EXPANSION_PLANS}), not the length of this list.
    */
   readonly expansions: readonly RtsExpansionRegion[];
+  /**
+   * §58: how the army reads the regional victory race. Explicitly `null` — not
+   * optional — whenever the `regionalVictory` flag is off, so a disabled feature
+   * adds no per-tick work *and* a future caller has to decide about objectives
+   * rather than forget them into existence.
+   */
+  readonly objectives: (() => AiObjectiveWatch | null) | null;
   readonly construction: StructureConstructionService;
   readonly roadConstruction: RoadConstructionService;
   readonly workerProduction: WorkerProductionSystem;
@@ -151,6 +158,7 @@ export class AiController {
       options.navigation,
       options.balance,
       this.log,
+      options.objectives ?? null,
     );
     this.builds = new AiBuildManager(
       options.owner,

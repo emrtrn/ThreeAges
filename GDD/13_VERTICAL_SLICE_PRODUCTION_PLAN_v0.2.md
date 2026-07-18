@@ -2444,15 +2444,42 @@ Bu fazdaki her alt sistem bağımsız scope kararıdır.
 
 ### Görevler
 
-- [ ] İki stratejik nokta ekle.
-- [ ] Ele geçirme durumu ekle.
-- [ ] Dost kontrol alanı veya aktif karakol bağlantısı koşulu ekle.
-- [ ] Zafer sayacı ekle.
-- [ ] Sayaç durma ve gerileme davranışı ekle.
-- [ ] AI Contest Objective davranışı ekle.
-- [ ] UI geri sayım ve harita göstergesi ekle.
+- [x] İki stratejik nokta ekle. (`RTS_BLOCKOUT_MAP.strategicPoints`: Batı Geçidi
+      `(-20,-20)`, Doğu Geçidi `(20,20)` — üs-üs köşegenine dik eksende, iki üsse
+      de ~60.7 birim, 28 birimlik başlangıç kontrol yarıçapına karşı. Yani maç
+      başında ikisi de nötr ve kimsenin yolu daha kısa değil.)
+- [x] Ele geçirme durumu ekle. (`objectives/strategicPointSystem.ts`)
+- [x] Dost kontrol alanı veya aktif karakol bağlantısı koşulu ekle. (Ayrı bir
+      kural değil: sahiplik `TerritoryControlSystem.ownerAt`'a sorulur ve o
+      sistemin kaynakları zaten merkez + *tamamlanmış* karakoldur; karakolun
+      geniş yarıçapı da yalnızca yola bağlıyken geçerlidir.)
+- [x] Zafer sayacı ekle. (`objectives/regionalVictorySystem.ts`; 180 simülasyon
+      saniyesi kesintisiz çift kontrol)
+- [x] Sayaç durma ve gerileme davranışı ekle. (İkisi de tutuluyor → tırmanır;
+      biri çekişmeli veya sadece biri tutuluyor → **durur**; hiçbiri tutulmuyor →
+      1/3 hızla **geriler**. Sıfırlanmaz: sıfırlama, kaybedene bir daha
+      giremeyeceği ikili bir kapı olurdu.)
+- [x] AI Contest Objective davranışı ekle. (`armyManager.ts`; `aiTypes.ts`'te
+      rezerve edilmiş `contestObjective` görevi dolduruldu. Üs savunmasının
+      *altında*, §60 hedef skorlamasının *üstünde*: skorlayıcı yalnızca bina
+      görür, geçit bina değildir. Yalnızca oyuncunun sayacı uyarı bandındayken
+      tetiklenir, yoksa AI her temasta saldırısından koparılabilirdi.)
+- [x] UI geri sayım ve harita göstergesi ekle. (`ui/rtsObjectiveTracker.ts` —
+      iki krallığın sayacı da görünür; `objectives/strategicPointView.ts` —
+      halka, noktanın gerçek `captureRadius`'unda çizilir.)
+
+Tamamı `regionalVictory` feature flag'i arkasında ve varsayılan **kapalı**:
+bayrak kapalıyken sistemler hiç kurulmaz (§13 "kapalı bayrak runtime'da hiçbir
+şeye mal olmamalı"), ekranda da §60 uyarınca hiçbir iz bırakmaz.
+`?rts&flags=regionalVictory` ile açılır.
+
+Test durumu: `tools/engine-tests.ts` içinde beş `§58` kontrolü (tutma/durma/
+gerileme, uyarı bandı, maç sonucu önceliği, AI contest davranışı);
+`tests/smoke/rts-regional-victory.spec.ts` bayraklı/bayraksız boot'u sürüyor.
 
 ### Kabul kriterleri
+
+Dördü de **playtest gerektirir** — kod tarafı hazır, ölçüm yapılmadı:
 
 - [ ] Bölgesel zafer merkez savunmasına kapanmayı azaltıyor.
 - [ ] Sayaç sürpriz yenilgi yaratmıyor.
@@ -2460,6 +2487,10 @@ Bu fazdaki her alt sistem bağımsız scope kararıdır.
 - [ ] İkinci zafer türü askerî zaferi gereksiz hale getirmiyor.
 
 Başarısızsa sistem feature flag arkasında kapatılır.
+
+> **Ayarlanacak sayılar** (`DEFAULT_REGIONAL_VICTORY_SETTINGS`): gereken süre
+> 180 sn, gerileme 1/3, uyarı bandı 60 sn. Şu an kodda sabit; playtest bunları
+> oynatmayı gerektirirse `balance/` altına bir JSON'a taşınmalıdır.
 
 ---
 

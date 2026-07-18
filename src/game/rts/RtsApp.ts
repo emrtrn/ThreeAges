@@ -62,7 +62,7 @@ import { RtsBuildingVisuals } from "./structures/rtsBuildingVisuals";
 import { updateStructureDestruction } from "./structures/structureDestruction";
 import { RtsMatchState } from "./match/rtsMatchState";
 import { RtsMatchFlow } from "./match/rtsMatchFlow";
-import { RtsMatchClock } from "./match/rtsMatchClock";
+import { RtsMatchClock, formatMatchDuration } from "./match/rtsMatchClock";
 import { RtsMatchOverlay } from "./match/rtsMatchOverlay";
 import { RtsDebugOverlay } from "./debug/rtsDebugOverlay";
 import { PlacedStructureSystem, type PlacedStructure } from "./structures/placedStructureSystem";
@@ -115,6 +115,11 @@ import { RtsNotificationFeed } from "./ui/rtsNotificationFeed";
 import { RtsAttackWatch } from "./ui/rtsAttackWatch";
 import { resourceLabel, RESOURCE_ORDER } from "./ui/resourceLabels";
 import { TerritoryControlSystem } from "./territory/territoryControlSystem";
+import { StrategicPointSystem } from "./objectives/strategicPointSystem";
+import { StrategicPointView } from "./objectives/strategicPointView";
+import { RegionalVictorySystem } from "./objectives/regionalVictorySystem";
+import { RtsObjectiveTracker } from "./ui/rtsObjectiveTracker";
+import type { AiObjectiveWatch } from "./ai/armyManager";
 
 const MAX_PIXEL_RATIO = 2;
 /** Clamp rAF delta so an alt-tab stall or breakpoint can't teleport the camera. */
@@ -145,6 +150,15 @@ export interface RtsAppOptions {
   readonly debug?: boolean;
   /** `?flags=prosperity`: debug information only; never a gameplay requirement. */
   readonly prosperityDebugEnabled?: boolean;
+  /**
+   * `?flags=regionalVictory` (§58, Faz 11): the second win condition.
+   *
+   * Off by default and genuinely absent when off — the objective systems are not
+   * constructed, so there is no per-tick cost, no ring on the ground and no HUD
+   * panel (plan §13, and §60's rule that a disabled feature leaves no reserved
+   * empty space on screen).
+   */
+  readonly regionalVictoryEnabled?: boolean;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
   readonly unitBalance: UnitBalance;
   /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
@@ -212,6 +226,17 @@ export class RtsApp {
   private readonly marketTrade: MarketTradeSystem;
   private readonly workerProduction: WorkerProductionSystem;
   private readonly structureUpgrades: StructureUpgradeSystem;
+  /**
+   * §58's objective slice, all four pieces null together whenever the
+   * `regionalVictory` flag is off. One flag, one construction site: a half-built
+   * combination — say the counter without the tracker — is exactly the state
+   * §13 forbids, and making them a single conditional block is what makes that
+   * combination unrepresentable.
+   */
+  private readonly strategicPoints: StrategicPointSystem | null;
+  private readonly regionalVictory: RegionalVictorySystem | null;
+  private readonly strategicPointView: StrategicPointView | null;
+  private readonly objectiveTracker: RtsObjectiveTracker | null;
   private readonly match = new RtsMatchState();
   /** §51: whether the simulation should be running; `match` owns who won. */
   private readonly flow = new RtsMatchFlow();
@@ -283,6 +308,29 @@ export class RtsApp {
       SETTLEMENT_POPULATION_CAPACITY,
     );
     this.ages = new AgeSystem(KINGDOM_OWNERS, this.options.ageBalance, this.centers, this.structures, this.kingdoms);
+    // §58. Built here — before the AI, which reads the objective watch — and
+    // only when the flag is on, so `regionalVictory` off means these four are
+    // null and nothing downstream ever asks them anything.
+    if (this.options.regionalVictoryEnabled) {
+      this.strategicPoints = new StrategicPointSystem(
+        RTS_BLOCKOUT_MAP.strategicPoints,
+        (x, z) => this.territory.ownerAt(x, z),
+        // Workers are excluded: §58 is contested by *force*, and letting a
+        // wandering gatherer stall a counter would make the condition a
+        // question of stray pathing rather than of holding ground.
+        () => this.units.armyOf("player").concat(this.units.armyOf("enemy"))
+          .filter((unit) => !unit.dying)
+          .map((unit) => ({ owner: unit.owner, x: unit.position.x, z: unit.position.z })),
+      );
+      this.regionalVictory = new RegionalVictorySystem(KINGDOM_OWNERS, this.strategicPoints);
+      this.strategicPointView = new StrategicPointView();
+      this.objectiveTracker = new RtsObjectiveTracker();
+    } else {
+      this.strategicPoints = null;
+      this.regionalVictory = null;
+      this.strategicPointView = null;
+      this.objectiveTracker = null;
+    }
     this.structureUpgrades = new StructureUpgradeSystem(
       this.structures,
       this.kingdoms,
@@ -434,6 +482,11 @@ export class RtsApp {
       isWorkerBusy: (unit) => this.workerConstruction.stateFor(unit) !== "idle"
         || (this.economyProduction?.isAssigned(unit) ?? false),
       navigation: this.navigation,
+      // §58: undefined while the flag is off, so the army manager is built with
+      // a null provider and never spends a tick on objectives that do not exist.
+      objectives: this.regionalVictory && this.strategicPoints
+        ? () => this.aiObjectiveWatch()
+        : null,
       anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
       baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
       expansions: RTS_BLOCKOUT_MAP.enemyExpansions,
@@ -674,6 +727,8 @@ export class RtsApp {
     this.roadPlacement.dispose();
     this.roadDebugView.dispose();
     this.territory.dispose();
+    this.strategicPointView?.dispose();
+    this.objectiveTracker?.dispose();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
     this.workerProduction.reset();
@@ -730,6 +785,7 @@ export class RtsApp {
     this.scene.add(this.roadPlacement.root);
     this.scene.add(this.roadDebugView.root);
     this.scene.add(this.territory.root);
+    if (this.strategicPointView) this.scene.add(this.strategicPointView.root);
     this.scene.add(this.units.root);
     this.scene.add(this.projectiles.root);
     this.scene.add(this.commandMarkers.root);
@@ -1013,13 +1069,62 @@ export class RtsApp {
     });
     updateUnitDeaths(this.units, this.selection, dt);
     this.destroyRuinedStructures();
+    // §58, after the deaths and demolitions this tick: a point whose holding
+    // outpost just fell has already stopped being held by the time it is scored.
+    this.updateRegionalVictory(dt);
     const outcome = this.match.update(this.centers);
-    if (outcome !== "active") {
-      this.log.info(outcome === "victory"
-        ? "Victory: enemy command center destroyed"
-        : "Defeat: the player's command center was destroyed");
+    // Resolved second, so a centre razed on the same tick keeps the more
+    // specific reason — `resolveRegionalControl` is a no-op on a decided match.
+    const regional = this.match.resolveRegionalControl(this.regionalVictory?.winner() ?? null);
+    if (this.match.outcome !== "active" && (outcome !== "active" || regional)) {
+      this.log.info(`Match ended: ${this.match.outcome} (${this.match.reason})`);
       this.showMatchResult();
     }
+  }
+
+  /**
+   * §58: recount the objectives, age the counters, and warn.
+   *
+   * The warning is a notification while the tracker is a panel, and the split is
+   * deliberate: the panel answers "what is the state" continuously, the notice
+   * fires once when the state becomes the player's problem.
+   * {@link RtsNotificationCenter} de-duplicates by kind, so posting on every tick
+   * inside the window raises one notice, not hundreds.
+   */
+  private updateRegionalVictory(dt: number): void {
+    const points = this.strategicPoints;
+    const victory = this.regionalVictory;
+    if (!points || !victory) return;
+    points.refresh();
+    victory.advance(dt);
+    this.strategicPointView?.setStatuses(points.all());
+    this.objectiveTracker?.setState({ points: points.all(), progress: victory.all() });
+    if (victory.warning(AI_OWNER)) {
+      this.notifications.post({
+        kind: "regional-victory-warning",
+        text: `Düşman stratejik geçitleri tutuyor: ${formatMatchDuration(victory.progressFor(AI_OWNER).remainingSeconds)} kaldı.`,
+      });
+    }
+  }
+
+  /** §58: the read-only view of the objective race the AI's army acts on. */
+  private aiObjectiveWatch(): AiObjectiveWatch | null {
+    const points = this.strategicPoints;
+    const victory = this.regionalVictory;
+    if (!points || !victory) return null;
+    return {
+      // The *player's* counter is the one the AI has to answer; its own counter
+      // climbing is not a reason to send the army anywhere.
+      urgent: victory.warning(PLAYER_OWNER),
+      contestable: points.all()
+        .filter((status) => status.holder === PLAYER_OWNER)
+        .map((status) => ({
+          id: status.point.id,
+          name: status.point.name,
+          x: status.point.x,
+          z: status.point.z,
+        })),
+    };
   }
 
   /**
@@ -1191,6 +1296,10 @@ export class RtsApp {
     this.attackWatch.reset();
     this.match.reset();
     this.clock.reset();
+    // §58: a restart is a new match. A counter carried over would start the
+    // fresh game part-way to a regional loss the player never played.
+    this.strategicPoints?.reset();
+    this.regionalVictory?.reset();
     // "Yeniden Başlat" is reachable from the pause menu as well as the result
     // screen, so the flow has to be told too — otherwise restarting a paused
     // match would rebuild the world and leave it frozen behind a hidden menu.

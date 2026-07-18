@@ -36,6 +36,12 @@ interface BootFoundationResult {
   readonly preset: GamePreset | null;
   /** Prosperity is debug-only in Phase 6 and never enters gameplay gates. */
   readonly prosperityDebugEnabled: boolean;
+  /**
+   * §58's second win condition (Faz 11). Unlike prosperity this *is* a gameplay
+   * gate, which is exactly why it stays behind a flag until §58's acceptance
+   * criteria are met in playtesting: `?flags=regionalVictory`.
+   */
+  readonly regionalVictoryEnabled: boolean;
 }
 
 async function bootFoundation(): Promise<BootFoundationResult> {
@@ -64,11 +70,15 @@ async function bootFoundation(): Promise<BootFoundationResult> {
       config: snapshotRuntimeConfig(config),
     };
   }
-  return { preset, prosperityDebugEnabled: config.flags.prosperity };
+  return {
+    preset,
+    prosperityDebugEnabled: config.flags.prosperity,
+    regionalVictoryEnabled: config.flags.regionalVictory,
+  };
 }
 
 async function main(): Promise<void> {
-  const { preset, prosperityDebugEnabled } = await bootFoundation();
+  const { preset, prosperityDebugEnabled, regionalVictoryEnabled } = await bootFoundation();
 
   const params = new URLSearchParams(location.search);
   const canvas = requireElement<HTMLCanvasElement>("game-canvas");
@@ -91,6 +101,7 @@ async function main(): Promise<void> {
     const rts = new RtsApp(canvas, {
       debug: params.has("debug"),
       prosperityDebugEnabled,
+      regionalVictoryEnabled,
       unitBalance,
       buildingBalance,
       resourceBalance,

@@ -108,7 +108,7 @@ import { KingdomRegistry } from "../src/game/rts/kingdom/kingdomRegistry";
 import { AiController, type AiControllerSnapshot } from "../src/game/rts/ai/aiController";
 import { AiDecisionLog } from "../src/game/rts/ai/aiDecisionLog";
 import { AiTradeManager } from "../src/game/rts/ai/aiTradeManager";
-import { ArmyManager } from "../src/game/rts/ai/armyManager";
+import { ArmyManager, type AiObjectiveWatch } from "../src/game/rts/ai/armyManager";
 import { KingdomDirector } from "../src/game/rts/ai/kingdomDirector";
 import { AiBuildManager, AI_ANCHOR_FAILURE_LIMIT } from "../src/game/rts/ai/aiBuildManager";
 import { buildOrder, detectBottleneck, nextBuilding } from "../src/game/rts/ai/aiEconomyManager";
@@ -160,7 +160,17 @@ import {
 import {
   COMMAND_CENTER_CONTROL_RADIUS,
   TerritoryControlSystem,
+  type TerritorySource,
 } from "../src/game/rts/territory/territoryControlSystem";
+import {
+  StrategicPointSystem,
+  type StrategicPointOccupant,
+} from "../src/game/rts/objectives/strategicPointSystem";
+import {
+  DEFAULT_REGIONAL_VICTORY_SETTINGS,
+  RegionalVictorySystem,
+} from "../src/game/rts/objectives/regionalVictorySystem";
+import type { RtsStrategicPoint } from "../src/game/rts/world/rtsMapBlockout";
 import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
@@ -29273,6 +29283,162 @@ check("RTS match enters victory when the enemy command center is depleted", () =
   assert.equal(centers.all().length, 0, "restart can discard old command centers");
 });
 
+/**
+ * §58 fixture: two objectives, and a real territory grid so "held" is decided by
+ * the same control system the game uses rather than by a stub that could agree
+ * with a broken rule.
+ */
+function regionalVictoryTestWorld() {
+  const points: RtsStrategicPoint[] = [
+    { id: "west", name: "Batı", x: -20, z: 0, captureRadius: 8 },
+    { id: "east", name: "Doğu", x: 20, z: 0, captureRadius: 8 },
+  ];
+  const sources: TerritorySource[] = [];
+  const territory = new TerritoryControlSystem(() => sources);
+  let occupants: StrategicPointOccupant[] = [];
+  const strategic = new StrategicPointSystem(
+    points,
+    (x, z) => territory.ownerAt(x, z),
+    () => occupants,
+  );
+  const victory = new RegionalVictorySystem(["player", "enemy"], strategic);
+  /** Claim a point by putting a control source on it, as an outpost would. */
+  const claim = (owner: UnitOwner, x: number): void => {
+    sources.push({ owner, x, z: 0, radius: 10 });
+    territory.refresh();
+  };
+  const occupy = (next: StrategicPointOccupant[]): void => {
+    occupants = next;
+  };
+  /** Advance both systems the way the app's tick does: recount, then age. */
+  const tick = (seconds: number): void => {
+    strategic.refresh();
+    victory.advance(seconds);
+  };
+  return { points, territory, strategic, victory, claim, occupy, tick };
+}
+
+check("§58: a strategic point is held through territory control and contested by force", () => {
+  const world = regionalVictoryTestWorld();
+  world.tick(0.1);
+  assert.deepEqual(
+    world.strategic.all().map((status) => status.holder),
+    ["neutral", "neutral"],
+    "nobody holds an objective before anyone expands to it",
+  );
+
+  world.claim("player", -20);
+  world.tick(0.1);
+  assert.equal(world.strategic.statusOf("west")?.holder, "player", "friendly control area takes the point");
+  assert.equal(world.strategic.securedBy("player").length, 1);
+  assert.equal(world.strategic.holdsAll("player"), false, "one of two is not all of them");
+
+  // §58: an enemy standing on the point contests it without taking it — taking
+  // requires territory, which a lone unit does not carry.
+  world.occupy([{ owner: "enemy", x: -18, z: 0 }]);
+  world.tick(0.1);
+  assert.equal(world.strategic.statusOf("west")?.holder, "player", "contesting does not flip ownership");
+  assert.equal(world.strategic.statusOf("west")?.contested, true);
+  assert.equal(world.strategic.securedBy("player").length, 0, "a contested point is not secured");
+
+  // Outside the capture radius is not contesting.
+  world.occupy([{ owner: "enemy", x: -6, z: 0 }]);
+  world.tick(0.1);
+  assert.equal(world.strategic.statusOf("west")?.contested, false);
+
+  // A friendly unit on our own point is not an enemy and must never contest it.
+  world.occupy([{ owner: "player", x: -18, z: 0 }]);
+  world.tick(0.1);
+  assert.equal(world.strategic.statusOf("west")?.contested, false, "your own army does not contest your point");
+});
+
+check("§58: the regional counter climbs on a full hold, stalls when contested and decays when lost", () => {
+  const world = regionalVictoryTestWorld();
+  const { requiredSeconds, decayPerSecond } = DEFAULT_REGIONAL_VICTORY_SETTINGS;
+
+  world.claim("player", -20);
+  world.claim("player", 20);
+  world.tick(10);
+  assert.equal(world.victory.progressFor("player").phase, "holding");
+  assert.equal(world.victory.progressFor("player").seconds, 10);
+  assert.equal(world.victory.progressFor("player").secured, 2);
+  assert.equal(world.victory.winner(), null, "ten seconds is not a victory");
+
+  // §58 "sayaç durma": one contested point is enough to stop the clock.
+  world.occupy([{ owner: "enemy", x: -18, z: 0 }]);
+  world.tick(30);
+  assert.equal(world.victory.progressFor("player").phase, "stalled");
+  assert.equal(world.victory.progressFor("player").seconds, 10, "a stalled counter neither climbs nor falls");
+
+  // §58 "gerileme": holding nothing gives ground back, slowly.
+  world.occupy([{ owner: "enemy", x: -18, z: 0 }, { owner: "enemy", x: 18, z: 0 }]);
+  world.tick(9);
+  assert.equal(world.victory.progressFor("player").phase, "decaying");
+  assert.ok(
+    Math.abs(world.victory.progressFor("player").seconds - (10 - 9 * decayPerSecond)) < 1e-9,
+    "decay runs at the settings' rate, not instantly",
+  );
+
+  // And a sustained hold completes.
+  world.occupy([]);
+  world.tick(requiredSeconds);
+  assert.equal(world.victory.progressFor("player").seconds, requiredSeconds, "the counter is capped at the requirement");
+  assert.equal(world.victory.progressFor("player").remainingSeconds, 0);
+  assert.equal(world.victory.winner(), "player");
+
+  world.victory.reset();
+  assert.equal(world.victory.winner(), null, "a restart does not inherit the last match's counter");
+  assert.equal(world.victory.progressFor("player").seconds, 0);
+});
+
+check("§58: the regional victory is only a warning while it is still winnable", () => {
+  const world = regionalVictoryTestWorld();
+  const { requiredSeconds, warningSeconds } = DEFAULT_REGIONAL_VICTORY_SETTINGS;
+  assert.equal(world.victory.warning("player"), false, "an untouched counter warns nobody");
+
+  world.claim("enemy", -20);
+  world.claim("enemy", 20);
+  world.tick(requiredSeconds - warningSeconds - 1);
+  assert.equal(world.victory.warning("enemy"), false, "outside the window there is nothing to announce yet");
+
+  world.tick(2);
+  assert.equal(world.victory.warning("enemy"), true);
+  // Contesting stops the clock but must not stop the warning: one unit walking
+  // away from the point is one unit away from losing the match.
+  world.occupy([{ owner: "player", x: -18, z: 0 }]);
+  world.tick(1);
+  assert.equal(world.victory.progressFor("enemy").phase, "stalled");
+  assert.equal(world.victory.warning("enemy"), true, "a stalled counter is still a live threat");
+});
+
+check("§58: a completed regional counter ends the match, and never re-ends a decided one", () => {
+  const centers = new CommandCenterSystem();
+  centers.spawn("player", 0, 16, 300);
+  centers.spawn("enemy", 0, -26, 300);
+
+  const playerWins = new RtsMatchState();
+  assert.equal(playerWins.resolveRegionalControl(null), false, "no winner is a no-op the caller may run every tick");
+  assert.equal(playerWins.outcome, "active");
+  assert.equal(playerWins.resolveRegionalControl("player"), true);
+  assert.equal(playerWins.outcome, "victory");
+  assert.equal(playerWins.reason, "regional-control", "the result screen can name the condition");
+
+  const playerLoses = new RtsMatchState();
+  playerLoses.resolveRegionalControl("enemy");
+  assert.equal(playerLoses.outcome, "defeat", "§39: the condition is symmetric");
+  assert.equal(playerLoses.reason, "regional-control");
+
+  // A razed centre is the more specific ending and already ended the match.
+  const razed = new RtsMatchState();
+  const enemyCenter = centers.get("enemy") ?? assert.fail("enemy centre missing");
+  enemyCenter.health.damage(300);
+  razed.update(centers);
+  assert.equal(razed.resolveRegionalControl("enemy"), false, "a decided match cannot be re-decided");
+  assert.equal(razed.outcome, "victory");
+  assert.equal(razed.reason, "center-destroyed");
+  centers.clear();
+});
+
 check("RTS death deselects, clears attackers, then removes the defeated unit", () => {
   const units = new UnitSystem();
   const player = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
@@ -32837,7 +33003,7 @@ check("ai balance orders the §69 dominance bar above the §62 attack bar", () =
 });
 
 /** An ArmyManager over a headless world, so missions can be driven directly. */
-function armyTestWorld() {
+function armyTestWorld(objectives: (() => AiObjectiveWatch | null) | null = null) {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
   );
@@ -32853,7 +33019,7 @@ function armyTestWorld() {
   const navigation = new RtsNavigation();
   navigation.setBlockers(centers.navigationBlockers());
   const log = new AiDecisionLog();
-  const army = new ArmyManager("enemy", units, centers, structures, navigation, AI_TEST_BALANCE, log);
+  const army = new ArmyManager("enemy", units, centers, structures, navigation, AI_TEST_BALANCE, log, objectives);
   /** A completed player building the AI can see and score. */
   const playerBuilding = (id: string, x: number, z: number) => {
     const stats = buildings[id] ?? assert.fail(`${id} balance missing`);
@@ -32944,6 +33110,57 @@ check("§60: the AI picks the outer economy while even and the centre once domin
     raided.units.unitsOf("enemy").some((unit) => unit.attackTarget === raider),
     "§57: guards protect the centre by attacking its nearby raider",
   );
+});
+
+check("§58: the AI contests a regional victory it is about to lose, but is not baited by one it is not", () => {
+  const watch = (urgent: boolean): AiObjectiveWatch => ({
+    urgent,
+    contestable: [
+      { id: "east", name: "Doğu Geçidi", x: 30, z: 10 },
+      // Nearer to the enemy base at (0,-26) — the one it should pick.
+      { id: "west", name: "Batı Geçidi", x: -6, z: -10 },
+    ],
+  });
+
+  // Not urgent: the army keeps playing its normal §60 game rather than
+  // abandoning an offensive every time the player touches a pass.
+  const calm = armyTestWorld(() => watch(false));
+  calm.enemyGuards(6);
+  calm.playerBuilding("farm", 0, 16);
+  calm.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
+  assert.equal(calm.army.currentMission, "harassEconomy", "a non-urgent counter does not pull the army");
+
+  // Urgent: the counter outranks the target the §60 scorer would have chosen,
+  // because that scorer only sees buildings and the match is being lost on a pass.
+  const urgent = armyTestWorld(() => watch(true));
+  const guards = urgent.enemyGuards(6);
+  urgent.playerBuilding("farm", 0, 16);
+  urgent.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
+  assert.equal(urgent.army.currentMission, "contestObjective");
+  assert.equal(urgent.army.state().target, null, "contesting holds no assault target");
+  assert.match(urgent.log.latest?.reason ?? "", /Batı Geçidi/, "§5: it marches on the nearer pass, and says so");
+  assert.ok(
+    guards.some((unit) => unit.pathWaypointCount > 0),
+    "the army is actually walked onto the objective",
+  );
+
+  // §57 still wins: a raid at home outranks any counter, because a razed centre
+  // ends the match faster than a counter can fill.
+  const raided = armyTestWorld(() => watch(true));
+  raided.enemyGuards(6);
+  raided.playerGuards(1);
+  raided.army.update(
+    aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5, baseThreat: 3 }),
+    "attack",
+  );
+  assert.equal(raided.army.currentMission, "defendBase", "base defence outranks the objective");
+
+  // And with no watch at all — the flag off — the objective path is unreachable.
+  const flagOff = armyTestWorld();
+  flagOff.enemyGuards(6);
+  flagOff.playerBuilding("farm", 0, 16);
+  flagOff.army.update(aiTestBlackboard({ ownArmyPower: 6, knownEnemyArmyPower: 5 }), "attack");
+  assert.equal(flagOff.army.currentMission, "harassEconomy", "no provider, no contesting");
 });
 
 check("RTS match-start resources are shared fairly by both kingdoms", () => {

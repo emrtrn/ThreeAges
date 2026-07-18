@@ -539,6 +539,107 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Faz 11 §58 regional victory readout. Top-right under the speed controls: the
+   left edge is the debug overlay's and the bottom-centre belongs to selection,
+   so this is the one free anchor that stays visible during a fight. Read-only,
+   like the notification feed. */
+.rts-objective-tracker {
+  position: absolute;
+  top: calc(var(--rts-hud-bar-height) + 96px);
+  right: max(12px, env(safe-area-inset-right));
+  width: min(230px, calc(100vw - 24px));
+  padding: 8px 10px;
+  color: #edf0dc;
+  font-size: 12px;
+  background: rgb(18 27 30 / 88%);
+  border: 1px solid rgb(183 206 130 / 55%);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  pointer-events: none;
+}
+
+.rts-objective-tracker[hidden] {
+  display: none;
+}
+
+.rts-objective-points {
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rts-objective-point {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 0;
+  color: #93a68a;
+}
+
+.rts-objective-point[data-holder="player"] {
+  color: #9fc8ef;
+}
+
+.rts-objective-point[data-holder="enemy"] {
+  color: #e8a08f;
+}
+
+/* Contested outranks the holder colour: it is what the counter is reacting to. */
+.rts-objective-point[data-contested="true"] {
+  color: #e5d675;
+}
+
+.rts-objective-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.rts-objective-bar {
+  display: grid;
+  grid-template-columns: 58px 1fr 34px;
+  align-items: center;
+  gap: 6px;
+}
+
+.rts-objective-bar-label,
+.rts-objective-bar-remaining {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.rts-objective-bar-remaining {
+  text-align: right;
+  color: #93a68a;
+}
+
+.rts-objective-bar-track {
+  height: 6px;
+  overflow: hidden;
+  background: rgb(0 0 0 / 40%);
+  border-radius: 3px;
+}
+
+.rts-objective-bar-fill {
+  height: 100%;
+  background: #2d7fd6;
+}
+
+.rts-objective-bar[data-owner="enemy"] .rts-objective-bar-fill {
+  background: #c0392b;
+}
+
+/* A stalled counter must not look like a climbing one — the difference between
+   "I have time" and "I have none" is the whole point of the readout. */
+.rts-objective-bar[data-phase="stalled"] .rts-objective-bar-fill {
+  opacity: 0.55;
+}
+
+.rts-objective-bar[data-phase="decaying"] .rts-objective-bar-fill {
+  opacity: 0.3;
+}
+
 /* Phase 4 road placement sits opposite the build palette and stays compact. */
 .rts-road-controls {
   position: absolute;

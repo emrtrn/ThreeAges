@@ -33,7 +33,8 @@ export type RtsNotificationKind =
   | "outpost-under-attack"
   | "center-under-attack"
   | "age-upgraded"
-  | "enemy-age-upgraded";
+  | "enemy-age-upgraded"
+  | "regional-victory-warning";
 
 /** Drives presentation weight only; the feed never reorders by severity. */
 export type RtsNotificationSeverity = "info" | "warning" | "alert";
@@ -60,6 +61,11 @@ const RULES: Readonly<Record<RtsNotificationKind, NotificationRule>> = {
   "center-under-attack": { severity: "alert", displaySeconds: 8, cooldownSeconds: 10 },
   "age-upgraded": { severity: "info", displaySeconds: 6, cooldownSeconds: 0 },
   "enemy-age-upgraded": { severity: "warning", displaySeconds: 8, cooldownSeconds: 0 },
+  // §58: the longest display and a cooldown to match. Unlike the others this
+  // notice describes a *countdown* rather than an event, so it should still be
+  // on screen while the player decides what to do about it — but re-raising it
+  // every few seconds for three minutes would be the "×378" failure above.
+  "regional-victory-warning": { severity: "alert", displaySeconds: 10, cooldownSeconds: 25 },
 };
 
 /**
