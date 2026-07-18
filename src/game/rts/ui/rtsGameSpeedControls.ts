@@ -23,9 +23,6 @@ export class RtsGameSpeedControls {
     this.speed = initialSpeed;
     this.root.className = "rts-game-speed ui-interactive";
     this.root.setAttribute("aria-label", "Oyun hızı");
-    const title = document.createElement("strong");
-    title.textContent = "Oyun Hızı";
-    this.root.appendChild(title);
     const choices = document.createElement("div");
     choices.className = "rts-game-speed-choices";
     for (const speed of RTS_SIMULATION_SPEEDS) {
@@ -38,8 +35,12 @@ export class RtsGameSpeedControls {
       choices.appendChild(button);
     }
     this.root.appendChild(choices);
-    (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.render();
+  }
+
+  /** The HUD owns placement; this control owns only speed-selection state. */
+  mount(parent: HTMLElement): void {
+    parent.appendChild(this.root);
   }
 
   dispose(): void {

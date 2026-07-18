@@ -5,12 +5,11 @@
     "prosperity": false
   },
   "startingResources": {
-    "food": 5000,
-    "wood": 5000,
-    "stone": 5000,
-    "gold": 5000
+    "food": 500,
+    "wood": 500,
+    "stone": 0,
+    "gold": 0
   },
-
   "enemyStartingResources": {
     "food": 500,
     "wood": 500,
@@ -21,7 +20,6 @@
     "guard": 0,
     "worker": 5
   },
-
   "gameSpeed": 1,
   "mapState": "two_flanks_blockout",
   "aiProfile": "normal"

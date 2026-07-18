@@ -321,6 +321,7 @@ export class RtsApp {
   private readonly hudBar = new RtsHudBar(
     () => this.selectIdleWorkers(),
     () => this.assignSelectedIdleWorkers(),
+    () => this.togglePause(),
   );
   private readonly notifications = new RtsNotificationCenter();
   private readonly notificationFeed = new RtsNotificationFeed();
@@ -665,6 +666,7 @@ export class RtsApp {
     this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => {
       this.simulationSpeed = speed;
     });
+    this.hudBar.mountUtilityControl(this.gameSpeedControls);
     this.matchOverlay = new RtsMatchOverlay({
       onStart: this.beginMatch,
       onResume: this.resumeMatch,
@@ -1804,6 +1806,7 @@ export class RtsApp {
     const population = this.playerKingdom.population.snapshot();
     this.hudBar.setPopulation(population.used, population.capacity);
     this.hudBar.setAge(this.ages.snapshot(PLAYER_OWNER), this.options.ageBalance);
+    this.hudBar.setMatchDuration(this.clock.seconds);
   }
 
   /**

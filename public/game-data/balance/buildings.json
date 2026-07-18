@@ -1,6 +1,8 @@
 {
   "command_center": {
     "label": "Merkez",
+    "icon": "/assets/ui/icons/building-command-center.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 8,
       "depth": 8
@@ -69,6 +71,8 @@
   },
   "house": {
     "label": "Ev",
+    "icon": "/assets/ui/icons/building-house.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 4,
       "depth": 4
@@ -141,6 +145,8 @@
   },
   "depot": {
     "label": "Depo",
+    "icon": "/assets/ui/icons/building-depot.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -210,6 +216,8 @@
   },
   "outpost": {
     "label": "Karakol",
+    "icon": "/assets/ui/icons/building-outpost.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -339,6 +347,8 @@
   },
   "farm": {
     "label": "Tarla",
+    "icon": "/assets/ui/icons/building-farm.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -438,6 +448,8 @@
   },
   "lumber_camp": {
     "label": "Oduncu Kampı",
+    "icon": "/assets/ui/icons/building-lumber-camp.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -526,6 +538,8 @@
   },
   "quarry": {
     "label": "Taş Ocağı",
+    "icon": "/assets/ui/icons/building-quarry.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -606,6 +620,8 @@
   },
   "gold_mine": {
     "label": "Altın Madeni",
+    "icon": "/assets/ui/icons/building-gold-mine.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 6,
       "depth": 6
@@ -686,6 +702,8 @@
   },
   "market": {
     "label": "Pazar",
+    "icon": "/assets/ui/icons/building-market.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 8,
       "depth": 8
@@ -769,6 +787,8 @@
   },
   "barracks": {
     "label": "Kışla",
+    "icon": "/assets/ui/icons/building-barracks.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 8,
       "depth": 8
@@ -838,6 +858,8 @@
   },
   "archery_range": {
     "label": "Okçuluk Alanı",
+    "icon": "/assets/ui/icons/building-archery-range.svg",
+    "portrait": "/assets/ui/portraits/building.svg",
     "footprint": {
       "width": 8,
       "depth": 8

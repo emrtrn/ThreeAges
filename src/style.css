@@ -13,13 +13,47 @@
   box-sizing: border-box;
 }
 
+/* Display serif for titles and labels (ThreeAges UI Restyling Faz A).
+   Self-hosted (OFL) — no CDN dependency; Georgia is the fallback. */
+@font-face {
+  font-family: "Cinzel";
+  src: url("/assets/ui/fonts/Cinzel-var.ttf") format("truetype-variations");
+  font-weight: 400 900;
+  font-display: swap;
+}
+
 :root {
   /*
    * Height of the Faz 9 HUD strip. Lives here rather than on .rts-hud-bar
    * because the elements that must clear the bar are its *siblings* in
    * #ui-overlay, and a custom property only inherits downward.
    */
-  --rts-hud-bar-height: 46px;
+  --rts-hud-bar-height: 58px;
+
+  /*
+   * ThreeAges medieval theme tokens (docs/planned/THREEAGES_UI_RESTYLING_PLAN.md,
+   * Faz A). Every RTS panel reads these instead of literal colors, so the skin
+   * changes in one place. Buttons: --ta-btn-* is the primary (gold) action,
+   * --ta-btn2-* the quiet secondary.
+   */
+  --ta-font-display: "Cinzel", Georgia, "Times New Roman", serif;
+  --ta-font-body: Georgia, "Times New Roman", serif;
+  --ta-ink: #e9ddc2;
+  --ta-ink-muted: #a5926e;
+  --ta-gold: #e2b95c;
+  --ta-gold-soft: #d8bd7a;
+  --ta-positive: #9dc275;
+  --ta-alert: #e0954e;
+  --ta-surface: rgb(21 16 11 / 88%);
+  --ta-surface-solid: rgb(19 14 10 / 97%);
+  --ta-surface-raised: #241b12;
+  --ta-danger-bg: rgb(88 32 20 / 92%);
+  --ta-border: rgb(150 114 62 / 60%);
+  --ta-border-strong: #8c6c3c;
+  --ta-btn-bg: linear-gradient(180deg, #e6c476, #c39c47);
+  --ta-btn-ink: #2b2010;
+  --ta-btn2-bg: #3a2d1c;
+  --ta-panel-shadow: inset 0 0 0 1px rgb(0 0 0 / 45%), 0 8px 24px rgb(0 0 0 / 40%);
 }
 
 html,
@@ -28,7 +62,7 @@ body {
   height: 100%;
   /* Block pull-to-refresh / rubber-banding while scrubbing (CLEAN phase). */
   overscroll-behavior: none;
-  background: #1a1a2e;
+  background: #14100b;
   font-family: system-ui, -apple-system, sans-serif;
   -webkit-user-select: none;
   user-select: none;
@@ -76,6 +110,9 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
+  /* Faz A theme: game UI text is serif; editor DOM lives outside this root and
+     keeps its own font. Widgets that want the display face opt in below. */
+  font-family: var(--ta-font-body);
   /* Keep HUD clear of notches / home indicator on phones. */
   padding: env(safe-area-inset-top) env(safe-area-inset-right)
     env(safe-area-inset-bottom) env(safe-area-inset-left);
@@ -115,7 +152,7 @@ body {
   padding: 1px;
   border: 1px solid rgb(0 0 0 / 80%);
   border-radius: 3px;
-  background: rgb(12 18 22 / 88%);
+  background: rgb(15 11 8 / 88%);
   box-shadow: 0 1px 3px rgb(0 0 0 / 65%);
 }
 
@@ -142,7 +179,7 @@ body {
   inset: 0;
   display: none;
   place-items: center;
-  background: rgb(12 17 22 / 58%);
+  background: rgb(8 6 3 / 60%);
   pointer-events: auto;
   z-index: 20;
 }
@@ -156,30 +193,30 @@ body {
   padding: 24px 30px;
   color: #f6f1de;
   text-align: center;
-  background: #26323a;
-  border: 1px solid #9eaf75;
+  background: var(--ta-surface-raised);
+  border: 1px solid var(--ta-border-strong);
   border-radius: 8px;
   box-shadow: 0 16px 48px rgb(0 0 0 / 40%);
 }
 
 .rts-match-card h1 {
   margin: 0;
-  color: #e5d675;
+  color: var(--ta-gold);
   font-size: 24px;
 }
 
 /* A loss announced in the victory gold reads, for a beat, as a win. */
 .rts-match-card[data-tone="defeat"] {
-  border-color: #e09b5c;
+  border-color: var(--ta-alert);
 }
 
 .rts-match-card[data-tone="defeat"] h1 {
-  color: #e09b5c;
+  color: var(--ta-alert);
 }
 
 .rts-match-card p {
   margin-top: 8px;
-  color: #dce8be;
+  color: var(--ta-ink);
   font-size: 13px;
 }
 
@@ -189,7 +226,7 @@ body {
  * across fifteen matches rather than reading it once.
  */
 .rts-match-duration {
-  color: #9eaf75;
+  color: var(--ta-ink-muted);
   font-variant-numeric: tabular-nums;
 }
 
@@ -210,7 +247,7 @@ body {
 .rts-match-settings {
   margin-top: 20px;
   padding-top: 14px;
-  border-top: 1px solid rgb(220 232 190 / 24%);
+  border-top: 1px solid rgb(226 185 92 / 22%);
   text-align: left;
 }
 
@@ -224,23 +261,23 @@ body {
   gap: 10px;
   align-items: center;
   margin-top: 10px;
-  color: #dce8be;
+  color: var(--ta-ink);
   font-size: 13px;
 }
 
 .rts-match-setting input[type="range"] {
   width: 100%;
-  accent-color: #cddd8d;
+  accent-color: var(--ta-gold);
   cursor: pointer;
 }
 
 .rts-match-card button {
   padding: 9px 16px;
-  color: #18220f;
+  color: var(--ta-btn-ink);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
-  background: #cddd8d;
+  background: var(--ta-btn-bg);
   border: 0;
   border-radius: 4px;
 }
@@ -250,15 +287,15 @@ body {
  * same pill as "Devam Et" would read as an equally ordinary thing to click.
  */
 .rts-match-card button[data-primary="false"] {
-  color: #e4ebcf;
-  background: #3d5140;
-  border: 1px solid #78905f;
+  color: var(--ta-ink);
+  background: var(--ta-btn2-bg);
+  border: 1px solid var(--ta-border-strong);
 }
 
 .rts-match-card button[data-danger="true"] {
   color: #fff1cf;
   background: #7a3527;
-  border-color: #e09b5c;
+  border-color: var(--ta-alert);
 }
 
 /* Read-only Faz 1 diagnostics, intentionally available only with ?rts&debug. */
@@ -271,53 +308,44 @@ body {
   max-height: 48vh;
   overflow: auto;
   padding: 10px 12px;
-  color: #dce8be;
+  color: var(--ta-ink);
   font: 12px/1.4 ui-monospace, SFMono-Regular, Consolas, monospace;
   white-space: pre-wrap;
   /* This panel can exceed its viewport. Opt back into pointer input so its
      native scrollbar and mouse-wheel scrolling stay usable above the canvas. */
   pointer-events: auto;
-  background: rgb(13 20 24 / 78%);
-  border: 1px solid rgb(183 206 130 / 55%);
+  background: var(--ta-surface);
+  border: 1px solid var(--ta-border);
   border-radius: 5px;
 }
 
-/* Phase 4 test aid: always-visible, simulation-only speed controls. */
+/* Compact simulation-speed selector. Faz C mounts it in the HUD's utility end. */
 .rts-game-speed {
-  position: absolute;
-  top: calc(var(--rts-hud-bar-height) + 8px);
-  right: max(12px, env(safe-area-inset-right));
-  padding: 8px 10px;
-  color: #edf0dc;
-  background: rgb(18 27 30 / 84%);
-  border: 1px solid rgb(183 206 130 / 55%);
-  border-radius: 5px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  color: var(--ta-ink);
 }
 
 .rts-game-speed-choices {
   display: flex;
   gap: 5px;
-  margin-top: 6px;
 }
 
 .rts-game-speed button {
   min-width: 38px;
   padding: 5px 7px;
-  color: #e4ebcf;
+  color: var(--ta-ink);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  background: #3d5140;
-  border: 1px solid #78905f;
+  background: var(--ta-btn2-bg);
+  border: 1px solid var(--ta-border-strong);
   border-radius: 3px;
 }
 
 .rts-game-speed button[aria-pressed="true"] {
-  color: #1d2b1b;
-  background: #cddd8d;
-  border-color: #e5d675;
+  color: var(--ta-btn-ink);
+  background: var(--ta-btn-bg);
+  border-color: var(--ta-gold);
 }
 
 /*
@@ -341,15 +369,41 @@ body {
      other panels offset against, so a wrapping bar would silently slide under
      the debug overlay and the speed controls. */
   flex-wrap: nowrap;
-  gap: 18px;
+  gap: 12px;
   height: var(--rts-hud-bar-height);
-  padding: 6px max(12px, env(safe-area-inset-right)) 6px max(12px, env(safe-area-inset-left));
-  color: #edf0dc;
+  padding: 5px max(12px, env(safe-area-inset-right)) 5px max(12px, env(safe-area-inset-left));
+  color: var(--ta-ink);
   /* Opaque, unlike the floating panels: the bar is a frame edge, and a
      translucent one would let map contrast fight the numbers. */
-  background: rgb(15 23 26 / 96%);
-  border-bottom: 1px solid rgb(183 206 130 / 55%);
+  background: var(--ta-surface-solid);
+  border-bottom: 1px solid var(--ta-border);
   box-shadow: 0 4px 18px rgb(0 0 0 / 32%);
+}
+
+.rts-hud-identity {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.rts-hud-crest {
+  display: grid;
+  width: 28px;
+  height: 32px;
+  place-items: center;
+  color: #3a2515;
+  font: 800 10px/1 Cinzel, Georgia, serif;
+  letter-spacing: -0.04em;
+  background: var(--ta-gold);
+  clip-path: polygon(50% 0, 92% 16%, 84% 76%, 50% 100%, 16% 76%, 8% 16%);
+}
+
+.rts-hud-kingdom-name {
+  color: var(--ta-gold);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
 }
 
 .rts-hud-resources {
@@ -360,12 +414,25 @@ body {
 
 .rts-hud-resource {
   display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.rts-hud-resource-icon {
+  width: 21px;
+  height: 21px;
+}
+
+.rts-hud-resource-values {
+  display: grid;
+  grid-template-columns: auto auto;
   align-items: baseline;
-  gap: 5px;
+  column-gap: 4px;
 }
 
 .rts-hud-resource-label {
-  color: #93a68a;
+  grid-column: 1 / -1;
+  color: var(--ta-ink-muted);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -379,7 +446,7 @@ body {
  */
 .rts-hud-resource-amount {
   min-width: 34px;
-  color: #e5d675;
+  color: var(--ta-gold);
   font-size: 15px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -387,20 +454,20 @@ body {
 }
 
 .rts-hud-resource-income {
-  color: #8fc08f;
+  color: var(--ta-positive);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
 
 /* A resource earning nothing is the readout that explains a stalled age. */
 .rts-hud-resource-income[data-idle="true"] {
-  color: #c9743f;
+  color: var(--ta-alert);
 }
 
 .rts-hud-status {
   display: flex;
   flex-shrink: 0;
-  gap: 14px;
+  gap: 10px;
   /* Pins the status block to the right edge whether or not the warning between
      them is showing. */
   margin-left: auto;
@@ -409,17 +476,23 @@ body {
 }
 
 .rts-hud-population,
-.rts-hud-age {
-  color: #dce8be;
+.rts-hud-age,
+.rts-hud-duration {
+  color: var(--ta-ink);
+}
+
+.rts-hud-duration {
+  color: var(--ta-gold);
+  font-weight: 700;
 }
 
 .rts-hud-idle-workers {
-  color: #93a68a;
+  color: var(--ta-ink-muted);
 }
 
 /* Idle labour and a full population are both "you owe the game a decision". */
 .rts-hud-idle-workers[data-idle="true"] {
-  color: #e5d675;
+  color: var(--ta-gold);
   font-weight: 700;
 }
 
@@ -429,18 +502,18 @@ body {
 }
 
 .rts-hud-worker-action {
-  border: 1px solid rgb(147 166 138 / 65%);
+  border: 1px solid var(--ta-border);
   border-radius: 4px;
   padding: 2px 6px;
-  color: #dce8be;
+  color: var(--ta-ink);
   font: inherit;
   font-size: 11px;
-  background: rgb(34 48 48 / 82%);
+  background: rgb(56 42 26 / 85%);
   cursor: pointer;
 }
 
 .rts-hud-worker-action:hover:not(:disabled) {
-  border-color: #e5d675;
+  border-color: var(--ta-gold);
   color: #fff1a3;
 }
 
@@ -449,8 +522,32 @@ body {
   opacity: 0.45;
 }
 
+.rts-hud-utility-controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.rts-hud-menu-button {
+  min-width: 28px;
+  padding: 4px 6px;
+  color: var(--ta-ink);
+  font: 700 15px/1 Georgia, serif;
+  cursor: pointer;
+  background: var(--ta-btn2-bg);
+  border: 1px solid var(--ta-border-strong);
+  border-radius: 3px;
+}
+
+.rts-hud-menu-button:hover {
+  color: var(--ta-btn-ink);
+  background: var(--ta-btn-bg);
+  border-color: var(--ta-gold);
+}
+
 .rts-hud-population[data-full="true"] {
-  color: #e09b5c;
+  color: var(--ta-alert);
   font-weight: 700;
 }
 
@@ -470,8 +567,8 @@ body {
   font-weight: 700;
   white-space: nowrap;
   text-overflow: ellipsis;
-  background: rgb(105 48 35 / 90%);
-  border: 1px solid #e09b5c;
+  background: var(--ta-danger-bg);
+  border: 1px solid var(--ta-alert);
   border-radius: 4px;
 }
 
@@ -511,34 +608,34 @@ body {
   justify-content: space-between;
   gap: 8px;
   padding: 7px 9px;
-  color: #edf0dc;
+  color: var(--ta-ink);
   font-size: 12px;
-  background: rgb(18 27 30 / 92%);
-  border: 1px solid rgb(183 206 130 / 55%);
+  background: var(--ta-surface);
+  border: 1px solid var(--ta-border);
   border-left-width: 3px;
   border-radius: 4px;
   box-shadow: 0 6px 18px rgb(0 0 0 / 30%);
 }
 
 .rts-notification[data-severity="info"] {
-  border-left-color: #8fc08f;
+  border-left-color: var(--ta-positive);
 }
 
 .rts-notification[data-severity="warning"] {
   color: #fff1cf;
-  border-left-color: #e5d675;
+  border-left-color: var(--ta-gold);
 }
 
 .rts-notification[data-severity="alert"] {
   color: #fff1cf;
-  background: rgb(78 34 26 / 92%);
+  background: var(--ta-danger-bg);
   border-color: rgb(224 155 92 / 70%);
-  border-left-color: #e09b5c;
+  border-left-color: var(--ta-alert);
 }
 
 .rts-notification-repeats {
   flex-shrink: 0;
-  color: #93a68a;
+  color: var(--ta-ink-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -553,12 +650,12 @@ body {
   right: max(12px, env(safe-area-inset-right));
   width: min(230px, calc(100vw - 24px));
   padding: 8px 10px;
-  color: #edf0dc;
+  color: var(--ta-ink);
   font-size: 12px;
-  background: rgb(18 27 30 / 88%);
-  border: 1px solid rgb(183 206 130 / 55%);
+  background: var(--ta-surface);
+  border: 1px solid var(--ta-border);
   border-radius: 5px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  box-shadow: var(--ta-panel-shadow);
   pointer-events: none;
 }
 
@@ -577,7 +674,7 @@ body {
   justify-content: space-between;
   gap: 8px;
   padding: 2px 0;
-  color: #93a68a;
+  color: var(--ta-ink-muted);
 }
 
 .rts-objective-point[data-holder="player"] {
@@ -590,7 +687,7 @@ body {
 
 /* Contested outranks the holder colour: it is what the counter is reacting to. */
 .rts-objective-point[data-contested="true"] {
-  color: #e5d675;
+  color: var(--ta-gold);
 }
 
 .rts-objective-bars {
@@ -615,7 +712,7 @@ body {
 
 .rts-objective-bar-remaining {
   text-align: right;
-  color: #93a68a;
+  color: var(--ta-ink-muted);
 }
 
 .rts-objective-bar-track {
@@ -651,22 +748,22 @@ body {
   bottom: max(12px, env(safe-area-inset-bottom));
   width: min(300px, calc(100vw - 24px));
   padding: 10px 12px;
-  color: #edf0dc;
-  background: rgb(18 27 30 / 84%);
-  border: 1px solid rgb(183 206 130 / 55%);
+  color: var(--ta-ink);
+  background: var(--ta-surface);
+  border: 1px solid var(--ta-border);
   border-radius: 5px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  box-shadow: var(--ta-panel-shadow);
 }
 
 .rts-road-controls button {
   margin: 8px 6px 0 0;
   padding: 5px 8px;
-  color: #1d2b1b;
+  color: var(--ta-btn-ink);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  background: #cddd8d;
+  background: var(--ta-btn-bg);
   border: 0;
   border-radius: 3px;
 }
@@ -674,7 +771,7 @@ body {
 .rts-road-status {
   min-height: 1.35em;
   margin: 8px 0 0;
-  color: #dce8be;
+  color: var(--ta-ink);
   font-size: 12px;
 }
 
@@ -690,11 +787,11 @@ body {
   transform: translateX(-50%);
   width: min(420px, calc(100vw - 640px));
   padding: 10px 12px;
-  color: #edf0dc;
-  background: rgb(18 27 30 / 84%);
-  border: 1px solid rgb(183 206 130 / 55%);
+  color: var(--ta-ink);
+  background: var(--ta-surface);
+  border: 1px solid var(--ta-border);
   border-radius: 5px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  box-shadow: var(--ta-panel-shadow);
 }
 
 .rts-selection-panel[hidden] {
@@ -703,7 +800,7 @@ body {
 
 .rts-selection-summary {
   margin-top: 8px;
-  color: #e5d675;
+  color: var(--ta-gold);
   font-size: 12px;
   font-weight: 700;
 }
@@ -713,13 +810,13 @@ body {
    things worth saying. */
 .rts-selection-line {
   margin-top: 4px;
-  color: #dce8be;
+  color: var(--ta-ink);
   font-size: 12px;
 }
 
 .rts-selection-hints {
   margin-top: 8px;
-  color: #93a68a;
+  color: var(--ta-ink-muted);
   font-size: 11px;
 }
 
@@ -737,13 +834,13 @@ body {
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  color: #e5d675;
+  color: var(--ta-gold);
   font-size: 11px;
   font-weight: 700;
 }
 
 .rts-selection-progress-time {
-  color: #cddd8d;
+  color: var(--ta-gold-soft);
   font-weight: 600;
 }
 
@@ -751,7 +848,7 @@ body {
   margin-top: 3px;
   height: 6px;
   background: rgb(0 0 0 / 34%);
-  border: 1px solid rgb(183 206 130 / 35%);
+  border: 1px solid rgb(140 108 60 / 40%);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -759,7 +856,7 @@ body {
 .rts-selection-progress-fill {
   height: 100%;
   width: 0;
-  background: linear-gradient(90deg, #9fd15a, #e5d675);
+  background: linear-gradient(90deg, #c9a24b, var(--ta-gold));
   transition: width 120ms linear;
 }
 
@@ -780,12 +877,12 @@ body {
   display: grid;
   gap: 2px;
   padding: 5px 9px;
-  color: #1d2b1b;
+  color: var(--ta-btn-ink);
   font: inherit;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  background: #cddd8d;
+  background: var(--ta-btn-bg);
   border: 0;
   border-radius: 3px;
 }
@@ -800,7 +897,7 @@ body {
 }
 
 .rts-selection-action-cost {
-  color: #56632f;
+  color: #6b5320;
   font-size: 10px;
   font-weight: 600;
   line-height: 1.1;
@@ -813,18 +910,18 @@ body {
   bottom: max(12px, env(safe-area-inset-bottom));
   width: min(320px, calc(100vw - 24px));
   padding: 10px 12px;
-  color: #edf0dc;
-  background: rgb(18 27 30 / 84%);
-  border: 1px solid rgb(183 206 130 / 55%);
+  color: var(--ta-ink);
+  background: var(--ta-surface);
+  border: 1px solid var(--ta-border);
   border-radius: 5px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 28%);
+  box-shadow: var(--ta-panel-shadow);
 }
 
 /* §51 build categories: a label the eye can skip past, not a section header
    competing with the panel's own title. */
 .rts-build-category {
   margin-top: 8px;
-  color: #93a68a;
+  color: var(--ta-ink-muted);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -842,7 +939,7 @@ body {
    than faded to near-nothing — the player still has to read the price to know
    how far off it is. */
 .rts-build-choice.is-unaffordable {
-  background: #8c9a63;
+  background: #9c8a5f;
 }
 
 .rts-build-choice-cost.is-unaffordable {
@@ -853,12 +950,12 @@ body {
   display: grid;
   gap: 2px;
   padding: 5px 9px;
-  color: #1d2b1b;
+  color: var(--ta-btn-ink);
   font: inherit;
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-  background: #cddd8d;
+  background: var(--ta-btn-bg);
   border: 0;
   border-radius: 3px;
 }
@@ -873,7 +970,7 @@ body {
 }
 
 .rts-build-choice-cost {
-  color: #56632f;
+  color: #6b5320;
   font-size: 10px;
   font-weight: 600;
   line-height: 1.1;
@@ -882,7 +979,7 @@ body {
 .rts-build-status {
   min-height: 1.35em;
   margin-top: 8px;
-  color: #dce8be;
+  color: var(--ta-ink);
   font-size: 12px;
 }
 
@@ -893,9 +990,22 @@ body {
 .rts-build-action-message {
   min-height: 1.35em;
   margin-top: 4px;
-  color: #f0c977;
+  color: var(--ta-gold);
   font-size: 12px;
   font-weight: 700;
+}
+
+/*
+ * Faz A display face: titles and the small caps-style labels wear Cinzel; body
+ * copy stays on the body serif for legibility at 11-12px. Kept after the
+ * component rules so it wins the same-specificity `font: inherit` resets.
+ */
+.rts-match-card h1,
+.rts-selection-panel > strong,
+.rts-hud-resource-label,
+.rts-hud-age,
+.rts-build-category {
+  font-family: var(--ta-font-display);
 }
 
 /*

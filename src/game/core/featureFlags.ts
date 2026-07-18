@@ -15,7 +15,15 @@
  */
 
 /** The canonical flag set (plan §13). All default OFF — each is a later or
- *  conditional system, not part of Ürün A's core. */
+ *  conditional system, not part of Ürün A's core.
+ *
+ *  `contentAssets` is the migration gate for
+ *  `docs/planned/THREEAGES_RTS_CONTENT_ASSETIZATION_PLAN.md`: with it off the
+ *  RTS resolves visuals through the legacy code-side tables
+ *  (`rtsBuildingArt`, `rtsMapArt`, `Unit`'s placeholder geometry), which stay
+ *  the only authority until each phase's acceptance is met. Turning it on
+ *  (`?flags=contentAssets`) selects the Content Drawer asset path instead. It
+ *  is never added to a shipped preset before the plan's §13 removal gate. */
 export const FEATURE_FLAG_IDS = [
   "age3",
   "regionalVictory",
@@ -25,6 +33,7 @@ export const FEATURE_FLAG_IDS = [
   "tower",
   "advancedAI",
   "finalAssets",
+  "contentAssets",
 ] as const;
 
 export type FeatureFlag = (typeof FEATURE_FLAG_IDS)[number];

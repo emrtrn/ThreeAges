@@ -89,6 +89,14 @@ export type UnitDamageMultipliers = Readonly<Record<UnitArmorClass, number>>;
 export interface UnitBalanceStats {
   /** Player-facing name; the HUD never invents a label for a unit id. */
   readonly label: string;
+  /**
+   * Optional public UI asset, resolved from the game-data file rather than
+   * chosen by a panel.  Placeholder art may be replaced without changing UI
+   * code; omitted remains valid for headless fixtures and future content.
+   */
+  readonly icon?: UiAssetPath;
+  /** Larger selection-panel artwork for this unit, when it has one. */
+  readonly portrait?: UiAssetPath;
   /** Battlefield role, driving both production gating and UI role copy. */
   readonly role: UnitRoleId;
   /** What attackers resolve their §33 multiplier against when hitting this unit. */
@@ -143,11 +151,22 @@ export interface UnitBalanceStats {
 /** `public/game-data/balance/units.json` — keyed by stable unit id. */
 export type UnitBalance = Readonly<Record<string, UnitBalanceStats>>;
 
+/**
+ * A public, same-origin UI asset path.  Game data may point only at the
+ * curated UI directories; this keeps data-driven panels from accepting an
+ * arbitrary URL as artwork.
+ */
+export type UiAssetPath = `/assets/ui/${"icons" | "portraits"}/${string}.svg`;
+
 /** One grid-aligned RTS building definition, loaded from balance/buildings.json. */
 export interface BuildingBalanceStats {
   /** Stable data id, copied from the key in `balance/buildings.json`. */
   readonly id: string;
   readonly label: string;
+  /** Compact tile/icon artwork used by build and selection UI. */
+  readonly icon?: UiAssetPath;
+  /** Larger selection-panel artwork, when distinct from the compact icon. */
+  readonly portrait?: UiAssetPath;
   /** World-space footprint dimensions; both are multiples of the placement grid. */
   readonly footprint: { readonly width: number; readonly depth: number };
   /** Resource reservation is implemented in the following Phase 2 slice. */

@@ -133,14 +133,16 @@ test("RTS Phase 9 the HUD strip stays clear of the map at 1366x768 and 1920x1080
     expect(bar.height).toBeLessThan(viewport.height * 0.1);
     expect(bar.width).toBe(viewport.width);
 
-    // The bar owns the top edge, so everything that used to live there has to
-    // start below it. This is the assertion that fails if the height variable
-    // and the strip's real height drift apart.
-    for (const selector of [".rts-debug-overlay", ".rts-game-speed"]) {
-      const box = await page.locator(selector).boundingBox();
-      if (!box) throw new Error(`${selector} has no box`);
-      expect(box.y, `${selector} must clear the HUD bar`).toBeGreaterThanOrEqual(bar.y + bar.height);
-    }
+    // Faz C: speed moved into the bar's right-side utility cluster, while the
+    // debug panel remains a sibling and must still clear the published height.
+    const speed = await page.locator(".rts-game-speed").boundingBox();
+    if (!speed) throw new Error(".rts-game-speed has no box");
+    expect(speed.y).toBeGreaterThanOrEqual(bar.y);
+    expect(speed.y + speed.height).toBeLessThanOrEqual(bar.y + bar.height);
+    const debug = await page.locator(".rts-debug-overlay").boundingBox();
+    if (!debug) throw new Error(".rts-debug-overlay has no box");
+    expect(debug.y, ".rts-debug-overlay must clear the HUD bar").toBeGreaterThanOrEqual(bar.y + bar.height);
+    await expect(page.locator(".rts-hud-resource-icon")).toHaveCount(4);
 
     // Nothing may push the page into a horizontal scroll at either width.
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);

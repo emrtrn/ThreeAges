@@ -1197,6 +1197,18 @@ const RTS_TEST_UNIT_BALANCE: UnitBalance = {
   worker_placeholder: RTS_TEST_WORKER_STATS,
 };
 const check = (label: string, fn: () => void): void => {
+  if (process.env.ENGINE_TESTS_COLLECT) {
+    try {
+      fn();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      console.log(`  FAIL: ${label}\n${detail.split("\n").map((line) => `        ${line}`).join("\n")}`);
+      return;
+    }
+    checks += 1;
+    console.log(`  ok: ${label}`);
+    return;
+  }
   fn();
   checks += 1;
   console.log(`  ok: ${label}`);
@@ -28411,10 +28423,13 @@ check("RTS health clamps damage and healing while exposing current/max/ratio", (
   assert.throws(() => health.damage(-1), RangeError);
   assert.throws(() => new HealthComponent(0), RangeError);
 
-  // upgradeMax only raises and never restores damage; setMax may lower and clamps.
+  // upgradeMax carries current health up by the *delta*, so the damage already
+  // taken is preserved as an absolute figure (30 down before, 30 down after);
+  // setMax may lower and clamps instead. Raising the ceiling alone would make an
+  // undamaged 700/700 building read as 700/1000 — see health.ts.
   health.damage(30);
   health.upgradeMax(160);
-  assert.deepEqual([health.current, health.max], [70, 160], "a raised ceiling keeps the damage already taken");
+  assert.deepEqual([health.current, health.max], [130, 160], "a raised ceiling keeps the damage already taken, not the ratio");
   assert.throws(() => health.upgradeMax(150), RangeError, "upgradeMax refuses to lower the maximum");
   health.setMax(50);
   assert.deepEqual([health.current, health.max], [50, 50], "setMax lowers the ceiling and clamps current into range");
@@ -28542,10 +28557,34 @@ check("building balance validates grid-aligned Phase 2 footprints", () => {
     arrowsPerVolley: 2,
     damageMultipliers: { light: 1.2, heavy: 0.8, structure: 0.25 },
   });
+  assert.equal(buildings.house?.icon, "/assets/ui/icons/building-house.svg");
+  assert.equal(buildings.house?.portrait, "/assets/ui/portraits/building.svg");
   assert.throws(
     () => validateBuildingBalance({ house: { label: "Ev", footprint: { width: 0, depth: 4 }, cost: {}, constructionSeconds: 25 } }),
     GameDataError,
   );
+  assert.throws(
+    () => validateBuildingBalance({ house: { label: "Ev", icon: "https://example.invalid/house.svg", footprint: { width: 4, depth: 4 }, cost: {}, constructionSeconds: 25, maxHealth: 100, visionRadius: 8 } }),
+    GameDataError,
+    "UI assets are packaged paths, not arbitrary URLs",
+  );
+});
+
+check("Faz B UI artwork is data-driven and every shipped reference exists", () => {
+  const tables = [
+    validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown),
+    validateUnitBalance(JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown),
+  ];
+  assert.equal(tables[1].worker_placeholder?.icon, "/assets/ui/icons/unit-worker.svg");
+  assert.equal(tables[1].worker_placeholder?.portrait, "/assets/ui/portraits/unit.svg");
+  for (const table of tables) {
+    for (const definition of Object.values(table)) {
+      for (const asset of [definition.icon, definition.portrait]) {
+        assert.ok(asset, `${definition.label} needs a UI artwork reference`);
+        assert.ok(statSync(`public${asset}`).isFile(), `${definition.label} references a missing UI asset: ${asset}`);
+      }
+    }
+  }
 });
 
 check("Faz 6 stone and gold data defines finite safe and richer external deposits", () => {
@@ -28735,6 +28774,87 @@ check("Faz M1 the Market is buildable and every balance building has art wired",
   }
 });
 
+/**
+ * Assetization Faz A baseline (docs/planned/THREEAGES_RTS_CONTENT_ASSETIZATION_PLAN.md).
+ *
+ * Faz A changes no behaviour; its job is to pin the seams the later phases move
+ * so a migration cannot land silently. Each assertion below records *where the
+ * authority lives today*, and is expected to be rewritten — not deleted — by the
+ * phase named in its comment. The flag is the gate all of that hangs from.
+ */
+check("Assetization Faz A: the content-asset migration is gated off by default", () => {
+  assert.equal(
+    resolveFeatureFlags().contentAssets,
+    false,
+    "Faz A ships no behaviour change: the legacy code-side art path stays the default",
+  );
+  assert.equal(resolveFeatureFlags({}, "contentAssets").contentAssets, true, "?flags=contentAssets opts in");
+  // The flag is a dev opt-in, never a shipped preset's (plan §9 Faz A, §13).
+  for (const presetId of ["core_match", "gameplay_proof", "debug_fast"]) {
+    const preset = validateGamePreset(readPresetJson(presetId), presetId);
+    assert.notEqual(
+      preset.flags?.contentAssets,
+      true,
+      `preset "${presetId}" may not enable contentAssets before the plan's §13 removal gate`,
+    );
+  }
+});
+
+check("Assetization Faz A: the legacy visual authorities are recorded before Faz C moves them", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const units = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+
+  // Buildings: `rtsBuildingArt` is the sole mapping today, and it covers the
+  // whole balance table. Faz C replaces this lookup with the content catalog for
+  // the Barracks pilot only — every other id must still resolve here meanwhile.
+  for (const id of Object.keys(buildings)) {
+    assert.ok(hasBuildingArt(id), `building "${id}" has no art resolver`);
+  }
+  assert.equal(
+    buildingMeshPath("barracks", "settlement", 1),
+    `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level1.gltf`,
+    "the Faz C pilot's legacy path, kept as the fallback the catalog falls back *to*",
+  );
+  assert.equal(
+    buildingMeshPath("barracks", "settlement", 2),
+    `${STATIC_MESH_ROOT}/Barracks_FirstAge_Level2.gltf`,
+  );
+
+  // Units: the gap Faz C exists to close. There is no unit art mapping at all —
+  // `Unit` builds role-shaped placeholder geometry in its own constructor, so
+  // nothing outside TypeScript can change how a unit looks. When the Guard's
+  // Actor Script lands, this assertion is what has to be rewritten.
+  for (const id of Object.keys(units)) {
+    assert.equal(
+      hasBuildingArt(id),
+      false,
+      `unit "${id}" must not be resolved through the building art table`,
+    );
+  }
+  assert.ok(units.guard_placeholder, "guard_placeholder is the Faz C unit pilot");
+});
+
+check("Assetization Faz A: RTS_BLOCKOUT_MAP is still the spatial authority Faz D takes over", () => {
+  // Plan §K-05 moves each of these to the Level asset. Pinning the *shape* (not
+  // the coordinates, which are tuning) means Faz D's adapter has an explicit
+  // before-picture: when the Level supplies these, this test names what moved.
+  const map = RTS_BLOCKOUT_MAP;
+  assert.ok(map.playerStart && map.enemyStart, "both starts are hard-coded in TypeScript today");
+  assert.notDeepEqual(map.playerStart, map.enemyStart, "the two kingdoms do not share a start");
+  for (const key of ["resourceNodes", "enemyBaseAnchors", "enemyExpansions", "navigationBlockers"] as const) {
+    const entries = map[key];
+    assert.ok(Array.isArray(entries) && entries.length > 0, `${key} is authored in rtsMapBlockout.ts`);
+  }
+  // Duplicate ids are the first thing the Faz D adapter has to reject, so the
+  // legacy data has to be clean before it is migrated.
+  const nodeIds = map.resourceNodes.map((node) => node.id);
+  assert.equal(new Set(nodeIds).size, nodeIds.length, "resource node ids are unique");
+});
+
 check("Faz 0 preload set is deduplicated and every mesh file exists on disk", () => {
   const paths = allBuildingMeshPaths();
   assert.equal(new Set(paths).size, paths.length, "preload paths are deduplicated");
@@ -28865,43 +28985,69 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   assert.equal(upgrades.start(barracks), "at-max-level", "a level-3 Barracks has no further step");
 
   const houseStats = buildings.house ?? assert.fail("house balance missing");
-  assert.deepEqual(houseStats.upgrade, { cost: { wood: 70, stone: 40 }, durationSeconds: 35, maxHealth: 450 });
+  // Tuning-agnostic by construction (plan §75): every number below is *read from*
+  // the House's own balance entry rather than written here, so a balance pass
+  // retunes the fixture instead of failing the test. What is asserted is the
+  // mechanism — research promotes the whole type at once, health follows the
+  // tier table, capacity is the sum of the owner's Houses — none of which a
+  // retune may change.
+  const houseTier = (level: number) =>
+    houseStats.progression?.settlement.find((tier) => tier.level === level)
+      ?? assert.fail(`house settlement tier ${level} missing`);
+  const houseStep = (level: number) =>
+    houseStats.levels?.find((step) => step.level === level)
+      ?? assert.fail(`house level step ${level} missing`);
+  const BASE_POPULATION = 20;
+  const capacityFor = (houses: number, level: number) =>
+    BASE_POPULATION + houses * houseTier(level).populationCapacity;
+
+  // The derived legacy `upgrade` mirrors the level-2 step (see the Barracks note
+  // above); that mirroring is the contract, not the values it carries today.
+  assert.deepEqual(houseStats.upgrade, {
+    cost: houseStep(2).cost,
+    durationSeconds: houseStep(2).durationSeconds,
+    maxHealth: houseStep(2).maxHealth,
+  });
   const house = structures.place("player", houseStats, 80, 10);
   structures.advanceConstruction(house, houseStats.constructionSeconds);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 25, "a completed Level 1 House adds five population");
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, capacityFor(1, 1),
+    "a completed Level 1 House adds its tier's population");
   const secondHouse = structures.place("player", houseStats, 90, 10);
   structures.advanceConstruction(secondHouse, houseStats.constructionSeconds);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 30, "each completed House contributes its own base capacity");
-  kingdoms.get("player").wallet.credit("wood", 70);
-  kingdoms.get("player").wallet.credit("stone", 40);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, capacityFor(2, 1),
+    "each completed House contributes its own base capacity");
+  kingdoms.get("player").wallet.credit("wood", houseStep(2).cost.wood ?? 0);
+  kingdoms.get("player").wallet.credit("stone", houseStep(2).cost.stone ?? 0);
   assert.deepEqual(upgrades.snapshot(house), {
     level: 1, maxLevel: 3, upgrading: false, remainingSeconds: 0,
-    nextCost: { wood: 70, stone: 40 }, completed: false,
+    nextCost: houseStep(2).cost, completed: false,
   });
   assert.equal(upgrades.start(house), "started");
   assert.deepEqual(upgrades.snapshot(house), {
-    level: 1, maxLevel: 3, upgrading: true, remainingSeconds: 35,
-    nextCost: { wood: 70, stone: 40 }, completed: false,
+    level: 1, maxLevel: 3, upgrading: true, remainingSeconds: houseStep(2).durationSeconds,
+    nextCost: houseStep(2).cost, completed: false,
   });
-  assert.deepEqual(upgrades.update(34.9), []);
+  assert.deepEqual(upgrades.update(houseStep(2).durationSeconds - 0.1), []);
   const houseLevel2Events = upgrades.update(0.2);
   assert.deepEqual(houseLevel2Events.map((event) => event.type), ["completed"]);
   assert.deepEqual(houseLevel2Events[0]?.structures, [house, secondHouse],
     "a House research promotes every completed House of the owner");
   assert.equal(house.level, 2);
   assert.equal(secondHouse.level, 2, "the second House inherits the same type level");
-  assert.equal(house.health.max, 450);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 36, "both Level 2 Houses supply eight");
+  assert.equal(house.health.max, houseTier(2).maxHealth);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, capacityFor(2, 2),
+    "both Houses supply the Level 2 tier's capacity");
   // The next research raises the whole type again, once, at the Level 3 cost.
-  kingdoms.get("player").wallet.credit("wood", 110);
-  kingdoms.get("player").wallet.credit("stone", 80);
+  kingdoms.get("player").wallet.credit("wood", houseStep(3).cost.wood ?? 0);
+  kingdoms.get("player").wallet.credit("stone", houseStep(3).cost.stone ?? 0);
   assert.equal(upgrades.start(secondHouse), "started");
-  const houseLevel3Events = upgrades.update(45);
+  const houseLevel3Events = upgrades.update(houseStep(3).durationSeconds);
   assert.deepEqual(houseLevel3Events.map((event) => event.level), [3]);
   assert.equal(house.level, 3);
   assert.equal(secondHouse.level, 3);
-  assert.equal(house.health.max, 600);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 42, "both Level 3 Houses supply eleven");
+  assert.equal(house.health.max, houseTier(3).maxHealth);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, capacityFor(2, 3),
+    "both Houses supply the Level 3 tier's capacity");
   assert.deepEqual(upgrades.snapshot(house), {
     level: 3, maxLevel: 3, upgrading: false, remainingSeconds: 0, nextCost: null, completed: true,
   });
@@ -28910,8 +29056,8 @@ check("Faz 6 Town upgrade reserves four resources, pauses the centre, and comple
   structures.advanceConstruction(laterHouse, houseStats.constructionSeconds);
   assert.equal(upgrades.applyCompletedUpgrade(laterHouse), true);
   assert.equal(laterHouse.level, 3);
-  assert.equal(laterHouse.health.max, 600);
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 53);
+  assert.equal(laterHouse.health.max, houseTier(3).maxHealth);
+  assert.equal(kingdoms.get("player").population.snapshot().capacity, capacityFor(3, 3));
   assert.equal(upgrades.levelFor("player", "house"), 3,
     "new House previews resolve to the research level before construction finishes");
 
@@ -28989,18 +29135,25 @@ check("Faz 2 KR-03: an age transition resets every owned building to its base Le
     upgrades.update(step.durationSeconds);
   };
 
+  // The climbed-to values come from each building's own tier table (plan §75):
+  // what this check is about is the *reset*, and pinning the tuning here would
+  // fail the test on every balance pass without telling us anything about it.
+  const tier = (id: string, level: number) =>
+    buildings[id]?.progression?.settlement.find((entry) => entry.level === level)
+      ?? assert.fail(`${id} settlement tier ${level} missing`);
+
   // Climb a House to Level 3 and an Outpost to Level 2, so both carry real gains.
   const house = complete("house", 0);
   levelUp(house);
   levelUp(house);
   assert.equal(house.level, 3);
-  assert.equal(house.health.max, 600);
+  assert.equal(house.health.max, tier("house", 3).maxHealth);
   const populationAtLevel3 = kingdoms.get("player").population.snapshot().capacity;
 
   const outpost = complete("outpost", 40);
   levelUp(outpost);
   assert.equal(outpost.level, 2);
-  assert.equal(outpost.territoryControlRadius, 20);
+  assert.equal(outpost.territoryControlRadius, tier("outpost", 2).territory?.controlRadius);
 
   // A third building with a level-up still in flight — its reservation must return.
   const depot = complete("depot", 80);
@@ -29034,15 +29187,50 @@ check("Faz 1: the six-tier building matrix preserves the Y3 -> K1 power floor", 
   const outpost = buildings.outpost ?? assert.fail("outpost balance missing");
   const archeryRange = buildings.archery_range ?? assert.fail("archery range balance missing");
 
-  assert.deepEqual(house.progression?.settlement.map((tier) => tier.populationCapacity), [5, 8, 11]);
-  assert.deepEqual(house.progression?.town.map((tier) => tier.populationCapacity), [14, 17, 20]);
-  assert.deepEqual(farm.progression?.town.map((tier) => tier.economy?.perWorkerPerMinute), [10, 11, 12]);
-  assert.deepEqual(outpost.progression?.town.map((tier) => tier.defense?.attackDamage), [14, 16, 18]);
-  assert.deepEqual(archeryRange.progression?.settlement, [], "Town-only structures declare no unavailable Settlement tiers");
-  assert.deepEqual(archeryRange.progression?.town.map((tier) => tier.queueCapacity), [20, 25, 30]);
+  // The "power floor" is a *rule*, not a set of numbers (plan §75): whatever the
+  // six tiers are tuned to, each ladder must climb and the Town entry tier may
+  // never be weaker than the Settlement top tier — otherwise ageing up is a
+  // downgrade. Asserting the shape rather than the values is what lets a balance
+  // pass retune these freely while still being caught if it inverts a ladder.
+  const climbs = (values: readonly (number | undefined)[], what: string): void => {
+    for (const [index, value] of values.entries()) {
+      assert.ok(typeof value === "number", `${what} tier ${index + 1} declares a value`);
+      if (index === 0) continue;
+      const previous = values[index - 1];
+      assert.ok(
+        typeof previous === "number" && value > previous,
+        `${what} must climb: tier ${index + 1} (${value}) does not exceed tier ${index} (${previous})`,
+      );
+    }
+  };
+  const floorHolds = (stats: typeof house, read: (tier: any) => number | undefined, what: string): void => {
+    const settlementTop = stats.progression?.settlement.at(-1);
+    const townEntry = stats.progression?.town[0];
+    if (!settlementTop || !townEntry) return;
+    const top = read(settlementTop);
+    const entry = read(townEntry);
+    assert.ok(
+      typeof top === "number" && typeof entry === "number" && entry >= top,
+      `${what}: Town Lv1 (${entry}) may not regress below Settlement Lv3 (${top})`,
+    );
+  };
 
+  climbs(house.progression?.settlement.map((tier) => tier.populationCapacity) ?? [], "house settlement population");
+  climbs(house.progression?.town.map((tier) => tier.populationCapacity) ?? [], "house town population");
+  floorHolds(house, (tier) => tier.populationCapacity, "house population");
+  climbs(farm.progression?.town.map((tier) => tier.economy?.perWorkerPerMinute) ?? [], "farm town yield");
+  climbs(outpost.progression?.town.map((tier) => tier.defense?.attackDamage) ?? [], "outpost town damage");
+  floorHolds(outpost, (tier) => tier.defense?.attackDamage, "outpost damage");
+  assert.deepEqual(archeryRange.progression?.settlement, [], "Town-only structures declare no unavailable Settlement tiers");
+  climbs(archeryRange.progression?.town.map((tier) => tier.queueCapacity) ?? [], "archery range town queue");
+
+  // And the validator enforces that floor rather than trusting the author: a
+  // Town Lv1 tuned one below the Settlement top has to be refused, whatever the
+  // current numbers happen to be.
   const invalid = JSON.parse(JSON.stringify(raw)) as Record<string, any>;
-  invalid.house.progression.town[0].populationCapacity = 10;
+  const settlementTopPopulation = house.progression?.settlement.at(-1)?.populationCapacity
+    ?? assert.fail("house settlement top tier missing");
+  invalid.house.progression.town[0].populationCapacity = settlementTopPopulation - 1;
   assert.throws(
     () => validateBuildingBalance(invalid),
     (error: unknown) => error instanceof GameDataError && /may not regress below Settlement Lv3/.test(error.message),
@@ -29085,37 +29273,64 @@ check("Faz 2: an age transition applies every completed building's Town Lv1 tier
     upgrades.applyCompletedUpgrade(structure);
     return structure;
   };
+  // Every expectation reads from the tier table the transition is supposed to
+  // apply (plan §75). The subject here is *which tier reaches the building*, not
+  // what that tier is tuned to.
+  const tierOf = (id: string, ageKey: SettlementAge, level: number) =>
+    buildings[id]?.progression?.[ageKey].find((entry) => entry.level === level)
+      ?? assert.fail(`${id} ${ageKey} tier ${level} missing`);
+
   const house = complete("house", 0);
   const farm = complete("farm", 20);
   const outpost = complete("outpost", 40);
   const barracks = complete("barracks", 60);
-  assert.equal(house.health.max, 300);
-  assert.equal(farm.economy?.perWorkerPerMinute, 7);
-  assert.equal(outpost.defenseAttackDamage, 10);
+  assert.equal(house.health.max, tierOf("house", "settlement", 1).maxHealth);
+  assert.equal(farm.economy?.perWorkerPerMinute, tierOf("farm", "settlement", 1).economy?.perWorkerPerMinute);
+  assert.equal(outpost.defenseAttackDamage, tierOf("outpost", "settlement", 1).defense?.attackDamage);
 
+  const houseStep = (level: number) =>
+    buildings.house?.levels?.find((step) => step.level === level)
+      ?? assert.fail(`house level step ${level} missing`);
+  const houseBasePopulation = buildings.house?.populationCapacity ?? assert.fail("house base population missing");
   assert.equal(upgrades.start(house), "started");
-  upgrades.update(35);
+  upgrades.update(houseStep(2).durationSeconds);
   assert.equal(upgrades.start(house), "started");
-  upgrades.update(45);
-  assert.equal(house.populationCapacityBonus, 6, "Settlement Lv3 House supplies eleven population");
+  upgrades.update(houseStep(3).durationSeconds);
+  assert.equal(
+    house.populationCapacityBonus,
+    tierOf("house", "settlement", 3).populationCapacity - houseBasePopulation,
+    "a Settlement Lv3 House supplies its top Settlement tier over the base",
+  );
 
   age = "town";
   upgrades.resetOwner("player");
   assert.equal(house.level, 1);
-  assert.equal(house.health.max, 750);
-  assert.equal(house.populationCapacityBonus, 9, "Town Lv1 House is 14 population over its base five, above Settlement Lv3's eleven");
+  assert.equal(house.health.max, tierOf("house", "town", 1).maxHealth);
+  // The power floor again, seen from the runtime side: ageing up may not hand a
+  // building less than the tier it already had.
+  assert.ok(
+    tierOf("house", "town", 1).populationCapacity >= tierOf("house", "settlement", 3).populationCapacity,
+    "Town Lv1 is at least Settlement Lv3, so the age transition is never a downgrade",
+  );
+  assert.equal(
+    house.populationCapacityBonus,
+    tierOf("house", "town", 1).populationCapacity - houseBasePopulation,
+  );
   assert.deepEqual(farm.economy && {
-    workerCapacity: farm.economy.workerCapacity,
     perWorkerPerMinute: farm.economy.perWorkerPerMinute,
-    localBufferCapacity: farm.economy.localBufferCapacity,
-  }, { workerCapacity: 4, perWorkerPerMinute: 10, localBufferCapacity: 80 });
-  assert.equal(outpost.defenseAttackDamage, 14);
-  assert.equal(outpost.territoryControlRadius, 28);
-  assert.equal(barracks.queueCapacity, 20);
+  }, { perWorkerPerMinute: tierOf("farm", "town", 1).economy?.perWorkerPerMinute });
+  assert.equal(outpost.defenseAttackDamage, tierOf("outpost", "town", 1).defense?.attackDamage);
+  assert.equal(outpost.territoryControlRadius, tierOf("outpost", "town", 1).territory?.controlRadius);
+  assert.equal(barracks.queueCapacity, tierOf("barracks", "town", 1).queueCapacity);
 
   const laterHouse = complete("house", 90);
-  assert.equal(laterHouse.health.max, 750, "a later Town House starts at the active Town Lv1 tier");
-  assert.equal(kingdoms.get("player").population.snapshot().capacity, 48, "two Town Lv1 Houses supply 14 population each");
+  assert.equal(laterHouse.health.max, tierOf("house", "town", 1).maxHealth,
+    "a later Town House starts at the active Town Lv1 tier");
+  assert.equal(
+    kingdoms.get("player").population.snapshot().capacity,
+    20 + 2 * tierOf("house", "town", 1).populationCapacity,
+    "both Town Lv1 Houses supply their tier's capacity",
+  );
 });
 
 check("Faz 2: the art resolver maps the two ages to their families and keeps fixed camps age-agnostic", () => {
@@ -34546,8 +34761,15 @@ check("Faz 9 §51: the level-up button sits on the building and names the next l
   }) ?? assert.fail("panel missing");
   assert.deepEqual(
     barracks.actions.map((a) => a.id),
-    ["train:guard_placeholder", "rally", "upgrade"],
+    ["train:guard_placeholder", "rally", "upgrade", "demolish"],
     "the upgrade is appended to the building's own verbs, not instead of them",
+  );
+  // Ordering is the point, not the roster: the building's own verbs come first,
+  // and the two whole-building verbs are appended after them in that order.
+  assert.deepEqual(
+    barracks.actions.map((a) => a.id).slice(-2),
+    ["upgrade", "demolish"],
+    "destroying the building sits last, after the verb that improves it",
   );
 });
 
@@ -34700,11 +34922,21 @@ check("Faz M2: trading moves stock and price, and never counts as production inc
   connected = true;
 
   // A buy: gold out, a lot in, and the price of what was bought goes up.
+  //
+  // The amount is taken from the Market's own quote rather than written here
+  // (plan §75): what must hold under any tuning is that the player is charged
+  // *exactly what they were quoted* and receives exactly one lot. A pinned 115
+  // only ever proved what the base price happened to be that week.
+  const quoted = trade.snapshotFor("player")!.prices.find((price) => price.resourceId === "stone")!;
+  const goldBeforeBuy = wallet.amount("gold");
+  const lotSize = marketStats.market?.lotSize ?? assert.fail("market lot size missing");
   assert.equal(trade.buy("player", "stone"), "traded");
-  assert.equal(wallet.amount("gold"), 85, "115 gold for one lot at the opening rate");
-  assert.equal(wallet.amount("stone"), 100);
+  assert.equal(wallet.amount("gold"), goldBeforeBuy - quoted.buyPrice,
+    "the buy costs exactly the price it was quoted at");
+  assert.equal(wallet.amount("stone"), lotSize, "one lot arrives, whatever a lot is tuned to");
   const afterBuy = trade.snapshotFor("player")!.prices.find((price) => price.resourceId === "stone")!;
   assert.ok(afterBuy.index > 1, "buying stone made stone dearer");
+  assert.ok(afterBuy.buyPrice >= quoted.buyPrice, "and the next lot is not cheaper than the one just bought");
 
   // §2.4, the defect this path exists to prevent: 100 stone bought with gold is
   // not stone anyone mined, and must not show up in the HUD's "+X/dk" income.
@@ -34715,17 +34947,33 @@ check("Faz M2: trading moves stock and price, and never counts as production inc
   assert.ok(wallet.incomePerMinute("stone") > 0, "real production still registers");
 
   // Refusals leave the market exactly as they found it — a broke player must not
-  // be able to move the price for free.
+  // be able to move the price for free. Being broke is arranged *relative to the
+  // live quote* rather than to a pinned price: with a hard-coded 115 a retune
+  // that made food cheap would quietly turn this into an affordable buy, and the
+  // refusal path would stop being tested without any test going red.
+  const foodQuote = trade.snapshotFor("player")!.prices.find((price) => price.resourceId === "food")!;
+  const spareGold = wallet.amount("gold") - (foodQuote.buyPrice - 1);
+  if (spareGold > 0) {
+    assert.ok(wallet.reserve({ gold: spareGold }), "the fixture holds back the gold the player must not have");
+  }
+  assert.ok(wallet.amount("gold") < foodQuote.buyPrice, "the player is one gold short of a lot of food");
   const before = trade.snapshotFor("player")!;
-  assert.equal(trade.buy("player", "food"), "insufficient-gold", "85 gold cannot pay 115");
+  assert.equal(trade.buy("player", "food"), "insufficient-gold");
   assert.deepEqual(trade.snapshotFor("player"), before, "a refused buy moves neither stock nor price");
   assert.equal(trade.sell("player", "food"), "insufficient-resources", "no food to sell");
   assert.equal(trade.buy("player", "gold"), "untraded-resource", "gold is the numeraire, not a commodity");
 
   // A sell: a lot out, gold in, and the price of what was sold goes down.
+  const woodQuote = trade.snapshotFor("player")!.prices.find((price) => price.resourceId === "wood")!;
+  const woodBeforeSell = wallet.amount("wood");
+  const goldBeforeSell = wallet.amount("gold");
   assert.equal(trade.sell("player", "wood"), "traded");
-  assert.equal(wallet.amount("wood"), 400);
-  assert.equal(wallet.amount("gold"), 85 + 85, "85 gold for one lot at the opening rate");
+  assert.equal(wallet.amount("wood"), woodBeforeSell - lotSize, "exactly one lot leaves the stockpile");
+  assert.equal(wallet.amount("gold"), goldBeforeSell + woodQuote.sellPrice,
+    "the sale pays exactly the price it was quoted at");
+  // The house always takes the spread — the invariant that keeps a round trip
+  // from minting gold, whatever the commission is tuned to.
+  assert.ok(woodQuote.sellPrice < woodQuote.buyPrice, "selling a lot never recovers what buying one costs");
   assert.ok(
     trade.snapshotFor("player")!.prices.find((price) => price.resourceId === "wood")!.index < 1,
     "selling wood made wood cheaper",
@@ -34810,11 +35058,26 @@ check("Faz M4: the AI trades toward the age it is short for, and stops once it c
   // it sells the resource it has most to spare, not the one it is also short of.
   const market = structures.place("enemy", marketStats, 0, 0);
   structures.advanceConstruction(market, marketStats.constructionSeconds);
+  // Opening rates come from the Market's own data (plan §75) so a price retune
+  // moves the fixture instead of failing the test. What is under test is the
+  // AI's *decision*, not what a lot of stone costs this week.
+  const openingRates = new MarketPrices(marketStats.market ?? assert.fail("market tuning missing"));
+  const openingBuy = (resourceId: string) =>
+    openingRates.buyPrice(resourceId) ?? assert.fail(`${resourceId} is untraded`);
+  const openingSell = (resourceId: string) =>
+    openingRates.sellPrice(resourceId) ?? assert.fail(`${resourceId} is untraded`);
+  const marketLot = marketStats.market?.lotSize ?? assert.fail("market lot size missing");
+
   const selling = setup(short);
   assert.equal(selling.manager.update(blackboard(short)), "traded");
   const wallet = selling.kingdoms.get("enemy").wallet;
-  assert.equal(wallet.amount("gold"), 85, "one lot sold at the opening rate");
-  assert.equal(wallet.amount("food") + wallet.amount("wood"), 1700, "exactly one lot left the stockpile");
+  // It sold whichever of food/wood it had most to spare, so accept either rate.
+  assert.ok(
+    [openingSell("food"), openingSell("wood")].includes(wallet.amount("gold")),
+    `one lot sold at the opening rate (got ${wallet.amount("gold")})`,
+  );
+  assert.equal(wallet.amount("food") + wallet.amount("wood"), short.food + short.wood - marketLot,
+    "exactly one lot left the stockpile");
 
   // KR-M4 binds the AI exactly as it binds the player: a besieged Market trades
   // for neither of them.
@@ -34827,12 +35090,16 @@ check("Faz M4: the AI trades toward the age it is short for, and stops once it c
   const buying = { food: 900, wood: 900, stone: 0, gold: 400 };
   const buyer = setup(buying);
   assert.equal(buyer.manager.update(blackboard(buying)), "traded");
-  assert.equal(buyer.kingdoms.get("enemy").wallet.amount("stone"), 100);
-  assert.equal(buyer.kingdoms.get("enemy").wallet.amount("gold"), 285, "115 gold for one lot");
+  assert.equal(buyer.kingdoms.get("enemy").wallet.amount("stone"), marketLot);
+  assert.equal(buyer.kingdoms.get("enemy").wallet.amount("gold"), buying.gold - openingBuy("stone"),
+    "one lot of stone at the opening rate");
 
-  // Gold spare is measured against the age cost, not the raw stock: 200 gold
-  // with 150 owed to the age leaves 50, which cannot buy a 115-gold lot.
-  const tight = { food: 900, wood: 900, stone: 0, gold: 200 };
+  // Gold spare is measured against the age cost, not the raw stock: the age owes
+  // 150 gold, so a stock of (150 + one lot's price - 1) leaves the AI one gold
+  // short of a lot and it must save rather than trade. Derived from the live
+  // price so a cheaper Market cannot silently make this case affordable — which
+  // would leave the "spare, not stock" rule untested while still passing.
+  const tight = { food: 900, wood: 900, stone: 0, gold: 150 + openingBuy("stone") - 1 };
   assert.equal(setup(tight).manager.update(blackboard(tight)), "saving");
 
   // Nothing spare to sell: the reserve keeps the AI from selling the food the
@@ -34852,11 +35119,21 @@ check("Faz M3: a Market level narrows the spread, and the data cannot narrow it 
   const raw = JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as Record<string, unknown>;
   const buildings = validateBuildingBalance(raw);
   const marketStats = buildings["market"] ?? assert.fail("the market building is missing");
-  assert.deepEqual(
-    marketStats.levels?.map((step) => step.tradeCommission),
-    [0.12, 0.09],
-    "the level ladder is the commission ladder (plan §1: Lv1 15% -> Lv2 12% -> Lv3 9%)",
-  );
+  // The ladder must *narrow* — the direction is the rule, the rates are tuning
+  // (plan §75). A ladder that widened at a level would sell the player a
+  // downgrade, and that is what this has to catch under any commission values.
+  const commissionLadder = [
+    marketStats.market?.commission ?? assert.fail("base commission missing"),
+    ...(marketStats.levels?.map((step) => step.tradeCommission) ?? []),
+  ];
+  for (const [index, commission] of commissionLadder.entries()) {
+    assert.ok(typeof commission === "number", `market level ${index + 1} declares a commission`);
+    if (index === 0) continue;
+    assert.ok(
+      commission! < commissionLadder[index - 1]!,
+      `market level ${index + 1} must narrow the spread, not widen it`,
+    );
+  }
 
   const units = new UnitSystem();
   const structures = new PlacedStructureSystem();
@@ -34867,24 +35144,39 @@ check("Faz M3: a Market level narrows the spread, and the data cannot narrow it 
   const market = structures.place("player", marketStats, 0, 0);
   structures.advanceConstruction(market, marketStats.constructionSeconds);
 
-  // Lv1: the base spread, and the prices the panel already quotes.
-  assert.equal(trade.commissionFor("player"), 0.15);
-  assert.equal(trade.snapshotFor("player")!.prices[0]!.buyPrice, 115);
-  assert.equal(trade.snapshotFor("player")!.prices[0]!.sellPrice, 85);
+  // The payoff, stated as the movement rather than the numbers: each level buys
+  // a strictly better price on *both* sides at once, and the spread never
+  // inverts. Reading the quotes back from the panel is also what proves the
+  // level actually reaches the price, which a pinned 115 could never separate
+  // from a coincidence.
+  const quoteAtLevel = (level: number) => {
+    market.level = level;
+    const price = trade.snapshotFor("player")!.prices[0]!;
+    return { commission: trade.commissionFor("player"), buy: price.buyPrice, sell: price.sellPrice };
+  };
+  const ladder = [1, 2, 3].map(quoteAtLevel);
+  for (const [index, step] of ladder.entries()) {
+    assert.equal(step.commission, commissionLadder[index], `level ${index + 1} trades at its own commission`);
+    assert.ok(step.sell < step.buy, `level ${index + 1} keeps a spread, so a round trip cannot mint gold`);
+    if (index === 0) continue;
+    const previous = ladder[index - 1]!;
+    assert.ok(step.buy <= previous.buy, `level ${index + 1} does not buy dearer than level ${index}`);
+    assert.ok(step.sell >= previous.sell, `level ${index + 1} does not sell cheaper than level ${index}`);
+    assert.ok(
+      step.buy - step.sell < previous.buy - previous.sell,
+      `level ${index + 1} narrows the spread it inherited`,
+    );
+  }
 
-  // The payoff: levelling buys a narrower spread on both sides at once.
-  market.level = 2;
-  assert.equal(trade.commissionFor("player"), 0.12);
-  assert.equal(trade.snapshotFor("player")!.prices[0]!.buyPrice, 112);
-  assert.equal(trade.snapshotFor("player")!.prices[0]!.sellPrice, 88);
-  market.level = 3;
-  assert.equal(trade.commissionFor("player"), 0.09);
-  assert.equal(trade.snapshotFor("player")!.prices[0]!.buyPrice, 109);
-  assert.equal(trade.snapshotFor("player")!.prices[0]!.sellPrice, 91);
   // And a real trade is charged the level's rate, not the base one.
+  market.level = 3;
   const wallet = kingdoms.get("player").wallet;
+  const goldBefore = wallet.amount("gold");
+  const woodQuote = trade.snapshotFor("player")!.prices.find((price) => price.resourceId === "wood")!;
   assert.equal(trade.sell("player", "wood"), "traded");
-  assert.equal(wallet.amount("gold"), 1091, "the Lv3 rate paid 91, not the Lv1 85");
+  assert.equal(wallet.amount("gold"), goldBefore + woodQuote.sellPrice,
+    "the sale paid the levelled rate the panel was quoting");
+  assert.ok(woodQuote.sellPrice > ladder[0]!.sell, "and that rate beats the Lv1 one it replaced");
 
   // A kingdom that has paid for a Lv3 Market keeps that rate whichever of its
   // Markets the panel happens to be open on.

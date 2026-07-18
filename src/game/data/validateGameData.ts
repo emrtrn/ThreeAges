@@ -46,6 +46,7 @@ import type {
   UnitBalance,
   UnitDamageMultipliers,
   UnitRoleId,
+  UiAssetPath,
 } from "./gameDataTypes";
 
 /** Thrown for any malformed / mis-referenced game-data file. */
@@ -85,6 +86,25 @@ function requireStringAllowEmpty(
     throw new GameDataError(`${where}: field "${key}" must be a string`);
   }
   return value;
+}
+
+/**
+ * UI artwork is data-driven but remains a packaged, same-origin asset.  The
+ * constrained path keeps panels portable and makes a bad asset reference fail
+ * at load time instead of becoming a broken image after a player has started a
+ * match.
+ */
+function optionalUiAssetPath(
+  obj: Record<string, unknown>,
+  key: "icon" | "portrait",
+  where: string,
+): UiAssetPath | undefined {
+  const value = obj[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string" || !/^\/assets\/ui\/(?:icons|portraits)\/[a-z0-9][a-z0-9_-]*\.svg$/.test(value)) {
+    throw new GameDataError(`${where}.${key}: must be a /assets/ui/icons/ or /assets/ui/portraits/ SVG path`);
+  }
+  return value as UiAssetPath;
 }
 
 function requireFiniteNumber(
@@ -350,8 +370,12 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (!Number.isInteger(populationCost) || populationCost <= 0) {
       throw new GameDataError(`${statsWhere}.populationCost: must be a positive integer`);
     }
+    const icon = optionalUiAssetPath(stats, "icon", statsWhere);
+    const portrait = optionalUiAssetPath(stats, "portrait", statsWhere);
     units[id] = {
       label: requireString(stats, "label", statsWhere),
+      ...(icon ? { icon } : {}),
+      ...(portrait ? { portrait } : {}),
       role: role as UnitRoleId,
       armorClass: armorClass as Exclude<UnitArmorClass, "structure">,
       maxHealth,
@@ -626,9 +650,13 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
         ...(requiredAge ? { requiredAge } : {}),
       },
     );
+    const icon = optionalUiAssetPath(stats, "icon", statsWhere);
+    const portrait = optionalUiAssetPath(stats, "portrait", statsWhere);
     buildings[id] = {
       id,
       label: requireString(stats, "label", statsWhere),
+      ...(icon ? { icon } : {}),
+      ...(portrait ? { portrait } : {}),
       footprint: { width, depth },
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       constructionSeconds,

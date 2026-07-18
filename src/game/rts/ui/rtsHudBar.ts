@@ -37,16 +37,32 @@ export class RtsHudBar {
   private readonly population = document.createElement("span");
   private readonly idleWorkers = document.createElement("span");
   private readonly age = document.createElement("span");
+  private readonly duration = document.createElement("span");
   private readonly warning = document.createElement("p");
   private readonly selectIdleWorkers = document.createElement("button");
   private readonly assignIdleWorkers = document.createElement("button");
+  private readonly utilityControls = document.createElement("div");
 
   constructor(
     onSelectIdleWorkers: () => void = () => {},
     onAssignIdleWorkers: () => void = () => {},
+    onOpenPauseMenu: () => void = () => {},
   ) {
     this.root.className = "rts-hud-bar ui-interactive";
     this.root.setAttribute("aria-label", "Krallık durumu");
+
+    const identity = document.createElement("div");
+    identity.className = "rts-hud-identity";
+    identity.setAttribute("aria-label", "Krallık");
+    const crest = document.createElement("span");
+    crest.className = "rts-hud-crest";
+    crest.setAttribute("aria-hidden", "true");
+    crest.textContent = "TA";
+    const kingdomName = document.createElement("strong");
+    kingdomName.className = "rts-hud-kingdom-name";
+    kingdomName.textContent = "Krallık";
+    identity.append(crest, kingdomName);
+    this.root.appendChild(identity);
 
     const resources = document.createElement("div");
     resources.className = "rts-hud-resources";
@@ -54,6 +70,11 @@ export class RtsHudBar {
       const cell = document.createElement("div");
       cell.className = "rts-hud-resource";
       cell.dataset.rtsResource = resourceId;
+      const icon = document.createElement("img");
+      icon.className = "rts-hud-resource-icon";
+      icon.src = `/assets/ui/icons/resource-${resourceId}.svg`;
+      icon.alt = "";
+      icon.setAttribute("aria-hidden", "true");
       const label = document.createElement("span");
       label.className = "rts-hud-resource-label";
       label.textContent = resourceLabel(resourceId);
@@ -63,7 +84,10 @@ export class RtsHudBar {
       const income = document.createElement("span");
       income.className = "rts-hud-resource-income";
       income.textContent = "+0.0/dk";
-      cell.append(label, amount, income);
+      const values = document.createElement("span");
+      values.className = "rts-hud-resource-values";
+      values.append(label, amount, income);
+      cell.append(icon, values);
       resources.appendChild(cell);
       this.resourceCells.set(resourceId, { amount, income });
     }
@@ -87,6 +111,7 @@ export class RtsHudBar {
     this.population.className = "rts-hud-population";
     this.idleWorkers.className = "rts-hud-idle-workers";
     this.age.className = "rts-hud-age";
+    this.duration.className = "rts-hud-duration";
     const workerActions = document.createElement("div");
     workerActions.className = "rts-hud-worker-actions";
     this.selectIdleWorkers.type = "button";
@@ -98,8 +123,18 @@ export class RtsHudBar {
     this.assignIdleWorkers.textContent = "İşe Gönder (R)";
     this.assignIdleWorkers.addEventListener("click", onAssignIdleWorkers);
     workerActions.append(this.selectIdleWorkers, this.assignIdleWorkers);
-    status.append(this.population, this.idleWorkers, workerActions, this.age);
+    status.append(this.age, this.duration, this.population, this.idleWorkers, workerActions);
     this.root.appendChild(status);
+    this.utilityControls.className = "rts-hud-utility-controls";
+    const pause = document.createElement("button");
+    pause.type = "button";
+    pause.className = "rts-hud-menu-button";
+    pause.textContent = "☰";
+    pause.setAttribute("aria-label", "Menü ve duraklat (Esc)");
+    pause.title = "Menü ve duraklat (Esc)";
+    pause.addEventListener("click", onOpenPauseMenu);
+    this.utilityControls.appendChild(pause);
+    this.root.appendChild(this.utilityControls);
 
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
   }
@@ -144,6 +179,17 @@ export class RtsHudBar {
       ? `Çağ: ${balance.settlement.label} → ${balance.town.label} (${Math.ceil(snapshot.remainingSeconds)} sn)`
       : `Çağ: ${snapshot.age === "town" ? balance.town.label : balance.settlement.label}`;
     if (this.age.textContent !== text) this.age.textContent = text;
+  }
+
+  setMatchDuration(seconds: number): void {
+    const total = Math.max(0, Math.floor(Number.isFinite(seconds) ? seconds : 0));
+    const text = `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
+    if (this.duration.textContent !== text) this.duration.textContent = text;
+  }
+
+  /** Places a stateful control in the HUD without making the bar own its rules. */
+  mountUtilityControl(control: { mount(parent: HTMLElement): void }): void {
+    control.mount(this.utilityControls);
   }
 
   /**
