@@ -50,7 +50,7 @@ const BUILD_CATEGORIES: readonly BuildCategory[] = [
   { title: "Ekonomi", buildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "market"] },
   { title: "Lojistik", buildingIds: ["depot", "outpost"] },
   { title: "Yerleşim", buildingIds: ["house"] },
-  { title: "Askerî", buildingIds: ["barracks"] },
+  { title: "Askerî", buildingIds: ["barracks", "archery_range"] },
 ];
 
 export class RtsBuildPalette {
@@ -59,7 +59,12 @@ export class RtsBuildPalette {
   private readonly townUnlocks = document.createElement("p");
   private readonly buildButtons = new Map<
     string,
-    { readonly button: HTMLButtonElement; readonly cost: HTMLSpanElement; readonly price: StartingResources }
+    {
+      readonly button: HTMLButtonElement;
+      readonly cost: HTMLSpanElement;
+      readonly price: StartingResources;
+      readonly requiredAge: BuildingBalance[string]["requiredAge"];
+    }
   >();
   private affordabilitySignature = "";
   private readonly actionMessage = document.createElement("p");
@@ -110,7 +115,7 @@ export class RtsBuildPalette {
         cost.textContent = formatResourceCost(stats.cost);
         button.append(label, cost);
         button.addEventListener("click", () => this.onChoose(id));
-        this.buildButtons.set(id, { button, cost, price: stats.cost });
+        this.buildButtons.set(id, { button, cost, price: stats.cost, requiredAge: stats.requiredAge });
         choices.appendChild(button);
       }
       this.root.appendChild(choices);
@@ -169,14 +174,17 @@ export class RtsBuildPalette {
 
   /**
    * What the age milestone means, before the player owns a building to click.
-   * The age no longer gates any T2 button (KR-04) — level-ups are always open on
-   * the building's own panel. What it *does* is the one thing no building panel
-   * can say: reaching the Town age re-skins every building into the new age
-   * family and resets its level to 1 (KR-03), so the ladder is climbed afresh.
+   * The age resets every existing building to Level 1 and also opens any
+   * building whose data declares Town as its first available age.
    */
   setAgeState(snapshot: Pick<AgeSnapshot, "age" | "upgrading">): void {
+    for (const { button, requiredAge } of this.buildButtons.values()) {
+      const locked = requiredAge === "town" && !townUnlocksAvailable(snapshot);
+      button.disabled = locked;
+      button.title = locked ? "Kasaba Çağında açılır." : "";
+    }
     const text = townUnlocksAvailable(snapshot)
-      ? "Kasaba Çağındasınız — binaları kendi panelinden Lv2/Lv3'e yükseltin."
+      ? "Kasaba Çağındasınız — Okçuluk Alanı açıldı; binaları kendi panelinden Lv2/Lv3'e yükseltin."
       : snapshot.upgrading
         ? "Kasaba Çağı yükseltmesi sürüyor — tamamlanınca tüm binalar yeni çağ modeline geçer."
         : "Kasaba Çağı: tamamlanınca tüm binalarınız yeni çağ modeline geçer ve seviyeleri sıfırlanır.";
@@ -215,4 +223,3 @@ export class RtsBuildPalette {
     this.root.remove();
   }
 }
-

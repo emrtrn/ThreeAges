@@ -214,5 +214,27 @@
         "maxHealth": 1200
       }
     ]
+  },
+  "archery_range": {
+    "label": "Okçuluk Alanı",
+    "footprint": { "width": 8, "depth": 8 },
+    "cost": { "wood": 160, "stone": 40 },
+    "constructionSeconds": 55,
+    "requiredAge": "town",
+    "maxHealth": 600,
+    "levels": [
+      {
+        "level": 2,
+        "cost": { "wood": 120, "stone": 60 },
+        "durationSeconds": 50,
+        "maxHealth": 850
+      },
+      {
+        "level": 3,
+        "cost": { "wood": 180, "stone": 100 },
+        "durationSeconds": 60,
+        "maxHealth": 1100
+      }
+    ]
   }
 }

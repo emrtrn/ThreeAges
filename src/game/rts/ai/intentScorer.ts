@@ -227,6 +227,27 @@ function scoreDefend(bb: AiBlackboard, balance: AiBalance): { rawScore: number; 
  */
 function scoreAttack(bb: AiBlackboard, balance: AiBalance): { rawScore: number; reason: string } {
   if (!bb.enemyCenterExists) return { rawScore: 0, reason: "hedef yok" };
+  // Plan §53 (4): the early-game non-aggression window. Playtesting found the
+  // opening decided the match — the AI pushed as soon as it could and the only
+  // winning reply was to rush first — so the economy/expansion/age openings
+  // never got to exist. Gating here rather than in the army manager keeps the
+  // rule in one place: §30's Attack is what the manager reads (`intent !==
+  // "attack"` → regroup), so a suppressed intent suppresses target selection
+  // too, and there is no second copy of the window to drift.
+  //
+  // Defend is deliberately untouched. This makes the AI slow to *start* a fight,
+  // not slow to answer one: `baseThreat` still drives Defend and the army
+  // manager's own §57 override, so rushing the AI inside the window is answered
+  // normally rather than met with a passive base.
+  //
+  // `bb.now` is match simulation seconds — the same tick {@link RtsMatchClock}
+  // counts and reset with the match, so the window scales with game speed and
+  // freezes on pause without this holding a second clock of its own.
+  const { peaceSeconds } = balance.army;
+  if (bb.now < peaceSeconds) {
+    const remaining = Math.ceil(peaceSeconds - bb.now);
+    return { rawScore: 0, reason: `erken oyun saldırmazlık süresi (${remaining} sn kaldı)` };
+  }
   // §59: the base keeps a minimum defence before the field army may leave.
   const deployable = bb.ownArmyPower - balance.army.minimumDefensePower;
   if (deployable <= 0) {

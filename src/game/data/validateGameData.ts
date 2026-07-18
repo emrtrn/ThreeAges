@@ -317,6 +317,14 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (!Number.isInteger(requiredBuildingLevel) || requiredBuildingLevel <= 0) {
       throw new GameDataError(`${statsWhere}.requiredBuildingLevel: must be a positive integer`);
     }
+    const productionBuildingId = requireString(stats, "productionBuildingId", statsWhere);
+    if (productionBuildingId !== "command_center" && productionBuildingId !== "barracks" && productionBuildingId !== "archery_range") {
+      throw new GameDataError(`${statsWhere}.productionBuildingId: must be command_center, barracks or archery_range`);
+    }
+    const requiredAge = requireString(stats, "requiredAge", statsWhere) as SettlementAge;
+    if (!SETTLEMENT_AGES.includes(requiredAge)) {
+      throw new GameDataError(`${statsWhere}.requiredAge: must be one of ${SETTLEMENT_AGES.join(", ")}`);
+    }
     const populationCost = requireFiniteNumber(stats, "populationCost", statsWhere);
     if (!Number.isInteger(populationCost) || populationCost <= 0) {
       throw new GameDataError(`${statsWhere}.populationCost: must be a positive integer`);
@@ -338,6 +346,8 @@ export function validateUnitBalance(value: unknown): UnitBalance {
         `${statsWhere}.damageMultipliers`,
       ),
       trainingSeconds,
+      productionBuildingId,
+      requiredAge,
       requiredBuildingLevel,
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       populationCost,
@@ -369,6 +379,11 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
     const constructionSeconds = requireFiniteNumber(stats, "constructionSeconds", statsWhere);
     if (constructionSeconds <= 0) {
       throw new GameDataError(`${statsWhere}.constructionSeconds: must be > 0`);
+    }
+    const requiredAgeRaw = stats["requiredAge"];
+    const requiredAge = requiredAgeRaw === undefined ? undefined : requireString(stats, "requiredAge", statsWhere) as SettlementAge;
+    if (requiredAge !== undefined && !SETTLEMENT_AGES.includes(requiredAge)) {
+      throw new GameDataError(`${statsWhere}.requiredAge: must be one of ${SETTLEMENT_AGES.join(", ")}`);
     }
     const maxHealth = requireFiniteNumber(stats, "maxHealth", statsWhere);
     if (maxHealth <= 0) {
@@ -567,6 +582,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       footprint: { width, depth },
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       constructionSeconds,
+      ...(requiredAge ? { requiredAge } : {}),
       maxHealth,
       ...(populationCapacity ? { populationCapacity } : {}),
       ...(economy ? { economy } : {}),
@@ -812,6 +828,7 @@ export function validateAiBalance(value: unknown): AiBalance {
 
   const armyObj = asObject(obj["army"], `${where}.army`);
   const army = {
+    peaceSeconds: requireFiniteNumber(armyObj, "peaceSeconds", `${where}.army`),
     attackPowerRatio: requirePositive(armyObj, "attackPowerRatio", `${where}.army`),
     riskyAttackPowerRatio: requirePositive(armyObj, "riskyAttackPowerRatio", `${where}.army`),
     retreatPowerRatio: requirePositive(armyObj, "retreatPowerRatio", `${where}.army`),
@@ -843,6 +860,11 @@ export function validateAiBalance(value: unknown): AiBalance {
   }
   if (army.minimumDefensePower < 0) {
     throw new GameDataError(`${where}.army: minimumDefensePower must be >= 0`);
+  }
+  // §53 (4): 0 disables the window (the pre-grace behaviour, still expressible);
+  // negative is meaningless and would read as "attack before the match started".
+  if (army.peaceSeconds < 0) {
+    throw new GameDataError(`${where}.army: peaceSeconds must be >= 0`);
   }
   // §55: a share of 1 lets the army fill the population by itself, which is the
   // deadlock the ceiling exists to prevent — there would be no headroom left for

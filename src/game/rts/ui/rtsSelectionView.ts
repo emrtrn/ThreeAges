@@ -744,10 +744,13 @@ function ageUpAction(age: AgeSnapshot, labels: ReadonlyMap<string, string>): Sel
  */
 function trainAction(entry: RosterEntry, detail: MilitaryDetailView): SelectionAction {
   const full = detail.queue.queued >= detail.queue.capacity;
+  const buildingLabel = entry.stats.productionBuildingId === "archery_range" ? "Okçuluk Alanı" : "Kışla";
   const reason = !entry.unlocked
-    ? `${entry.stats.label} için Kışla Lv${entry.stats.requiredBuildingLevel} gerekir.`
+    ? entry.stats.requiredAge === "town"
+      ? `${entry.stats.label} Kasaba Çağında açılır.`
+      : `${entry.stats.label} için ${buildingLabel} Lv${entry.stats.requiredBuildingLevel} gerekir.`
     : !detail.connected
-      ? "Kontrol Dışı: bu Kışla birlik üretemez."
+      ? `Kontrol Dışı: bu ${buildingLabel} birlik üretemez.`
       : detail.upgrading
         ? "Seviye yükseltmesi sürerken kuyruk duraklatıldı."
         : full

@@ -32,6 +32,8 @@ export class AiProductionManager {
     private readonly balance: AiBalance,
     /** Which unit id trains a given role, read off the same balance the player uses. */
     private readonly unitIdForRole: (role: UnitRoleId) => string | null,
+    /** Build the missing military line through the AI's shared construction slot. */
+    private readonly requestMilitaryBuilding: (buildingId: string, now: number) => void,
   ) {}
 
   /**
@@ -79,14 +81,22 @@ export class AiProductionManager {
     if ((bb.buildingCounts["barracks"] ?? 0) === 0) return;
     this.gatedRole = null;
     // §53: take the most wanted role, but do not stall the whole army on it. A
-    // Town-age AI wants an Archer long before its Barracks II research lands, and
-    // an AI that queued nothing until then would field no army at all through the
-    // one window it is most likely to be attacked in.
+    // Town-age AI wants an Archer from its separate Range; an AI that queued
+    // nothing until that line was built would field no army through the one
+    // window it is most likely to be attacked in.
     for (const role of this.rolesByDeficit(bb)) {
       const unitId = this.unitIdForRole(role);
       if (!unitId) continue;
       const result = this.army.queueUnit(this.owner, unitId);
-      if (result !== "requires-barracks-upgrade") return;
+      if (result === "no-completed-production-building") {
+        const buildingId = this.army.productionBuildingFor(unitId);
+        if (buildingId) this.requestMilitaryBuilding(buildingId, bb.now);
+        return;
+      }
+      // A full Barracks queue must not suppress the independent Archer line.
+      // Try the next deficit role: it may have a different production building.
+      if (result === "queue-full") continue;
+      if (result !== "requires-production-building-upgrade") return;
       // The first gated role is the one the upgrade is *for*; keep it and drop to
       // whatever this tier can still train.
       this.gatedRole ??= role;

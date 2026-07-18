@@ -170,6 +170,10 @@ export const RTS_BLOCKOUT_MAP: RtsMapBlockout = {
     // can touch all three from the z=-18 leg.
     { buildingId: "depot", ...atEnemyBase(0, 12) },
     { buildingId: "barracks", ...atEnemyBase(0, -12) },
+    // Town military branch: the range is outside the tight opening ring, but
+    // inside the Town control radius. It cannot compete with the first Barracks
+    // for the early base slot and becomes legal only after the age transition.
+    { buildingId: "archery_range", ...atEnemyBase(-12, -18) },
     // Faz M4: the AI's Market. Behind the Barracks, in the only 8x8 gap the base
     // ring leaves — clear of the spine (z = 8) and both expansion corridors, and
     // 22 units out, well inside the 28-unit starting control the trade rule

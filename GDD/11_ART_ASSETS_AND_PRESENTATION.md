@@ -15,6 +15,12 @@
 
 ---
 
+> **İlerleme Modeli Revizyonu (2026-07-18):** §7 adlandırma kuralı, §10 görsel
+> gelişim, §11 eşleştirme tablosu ve §83 asset listesi yeniden yazıldı. Model
+> matrisi tek eksenli `t1/t2/t3` değil, **çağ ailesi × Lv1–3** çarpımıdır
+> (`02 §25`). ThirdAge ailesinin asseti yoktur (`SL-007`). Kod karşılığı:
+> `src/game/rts/structures/rtsBuildingArt.ts`.
+>
 > **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. Asset entegrasyonu ve görsel polish, oynanış kanıtı (Kapı A) geçilmeden başlamaz. Forge'a özgü teknik hizalama (mevcut Content Browser/manifest, glTF import, VFX sistemi) için bkz. `TECH_DECISIONS.md`.
 
 ---
@@ -216,8 +222,15 @@ assets/
 Dosya adlarında:
 
 - boşluk kullanılmamalı,
-- seviye `t1`, `t2`, `t3` ile belirtilmeli,
+- **çağ ve seviye ayrı ayrı belirtilmeli:** `{TabanAd}_{ÇağAilesi}_Level{n}`
+  (örn. `Barracks_SecondAge_Level3.gltf`); çağ ailesi `FirstAge` / `SecondAge` /
+  `ThirdAge`, seviye `Level1..Level3`,
 - takım varyantı ayrı model yerine materyal parametresiyle çözülmelidir.
+
+> **v0.1'den değişiklik.** Eski kural "seviye `t1`, `t2`, `t3` ile belirtilmeli"
+> diyordu; bu, çağ ile seviyeyi tek eksen sayan modele aitti. Arşivdeki gerçek
+> adlandırma ve `rtsBuildingArt.ts` çözümleyicisi yukarıdaki iki-eksenli şablonu
+> kullanır.
 
 ---
 
@@ -282,9 +295,20 @@ Birim ve bina ölçekleri görsel gerçekçilikten çok oynanış okunabilirliğ
 
 ---
 
-## 10. Üç Seviye Görsel Gelişim
+## 10. Görsel Gelişim — İki Eksen
 
-### Seviye I — Yerleşim
+Görsel gelişim tek bir üçlü merdiven değil, **çağ × seviye** matrisidir
+(`02 §25`). İki eksen farklı şeyler anlatır:
+
+- **Çağ ailesi** siluetin *malzemesini ve çağını* değiştirir (ahşap köy →
+  taş kasaba → kale). Çağ atlayınca bina yeni ailenin en küçük varyantına döner.
+- **Seviye (Lv1–3)** aynı aile içinde *büyümeyi* anlatır: kütle artışı, ek kat
+  veya kanat, daha zengin props.
+
+Aşağıdaki üçlü tanım artık **çağ ailelerinin** görsel yönüdür; her ailenin
+kendi içinde ayrıca Lv1–Lv3 büyüme adımları vardır.
+
+### FirstAge — Yerleşim
 
 - ahşap ağırlıklı,
 - küçük kütle,
@@ -293,7 +317,7 @@ Birim ve bina ölçekleri görsel gerçekçilikten çok oynanış okunabilirliğ
 - az dekor,
 - geçici yerleşim görünümü.
 
-### Seviye II — Kasaba
+### SecondAge — Kasaba
 
 - ahşap + taş karışımı,
 - daha büyük kütle,
@@ -301,7 +325,7 @@ Birim ve bina ölçekleri görsel gerçekçilikten çok oynanış okunabilirliğ
 - daha düzenli çatı,
 - belirgin işlevsel props.
 
-### Seviye III — Krallık
+### ThirdAge — Krallık (**asset yok** — `SL-007`)
 
 - taş ağırlıklı,
 - daha yüksek ve güçlü siluet,
@@ -317,7 +341,10 @@ Kesin modeller asset envanteri sonrası seçilecektir.
 
 Önerilen eşleştirme tablosu:
 
-| Oyun yapısı | T1 görsel yön | T2 görsel yön | T3 görsel yön |
+Sütunlar **çağ ailelerini** anlatır (seviyeyi değil); her hücrenin kendi içinde
+Lv1–Lv3 büyüme adımı vardır.
+
+| Oyun yapısı | FirstAge görsel yön | SecondAge görsel yön | ThirdAge görsel yön |
 |---|---|---|---|
 | Merkez | Büyük ahşap salon | Kasaba merkezi | Kale / yönetim yapısı |
 | Ev | Küçük kulübe | Taş-ahşap ev | Gelişmiş şehir evi |
@@ -1394,26 +1421,33 @@ Kontrol edilecek:
 
 ## 83. Zorunlu Bina Assetleri
 
-- Merkez T1
-- Merkez T2
-- Merkez T3
-- Ev T1
-- Ev T2
-- Ev T3
-- Depo T1
-- Depo T2
-- Depo T3
-- Tarla/Çiftlik
-- Oduncu Kampı
-- Taş Ocağı
-- Altın Madeni
-- Kışla T1
-- Kışla T2
-- Kışla T3
-- Karakol T1
-- Karakol T2
-- Karakol T3
-- Kule
+Liste **çağ × seviye** matrisidir (`02 §25.3`): merdivenli her yapı için
+`{TabanAd}_{ÇağAilesi}_Level{1..3}`. Bağlı iki çağ (FirstAge, SecondAge) için
+bina başına altı model gerekir; ThirdAge sütunu **eksiktir** (`SL-007`).
+
+Kaynak: `src/game/rts/structures/rtsBuildingArt.ts` (`BUILDING_ART`) — bu tablo
+o eşlemenin belge karşılığıdır; ikisi birlikte güncellenmelidir.
+
+| Oyun yapısı | Mesh şablonu | FirstAge Lv1–3 | SecondAge Lv1–3 | ThirdAge Lv1–3 |
+|---|---|---|---|---|
+| Merkez | `TownCenter_{Çağ}_Level{n}` | ✅ | ✅ | ❌ |
+| Ev | `Houses_{Çağ}_1_Level{n}` | ✅ | ✅ | ❌ |
+| Depo | `Storage_{Çağ}_Level{n}` | ✅ | ✅ | ❌ |
+| Kışla | `Barracks_{Çağ}_Level{n}` | ✅ | ✅ | ❌ |
+| Karakol | `WatchTower_{Çağ}_Level{n}` | ✅ | ✅ | ❌ |
+| Okçu Alanı | `Archery_{Çağ}_Level{n}` | ✅ | ✅ | ❌ |
+| Tarla | `Farm_{Çağ}_Level{n}_Wheat` | ✅ | ✅ | ❌ |
+| Pazar | `Market_{Çağ}_Level{n}` | ✅ | ✅ | ❌ |
+
+Merdiven **dışında** kalan, çağdan ve seviyeden bağımsız tek mesh'ler:
+
+- Taş Ocağı — `Mine`
+- Altın Madeni — `Mine`
+- Oduncu Kampı — `Resource_Tree_Group_Cut` (kalıcı stand-in)
+
+Henüz üretilmemiş / kapsam kararına bağlı:
+
+- Kule (koşullu)
 - Kuşatma Atölyesi veya geç oyun askerî yapı
 
 ---

@@ -10,6 +10,12 @@
 
 ---
 
+> **İlerleme Modeli Revizyonu (2026-07-18):** §24, §25 ve §30 yeniden yazıldı.
+> Çağ ile bina seviyesi artık **bağımsız iki eksendir**; 0.1 taslağının
+> "Seviye I = Yerleşim, Seviye II = Kasaba, Seviye III = Krallık" eşlemesi
+> uygulanmadı ve terk edildi. Uygulama kaydı:
+> `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`.
+>
 > **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. "Vertical slice için zorunlu" ifadeleri tam oyun hedefini anlatır — bir özelliğin hangi üründe (A/B/C) açıldığı ya da koşullu/kapsam dışı olduğu konusunda 13 v0.2 esastır. Forge'a özgü teknik hizalama için bkz. `TECH_DECISIONS.md`.
 
 ---
@@ -25,7 +31,7 @@ Belge şu sorulara cevap verir:
 - Çağ atlama hangi koşullarla gerçekleşir?
 - Çağ atlamanın fırsat maliyeti nedir?
 - Hangi yapılar, birlikler ve sistemler hangi aşamada açılır?
-- Yapıların üç görsel seviyesi nasıl kullanılacaktır?
+- Çağ ekseni ile bina seviye ekseni nasıl ayrılır ve model matrisi nasıl kurulur?
 - Oyuncunun erken, orta ve geç oyunda ne kadar güçlü olması beklenir?
 - AI rakip, oyuncunun ilerlemesine nasıl tepki verir?
 - Bir oyuncu geride kaldığında maça nasıl dönebilir?
@@ -258,13 +264,12 @@ Oyuncunun ana sorusu:
 
 ### 12.2 Yapılar
 
-- Merkez binası II
-- Ev II
-- Depo II
-- Gelişmiş üretim yapıları II
-- Kışla II
-- Okçu üretim yapısı
-- Karakol II
+Kasaba çağı yapıları SecondAge ailesinin Lv1 modeliyle gelir; aşağıdaki "II"
+ifadeleri **çağ katmanını** anlatır, per-bina seviyeyi değil (`§25`).
+
+- Merkez binası II (çağ katmanı)
+- Okçuluk Alanı (**yalnız Kasaba çağı** — `requiredAge: "town"`)
+- Karakol
 - Gözcü kulesi
 - Taş savunma yapıları
 - Pazar veya ticaret yapısı
@@ -320,8 +325,7 @@ Kasaba seviyesi başarısız tasarlanırsa oyun ya çok erken biter ya da geç o
 
 Krallık seviyesine geçiş için önerilen genel koşullar:
 
-- Merkez binası II
-- Belirli sayıda Seviye II yapı
+- Merkez binası II (çağ katmanı)
 - En az bir gelişmiş askerî yapı
 - En az bir aktif ileri karakol
 - Belirli miktarda taş ve altın
@@ -527,31 +531,68 @@ Geçiş süresi:
 Çağ tamamlandığında:
 
 - yeni yapı türleri açılır,
-- mevcut yapıların yeni seviye yükseltmeleri açılır,
 - yeni birlik türleri açılır,
 - nüfus sınırı potansiyeli artar,
 - karakol ve yol yükseltmeleri açılır,
-- yeni zafer seçenekleri kullanılabilir hale gelir.
+- yeni zafer seçenekleri kullanılabilir hale gelir,
+- **sahibin bütün yapıları yeni çağın Seviye 1 modeline geçer ve bina
+  seviyeleri 1'e sıfırlanır.**
 
-Tüm yapılar otomatik yükseltilmez.
+Son madde bilinçli bir tasarım kararıdır (`KR-03`): çağ atlama, seviye
+merdivenini *yükselten* değil **sıfırlayan** bir milestone'dur. Oyuncu yeni
+çağda daha güçlü bir tabandan başlar, ancak merdiveni yeniden tırmanır. Çağ
+atlamanın seviye önkoşulu yoktur.
+
+> **Not — v0.1'den değişiklik.** Bu bölüm daha önce "mevcut yapıların yeni
+> seviye yükseltmeleri açılır" ve "tüm yapılar otomatik yükseltilmez" diyordu;
+> ikisi de çağ ile seviyeyi tek eksen sayan eski modele aitti. Yeni iki-eksenli
+> model için bkz. §25.
 
 ---
 
 # BÖLÜM E — YAPI GELİŞİMİ
 
-## 25. Yapıların Üç Seviye Kullanımı
+## 25. Çağ ve Seviye — İki Bağımsız Eksen
 
-Quaternius asset setindeki üç yapı gelişim seviyesi, oyun sistemine doğrudan bağlanmalıdır.
+İlerleme **tek bir merdiven değil, birbirinden bağımsız iki eksendir.** Bu
+belgenin 0.1 taslağı ikisini aynı şey sayıyordu ("Seviye I = Yerleşim,
+Seviye II = Kasaba, Seviye III = Krallık"); o model uygulanmadı ve terk edildi.
 
-Önerilen yaklaşım:
+### 25.1 Çağ ekseni (sanat ailesi)
 
-- Seviye I yapı: Yerleşim
-- Seviye II yapı: Kasaba
-- Seviye III yapı: Krallık
+Çağ, ağır bir milestone'dur: bina gereksinimi + dört kaynak maliyeti + süre +
+merkez üretiminin durması. Çağ, yapının **hangi sanat ailesinden** çizildiğini
+belirler:
 
-Ancak her yapı üç seviyeye sahip olmak zorunda değildir.
+| Çağ | Sanat ailesi |
+|---|---|
+| Yerleşim | `FirstAge` |
+| Kasaba | `SecondAge` |
+| Krallık | `ThirdAge` — **sanat kaynağı yok, bağlanmadı** |
 
-### 25.1 Üç seviyeli olması önerilen yapılar
+Çağ tamamlandığında sahibin bütün yapıları yeni ailenin Seviye 1 modeline
+geçer ve seviyeleri sıfırlanır (§24).
+
+### 25.2 Seviye ekseni (bina içi merdiven)
+
+Seviye, bulunulan çağın *içinde* işler: her yapı **tek tek**, kendi
+panelinden, kendi maliyeti ve süresiyle Lv1 → Lv2 → Lv3 yükseltilir. Aynı
+türdeki iki bina farklı seviyelerde olabilir.
+
+- Seviye yükseltmesinin **çağ kapısı yoktur**: Yerleşim çağında da Lv3'e
+  çıkılabilir.
+- Her seviye bir kazanım verir (sağlık, tipe özel bonus) ve modeli o çağın
+  `Level{n}` varyantına çevirir.
+- Seviye yükseltmesi tür-geneli bir araştırma değil, **bina instance'ı**
+  üzerindeki bir fiildir.
+
+### 25.3 Model matrisi
+
+İki eksen çarpılır: bir yapının tam kadrosu **çağ sayısı × 3** modeldir, tek
+eksenli üçlü değil. İki çağ bağlı olduğu için bugün bina başına altı model
+kullanılır (`{Bina}_{Çağ}_Level{1..3}`).
+
+### 25.4 Üç seviyeli olması önerilen yapılar
 
 - Merkez binası
 - Ev
@@ -645,23 +686,58 @@ Yükseltme iptali ve kaynak iadesi sistemi daha sonra belirlenmelidir.
 
 ## 30. Önerilen Yapı Açılım Tablosu
 
-| Yapı | Yerleşim | Kasaba | Krallık |
+Çağ artık bir yapının *seviyesini* değil, **var olup olmadığını** ve hangi
+sanat ailesinden çizildiğini belirler (§25). Bu yüzden tablo "hangi çağda
+Seviye II" değil, **"hangi çağda açık"** sorusunu cevaplar. Açık olan her yapı,
+bulunduğu çağın içinde Lv1–Lv3 merdivenini kendi başına tırmanır.
+
+| Yapı | Yerleşim | Kasaba | Krallık | Seviye merdiveni |
+|---|---|---|---|---|
+| Merkez | Açık | Açık | Açık | Çağ katmanı — per-bina merdiven dışında |
+| Ev | Açık | Açık | Açık | Lv1–3 |
+| Depo | Açık | Açık | Açık | Lv1–3 |
+| Tarla / yiyecek yapısı | Açık | Açık | Açık | Lv1–3 |
+| Oduncu noktası | Açık | Açık | Açık | Yok — tek mesh (stand-in) |
+| Taş ocağı | Sınırlı | Açık | Açık | Yok — tek mesh (`Mine`) |
+| Altın madeni | Sınırlı | Açık | Açık | Yok — tek mesh (`Mine`) |
+| Kışla | Açık | Açık | Açık | Lv1–3 |
+| Okçuluk Alanı | Kapalı | Açık | Açık | Lv1–3 |
+| Süvari yapısı | Kapalı | Opsiyonel | Açık | TBD |
+| Kuşatma | Kapalı | Kışla Lv2 içinde | Kışla Lv2 içinde | — |
+| Karakol | Açık | Açık | Açık | Lv1–3 |
+| Kule | Kapsam dışı | Kapsam dışı | Koşullu | TBD |
+| Pazar | Kapalı | Açık | Açık | TBD |
+| Zafer yapısı | Kapalı | Kapalı | Koşullu | TBD |
+
+Merkez bilinçli olarak per-bina seviye sisteminin dışındadır: `level`'ı çağ
+katmanını taşır (Yerleşim = 1, Kasaba = 2), yani Merkez'in modeli çağ ile
+değişir, ayrı bir yükseltme düğmesiyle değil.
+
+### 30.1 Birim kapısı da iki boyutludur
+
+Seviyenin çağ kapısı kalkınca (§25.2) birim açılımı bir süre çağdan kopmuştu:
+`Kışla Lv2` gerektiren Okçu ve Koçbaşı, Yerleşim çağında da üretilebilir hale
+gelmişti. Bu **birim verisine ayrı bir çağ kapısı eklenerek** kapatıldı — yapı
+tarafındaki iki eksen artık birim tarafında da var:
+
+| Birim | Üretim yapısı | Gereken çağ | Gereken bina seviyesi |
 |---|---|---|---|
-| Merkez | I | II | III |
-| Ev | I | II | III |
-| Depo | I | II | III |
-| Tarla / yiyecek yapısı | I | II | III |
-| Oduncu noktası | I | II | III |
-| Taş ocağı desteği | Sınırlı | II | III |
-| Altın madeni desteği | Sınırlı | II | III |
-| Kışla | I | II | III |
-| Okçu yapısı | Kapalı/temel | II | III |
-| Süvari yapısı | Kapalı | Opsiyonel | III |
-| Kuşatma atölyesi | Kapalı | Kapalı | III |
-| Karakol | I | II | III |
-| Kule | Basit | II | III |
-| Pazar | Kapalı | II | III |
-| Zafer yapısı | Kapalı | Kapalı | III |
+| İşçi | Merkez | Yerleşim | Lv1 |
+| Muhafız | Kışla | Yerleşim | Lv1 |
+| Okçu | **Okçuluk Alanı** | Kasaba | Lv1 |
+| Koçbaşı | Kışla | Kasaba | Lv2 |
+
+Veri sözleşmesi (`UnitBalanceStats`): `productionBuildingId` + `requiredAge` +
+`requiredBuildingLevel`. Yapılar da opsiyonel `requiredAge` taşır — Okçuluk
+Alanı Kasaba çağından önce yerleştirilemez.
+
+**Okçu ayrı binaya taşındı.** `13 §2` maddesi 10 bir dönem "Okçu ayrı yapı
+yerine Kışla yükseltmesi veya Kışla II içinde açılacaktır" diyordu; o kapsam
+kararı geri alındı ve madde yeniden yazıldı. Gerekçe: seviye merdiveni çağ
+kapısız hale gelince "Kışla Lv2" tek
+başına bir çağ kapısı olmaktan çıktı, dolayısıyla Okçu'yu Kışla'nın içinde
+tutmak onu erken oyuna sızdırıyordu. Ayrı bina, kapıyı hem çağa hem de ayrı bir
+inşaat yatırımına (160 Odun + 40 Taş, 55 sn) bağlar.
 
 Bu tablo kesin değildir; asset eşleştirmesi ve kapsam kontrolüyle daraltılacaktır.
 

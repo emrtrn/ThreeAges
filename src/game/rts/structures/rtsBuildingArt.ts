@@ -45,6 +45,7 @@ const BUILDING_ART: Record<string, ArtResolver> = {
   depot: { kind: "aged", basename: (f, l) => `Storage_${f}_Level${l}` },
   outpost: { kind: "aged", basename: (f, l) => `WatchTower_${f}_Level${l}` },
   barracks: { kind: "aged", basename: (f, l) => `Barracks_${f}_Level${l}` },
+  archery_range: { kind: "aged", basename: (f, l) => `Archery_${f}_Level${l}` },
   farm: { kind: "aged", basename: (f, l) => `Farm_${f}_Level${l}_Wheat` },
   market: { kind: "aged", basename: (f, l) => `Market_${f}_Level${l}` },
   lumber_camp: { kind: "fixed", basename: "Resource_Tree_Group_Cut" },

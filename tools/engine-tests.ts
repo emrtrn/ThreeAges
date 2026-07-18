@@ -1112,6 +1112,8 @@ const RTS_TEST_UNIT_STATS = {
   chaseRange: 14,
   damageMultipliers: { light: 1, heavy: 1.2, structure: 0.35 },
   trainingSeconds: 0.25,
+  productionBuildingId: "barracks",
+  requiredAge: "settlement",
   requiredBuildingLevel: 1,
   cost: { food: 50 },
   populationCost: 1,
@@ -1120,6 +1122,7 @@ const RTS_TEST_UNIT_STATS = {
 /** Workers never fight: a zero acquisition range is what opts them out. */
 const RTS_TEST_WORKER_STATS = {
   ...RTS_TEST_UNIT_STATS,
+  productionBuildingId: "command_center",
   label: "Test İşçisi",
   role: "worker",
   armorClass: "light",
@@ -1141,7 +1144,9 @@ const RTS_TEST_ARCHER_STATS = {
   acquisitionRange: 9,
   chaseRange: 11,
   damageMultipliers: { light: 1.2, heavy: 0.8, structure: 0.25 },
-  requiredBuildingLevel: 2,
+  productionBuildingId: "archery_range",
+  requiredAge: "town",
+  requiredBuildingLevel: 1,
 } as const satisfies UnitBalanceStats;
 
 const RTS_TEST_SIEGE_STATS = {
@@ -1157,6 +1162,8 @@ const RTS_TEST_SIEGE_STATS = {
   acquisitionRange: 7,
   chaseRange: 8,
   damageMultipliers: { light: 0.35, heavy: 0.3, structure: 2.5 },
+  productionBuildingId: "barracks",
+  requiredAge: "town",
   requiredBuildingLevel: 2,
   cost: { wood: 140 },
   populationCost: 3,
@@ -28411,10 +28418,12 @@ check("unit balance validates combat stats for stable unit ids", () => {
   assert.equal(balance["siege_placeholder"]?.role, "siege");
   assert.deepEqual(balance["worker_placeholder"]?.cost, { food: 50 });
 
-  // Plan §46: the Archer and the Ram sit behind Barracks II; the Guard does not.
+  // The Archer opens from a Town-age Range; only the Ram needs Barracks II.
   assert.equal(balance["guard_placeholder"]?.requiredBuildingLevel, 1);
-  assert.equal(balance["archer_placeholder"]?.requiredBuildingLevel, 2);
+  assert.equal(balance["archer_placeholder"]?.requiredBuildingLevel, 1);
   assert.equal(balance["siege_placeholder"]?.requiredBuildingLevel, 2);
+  assert.equal(balance["archer_placeholder"]?.productionBuildingId, "archery_range");
+  assert.equal(balance["archer_placeholder"]?.requiredAge, "town");
 
   for (const [id, stats] of Object.entries(balance)) {
     if (id === "worker_placeholder") continue;
@@ -30470,7 +30479,6 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
   const kingdoms = new KingdomRegistry(["player", "enemy"], units, structures, { food: 3000, wood: 3000 }, 50);
   const wallet = kingdoms.get("player").wallet;
   const population = kingdoms.get("player").population;
-  let ageLevel = 1;
   const production = new BarracksProductionSystem(
     units,
     structures,
@@ -30478,7 +30486,7 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
     { guard_placeholder: { ...guard, trainingSeconds: 0.1 } },
     kingdoms,
     undefined,
-    () => guardQueueCapacityForAgeLevel(ageLevel),
+    (structure) => guardQueueCapacityForAgeLevel(structure.level),
   );
   assert.equal(guardQueueCapacityForAgeLevel(1), 5);
   assert.equal(guardQueueCapacityForAgeLevel(2), 10);
@@ -30495,14 +30503,14 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
   assert.equal(units.unitsOf("player").filter((unit) => unit.role === "guard").length, 5);
   assert.ok(navigation.plan(trained.position, trained.position), "guard spawns on a navigable exit");
 
-  ageLevel = 2;
+  completed.level = 2;
   for (let index = 0; index < 10; index += 1) assert.equal(production.queueGuard("player"), "queued");
   assert.equal(production.queueGuard("player"), "queue-full", "Town Barracks hold at most ten Guard orders");
   assert.equal(production.queuedCount("player"), 10);
   production.reset();
   assert.equal(population.snapshot().reserved, 0, "reset releases every waiting Town Guard order");
 
-  ageLevel = 3;
+  completed.level = 3;
   for (let index = 0; index < 20; index += 1) assert.equal(production.queueGuard("player"), "queued");
   assert.equal(production.queueGuard("player"), "queue-full", "third-age Barracks hold at most twenty Guard orders");
   production.reset();
@@ -30511,11 +30519,12 @@ check("RTS Barracks queues paid Guards by age capacity and trains them at a safe
   units.clear();
 });
 
-check("Faz 7 Barracks II is what unlocks the Archer and the Ram", () => {
+check("Faz 7 separates Archers into the Range and keeps Rams behind Barracks II", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
   );
   const barracksStats = buildings.barracks ?? assert.fail("barracks definition missing");
+  const rangeStats = buildings.archery_range ?? assert.fail("archery range definition missing");
   const structures = new PlacedStructureSystem();
   const barracks = structures.place("player", { ...barracksStats, constructionSeconds: 0.1 }, 0, 0);
   structures.advanceConstruction(barracks, 0.1);
@@ -30528,26 +30537,29 @@ check("Faz 7 Barracks II is what unlocks the Archer and the Ram", () => {
   );
   const production = new BarracksProductionSystem(
     units, structures, navigation, RTS_TEST_UNIT_BALANCE, kingdoms,
-    undefined, () => 5,
+    undefined, () => 5, undefined, "guard_placeholder", () => "town",
   );
 
   // Plan §2.10: the Archer arrives through a Barracks upgrade, not a new building.
   assert.equal(production.queueUnit("player", "guard_placeholder"), "queued", "T1 trains the Guard");
-  assert.equal(production.queueUnit("player", "archer_placeholder"), "requires-barracks-upgrade");
-  assert.equal(production.queueUnit("player", "siege_placeholder"), "requires-barracks-upgrade");
+  assert.equal(production.queueUnit("player", "archer_placeholder"), "no-completed-production-building");
+  assert.equal(production.queueUnit("player", "siege_placeholder"), "requires-production-building-upgrade");
   assert.equal(production.queueUnit("player", "worker_placeholder"), "unknown-unit", "the Barracks is not a Centre");
   assert.deepEqual(
-    production.trainableUnits("player").filter((unit) => unit.unlocked).map((unit) => unit.id),
+    production.trainableUnits(barracks).filter((unit) => unit.unlocked).map((unit) => unit.id),
     ["guard_placeholder"],
     "the HUD is told exactly which units a T1 Barracks can build",
   );
 
   barracks.level = 2;
-  assert.equal(production.queueUnit("player", "archer_placeholder"), "queued");
   assert.equal(production.queueUnit("player", "siege_placeholder"), "queued");
+  const range = structures.place("player", { ...rangeStats, constructionSeconds: 0.1 }, 12, 0);
+  structures.advanceConstruction(range, 0.1);
+  navigation.setBlockers(structures.navigationBlockers());
+  assert.equal(production.queueUnit("player", "archer_placeholder"), "queued");
   assert.deepEqual(
-    production.trainableUnits("player").filter((unit) => unit.unlocked).map((unit) => unit.id).sort(),
-    ["archer_placeholder", "guard_placeholder", "siege_placeholder"],
+    production.trainableUnits(range).filter((unit) => unit.unlocked).map((unit) => unit.id),
+    ["archer_placeholder"],
     "plan §45: one tier-2 Barracks covers the whole core roster — no Workshop",
   );
 
@@ -30906,7 +30918,7 @@ check("RTS workers, production and logistics never cross kingdoms", () => {
   const enemyBarracks = structures.place("enemy", { ...barracks, constructionSeconds: 0.1 }, -20, 0);
   structures.advanceConstruction(enemyBarracks, 0.1);
   const guards = new BarracksProductionSystem(units, structures, navigation, { guard_placeholder: { ...guard, trainingSeconds: 0.1 } }, kingdoms);
-  assert.equal(guards.queueGuard("player"), "no-completed-barracks", "the player has no barracks of its own");
+  assert.equal(guards.queueGuard("player"), "no-completed-production-building", "the player has no barracks of its own");
   assert.equal(guards.queueGuard("enemy"), "queued");
   const trained = guards.update(0.1);
   assert.deepEqual(trained.map((event) => event.type), ["completed"]);
@@ -30923,7 +30935,12 @@ check("RTS workers, production and logistics never cross kingdoms", () => {
 /** A neutral blackboard; each test perturbs only the fields it is about. */
 function aiTestBlackboard(overrides: Partial<AiBlackboard> = {}): AiBlackboard {
   return {
-    now: 0,
+    // Past the §53 (4) non-aggression window, for the same reason the economy
+    // below is settled: the default satisfies every term so a test perturbs
+    // exactly the one it is about. Left at 0, every Attack assertion would
+    // quietly become a test of the peace window instead. Read off the balance
+    // rather than pinned, so retuning the window cannot strand these tests.
+    now: AI_TEST_BALANCE.army.peaceSeconds + 1,
     // A settled four-resource economy at its income targets: every AI-2 term is
     // satisfied by default, so a test perturbs exactly the one it is about.
     resourceStocks: { food: 200, wood: 200, stone: 100, gold: 100 },
@@ -31077,7 +31094,10 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     unitBalance,
     kingdoms,
     (structure) => structureUpgrades.isUpgrading(structure),
-    (owner) => guardQueueCapacityForAgeLevel(centers.get(owner)?.level ?? 1),
+    (structure) => guardQueueCapacityForAgeLevel(structure.level),
+    undefined,
+    "guard_placeholder",
+    (owner) => ages.snapshot(owner).age,
   );
   const ai = new AiController({
     owner: "enemy",
@@ -31127,7 +31147,11 @@ function aiTestWorld(startingResources: StartingResources = { food: 200, wood: 2
     for (const event of structureUpgrades.update(dt)) {
       if (event.type === "completed" && event.structure.stats.territory) territory.refresh();
     }
-    ages.update(dt);
+    for (const event of ages.update(dt)) {
+      if (event.type !== "completed") continue;
+      structureUpgrades.resetOwner(event.owner);
+      territory.refresh();
+    }
     ai.update(dt);
   };
   return {
@@ -31261,6 +31285,31 @@ check("AI intent scoring reflects the §30 drivers and always names a reason", (
   assert.ok(scoreFor(threatened, "defend").score > 0);
   assert.equal(scoreFor(threatened, "attack").reason, "üs tehdit altında, saldırı beklemede");
   assert.ok(scoreFor(threatened, "attack").score < scoreFor(threatened, "defend").score);
+
+  // Plan §53 (4): inside the early-game window a rout-strength army still may
+  // not attack, and the reason says why rather than blaming the power ratio.
+  const { peaceSeconds } = AI_TEST_BALANCE.army;
+  assert.ok(peaceSeconds > 0, "§53 (4): the window must actually be authored");
+  const routArmy = { ownArmyPower: 30, knownEnemyArmyPower: 10 } as const;
+  const opening = aiTestBlackboard({ ...routArmy, now: peaceSeconds - 1 });
+  assert.equal(scoreFor(opening, "attack").score, 0, "§53 (4): no attack inside the window");
+  assert.match(scoreFor(opening, "attack").reason, /saldırmazlık süresi/);
+  // The boundary is inclusive on the open side: at exactly peaceSeconds the
+  // window is over, or "300 sn" would silently mean 301.
+  const justAfter = aiTestBlackboard({ ...routArmy, now: peaceSeconds });
+  assert.ok(scoreFor(justAfter, "attack").score > 0, "§53 (4): the window ends at peaceSeconds");
+  // The window suppresses starting a fight, never answering one: a base under
+  // attack during the opening must still score Defend.
+  const rushedInWindow = aiTestBlackboard({
+    now: peaceSeconds - 1,
+    baseThreat: 3,
+    ownArmyPower: 4,
+    knownEnemyArmyPower: 3,
+  });
+  assert.ok(
+    scoreFor(rushedInWindow, "defend").score > 0,
+    "§53 (4): defence stays live inside the window",
+  );
 
   // §59: the army may not leave while it is below the minimum base defence.
   const thinArmy = aiTestBlackboard({ ownArmyPower: 1 });
@@ -31435,8 +31484,15 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   const log = new AiDecisionLog();
   const director = new KingdomDirector(AI_TEST_BALANCE, log);
 
+  // This test is about the director's *time* rules (commitment, hysteresis,
+  // timeout) and uses Attack as the rival intent, so it runs on a clock past the
+  // §53 (4) non-aggression window — otherwise the rival scores 0 for a reason
+  // that has nothing to do with what is being tested. Only the origin moves; the
+  // deltas below are the commitment/hysteresis boundaries themselves.
+  const t0 = AI_TEST_BALANCE.army.peaceSeconds;
+
   // A fresh director commits immediately and explains why.
-  const first = director.evaluate(aiTestBlackboard({ now: 0, workerCount: 1 }));
+  const first = director.evaluate(aiTestBlackboard({ now: t0, workerCount: 1 }));
   assert.ok(first);
   assert.equal(first?.intent, "economy");
   assert.equal(first?.status, "running");
@@ -31444,7 +31500,7 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   assert.ok((log.latest?.reason ?? "").length > 0);
 
   // §7: inside the commitment window a better rival cannot take over.
-  const tempting = aiTestBlackboard({ now: 2, ownArmyPower: 9, knownEnemyArmyPower: 1, workerCount: 8 });
+  const tempting = aiTestBlackboard({ now: t0 + 2, ownArmyPower: 9, knownEnemyArmyPower: 1, workerCount: 8 });
   assert.equal(director.evaluate(tempting)?.id, first?.id, "plan is held during commitment");
   assert.equal(log.latest?.kind, "intent-held");
   assert.match(log.latest?.reason ?? "", /bağlılık süresi/);
@@ -31453,7 +31509,7 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   // the scoring coefficients into ai.json, so the boundary is read back off the
   // scorer rather than pinned to numbers that would rot the next time the data
   // is retuned — what this test is about is the margin rule, not the tuning.
-  const marginal = aiTestBlackboard({ now: 30, workerCount: 1, ownArmyPower: 12.7, knownEnemyArmyPower: 10 });
+  const marginal = aiTestBlackboard({ now: t0 + 30, workerCount: 1, ownArmyPower: 12.7, knownEnemyArmyPower: 10 });
   const marginalScores = scoreIntents(marginal, AI_TEST_BALANCE);
   const scoreOf = (intent: AiIntent) =>
     marginalScores.find((score) => score.intent === intent)?.score ?? assert.fail(`${intent} missing`);
@@ -31465,7 +31521,7 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   assert.match(log.latest?.reason ?? "", /histerezis/);
 
   // A decisively better intent past commitment does take over.
-  const decisive = aiTestBlackboard({ now: 40, workerCount: 8, ownArmyPower: 9, knownEnemyArmyPower: 1 });
+  const decisive = aiTestBlackboard({ now: t0 + 40, workerCount: 8, ownArmyPower: 9, knownEnemyArmyPower: 1 });
   const switched = director.evaluate(decisive);
   assert.equal(switched?.intent, "attack");
   assert.notEqual(switched?.id, first?.id);
@@ -31474,7 +31530,7 @@ check("KingdomDirector holds a plan through commitment and hysteresis, and emerg
   assert.match(log.latest?.reason ?? "", /economy → attack/);
 
   // §7: an emergency bypasses commitment entirely — no waiting.
-  const raided = aiTestBlackboard({ now: 41, baseThreat: 4, ownArmyPower: 9, emergencyFlags: ["base-under-attack"] });
+  const raided = aiTestBlackboard({ now: t0 + 41, baseThreat: 4, ownArmyPower: 9, emergencyFlags: ["base-under-attack"] });
   const emergency = director.evaluate(raided);
   assert.equal(emergency?.intent, "defend");
   assert.equal(log.latest?.kind, "emergency");
@@ -31656,6 +31712,45 @@ check("AI controller runs a headless accelerated match, decides on cadence, and 
     .filter((unit) => unit.role === "guard")
     .some((unit) => unit.pathWaypointCount > 0 || unit.attackTarget !== null || unit.moveTarget !== null);
   assert.ok(ordered, "§16: the army issues the same unit orders a player's click would");
+
+  // Plan §53 (4) end to end: the window is what the *army* obeys, not just the
+  // scorer. A dominant, unopposed army is the hardest case — every other reason
+  // to hold back is absent, so an assault here could only come from the window
+  // failing. Stepped on the same accelerated tick the match uses.
+  const attackMissions = ["assaultTarget", "harassEconomy"];
+  const peaceful = aiTestWorld();
+  // Staffed to the age's worker target so Economy is *satisfied* and Attack is
+  // the top intent on merit. Without this the AI is right to keep building: a
+  // worker-less kingdom scores Economy at 1.0, and the test would be measuring
+  // that competition instead of the window.
+  const workerTarget = AI_TEST_BALANCE.economy.workerTarget.settlement;
+  for (let index = 0; index < workerTarget; index += 1) {
+    peaceful.units.spawn("enemy", -6 + index * 2, -24, worker);
+  }
+  // Three Guards, not a horde: unopposed, that is already a 6:1 ratio and a
+  // maxed Attack. A bigger army would fill the 20-population cap alongside the
+  // workers and trip §7's PopulationBlocked emergency, which pins the director
+  // on Economy — the test would then pass or fail on a housing lock.
+  for (let index = 0; index < 3; index += 1) peaceful.units.spawn("enemy", -6 + index * 2, -20, guard);
+  const peaceSeconds = AI_TEST_BALANCE.army.peaceSeconds;
+  let elapsed = 0;
+  for (; elapsed < peaceSeconds - 1; elapsed += 0.5) {
+    peaceful.ai.update(0.5);
+    const mission = peaceful.ai.snapshot().mission;
+    assert.ok(
+      mission === null || !attackMissions.includes(mission),
+      `§53 (4): the army must not assault at ${elapsed.toFixed(1)}s (got ${mission})`,
+    );
+  }
+  // …and once the window closes it does go, so this is a delay and not a mute.
+  // Long enough to clear the director's cadence and §7 commitment window.
+  for (let index = 0; index < 200; index += 1) peaceful.ai.update(0.5);
+  const releasedSnap = peaceful.ai.snapshot();
+  const released = releasedSnap.mission;
+  assert.ok(
+    released !== null && attackMissions.includes(released),
+    `§53 (4): the army attacks once the window closes (got ${released}, intent ${releasedSnap.intent})`,
+  );
 
   // §57: an enemy at the base overrides whatever the director wanted. The
   // raider is placed relative to the AI's actual start so it stays inside
@@ -32008,11 +32103,12 @@ check("Faz 8 §53: the AI researches Barracks II and fields a mixed army", () =>
   // AI could research the tier. It fielded Guards and only Guards, whatever the
   // ratio asked for — the "AI karışık ordu üretiyor" criterion failed on a
   // missing executor rather than on a scoring rule.
-  assert.equal(world.ai.snapshot().upgradeStep, "done", "§53: the AI finished the tier its ratio needs");
+  const ranges = world.structures.ownedBy("enemy").filter((structure) => structure.stats.id === "archery_range");
+  assert.ok(ranges.some((structure) => structure.construction.complete), "the AI completes its Town-age Range");
   const barracks = world.structures.ownedBy("enemy").filter((structure) => structure.stats.id === "barracks");
   // KR-01: levelling is per-instance, so the AI raises a *single* Barracks to
   // level 2 — which is all `bestBarracksLevel` needs to unlock the Archer.
-  assert.ok(barracks.length > 0 && barracks.some((structure) => structure.level >= 2), "at least one Barracks is tier 2");
+  assert.ok(barracks.length > 0, "the first-age Barracks remains the Guard line");
 
   assert.ok(board.armyComposition.guard > 0, "§53: Guards are still the line");
   assert.ok(board.armyComposition.archer > 0, "§53: and the AI actually diversifies into Archers");
@@ -33333,7 +33429,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
           upgrading: false,
           roster: [
             { id: "guard_placeholder", stats: RTS_TEST_UNIT_STATS, unlocked: true },
-            { id: "archer_placeholder", stats: RTS_TEST_ARCHER_STATS, unlocked: false },
+            { id: "siege_placeholder", stats: { ...RTS_TEST_SIEGE_STATS, requiredAge: "settlement" }, unlocked: false },
           ],
           queue: {
             structureId: 1, queued: 0, capacity: 5,
@@ -33353,7 +33449,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   assert.equal(action(healthy, "train:guard_placeholder").enabled, true);
   assert.equal(action(healthy, "train:guard_placeholder").reason, null, "a legal action carries no excuse");
   assert.match(action(healthy, "train:guard_placeholder").cost ?? "", /50 Yiyecek · 1 Nüfus/);
-  const locked = action(healthy, "train:archer_placeholder");
+  const locked = action(healthy, "train:siege_placeholder");
   assert.equal(locked.enabled, false);
   assert.match(locked.reason ?? "", /Kışla Lv2 gerekir/);
   assert.ok(action(healthy, "rally"), "a Barracks can always be given a rally point");
@@ -33363,7 +33459,7 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   const severed = militaryPanel({ connected: false });
   assert.match(action(severed, "train:guard_placeholder").reason ?? "", /Kontrol Dışı/);
   assert.match(
-    action(severed, "train:archer_placeholder").reason ?? "",
+    action(severed, "train:siege_placeholder").reason ?? "",
     /Kışla Lv2 gerekir/,
     "the tier gate outranks the territory gate, as the production system reports it",
   );

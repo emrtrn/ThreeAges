@@ -61,7 +61,7 @@ Bu sürümde aşağıdaki üretim kararları alınmıştır:
 7. Tam telemetri sistemi yerine küçük ve hedefli test kayıtları kullanılacaktır.
 8. Fog of war çekirdek maç kanıtlandıktan sonra değerlendirilecektir; minimap küçük sahne ölçeği nedeniyle kapsamdan çıkarılmıştır (`SCOPE_LOG.md` SL-006).
 9. Süvari vertical slice kapsamından çıkarılmıştır.
-10. Okçu ayrı yapı yerine Kışla yükseltmesi veya Kışla II içinde açılacaktır.
+10. Okçu, yalnız Kasaba Çağında kurulabilen Okçuluk Alanı'nda üretilecektir; Muhafız Kışla Lv1, Koçbaşı ise Kasaba Çağı Kışla Lv2 kapısındadır.
 11. Tek kuşatma birimi kullanılacaktır.
 12. AI, `07_ENEMY_AI_DESIGN_v0.2.md` içindeki aşamalı modele göre üretilecektir.
 13. İlk AI yalnızca ekonomi kurar, bir kez genişler, tek ordu üretir ve saldırır.
@@ -132,6 +132,7 @@ Kaynak üret
 - Oduncu Kampı
 - Depo
 - Kışla
+- Okçuluk Alanı (yalnız Kasaba Çağı)
 - Karakol
 
 #### Sistemler
@@ -229,7 +230,7 @@ Bu soruya net biçimde “evet” denmeden Ürün B kapsamına geçilmez.
 - Kışla
 - Karakol
 - Kule, kapsam uygunsa
-- Kuşatma üretimi Kışla II veya tek seviyeli Atölye üzerinden
+- Koçbaşı üretimi Kasaba Çağı Kışla Lv2 üzerinden; ayrı Atölye sonraki kuşatma kadrosuna ertelenir
 
 #### Sistemler
 
@@ -402,7 +403,9 @@ Başarısızsa:
 Release Candidate öncesi:
 
 - [ ] 20–30 dakikalık hedef maç düzenli oluşuyor.
-- [ ] Üç çağ görsel ve mekanik olarak ayrılıyor.
+- [ ] Üç çağ görsel ve mekanik olarak ayrılıyor. (**Şu an ulaşılamaz:**
+      ThirdAge bina modeli yok — `SL-007`. İki çağ ayrışıyor: FirstAge/SecondAge
+      aileleri + her çağda Lv1–3 merdiveni.)
 - [ ] AI en az Normal profilde geçerli rakip sunuyor.
 - [ ] Bir maç baştan sona açıklama gerektirmeden oynanabiliyor.
 - [ ] Kritik durumların nedenleri UI üzerinden okunuyor.
@@ -1236,32 +1239,52 @@ Kapı A geçilmezse:
   `test:engine` veri süresi tamamlanmadan durumu değiştirmediğini doğrular.)
 - [x] Yükseltme sırasında merkezin davranışı. (İşçi kuyruğu iptal edilmez ancak
   Merkez yükseltmesi boyunca durur; Kasaba tamamlanınca aynı kuyruğu sürdürür.)
-- [x] Açılan yapı ve birlikler. (Kasaba tamamlanana kadar T2 Ev, Depo, Kışla ve
-  Karakol eylemleri paletten kilitlidir; tamamlanınca açılır. Yeni birlik türleri
-  ve Okçu yapısı Faz 7 birim kadrosu kapsamında tutulur.)
+- [x] Açılan yapı ve birlikler. (Yeni birlik türleri ve Okçu yapısı Faz 7 birim
+  kadrosu kapsamındadır.)
+  **Güncellendi (2026-07-18):** Bu kutu daha önce "Kasaba tamamlanana kadar T2 Ev,
+  Depo, Kışla ve Karakol eylemleri paletten kilitlidir" diyordu. O çağ kapısı
+  `KR-04` ile kaldırıldı: seviye yükseltmesi her çağda açıktır ve düğmeler
+  paletten binanın seçim paneline taşındı. Çağ artık yapı *seviyesi* değil, yapı
+  *sanat ailesi* ve yeni yapı/birlik türleri açar.
 - [x] Çağ bildirimi. (HUD çağ durumunu/geri sayımını gösterir; başlatma, iptal ve
-  tamamlanma mesajları `RtsBuildPalette` eylem alanına yazılır.)
+  tamamlanma mesajları `RtsBuildPalette` eylem alanına yazılır. Tamamlanma
+  bildirimi davranışı anlatır: "tüm binalarınız yeni çağ modeline geçti ve
+  seviye 1'e döndü".)
+- [x] Çağ atlama → tüm binalar yeni çağın Lv1'i. (`RtsApp` çağ-tamamlanma
+  handler'ı `rebuildForAge(owner)` ile sahibin bütün yapılarını yeni sanat
+  ailesiyle yeniden kurar; `structureUpgrades.resetOwner(owner)` uçuştaki
+  yükseltmeleri iade edip her binayı taban Lv1'e çeker — sağlık, ev nüfusu ve
+  karakol alanı taban değerlere döner. Oyuncu ve AI aynı yoldan geçer.)
 
 ### Yapı yükseltmeleri
 
-- [x] Tür-geneli tek seferlik T2 araştırması. (`StructureUpgradeSystem`: Ev, Depo,
-  Kışla veya Karakol düğmesi tek maliyet ve süreyle o türün tamamlanmış tüm
-  yapılarını yükseltir; sonra tamamlanan aynı tür yapılar da T2 başlar. Palet,
-  süren veya biten araştırmayı devre dışı ve soluk gösterir.)
-- [x] Merkez T1 → T2. (`ages.json` Kasaba sonucu: 450 sağlık, 22 kontrol yarıçapı
-  ve 9 sn yeni işçi üretimi; `TownCenter_FirstAge_Level2.gltf` tamamlanınca uygulanır.)
-- [x] Ev T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 70 Odun + 40 Taş,
-  35 sn; kapasite 5'ten 8'e, sağlık 450'ye çıkar ve Level 2 ev modeli uygulanır.)
-- [x] Depo T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 90 Odun + 40 Taş,
-  45 sn; yol bağlantısı kesilmeden sağlık 750'ye ve Level 2 Depo modeline geçer.)
-- [x] Kışla T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 140 Odun + 80 Taş,
-  50 sn; Muhafız kuyruğu durur, T2 900 sağlığa ve Level 2 modele geçer.)
-- [x] Karakol T1 → T2. (`StructureUpgradeSystem`: Kasaba çağında 110 Odun + 70 Taş,
-  55 sn; sağlık 1000'e, yalnız kontrol 20'ye ve yol bağlı kontrol 24'e çıkar;
-  Level 2 karakol modeli tamamlanınca uygulanır.)
-- [x] Placeholder model değişimi. (Tamamlanan tüm Faz 6 yapıları gerçek İlk Çağ
-  varlıklarına geçer; Taş Ocağı ve Altın Madeni `Mine.gltf`, Oduncu Kampı geçici
-  Depo modeli, diğer yapılar kendi T1/T2 modellerini kullanır.)
+> **Bu blok 2026-07-18'de yeniden yazıldı.** Faz 6'da üretilen sistem
+> tür-geneli, çağ kapılı, tek adımlı (T1→T2) bir araştırmaydı. Çağ/seviye
+> ayrıştırma çalışması onu **instance-bazlı, çağ kapısız, iki adımlı
+> (Lv1→Lv2→Lv3)** bir sisteme çevirdi. Aşağıdaki kutular teslim edilen *son*
+> durumu anlatır; Faz 6'nın orijinal T2 araştırması artık kodda yoktur.
+> Karar kaydı: `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`.
+
+- [x] Per-bina seviye yükseltmesi. (`StructureUpgradeSystem` anahtarı
+  `structure.id`; `start/snapshot/isUpgrading` `PlacedStructure` alır. Aynı
+  türden iki bina farklı seviyelerde olabilir. Yükseltme düğmesi binanın kendi
+  seçim panelindedir, palette değil.)
+- [x] Çağ kapısı kaldırıldı (`KR-04`). (`isTown` şartı ve tür-geneli
+  `completedUpgrades` semantiği silindi; seviye merdiveni her çağda açıktır.)
+- [x] Üç seviye. (`buildings.json` `levels: BuildingLevelBalance[]`; Ev, Depo,
+  Kışla, Karakol ve Tarla için Lv2 + Lv3 tanımlı. Her giriş `cost`,
+  `durationSeconds`, `maxHealth` ve opsiyonel `populationCapacity` / `territory`
+  taşır.)
+- [x] Merkez çağ katmanı olarak kaldı. (Per-bina merdivenin dışında; `level`
+  Yerleşim = 1, Kasaba = 2. `ages.json` Kasaba sonucu 450 sağlık, 22 kontrol
+  yarıçapı ve 9 sn işçi üretimi verir; model `TownCenter_SecondAge_Level2`.)
+- [x] Seviyesiz yapılar bilinçli olarak dışarıda. (Taş Ocağı ve Altın Madeni
+  `Mine`, Oduncu Kampı stand-in — çağ/level mesh varyantı yok, `levels` tanımı
+  da yok, dolayısıyla seviye düğmesi çıkmıyor.)
+- [x] Yükseltme ilerleme çubuğu. (`SelectionProgress` + `SelectionPanelContent.progress`;
+  `StructureUpgradeView.progress` adımın `durationSeconds` ve `remainingSeconds`
+  değerinden hesaplanır. Mekanizma genel — ileride inşaat ilerlemesi de aynı
+  alana bağlanabilir. Plan dışı, kullanıcı isteğiyle eklendi.)
 
 ### Refah kararı
 
@@ -1298,7 +1321,8 @@ Görevler:
 ## 43. Kabul Kriterleri
 
 - [x] Dört kaynak farklı kullanım alanına sahip. (`test:engine`: Yiyecek işçi,
-  Odun yapı/Muhafız, Taş T2 yapı ve Altın Kasaba geçişi kararlarına bağlanır.)
+  Odun yapı/Muhafız, Taş seviye yükseltmeleri ve Altın Kasaba geçişi kararlarına
+  bağlanır.)
 - [ ] Oyuncu yalnız güvenli kaynaklarla bütün maçı bitiremiyor.
 - [x] Kasabaya geçiş gerçek fırsat maliyeti oluşturuyor. (`AgeSystem` dört kaynak
   maliyetini atomik rezerve eder; testte başarılı başlangıç sonrası tüm stok sıfırdır.)
@@ -1340,7 +1364,7 @@ Muhafız, Okçu ve Kuşatma arasında okunabilir bir karşıtlık sistemi oluşt
 
 ### Üretim
 
-- [x] Okçuyu Kışla II içinde aç. (`requiredBuildingLevel: 2`; kapı veride,
+- [x] Okçuyu Kasaba Çağı Okçuluk Alanı Lv1 içinde aç; Koçbaşı Kasaba Çağı Kışla Lv2 içindedir. (`productionBuildingId`, `requiredAge` ve `requiredBuildingLevel` kapıları veridedir,
   kodda bina kimliği kontrolü yok.)
 - [x] Kuşatma üretimini tek seviyeli Atölye veya Kışla II içinde çöz. (Kışla II
   seçildi; ayrı Atölye yapısı kapsam dışında kaldı.)
@@ -1975,6 +1999,17 @@ fiil ancak bunu söylerse dürüst olur. Dört adet birbirinin kopyası
 `startStructureUpgrade(buildingId)` oldu; aralarındaki tek fark binanın zaten
 veride duran etiketiydi.
 
+> **Sonradan geçersiz kaldı (2026-07-18).** Yukarıdaki "itiraf eden etiket"
+> çözümü, fiilin tür-geneli olmak *zorunda* olduğu varsayımına dayanıyordu.
+> Çağ/seviye ayrıştırma çalışması o zorunluluğu kaldırdı: yükseltme artık
+> gerçekten bina instance'ının üzerinde, dolayısıyla itiraf edecek bir şey de
+> kalmadı. Etiket `Tüm Kışla Yapılarını T2 Yükselt` → **`Lv{n+1}'e Yükselt`**
+> oldu ve yanında mevcut seviye, maliyet ve kazanım satırı
+> (`Lv2: 450 can (+150) · 8 nüfus`) duruyor. Panel diline geçen diğer değişimler:
+> detay başlığı `T{n}` → `Lv{n}` ("Ev Lv2"), birim kapısı `Kışla T{n} gerekir` →
+> `Kışla Lv{n} gerekir`, ve palet çağ readout'u artık çağ-milestone davranışını
+> anlatıyor (eski "T2 ... için Kasaba Çağı gerekir" kapı metni silindi).
+
 **§52'nin palet ölçüsü.** Kriter paleti adıyla suçluyordu: "sağ sütunun tamamını
 (1366×768'de 647px) kaplayan Faz 2 yığını". Ölçüldü: **462px, ekranın %14.1'i** —
 üstünde 306px harita açıldı. Playwright artık bunu ölçüyor, yani fiiller palete
@@ -2238,7 +2273,7 @@ oynamaktır. 1 ve 2 bitti — yani sıra artık 3'te: bilinen hata düzeltildi v
   niyeti veriyle kapalı" notu Faz 8'de geçersiz kaldı, yani "AI genişliyor" ve
   "iki çağ" kutuları veriyle ölü değildi, oynanarak sınandı. Tek bulgu 4. maddede.
 
-- [ ] **4. Erken oyun saldırmazlık süresi (denge bulgusu — early rush).**
+- [x] **4. Erken oyun saldırmazlık süresi (denge bulgusu — early rush).**
   Oynanış testinin çıktısı: AI açılışta hemen bir Kışla kurup Muhafızlarını
   gönderiyor ve oyuncu şehrini kurmaya çalışırken onu eziyor. Oyuncunun tek
   kazanma yolu *ondan önce* Kışla kurup saldırmak — yani maçın sonucu ilk
@@ -2259,7 +2294,44 @@ oynamaktır. 1 ve 2 bitti — yani sıra artık 3'te: bilinen hata düzeltildi v
   bu alan `balance/ai.json` içinde, `LayoutPlacement`/skeleton/effect allowlist
   yüzeylerinden biri değil — CLAUDE.md'deki `tools/saveValidator.ts` uyarısı bu
   dosyaya uygulanmaz; yalnız AI config loader'ının yeni alanı okuduğundan emin ol.
-  **Sahiplik:** §53'te sürmekte olan çağ/seviye denge çalışmasına taşındı.
+  **Yapıldı (2026-07-18).** `balance/ai.json` → `army.peaceSeconds: 300`; tip
+  `AiBalance.army.peaceSeconds`, doğrulama `validateAiBalance` (`>= 0`; 0 =
+  pencere kapalı, yani eski davranış hâlâ ifade edilebilir). Kapı **tek yerde**:
+  `intentScorer.scoreAttack` pencere içinde `rawScore: 0` ve nedenini adıyla
+  söylüyor (`erken oyun saldırmazlık süresi (N sn kaldı)`). Ordu yöneticisine
+  ikinci bir kopya konmadı — `armyManager` zaten `intent !== "attack"` iken
+  `regroup`'a düşüyor, dolayısıyla bastırılan niyet hedef seçimini de bastırıyor
+  ve sürüklenecek ikinci bir pencere yok.
+  **Savunma kasıtlı olarak dokunulmadı:** `defend` ve `baseThreat` yolları açık,
+  yani AI kavgaya *başlamakta* yavaş, kendisine yapılan rush'a cevap vermekte
+  değil.
+  **Süre neden 300 sn:** §42'nin authored ilk-temas hedefi 5–9 dk; pencere o
+  aralığın alt ucuna oturuyor, yani AI authored temas penceresinden önce
+  saldıramıyor. Değer veride, kodda sabit değil.
+  **Ölçüm:** `bb.now` (maç simülasyon saniyesi, `RtsMatchClock` ile aynı tik ve
+  aynı reset) — pencere hızla ölçekleniyor, duraklamada donuyor ve saatin ikinci
+  bir kopyası tutulmuyor.
+  **Doğrulama:** `test:engine` 1040 check yeşil, `build:verify` yeşil. Skorer
+  seviyesinde pencere içi/dışı ve sınır (`peaceSeconds`'ta pencere biter);
+  entegrasyon seviyesinde headless maçta baskın bir ordu pencere boyunca **her
+  tikte** `assaultTarget`/`harassEconomy`'ye geçmiyor, pencere kapanınca geçiyor
+  (yani gecikme, susturma değil). Testi yazarken iki yanlış kurulum ölçümle
+  bulundu ve düzeltildi: nüfus tavanını dolduran ordu §7 `population-blocked`
+  acil durumunu tetikleyip direktörü Economy'ye kilitliyordu, ve işçisiz bir
+  krallıkta Economy zaten 1.0 skorluyor — ikisi de pencereyi değil o yarışı
+  ölçerdi.
+  **Yan etki:** `aiTestBlackboard` varsayılanı `now: peaceSeconds + 1` oldu ve
+  direktörün bağlılık/histerezis testi `t0 = peaceSeconds` üzerine kaydırıldı —
+  aksi halde Attack'ı kullanan her mevcut iddia sessizce pencere testine
+  dönüşürdü.
+
+- [x] **5. Çağ/seviye ayrıştırma (tamamlandı 2026-07-18).** 4. maddeyle birlikte
+  başlatılan denge çalışması, asıl sorunun denge değil **model** olduğunu
+  gösterdi: çağ atlama ile bina seviyesi tek harekete sıkışmıştı, SecondAge ve
+  Level3 modelleri hiç kullanılmıyordu. İki eksen ayrıldı (`02 §25`, `04 §31`),
+  per-bina Lv1–3 merdiveni ve çağ atlayınca Lv1'e sıfırlama uygulandı.
+  Faz 0–4 kaydı: `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`.
+  `npm run build:verify` yeşil (1029 check).
 
 Kapı B geçildiğine göre aşağıdakiler artık ana üretim hattına alınabilir (Faz 10+):
 
@@ -2269,8 +2341,15 @@ Kapı B geçildiğine göre aşağıdakiler artık ana üretim hattına alınabi
 - minimap,
 - final asset polish.
 
-Erken oyun saldırmazlık süresi (4. madde) bunlardan bağımsız, sürmekte olan
-çağ/seviye denge çalışmasının içinde ele alınır.
+Erken oyun saldırmazlık süresi (4. madde) bunlardan bağımsızdı ve tamamlandı.
+**Açık kalan:** pencerenin 300 sn değeri oynanışla henüz sınanmadı — açılış
+çeşitliliğinin gerçekten geri geldiğini görmek için yeni bir maç turu gerekiyor
+(§70 denge önceliklerine bağlanmalı).
+
+**Üçüncü çağ için uyarı.** Yukarıdaki listenin ilk maddesi artık kodla değil,
+**sanatla** bloklu: arşivde ThirdAge bina modeli yok (`SL-007`). Sistem N-çağa
+hazır kuruldu — çağ→aile eşlemesi veriden çözülüyor — ama üçüncü çağ ancak sanat
+kaynağı netleşince bağlanabilir.
 
 ---
 
@@ -2286,12 +2365,27 @@ Erken oyun saldırmazlık süresi (4. madde) bunlardan bağımsız, sürmekte ol
 
 ### Krallık çağı
 
-- [ ] Krallık çağ gereksinimleri
-- [ ] Merkez T3
+> **Ön koşul — sanat (2026-07-18).** Bu faz kodla değil, **asset ile**
+> bloklu: arşivde `ThirdAge` bina modeli yok (`SL-007`). Çağ sistemi N-çağa
+> hazır (`rtsBuildingArt.ts` çağ→aile eşlemesini veriden çözer), yani bağlama
+> işi küçük; eksik olan modellerin kendisi. Bu karar verilmeden aşağıdaki
+> kutuların hiçbiri başlatılmamalıdır.
+>
+> Ayrıca kalemler yeni ilerleme modeline göre yeniden yazıldı: "Merkez T3" ve
+> "Karakol T3" eski tek-eksenli modelin (çağ = seviye) kalıntılarıydı. Üçüncü
+> çağ artık `T3` demek değil, **`ThirdAge` sanat ailesi + o ailenin Lv1–3
+> merdiveni** demektir.
+
+- [ ] ThirdAge asset kararı (üret / satın al / SecondAge varyantıyla idare et)
+- [ ] Krallık çağ gereksinimleri (`ages.json` üçüncü giriş)
+- [ ] Merkez'in Krallık katmanı (`level = 3`, `TownCenter_ThirdAge_Level3`)
+- [ ] ThirdAge Lv1–3 model matrisi (bina başına 3 model)
 - [ ] Nüfus üst sınırı artışı
 - [ ] Üst seviye üretim değerleri
 - [ ] Kuşatma erişimi, daha önce açılmadıysa
-- [ ] Karakol T3 veya dayanıklılık yükseltmesi, yalnız gerekliyse
+- [ ] Çağ başı stat ölçeklemesi (`KR-06` ile ertelenmişti — üçüncü çağ eklenirken
+      yeniden değerlendirilmeli; şu an çağ atlama stat kazancı vermiyor, kazanımı
+      seviye adımları taşıyor)
 
 ### Maç sonlandırma baskısı
 
@@ -2454,16 +2548,21 @@ Kanıtlanmış oynanış sistemlerini Quaternius assetleriyle sunulabilir hale g
 
 Görevler:
 
-- [ ] T1 modelleri
-- [ ] T2 modelleri
-- [ ] T3 ana modelleri
+- [x] FirstAge Lv1–3 modelleri (`{Bina}_FirstAge_Level{1..3}`)
+- [x] SecondAge Lv1–3 modelleri (`{Bina}_SecondAge_Level{1..3}`)
+- [ ] ThirdAge Lv1–3 modelleri — **asset yok**, bkz. §55 / `SL-007`
 - [ ] Takım renkleri
 - [ ] Seçim ve sağlık göstergeleri
 - [ ] İnşaat placeholder geçişi
 - [ ] Hasar efekti
 - [ ] Yıkım geçişi
 
-Her yapının üç özel modeli bulunmak zorunda değildir. Gerekirse:
+**Model matrisi tek eksenli üçlü değil, çağ × seviye çarpımıdır** (`02 §25.3`):
+bina başına **çağ sayısı × 3** model. İki çağ bağlı olduğu için bugün altı model
+kullanılıyor. Taş Ocağı, Altın Madeni ve Oduncu Kampı bu matrisin dışında —
+çağdan ve seviyeden bağımsız tek mesh kullanırlar.
+
+Her yapının her seviye için özel modeli bulunmak zorunda değildir. Gerekirse:
 
 - prop ekleme,
 - ölçek ve malzeme varyantı,
@@ -3459,8 +3558,9 @@ Vertical slice tamamlanmıştır yalnızca:
 
 - [x] Yerleşim
 - [x] Kasaba
-- [x] Merkez T2
-- [x] Kışla T2
+- [x] Merkez çağ katmanı (Yerleşim = 1, Kasaba = 2)
+- [x] Per-bina Lv1–3 merdiveni (Ev, Depo, Kışla, Karakol, Tarla)
+- [x] Çağ atlama → tüm binalar yeni çağın Lv1'i
 
 ### Savaş
 
@@ -3499,8 +3599,8 @@ Vertical slice tamamlanmıştır yalnızca:
 
 ### İlerleme
 
+- [ ] ThirdAge asset kararı (`SL-007` — Krallık çağının ön koşulu)
 - [ ] Krallık çağı
-- [ ] Merkez T3
 - [ ] Geç oyun bitirme baskısı
 
 ### Koşullu

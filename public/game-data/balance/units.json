@@ -13,6 +13,8 @@
     "chaseRange": 14,
     "damageMultipliers": { "light": 1, "heavy": 1.2, "structure": 0.35 },
     "trainingSeconds": 28,
+    "productionBuildingId": "barracks",
+    "requiredAge": "settlement",
     "requiredBuildingLevel": 1,
     "cost": { "food": 60, "wood": 20 },
     "populationCost": 1
@@ -31,7 +33,9 @@
     "chaseRange": 11,
     "damageMultipliers": { "light": 1.2, "heavy": 0.8, "structure": 0.25 },
     "trainingSeconds": 34,
-    "requiredBuildingLevel": 2,
+    "productionBuildingId": "archery_range",
+    "requiredAge": "town",
+    "requiredBuildingLevel": 1,
     "cost": { "food": 50, "wood": 40 },
     "populationCost": 1
   },
@@ -49,6 +53,8 @@
     "chaseRange": 8,
     "damageMultipliers": { "light": 0.35, "heavy": 0.3, "structure": 2.5 },
     "trainingSeconds": 75,
+    "productionBuildingId": "barracks",
+    "requiredAge": "town",
     "requiredBuildingLevel": 2,
     "cost": { "wood": 140, "stone": 100, "gold": 60 },
     "populationCost": 3
@@ -67,6 +73,8 @@
     "chaseRange": 0,
     "damageMultipliers": { "light": 1, "heavy": 1, "structure": 1 },
     "trainingSeconds": 25,
+    "productionBuildingId": "command_center",
+    "requiredAge": "settlement",
     "requiredBuildingLevel": 1,
     "cost": { "food": 50 },
     "populationCost": 1

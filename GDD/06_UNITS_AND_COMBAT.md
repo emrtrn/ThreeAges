@@ -1925,7 +1925,8 @@ Muhafız + Okçu grubu
 
 - Süvari vertical slice içinde kesin olarak bulunacak mı?
 - Kuşatma birimi koçbaşı mı, mancınık mı olmalı?
-- Okçu ayrı binada mı, Kışla II içinde mi açılmalı?
+- ~~Okçu ayrı binada mı, Kışla II içinde mi açılmalı?~~ **Karar verildi:** ayrı
+  bina — Okçuluk Alanı, yalnız Kasaba çağı (`02 §30.1`, `SL-007`).
 - Keşif için özel birim gerekli mi?
 
 ### Hasar modeli

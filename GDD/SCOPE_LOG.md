@@ -110,6 +110,37 @@ Format:
 - **İlgili:** `13 §60`, `UI_PRODUCTION_PLAN_v0.1.md §6.8/§13`,
   `10_CAMERA_CONTROLS_AND_UI.md` kapsam hizalaması.
 
+### SL-007 — Çağ ve bina seviyesi ayrıldı; üçüncü çağ sanat kaynağına bağlandı (2026-07-18)
+
+- **Karar:** İlerleme tek eksenden (çağ = bina seviyesi) **iki bağımsız eksene**
+  çevrildi: çağ sanat ailesini (`FirstAge`/`SecondAge`) ve yeni yapı/birlik
+  açılımını belirler; bina seviyesi (Lv1–3) çağın *içinde*, **bina instance'ı
+  başına** yükseltilir ve çağ kapısı yoktur. Çağ atlayınca sahibin tüm yapıları
+  yeni çağın Lv1 modeline geçer ve seviyeleri sıfırlanır. **Üçüncü çağ
+  (Krallık) ertelendi:** arşivde `ThirdAge` bina modeli yok.
+- **Kapsam etkisi:** Dahil (iki çağ × üç seviye, uygulandı) / **Ertelendi**
+  (üçüncü çağ — sanat kaynağı kararına bağlı).
+- **Gerekçe:** Eski model SecondAge ve Level3 modellerini hiç kullanmıyordu:
+  çağ atlama `structure.level`'ı 1'den 2'ye çekiyor, arşivdeki iki çağ ailesinin
+  ve üçüncü seviyenin tamamı ölü kalıyordu. Ayrıştırma hem bu varlıkları oyuna
+  sokuyor hem de seviye yükseltmesini çağ beklemeden anlamlı bir karar haline
+  getiriyor (`KR-04`). Üçüncü çağ **kod değil sanat** bloklu — çağ→aile eşlemesi
+  veriden çözüldüğü için (`rtsBuildingArt.ts`) bağlama işi küçüktür; eksik olan
+  modellerin kendisidir. Oyunun adı "Üç Çağ" olduğu için bu kalıcı bir kesinti
+  değil, sanat kararına bağlı bir ertelemedir.
+- **Yan etki ve çözümü (kapandı):** Seviye kapısı kalkınca `Kışla Lv2`
+  gerektiren Okçu ve Koçbaşı, Yerleşim çağında da açılabilir hale geldi —
+  birim açılımı çağ temposundan koptu. Kapatıldı: birim verisine **ayrı bir çağ
+  kapısı** eklendi (`UnitBalanceStats.productionBuildingId` + `requiredAge` +
+  `requiredBuildingLevel`), yapılara da opsiyonel `requiredAge`. Okçu ayrıca
+  Kışla'dan çıkarılıp kendi binasına taşındı (`archery_range` — Okçuluk Alanı,
+  yalnız Kasaba çağı), yani `13 §2` maddesi 10'un "Okçu ayrı yapı yerine Kışla
+  II içinde" kapsam kararı geri alındı. Böylece hem yapı hem birim tarafında
+  kapı **çağ + seviye çifti**dir. Tablo: `02 §30.1`.
+- **İlgili:** `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`,
+  `02 §24/§25/§30`, `04 §31`, `11 §7/§10/§83`, `12 §26/§29/§38`,
+  `13 §42/§53/§55/§64`.
+
 ---
 
 ## 3. Referans — Scope-Cut Sırası
@@ -138,3 +169,10 @@ bölümde listelidir.
 
 - SL-006 ile minimap küçük sahne ölçeği nedeniyle bütün ürün kapsamından
   çıkarıldı; minimapsiz navigasyon yüzeyleri UI planına bağlandı.
+
+### Sürüm 0.4 (2026-07-18)
+
+- SL-007 ile çağ/seviye ayrıştırması kayda geçirildi ve üçüncü çağ ThirdAge
+  sanat kararına bağlandı. GDD 02, 04, 11, 12 ve 13 buna göre güncellendi.
+- SL-007'nin yan etkisi (birim kapısının çağdan kopması) ayrı çağ kapısı ve
+  Okçuluk Alanı ile kapatıldı; `02 §30.1` ve `04 §8.2` eklendi.

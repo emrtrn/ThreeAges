@@ -8,6 +8,7 @@
     "hysteresisMargin": 0.25
   },
   "army": {
+    "peaceSeconds": 300,
     "attackPowerRatio": 1.1,
     "riskyAttackPowerRatio": 0.9,
     "retreatPowerRatio": 0.8,

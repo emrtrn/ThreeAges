@@ -189,6 +189,7 @@ export class AiController {
       options.barracksProduction,
       options.balance,
       options.unitIdForRole,
+      (buildingId, now) => { this.builds.request(buildingId, now); },
     );
     this.upgrades = new AiUpgradeManager(
       options.owner,

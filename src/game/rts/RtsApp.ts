@@ -101,7 +101,7 @@ import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { roadCellTouchingFootprint } from "./economy/depotLogisticsSystem";
 import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import type { UnitOwner } from "./units/unit";
-import { BarracksProductionSystem, guardQueueCapacityForAgeLevel } from "./structures/barracksProductionSystem";
+import { BarracksProductionSystem, unitQueueCapacityForBuildingLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
 import { StructureUpgradeSystem } from "./structures/structureUpgradeSystem";
 import { RoadGraph } from "./roads/roadGraph";
@@ -345,11 +345,12 @@ export class RtsApp {
       this.options.unitBalance,
       this.kingdoms,
       (structure) => this.structureUpgrades.isUpgrading(structure),
-      (owner) => guardQueueCapacityForAgeLevel(this.centers.get(owner)?.level ?? 1),
+      (structure) => unitQueueCapacityForBuildingLevel(structure.level),
       // Plan §45: a Barracks whose ground has been taken stops training, the
       // same severance rule the economy's producers already live under.
       (structure) => this.territory.ownerAt(structure.x, structure.z) === structure.owner,
       PLACEHOLDER_GUARD_ID,
+      (owner) => this.ages.snapshot(owner).age,
     );
     this.marketTrade = new MarketTradeSystem(
       this.options.buildingBalance,
@@ -463,6 +464,11 @@ export class RtsApp {
     this.buildPalette = new RtsBuildPalette(
       this.options.buildingBalance,
       (id) => {
+        const requiredAge = this.options.buildingBalance[id]?.requiredAge;
+        if (requiredAge === "town" && this.ages.snapshot(PLAYER_OWNER).age !== "town") {
+          this.buildPalette.setActionMessage("Okçuluk Alanı Kasaba Çağında açılır.");
+          return;
+        }
         this.roadPlacement.cancel();
         this.syncRoadUi();
         this.placement.begin(id);
@@ -972,8 +978,8 @@ export class RtsApp {
       if (event.structure.owner !== PLAYER_OWNER) continue;
       this.buildPalette.setActionMessage(
         event.type === "completed"
-          ? `${event.label} Kışla'dan çıktı.`
-          : `${event.label} çıkışı engelli; Kışla çevresini açın.`,
+          ? `${event.label} ${event.structure.stats.label}'ndan çıktı.`
+          : `${event.label} çıkışı engelli; ${event.structure.stats.label} çevresini açın.`,
       );
     }
     // The AI decides on the same scaled match delta as every other system, so
@@ -1514,7 +1520,7 @@ export class RtsApp {
         };
       }
     }
-    if (structure.stats.id === "barracks") {
+    if (this.barracksProduction.trainableUnits(structure).length > 0) {
       return {
         kind: "military",
         queue: this.barracksProduction.queueSnapshot(structure),
@@ -1527,7 +1533,7 @@ export class RtsApp {
         upgrading: this.structureUpgrades.isUpgrading(structure),
         // The tier gate comes from the system that enforces it, never from a
         // level check written again here (plan §45: the gate lives in data).
-        roster: this.barracksProduction.trainableUnits(structure.owner),
+        roster: this.barracksProduction.trainableUnits(structure),
       };
     }
     // Population is the only thing a House does, and the panel reads it the same
@@ -1681,21 +1687,26 @@ export class RtsApp {
 
   private queueUnit(unitId: string): void {
     const label = this.options.unitBalance[unitId]?.label ?? unitId;
-    const requiredLevel = this.options.unitBalance[unitId]?.requiredBuildingLevel ?? 2;
+    const stats = this.options.unitBalance[unitId];
+    const requiredLevel = stats?.requiredBuildingLevel ?? 2;
+    const buildingLabel = stats
+      ? this.options.buildingBalance[stats.productionBuildingId]?.label ?? stats.productionBuildingId
+      : "askerî yapı";
     const result = this.barracksProduction.queueUnit(PLAYER_OWNER, unitId);
     const queuedCount = this.barracksProduction.queuedCount(PLAYER_OWNER);
     const queueCapacity = this.barracksProduction.queueCapacity(PLAYER_OWNER);
     const message: Record<typeof result, string> = {
       queued: `${label} üretim kuyruğa alındı (${queuedCount}/${queueCapacity}).`,
-      "unknown-unit": `${label} Kışla'da üretilemiyor.`,
-      "no-completed-barracks": "Önce tamamlanmış bir Kışla kurun.",
-      "requires-barracks-upgrade": `${label} için Kışla Lv${requiredLevel} yükseltmesi gerekir.`,
+      "unknown-unit": `${label} askerî yapıda üretilemiyor.`,
+      "no-completed-production-building": `Önce tamamlanmış bir ${buildingLabel} kurun.`,
+      "requires-town-age": `${label} Kasaba Çağında açılır.`,
+      "requires-production-building-upgrade": `${label} için ${buildingLabel} Lv${requiredLevel} yükseltmesi gerekir.`,
       "queue-full": `Üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
-      "exit-blocked": `${label} çıkışı engelli; Kışla çevresini açın.`,
+      "exit-blocked": `${label} çıkışı engelli; ${buildingLabel} çevresini açın.`,
       "insufficient-resources": `${label} için kaynak yetersiz.`,
       "population-full": "Nüfus dolu: önce Ev kurun.",
-      "structure-upgrading": `Kışla seviye yükseltmesi sürerken ${label} üretimi durur.`,
-      disconnected: "Kışla kontrol alanınızın dışında kaldı; üretim durdu.",
+      "structure-upgrading": `${buildingLabel} seviye yükseltmesi sürerken ${label} üretimi durur.`,
+      disconnected: `${buildingLabel} kontrol alanınızın dışında kaldı; üretim durdu.`,
     };
     this.buildPalette.setActionMessage(message[result]);
     this.syncPlacementUi();

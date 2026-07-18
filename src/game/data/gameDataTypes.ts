@@ -79,6 +79,9 @@ export type UnitRoleId = "guard" | "archer" | "siege" | "worker";
 /** Melee lands instantly at range; ranged spawns a tracer toward the target. */
 export type UnitAttackType = "melee" | "ranged";
 
+/** Buildings that can own a unit production queue. */
+export type ProductionBuildingId = "command_center" | "barracks" | "archery_range";
+
 /** Per-armour-class damage multipliers — the GDD 12 §33 soft-counter table. */
 export type UnitDamageMultipliers = Readonly<Record<UnitArmorClass, number>>;
 
@@ -118,10 +121,11 @@ export interface UnitBalanceStats {
   readonly damageMultipliers: UnitDamageMultipliers;
   /** Seconds a completed production building needs to train this unit. */
   trainingSeconds: number;
-  /**
-   * Minimum tier of the training building. Archers and siege sit behind Barracks
-   * II (plan §2.10 / §45), so the gate is data instead of a hard-coded id check.
-   */
+  /** The building that trains this unit. */
+  readonly productionBuildingId: ProductionBuildingId;
+  /** The earliest settlement age that may train this unit. */
+  readonly requiredAge: SettlementAge;
+  /** Minimum in-age tier of {@link productionBuildingId}. */
   readonly requiredBuildingLevel: number;
   /** Resources reserved when this unit enters a production queue. */
   readonly cost: StartingResources;
@@ -142,6 +146,8 @@ export interface BuildingBalanceStats {
   /** Resource reservation is implemented in the following Phase 2 slice. */
   readonly cost: StartingResources;
   readonly constructionSeconds: number;
+  /** The earliest settlement age in which this building may be placed. */
+  readonly requiredAge?: SettlementAge;
   /**
    * Durability of the placed structure, following the GDD §37 health classes
    * (`12_BALANCE_AND_GAME_DATA.md`). Required rather than optional: a building
@@ -443,6 +449,20 @@ export interface AiBalance {
     readonly hysteresisMargin: number;
   };
   readonly army: {
+    /**
+     * Vertical Slice Plan v0.2 §53 (4): match seconds before the AI may attack
+     * at all — the early-game non-aggression window.
+     *
+     * Playtesting for Kapı B found the opening decided the match: the AI built a
+     * Barracks immediately and pushed, so the only winning reply was to rush
+     * first, and §9's "12–25 dakika" window only appeared when neither side did.
+     * The window buys the economy/expansion/age openings enough room to exist.
+     *
+     * Measured in *simulation* seconds, so §38's speed control scales it and a
+     * pause freezes it. Defend is untouched: this suppresses the attack intent,
+     * never the AI's ability to answer a rush against itself.
+     */
+    readonly peaceSeconds: number;
     /** §62: attack when own/enemy power is at or above this. */
     readonly attackPowerRatio: number;
     /** §62: below `attackPowerRatio`, only a high-value target justifies attacking. */

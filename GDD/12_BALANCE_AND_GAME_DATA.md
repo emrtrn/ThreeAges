@@ -5,6 +5,12 @@
 > **Sürüm:** 0.1  
 > **Durum:** İlk taslak
 
+> **İlerleme Modeli Revizyonu (2026-07-18):** §26, §29 ve §38 güncellendi. Seviye
+> katsayıları artık **çağ içi** merdivene (Lv1–3) uygulanır; çağ ekseninin ayrı
+> katsayısı `KR-06` gereği şu an 1.00'dır (§29.1). Çağ atlama binaları
+> yükseltmez, **Lv1'e sıfırlar**. Model: `02 §25`. Denge verisi:
+> `public/game-data/balance/buildings.json` (`levels: BuildingLevelBalance[]`).
+>
 > **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. **Önemli:** Veri klasörü konumu (`/game-data/` vs Forge'un `public/` + save-validator pipeline'ı) henüz kilitlenmemiştir; bu bir açık teknik karardır — bkz. `TECH_DECISIONS.md`. Tüm sayılar başlangıç hipotezidir.
 
 ---
@@ -402,10 +408,16 @@ Ek koşullar:
 
 - gelişmiş askerî yapı,
 - aktif dış bölge,
-- Seviye II yapılar,
 - yüksek Refah.
 
-Çağ atlama tamamlandığında tüm yapılar otomatik yükseltilmez.
+**Çağ atlama tamamlandığında sahibin tüm yapıları yeni çağın Lv1 modeline geçer
+ve seviyeleri 1'e sıfırlanır** (`02 §24`). Çağ atlamanın bina-seviyesi önkoşulu
+yoktur; bu yüzden yukarıdaki listeden "Seviye II yapılar" koşulu kaldırıldı.
+
+> **v0.1'den değişiklik.** Bu bölüm daha önce "çağ atlama tamamlandığında tüm
+> yapılar otomatik yükseltilmez" diyordu. Yeni modelde yapılar otomatik olarak
+> *yükselmez* ama otomatik olarak **sıfırlanır** — kazanım çağın kendisinde
+> değil, yeniden tırmanılacak seviye merdiveninde ve daha güçlü taban modelde.
 
 ---
 
@@ -433,11 +445,25 @@ Ek koşullar:
 
 ## 29. Seviye Maliyet Katsayısı
 
-| Seviye | Katsayı |
+Katsayı **çağın içindeki** seviye merdivenine uygulanır. Çağ ekseninin ayrı bir
+maliyet katsayısı yoktur (bkz. §29.1).
+
+| Seviye (çağ içi) | Katsayı |
 |---|---:|
-| T1 | 1.00 |
-| T2 | 1.20–1.35 |
-| T3 | 1.45–1.70 |
+| Lv1 | 1.00 |
+| Lv2 | 1.20–1.35 |
+| Lv3 | 1.45–1.70 |
+
+### 29.1 Çağ ekseni katsayısı — şu an 1.00
+
+`KR-06` gereği ilk sürümde **çağ atlamanın kendisi stat ölçeklemesi vermez**:
+çağ atlayınca binalar Lv1'e döner ve o çağın Lv1 taban değerleriyle çalışır.
+Yani bugün `çağ katsayısı = 1.00` ve ilerleme hissini tamamen seviye merdiveni
+taşır.
+
+Bu bilinçli bir sadeleştirmedir, kalıcı bir karar değil. Üçüncü çağ eklenirken
+(`13 §55`) yeniden değerlendirilmelidir: iki eksen de düz olursa geç oyun
+binaları erken oyun binalarından yalnızca model olarak ayrılır.
 
 ---
 
@@ -525,11 +551,16 @@ Göreli katsayı:
 
 ## 38. Seviye Sağlık Katsayısı
 
-| Seviye | Katsayı |
+Çağ içi merdivene uygulanır; çağ ekseni için bkz. §29.1 (şu an 1.00).
+
+| Seviye (çağ içi) | Katsayı |
 |---|---:|
-| T1 | 1.00 |
-| T2 | 1.35–1.55 |
-| T3 | 1.75–2.10 |
+| Lv1 | 1.00 |
+| Lv2 | 1.35–1.55 |
+| Lv3 | 1.75–2.10 |
+
+Sağlık, seviye düşerken de uygulanır: çağ atlayınca `HealthComponent.setMax`
+tavanı Lv1 taban değerine **indirir**.
 
 ## 39. Hedef Yıkım Süreleri
 

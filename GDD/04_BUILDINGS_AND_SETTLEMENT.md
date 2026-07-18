@@ -12,6 +12,11 @@
 
 ---
 
+> **İlerleme Modeli Revizyonu (2026-07-18):** §31 yeniden yazıldı — yapı
+> seviyeleri artık çağ ile sınırlandırılmaz; çağ ve seviye bağımsız iki eksendir
+> (`02 §25`). §3.3 ve §5.1'e buna bağlı notlar eklendi. Uygulama kaydı:
+> `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`.
+>
 > **Kapsam Hizalaması (v0.2):** Bu belgenin tasarım gövdesi 0.1 taslağıdır; **üretim kapsamı** `13_VERTICAL_SLICE_PRODUCTION_PLAN_v0.2.md` (Ürün A/B/C kapıları) tarafından belirlenir. "Vertical slice için zorunlu" ifadeleri tam oyun hedefini anlatır — bir özelliğin hangi üründe (A/B/C) açıldığı ya da koşullu/kapsam dışı olduğu konusunda 13 v0.2 esastır. Forge'a özgü teknik hizalama için bkz. `TECH_DECISIONS.md`.
 
 ---
@@ -94,9 +99,15 @@ Yükseltme mümkün olduğunca sadece daha fazla sağlık veya üretim vermemeli
 
 Örnek:
 
-- Depo II yalnızca daha fazla stok değil, alternatif yol bağlantısı desteği sağlar.
-- Karakol II yalnızca daha dayanıklı değil, daha geniş kontrol alanı üretir.
-- Kışla II yalnızca daha hızlı üretmez, yeni birlik türü açar.
+- Depo Lv2 yalnızca daha fazla stok değil, alternatif yol bağlantısı desteği sağlar.
+- Karakol Lv2 yalnızca daha dayanıklı değil, daha geniş kontrol alanı üretir.
+- Kışla Lv2 yalnızca daha hızlı üretmez, yeni birlik türü açar (Koçbaşı).
+
+> **Not — birim kapısı çağ + seviye çiftidir.** §31 uyarınca seviye merdiveninin
+> çağ kapısı yoktur, dolayısıyla `requiredBuildingLevel` tek başına bir çağ
+> kapısı değildir. Birimler bu yüzden ayrıca `requiredAge` taşır: Koçbaşı
+> *Kasaba çağı + Kışla Lv2* ister. Okçu ise Kışla'dan tamamen çıkarılıp kendi
+> binasına (Okçuluk Alanı, Kasaba çağı) taşındı. Tablo: `02 §30.1`.
 
 ### 3.4 Her bina üç seviyeli olmak zorunda değildir
 
@@ -169,6 +180,11 @@ Seviyeleri:
 - Merkez I — Yerleşim Merkezi
 - Merkez II — Kasaba Merkezi
 - Merkez III — Kale / Krallık Merkezi
+
+> **Merkez, per-bina seviye sisteminin dışındadır.** Diğer yapıların aksine
+> Merkez'in ayrı bir Lv1→Lv2→Lv3 yükseltme düğmesi yoktur; `level`'ı doğrudan
+> **çağ katmanını** taşır ve yalnızca çağ atlayınca değişir. Yukarıdaki üçlü,
+> per-bina merdiven değil, üç çağın Merkez karşılığıdır.
 
 ### 5.2 Yönetim veya Refah Yapısı
 
@@ -264,7 +280,7 @@ Seviye etkileri:
 - kuyruk kapasitesi,
 - yapı dayanıklılığı.
 
-### 8.2 Okçu Yapısı
+### 8.2 Okçuluk Alanı
 
 Üretir:
 
@@ -272,7 +288,12 @@ Seviye etkileri:
 - gelişmiş okçu,
 - isteğe bağlı keşif birimi.
 
-Kasaba seviyesinde açılması önerilir.
+**Uygulandı** (`archery_range`): yalnız Kasaba çağında yerleştirilebilir
+(`requiredAge: "town"`), 8×8 footprint, 160 Odun + 40 Taş, 55 sn, 600 sağlık;
+kendi Lv1–3 merdiveni var (`02 §25.2`).
+
+Bir dönem Okçu'nun ayrı bina yerine Kışla Lv2 içinde açılması planlanmıştı;
+o karar geri alındı — gerekçe `02 §30.1`.
 
 ### 8.3 Süvari Yapısı
 
@@ -283,7 +304,7 @@ Vertical slice kapsamına göre:
 - ayrı yapı olabilir,
 - gelişmiş kışla içinde açılabilir.
 
-Kapsam kontrolü için ayrı bina yerine Kışla III içinde süvari üretimi değerlendirilebilir.
+Kapsam kontrolü için ayrı bina yerine Kışla Lv3 içinde süvari üretimi değerlendirilebilir.
 
 ### 8.4 Kuşatma Atölyesi
 
@@ -499,8 +520,9 @@ Bu liste 10–12 yapı hedefiyle uyumludur.
 
 Geliştirme yükü artarsa:
 
-- Okçu yapısı Kışla II içine alınabilir.
-- Süvari ayrı bina yerine Kışla III'te açılabilir.
+- ~~Okçu yapısı Kışla Lv2 içine alınabilir.~~ **Geri alındı:** Okçu kendi
+  binasına taşındı (Okçuluk Alanı, `requiredAge: town`) — gerekçe `02 §30.1`.
+- Süvari ayrı bina yerine Kışla Lv3'te açılabilir.
 - Kuşatma Atölyesi tek seviyeli olabilir.
 - Pazar ertelenebilir.
 - Gözcü ve Savunma Kulesi tek yapı altında birleşebilir.
@@ -804,20 +826,27 @@ Bir işçi yapı alanına ulaşamazsa:
 
 ## 31. Seviye Sistemi
 
-Yapı seviyeleri çağ seviyesiyle sınırlandırılır.
-
-Örnek:
+**Yapı seviyeleri çağ seviyesiyle sınırlandırılmaz.** Çağ ve seviye bağımsız
+iki eksendir (`02 §25`).
 
 ```text
-Yerleşim Çağı
-→ En fazla Seviye I
+Her çağın içinde
+→ Lv1 → Lv2 → Lv3 merdiveni her zaman açıktır
+→ Yükseltme bina instance'ı başınadır, tür-geneli değildir
+→ Aynı türden iki bina farklı seviyelerde olabilir
 
-Kasaba Çağı
-→ Seviye II yükseltmeleri açılır
-
-Krallık Çağı
-→ Seviye III yükseltmeleri açılır
+Çağ atlandığında
+→ Sahibin bütün yapıları yeni çağın Lv1 modeline geçer
+→ Seviyeler 1'e sıfırlanır, merdiven yeniden tırmanılır
 ```
+
+Çağın seviye üzerindeki tek etkisi **hangi sanat ailesinin** kullanıldığıdır
+(Yerleşim → `FirstAge`, Kasaba → `SecondAge`).
+
+> **v0.1'den değişiklik.** Bu bölüm daha önce "Yerleşim → en fazla Seviye I,
+> Kasaba → Seviye II açılır" diyordu. O kapı uygulanmadı ve kaldırıldı (`KR-04`);
+> gerekçe, seviye merdivenini çağ beklemeden anlamlı bir karar haline
+> getirmekti.
 
 ---
 
