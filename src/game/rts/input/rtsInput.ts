@@ -48,6 +48,12 @@ const COMMAND_KEYS = {
   KeyI: "selectIdleWorkers",
   /** Send the selected idle workers back into automatic staffing. */
   KeyR: "assignIdleWorkers",
+  /** Faz F build-palette visibility and its four authored category tabs. */
+  KeyB: "toggleBuildPalette",
+  Digit1: "buildCategory1",
+  Digit2: "buildCategory2",
+  Digit3: "buildCategory3",
+  Digit4: "buildCategory4",
   /**
    * Faz 9 §51 pause. Escape is where players reach for it, but it is also where
    * they reach to cancel a pending build placement — `RtsApp` gives placement

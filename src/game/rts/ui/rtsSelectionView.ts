@@ -279,8 +279,23 @@ export interface SelectionPanelContent {
   readonly portrait?: string | null;
   readonly selectionCount?: number;
   readonly health?: { readonly current: number; readonly max: number } | null;
+  /** Collapsed role list for multi-unit selections; layout, not game state. */
+  readonly slots?: readonly SelectionSlot[];
+  /** Keyboard commands echoed as non-clickable chips; bindings stay in RtsApp. */
+  readonly commandChips?: readonly SelectionCommandChip[];
   /** A running timed job (e.g. a level-up), or null/absent when nothing is timed. */
   readonly progress?: SelectionProgress | null;
+}
+
+export interface SelectionSlot {
+  readonly label: string;
+  readonly icon: string | null;
+  readonly count: number;
+}
+
+export interface SelectionCommandChip {
+  readonly label: string;
+  readonly key: string;
 }
 
 /**
@@ -350,6 +365,12 @@ const LOGISTICS_REASON: Record<ProducerLogisticsStatus, string> = {
 };
 
 const UNIT_HINT = "F: Saldırı-Hareket · H: Pozisyonu Koru · G: Serbest · X: Dur";
+const UNIT_COMMAND_CHIPS: readonly SelectionCommandChip[] = [
+  { label: "Saldırı-Hareket", key: "F" },
+  { label: "Pozisyonu Koru", key: "H" },
+  { label: "Serbest", key: "G" },
+  { label: "Dur", key: "X" },
+];
 const WORKER_HINT = "Sağ tık: inşaata veya üretim yapısına ata · X: Görevi bırak";
 const STRUCTURE_HINT = "Sağ tık: seçili işçileri bu yapıya ata";
 const OUTPOST_HINT = "Sağ tık: menzildeki düşmana saldırı emri ver";
@@ -385,6 +406,10 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
   const summary = `${[...counts]
     .map(([role, count]) => `${count} ${labelFor(units, role)}`)
     .join(" · ")} — Can: ${Math.ceil(health)}/${Math.ceil(maxHealth)}`;
+  const slots = [...counts].map(([role, count]) => {
+    const sample = units.find((unit) => unit.role === role)!;
+    return { label: sample.stats.label, icon: sample.stats.icon ?? null, count };
+  });
 
   // A selection of nothing but workers is an economy question, and the army
   // panel has no answer to it: a Worker has no matchup and no stance. §51 lists
@@ -404,6 +429,7 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
       portrait: first.stats.portrait ?? first.stats.icon ?? null,
       selectionCount: units.length,
       health: { current: health, max: maxHealth },
+      slots,
     };
   }
 
@@ -431,6 +457,8 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
     portrait: sample.stats.portrait ?? sample.stats.icon ?? null,
     selectionCount: units.length,
     health: { current: health, max: maxHealth },
+    slots,
+    commandChips: UNIT_COMMAND_CHIPS,
   };
 }
 

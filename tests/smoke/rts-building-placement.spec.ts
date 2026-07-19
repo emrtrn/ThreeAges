@@ -44,20 +44,22 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   await openMatch(page, "/?rts&debug");
   await expect(page.locator("#game-canvas")).toBeVisible();
   await expect(page.locator(".rts-build-palette")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Yol yerleştirme" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Ağ Görünümü", exact: true })).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "Ağ Görünümü", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Ağ Görünümü", exact: true })).toHaveAttribute("aria-pressed", "false");
+  await expect(page.getByRole("button", { name: "Ekonomi", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Lojistik", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Yol", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Oyun hızı" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Normal", exact: true })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "4X", exact: true }).click();
   await expect(page.getByRole("button", { name: "4X", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Ekonomi", exact: true }).click();
   await expect(page.getByRole("button", { name: "Tarla", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Oduncu Kampı", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Lojistik", exact: true }).click();
   await expect(page.getByRole("button", { name: "Karakol", exact: true })).toBeVisible();
-  await expect(page.locator('[data-rts-building="house"]')).toContainText("80 Odun");
   await expect(page.locator('[data-rts-building="depot"]')).toContainText("120 Odun");
   await expect(page.locator('[data-rts-building="outpost"]')).toContainText("140 Odun");
+  await page.getByRole("button", { name: "Yerleşim", exact: true }).click();
+  await expect(page.locator('[data-rts-building="house"]')).toContainText("80 Odun");
   // §51: the palette is the *placement* surface now. Training a worker is
   // something the Merkez does, so its button left with the building.
   await expect(page.getByRole("button", { name: "İşçi Üret", exact: true })).toHaveCount(0);
@@ -80,11 +82,13 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
   // Nothing has happened yet, so the feed must be silent rather than empty-boxed.
   await expect(page.locator(".rts-notification-feed")).toBeHidden();
 
-  await page.getByRole("button", { name: "Yol Kur", exact: true }).click();
-  await expect(page.locator(".rts-road-status")).toHaveText(
+  await page.getByRole("button", { name: "Lojistik", exact: true }).click();
+  await page.getByRole("button", { name: "Yol", exact: true }).click();
+  await expect(page.locator(".rts-build-status")).toHaveText(
     "Yol başlangıcını sol tıkla seçin; sağ tıkla bitirin.",
   );
-  await page.getByRole("button", { name: "Yolu İptal", exact: true }).click();
+  await page.locator("#game-canvas").click({ button: "right", position: { x: 640, y: 420 } });
+  await page.getByRole("button", { name: "Yerleşim", exact: true }).click();
 
   await page.getByRole("button", { name: "Ev", exact: true }).click();
   await expect(page.locator(".rts-build-status")).toHaveText("Haritada konum seçin.");
@@ -94,6 +98,7 @@ test("RTS Phase 4 build palette exposes territory-gated economy structures witho
 
   await page.locator("#game-canvas").click({ button: "right", position: { x: 640, y: 420 } });
   await expect(page.locator(".rts-build-status")).toHaveText("Bir yapı seçin.");
+  await page.getByRole("button", { name: "Lojistik", exact: true }).click();
   await page.getByRole("button", { name: "Karakol", exact: true }).click();
   await expect(page.locator(".rts-build-status")).toHaveText(
     "Karakolu kontrol alanının hemen dışındaki nötr bir konuma yerleştirin.",

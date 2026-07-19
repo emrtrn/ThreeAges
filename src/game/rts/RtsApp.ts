@@ -111,7 +111,6 @@ import { RoadGraph } from "./roads/roadGraph";
 import { RoadDebugView } from "./roads/roadDebugView";
 import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
 import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
-import { RtsRoadControls } from "./ui/rtsRoadControls";
 import { RtsHudBar } from "./ui/rtsHudBar";
 import { RtsNotificationCenter } from "./ui/rtsNotifications";
 import { RtsNotificationFeed } from "./ui/rtsNotificationFeed";
@@ -317,7 +316,6 @@ export class RtsApp {
   private buildingLabelCache: ReadonlyMap<string, string> | null = null;
   private readonly projectiles = new ProjectileSystem();
   private readonly structureDefense = new StructureDefenseSystem();
-  private readonly roadControls: RtsRoadControls;
   private readonly hudBar = new RtsHudBar(
     () => this.selectIdleWorkers(),
     () => this.assignSelectedIdleWorkers(),
@@ -636,33 +634,11 @@ export class RtsApp {
       },
       () => {
         this.placement.cancel();
-        this.syncPlacementUi();
-      },
-      () => {
-        this.placement.cancelLatestConstruction();
-        this.selection.reconcileStructures(this.structures.all());
-        this.buildPalette.setActionMessage(null);
-        this.syncPlacementUi();
-      },
-    );
-    this.roadControls = new RtsRoadControls(
-      () => {
-        this.placement.cancel();
         this.roadPlacement.begin();
         this.syncPlacementUi();
         this.syncRoadUi();
       },
-      () => {
-        this.roadPlacement.cancel();
-        this.syncRoadUi();
-      },
-      () => {
-        this.roadOverlayVisible = !this.roadOverlayVisible;
-        this.roadDebugView.root.visible = this.roadOverlayVisible;
-        this.roadControls.setOverlayVisible(this.roadOverlayVisible);
-      },
     );
-    this.roadControls.setOverlayVisible(this.roadOverlayVisible);
     this.gameSpeedControls = new RtsGameSpeedControls(1, (speed) => {
       this.simulationSpeed = speed;
     });
@@ -838,7 +814,6 @@ export class RtsApp {
     this.selectionPanel.dispose();
     this.worldProgressOverlay.dispose();
     this.projectiles.dispose();
-    this.roadControls.dispose();
     this.hudBar.dispose();
     this.notificationFeed.dispose();
     this.gameSpeedControls.dispose();
@@ -1190,6 +1165,11 @@ export class RtsApp {
     // Drained before the unit orders: pause is about the match, not the
     // selection, and it must answer even when the simulation is frozen.
     if (this.input.consumeCommand("pause")) this.togglePause();
+    if (this.input.consumeCommand("toggleBuildPalette")) this.buildPalette.toggleVisible();
+    if (this.input.consumeCommand("buildCategory1")) this.buildPalette.selectCategoryByIndex(0);
+    if (this.input.consumeCommand("buildCategory2")) this.buildPalette.selectCategoryByIndex(1);
+    if (this.input.consumeCommand("buildCategory3")) this.buildPalette.selectCategoryByIndex(2);
+    if (this.input.consumeCommand("buildCategory4")) this.buildPalette.selectCategoryByIndex(3);
     if (this.input.consumeStopRequest()) this.commands.issueStop();
     if (this.input.consumeCommand("hold")) this.commands.issueStance("hold");
     if (this.input.consumeCommand("aggressive")) this.commands.issueStance("aggressive");
@@ -1825,7 +1805,7 @@ export class RtsApp {
   }
 
   private syncRoadUi(): void {
-    this.roadControls.setState(this.roadPlacement.state());
+    this.buildPalette.setRoadState(this.roadPlacement.state());
   }
 
   /**

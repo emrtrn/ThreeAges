@@ -21,6 +21,7 @@
  */
 import type { BuildingBalance, StartingResources } from "../../data/gameDataTypes";
 import { townUnlocksAvailable, type AgeSnapshot } from "../progression/ageSystem";
+import type { RoadPlacementState } from "../roads/roadPlacementSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
 
 import { canAffordCost, formatResourceCost } from "./resourceLabels";
@@ -44,19 +45,20 @@ import { canAffordCost, formatResourceCost } from "./resourceLabels";
 interface BuildCategory {
   readonly title: string;
   readonly buildingIds: readonly string[];
+  readonly includesRoad?: boolean;
+  readonly includesTempleSoon?: boolean;
 }
 
 const BUILD_CATEGORIES: readonly BuildCategory[] = [
   { title: "Ekonomi", buildingIds: ["farm", "lumber_camp", "quarry", "gold_mine", "market"] },
-  { title: "Lojistik", buildingIds: ["depot", "outpost"] },
-  { title: "Yerleşim", buildingIds: ["house"] },
+  { title: "Lojistik", buildingIds: ["depot", "outpost"], includesRoad: true },
+  { title: "Yerleşim", buildingIds: ["house"], includesTempleSoon: true },
   { title: "Askerî", buildingIds: ["barracks", "archery_range"] },
 ];
 
 export class RtsBuildPalette {
   private readonly root = document.createElement("section");
   private readonly status = document.createElement("p");
-  private readonly townUnlocks = document.createElement("p");
   private readonly buildButtons = new Map<
     string,
     {
@@ -68,12 +70,14 @@ export class RtsBuildPalette {
   >();
   private affordabilitySignature = "";
   private readonly actionMessage = document.createElement("p");
+  private readonly tabs = new Map<string, HTMLButtonElement>();
+  private readonly categoryPanels = new Map<string, HTMLElement>();
+  private activeCategory = "Ekonomi";
 
   constructor(
     buildings: BuildingBalance,
     private readonly onChoose: (id: string) => void,
-    private readonly onCancel: () => void,
-    private readonly onCancelLatest: () => void,
+    private readonly onChooseRoad: () => void = () => {},
   ) {
     this.root.className = "rts-build-palette ui-interactive";
     this.root.setAttribute("aria-label", "Yapı yerleştirme");
@@ -89,15 +93,25 @@ export class RtsBuildPalette {
     const groups: readonly BuildCategory[] = uncategorised.length > 0
       ? [...BUILD_CATEGORIES, { title: "Diğer", buildingIds: uncategorised }]
       : BUILD_CATEGORIES;
+    const tabRow = document.createElement("div");
+    tabRow.className = "rts-build-tabs";
+    this.root.appendChild(tabRow);
+    const grid = document.createElement("div");
+    grid.className = "rts-build-grid";
+    this.root.appendChild(grid);
     for (const category of groups) {
       const ids = category.buildingIds.filter((id) => buildings[id]);
-      if (ids.length === 0) continue;
-      const heading = document.createElement("p");
-      heading.className = "rts-build-category";
-      heading.textContent = category.title;
-      this.root.appendChild(heading);
+      if (ids.length === 0 && !category.includesRoad) continue;
+      const tab = document.createElement("button");
+      tab.type = "button";
+      tab.className = "rts-build-tab";
+      tab.textContent = category.title;
+      tab.addEventListener("click", () => this.selectCategory(category.title));
+      this.tabs.set(category.title, tab);
+      tabRow.appendChild(tab);
       const choices = document.createElement("div");
-      choices.className = "rts-build-choices";
+      choices.className = "rts-build-choices rts-build-category-panel";
+      choices.dataset.rtsBuildCategory = category.title;
       for (const id of ids) {
         const stats = buildings[id]!;
         const button = document.createElement("button");
@@ -107,6 +121,13 @@ export class RtsBuildPalette {
         // Keep the action's accessible name concise while the visual label shows
         // the explicit resource cost needed for faster purchase decisions.
         button.setAttribute("aria-label", stats.label);
+        if (stats.icon) {
+          const icon = document.createElement("img");
+          icon.className = "rts-build-choice-icon";
+          icon.src = stats.icon;
+          icon.alt = "";
+          button.appendChild(icon);
+        }
         const label = document.createElement("span");
         label.className = "rts-build-choice-label";
         label.textContent = stats.label;
@@ -118,23 +139,48 @@ export class RtsBuildPalette {
         this.buildButtons.set(id, { button, cost, price: stats.cost, requiredAge: stats.requiredAge });
         choices.appendChild(button);
       }
-      this.root.appendChild(choices);
+      if (category.includesRoad) {
+        const road = document.createElement("button");
+        road.type = "button";
+        road.className = "rts-build-choice";
+        road.dataset.rtsBuilding = "road";
+        road.setAttribute("aria-label", "Yol");
+        const icon = document.createElement("img");
+        icon.className = "rts-build-choice-icon";
+        icon.src = "/assets/ui/icons/command-patrol.svg";
+        icon.alt = "";
+        const label = document.createElement("span");
+        label.className = "rts-build-choice-label";
+        label.textContent = "Yol";
+        const cost = document.createElement("span");
+        cost.className = "rts-build-choice-cost";
+        cost.textContent = "Odun / hücre";
+        road.append(icon, label, cost);
+        road.addEventListener("click", this.onChooseRoad);
+        choices.appendChild(road);
+      }
+      if (category.includesTempleSoon) {
+        const temple = document.createElement("button");
+        temple.type = "button";
+        temple.className = "rts-build-choice is-coming-soon";
+        temple.disabled = true;
+        temple.setAttribute("aria-label", "Tapınak — Yakında");
+        const icon = document.createElement("img");
+        icon.className = "rts-build-choice-icon";
+        icon.src = "/assets/ui/icons/building-command-center.svg";
+        icon.alt = "";
+        const label = document.createElement("span");
+        label.className = "rts-build-choice-label";
+        label.textContent = "Tapınak";
+        const status = document.createElement("span");
+        status.className = "rts-build-choice-cost";
+        status.textContent = "Yakında";
+        temple.append(icon, label, status);
+        choices.appendChild(temple);
+      }
+      this.categoryPanels.set(category.title, choices);
+      grid.appendChild(choices);
     }
-    const controls = document.createElement("div");
-    controls.className = "rts-build-choices";
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.textContent = "İptal";
-    cancel.addEventListener("click", this.onCancel);
-    controls.appendChild(cancel);
-    const cancelLatest = document.createElement("button");
-    cancelLatest.type = "button";
-    cancelLatest.textContent = "Son İnşaatı İptal";
-    cancelLatest.addEventListener("click", this.onCancelLatest);
-    controls.appendChild(cancelLatest);
-    this.root.appendChild(controls);
-    this.townUnlocks.className = "rts-build-age";
-    this.root.appendChild(this.townUnlocks);
     this.actionMessage.className = "rts-build-action-message";
     this.root.appendChild(this.actionMessage);
     this.status.className = "rts-build-status";
@@ -142,6 +188,7 @@ export class RtsBuildPalette {
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setState({ activeBuildingId: null, result: null });
     this.setAgeState({ age: "settlement", upgrading: false });
+    this.selectCategory(this.activeCategory);
   }
 
   setState(state: BuildingPlacementState): void {
@@ -185,12 +232,17 @@ export class RtsBuildPalette {
       button.disabled = locked;
       button.title = locked ? "Kasaba Çağında açılır." : "";
     }
-    const text = townUnlocksAvailable(snapshot)
-      ? "Kasaba Çağındasınız — Okçuluk Alanı açıldı; binaları kendi panelinden Lv2/Lv3'e yükseltin."
-      : snapshot.upgrading
-        ? "Kasaba Çağı yükseltmesi sürüyor — tamamlanınca tüm binalar yeni çağ modeline geçer."
-        : "Kasaba Çağı: tamamlanınca tüm binalarınız yeni çağ modeline geçer ve seviyeleri sıfırlanır.";
-    if (this.townUnlocks.textContent !== text) this.townUnlocks.textContent = text;
+  }
+
+  /** Road mode is owned by the road system; the palette only narrates it. */
+  setRoadState(state: RoadPlacementState): void {
+    if (!state.active) {
+      this.status.textContent = "Bir yapı seçin.";
+      return;
+    }
+    this.status.textContent = state.plan
+      ? `Yol rotası hazır. Bitirmek için sağ tık yapın · ${state.plan.newCells.length} hücre, ${state.plan.woodCost} Odun.`
+      : "Yol başlangıcını sol tıkla seçin; bitirmek için sağ tık yapın.";
   }
 
   /**
@@ -219,6 +271,23 @@ export class RtsBuildPalette {
   /** Persist completion/error feedback while placement hover state keeps changing. */
   setActionMessage(message: string | null): void {
     this.actionMessage.textContent = message ?? "";
+  }
+
+  toggleVisible(): void {
+    this.root.hidden = !this.root.hidden;
+  }
+
+  selectCategoryByIndex(index: number): void {
+    const title = [...this.tabs.keys()][index];
+    if (!title) return;
+    this.root.hidden = false;
+    this.selectCategory(title);
+  }
+
+  private selectCategory(title: string): void {
+    this.activeCategory = title;
+    for (const [category, tab] of this.tabs) tab.setAttribute("aria-pressed", String(category === title));
+    for (const [category, panel] of this.categoryPanels) panel.hidden = category !== title;
   }
 
   dispose(): void {

@@ -73,7 +73,7 @@ bambaşka görünür.
   mevcut simülasyon saatinden gelir; hız kontrolünün sahipliği değişmez, yalnızca
   HUD içindeki konumu değişir.
 
-### Faz D — Sabit çerçeveli seçim paneli
+### Faz D — Sabit çerçeveli seçim paneli ✅ (2026-07-19)
 
 **Ana karar: panel boyutu seçime göre değişmez.** Bugünkü panel içeriğe göre
 büyüyüp küçülüyor; hedef, üç bölgeli sabit iskelet:
@@ -94,17 +94,19 @@ büyüyüp küçülüyor; hedef, üç bölgeli sabit iskelet:
   kullanılmayacak. Birlik seçiminde komutlar, aksiyon bölgesinde küçük çip
   satırı olarak gösterilir (`Saldırı-Hareket [F]` vb.); kısayol bağlama
   `RtsApp`'te kalır, panel sadece gösterir.
-- Karar (2026-07-19): boş seçimde panel "Seçim yok" yazısıyla soluk ve yerinde
-  kalır; bu, mockup'taki öneriyi izler ve ekran zıplamasını önler.
+- Karar (2026-07-19): boş seçimde panel otomatik gizlenir; inşa paneli kendi
+  sabit çerçevesini korur, seçim paneli yalnızca gerçek bir seçim olduğunda
+  görünür.
 - Tıklama-geçirgenlik kuralı korunur: yalnızca butonlar ve tooltip taşıyan
   gövde `ui-interactive` olur, panelin geri kalanı harita tıklamasını yutmaz.
 
-**İlerleme (2026-07-19):** Sabit yükseklikli üç bölge iskeleti, boş seçim
-durumu, veri-güdümlü geçici portre, adet rozeti, HP çubuğu ve kendi alanında
-kayan bilgi/aksiyon bölgeleri uygulandı. Bir sonraki D dilimi, çoklu seçimde
-rol bazlı slot listesini ve birlik komutlarının kompakt çip satırını ekler.
+Uygulandı: sabit yükseklikli üç bölge iskeleti, boş seçim durumu,
+veri-güdümlü geçici portre, adet rozeti, HP çubuğu, çoklu seçim için rol bazlı
+slot listesi ve F/H/G/X komutlarının yalnızca gösterim amaçlı kompakt çip
+satırı. Bilgi/aksiyon bölgeleri kendi içinde kayar; komut bağlama hâlâ `RtsApp`
+ve giriş katmanındadır.
 
-### Faz F — Kategorili inşa paneli (sol alt)
+### Faz F — Kategorili inşa paneli (sol alt) ✅ (2026-07-19)
 
 Kullanıcı kararı (2026-07-19): inşa paneli sol alta taşınır ve dört kategori
 sekmesine ayrılır. (Sağ alttaki mevcut `rtsBuildPalette` bu düzene evrilir;
@@ -127,6 +129,14 @@ seçim panelinden yapılır.)
   `defaultInputBindings` üzerinden bağlanır).
 - Yol çizimi (`rtsRoadControls`) "Yol" karosunun arkasına taşınır: karo,
   bugünkü yol çizim modunu açar.
+
+**İlerleme (2026-07-19):** Panel sol alta taşındı; Ekonomi/Lojistik/Yerleşim/
+Askerî sekmeleri ve sabit 5×2 karo alanı uygulandı. Yapı karoları veri-güdümlü
+İkon, ad ve maliyet taşır; Yol karosu yol modunu açar ve sağ tıkla bitirme
+bilgisini panelin kendi durum satırında gösterir. Bağımsız yol kartı kaldırıldı.
+İnşa ve seçim panelleri ortak 240 px dış yüksekliğe sahiptir. `1–4` ilgili
+sekmeyi seçer (gizliyse paneli açar), `B` paneli açıp kapatır; Yerleşim
+sekmesinde devre dışı "Tapınak — Yakında" karosu bulunur.
 
 ### Faz E — Sağ kolon
 

@@ -24,6 +24,7 @@ export class RtsSelectionPanel {
   private readonly summary = document.createElement("p");
   private readonly health = document.createElement("div");
   private readonly healthFill = document.createElement("div");
+  private readonly slots = document.createElement("div");
   private readonly body = document.createElement("div");
   private readonly lines: HTMLParagraphElement[] = [];
   private readonly progress = document.createElement("div");
@@ -31,6 +32,7 @@ export class RtsSelectionPanel {
   private readonly progressTime = document.createElement("span");
   private readonly progressFill = document.createElement("div");
   private readonly actionRow = document.createElement("div");
+  private readonly commandChips = document.createElement("div");
   private readonly actionButtons = new Map<string, HTMLButtonElement>();
   private readonly hints = document.createElement("p");
   /**
@@ -62,9 +64,11 @@ export class RtsSelectionPanel {
     this.health.setAttribute("aria-label", "Can");
     this.healthFill.className = "rts-selection-health-fill";
     this.health.appendChild(this.healthFill);
-    this.header.append(this.title, this.summary, this.health);
+    this.slots.className = "rts-selection-slots";
+    this.header.append(this.title, this.summary, this.health, this.slots);
     this.body.className = "rts-selection-body ui-interactive";
     this.actionRow.className = "rts-selection-actions ui-interactive";
+    this.commandChips.className = "rts-selection-command-chips";
     this.hints.className = "rts-selection-hints";
     // A labelled fill bar for a running timed job (a level-up). Assembled once
     // and shown/hidden per frame; only the label, seconds and fill width move.
@@ -82,18 +86,20 @@ export class RtsSelectionPanel {
     const details = document.createElement("div");
     details.className = "rts-selection-details";
     details.append(this.body, this.progress);
-    this.root.append(this.portrait, this.header, details, this.actionRow, this.hints);
+    this.root.append(this.portrait, this.header, details, this.actionRow, this.commandChips, this.hints);
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
     this.setSelection({ kind: "none" });
   }
 
   setSelection(view: RtsSelectionView): void {
     const content = describeSelection(view);
+    const isEmptySelection = view.kind === "none" || (view.kind === "units" && view.units.length === 0);
     // Selection is re-pushed every frame; only touch the DOM when it changed.
     const signature = JSON.stringify(content);
     if (signature === this.signature) return;
     this.signature = signature;
-    this.render(content);
+    this.root.hidden = isEmptySelection;
+    if (!this.root.hidden) this.render(content);
   }
 
   dispose(): void {
@@ -104,6 +110,8 @@ export class RtsSelectionPanel {
     this.title.textContent = content.title;
     this.summary.textContent = content.summary;
     this.hints.textContent = content.hint;
+    this.renderSlots(content.slots ?? []);
+    this.renderCommandChips(content.commandChips ?? []);
     const portrait = content.portrait ?? null;
     this.portraitImage.hidden = portrait === null;
     if (portrait && this.portraitImage.src !== new URL(portrait, window.location.origin).href) {
@@ -134,6 +142,43 @@ export class RtsSelectionPanel {
     this.body.title = content.tooltip ?? "";
     this.renderProgress(content);
     this.renderActions(content);
+  }
+
+  private renderSlots(slots: readonly import("./rtsSelectionView").SelectionSlot[]): void {
+    const signature = slots.map((slot) => `${slot.icon ?? ""}|${slot.label}|${slot.count}`).join(";");
+    if (this.slots.dataset.rtsSlots === signature) return;
+    this.slots.dataset.rtsSlots = signature;
+    this.slots.replaceChildren(...slots.map((slot) => {
+      const entry = document.createElement("span");
+      entry.className = "rts-selection-slot";
+      entry.title = `${slot.count} ${slot.label}`;
+      if (slot.icon) {
+        const icon = document.createElement("img");
+        icon.src = slot.icon;
+        icon.alt = "";
+        entry.appendChild(icon);
+      }
+      const count = document.createElement("b");
+      count.textContent = `×${slot.count}`;
+      entry.appendChild(count);
+      return entry;
+    }));
+  }
+
+  private renderCommandChips(chips: readonly import("./rtsSelectionView").SelectionCommandChip[]): void {
+    const signature = chips.map((chip) => `${chip.label}|${chip.key}`).join(";");
+    if (this.commandChips.dataset.rtsCommands === signature) return;
+    this.commandChips.dataset.rtsCommands = signature;
+    this.commandChips.hidden = chips.length === 0;
+    this.commandChips.replaceChildren(...chips.map((chip) => {
+      const entry = document.createElement("span");
+      entry.className = "rts-selection-command-chip";
+      entry.textContent = chip.label;
+      const key = document.createElement("kbd");
+      key.textContent = chip.key;
+      entry.appendChild(key);
+      return entry;
+    }));
   }
 
   /** Show the fill bar only while a timed job is running; hide it otherwise. */
