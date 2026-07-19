@@ -8,6 +8,17 @@
  */
 import type { RtsNotification } from "./rtsNotifications";
 
+const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
+  "population-full": "⌂",
+  "resource-depleted": "⛏",
+  "logistics-cut": "⛓",
+  "outpost-under-attack": "⚔",
+  "center-under-attack": "⚔",
+  "age-upgraded": "✦",
+  "enemy-age-upgraded": "✦",
+  "regional-victory-warning": "⚑",
+};
+
 export class RtsNotificationFeed {
   private readonly root = document.createElement("aside");
   private signature = " ";
@@ -41,9 +52,14 @@ export class RtsNotificationFeed {
       item.className = "rts-notification";
       item.dataset.severity = notification.severity;
       item.dataset.rtsNotification = notification.kind;
+      const icon = document.createElement("span");
+      icon.className = "rts-notification-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = ICON_BY_KIND[notification.kind];
       const text = document.createElement("span");
+      text.className = "rts-notification-text";
       text.textContent = notification.text;
-      item.appendChild(text);
+      item.append(icon, text);
       // "×3" means this problem has been raised three separate times — a
       // recurring failure the player keeps not fixing. A first raise says
       // nothing extra, so it stays silent rather than showing a noisy "×1".

@@ -120,9 +120,8 @@ seçim panelinden yapılır.)
 | Yerleşim | Ev, Tapınak *(ileride — kilitli "Yakında" karosu)* |
 | Askeri | Kışla, Okçuluk Alanı |
 
-- **Sabit 5×2 ızgara:** en kalabalık sekme (Ekonomi, 5 yapı) genişliği
-  belirler; sekme değişince panel boyutu oynamaz (sabit panel ilkesiyle
-  tutarlı).
+- **Sabit 5×1 ızgara:** en kalabalık sekme (Ekonomi, 5 yapı) genişliği
+  belirler; karolar panel genişliğinin beşte birini alır ve kare kalır.
 - Karolar ikon + ad + maliyet gösterir; maliyetler `buildings.json`'dan gelir,
   karşılanamayan maliyet mevcut `is-unaffordable` kilidiyle işaretlenir.
 - Kısayol önerisi: sekmeler için `1–4`, panel aç/kapa için `B` (Faz F'de
@@ -131,18 +130,25 @@ seçim panelinden yapılır.)
   bugünkü yol çizim modunu açar.
 
 **İlerleme (2026-07-19):** Panel sol alta taşındı; Ekonomi/Lojistik/Yerleşim/
-Askerî sekmeleri ve sabit 5×2 karo alanı uygulandı. Yapı karoları veri-güdümlü
+Askerî sekmeleri ve sabit 5×1 karo alanı uygulandı. Yapı karoları veri-güdümlü
 İkon, ad ve maliyet taşır; Yol karosu yol modunu açar ve sağ tıkla bitirme
 bilgisini panelin kendi durum satırında gösterir. Bağımsız yol kartı kaldırıldı.
-İnşa ve seçim panelleri ortak 240 px dış yüksekliğe sahiptir. `1–4` ilgili
+İnşa ve seçim panelleri ortak 220 px dış yüksekliğe sahiptir. `1–4` ilgili
 sekmeyi seçer (gizliyse paneli açar), `B` paneli açıp kapatır; Yerleşim
-sekmesinde devre dışı "Tapınak — Yakında" karosu bulunur.
+sekmesinde devre dışı "Tapınak — Yakında" karosu bulunur. Yapı Kur panelinde
+ayrı bir iptal düğmesi yoktur; yerleştirme modundan sağ tık veya `Esc` ile
+çıkılır. Seçili, tamamlanmamış bir şantiyenin seçim panelinde iki aşamalı
+`İnşaatı İptal Et` eylemi görünür ve kaynakları tam iade eder.
 
-### Faz E — Sağ kolon
+### Faz E — Sağ kolon ✅ (2026-07-19)
 
-- Görev takipçisi katlanabilir "Görevler" kartına dönüşür.
-- Saldırı/lojistik uyarıları ikonlu bantlar olur; tıklanınca kameraya odaklanma
-  davranışı `rtsAttackWatch`'ta zaten varsa yeniden kullanılır.
+- ✅ Görev takipçisi, başlığından açılıp kapanan "Görevler" kartına dönüştü.
+  Yalnızca başlık butonu etkileşimlidir; kartın geri kalanı ve kapalı hali
+  harita tıklamalarını geçirmeye devam eder.
+- ✅ Saldırı ve lojistik dahil tüm bildirimler, türlerini belirten ikonlu uyarı
+  bantları olarak gösterilir. `rtsAttackWatch` tarafında mevcut bir kamera odaklama
+  davranışı olmadığından yeni bir hedefleme kuralı eklenmedi; uyarılar salt
+  bilgi olmaya ve harita girdisini engellememeye devam eder.
 
 ## İlkeler ve Kısıtlar
 
@@ -155,10 +161,6 @@ sekmesinde devre dışı "Tapınak — Yakında" karosu bulunur.
 
 ## Sıralama
 
-Faz A tamamlandı. Kalan sıra: **C → D → F → E** (B'nin boru hattı kısmı
-C'den önce, sanat üretimi en sona). C/D/F'nin ikon ihtiyacı B'deki boru hatta
-bağlıdır ama geçici placeholder ikonlarla (mockup'taki şematik SVG'ler
-başlangıç seti olabilir) B'nin sanat üretimini beklemeden ilerleyebilir.
-D ile F aynı alt bölgeyi paylaştığı için art arda yapılmalı; ikisinin toplam
-genişliği 1366 px'te yan yana sığmalıdır (mockup oranları: inşa ~%28, seçim
-~%68).
+Faz A–F tamamlandı. Geçici şematik ikon ve portreler, nihai sanat geldiğinde
+aynı dosya yolları korunarak değiştirilebilir; bunun dışında bu planın işlevsel
+restyling kapsamı kapanmıştır.

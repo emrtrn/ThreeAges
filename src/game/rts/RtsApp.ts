@@ -76,6 +76,7 @@ import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
 import { RtsWorldProgressOverlay, type RtsWorldProgressEntry } from "./ui/rtsWorldProgressOverlay";
 import {
   AGE_UP_ACTION,
+  CANCEL_CONSTRUCTION_ACTION,
   DEMOLISH_ACTION,
   RALLY_ACTION,
   TRADE_BUY_ACTION_PREFIX,
@@ -310,6 +311,8 @@ export class RtsApp {
   private readonly selectionPanel = new RtsSelectionPanel((id) => this.runSelectionAction(id));
   /** The building whose demolish is armed and awaiting its confirm click. */
   private demolishArmed: PlacedStructure | null = null;
+  /** The unfinished site whose cancellation is armed and awaiting its confirm click. */
+  private cancelConstructionArmed: PlacedStructure | null = null;
   /** Per-building last-seen health and how long its bar still has to live. */
   private readonly healthBarLinger = new Map<number, { health: number; remaining: number }>();
   private readonly worldProgressOverlay = new RtsWorldProgressOverlay();
@@ -1825,6 +1828,12 @@ export class RtsApp {
     if (this.demolishArmed && this.selection.selectedStructure() !== this.demolishArmed) {
       this.demolishArmed = null;
     }
+    if (this.cancelConstructionArmed && (
+      this.selection.selectedStructure() !== this.cancelConstructionArmed
+      || this.cancelConstructionArmed.construction.complete
+    )) {
+      this.cancelConstructionArmed = null;
+    }
     const units = this.selection.selected();
     if (units.length > 0) {
       return {
@@ -1853,6 +1862,7 @@ export class RtsApp {
           health: structure.health.current,
           maxHealth: structure.health.max,
           demolishArmed: this.demolishArmed === structure,
+          cancelConstructionArmed: this.cancelConstructionArmed === structure,
           detail: this.structureDetail(structure),
           // Null when the data gives this building no `levels` at all — the
           // absence of an upgrade path is the data's statement, not a UI decision.
@@ -1962,6 +1972,21 @@ export class RtsApp {
     this.buildPalette.setActionMessage(`${structure.stats.label} yıkıldı.`);
   }
 
+  /** Cancel exactly the selected foundation; a finished building must use demolition instead. */
+  private cancelSelectedConstruction(): void {
+    const structure = this.selection.selectedStructure();
+    if (!structure || structure.owner !== PLAYER_OWNER || structure.construction.complete) return;
+    if (this.cancelConstructionArmed !== structure) {
+      this.cancelConstructionArmed = structure;
+      this.buildPalette.setActionMessage(`${structure.stats.label} inşaatı iptal edilecek. Onaylamak için tekrar basın.`);
+      return;
+    }
+    this.cancelConstructionArmed = null;
+    if (!this.structureConstruction.cancel(PLAYER_OWNER, structure)) return;
+    this.selection.reconcileStructures(this.structures.all());
+    this.buildPalette.setActionMessage(`${structure.stats.label} inşaatı iptal edildi; kaynaklar iade edildi.`);
+  }
+
   private runSelectionAction(id: string): void {
     if (id === TRAIN_WORKER_ACTION) {
       this.queueWorker();
@@ -1980,6 +2005,10 @@ export class RtsApp {
     }
     if (id === DEMOLISH_ACTION) {
       this.demolishSelectedStructure();
+      return;
+    }
+    if (id === CANCEL_CONSTRUCTION_ACTION) {
+      this.cancelSelectedConstruction();
       return;
     }
     if (id === UPGRADE_ACTION) {

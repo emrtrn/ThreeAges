@@ -288,7 +288,17 @@ export class PlacedStructureSystem {
     return this.structures.filter((structure) => structure.owner === owner);
   }
 
-  /** Remove a kingdom's newest unbuilt site. Targeted cancellation arrives with workers. */
+  /** Remove one unbuilt site immediately, without the completed-building collapse visual. */
+  cancel(structure: PlacedStructure): boolean {
+    if (structure.construction.complete) return false;
+    const index = this.structures.indexOf(structure);
+    if (index < 0) return false;
+    this.structures.splice(index, 1);
+    this.disposeStructure(structure);
+    return true;
+  }
+
+  /** Remove a kingdom's newest unbuilt site for the legacy placement-mode cancel path. */
   cancelLatest(owner: UnitOwner): PlacedStructure | null {
     let index = -1;
     for (let i = this.structures.length - 1; i >= 0; i -= 1) {
@@ -299,10 +309,9 @@ export class PlacedStructureSystem {
       }
     }
     if (index < 0) return null;
-    const [structure] = this.structures.splice(index, 1);
+    const structure = this.structures[index];
     if (!structure) return null;
-    this.disposeStructure(structure);
-    return structure;
+    return this.cancel(structure) ? structure : null;
   }
 
   /**

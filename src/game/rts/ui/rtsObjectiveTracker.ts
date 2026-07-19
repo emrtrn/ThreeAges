@@ -41,21 +41,33 @@ export interface RtsObjectiveTrackerState {
 
 export class RtsObjectiveTracker {
   private readonly root = document.createElement("section");
+  private readonly toggle = document.createElement("button");
+  private readonly content = document.createElement("div");
   private readonly pointList = document.createElement("ul");
   private readonly bars = document.createElement("div");
+  private collapsed = false;
 
   constructor() {
     this.root.className = "rts-objective-tracker";
     this.root.dataset.rtsObjectives = "";
-    // Read-only, like the notification feed: the panel overlays the field and
-    // must never swallow a click meant for the map.
-    this.root.setAttribute("role", "status");
-    this.root.setAttribute("aria-live", "polite");
+    this.root.setAttribute("aria-label", "Görevler");
+    this.toggle.type = "button";
+    this.toggle.className = "rts-objective-toggle ui-interactive";
+    this.toggle.setAttribute("aria-expanded", "true");
+    this.toggle.setAttribute("aria-controls", "rts-objective-content");
+    this.toggle.innerHTML = "<span>Görevler</span><span aria-hidden=\"true\">⌃</span>";
+    this.toggle.addEventListener("click", () => {
+      this.collapsed = !this.collapsed;
+      this.syncCollapsedState();
+    });
     const heading = document.createElement("strong");
     heading.textContent = "Bölgesel Zafer";
+    this.content.id = "rts-objective-content";
+    this.content.className = "rts-objective-content";
     this.pointList.className = "rts-objective-points";
     this.bars.className = "rts-objective-bars";
-    this.root.append(heading, this.pointList, this.bars);
+    this.content.append(heading, this.pointList, this.bars);
+    this.root.append(this.toggle, this.content);
     this.root.hidden = true;
     (document.getElementById("ui-overlay") ?? document.body).appendChild(this.root);
   }
@@ -77,6 +89,14 @@ export class RtsObjectiveTracker {
 
   dispose(): void {
     this.root.remove();
+  }
+
+  private syncCollapsedState(): void {
+    this.root.dataset.collapsed = String(this.collapsed);
+    this.content.hidden = this.collapsed;
+    this.toggle.setAttribute("aria-expanded", String(!this.collapsed));
+    const icon = this.toggle.lastElementChild;
+    if (icon) icon.textContent = this.collapsed ? "⌄" : "⌃";
   }
 
   private renderPoints(points: readonly StrategicPointStatus[]): void {

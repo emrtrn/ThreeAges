@@ -1197,18 +1197,6 @@ const RTS_TEST_UNIT_BALANCE: UnitBalance = {
   worker_placeholder: RTS_TEST_WORKER_STATS,
 };
 const check = (label: string, fn: () => void): void => {
-  if (process.env.ENGINE_TESTS_COLLECT) {
-    try {
-      fn();
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      console.log(`  FAIL: ${label}\n${detail.split("\n").map((line) => `        ${line}`).join("\n")}`);
-      return;
-    }
-    checks += 1;
-    console.log(`  ok: ${label}`);
-    return;
-  }
   fn();
   checks += 1;
   console.log(`  ok: ${label}`);
@@ -34315,11 +34303,21 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     id, role: "worker", stats: RTS_TEST_WORKER_STATS, health: 50, maxHealth: 50, stance: "aggressive", job,
   });
 
-  assert.equal(describeSelection({ kind: "none" }), null);
-  assert.equal(
+  // An empty selection now yields a placeholder panel rather than null: the panel
+  // frame is always present and `RtsSelectionPanel` hides the root on emptiness
+  // (`isEmptySelection`), so `describeSelection` describes "nothing selected"
+  // instead of returning nothing. The contract is that the placeholder carries
+  // no unit content — no actions, no lines, a zero count — so nothing stale can
+  // render through it, and an empty unit list resolves to the same placeholder.
+  const emptyPanel = describeSelection({ kind: "none" });
+  assert.equal(emptyPanel.title, "Seçim yok");
+  assert.deepEqual(emptyPanel.actions, [], "the placeholder offers no verbs");
+  assert.deepEqual(emptyPanel.lines, [], "and shows no unit lines");
+  assert.equal(emptyPanel.selectionCount ?? 0, 0);
+  assert.deepEqual(
     describeSelection({ kind: "units", units: [] }),
-    null,
-    "an empty selection is not a panel with nothing in it",
+    emptyPanel,
+    "an empty unit selection is the same placeholder as no selection",
   );
 
   const army = describeSelection({ kind: "units", units: [guard(1), guard(2)] })
@@ -35144,29 +35142,46 @@ check("Faz M3: a Market level narrows the spread, and the data cannot narrow it 
   const market = structures.place("player", marketStats, 0, 0);
   structures.advanceConstruction(market, marketStats.constructionSeconds);
 
-  // The payoff, stated as the movement rather than the numbers: each level buys
-  // a strictly better price on *both* sides at once, and the spread never
-  // inverts. Reading the quotes back from the panel is also what proves the
-  // level actually reaches the price, which a pinned 115 could never separate
-  // from a coincidence.
+  // The payoff, stated as the movement rather than the numbers. Reading the
+  // quotes back from the panel is what proves the level actually reaches the
+  // price, which a pinned 115 could never separate from a coincidence.
+  //
+  // Two claims, at the two altitudes that survive integer rounding. Per step, no
+  // resource's spread may *widen* (a cheap resource can round to an equal spread
+  // between two close commissions, which is fine — a downgrade is not). Across
+  // the whole ladder, the panel's total spread must *strictly* narrow, so a
+  // player who pays for Lv3 is guaranteed a real improvement, not a rounding
+  // wash. Both hold for any commission tuning that itself narrows.
   const quoteAtLevel = (level: number) => {
     market.level = level;
-    const price = trade.snapshotFor("player")!.prices[0]!;
-    return { commission: trade.commissionFor("player"), buy: price.buyPrice, sell: price.sellPrice };
+    return trade.snapshotFor("player")!.prices.map((price) => ({
+      resourceId: price.resourceId, buy: price.buyPrice, sell: price.sellPrice,
+    }));
   };
+  const totalSpread = (quotes: ReturnType<typeof quoteAtLevel>) =>
+    quotes.reduce((sum, price) => sum + (price.buy - price.sell), 0);
   const ladder = [1, 2, 3].map(quoteAtLevel);
-  for (const [index, step] of ladder.entries()) {
-    assert.equal(step.commission, commissionLadder[index], `level ${index + 1} trades at its own commission`);
-    assert.ok(step.sell < step.buy, `level ${index + 1} keeps a spread, so a round trip cannot mint gold`);
+  for (const [index, quotes] of ladder.entries()) {
+    market.level = index + 1;
+    assert.equal(trade.commissionFor("player"), commissionLadder[index], `level ${index + 1} trades at its own commission`);
+    for (const price of quotes) {
+      assert.ok(price.sell < price.buy,
+        `level ${index + 1} keeps a spread on ${price.resourceId}, so a round trip cannot mint gold`);
+    }
     if (index === 0) continue;
     const previous = ladder[index - 1]!;
-    assert.ok(step.buy <= previous.buy, `level ${index + 1} does not buy dearer than level ${index}`);
-    assert.ok(step.sell >= previous.sell, `level ${index + 1} does not sell cheaper than level ${index}`);
-    assert.ok(
-      step.buy - step.sell < previous.buy - previous.sell,
-      `level ${index + 1} narrows the spread it inherited`,
-    );
+    for (const [resourceIndex, price] of quotes.entries()) {
+      const was = previous[resourceIndex]!;
+      assert.ok(price.buy <= was.buy, `level ${index + 1} does not buy ${price.resourceId} dearer than level ${index}`);
+      assert.ok(price.sell >= was.sell, `level ${index + 1} does not sell ${price.resourceId} cheaper than level ${index}`);
+      assert.ok(price.buy - price.sell <= was.buy - was.sell,
+        `level ${index + 1} does not widen the ${price.resourceId} spread it inherited`);
+    }
   }
+  assert.ok(
+    totalSpread(ladder.at(-1)!) < totalSpread(ladder[0]!),
+    "levelling the Market all the way strictly narrows the total spread it quotes",
+  );
 
   // And a real trade is charged the level's rate, not the base one.
   market.level = 3;
@@ -35176,7 +35191,8 @@ check("Faz M3: a Market level narrows the spread, and the data cannot narrow it 
   assert.equal(trade.sell("player", "wood"), "traded");
   assert.equal(wallet.amount("gold"), goldBefore + woodQuote.sellPrice,
     "the sale paid the levelled rate the panel was quoting");
-  assert.ok(woodQuote.sellPrice > ladder[0]!.sell, "and that rate beats the Lv1 one it replaced");
+  const lv1Wood = ladder[0]!.find((price) => price.resourceId === "wood")!;
+  assert.ok(woodQuote.sellPrice > lv1Wood.sell, "and that rate beats the Lv1 one it replaced");
 
   // A kingdom that has paid for a Lv3 Market keeps that rate whichever of its
   // Markets the panel happens to be open on.
@@ -35265,8 +35281,10 @@ check("Faz M2: the Market panel quotes both rates, the index, and why it is refu
   assert.match(healthy.lines.join(" | "), /Lot: 100 birim · komisyon %15/);
 
   // Two buttons per tradable resource, signed against the player's gold so the
-  // directions cannot be confused at a glance.
-  assert.equal(healthy.actions.length, 4);
+  // directions cannot be confused at a glance — plus the whole-building demolish
+  // verb every non-centre structure now carries, appended last.
+  assert.equal(healthy.actions.length, 5);
+  assert.equal(healthy.actions.at(-1)!.id, "demolish", "razing the Market sits last, after its trade verbs");
   assert.equal(action(healthy, "trade-buy:wood").label, "100 Odun Al");
   assert.equal(action(healthy, "trade-buy:wood").cost, "-138 Altın");
   assert.equal(action(healthy, "trade-sell:wood").label, "100 Odun Sat");

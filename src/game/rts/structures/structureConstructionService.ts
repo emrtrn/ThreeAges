@@ -122,6 +122,16 @@ export class StructureConstructionService {
   cancelLatest(owner: UnitOwner): boolean {
     const structure = this.structures.cancelLatest(owner);
     if (!structure) return false;
+    return this.refundCancelledStructure(owner, structure);
+  }
+
+  /** Cancel this exact unbuilt site and refund the reservation made for it. */
+  cancel(owner: UnitOwner, structure: PlacedStructure): boolean {
+    if (structure.owner !== owner || !this.structures.cancel(structure)) return false;
+    return this.refundCancelledStructure(owner, structure);
+  }
+
+  private refundCancelledStructure(owner: UnitOwner, structure: PlacedStructure): boolean {
     const reservation = this.reservations.get(structure.id);
     if (reservation) this.kingdoms.get(owner).wallet.refund(reservation);
     this.reservations.delete(structure.id);

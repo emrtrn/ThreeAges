@@ -245,6 +245,8 @@ export interface SelectedStructureView {
   readonly maxHealth: number;
   /** True once the player has clicked "Yık" and the panel is asking to confirm. */
   readonly demolishArmed?: boolean;
+  /** True once the player has clicked "İnşaatı İptal Et" on this site. */
+  readonly cancelConstructionArmed?: boolean;
   readonly detail: StructureDetailView;
   /** Null when the data gives this building no upgrade at all. */
   readonly upgrade: StructureUpgradeView | null;
@@ -308,6 +310,7 @@ export const AGE_UP_ACTION = "age-up";
 export const RALLY_ACTION = "rally";
 export const UPGRADE_ACTION = "upgrade";
 export const DEMOLISH_ACTION = "demolish";
+export const CANCEL_CONSTRUCTION_ACTION = "cancel-construction";
 export const TRADE_BUY_ACTION_PREFIX = "trade-buy:";
 export const TRADE_SELL_ACTION_PREFIX = "trade-sell:";
 
@@ -464,6 +467,15 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
 
 function describeStructure(structure: SelectedStructureView): SelectionPanelContent {
   const base = describeStructureDetail(structure);
+  if (structure.detail.kind === "construction") {
+    return {
+      ...base,
+      actions: [...base.actions, cancelConstructionAction(structure)],
+      portrait: structure.portrait ?? null,
+      selectionCount: 1,
+      health: { current: structure.health, max: structure.maxHealth },
+    };
+  }
   const upgrade = upgradeAction(structure);
   const gainLine = upgradeGainLine(structure);
   const lines = gainLine ? [...base.lines, gainLine] : base.lines;
@@ -486,6 +498,28 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
     portrait: structure.portrait ?? null,
     selectionCount: 1,
     health: { current: structure.health, max: structure.maxHealth },
+  };
+}
+
+/** A foundation has not become a building yet, so cancelling it returns its reservation in full. */
+function cancelConstructionAction(structure: SelectedStructureView): SelectionAction {
+  if (structure.cancelConstructionArmed) {
+    return {
+      id: CANCEL_CONSTRUCTION_ACTION,
+      label: "İptali Onayla",
+      cost: null,
+      enabled: true,
+      reason: null,
+      hint: `${structure.label} şantiyesi kaldırılacak; tüm kaynaklar iade edilecek.`,
+    };
+  }
+  return {
+    id: CANCEL_CONSTRUCTION_ACTION,
+    label: "İnşaatı İptal Et",
+    cost: null,
+    enabled: true,
+    reason: null,
+    hint: "Şantiyeyi kaldırır ve harcanan kaynakları tam iade eder. Onay ister.",
   };
 }
 

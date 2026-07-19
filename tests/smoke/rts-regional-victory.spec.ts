@@ -24,6 +24,14 @@ test("§58: the regional victory tracker runs behind its flag and leaves no trac
   const tracker = page.locator("[data-rts-objectives]");
   await expect(tracker).toBeVisible();
 
+  const toggle = tracker.getByRole("button", { name: "Görevler", exact: true });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(tracker.locator(".rts-objective-content")).toBeHidden();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(tracker.locator(".rts-objective-content")).toBeVisible();
+
   // §60 replaced the minimap with named strategic points, so the names are the
   // navigation aid and have to be on screen, not only in the world.
   await expect(tracker).toContainText("Batı Geçidi");
