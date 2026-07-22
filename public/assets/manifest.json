@@ -19966,6 +19966,54 @@
       "license": "Project-local RTS gameplay marker"
     },
     {
+      "id": "threeages-rts-expansion-marker",
+      "name": "BP RTS Expansion Marker.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Markers",
+      "path": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
+      "tags": ["threeages", "rts", "marker", "expansion"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 626 },
+      "license": "Project-local RTS gameplay marker"
+    },
+    {
+      "id": "threeages-rts-tree-marker",
+      "name": "BP RTS Tree.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Markers",
+      "path": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "tags": ["threeages", "rts", "marker", "tree"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 677 },
+      "license": "Project-local RTS gameplay marker"
+    },
+    {
+      "id": "threeages-rts-strategic-point-marker",
+      "name": "BP RTS Strategic Point.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Markers",
+      "path": "assets/ThreeAges/Actors/Markers/BP_RTS_StrategicPoint.actor.json",
+      "tags": ["threeages", "rts", "marker", "objective"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 578 },
+      "license": "Project-local RTS gameplay marker"
+    },
+    {
+      "id": "threeages-rts-navigation-blocker-marker",
+      "name": "BP RTS Navigation Blocker.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Markers",
+      "path": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "tags": ["threeages", "rts", "marker", "navigation"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 545 },
+      "license": "Project-local RTS gameplay marker"
+    },
+    {
       "id": "ual1-standard-rm",
       "name": "UAL1 Standard RM",
       "assetType": "skeletalMesh",
@@ -23319,7 +23367,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 1363
+        "bytes": 3281
       },
       "license": "Unknown"
     }

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_ExpansionMarker",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "regionId", "label": "Region Id", "type": "text", "default": "enemy_west" },
+    { "key": "role", "label": "Role", "type": "select", "default": "outpost", "options": ["outpost", "depot", "production"] },
+    { "key": "buildingId", "label": "Building Id", "type": "text", "default": "outpost" }
+  ],
+  "components": [{ "id": "root", "component": "Transform", "props": {} }],
+  "interfaces": [], "references": [], "dispatchers": [], "eventBindings": [], "messageBindings": [], "construction": null
+}

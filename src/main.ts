@@ -37,6 +37,8 @@ interface BootFoundationResult {
   readonly preset: GamePreset | null;
   /** Assetization Faz B's opt-in catalog load gate. */
   readonly contentAssetsEnabled: boolean;
+  /** Assetization Faz D's opt-in authored gameplay-Level gate. */
+  readonly levelAssetsEnabled: boolean;
   /** Prosperity is debug-only in Phase 6 and never enters gameplay gates. */
   readonly prosperityDebugEnabled: boolean;
   /**
@@ -82,6 +84,7 @@ async function bootFoundation(): Promise<BootFoundationResult> {
   return {
     preset,
     contentAssetsEnabled: config.flags.contentAssets,
+    levelAssetsEnabled: config.flags.levelAssets,
     prosperityDebugEnabled: config.flags.prosperity,
     regionalVictoryEnabled: config.flags.regionalVictory,
     fogOfWarEnabled: config.flags.fogOfWar,
@@ -89,7 +92,7 @@ async function bootFoundation(): Promise<BootFoundationResult> {
 }
 
 async function main(): Promise<void> {
-  const { preset, contentAssetsEnabled, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
+  const { preset, contentAssetsEnabled, levelAssetsEnabled, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
     await bootFoundation();
 
   const params = new URLSearchParams(location.search);
@@ -115,12 +118,19 @@ async function main(): Promise<void> {
     const contentCatalog = contentAssetsEnabled
       ? await loadRtsContentCatalog(unitBalance, buildingBalance)
       : undefined;
+    const authoredLevel = levelAssetsEnabled && preset?.levelRef
+      ? await (await import("@/game/rts/world/rtsLevelLoader")).loadRtsLevelDefinition(
+        preset.levelRef,
+        { buildings: buildingBalance, resources: resourceBalance },
+      )
+      : undefined;
     const rts = new RtsApp(canvas, {
       debug: params.has("debug"),
       prosperityDebugEnabled,
       regionalVictoryEnabled,
       fogOfWarEnabled,
       ...(contentCatalog ? { contentCatalog } : {}),
+      ...(authoredLevel ? { level: authoredLevel } : {}),
       unitBalance,
       buildingBalance,
       resourceBalance,

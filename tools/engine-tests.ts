@@ -88,6 +88,7 @@ import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
 import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
 import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
 import { adaptRtsLevel, RtsLevelError } from "../src/game/rts/world/rtsLevelAdapter";
+import { resolveRtsSpatialLayout } from "../src/game/rts/world/rtsSpatialLayout";
 import {
   RTS_PLACEMENT_GRID_SIZE,
   buildingFootprintBlocker,
@@ -28873,6 +28874,8 @@ check("Assetization Faz A: the content-asset migration is gated off by default",
     "Faz A ships no behaviour change: the legacy code-side art path stays the default",
   );
   assert.equal(resolveFeatureFlags({}, "contentAssets").contentAssets, true, "?flags=contentAssets opts in");
+  assert.equal(resolveFeatureFlags().levelAssets, false, "Level gameplay data remains opt-in during Faz D");
+  assert.equal(resolveFeatureFlags({}, "levelAssets").levelAssets, true, "?flags=levelAssets opts in");
   // The flag is a dev opt-in, never a shipped preset's (plan §9 Faz A, §13).
   for (const presetId of ["core_match", "gameplay_proof", "debug_fast"]) {
     const preset = validateGamePreset(readPresetJson(presetId), presetId);
@@ -28952,13 +28955,55 @@ check("Assetization Faz D: Level marker Actors resolve starts, resources, anchor
   ];
   const markerActors = [...starts,
     actor("BP_RTS_ResourceNode", [{ key: "nodeId", label: "Node", type: "text", default: "n" }, { key: "resourceId", label: "Resource", type: "text", default: "stone" }, { key: "kind", label: "Kind", type: "select", default: "safe" }], { nodeId: "stone-a", resourceId: "stone", kind: "safe" }, [2, 0, 3]),
-    actor("BP_RTS_BuildAnchor", [{ key: "buildingId", label: "Building", type: "text", default: "farm" }], { buildingId: "farm" }, [4, 0, 5]),
+    actor("BP_RTS_BuildAnchor", [
+      { key: "owner", label: "Owner", type: "select", default: "enemy" },
+      { key: "buildingId", label: "Building", type: "text", default: "farm" },
+    ], { buildingId: "farm" }, [4, 0, 5]),
   ];
   const level = adaptRtsLevel(markerActors, [{ id: "route", position: [1, 0, 2], spline: { schema: 1, closed: false, defaultUp: [0, 1, 0], reparamStepsPerSegment: 8, points: [{ id: "a", position: [0, 0, 0], pointType: "linear" }, { id: "b", position: [4, 0, 0], pointType: "linear" }] }, runtime: { tags: ["rts.route:enemy:base:0"] } }], { buildings, resources });
   assert.deepEqual(level.playerStart, { x: -10, z: 10 });
   assert.deepEqual(level.resourceNodes, [{ id: "stone-a", resourceId: "stone", kind: "safe", x: 2, z: 3 }]);
   assert.deepEqual(level.routes.get("rts.route:enemy:base:0"), [{ x: 1, z: 2 }, { x: 5, z: 2 }]);
   assert.throws(() => adaptRtsLevel([starts[0]!], [], { buildings, resources }), RtsLevelError);
+});
+
+check("Assetization Faz D: Expansion markers require all roles and an authored route", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
+  const actor = (name: string, values: unknown[], overrides: Record<string, string>, position: [number, number, number]) => ({
+    index: 0, instance: { classRef: `${name}.actor.json`, position, variableOverrides: overrides },
+    def: normalizeActorScriptDef({ name, parentClass: "actor", variables: values }),
+  });
+  const starts = [
+    actor("BP_RTS_KingdomStart", [{ key: "owner", label: "Owner", type: "select", default: "player" }], { owner: "player" }, [-10, 0, 10]),
+    actor("BP_RTS_KingdomStart", [{ key: "owner", label: "Owner", type: "select", default: "player" }], { owner: "enemy" }, [10, 0, -10]),
+  ];
+  const expansionVariables = [
+    { key: "regionId", label: "Region", type: "text", default: "west" },
+    { key: "role", label: "Role", type: "select", default: "outpost" },
+    { key: "buildingId", label: "Building", type: "text", default: "outpost" },
+  ];
+  const expansion = [
+    actor("BP_RTS_ExpansionMarker", expansionVariables, { regionId: "west", role: "outpost", buildingId: "outpost" }, [0, 0, 0]),
+    actor("BP_RTS_ExpansionMarker", expansionVariables, { regionId: "west", role: "depot", buildingId: "depot" }, [0, 0, -4]),
+    actor("BP_RTS_ExpansionMarker", expansionVariables, { regionId: "west", role: "production", buildingId: "farm" }, [0, 0, 4]),
+  ];
+  const route = [{ id: "west-route", position: [0, 0, 0], spline: { schema: 1, closed: false, defaultUp: [0, 1, 0], reparamStepsPerSegment: 8, points: [{ id: "a", position: [0, 0, 0], pointType: "linear" }, { id: "b", position: [4, 0, 0], pointType: "linear" }] }, runtime: { tags: ["rts.route:enemy:west:0"] } }];
+  const level = adaptRtsLevel([...starts, ...expansion], route, { buildings, resources });
+  assert.deepEqual(level.expansions, [{
+    id: "west",
+    outpost: { buildingId: "outpost", x: 0, z: 0 },
+    depot: { buildingId: "depot", x: 0, z: -4 },
+    production: { buildingId: "farm", x: 0, z: 4 },
+    routes: [[{ x: 0, z: 0 }, { x: 4, z: 0 }]],
+  }]);
+  assert.throws(() => adaptRtsLevel([...starts, ...expansion.slice(0, 2)], route, { buildings, resources }), RtsLevelError);
+  assert.throws(() => adaptRtsLevel([...starts, ...expansion], [], { buildings, resources }), RtsLevelError);
+  assert.throws(() => adaptRtsLevel(starts, [{ ...route[0]!, runtime: { tags: ["rts.route:enemy:west"] } }], { buildings, resources }), RtsLevelError);
+  assert.throws(() => adaptRtsLevel([
+    starts[0]!,
+    actor("BP_RTS_KingdomStart", [{ key: "owner", label: "Owner", type: "select", default: "player" }], { owner: "enemy" }, [71, 0, 0]),
+  ], [], { buildings, resources }), RtsLevelError);
 });
 
 check("Assetization Faz D: shipped RTS Core Match Level resolves its marker assets", () => {
@@ -28984,8 +29029,40 @@ check("Assetization Faz D: shipped RTS Core Match Level resolves its marker asse
   assert.deepEqual(level.playerStart, { x: -38, z: 38 });
   assert.deepEqual(level.enemyStart, { x: 38, z: -38 });
   assert.deepEqual(level.resourceNodes, [{ id: "enemy-stone-safe", resourceId: "stone", kind: "safe", x: 30, z: -24 }]);
-  assert.deepEqual(level.buildAnchors, [{ buildingId: "farm", x: 26, z: -38 }]);
+  assert.deepEqual(level.trees, [{ id: "enemy-wood-1", forestId: "enemy-grove", capacity: 40, variant: "pine", x: 48, z: -30 }]);
+  assert.deepEqual(level.strategicPoints, [{ id: "west_pass", name: "Batı Geçidi", captureRadius: 10, x: -20, z: -20 }]);
+  assert.deepEqual(level.navigationBlockers, [{ min: [-12, -1, -4], max: [12, 4, 4] }]);
+  assert.deepEqual(level.buildAnchors, [{ owner: "enemy", buildingId: "farm", x: 26, z: -38 }]);
   assert.deepEqual(level.routes.get("rts.route:enemy:base:0"), [{ x: 38, z: -38 }, { x: 26, z: -38 }]);
+  assert.deepEqual(level.expansions, [{
+    id: "enemy_west",
+    outpost: { buildingId: "outpost", x: 10, z: -32 },
+    depot: { buildingId: "depot", x: 10, z: -40 },
+    production: { buildingId: "farm", x: 10, z: -24 },
+    routes: [[{ x: 26, z: -30 }, { x: 14, z: -30 }, { x: 14, z: -24 }, { x: 14, z: -40 }]],
+  }]);
+});
+
+check("Assetization Faz D: RtsApp spatial inputs stay legacy until an authored Level is supplied", () => {
+  assert.equal(resolveRtsSpatialLayout(), RTS_BLOCKOUT_MAP);
+  const authored = {
+    playerStart: { x: -10, z: 10 },
+    enemyStart: { x: 10, z: -10 },
+    resourceNodes: [],
+    trees: [],
+    strategicPoints: [],
+    navigationBlockers: [],
+    buildAnchors: [
+      { owner: "player" as const, buildingId: "farm", x: -6, z: 6 },
+      { owner: "enemy" as const, buildingId: "farm", x: 6, z: -6 },
+    ],
+    expansions: [],
+    routes: new Map([["rts.route:enemy:base:0", [{ x: 10, z: -10 }, { x: 6, z: -6 }]]]),
+  };
+  const spatial = resolveRtsSpatialLayout(authored);
+  assert.deepEqual(spatial.playerStart, authored.playerStart);
+  assert.deepEqual(spatial.enemyBaseAnchors, [{ owner: "enemy", buildingId: "farm", x: 6, z: -6 }]);
+  assert.throws(() => resolveRtsSpatialLayout({ ...authored, routes: new Map() }), RtsLevelError);
 });
 
 check("Assetization Faz B/C: content catalog accepts known balance ids and the shipped Actor pilot refs", () => {

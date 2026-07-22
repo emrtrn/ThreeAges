@@ -34,6 +34,7 @@ export const FEATURE_FLAG_IDS = [
   "advancedAI",
   "finalAssets",
   "contentAssets",
+  "levelAssets",
 ] as const;
 
 export type FeatureFlag = (typeof FEATURE_FLAG_IDS)[number];

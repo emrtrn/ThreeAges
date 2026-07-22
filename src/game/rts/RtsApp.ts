@@ -43,6 +43,8 @@ import { RtsPointer } from "./input/rtsPointer";
 import { createRtsGround, RTS_WORLD_HALF_EXTENT } from "./world/rtsGround";
 import { RTS_PLACEMENT_GRID_SIZE } from "./structures/placementGrid";
 import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
+import { resolveRtsSpatialLayout, type RtsSpatialLayout } from "./world/rtsSpatialLayout";
+import type { RtsLevelDefinition } from "./world/rtsLevelAdapter";
 import { RtsMapArt, collectWorldProps } from "./world/rtsMapArt";
 import { UnitSystem } from "./units/unitSystem";
 import { Unit } from "./units/unit";
@@ -153,8 +155,6 @@ const STARTING_GUARD_COUNT = 3;
  */
 const STARTING_WORKER_COUNT = 5;
 const SETTLEMENT_POPULATION_CAPACITY = 20;
-const PLAYER_CENTER_POSITION = RTS_BLOCKOUT_MAP.playerStart;
-const ENEMY_CENTER_POSITION = RTS_BLOCKOUT_MAP.enemyStart;
 /**
  * Where the camera opens a match.
  *
@@ -172,10 +172,6 @@ const ENEMY_CENTER_POSITION = RTS_BLOCKOUT_MAP.enemyStart;
  * unchanged, and panning back to the corner is still allowed.
  */
 const OPENING_FOCUS_PULL_TOWARD_CENTER = 0.15;
-const OPENING_FOCUS = {
-  x: PLAYER_CENTER_POSITION.x * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
-  z: PLAYER_CENTER_POSITION.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
-};
 /** Faz 5.0: both kingdoms run the same economy; only this one has a UI. */
 const KINGDOM_OWNERS: readonly UnitOwner[] = ["player", "enemy"];
 const PLAYER_OWNER: UnitOwner = "player";
@@ -215,6 +211,8 @@ export interface RtsAppOptions {
    * entries, so the legacy presentation path remains unchanged for now.
    */
   readonly contentCatalog?: RtsContentCatalog;
+  /** Faz D opt-in Level gameplay markers. Omitted keeps the blockout fallback. */
+  readonly level?: RtsLevelDefinition;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
   readonly unitBalance: UnitBalance;
   /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
@@ -239,6 +237,8 @@ export interface RtsAppOptions {
 }
 
 export class RtsApp {
+  private readonly spatial: RtsSpatialLayout;
+  private readonly openingFocus: { readonly x: number; readonly z: number };
   private readonly renderer: WebGLRenderer;
   private readonly actorVisuals: RtsActorVisualFactory | null;
   private readonly buildingVisuals: RtsBuildingVisuals;
@@ -355,6 +355,11 @@ export class RtsApp {
     private readonly canvas: HTMLCanvasElement,
     private readonly options: RtsAppOptions,
   ) {
+    this.spatial = resolveRtsSpatialLayout(this.options.level);
+    this.openingFocus = {
+      x: this.spatial.playerStart.x * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
+      z: this.spatial.playerStart.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
+    };
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
     this.actorVisuals = this.options.contentCatalog
       ? new RtsActorVisualFactory(this.renderer, this.options.contentCatalog)
@@ -370,8 +375,8 @@ export class RtsApp {
     this.resourceCapacity = new ResourceCapacitySystem(this.structures);
     this.logisticsOccupation = new LogisticsOccupationSystem(this.depotLogistics);
     this.productionLogistics = new ProductionLogisticsSystem(this.structures, this.roads, this.depotLogistics, this.territory, this.logisticsOccupation);
-    this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, RTS_BLOCKOUT_MAP.resourceNodes);
-    this.forests = new ForestSystem(RTS_BLOCKOUT_MAP.trees);
+    this.resourceNodes = new ResourceNodeSystem(this.options.resourceBalance, this.spatial.resourceNodes);
+    this.forests = new ForestSystem(this.spatial.trees);
     this.kingdoms = new KingdomRegistry(
       KINGDOM_OWNERS,
       this.units,
@@ -388,7 +393,7 @@ export class RtsApp {
     // null and nothing downstream ever asks them anything.
     if (this.options.regionalVictoryEnabled) {
       this.strategicPoints = new StrategicPointSystem(
-        RTS_BLOCKOUT_MAP.strategicPoints,
+        this.spatial.strategicPoints,
         (x, z) => this.territory.ownerAt(x, z),
         // Workers are excluded: §58 is contested by *force*, and letting a
         // wandering gatherer stall a counter would make the condition a
@@ -602,9 +607,9 @@ export class RtsApp {
       vision: this.vision && this.enemyMemory
         ? new VisionSystemAiFilter(this.vision, this.enemyMemory, AI_OWNER)
         : null,
-      anchors: RTS_BLOCKOUT_MAP.enemyBaseAnchors,
-      baseRoute: RTS_BLOCKOUT_MAP.enemyBaseRoute,
-      expansions: RTS_BLOCKOUT_MAP.enemyExpansions,
+      anchors: this.spatial.enemyBaseAnchors,
+      baseRoute: this.spatial.enemyBaseRoute,
+      expansions: this.spatial.enemyExpansions,
       construction: this.structureConstruction,
       roadConstruction: this.roadConstruction,
       workerProduction: this.workerProduction,
@@ -901,7 +906,7 @@ export class RtsApp {
     this.scene.add(blockout);
     void this.loadMapArt(blockout);
     this.spawnCenters();
-    this.cameraController.setFocus(OPENING_FOCUS.x, OPENING_FOCUS.z);
+    this.cameraController.setFocus(this.openingFocus.x, this.openingFocus.z);
     this.territory.refresh();
     this.refreshNavigationBlockers();
     this.scene.add(this.centers.root);
@@ -959,8 +964,8 @@ export class RtsApp {
         this.units.spawn(owner, x, z, worker);
       }
     };
-    spawnSide("player", player, PLAYER_CENTER_POSITION, 1);
-    spawnSide("enemy", enemy, ENEMY_CENTER_POSITION, -1);
+    spawnSide("player", player, this.spatial.playerStart, 1);
+    spawnSide("enemy", enemy, this.spatial.enemyStart, -1);
   }
 
   private readonly onFrame = (now: number): void => {
@@ -1507,15 +1512,15 @@ export class RtsApp {
     const maxHealth = stats?.maxHealth ?? COMMAND_CENTER_MAX_HEALTH;
     const playerCenter = this.centers.spawn(
       "player",
-      PLAYER_CENTER_POSITION.x,
-      PLAYER_CENTER_POSITION.z,
+      this.spatial.playerStart.x,
+      this.spatial.playerStart.z,
       maxHealth,
       stats,
     );
     const enemyCenter = this.centers.spawn(
       "enemy",
-      ENEMY_CENTER_POSITION.x,
-      ENEMY_CENTER_POSITION.z,
+      this.spatial.enemyStart.x,
+      this.spatial.enemyStart.z,
       maxHealth,
       stats,
     );
@@ -1726,7 +1731,7 @@ export class RtsApp {
     // A restart is a fresh match, so the view returns to the opening framing too
     // — otherwise the player restarts into wherever they had scrolled to, which
     // under fog is very likely unexplored ground.
-    this.cameraController.setFocus(OPENING_FOCUS.x, OPENING_FOCUS.z);
+    this.cameraController.setFocus(this.openingFocus.x, this.openingFocus.z);
     this.territory.refresh();
     this.refreshNavigationBlockers();
     this.spawnStartingUnits();
@@ -1757,7 +1762,7 @@ export class RtsApp {
 
   private navigationBlockers() {
     return [
-      ...RTS_BLOCKOUT_MAP.navigationBlockers,
+      ...this.spatial.navigationBlockers,
       ...this.centers.navigationBlockers(),
       ...this.structures.navigationBlockers(),
     ];

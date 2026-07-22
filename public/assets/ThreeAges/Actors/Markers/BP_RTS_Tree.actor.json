@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_Tree",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "treeId", "label": "Tree Id", "type": "text", "default": "tree-1" },
+    { "key": "forestId", "label": "Forest Id", "type": "text", "default": "grove" },
+    { "key": "capacity", "label": "Capacity", "type": "number", "default": 40 },
+    { "key": "variant", "label": "Variant", "type": "select", "default": "pine", "options": ["pine", "tree1", "tree2"] }
+  ],
+  "components": [{ "id": "root", "component": "Transform", "props": {} }],
+  "interfaces": [], "references": [], "dispatchers": [], "eventBindings": [], "messageBindings": [], "construction": null
+}

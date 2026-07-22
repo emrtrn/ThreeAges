@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_NavigationBlocker",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "width", "label": "Width", "type": "number", "default": 24 },
+    { "key": "depth", "label": "Depth", "type": "number", "default": 8 },
+    { "key": "height", "label": "Height", "type": "number", "default": 5 }
+  ],
+  "components": [{ "id": "root", "component": "Transform", "props": {} }],
+  "interfaces": [], "references": [], "dispatchers": [], "eventBindings": [], "messageBindings": [], "construction": null
+}

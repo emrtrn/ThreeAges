@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_StrategicPoint",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "pointId", "label": "Point Id", "type": "text", "default": "west_pass" },
+    { "key": "label", "label": "Label", "type": "text", "default": "West Pass" },
+    { "key": "captureRadius", "label": "Capture Radius", "type": "number", "default": 10 }
+  ],
+  "components": [{ "id": "root", "component": "Transform", "props": {} }],
+  "interfaces": [], "references": [], "dispatchers": [], "eventBindings": [], "messageBindings": [], "construction": null
+}

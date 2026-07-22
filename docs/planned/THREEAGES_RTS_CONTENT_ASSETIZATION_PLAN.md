@@ -342,7 +342,16 @@ Level'da kullanilacak ilk marker Actor Script'leri:
 - `BP_RTS_BuildAnchor.actor.json`
   - `owner`, `buildingId`, `regionId`, `priority`
 - `BP_RTS_ExpansionMarker.actor.json`
-  - `regionId`, `role`: `outpost | depot | production`
+  - `regionId`, `role`: `outpost | depot | production`, `buildingId`
+  - `outpost` ve `depot` rolleri ayni adli balance binasini kullanir; `production`
+    rolu ise `farm` veya `lumber_camp` gibi acik bir balance `buildingId`si tasir.
+- `BP_RTS_Tree.actor.json`
+  - `treeId`, `forestId`, `capacity`, `variant`: `pine | tree1 | tree2`
+- `BP_RTS_StrategicPoint.actor.json`
+  - `pointId`, `label`, `captureRadius`
+- `BP_RTS_NavigationBlocker.actor.json`
+  - Actor transform merkezi ile `width`, `depth`, `height`; adapter bunu mevcut
+    `NavBlocker { min, max }` sozlesmesine cevirir.
 
 Road ve expansion route'lari, nokta listelerini Actor variable'a gommek yerine
 Forge Spline actor'lariyla author edilir. `LayoutSplineActor.runtime.tags`
@@ -656,6 +665,29 @@ Actor class'lari `public/assets/ThreeAges/Actors/Markers/` altinda ve manifestte
 yer alir. Adapter'in start/resource/anchor/spline route basari ve hata
 sozlesmesi engine testiyle kilitlenmistir.
 
+`BP_RTS_ExpansionMarker` da eklendi. Adapter her region icin tekil
+`outpost`/`depot`/`production` uyelerini ve en az bir
+`rts.route:enemy:<region>:<index>` spline route'unu zorunlu tutar; bilinmeyen
+balance binasi, tekrarli rol, hatali route tag'i veya RTS world bounds disina
+cikan Actor/Spline noktasi boot validation hatasidir. Bootstrap Level bir
+`enemy_west` expansion ornegini bu sozlesmeyle tasir.
+
+Tree, Strategic Point ve Navigation Blocker marker'lari da adapter'a eklendi;
+shipped Level bunlarin birer gercek ornegini tasir ve testte legacy sistemlerin
+tukettigi `RtsTreeDefinition`, `RtsStrategicPoint` ve `NavBlocker` sekillerine
+cozulur. Tum mevcut kaynak/agac/expansion/route/strategic point/blocker
+envanterinin eksiksiz Level kopyasi ve aktif runtime kabul senaryosu hala
+bekler.
+
+`rtsSpatialLayout.ts` bu bekleyen runtime portunu hazirlar: Level verilmezse
+`RTS_BLOCKOUT_MAP`in mevcut degerini aynen kullanir; Level verilirse start,
+resource, tree, strategic point, enemy anchor/base route/expansion ve blocker
+girdilerini `RtsApp`e verir. `levelAssets` feature flag'i varsayilan kapali;
+boot yalniz bu flag ve preset `levelRef` birlikte varsa browser-side loader'i
+calistirir. Bootstrap Level henuz tam envanteri tasimadigi icin shipped
+presetlere `levelRef` yazilmamistir; dolayisiyla normal `?rts` ve
+`?rts&flags=contentAssets` davranisi degismez.
+
 Teslimatlar:
 
 - Generic Actor instance variable override destegi.
@@ -663,6 +695,8 @@ Teslimatlar:
 - `RtsLevelAdapter`, browser-side Level loader'i ve pure/shipped-asset validation
   testleri.
 - Preset `levelRef` validation migration'i.
+- `RtsApp` spatial dependency portu ve varsayilan-kapali `levelAssets` runtime
+  gate'i.
 - Bootstrap start, resource, anchor ve route verisinin yeni Level'e tasinmasi.
 - Tam spatial contract migration'i ve `RtsApp` opt-in baglantisi (bekliyor).
 
