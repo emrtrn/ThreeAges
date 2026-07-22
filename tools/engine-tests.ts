@@ -29006,7 +29006,7 @@ check("Assetization Faz D: Expansion markers require all roles and an authored r
   ], [], { buildings, resources }), RtsLevelError);
 });
 
-check("Assetization Faz D: shipped RTS Core Match Level resolves its marker assets", () => {
+check("Assetization Faz D: shipped RTS Core Match Level reproduces the full legacy spatial contract", () => {
   const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
   const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
   const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_CoreMatch.level.json", "utf8")) as {
@@ -29026,21 +29026,58 @@ check("Assetization Faz D: shipped RTS Core Match Level resolves its marker asse
     ),
   }));
   const level = adaptRtsLevel(actors, layout.splines, { buildings, resources });
-  assert.deepEqual(level.playerStart, { x: -38, z: 38 });
-  assert.deepEqual(level.enemyStart, { x: 38, z: -38 });
-  assert.deepEqual(level.resourceNodes, [{ id: "enemy-stone-safe", resourceId: "stone", kind: "safe", x: 30, z: -24 }]);
-  assert.deepEqual(level.trees, [{ id: "enemy-wood-1", forestId: "enemy-grove", capacity: 40, variant: "pine", x: 48, z: -30 }]);
-  assert.deepEqual(level.strategicPoints, [{ id: "west_pass", name: "Batı Geçidi", captureRadius: 10, x: -20, z: -20 }]);
-  assert.deepEqual(level.navigationBlockers, [{ min: [-12, -1, -4], max: [12, 4, 4] }]);
-  assert.deepEqual(level.buildAnchors, [{ owner: "enemy", buildingId: "farm", x: 26, z: -38 }]);
-  assert.deepEqual(level.routes.get("rts.route:enemy:base:0"), [{ x: 38, z: -38 }, { x: 26, z: -38 }]);
-  assert.deepEqual(level.expansions, [{
-    id: "enemy_west",
-    outpost: { buildingId: "outpost", x: 10, z: -32 },
-    depot: { buildingId: "depot", x: 10, z: -40 },
-    production: { buildingId: "farm", x: 10, z: -24 },
-    routes: [[{ x: 26, z: -30 }, { x: 14, z: -30 }, { x: 14, z: -24 }, { x: 14, z: -40 }]],
-  }]);
+  // The shipped Level is now the complete copy of RTS_BLOCKOUT_MAP's gameplay
+  // inventory, so resolving it must reproduce exactly the legacy spatial
+  // contract. That is the Faz D "eksiksiz Level kopyasi" acceptance: the
+  // authored markers, not rtsMapBlockout.ts, become the spatial authority.
+  const fromLevel = resolveRtsSpatialLayout(level);
+  const legacy = resolveRtsSpatialLayout();
+  assert.deepEqual(fromLevel.playerStart, legacy.playerStart);
+  assert.deepEqual(fromLevel.enemyStart, legacy.enemyStart);
+  assert.deepEqual(fromLevel.resourceNodes, legacy.resourceNodes);
+  assert.deepEqual(fromLevel.trees, legacy.trees);
+  assert.deepEqual(fromLevel.strategicPoints, legacy.strategicPoints);
+  assert.deepEqual(fromLevel.navigationBlockers, legacy.navigationBlockers);
+  assert.deepEqual(fromLevel.enemyBaseRoute, legacy.enemyBaseRoute);
+  assert.deepEqual(fromLevel.enemyExpansions, legacy.enemyExpansions);
+  // Legacy base anchors carry no owner; the Level path tags each enemy anchor.
+  assert.deepEqual(
+    fromLevel.enemyBaseAnchors.map((anchor) => {
+      const { owner: _owner, ...rest } = anchor as { owner?: string } & typeof anchor;
+      return rest;
+    }),
+    legacy.enemyBaseAnchors,
+  );
+});
+
+check("Assetization Faz D: the authored Level keeps both flanks and the enemy base route reachable", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
+  const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_CoreMatch.level.json", "utf8")) as {
+    actors: Array<{ classRef: string; position: [number, number, number]; variableOverrides?: Record<string, string | number | boolean | string[]> }>;
+    splines: Parameters<typeof adaptRtsLevel>[1];
+  };
+  const actors = layout.actors.map((instance, index) => ({
+    index,
+    instance,
+    def: normalizeActorScriptDef(JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown, instance.classRef),
+  }));
+  const spatial = resolveRtsSpatialLayout(adaptRtsLevel(actors, layout.splines, { buildings, resources }));
+
+  // The two starts stay connected around the authored ridge, using an open flank
+  // rather than crossing it — the §25 spatial contract, now sourced from markers.
+  const navigation = new RtsNavigation();
+  navigation.setBlockers(spatial.navigationBlockers);
+  const path = navigation.plan(
+    new Vector3(spatial.playerStart.x, 0, spatial.playerStart.z),
+    new Vector3(spatial.enemyStart.x, 0, spatial.enemyStart.z),
+  );
+  assert.ok(path && path.length > 2, "the Level's opposing starts remain connected");
+  assert.ok(path.some((point) => Math.abs(point.x) > 12.5), "the Level route uses an open flank, not the ridge");
+
+  // The AI's mandatory base road spine is authored as a spline and survives the
+  // round-trip as a walkable multi-point route.
+  assert.ok(spatial.enemyBaseRoute.length >= 2, "the enemy base route carries at least two authored points");
 });
 
 check("Assetization Faz D: RtsApp spatial inputs stay legacy until an authored Level is supplied", () => {

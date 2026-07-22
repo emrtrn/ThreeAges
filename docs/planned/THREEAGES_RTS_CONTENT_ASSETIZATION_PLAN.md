@@ -1,8 +1,9 @@
 # ThreeAges RTS Content Drawer Assetlestirme Plani
 
 Olusturulma tarihi: 2026-07-17  
-Durum: Faz C tamamlandi (2026-07-22; manual Content Drawer -> runtime kabul
-teyitli). Aktif uygulama adimi: Faz D - Level gameplay marker'lari.
+Durum: Faz D tamamlandi (2026-07-22; RTS_BLOCKOUT_MAP'in tam spatial envanteri
+Level'e kopyalandi ve opt-in runtime baglantisi kuruldu). Aktif uygulama adimi:
+Faz E - Landscape ve authored dunya.
 Kapsam: `RtsApp` ile Forge Actor Script, oyun verisi, Level ve UI Widget
 sistemleri arasinda veri/authoring koprusu kurulmasi
 
@@ -634,59 +635,44 @@ Kabul:
 
 #### Faz D - Durum (2026-07-22)
 
-Devam ediyor. Generic Forge `LayoutActorInstance.variableOverrides` zinciri
+Tamamlandi. Generic Forge `LayoutActorInstance.variableOverrides` zinciri
 tamamlandi: layout semasi, save allowlist/normalizasyonu, class default +
 type-safe instance override birlestirme helper'i ve `ScriptActor` runtime
 aktarimi birlikte calisiyor. Bilinmeyen veya Actor variable tipiyle uyusmayan
 override runtime'a sizmaz. Engine testleri default/override birlesimini ve
 layout round-trip'ini kapsar.
 
-Marker bootstrap dilimi tamamlandi: `RTS_CoreMatch.level.json`, iki Kingdom
-Start, bir Resource Node, bir Build Anchor ve `rts.route:enemy:base:0` spline
-ornegini tasir. Asset manifestte `rts-core-match-level` olarak gorunur;
-`rtsLevelLoader.ts` Level ve onun Actor class referanslarini browser tarafinda
-yukleyip adapter'a verir. Shipped Level + gercek Actor class referanslari engine
-testinde birlikte cozulur.
+`src/game/rts/world/rtsLevelAdapter.ts`, resolve edilmis Actor
+default/override'larindan Kingdom Start, Resource Node, Build Anchor, Expansion
+Marker, Tree, Strategic Point ve Navigation Blocker markerlarini; `rts.route:*`
+spline tag'lerinden de route noktalarini saf bir `RtsLevelDefinition`a cevirir.
+Bilinmeyen balance binasi/kaynagi, tekrarli id, eksik expansion uyesi, hatali
+route tag'i, ikiden az noktali route veya RTS world bounds disina cikan
+Actor/Spline noktasi boot validation hatasidir. Marker Actor class'lari
+`public/assets/ThreeAges/Actors/Markers/` altinda ve manifestte yer alir.
 
-Bu Level henuz mevcut macin tum spatial contract'ini tasimadigindan
-`RtsApp`/preset `levelRef` ile ona yonlendirilmemistir. Siradaki Faz D dilimi,
-`RTS_BLOCKOUT_MAP`in kaynak, anchor/expansion, route, tree, strategic point ve
-navigation blocker verisini eksiksiz marker/Level sozlesmesine tasimak ve ancak
-sonra legacy spatial otoriteyi opt-in runtime baglantisiyla degistirmektir.
+`RTS_CoreMatch.level.json` artik `RTS_BLOCKOUT_MAP`in tam spatial envanterini
+tasir: iki Kingdom Start, alti Resource Node, tum grove agaclari (dense varyantlar
+dahil), iki Strategic Point, on dort enemy base anchor, `enemy_west`/`enemy_east`
+expansion'lari (her biri outpost/depot/production + iki spline route), enemy base
+route spline'i ve merkez ridge Navigation Blocker'i (107 marker, 5 spline). Level,
+kaynagi `RTS_BLOCKOUT_MAP`den turetilerek uretildi; engine testi shipped Level'i
+adapte edip `resolveRtsSpatialLayout()`in legacy ciktisiyla alan alan
+karsilastirir (anchor `owner` etiketi haric birebir ayni). Ikinci bir engine
+testi Level-turevli layout uzerinde iki-flank ulasilabilirligini ve enemy base
+route'unu dogrular.
 
-`src/game/rts/world/rtsLevelAdapter.ts` baslatildi: resolve edilmis Actor
-default/override'larindan Kingdom Start, Resource Node ve Build Anchor
-markerlarini; `rts.route:*` spline tag'lerinden de route noktalarini saf bir
-`RtsLevelDefinition`a cevirir. Shipped marker assetleri ve browser-side loader
-eklendi; tam spatial contract ile `RtsApp` baglantisi sonraki dilimdedir.
-
-`BP_RTS_KingdomStart`, `BP_RTS_ResourceNode` ve `BP_RTS_BuildAnchor` marker
-Actor class'lari `public/assets/ThreeAges/Actors/Markers/` altinda ve manifestte
-yer alir. Adapter'in start/resource/anchor/spline route basari ve hata
-sozlesmesi engine testiyle kilitlenmistir.
-
-`BP_RTS_ExpansionMarker` da eklendi. Adapter her region icin tekil
-`outpost`/`depot`/`production` uyelerini ve en az bir
-`rts.route:enemy:<region>:<index>` spline route'unu zorunlu tutar; bilinmeyen
-balance binasi, tekrarli rol, hatali route tag'i veya RTS world bounds disina
-cikan Actor/Spline noktasi boot validation hatasidir. Bootstrap Level bir
-`enemy_west` expansion ornegini bu sozlesmeyle tasir.
-
-Tree, Strategic Point ve Navigation Blocker marker'lari da adapter'a eklendi;
-shipped Level bunlarin birer gercek ornegini tasir ve testte legacy sistemlerin
-tukettigi `RtsTreeDefinition`, `RtsStrategicPoint` ve `NavBlocker` sekillerine
-cozulur. Tum mevcut kaynak/agac/expansion/route/strategic point/blocker
-envanterinin eksiksiz Level kopyasi ve aktif runtime kabul senaryosu hala
-bekler.
-
-`rtsSpatialLayout.ts` bu bekleyen runtime portunu hazirlar: Level verilmezse
-`RTS_BLOCKOUT_MAP`in mevcut degerini aynen kullanir; Level verilirse start,
-resource, tree, strategic point, enemy anchor/base route/expansion ve blocker
-girdilerini `RtsApp`e verir. `levelAssets` feature flag'i varsayilan kapali;
-boot yalniz bu flag ve preset `levelRef` birlikte varsa browser-side loader'i
-calistirir. Bootstrap Level henuz tam envanteri tasimadigi icin shipped
-presetlere `levelRef` yazilmamistir; dolayisiyla normal `?rts` ve
-`?rts&flags=contentAssets` davranisi degismez.
+`rtsSpatialLayout.ts` runtime portunu tasir: Level verilmezse `RTS_BLOCKOUT_MAP`in
+mevcut degerini aynen kullanir; Level verilirse start, resource, tree, strategic
+point, enemy anchor/base route/expansion ve blocker girdilerini `RtsApp`e verir.
+`levelAssets` feature flag'i varsayilan kapali; boot yalniz bu flag ve preset
+`levelRef` birlikte varsa browser-side loader'i calistirir. `core_match` preset'i
+artik `levelRef: assets/ThreeAges/Levels/RTS_CoreMatch.level.json` tasir, ama
+flag varsayilan kapali oldugu icin normal `?rts` ve `?rts&flags=contentAssets`
+davranisi degismez. `RtsApp`, `canvas.dataset.rtsLevel` = `authored | blockout`
+ile hangi spatial otoritenin secildigini browser'a acar; smoke bunu witness
+olarak kullanir. `?rts&flags=levelAssets` altinda authored Level yuklenir, adapte
+edilir ve canli mac onun spatial verisiyle baslar.
 
 Teslimatlar:
 
@@ -694,18 +680,21 @@ Teslimatlar:
 - RTS marker Actor Script asset'leri.
 - `RtsLevelAdapter`, browser-side Level loader'i ve pure/shipped-asset validation
   testleri.
-- Preset `levelRef` validation migration'i.
-- `RtsApp` spatial dependency portu ve varsayilan-kapali `levelAssets` runtime
-  gate'i.
-- Bootstrap start, resource, anchor ve route verisinin yeni Level'e tasinmasi.
-- Tam spatial contract migration'i ve `RtsApp` opt-in baglantisi (bekliyor).
+- Preset `levelRef` validation migration'i ve `core_match` opt-in `levelRef`i.
+- `RtsApp` spatial dependency portu, `data-rts-level` witness'i ve
+  varsayilan-kapali `levelAssets` runtime gate'i.
+- `RTS_BLOCKOUT_MAP`in tam kaynak/agac/expansion/route/anchor/strategic
+  point/blocker envanterinin `RTS_CoreMatch.level.json`a tasinmasi.
+- Level-turevli spatial layout'un legacy sozlesmeyi birebir uretmesi ve
+  `?rts&flags=levelAssets` canli-mac kabul smoke'u.
 
 Kabul:
 
 - Bir resource node veya AI anchor Editor'da tasindiginda `rtsMapBlockout.ts`
-  degistirilmeden runtime davranisi degisir.
+  degistirilmeden (`?rts&flags=levelAssets`) runtime davranisi degisir.
 - Iki flank ve zorunlu route ulasilabilirlik testleri Level verisiyle gecer.
-- `RTS_BLOCKOUT_MAP` bu alanlarda otorite olmaktan cikar.
+- `levelAssets` acikken `RTS_BLOCKOUT_MAP` bu alanlarda otorite olmaktan cikar;
+  flag kapaliyken fallback otorite olarak kalir (kaldirma kapisi §13'e bagli).
 
 ### Faz E - Landscape ve authored dunya
 

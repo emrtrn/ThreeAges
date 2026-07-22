@@ -356,6 +356,9 @@ export class RtsApp {
     private readonly options: RtsAppOptions,
   ) {
     this.spatial = resolveRtsSpatialLayout(this.options.level);
+    // Browser-visible witness of which spatial authority the match resolved:
+    // the authored Level (Faz D opt-in) or the legacy rtsMapBlockout fallback.
+    this.canvas.dataset.rtsLevel = this.options.level ? "authored" : "blockout";
     this.openingFocus = {
       x: this.spatial.playerStart.x * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
       z: this.spatial.playerStart.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),

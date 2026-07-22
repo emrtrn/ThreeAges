@@ -54,6 +54,30 @@ test("Assetization Faz C: the opt-in catalog loads Actor presentations without c
   expect(errors, "the catalog loader must not disturb the RTS match").toEqual([]);
 });
 
+test("Assetization Faz D: the opt-in authored Level drives the spatial layout of a live match", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  // Default boot resolves the legacy blockout — even though core_match now
+  // carries a levelRef, the levelAssets gate keeps it opt-in.
+  await page.goto("/?rts&debug");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
+
+  // With the flag on, the shipped RTS_CoreMatch Level loads and its markers
+  // become the spatial authority for the whole match.
+  await page.goto("/?rts&debug&flags=levelAssets");
+  await expect(page.locator("#game-canvas")).toBeVisible();
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored", { timeout: 30_000 });
+  await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
+
+  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
+  await expect(page.locator(".rts-hud-bar")).toBeVisible();
+  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+
+  expect(errors, "the authored Level must adapt and boot a match without runtime errors").toEqual([]);
+});
+
 test("Assetization Faz C: Guard Actor Script is discoverable and opens from the Content Drawer", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
