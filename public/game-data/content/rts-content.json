@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "type": "rtsContentCatalog",
+  "units": {
+    "guard_placeholder": {
+      "actorRef": "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json"
+    }
+  },
+  "buildings": {
+    "barracks": {
+      "constructionActorRef": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json",
+      "levels": {
+        "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json",
+        "2": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json"
+      }
+    }
+  },
+  "ui": {}
+}

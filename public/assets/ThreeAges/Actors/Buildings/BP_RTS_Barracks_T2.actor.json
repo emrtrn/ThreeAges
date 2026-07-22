@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_Barracks_T2",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    { "id": "root", "component": "Transform", "props": {} },
+    { "id": "barracksMesh", "parent": "root", "component": "StaticMeshComponent", "props": { "assetId": "barracks-firstage-level2" } }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "messageBindings": [],
+  "construction": null
+}

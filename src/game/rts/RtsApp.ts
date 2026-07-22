@@ -33,6 +33,8 @@ import type {
   StartingUnits,
   UnitBalance,
 } from "@/game/data/gameDataTypes";
+import type { RtsContentCatalog } from "./content/rtsContentCatalog";
+import { RtsActorVisualFactory } from "./content/rtsActorVisualFactory";
 import { AiController } from "./ai/aiController";
 import { formatRtsAiDebug } from "./ai/aiDebugView";
 import { RtsCameraController } from "./camera/rtsCameraController";
@@ -207,6 +209,12 @@ export interface RtsAppOptions {
    * both kingdoms. Symmetric on purpose — see `ai/aiVisionFilter.ts`.
    */
   readonly fogOfWarEnabled?: boolean;
+  /**
+   * Opt-in authored-content mappings loaded by the `contentAssets` flag.
+   * Faz B only passes this contract through; Faz C consumes the Guard/Barracks
+   * entries, so the legacy presentation path remains unchanged for now.
+   */
+  readonly contentCatalog?: RtsContentCatalog;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
   readonly unitBalance: UnitBalance;
   /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
@@ -232,6 +240,7 @@ export interface RtsAppOptions {
 
 export class RtsApp {
   private readonly renderer: WebGLRenderer;
+  private readonly actorVisuals: RtsActorVisualFactory | null;
   private readonly buildingVisuals: RtsBuildingVisuals;
   private readonly mapArt: RtsMapArt;
   private readonly scene = new Scene();
@@ -347,7 +356,11 @@ export class RtsApp {
     private readonly options: RtsAppOptions,
   ) {
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
-    this.buildingVisuals = new RtsBuildingVisuals(this.renderer);
+    this.actorVisuals = this.options.contentCatalog
+      ? new RtsActorVisualFactory(this.renderer, this.options.contentCatalog)
+      : null;
+    this.canvas.dataset.rtsContentAssets = this.actorVisuals ? "loading" : "disabled";
+    this.buildingVisuals = new RtsBuildingVisuals(this.renderer, this.actorVisuals);
     this.mapArt = new RtsMapArt(this.renderer);
     this.roads = new RoadGraph(this.options.roadBalance);
     this.roadDebugView = new RoadDebugView(this.roads);
@@ -756,6 +769,7 @@ export class RtsApp {
       this.applyStructureVisual(structure, true);
     });
     void this.loadBuildingVisuals();
+    void this.loadActorVisuals();
     this.spawnStartingUnits();
     // §59: one fog pass before the first frame is drawn.
     //
@@ -838,6 +852,7 @@ export class RtsApp {
     this.structures.clear();
     this.centers.clear();
     this.buildingVisuals.dispose();
+    this.actorVisuals?.dispose();
     this.mapArt.dispose();
     this.renderer.dispose();
   }
@@ -1809,6 +1824,39 @@ export class RtsApp {
 
   private syncRoadUi(): void {
     this.buildPalette.setRoadState(this.roadPlacement.state());
+  }
+
+  /** Load the opt-in Actor Script presentation pack after legacy gameplay booted. */
+  private async loadActorVisuals(): Promise<void> {
+    if (!this.actorVisuals) return;
+    try {
+      await this.actorVisuals.load();
+      if (this.disposed) return;
+      this.canvas.dataset.rtsContentAssets = "ready";
+      this.units.setPresentationFactory((owner, stats) =>
+        this.actorVisuals?.createUnitPresentation(
+          Object.entries(this.options.unitBalance).find(([, value]) => value === stats)?.[0] ?? "",
+          owner,
+        ) ?? null);
+      this.units.refreshPresentations();
+      this.placement.setPreviewFactory((buildingId, width, depth) =>
+        this.buildingVisuals.createPreviewForBuilding(
+          buildingId,
+          width,
+          depth,
+          this.ageOf(PLAYER_OWNER),
+          this.structureUpgrades.levelFor(PLAYER_OWNER, buildingId),
+        ));
+      for (const structure of this.structures.all()) {
+        if (structure.construction.complete) this.applyStructureVisual(structure);
+        else this.applyConstructionVisual(structure);
+      }
+    } catch (error) {
+      // The visual pilot is optional. Keep the legacy mesh/placeholder path
+      // playable when a Content Drawer class or one of its model refs is broken.
+      this.log.warn("RTS Actor presentation pack could not be loaded; using legacy visuals", error);
+      this.canvas.dataset.rtsContentAssets = "fallback";
+    }
   }
 
   /**

@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_Guard",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "selectionRadius", "label": "Selection Radius", "type": "number", "min": 0.1, "max": 4, "step": 0.1, "default": 0.5 }
+  ],
+  "components": [
+    { "id": "root", "component": "Transform", "props": {} },
+    {
+      "id": "guardMesh",
+      "parent": "root",
+      "component": "SkeletalMeshComponent",
+      "props": { "assetId": "ual1-standard-rm", "position": [0, 0, 0], "scale": [0.56, 0.56, 0.56] }
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

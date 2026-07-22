@@ -18,6 +18,7 @@ import {
   snapshotRuntimeConfig,
 } from "@/game/core/runtimeConfig";
 import { loadAgeBalance, loadAiBalance, loadBuildingBalance, loadGamePreset, loadResourceBalance, loadRoadBalance, loadUnitBalance } from "@/game/data/gameDataLoader";
+import { loadRtsContentCatalog } from "@/game/rts/content/rtsContentLoader";
 import type { GamePreset } from "@/game/data/gameDataTypes";
 
 function requireElement<T extends HTMLElement>(id: string): T {
@@ -34,6 +35,8 @@ function requireElement<T extends HTMLElement>(id: string): T {
  */
 interface BootFoundationResult {
   readonly preset: GamePreset | null;
+  /** Assetization Faz B's opt-in catalog load gate. */
+  readonly contentAssetsEnabled: boolean;
   /** Prosperity is debug-only in Phase 6 and never enters gameplay gates. */
   readonly prosperityDebugEnabled: boolean;
   /**
@@ -78,6 +81,7 @@ async function bootFoundation(): Promise<BootFoundationResult> {
   }
   return {
     preset,
+    contentAssetsEnabled: config.flags.contentAssets,
     prosperityDebugEnabled: config.flags.prosperity,
     regionalVictoryEnabled: config.flags.regionalVictory,
     fogOfWarEnabled: config.flags.fogOfWar,
@@ -85,7 +89,7 @@ async function bootFoundation(): Promise<BootFoundationResult> {
 }
 
 async function main(): Promise<void> {
-  const { preset, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
+  const { preset, contentAssetsEnabled, prosperityDebugEnabled, regionalVictoryEnabled, fogOfWarEnabled } =
     await bootFoundation();
 
   const params = new URLSearchParams(location.search);
@@ -106,11 +110,17 @@ async function main(): Promise<void> {
       loadRoadBalance(),
       loadAiBalance(),
     ]);
+    // The catalog remains opt-in until its Actor Script consumers land in Faz C.
+    // Keeping the fetch behind this flag preserves the default legacy boot path.
+    const contentCatalog = contentAssetsEnabled
+      ? await loadRtsContentCatalog(unitBalance, buildingBalance)
+      : undefined;
     const rts = new RtsApp(canvas, {
       debug: params.has("debug"),
       prosperityDebugEnabled,
       regionalVictoryEnabled,
       fogOfWarEnabled,
+      ...(contentCatalog ? { contentCatalog } : {}),
       unitBalance,
       buildingBalance,
       resourceBalance,

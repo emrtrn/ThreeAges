@@ -1,8 +1,9 @@
 # ThreeAges RTS Content Drawer Assetlestirme Plani
 
 Olusturulma tarihi: 2026-07-17  
-Durum: Faz A tamamlandi (2026-07-22). Sonraki adim: Faz B - Content catalog ve
-loader. Ayrinti icin asagidaki "Faz A - Durum" notuna bakin.
+Durum: Faz C uygulama ve otomasyon tamamlandi (2026-07-22). Kalan kabul:
+Content Drawer'da mesh degistir/save -> `?rts` goruntu manual smoke'u. Sonraki
+uygulama adimi: Faz D - Level gameplay marker'lari.
 Kapsam: `RtsApp` ile Forge Actor Script, oyun verisi, Level ve UI Widget
 sistemleri arasinda veri/authoring koprusu kurulmasi
 
@@ -547,6 +548,28 @@ Plan disi ama dogrudan ilgili yan is (ayni oturumda yapildi):
 
 ### Faz B - Content catalog ve loader
 
+#### Faz B - Durum (2026-07-22)
+
+Tamamlandi. `public/game-data/content/rts-content.json` yalnizca referans
+sozlesmesini tasiyan bir shipped catalog olarak eklendi. Guard/Barracks
+mapping'leri Faz C tarafindan doldurulur; flag kapaliyken default runtime legacy
+gorsel yolunu kullanmaya devam eder.
+
+- `src/game/rts/content/rtsContentCatalog.ts`: schema/type, strict Actor ref,
+  UI asset-id ve balance-id validator'i.
+- `src/game/rts/content/rtsContentLoader.ts`: `contentAssets` flag'i acikken
+  katalog fetch + validation'i.
+- `src/main.ts`: sadece opt-in flag acikken catalog yukler ve `RtsAppOptions`
+  uzerinden enjekte eder; catalog veya asset pack yuklenemezse legacy visual
+  path secilmeye devam eder.
+- `tools/engine-tests.ts`: shipped catalog, bilinen balance ID, level anahtari
+  ve Actor ref reddetme/acceptance coverage'i.
+- `tests/smoke/rts-assetization-baseline.spec.ts`: default legacy boot ile
+  `?flags=contentAssets` catalog boot'u birlikte geciyor (2 Chromium test).
+
+Kapanis gate'i: `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`, hedefli
+Playwright smoke ve `npm.cmd run build:verify` yesil.
+
 Teslimatlar:
 
 - `public/game-data/content/rts-content.json`
@@ -562,6 +585,25 @@ Kabul:
 - Balance dosyalarina asset yolu eklenmez.
 
 ### Faz C - Guard + Barracks Actor Script pilotu
+
+#### Faz C - Durum (2026-07-22)
+
+Uygulama ve otomatik kapanis tamamlandi. Guard ile Barracks'in insaat, T1 ve T2 gorunumleri Actor Script
+asset'leri olarak `public/assets/ThreeAges/Actors/` altinda author edilir ve
+manifestte Content Drawer'a kayitlidir. `RtsActorVisualFactory`, catalog
+referanslarini Actor component agacina ve glTF sunum handle'ina cevirir;
+`UnitSystem` artik Actor'un acik pick-target'larini kaydeder. `RtsApp` asset
+pack yuklenirse sunumlari yeniler, yuklenemezse legacy gorsellere geri duser.
+Unit ve bina simulasyon degerleri balance dosyalarinda kalir.
+
+- `?rts&flags=contentAssets` browser smoke'u asset pack'in `ready` durumuna
+  ulastigini ve match boot'un korundugunu dogrular.
+- Engine testleri katalog tier secimini, Actor component/mesh referanslarini ve
+  nested pick target -> unit cozumunu kilitler.
+- Content Drawer'da `BP_RTS_Guard.actor.json` cift tiklanarak mevcut Actor
+  Script editorunde acilir; kaydetme mevcut `/__save-actor` authoring akisini
+  kullanir. Gercek bir mesh degisikligiyle editor -> runtime kabul adimi
+  etkilesimli/manual smoke olarak kalir ve Faz C'nin tek acik kabul satiridir.
 
 Teslimatlar:
 

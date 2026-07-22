@@ -19882,6 +19882,54 @@
       "license": "Unknown"
     },
     {
+      "id": "threeages-rts-guard-actor",
+      "name": "BP RTS Guard.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Units",
+      "path": "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json",
+      "tags": ["threeages", "rts", "unit", "guard"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 665 },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-barracks-construction-actor",
+      "name": "BP RTS Barracks Construction.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json",
+      "tags": ["threeages", "rts", "building", "barracks", "construction"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 476 },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-barracks-t1-actor",
+      "name": "BP RTS Barracks T1.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json",
+      "tags": ["threeages", "rts", "building", "barracks", "tier1"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 466 },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
+      "id": "threeages-rts-barracks-t2-actor",
+      "name": "BP RTS Barracks T2.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Buildings",
+      "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json",
+      "tags": ["threeages", "rts", "building", "barracks", "tier2"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 443 },
+      "license": "Project-local RTS presentation asset"
+    },
+    {
       "id": "ual1-standard-rm",
       "name": "UAL1 Standard RM",
       "assetType": "skeletalMesh",

@@ -12,14 +12,15 @@ import type { Quaternion } from "three";
 
 import type { UnitBalanceStats } from "../../data/gameDataTypes";
 import type { CombatTarget } from "../combat/combatTarget";
-import { Unit, type UnitOwner } from "./unit";
+import { Unit, type RtsPresentationHandle, type UnitOwner } from "./unit";
 
 export class UnitSystem {
   /** Scene subtree holding all unit render objects. */
   readonly root = new Group();
   private readonly units: Unit[] = [];
-  /** Body-mesh id → unit, for resolving raycast hits. */
-  private readonly byBodyId = new Map<number, Unit>();
+  /** Presentation pick mesh id → unit, for resolving raycast hits. */
+  private readonly byPickObjectId = new Map<number, Unit>();
+  private presentationFactory: ((owner: UnitOwner, stats: UnitBalanceStats) => RtsPresentationHandle | null) | null = null;
 
   constructor() {
     this.root.name = "rts-units";
@@ -27,11 +28,9 @@ export class UnitSystem {
 
   /** Role, speed and counters all ride on `stats` now — there is no role argument. */
   spawn(owner: UnitOwner, x: number, z: number, stats: UnitBalanceStats): Unit {
-    const unit = new Unit(owner, x, z, stats);
+    const unit = new Unit(owner, x, z, stats, this.presentationFactory?.(owner, stats) ?? null);
     this.units.push(unit);
-    // The capsule body is the first child; index it for raycast resolution.
-    const body = unit.object.children[0];
-    if (body) this.byBodyId.set(body.id, unit);
+    this.registerPickTargets(unit);
     this.root.add(unit.object);
     return unit;
   }
@@ -59,6 +58,22 @@ export class UnitSystem {
     for (const unit of this.units) unit.updatePresentation(cameraQuaternion);
   }
 
+  setPresentationFactory(factory: ((owner: UnitOwner, stats: UnitBalanceStats) => RtsPresentationHandle | null) | null): void {
+    this.presentationFactory = factory;
+  }
+
+  /** Refresh only units with a catalog-backed handle; a null result keeps the playable fallback. */
+  refreshPresentations(): void {
+    if (!this.presentationFactory) return;
+    for (const unit of this.units) {
+      const presentation = this.presentationFactory(unit.owner, unit.stats);
+      if (!presentation) continue;
+      this.unregisterPickTargets(unit);
+      unit.replacePresentation(presentation);
+      this.registerPickTargets(unit);
+    }
+  }
+
   /** Clear every attack order aimed at a unit that can no longer be targeted. */
   clearAttackTargets(target: CombatTarget): void {
     for (const unit of this.units) {
@@ -72,8 +87,7 @@ export class UnitSystem {
     if (index < 0) return false;
     this.clearAttackTargets(unit);
     unit.stop();
-    const body = unit.object.children[0];
-    if (body) this.byBodyId.delete(body.id);
+    this.unregisterPickTargets(unit);
     this.units.splice(index, 1);
     this.root.remove(unit.object);
     unit.dispose();
@@ -87,7 +101,11 @@ export class UnitSystem {
 
   /** Resolve a raycast-hit object (body mesh) back to its owning unit, if any. */
   unitForObject(object: Object3D): Unit | null {
-    return this.byBodyId.get(object.id) ?? null;
+    for (let current: Object3D | null = object; current; current = current.parent) {
+      const unit = this.byPickObjectId.get(current.id);
+      if (unit) return unit;
+    }
+    return null;
   }
 
   /**
@@ -104,7 +122,14 @@ export class UnitSystem {
   bodyMeshes(): Object3D[] {
     return this.units
       .filter((unit) => !unit.health.depleted && unit.object.visible)
-      .map((unit) => unit.object.children[0])
-      .filter((o): o is Object3D => !!o);
+      .flatMap((unit) => unit.presentationPickTargets());
+  }
+
+  private registerPickTargets(unit: Unit): void {
+    for (const object of unit.presentationPickTargets()) this.byPickObjectId.set(object.id, unit);
+  }
+
+  private unregisterPickTargets(unit: Unit): void {
+    for (const object of unit.presentationPickTargets()) this.byPickObjectId.delete(object.id);
   }
 }

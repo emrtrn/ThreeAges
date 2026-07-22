@@ -22,6 +22,7 @@ import {
   type BufferGeometry,
   type Quaternion,
 } from "three";
+import type { Object3D } from "three";
 import type { UnitBalanceStats, UnitRoleId } from "../../data/gameDataTypes";
 import type { CombatTarget } from "../combat/combatTarget";
 // Body tint and the ground ring read from one source, so a unit can never wear
@@ -42,6 +43,15 @@ export type UnitRole = UnitRoleId;
  * where it stands and never steps off its position.
  */
 export type UnitStance = "aggressive" | "hold";
+
+/** Presentation-only Actor/legacy render handle. It owns no simulation data. */
+export interface RtsPresentationHandle {
+  readonly root: Object3D;
+  readonly pickTargets: readonly Object3D[];
+  readonly selectionRadius: number;
+  readonly update?: (deltaSeconds: number) => void;
+  dispose(): void;
+}
 
 /** Gameplay footprint used by selection, commands and formation spacing. */
 export const UNIT_RADIUS = 0.5;
@@ -104,6 +114,9 @@ export class Unit {
   private readonly ring: Mesh;
   private readonly targetRing: Mesh;
   private readonly healthBar: HealthBar;
+  private presentation: RtsPresentationHandle | null = null;
+  private fallbackBody: Mesh | null = null;
+  private pickTargets: readonly Object3D[] = [];
   private movePath: Vector3[] = [];
   /**
    * A ground route explicitly issued by the player. Automation and defensive
@@ -123,6 +136,7 @@ export class Unit {
     x: number,
     z: number,
     readonly stats: UnitBalanceStats,
+    presentation: RtsPresentationHandle | null = null,
   ) {
     this.id = nextUnitId++;
     this.owner = owner;
@@ -138,22 +152,8 @@ export class Unit {
 
     const shape = ROLE_BODY[this.role];
     this.navRadius = shape.radius;
-    const geometry: BufferGeometry = shape.box
-      ? new BoxGeometry(shape.radius * 2, shape.length, shape.radius * 2.6)
-      : new CapsuleGeometry(shape.radius, shape.length, 6, 12);
     const bodyCenterY = shape.box ? shape.length / 2 : shape.length / 2 + shape.radius;
-    const body = new Mesh(
-      geometry,
-      new MeshStandardMaterial({
-        color: new Color(this.role === "worker" ? "#dfbd5b" : TEAM_COLOR[owner]),
-        roughness: 0.6,
-      }),
-    );
-    body.position.y = bodyCenterY;
-    body.castShadow = true;
-    // Back-reference so a raycast hit on the body resolves to this unit.
-    body.userData.unitId = this.id;
-    this.object.add(body);
+    this.installPresentation(presentation, bodyCenterY);
 
     // Always on: this is the answer to "whose is that", which the player needs
     // continuously, not on selection. It sits inside the selection ring's radius
@@ -190,6 +190,17 @@ export class Unit {
 
     this.healthBar = new HealthBar(shape.radius * 2.4, bodyCenterY + shape.length / 2 + 0.55);
     this.object.add(this.healthBar.object);
+  }
+
+  /** The Actor Script path can replace only the presentation; stats and gameplay stay intact. */
+  replacePresentation(presentation: RtsPresentationHandle | null): void {
+    const shape = ROLE_BODY[this.role];
+    const bodyCenterY = shape.box ? shape.length / 2 : shape.length / 2 + shape.radius;
+    this.installPresentation(presentation, bodyCenterY);
+  }
+
+  presentationPickTargets(): readonly Object3D[] {
+    return this.pickTargets;
   }
 
   /** World position on the ground plane (y tracks 0 for gameplay purposes). */
@@ -410,6 +421,7 @@ export class Unit {
   /** Release the per-unit render allocations when it permanently leaves play. */
   dispose(): void {
     this.healthBar.dispose();
+    this.disposePresentation();
     this.object.traverse((child) => {
       if (!(child instanceof Mesh)) return;
       child.geometry.dispose();
@@ -417,6 +429,51 @@ export class Unit {
       for (const material of materials) material.dispose();
     });
     this.object.clear();
+  }
+
+  private installPresentation(presentation: RtsPresentationHandle | null, bodyCenterY: number): void {
+    this.disposePresentation();
+    if (presentation) {
+      this.presentation = presentation;
+      presentation.root.userData.rtsUnitPresentation = true;
+      this.object.add(presentation.root);
+      this.pickTargets = presentation.pickTargets;
+      return;
+    }
+    const shape = ROLE_BODY[this.role];
+    const geometry: BufferGeometry = shape.box
+      ? new BoxGeometry(shape.radius * 2, shape.length, shape.radius * 2.6)
+      : new CapsuleGeometry(shape.radius, shape.length, 6, 12);
+    const body = new Mesh(
+      geometry,
+      new MeshStandardMaterial({
+        color: new Color(this.role === "worker" ? "#dfbd5b" : TEAM_COLOR[this.owner]),
+        roughness: 0.6,
+      }),
+    );
+    body.position.y = bodyCenterY;
+    body.castShadow = true;
+    body.userData.unitId = this.id;
+    this.fallbackBody = body;
+    this.pickTargets = [body];
+    this.object.add(body);
+  }
+
+  private disposePresentation(): void {
+    if (this.presentation) {
+      this.presentation.dispose();
+      this.presentation = null;
+    }
+    if (this.fallbackBody) {
+      this.fallbackBody.removeFromParent();
+      this.fallbackBody.geometry.dispose();
+      const materials = Array.isArray(this.fallbackBody.material)
+        ? this.fallbackBody.material
+        : [this.fallbackBody.material];
+      for (const material of materials) material.dispose();
+      this.fallbackBody = null;
+    }
+    this.pickTargets = [];
   }
 
   setTargetedBy(delta: number): void {

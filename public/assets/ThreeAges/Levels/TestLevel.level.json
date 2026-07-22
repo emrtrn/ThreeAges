@@ -90,16 +90,5 @@
       "castShadow": true
     }
   ],
-  "landscapes": [
-    {
-      "id": "landscape-1",
-      "position": [
-        0,
-        0,
-        0
-      ],
-      "dataRef": "landscapes/landscape-1.landscape.json",
-      "name": "Landscape"
-    }
-  ]
+  "landscapes": []
 }

@@ -14,6 +14,7 @@ import { Box3, Group, Mesh, type Object3D, type WebGLRenderer } from "three";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
 
 import type { SettlementAge } from "../../data/gameDataTypes";
+import type { RtsActorVisualFactory } from "../content/rtsActorVisualFactory";
 import type { CommandCenter } from "./commandCenter";
 import type { PlacedStructure } from "./placedStructureSystem";
 import { allBuildingMeshPaths, buildingMeshPath } from "./rtsBuildingArt";
@@ -26,7 +27,10 @@ export class RtsBuildingVisuals {
   private readonly templates = new Map<string, Object3D>();
   private loaded = false;
 
-  constructor(renderer: WebGLRenderer) {
+  constructor(
+    renderer: WebGLRenderer,
+    private readonly actorVisuals: RtsActorVisualFactory | null = null,
+  ) {
     this.loader = createForgeGltfLoader(renderer);
   }
 
@@ -44,6 +48,14 @@ export class RtsBuildingVisuals {
   }
 
   createForStructure(structure: PlacedStructure, age: SettlementAge = "settlement"): Group | null {
+    const actorVisual = this.actorVisuals?.createBuildingVisual(
+      structure.stats.id,
+      "completed",
+      structure.level,
+      structure.stats.footprint.width,
+      structure.stats.footprint.depth,
+    );
+    if (actorVisual) return actorVisual;
     const path = visualMeshPathForStructure(structure, age);
     if (!path) return null;
     return this.create(
@@ -60,6 +72,14 @@ export class RtsBuildingVisuals {
     age: SettlementAge = "settlement",
     level = 1,
   ): Group | null {
+    const actorVisual = this.actorVisuals?.createBuildingVisual(
+      buildingId,
+      "completed",
+      level,
+      footprintWidth,
+      footprintDepth,
+    );
+    if (actorVisual) return actorVisual;
     const path = buildingMeshPath(buildingId, age, level);
     return path ? this.create(path, footprintWidth, footprintDepth) : null;
   }
@@ -69,6 +89,14 @@ export class RtsBuildingVisuals {
     age: SettlementAge = "settlement",
     level = 1,
   ): Group | null {
+    const actorVisual = this.actorVisuals?.createBuildingVisual(
+      structure.stats.id,
+      "construction",
+      level,
+      structure.stats.footprint.width,
+      structure.stats.footprint.depth,
+    );
+    if (actorVisual) return actorVisual;
     const path = buildingMeshPath(structure.stats.id, age, level);
     return path ? this.create(path, structure.stats.footprint.width, structure.stats.footprint.depth) : null;
   }

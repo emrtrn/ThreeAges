@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_Barracks_Construction",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    { "id": "root", "component": "Transform", "props": {} },
+    { "id": "barracksMesh", "parent": "root", "component": "StaticMeshComponent", "props": { "assetId": "barracks-firstage-level1" } }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

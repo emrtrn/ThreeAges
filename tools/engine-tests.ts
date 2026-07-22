@@ -66,6 +66,12 @@ import {
   validateRoadBalance,
   validateUnitBalance,
 } from "../src/game/data/validateGameData";
+import {
+  RtsContentCatalogError,
+  rtsBuildingActorRef,
+  rtsUnitActorRef,
+  validateRtsContentCatalog,
+} from "../src/game/rts/content/rtsContentCatalog";
 import { CommandSystem } from "../src/game/rts/commands/commandSystem";
 import { CommandMarkerSystem } from "../src/game/rts/commands/commandMarker";
 import { CommandCenterSystem } from "../src/game/rts/structures/commandCenterSystem";
@@ -28892,6 +28898,100 @@ check("Assetization Faz A: RTS_BLOCKOUT_MAP is still the spatial authority Faz D
   // legacy data has to be clean before it is migrated.
   const nodeIds = map.resourceNodes.map((node) => node.id);
   assert.equal(new Set(nodeIds).size, nodeIds.length, "resource node ids are unique");
+});
+
+check("Assetization Faz B/C: content catalog accepts known balance ids and the shipped Actor pilot refs", () => {
+  const unitBalance = validateUnitBalance(
+    JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,
+  );
+  const buildingBalance = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  const context = { unitBalance, buildingBalance };
+  const catalog = validateRtsContentCatalog(
+    JSON.parse(readFileSync("public/game-data/content/rts-content.json", "utf8")) as unknown,
+    context,
+  );
+  assert.equal(rtsUnitActorRef(catalog, "guard_placeholder"), "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json");
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "construction", 1), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json");
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 1), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json");
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 2), "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json");
+  assert.equal(rtsBuildingActorRef(catalog, "barracks", "completed", 3), null, "unmapped tiers keep the legacy fallback");
+  assert.deepEqual(catalog.ui, {}, "Faz F owns the first UI mapping");
+
+  const validPilot = validateRtsContentCatalog({
+    schema: 1,
+    type: "rtsContentCatalog",
+    units: {
+      guard_placeholder: { actorRef: "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json" },
+    },
+    buildings: {
+      barracks: {
+        constructionActorRef: "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json",
+        levels: { "1": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json" },
+      },
+    },
+    ui: { hud: "threeages-rts-hud" },
+  }, context);
+  assert.equal(validPilot.units.guard_placeholder?.actorRef, "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json");
+  assert.equal(validPilot.buildings.barracks?.levels["1"], "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json");
+
+  assert.throws(
+    () => validateRtsContentCatalog({ schema: 1, type: "rtsContentCatalog", units: { unknown: { actorRef: "assets/A.actor.json" } }, buildings: {}, ui: {} }, context),
+    RtsContentCatalogError,
+    "unit mapping must name an existing balance id",
+  );
+  assert.throws(
+    () => validateRtsContentCatalog({ schema: 1, type: "rtsContentCatalog", units: {}, buildings: { barracks: { levels: { "0": "assets/A.actor.json" } } }, ui: {} }, context),
+    RtsContentCatalogError,
+    "building levels must use positive integer keys",
+  );
+  assert.throws(
+    () => validateRtsContentCatalog({ schema: 1, type: "rtsContentCatalog", units: { guard_placeholder: { actorRef: "/assets/ThreeAges/Actors/Units/Guard.actor.json" } }, buildings: {}, ui: {} }, context),
+    RtsContentCatalogError,
+    "Actor references must stay public-root-relative and traversal-free",
+  );
+});
+
+check("Assetization Faz C: shipped Guard and Barracks Actor assets normalize to their authored mesh components", () => {
+  const actors = [
+    ["public/assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json", "SkeletalMeshComponent", "ual1-standard-rm"],
+    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json", "StaticMeshComponent", "barracks-firstage-level1"],
+    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json", "StaticMeshComponent", "barracks-firstage-level1"],
+    ["public/assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json", "StaticMeshComponent", "barracks-firstage-level2"],
+  ] as const;
+
+  for (const [path, component, assetId] of actors) {
+    const actor = normalizeActorScriptDef(JSON.parse(readFileSync(path, "utf8")) as unknown, path);
+    assert.ok(
+      actor.components.some((entry) => entry.component === component && entry.props.assetId === assetId),
+      `${path} keeps its authored ${component} asset reference`,
+    );
+  }
+});
+
+check("Assetization Faz C: UnitSystem resolves catalog presentation pick targets without body-child assumptions", () => {
+  const units = new UnitSystem();
+  const presentationRoot = new Group();
+  const pickMesh = new Mesh(new BoxGeometry(1, 1, 1), new MeshBasicMaterial());
+  const pickChild = new Group();
+  pickMesh.add(pickChild);
+  presentationRoot.add(pickMesh);
+  units.setPresentationFactory(() => ({
+    root: presentationRoot,
+    pickTargets: [pickMesh],
+    selectionRadius: 0.5,
+    dispose: () => presentationRoot.removeFromParent(),
+  }));
+
+  const guard = units.spawn("player", 0, 0, RTS_TEST_UNIT_STATS);
+  assert.deepEqual(units.bodyMeshes(), [pickMesh]);
+  assert.equal(units.unitForObject(pickMesh), guard);
+  assert.equal(units.unitForObject(pickChild), guard, "nested Actor meshes resolve through their pick target");
+  assert.equal(guard.stats.moveSpeed, RTS_TEST_UNIT_STATS.moveSpeed, "the presentation does not own unit balance");
+
+  assert.equal(units.despawn(guard), true);
+  assert.equal(units.unitForObject(pickMesh), null, "despawning unregisters the Actor pick target");
 });
 
 check("Faz 0 preload set is deduplicated and every mesh file exists on disk", () => {
