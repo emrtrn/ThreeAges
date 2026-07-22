@@ -27630,6 +27630,15 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
     "string",
     "an out-of-range edit is refused with a field message, not accepted",
   );
+
+  // Every registered table is wired to the right validator for its own file: the
+  // shipped file must validate, which catches a copy-paste that pairs (say) the
+  // buildings path with the units validator.
+  for (const table of catalog.dataTables ?? []) {
+    assert.match(table.path, /^game-data\/balance\/[a-z]+\.json$/, `${table.id} path is a balance file`);
+    const real = JSON.parse(readFileSync(`public/${table.path}`, "utf8")) as unknown;
+    assert.equal(table.validate(real), null, `the shipped ${table.id} file validates through its registered validator`);
+  }
 });
 
 check("validateSaveGameDataPayload fences writes to game-data JSON and rejects the rest", () => {

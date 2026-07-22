@@ -14,7 +14,7 @@
  * untouched. Dev-only, like every other `*Editor.ts`.
  */
 import type { EditorDataTableDef, EditorDataTableFieldMeta } from "@/editor/gameEditorRegistry";
-import { loadDataTable, saveDataTable } from "@/editor/dataTableStore";
+import { loadDataTable, loadDataTableDefaults, saveDataTable } from "@/editor/dataTableStore";
 
 type StatusTone = "info" | "success" | "warning" | "error";
 
@@ -57,6 +57,8 @@ export class DataTableEditor {
   private doc: Record<string, unknown> = {};
   /** Field metadata keyed by dotted leaf path, for labels/steps/enums. */
   private readonly fieldMeta = new Map<string, EditorDataTableFieldMeta>();
+  /** Committed (git HEAD) document, lazily fetched the first time an entry is reset. */
+  private defaults: Record<string, unknown> | null = null;
   private disposed = false;
 
   private constructor(private readonly options: DataTableEditorOptions) {
@@ -126,28 +128,72 @@ export class DataTableEditor {
 
   private renderEntries(): void {
     this.bodyEl.replaceChildren();
-    for (const [entryId, entry] of Object.entries(this.doc)) {
-      const section = document.createElement("details");
-      section.className = "dte-entry";
-      section.open = true;
+    for (const entryId of Object.keys(this.doc)) {
+      this.bodyEl.append(this.buildEntrySection(entryId));
+    }
+  }
 
-      const summary = document.createElement("summary");
-      summary.className = "dte-entry-title";
-      summary.textContent = displayLabel(entry) ? `${entryId} — ${displayLabel(entry)}` : entryId;
-      section.append(summary);
+  /** One collapsible section for a single entry: title, reset button, field grid. */
+  private buildEntrySection(entryId: string): HTMLElement {
+    const entry = this.doc[entryId];
+    const section = document.createElement("details");
+    section.className = "dte-entry";
+    section.dataset.entryId = entryId;
+    section.open = true;
 
-      const grid = document.createElement("div");
-      grid.className = "dte-grid";
-      if (isPlainObject(entry) || Array.isArray(entry)) {
-        for (const leaf of collectLeaves(entry as Record<string, unknown> | unknown[], "")) {
-          grid.append(this.renderLeaf(leaf));
-        }
-      } else {
-        // A scalar top-level entry is itself a single leaf.
-        grid.append(this.renderLeaf({ path: "", type: leafType(entry)!, container: this.doc, key: entryId }));
+    const summary = document.createElement("summary");
+    summary.className = "dte-entry-title";
+    const heading = document.createElement("span");
+    heading.textContent = displayLabel(entry) ? `${entryId} — ${displayLabel(entry)}` : entryId;
+    summary.append(heading);
+
+    // Reset this one entry to its committed (git HEAD) values. Placed in the
+    // summary; clicking it must not toggle the section open/closed.
+    const reset = document.createElement("button");
+    reset.type = "button";
+    reset.className = "dte-reset";
+    reset.textContent = "Varsayılana dön";
+    reset.title = "Bu başlığı depodaki (git) son kayıtlı değerlerine sıfırla";
+    reset.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      void this.resetEntry(entryId);
+    });
+    summary.append(reset);
+    section.append(summary);
+
+    const grid = document.createElement("div");
+    grid.className = "dte-grid";
+    if (isPlainObject(entry) || Array.isArray(entry)) {
+      for (const leaf of collectLeaves(entry as Record<string, unknown> | unknown[], "")) {
+        grid.append(this.renderLeaf(leaf));
       }
-      section.append(grid);
-      this.bodyEl.append(section);
+    } else {
+      // A scalar top-level entry is itself a single leaf.
+      grid.append(this.renderLeaf({ path: "", type: leafType(entry)!, container: this.doc, key: entryId }));
+    }
+    section.append(grid);
+    return section;
+  }
+
+  /** Restore one entry to its committed defaults, then leave it as a dirty edit to save. */
+  private async resetEntry(entryId: string): Promise<void> {
+    try {
+      if (!this.defaults) this.defaults = await loadDataTableDefaults(this.options.path);
+      const defaultEntry = this.defaults[entryId];
+      if (defaultEntry === undefined) {
+        this.setStatus(`"${entryId}" depoda (git) yok; sıfırlanacak varsayılan değer bulunamadı.`, "warning");
+        return;
+      }
+      this.doc[entryId] = structuredClone(defaultEntry);
+      const rebuilt = this.buildEntrySection(entryId);
+      const existing = this.bodyEl.querySelector(`.dte-entry[data-entry-id="${CSS.escape(entryId)}"]`);
+      if (existing) existing.replaceWith(rebuilt);
+      else this.renderEntries();
+      this.markDirty();
+      this.setStatus(`"${entryId}" varsayılana döndürüldü — kaydetmek için Kaydet'e basın.`, "info");
+    } catch (error) {
+      this.setStatus(`Varsayılanlar alınamadı: ${describeError(error)}`, "error");
     }
   }
 
@@ -319,7 +365,9 @@ function ensureStyles(): void {
 .dte-save:hover,.dte-close:hover{filter:brightness(1.15);}
 .dte-body{flex:1;overflow:auto;padding:10px 12px;}
 .dte-entry{border:1px solid #2e333d;border-radius:6px;margin-bottom:8px;background:#22262e;}
-.dte-entry-title{cursor:pointer;padding:8px 12px;font-weight:600;user-select:none;}
+.dte-entry-title{cursor:pointer;padding:8px 12px;font-weight:600;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.dte-reset{flex:0 0 auto;border:1px solid #3a4650;background:#2c313b;color:#cdd4df;border-radius:5px;cursor:pointer;padding:3px 10px;font:inherit;font-size:12px;font-weight:500;}
+.dte-reset:hover{filter:brightness(1.2);border-color:#c8955a;color:#ffce7a;}
 .dte-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;padding:6px 12px 12px;}
 .dte-field{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;}
 .dte-field-label{color:#aeb6c4;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}

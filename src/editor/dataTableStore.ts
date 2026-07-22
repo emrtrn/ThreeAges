@@ -26,6 +26,29 @@ export async function loadDataTable(path: string): Promise<unknown> {
   }
 }
 
+/**
+ * Fetch the committed (git HEAD) version of a data-table file — the "factory
+ * defaults" the editor resets an entry to. Read-only dev endpoint; throws when
+ * the file is not committed or the server is not in a git repo.
+ */
+export async function loadDataTableDefaults(path: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`/__gamedata-defaults?path=${encodeURIComponent(path)}`, {
+    cache: "no-cache",
+  });
+  const body = (await response.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    data?: unknown;
+  };
+  if (!response.ok || !body.ok) {
+    throw new Error(body.error ?? `Defaults fetch failed: HTTP ${response.status}`);
+  }
+  if (!body.data || typeof body.data !== "object" || Array.isArray(body.data)) {
+    throw new Error("Defaults document is not an object keyed by entry id");
+  }
+  return body.data as Record<string, unknown>;
+}
+
 export async function saveDataTable(
   path: string,
   data: unknown,

@@ -182,34 +182,64 @@
         {
           "level": 1,
           "maxHealth": 500,
-          "storageCapacity": { "food": 500, "wood": 500, "stone": 300, "gold": 300 }
+          "storageCapacity": {
+            "food": 500,
+            "wood": 500,
+            "stone": 300,
+            "gold": 300
+          }
         },
         {
           "level": 2,
           "maxHealth": 750,
-          "storageCapacity": { "food": 750, "wood": 750, "stone": 450, "gold": 450 }
+          "storageCapacity": {
+            "food": 750,
+            "wood": 750,
+            "stone": 450,
+            "gold": 450
+          }
         },
         {
           "level": 3,
           "maxHealth": 1050,
-          "storageCapacity": { "food": 1000, "wood": 1000, "stone": 600, "gold": 600 }
+          "storageCapacity": {
+            "food": 1000,
+            "wood": 1000,
+            "stone": 600,
+            "gold": 600
+          }
         }
       ],
       "town": [
         {
           "level": 1,
           "maxHealth": 1300,
-          "storageCapacity": { "food": 1400, "wood": 1400, "stone": 900, "gold": 900 }
+          "storageCapacity": {
+            "food": 1400,
+            "wood": 1400,
+            "stone": 900,
+            "gold": 900
+          }
         },
         {
           "level": 2,
           "maxHealth": 1600,
-          "storageCapacity": { "food": 1800, "wood": 1800, "stone": 1200, "gold": 1200 }
+          "storageCapacity": {
+            "food": 1800,
+            "wood": 1800,
+            "stone": 1200,
+            "gold": 1200
+          }
         },
         {
           "level": 3,
           "maxHealth": 1900,
-          "storageCapacity": { "food": 2400, "wood": 2400, "stone": 1600, "gold": 1600 }
+          "storageCapacity": {
+            "food": 2400,
+            "wood": 2400,
+            "stone": 1600,
+            "gold": 1600
+          }
         }
       ]
     }

@@ -14,7 +14,14 @@ import { BEHAVIOR_SCRIPT_IDS } from "@/game/behaviors";
 import { resolveMontageBindings } from "@/game/montageInputBindings";
 import { formatInputCode, keysForAction } from "@/game/defaultInputBindings";
 import { createRagdollDriver } from "@/game/ragdollDriver";
-import { validateUnitBalance } from "@/game/data/validateGameData";
+import {
+  validateAgeBalance,
+  validateAiBalance,
+  validateBuildingBalance,
+  validateResourceBalance,
+  validateRoadBalance,
+  validateUnitBalance,
+} from "@/game/data/validateGameData";
 
 /**
  * Wrap a runtime game-data validator as the editor's `validate` contract:
@@ -41,16 +48,47 @@ export const GAME_EDITOR_CATALOG = {
   formatInputCode,
   keysForAction,
   createRagdollDriver,
-  // Balance files editable from the Content Browser. Each `validate` is the
+  // Balance files editable from the editor's "Veri" menu. Each `validate` is the
   // real runtime validator (validateGameData.ts), so tuning from the editor can
-  // never write data the `?rts` boot would reject. First slice: units only;
-  // buildings/ages/resources/ai reuse the same editor by adding entries here.
+  // never write data the `?rts` boot would reject; the editor's per-entry "reset
+  // to defaults" restores an entry from git HEAD. Adding a file here is all it
+  // takes to make it editable — the form and reset button are generic.
   dataTables: [
     {
       id: "units",
       label: "Birim Dengesi",
       path: "game-data/balance/units.json",
       validate: asTableValidator(validateUnitBalance),
+    },
+    {
+      id: "buildings",
+      label: "Yapı Dengesi",
+      path: "game-data/balance/buildings.json",
+      validate: asTableValidator(validateBuildingBalance),
+    },
+    {
+      id: "resources",
+      label: "Kaynak Dengesi",
+      path: "game-data/balance/resources.json",
+      validate: asTableValidator(validateResourceBalance),
+    },
+    {
+      id: "ages",
+      label: "Çağ Dengesi",
+      path: "game-data/balance/ages.json",
+      validate: asTableValidator(validateAgeBalance),
+    },
+    {
+      id: "ai",
+      label: "Yapay Zekâ Dengesi",
+      path: "game-data/balance/ai.json",
+      validate: asTableValidator(validateAiBalance),
+    },
+    {
+      id: "roads",
+      label: "Yol Dengesi",
+      path: "game-data/balance/roads.json",
+      validate: asTableValidator(validateRoadBalance),
     },
   ],
 };

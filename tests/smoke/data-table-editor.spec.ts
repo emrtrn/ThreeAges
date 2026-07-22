@@ -41,7 +41,41 @@ test("Veri menu opens the units balance table with an editable per-field form", 
   await maxHealth.dispatchEvent("change");
   await expect(page.locator("[data-dte-save]")).toHaveClass(/is-dirty/);
 
+  // Per-entry "reset to defaults" restores the entry from git HEAD. This drives
+  // the /__gamedata-defaults endpoint end-to-end: 125 → back to the committed 110.
+  await guard.getByRole("button", { name: "Varsayılana dön" }).click();
+  await expect(maxHealth).toHaveValue("110");
+  // Resetting a still-not-saved edit leaves it dirty (ready to Save), untouched on disk.
+  await expect(page.locator("[data-dte-save]")).toHaveClass(/is-dirty/);
+
   // Close without saving; the overlay is dismissed.
   await page.locator("[data-dte-close]").click();
   await expect(editor).toHaveCount(0);
+});
+
+test("Veri menu lists every registered balance table", async ({ page }) => {
+  await page.setViewportSize({ width: 1680, height: 900 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+
+  const menu = page.locator("[data-datatables-popover]");
+  await page.locator("[data-datatables-button]").hover();
+  await expect(menu).toBeVisible();
+  await expect(menu.locator("[data-datatable-id]")).toHaveText([
+    "Birim Dengesi",
+    "Yapı Dengesi",
+    "Kaynak Dengesi",
+    "Çağ Dengesi",
+    "Yapay Zekâ Dengesi",
+    "Yol Dengesi",
+  ]);
+
+  // A nested table (buildings) opens and renders its entries with reset buttons.
+  await menu.locator('[data-datatable-id="buildings"]').click();
+  const editor = page.locator(".dte-overlay");
+  await expect(editor).toBeVisible();
+  await expect(editor.locator(".dte-entry", { hasText: "command_center" })).toBeVisible();
+  await expect(
+    editor.locator(".dte-entry", { hasText: "barracks" }).getByRole("button", { name: "Varsayılana dön" }),
+  ).toBeVisible();
 });

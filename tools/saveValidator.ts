@@ -3203,6 +3203,25 @@ export function validateSaveSoundCuePayload(value: unknown): {
 // editor via GameEditorCatalog and run before this endpoint is called), at
 // runtime load (`gameDataLoader.ts`), and by `npm run test:engine`. Keeping this
 // generic is what lets `saveValidator.ts` stay free of `@/game` balance schemas.
+/**
+ * Normalise + fence a game-data path to `game-data/**.json`. Shared by the save
+ * endpoint and the read-only defaults endpoint so both apply the exact same
+ * scope. Returns the normalised (forward-slash, no leading slash) path.
+ */
+export function validateGameDataPath(path: unknown): string {
+  if (typeof path !== "string") {
+    throw new Error("gameData payload path must be a string");
+  }
+  const normalizedPath = path.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalizedPath.startsWith("game-data/") || !normalizedPath.endsWith(".json")) {
+    throw new Error("gameData payload path must be a game-data/**.json file");
+  }
+  if (normalizedPath.includes("..")) {
+    throw new Error("gameData payload path must not contain ..");
+  }
+  return normalizedPath;
+}
+
 export function validateSaveGameDataPayload(value: unknown): {
   path: string;
   data: Record<string, unknown>;
@@ -3211,16 +3230,7 @@ export function validateSaveGameDataPayload(value: unknown): {
     throw new Error("gameData payload must be an object");
   }
   const input = value as Record<string, unknown>;
-  if (typeof input.path !== "string") {
-    throw new Error("gameData payload path must be a string");
-  }
-  const normalizedPath = input.path.replace(/\\/g, "/").replace(/^\/+/, "");
-  if (!normalizedPath.startsWith("game-data/") || !normalizedPath.endsWith(".json")) {
-    throw new Error("gameData payload path must be a game-data/**.json file");
-  }
-  if (normalizedPath.includes("..")) {
-    throw new Error("gameData payload path must not contain ..");
-  }
+  const normalizedPath = validateGameDataPath(input.path);
   if (!input.data || typeof input.data !== "object" || Array.isArray(input.data)) {
     throw new Error("gameData payload data must be an object keyed by entry id");
   }

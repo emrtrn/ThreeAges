@@ -1,6 +1,8 @@
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
 import { copyFile, mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { IncomingMessage } from "node:http";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath, URL } from "node:url";
@@ -28,6 +30,7 @@ import {
   validateSaveLandscapePayload,
   validateSaveUiPayload,
   validateSaveGameDataPayload,
+  validateGameDataPath,
   validateSaveUvwPayload,
   validateSaveSoundCuePayload,
   validateSaveEffectPayload,
@@ -43,6 +46,8 @@ import {
   validateSaveAiStateTreePayload,
   validateOpenLevelPayload,
 } from "./tools/saveValidator";
+
+const execFileAsync = promisify(execFile);
 
 // Single-codebase template: this repo's own public/ is the project root that
 // both the game (static fetch) and the editor (authoring middleware) read/write.
@@ -874,6 +879,7 @@ const PRIVILEGED_URLS = new Set([
   "/__save-state-tree",
   "/__save-ui",
   "/__save-gamedata",
+  "/__gamedata-defaults",
   "/__save-uvw",
   "/__save-meshpaint",
   "/__save-vertexcolors",
@@ -1206,6 +1212,37 @@ function layoutEditorPlugin(): Plugin {
             await writeFile(filePath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Data Table editor "reset to defaults": returns a balance file as it is
+        // committed in git (HEAD), so the editor can restore one entry to its last
+        // known-good state even after a bad edit was saved. Read-only; the path is
+        // fenced to game-data/**.json exactly like the save endpoint.
+        if (req.url?.split("?")[0] === "/__gamedata-defaults") {
+          if (req.method !== "GET") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const params = new URL(req.url, "http://localhost").searchParams;
+            const relPath = validateGameDataPath(params.get("path") ?? "");
+            // The repo tracks these under public/; git needs the repo-relative path.
+            const { stdout } = await execFileAsync("git", ["show", `HEAD:public/${relPath}`], {
+              cwd: fileURLToPath(new URL(".", import.meta.url)),
+              maxBuffer: 8 * 1024 * 1024,
+            });
+            const data = JSON.parse(stdout) as unknown;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: relPath, data }));
           } catch (error) {
             res.statusCode = 400;
             res.setHeader("Content-Type", "application/json; charset=utf-8");
