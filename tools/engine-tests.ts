@@ -790,6 +790,7 @@ import {
   validateSaveMeshPaintPayload,
   validateAssetVertexColors,
   validateSaveAssetVertexColorsPayload,
+  validateSaveGameDataPayload,
 } from "./saveValidator";
 import {
   normalizeFoliageType,
@@ -27612,6 +27613,47 @@ check("GAME_EDITOR_CATALOG satisfies the editor catalog contract once injected",
   // Montage resolver is pure and safe on empty/absent input.
   assert.deepEqual(catalog.resolveMontageBindings(undefined), []);
   assert.deepEqual(catalog.resolveMontageBindings([]), []);
+
+  // Data Table editor: the units balance is registered as an editable table, and
+  // its `validate` is the real runtime validator wrapped — null for the shipped
+  // file, a field message for a broken edit. This is what stops the editor from
+  // ever writing balance the `?rts` boot would reject.
+  const unitsTable = catalog.dataTables?.find((table) => table.id === "units")
+    ?? assert.fail("units data table is not registered in the editor catalog");
+  assert.equal(unitsTable.path, "game-data/balance/units.json");
+  const realUnits = JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown;
+  assert.equal(unitsTable.validate(realUnits), null, "the shipped units file validates");
+  const broken = JSON.parse(JSON.stringify(realUnits)) as Record<string, any>;
+  broken.guard_placeholder.maxHealth = -5;
+  assert.equal(
+    typeof unitsTable.validate(broken),
+    "string",
+    "an out-of-range edit is refused with a field message, not accepted",
+  );
+});
+
+check("validateSaveGameDataPayload fences writes to game-data JSON and rejects the rest", () => {
+  // The dev endpoint's guard is generic on purpose: path scope + a keyed object,
+  // no balance rules (those ride on the injected validator above and the runtime
+  // loader). Accepts a real balance path; refuses escapes and non-objects.
+  const ok = validateSaveGameDataPayload({ path: "game-data/balance/units.json", data: { a: {} } });
+  assert.equal(ok.path, "game-data/balance/units.json");
+  assert.deepEqual(ok.data, { a: {} });
+  // A leading slash is normalised rather than rejected.
+  assert.equal(
+    validateSaveGameDataPayload({ path: "/game-data/balance/units.json", data: {} }).path,
+    "game-data/balance/units.json",
+  );
+  for (const bad of [
+    { path: "src/main.ts", data: {} },
+    { path: "game-data/../secret.json", data: {} },
+    { path: "game-data/balance/units.json", data: [] },
+    { path: "game-data/balance/units.json", data: "x" },
+    { path: 42, data: {} },
+    null,
+  ]) {
+    assert.throws(() => validateSaveGameDataPayload(bad), /gameData payload/);
+  }
 });
 
 // Runtime `?debug` snapshot builders (P2.5): pure, side-effect-free, so the

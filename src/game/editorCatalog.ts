@@ -14,6 +14,25 @@ import { BEHAVIOR_SCRIPT_IDS } from "@/game/behaviors";
 import { resolveMontageBindings } from "@/game/montageInputBindings";
 import { formatInputCode, keysForAction } from "@/game/defaultInputBindings";
 import { createRagdollDriver } from "@/game/ragdollDriver";
+import { validateUnitBalance } from "@/game/data/validateGameData";
+
+/**
+ * Wrap a runtime game-data validator as the editor's `validate` contract:
+ * `null` when the document is accepted, otherwise the validator's own
+ * field-level message. This is what lets the Data Table editor refuse a save
+ * the game would reject at boot, using the exact same rules the runtime loads
+ * with — without the editor ever importing `@/game`.
+ */
+const asTableValidator =
+  (fn: (raw: unknown) => unknown) =>
+  (raw: unknown): string | null => {
+    try {
+      fn(raw);
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
+  };
 
 export const GAME_EDITOR_CATALOG = {
   gameModeOptions: GAME_MODE_OPTIONS,
@@ -22,4 +41,16 @@ export const GAME_EDITOR_CATALOG = {
   formatInputCode,
   keysForAction,
   createRagdollDriver,
+  // Balance files editable from the Content Browser. Each `validate` is the
+  // real runtime validator (validateGameData.ts), so tuning from the editor can
+  // never write data the `?rts` boot would reject. First slice: units only;
+  // buildings/ages/resources/ai reuse the same editor by adding entries here.
+  dataTables: [
+    {
+      id: "units",
+      label: "Birim Dengesi",
+      path: "game-data/balance/units.json",
+      validate: asTableValidator(validateUnitBalance),
+    },
+  ],
 };

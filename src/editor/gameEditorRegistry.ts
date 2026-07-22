@@ -57,6 +57,46 @@ export interface EditorRagdollDriver {
 }
 
 /**
+ * Optional per-leaf metadata for a data-table field. Purely presentational —
+ * the authoritative rule check is {@link EditorDataTableDef.validate}. Leaves
+ * with no matching entry render generically from their raw key and value type.
+ */
+export interface EditorDataTableFieldMeta {
+  /** Dotted leaf path within an entry, e.g. `cost.food` or `damageMultipliers.heavy`. */
+  readonly path: string;
+  readonly label?: string;
+  readonly min?: number;
+  readonly max?: number;
+  readonly step?: number;
+  /** When set, the leaf renders as a dropdown of these string options. */
+  readonly enum?: readonly string[];
+}
+
+/**
+ * A game-data file the editor's Data Table editor can open and save. The editor
+ * stays generic: it renders each top-level entry as a per-field form by walking
+ * the JSON's scalar leaves, and it enforces correctness by calling
+ * {@link validate} — the game's real runtime validator, injected as a function so
+ * no `@/game` symbol is imported into the editor.
+ */
+export interface EditorDataTableDef {
+  /** Stable id, e.g. `units`. */
+  readonly id: string;
+  /** Human-readable title shown in the editor header. */
+  readonly label: string;
+  /** Public-root-relative JSON path, e.g. `game-data/balance/units.json`. */
+  readonly path: string;
+  /** Optional per-leaf presentation hints; keyed by dotted path. */
+  readonly fields?: readonly EditorDataTableFieldMeta[];
+  /**
+   * Authoritative validation. Returns `null` when the parsed document is valid,
+   * otherwise a field-level message. Wraps the same validator the runtime loads
+   * with, so the editor cannot save data the game would reject at boot.
+   */
+  validate(raw: unknown): string | null;
+}
+
+/**
  * Game-provided data + helpers the editor renders, injected at startup. The
  * game assembles a plain object (`src/game/editorCatalog.ts`) whose inferred
  * shape structurally satisfies this contract.
@@ -82,6 +122,12 @@ export interface GameEditorCatalog {
     bridge: EditorRagdollPhysicsBridge,
     detachEntityId?: string,
   ): EditorRagdollDriver | null;
+  /**
+   * Game-data files editable through the Data Table editor. Omitted (or empty)
+   * for a fork that ships no editable balance data — the editor then offers no
+   * data-table opener, so the feature is naturally opt-in.
+   */
+  readonly dataTables?: readonly EditorDataTableDef[];
 }
 
 let catalog: GameEditorCatalog | null = null;

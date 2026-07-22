@@ -3194,6 +3194,39 @@ export function validateSaveSoundCuePayload(value: unknown): {
   };
 }
 
+// ─── Game-data table (Data Table editor save) ────────────────────────────────
+//
+// Deliberately a GENERIC structural guard only: it fences writes to
+// `public/game-data/**.json` and requires a keyed-object body, but it does NOT
+// encode any project balance rule. Those rules are project-specific and are
+// enforced elsewhere — by the game's own validator (injected into the Data Table
+// editor via GameEditorCatalog and run before this endpoint is called), at
+// runtime load (`gameDataLoader.ts`), and by `npm run test:engine`. Keeping this
+// generic is what lets `saveValidator.ts` stay free of `@/game` balance schemas.
+export function validateSaveGameDataPayload(value: unknown): {
+  path: string;
+  data: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object") {
+    throw new Error("gameData payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  if (typeof input.path !== "string") {
+    throw new Error("gameData payload path must be a string");
+  }
+  const normalizedPath = input.path.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalizedPath.startsWith("game-data/") || !normalizedPath.endsWith(".json")) {
+    throw new Error("gameData payload path must be a game-data/**.json file");
+  }
+  if (normalizedPath.includes("..")) {
+    throw new Error("gameData payload path must not contain ..");
+  }
+  if (!input.data || typeof input.data !== "object" || Array.isArray(input.data)) {
+    throw new Error("gameData payload data must be an object keyed by entry id");
+  }
+  return { path: normalizedPath, data: input.data as Record<string, unknown> };
+}
+
 // ─── VFX Lite particle effect (VFX Faz 1 editor save) ────────────────────────
 //
 // THIRD save-validator allowlist surface (after layout placements and skeleton

@@ -27,6 +27,7 @@ import {
   validateSaveSkeletonPayload,
   validateSaveLandscapePayload,
   validateSaveUiPayload,
+  validateSaveGameDataPayload,
   validateSaveUvwPayload,
   validateSaveSoundCuePayload,
   validateSaveEffectPayload,
@@ -872,6 +873,7 @@ const PRIVILEGED_URLS = new Set([
   "/__save-query",
   "/__save-state-tree",
   "/__save-ui",
+  "/__save-gamedata",
   "/__save-uvw",
   "/__save-meshpaint",
   "/__save-vertexcolors",
@@ -1171,6 +1173,36 @@ function layoutEditorPlugin(): Plugin {
             const filePath = resolvePublicPath(payload.path);
             const previous = await readFile(filePath, "utf8").catch(() => null);
             const next = `${JSON.stringify(payload.ui, null, 2)}\n`;
+            await writeFile(filePath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(
+              JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
+            );
+          }
+          return;
+        }
+
+        // Data Table editor save: writes a balance file under public/game-data/.
+        // The path + JSON shape are guarded generically server-side
+        // (validateSaveGameDataPayload); the project balance rules were already
+        // enforced in the editor via the game's injected validator, and are
+        // re-checked at runtime load and by test:engine. Kept inside public/ by
+        // resolvePublicPath.
+        if (req.url === "/__save-gamedata") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const payload = validateSaveGameDataPayload(await readJsonBody(req));
+            const filePath = resolvePublicPath(payload.path);
+            const previous = await readFile(filePath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.data, null, 2)}\n`;
             await writeFile(filePath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next }));
