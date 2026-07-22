@@ -506,9 +506,9 @@
           "maxHealth": 300,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 6,
+            "perWorkerPerMinute": 12,
             "localBufferCapacity": 40,
-            "carryCapacity": 10
+            "carryCapacity": 24
           }
         },
         {
@@ -516,9 +516,9 @@
           "maxHealth": 400,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 7,
+            "perWorkerPerMinute": 14,
             "localBufferCapacity": 50,
-            "carryCapacity": 12
+            "carryCapacity": 28
           }
         },
         {
@@ -526,9 +526,9 @@
           "maxHealth": 520,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 8,
+            "perWorkerPerMinute": 16,
             "localBufferCapacity": 60,
-            "carryCapacity": 14
+            "carryCapacity": 32
           }
         }
       ],
@@ -538,9 +538,9 @@
           "maxHealth": 650,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 9,
+            "perWorkerPerMinute": 18,
             "localBufferCapacity": 80,
-            "carryCapacity": 16
+            "carryCapacity": 36
           }
         },
         {
@@ -548,9 +548,9 @@
           "maxHealth": 800,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 10,
+            "perWorkerPerMinute": 20,
             "localBufferCapacity": 100,
-            "carryCapacity": 18
+            "carryCapacity": 40
           }
         },
         {
@@ -558,9 +558,9 @@
           "maxHealth": 960,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 11,
+            "perWorkerPerMinute": 22,
             "localBufferCapacity": 120,
-            "carryCapacity": 20
+            "carryCapacity": 44
           }
         }
       ]

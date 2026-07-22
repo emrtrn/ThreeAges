@@ -394,10 +394,10 @@ function ensureStyles(): void {
 .dte-reset:hover{filter:brightness(1.2);border-color:#c8955a;color:#ffce7a;}
 .dte-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;padding:6px 12px 12px;}
 .dte-field{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;}
-.dte-field-label{color:#aeb6c4;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dte-field-label{flex:1 1 auto;min-width:0;color:#aeb6c4;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .dte-field-hinted .dte-field-label::after{content:" ⓘ";color:#7f8aa0;}
 .dte-field-input:disabled{opacity:.55;cursor:not-allowed;}
-.dte-field-input{flex:0 0 44%;background:#171a20;color:#dfe3ea;border:1px solid #333842;border-radius:4px;padding:4px 6px;font:inherit;}
+.dte-field-input{flex:0 0 30%;min-width:0;background:#171a20;color:#dfe3ea;border:1px solid #333842;border-radius:4px;padding:4px 6px;font:inherit;}
 .dte-field-input[type=checkbox]{flex:0 0 auto;}
 .dte-field-input:focus{outline:none;border-color:#4a6bea;}
 .dte-status{padding:8px 12px;border-top:1px solid #333842;background:#252932;font-size:12px;color:#aeb6c4;}
