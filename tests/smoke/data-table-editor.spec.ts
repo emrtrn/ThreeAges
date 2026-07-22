@@ -29,12 +29,14 @@ test("Veri menu opens the units balance table with an editable per-field form", 
   await expect(editor.locator(".dte-entry")).toHaveCount(4);
   const guard = editor.locator(".dte-entry", { hasText: "guard_placeholder" });
   await expect(guard).toBeVisible();
-  // A known scalar leaf renders as a number input carrying the shipped value.
-  const maxHealth = guard.locator(".dte-field", { hasText: "maxHealth" }).locator("input");
+  // Fields carry friendly Turkish labels + number-input constraints from the
+  // catalog's field metadata, not the raw JSON keys.
+  const maxHealth = guard.locator(".dte-field", { hasText: "Can" }).locator("input");
   await expect(maxHealth).toHaveValue("110");
   await expect(maxHealth).toHaveAttribute("type", "number");
-  // A nested leaf is reachable at its dotted path.
-  await expect(guard.locator(".dte-field", { hasText: "cost.food" }).locator("input")).toHaveValue("60");
+  await expect(maxHealth).toHaveAttribute("min", "1");
+  // A nested leaf is labelled and reachable.
+  await expect(guard.locator(".dte-field", { hasText: "Maliyet: Yiyecek" }).locator("input")).toHaveValue("60");
 
   // Editing marks the Save button dirty (no save issued — data stays untouched).
   await maxHealth.fill("125");
@@ -74,8 +76,33 @@ test("Veri menu lists every registered balance table", async ({ page }) => {
   await menu.locator('[data-datatable-id="buildings"]').click();
   const editor = page.locator(".dte-overlay");
   await expect(editor).toBeVisible();
-  await expect(editor.locator(".dte-entry", { hasText: "command_center" })).toBeVisible();
+  const center = editor.locator(".dte-entry", { hasText: "command_center" });
+  await expect(center).toBeVisible();
   await expect(
     editor.locator(".dte-entry", { hasText: "barracks" }).getByRole("button", { name: "Varsayılana dön" }),
   ).toBeVisible();
+  // Index-agnostic field metadata labels every progression tier at once: the
+  // `progression.settlement.[].maxHealth` template reaches each concrete index.
+  await expect(center.locator(".dte-field", { hasText: "Yerleşim tier: Can" }).first()).toBeVisible();
+
+  // Structural tier indices are read-only (editing them only breaks a save).
+  await expect(
+    center.locator(".dte-field", { hasText: "Yerleşim tier: Seviye" }).first().locator("input"),
+  ).toBeDisabled();
+
+  // The level-1 territory value carries an explanatory hint (tooltip) so it is
+  // not mistaken for an outpost's single control-radius source.
+  const outpost = editor.locator(".dte-entry", { hasText: "outpost" });
+  await expect(
+    outpost.locator(".dte-field", { hasText: "Bölge: Kontrol yarıçapı" }).first(),
+  ).toHaveAttribute("title", /Seviye 1/);
+
+  // The editor is a modal overlay, so switching tables means closing first.
+  await page.locator("[data-dte-close]").click();
+  await expect(editor).toHaveCount(0);
+
+  // A flat config (roads) labels its scalar top-level values distinctly.
+  await page.locator("[data-datatables-button]").hover();
+  await menu.locator('[data-datatable-id="roads"]').click();
+  await expect(editor.locator(".dte-field", { hasText: "Hücre boyutu (birim)" }).locator("input")).toBeVisible();
 });

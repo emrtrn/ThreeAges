@@ -89,6 +89,70 @@ Kök `CLAUDE.md`'den kilit gerçekler:
 
 ---
 
+### TD-006 - RTS composition root: `RtsApp` korunur
+
+- **Karar:** `?rts` rotasındaki `RtsApp`, ilk Content Drawer assetleştirme
+  dilimlerinde korunur. RTS simülasyonu `RuntimeSceneApp`e taşınmaz; yeni
+  içerik yalnızca dar loader/factory/adapter portlarıyla `RtsApp`e verilir.
+- **Gerekçe:** Seçim, komut, ekonomi, lojistik, savaş ve stratejik AI mevcut
+  composition root etrafında çalışıyor. Runtime'ı yeniden kurmak asset
+  authoring hedefinden daha geniş ve riskli bir tasarım olur.
+- **Durum:** Kilitlendi. Kaynak plan: `docs/planned/THREEAGES_RTS_CONTENT_ASSETIZATION_PLAN.md` K-01.
+
+### TD-007 - Actor Script sunum archetype'idir; balance oynanış otoritesidir
+
+- **Karar:** Actor Script mesh, collider/pick bounds, animasyon, ses, VFX,
+  world-space UI ve class-default presentation değişkenlerini taşır. Can,
+  hasar, hız, maliyet, nüfus, üretim/insaat süresi, ekonomi, territory,
+  lojistik ve AI kararları `public/game-data/balance/*.json` ile TypeScript
+  simülasyonunda kalır.
+- **Gerekçe:** Aynı oynanış değerinin Actor ve balance verisinde iki kez
+  yazılması, sessiz sapma ve dengesizliğe neden olur.
+- **Durum:** Kilitlendi. Kaynak plan: K-02 ve K-03.
+
+### TD-008 - Balance kimlikleri ayrı RTS content catalog ile asset'e bağlanır
+
+- **Karar:** Balance JSON'larına asset yolu veya UI/CSS bilgisi eklenmez.
+  Bunların eşlemesi, `public/game-data/content/rts-content.json` içindeki
+  doğrulanmış `RtsContentCatalog` tarafından yapılır. Actor referansları
+  public-root-relative `*.actor.json`, UI referansları manifest asset id'sidir.
+- **Geçiş kuralı:** Katalog eksikliğinde geliştirme döneminde belgeli
+  placeholder fallback kullanılabilir; release gate'te eksik mapping hatadır.
+  Katalog oynanış sayısı taşımaz.
+- **Durum:** Kilitlendi. Kaynak plan: K-04.
+
+### TD-009 - Level mekansal; scenario/preset maç başlangıç otoritesidir
+
+- **Karar:** Level Landscape, dekorasyon, ışık/atmosfer, start ve resource
+  noktaları, AI anchor/expansion, authored route, navigation blocker ve
+  landmark konumlarının tek otoritesidir. Başlangıç roster'i, kaynaklar,
+  AI profili ve seçilen Level ise scenario/preset verisinde kalır.
+- **Sınır:** Level unit/building balance sayılarını, HUD yerleşimini veya maç
+  sırasında üretilen instance'ları taşımaz.
+- **Durum:** Kilitlendi. Kaynak plan: K-05.
+
+### TD-010 - UI Widget görünümdür; TypeScript eylem otoritesidir
+
+- **Karar:** UI Widget ağacı, responsive yerleşim, tema/lokalizasyon,
+  accessibility, binding ve message-action adlarını taşır. TypeScript
+  ViewModel'i üretir, message allowlist'ini doğrular ve ekonomi/spawn/match
+  mutasyonlarını uygular.
+- **Güvenlik sınırı:** Bir UI asset'inden gelen serbest string, simülasyon
+  veya ekonomi servisini doğrudan çağırmaz.
+- **Durum:** Kilitlendi. Kaynak plan: K-06.
+
+### TD-011 - Asset migration feature flag ile opt-in kalır
+
+- **Karar:** `contentAssets` varsayılan olarak kapalıdır ve shipped preset
+  tarafından açılmaz. Geçiş boyunca legacy visual path fallback olarak
+  korunur; kaldırma ancak content coverage, browser smoke ve dispose gate'leri
+  kanıtlandıktan sonra yapılır.
+- **Gerekçe:** Authoring migration'ı mevcut `?rts` akışında davranış
+  değişikliği yaratmadan, geri dönüşlü olarak ilerler.
+- **Durum:** Kilitlendi. Kaynak plan: Faz A ve Section 13 kaldırma kapısı.
+
+---
+
 ## 4. Sapma Kayıtları (master §13.3 formatı)
 
 ### Sapma S-001 — Klasör yapısı
@@ -131,6 +195,15 @@ ilgili faz geldiğinde teyit edilir. Faz 0 kod işi bu varsayılanlarla bloklanm
 ---
 
 ## 6. Revizyon Notları
+
+### Sürüm 0.3 - RTS Content Drawer assetleştirme sözleşmesi (2026-07-22)
+
+- TD-006...TD-011 kilitlendi: `RtsApp` composition root'u, Actor/Balance
+  otorite ayrımı, `RtsContentCatalog`, Level/scenario sınırı, UI action
+  allowlist'i ve `contentAssets` migration gate'i kayda geçirildi.
+- Uygulama sırası ve kabul kapıları
+  `docs/planned/THREEAGES_RTS_CONTENT_ASSETIZATION_PLAN.md` tarafından
+  yönetilmeye devam eder.
 
 ### Sürüm 0.2 — Faz 0 başlangıcı (2026-07-15)
 

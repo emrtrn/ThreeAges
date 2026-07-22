@@ -31157,9 +31157,18 @@ check("RTS territory stores centre ownership per grid cell and gates normal buil
   );
   const house = buildings.house ?? assert.fail("house definition missing");
   const outpost = buildings.outpost ?? assert.fail("outpost definition missing");
-  assert.deepEqual(outpost.territory, { controlRadius: 16, connectedControlRadius: 20, expansionPlacementRange: 12 });
-  assert.equal(outpost.cost.wood, 140);
-  assert.equal(outpost.constructionSeconds, 45);
+  // Invariants, not the tuning (plan §75): an outpost projects a positive control
+  // area that a road connection never shrinks, enables nearby expansion, and
+  // costs wood + time to raise. The exact radii/cost are balance the editor tunes.
+  const outpostTerritory = outpost.territory ?? assert.fail("outpost has no territory");
+  assert.ok(outpostTerritory.controlRadius > 0, "an outpost controls a positive radius");
+  assert.ok(
+    (outpostTerritory.connectedControlRadius ?? 0) >= outpostTerritory.controlRadius,
+    "a road connection never shrinks the control area",
+  );
+  assert.ok((outpostTerritory.expansionPlacementRange ?? 0) > 0, "an outpost enables expansion nearby");
+  assert.ok((outpost.cost.wood ?? 0) > 0, "an outpost costs wood");
+  assert.ok(outpost.constructionSeconds > 0, "an outpost takes time to build");
   const sources = [
     { owner: "player" as const, x: 0, z: 0, radius: 10 },
     { owner: "enemy" as const, x: 30, z: 0, radius: 10 },

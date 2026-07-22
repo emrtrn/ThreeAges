@@ -169,8 +169,9 @@ export class DataTableEditor {
         grid.append(this.renderLeaf(leaf));
       }
     } else {
-      // A scalar top-level entry is itself a single leaf.
-      grid.append(this.renderLeaf({ path: "", type: leafType(entry)!, container: this.doc, key: entryId }));
+      // A scalar top-level entry is itself a single leaf; key it by the entry id
+      // so a flat config (e.g. roads.json) can label each value distinctly.
+      grid.append(this.renderLeaf({ path: entryId, type: leafType(entry)!, container: this.doc, key: entryId }));
     }
     section.append(grid);
     return section;
@@ -197,10 +198,23 @@ export class DataTableEditor {
     }
   }
 
+  /**
+   * Field metadata for a leaf: an exact-path entry wins, else the array-index
+   * template (`levels.0.cost.wood` → `levels.[].cost.wood`) so one entry covers
+   * every tier without listing indices.
+   */
+  private metaFor(path: string): EditorDataTableFieldMeta | undefined {
+    return this.fieldMeta.get(path) ?? this.fieldMeta.get(templatePath(path));
+  }
+
   private renderLeaf(leaf: Leaf): HTMLElement {
     const row = document.createElement("label");
     row.className = "dte-field";
-    const meta = this.fieldMeta.get(leaf.path);
+    const meta = this.metaFor(leaf.path);
+    if (meta?.hint) {
+      row.title = meta.hint;
+      row.classList.add("dte-field-hinted");
+    }
 
     const name = document.createElement("span");
     name.className = "dte-field-label";
@@ -233,7 +247,12 @@ export class DataTableEditor {
       }
     }
     input.className = "dte-field-input";
-    input.addEventListener("change", () => this.commitLeaf(leaf, input));
+    if (meta?.readonly) {
+      input.disabled = true;
+      if (!row.title) row.title = "Bu alan yapısaldır ve düzenlenemez.";
+    } else {
+      input.addEventListener("change", () => this.commitLeaf(leaf, input));
+    }
     row.append(input);
     return row;
   }
@@ -300,6 +319,11 @@ export class DataTableEditor {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Replace array-index path segments with `[]` so field metadata is index-agnostic. */
+function templatePath(path: string): string {
+  return path.replace(/\.\d+(?=\.|$)/g, ".[]");
 }
 
 function leafType(value: unknown): Leaf["type"] | null {
@@ -371,6 +395,8 @@ function ensureStyles(): void {
 .dte-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;padding:6px 12px 12px;}
 .dte-field{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;}
 .dte-field-label{color:#aeb6c4;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.dte-field-hinted .dte-field-label::after{content:" ⓘ";color:#7f8aa0;}
+.dte-field-input:disabled{opacity:.55;cursor:not-allowed;}
 .dte-field-input{flex:0 0 44%;background:#171a20;color:#dfe3ea;border:1px solid #333842;border-radius:4px;padding:4px 6px;font:inherit;}
 .dte-field-input[type=checkbox]{flex:0 0 auto;}
 .dte-field-input:focus{outline:none;border-color:#4a6bea;}

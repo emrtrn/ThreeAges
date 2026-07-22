@@ -62,7 +62,8 @@ export interface EditorRagdollDriver {
  * with no matching entry render generically from their raw key and value type.
  */
 export interface EditorDataTableFieldMeta {
-  /** Dotted leaf path within an entry, e.g. `cost.food` or `damageMultipliers.heavy`. */
+  /** Dotted leaf path within an entry, e.g. `cost.food` or `damageMultipliers.heavy`.
+   *  A path segment of `[]` matches any array index (every tier/level at once). */
   readonly path: string;
   readonly label?: string;
   readonly min?: number;
@@ -70,6 +71,11 @@ export interface EditorDataTableFieldMeta {
   readonly step?: number;
   /** When set, the leaf renders as a dropdown of these string options. */
   readonly enum?: readonly string[];
+  /** Renders the input disabled — for structural/identity fields the validator
+   *  would reject edits to anyway (tier level indices, entry ids). */
+  readonly readonly?: boolean;
+  /** Tooltip on the field, e.g. explaining that a value is only the level-1 base. */
+  readonly hint?: string;
 }
 
 /**

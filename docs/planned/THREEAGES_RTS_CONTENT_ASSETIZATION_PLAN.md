@@ -1,7 +1,8 @@
 # ThreeAges RTS Content Drawer Assetlestirme Plani
 
 Olusturulma tarihi: 2026-07-17  
-Durum: Planlandi - uygulama baslamadi  
+Durum: Faz A tamamlandi (2026-07-22). Sonraki adim: Faz B - Content catalog ve
+loader. Ayrinti icin asagidaki "Faz A - Durum" notuna bakin.
 Kapsam: `RtsApp` ile Forge Actor Script, oyun verisi, Level ve UI Widget
 sistemleri arasinda veri/authoring koprusu kurulmasi
 
@@ -481,6 +482,68 @@ Kabul:
 - Kod davranisi degismez.
 - Mevcut calisma agacindaki HUD/AI calismasi korunur.
 - Legacy ve asset yolu arasinda hangi gate'te gecis yapilacagi yazilidir.
+
+#### Faz A - Durum (2026-07-19)
+
+Tamamlandi. Ilk kapanis sirasinda `npx tsc --noEmit`, `npm run test:engine`
+(1065 check), `npm run build:verify` ve `check:assets` yesildi. 2026-07-22
+kapanisinda karar kaydi ve migration'a ozel browser baseline eklendi;
+`npx.cmd tsc --noEmit`, `npm.cmd run test:engine`,
+`npm.cmd run smoke:browser -- tests/smoke/rts-assetization-baseline.spec.ts`
+(1 Chromium testi) ve `npm.cmd run build:verify` yeniden yesil.
+
+Yapilanlar:
+
+- `contentAssets` migration feature flag'i eklendi (varsayilan kapali,
+  `?flags=contentAssets` ile acilir): `src/game/core/featureFlags.ts`. Flag
+  kapaliyken RTS gorselleri legacy kod-tarafi tablolardan cozulur
+  (`rtsBuildingArt` / `rtsMapArt` / `Unit` placeholder geometry); flag asset
+  yolunu secer. Hicbir shipped preset onu acmaz.
+- Baseline sozlesme testleri eklendi (`tools/engine-tests.ts`, "Assetization
+  Faz A" ile aranir): (1) flag varsayilan kapali ve hicbir preset acmaz; (2)
+  legacy gorsel otoriteler kilitlendi - `rtsBuildingArt` tum balance yapilarini
+  kapsar, hicbir unit id'si oradan cozulmez (Faz C'nin kapatacagi bosluk); (3)
+  `RTS_BLOCKOUT_MAP` hala mekansal otorite ve resource node id'leri tekil (Faz
+  D adapter'inin ilk reddedecegi durum). Envanter prosa bir liste yerine bu
+  testlerde kilitlendi.
+- Kod davranisi degismedi; kullanicinin acik HUD/UI calismasina dokunulmadi.
+
+Faz A kapanis teslimatlari (2026-07-22):
+
+- `RtsContentCatalog` semasi ve K-01..K-06 kararlar `GDD/TECH_DECISIONS.md`
+  dosyasinda TD-006..TD-011 olarak kilitlendi.
+- `tests/smoke/rts-assetization-baseline.spec.ts`, varsayilan `?rts&debug`
+  boot/start akisini ve `contentAssets` flag'inin default olarak kapali oldugunu
+  browser katmaninda kayda alir. Mevcut kapsamli `rts-*.spec.ts` testleri bu
+  dar baseline'in yerini degil, tamamlayici kabul coverage'ini saglar.
+
+Plan disi ama dogrudan ilgili yan is (ayni oturumda yapildi):
+
+- Faz oncesi CI kirmiziydi: uc ayri denge pass'i (`584ec86`, `98b244e`,
+  `63574e5`) tuning sayisini cividileyen testleri bozmus, ayrica `core_match`
+  preset'i test amacli 5000 kaynakla kalmisti. Ilgili testler §75 dogrultusunda
+  deger cividilamak yerine invariant dogrulayacak sekilde yeniden yazildi, preset
+  500/500/0/0'a donduruldu. Sonuc: denge ayari artik CI'i kirmaz; yalnizca bir
+  *kurali* bozan degisiklik kirar. Bu, asagidaki editor cilasinin on kosuluydu.
+- Balance verisini oyun ici gormeden ayarlamak icin generic bir Data Table
+  editoru eklendi (Forge `?editor` -> ust bardaki "Veri" menusu). K-03'un
+  "balance tek oynanis otoritesi" ilkesine bir authoring yuzeyi getirir; asset
+  migration'i degil, gunluk denge ayarini hedefler. Ozellikler: units, buildings,
+  resources, ages, ai, roads tablolari; girdi-basina form; alan-basina
+  "Varsayilana don" (git HEAD'den geri yukler); Turkce etiket + min/max/step;
+  yapisal alanlar (tier `level`, cag `id`) readonly; validate-on-save (gercek
+  runtime validator, editor `@/game` import etmez - `GameEditorCatalog` uzerinden
+  enjekte). Dosyalar: `src/editor/DataTableEditor.ts`,
+  `src/editor/dataTableStore.ts`, `src/editor/gameEditorRegistry.ts`,
+  `src/game/editorCatalog.ts`, `src/editor/EditorUi.ts` ("Veri" menusu),
+  `tools/saveValidator.ts` (`validateSaveGameDataPayload` / `validateGameDataPath`),
+  `vite.config.ts` (`/__save-gamedata`, `/__gamedata-defaults`),
+  `tests/smoke/data-table-editor.spec.ts`.
+- Not (veri modeli kokusu): outpost gibi progression'li yapilarda seviye-1
+  territory iki yerde duruyor (top-level `territory` + `progression.settlement[0]
+  .territory`) ve elle senkron tutulmasi gerekiyor; bir engine testi sapmayi
+  yakalar. Editorde top-level alanlara aciklayici hint kondu. Ileride tek
+  otoriteye indirmek (loader turetsin) ayri bir is olarak durabilir.
 
 ### Faz B - Content catalog ve loader
 
