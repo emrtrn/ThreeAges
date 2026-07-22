@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_BuildAnchor",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "owner", "label": "Owner", "type": "select", "default": "enemy", "options": ["player", "enemy"] },
+    { "key": "buildingId", "label": "Building Id", "type": "text", "default": "farm" },
+    { "key": "regionId", "label": "Region Id", "type": "text", "default": "base" },
+    { "key": "priority", "label": "Priority", "type": "number", "default": 0 }
+  ],
+  "components": [{ "id": "root", "component": "Transform", "props": {} }],
+  "interfaces": [], "references": [], "dispatchers": [], "eventBindings": [], "messageBindings": [], "construction": null
+}

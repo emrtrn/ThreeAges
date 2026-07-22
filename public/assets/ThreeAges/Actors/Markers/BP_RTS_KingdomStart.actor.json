@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_KingdomStart",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "owner", "label": "Owner", "type": "select", "default": "player", "options": ["player", "enemy"] }
+  ],
+  "components": [{ "id": "root", "component": "Transform", "props": {} }],
+  "interfaces": [], "references": [], "dispatchers": [], "eventBindings": [], "messageBindings": [], "construction": null
+}

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "BP_RTS_ResourceNode",
+  "parentClass": "actor",
+  "variables": [
+    { "key": "nodeId", "label": "Node Id", "type": "text", "default": "resource-node" },
+    { "key": "resourceId", "label": "Resource", "type": "text", "default": "stone" },
+    { "key": "kind", "label": "Kind", "type": "select", "default": "safe", "options": ["safe", "external"] }
+  ],
+  "components": [{ "id": "root", "component": "Transform", "props": {} }],
+  "interfaces": [], "references": [], "dispatchers": [], "eventBindings": [], "messageBindings": [], "construction": null
+}

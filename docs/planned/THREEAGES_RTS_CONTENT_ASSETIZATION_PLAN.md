@@ -635,6 +635,17 @@ layout round-trip'ini kapsar.
 Siradaki Faz D dilimi: marker Actor asset'leri, Level adapter/validation ve
 mevcut `RTS_BLOCKOUT_MAP` verisinin `levelRef` ile Level asset'ine tasinmasi.
 
+`src/game/rts/world/rtsLevelAdapter.ts` baslatildi: resolve edilmis Actor
+default/override'larindan Kingdom Start, Resource Node ve Build Anchor
+markerlarini; `rts.route:*` spline tag'lerinden de route noktalarini saf bir
+`RtsLevelDefinition`a cevirir. Shipped marker assetleri ve `RtsApp` baglantisi
+sonraki dilimde eklenecektir.
+
+`BP_RTS_KingdomStart`, `BP_RTS_ResourceNode` ve `BP_RTS_BuildAnchor` marker
+Actor class'lari `public/assets/ThreeAges/Actors/Markers/` altinda ve manifestte
+yer alir. Adapter'in start/resource/anchor/spline route basari ve hata
+sozlesmesi engine testiyle kilitlenmistir.
+
 Teslimatlar:
 
 - Generic Actor instance variable override destegi.

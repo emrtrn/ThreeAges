@@ -87,6 +87,7 @@ import { HealthComponent } from "../src/game/rts/units/health";
 import { RtsNavigation } from "../src/game/rts/navigation/rtsNavigation";
 import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
 import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
+import { adaptRtsLevel, RtsLevelError } from "../src/game/rts/world/rtsLevelAdapter";
 import {
   RTS_PLACEMENT_GRID_SIZE,
   buildingFootprintBlocker,
@@ -28936,6 +28937,28 @@ check("Assetization Faz A: RTS_BLOCKOUT_MAP is still the spatial authority Faz D
   // legacy data has to be clean before it is migrated.
   const nodeIds = map.resourceNodes.map((node) => node.id);
   assert.equal(new Set(nodeIds).size, nodeIds.length, "resource node ids are unique");
+});
+
+check("Assetization Faz D: Level marker Actors resolve starts, resources, anchors and spline routes", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
+  const actor = (name: string, variables: unknown[], overrides: Record<string, string | number | boolean | string[]>, position: [number, number, number]) => ({
+    index: 0, instance: { classRef: `${name}.actor.json`, position, variableOverrides: overrides },
+    def: normalizeActorScriptDef({ name, parentClass: "actor", variables }),
+  });
+  const starts = [
+    actor("BP_RTS_KingdomStart", [{ key: "owner", label: "Owner", type: "select", default: "player" }], { owner: "player" }, [-10, 0, 10]),
+    actor("BP_RTS_KingdomStart", [{ key: "owner", label: "Owner", type: "select", default: "player" }], { owner: "enemy" }, [10, 0, -10]),
+  ];
+  const markerActors = [...starts,
+    actor("BP_RTS_ResourceNode", [{ key: "nodeId", label: "Node", type: "text", default: "n" }, { key: "resourceId", label: "Resource", type: "text", default: "stone" }, { key: "kind", label: "Kind", type: "select", default: "safe" }], { nodeId: "stone-a", resourceId: "stone", kind: "safe" }, [2, 0, 3]),
+    actor("BP_RTS_BuildAnchor", [{ key: "buildingId", label: "Building", type: "text", default: "farm" }], { buildingId: "farm" }, [4, 0, 5]),
+  ];
+  const level = adaptRtsLevel(markerActors, [{ id: "route", position: [1, 0, 2], spline: { schema: 1, closed: false, defaultUp: [0, 1, 0], reparamStepsPerSegment: 8, points: [{ id: "a", position: [0, 0, 0], pointType: "linear" }, { id: "b", position: [4, 0, 0], pointType: "linear" }] }, runtime: { tags: ["rts.route:enemy:base:0"] } }], { buildings, resources });
+  assert.deepEqual(level.playerStart, { x: -10, z: 10 });
+  assert.deepEqual(level.resourceNodes, [{ id: "stone-a", resourceId: "stone", kind: "safe", x: 2, z: 3 }]);
+  assert.deepEqual(level.routes.get("rts.route:enemy:base:0"), [{ x: 1, z: 2 }, { x: 5, z: 2 }]);
+  assert.throws(() => adaptRtsLevel([starts[0]!], [], { buildings, resources }), RtsLevelError);
 });
 
 check("Assetization Faz B/C: content catalog accepts known balance ids and the shipped Actor pilot refs", () => {

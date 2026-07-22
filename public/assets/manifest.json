@@ -19930,6 +19930,42 @@
       "license": "Project-local RTS presentation asset"
     },
     {
+      "id": "threeages-rts-kingdom-start-marker",
+      "name": "BP RTS Kingdom Start.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Markers",
+      "path": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
+      "tags": ["threeages", "rts", "marker", "start"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 428 },
+      "license": "Project-local RTS gameplay marker"
+    },
+    {
+      "id": "threeages-rts-resource-node-marker",
+      "name": "BP RTS Resource Node.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Markers",
+      "path": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
+      "tags": ["threeages", "rts", "marker", "resource"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 600 },
+      "license": "Project-local RTS gameplay marker"
+    },
+    {
+      "id": "threeages-rts-build-anchor-marker",
+      "name": "BP RTS Build Anchor.Actor",
+      "assetType": "prefab",
+      "category": "ThreeAges/Actors/Markers",
+      "path": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "tags": ["threeages", "rts", "marker", "anchor"],
+      "placeable": false,
+      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
+      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 678 },
+      "license": "Project-local RTS gameplay marker"
+    },
+    {
       "id": "ual1-standard-rm",
       "name": "UAL1 Standard RM",
       "assetType": "skeletalMesh",
