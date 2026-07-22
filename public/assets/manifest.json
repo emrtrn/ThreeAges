@@ -23299,6 +23299,29 @@
         "bytes": 100
       },
       "license": "Unknown"
+    },
+    {
+      "id": "rts-core-match-level",
+      "name": "RTS Core Match Markers.Level",
+      "assetType": "level",
+      "category": "Levels",
+      "path": "assets/ThreeAges/Levels/RTS_CoreMatch.level.json",
+      "tags": ["rts", "gameplay", "markers"],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1363
+      },
+      "license": "Unknown"
     }
   ]
 }

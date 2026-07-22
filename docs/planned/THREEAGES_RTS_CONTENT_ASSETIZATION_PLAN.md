@@ -632,14 +632,24 @@ aktarimi birlikte calisiyor. Bilinmeyen veya Actor variable tipiyle uyusmayan
 override runtime'a sizmaz. Engine testleri default/override birlesimini ve
 layout round-trip'ini kapsar.
 
-Siradaki Faz D dilimi: marker Actor asset'leri, Level adapter/validation ve
-mevcut `RTS_BLOCKOUT_MAP` verisinin `levelRef` ile Level asset'ine tasinmasi.
+Marker bootstrap dilimi tamamlandi: `RTS_CoreMatch.level.json`, iki Kingdom
+Start, bir Resource Node, bir Build Anchor ve `rts.route:enemy:base:0` spline
+ornegini tasir. Asset manifestte `rts-core-match-level` olarak gorunur;
+`rtsLevelLoader.ts` Level ve onun Actor class referanslarini browser tarafinda
+yukleyip adapter'a verir. Shipped Level + gercek Actor class referanslari engine
+testinde birlikte cozulur.
+
+Bu Level henuz mevcut macin tum spatial contract'ini tasimadigindan
+`RtsApp`/preset `levelRef` ile ona yonlendirilmemistir. Siradaki Faz D dilimi,
+`RTS_BLOCKOUT_MAP`in kaynak, anchor/expansion, route, tree, strategic point ve
+navigation blocker verisini eksiksiz marker/Level sozlesmesine tasimak ve ancak
+sonra legacy spatial otoriteyi opt-in runtime baglantisiyla degistirmektir.
 
 `src/game/rts/world/rtsLevelAdapter.ts` baslatildi: resolve edilmis Actor
 default/override'larindan Kingdom Start, Resource Node ve Build Anchor
 markerlarini; `rts.route:*` spline tag'lerinden de route noktalarini saf bir
-`RtsLevelDefinition`a cevirir. Shipped marker assetleri ve `RtsApp` baglantisi
-sonraki dilimde eklenecektir.
+`RtsLevelDefinition`a cevirir. Shipped marker assetleri ve browser-side loader
+eklendi; tam spatial contract ile `RtsApp` baglantisi sonraki dilimdedir.
 
 `BP_RTS_KingdomStart`, `BP_RTS_ResourceNode` ve `BP_RTS_BuildAnchor` marker
 Actor class'lari `public/assets/ThreeAges/Actors/Markers/` altinda ve manifestte
@@ -650,9 +660,11 @@ Teslimatlar:
 
 - Generic Actor instance variable override destegi.
 - RTS marker Actor Script asset'leri.
-- `RtsLevelAdapter` ve pure validation testleri.
-- Preset `levelRef` migration'i.
-- Start, resource, anchor ve route verisinin yeni Level'e tasinmasi.
+- `RtsLevelAdapter`, browser-side Level loader'i ve pure/shipped-asset validation
+  testleri.
+- Preset `levelRef` validation migration'i.
+- Bootstrap start, resource, anchor ve route verisinin yeni Level'e tasinmasi.
+- Tam spatial contract migration'i ve `RtsApp` opt-in baglantisi (bekliyor).
 
 Kabul:
 

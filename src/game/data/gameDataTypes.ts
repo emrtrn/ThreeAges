@@ -62,6 +62,12 @@ export interface GamePreset {
   gameSpeed: number;
   /** Map/level this preset boots into (blockout id; empty until Faz 2). */
   mapState: string;
+  /**
+   * Optional public-relative Forge Level asset. During Faz D this coexists with
+   * `mapState` so existing presets keep their blockout fallback until their
+   * complete gameplay marker set has migrated.
+   */
+  levelRef?: string;
   /** AI opponent profile. */
   aiProfile: AiProfile;
 }

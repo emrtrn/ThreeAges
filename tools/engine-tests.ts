@@ -28961,6 +28961,33 @@ check("Assetization Faz D: Level marker Actors resolve starts, resources, anchor
   assert.throws(() => adaptRtsLevel([starts[0]!], [], { buildings, resources }), RtsLevelError);
 });
 
+check("Assetization Faz D: shipped RTS Core Match Level resolves its marker assets", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
+  const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_CoreMatch.level.json", "utf8")) as {
+    actors: Array<{
+      classRef: string;
+      position: [number, number, number];
+      variableOverrides?: Record<string, string | number | boolean | string[]>;
+    }>;
+    splines: Parameters<typeof adaptRtsLevel>[1];
+  };
+  const actors = layout.actors.map((instance, index) => ({
+    index,
+    instance,
+    def: normalizeActorScriptDef(
+      JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown,
+      instance.classRef,
+    ),
+  }));
+  const level = adaptRtsLevel(actors, layout.splines, { buildings, resources });
+  assert.deepEqual(level.playerStart, { x: -38, z: 38 });
+  assert.deepEqual(level.enemyStart, { x: 38, z: -38 });
+  assert.deepEqual(level.resourceNodes, [{ id: "enemy-stone-safe", resourceId: "stone", kind: "safe", x: 30, z: -24 }]);
+  assert.deepEqual(level.buildAnchors, [{ buildingId: "farm", x: 26, z: -38 }]);
+  assert.deepEqual(level.routes.get("rts.route:enemy:base:0"), [{ x: 38, z: -38 }, { x: 26, z: -38 }]);
+});
+
 check("Assetization Faz B/C: content catalog accepts known balance ids and the shipped Actor pilot refs", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,

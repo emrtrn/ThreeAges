@@ -216,6 +216,13 @@ export function validateGamePreset(
     );
   }
 
+  const levelRef = obj["levelRef"];
+  if (levelRef !== undefined && (
+    typeof levelRef !== "string" || !levelRef.endsWith(".level.json") || levelRef.startsWith("/") || levelRef.includes("..")
+  )) {
+    throw new GameDataError(`${where}.levelRef must be a public-relative .level.json path`);
+  }
+
   return {
     id,
     label: requireString(obj, "label", where),
@@ -244,6 +251,7 @@ export function validateGamePreset(
     gameSpeed,
     // mapState is intentionally allowed empty until a blockout exists (Faz 2).
     mapState: requireStringAllowEmpty(obj, "mapState", where),
+    ...(levelRef ? { levelRef } : {}),
     aiProfile: aiProfileRaw as AiProfile,
   };
 }

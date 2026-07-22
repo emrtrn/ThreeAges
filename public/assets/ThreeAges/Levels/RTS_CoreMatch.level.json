@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "name": "RTS Core Match Markers",
+  "loadGroups": [],
+  "instances": [],
+  "characters": [],
+  "actors": [
+    { "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json", "name": "Player Start", "position": [-38, 0, 38], "variableOverrides": { "owner": "player" } },
+    { "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json", "name": "Enemy Start", "position": [38, 0, -38], "variableOverrides": { "owner": "enemy" } },
+    { "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json", "name": "Stone Safe 1", "position": [30, 0, -24], "variableOverrides": { "nodeId": "enemy-stone-safe", "resourceId": "stone", "kind": "safe" } },
+    { "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json", "name": "Enemy Farm Anchor", "position": [26, 0, -38], "variableOverrides": { "owner": "enemy", "buildingId": "farm", "regionId": "enemy-base", "priority": 0 } }
+  ],
+  "splines": [
+    { "id": "enemy-base-route", "name": "Enemy Base Route", "position": [38, 0, -38], "spline": { "schema": 1, "closed": false, "defaultUp": [0, 1, 0], "reparamStepsPerSegment": 8, "points": [{ "id": "start", "position": [0, 0, 0], "pointType": "linear" }, { "id": "farm", "position": [-12, 0, 0], "pointType": "linear" }] }, "runtime": { "tags": ["rts.route:enemy:base:0"] } }
+  ]
+}
