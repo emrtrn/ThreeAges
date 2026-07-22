@@ -874,6 +874,7 @@ import {
   actorInstanceToEntity,
   parseActorInstanceEntityIndex,
   parseSpawnedActorEntityIndex,
+  resolveActorInstanceVariables,
   spawnedActorEntityId,
 } from "../engine/scene/actorInstance";
 import {
@@ -2344,6 +2345,38 @@ check("actor instance patrolRoute overrides the reusable AIController class rout
     },
   }, 0);
   assert.equal(readAIControllerComponent(entity)?.patrolRoute?.splineId, "level-rail");
+});
+
+check("actor instance variable overrides merge declared Actor defaults without leaking unknown or invalid values", () => {
+  const def = normalizeActorScriptDef({
+    name: "Marker",
+    parentClass: "actor",
+    variables: [
+      { key: "owner", label: "Owner", type: "select", default: "player" },
+      { key: "priority", label: "Priority", type: "number", default: 1 },
+      { key: "enabled", label: "Enabled", type: "boolean", default: true },
+      { key: "tags", label: "Tags", type: "tags", default: ["rts"] },
+    ],
+  });
+  const variableOverrides = { owner: "enemy", priority: 4, enabled: false, tags: ["rts", "anchor"], unknown: "drop", malformed: true };
+  assert.deepEqual(resolveActorInstanceVariables(def, variableOverrides), {
+    owner: "enemy",
+    priority: 4,
+    enabled: false,
+    tags: ["rts", "anchor"],
+  });
+
+  const entity = actorInstanceToEntity(def, {
+    classRef: "Markers/Marker.actor.json",
+    position: [0, 0, 0],
+    variableOverrides,
+  }, 0);
+  assert.deepEqual(readScriptActorComponent(entity)?.variables, {
+    owner: "enemy",
+    priority: 4,
+    enabled: false,
+    tags: ["rts", "anchor"],
+  });
 });
 
 check("actorInstanceToEntity bakes placement scale into the flattened capsule collider", () => {
@@ -19809,6 +19842,7 @@ check("validateActorInstance allowlists classRef + transform and rejects bad ref
     name: "Door",
     rotation: [0, 45, 0],
     scale: 1.5,
+    variableOverrides: { owner: "enemy", priority: 2, tags: ["rts", "marker"] },
     patrolRoute: { source: "spline", splineId: "route-1", entry: "nearest", speed: 2.4 },
     sensor: true, // not an instance field â†’ dropped
   });
@@ -19817,12 +19851,14 @@ check("validateActorInstance allowlists classRef + transform and rejects bad ref
   assert.equal(actor.name, "Door");
   assert.deepEqual(actor.rotation, [0, 45, 0]);
   assert.equal(actor.scale, 1.5);
+  assert.deepEqual(actor.variableOverrides, { owner: "enemy", priority: 2, tags: ["rts", "marker"] });
   assert.deepEqual(actor.patrolRoute, { source: "spline", splineId: "route-1", entry: "nearest", speed: 2.4 });
   assert.equal("sensor" in actor, false);
 
   assert.throws(() => validateActorInstance({ classRef: "DoorBP.json", position: [0, 0, 0] }));
   assert.throws(() => validateActorInstance({ classRef: "../x.actor.json", position: [0, 0, 0] }));
   assert.throws(() => validateActorInstance({ classRef: "x.actor.json", position: [0, 0] }));
+  assert.throws(() => validateActorInstance({ classRef: "x.actor.json", position: [0, 0, 0], variableOverrides: { broken: {} } }));
 });
 
 check("validateLayout round-trips an actors[] array", () => {
@@ -19837,6 +19873,7 @@ check("validateLayout round-trips an actors[] array", () => {
         classRef: "blueprints/DoorBP.actor.json",
         position: [1, 0, 1],
         name: "Door A",
+        variableOverrides: { owner: "enemy" },
         patrolRoute: {
           source: "spline",
           splineId: "level-patrol",
@@ -19851,6 +19888,7 @@ check("validateLayout round-trips an actors[] array", () => {
   assert.equal(layout.actors?.length, 1);
   assert.equal(layout.actors?.[0]?.classRef, "blueprints/DoorBP.actor.json");
   assert.equal(layout.actors?.[0]?.patrolRoute?.splineId, "level-patrol");
+  assert.deepEqual(layout.actors?.[0]?.variableOverrides, { owner: "enemy" });
   // Idempotent: validating the output again yields the same shape.
   assert.deepEqual(validateLayout(layout), layout);
 });

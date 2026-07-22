@@ -498,7 +498,8 @@ export function validatePlacement(value: unknown): Record<string, unknown> {
  * Allowlist: a non-empty `.actor.json` `classRef`, position, and the shared
  * transform/hierarchy/flag fields. Component/behavior data lives in the class,
  * not the instance, so the rich placement fields (collision, audio, ...) do not
- * apply here. Per-instance overrides are a deferred phase.
+ * apply here. Variable values remain generic and are checked against the
+ * resolved Actor class at runtime.
  */
 export function validateActorInstance(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object") {
@@ -539,6 +540,20 @@ export function validateActorInstance(value: unknown): Record<string, unknown> {
     actor.scale = isNumberTuple(entry.scale)
       ? entry.scale.map((axis) => validateScaleValue(axis, "actor scale component"))
       : validateScaleValue(entry.scale, "actor scale");
+  }
+  if (entry.variableOverrides !== undefined) {
+    if (!entry.variableOverrides || typeof entry.variableOverrides !== "object" || Array.isArray(entry.variableOverrides)) {
+      throw new Error("actor instance variableOverrides must be an object");
+    }
+    const overrides: Record<string, string | number | boolean | string[]> = {};
+    for (const [key, value] of Object.entries(entry.variableOverrides as Record<string, unknown>)) {
+      if (!key) throw new Error("actor instance variable override key must not be empty");
+      if (typeof value === "string" || typeof value === "boolean") overrides[key] = value;
+      else if (typeof value === "number" && Number.isFinite(value)) overrides[key] = value;
+      else if (Array.isArray(value) && value.every((entry) => typeof entry === "string")) overrides[key] = value;
+      else throw new Error(`invalid actor instance variable override ${key}`);
+    }
+    if (Object.keys(overrides).length > 0) actor.variableOverrides = overrides;
   }
   if (entry.patrolRoute !== undefined) actor.patrolRoute = validateActorPatrolRoute(entry.patrolRoute);
   return actor;

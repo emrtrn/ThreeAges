@@ -1,9 +1,8 @@
 # ThreeAges RTS Content Drawer Assetlestirme Plani
 
 Olusturulma tarihi: 2026-07-17  
-Durum: Faz C uygulama ve otomasyon tamamlandi (2026-07-22). Kalan kabul:
-Content Drawer'da mesh degistir/save -> `?rts` goruntu manual smoke'u. Sonraki
-uygulama adimi: Faz D - Level gameplay marker'lari.
+Durum: Faz C tamamlandi (2026-07-22; manual Content Drawer -> runtime kabul
+teyitli). Aktif uygulama adimi: Faz D - Level gameplay marker'lari.
 Kapsam: `RtsApp` ile Forge Actor Script, oyun verisi, Level ve UI Widget
 sistemleri arasinda veri/authoring koprusu kurulmasi
 
@@ -603,7 +602,7 @@ Unit ve bina simulasyon degerleri balance dosyalarinda kalir.
 - Content Drawer'da `BP_RTS_Guard.actor.json` cift tiklanarak mevcut Actor
   Script editorunde acilir; kaydetme mevcut `/__save-actor` authoring akisini
   kullanir. Gercek bir mesh degisikligiyle editor -> runtime kabul adimi
-  etkilesimli/manual smoke olarak kalir ve Faz C'nin tek acik kabul satiridir.
+  etkilesimli/manual smoke ile teyit edildi (2026-07-22).
 
 Teslimatlar:
 
@@ -623,6 +622,18 @@ Kabul:
 - Eksik asset, tanimli placeholder ile oynanabilir runtime'i korur.
 
 ### Faz D - Level gameplay marker'lari
+
+#### Faz D - Durum (2026-07-22)
+
+Devam ediyor. Generic Forge `LayoutActorInstance.variableOverrides` zinciri
+tamamlandi: layout semasi, save allowlist/normalizasyonu, class default +
+type-safe instance override birlestirme helper'i ve `ScriptActor` runtime
+aktarimi birlikte calisiyor. Bilinmeyen veya Actor variable tipiyle uyusmayan
+override runtime'a sizmaz. Engine testleri default/override birlesimini ve
+layout round-trip'ini kapsar.
+
+Siradaki Faz D dilimi: marker Actor asset'leri, Level adapter/validation ve
+mevcut `RTS_BLOCKOUT_MAP` verisinin `levelRef` ile Level asset'ine tasinmasi.
 
 Teslimatlar:
 
@@ -674,6 +685,10 @@ Kabul:
 - Mevcut responsive smoke cozumleri korunur.
 
 ### Faz G - Kapsam genisletme ve legacy kaldirma
+
+Tum building Actor kapsami ile Guard/Isci UAL1 skeletal animasyon pilotunun
+ayrintili, sirali plani `THREEAGES_RTS_ACTOR_COVERAGE_AND_ANIMATION_PLAN.md`
+dosyasindadir. Faz G uygulanirken bu dokumandaki ownership sinirlari korunur.
 
 Teslimatlar:
 

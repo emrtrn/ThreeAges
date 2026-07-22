@@ -5,12 +5,24 @@
   "parentClass": "actor",
   "variables": [],
   "components": [
-    { "id": "root", "component": "Transform", "props": {} },
-    { "id": "barracksMesh", "parent": "root", "component": "StaticMeshComponent", "props": { "assetId": "barracks-firstage-level2" } }
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "barracksMesh",
+      "component": "StaticMeshComponent",
+      "props": {
+        "assetId": "barracks-firstage-level2"
+      },
+      "parent": "root"
+    }
   ],
   "interfaces": [],
   "references": [],
   "dispatchers": [],
+  "eventBindings": [],
   "messageBindings": [],
   "construction": null
 }

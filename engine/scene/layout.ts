@@ -231,6 +231,12 @@ export interface LayoutActorInstance {
   scale?: number | Vec3;
   /** Editor hint: keep scale axes proportional when editing. */
   scaleLocked?: boolean;
+  /**
+   * Level-owned values overriding declared Actor Script variable defaults.
+   * Keys are validated against the resolved class at runtime; the layout stays
+   * project-agnostic and never names a game's marker vocabulary.
+   */
+  variableOverrides?: LayoutMetadata;
   /** Optional level-owned override merged into this actor's AIController at spawn. */
   patrolRoute?: AiPatrolRoute;
 }
