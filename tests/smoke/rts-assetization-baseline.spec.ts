@@ -78,6 +78,39 @@ test("Assetization Faz D: the opt-in authored Level drives the spatial layout of
   expect(errors, "the authored Level must adapt and boot a match without runtime errors").toEqual([]);
 });
 
+test("Assetization Faz E: the opt-in Level mounts its authored static world and restarts cleanly", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  // Default boot authors no world: the levelAssets gate keeps the Level's static
+  // instances + sun off, so the legacy code sun and RtsMapArt ridge stay.
+  await page.goto("/?rts&debug");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-world", "disabled");
+
+  // With the flag on, the shipped Level's sun + ridge instances mount through the
+  // generic authored-world loader — the browser witness that "landscape/decor/
+  // light change reaches runtime without code change" (Faz E acceptance).
+  await page.goto("/?rts&debug&flags=levelAssets");
+  await expect(page.locator("#game-canvas")).toBeVisible();
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-world", "ready", { timeout: 30_000 });
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored");
+
+  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
+  await expect(page.locator(".rts-hud-bar")).toBeVisible();
+  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+
+  // Reloading tears the whole RtsApp down (authored-world dispose included) and
+  // rebuilds it: the world must mount again with no runtime errors, the flat-
+  // ground match still booting — the "dispose/restart leaves no leak" acceptance.
+  await page.goto("/?rts&debug&flags=levelAssets");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-authored-world", "ready", { timeout: 30_000 });
+  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await expect(page.locator(".rts-hud-bar")).toBeVisible();
+
+  expect(errors, "mounting and disposing the authored world must not produce runtime errors").toEqual([]);
+});
+
 test("Assetization Faz C: Guard Actor Script is discoverable and opens from the Content Drawer", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

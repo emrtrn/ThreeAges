@@ -16,6 +16,7 @@ import {
   AmbientLight,
   Color,
   DirectionalLight,
+  Mesh,
   Scene,
   type WebGLRenderer,
 } from "three";
@@ -46,6 +47,13 @@ import { createRtsMapBlockout, RTS_BLOCKOUT_MAP } from "./world/rtsMapBlockout";
 import { resolveRtsSpatialLayout, type RtsSpatialLayout } from "./world/rtsSpatialLayout";
 import type { RtsLevelDefinition } from "./world/rtsLevelAdapter";
 import { RtsMapArt, collectWorldProps } from "./world/rtsMapArt";
+import {
+  levelHasAuthoredSun,
+  levelHasAuthoredWorld,
+  loadRtsAuthoredWorld,
+} from "./world/rtsAuthoredWorld";
+import type { AuthoredWorldHandle } from "@/scene/authoredWorld";
+import type { RoomLayout } from "@engine/scene/layout";
 import { UnitSystem } from "./units/unitSystem";
 import { Unit } from "./units/unit";
 import { updateUnitMovement } from "./units/unitMovement";
@@ -185,6 +193,12 @@ const HEALTH_BAR_LINGER_SECONDS = 6;
 const CENTER_HEALTH_BAR_KEY = -1;
 /** Faz 5: the kingdom the AI opponent plays (plan §37). */
 const AI_OWNER: UnitOwner = "enemy";
+/**
+ * §53: how long before the saldırmazlık (non-aggression) window closes the
+ * player gets the actionable heads-up notice. Simulation seconds, so it scales
+ * with game speed like the window it counts down to.
+ */
+const PEACE_HEADS_UP_SECONDS = 30;
 
 export interface RtsAppOptions {
   /** `?debug`: shows the compact Faz 1 RTS state/debug panel. */
@@ -213,6 +227,13 @@ export interface RtsAppOptions {
   readonly contentCatalog?: RtsContentCatalog;
   /** Faz D opt-in Level gameplay markers. Omitted keeps the blockout fallback. */
   readonly level?: RtsLevelDefinition;
+  /**
+   * Faz E opt-in raw Level layout, carrying the authored static world (instances,
+   * lights, world settings) the markers omit. Present only under the `levelAssets`
+   * flag; when it authors a world it is mounted and the matching legacy visuals
+   * (the code sun and the {@link RtsMapArt} ridge) step aside.
+   */
+  readonly levelLayout?: RoomLayout;
   /** JSON-backed placeholder unit stats until full unit data is introduced. */
   readonly unitBalance: UnitBalance;
   /** JSON-backed footprint/cost/build-time definitions introduced in Faz 2. */
@@ -243,6 +264,15 @@ export class RtsApp {
   private readonly actorVisuals: RtsActorVisualFactory | null;
   private readonly buildingVisuals: RtsBuildingVisuals;
   private readonly mapArt: RtsMapArt;
+  /**
+   * Faz E authored static world mounted from the Level (null under the blockout
+   * fallback). Its presence gates the legacy ridge art and the code sun.
+   */
+  private authoredWorld: AuthoredWorldHandle | null = null;
+  /** Whether the Level intends to author a static world (known synchronously). */
+  private readonly authoredWorldIntended: boolean;
+  /** The code-side sun, kept so an authored directional light can retire it. */
+  private codeSun: DirectionalLight | null = null;
   private readonly scene = new Scene();
   private readonly cameraController = new RtsCameraController();
   private readonly input: RtsInput;
@@ -335,6 +365,12 @@ export class RtsApp {
   );
   private readonly notifications = new RtsNotificationCenter();
   private readonly notificationFeed = new RtsNotificationFeed();
+  /**
+   * §53 saldırmazlık window: which of the three one-shot notices has fired.
+   * 0 = nothing yet, 1 = "active" posted, 2 = heads-up posted, 3 = "ended"
+   * posted (or the window is disabled). Advanced only forward, reset per match.
+   */
+  private peaceAnnounceStage = 0;
   /** §51 "saldırı altında": combat has no event bus, so health is sampled. */
   private readonly attackWatch = new RtsAttackWatch();
   private readonly gameSpeedControls: RtsGameSpeedControls;
@@ -359,6 +395,12 @@ export class RtsApp {
     // Browser-visible witness of which spatial authority the match resolved:
     // the authored Level (Faz D opt-in) or the legacy rtsMapBlockout fallback.
     this.canvas.dataset.rtsLevel = this.options.level ? "authored" : "blockout";
+    // Faz E: does the Level carry a static world to mount? Known synchronously so
+    // buildScene / loadMapArt can gate the legacy ridge before the async load.
+    this.authoredWorldIntended = this.options.levelLayout
+      ? levelHasAuthoredWorld(this.options.levelLayout)
+      : false;
+    this.canvas.dataset.rtsAuthoredWorld = this.authoredWorldIntended ? "loading" : "disabled";
     this.openingFocus = {
       x: this.spatial.playerStart.x * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
       z: this.spatial.playerStart.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
@@ -862,6 +904,10 @@ export class RtsApp {
     this.buildingVisuals.dispose();
     this.actorVisuals?.dispose();
     this.mapArt.dispose();
+    // Faz E: release the authored world's GPU resources so restart/dispose leaves
+    // no leaked geometry, materials or shadow maps behind.
+    this.authoredWorld?.dispose();
+    this.authoredWorld = null;
     this.renderer.dispose();
   }
 
@@ -903,11 +949,21 @@ export class RtsApp {
     sun.shadow.camera.near = 1;
     sun.shadow.camera.far = 260;
     this.scene.add(sun);
+    // Kept referenced so an authored directional light (Faz E) can retire it once
+    // the Level's world has actually loaded — never before, so a load failure
+    // leaves the field lit by this fallback rather than dark.
+    this.codeSun = sun;
 
     this.scene.add(createRtsGround());
     const blockout = createRtsMapBlockout();
     this.scene.add(blockout);
     void this.loadMapArt(blockout);
+    // Faz E: mount the Level's static world in parallel with the map art. The
+    // ridge gate below (loadMapArt) already skipped the legacy ridge art when this
+    // is intended, so the authored ridge does not double up with it.
+    if (this.authoredWorldIntended && this.options.levelLayout) {
+      void this.loadAuthoredWorld(this.options.levelLayout);
+    }
     this.spawnCenters();
     this.cameraController.setFocus(this.openingFocus.x, this.openingFocus.z);
     this.territory.refresh();
@@ -1314,6 +1370,7 @@ export class RtsApp {
     this.syncAgeUi();
     this.syncEconomyUi();
     this.syncNotifications();
+    this.announcePeaceWindow();
     updateUnitCombat(
       this.units.all(),
       dt,
@@ -1593,7 +1650,12 @@ export class RtsApp {
 
   private async loadMapArt(blockout: import("three").Group): Promise<void> {
     try {
-      await this.mapArt.apply(blockout, RTS_BLOCKOUT_MAP, this.forests);
+      // Faz E ridge gate: when the Level authors its own static world, the ridge
+      // comes from that (mounted by loadAuthoredWorld). Map art still owns the
+      // forest and the external-resource landmark, so only the ridge steps aside.
+      await this.mapArt.apply(blockout, RTS_BLOCKOUT_MAP, this.forests, {
+        includeRidge: !this.authoredWorldIntended,
+      });
       // §59/GDD 08 §39: resource deposits, ridges and trees must not be readable
       // in ground the player has never scouted. Registered here rather than at
       // construction because the art loads asynchronously — at construction time
@@ -1607,6 +1669,51 @@ export class RtsApp {
       this.syncForestVisibility();
     } catch (error) {
       this.log.warn("RTS map art could not be loaded", error);
+    }
+  }
+
+  /**
+   * Faz E: mount the Level's authored static world (instances + lights).
+   *
+   * On success the authored subtree joins the scene, its directional sun retires
+   * the code sun, and the blockout's placeholder ridge box is removed so the
+   * authored ridge stands alone. On failure everything falls back: the code sun
+   * still lights the field and the placeholder ridge remains, so a bad/missing
+   * asset never leaves an unplayable dark or ridge-less map.
+   */
+  private async loadAuthoredWorld(layout: RoomLayout): Promise<void> {
+    try {
+      const handle = await loadRtsAuthoredWorld(
+        layout,
+        this.renderer,
+        (message, error) => this.log.warn(message, error),
+      );
+      if (this.disposed) {
+        handle.dispose();
+        return;
+      }
+      this.authoredWorld = handle;
+      this.scene.add(handle.root);
+      // Retire the code sun only now that a real authored directional light exists.
+      if (this.codeSun && levelHasAuthoredSun(layout)) {
+        this.scene.remove(this.codeSun);
+        this.codeSun.dispose();
+        this.codeSun = null;
+      }
+      // The blockout still drew a placeholder ridge box from the marker blocker;
+      // remove it so it does not sit under the authored ridge mesh.
+      const placeholder = this.scene.getObjectByName("rts-central-ridge");
+      if (placeholder instanceof Mesh) {
+        placeholder.removeFromParent();
+        placeholder.geometry.dispose();
+        for (const material of Array.isArray(placeholder.material) ? placeholder.material : [placeholder.material]) {
+          material.dispose();
+        }
+      }
+      this.canvas.dataset.rtsAuthoredWorld = "ready";
+    } catch (error) {
+      this.log.warn("RTS authored world could not be loaded", error);
+      this.canvas.dataset.rtsAuthoredWorld = "fallback";
     }
   }
 
@@ -1713,6 +1820,9 @@ export class RtsApp {
     // stale health baseline would read the fresh centre as already damaged.
     this.notifications.reset();
     this.notificationFeed.setNotifications([]);
+    // A fresh match reopens the saldırmazlık window, so its notices must be
+    // allowed to fire again from the top.
+    this.peaceAnnounceStage = 0;
     this.attackWatch.reset();
     this.match.reset();
     this.clock.reset();
@@ -2267,6 +2377,56 @@ export class RtsApp {
     }
 
     this.syncUnderAttackNotifications();
+  }
+
+  /**
+   * §53 saldırmazlık (non-aggression) window — three one-shot notices instead of
+   * a remaining-time counter. The AI holds its "attack" intent until
+   * `army.peaceSeconds` (see {@link scoreIntent}); the player has no other honest
+   * way to learn that window exists or when it closes, so it is announced rather
+   * than shown as a second clock beside the HUD's elapsed timer.
+   *
+   * Driven off {@link RtsMatchClock} simulation seconds like every other §51
+   * notice, so it scales with §38's game speed and freezes on pause for free. The
+   * stage guard — not the notification centre's dedup — is what keeps each notice
+   * to a single raise: posting every frame would *refresh* the "active" line and
+   * leave it up for the whole window. A zero or negative `peaceSeconds` means the
+   * window is disabled, so nothing is announced.
+   */
+  private announcePeaceWindow(): void {
+    if (this.peaceAnnounceStage >= 3) return;
+    const peaceSeconds = this.options.aiBalance.army.peaceSeconds;
+    if (peaceSeconds <= 0) {
+      this.peaceAnnounceStage = 3;
+      return;
+    }
+    const now = this.clock.seconds;
+    if (this.peaceAnnounceStage === 0) {
+      this.notifications.post({
+        kind: "peace-active",
+        text: `Saldırmazlık süresi etkin: düşman ilk ${formatMatchDuration(peaceSeconds)} boyunca saldırmayacak.`,
+      });
+      this.peaceAnnounceStage = 1;
+    }
+    // Heads-up only inside the window: a large tick (or 8x speed) can jump past
+    // both thresholds in one frame, and a "bitmek üzere" line posted after the
+    // window has already closed would be a lie the very next stage corrects.
+    const headsUpAt = Math.max(0, peaceSeconds - PEACE_HEADS_UP_SECONDS);
+    if (this.peaceAnnounceStage === 1 && now >= headsUpAt && now < peaceSeconds) {
+      const remaining = Math.max(1, Math.ceil(peaceSeconds - now));
+      this.notifications.post({
+        kind: "peace-ending",
+        text: `Saldırmazlık süresi bitmek üzere (${remaining} sn): savunmanı hazırla!`,
+      });
+      this.peaceAnnounceStage = 2;
+    }
+    if (now >= peaceSeconds) {
+      this.notifications.post({
+        kind: "peace-ended",
+        text: "Saldırmazlık süresi sona erdi — düşman artık saldırabilir!",
+      });
+      this.peaceAnnounceStage = 3;
+    }
   }
 
   /**

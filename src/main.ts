@@ -119,7 +119,7 @@ async function main(): Promise<void> {
       ? await loadRtsContentCatalog(unitBalance, buildingBalance)
       : undefined;
     const authoredLevel = levelAssetsEnabled && preset?.levelRef
-      ? await (await import("@/game/rts/world/rtsLevelLoader")).loadRtsLevelDefinition(
+      ? await (await import("@/game/rts/world/rtsLevelLoader")).loadRtsLevel(
         preset.levelRef,
         { buildings: buildingBalance, resources: resourceBalance },
       )
@@ -130,7 +130,7 @@ async function main(): Promise<void> {
       regionalVictoryEnabled,
       fogOfWarEnabled,
       ...(contentCatalog ? { contentCatalog } : {}),
-      ...(authoredLevel ? { level: authoredLevel } : {}),
+      ...(authoredLevel ? { level: authoredLevel.definition, levelLayout: authoredLevel.layout } : {}),
       unitBalance,
       buildingBalance,
       resourceBalance,

@@ -1,9 +1,10 @@
 # ThreeAges RTS Content Drawer Assetlestirme Plani
 
 Olusturulma tarihi: 2026-07-17  
-Durum: Faz D tamamlandi (2026-07-22; RTS_BLOCKOUT_MAP'in tam spatial envanteri
-Level'e kopyalandi ve opt-in runtime baglantisi kuruldu). Aktif uygulama adimi:
-Faz E - Landscape ve authored dunya.
+Durum: Faz E tamamlandi (2026-07-23; Level'in authored statik dunyasi - sun +
+merkez ridge static-mesh instance'lari - generic loader ile RtsApp sahnesine
+mount edildi ve legacy ridge/sun fallback gate'i kuruldu). Aktif uygulama adimi:
+Faz F - UI Widget pilotu ve kademeli migration.
 Kapsam: `RtsApp` ile Forge Actor Script, oyun verisi, Level ve UI Widget
 sistemleri arasinda veri/authoring koprusu kurulmasi
 
@@ -697,6 +698,58 @@ Kabul:
   flag kapaliyken fallback otorite olarak kalir (kaldirma kapisi §13'e bagli).
 
 ### Faz E - Landscape ve authored dunya
+
+#### Faz E - Durum (2026-07-23)
+
+Tamamlandi. Generic authored-world loader `src/scene/authoredWorld.ts`e eklendi:
+`buildAuthoredWorld` bir `RoomLayout`in statik instance'larini ve isiklarini tek
+bir `Group`a yukleyip `AuthoredWorldHandle { root, navigationBlockers,
+directionalLights, dispose }` dondurur. `SceneRuntimeCore`un ortak build
+yardimcilarini (`buildSceneInstancedModel`, `buildSceneLightObject`,
+`fitDirectionalShadowToBounds`, `registerSceneShapeModels`,
+`sceneModelAssetIds`) yeniden kullanir; RuntimeSceneApp'in 5.6k satiri
+dokunulmadan kaldi. Loader dar tutuldu: yalniz gorsel mount sahibi, level
+sanatindan gameplay nav/kaynak otoritesi turetmez (plan §12) - `navigationBlockers`
+generic sozlesme icin bos kalir; RTS nav otoritesi marker/balance'ta.
+
+`src/game/rts/world/rtsAuthoredWorld.ts` ince RTS sarmalayicisi: proje URL
+cozucusu ve top-down alanin golge sinirini generic host'un disinda tutar,
+`levelHasAuthoredWorld`/`levelHasAuthoredSun` yardimcilarini verir.
+`rtsLevelLoader` artik ham layout'u da dondurur (`loadRtsLevel`), `main.ts` bunu
+`RtsAppOptions.levelLayout` uzerinden enjekte eder. `RtsApp` `levelAssets` flag'i
+acikken authored dunyayi `loadMapArt` ile paralel yukler; basarida authored sun
+kod sun'unu emekli eder ve blockout ridge placeholder'i kaldirilir, basarisizlikta
+kod sun ve placeholder ridge fallback olarak kalir (karanlik/ridge'siz harita
+olmaz). `RtsMapArt.apply` `includeRidge` gate'i aldi: authored dunya niyetinde
+ridge sanati atlanir, orman + dis kaynak landmark'i map art'ta kalir (secilen
+kapsam). `canvas.dataset.rtsAuthoredWorld` = `loading | ready | fallback |
+disabled` witness'i browser'a acilir; dispose authored dunyanin GPU kaynaklarini
+(geometry/material/texture/shadow map) serbest birakir.
+
+`RTS_CoreMatch.level.json` artik authored bir statik dunya tasir: yon isigi
+(`sun`, gölge yapan), `worldSettings.staticObjectsCastShadow`, ve merkez ridge'i
+manifest'li `mountain-group-1` + `rock-group` static-mesh instance'lariyla
+(nav blocker'in x -12..12 aciklginda). Ground `createRtsGround` olarak duz ve
+y=0 kaldi (duz-zemin nav kabul senaryosu korunur); landscape heightfield ve
+atmosphere bu ince dilimin disinda, ayni generic host'un ileri uzantilari.
+
+`?rts&flags=levelAssets` altinda authored dunya yuklenir, kod sun/ridge emekli
+olur; flag kapaliyken davranis degismez.
+
+Kapanis gate'i (2026-07-23): `npx.cmd tsc --noEmit`, `npm.cmd run test:engine`
+(1075 check), `npm.cmd run smoke:browser --
+tests/smoke/rts-assetization-baseline.spec.ts` (5 Chromium testi, Faz E dahil),
+`npm.cmd run build:verify` ve `npm.cmd run check:assets` yesil.
+
+Not (kabul kapsami): "Editor -> save -> `?rts`" satiri manuel kabul olarak
+birakildi. Level'i editorde acip kaydetmek dev save server'i uzerinden shipped
+`RTS_CoreMatch.level.json`i overwrite eder; smoke altyapisi tam da bunu onlemek
+icin default sahneyi gecici kopyaya cevirir, bu yuzden otomatik save round-trip'i
+shipped dosyayi kirletmemek adina yapilmadi. `instances`/`lights`/`worldSettings`
+standart layout alanlaridir ve mevcut editor save validator'i tarafindan
+round-trip edilir; runtime smoke authored dunyanin mount oldugunu kanitlar. Faz
+C'nin editor->runtime mesh kabul satiri da ayni sekilde manuel/etkilesimli
+birakilmisti.
 
 Teslimatlar:
 

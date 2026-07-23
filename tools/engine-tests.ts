@@ -29102,6 +29102,44 @@ check("Assetization Faz D: RtsApp spatial inputs stay legacy until an authored L
   assert.throws(() => resolveRtsSpatialLayout({ ...authored, routes: new Map() }), RtsLevelError);
 });
 
+check("Assetization Faz E: the shipped RTS Core Match Level authors a mountable static world", () => {
+  const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_CoreMatch.level.json", "utf8")) as {
+    worldSettings?: { staticObjectsCastShadow?: boolean };
+    lights?: Array<{ id: string; type: string; castShadow?: boolean }>;
+    instances: Array<{ assetId: string; placements: Array<{ position: [number, number, number]; scale?: number | [number, number, number] }> }>;
+  };
+
+  // A directional sun is authored so the generic loader can retire the code sun
+  // and the "light change reaches runtime without code change" acceptance is real.
+  const sun = (layout.lights ?? []).find((light) => light.type === "directional");
+  assert.ok(sun, "the Level authors a directional sun");
+  assert.equal(sun!.castShadow, true, "the authored sun casts shadows like the code sun it replaces");
+  assert.equal(layout.worldSettings?.staticObjectsCastShadow, true, "authored static meshes cast shadows");
+
+  // The central ridge is authored as static-mesh instances (Faz E decor), each
+  // referencing a manifested staticMesh id — the same assets the legacy RtsMapArt
+  // ridge used, now owned by the Level so an editor move reaches runtime.
+  const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as {
+    assets: Array<{ id: string; assetType: string }>;
+  };
+  const staticMeshIds = new Set(
+    manifest.assets.filter((asset) => asset.assetType === "staticMesh").map((asset) => asset.id),
+  );
+  const placed = layout.instances.filter((instance) => instance.placements.length > 0);
+  assert.ok(placed.length >= 1, "the Level authors at least one placed static instance");
+  for (const instance of placed) {
+    assert.ok(staticMeshIds.has(instance.assetId), `ridge instance ${instance.assetId} is a manifested staticMesh`);
+  }
+  const ridgeIds = new Set(placed.map((instance) => instance.assetId));
+  assert.ok(ridgeIds.has("mountain-group-1"), "the authored ridge mounts the mountain-group static mesh");
+
+  // The ridge sits on the central navigation blocker the markers still author, so
+  // its visual (Faz E) and its blocker (Faz D) agree on where the ridge is — one
+  // authority each, no duplicated blocker in the level art (plan §12).
+  const centres = placed.flatMap((instance) => instance.placements.map((placement) => placement.position[0]));
+  assert.ok(centres.every((x) => Math.abs(x) <= 12), "authored ridge instances stay within the central ridge span");
+});
+
 check("Assetization Faz B/C: content catalog accepts known balance ids and the shipped Actor pilot refs", () => {
   const unitBalance = validateUnitBalance(
     JSON.parse(readFileSync("public/game-data/balance/units.json", "utf8")) as unknown,

@@ -29,13 +29,31 @@ export class RtsMapArt {
     this.loader = createForgeGltfLoader(renderer);
   }
 
-  async apply(root: Group, map: RtsMapBlockout, forests: ForestSystem): Promise<void> {
-    const entries = await Promise.all((Object.entries(MODELS) as [MapModelId, string][])
-      .map(async ([id, path]) => [id, (await this.loader.loadAsync(path)).scene] as const));
+  /**
+   * @param options.includeRidge Faz E ridge gate. Default true keeps the legacy
+   *   fitted ridge art. When the Level authors its own static world the ridge is
+   *   mounted from there instead, so this is passed false — the placeholder box is
+   *   left in place for the loader to remove on success (a fallback if it fails),
+   *   and the forest + external-resource landmark still come from here.
+   */
+  async apply(
+    root: Group,
+    map: RtsMapBlockout,
+    forests: ForestSystem,
+    options: { includeRidge?: boolean } = {},
+  ): Promise<void> {
+    const includeRidge = options.includeRidge ?? true;
+    const modelIds = includeRidge
+      ? (Object.keys(MODELS) as MapModelId[])
+      : (Object.keys(MODELS) as MapModelId[]).filter((id) => id !== "ridge" && id !== "ridgeRock");
+    const entries = await Promise.all(modelIds
+      .map(async (id) => [id, (await this.loader.loadAsync(MODELS[id])).scene] as const));
     for (const [id, scene] of entries) this.templates.set(id, scene);
 
-    this.replaceRidgePlaceholder(root);
-    root.add(this.createRidge());
+    if (includeRidge) {
+      this.replaceRidgePlaceholder(root);
+      root.add(this.createRidge());
+    }
     root.add(this.createExternalResources(map));
     root.add(this.createForest(forests));
   }

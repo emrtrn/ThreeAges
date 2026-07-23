@@ -34,7 +34,10 @@ export type RtsNotificationKind =
   | "center-under-attack"
   | "age-upgraded"
   | "enemy-age-upgraded"
-  | "regional-victory-warning";
+  | "regional-victory-warning"
+  | "peace-active"
+  | "peace-ending"
+  | "peace-ended";
 
 /** Drives presentation weight only; the feed never reorders by severity. */
 export type RtsNotificationSeverity = "info" | "warning" | "alert";
@@ -66,6 +69,15 @@ const RULES: Readonly<Record<RtsNotificationKind, NotificationRule>> = {
   // on screen while the player decides what to do about it — but re-raising it
   // every few seconds for three minutes would be the "×378" failure above.
   "regional-victory-warning": { severity: "alert", displaySeconds: 10, cooldownSeconds: 25 },
+  // The three saldırmazlık (non-aggression) notices are each raised exactly once
+  // per match — a stage guard in RtsApp fires them on clock thresholds, not per
+  // frame — so they need no cooldown. They replace what would otherwise be a
+  // remaining-time counter, which would sit confusingly beside the HUD's own
+  // elapsed-time readout (one counting up, one down). The heads-up before the
+  // window closes is the actionable one, so it is the loudest.
+  "peace-active": { severity: "info", displaySeconds: 8, cooldownSeconds: 0 },
+  "peace-ending": { severity: "alert", displaySeconds: 10, cooldownSeconds: 0 },
+  "peace-ended": { severity: "warning", displaySeconds: 8, cooldownSeconds: 0 },
 };
 
 /**

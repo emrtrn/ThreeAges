@@ -11,16 +11,32 @@ async function fetchJson(path: string): Promise<unknown> {
   return response.json();
 }
 
+/** A resolved Level: its validated gameplay markers plus the raw layout for
+ *  Faz E's authored-world mounting (the layout carries the static instances,
+ *  lights and world settings the markers deliberately do not). */
+export interface RtsLevel {
+  readonly definition: RtsLevelDefinition;
+  readonly layout: RoomLayout;
+}
+
 /** Fetches Level layout and every placed Actor class, then validates its RTS markers. */
-export async function loadRtsLevelDefinition(
+export async function loadRtsLevel(
   levelRef: string,
   balance: { readonly buildings: BuildingBalance; readonly resources: ResourceBalance },
-): Promise<RtsLevelDefinition> {
+): Promise<RtsLevel> {
   const layout = await fetchJson(levelRef) as RoomLayout;
   const actors = await Promise.all((layout.actors ?? []).map(async (instance, index) => ({
     index,
     instance,
     def: normalizeActorScriptDef(await fetchJson(instance.classRef), instance.classRef),
   })));
-  return adaptRtsLevel(actors, layout.splines ?? [], balance);
+  return { definition: adaptRtsLevel(actors, layout.splines ?? [], balance), layout };
+}
+
+/** Back-compat: the marker definition only, for callers that ignore the art. */
+export async function loadRtsLevelDefinition(
+  levelRef: string,
+  balance: { readonly buildings: BuildingBalance; readonly resources: ResourceBalance },
+): Promise<RtsLevelDefinition> {
+  return (await loadRtsLevel(levelRef, balance)).definition;
 }

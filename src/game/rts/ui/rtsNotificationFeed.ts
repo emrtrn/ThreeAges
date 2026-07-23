@@ -17,6 +17,9 @@ const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "age-upgraded": "✦",
   "enemy-age-upgraded": "✦",
   "regional-victory-warning": "⚑",
+  "peace-active": "☮",
+  "peace-ending": "⚔",
+  "peace-ended": "⚔",
 };
 
 export class RtsNotificationFeed {
