@@ -71,6 +71,13 @@ export interface SelectedUnitView {
   readonly stance: UnitStance;
   /** Workers only; a Guard has no job beyond its orders. */
   readonly job: WorkerJob | null;
+  /**
+   * True when the unit is standing on ground it could never legally reach —
+   * inside a building footprint it was caught under, the "sıkışıp kalma" a
+   * freshly placed structure creates. It is the one state {@link RESCUE_ACTION}
+   * exists to undo, so the panel offers that button only when it is set.
+   */
+  readonly trapped: boolean;
 }
 
 /** A site that is not a building yet: the only thing to say is when it will be. */
@@ -260,6 +267,13 @@ export const TRAIN_ACTION_PREFIX = "train:";
 export const TRAIN_WORKER_ACTION = "train-worker";
 export const AGE_UP_ACTION = "age-up";
 export const RALLY_ACTION = "rally";
+/**
+ * Free selected units trapped inside a building footprint — the player's answer
+ * to "sıkışıp kalma" that does not cost them the unit. Offered on the unit panel
+ * (never the building panel) only while at least one selected unit is trapped,
+ * so it is not a standing button on a healthy army.
+ */
+export const RESCUE_ACTION = "rescue";
 /** The centre's in-age level-up (Lv1→2 / Lv2→3); the Town step uses {@link AGE_UP_ACTION}. */
 export const CENTER_LEVEL_UP_ACTION = "center-level-up";
 export const DEMOLISH_ACTION = "demolish";
@@ -354,6 +368,25 @@ export function describeSelection(view: RtsSelectionView): SelectionPanelContent
   return describeStructure(view.structure);
 }
 
+/**
+ * The "free the trapped" button, or nothing. Returned as a list so the caller
+ * can spread it into an actions row that is otherwise empty — a unit's verbs are
+ * world gestures, and this is the one command it can carry, present only while
+ * there is actually someone to dig out.
+ */
+function rescueActions(units: readonly SelectedUnitView[]): SelectionAction[] {
+  const trapped = units.filter((unit) => unit.trapped).length;
+  if (trapped === 0) return [];
+  return [{
+    id: RESCUE_ACTION,
+    label: "Kurtar",
+    cost: null,
+    enabled: true,
+    reason: null,
+    hint: `${trapped} birim bir yapının içine sıkışmış; en yakın boş zemine çıkarır.`,
+  }];
+}
+
 function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelContent {
   const counts = new Map<UnitRoleId, number>();
   for (const unit of units) counts.set(unit.role, (counts.get(unit.role) ?? 0) + 1);
@@ -378,8 +411,9 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
       summary,
       lines: [ROLE_DESCRIPTION.worker, `Görev: ${jobBreakdown(units)}`],
       // A worker's verbs are all world gestures — right-click to assign, X to
-      // drop the job — so it has nothing to put on a button.
-      actions: [],
+      // drop the job — so the only button it ever carries is the rescue, and
+      // only while one of these workers is trapped inside a footprint.
+      actions: rescueActions(units),
       hint: WORKER_HINT,
       tooltip: "Boşta bir işçi, oyuncunun oyuna borçlu olduğu bir karardır.",
       portrait: first.stats.portrait ?? first.stats.icon ?? null,
@@ -406,8 +440,10 @@ function describeUnits(units: readonly SelectedUnitView[]): SelectionPanelConten
       `Duruş: ${stances.size > 1 ? "Karışık" : STANCE_LABEL[[...stances][0] ?? "aggressive"]}`,
     ],
     // Army verbs are keyboard commands with a world target (F/H/G/X); the hint
-    // row already teaches them, and a button cannot take the target anyway.
-    actions: [],
+    // row already teaches them, and a button cannot take the target anyway. The
+    // rescue is the exception — it needs no world target — and appears only when
+    // a selected unit is trapped.
+    actions: rescueActions(units),
     hint: UNIT_HINT,
     tooltip: null,
     portrait: sample.stats.portrait ?? sample.stats.icon ?? null,
@@ -532,13 +568,13 @@ function centerProgress(view: CenterProgressionView): SelectionProgress | null {
 /**
  * The centre's single progression action — the one place the kingdom advances.
  * It is a level-up while below Lv3, the Town transition at Settlement Lv3, and a
- * disabled "top tier" note at Town Lv3. A level-up carries no prerequisite and
- * its hint is the whole point ("tüm yapılar gelişir"); the Town action names the
- * buildings it still waits on, exactly as the old age button did.
+ * disabled "top tier" note at Town Lv3. The Town action also names the buildings
+ * it still waits on, exactly as the old age button did.
  *
- * Affordability never disables it: the wallet moves every frame, so the price
- * rides on the button and the shortfall in the hint, and the click gives the
- * final answer.
+ * A price the wallet cannot meet disables the button, so the level-up and the
+ * Town transition read the same way: both fade when their requirement is unmet
+ * (buildings for Town, cost for either), rather than the level-up staying lit
+ * while a shortfall lives only in the hint. The shortfall still names the number.
  */
 function centerProgressionAction(view: CenterProgressionView): SelectionAction {
   const { snapshot } = view;
@@ -554,13 +590,16 @@ function centerProgressionAction(view: CenterProgressionView): SelectionAction {
   }
   const cost = formatResourceCost(action.cost);
   const shortfall = formatCostShortfall(action.cost, view.stock);
+  // A shortfall is what the stock cannot cover, so its presence is the "cannot
+  // afford" gate — same flooring the HUD prints, so the button and the wallet agree.
+  const unaffordableReason = shortfall ? `Kaynak yetersiz — eksik: ${shortfall}.` : null;
   if (action.kind === "town") {
     const missing = action.missingBuildingIds.map((id) => view.requiredBuildingLabels.get(id) ?? id);
     const reason = snapshot.upgrading
       ? `${view.townLabel} Çağı yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
       : missing.length > 0
         ? `Önce şu yapılar gerekir: ${missing.join(", ")}.`
-        : null;
+        : unaffordableReason;
     return {
       id: AGE_UP_ACTION,
       label: `${view.townLabel} Çağına Geç`,
@@ -573,7 +612,7 @@ function centerProgressionAction(view: CenterProgressionView): SelectionAction {
   const targetLabel = tierName(view, action.targetAge, action.targetLevel);
   const reason = snapshot.upgrading
     ? `${targetLabel} yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
-    : null;
+    : unaffordableReason;
   return {
     id: CENTER_LEVEL_UP_ACTION,
     label: `${targetLabel}'ye Yükselt`,

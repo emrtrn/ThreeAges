@@ -92,6 +92,7 @@ import {
   CANCEL_CONSTRUCTION_ACTION,
   DEMOLISH_ACTION,
   RALLY_ACTION,
+  RESCUE_ACTION,
   TRADE_BUY_ACTION_PREFIX,
   TRADE_SELL_ACTION_PREFIX,
   TRAIN_ACTION_PREFIX,
@@ -2011,6 +2012,9 @@ export class RtsApp {
           maxHealth: unit.health.max,
           stance: unit.stance,
           job: unit.role === "worker" ? this.workerJob(unit) : null,
+          // Standing on ground the grid forbids means the unit was caught under a
+          // footprint; that is the only state the rescue button reacts to.
+          trapped: !this.navigation.isWalkable(unit.position.x, unit.position.z),
         })),
       };
     }
@@ -2139,6 +2143,10 @@ export class RtsApp {
       this.buildPalette.setActionMessage("Toplanma noktası için haritada bir konum seçin.");
       return;
     }
+    if (id === RESCUE_ACTION) {
+      this.rescueTrappedSelection();
+      return;
+    }
     if (id === DEMOLISH_ACTION) {
       this.demolishSelectedStructure();
       return;
@@ -2168,6 +2176,34 @@ export class RtsApp {
     // An unknown id means the view offered a button nothing implements: that is
     // a wiring bug, and swallowing it would present the player a dead button.
     throw new Error(`Unhandled selection action: ${id}`);
+  }
+
+  /**
+   * Walk every trapped unit in the selection out to the nearest clear ground.
+   *
+   * "Trapped" is the same test the panel used to offer the button: standing on a
+   * cell the navigation grid forbids, which for a friendly unit means a footprint
+   * closed over it. Each such unit gets a collision-exempt escort ({@link
+   * Unit.beginRescue}) toward the nearest walkable point; a unit with no clear
+   * ground anywhere within reach is left as-is rather than sent nowhere.
+   */
+  private rescueTrappedSelection(): void {
+    const trapped = this.selection.selected()
+      .filter((unit) => !this.navigation.isWalkable(unit.position.x, unit.position.z));
+    if (trapped.length === 0) {
+      this.buildPalette.setActionMessage("Kurtarılacak sıkışmış birim yok.");
+      return;
+    }
+    let rescued = 0;
+    for (const unit of trapped) {
+      const exit = this.navigation.nearestWalkable(unit.position.x, unit.position.z);
+      if (!exit) continue;
+      unit.beginRescue(exit.x, exit.z);
+      rescued += 1;
+    }
+    this.buildPalette.setActionMessage(rescued > 0
+      ? `${rescued} birim boş zemine çıkarılıyor.`
+      : "Yakında boş zemin bulunamadı; birimler kurtarılamadı.");
   }
 
   /**

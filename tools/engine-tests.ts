@@ -144,6 +144,7 @@ import { RtsNotificationCenter, MAX_ACTIVE_NOTIFICATIONS } from "../src/game/rts
 import { RtsAttackWatch } from "../src/game/rts/ui/rtsAttackWatch";
 import {
   describeSelection,
+  RESCUE_ACTION,
   type MarketDetailView,
   type MilitaryDetailView,
   type SelectedUnitView,
@@ -34405,11 +34406,13 @@ check("Faz 9 §51: surrender is a defeat with its own reason (plan §51)", () =>
 });
 
 check("Faz 9 §51: the selection panel answers for an army, and for workers separately", () => {
-  const guard = (id: number, stance: "aggressive" | "hold" = "aggressive"): SelectedUnitView => ({
+  const guard = (id: number, stance: "aggressive" | "hold" = "aggressive", trapped = false): SelectedUnitView => ({
     id, role: "guard", stats: RTS_TEST_UNIT_STATS, health: 80, maxHealth: 100, stance, job: null,
+    trapped,
   });
-  const worker = (id: number, job: WorkerJob): SelectedUnitView => ({
+  const worker = (id: number, job: WorkerJob, trapped = false): SelectedUnitView => ({
     id, role: "worker", stats: RTS_TEST_WORKER_STATS, health: 50, maxHealth: 50, stance: "aggressive", job,
+    trapped,
   });
 
   // An empty selection now yields a placeholder panel rather than null: the panel
@@ -34464,6 +34467,31 @@ check("Faz 9 §51: the selection panel answers for an army, and for workers sepa
     "the breakdown reads in a fixed order, whatever order the workers arrived in",
   );
   assert.ok(!workers.lines.join(" | ").includes("Duruş"), "a worker has no stance to report");
+
+  // The rescue button is not a standing verb: a healthy selection — army or
+  // workers — offers no buttons at all, because a unit's commands are world
+  // gestures and there is nothing to dig out.
+  assert.deepEqual(army.actions, [], "a healthy army panel has no buttons");
+  assert.deepEqual(workers.actions, [], "a healthy worker panel has no buttons");
+
+  // One trapped unit turns it on, on either panel, and its hint counts exactly
+  // the trapped bodies — not the whole selection.
+  const trappedArmy = describeSelection({
+    kind: "units",
+    units: [guard(1), guard(2, "aggressive", true)],
+  }) ?? assert.fail("panel missing");
+  const armyRescue = trappedArmy.actions.find((action) => action.id === RESCUE_ACTION)
+    ?? assert.fail("a trapped army offers the rescue button");
+  assert.equal(armyRescue.enabled, true, "the rescue is never a refusal — it always has clear ground to try");
+  assert.match(armyRescue.hint ?? "", /1 birim/, "the hint counts only the trapped unit");
+
+  const trappedWorkers = describeSelection({
+    kind: "units",
+    units: [worker(1, "idle", true), worker(2, "building", true), worker(3, "producing")],
+  }) ?? assert.fail("panel missing");
+  const workerRescue = trappedWorkers.actions.find((action) => action.id === RESCUE_ACTION)
+    ?? assert.fail("trapped workers offer the rescue button");
+  assert.match(workerRescue.hint ?? "", /2 birim/, "two of three workers are trapped");
 });
 
 check("Faz 9 §51: every building kind explains itself, working or not", () => {
@@ -34683,6 +34711,12 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   assert.equal(levelBtn.enabled, true);
   assert.match(levelBtn.label, /Yerleşim Lv2/);
   assert.match(levelBtn.hint ?? "", /Tüm yapılar Yerleşim Lv2 olur/);
+  // Short of the level-up price the button disables, matching the age button's
+  // fade, and its reason names the shortfall rather than hiding it in the hint.
+  const lv1Poor = centerPanel({ stock: { food: 0, wood: 0 } });
+  const levelBtnPoor = action(lv1Poor, "center-level-up");
+  assert.equal(levelBtnPoor.enabled, false, "a level-up the wallet cannot afford is disabled");
+  assert.match(levelBtnPoor.reason ?? "", /Kaynak yetersiz — eksik: 150 Yiyecek · 150 Odun/);
 
   // Settlement Lv3: the action becomes the Town transition, which names its
   // missing buildings in the player's words, not the data model's ids.
@@ -34698,10 +34732,11 @@ check("Faz 9 §51: a selection's buttons state their own gate, in the system's o
   assert.equal(action(townReady, "age-up").enabled, true);
   assert.equal(action(townReady, "age-up").cost, "600 Yiyecek · 350 Odun · 150 Taş · 150 Altın");
   assert.match(action(townReady, "age-up").hint ?? "", /^Maliyet: /);
-  // Short of it, the tooltip names the shortfall while the button stays enabled.
+  // Short of it, the button disables and its reason names the shortfall, while
+  // the hint still quotes the full price — the age and level buttons fade alike.
   const poor = centerPanel({ level: 3, stock: { food: 600, wood: 350, stone: 30, gold: 0 } });
-  assert.equal(action(poor, "age-up").enabled, true, "affordability never disables the age button");
-  assert.equal(action(poor, "age-up").reason, null);
+  assert.equal(action(poor, "age-up").enabled, false, "a price the wallet cannot meet disables the age button");
+  assert.match(action(poor, "age-up").reason ?? "", /Kaynak yetersiz — eksik: 120 Taş · 150 Altın/);
   assert.match(action(poor, "age-up").hint ?? "", /Eksik: 120 Taş · 150 Altın/);
 
   // A Town-kind upgrade in flight pauses worker training; a plain level-up does not.

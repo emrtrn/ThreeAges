@@ -45,7 +45,10 @@ export function updateUnitSeparation(
   options: UnitSeparationOptions = {},
 ): void {
   if (dt <= 0 || units.length < 2) return;
-  const active = units.filter((unit) => !unit.health.depleted && !unit.dying);
+  // A unit being rescued out of a footprint is deliberately absent here: it is
+  // walking through ground separation would refuse to let it stand on, so it must
+  // neither be pushed nor push others until it reaches the clear point it was sent to.
+  const active = units.filter((unit) => !unit.health.depleted && !unit.dying && !unit.isRescuing);
   if (active.length < 2) return;
 
   // The ordinary push is deliberately capped, so it looks like jostling. That

@@ -125,6 +125,15 @@ export class Unit {
    * with its old job or a Guard may abandon after taking one hit.
    */
   private playerMoveOrder = false;
+  /**
+   * True while a rescue escort is walking this unit out of a footprint it was
+   * caught inside. It marks the one stretch of movement that must ignore crowd
+   * separation: separation refuses to shove a body onto unwalkable ground, so an
+   * ordinary escort would be pinned inside the blocker it is trying to leave.
+   * Scoped to the moment — {@link isRescuing} reads it together with a live
+   * target, and every other order-issuing method clears it.
+   */
+  private rescuing = false;
   private workerReturnDelayAfterMove = 0;
   private workerReturnDelayRemaining = 0;
   private selectedFlag = false;
@@ -240,8 +249,31 @@ export class Unit {
     this.attackMoveTarget = null;
     this.movePath = [];
     this.playerMoveOrder = false;
+    this.rescuing = false;
     this.resumeAutomaticWorkerAssignment();
     this.moveTarget = new Vector3(x, 0, z);
+  }
+
+  /**
+   * Escort a trapped unit straight to clear ground, phasing through the crowd
+   * until it arrives. Issued as a player move order so worker automation cannot
+   * reclaim the unit before it is out of the footprint; {@link isRescuing} then
+   * holds — and separation keeps ignoring the body — only until the point is
+   * reached, at which point ordinary movement takes over again.
+   */
+  beginRescue(x: number, z: number): void {
+    this.setAttackTarget(null);
+    this.attackMoveTarget = null;
+    this.movePath = [];
+    this.resumeAutomaticWorkerAssignment();
+    this.moveTarget = new Vector3(x, 0, z);
+    this.playerMoveOrder = true;
+    this.rescuing = true;
+  }
+
+  /** Whether a rescue escort still owns this unit (true until it reaches clear ground). */
+  get isRescuing(): boolean {
+    return this.rescuing && this.moveTarget !== null;
   }
 
   /** Replace the current movement order with a planned ground waypoint path. */
@@ -289,6 +321,7 @@ export class Unit {
     this.moveTarget = null;
     this.movePath = points.map((point) => point.clone());
     this.playerMoveOrder = playerMoveOrder;
+    this.rescuing = false;
     if (!playerMoveOrder) this.resumeAutomaticWorkerAssignment();
   }
 
@@ -347,6 +380,7 @@ export class Unit {
     this.moveTarget = null;
     this.movePath = [];
     this.playerMoveOrder = false;
+    this.rescuing = false;
     this.resumeAutomaticWorkerAssignment();
   }
 
@@ -379,6 +413,7 @@ export class Unit {
     if (this.attackTarget === target) return;
     this.attackTarget?.setTargetedBy?.(-1);
     this.attackTarget = target;
+    this.rescuing = false;
     this.autoAcquired = target !== null && auto;
     this.chaseOrigin = target !== null && auto ? this.position.clone() : null;
     this.moveTarget = null;

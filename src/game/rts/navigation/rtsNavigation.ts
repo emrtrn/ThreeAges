@@ -71,6 +71,29 @@ export class RtsNavigation {
     return grid.passable[row * grid.cols + col] === 1;
   }
 
+  /**
+   * The nearest ground point a unit may legally stand on, searched outward in
+   * rings from (x, z). Returns the point itself when it is already walkable, or
+   * null when no clear ground exists within `maxRadius`.
+   *
+   * This is how a unit caught inside a freshly placed footprint is dug back out:
+   * the cell it stands on is unwalkable, so ordinary planning cannot even start
+   * there, but clear ground is almost always a few cells away.
+   */
+  nearestWalkable(x: number, z: number, maxRadius = 12): Vector3 | null {
+    if (this.isWalkable(x, z)) return new Vector3(x, 0, z);
+    const directions = 24;
+    for (let radius = CELL_SIZE; radius <= maxRadius; radius += CELL_SIZE) {
+      for (let i = 0; i < directions; i += 1) {
+        const angle = (i / directions) * Math.PI * 2;
+        const px = x + Math.cos(angle) * radius;
+        const pz = z + Math.sin(angle) * radius;
+        if (this.isWalkable(px, pz)) return new Vector3(px, 0, pz);
+      }
+    }
+    return null;
+  }
+
   /** The single baked grid, rebuilt only when the blocker set changes. */
   private grid(): NavGrid | null {
     return this.gridCache.getOrBuild(`rts:${this.revision}`, {
