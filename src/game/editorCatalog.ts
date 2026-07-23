@@ -443,6 +443,13 @@ export const GAME_EDITOR_CATALOG = {
       label: "Yapı Dengesi",
       path: "game-data/balance/buildings.json",
       fields: BUILDINGS_FIELDS,
+      // Friendly names for the repeated blocks so each tier/level renders as its
+      // own collapsible sub-group (e.g. "Yerleşim — Seviye 1").
+      groups: [
+        { path: "progression.settlement", label: "Yerleşim çağı" },
+        { path: "progression.town", label: "Kasaba çağı" },
+        { path: "levels", label: "Yükseltme" },
+      ],
       validate: asTableValidator(validateBuildingBalance),
     },
     {

@@ -79,6 +79,18 @@ export interface EditorDataTableFieldMeta {
 }
 
 /**
+ * Optional label for a repeated (array) block, so the editor can title the
+ * collapsible sub-group it renders for each element. Purely presentational.
+ */
+export interface EditorDataTableGroupMeta {
+  /** Dotted path to the array itself, e.g. `progression.settlement` or `levels`. */
+  readonly path: string;
+  /** Friendly name for the block, e.g. `Yerleşim`. The editor appends the
+   *  element's level (`— Seviye N`) to distinguish the tiers. */
+  readonly label: string;
+}
+
+/**
  * A game-data file the editor's Data Table editor can open and save. The editor
  * stays generic: it renders each top-level entry as a per-field form by walking
  * the JSON's scalar leaves, and it enforces correctness by calling
@@ -94,6 +106,13 @@ export interface EditorDataTableDef {
   readonly path: string;
   /** Optional per-leaf presentation hints; keyed by dotted path. */
   readonly fields?: readonly EditorDataTableFieldMeta[];
+  /**
+   * Optional friendly names for repeated (array) blocks. When an entry contains
+   * arrays (progression tiers, upgrade levels), the editor renders one
+   * collapsible sub-group per element; these labels title those groups. Blocks
+   * with no matching entry fall back to the array's own key.
+   */
+  readonly groups?: readonly EditorDataTableGroupMeta[];
   /**
    * Authoritative validation. Returns `null` when the parsed document is valid,
    * otherwise a field-level message. Wraps the same validator the runtime loads

@@ -29845,6 +29845,50 @@ check("RTS lumber camps require individual trees and workers carry wood back to 
   territory.dispose();
 });
 
+check("RTS a live tree blocks a building footprint until it is harvested away", () => {
+  const buildings = validateBuildingBalance(
+    JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
+  );
+  // Two trees: one where the camp would sit, one clear of it so requiresForest
+  // is still satisfied — isolating the footprint-overlap rule from missing-forest.
+  const forests = new ForestSystem([
+    { id: "under-camp", forestId: "grove", x: 20, z: 0, capacity: 40, variant: "pine" },
+    { id: "work-tree", forestId: "grove", x: 30, z: 0, capacity: 40, variant: "tree1" },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const navigation = new RtsNavigation();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { food: 0, wood: 500 }, 20);
+  // A control zone large enough that territory never vetoes these proposals.
+  const territory = new TerritoryControlSystem(() => [{ owner: "player", x: 0, z: 0, radius: 1000 }]);
+  territory.refresh();
+  const construction = new StructureConstructionService(
+    buildings,
+    structures,
+    kingdoms,
+    navigation,
+    () => structures.navigationBlockers(),
+    territory,
+    () => {},
+    () => {},
+    (stats, x, z) => stats.economy?.requiresForest
+      && !forests.hasLiveTreeNear(x, z, stats.economy.gatherRadius ?? 0, stats.footprint)
+      ? "missing-forest"
+      : null,
+    () => forests.liveTreeBlockers(),
+  );
+  // A camp centred on the standing tree is refused before it can bury it.
+  assert.equal(construction.validate("player", "lumber_camp", 20, 0)?.reason, "blocked", "a live tree refuses a footprint over it");
+  // Beside the grove, clear of every trunk, the same camp is legal.
+  assert.equal(construction.validate("player", "lumber_camp", 10, 0)?.valid, true, "a camp is legal beside the grove");
+  // Harvest the blocking tree to nothing; its ground becomes buildable again.
+  forests.reserveNearest(1, 20, 0, 4);
+  forests.harvest(1, 40);
+  assert.equal(forests.snapshots().find((tree) => tree.id === "under-camp")?.depleted, true, "the buried tree is now gone");
+  assert.notEqual(construction.validate("player", "lumber_camp", 20, 0)?.reason, "blocked", "a depleted tree stops reserving its cell");
+  territory.dispose();
+});
+
 check("RTS wood workers switch to a nearer camp after delivering their exhausted tree", () => {
   const buildings = validateBuildingBalance(
     JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown,
@@ -31277,6 +31321,29 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   }
   assert.equal(redundant.remove([{ x: 0, z: 0 }]), 1);
   assert.equal(redundant.connected({ x: -4, z: 0 }, { x: 4, z: 0 }), true, "an alternate branch preserves connectivity after a road cut");
+});
+
+check("RTS a road routes around a standing tree and straight through once it is felled", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const roads = new RoadGraph(balance);
+  const forests = new ForestSystem([
+    { id: "on-route", forestId: "grove", x: 0, z: 0, capacity: 40, variant: "pine" },
+  ]);
+  const units = new UnitSystem();
+  const structures = new PlacedStructureSystem();
+  const kingdoms = new KingdomRegistry(["player"], units, structures, { wood: 500 }, 20);
+  const construction = new RoadConstructionService(roads, kingdoms, () => forests.liveTreeBlockers());
+  const detour = construction.plan({ x: -6, z: 0 }, { x: 6, z: 0 });
+  assert.ok(detour, "a road still connects across a grove");
+  assert.ok(detour.cells.every((cell) => cell.x !== 0 || cell.z !== 0), "the route bends around the standing tree");
+  // Fell the tree; its cell stops reserving road space.
+  forests.reserveNearest(1, 0, 0, 4);
+  forests.harvest(1, 40);
+  const through = construction.plan({ x: -6, z: 0 }, { x: 6, z: 0 });
+  assert.ok(through, "a road plans across the cleared cell");
+  assert.ok(through.cells.some((cell) => cell.x === 0 && cell.z === 0), "the felled tree no longer diverts the road");
 });
 
 check("RTS depot age and level tiers provide four-resource global storage capacity", () => {

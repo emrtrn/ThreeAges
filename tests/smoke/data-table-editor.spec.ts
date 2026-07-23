@@ -81,13 +81,21 @@ test("Veri menu lists every registered balance table", async ({ page }) => {
   await expect(
     editor.locator(".dte-entry", { hasText: "barracks" }).getByRole("button", { name: "Varsayılana dön" }),
   ).toBeVisible();
+
+  // Entries with repeated blocks render one collapsible sub-group per tier/level,
+  // titled from the catalog's group labels; the tiers start collapsed to cut
+  // clutter, so expand the first Settlement tier before reading its fields.
+  const settlementTier1 = center.locator(".dte-group", { hasText: "Yerleşim çağı — Seviye 1" });
+  await expect(settlementTier1).toBeVisible();
+  await settlementTier1.locator(".dte-group-title").click();
+
   // Index-agnostic field metadata labels every progression tier at once: the
   // `progression.settlement.[].maxHealth` template reaches each concrete index.
-  await expect(center.locator(".dte-field", { hasText: "Yerleşim tier: Can" }).first()).toBeVisible();
+  await expect(settlementTier1.locator(".dte-field", { hasText: "Yerleşim tier: Can" }).first()).toBeVisible();
 
   // Structural tier indices are read-only (editing them only breaks a save).
   await expect(
-    center.locator(".dte-field", { hasText: "Yerleşim tier: Seviye" }).first().locator("input"),
+    settlementTier1.locator(".dte-field", { hasText: "Yerleşim tier: Seviye" }).first().locator("input"),
   ).toBeDisabled();
 
   // The level-1 territory value carries an explanatory hint (tooltip) so it is

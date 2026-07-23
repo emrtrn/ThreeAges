@@ -13,7 +13,10 @@
  * Self-contained: styles are injected once so the shared `style.css` is left
  * untouched. Dev-only, like every other `*Editor.ts`.
  */
-import type { EditorDataTableDef, EditorDataTableFieldMeta } from "@/editor/gameEditorRegistry";
+import type {
+  EditorDataTableDef,
+  EditorDataTableFieldMeta,
+} from "@/editor/gameEditorRegistry";
 import { loadDataTable, loadDataTableDefaults, saveDataTable } from "@/editor/dataTableStore";
 
 type StatusTone = "info" | "success" | "warning" | "error";
@@ -57,12 +60,15 @@ export class DataTableEditor {
   private doc: Record<string, unknown> = {};
   /** Field metadata keyed by dotted leaf path, for labels/steps/enums. */
   private readonly fieldMeta = new Map<string, EditorDataTableFieldMeta>();
+  /** Friendly names for repeated (array) blocks, keyed by the array's dotted path. */
+  private readonly groupLabels = new Map<string, string>();
   /** Committed (git HEAD) document, lazily fetched the first time an entry is reset. */
   private defaults: Record<string, unknown> | null = null;
   private disposed = false;
 
   private constructor(private readonly options: DataTableEditorOptions) {
     for (const field of options.def.fields ?? []) this.fieldMeta.set(field.path, field);
+    for (const group of options.def.groups ?? []) this.groupLabels.set(group.path, group.label);
     ensureStyles();
 
     this.overlay = document.createElement("div");
@@ -162,19 +168,55 @@ export class DataTableEditor {
     summary.append(reset);
     section.append(summary);
 
+    const leaves =
+      isPlainObject(entry) || Array.isArray(entry)
+        ? collectLeaves(entry as Record<string, unknown> | unknown[], "")
+        : // A scalar top-level entry is itself a single leaf; key it by the entry
+          // id so a flat config (e.g. roads.json) can label each value distinctly.
+          [{ path: entryId, type: leafType(entry)!, container: this.doc, key: entryId } satisfies Leaf];
+
+    const groups = partitionLeaves(leaves);
+    // Entries with repeated blocks (progression tiers, upgrade levels) get one
+    // collapsible sub-group each so the long form stays readable; simpler flat
+    // configs (units, roads, …) keep the single grid unchanged.
+    if (groups.some((group) => !group.isBase)) {
+      for (const group of groups) section.append(this.buildGroupSection(entry, group));
+    } else {
+      const grid = document.createElement("div");
+      grid.className = "dte-grid";
+      for (const leaf of leaves) grid.append(this.renderLeaf(leaf));
+      section.append(grid);
+    }
+    return section;
+  }
+
+  /** One collapsible sub-group (base values, or a single array tier/level). */
+  private buildGroupSection(entry: unknown, group: LeafGroup): HTMLElement {
+    const details = document.createElement("details");
+    details.className = "dte-group";
+    // Base values open by default; tiers/levels start collapsed to cut clutter.
+    details.open = group.isBase;
+
+    const summary = document.createElement("summary");
+    summary.className = "dte-group-title";
+    summary.textContent = this.groupTitle(entry, group);
+    details.append(summary);
+
     const grid = document.createElement("div");
     grid.className = "dte-grid";
-    if (isPlainObject(entry) || Array.isArray(entry)) {
-      for (const leaf of collectLeaves(entry as Record<string, unknown> | unknown[], "")) {
-        grid.append(this.renderLeaf(leaf));
-      }
-    } else {
-      // A scalar top-level entry is itself a single leaf; key it by the entry id
-      // so a flat config (e.g. roads.json) can label each value distinctly.
-      grid.append(this.renderLeaf({ path: entryId, type: leafType(entry)!, container: this.doc, key: entryId }));
-    }
-    section.append(grid);
-    return section;
+    for (const leaf of group.leaves) grid.append(this.renderLeaf(leaf));
+    details.append(grid);
+    return details;
+  }
+
+  /** Title for a sub-group: "Temel değerler", or "<block> — Seviye N" for a tier. */
+  private groupTitle(entry: unknown, group: LeafGroup): string {
+    if (group.isBase) return "Temel değerler";
+    const label = this.groupLabels.get(group.arrayPath) ?? lastSegment(group.arrayPath);
+    const element = resolveArrayElement(entry, group.arrayPath, group.index);
+    const level =
+      isPlainObject(element) && typeof element.level === "number" ? element.level : group.index + 1;
+    return `${label} — Seviye ${level}`;
   }
 
   /** Restore one entry to its committed defaults, then leave it as a dirty edit to save. */
@@ -355,6 +397,71 @@ function collectLeaves(node: Record<string, unknown> | unknown[], prefix: string
   return leaves;
 }
 
+/** A run of leaves rendered as one collapsible sub-group of an entry. */
+interface LeafGroup {
+  /** Group identity: the array-element path (`progression.settlement.0`) or `""` for base. */
+  readonly key: string;
+  /** Base values (no repeated block) vs. one element of an array. */
+  readonly isBase: boolean;
+  /** Path to the owning array (`progression.settlement`); empty for base. */
+  readonly arrayPath: string;
+  /** Element index within the array; `-1` for base. */
+  readonly index: number;
+  readonly leaves: Leaf[];
+}
+
+/**
+ * Partition an entry's leaves into ordered sub-groups: base scalars first, then
+ * one group per array element (keyed by the array-element prefix of each leaf's
+ * path). Insertion order follows first appearance, so groups keep the natural
+ * document order (base, then each tier). The grouping is data-shape driven, not
+ * game-specific — an entry with no arrays yields a single base group.
+ */
+function partitionLeaves(leaves: Leaf[]): LeafGroup[] {
+  const order: string[] = [];
+  const groups = new Map<string, LeafGroup>();
+  for (const leaf of leaves) {
+    const meta = groupKeyFor(leaf.path);
+    let bucket = groups.get(meta.key);
+    if (!bucket) {
+      bucket = { ...meta, leaves: [] };
+      groups.set(meta.key, bucket);
+      order.push(meta.key);
+    }
+    bucket.leaves.push(leaf);
+  }
+  return order.map((key) => groups.get(key)!);
+}
+
+/** Classify a leaf path by its first array-index segment (`levels.0.cost.wood` → element `levels.0`). */
+function groupKeyFor(path: string): Omit<LeafGroup, "leaves"> {
+  const segments = path.split(".");
+  const at = segments.findIndex((segment) => /^\d+$/.test(segment));
+  if (at === -1) return { key: "", isBase: true, arrayPath: "", index: -1 };
+  return {
+    key: segments.slice(0, at + 1).join("."),
+    isBase: false,
+    arrayPath: segments.slice(0, at).join("."),
+    index: Number(segments[at]),
+  };
+}
+
+/** Resolve `entry.<arrayPath>[index]`, tolerating missing intermediate keys. */
+function resolveArrayElement(entry: unknown, arrayPath: string, index: number): unknown {
+  let node: unknown = entry;
+  for (const segment of arrayPath.split(".")) {
+    if (!isPlainObject(node)) return undefined;
+    node = node[segment];
+  }
+  return Array.isArray(node) ? node[index] : undefined;
+}
+
+/** Last dotted segment, used as a fallback group label when the game names none. */
+function lastSegment(path: string): string {
+  const segments = path.split(".");
+  return segments[segments.length - 1] || path;
+}
+
 /** A `label`/`name` scalar on an entry, used as a friendly section subtitle. */
 function displayLabel(entry: unknown): string {
   if (!isPlainObject(entry)) return "";
@@ -392,6 +499,13 @@ function ensureStyles(): void {
 .dte-entry-title{cursor:pointer;padding:8px 12px;font-weight:600;user-select:none;display:flex;align-items:center;justify-content:space-between;gap:12px;}
 .dte-reset{flex:0 0 auto;border:1px solid #3a4650;background:#2c313b;color:#cdd4df;border-radius:5px;cursor:pointer;padding:3px 10px;font:inherit;font-size:12px;font-weight:500;}
 .dte-reset:hover{filter:brightness(1.2);border-color:#c8955a;color:#ffce7a;}
+.dte-group{border:1px solid #2a2f38;border-radius:5px;margin:6px 12px;background:#1d2128;}
+.dte-group[open]{background:#20242c;}
+.dte-group-title{cursor:pointer;padding:6px 10px;font-weight:600;font-size:12px;color:#c6cdda;user-select:none;list-style:none;display:flex;align-items:center;gap:8px;}
+.dte-group-title::-webkit-details-marker{display:none;}
+.dte-group-title::before{content:"▸";color:#7f8aa0;font-size:10px;}
+.dte-group[open]>.dte-group-title::before{content:"▾";}
+.dte-group>.dte-grid{padding-top:2px;}
 .dte-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;padding:6px 12px 12px;}
 .dte-field{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0;}
 .dte-field-label{flex:1 1 auto;min-width:0;color:#aeb6c4;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}

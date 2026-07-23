@@ -3,9 +3,19 @@
  * finite wood sources. Rendering may batch them, but gameplay never treats the
  * forest as one opaque static mesh.
  */
+import type { NavBlocker } from "@engine/navigation/gridNavigation";
+
 export type TreeVariant = "pine" | "tree1" | "tree2";
 
 const DEPLETION_EPSILON = 1e-9;
+
+/**
+ * Half-extent of the square a live tree reserves against building placement, in
+ * world units. Sized just under the tree's rendered canopy so a footprint can
+ * abut a grove without ever sitting on a trunk — a buried tree has no work point
+ * (see {@link ForestSystem.outsideFootprint}) and would be lost wood.
+ */
+export const RTS_TREE_BLOCK_HALF_EXTENT = 0.8;
 
 export interface RtsTreeDefinition {
   readonly id: string;
@@ -120,6 +130,24 @@ export class ForestSystem {
       tree.remaining = tree.definition.capacity;
       tree.reservedByWorkerId = null;
     }
+  }
+
+  /**
+   * Footprint blockers for every still-standing tree, so a building cannot be
+   * placed on top of a live wood source. Depleted trees have already vanished,
+   * so they stop reserving ground and their cells become buildable again.
+   */
+  liveTreeBlockers(): readonly NavBlocker[] {
+    const blockers: NavBlocker[] = [];
+    for (const tree of this.trees.values()) {
+      if (tree.remaining <= 0) continue;
+      const { x, z } = tree.definition;
+      blockers.push({
+        min: [x - RTS_TREE_BLOCK_HALF_EXTENT, 0, z - RTS_TREE_BLOCK_HALF_EXTENT],
+        max: [x + RTS_TREE_BLOCK_HALF_EXTENT, 3, z + RTS_TREE_BLOCK_HALF_EXTENT],
+      });
+    }
+    return blockers;
   }
 
   snapshots(): readonly TreeSnapshot[] {

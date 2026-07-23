@@ -608,13 +608,19 @@ export class RtsApp {
           )
           ? "missing-forest"
           : null,
-      () => this.roads.occupancyBlockers(),
+      // Roads and standing trees both reserve build space without blocking
+      // navigation: a camp is placed beside a grove, never on it, so its
+      // buried trees stay harvestable.
+      () => [...this.roads.occupancyBlockers(), ...this.forests.liveTreeBlockers()],
       () => this.units.all(),
     );
     this.roadConstruction = new RoadConstructionService(
       this.roads,
       this.kingdoms,
-      () => this.navigationBlockers(),
+      // Standing trees reserve road cells too, so a route bends around a grove
+      // rather than paving over harvestable wood. They stay out of
+      // navigationBlockers() itself, which units path through to reach the trees.
+      () => [...this.navigationBlockers(), ...this.forests.liveTreeBlockers()],
       () => {
         this.roadPlacement.renderNetwork();
         // A committed road can link an outpost to its main network, which grows
