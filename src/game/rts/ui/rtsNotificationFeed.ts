@@ -12,6 +12,7 @@ const ICON_BY_KIND: Readonly<Record<RtsNotification["kind"], string>> = {
   "population-full": "⌂",
   "resource-depleted": "⛏",
   "logistics-cut": "⛓",
+  "logistics-restored": "✓",
   "outpost-under-attack": "⚔",
   "center-under-attack": "⚔",
   "age-upgraded": "✦",

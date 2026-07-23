@@ -30,6 +30,7 @@ export type RtsNotificationKind =
   | "population-full"
   | "resource-depleted"
   | "logistics-cut"
+  | "logistics-restored"
   | "outpost-under-attack"
   | "center-under-attack"
   | "age-upgraded"
@@ -60,6 +61,11 @@ const RULES: Readonly<Record<RtsNotificationKind, NotificationRule>> = {
   "population-full": { severity: "warning", displaySeconds: 6, cooldownSeconds: 20 },
   "resource-depleted": { severity: "warning", displaySeconds: 8, cooldownSeconds: 30 },
   "logistics-cut": { severity: "alert", displaySeconds: 8, cooldownSeconds: 15 },
+  // The green counterpart to a cut: raised once, on the frame a producer's link
+  // is restored (see RtsApp.syncNotifications). It only fires on that
+  // transition, never polled, so it needs no cooldown — and it is info, not
+  // alert, so the feed colours it as good news rather than a fresh warning.
+  "logistics-restored": { severity: "info", displaySeconds: 6, cooldownSeconds: 0 },
   "outpost-under-attack": { severity: "alert", displaySeconds: 6, cooldownSeconds: 12 },
   "center-under-attack": { severity: "alert", displaySeconds: 8, cooldownSeconds: 10 },
   "age-upgraded": { severity: "info", displaySeconds: 6, cooldownSeconds: 0 },
@@ -169,6 +175,24 @@ export class RtsNotificationCenter {
     // most time to read.
     if (this.entries.length > MAX_ACTIVE_NOTIFICATIONS) this.entries.shift();
     return "posted";
+  }
+
+  /**
+   * Retire a live notice at once, before its display time lapses — used when the
+   * *condition* it reports has provably ended (a cut producer is linked again),
+   * so the player should not keep reading a warning that no longer holds. Unlike
+   * an expiry it applies no cooldown: if the condition immediately returns, the
+   * player must be warned again rather than muted. Raise history is left intact,
+   * so a genuine re-cut still counts as a repeat. No-op if nothing is live.
+   *
+   * @returns `true` when a live notice was removed.
+   */
+  dismiss(request: Pick<RtsNotificationRequest, "kind" | "subject">): boolean {
+    const key = notificationKey(request);
+    const index = this.entries.findIndex((entry) => entry.key === key);
+    if (index < 0) return false;
+    this.entries.splice(index, 1);
+    return true;
   }
 
   /** Advance on the rendered-frame delta and retire anything that timed out. */

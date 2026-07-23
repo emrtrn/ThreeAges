@@ -110,7 +110,7 @@ import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { ForestSystem } from "./economy/forestSystem";
 import { AgeSystem } from "./progression/ageSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
-import { ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
+import { type ProducerLogisticsStatus, ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
 import { LogisticsOccupationSystem } from "./economy/logisticsOccupationSystem";
 import { ResourceCapacitySystem } from "./economy/resourceCapacitySystem";
@@ -365,6 +365,14 @@ export class RtsApp {
   );
   private readonly notifications = new RtsNotificationCenter();
   private readonly notificationFeed = new RtsNotificationFeed();
+  /**
+   * Last-seen logistics status per player producer, so {@link syncNotifications}
+   * can tell a *transition* from a steady state: the "cut" warning is polled, but
+   * "link restored" is news only on the frame the link actually returns. Keyed by
+   * structure id; pruned as producers vanish so a reused id never reads a stale
+   * status.
+   */
+  private readonly previousLogisticsStatus = new Map<number, ProducerLogisticsStatus>();
   /**
    * §53 saldırmazlık window: which of the three one-shot notices has fired.
    * 0 = nothing yet, 1 = "active" posted, 2 = heads-up posted, 3 = "ended"
@@ -1826,6 +1834,7 @@ export class RtsApp {
     // stale health baseline would read the fresh centre as already damaged.
     this.notifications.reset();
     this.notificationFeed.setNotifications([]);
+    this.previousLogisticsStatus.clear();
     // A fresh match reopens the saldırmazlık window, so its notices must be
     // allowed to fire again from the top.
     this.peaceAnnounceStage = 0;
@@ -2373,13 +2382,38 @@ export class RtsApp {
       });
     }
 
+    const livingProducers = new Set<number>();
     for (const producer of this.productionLogistics.snapshots()) {
-      if (producer.owner !== PLAYER_OWNER || producer.status === "linked") continue;
-      this.notifications.post({
-        kind: "logistics-cut",
-        subject: String(producer.structureId),
-        text: `${resourceLabel(producer.resourceId)} üretimi durdu: lojistik bağlantısı kesildi.`,
-      });
+      if (producer.owner !== PLAYER_OWNER) continue;
+      livingProducers.add(producer.structureId);
+      const subject = String(producer.structureId);
+      const previous = this.previousLogisticsStatus.get(producer.structureId);
+      this.previousLogisticsStatus.set(producer.structureId, producer.status);
+      if (producer.status !== "linked") {
+        this.notifications.post({
+          kind: "logistics-cut",
+          subject,
+          text: `${resourceLabel(producer.resourceId)} üretimi durdu: lojistik bağlantısı kesildi.`,
+        });
+        continue;
+      }
+      // Linked now. Only announce the *recovery* when we had actually warned the
+      // player it was cut — a producer built already-linked is not news. Clearing
+      // the warning at once (rather than letting it time out) is the point: the
+      // green notice and the red one must not sit on screen together.
+      if (previous !== undefined && previous !== "linked") {
+        this.notifications.dismiss({ kind: "logistics-cut", subject });
+        this.notifications.post({
+          kind: "logistics-restored",
+          subject,
+          text: `${resourceLabel(producer.resourceId)} lojistik bağlantısı kuruldu: depoya aktarım başladı.`,
+        });
+      }
+    }
+    // Drop vanished producers so a later structure that reuses the id does not
+    // inherit a stale "was cut" status and fire a phantom recovery notice.
+    for (const structureId of [...this.previousLogisticsStatus.keys()]) {
+      if (!livingProducers.has(structureId)) this.previousLogisticsStatus.delete(structureId);
     }
 
     this.syncUnderAttackNotifications();

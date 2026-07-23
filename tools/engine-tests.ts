@@ -28092,6 +28092,41 @@ check("RTS notifications separate subjects and bound the feed (plan §51/§52)",
   assert.throws(() => notifications.advance(-1), RangeError);
 });
 
+check("RTS a restored logistics link clears its cut warning at once and reads as good news (plan §51/§52)", () => {
+  const notifications = new RtsNotificationCenter();
+
+  // A producer's road-to-depot link is severed: the alert is raised.
+  assert.equal(
+    notifications.post({ kind: "logistics-cut", subject: "7", text: "Odun üretimi durdu" }),
+    "posted",
+  );
+  assert.equal(notifications.active()[0]?.severity, "alert", "a cut is red");
+
+  // The player builds the connecting depot. The warning must leave immediately,
+  // not linger for its full display time beside the recovery notice.
+  assert.equal(notifications.dismiss({ kind: "logistics-cut", subject: "7" }), true);
+  assert.equal(notifications.active().length, 0, "the stale warning is gone the moment the link returns");
+  assert.equal(notifications.dismiss({ kind: "logistics-cut", subject: "7" }), false, "nothing left to dismiss");
+
+  // The recovery is its own subject-keyed, info-severity (green) notice.
+  assert.equal(
+    notifications.post({ kind: "logistics-restored", subject: "7", text: "Odun lojistiği bağlandı" }),
+    "posted",
+  );
+  const restored = notifications.active()[0] ?? assert.fail("recovery notice missing");
+  assert.equal(restored.severity, "info", "a restored link is green, not a fresh warning");
+  assert.equal(restored.kind, "logistics-restored");
+
+  // Dismiss applies no cooldown: if the very next check finds the link cut again,
+  // the player is warned again rather than muted — and it counts as a repeat.
+  assert.equal(
+    notifications.post({ kind: "logistics-cut", subject: "7", text: "Odun üretimi yine durdu" }),
+    "posted",
+    "a re-cut right after a dismiss is not swallowed",
+  );
+  assert.equal(notifications.active().find((entry) => entry.kind === "logistics-cut")?.raises, 2, "the re-cut counts as a repeat");
+});
+
 check("RTS attack watch reports health losses, not placements or rebuilds (plan §51)", () => {
   const watch = new RtsAttackWatch();
 
