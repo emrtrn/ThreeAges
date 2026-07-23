@@ -1,23 +1,22 @@
 /**
- * AI structure upgrade executor — `07_ENEMY_AI_DESIGN_v0.2.md` §17, §53; plan §48
- * ("Muhafız / Okçu / Kuşatma oranı").
+ * AI centre-level upgrade executor — `07_ENEMY_AI_DESIGN_v0.2.md` §17, §53; plan §48
+ * ("Muhafız / Okçu / Kuşatma oranı") and the centre-led progression plan §4.
  *
  * §53's composition ratio was data long before the AI could honour it: the Archer
- * and the Ram sit behind `requiredBuildingLevel: 2`, so a kingdom whose Barracks
- * is still tier 1 can only ever field Guards no matter what the ratio asks for.
- * Faz 8's acceptance criteria ("AI karışık ordu üretiyor", "AI yapı hedefleri
- * için kuşatma kullanıyor") both failed on exactly that missing step.
+ * and the Ram sit behind a global centre tier (`requiredSettlementLevel`), so a
+ * kingdom that has not levelled its centre can only ever field Guards no matter
+ * what the ratio asks for.
  *
- * The upgrade runs through the same {@link StructureUpgradeSystem} the player's
- * selection-panel button drives (§4), so the cost and the training pause during
- * the upgrade are identical for both kingdoms.
+ * Under centre-led progression a unit is gated on the kingdom's global tier, not
+ * a building's own level, so this executor invests in the centre level through
+ * the same {@link KingdomProgressionSystem} the player's Merkez panel drives (§4).
  *
  * The trigger is deliberately not a rule of its own: the production manager
- * already asks for the role §53 wants and is told `requires-barracks-upgrade` by
- * the same data gate the player hits. This executor only acts on that answer, so
- * the tier gate stays in the data (§45) and no second copy of it lives here.
+ * already asks for the role §53 wants and is told `requires-production-building-upgrade`
+ * by the same data gate the player hits. This executor only acts on that answer,
+ * so the tier gate stays in the data (§45) and no second copy of it lives here.
  */
-import type { StructureUpgradeSystem } from "../structures/structureUpgradeSystem";
+import type { KingdomProgressionSystem } from "../progression/kingdomProgressionSystem";
 import type { UnitOwner } from "../units/unit";
 import type { AiBlackboard } from "./aiBlackboard";
 import type { AiDecisionLog } from "./aiDecisionLog";
@@ -30,9 +29,7 @@ export class AiUpgradeManager {
 
   constructor(
     private readonly owner: UnitOwner,
-    /** The building whose tier gates the §53 composition — the Barracks. */
-    private readonly buildingId: string,
-    private readonly upgrades: StructureUpgradeSystem,
+    private readonly progression: KingdomProgressionSystem,
     private readonly log: AiDecisionLog,
   ) {}
 
@@ -41,25 +38,24 @@ export class AiUpgradeManager {
   }
 
   /**
-   * Advance the research by at most one step. `blocked` is the production
+   * Advance the centre level by at most one step. `blocked` is the production
    * manager's report that the composition wants a unit this tier cannot train.
    *
    * A refused start is never an error worth failing on: `insufficient-resources`
-   * and `no-eligible-structure` are both "later", and the stockpile and having a
-   * completed Barracks standing are the economy's problem, not this executor's.
+   * is "later" and the stockpile is the economy's problem, not this executor's;
+   * `at-max-level` means the tier ladder is exhausted and nothing more will open.
    */
   update(bb: AiBlackboard, blocked: boolean): AiUpgradeStep {
-    const snapshot = this.upgrades.typeSnapshot(this.owner, this.buildingId);
-    if (snapshot.completed) return this.enter("done", bb, `${this.buildingId} II tamamlandı`);
-    if (snapshot.upgrading) return this.enter("researching", bb, `${this.buildingId} II yükseltiliyor`);
+    const snapshot = this.progression.snapshot(this.owner);
+    if (snapshot.upgrading) return this.enter("researching", bb, "merkez seviyesi yükseltiliyor");
     if (!blocked) {
       this.step = "idle";
       return this.step;
     }
-    const result = this.upgrades.startForType(this.owner, this.buildingId);
-    if (result === "started") return this.enter("researching", bb, `${this.buildingId} II başlatıldı (§53 bileşimi)`);
-    // Everything else is a wait: the stockpile is short, or there is no completed
-    // Barracks standing at a level below its max to upgrade yet.
+    const result = this.progression.startLevelUpgrade(this.owner);
+    if (result === "started") return this.enter("researching", bb, "§53 bileşimi için merkez seviyesi başlatıldı");
+    if (result === "at-max-level") return this.enter("done", bb, "merkez en yüksek seviyede");
+    // Everything else is a wait: the stockpile is short, or the centre is gone.
     this.step = "saving";
     return this.step;
   }

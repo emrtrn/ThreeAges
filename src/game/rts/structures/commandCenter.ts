@@ -23,10 +23,9 @@ import type {
   BuildingBalanceStats,
   EconomyProductionBalance,
   StartingResources,
-  TownAgeBalance,
 } from "../../data/gameDataTypes";
 import { HealthComponent } from "../units/health";
-import type { UpgradableStructure } from "./structureUpgradeSystem";
+import type { UpgradableStructure } from "../progression/kingdomProgressionSystem";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 
 /** Temporary Faz 1 centre durability; building balance data arrives in Faz 2. */
@@ -57,7 +56,7 @@ export class CommandCenter implements UpgradableStructure {
    * ring living in there would be disposed with it.
    */
   private readonly selectionRing: Mesh;
-  /** In-age level (1..3), owned by `StructureUpgradeSystem` like every building. */
+  /** Global tier level (1..3), owned by `KingdomProgressionSystem` like every building. */
   level = 1;
   controlRadius = COMMAND_CENTER_CONTROL_RADIUS;
   workerTrainingSeconds: number | null = null;
@@ -164,21 +163,6 @@ export class CommandCenter implements UpgradableStructure {
   /** The centre's counterpart of `Unit.setSelected` (plan §51). */
   setSelected(selected: boolean): void {
     this.selectionRing.visible = selected;
-  }
-
-  /**
-   * Apply the data-owned Town benefits after a completed Settlement upgrade.
-   *
-   * The level is deliberately not touched here. An age is not a level: like
-   * every other building the centre drops back to Lv1 in the new age (KR-03)
-   * and re-earns Lv2/Lv3 through research, so `StructureUpgradeSystem` owns
-   * `level` and — where the centre has `progression` tiers — its health too.
-   * Radius and worker training remain age-only benefits with no tier ladder.
-   */
-  applyTownUpgrade(upgrade: TownAgeBalance["commandCenter"]): void {
-    if (!this.stats.progression) this.health.upgradeMax(upgrade.maxHealth);
-    this.controlRadius = upgrade.controlRadius;
-    this.workerTrainingSeconds = upgrade.workerTrainingSeconds;
   }
 
   /** Replace the Faz 1 primitive tower with an RTS building asset. */

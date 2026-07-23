@@ -31,8 +31,8 @@ export const TEAM_COLOR: Record<UnitOwner, string> = {
 export const TEAM_RING_Y = 0.015;
 
 /** Ring thickness as a fraction of its radius, so small and large rings read alike. */
-const RING_THICKNESS_RATIO = 0.18;
-const MIN_RING_THICKNESS = 0.12;
+const RING_THICKNESS_RATIO = 0.04;
+const MIN_RING_THICKNESS = 0.04;
 
 /**
  * A flat team-coloured ring laid on the ground, sized to sit just outside
@@ -50,7 +50,7 @@ export function createTeamRing(owner: UnitOwner, radius: number): Mesh {
     new MeshBasicMaterial({
       color: new Color(TEAM_COLOR[owner]),
       transparent: true,
-      opacity: 0.85,
+      opacity: 0.4,
       depthWrite: false,
     }),
   );

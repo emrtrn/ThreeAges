@@ -55,19 +55,14 @@ export interface MarketTradeSnapshot {
 }
 
 /**
- * The spread one Market charges at its current level. Walks the level ladder
- * rather than indexing it, so a level that grants only health inherits the rate
- * from the last level that named one — the data may set a commission on some
- * steps and not others without opening a gap.
+ * The spread one Market charges at its current tier. Centre-led progression sets
+ * {@link PlacedStructure.marketCommission} from the active age × level tier, so
+ * that live value wins; the base commission is only the fallback for a Market
+ * with no progression entry yet (e.g. before its first tier is applied).
  */
 export function marketCommission(structure: PlacedStructure, baseCommission: number): number {
   if (structure.marketCommission !== null) return structure.marketCommission;
-  let commission = structure.stats.market?.commission ?? baseCommission;
-  for (const step of structure.stats.levels ?? []) {
-    if (step.level > structure.level) break;
-    if (step.tradeCommission !== undefined) commission = step.tradeCommission;
-  }
-  return commission;
+  return structure.stats.market?.commission ?? baseCommission;
 }
 
 export class MarketTradeSystem {

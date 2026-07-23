@@ -1,9 +1,15 @@
 # ThreeAges Altı Kademe Çağ ve Yapı Dengesi Planı
 
-Durum: Faz 1 devam ediyor - altı kademe veri matrisi eklendi; runtime geçişi bekliyor  
+Durum: Yerine geçildi - bina-türü bazlı modelin tarihsel planı
 Tarih: 2026-07-18  
 Kapsam: Yerleşim Lv1-3 ve Kasaba Lv1-3 ile altı anlamlı yapı kademesi. Bu
 belge denge hedefini tanımlar; oyun değerlerini henüz değiştirmez.
+
+> 2026-07-23 kararı: Bu belgedeki bina-türü bazlı Lv araştırması yeni oyun
+> tasarımı değildir. Yerine, tüm yapıların seviyesini Merkezden yöneten
+> [Merkez Odaklı Altı Seviye İlerleme Planı](THREEAGES_CENTER_LED_PROGRESSION_PLAN.md)
+> geçmiştir. Bu belge altı-tier denge değerleri ve önceki uygulama bağlamı için
+> korunur.
 
 ## 1. Karar ve kural
 

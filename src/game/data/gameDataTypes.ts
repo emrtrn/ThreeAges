@@ -146,8 +146,14 @@ export interface UnitBalanceStats {
   readonly productionBuildingId: ProductionBuildingId;
   /** The earliest settlement age that may train this unit. */
   readonly requiredAge: SettlementAge;
-  /** Minimum in-age tier of {@link productionBuildingId}. */
-  readonly requiredBuildingLevel: number;
+  /**
+   * Minimum global centre level *within {@link requiredAge}* the owner must have
+   * reached to train this unit (1..3). Centre-led progression (see
+   * `docs/planned/THREEAGES_CENTER_LED_PROGRESSION_PLAN.md`): a unit gate is a
+   * statement about the whole kingdom's tier, not about one production building.
+   * Guard = Settlement Lv1, Archer = Town Lv1, Ram = Town Lv2.
+   */
+  readonly requiredSettlementLevel: number;
   /** Resources reserved when this unit enters a production queue. */
   readonly cost: StartingResources;
   /** Population capacity consumed by this unit once queued. */
@@ -206,54 +212,13 @@ export interface BuildingBalanceStats {
   /** Optional stationary ranged defense, fired only after construction completes. */
   readonly defense?: BuildingDefenseBalance;
   /**
-   * In-age level-up steps (Level 2, then 3), applied per building instance and
-   * independent of the Settlement -> Town age transition. Absent buildings stay
-   * single-level. See `docs/planned/THREEAGES_AGE_AND_LEVEL_PROGRESSION_PLAN.md`.
-   */
-  readonly levels?: readonly BuildingLevelBalance[];
-  /**
-   * Complete age × level balance matrix.  Unlike the legacy {@link levels}
-   * ladder, every entry is an absolute value for one of the six playable
-   * tiers (Settlement 1–3, Town 1–3).
-   *
-   * The matrix is introduced ahead of its runtime migration: until every
-   * consumer resolves an active tier, {@link levels} remains authoritative
-   * for the live upgrade flow.
+   * Complete age × level balance matrix — the single source of a building's
+   * live stats. Every entry is an absolute value for one of the six playable
+   * tiers (Settlement 1–3, Town 1–3). The owner's centre-led global tier
+   * (see {@link AgeBalance}) selects which entry is active; a building no
+   * longer carries its own per-instance upgrade cost or ladder.
    */
   readonly progression?: BuildingProgressionBalance;
-  /**
-   * Legacy single-step Town upgrade, derived from `levels` (the level-2 entry)
-   * by the loader so pre-per-level systems keep reading one shape. Removed once
-   * every consumer moves onto {@link levels}.
-   */
-  readonly upgrade?: BuildingUpgradeBalance;
-}
-
-/** One in-age level-up step. `level` is the level this step promotes to (2 or 3). */
-export interface BuildingLevelBalance {
-  readonly level: number;
-  readonly cost: StartingResources;
-  readonly durationSeconds: number;
-  readonly maxHealth: number;
-  /**
-   * Absolute population capacity a housing building supplies once it reaches this
-   * level (not a delta). Only meaningful on buildings with a base
-   * {@link BuildingBalanceStats.populationCapacity}; must exceed the previous level's.
-   */
-  readonly populationCapacity?: number;
-  /** Outposts can expand both their isolated and road-connected control area. */
-  readonly territory?: Pick<TerritoryBuildingBalance, "controlRadius" | "connectedControlRadius">;
-  /**
-   * The house's spread once a Market reaches this level (absolute, not a delta).
-   * Only meaningful on a building with a base {@link BuildingBalanceStats.market},
-   * and must be strictly lower than the previous level's — a level-up that made
-   * trading *worse* would be a cost with a penalty attached.
-   *
-   * The validator re-runs the no-arbitrage invariant against it, because a lower
-   * commission is the direction that breaks it: the spread is what makes a round
-   * trip lose money, so shrinking it is exactly how a market starts minting gold.
-   */
-  readonly tradeCommission?: number;
 }
 
 /** Full absolute balance matrix for the two currently playable settlement ages. */
@@ -278,14 +243,6 @@ export interface BuildingProgressionTier {
   readonly queueCapacity?: number;
   /** Global stock capacity this completed depot contributes, keyed by resource id. */
   readonly storageCapacity?: StartingResources;
-}
-
-export interface BuildingUpgradeBalance {
-  readonly cost: StartingResources;
-  readonly durationSeconds: number;
-  readonly maxHealth: number;
-  /** T2 outposts can expand both their isolated and road-connected control area. */
-  readonly territory?: Pick<TerritoryBuildingBalance, "controlRadius" | "connectedControlRadius">;
 }
 
 /** Data-owned production behaviour for an RTS resource structure. */
@@ -386,32 +343,59 @@ export type ResourceBalance = Readonly<Record<string, ResourceBalanceStats>>;
 /** The two progression states included in Faz 6 (Kingdom deliberately remains out of scope). */
 export type SettlementAge = "settlement" | "town";
 
-/** One data-owned transition from the opening Settlement into Town. */
+/**
+ * One centre level-up step within an age. `level` is the level it promotes to
+ * (2 or 3). Cost is reserved when the upgrade starts and committed on completion;
+ * a level-up carries no building or technology prerequisite ("cost only").
+ */
+export interface CenterLevelUpgradeBalance {
+  readonly level: 2 | 3;
+  readonly cost: StartingResources;
+  readonly durationSeconds: number;
+}
+
+/**
+ * Age-level command-centre benefits applied to the centre whenever the owner
+ * enters this age (and at spawn). Kept here rather than in the per-building
+ * progression matrix because control radius and worker-training pace are the
+ * centre's alone — no other building has them.
+ */
+export interface CommandCenterAgeBalance {
+  /** Buildable control radius the centre grants for this age. */
+  readonly controlRadius: number;
+  /** Worker training pace for this age; absent means "use the worker's own trainingSeconds". */
+  readonly workerTrainingSeconds?: number;
+}
+
+/** The opening age. Its centre begins at Lv1; two upgrades reach Lv2 and Lv3. */
+export interface SettlementAgeBalance {
+  readonly id: "settlement";
+  readonly label: string;
+  readonly commandCenter: CommandCenterAgeBalance;
+  /** Centre level upgrades within Settlement: Lv1→2, then Lv2→3 ("cost only"). */
+  readonly levelUpgrades: readonly CenterLevelUpgradeBalance[];
+}
+
+/**
+ * The Town age. Entered by the one-way transition from Settlement Lv3, then two
+ * further centre level upgrades reach Town Lv2 and Lv3.
+ */
 export interface TownAgeBalance {
   readonly id: "town";
   readonly label: string;
-  /** Atomically reserved when the command-centre upgrade begins. */
+  /** Atomically reserved when the Settlement Lv3 → Town transition begins. */
   readonly cost: StartingResources;
   readonly upgradeSeconds: number;
   /** Completed structures that prove the economy and defence are established. */
   readonly requiredBuildingIds: readonly string[];
-  /**
-   * In-age command-centre level the kingdom must have researched before the age
-   * may start. The buildings list proves breadth; this proves the kingdom has
-   * actually invested in its capital rather than throwing up one of everything.
-   */
-  readonly requiredCommandCenterLevel: number;
-  /** The command centre's concrete T2 gains, applied when the age completes. */
-  readonly commandCenter: {
-    readonly maxHealth: number;
-    readonly controlRadius: number;
-    readonly workerTrainingSeconds: number;
-  };
+  readonly commandCenter: CommandCenterAgeBalance;
+  /** Centre level upgrades within Town: Lv1→2, then Lv2→3 ("cost only"). */
+  readonly levelUpgrades: readonly CenterLevelUpgradeBalance[];
 }
 
-/** `public/game-data/balance/ages.json` — the Faz 6 progression contract. */
+/** `public/game-data/balance/ages.json` — the centre-led progression contract. */
 export interface AgeBalance {
-  readonly settlement: { readonly id: "settlement"; readonly label: string };
+  readonly settlement: SettlementAgeBalance;
   readonly town: TownAgeBalance;
 }
 

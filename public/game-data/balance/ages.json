@@ -1,7 +1,29 @@
 {
   "settlement": {
     "id": "settlement",
-    "label": "Yerleşim"
+    "label": "Yerleşim",
+    "commandCenter": {
+      "controlRadius": 28
+    },
+    "levelUpgrades": [
+      {
+        "level": 2,
+        "cost": {
+          "food": 150,
+          "wood": 150
+        },
+        "durationSeconds": 45
+      },
+      {
+        "level": 3,
+        "cost": {
+          "food": 250,
+          "wood": 250,
+          "gold": 60
+        },
+        "durationSeconds": 60
+      }
+    ]
   },
   "town": {
     "id": "town",
@@ -13,12 +35,6 @@
       "gold": 150
     },
     "upgradeSeconds": 105,
-    "commandCenter": {
-      "maxHealth": 450,
-      "controlRadius": 32,
-      "workerTrainingSeconds": 9
-    },
-    "requiredCommandCenterLevel": 3,
     "requiredBuildingIds": [
       "farm",
       "lumber_camp",
@@ -26,6 +42,32 @@
       "gold_mine",
       "barracks",
       "outpost"
+    ],
+    "commandCenter": {
+      "controlRadius": 32,
+      "workerTrainingSeconds": 9
+    },
+    "levelUpgrades": [
+      {
+        "level": 2,
+        "cost": {
+          "food": 200,
+          "wood": 200,
+          "stone": 120,
+          "gold": 80
+        },
+        "durationSeconds": 70
+      },
+      {
+        "level": 3,
+        "cost": {
+          "food": 380,
+          "wood": 340,
+          "stone": 220,
+          "gold": 180
+        },
+        "durationSeconds": 90
+      }
     ]
   }
 }

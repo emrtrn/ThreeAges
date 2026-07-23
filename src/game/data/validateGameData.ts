@@ -30,7 +30,6 @@ import type {
   AiScoringBalance,
   AiTargetWeights,
   BuildingBalance,
-  BuildingLevelBalance,
   BuildingProgressionBalance,
   BuildingProgressionTier,
   GamePreset,
@@ -362,9 +361,9 @@ export function validateUnitBalance(value: unknown): UnitBalance {
     if (trainingSeconds <= 0) {
       throw new GameDataError(`${statsWhere}.trainingSeconds: must be > 0`);
     }
-    const requiredBuildingLevel = requireFiniteNumber(stats, "requiredBuildingLevel", statsWhere);
-    if (!Number.isInteger(requiredBuildingLevel) || requiredBuildingLevel <= 0) {
-      throw new GameDataError(`${statsWhere}.requiredBuildingLevel: must be a positive integer`);
+    const requiredSettlementLevel = requireFiniteNumber(stats, "requiredSettlementLevel", statsWhere);
+    if (!Number.isInteger(requiredSettlementLevel) || requiredSettlementLevel < 1 || requiredSettlementLevel > 3) {
+      throw new GameDataError(`${statsWhere}.requiredSettlementLevel: must be an integer in 1..3`);
     }
     const productionBuildingId = requireString(stats, "productionBuildingId", statsWhere);
     if (productionBuildingId !== "command_center" && productionBuildingId !== "barracks" && productionBuildingId !== "archery_range") {
@@ -402,7 +401,7 @@ export function validateUnitBalance(value: unknown): UnitBalance {
       trainingSeconds,
       productionBuildingId,
       requiredAge,
-      requiredBuildingLevel,
+      requiredSettlementLevel,
       cost: validateStartingResources(stats["cost"] ?? {}, statsWhere),
       populationCost,
     };
@@ -547,102 +546,6 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
         damageMultipliers: validateDamageMultipliers(defenseData["damageMultipliers"], `${defenseWhere}.damageMultipliers`),
       };
     }
-    // In-age level steps: an ordered list starting at level 2, each strictly
-    // stronger than the previous. The legacy single-step `upgrade` is derived
-    // from the level-2 entry so pre-per-level systems keep one shape to read.
-    const levelsRaw = stats["levels"];
-    let levels: BuildingBalance["string"]["levels"];
-    let upgrade: BuildingBalance["string"]["upgrade"];
-    if (levelsRaw !== undefined) {
-      const levelsWhere = `${statsWhere}.levels`;
-      if (!Array.isArray(levelsRaw)) throw new GameDataError(`${levelsWhere}: must be an array`);
-      const parsed: BuildingLevelBalance[] = [];
-      let previousMaxHealth = maxHealth;
-      let previousPopulationCapacity = populationCapacity ?? 0;
-      let previousTradeCommission = market?.commission ?? 0;
-      let expectedLevel = 2;
-      levelsRaw.forEach((entryRaw, index) => {
-        const entryWhere = `${levelsWhere}[${index}]`;
-        const entryData = asObject(entryRaw, entryWhere);
-        const level = requireFiniteNumber(entryData, "level", entryWhere);
-        if (level !== expectedLevel) {
-          throw new GameDataError(`${entryWhere}.level: expected ${expectedLevel} (levels must run contiguously from 2)`);
-        }
-        const durationSeconds = requireFiniteNumber(entryData, "durationSeconds", entryWhere);
-        const entryMaxHealth = requireFiniteNumber(entryData, "maxHealth", entryWhere);
-        if (durationSeconds <= 0 || entryMaxHealth <= previousMaxHealth) {
-          throw new GameDataError(`${entryWhere}: durationSeconds must be > 0 and maxHealth must exceed the previous level`);
-        }
-        const entryPopulationRaw = entryData["populationCapacity"];
-        let entryPopulationCapacity: number | undefined;
-        if (entryPopulationRaw !== undefined) {
-          if (populationCapacity === undefined) {
-            throw new GameDataError(`${entryWhere}.populationCapacity requires a base populationCapacity`);
-          }
-          if (typeof entryPopulationRaw !== "number" || !Number.isInteger(entryPopulationRaw)
-            || entryPopulationRaw <= previousPopulationCapacity) {
-            throw new GameDataError(`${entryWhere}.populationCapacity: must be an integer greater than the previous level`);
-          }
-          entryPopulationCapacity = entryPopulationRaw;
-          previousPopulationCapacity = entryPopulationRaw;
-        }
-        // Faz M3: a Market level buys a narrower spread. Checked against the
-        // *previous* level rather than only the base, so a three-step ladder
-        // cannot quietly go 15% -> 9% -> 12%.
-        const entryCommissionRaw = entryData["tradeCommission"];
-        let entryTradeCommission: number | undefined;
-        if (entryCommissionRaw !== undefined) {
-          if (!market) {
-            throw new GameDataError(`${entryWhere}.tradeCommission requires a base market definition`);
-          }
-          if (typeof entryCommissionRaw !== "number" || !Number.isFinite(entryCommissionRaw)
-            || !(entryCommissionRaw > 0) || entryCommissionRaw >= previousTradeCommission) {
-            throw new GameDataError(
-              `${entryWhere}.tradeCommission: must be in (0, ${previousTradeCommission}) — a level must lower the spread`,
-            );
-          }
-          // The direction that breaks §4.3: the spread is what makes a round
-          // trip lose money, so shrinking it is how a market mints gold.
-          assertNoArbitrage(market.priceStep, market.indexMin, entryCommissionRaw, `${entryWhere}.tradeCommission`);
-          entryTradeCommission = entryCommissionRaw;
-          previousTradeCommission = entryCommissionRaw;
-        }
-        const entryTerritoryRaw = entryData["territory"];
-        let entryTerritory: BuildingLevelBalance["territory"];
-        if (entryTerritoryRaw !== undefined) {
-          if (!territory) throw new GameDataError(`${entryWhere}.territory requires a base territory definition`);
-          const entryTerritoryWhere = `${entryWhere}.territory`;
-          const entryTerritoryData = asObject(entryTerritoryRaw, entryTerritoryWhere);
-          const controlRadius = requireFiniteNumber(entryTerritoryData, "controlRadius", entryTerritoryWhere);
-          const connectedControlRadius = requireFiniteNumber(entryTerritoryData, "connectedControlRadius", entryTerritoryWhere);
-          if (controlRadius < territory.controlRadius || connectedControlRadius < controlRadius
-            || connectedControlRadius < territory.connectedControlRadius) {
-            throw new GameDataError(`${entryTerritoryWhere}: level radii must not shrink base control`);
-          }
-          entryTerritory = { controlRadius, connectedControlRadius };
-        }
-        parsed.push({
-          level: expectedLevel,
-          cost: validateStartingResources(entryData["cost"] ?? {}, entryWhere),
-          durationSeconds,
-          maxHealth: entryMaxHealth,
-          ...(entryPopulationCapacity !== undefined ? { populationCapacity: entryPopulationCapacity } : {}),
-          ...(entryTerritory ? { territory: entryTerritory } : {}),
-          ...(entryTradeCommission !== undefined ? { tradeCommission: entryTradeCommission } : {}),
-        });
-        previousMaxHealth = entryMaxHealth;
-        expectedLevel += 1;
-      });
-      if (parsed.length === 0) throw new GameDataError(`${levelsWhere}: must define at least one level step`);
-      levels = parsed;
-      const levelTwo = parsed[0]!;
-      upgrade = {
-        cost: levelTwo.cost,
-        durationSeconds: levelTwo.durationSeconds,
-        maxHealth: levelTwo.maxHealth,
-        ...(levelTwo.territory ? { territory: levelTwo.territory } : {}),
-      };
-    }
     const progressionRaw = stats["progression"];
     const progression = progressionRaw === undefined ? undefined : validateBuildingProgression(
       progressionRaw,
@@ -676,9 +579,7 @@ export function validateBuildingBalance(value: unknown): BuildingBalance {
       ...(territory ? { territory } : {}),
       ...(market ? { market } : {}),
       ...(defense ? { defense } : {}),
-      ...(levels ? { levels } : {}),
       ...(progression ? { progression } : {}),
-      ...(upgrade ? { upgrade } : {}),
     };
   }
   if (Object.keys(buildings).length === 0) {
@@ -1007,7 +908,10 @@ export function validateResourceBalance(value: unknown): ResourceBalance {
   return resources;
 }
 
-/** Validate the data-owned Faz 6 Settlement -> Town transition. */
+/**
+ * Validate the centre-led progression contract: the Settlement -> Town
+ * transition plus the two "cost only" centre level upgrades each age carries.
+ */
 export function validateAgeBalance(value: unknown): AgeBalance {
   const where = "balance/ages.json";
   const obj = asObject(value, where);
@@ -1035,34 +939,56 @@ export function validateAgeBalance(value: unknown): AgeBalance {
     || new Set(requirements).size !== requirements.length) {
     throw new GameDataError(`${where}.town.requiredBuildingIds: must be a non-empty unique building-id array`);
   }
-  const requiredCommandCenterLevel = requireFiniteNumber(town, "requiredCommandCenterLevel", `${where}.town`);
-  if (!Number.isInteger(requiredCommandCenterLevel) || requiredCommandCenterLevel < 1 || requiredCommandCenterLevel > 3) {
-    throw new GameDataError(`${where}.town.requiredCommandCenterLevel: must be an integer in 1..3`);
-  }
-  const commandCenterWhere = `${where}.town.commandCenter`;
-  const commandCenter = asObject(town["commandCenter"], commandCenterWhere);
-  const commandCenterMaxHealth = requireFiniteNumber(commandCenter, "maxHealth", commandCenterWhere);
-  const commandCenterControlRadius = requireFiniteNumber(commandCenter, "controlRadius", commandCenterWhere);
-  const commandCenterWorkerTrainingSeconds = requireFiniteNumber(commandCenter, "workerTrainingSeconds", commandCenterWhere);
-  if (commandCenterMaxHealth <= 0 || commandCenterControlRadius <= 0 || commandCenterWorkerTrainingSeconds <= 0) {
-    throw new GameDataError(`${commandCenterWhere}: maxHealth, controlRadius and workerTrainingSeconds must be > 0`);
-  }
   return {
-    settlement: { id: "settlement", label: requireString(settlement, "label", `${where}.settlement`) },
+    settlement: {
+      id: "settlement",
+      label: requireString(settlement, "label", `${where}.settlement`),
+      commandCenter: validateCommandCenterAge(settlement["commandCenter"], `${where}.settlement.commandCenter`),
+      levelUpgrades: validateCenterLevelUpgrades(settlement["levelUpgrades"], `${where}.settlement.levelUpgrades`),
+    },
     town: {
       id: "town",
       label: requireString(town, "label", `${where}.town`),
       cost,
       upgradeSeconds,
       requiredBuildingIds: [...requirements] as string[],
-      requiredCommandCenterLevel,
-      commandCenter: {
-        maxHealth: commandCenterMaxHealth,
-        controlRadius: commandCenterControlRadius,
-        workerTrainingSeconds: commandCenterWorkerTrainingSeconds,
-      },
+      commandCenter: validateCommandCenterAge(town["commandCenter"], `${where}.town.commandCenter`),
+      levelUpgrades: validateCenterLevelUpgrades(town["levelUpgrades"], `${where}.town.levelUpgrades`),
     },
   };
+}
+
+/** Age-level centre benefits: a positive control radius and an optional training pace. */
+function validateCommandCenterAge(value: unknown, where: string): AgeBalance["settlement"]["commandCenter"] {
+  const data = asObject(value, where);
+  const controlRadius = requireFiniteNumber(data, "controlRadius", where);
+  if (controlRadius <= 0) throw new GameDataError(`${where}.controlRadius: must be > 0`);
+  const trainingRaw = data["workerTrainingSeconds"];
+  if (trainingRaw === undefined) return { controlRadius };
+  const workerTrainingSeconds = requireFiniteNumber(data, "workerTrainingSeconds", where);
+  if (workerTrainingSeconds <= 0) throw new GameDataError(`${where}.workerTrainingSeconds: must be > 0`);
+  return { controlRadius, workerTrainingSeconds };
+}
+
+/**
+ * The two "cost only" centre level upgrades of an age: exactly Lv2 then Lv3,
+ * each with a positive duration and a payable cost. No building or technology
+ * prerequisite lives here — the whole point of a centre level-up is that its
+ * only gate is the resources it reserves.
+ */
+function validateCenterLevelUpgrades(value: unknown, where: string): AgeBalance["settlement"]["levelUpgrades"] {
+  if (!Array.isArray(value)) throw new GameDataError(`${where}: must be an array`);
+  if (value.length !== 2) throw new GameDataError(`${where}: must define exactly the Lv2 and Lv3 upgrades`);
+  return value.map((entryRaw, index) => {
+    const entryWhere = `${where}[${index}]`;
+    const entry = asObject(entryRaw, entryWhere);
+    const expectedLevel = index + 2;
+    const level = requireFiniteNumber(entry, "level", entryWhere);
+    if (level !== expectedLevel) throw new GameDataError(`${entryWhere}.level: expected ${expectedLevel}`);
+    const durationSeconds = requireFiniteNumber(entry, "durationSeconds", entryWhere);
+    if (durationSeconds <= 0) throw new GameDataError(`${entryWhere}.durationSeconds: must be > 0`);
+    return { level: expectedLevel as 2 | 3, cost: validateStartingResources(entry["cost"], entryWhere), durationSeconds };
+  });
 }
 
 const AI_INTENTS: readonly AiIntent[] = ["economy", "ageUp", "expand", "defend", "attack"];

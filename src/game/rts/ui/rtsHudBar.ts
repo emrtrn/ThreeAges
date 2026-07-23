@@ -14,7 +14,7 @@
  * re-pushed every frame, so each cell diffs its own text first.
  */
 import type { AgeBalance } from "../../data/gameDataTypes";
-import type { AgeSnapshot } from "../progression/ageSystem";
+import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSystem";
 import { RESOURCE_ORDER, formatInventoryAmount, resourceLabel } from "./resourceLabels";
 
@@ -174,7 +174,7 @@ export class RtsHudBar {
     this.assignIdleWorkers.disabled = count === 0;
   }
 
-  setAge(snapshot: AgeSnapshot, balance: AgeBalance): void {
+  setAge(snapshot: Pick<ProgressionSnapshot, "age" | "upgrading" | "remainingSeconds">, balance: AgeBalance): void {
     const text = snapshot.upgrading
       ? `Çağ: ${balance.settlement.label} → ${balance.town.label} (${Math.ceil(snapshot.remainingSeconds)} sn)`
       : `Çağ: ${snapshot.age === "town" ? balance.town.label : balance.settlement.label}`;

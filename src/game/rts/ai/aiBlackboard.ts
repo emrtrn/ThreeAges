@@ -18,7 +18,7 @@ import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { PlacedStructureSystem } from "../structures/placedStructureSystem";
 import type { Unit, UnitOwner } from "../units/unit";
 import type { UnitSystem } from "../units/unitSystem";
-import type { AgeSystem } from "../progression/ageSystem";
+import type { KingdomProgressionSystem } from "../progression/kingdomProgressionSystem";
 import type { EconomyProductionSystem } from "../economy/economyProductionSystem";
 import type { ProductionLogisticsSystem } from "../economy/productionLogisticsSystem";
 import type { AiArmyMission, AiExpansionStep, AiIntent, AiPlan } from "./aiTypes";
@@ -111,8 +111,8 @@ export interface AiBlackboardSources {
   readonly kingdoms: KingdomRegistry;
   readonly production: EconomyProductionSystem;
   readonly logistics: ProductionLogisticsSystem;
-  /** §19 DevelopmentLevel: the owner-scoped Settlement → Town progression. */
-  readonly ages: AgeSystem;
+  /** §19 DevelopmentLevel: the owner-scoped centre-led progression. */
+  readonly progression: KingdomProgressionSystem;
   /** The Town transition's cost, so §30's AgeUp can score affordability. */
   readonly townCost: Readonly<Record<string, number>>;
   /** The Town transition's required buildings, so §30 can score progress. */
@@ -142,7 +142,7 @@ export class AiBlackboardReader {
     readonly expansionStep: AiExpansionStep;
     readonly expansionPlanAvailable: boolean;
   }): AiBlackboard {
-    const { owner, units, structures, centers, kingdoms, production, logistics, ages } = this.sources;
+    const { owner, units, structures, centers, kingdoms, production, logistics, progression } = this.sources;
     const kingdom = kingdoms.get(owner);
     const opponent: UnitOwner = owner === "player" ? "enemy" : "player";
     const populationSnapshot = kingdom.population.snapshot();
@@ -174,7 +174,7 @@ export class AiBlackboardReader {
           <= AI_BASE_THREAT_RADIUS))
       : 0;
 
-    const ageSnapshot = ages.snapshot(owner);
+    const ageSnapshot = progression.snapshot(owner);
 
     const buildingCounts: Record<string, number> = {};
     for (const structure of structures.ownedBy(owner)) {
@@ -212,7 +212,10 @@ export class AiBlackboardReader {
       age: ageSnapshot.age,
       ageUpgrading: ageSnapshot.upgrading,
       ageRequiredBuildingIds: this.sources.townRequiredBuildingIds,
-      ageMissingBuildingIds: ageSnapshot.missingBuildingIds,
+      // Centre-led progression carries the Town's missing buildings only while the
+      // town action is the next one (Settlement Lv3). The AI must keep building
+      // them from the opening, so this is computed from live counts independently.
+      ageMissingBuildingIds: this.sources.townRequiredBuildingIds.filter((id) => (buildingCounts[id] ?? 0) === 0),
       ageAffordable: Object.entries(this.sources.townCost)
         .every(([id, cost]) => (stocks[id] ?? 0) >= cost),
       ageCost: this.sources.townCost,

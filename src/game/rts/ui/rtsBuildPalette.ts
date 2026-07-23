@@ -20,7 +20,7 @@
  * own panel can do.
  */
 import type { BuildingBalance, StartingResources } from "../../data/gameDataTypes";
-import { townUnlocksAvailable, type AgeSnapshot } from "../progression/ageSystem";
+import { townUnlocksAvailable, type ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { RoadPlacementState } from "../roads/roadPlacementSystem";
 import type { BuildingPlacementState } from "../structures/buildingPlacementSystem";
 
@@ -226,7 +226,7 @@ export class RtsBuildPalette {
    * The age resets every existing building to Level 1 and also opens any
    * building whose data declares Town as its first available age.
    */
-  setAgeState(snapshot: Pick<AgeSnapshot, "age" | "upgrading">): void {
+  setAgeState(snapshot: Pick<ProgressionSnapshot, "age" | "upgrading">): void {
     for (const { button, requiredAge } of this.buildButtons.values()) {
       const locked = requiredAge === "town" && !townUnlocksAvailable(snapshot);
       button.disabled = locked;

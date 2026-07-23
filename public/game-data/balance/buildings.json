@@ -11,27 +11,6 @@
     "constructionSeconds": 1,
     "maxHealth": 300,
     "visionRadius": 26,
-    "levels": [
-      {
-        "level": 2,
-        "cost": {
-          "food": 150,
-          "wood": 150
-        },
-        "durationSeconds": 45,
-        "maxHealth": 400
-      },
-      {
-        "level": 3,
-        "cost": {
-          "food": 250,
-          "wood": 250,
-          "gold": 60
-        },
-        "durationSeconds": 60,
-        "maxHealth": 500
-      }
-    ],
     "progression": {
       "settlement": [
         {
@@ -84,28 +63,6 @@
     "maxHealth": 100,
     "visionRadius": 8,
     "populationCapacity": 5,
-    "levels": [
-      {
-        "level": 2,
-        "cost": {
-          "wood": 70,
-          "stone": 40
-        },
-        "durationSeconds": 35,
-        "maxHealth": 150,
-        "populationCapacity": 6
-      },
-      {
-        "level": 3,
-        "cost": {
-          "wood": 110,
-          "stone": 80
-        },
-        "durationSeconds": 45,
-        "maxHealth": 200,
-        "populationCapacity": 7
-      }
-    ],
     "progression": {
       "settlement": [
         {
@@ -157,26 +114,6 @@
     "constructionSeconds": 45,
     "maxHealth": 500,
     "visionRadius": 10,
-    "levels": [
-      {
-        "level": 2,
-        "cost": {
-          "wood": 90,
-          "stone": 40
-        },
-        "durationSeconds": 45,
-        "maxHealth": 750
-      },
-      {
-        "level": 3,
-        "cost": {
-          "wood": 140,
-          "stone": 90
-        },
-        "durationSeconds": 55,
-        "maxHealth": 1050
-      }
-    ],
     "progression": {
       "settlement": [
         {
@@ -274,34 +211,6 @@
         "structure": 0.25
       }
     },
-    "levels": [
-      {
-        "level": 2,
-        "cost": {
-          "wood": 110,
-          "stone": 70
-        },
-        "durationSeconds": 55,
-        "maxHealth": 1000,
-        "territory": {
-          "controlRadius": 20,
-          "connectedControlRadius": 24
-        }
-      },
-      {
-        "level": 3,
-        "cost": {
-          "wood": 160,
-          "stone": 110
-        },
-        "durationSeconds": 65,
-        "maxHealth": 1350,
-        "territory": {
-          "controlRadius": 24,
-          "connectedControlRadius": 28
-        }
-      }
-    ],
     "progression": {
       "settlement": [
         {
@@ -395,26 +304,6 @@
       "perWorkerPerMinute": 10,
       "localBufferCapacity": 40
     },
-    "levels": [
-      {
-        "level": 2,
-        "cost": {
-          "wood": 60,
-          "stone": 30
-        },
-        "durationSeconds": 30,
-        "maxHealth": 400
-      },
-      {
-        "level": 3,
-        "cost": {
-          "wood": 100,
-          "stone": 60
-        },
-        "durationSeconds": 40,
-        "maxHealth": 520
-      }
-    ],
     "progression": {
       "settlement": [
         {
@@ -756,28 +645,6 @@
       "indexMax": 4,
       "commission": 0.15
     },
-    "levels": [
-      {
-        "level": 2,
-        "cost": {
-          "wood": 120,
-          "stone": 60
-        },
-        "durationSeconds": 45,
-        "maxHealth": 750,
-        "tradeCommission": 0.12
-      },
-      {
-        "level": 3,
-        "cost": {
-          "wood": 170,
-          "stone": 100
-        },
-        "durationSeconds": 55,
-        "maxHealth": 1000,
-        "tradeCommission": 0.09
-      }
-    ],
     "progression": {
       "settlement": [
         {
@@ -829,26 +696,6 @@
     "constructionSeconds": 55,
     "maxHealth": 650,
     "visionRadius": 12,
-    "levels": [
-      {
-        "level": 2,
-        "cost": {
-          "wood": 140,
-          "stone": 80
-        },
-        "durationSeconds": 50,
-        "maxHealth": 900
-      },
-      {
-        "level": 3,
-        "cost": {
-          "wood": 200,
-          "stone": 120
-        },
-        "durationSeconds": 60,
-        "maxHealth": 1200
-      }
-    ],
     "progression": {
       "settlement": [
         {
@@ -902,26 +749,6 @@
     "requiredAge": "town",
     "maxHealth": 600,
     "visionRadius": 14,
-    "levels": [
-      {
-        "level": 2,
-        "cost": {
-          "wood": 120,
-          "stone": 60
-        },
-        "durationSeconds": 50,
-        "maxHealth": 850
-      },
-      {
-        "level": 3,
-        "cost": {
-          "wood": 180,
-          "stone": 100
-        },
-        "durationSeconds": 60,
-        "maxHealth": 1100
-      }
-    ],
     "progression": {
       "settlement": [],
       "town": [

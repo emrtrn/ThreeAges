@@ -16,14 +16,12 @@ import type { AiBalance, AiProfile, UnitRoleId } from "../../data/gameDataTypes"
 import type { BarracksProductionSystem } from "../structures/barracksProductionSystem";
 import type { CommandCenterSystem } from "../structures/commandCenterSystem";
 import type { StructureConstructionService } from "../structures/structureConstructionService";
-import type { StructureUpgradeSystem } from "../structures/structureUpgradeSystem";
 import type { WorkerProductionSystem } from "../structures/workerProductionSystem";
 import type { MarketTradeSystem } from "../economy/marketTradeSystem";
 import type { RtsNavigation } from "../navigation/rtsNavigation";
 import type { RoadConstructionService } from "../roads/roadConstructionService";
 import type { RtsBuildAnchor, RtsExpansionRegion, RtsMapPoint } from "../world/rtsMapBlockout";
 import type { UnitOwner } from "../units/unit";
-import type { AgeSystem } from "../progression/ageSystem";
 import { AiAgeManager } from "./aiAgeManager";
 import { AiBlackboardReader, type AiBlackboard, type AiBlackboardSources } from "./aiBlackboard";
 import { AiBuildManager } from "./aiBuildManager";
@@ -43,8 +41,6 @@ import type { AiArmyMission, AiExpansionStep, AiIntent, AiIntentScore, AiPlan } 
 export interface AiControllerOptions extends AiBlackboardSources {
   readonly balance: AiBalance;
   readonly profile: AiProfile;
-  /** §24: the same owner-scoped progression the player's centre panel drives. */
-  readonly ages: AgeSystem;
   readonly navigation: RtsNavigation;
   readonly centers: CommandCenterSystem;
   /** §40: the authored slots this kingdom may build on. */
@@ -78,12 +74,6 @@ export interface AiControllerOptions extends AiBlackboardSources {
   readonly roadConstruction: RoadConstructionService;
   readonly workerProduction: WorkerProductionSystem;
   readonly barracksProduction: BarracksProductionSystem;
-  /**
-   * §53: the same tier research the player's palette drives. Without it the AI's
-   * composition ratio can never leave Guards — the Archer and the Ram are gated
-   * on Barracks II.
-   */
-  readonly structureUpgrades: StructureUpgradeSystem;
   /** §53: which unit id fills a combat role, read off `balance/units.json`. */
   readonly unitIdForRole: (role: UnitRoleId) => string | null;
   /**
@@ -130,8 +120,6 @@ export interface AiControllerSnapshot {
   readonly blackboard: AiBlackboard | null;
 }
 
-/** §53: the building whose tier gates the age composition's roles. */
-const AI_COMPOSITION_BUILDING_ID = "barracks";
 
 export class AiController {
   readonly log = new AiDecisionLog();
@@ -157,7 +145,7 @@ export class AiController {
   constructor(private readonly options: AiControllerOptions) {
     this.reader = new AiBlackboardReader(options, options.balance);
     this.director = new KingdomDirector(options.balance, this.log);
-    this.age = new AiAgeManager(options.owner, options.ages, this.log, options.structureUpgrades);
+    this.age = new AiAgeManager(options.owner, options.progression, this.log);
     this.army = new ArmyManager(
       options.owner,
       options.units,
@@ -210,11 +198,10 @@ export class AiController {
     );
     this.upgrades = new AiUpgradeManager(
       options.owner,
-      // The Barracks is what trains the §53 composition, so its tier is the one
-      // the composition can be gated on. Scoped here rather than searched for:
-      // the same single building {@link BarracksProductionSystem} is scoped to.
-      AI_COMPOSITION_BUILDING_ID,
-      options.structureUpgrades,
+      // Centre-led progression: the §53 composition is gated on the kingdom's
+      // global centre tier now, not a building's own level, so the upgrade
+      // executor invests in the centre level rather than the Barracks.
+      options.progression,
       this.log,
     );
     this.trades = new AiTradeManager(options.owner, options.marketTrade, this.log);

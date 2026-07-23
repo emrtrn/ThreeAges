@@ -22,7 +22,7 @@
     "trainingSeconds": 28,
     "productionBuildingId": "barracks",
     "requiredAge": "settlement",
-    "requiredBuildingLevel": 1,
+    "requiredSettlementLevel": 1,
     "cost": {
       "food": 60,
       "wood": 20
@@ -52,7 +52,7 @@
     "trainingSeconds": 34,
     "productionBuildingId": "archery_range",
     "requiredAge": "town",
-    "requiredBuildingLevel": 1,
+    "requiredSettlementLevel": 1,
     "cost": {
       "food": 50,
       "wood": 40
@@ -82,7 +82,7 @@
     "trainingSeconds": 75,
     "productionBuildingId": "barracks",
     "requiredAge": "town",
-    "requiredBuildingLevel": 2,
+    "requiredSettlementLevel": 2,
     "cost": {
       "wood": 140,
       "stone": 100,
@@ -113,7 +113,7 @@
     "trainingSeconds": 25,
     "productionBuildingId": "command_center",
     "requiredAge": "settlement",
-    "requiredBuildingLevel": 1,
+    "requiredSettlementLevel": 1,
     "cost": {
       "food": 50
     },

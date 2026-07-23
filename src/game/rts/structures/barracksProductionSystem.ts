@@ -123,7 +123,7 @@ export class BarracksProductionSystem {
       .map(([id, stats]) => ({
         id,
         stats,
-        unlocked: ageRank(age) >= ageRank(stats.requiredAge) && structure.level >= stats.requiredBuildingLevel,
+        unlocked: ageRank(age) >= ageRank(stats.requiredAge) && structure.level >= stats.requiredSettlementLevel,
       }));
   }
 
@@ -152,8 +152,9 @@ export class BarracksProductionSystem {
     const ready = connected.filter((structure) => !this.isStructureUpgrading(structure));
     if (ready.length === 0) return "structure-upgrading";
     // The tier gate is checked before cost so a player who cannot build the unit
-    // at all is told why, rather than being told they are poor.
-    const eligible = ready.filter((structure) => structure.level >= stats.requiredBuildingLevel);
+    // at all is told why, rather than being told they are poor. `structure.level`
+    // is the owner's global centre tier, so this reads "the kingdom is high enough".
+    const eligible = ready.filter((structure) => structure.level >= stats.requiredSettlementLevel);
     if (eligible.length === 0) return "requires-production-building-upgrade";
 
     const barracks = eligible

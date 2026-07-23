@@ -64,7 +64,7 @@ const UNITS_FIELDS = [
   { path: "trainingSeconds", label: "Üretim süresi (sn)", min: 0, step: 1 },
   { path: "populationCost", label: "Nüfus maliyeti", min: 0, step: 1 },
   { path: "requiredAge", label: "Gerekli çağ", enum: ["settlement", "town"] },
-  { path: "requiredBuildingLevel", label: "Gerekli bina seviyesi", min: 1, step: 1 },
+  { path: "requiredSettlementLevel", label: "Gerekli merkez kademesi (çağ içi 1-3)", min: 1, max: 3, step: 1, hint: "Bu birimin açılması için krallığın gerekli çağ (requiredAge) içindeki asgari Merkez seviyesi." },
   { path: "productionBuildingId", label: "Üretim binası" },
   { path: "cost.food", label: "Maliyet: Yiyecek", min: 0, step: 1 },
   { path: "cost.wood", label: "Maliyet: Odun", min: 0, step: 1 },
@@ -142,7 +142,6 @@ const BUILDINGS_FIELDS = [
   // these only breaks a save. Shown read-only rather than as a live input.
   { path: "progression.settlement.[].level", label: "Yerleşim tier: Seviye", readonly: true },
   { path: "progression.town.[].level", label: "Kasaba tier: Seviye", readonly: true },
-  { path: "levels.[].level", label: "Yükseltme seviyesi", readonly: true },
   // Base economy block. For buildings that carry progression tiers (farm,
   // lumber_camp, quarry, gold_mine) the runtime merges this with the active
   // age × level tier and the TIER WINS (structureUpgradeSystem.applyProgressionTier),
@@ -349,25 +348,6 @@ const BUILDINGS_FIELDS = [
     step: 1,
     hint: "Bu seviyede işçinin kampa dönmeden taşıdığı maks. yük (Oduncu Kampı).",
   },
-  // `levels` = yükseltme tanımı (maliyet + süre + yükseltilen stat). Çağ-bazlı
-  // canlı stat progression tier'larından gelir; buradaki değerler yükseltmenin
-  // kendisini (fiyat/süre) ve tier ile eşleşmesi gereken hedefi tanımlar.
-  { path: "levels.[].maxHealth", label: "Seviye: Can (yükseltme hedefi)", min: 1, step: 1, hint: "Bu seviyeye yükseltildiğinde ulaşılan can; ilgili progression tier ile aynı olmalı." },
-  { path: "levels.[].populationCapacity", label: "Seviye: Nüfus (yükseltme hedefi)", min: 0, step: 1 },
-  { path: "levels.[].durationSeconds", label: "Seviye: Yükseltme süresi (sn)", min: 0, step: 1, hint: "Bu seviyeye yükseltmenin saniye cinsinden süresi." },
-  { path: "levels.[].cost.food", label: "Seviye maliyeti: Yiyecek", min: 0, step: 1, hint: "Bu seviyeye yükseltmenin yiyecek maliyeti." },
-  { path: "levels.[].cost.wood", label: "Seviye maliyeti: Odun", min: 0, step: 1, hint: "Bu seviyeye yükseltmenin odun maliyeti." },
-  { path: "levels.[].cost.stone", label: "Seviye maliyeti: Taş", min: 0, step: 1, hint: "Bu seviyeye yükseltmenin taş maliyeti." },
-  { path: "levels.[].cost.gold", label: "Seviye maliyeti: Altın", min: 0, step: 1, hint: "Bu seviyeye yükseltmenin altın maliyeti." },
-  {
-    path: "levels.[].territory.controlRadius",
-    label: "Seviye: Kontrol yarıçapı (yükseltme hedefi)",
-    min: 0,
-    step: 1,
-    hint: "Bu yükseltme seviyesinde Karakol'un kontrol yarıçapı; ilgili progression tier ile eşleşmeli.",
-  },
-  { path: "levels.[].territory.connectedControlRadius", label: "Seviye: Bağlı kontrol yarıçapı (yükseltme hedefi)", min: 0, step: 1 },
-  { path: "levels.[].tradeCommission", label: "Seviye: Ticaret komisyonu (yükseltme hedefi, 0-1)", min: 0, max: 1, step: 0.01, hint: "Bu yükseltme seviyesinde Pazar komisyonu; ilgili progression tier ile eşleşmeli." },
 ];
 
 const RESOURCES_FIELDS = [
@@ -378,18 +358,28 @@ const RESOURCES_FIELDS = [
   { path: "externalNode.perWorkerPerMinute", label: "Dış düğüm: İşçi başı/dk", min: 0, step: 0.5 },
 ];
 
+// Centre-led progression (docs/planned/THREEAGES_CENTER_LED_PROGRESSION_PLAN.md).
+// Applied to each top-level age entry (settlement / town). The Town-only fields
+// (cost, upgradeSeconds) are simply absent on the Settlement entry. `levelUpgrades`
+// carries each age's Lv2 / Lv3 "cost only" centre upgrades.
 const AGES_FIELDS = [
   { path: "id", label: "Kimlik", readonly: true },
   { path: "label", label: "Ad" },
-  { path: "upgradeSeconds", label: "Yükseltme süresi (sn)", min: 0, step: 1 },
-  { path: "requiredCommandCenterLevel", label: "Gerekli merkez seviyesi", min: 1, step: 1 },
-  { path: "cost.food", label: "Maliyet: Yiyecek", min: 0, step: 1 },
-  { path: "cost.wood", label: "Maliyet: Odun", min: 0, step: 1 },
-  { path: "cost.stone", label: "Maliyet: Taş", min: 0, step: 1 },
-  { path: "cost.gold", label: "Maliyet: Altın", min: 0, step: 1 },
-  { path: "commandCenter.maxHealth", label: "Merkez: Can", min: 1, step: 1 },
   { path: "commandCenter.controlRadius", label: "Merkez: Kontrol yarıçapı", min: 0, step: 1 },
-  { path: "commandCenter.workerTrainingSeconds", label: "Merkez: İşçi üretim süresi (sn)", min: 0, step: 1 },
+  { path: "commandCenter.workerTrainingSeconds", label: "Merkez: İşçi üretim süresi (sn)", min: 0, step: 1, hint: "Boş bırakılırsa işçinin kendi trainingSeconds değeri kullanılır (Yerleşim)." },
+  // Town transition (Yerleşim Lv3 → Kasaba Lv1). Only the Town entry carries these.
+  { path: "upgradeSeconds", label: "Kasaba geçiş süresi (sn)", min: 0, step: 1 },
+  { path: "cost.food", label: "Kasaba geçiş maliyeti: Yiyecek", min: 0, step: 1 },
+  { path: "cost.wood", label: "Kasaba geçiş maliyeti: Odun", min: 0, step: 1 },
+  { path: "cost.stone", label: "Kasaba geçiş maliyeti: Taş", min: 0, step: 1 },
+  { path: "cost.gold", label: "Kasaba geçiş maliyeti: Altın", min: 0, step: 1 },
+  // Centre level upgrades within this age (Lv2, then Lv3).
+  { path: "levelUpgrades.[].level", label: "Kademe yükseltmesi: Seviye", readonly: true },
+  { path: "levelUpgrades.[].durationSeconds", label: "Kademe: Süre (sn)", min: 0, step: 1 },
+  { path: "levelUpgrades.[].cost.food", label: "Kademe maliyeti: Yiyecek", min: 0, step: 1 },
+  { path: "levelUpgrades.[].cost.wood", label: "Kademe maliyeti: Odun", min: 0, step: 1 },
+  { path: "levelUpgrades.[].cost.stone", label: "Kademe maliyeti: Taş", min: 0, step: 1 },
+  { path: "levelUpgrades.[].cost.gold", label: "Kademe maliyeti: Altın", min: 0, step: 1 },
 ];
 
 const AI_FIELDS = [
@@ -448,7 +438,6 @@ export const GAME_EDITOR_CATALOG = {
       groups: [
         { path: "progression.settlement", label: "Yerleşim çağı" },
         { path: "progression.town", label: "Kasaba çağı" },
-        { path: "levels", label: "Yükseltme" },
       ],
       validate: asTableValidator(validateBuildingBalance),
     },
@@ -461,9 +450,12 @@ export const GAME_EDITOR_CATALOG = {
     },
     {
       id: "ages",
-      label: "Çağ Dengesi",
+      label: "Çağ ve Merkez İlerleme Dengesi",
       path: "game-data/balance/ages.json",
       fields: AGES_FIELDS,
+      groups: [
+        { path: "levelUpgrades", label: "Merkez kademe yükseltmesi" },
+      ],
       validate: asTableValidator(validateAgeBalance),
     },
     {

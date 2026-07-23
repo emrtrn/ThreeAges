@@ -13,8 +13,11 @@
  * and the AI reaches Town by running its ordinary economy well rather than by
  * following a separate age script.
  */
-import type { AgeSystem, AgeUpgradeResult } from "../progression/ageSystem";
-import type { StructureUpgradeSystem } from "../structures/structureUpgradeSystem";
+import type {
+  KingdomProgressionSystem,
+  LevelUpgradeResult,
+  TownUpgradeResult,
+} from "../progression/kingdomProgressionSystem";
 import type { UnitOwner } from "../units/unit";
 import type { AiBlackboard } from "./aiBlackboard";
 import type { AiDecisionLog } from "./aiDecisionLog";
@@ -32,23 +35,39 @@ export type AiAgeOutcome =
 export class AiAgeManager {
   constructor(
     private readonly owner: UnitOwner,
-    private readonly ages: AgeSystem,
-    private readonly log: AiDecisionLog,
     /**
-     * The centre's level research. Unlike the age's building list, this is *not*
-     * something another executor produces as a side effect of playing well — no
-     * other manager ever levels the centre — so the age executor has to buy the
-     * step itself or the AI could never leave the Settlement age.
+     * Centre-led progression. Reaching Town is now two things through one system:
+     * buying centre levels up to Settlement Lv3 (no other executor ever levels
+     * the centre, so this manager has to), then paying the Town transition.
      */
-    private readonly upgrades: StructureUpgradeSystem,
+    private readonly progression: KingdomProgressionSystem,
+    private readonly log: AiDecisionLog,
   ) {}
 
-  /** Try to advance the age by one step. Called while the intent is AgeUp. */
+  /** Try to advance toward Town by one step. Called while the intent is AgeUp. */
   update(bb: AiBlackboard): AiAgeOutcome {
     if (bb.age === "town") return { kind: "done" };
     if (bb.ageUpgrading) return { kind: "upgrading" };
 
-    const result = this.ages.startTownUpgrade(this.owner);
+    const snapshot = this.progression.snapshot(this.owner);
+    // Below Settlement Lv3 the Town gate is not open yet: climb the centre level
+    // ladder first. Each level is "cost only", so a refused start is only ever a
+    // wait on the stockpile.
+    if (snapshot.level < 3) {
+      const result = this.progression.startLevelUpgrade(this.owner);
+      if (result === "started") {
+        this.log.record({
+          at: bb.now,
+          kind: "intent-selected",
+          intent: "ageUp",
+          reason: "kasaba için merkez seviyesi yükseltiliyor",
+        });
+        return { kind: "started" };
+      }
+      return this.levelOutcome(result, bb);
+    }
+    // Settlement Lv3: start the one-way Town transition.
+    const result = this.progression.startTownUpgrade(this.owner);
     if (result === "started") {
       this.log.record({
         at: bb.now,
@@ -58,53 +77,51 @@ export class AiAgeManager {
       });
       return { kind: "started" };
     }
-    return this.outcomeFor(result, bb);
+    return this.townOutcome(result, bb);
   }
 
   /**
-   * Buy the next centre level the age is waiting on, through the same research
-   * the player's panel button drives (§4). Always a wait, never a failure: a
-   * refused start means the stockpile is short or a level is already running,
-   * and both resolve on a later tick without the director leaving the plan.
+   * §43: name the reason rather than retrying blindly. A centre level-up only
+   * ever refuses for lack of resources (or a race with an in-flight one), both of
+   * which the economy executor resolves — so this is always a recoverable wait
+   * unless the centre itself is gone.
    */
-  private researchCenterLevel(bb: AiBlackboard): AiAgeOutcome {
-    const result = this.upgrades.startForType(this.owner, "command_center");
-    if (result === "started") {
-      this.log.record({
-        at: bb.now,
-        kind: "intent-selected",
-        intent: "ageUp",
-        reason: "kasaba için merkez seviyesi yükseltiliyor",
-      });
+  private levelOutcome(result: LevelUpgradeResult, bb: AiBlackboard): AiAgeOutcome {
+    switch (result) {
+      case "already-upgrading": return { kind: "upgrading" };
+      case "at-max-level": return { kind: "waiting", reason: "insufficient-resources" };
+      case "insufficient-resources": return { kind: "waiting", reason: "insufficient-resources" };
+      case "no-command-center":
+      default: return this.failNoCentre(bb);
     }
-    return { kind: "waiting", reason: "insufficient-resources" };
   }
 
   /**
-   * §43: name the reason rather than retrying blindly. Only a genuinely
-   * unrecoverable state fails the plan — a missing requirement or an empty
-   * stockpile is a wait, because the economy executor is what fixes both and it
-   * needs the director free to go back to it.
+   * §43 for the Town transition. A missing requirement or an empty stockpile is a
+   * wait — the economy executor fixes both and needs the director free to return
+   * to it. Only a lost centre fails the plan.
    */
-  private outcomeFor(result: AgeUpgradeResult, bb: AiBlackboard): AiAgeOutcome {
+  private townOutcome(result: TownUpgradeResult, bb: AiBlackboard): AiAgeOutcome {
     switch (result) {
       case "already-town": return { kind: "done" };
       case "already-upgrading": return { kind: "upgrading" };
-      case "command-center-level": return this.researchCenterLevel(bb);
+      case "settlement-level": return { kind: "waiting", reason: "insufficient-resources" };
       case "missing-requirements": return { kind: "waiting", reason: "required-node-missing" };
       case "insufficient-resources": return { kind: "waiting", reason: "insufficient-resources" };
       case "no-command-center":
-      default:
-        // Losing the centre ends the match anyway; failing loudly here keeps a
-        // dead kingdom from silently re-queuing an upgrade every tick.
-        this.log.record({
-          at: bb.now,
-          kind: "plan-failed",
-          intent: "ageUp",
-          reason: "çağ yükseltmesi başarısız: merkez yok",
-          failureReason: "timeout",
-        });
-        return { kind: "failed", reason: "timeout" };
+      default: return this.failNoCentre(bb);
     }
+  }
+
+  /** Losing the centre ends the match; fail loudly so a dead kingdom stops re-queuing. */
+  private failNoCentre(bb: AiBlackboard): AiAgeOutcome {
+    this.log.record({
+      at: bb.now,
+      kind: "plan-failed",
+      intent: "ageUp",
+      reason: "çağ yükseltmesi başarısız: merkez yok",
+      failureReason: "timeout",
+    });
+    return { kind: "failed", reason: "timeout" };
   }
 }

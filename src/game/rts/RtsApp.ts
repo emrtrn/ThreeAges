@@ -30,6 +30,7 @@ import type {
   BuildingBalance,
   ResourceBalance,
   RoadBalance,
+  SettlementAge,
   StartingResources,
   StartingUnits,
   UnitBalance,
@@ -95,11 +96,10 @@ import {
   TRADE_SELL_ACTION_PREFIX,
   TRAIN_ACTION_PREFIX,
   TRAIN_WORKER_ACTION,
-  UPGRADE_ACTION,
+  CENTER_LEVEL_UP_ACTION,
   type RtsSelectionView,
   type StructureDetailView,
-  type StructureUpgradeView,
-  type UpgradeGain,
+  type CenterProgressionView,
   type WorkerJob,
 } from "./ui/rtsSelectionView";
 import { RtsGameSpeedControls } from "./ui/rtsGameSpeedControls";
@@ -108,7 +108,7 @@ import { EconomyProductionSystem } from "./economy/economyProductionSystem";
 import { MarketTradeSystem, type MarketTradeResult } from "./economy/marketTradeSystem";
 import { ResourceNodeSystem } from "./economy/resourceNodeSystem";
 import { ForestSystem } from "./economy/forestSystem";
-import { AgeSystem } from "./progression/ageSystem";
+import { KingdomProgressionSystem, type UpgradableStructure } from "./progression/kingdomProgressionSystem";
 import { DepotLogisticsSystem } from "./economy/depotLogisticsSystem";
 import { type ProducerLogisticsStatus, ProductionLogisticsSystem } from "./economy/productionLogisticsSystem";
 import { LogisticsTransferSystem } from "./economy/logisticsTransferSystem";
@@ -119,7 +119,6 @@ import { WorkerConstructionSystem } from "./units/workerConstructionSystem";
 import type { UnitOwner } from "./units/unit";
 import { BarracksProductionSystem, unitQueueCapacityForBuildingLevel } from "./structures/barracksProductionSystem";
 import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./structures/workerProductionSystem";
-import { StructureUpgradeSystem, type UpgradableStructure } from "./structures/structureUpgradeSystem";
 import { RoadGraph } from "./roads/roadGraph";
 import { RoadDebugView } from "./roads/roadDebugView";
 import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
@@ -297,7 +296,7 @@ export class RtsApp {
         : structure.territoryControlRadius ?? 0,
     }))));
   private readonly kingdoms: KingdomRegistry;
-  private readonly ages: AgeSystem;
+  private readonly progression: KingdomProgressionSystem;
   private readonly ai: AiController;
   private readonly structureConstruction: StructureConstructionService;
   private readonly roadConstruction: RoadConstructionService;
@@ -313,7 +312,6 @@ export class RtsApp {
   private readonly barracksProduction: BarracksProductionSystem;
   private readonly marketTrade: MarketTradeSystem;
   private readonly workerProduction: WorkerProductionSystem;
-  private readonly structureUpgrades: StructureUpgradeSystem;
   /**
    * §58's objective slice, all four pieces null together whenever the
    * `regionalVictory` flag is off. One flag, one construction site: a half-built
@@ -440,7 +438,13 @@ export class RtsApp {
           : this.options.startingResources,
       SETTLEMENT_POPULATION_CAPACITY,
     );
-    this.ages = new AgeSystem(KINGDOM_OWNERS, this.options.ageBalance, this.centers, this.structures, this.kingdoms);
+    this.progression = new KingdomProgressionSystem(
+      KINGDOM_OWNERS,
+      this.options.ageBalance,
+      this.centers,
+      this.structures,
+      this.kingdoms,
+    );
     // §58. Built here — before the AI, which reads the objective watch — and
     // only when the flag is on, so `regionalVictory` off means these four are
     // null and nothing downstream ever asks them anything.
@@ -489,17 +493,6 @@ export class RtsApp {
       this.ghostStructures = null;
       this.fogVisibility = null;
     }
-    this.structureUpgrades = new StructureUpgradeSystem(
-      this.structures,
-      this.kingdoms,
-      (owner) => this.ages.snapshot(owner).age,
-      // The centre levels on the same ladder as every other building; it is just
-      // not a placed structure, so the system has to be told where to find it.
-      (owner) => {
-        const center = this.centers.get(owner);
-        return center ? [center] : [];
-      },
-    );
     this.scene.background = new Color(SCENE_BACKGROUND);
     this.input = new RtsInput(canvas);
     this.selection = new SelectionSystem(
@@ -558,13 +551,16 @@ export class RtsApp {
       this.navigation,
       this.options.unitBalance,
       this.kingdoms,
-      (structure) => this.structureUpgrades.isUpgrading(structure),
+      // Centre-led progression: a level-up or age transition no longer pauses a
+      // Barracks (plan §4 — only the centre's own worker queue pauses, and only
+      // during the Town transition), so military production is never suspended here.
+      () => false,
       (structure) => structure.queueCapacity ?? unitQueueCapacityForBuildingLevel(structure.level),
       // Plan §45: a Barracks whose ground has been taken stops training, the
       // same severance rule the economy's producers already live under.
       (structure) => this.territory.ownerAt(structure.x, structure.z) === structure.owner,
       PLACEHOLDER_GUARD_ID,
-      (owner) => this.ages.snapshot(owner).age,
+      (owner) => this.progression.tierFor(owner).age,
     );
     this.marketTrade = new MarketTradeSystem(
       this.options.buildingBalance,
@@ -582,7 +578,9 @@ export class RtsApp {
       this.navigation,
       worker,
       this.kingdoms,
-      (owner) => this.ages.isUpgrading(owner),
+      // Only the Town transition pauses the centre's worker queue (plan §4); a
+      // plain level-up keeps it running.
+      (owner) => this.progression.snapshot(owner).upgradeKind === "town",
       (owner) => this.centers.get(owner)?.workerTrainingSeconds ?? worker.trainingSeconds,
       (owner) => this.workerQueueCapacity(owner),
     );
@@ -647,7 +645,6 @@ export class RtsApp {
       kingdoms: this.kingdoms,
       production: this.economyProduction,
       logistics: this.productionLogistics,
-      ages: this.ages,
       townCost: this.options.ageBalance.town.cost,
       townRequiredBuildingIds: this.options.ageBalance.town.requiredBuildingIds,
       unitIdForRole: (role) => Object.entries(this.options.unitBalance)
@@ -673,7 +670,7 @@ export class RtsApp {
       roadConstruction: this.roadConstruction,
       workerProduction: this.workerProduction,
       barracksProduction: this.barracksProduction,
-      structureUpgrades: this.structureUpgrades,
+      progression: this.progression,
       balance: this.options.aiBalance,
       profile: this.options.aiProfile,
     });
@@ -690,7 +687,7 @@ export class RtsApp {
         width,
         depth,
         this.ageOf(PLAYER_OWNER),
-        this.structureUpgrades.levelFor(PLAYER_OWNER, buildingId),
+        this.progression.tierFor(PLAYER_OWNER).level,
       ));
     this.roadPlacement = new RoadPlacementSystem(
       canvas,
@@ -703,7 +700,7 @@ export class RtsApp {
       this.options.buildingBalance,
       (id) => {
         const requiredAge = this.options.buildingBalance[id]?.requiredAge;
-        if (requiredAge === "town" && this.ages.snapshot(PLAYER_OWNER).age !== "town") {
+        if (requiredAge === "town" && this.progression.tierFor(PLAYER_OWNER).age !== "town") {
           this.buildPalette.setActionMessage("Okçuluk Alanı Kasaba Çağında açılır.");
           return;
         }
@@ -829,7 +826,7 @@ export class RtsApp {
     // A completed type-wide research also applies to buildings that finish
     // afterwards; the visual must be created at that inherited level.
     this.structures.setCompletedVisualHandler((structure) => {
-      this.structureUpgrades.applyCompletedUpgrade(structure);
+      this.progression.applyToStructure(structure);
       this.applyStructureVisual(structure, true);
     });
     void this.loadBuildingVisuals();
@@ -935,7 +932,7 @@ export class RtsApp {
           width,
           depth,
           this.ageOf(PLAYER_OWNER),
-          this.structureUpgrades.levelFor(PLAYER_OWNER, buildingId),
+          this.progression.tierFor(PLAYER_OWNER).level,
         ));
       for (const center of this.centers.all()) this.buildingVisuals.applyToCenter(center, this.ageOf(center.owner));
       for (const structure of this.structures.all()) {
@@ -1177,7 +1174,7 @@ export class RtsApp {
         label: `İnşa %${Math.floor(structure.construction.progress * 100)}`,
       }));
     const center = this.centers.get(PLAYER_OWNER);
-    const age = this.ages.snapshot(PLAYER_OWNER);
+    const age = this.progression.snapshot(PLAYER_OWNER);
     const queue = this.workerProduction.queueSnapshot(PLAYER_OWNER);
     if (center && queue.trainingRemainingSeconds !== null) {
       const duration = center.workerTrainingSeconds ?? trainingSeconds;
@@ -1211,21 +1208,9 @@ export class RtsApp {
           label: `${queue.trainingLabel ?? "Asker"} üretiliyor · ${queue.queued}/${queue.capacity}`,
         });
       }
-      // The in-age level research (Lv1→2→3) is type-wide, so every completed
-      // building of the type shows its own bar while the research runs — the
-      // same feedback the age upgrade gets, floated above the building rather
-      // than hidden in the selection panel the player has probably closed.
-      const levelUp = this.levelUpgradeOverlay(structure);
-      if (levelUp) {
-        entries.push({
-          id: `structure-level-upgrade-${structure.id}`,
-          x: structure.x,
-          y: 9.5,
-          z: structure.z,
-          progress: levelUp.progress,
-          label: levelUp.label,
-        });
-      }
+      // Centre-led progression has no per-building upgrade bar: the level and age
+      // ladder is the kingdom's, shown once on the centre below, not on each
+      // building (plan §5 — the world progress bar lives only on the Merkez).
       if (!structure.health.depleted && structure.health.ratio < 1 && this.healthBarVisible(structure.id)) {
         entries.push({
           id: `structure-health-${structure.id}`,
@@ -1249,54 +1234,27 @@ export class RtsApp {
         variant: "health",
       });
     }
-    // The age is the longest thing the player ever waits on and the only one
-    // with no field presence at all — it ran for 105 seconds visible nowhere
-    // but the selection panel, which is closed whenever they are doing anything
-    // else. It sits above the worker bar because it outranks it: it is what
-    // paused it.
-    if (center && age.upgrading) {
-      const duration = this.options.ageBalance.town.upgradeSeconds;
+    // Centre-led progression is the longest thing the player ever waits on and
+    // the only one with no field presence but the selection panel — which is
+    // closed whenever they are doing anything else. One bar covers both the level
+    // ladder and the age transition, and they are mutually exclusive by nature.
+    if (center && age.upgrading && age.nextAction) {
+      const duration = age.nextAction.durationSeconds;
+      const label = age.upgradeKind === "town"
+        ? `${this.options.ageBalance.town.label} Çağı · ${Math.ceil(age.remainingSeconds)} sn`
+        : `${this.tierLabel(age.nextAction.targetAge, age.nextAction.targetLevel)} · ${Math.ceil(age.remainingSeconds)} sn`;
       entries.push({
-        id: "player-age-upgrade",
+        id: "player-center-progression",
         x: center.position.x,
         y: 11,
         z: center.position.z,
         progress: duration > 0 ? 1 - Math.min(1, age.remainingSeconds / duration) : 0,
-        label: `Kasaba Çağı · ${Math.ceil(age.remainingSeconds)} sn`,
-      });
-    }
-    // The centre runs the same in-age Lv1→3 ladder as every building; its level
-    // research is locked while an age upgrade runs, so this bar and the one above
-    // are mutually exclusive and never stack.
-    const centerLevelUp = center ? this.levelUpgradeOverlay(center) : null;
-    if (center && centerLevelUp) {
-      entries.push({
-        id: "player-command-center-level-upgrade",
-        x: center.position.x,
-        y: 11,
-        z: center.position.z,
-        progress: centerLevelUp.progress,
-        label: centerLevelUp.label,
+        label,
       });
     }
     this.worldProgressOverlay.update(this.cameraController.camera, this.canvas.clientWidth, this.canvas.clientHeight, entries);
   }
 
-  /**
-   * Floating-bar state for an in-flight in-age level upgrade (Lv1→2→3), or null
-   * when the building's type has no research running. Duration comes from the
-   * next `levels` step so the fill matches the selection panel's exactly.
-   */
-  private levelUpgradeOverlay(structure: UpgradableStructure): { readonly progress: number; readonly label: string } | null {
-    const snapshot = this.structureUpgrades.snapshot(structure);
-    if (!snapshot.upgrading) return null;
-    const next = structure.stats.levels?.find((entry) => entry.level === snapshot.level + 1);
-    const duration = next?.durationSeconds ?? 0;
-    return {
-      progress: duration > 0 ? 1 - Math.min(1, snapshot.remainingSeconds / duration) : 0,
-      label: `Lv${snapshot.level + 1} yükseltmesi · ${Math.ceil(snapshot.remainingSeconds)} sn`,
-    };
-  }
 
   /**
    * Drain this frame's edge-triggered orders. Attack-move needs a map position,
@@ -1345,21 +1303,22 @@ export class RtsApp {
     // stops on pause because it is only ever ticked from here (§53).
     this.clock.advance(dt);
     this.kingdoms.advance(dt);
-    for (const event of this.ages.update(dt)) {
+    // Centre-led progression: one event stream for level-ups and the Town
+    // transition alike. On completion every one of the owner's completed
+    // structures — the centre included — has already been re-tiered atomically by
+    // the system; here we re-skin them into the new tier and refresh territory.
+    for (const event of this.progression.update(dt)) {
+      const isPlayer = event.owner === PLAYER_OWNER;
+      const tierLabel = this.tierLabel(event.age, event.level);
       if (event.type === "completed") {
-        // KR-03: the age is the milestone. Every one of the owner's buildings
-        // drops to Level 1 and re-skins into the new age family (Settlement ->
-        // First Age, Town -> Second Age), and any in-flight level-up is refunded.
-        this.rebuildForAge(event.owner);
-        const center = this.centers.get(event.owner);
-        if (center) this.buildingVisuals.applyToCenter(center, this.ageOf(center.owner));
+        for (const structure of event.structures) this.applyUpgradedVisual(structure);
         this.territory.refresh();
+        if (isPlayer) this.placement.refreshPreview();
       }
-      // §51 wants the AI's age-up called out, and only this event knows it: the
-      // player has no other honest way to learn the opponent got stronger
-      // (there is no fog yet, but scanning the enemy base is not a HUD).
-      if (event.owner !== PLAYER_OWNER) {
-        if (event.type === "completed") {
+      // §51 wants the AI's age-up called out; only the Town event marks it, since
+      // a level-up is not a milestone the player needs warning about.
+      if (!isPlayer) {
+        if (event.type === "completed" && event.kind === "town") {
           this.notifications.post({
             kind: "enemy-age-upgraded",
             text: `Düşman ${this.options.ageBalance.town.label} Çağına geçti.`,
@@ -1370,27 +1329,14 @@ export class RtsApp {
       if (event.type === "completed") {
         this.notifications.post({
           kind: "age-upgraded",
-          text: `${this.options.ageBalance.town.label} Çağı tamamlandı: tüm binalarınız Kasaba Lv1 değerlerine yükseldi.`,
+          text: event.kind === "town"
+            ? `${this.options.ageBalance.town.label} Çağı tamamlandı: tüm yapılarınız ${tierLabel} oldu.`
+            : `${tierLabel} tamamlandı: tüm yapılarınız gelişti.`,
         });
       }
       this.buildPalette.setActionMessage(event.type === "completed"
-        ? "Kasaba Çağı tamamlandı."
-        : "Merkez yıkıldığı için çağ yükseltmesi iptal edildi; kaynaklar iade edildi.");
-    }
-    for (const event of this.structureUpgrades.update(dt)) {
-      // The world consequences of a level-up belong to whichever kingdom bought
-      // it — the AI levels the same way, and a Level 2 outpost of its own has to
-      // claim its wider radius exactly as the player's does.
-      if (event.type === "completed") {
-        for (const structure of event.structures) this.applyUpgradedVisual(structure);
-        this.placement.refreshPreview();
-      }
-      if (event.structures.some((structure) => structure.stats.territory)) this.territory.refresh();
-      // Only the message is the player's; the AI has the debug panel instead.
-      if (event.structure.owner !== PLAYER_OWNER) continue;
-      this.buildPalette.setActionMessage(event.type === "completed"
-        ? `${event.structure.stats.label} Lv${event.level} yükseltmesi tamamlandı.`
-        : `${event.structure.stats.label} yıkıldığı için yükseltme iptal edildi; kaynaklar iade edildi.`);
+        ? (event.kind === "town" ? "Kasaba Çağı tamamlandı." : `${tierLabel} tamamlandı.`)
+        : "Merkez yıkıldığı için ilerleme iptal edildi; kaynaklar iade edildi.");
     }
     // Acquisition before movement: a unit that picks up a target this tick
     // should start walking toward it on the same tick, not the next one.
@@ -1644,7 +1590,7 @@ export class RtsApp {
       stats,
     );
     // Settlement Lv1 tier values (worker queue capacity today) before any research.
-    for (const center of this.centers.all()) this.structureUpgrades.applyCompletedUpgrade(center);
+    for (const center of this.centers.all()) this.progression.applyToStructure(center);
     this.buildingVisuals.applyToCenter(playerCenter, this.ageOf(playerCenter.owner));
     this.buildingVisuals.applyToCenter(enemyCenter, this.ageOf(enemyCenter.owner));
   }
@@ -1661,21 +1607,15 @@ export class RtsApp {
 
   /** The art family a kingdom's buildings currently belong to (Settlement/Town). */
   private ageOf(owner: UnitOwner) {
-    return this.ages.snapshot(owner).age;
+    return this.progression.tierFor(owner).age;
   }
 
-  /**
-   * Age transition consequence (KR-03): reset every owned building to Level 1
-   * and applies the new age's Lv1 stats before rebuilding its model. Only completed
-   * buildings get a finished model; sites keep the translucent model at their
-   * type's currently researched level (which is Level 1 after this reset).
-   */
-  private rebuildForAge(owner: UnitOwner): void {
-    this.structureUpgrades.resetOwner(owner);
-    for (const structure of this.structures.ownedBy(owner)) {
-      if (structure.construction.complete) this.applyStructureVisual(structure);
-      else this.applyConstructionVisual(structure);
-    }
+  /** Player-facing name of one tier, e.g. "Yerleşim Lv2" / "Kasaba Lv1". */
+  private tierLabel(age: SettlementAge, level: number): string {
+    const ageLabel = age === "town"
+      ? this.options.ageBalance.town.label
+      : this.options.ageBalance.settlement.label;
+    return `${ageLabel} Lv${level}`;
   }
 
   /**
@@ -1702,7 +1642,7 @@ export class RtsApp {
     const visual = this.buildingVisuals.createConstructionVisual(
       structure,
       this.ageOf(structure.owner),
-      this.structureUpgrades.levelFor(structure.owner, structure.stats.id),
+      this.progression.tierFor(structure.owner).level,
     );
     if (visual) this.structures.setConstructionVisual(structure, visual);
   }
@@ -1856,9 +1796,8 @@ export class RtsApp {
     this.logisticsTransfers.reset();
     this.workerConstruction.reset();
     this.barracksProduction.reset();
-    this.structureUpgrades.reset();
+    this.progression.reset();
     this.workerProduction.reset();
-    this.ages.reset();
     this.ai.reset();
     this.units.clear();
     this.centers.clear();
@@ -1981,7 +1920,7 @@ export class RtsApp {
     this.hudBar.setIdleWorkerCount(this.workerConstruction.idleWorkerCount(PLAYER_OWNER));
     const population = this.playerKingdom.population.snapshot();
     this.hudBar.setPopulation(population.used, population.capacity);
-    this.hudBar.setAge(this.ages.snapshot(PLAYER_OWNER), this.options.ageBalance);
+    this.hudBar.setAge(this.progression.snapshot(PLAYER_OWNER), this.options.ageBalance);
     this.hudBar.setMatchDuration(this.clock.seconds);
   }
 
@@ -2023,7 +1962,7 @@ export class RtsApp {
           width,
           depth,
           this.ageOf(PLAYER_OWNER),
-          this.structureUpgrades.levelFor(PLAYER_OWNER, buildingId),
+          this.progression.tierFor(PLAYER_OWNER).level,
         ));
       for (const structure of this.structures.all()) {
         if (structure.construction.complete) this.applyStructureVisual(structure);
@@ -2090,9 +2029,6 @@ export class RtsApp {
           demolishArmed: this.demolishArmed === structure,
           cancelConstructionArmed: this.cancelConstructionArmed === structure,
           detail: this.structureDetail(structure),
-          // Null when the data gives this building no `levels` at all — the
-          // absence of an upgrade path is the data's statement, not a UI decision.
-          upgrade: this.structureUpgradeView(structure),
         },
       };
     }
@@ -2111,60 +2047,34 @@ export class RtsApp {
         detail: {
           kind: "center",
           queue: this.workerProduction.queueSnapshot(PLAYER_OWNER),
-          age: this.ages.snapshot(PLAYER_OWNER),
           controlRadius: center.controlRadius,
           workerStats: this.options.unitBalance["worker_placeholder"]!,
-          requiredBuildingLabels: this.buildingLabels,
-          ageCost: this.options.ageBalance.town.cost,
-          stock: this.kingdoms.get(PLAYER_OWNER).wallet.snapshot(),
+          // The centre is the kingdom's whole progression surface (plan §5): one
+          // action, whether a level-up or the Town transition.
+          progression: this.centerProgressionView(PLAYER_OWNER),
         },
-        // The centre's radius and worker speed still ride on the age, but its
-        // in-age Lv1→3 ladder is the same research every other building runs.
-        upgrade: this.structureUpgradeView(center),
       },
     };
   }
 
   /**
-   * The selected building's level-up view: the system snapshot, what the next
-   * level buys (gain line), and how far an in-flight upgrade has run (progress
-   * bar). Null when the data gives the building no `levels` at all.
+   * The centre's progression view for the §51 panel: the live snapshot (which
+   * carries the single next action), how far an in-flight action has run, and the
+   * labels the Town action needs to name what it still waits on.
    */
-  private structureUpgradeView(structure: UpgradableStructure): StructureUpgradeView | null {
-    if (!structure.stats.levels) return null;
-    const snapshot = this.structureUpgrades.snapshot(structure);
-    const next = structure.stats.levels.find((entry) => entry.level === snapshot.level + 1);
-    const nextTier = structure.stats.progression?.[this.ageOf(structure.owner)]
-      .find((entry) => entry.level === snapshot.level + 1);
-    const gain: UpgradeGain | null = next || nextTier
-      ? {
-          maxHealth: nextTier?.maxHealth ?? next!.maxHealth,
-          maxHealthDelta: (nextTier?.maxHealth ?? next!.maxHealth) - structure.health.max,
-          populationCapacity: nextTier?.populationCapacity ?? next?.populationCapacity ?? null,
-          controlRadius: nextTier?.territory?.controlRadius ?? next?.territory?.controlRadius ?? null,
-          tradeCommission: nextTier?.tradeCommission ?? next?.tradeCommission ?? null,
-          workerCapacity: nextTier?.economy?.workerCapacity ?? null,
-          perWorkerPerMinute: nextTier?.economy?.perWorkerPerMinute ?? null,
-          localBufferCapacity: nextTier?.economy?.localBufferCapacity ?? null,
-          carryCapacity: nextTier?.economy?.carryCapacity ?? null,
-          attackDamage: nextTier?.defense?.attackDamage ?? null,
-          queueCapacity: nextTier?.queueCapacity ?? null,
-          storageCapacity: nextTier?.storageCapacity ?? null,
-        }
-      : null;
-    // While upgrading, `next` is the in-flight step (level is bumped only on
-    // completion), so its duration is the total the remaining time counts down.
-    const progress = snapshot.upgrading && next && next.durationSeconds > 0
-      ? Math.min(1, Math.max(0, (next.durationSeconds - snapshot.remainingSeconds) / next.durationSeconds))
+  private centerProgressionView(owner: UnitOwner): CenterProgressionView {
+    const snapshot = this.progression.snapshot(owner);
+    const action = snapshot.nextAction;
+    const progress = snapshot.upgrading && action && action.durationSeconds > 0
+      ? Math.min(1, Math.max(0, (action.durationSeconds - snapshot.remainingSeconds) / action.durationSeconds))
       : 0;
     return {
       snapshot,
-      gain,
       progress,
-      lockedReason: this.ages.isUpgrading(structure.owner)
-        ? "Kasaba Çağına geçiliyor; çağ tamamlanana kadar yapı yükseltmeleri kapalı."
-        : null,
-      stock: this.kingdoms.get(structure.owner).wallet.snapshot(),
+      requiredBuildingLabels: this.buildingLabels,
+      settlementLabel: this.options.ageBalance.settlement.label,
+      townLabel: this.options.ageBalance.town.label,
+      stock: this.kingdoms.get(owner).wallet.snapshot(),
     };
   }
 
@@ -2237,11 +2147,10 @@ export class RtsApp {
       this.cancelSelectedConstruction();
       return;
     }
-    if (id === UPGRADE_ACTION) {
-      // The selected building identifies a type-wide research; all completed
-      // structures of that type receive the level together.
-      const selected = this.selection.selectedStructure() ?? this.selection.selectedCenter();
-      if (selected) this.startStructureUpgrade(selected);
+    if (id === CENTER_LEVEL_UP_ACTION) {
+      // Centre-led progression: the one in-age level-up (Lv1→2 / Lv2→3) lifts the
+      // whole kingdom, only ever started from the selected Merkez.
+      this.startCenterLevelUpgrade();
       return;
     }
     if (id.startsWith(TRAIN_ACTION_PREFIX)) {
@@ -2370,7 +2279,9 @@ export class RtsApp {
         // panel that judged connection by footprint while training judged it by
         // centre point would call a working Barracks "Kontrol Dışı".
         connected: this.territory.ownerAt(structure.x, structure.z) === structure.owner,
-        upgrading: this.structureUpgrades.isUpgrading(structure),
+        // Centre-led progression never pauses a Barracks (plan §4), so military
+        // production is never suspended by a level-up or age transition.
+        upgrading: false,
         // The tier gate comes from the system that enforces it, never from a
         // level check written again here (plan §45: the gate lives in data).
         roster: this.barracksProduction.trainableUnits(structure),
@@ -2603,7 +2514,9 @@ export class RtsApp {
   private queueUnit(unitId: string): void {
     const label = this.options.unitBalance[unitId]?.label ?? unitId;
     const stats = this.options.unitBalance[unitId];
-    const requiredLevel = stats?.requiredBuildingLevel ?? 2;
+    const requiredTier = stats
+      ? `${stats.requiredAge === "town" ? this.options.ageBalance.town.label : this.options.ageBalance.settlement.label} Lv${stats.requiredSettlementLevel}`
+      : "gerekli kademe";
     const buildingLabel = stats
       ? this.options.buildingBalance[stats.productionBuildingId]?.label ?? stats.productionBuildingId
       : "askerî yapı";
@@ -2615,7 +2528,7 @@ export class RtsApp {
       "unknown-unit": `${label} askerî yapıda üretilemiyor.`,
       "no-completed-production-building": `Önce tamamlanmış bir ${buildingLabel} kurun.`,
       "requires-town-age": `${label} Kasaba Çağında açılır.`,
-      "requires-production-building-upgrade": `${label} için ${buildingLabel} Lv${requiredLevel} yükseltmesi gerekir.`,
+      "requires-production-building-upgrade": `${label} için ${requiredTier} gerekir (Merkezden yükseltin).`,
       "queue-full": `Üretim kuyruğu dolu (${queuedCount}/${queueCapacity}).`,
       "exit-blocked": `${label} çıkışı engelli; ${buildingLabel} çevresini açın.`,
       "insufficient-resources": `${label} için kaynak yetersiz.`,
@@ -2676,63 +2589,58 @@ export class RtsApp {
     // Read before the call: a started upgrade has already reserved the cost, and
     // a shortfall computed after it would be measuring the wrong wallet.
     const cost = this.options.ageBalance.town.cost;
+    const before = this.progression.snapshot(PLAYER_OWNER);
+    const missing = before.nextAction?.missingBuildingIds ?? [];
+    const missingLabels = missing.map((id) => this.buildingLabels.get(id) ?? id);
     const shortfall = formatCostShortfall(cost, this.kingdoms.get(PLAYER_OWNER).wallet.snapshot());
-    const result = this.ages.startTownUpgrade(PLAYER_OWNER);
-    const snapshot = this.ages.snapshot(PLAYER_OWNER);
+    const result = this.progression.startTownUpgrade(PLAYER_OWNER);
+    const snapshot = this.progression.snapshot(PLAYER_OWNER);
+    const townLabel = this.options.ageBalance.town.label;
     const message: Record<typeof result, string> = {
-      started: `Kasaba Çağı yükseltmesi başladı (${this.options.ageBalance.town.upgradeSeconds} sn). Merkez işçi üretimi durdu.`,
-      "already-town": "Zaten Kasaba Çağındasınız.",
-      "already-upgrading": `Kasaba Çağı yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`,
-      "no-command-center": "Kasaba Çağı için Merkez gerekli.",
-      "command-center-level":
-        `Kasaba Çağı için Merkez Lv${snapshot.requiredCenterLevel} gerekir (şu an Lv${snapshot.centerLevel}).`,
-      "missing-requirements": `Kasaba Çağı için eksik yapılar: ${snapshot.missingBuildingIds.join(", ")}.`,
+      started: `${townLabel} Çağı yükseltmesi başladı (${this.options.ageBalance.town.upgradeSeconds} sn). Merkez işçi üretimi durdu.`,
+      "already-town": `Zaten ${townLabel} Çağındasınız.`,
+      "already-upgrading": `Merkez ilerlemesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`,
+      "no-command-center": `${townLabel} Çağı için Merkez gerekli.`,
+      "settlement-level":
+        `${townLabel} Çağı için önce ${this.options.ageBalance.settlement.label} Lv3 gerekir (şu an Lv${snapshot.level}).`,
+      "missing-requirements": `${townLabel} Çağı için eksik yapılar: ${missingLabels.join(", ")}.`,
       "insufficient-resources": shortfall
-        ? `Kasaba Çağı için ${shortfall} daha gerekli (toplam ${formatResourceCost(cost)}).`
-        : `Kasaba Çağı için kaynak yetersiz (${formatResourceCost(cost)}).`,
+        ? `${townLabel} Çağı için ${shortfall} daha gerekli (toplam ${formatResourceCost(cost)}).`
+        : `${townLabel} Çağı için kaynak yetersiz (${formatResourceCost(cost)}).`,
     };
     this.buildPalette.setActionMessage(message[result]);
     this.syncAgeUi();
   }
 
   /**
-   * Start the selected building type's next in-age level research.
-   *
-   * The selected instance is only the command surface: House/Depot/Barracks
-   * research applies its completed level to every completed matching structure.
+   * Start the kingdom's next centre level-up (Lv1→2 / Lv2→3). The whole kingdom
+   * advances together on completion; a level-up carries no building prerequisite.
    */
-  private startStructureUpgrade(structure: UpgradableStructure): void {
-    if (this.ages.isUpgrading(structure.owner)) {
-      this.buildPalette.setActionMessage("Kasaba Çağına geçiliyor; çağ tamamlanana kadar yapı yükseltmeleri kapalı.");
-      return;
-    }
-    const label = structure.stats.label;
-    const nextLevel = structure.level + 1;
-    // Read before the call, for the same reason the age button does: a started
-    // research has already reserved its cost out of this wallet.
-    const nextCost = this.structureUpgrades.snapshot(structure).nextCost ?? {};
-    const shortfall = formatCostShortfall(nextCost, this.kingdoms.get(structure.owner).wallet.snapshot());
-    const result = this.structureUpgrades.start(structure);
-    const startedNote: Record<string, string> = {
-      barracks: " Birlik üretimi geçici olarak durur.",
-      depot: " Yol bağlantısı korunur.",
-      outpost: " Kontrol alanı tamamlanınca büyür.",
-    };
+  private startCenterLevelUpgrade(): void {
+    const before = this.progression.snapshot(PLAYER_OWNER);
+    const action = before.nextAction;
+    const targetLabel = action && action.kind === "level"
+      ? this.tierLabel(action.targetAge, action.targetLevel)
+      : this.tierLabel(before.age, before.level);
+    const cost = action?.cost ?? {};
+    const shortfall = formatCostShortfall(cost, this.kingdoms.get(PLAYER_OWNER).wallet.snapshot());
+    const result = this.progression.startLevelUpgrade(PLAYER_OWNER);
+    const snapshot = this.progression.snapshot(PLAYER_OWNER);
     const message: Record<typeof result, string> = {
-      started: `Tüm ${label} yapıları için Lv${nextLevel} yükseltmesi başladı.${startedNote[structure.stats.id] ?? ""}`,
-      "no-eligible-structure": `Yükseltilecek ${label} yok.`,
-      "at-max-level": `${label} zaten en yüksek seviyede.`,
-      "under-construction": `${label} önce inşaatını tamamlamalı.`,
-      "already-upgrading": `${label} yükseltmesi zaten sürüyor.`,
+      started: `${targetLabel} yükseltmesi başladı: tamamlanınca tüm yapılarınız gelişir.`,
+      "at-max-level": "Krallık en yüksek kademede.",
+      "already-upgrading": `Merkez ilerlemesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`,
+      "no-command-center": "Seviye yükseltmesi için Merkez gerekli.",
       "insufficient-resources": shortfall
-        ? `${label} Lv${nextLevel} için ${shortfall} daha gerekli (toplam ${formatResourceCost(nextCost)}).`
-        : `${label} Lv${nextLevel} için kaynak yetersiz.`,
+        ? `${targetLabel} için ${shortfall} daha gerekli (toplam ${formatResourceCost(cost)}).`
+        : `${targetLabel} için kaynak yetersiz.`,
     };
     this.buildPalette.setActionMessage(message[result]);
+    this.syncAgeUi();
   }
 
   private syncAgeUi(): void {
-    this.buildPalette.setAgeState(this.ages.snapshot(PLAYER_OWNER));
+    this.buildPalette.setAgeState(this.progression.snapshot(PLAYER_OWNER));
   }
 
 }

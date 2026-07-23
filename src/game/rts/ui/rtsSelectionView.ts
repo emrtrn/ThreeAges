@@ -25,8 +25,7 @@ import type { ProducerLogisticsStatus } from "../economy/productionLogisticsSyst
 import type { DepotNodeStatus } from "../economy/depotLogisticsSystem";
 import type { BarracksQueueSnapshot } from "../structures/barracksProductionSystem";
 import type { WorkerQueueSnapshot } from "../structures/workerProductionSystem";
-import type { StructureUpgradeSnapshot } from "../structures/structureUpgradeSystem";
-import { centerLevelReadyForTown, type AgeSnapshot } from "../progression/ageSystem";
+import type { ProgressionSnapshot } from "../progression/kingdomProgressionSystem";
 import type { MarketTradeSnapshot } from "../economy/marketTradeSystem";
 import { formatCostShortfall, formatResourceCost, resourceLabel } from "./resourceLabels";
 
@@ -136,18 +135,27 @@ export interface RosterEntry {
 export interface CenterDetailView {
   readonly kind: "center";
   readonly queue: WorkerQueueSnapshot;
-  readonly age: AgeSnapshot;
   readonly controlRadius: number;
   readonly workerStats: UnitBalanceStats;
-  /**
-   * Building id → label, so the age button can name what it is waiting for in
-   * the player's words. `missingBuildingIds` is ids, and "farm, lumber_camp" is
-   * the data model talking, not the game.
-   */
+  /** The kingdom's centre-led progression: the one action, its cost, and its state. */
+  readonly progression: CenterProgressionView;
+}
+
+/**
+ * The centre's whole progression surface — the single place the kingdom advances
+ * its tier. It exposes exactly one next action ({@link ProgressionSnapshot.nextAction}),
+ * be it a level-up or the Town transition, so the panel never has to choose
+ * between two competing upgrade buttons.
+ */
+export interface CenterProgressionView {
+  readonly snapshot: ProgressionSnapshot;
+  /** How far an in-flight action has run, 0..1 (0 when idle). */
+  readonly progress: number;
+  /** Building id → label, so the Town action can name what it still waits on. */
   readonly requiredBuildingLabels: ReadonlyMap<string, string>;
-  /** The age's four-resource price, so the button can quote it before the click. */
-  readonly ageCost: Readonly<Record<string, number>>;
-  /** The owner's live stock, for naming what {@link ageCost} is still short of. */
+  readonly settlementLabel: string;
+  readonly townLabel: string;
+  /** The owner's live stock, for naming what the next action's cost is short of. */
   readonly stock: Readonly<Record<string, number>>;
 }
 
@@ -179,60 +187,6 @@ export type StructureDetailView =
   | PassiveDetailView
   | CenterDetailView;
 
-/**
- * What one level step buys, so the panel can show the gain next to its cost
- * (plan Faz 3: "seviye + maliyet + kazanım gösterimi"). Absolute figures rather
- * than "the data step", because the player reads a total ("240 can"), and the
- * one delta that matters — extra health — is computed against the live building.
- */
-export interface UpgradeGain {
-  /** Maximum health at the next level. */
-  readonly maxHealth: number;
-  /** Extra maximum health the step adds over the building's current level. */
-  readonly maxHealthDelta: number;
-  /** Population capacity the next level supplies, or null when it grants none. */
-  readonly populationCapacity: number | null;
-  /** Control radius the next level supplies, or null when it grants none. */
-  readonly controlRadius: number | null;
-  /**
-   * The Market spread the next level trades at, or null when the step does not
-   * touch it. Faz M3: this is what makes levelling a Market a decision — the
-   * building's other gains are health, and health is not why a Market is built.
-   */
-  readonly tradeCommission: number | null;
-  readonly workerCapacity?: number | null;
-  readonly perWorkerPerMinute?: number | null;
-  readonly localBufferCapacity?: number | null;
-  readonly carryCapacity?: number | null;
-  readonly attackDamage?: number | null;
-  readonly queueCapacity?: number | null;
-  readonly storageCapacity?: Readonly<Record<string, number>> | null;
-}
-
-/**
- * The type-wide level-up path, when the building's data declares `levels`. It
- * is started from one selected structure but upgrades every completed structure
- * of that type for the owner; the next level's cost and state live entirely in
- * {@link StructureUpgradeSnapshot}.
- *
- * {@link gain} is the next step's benefits, or null at max level — it rides
- * alongside the snapshot so the panel can name what the cost is buying.
- * {@link progress} is how far the in-flight level-up has run (0..1), 0 when idle.
- */
-export interface StructureUpgradeView {
-  readonly snapshot: StructureUpgradeSnapshot;
-  readonly gain: UpgradeGain | null;
-  readonly progress: number;
-  /** A broader progression action temporarily blocks new structure research. */
-  readonly lockedReason?: string | null;
-  /**
-   * The owner's live stock, for naming what the next level's cost is short of.
-   * Like the age button, affordability never disables the level-up — it only
-   * decides what the tooltip and the click's answer say.
-   */
-  readonly stock?: Readonly<Record<string, number>>;
-}
-
 export interface SelectedStructureView {
   readonly id: number;
   readonly label: string;
@@ -248,8 +202,6 @@ export interface SelectedStructureView {
   /** True once the player has clicked "İnşaatı İptal Et" on this site. */
   readonly cancelConstructionArmed?: boolean;
   readonly detail: StructureDetailView;
-  /** Null when the data gives this building no upgrade at all. */
-  readonly upgrade: StructureUpgradeView | null;
 }
 
 export type RtsSelectionView =
@@ -308,7 +260,8 @@ export const TRAIN_ACTION_PREFIX = "train:";
 export const TRAIN_WORKER_ACTION = "train-worker";
 export const AGE_UP_ACTION = "age-up";
 export const RALLY_ACTION = "rally";
-export const UPGRADE_ACTION = "upgrade";
+/** The centre's in-age level-up (Lv1→2 / Lv2→3); the Town step uses {@link AGE_UP_ACTION}. */
+export const CENTER_LEVEL_UP_ACTION = "center-level-up";
 export const DEMOLISH_ACTION = "demolish";
 export const CANCEL_CONSTRUCTION_ACTION = "cancel-construction";
 export const TRADE_BUY_ACTION_PREFIX = "trade-buy:";
@@ -476,25 +429,22 @@ function describeStructure(structure: SelectedStructureView): SelectionPanelCont
       health: { current: structure.health, max: structure.maxHealth },
     };
   }
-  const upgrade = upgradeAction(structure);
-  const gainLine = upgradeGainLine(structure);
-  const lines = gainLine ? [...base.lines, gainLine] : base.lines;
-  // Demolish sits last on every building panel, after the upgrade: the row reads
-  // left-to-right from what the building can become to what removes it.
-  // The centre reaches here wrapped as a structure (`detail.kind === "center"`),
-  // so demolish has to be excluded on the detail, not on the outer kind: razing
-  // your own centre is the defeat condition, which is a thing you lose, not a
-  // thing you order.
+  // Centre-led progression: a building carries no upgrade button of its own — its
+  // tier is read-only (shown in the panel title, e.g. "Depo · Kasaba Lv2"), and
+  // the whole level/age ladder lives on the Merkez. Only the centre's own panel
+  // (built in `describeCenter`) offers a progression action and a progress bar.
+  //
+  // Demolish sits last on every building panel. The centre reaches here wrapped
+  // as a structure (`detail.kind === "center"`), so it is excluded on the detail:
+  // razing your own centre is the defeat condition, a thing you lose, not order.
   const actions = [
     ...base.actions,
-    ...(upgrade ? [upgrade] : []),
     ...(structure.detail.kind === "center" ? [] : [demolishAction(structure)]),
   ];
   return {
     ...base,
-    lines,
     actions,
-    progress: upgradeProgress(structure),
+    progress: structure.detail.kind === "center" ? centerProgress(structure.detail.progression) : null,
     portrait: structure.portrait ?? null,
     selectionCount: 1,
     health: { current: structure.health, max: structure.maxHealth },
@@ -559,82 +509,80 @@ function demolishAction(structure: SelectedStructureView): SelectionAction {
   };
 }
 
-/**
- * The level-up progress bar. Present only while a level-up is actually in flight
- * — a completed or never-started upgrade is a button, not a bar — and it names
- * the level it is climbing to so the bar reads as "Lv2 yükseltmesi", not just a
- * fill. The fraction comes straight from {@link StructureUpgradeView.progress}.
- */
-function upgradeProgress(structure: SelectedStructureView): SelectionProgress | null {
-  const upgrade = structure.upgrade;
-  if (!upgrade || !upgrade.snapshot.upgrading) return null;
-  return {
-    label: `Lv${upgrade.snapshot.level + 1} yükseltmesi`,
-    value: upgrade.progress,
-    remainingSeconds: upgrade.snapshot.remainingSeconds,
-  };
+/** Player-facing name of the tier one centre action produces, e.g. "Kasaba Lv2". */
+function tierName(view: CenterProgressionView, age: "settlement" | "town", level: number): string {
+  return `${age === "town" ? view.townLabel : view.settlementLabel} Lv${level}`;
 }
 
 /**
- * The one line that turns "Lv2'ye Yükselt" into a decision: what the next level
- * grants. Health is shown as a total with the delta in parentheses; capacity and
- * radius, when the step sets them, as the totals the player will read on the
- * levelled building. Null once the building is at max or its data grants nothing.
+ * The centre's progression progress bar. Present only while an action is in
+ * flight — a completed or idle progression is a button, not a bar — and it names
+ * whichever action is running (a level-up or the Town transition).
  */
-function upgradeGainLine(structure: SelectedStructureView): string | null {
-  const upgrade = structure.upgrade;
-  if (!upgrade?.gain || upgrade.snapshot.completed) return null;
-  const { gain } = upgrade;
-  const nextLevel = upgrade.snapshot.level + 1;
-  const parts = [`${Math.round(gain.maxHealth)} can (+${Math.round(gain.maxHealthDelta)})`];
-  if (gain.populationCapacity !== null) parts.push(`${gain.populationCapacity} nüfus`);
-  if (gain.controlRadius !== null) parts.push(`${gain.controlRadius} kontrol yarıçapı`);
-  if (gain.tradeCommission !== null) parts.push(`%${Math.round(gain.tradeCommission * 100)} komisyon`);
-  if (gain.workerCapacity != null) parts.push(`${gain.workerCapacity} işçi`);
-  if (gain.perWorkerPerMinute != null) parts.push(`${gain.perWorkerPerMinute}/dk işçi başı üretim`);
-  if (gain.localBufferCapacity != null) parts.push(`${gain.localBufferCapacity} yerel tampon`);
-  if (gain.carryCapacity != null) parts.push(`${gain.carryCapacity} taşıma`);
-  if (gain.attackDamage != null) parts.push(`${gain.attackDamage} ok hasarı`);
-  if (gain.queueCapacity != null) parts.push(`${gain.queueCapacity} sıra kapasitesi`);
-  if (gain.storageCapacity != null) {
-    parts.push(`Depo +${Object.entries(gain.storageCapacity).map(([resourceId, amount]) => `${amount} ${resourceLabel(resourceId)}`).join(", ")}`);
-  }
-  return `Lv${nextLevel}: ${parts.join(" · ")}`;
+function centerProgress(view: CenterProgressionView): SelectionProgress | null {
+  const { snapshot } = view;
+  if (!snapshot.upgrading || !snapshot.nextAction) return null;
+  const action = snapshot.nextAction;
+  const label = action.kind === "town"
+    ? `${view.townLabel} Çağı`
+    : `${tierName(view, action.targetAge, action.targetLevel)} yükseltmesi`;
+  return { label, value: view.progress, remainingSeconds: snapshot.remainingSeconds };
 }
 
 /**
- * The building's level-up button starts a type-wide research from the selected
- * building. No age gate stands between the player and it; completion upgrades
- * every completed matching structure for that owner.
+ * The centre's single progression action — the one place the kingdom advances.
+ * It is a level-up while below Lv3, the Town transition at Settlement Lv3, and a
+ * disabled "top tier" note at Town Lv3. A level-up carries no prerequisite and
+ * its hint is the whole point ("tüm yapılar gelişir"); the Town action names the
+ * buildings it still waits on, exactly as the old age button did.
+ *
+ * Affordability never disables it: the wallet moves every frame, so the price
+ * rides on the button and the shortfall in the hint, and the click gives the
+ * final answer.
  */
-function upgradeAction(structure: SelectedStructureView): SelectionAction | null {
-  const upgrade = structure.upgrade;
-  if (!upgrade) return null;
-  const { snapshot } = upgrade;
-  if (snapshot.completed) {
+function centerProgressionAction(view: CenterProgressionView): SelectionAction {
+  const { snapshot } = view;
+  const action = snapshot.nextAction;
+  if (!action) {
     return {
-      id: UPGRADE_ACTION,
+      id: CENTER_LEVEL_UP_ACTION,
       label: "En Üst Seviyede",
       cost: null,
       enabled: false,
-      reason: `Tüm ${structure.label} yapıları en yüksek seviyede (Lv${snapshot.level}).`,
+      reason: `Krallık en yüksek kademede (${tierName(view, snapshot.age, snapshot.level)}).`,
     };
   }
-  const nextLevel = snapshot.level + 1;
-  const reason = upgrade.lockedReason
-    ?? (snapshot.upgrading
-      ? `Lv${nextLevel} yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
-      : null);
-  const nextCost = snapshot.nextCost ?? {};
-  const cost = formatResourceCost(nextCost);
-  const shortfall = upgrade.stock ? formatCostShortfall(nextCost, upgrade.stock) : null;
+  const cost = formatResourceCost(action.cost);
+  const shortfall = formatCostShortfall(action.cost, view.stock);
+  if (action.kind === "town") {
+    const missing = action.missingBuildingIds.map((id) => view.requiredBuildingLabels.get(id) ?? id);
+    const reason = snapshot.upgrading
+      ? `${view.townLabel} Çağı yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
+      : missing.length > 0
+        ? `Önce şu yapılar gerekir: ${missing.join(", ")}.`
+        : null;
+    return {
+      id: AGE_UP_ACTION,
+      label: `${view.townLabel} Çağına Geç`,
+      cost,
+      enabled: reason === null,
+      reason,
+      hint: shortfall ? `Eksik: ${shortfall}. Toplam maliyet: ${cost}.` : `Maliyet: ${cost}.`,
+    };
+  }
+  const targetLabel = tierName(view, action.targetAge, action.targetLevel);
+  const reason = snapshot.upgrading
+    ? `${targetLabel} yükseltmesi sürüyor (${Math.ceil(snapshot.remainingSeconds)} sn).`
+    : null;
   return {
-    id: UPGRADE_ACTION,
-    label: `Lv${nextLevel}'ye Yükselt`,
+    id: CENTER_LEVEL_UP_ACTION,
+    label: `${targetLabel}'ye Yükselt`,
     cost,
     enabled: reason === null,
     reason,
-    hint: shortfall ? `Eksik: ${shortfall}. Toplam maliyet: ${cost}.` : `Maliyet: ${cost}.`,
+    hint: shortfall
+      ? `Tüm yapılar ${targetLabel} olur. Eksik: ${shortfall}.`
+      : `Tüm yapılar ${targetLabel} olur. Maliyet: ${cost}.`,
   };
 }
 
@@ -743,13 +691,11 @@ function describeCenter(
   summary: string,
   detail: CenterDetailView,
 ): SelectionPanelContent {
-  const { queue, age } = detail;
-  const isTown = age.age === "town";
-  // The age button does not exist until the centre is levelled far enough. A
-  // greyed-out button would read as "you failed a check"; the truth is the age
-  // has not opened yet, so the panel says what opens it on a line instead and
-  // leaves the centre's own level-up button as the only thing to press.
-  const centerReady = centerLevelReadyForTown(age);
+  const { queue, progression } = detail;
+  const { snapshot } = progression;
+  // Only the Town transition pauses the centre's worker queue (plan §4); a plain
+  // level-up leaves it running, so worker production is refused only then.
+  const townUpgrading = snapshot.upgrading && snapshot.upgradeKind === "town";
   return {
     title,
     summary,
@@ -758,9 +704,8 @@ function describeCenter(
       queue.trainingRemainingSeconds === null
         ? "Üretim yok."
         : `Üretiliyor: ${detail.workerStats.label} — ${Math.ceil(queue.trainingRemainingSeconds)} sn`,
-      `Çağ: ${isTown ? "Kasaba" : "Yerleşim"}${age.upgrading ? " (yükseltiliyor)" : ""}`,
+      `Kademe: ${tierName(progression, snapshot.age, snapshot.level)}${snapshot.upgrading ? " (yükseltiliyor)" : ""}`,
       `Kontrol yarıçapı: ${detail.controlRadius}`,
-      ...(centerReady ? [] : [`Kasaba Çağı için Merkez Lv${age.requiredCenterLevel} gerekir.`]),
     ],
     actions: [
       {
@@ -770,15 +715,15 @@ function describeCenter(
         // The centre's own gates only. Cost and population are checked when the
         // order is placed and answered with a message: pre-computing them here
         // would restate two systems' rules and could disagree with them.
-        enabled: !age.upgrading,
-        reason: age.upgrading ? "Kasaba Çağı yükseltmesi sürerken Merkez üretim yapamaz." : null,
+        enabled: !townUpgrading,
+        reason: townUpgrading ? `${progression.townLabel} Çağı yükseltmesi sürerken Merkez üretim yapamaz.` : null,
       },
-      ...(centerReady ? [ageUpAction(age, detail)] : []),
+      centerProgressionAction(progression),
     ],
     hint: STRUCTURE_HINT,
-    tooltip: age.upgrading
-      ? "Yükseltme tamamlanınca Merkez kuyruğu kaldığı yerden devam eder."
-      : "Merkez işçi üretir ve krallığın kontrol alanının çekirdeğidir.",
+    tooltip: snapshot.upgrading
+      ? "Yükseltme tamamlanınca Merkez etkileri tüm yapılara uygulanır."
+      : "Merkez işçi üretir, krallığın kademesini yükseltir ve kontrol alanının çekirdeğidir.",
   };
 }
 
@@ -925,40 +870,6 @@ function tradeAction(
 }
 
 /**
- * The age button. Its refusal order mirrors `AgeSystem.startTownUpgrade`, and
- * the prerequisite comes from `AgeSnapshot.missingBuildingIds` — the system
- * already computes exactly which buildings are missing, so the button names them
- * instead of failing only once the player has pressed it (§52: a thing that will
- * not work says why).
- *
- * Affordability deliberately does *not* gate it: the wallet can change between
- * frames, and a button that greys out mid-reach is worse than one that answers.
- * So the price rides on the button and the shortfall rides in its tooltip —
- * the player learns what it costs, and what they are short of, without the
- * button ever lying about whether the age is open to them.
- */
-function ageUpAction(age: AgeSnapshot, detail: CenterDetailView): SelectionAction {
-  const missing = age.missingBuildingIds.map((id) => detail.requiredBuildingLabels.get(id) ?? id);
-  const reason = age.age === "town"
-    ? "Kasaba Çağı zaten tamamlandı."
-    : age.upgrading
-      ? "Kasaba Çağı yükseltmesi sürüyor."
-      : missing.length > 0
-        ? `Önce şu yapılar gerekir: ${missing.join(", ")}.`
-        : null;
-  const cost = formatResourceCost(detail.ageCost);
-  const shortfall = formatCostShortfall(detail.ageCost, detail.stock);
-  return {
-    id: AGE_UP_ACTION,
-    label: "Kasaba Çağına Geç",
-    cost,
-    enabled: reason === null,
-    reason,
-    hint: shortfall ? `Eksik: ${shortfall}. Toplam maliyet: ${cost}.` : `Maliyet: ${cost}.`,
-  };
-}
-
-/**
  * One roster button. The refusal order matters and mirrors
  * `BarracksProductionSystem.queueUnit`: the tier gate is reported before
  * anything else, so a player who cannot build the unit *at all* is told that
@@ -967,10 +878,13 @@ function ageUpAction(age: AgeSnapshot, detail: CenterDetailView): SelectionActio
 function trainAction(entry: RosterEntry, detail: MilitaryDetailView): SelectionAction {
   const full = detail.queue.queued >= detail.queue.capacity;
   const buildingLabel = entry.stats.productionBuildingId === "archery_range" ? "Okçuluk Alanı" : "Kışla";
+  // The gate is the kingdom's global centre tier, not this building's level: a
+  // pure age gate (Lv1) reads "… Çağında açılır"; a higher tier names the level.
+  const reqAgeLabel = entry.stats.requiredAge === "town" ? "Kasaba" : "Yerleşim";
   const reason = !entry.unlocked
-    ? entry.stats.requiredAge === "town"
-      ? `${entry.stats.label} Kasaba Çağında açılır.`
-      : `${entry.stats.label} için ${buildingLabel} Lv${entry.stats.requiredBuildingLevel} gerekir.`
+    ? entry.stats.requiredSettlementLevel <= 1
+      ? `${entry.stats.label} ${reqAgeLabel} Çağında açılır.`
+      : `${entry.stats.label} için ${reqAgeLabel} Lv${entry.stats.requiredSettlementLevel} gerekir.`
     : !detail.connected
       ? `Kontrol Dışı: bu ${buildingLabel} birlik üretemez.`
       : detail.upgrading
