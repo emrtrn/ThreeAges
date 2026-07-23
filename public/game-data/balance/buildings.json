@@ -392,7 +392,7 @@
     "economy": {
       "resourceId": "food",
       "workerCapacity": 3,
-      "perWorkerPerMinute": 7,
+      "perWorkerPerMinute": 10,
       "localBufferCapacity": 40
     },
     "levels": [
@@ -422,7 +422,7 @@
           "maxHealth": 300,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 7,
+            "perWorkerPerMinute": 10,
             "localBufferCapacity": 40
           }
         },
@@ -431,7 +431,7 @@
           "maxHealth": 400,
           "economy": {
             "workerCapacity": 3,
-            "perWorkerPerMinute": 8,
+            "perWorkerPerMinute": 12,
             "localBufferCapacity": 50
           }
         },
@@ -440,7 +440,7 @@
           "maxHealth": 520,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 9,
+            "perWorkerPerMinute": 14,
             "localBufferCapacity": 60
           }
         }
@@ -451,7 +451,7 @@
           "maxHealth": 650,
           "economy": {
             "workerCapacity": 4,
-            "perWorkerPerMinute": 10,
+            "perWorkerPerMinute": 16,
             "localBufferCapacity": 80
           }
         },
@@ -460,7 +460,7 @@
           "maxHealth": 800,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 11,
+            "perWorkerPerMinute": 18,
             "localBufferCapacity": 100
           }
         },
@@ -469,7 +469,7 @@
           "maxHealth": 960,
           "economy": {
             "workerCapacity": 5,
-            "perWorkerPerMinute": 12,
+            "perWorkerPerMinute": 20,
             "localBufferCapacity": 120
           }
         }

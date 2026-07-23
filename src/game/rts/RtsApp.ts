@@ -1211,6 +1211,21 @@ export class RtsApp {
           label: `${queue.trainingLabel ?? "Asker"} üretiliyor · ${queue.queued}/${queue.capacity}`,
         });
       }
+      // The in-age level research (Lv1→2→3) is type-wide, so every completed
+      // building of the type shows its own bar while the research runs — the
+      // same feedback the age upgrade gets, floated above the building rather
+      // than hidden in the selection panel the player has probably closed.
+      const levelUp = this.levelUpgradeOverlay(structure);
+      if (levelUp) {
+        entries.push({
+          id: `structure-level-upgrade-${structure.id}`,
+          x: structure.x,
+          y: 9.5,
+          z: structure.z,
+          progress: levelUp.progress,
+          label: levelUp.label,
+        });
+      }
       if (!structure.health.depleted && structure.health.ratio < 1 && this.healthBarVisible(structure.id)) {
         entries.push({
           id: `structure-health-${structure.id}`,
@@ -1250,7 +1265,37 @@ export class RtsApp {
         label: `Kasaba Çağı · ${Math.ceil(age.remainingSeconds)} sn`,
       });
     }
+    // The centre runs the same in-age Lv1→3 ladder as every building; its level
+    // research is locked while an age upgrade runs, so this bar and the one above
+    // are mutually exclusive and never stack.
+    const centerLevelUp = center ? this.levelUpgradeOverlay(center) : null;
+    if (center && centerLevelUp) {
+      entries.push({
+        id: "player-command-center-level-upgrade",
+        x: center.position.x,
+        y: 11,
+        z: center.position.z,
+        progress: centerLevelUp.progress,
+        label: centerLevelUp.label,
+      });
+    }
     this.worldProgressOverlay.update(this.cameraController.camera, this.canvas.clientWidth, this.canvas.clientHeight, entries);
+  }
+
+  /**
+   * Floating-bar state for an in-flight in-age level upgrade (Lv1→2→3), or null
+   * when the building's type has no research running. Duration comes from the
+   * next `levels` step so the fill matches the selection panel's exactly.
+   */
+  private levelUpgradeOverlay(structure: UpgradableStructure): { readonly progress: number; readonly label: string } | null {
+    const snapshot = this.structureUpgrades.snapshot(structure);
+    if (!snapshot.upgrading) return null;
+    const next = structure.stats.levels?.find((entry) => entry.level === snapshot.level + 1);
+    const duration = next?.durationSeconds ?? 0;
+    return {
+      progress: duration > 0 ? 1 - Math.min(1, snapshot.remainingSeconds / duration) : 0,
+      label: `Lv${snapshot.level + 1} yükseltmesi · ${Math.ceil(snapshot.remainingSeconds)} sn`,
+    };
   }
 
   /**
