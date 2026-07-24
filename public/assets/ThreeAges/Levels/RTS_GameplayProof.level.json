@@ -5,7 +5,28 @@
   "instances": [
     {
       "assetId": "mountain-group-1",
-      "placements": []
+      "placements": [
+        {
+          "position": [
+            -61.62,
+            0.08,
+            63.44
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -38.92,
+            0.08,
+            64.07
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
     },
     {
       "assetId": "rock-group",
@@ -124,6 +145,76 @@
             -33.83,
             0,
             17.05
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mountain-group-2",
+      "placements": [
+        {
+          "position": [
+            -53.98,
+            0.04,
+            63.57
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -64.59,
+            0.04,
+            55.87
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -63.62,
+            0.04,
+            50.73
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mountain-single",
+      "placements": [
+        {
+          "position": [
+            -50.03,
+            0.04,
+            64.16
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mountainlarge-single",
+      "placements": [
+        {
+          "position": [
+            -47.45,
+            0.1,
+            65.03
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,

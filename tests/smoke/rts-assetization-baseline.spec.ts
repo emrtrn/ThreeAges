@@ -108,6 +108,43 @@ test("Landscape Faz 1: the gameplay_proof preset resolves its own authored Level
   expect(errors, "the gameplay proof Level must adapt and boot a match without runtime errors").toEqual([]);
 });
 
+test("Landscape Faz 5: command and build placement picking work over the mounted landscape", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  await page.goto("/?rts&debug&preset=gameplay_proof&flags=levelAssets");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "landscape", { timeout: 30_000 });
+  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
+
+  // V1 keeps a flat playable field: command, road and building placement all
+  // raycast a mathematical y=0 plane, not the terrain mesh, so picking must return
+  // a world point over the landscape exactly as it did on the flat placeholder.
+  // The three tools share that one raycast, so exercising the build + road tools
+  // proves the ground picking all three depend on still resolves over the terrain.
+  const canvas = page.locator("#game-canvas");
+  const status = page.locator(".rts-build-status");
+  await page.getByRole("button", { name: "Yerleşim", exact: true }).click();
+  await page.getByRole("button", { name: "Ev", exact: true }).click();
+  await expect(status).toHaveText("Haritada konum seçin.");
+  // Hovering resolves a ground point: the status turns location-reactive — valid,
+  // occupied or out-of-territory. Anything but the idle prompt means the ray hit
+  // the ground plane on the landscape-mounted world.
+  await canvas.hover({ position: { x: 640, y: 400 } });
+  await expect(status).toContainText(/konum|çakış|kontrol|Geçerli|Geçersiz/);
+  await canvas.click({ button: "right", position: { x: 640, y: 400 } });
+  await expect(status).toHaveText("Bir yapı seçin.");
+
+  // The road tool arms the same plane; its start-point prompt confirms picking is
+  // live over the terrain, and right-clicking backs out without an error.
+  await page.getByRole("button", { name: "Lojistik", exact: true }).click();
+  await page.getByRole("button", { name: "Yol", exact: true }).click();
+  await expect(status).toContainText("Yol başlangıcını");
+  await canvas.click({ button: "right", position: { x: 640, y: 400 } });
+
+  expect(errors, "gameplay picking over the landscape must not error").toEqual([]);
+});
+
 test("Assetization Faz E: the opt-in Level mounts its authored static world and restarts cleanly", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));

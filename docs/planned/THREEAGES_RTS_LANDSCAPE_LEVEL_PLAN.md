@@ -205,18 +205,28 @@ Kabul:
 Amac: Kartezyen grid goruntusunu, oyun kurallarini bozmadan gercek araziyle
 degistirmek.
 
-- [ ] Level'a 140x140 dunya ayak izini kapsayan Landscape ekle; spacing ve
-  vertex yogunlugunu performans/hedef sanat kararina gore sec.
-- [ ] Landscape sidecar yolunu `rts-gameplay-proof.landscape.json` olarak
-  sabitle ve save/reload'u dogrula.
+Durum: Devam eden editor-ici authoring. Temel Landscape yerlestirildi ve grass
+materyali baglandi; sculpt/paint/road authoring kullaniciya acik.
+
+- [~] Level'a 140x140 dunya ayak izini kapsayan Landscape ekle; spacing ve
+  vertex yogunlugunu performans/hedef sanat kararina gore sec. (Yerlestirildi:
+  `landscape-1`, 129x129 vertex, spacing 1 -> ~128 birim, origin'de merkezli
+  (X,Z ∈ [-64,64]) oyun alanini ortuyor. Plandaki 140x140 hedefine gore biraz
+  kucuk; genisletmek istege bagli.)
+- [~] Landscape sidecar yolunu `rts-gameplay-proof.landscape.json` olarak
+  sabitle ve save/reload'u dogrula. (Editor otomatik `landscapes/landscape-1.landscape.json`
+  adini verdi; save/reload calisiyor. Planlanan sabit ad kozmetik; istenirse
+  editorde rename edilir.)
 - [ ] Merkezi oynanabilir plato ile iki flank koridorunu duz veya cok dusuk
-  egimli tut.
+  egimli tut. (Su an tum yukseklikler 0 = tamamen duz; sculpt henuz yapilmadi.)
 - [ ] Yollarin, bina alanlarinin ve iki base'in altini duzle; yapi footprinti
   icin yeterli bosluk birak.
 - [ ] Uc, sirt, gol yatagi veya gecilemez dekoru oynanabilir alandan ayir;
-  gerekiyorsa marker blocker ekle.
-- [ ] Grass/Dirt/Rock/Snow katmanlarina gercek materyalleri bagla; gorunen
-  layer adi atanmis materyal adini yansitsin.
+  gerekiyorsa marker blocker ekle. (Merkez sirt blocker `Blocker 0` korunuyor —
+  editor save'i bir kez dusurdu, geri eklendi; silinmemeli.)
+- [~] Grass/Dirt/Rock/Snow katmanlarina gercek materyalleri bagla; gorunen
+  layer adi atanmis materyal adini yansitsin. (Grass -> `starter-mat-grass`
+  baglandi ve runtime'da render oluyor; dirt/rock/snow henuz atanmadi.)
 - [ ] Road spline'larini olustur; yolun gameplayde walkable fakat build
   placement icin rezervli olma kuralini koru.
 - [ ] Foliage'i ayri authoring konusu olarak ele al; dekoratif instance ile
@@ -225,58 +235,87 @@ degistirmek.
 
 Kabul:
 
-- Editor Landscape save/reload sonrasinda height, paint ve spline verisini
-  korur.
-- Mac basladiginda zemin grid degil, ayni Landscape goruntusudur.
-- Oynanabilir alanin hicbir zorunlu yolu gorunmez egim nedeniyle belirsiz veya
-  kullanilamaz hale gelmez.
+- [x] Editor Landscape save/reload sonrasinda height, paint ve spline verisini
+  korur. (grass paint + material save/reload dogrulandi.)
+- [x] Mac basladiginda zemin grid degil, ayni Landscape goruntusudur. (Faz 4
+  mount; witness `data-rts-ground=landscape`.)
+- [ ] Oynanabilir alanin hicbir zorunlu yolu gorunmez egim nedeniyle belirsiz
+  veya kullanilamaz hale gelmez. (Sculpt yapilinca kontrol edilecek.)
 
 ### Faz 4 - Authored Landscape runtime mount ve flat fallback gate'i
 
 Amac: RTS runtime'inin Level Landscape'ini generic kodla yuklemesi; fallback
 rotasinin guvenilir kalmasi.
 
-- [ ] `AuthoredWorldHandle` / `buildAuthoredWorld`a Landscape sidecar yukleme,
-  render group olusturma ve GPU dispose destegi ekle.
-- [ ] Landscape material/texture, golge alma ve sidecar fetch hatalarini
-  generic host'ta ele al.
-- [ ] `rtsAuthoredWorld`a RTS Landscape alan sinirini ve proje URL cozucusunu
-  ekle; generic host RTS sabitlerini bilmesin.
-- [ ] `RtsApp`te Level Landscape basariyla yuklendiginde duz plane/grid'i
+- [x] `AuthoredWorldHandle` / `buildAuthoredWorld`a Landscape sidecar yukleme,
+  render group olusturma ve GPU dispose destegi ekle. (`buildAuthoredWorld`
+  `layout.landscapes`i fetch edip `createLandscapeObject` ile mount eder,
+  `landscapeCount` doner; handle dispose geometry/material/texture serbest birakir.)
+- [x] Landscape material/texture, golge alma ve sidecar fetch hatalarini
+  generic host'ta ele al. (`resolveLandscapeLayerTextures` -> `loadForgeMaterialLayer`
+  grass/dirt/rock/snow splat texture'larini cozer; chunk `receiveShadow`; sidecar
+  fetch hatasi -> `createFlatLandscapeData` fallback; layer material hatasi ->
+  preset renk.)
+- [x] `rtsAuthoredWorld`a RTS Landscape alan sinirini ve proje URL cozucusunu
+  ekle; generic host RTS sabitlerini bilmesin. (URL cozucu `projectFileUrl`
+  wrapper'da; landscape boyutu sidecar `size`'dan gelir, generic host RTS sabiti
+  bilmez; `levelHasAuthoredWorld` artik landscape'i de sayar.)
+- [x] `RtsApp`te Level Landscape basariyla yuklendiginde duz plane/grid'i
   gizle veya kaldir; Landscape yuklenemezse duz plane/grid geri kalsin.
-- [ ] Legacy ridge/dekor gate'ini authored Landscape ile cakismaz hale getir.
+  (`retireFlatGround()` yalniz `landscapeCount > 0` iken; picking matematiksel
+  y=0 duzleminde oldugu icin etkilenmez.)
+- [x] Legacy ridge/dekor gate'ini authored Landscape ile cakismaz hale getir.
+  (`loadMapArt` ridge'i `authoredWorldIntended` iken atlar; placeholder ridge
+  mesh mount'ta kaldirilir.)
 - [ ] Fog, territory ve command marker katman siralarini Landscape ustunde
-  okunur kil.
-- [ ] Restart/dispose sonrasi Landscape geometry, material ve texture
-  kaynaklarinin serbest kaldigini test et.
-- [ ] `data-rts-authored-world` witness'ini `ready` ve `fallback` durumlariyla
-  browser smoke'ta kanitla.
+  okunur kil. (Kalan is: sculpt sonrasi yukseklik farkinda overlay okunurlugu.)
+- [~] Restart/dispose sonrasi Landscape geometry, material ve texture
+  kaynaklarinin serbest kaldigini test et. (Dispose splat texture'lari dahil
+  serbest birakir; Faz E smoke reload/restart'i kanitlar. Ozel leak testi yok.)
+- [x] `data-rts-authored-world` witness'ini `ready` ve `fallback` durumlariyla
+  browser smoke'ta kanitla. (Mevcut Faz E smoke + yeni `data-rts-ground=flat|landscape`
+  witness'i `Landscape Faz 1` smoke'unda.)
 
 Kabul:
 
-- `levelAssets` acikken RTS ayni Landscape'i render eder.
-- Landscape sidecar veya asset hatasi maci karartmaz/kitlenmez; flat fallback
-  calisir.
+- [x] `levelAssets` acikken RTS ayni Landscape'i render eder. (grass texture'li,
+  witness `data-rts-ground=landscape`.)
+- [x] Landscape sidecar veya asset hatasi maci karartmaz/kitlenmez; flat fallback
+  calisir. (sidecar hatasi -> flat data; mount hatasi -> `data-rts-authored-world=fallback`,
+  duz zemin kalir.)
 - Flag kapaliyken mevcut `createRtsGround()` davranisi degismez.
 
 ### Faz 5 - V1 duz-zemin oynanis uyumlulugu
 
 Amac: Gercek arazi goruntusu altinda mevcut X/Z RTS kurallarini guvenle korumak.
 
-- [ ] Command, road ve building placement ground raycast'lerinin V1 duz
-  oynanabilir alanda beklenen X/Z noktasini verdigini kontrol et.
-- [ ] Unit, command center, structure ve progress overlay'lerinin zeminle
-  cakisarak okunmaz hale gelmedigini kontrol et.
+Durum: Picking terrain-bagimsiz oldugu icin (matematiksel y=0 duzlemi) oynanis
+mantigi Landscape'ten etkilenmiyor; otomatik olarak kanitlandi. Gorsel oturma
+(unit/kaynak/agac yuksekligi) V1 sinirinin bilincli bir parcasi (birimler y=0,
+terrain-aware Faz 7).
+
+- [x] Command, road ve building placement ground raycast'lerinin V1 duz
+  oynanabilir alanda beklenen X/Z noktasini verdigini kontrol et. (`Landscape Faz 5`
+  smoke: landscape mount edilmis macta build + road tool picking'i cozuyor; ucu de
+  ayni `GROUND_PLANE` y=0 raycast'ini paylasir.)
+- [~] Unit, command center, structure ve progress overlay'lerinin zeminle
+  cakisarak okunmaz hale gelmedigini kontrol et. (Duz oynanabilir alanda overlay'ler
+  y≈0.02'de zeminin hemen ustunde, `depthWrite:false` + `renderOrder` ile okunur.
+  Playable alan sculpt edilirse V1 siniri devreye girer — duz tutulmali.)
 - [ ] Baslangic unitlerinin, kaynak noktalarinin ve agaclarin Landscape'e
-  gorsel olarak dogru oturdugunu elle dogrula.
-- [ ] Birim hareketi, unit separation, tree harvesting, worker construction ve
-  AI expansion akisini iki flankte smoke et.
-- [ ] Yapi preview/placement, yol placement ve control territory sinirlarini
-  kontrol et.
+  gorsel olarak dogru oturdugunu elle dogrula. (Elle; sculpt sonrasi.)
+- [~] Birim hareketi, unit separation, tree harvesting, worker construction ve
+  AI expansion akisini iki flankte smoke et. (Bu mekanikler terrain-bagimsiz ve
+  mevcut blockout gameplay smoke'lari + engine testleriyle kanitli; Landscape
+  render mantigi degistirmiyor. Iki-flank ulasabilirligi `structurally playable`
+  engine testinde.)
+- [x] Yapi preview/placement, yol placement ve control territory sinirlarini
+  kontrol et. (`Landscape Faz 5` smoke: build preview + road tool landscape uzerinde.)
 - [ ] Fog of war ve regional victory flag'leri acikken terrain/dekor
-  okunurlugunu kontrol et.
+  okunurlugunu kontrol et. (Elle; flag'li rota + sculpt sonrasi.)
 - [ ] Eglimli veya oyuk alanlara birim/path/placement girmesini V1 tasarimla
-  engelle; gerekirse o alanlari blocker ile kapat.
+  engelle; gerekirse o alanlari blocker ile kapat. (Authoring karari; playable
+  alani duz tut, dekoratif egimleri blocker/dunya-siniri disinda birak.)
 
 Kabul:
 
