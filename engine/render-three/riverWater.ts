@@ -45,7 +45,7 @@ export interface BuildRiverWaterRibbonOptions {
   normalTileLength?: number;
   /** Optional Landscape data used to bake shallow/deep water into the ribbon. */
   landscapeData?: ForgeLandscapeData;
-  /** Static foam masks, evaluated into vertices when the river geometry is built. */
+  /** Legacy strip data is accepted for saved-layout compatibility, but ignored. */
   foamStamps?: readonly LayoutRiverWaterFoamStamp[];
   /** Per-segment flow/rapid overrides keyed by the Landscape spline segment id. */
   segmentProfiles?: readonly LayoutRiverWaterSegmentProfile[];
@@ -61,7 +61,6 @@ interface RiverSample extends RiverPolylineSample {
 
 const EPSILON = 1e-5;
 const DEFAULT_SAMPLE_SPACING = 1.25;
-const STATIC_FOAM_SAMPLE_SPACING = 0.75;
 const DEFAULT_NORMAL_TILE_LENGTH = 3;
 
 /**
@@ -125,44 +124,6 @@ function riverChains(spline: ForgeLandscapeSpline, sampleSpacing: number): River
   return chains;
 }
 
-function pointToSegmentDistanceXZ(
-  pointX: number,
-  pointZ: number,
-  startX: number,
-  startZ: number,
-  endX: number,
-  endZ: number,
-): number {
-  const dx = endX - startX;
-  const dz = endZ - startZ;
-  const lengthSquared = dx * dx + dz * dz;
-  const t = lengthSquared <= EPSILON ? 0 : Math.max(0, Math.min(1, ((pointX - startX) * dx + (pointZ - startZ) * dz) / lengthSquared));
-  return Math.hypot(pointX - (startX + dx * t), pointZ - (startZ + dz * t));
-}
-
-function staticFoamMask(
-  foamStamps: readonly LayoutRiverWaterFoamStamp[] | undefined,
-  x: number,
-  z: number,
-): number {
-  if (!foamStamps?.length) return 0;
-  let mask = 0;
-  for (const stamp of foamStamps) {
-    // Radial points are now rendered as animated overlay rings. Keep strips in
-    // this baked mask path for rapids/wakes, while old point data remains
-    // backwards compatible through the overlay below.
-    if (stamp.kind === "point") continue;
-    const end = stamp.kind === "strip" ? stamp.endPosition ?? stamp.position : stamp.position;
-    const distance = pointToSegmentDistanceXZ(x, z, stamp.position[0], stamp.position[2], end[0], end[2]);
-    const falloff = Math.max(0, 1 - distance / Math.max(EPSILON, stamp.radius));
-    // Smoothstep keeps a readable core and a soft outer edge. Squaring the
-    // falloff made a point stamp disappear between this ribbon's sparse rows.
-    const feathered = falloff * falloff * (3 - 2 * falloff);
-    mask = Math.max(mask, stamp.intensity * feathered);
-  }
-  return mask;
-}
-
 /** Builds a spline ribbon with arc-length UVs and per-vertex flow data. */
 export function buildRiverWaterRibbon(
   spline: ForgeLandscapeSpline,
@@ -177,17 +138,14 @@ export function buildRiverWaterRibbon(
   const foamMasks: number[] = [];
   const flowSpeedMultipliers: number[] = [];
   const indices: number[] = [];
-  const hasStaticFoam = options.foamStamps?.some((stamp) => stamp.kind === "strip") ?? false;
-  // Static masks are baked at vertices, so add only the resolution needed to
-  // make authored rock/pier foam legible; ordinary rivers keep their cheaper 5-wide grid.
-  const width = hasStaticFoam ? 9 : 5;
+  // Strip Foam has been retired. Keep the legacy data loadable, but do not
+  // allocate mask resolution or render it into newly built river ribbons.
+  const width = 5;
   const tileLength = Math.max(EPSILON, options.normalTileLength ?? DEFAULT_NORMAL_TILE_LENGTH);
   const profiles = new Map((options.segmentProfiles ?? []).map((profile) => [profile.splineSegmentRef, profile]));
   let vertexBase = 0;
   const requestedSpacing = options.sampleSpacing ?? DEFAULT_SAMPLE_SPACING;
-  const sampleSpacing = hasStaticFoam
-    ? Math.min(requestedSpacing, STATIC_FOAM_SAMPLE_SPACING)
-    : requestedSpacing;
+  const sampleSpacing = requestedSpacing;
   for (const chain of riverChains(spline, Math.max(0.25, sampleSpacing))) {
     for (let index = 0; index < chain.length; index += 1) {
       const sample = chain[index]!;
@@ -226,7 +184,7 @@ export function buildRiverWaterRibbon(
           : options.surfaceLevel - 1;
         waterDepths.push(Math.max(0, options.surfaceLevel - terrainHeight));
         rapidness.push(segmentRapidness);
-        foamMasks.push(staticFoamMask(options.foamStamps, x, z));
+        foamMasks.push(0);
         flowSpeedMultipliers.push(flowSpeedMultiplier);
       }
     }
@@ -288,9 +246,8 @@ uniform vec3 shallowColor;
 uniform float opacity;
 uniform float bedVisibility;
 uniform float absorptionDistance;
-uniform float foamIntensity;
-uniform float foamScale;
-uniform float shoreWaveIntensity;
+uniform vec3 foamColor;
+uniform float foamOpacity;
 uniform float shoreWaveSpacing;
 uniform float shoreWaveSpeed;
 uniform float shoreWaveReach;
@@ -343,7 +300,7 @@ void main() {
   vec2 foamUv = vec2(
     vRiverUv.x * 0.78 - time * flowSpeed * vFlowSpeedMultiplier * 0.34,
     vRiverUv.y * 4.5
-  ) * max(foamScale, 0.1);
+  ) * 1.35;
   float broadFoamNoise = foamNoise(foamUv);
   float detailFoamNoise = foamNoise(foamUv * 2.13 + vec2(7.1, 3.7));
   float foamBreakup = smoothstep(0.38, 0.70, mix(broadFoamNoise, detailFoamNoise, 0.52));
@@ -357,19 +314,16 @@ void main() {
   ) * max(shoreWaveBreakupScale, 0.1);
   float textureBreakup = texture2D(foamNoiseMap, shoreNoiseUv).r;
   float shoreBreakup = mix(foamBreakup, textureBreakup, hasFoamNoiseMap);
-  // Authorable reach keeps the white fronts near the bank instead of letting
-  // their fade reach the middle of a broad river. The final 38% is feathered.
+  // The final 38% of Reach is feathered. This is intentionally fixed so Foam
+  // Opacity remains the single visible foam-strength control in Details.
   float shoreFadeStart = max(0.01, shoreWaveReach * 0.62);
   float shoreZone = 1.0 - smoothstep(shoreFadeStart, max(shoreFadeStart + 0.01, shoreWaveReach), inwardDistance);
   float shorePhase = fract(inwardDistance * shoreWaveSpacing - time * shoreWaveSpeed + shoreBreakup * 0.24);
   float shoreBands = smoothstep(0.78, 0.96, shorePhase);
-  float shoreFoam = shoreZone * shoreBands * smoothstep(0.34, 0.66, shoreBreakup) * shoreWaveIntensity;
+  float shoreFoam = shoreZone * shoreBands * smoothstep(0.34, 0.66, shoreBreakup);
   float rapidFoam = smoothstep(0.16, 0.75, vRapidness) * (0.28 + 0.72 * foamBreakup);
-  // Authored point/strip masks remain legible near an obstacle but are broken
-  // up at their boundary instead of filling an opaque circular decal.
-  float authoredFoam = vFoamMask * (0.36 + 0.64 * foamBreakup);
-  float foam = clamp((shoreFoam + rapidFoam) * foamIntensity + authoredFoam, 0.0, 1.0);
-  color = mix(color, vec3(0.91, 0.98, 0.96), foam * 0.92);
+  float foam = clamp(shoreFoam + rapidFoam, 0.0, 1.0);
+  color = mix(color, foamColor, foam * foamOpacity);
   vec2 reflectionUv = vReflectionUv.xy / max(vReflectionUv.w, 0.0001);
   reflectionUv += mix(normalA, normalB, phase) * 0.025;
   vec3 reflected = texture2D(reflectionTexture, reflectionUv).rgb;
@@ -393,8 +347,6 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
   rotation: Vec3;
   /** Repeating grayscale noise used to break up inward shore-wave fronts. */
   foamNoiseMap: Texture | null;
-  /** Development Content concentric-ring mask used by authored point overlays. */
-  ringFoamMap: Texture | null;
   /** Optional shared source; absent covers off/low reflection profiles. */
   reflectionSource?: PlanarReflectionSource | null;
 }
@@ -437,8 +389,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         absorptionDistance: { value: item.absorptionDistance },
         waveAmplitude: { value: item.waveAmplitude },
         waveLength: { value: item.waveLength },
-        foamIntensity: { value: item.foamIntensity },
-        shoreWaveIntensity: { value: item.shoreWaveIntensity },
+        foamColor: { value: new Color(item.foamColor) },
+        foamOpacity: { value: item.foamOpacity },
         shoreWaveSpacing: { value: item.shoreWaveSpacing },
         shoreWaveSpeed: { value: item.shoreWaveSpeed },
         shoreWaveReach: { value: item.shoreWaveReach },
@@ -471,7 +423,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.renderOrder = 1;
     for (const stamp of item.foamStamps) {
       if (stamp.kind !== "point") continue;
-      this.add(createRiverWaterRingFoamObject(stamp, item.ringFoamMap, item.foamNoiseMap));
+      this.add(createRiverWaterRadialFoamObject(stamp, item));
     }
     item.reflectionSource?.addConsumer(this);
     this.onBeforeRender = (renderer, scene, camera) => {
@@ -501,71 +453,67 @@ void main() {
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }`;
 
-const RING_FOAM_FRAGMENT_SHADER = `
-uniform sampler2D ringFoamMap;
+const RADIAL_FOAM_FRAGMENT_SHADER = `
 uniform sampler2D foamNoiseMap;
-uniform float hasRingFoamMap;
 uniform float hasFoamNoiseMap;
 uniform float time;
 uniform float intensity;
-uniform float ringCount;
-uniform float expansionSpeed;
+uniform vec3 foamColor;
+uniform float foamOpacity;
+uniform float shoreWaveSpacing;
+uniform float shoreWaveSpeed;
+uniform float shoreWaveReach;
+uniform float shoreWaveBreakupScale;
 varying vec2 vUv;
-
-float hash(vec2 value) {
-  return fract(sin(dot(value, vec2(12.9898, 78.233))) * 43758.5453);
-}
 
 void main() {
   vec2 centred = vUv - 0.5;
   float radialDistance = length(centred) * 2.0;
-  float phase = fract(time * expansionSpeed + hash(centred * 19.0) * 0.07);
-  float expansion = 0.22 + phase * 0.78;
-  vec2 animatedUv = centred * (ringCount / 3.0) / expansion + 0.5;
-  float inside = step(0.0, animatedUv.x) * step(animatedUv.x, 1.0) * step(0.0, animatedUv.y) * step(animatedUv.y, 1.0);
-  float textureRings = texture2D(ringFoamMap, animatedUv).r * inside;
-  float fallbackRings = smoothstep(0.82, 0.97, 0.5 + 0.5 * sin(radialDistance * ringCount * 22.0 - time * expansionSpeed * 18.0));
-  float rings = mix(fallbackRings, textureRings, hasRingFoamMap);
-  float textureNoise = texture2D(foamNoiseMap, vUv * 3.7 + vec2(time * expansionSpeed * 0.035, -time * 0.02)).r;
-  float breakup = mix(0.72, smoothstep(0.26, 0.78, textureNoise), hasFoamNoiseMap);
-  float edgeFade = 1.0 - smoothstep(0.74, 1.0, radialDistance);
-  float lifeFade = 1.0 - smoothstep(0.84, 1.0, phase);
-  float alpha = rings * breakup * edgeFade * mix(0.42, 1.0, lifeFade) * intensity;
+  float angle = atan(centred.y, centred.x) * 0.159154943 + 0.5;
+  vec2 radialNoiseUv = vec2(angle * 2.4 - time * shoreWaveSpeed * 0.035, radialDistance * 3.0) * max(shoreWaveBreakupScale, 0.1);
+  float textureBreakup = texture2D(foamNoiseMap, radialNoiseUv).r;
+  float breakup = mix(0.72, textureBreakup, hasFoamNoiseMap);
+  float fadeStart = max(0.01, shoreWaveReach * 0.62);
+  float radialZone = 1.0 - smoothstep(fadeStart, max(fadeStart + 0.01, shoreWaveReach), radialDistance);
+  float radialPhase = fract(radialDistance * shoreWaveSpacing - time * shoreWaveSpeed + breakup * 0.24);
+  float radialBands = smoothstep(0.78, 0.96, radialPhase);
+  float alpha = radialZone * radialBands * smoothstep(0.34, 0.66, breakup) * intensity * foamOpacity;
   if (alpha <= 0.002) discard;
-  gl_FragColor = vec4(vec3(0.94, 0.99, 0.97), alpha * 0.9);
+  gl_FragColor = vec4(foamColor, alpha);
 }`;
 
 /**
- * Creates the runtime-visible, animated Ring Foam overlay for one point stamp.
+ * Creates an obstacle-centred version of the regular shore-wave foam for one point stamp.
  * It is parented under the river ribbon, so authored landscape transforms are
  * inherited. Layer 31 keeps it out of planar-reflection captures.
  */
-function createRiverWaterRingFoamObject(
+function createRiverWaterRadialFoamObject(
   stamp: LayoutRiverWaterFoamStamp,
-  ringFoamMap: Texture | null,
-  foamNoiseMap: Texture | null,
+  item: RiverWaterRenderItem,
 ): Mesh<PlaneGeometry, ShaderMaterial> {
   const radius = Math.max(0.05, stamp.radius);
   const geometry = new PlaneGeometry(radius * 2, radius * 2, 1, 1);
   const material = new ShaderMaterial({
     vertexShader: RING_FOAM_VERTEX_SHADER,
-    fragmentShader: RING_FOAM_FRAGMENT_SHADER,
+    fragmentShader: RADIAL_FOAM_FRAGMENT_SHADER,
     uniforms: {
-      ringFoamMap: { value: ringFoamMap },
-      foamNoiseMap: { value: foamNoiseMap },
-      hasRingFoamMap: { value: ringFoamMap ? 1 : 0 },
-      hasFoamNoiseMap: { value: foamNoiseMap ? 1 : 0 },
+      foamNoiseMap: { value: item.foamNoiseMap },
+      hasFoamNoiseMap: { value: item.foamNoiseMap ? 1 : 0 },
       time: { value: 0 },
       intensity: { value: stamp.intensity },
-      ringCount: { value: stamp.ringCount ?? 3 },
-      expansionSpeed: { value: stamp.expansionSpeed ?? 0.65 },
+      foamColor: { value: new Color(item.foamColor) },
+      foamOpacity: { value: item.foamOpacity },
+      shoreWaveSpacing: { value: item.shoreWaveSpacing },
+      shoreWaveSpeed: { value: item.shoreWaveSpeed },
+      shoreWaveReach: { value: item.shoreWaveReach },
+      shoreWaveBreakupScale: { value: item.shoreWaveBreakupScale },
     },
     transparent: true,
     depthWrite: false,
     side: DoubleSide,
   });
   const overlay = new Mesh(geometry, material);
-  overlay.name = `ring-foam:${stamp.id}`;
+  overlay.name = `radial-foam:${stamp.id}`;
   overlay.position.set(stamp.position[0], stamp.position[1] + 0.025, stamp.position[2]);
   overlay.rotation.x = -Math.PI / 2;
   overlay.renderOrder = 2;

@@ -1638,6 +1638,19 @@
   outline: none;
 }
 
+/* River Water values are short numeric/color inputs. Reserve panel space for
+   their longer labels instead of stretching every field across the inspector. */
+.editor-details .river-water-details .detail-row {
+  grid-template-columns: minmax(0, 1fr) 110px;
+  gap: 10px;
+}
+
+.editor-details .river-water-details .detail-row input,
+.editor-details .river-water-details .detail-row select {
+  width: 110px;
+  justify-self: end;
+}
+
 .editor-details .detail-section {
   gap: 0;
   margin: 0;

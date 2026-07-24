@@ -23,9 +23,8 @@ export interface ResolvedRiverWater {
   absorptionDistance: number;
   waveAmplitude: number;
   waveLength: number;
-  foamIntensity: number;
-  foamScale: number;
-  shoreWaveIntensity: number;
+  foamColor: string;
+  foamOpacity: number;
   shoreWaveSpacing: number;
   shoreWaveSpeed: number;
   shoreWaveReach: number;
@@ -57,9 +56,8 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   absorptionDistance: 0.5,
   waveAmplitude: 0.04,
   waveLength: 3.5,
-  foamIntensity: 0.55,
-  foamScale: 1.35,
-  shoreWaveIntensity: 0.78,
+  foamColor: "#e8fff5",
+  foamOpacity: 0.92,
   shoreWaveSpacing: 5,
   shoreWaveSpeed: 0.34,
   shoreWaveReach: 0.36,
@@ -92,9 +90,8 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     absorptionDistance: actor?.absorptionDistance ?? defaults.absorptionDistance,
     waveAmplitude: actor?.waveAmplitude ?? defaults.waveAmplitude,
     waveLength: actor?.waveLength ?? defaults.waveLength,
-    foamIntensity: actor?.foamIntensity ?? defaults.foamIntensity,
-    foamScale: actor?.foamScale ?? defaults.foamScale,
-    shoreWaveIntensity: actor?.shoreWaveIntensity ?? defaults.shoreWaveIntensity,
+    foamColor: actor?.foamColor ?? defaults.foamColor,
+    foamOpacity: actor?.foamOpacity ?? defaults.foamOpacity,
     shoreWaveSpacing: actor?.shoreWaveSpacing ?? defaults.shoreWaveSpacing,
     shoreWaveSpeed: actor?.shoreWaveSpeed ?? defaults.shoreWaveSpeed,
     shoreWaveReach: actor?.shoreWaveReach ?? defaults.shoreWaveReach,

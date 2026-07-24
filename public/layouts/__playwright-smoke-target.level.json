@@ -4,6 +4,288 @@
   "loadGroups": [],
   "instances": [
     {
+      "assetId": "mountain-group-1",
+      "placements": [
+        {
+          "position": [
+            -61.62,
+            0.08,
+            63.44
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -38.92,
+            0.08,
+            64.07
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "rock-group",
+      "placements": []
+    },
+    {
+      "assetId": "resource-gold-1",
+      "placements": [
+        {
+          "position": [
+            -34.1,
+            0.01,
+            24.92
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-gold-2",
+      "placements": [
+        {
+          "position": [
+            -34.83,
+            0.01,
+            26.39
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-gold-3",
+      "placements": [
+        {
+          "position": [
+            -33.51,
+            0,
+            26.47
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-rock-1",
+      "placements": [
+        {
+          "position": [
+            -41.9,
+            0.02,
+            25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -33.95,
+            0.02,
+            15.63
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-rock-2",
+      "placements": [
+        {
+          "position": [
+            -42.79,
+            0.01,
+            26
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -34.84,
+            0.01,
+            16.63
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-rock-3",
+      "placements": [
+        {
+          "position": [
+            -41.78,
+            0,
+            26.42
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -33.83,
+            0,
+            17.05
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mountain-group-2",
+      "placements": [
+        {
+          "position": [
+            -53.98,
+            0.04,
+            63.57
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -64.59,
+            0.04,
+            55.87
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -63.62,
+            0.04,
+            50.73
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mountain-single",
+      "placements": [
+        {
+          "position": [
+            -50.03,
+            0.04,
+            64.16
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mountainlarge-single",
+      "placements": [
+        {
+          "position": [
+            -47.45,
+            0.1,
+            65.03
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "highpolyplane",
+      "placements": []
+    },
+    {
+      "assetId": "archery-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "rock",
+      "placements": [
+        {
+          "position": [
+            15.23,
+            -2.37,
+            19.64
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 8.29
+        },
+        {
+          "position": [
+            16.01,
+            -2.37,
+            20.95
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -60,
+            0
+          ],
+          "scale": 7.34
+        },
+        {
+          "position": [
+            14.47,
+            -2.37,
+            20.25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 11.6
+        },
+        {
+          "position": [
+            15.2,
+            -2.37,
+            20.63
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -60,
+            0
+          ],
+          "scale": 10.27
+        }
+      ]
+    },
+    {
       "assetId": "marker:playerStart",
       "placements": [
         {
@@ -21,46 +303,6 @@
           }
         }
       ]
-    },
-    {
-      "assetId": "archery-firstage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "archery-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "resource-tree-group",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "watchtower-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "watchtower-secondage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "watchtower-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "farm-secondage-level3",
-      "placements": []
     },
     {
       "assetId": "floor-400x400",
@@ -116,10 +358,7 @@
     "rayleigh": 1,
     "turbidity": 1,
     "mie": 0.002,
-    "mieDirectionalG": 0.8,
-    "skyLightCapture": {
-      "intensity": 1
-    }
+    "mieDirectionalG": 0.6
   },
   "postProcess": {
     "antialias": "smaa",
@@ -135,9 +374,9 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        3,
-        9,
-        4
+        40,
+        80,
+        30
       ],
       "name": "Sun",
       "rotation": [
@@ -146,34 +385,14 @@
         0
       ],
       "color": "#ffffff",
-      "intensity": 3,
+      "intensity": 1.6,
       "castShadow": true
     }
   ],
-  "reflectionPlanes": [],
   "reflectiveSurfaces": [],
-  "reflectionCaptures": [],
-  "blockingVolumes": [],
-  "aiNavigationVolumes": [
-    {
-      "id": "ai-navigation-volume-1",
-      "position": [
-        0,
-        2,
-        0
-      ],
-      "name": "AI Navigation Volume",
-      "size": [
-        10,
-        4,
-        10
-      ]
-    }
-  ],
-  "targetPoints": [],
   "splines": [
     {
-      "id": "spline-1",
+      "id": "enemy-base-route",
       "position": [
         0,
         0,
@@ -190,71 +409,398 @@
         "reparamStepsPerSegment": 8,
         "points": [
           {
-            "id": "spline-point-1",
+            "id": "p0",
             "position": [
+              38,
               0,
-              0,
-              0
+              -32
             ],
-            "pointType": "curveAuto"
+            "pointType": "linear"
           },
           {
-            "id": "spline-point-4",
+            "id": "p1",
             "position": [
-              2,
+              38,
               0,
-              0
+              -30
             ],
-            "pointType": "curveAuto"
+            "pointType": "linear"
           },
           {
-            "id": "spline-point-2",
+            "id": "p2",
             "position": [
-              4,
+              26,
               0,
-              0
+              -30
             ],
-            "pointType": "curveAuto"
+            "pointType": "linear"
           },
           {
-            "id": "spline-point-3",
+            "id": "p3",
             "position": [
-              8,
+              26,
               0,
-              0
+              -34
             ],
-            "pointType": "curveCustom",
-            "arriveTangent": [
-              4,
+            "pointType": "linear"
+          },
+          {
+            "id": "p4",
+            "position": [
+              26,
               0,
-              0
+              -30
             ],
-            "leaveTangent": [
-              4,
+            "pointType": "linear"
+          },
+          {
+            "id": "p5",
+            "position": [
+              50,
               0,
-              0
+              -30
             ],
-            "tangentsLinked": false
+            "pointType": "linear"
+          },
+          {
+            "id": "p6",
+            "position": [
+              50,
+              0,
+              -34
+            ],
+            "pointType": "linear"
           }
         ]
       },
-      "name": "Spline",
-      "generators": [
-        {
-          "id": "rigid-segments",
-          "type": "rigidSegments",
-          "meshAsset": "",
-          "segmentLength": 2
-        }
+      "name": "Enemy Base Route",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:base:0"
+        ]
+      }
+    },
+    {
+      "id": "enemy_west-route-0",
+      "position": [
+        0,
+        0,
+        0
       ],
-      "debug": {
-        "visible": true,
-        "showPointIds": true,
-        "color": "#ffffff",
-        "resolution": 16
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "p0",
+            "position": [
+              26,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p1",
+            "position": [
+              14,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p2",
+            "position": [
+              14,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p3",
+            "position": [
+              14,
+              0,
+              -40
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "enemy_west route 0",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:enemy_west:0"
+        ]
+      }
+    },
+    {
+      "id": "enemy_west-route-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "p0",
+            "position": [
+              26,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p1",
+            "position": [
+              26,
+              0,
+              -20
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p2",
+            "position": [
+              14,
+              0,
+              -20
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p3",
+            "position": [
+              14,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p4",
+            "position": [
+              14,
+              0,
+              -40
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "enemy_west route 1",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:enemy_west:1"
+        ]
+      }
+    },
+    {
+      "id": "enemy_east-route-0",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "p0",
+            "position": [
+              50,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p1",
+            "position": [
+              62,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p2",
+            "position": [
+              62,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p3",
+            "position": [
+              62,
+              0,
+              -40
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "enemy_east route 0",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:enemy_east:0"
+        ]
+      }
+    },
+    {
+      "id": "enemy_east-route-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "p0",
+            "position": [
+              50,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p1",
+            "position": [
+              50,
+              0,
+              -20
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p2",
+            "position": [
+              62,
+              0,
+              -20
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p3",
+            "position": [
+              62,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p4",
+            "position": [
+              62,
+              0,
+              -40
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "enemy_east route 1",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:enemy_east:1"
+        ]
       }
     }
   ],
-  "landscapes": [],
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "landscapes/landscape-1.landscape.json",
+      "name": "Landscape"
+    }
+  ],
+  "riverWaters": [
+    {
+      "id": "river-water-1",
+      "landscapeRef": "landscape-1",
+      "splineRef": "spline-1",
+      "name": "River Water 1",
+      "surfaceLevel": -1,
+      "opacity": 1,
+      "bedVisibility": 0.2,
+      "absorptionDistance": 1,
+      "foamOpacity": 0.7,
+      "shoreWaveSpacing": 4,
+      "shoreWaveSpeed": 0.3,
+      "shoreWaveReach": 0.3,
+      "shoreWaveBreakupScale": 1,
+      "foamStamps": [
+        {
+          "id": "foam-1",
+          "kind": "point",
+          "position": [
+            15.39,
+            -1,
+            20.51
+          ],
+          "radius": 4,
+          "intensity": 0.7
+        },
+        {
+          "id": "foam-2",
+          "kind": "point",
+          "position": [
+            14.33,
+            -1,
+            20.17
+          ],
+          "radius": 4,
+          "intensity": 0.7
+        }
+      ],
+      "reflectionMode": "sharedPlanar",
+      "reflectionQuality": "high"
+    }
+  ],
   "actors": []
 }

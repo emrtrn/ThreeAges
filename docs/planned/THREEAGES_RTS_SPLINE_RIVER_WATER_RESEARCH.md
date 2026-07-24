@@ -594,7 +594,7 @@ Editor helpers and future world-space UI/FX can opt out through that layer.
 
 ### Faz 4 - Author edilen obstacle kopugu
 
-- [x] Foam Point/Strip veya esdeger authoring verisini tanimla.
+- [x] Radial Foam point authoring verisini tanimla.
 - [x] Kopru ayagi ve kayalar icin maskeyi ribbon'a uygula.
 - [x] Segment bazli rapids/hiz authoring'i ekle.
 - [x] Landscape Details icinde River Water Body ayarlarini canli authoring'e bagla.
@@ -605,9 +605,10 @@ Kabul:
 - Kopru ayagi ve kaya etrafinda kontrollu kopuk vardir.
 - Kopuk birim ve gecici aktorlerde istemsiz tetiklenmez.
 
-`foamStamps` (point veya strip) Landscape-local konum/radius/intensity ile
-River Water Body verisinde saklanir ve geometry kurulurken vertex foam maskesine
-bake edilir. Bu nedenle birim, projectile veya gecici aktor sorgusu yoktur.
+`foamStamps` icindeki point kayitlari Landscape-local konum/radius/intensity ile
+River Water Body verisinde saklanir ve ayri Radial Foam overlay'i olarak cizilir.
+Eski strip kayitlari geriye uyumluluk icin okunur fakat render/editor akisi
+tarafindan kullanilmaz; bu nedenle birim, projectile veya gecici aktor sorgusu yoktur.
 `segmentProfiles`, spline segment id'si uzerinden yerel flow-speed multiplier ve
 rapidness uygular. Gameplay-proof level'de bir point, bir strip ve iki rapid
 profil ornegi vardir. Mevcut nehir tek, dalsiz bir zincir oldugu icin junction
@@ -615,17 +616,15 @@ patch/flow-map maddesi uygulanmadi; dallanan bir spline author edilirse Faz 4'un
 kalan kapisi olarak ele alinacak.
 
 Gorsel ayar notu: Gameplay-proof kaya kumesi `rock-cluster` point stamp'i ve
-asagi akis `rock-cluster-wake` strip'i ile isaretlidir. Shader, ribbon kiyi
-mesafesini de shallow renk/alpha gecisine katar; boylece yatak derin olsa bile
-kiyi tek bir koyu, sert sinir gibi okunmaz. Static foam varken ribbon 9-wide ve
-en cok 0.75 world-unit merkez cizgisi araliginda orneklenir; bu, seyrek vertex
-maskesinin kaya cevresinde gorunmeden kaybolmasini engeller.
+Shader, ribbon kiyi mesafesini de shallow renk/alpha gecisine katar; boylece
+yatak derin olsa bile kiyi tek bir koyu, sert sinir gibi okunmaz.
 
 Editor authoring notu (2026-07-24): River Water, ayri bir Foliage/RTS paneli
 degil, secili Landscape'in `Details > Landscape Mode` akisinda yer alir. Panel
 Landscape'e bagli tum water body'leri listeler; Surface, Flow & Waves, Foam
-Point/Strip (yerel X/Z, radius, intensity), segment rapidness/hiz ve shared
-planar reflection kontrollerini ayni persisted veri uzerinden canli uygular.
+radius/intensity ve shared planar reflection kontrollerini ayni persisted veri
+uzerinden canli uygular. Radial Foam tek marker ile viewport gizmosundan
+konumlandirilir; sayisal X/Z girisi yoktur.
 Her degisiklik undo/redo ve auto-save zincirinden gecer; bu nedenle ayni editor
 altyapisi Forge'a proje-kurali tasimadan aktarilabilir.
 
@@ -645,11 +644,11 @@ dalga, kopuk ve planar yansimadan bagimsizdir.
 
 Kopuk, kiyida ve rapid segmentlerinde akim yonunde kayan iki katmanli kirik
 gurultuyle uretilir; bu nedenle duzenli cizgiler yerine parcalanmis beyaz
-yamalar gorunur. `Pattern Scale` yamalarin boyutunu ayarlar. Point/Strip Foam
-stamp'leri kopugu kaya, ayak ve akinti cevresine tasir; stamp siniri de ayni
+yamalar gorunur. Radial Foam point'leri kopugu kaya ve ayak cevresine tasir;
+stamp siniri de ayni
 gurultuyle parcalanir.
 
-### Faz 4.1 - Kiyi dalgasi ve Ring Foam authoring (plan; uygulama onayindan sonra)
+### Faz 4.1 - Kiyi dalgasi ve Radial Foam authoring
 
 Mevcut shader'daki shore foam, gorunur bir dalga cephesi yerine suyun kenarini
 hafifce renklendirir; X/Z girisli stamp ise sahnede nereye ait oldugunu
@@ -660,8 +659,8 @@ okutmaz. Bu dilim bu iki sorunu ayri presentation katmanlariyla cozer.
 - Her iki kiyidan merkeze dogru ilerleyen, ince ve kirilmis beyaz dalga
   seritleri; seritler akintinin yonune tasinmaz, kiyi normali boyunca iceri
   ilerler.
-- Kaya veya kopru ayagi merkezinde yer alan, disari dogru buyuyup solan 2-3
-  konsantrik halka; tek bir beyaz disk/dekal gorunumu olmamalidir.
+- Kaya veya kopru ayagi merkezinden disari ilerleyen, kiyidaki foam ile ayni
+  kirik bant karakterine sahip radyal dalgalar.
 - Kiyidaki dalga ile obstacle halkasi ayni parlaklik, noise ve renk ailesini
   kullanir; yansima/opacity bunlari maviye bozmamalidir.
 
@@ -671,17 +670,15 @@ okutmaz. Bu dilim bu iki sorunu ayri presentation katmanlariyla cozer.
 | --- | --- |
 | Kiyi mesafesi, su kotu, ribbon UV | River Water ribbon (`shoreDistance`, `waterDepth`) |
 | Kiyidan merkeze dalga ritmi ve texture maskesi | River Water material |
-| Kaya/ayak halka merkezi, radius, intensity | `LayoutRiverWaterFoamStamp` (`kind: point`) |
+| Kaya/ayak radyal merkez, radius, intensity | `LayoutRiverWaterFoamStamp` (`kind: point`) |
 | Point secimi, marker ve hareket gizmosu | Landscape Details + editor-only overlay |
 | Terrain deform/paint ve spline yatagi | Landscape (degismez) |
 | Unit/actor tabanli otomatik foam | Kapsam disi; istemsiz gameplay tetiklenmez |
 
 #### Kullanilacak mevcut dokular
 
-- `circle-rings-a-noise-3` (`DevelopmentContent/Textures/LightMasks/Transparent`):
-  obstacle point icin konsantrik halka maskesi.
 - `perlin-noise` (`DevelopmentContent/Textures/DevelopmentEssentials`):
-  kiyidaki seritleri ve halka kenarlarini kirma maskesi.
+  kiyidaki seritleri ve radyal dalga kenarlarini kirma maskesi.
 - `t-water-m`: gerekirse yuzeyteki ince akinti ayrintisini destekler; foam
   maskesinin ana kontrast kaynagi olmaz.
 
@@ -697,43 +694,47 @@ olarak kullanilir; yeni raster asset uretilmez.
      2-3 dar foam bandi hesapla.
    - `[x]` Bandlari `perlin-noise` ile kir; beyazlik, reflection karisimindan
      sonra tekrar bastirilmayacak ayri foam compositing asamasinda uygulansin.
-   - `[x]` Body geneli icin `Shore Wave Intensity`, `Band Spacing`, `Inward
-     Speed`, `Shore Wave Reach` ve `Breakup Scale` kontrollerini ekle. Reach,
+   - `[x]` Body geneli icin `Band Spacing`, `Inward Speed`, `Shore Wave Reach`
+     ve `Breakup Scale` kontrollerini ekle. Reach,
      banktan itibaren dalga fade'inin bitecegi normalize mesafedir.
 
-2. **Ring Foam render overlay**
+2. **Radial Foam render overlay**
    - `[x]` Point stamp'leri, ribbon vertexlerine bake etmek yerine su yuzeyinin
      hemen ustunde duran ayri, editor/runtime gorunur overlay quad'lari olarak
      ciz. Boyut stamp radius'undan gelir.
-   - `[x]` `circle-rings-a-noise-3` ve Perlin maskesini kullanarak zamana bagli
-     radyal faz, 2-3 halka ve disari dogru solma uygula.
+   - `[x]` Perlin maskesi ile kiyidaki foam'in Band Spacing, Inward Speed,
+     Shore Wave Reach, Breakup Scale, renk ve opacity ayarlarini paylasan
+     zamana bagli radyal bantlar uygula.
    - `[ ]` Strip stamp mevcut rapid/wake semantigini korur; bu dilimde Point
      stamp `rings` stilini kullanir. Eski point verileri geriye uyumlu olarak
      halka overlay'ine cozulur.
 
 3. **Scene point authoring**
-   - `[x]` `+ Point Foam` yerine `Add Ring Foam` moduna gec: water/terrain
+   - `[x]` `+ Point Foam` yerine `Add Radial Foam` moduna gec: water/terrain
      uzerine tiklama Landscape-local stamp konumu olusturur.
-   - `[x]` Ring Foam marker'ini editor overlay'inde ciz, secimi ekran-uzayi
+   - `[x]` Radial Foam marker'ini editor overlay'inde ciz, secimi ekran-uzayi
      hit-test ile yap ve mevcut Landscape spline point akisi gibi shared move
      gizmosuna bagla.
-   - `[x]` Details panelinde X/Z satirlarini kaldir; secili point icin sadece
-     Radius, Intensity, Ring Count ve Expansion Speed goster. Delete secili
-     point'i siler; tum islemler undo/redo + autosave'den gecer.
+   - `[x]` Details panelinde X/Z satirlarini kaldir; Radial Foam icin tek
+     gizmo secimi sun. Sayisal panelde yalniz Radius ve Intensity goster.
+     Delete secili stamp'i siler; tum islemler undo/redo + autosave'den gecer.
    - `[ ]` Landscape tasininca/rotate olunca marker ve runtime overlay, River
      Water ile ayni transformu izler; reflection render'inda gorunmezler.
 
 4. **Dogrulama ve kabul**
    - `[ ]` Bir kiyi donusunde seritler sahneye sabit sinir yerine iceri dogru
      hareket eden kirik beyaz dalgalar olarak okunur.
-   - `[ ]` Bir kayaya Ring Foam point konur, gizmo ile tasinir, save/reload ve
-     undo/redo sonrasi ayni yerde kalir; concentric halkalar disari yayilir.
+   - `[ ]` Bir kayaya Radial Foam point konur, gizmo ile tasinir, save/reload ve
+     undo/redo sonrasi ayni yerde kalir; kirik bantlar merkezden disari yayilir.
    - `[ ]` Orta/dusuk kalite profilleri texture yuklemesi basarisizsa guvenli
      procedural fallback ile calisir; WebGL warning/console error yoktur.
    - `[x]` `npx tsc --noEmit`, `npm run test:engine` ve `npm run build:verify`
      tamamlandi.
-   - `[ ]` Hedefli editor browser smoke: Ring Foam ekle, marker'i sec/tasi,
-     undo/redo ve save/reload sonrasi gorunumu elle dogrula.
+   - `[x]` Hedefli editor browser smoke: `Add Radial Foam` viewport tiklamasi
+     yeni point olusturur; X/Z ve eski halka parametreleri gorunmez,
+     undo/redo + reload sonrasi point korunur ve console/page error yoktur.
+   - `[ ]` Manuel kabul: marker'i sec/tasi, undo/redo ve save/reload sonrasi
+     ayni konumda kaldigini; halkalarin kayalik etrafinda okunur oldugunu dogrula.
 
 ### Faz 5 - Opsiyonel yuksek kalite
 

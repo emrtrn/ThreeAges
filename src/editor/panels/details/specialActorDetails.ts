@@ -1,5 +1,5 @@
 import { assetType, isModelAssetType, type EditableAsset } from "@engine/assets/manifest";
-import type { BrushShape, LayoutLightActor, LayoutRiverWaterFoamStamp, Vec3 } from "@engine/scene/layout";
+import type { BrushShape, LayoutLightActor, Vec3 } from "@engine/scene/layout";
 import type { ForgeSplineDeformMeshGeneratorDef, ForgeSplineGeneratorDef, ForgeSplineInstanceGeneratorDef, ForgeSplineRigidSegmentGeneratorDef, SplineMeshAxis } from "@engine/scene/splineGenerator";
 import { BRUSH_SHAPES } from "@engine/scene/blockingVolume";
 import { splinePerformanceWarnings } from "@engine/scene/splineDiagnostics";
@@ -112,7 +112,6 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   createSelectedLandscapeRiverWater: (splineId: string) => void;
   deleteSelectedLandscapeRiverWater: (waterId: string) => void;
   setSelectedLandscapeRiverWater: (waterId: string, patch: RiverWaterDetailsPatch) => void;
-  addSelectedLandscapeRiverWaterFoamStamp: (waterId: string, kind: LayoutRiverWaterFoamStamp["kind"]) => void;
   beginSelectedLandscapeRiverWaterRingFoam: (waterId: string) => void;
   removeSelectedLandscapeRiverWaterFoamStamp: (waterId: string, stampId: string) => void;
   getLandscapeSculptSettings: () => LandscapeSculptSettings;
@@ -196,7 +195,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   const riverSourceSpline = availableRiverSplines.find((spline) => spline.id === settings.activeSplineId) ?? availableRiverSplines[0];
   const activeRiverWater = riverWaters.find((water) => water.id === settings.activeRiverWaterId) ?? riverWaters[0];
   const riverWaterMarkup = activeRiverWater
-    ? `<div class="detail-section">
+    ? `<div class="detail-section river-water-details">
         <div class="detail-section-title">River Water</div>
         <div class="landscape-layer-list">${riverWaters.map((water) => `<button type="button" data-river-water="${escapeHtml(water.id)}" class="${water.id === activeRiverWater.id ? "active" : ""}" ${lockedAttr}><span>${escapeHtml(water.name)}</span><span>${escapeHtml(water.splineRef)}</span></button>`).join("")}</div>
         <div class="detail-hint">Water presentation is linked to this Landscape's spline; terrain shape remains authored by Landscape Splines.</div>
@@ -217,21 +216,18 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         <label class="detail-row"><span>Wave Amplitude</span><input data-river-water-number="waveAmplitude" type="number" min="0" max="1" step="0.01" value="${activeRiverWater.waveAmplitude}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Wave Length</span><input data-river-water-number="waveLength" type="number" min="0.1" max="100" step="0.1" value="${activeRiverWater.waveLength}" ${lockedAttr} /></label>
         <div class="detail-subsection-title">Foam</div>
-        <label class="detail-row"><span>Base Intensity</span><input data-river-water-number="foamIntensity" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.foamIntensity}" ${lockedAttr} /></label>
-        <label class="detail-row"><span>Pattern Scale</span><input data-river-water-number="foamScale" type="number" min="0.1" max="10" step="0.05" value="${activeRiverWater.foamScale}" ${lockedAttr} /></label>
-        <label class="detail-row"><span>Shore Wave Intensity</span><input data-river-water-number="shoreWaveIntensity" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.shoreWaveIntensity}" ${lockedAttr} /></label>
+        <label class="detail-row"><span>Foam Color</span><input data-river-water-color="foamColor" type="color" value="${escapeHtml(activeRiverWater.foamColor)}" ${lockedAttr} /></label>
+        <label class="detail-row"><span>Foam Opacity</span><input data-river-water-number="foamOpacity" type="number" min="0" max="1" step="0.05" value="${activeRiverWater.foamOpacity}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Band Spacing</span><input data-river-water-number="shoreWaveSpacing" type="number" min="0.5" max="20" step="0.1" value="${activeRiverWater.shoreWaveSpacing}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Inward Speed</span><input data-river-water-number="shoreWaveSpeed" type="number" min="0" max="10" step="0.05" value="${activeRiverWater.shoreWaveSpeed}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Shore Wave Reach</span><input data-river-water-number="shoreWaveReach" type="number" min="0.05" max="1" step="0.05" value="${activeRiverWater.shoreWaveReach}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Breakup Scale</span><input data-river-water-number="shoreWaveBreakupScale" type="number" min="0.1" max="10" step="0.05" value="${activeRiverWater.shoreWaveBreakupScale}" ${lockedAttr} /></label>
-        <div class="detail-hint">Ring Foam is placed directly in the viewport, then moved with the gizmo. Strip Foam remains useful for short rapids and wakes.</div>
-        <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-foam-add="ring" ${lockedAttr}>+ Add Ring Foam</button><button type="button" class="detail-action-button" data-river-water-foam-add="strip" ${lockedAttr}>+ Strip Foam</button></div>
-        <div class="landscape-layer-list">${activeRiverWater.foamStamps.map((stamp) => `<div class="detail-subsection-title"><span>${escapeHtml(stamp.id)} (${stamp.kind === "point" ? "Ring Foam" : "Strip Foam"})</span><button type="button" class="detail-action-button" data-river-water-foam-delete="${escapeHtml(stamp.id)}" ${lockedAttr}>Delete</button></div>${stamp.kind === "strip" ? `<label class="detail-row"><span>Start X</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:positionX" type="number" step="0.1" value="${stamp.position[0]}" ${lockedAttr} /></label><label class="detail-row"><span>Start Z</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:positionZ" type="number" step="0.1" value="${stamp.position[2]}" ${lockedAttr} /></label><label class="detail-row"><span>End X</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:endPositionX" type="number" step="0.1" value="${stamp.endPosition?.[0] ?? stamp.position[0]}" ${lockedAttr} /></label><label class="detail-row"><span>End Z</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:endPositionZ" type="number" step="0.1" value="${stamp.endPosition?.[2] ?? stamp.position[2]}" ${lockedAttr} /></label>` : "<div class=\"detail-hint\">Select the viewport marker to move this Ring Foam point.</div>"}<label class="detail-row"><span>Radius</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:radius" type="number" min="0.1" step="0.1" value="${stamp.radius}" ${lockedAttr} /></label><label class="detail-row"><span>Intensity</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:intensity" type="number" min="0" max="1" step="0.05" value="${stamp.intensity}" ${lockedAttr} /></label>${stamp.kind === "point" ? `<label class="detail-row"><span>Ring Count</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:ringCount" type="number" min="1" max="8" step="1" value="${stamp.ringCount ?? 3}" ${lockedAttr} /></label><label class="detail-row"><span>Expansion Speed</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:expansionSpeed" type="number" min="0.05" max="5" step="0.05" value="${stamp.expansionSpeed ?? 0.65}" ${lockedAttr} /></label>` : ""}`).join("") || "<div class=\"detail-hint\">Add Ring Foam for rocks/piers, or Strip Foam for small rapids.</div>"}</div>
-        <div class="detail-subsection-title">Rapids</div>
-        <div class="landscape-layer-list">${activeRiverWater.splineSegments.map((segment) => {
-          const profile = activeRiverWater.segmentProfiles.find((entry) => entry.splineSegmentRef === segment.id);
-          return `<div class="detail-hint">${escapeHtml(segment.startPointId)} → ${escapeHtml(segment.endPointId)}</div><label class="detail-row"><span>Speed Mult.</span><input data-river-water-profile-number="${escapeHtml(segment.id)}:flowSpeedMultiplier" type="number" min="0" max="10" step="0.1" value="${profile?.flowSpeedMultiplier ?? 1}" ${lockedAttr} /></label><label class="detail-row"><span>Rapidness</span><input data-river-water-profile-number="${escapeHtml(segment.id)}:rapidness" type="number" min="0" max="1" step="0.05" value="${profile?.rapidness ?? 0}" ${lockedAttr} /></label>`;
-        }).join("") || "<div class=\"detail-hint\">This water body has no resolvable spline segments.</div>"}</div>
+        <div class="detail-hint">Radial Foam uses the same color, opacity, band spacing, speed, reach and breakup as shore waves.</div>
+        <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-foam-add="ring" ${lockedAttr}>+ Add Radial Foam</button></div>
+        <div class="landscape-layer-list">${activeRiverWater.foamStamps.filter((stamp) => stamp.kind === "point").map((stamp) => {
+          const id = escapeHtml(stamp.id);
+          return `<div class="detail-subsection-title"><span>${id} (Radial Foam)</span><span><button type="button" class="detail-action-button" data-river-water-foam-select="${id}:start" ${lockedAttr}>Move Gizmo</button><button type="button" class="detail-action-button" data-river-water-foam-delete="${id}" ${lockedAttr}>Delete</button></span></div><div class="detail-hint">Select the marker or Move Gizmo to position this Radial Foam.</div><label class="detail-row"><span>Radius</span><input data-river-water-foam-number="${id}:radius" type="number" min="0.1" step="0.1" value="${stamp.radius}" ${lockedAttr} /></label><label class="detail-row"><span>Intensity</span><input data-river-water-foam-number="${id}:intensity" type="number" min="0" max="1" step="0.05" value="${stamp.intensity}" ${lockedAttr} /></label>`;
+        }).join("") || "<div class=\"detail-hint\">Add Radial Foam for rocks and piers.</div>"}</div>
         <div class="detail-subsection-title">Reflection</div>
         <label class="detail-row"><span>Mode</span><select data-river-water-reflection="reflectionMode" ${lockedAttr}><option value="off" ${activeRiverWater.reflectionMode === "off" ? "selected" : ""}>Off</option><option value="sharedPlanar" ${activeRiverWater.reflectionMode === "sharedPlanar" ? "selected" : ""}>Shared Planar</option></select></label>
         <label class="detail-row"><span>Group</span><input data-river-water-reflection="reflectionGroup" type="text" value="${escapeHtml(activeRiverWater.reflectionGroup)}" placeholder="river" ${lockedAttr} /></label>
@@ -714,7 +710,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   body.querySelectorAll<HTMLInputElement>("[data-river-water-number]").forEach((input) => {
     input.addEventListener("change", () => {
       const water = selectedRiverWater();
-      const key = input.dataset.riverWaterNumber as keyof Pick<RiverWaterDetailsPatch, "surfaceLevel" | "widthScale" | "flowSpeed" | "normalScale" | "opacity" | "bedVisibility" | "absorptionDistance" | "waveAmplitude" | "waveLength" | "foamIntensity" | "foamScale" | "shoreWaveIntensity" | "shoreWaveSpacing" | "shoreWaveSpeed" | "shoreWaveReach" | "shoreWaveBreakupScale"> | undefined;
+      const key = input.dataset.riverWaterNumber as keyof Pick<RiverWaterDetailsPatch, "surfaceLevel" | "widthScale" | "flowSpeed" | "normalScale" | "opacity" | "bedVisibility" | "absorptionDistance" | "waveAmplitude" | "waveLength" | "foamOpacity" | "shoreWaveSpacing" | "shoreWaveSpeed" | "shoreWaveReach" | "shoreWaveBreakupScale"> | undefined;
       const value = Number(input.value);
       if (!water || !key || !Number.isFinite(value)) return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: value } as RiverWaterDetailsPatch);
@@ -724,7 +720,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
   body.querySelectorAll<HTMLInputElement>("[data-river-water-color]").forEach((input) => {
     input.addEventListener("change", () => {
       const water = selectedRiverWater();
-      const key = input.dataset.riverWaterColor as "deepColor" | "shallowColor" | undefined;
+      const key = input.dataset.riverWaterColor as "deepColor" | "shallowColor" | "foamColor" | undefined;
       if (!water || !key) return;
       options.setSelectedLandscapeRiverWater(water.id, { [key]: input.value } as RiverWaterDetailsPatch);
       renderLandscapeDetails(options);
@@ -734,9 +730,8 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     button.addEventListener("click", () => {
       const water = selectedRiverWater();
       const kind = button.dataset.riverWaterFoamAdd;
-      if (!water || (kind !== "ring" && kind !== "strip")) return;
-      if (kind === "ring") options.beginSelectedLandscapeRiverWaterRingFoam(water.id);
-      else options.addSelectedLandscapeRiverWaterFoamStamp(water.id, kind);
+      if (!water || kind !== "ring") return;
+      options.beginSelectedLandscapeRiverWaterRingFoam(water.id);
       renderLandscapeDetails(options);
     });
   });
@@ -749,46 +744,34 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       renderLandscapeDetails(options);
     });
   });
+  body.querySelectorAll<HTMLButtonElement>("[data-river-water-foam-select]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const water = selectedRiverWater();
+      const [stampId, anchor] = (button.dataset.riverWaterFoamSelect ?? "").split(":");
+      if (!water || !stampId || anchor !== "start") return;
+      options.setLandscapeSculptSettings({
+        activeRiverWaterId: water.id,
+        activeRiverWaterFoamStampId: stampId,
+        activeRiverWaterFoamStampAnchor: "start",
+      });
+      renderLandscapeDetails(options);
+    });
+  });
   body.querySelectorAll<HTMLInputElement>("[data-river-water-foam-number]").forEach((input) => {
     input.addEventListener("change", () => {
       const water = selectedRiverWater();
       const [stampId, key] = (input.dataset.riverWaterFoamNumber ?? "").split(":") as [
         string,
-        "radius" | "intensity" | "ringCount" | "expansionSpeed" | "positionX" | "positionZ" | "endPositionX" | "endPositionZ",
+        "radius" | "intensity",
       ];
       const value = Number(input.value);
-      if (!water || !stampId || !["radius", "intensity", "ringCount", "expansionSpeed", "positionX", "positionZ", "endPositionX", "endPositionZ"].includes(key) || !Number.isFinite(value)) return;
+      if (!water || !stampId || !["radius", "intensity"].includes(key) || !Number.isFinite(value)) return;
       options.setSelectedLandscapeRiverWater(water.id, {
         foamStamps: water.foamStamps.map((stamp) => {
           if (stamp.id !== stampId) return stamp;
-          if (key === "positionX" || key === "positionZ") {
-            const position: Vec3 = [...stamp.position];
-            position[key === "positionX" ? 0 : 2] = value;
-            return { ...stamp, position };
-          }
-          if (key === "ringCount" || key === "expansionSpeed") return { ...stamp, [key]: value };
-          if (key === "endPositionX" || key === "endPositionZ") {
-            const endPosition: Vec3 = [...(stamp.endPosition ?? stamp.position)];
-            endPosition[key === "endPositionX" ? 0 : 2] = value;
-            return { ...stamp, endPosition };
-          }
           return { ...stamp, [key]: value };
         }),
       });
-      renderLandscapeDetails(options);
-    });
-  });
-  body.querySelectorAll<HTMLInputElement>("[data-river-water-profile-number]").forEach((input) => {
-    input.addEventListener("change", () => {
-      const water = selectedRiverWater();
-      const [splineSegmentRef, key] = (input.dataset.riverWaterProfileNumber ?? "").split(":") as [string, "flowSpeedMultiplier" | "rapidness"];
-      const value = Number(input.value);
-      if (!water || !splineSegmentRef || (key !== "flowSpeedMultiplier" && key !== "rapidness") || !Number.isFinite(value)) return;
-      const profiles = water.segmentProfiles.map((profile) => ({ ...profile }));
-      const index = profiles.findIndex((profile) => profile.splineSegmentRef === splineSegmentRef);
-      if (index >= 0) profiles[index] = { ...profiles[index]!, [key]: value };
-      else profiles.push({ splineSegmentRef, [key]: value });
-      options.setSelectedLandscapeRiverWater(water.id, { segmentProfiles: profiles });
       renderLandscapeDetails(options);
     });
   });

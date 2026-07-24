@@ -860,7 +860,7 @@ export interface LayoutLandscape {
 /** A static local foam mask authored independently of RTS units and actors. */
 export interface LayoutRiverWaterFoamStamp {
   id: string;
-  /** A radial ring point or a capsule-like strip on the river surface. */
+  /** A radial foam point or a capsule-like strip on the river surface. */
   kind: "point" | "strip";
   /** Landscape-local centre/start position; only X/Z affect the water ribbon. */
   position: Vec3;
@@ -870,9 +870,9 @@ export interface LayoutRiverWaterFoamStamp {
   radius: number;
   /** Additive foam contribution, 0..1. */
   intensity: number;
-  /** Number of concentric rings rendered by a radial point. Defaults to 3. */
+  /** Legacy concentric-ring setting retained only for old saved layouts. */
   ringCount?: number;
-  /** Outward ring-cycle speed in cycles per second. Defaults to 0.65. */
+  /** Legacy concentric-ring setting retained only for old saved layouts. */
   expansionSpeed?: number;
 }
 
@@ -927,12 +927,10 @@ export interface LayoutRiverWater {
   waveAmplitude?: number;
   /** Main wave length in world units. */
   waveLength?: number;
-  /** Multiplier for procedural shore/rapid foam, 0..1. */
-  foamIntensity?: number;
-  /** Scale of the animated procedural foam breakup pattern. */
-  foamScale?: number;
-  /** Strength of the white wave fronts that travel from both banks toward the centre. */
-  shoreWaveIntensity?: number;
+  /** Tint used by shore, rapid and strip foam. */
+  foamColor?: string;
+  /** Visual blend strength of shore, rapid and strip foam, 0..1. */
+  foamOpacity?: number;
   /** Number of visible inward-moving shore-wave bands per bank. */
   shoreWaveSpacing?: number;
   /** Shore-wave travel speed from bank toward the river centre. */

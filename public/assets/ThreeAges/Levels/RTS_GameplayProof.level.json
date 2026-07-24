@@ -705,21 +705,32 @@
       "opacity": 1,
       "bedVisibility": 0.2,
       "absorptionDistance": 1,
+      "foamOpacity": 0.7,
+      "shoreWaveSpacing": 4,
+      "shoreWaveSpeed": 0.3,
+      "shoreWaveReach": 0.3,
+      "shoreWaveBreakupScale": 1,
       "foamStamps": [
         {
           "id": "foam-1",
-          "kind": "strip",
+          "kind": "point",
           "position": [
-            0,
+            15.39,
             -1,
-            0
+            20.51
           ],
-          "endPosition": [
-            3,
+          "radius": 4,
+          "intensity": 0.7
+        },
+        {
+          "id": "foam-2",
+          "kind": "point",
+          "position": [
+            14.33,
             -1,
-            0
+            20.17
           ],
-          "radius": 2,
+          "radius": 4,
           "intensity": 0.7
         }
       ],

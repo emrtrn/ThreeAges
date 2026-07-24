@@ -352,24 +352,6 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       }
       riverNormalCache.set("perlin-noise", foamNoiseMap);
     }
-    let ringFoamMap = riverNormalCache.get("circle-rings-a-noise-3");
-    if (ringFoamMap === undefined) {
-      const texturePath = texturePathById.get("circle-rings-a-noise-3");
-      if (!texturePath) {
-        warn("Authored-world river water ring foam texture is not in the manifest: circle-rings-a-noise-3");
-        ringFoamMap = null;
-      } else {
-        try {
-          ringFoamMap = await textureLoader!.loadAsync(resolveUrl(texturePath));
-          ringFoamMap.wrapS = ringFoamMap.wrapT = RepeatWrapping;
-          riverWaterTextures.push(ringFoamMap);
-        } catch (error) {
-          warn("Authored-world river water ring foam texture failed to load: circle-rings-a-noise-3", error);
-          ringFoamMap = null;
-        }
-      }
-      riverNormalCache.set("circle-rings-a-noise-3", ringFoamMap);
-    }
     const item: RiverWaterRenderItem = {
       ...resolved,
       spline,
@@ -377,7 +359,6 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       position: landscape.actor.position,
       rotation: landscape.actor.rotation ?? [0, 0, 0],
       foamNoiseMap,
-      ringFoamMap,
       reflectionSource,
     };
     const object = createRiverWaterObject(item, normalMap);

@@ -4022,8 +4022,6 @@ export class EditorUi {
       deleteSelectedLandscapeRiverWater: (waterId) => this.app.deleteSelectedLandscapeRiverWater(waterId),
       setSelectedLandscapeRiverWater: (waterId, patch) =>
         this.app.setSelectedLandscapeRiverWater(waterId, patch),
-      addSelectedLandscapeRiverWaterFoamStamp: (waterId, kind) =>
-        this.app.addSelectedLandscapeRiverWaterFoamStamp(waterId, kind),
       beginSelectedLandscapeRiverWaterRingFoam: (waterId) =>
         this.app.beginSelectedLandscapeRiverWaterRingFoam(waterId),
       removeSelectedLandscapeRiverWaterFoamStamp: (waterId, stampId) =>

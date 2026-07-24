@@ -1106,7 +1106,7 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   } else if (input.normalTexture !== undefined && input.normalTexture !== null) {
     throw new Error("river water normalTexture must be a string, null, or omitted");
   }
-  for (const key of ["deepColor", "shallowColor"] as const) {
+  for (const key of ["deepColor", "shallowColor", "foamColor"] as const) {
     if (input[key] !== undefined) water[key] = validateHexColor(input[key], `river water ${key}`);
   }
   const opacity = validateOptionalNumber(input.opacity, "river water opacity", 0, 1);
@@ -1119,12 +1119,8 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   if (waveAmplitude !== undefined) water.waveAmplitude = Number(waveAmplitude.toFixed(3));
   const waveLength = validateOptionalNumber(input.waveLength, "river water waveLength", 0.1, 100);
   if (waveLength !== undefined) water.waveLength = Number(waveLength.toFixed(3));
-  const foamIntensity = validateOptionalNumber(input.foamIntensity, "river water foamIntensity", 0, 1);
-  if (foamIntensity !== undefined) water.foamIntensity = Number(foamIntensity.toFixed(3));
-  const foamScale = validateOptionalNumber(input.foamScale, "river water foamScale", 0.1, 10);
-  if (foamScale !== undefined) water.foamScale = Number(foamScale.toFixed(3));
-  const shoreWaveIntensity = validateOptionalNumber(input.shoreWaveIntensity, "river water shoreWaveIntensity", 0, 1);
-  if (shoreWaveIntensity !== undefined) water.shoreWaveIntensity = Number(shoreWaveIntensity.toFixed(3));
+  const foamOpacity = validateOptionalNumber(input.foamOpacity, "river water foamOpacity", 0, 1);
+  if (foamOpacity !== undefined) water.foamOpacity = Number(foamOpacity.toFixed(3));
   const shoreWaveSpacing = validateOptionalNumber(input.shoreWaveSpacing, "river water shoreWaveSpacing", 0.5, 20);
   if (shoreWaveSpacing !== undefined) water.shoreWaveSpacing = Number(shoreWaveSpacing.toFixed(3));
   const shoreWaveSpeed = validateOptionalNumber(input.shoreWaveSpeed, "river water shoreWaveSpeed", 0, 10);
@@ -1168,8 +1164,8 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
       }
       saved.radius = radius;
       saved.intensity = intensity;
-      // Point stamps are rendered as animated Ring Foam. These remain optional
-      // so older point-stamp layouts keep their established placement data.
+      // Legacy ring fields remain optional so older point-stamp layouts keep
+      // their established placement data after Radial Foam replaced the rings.
       if (stamp.kind === "point") {
         const ringCount = validateOptionalNumber(stamp.ringCount, `river water foamStamps[${index}].ringCount`, 1, 8);
         const expansionSpeed = validateOptionalNumber(stamp.expansionSpeed, `river water foamStamps[${index}].expansionSpeed`, 0.05, 5);

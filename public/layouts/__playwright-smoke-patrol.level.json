@@ -4,69 +4,23 @@
   "loadGroups": [],
   "instances": [
     {
-      "assetId": "marker:playerStart",
+      "assetId": "mountain-group-1",
       "placements": [
         {
           "position": [
-            0,
-            0,
-            0
+            -61.62,
+            0.08,
+            63.44
           ],
-          "name": "Player Start",
-          "collision": false,
+          "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
-    },
-    {
-      "assetId": "archery-firstage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "archery-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "resource-tree-group",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "towncenter-secondage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "watchtower-secondage-level1",
-      "placements": []
-    },
-    {
-      "assetId": "watchtower-secondage-level2",
-      "placements": []
-    },
-    {
-      "assetId": "watchtower-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "farm-secondage-level3",
-      "placements": []
-    },
-    {
-      "assetId": "floor-400x400",
-      "placements": [
+          "scale": 3
+        },
         {
           "position": [
-            0,
-            0,
-            -1.5
+            -38.92,
+            0.08,
+            64.07
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
@@ -75,82 +29,259 @@
       ]
     },
     {
-      "assetId": "shape:cube",
+      "assetId": "rock-group",
+      "placements": []
+    },
+    {
+      "assetId": "resource-gold-1",
       "placements": [
         {
           "position": [
-            0,
-            1,
-            -4
+            -34.1,
+            0.01,
+            24.92
           ],
-          "name": "Smoke Checkpoint",
-          "collisionPreset": "trigger",
-          "sensor": true,
-          "behavior": {
-            "script": "checkpoint",
-            "params": {
-              "slot": "quick"
-            }
-          },
-          "scale": [
-            12,
-            4,
-            3
-          ]
-        },
-        {
-          "position": [
-            0,
-            1,
-            -6
-          ],
-          "name": "Smoke Interact",
-          "collisionPreset": "trigger",
-          "sensor": true,
-          "behavior": {
-            "script": "interact"
-          },
-          "interaction": {
-            "action": "activate",
-            "prompt": "Activate"
-          },
-          "scale": [
-            12,
-            4,
-            2
-          ]
-        },
-        {
-          "position": [
-            0,
-            1,
-            -10
-          ],
-          "name": "Smoke Portal",
-          "collisionPreset": "trigger",
-          "sensor": true,
-          "behavior": {
-            "script": "level-travel",
-            "params": {
-              "targetLevel": "layouts/__playwright-smoke-target.level.json",
-              "targetSpawn": "arrival"
-            }
-          },
-          "scale": [
-            12,
-            4,
-            3
-          ]
-        },
-        {
-          "position": [
-            2,
-            0.25,
-            -0.71
-          ],
-          "name": "Cube",
+          "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 1
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-gold-2",
+      "placements": [
+        {
+          "position": [
+            -34.83,
+            0.01,
+            26.39
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-gold-3",
+      "placements": [
+        {
+          "position": [
+            -33.51,
+            0,
+            26.47
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-rock-1",
+      "placements": [
+        {
+          "position": [
+            -41.9,
+            0.02,
+            25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -33.95,
+            0.02,
+            15.63
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-rock-2",
+      "placements": [
+        {
+          "position": [
+            -42.79,
+            0.01,
+            26
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -34.84,
+            0.01,
+            16.63
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-rock-3",
+      "placements": [
+        {
+          "position": [
+            -41.78,
+            0,
+            26.42
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -33.83,
+            0,
+            17.05
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mountain-group-2",
+      "placements": [
+        {
+          "position": [
+            -53.98,
+            0.04,
+            63.57
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -64.59,
+            0.04,
+            55.87
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -63.62,
+            0.04,
+            50.73
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -90,
+            0
+          ],
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mountain-single",
+      "placements": [
+        {
+          "position": [
+            -50.03,
+            0.04,
+            64.16
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "mountainlarge-single",
+      "placements": [
+        {
+          "position": [
+            -47.45,
+            0.1,
+            65.03
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "highpolyplane",
+      "placements": []
+    },
+    {
+      "assetId": "archery-secondage-level1",
+      "placements": []
+    },
+    {
+      "assetId": "rock",
+      "placements": [
+        {
+          "position": [
+            15.23,
+            -2.37,
+            19.64
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 8.29
+        },
+        {
+          "position": [
+            16.01,
+            -2.37,
+            20.95
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -60,
+            0
+          ],
+          "scale": 7.34
+        },
+        {
+          "position": [
+            14.47,
+            -2.37,
+            20.25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 11.6
+        },
+        {
+          "position": [
+            15.2,
+            -2.37,
+            20.63
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -60,
+            0
+          ],
+          "scale": 10.27
         }
       ]
     }
@@ -158,7 +289,6 @@
   "characters": [],
   "worldSettings": {
     "staticObjectsCastShadow": true,
-    "gameMode": "assets/starter-content/Gameplay/Script_GameMode.actor.json",
     "hudWidget": "hud",
     "pauseMenuWidget": "menu",
     "locale": "en"
@@ -167,10 +297,7 @@
     "rayleigh": 1,
     "turbidity": 1,
     "mie": 0.002,
-    "mieDirectionalG": 0.8,
-    "skyLightCapture": {
-      "intensity": 1
-    }
+    "mieDirectionalG": 0.6
   },
   "postProcess": {
     "antialias": "smaa",
@@ -186,9 +313,9 @@
       "id": "sun",
       "type": "directional",
       "position": [
-        3,
-        9,
-        4
+        40,
+        80,
+        30
       ],
       "name": "Sun",
       "rotation": [
@@ -197,34 +324,14 @@
         0
       ],
       "color": "#ffffff",
-      "intensity": 3,
+      "intensity": 1.6,
       "castShadow": true
     }
   ],
-  "reflectionPlanes": [],
   "reflectiveSurfaces": [],
-  "reflectionCaptures": [],
-  "blockingVolumes": [],
-  "aiNavigationVolumes": [
-    {
-      "id": "ai-navigation-volume-1",
-      "position": [
-        0,
-        2,
-        0
-      ],
-      "name": "AI Navigation Volume",
-      "size": [
-        10,
-        4,
-        10
-      ]
-    }
-  ],
-  "targetPoints": [],
   "splines": [
     {
-      "id": "spline-1",
+      "id": "enemy-base-route",
       "position": [
         0,
         0,
@@ -241,71 +348,3049 @@
         "reparamStepsPerSegment": 8,
         "points": [
           {
-            "id": "spline-point-1",
+            "id": "p0",
             "position": [
+              38,
               0,
-              0,
-              0
+              -32
             ],
-            "pointType": "curveAuto"
+            "pointType": "linear"
           },
           {
-            "id": "spline-point-4",
+            "id": "p1",
             "position": [
-              2,
+              38,
               0,
-              0
+              -30
             ],
-            "pointType": "curveAuto"
+            "pointType": "linear"
           },
           {
-            "id": "spline-point-2",
+            "id": "p2",
             "position": [
-              4,
+              26,
               0,
-              0
+              -30
             ],
-            "pointType": "curveAuto"
+            "pointType": "linear"
           },
           {
-            "id": "spline-point-3",
+            "id": "p3",
             "position": [
-              8,
+              26,
               0,
-              0
+              -34
             ],
-            "pointType": "curveCustom",
-            "arriveTangent": [
-              4,
+            "pointType": "linear"
+          },
+          {
+            "id": "p4",
+            "position": [
+              26,
               0,
-              0
+              -30
             ],
-            "leaveTangent": [
-              4,
+            "pointType": "linear"
+          },
+          {
+            "id": "p5",
+            "position": [
+              50,
               0,
-              0
+              -30
             ],
-            "tangentsLinked": false
+            "pointType": "linear"
+          },
+          {
+            "id": "p6",
+            "position": [
+              50,
+              0,
+              -34
+            ],
+            "pointType": "linear"
           }
         ]
       },
-      "name": "Spline",
-      "generators": [
-        {
-          "id": "rigid-segments",
-          "type": "rigidSegments",
-          "meshAsset": "",
-          "segmentLength": 2
-        }
+      "name": "Enemy Base Route",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:base:0"
+        ]
+      }
+    },
+    {
+      "id": "enemy_west-route-0",
+      "position": [
+        0,
+        0,
+        0
       ],
-      "debug": {
-        "visible": true,
-        "showPointIds": true,
-        "color": "#ffffff",
-        "resolution": 16
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "p0",
+            "position": [
+              26,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p1",
+            "position": [
+              14,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p2",
+            "position": [
+              14,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p3",
+            "position": [
+              14,
+              0,
+              -40
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "enemy_west route 0",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:enemy_west:0"
+        ]
+      }
+    },
+    {
+      "id": "enemy_west-route-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "p0",
+            "position": [
+              26,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p1",
+            "position": [
+              26,
+              0,
+              -20
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p2",
+            "position": [
+              14,
+              0,
+              -20
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p3",
+            "position": [
+              14,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p4",
+            "position": [
+              14,
+              0,
+              -40
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "enemy_west route 1",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:enemy_west:1"
+        ]
+      }
+    },
+    {
+      "id": "enemy_east-route-0",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "p0",
+            "position": [
+              50,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p1",
+            "position": [
+              62,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p2",
+            "position": [
+              62,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p3",
+            "position": [
+              62,
+              0,
+              -40
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "enemy_east route 0",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:enemy_east:0"
+        ]
+      }
+    },
+    {
+      "id": "enemy_east-route-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "spline": {
+        "schema": 1,
+        "closed": false,
+        "defaultUp": [
+          0,
+          1,
+          0
+        ],
+        "reparamStepsPerSegment": 8,
+        "points": [
+          {
+            "id": "p0",
+            "position": [
+              50,
+              0,
+              -30
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p1",
+            "position": [
+              50,
+              0,
+              -20
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p2",
+            "position": [
+              62,
+              0,
+              -20
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p3",
+            "position": [
+              62,
+              0,
+              -24
+            ],
+            "pointType": "linear"
+          },
+          {
+            "id": "p4",
+            "position": [
+              62,
+              0,
+              -40
+            ],
+            "pointType": "linear"
+          }
+        ]
+      },
+      "name": "enemy_east route 1",
+      "runtime": {
+        "tags": [
+          "rts.route:enemy:enemy_east:1"
+        ]
       }
     }
   ],
-  "landscapes": [],
-  "actors": []
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "landscapes/landscape-1.landscape.json",
+      "name": "Landscape"
+    }
+  ],
+  "riverWaters": [
+    {
+      "id": "river-water-1",
+      "landscapeRef": "landscape-1",
+      "splineRef": "spline-1",
+      "name": "River Water 1",
+      "surfaceLevel": -1,
+      "opacity": 1,
+      "bedVisibility": 0.2,
+      "absorptionDistance": 1,
+      "foamOpacity": 0.7,
+      "shoreWaveSpacing": 4,
+      "shoreWaveSpeed": 0.3,
+      "shoreWaveReach": 0.3,
+      "shoreWaveBreakupScale": 1,
+      "foamStamps": [
+        {
+          "id": "foam-1",
+          "kind": "point",
+          "position": [
+            15.39,
+            -1,
+            20.51
+          ],
+          "radius": 4,
+          "intensity": 0.7
+        },
+        {
+          "id": "foam-2",
+          "kind": "point",
+          "position": [
+            14.33,
+            -1,
+            20.17
+          ],
+          "radius": 4,
+          "intensity": 0.7
+        }
+      ],
+      "reflectionMode": "sharedPlanar",
+      "reflectionQuality": "high"
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
+      "position": [
+        -38,
+        0,
+        38
+      ],
+      "name": "Player Start",
+      "variableOverrides": {
+        "owner": "player"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
+      "position": [
+        38,
+        0,
+        -38
+      ],
+      "name": "Enemy Start",
+      "variableOverrides": {
+        "owner": "enemy"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
+      "position": [
+        -42,
+        0,
+        26
+      ],
+      "name": "Resource player_safe_stone",
+      "variableOverrides": {
+        "nodeId": "player_safe_stone",
+        "resourceId": "stone",
+        "kind": "safe"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
+      "position": [
+        -34,
+        0,
+        26
+      ],
+      "name": "Resource player_safe_gold",
+      "variableOverrides": {
+        "nodeId": "player_safe_gold",
+        "resourceId": "gold",
+        "kind": "safe"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
+      "position": [
+        34,
+        0,
+        -26
+      ],
+      "name": "Resource enemy_safe_stone",
+      "variableOverrides": {
+        "nodeId": "enemy_safe_stone",
+        "resourceId": "stone",
+        "kind": "safe"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
+      "position": [
+        42,
+        0,
+        -26
+      ],
+      "name": "Resource enemy_safe_gold",
+      "variableOverrides": {
+        "nodeId": "enemy_safe_gold",
+        "resourceId": "gold",
+        "kind": "safe"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
+      "position": [
+        -34,
+        0,
+        16
+      ],
+      "name": "Resource external_stone",
+      "variableOverrides": {
+        "nodeId": "external_stone",
+        "resourceId": "stone",
+        "kind": "external"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
+      "position": [
+        34,
+        0,
+        16
+      ],
+      "name": "Resource external_gold",
+      "variableOverrides": {
+        "nodeId": "external_gold",
+        "resourceId": "gold",
+        "kind": "external"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -56,
+        0,
+        40
+      ],
+      "name": "Tree player-wood-1",
+      "variableOverrides": {
+        "treeId": "player-wood-1",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -54,
+        0,
+        38
+      ],
+      "name": "Tree player-wood-1-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-1-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -52,
+        0,
+        42
+      ],
+      "name": "Tree player-wood-2",
+      "variableOverrides": {
+        "treeId": "player-wood-2",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -54,
+        0,
+        44
+      ],
+      "name": "Tree player-wood-2-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-2-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -48,
+        0,
+        40
+      ],
+      "name": "Tree player-wood-3",
+      "variableOverrides": {
+        "treeId": "player-wood-3",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -46,
+        0,
+        38
+      ],
+      "name": "Tree player-wood-3-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-3-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -56,
+        0,
+        34
+      ],
+      "name": "Tree player-wood-4",
+      "variableOverrides": {
+        "treeId": "player-wood-4",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -58,
+        0,
+        36
+      ],
+      "name": "Tree player-wood-4-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-4-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -52,
+        0,
+        32
+      ],
+      "name": "Tree player-wood-5",
+      "variableOverrides": {
+        "treeId": "player-wood-5",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -50,
+        0,
+        30
+      ],
+      "name": "Tree player-wood-5-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-5-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -48,
+        0,
+        34
+      ],
+      "name": "Tree player-wood-6",
+      "variableOverrides": {
+        "treeId": "player-wood-6",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -50,
+        0,
+        36
+      ],
+      "name": "Tree player-wood-6-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-6-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -54,
+        0,
+        28
+      ],
+      "name": "Tree player-wood-7",
+      "variableOverrides": {
+        "treeId": "player-wood-7",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -52,
+        0,
+        26
+      ],
+      "name": "Tree player-wood-7-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-7-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -48,
+        0,
+        28
+      ],
+      "name": "Tree player-wood-8",
+      "variableOverrides": {
+        "treeId": "player-wood-8",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -50,
+        0,
+        30
+      ],
+      "name": "Tree player-wood-8-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-8-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        48,
+        0,
+        -30
+      ],
+      "name": "Tree enemy-wood-1",
+      "variableOverrides": {
+        "treeId": "enemy-wood-1",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        50,
+        0,
+        -32
+      ],
+      "name": "Tree enemy-wood-1-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-1-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        52,
+        0,
+        -28
+      ],
+      "name": "Tree enemy-wood-2",
+      "variableOverrides": {
+        "treeId": "enemy-wood-2",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        50,
+        0,
+        -26
+      ],
+      "name": "Tree enemy-wood-2-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-2-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        56,
+        0,
+        -30
+      ],
+      "name": "Tree enemy-wood-3",
+      "variableOverrides": {
+        "treeId": "enemy-wood-3",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        58,
+        0,
+        -32
+      ],
+      "name": "Tree enemy-wood-3-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-3-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        46,
+        0,
+        -36
+      ],
+      "name": "Tree enemy-wood-4",
+      "variableOverrides": {
+        "treeId": "enemy-wood-4",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        44,
+        0,
+        -34
+      ],
+      "name": "Tree enemy-wood-4-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-4-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        54,
+        0,
+        -36
+      ],
+      "name": "Tree enemy-wood-5",
+      "variableOverrides": {
+        "treeId": "enemy-wood-5",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        56,
+        0,
+        -38
+      ],
+      "name": "Tree enemy-wood-5-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-5-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        58,
+        0,
+        -38
+      ],
+      "name": "Tree enemy-wood-6",
+      "variableOverrides": {
+        "treeId": "enemy-wood-6",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        56,
+        0,
+        -36
+      ],
+      "name": "Tree enemy-wood-6-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-6-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        48,
+        0,
+        -44
+      ],
+      "name": "Tree enemy-wood-7",
+      "variableOverrides": {
+        "treeId": "enemy-wood-7",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        50,
+        0,
+        -46
+      ],
+      "name": "Tree enemy-wood-7-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-7-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        54,
+        0,
+        -44
+      ],
+      "name": "Tree enemy-wood-8",
+      "variableOverrides": {
+        "treeId": "enemy-wood-8",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        52,
+        0,
+        -42
+      ],
+      "name": "Tree enemy-wood-8-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-8-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -48,
+        0,
+        10
+      ],
+      "name": "Tree west-wood-1",
+      "variableOverrides": {
+        "treeId": "west-wood-1",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -46,
+        0,
+        8
+      ],
+      "name": "Tree west-wood-1-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-1-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -44,
+        0,
+        12
+      ],
+      "name": "Tree west-wood-2",
+      "variableOverrides": {
+        "treeId": "west-wood-2",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -46,
+        0,
+        14
+      ],
+      "name": "Tree west-wood-2-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-2-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -40,
+        0,
+        10
+      ],
+      "name": "Tree west-wood-3",
+      "variableOverrides": {
+        "treeId": "west-wood-3",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -38,
+        0,
+        8
+      ],
+      "name": "Tree west-wood-3-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-3-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -48,
+        0,
+        4
+      ],
+      "name": "Tree west-wood-4",
+      "variableOverrides": {
+        "treeId": "west-wood-4",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -50,
+        0,
+        6
+      ],
+      "name": "Tree west-wood-4-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-4-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -42,
+        0,
+        4
+      ],
+      "name": "Tree west-wood-5",
+      "variableOverrides": {
+        "treeId": "west-wood-5",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -40,
+        0,
+        2
+      ],
+      "name": "Tree west-wood-5-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-5-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -38,
+        0,
+        6
+      ],
+      "name": "Tree west-wood-6",
+      "variableOverrides": {
+        "treeId": "west-wood-6",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -40,
+        0,
+        8
+      ],
+      "name": "Tree west-wood-6-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-6-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        38,
+        0,
+        -4
+      ],
+      "name": "Tree east-wood-1",
+      "variableOverrides": {
+        "treeId": "east-wood-1",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        40,
+        0,
+        -6
+      ],
+      "name": "Tree east-wood-1-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-1-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        44,
+        0,
+        -4
+      ],
+      "name": "Tree east-wood-2",
+      "variableOverrides": {
+        "treeId": "east-wood-2",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        42,
+        0,
+        -2
+      ],
+      "name": "Tree east-wood-2-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-2-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        48,
+        0,
+        -6
+      ],
+      "name": "Tree east-wood-3",
+      "variableOverrides": {
+        "treeId": "east-wood-3",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        50,
+        0,
+        -8
+      ],
+      "name": "Tree east-wood-3-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-3-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        40,
+        0,
+        -10
+      ],
+      "name": "Tree east-wood-4",
+      "variableOverrides": {
+        "treeId": "east-wood-4",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        38,
+        0,
+        -8
+      ],
+      "name": "Tree east-wood-4-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-4-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        46,
+        0,
+        -12
+      ],
+      "name": "Tree east-wood-5",
+      "variableOverrides": {
+        "treeId": "east-wood-5",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        48,
+        0,
+        -14
+      ],
+      "name": "Tree east-wood-5-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-5-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        52,
+        0,
+        -12
+      ],
+      "name": "Tree east-wood-6",
+      "variableOverrides": {
+        "treeId": "east-wood-6",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        50,
+        0,
+        -10
+      ],
+      "name": "Tree east-wood-6-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-6-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -12,
+        0,
+        -46
+      ],
+      "name": "Tree north-wood-1",
+      "variableOverrides": {
+        "treeId": "north-wood-1",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -10,
+        0,
+        -48
+      ],
+      "name": "Tree north-wood-1-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-1-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -6,
+        0,
+        -44
+      ],
+      "name": "Tree north-wood-2",
+      "variableOverrides": {
+        "treeId": "north-wood-2",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -8,
+        0,
+        -42
+      ],
+      "name": "Tree north-wood-2-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-2-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        0,
+        0,
+        -46
+      ],
+      "name": "Tree north-wood-3",
+      "variableOverrides": {
+        "treeId": "north-wood-3",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        2,
+        0,
+        -48
+      ],
+      "name": "Tree north-wood-3-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-3-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -10,
+        0,
+        -52
+      ],
+      "name": "Tree north-wood-4",
+      "variableOverrides": {
+        "treeId": "north-wood-4",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -12,
+        0,
+        -50
+      ],
+      "name": "Tree north-wood-4-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-4-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -2,
+        0,
+        -52
+      ],
+      "name": "Tree north-wood-5",
+      "variableOverrides": {
+        "treeId": "north-wood-5",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        0,
+        0,
+        -54
+      ],
+      "name": "Tree north-wood-5-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-5-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        4,
+        0,
+        42
+      ],
+      "name": "Tree south-wood-1",
+      "variableOverrides": {
+        "treeId": "south-wood-1",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        2,
+        0,
+        44
+      ],
+      "name": "Tree south-wood-1-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-1-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        10,
+        0,
+        44
+      ],
+      "name": "Tree south-wood-2",
+      "variableOverrides": {
+        "treeId": "south-wood-2",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        12,
+        0,
+        42
+      ],
+      "name": "Tree south-wood-2-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-2-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        16,
+        0,
+        42
+      ],
+      "name": "Tree south-wood-3",
+      "variableOverrides": {
+        "treeId": "south-wood-3",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        14,
+        0,
+        44
+      ],
+      "name": "Tree south-wood-3-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-3-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        6,
+        0,
+        36
+      ],
+      "name": "Tree south-wood-4",
+      "variableOverrides": {
+        "treeId": "south-wood-4",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        8,
+        0,
+        34
+      ],
+      "name": "Tree south-wood-4-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-4-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        14,
+        0,
+        36
+      ],
+      "name": "Tree south-wood-5",
+      "variableOverrides": {
+        "treeId": "south-wood-5",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        12,
+        0,
+        38
+      ],
+      "name": "Tree south-wood-5-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-5-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -58,
+        0,
+        34
+      ],
+      "name": "Tree player-wood-9",
+      "variableOverrides": {
+        "treeId": "player-wood-9",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -56,
+        0,
+        32
+      ],
+      "name": "Tree player-wood-9-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-9-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -58,
+        0,
+        40
+      ],
+      "name": "Tree player-wood-10",
+      "variableOverrides": {
+        "treeId": "player-wood-10",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -60,
+        0,
+        42
+      ],
+      "name": "Tree player-wood-10-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-10-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -56,
+        0,
+        28
+      ],
+      "name": "Tree player-wood-11",
+      "variableOverrides": {
+        "treeId": "player-wood-11",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -54,
+        0,
+        26
+      ],
+      "name": "Tree player-wood-11-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-11-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -56,
+        0,
+        36
+      ],
+      "name": "Tree player-wood-12",
+      "variableOverrides": {
+        "treeId": "player-wood-12",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -58,
+        0,
+        38
+      ],
+      "name": "Tree player-wood-12-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-12-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -56,
+        0,
+        38
+      ],
+      "name": "Tree player-wood-13",
+      "variableOverrides": {
+        "treeId": "player-wood-13",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -54,
+        0,
+        36
+      ],
+      "name": "Tree player-wood-13-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-13-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -56,
+        0,
+        42
+      ],
+      "name": "Tree player-wood-14",
+      "variableOverrides": {
+        "treeId": "player-wood-14",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -58,
+        0,
+        44
+      ],
+      "name": "Tree player-wood-14-dense",
+      "variableOverrides": {
+        "treeId": "player-wood-14-dense",
+        "forestId": "player-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        52,
+        0,
+        -26
+      ],
+      "name": "Tree enemy-wood-9",
+      "variableOverrides": {
+        "treeId": "enemy-wood-9",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        54,
+        0,
+        -28
+      ],
+      "name": "Tree enemy-wood-9-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-9-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        56,
+        0,
+        -32
+      ],
+      "name": "Tree enemy-wood-10",
+      "variableOverrides": {
+        "treeId": "enemy-wood-10",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        54,
+        0,
+        -30
+      ],
+      "name": "Tree enemy-wood-10-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-10-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        56,
+        0,
+        -28
+      ],
+      "name": "Tree enemy-wood-11",
+      "variableOverrides": {
+        "treeId": "enemy-wood-11",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        58,
+        0,
+        -30
+      ],
+      "name": "Tree enemy-wood-11-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-11-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        54,
+        0,
+        -26
+      ],
+      "name": "Tree enemy-wood-12",
+      "variableOverrides": {
+        "treeId": "enemy-wood-12",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        52,
+        0,
+        -24
+      ],
+      "name": "Tree enemy-wood-12-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-12-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        56,
+        0,
+        -26
+      ],
+      "name": "Tree enemy-wood-13",
+      "variableOverrides": {
+        "treeId": "enemy-wood-13",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        58,
+        0,
+        -28
+      ],
+      "name": "Tree enemy-wood-13-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-13-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        54,
+        0,
+        -24
+      ],
+      "name": "Tree enemy-wood-14",
+      "variableOverrides": {
+        "treeId": "enemy-wood-14",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        52,
+        0,
+        -22
+      ],
+      "name": "Tree enemy-wood-14-dense",
+      "variableOverrides": {
+        "treeId": "enemy-wood-14-dense",
+        "forestId": "enemy-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -50,
+        0,
+        4
+      ],
+      "name": "Tree west-wood-7",
+      "variableOverrides": {
+        "treeId": "west-wood-7",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -48,
+        0,
+        2
+      ],
+      "name": "Tree west-wood-7-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-7-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -50,
+        0,
+        10
+      ],
+      "name": "Tree west-wood-8",
+      "variableOverrides": {
+        "treeId": "west-wood-8",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -52,
+        0,
+        12
+      ],
+      "name": "Tree west-wood-8-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-8-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -48,
+        0,
+        6
+      ],
+      "name": "Tree west-wood-9",
+      "variableOverrides": {
+        "treeId": "west-wood-9",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -46,
+        0,
+        4
+      ],
+      "name": "Tree west-wood-9-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-9-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -48,
+        0,
+        12
+      ],
+      "name": "Tree west-wood-10",
+      "variableOverrides": {
+        "treeId": "west-wood-10",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -50,
+        0,
+        14
+      ],
+      "name": "Tree west-wood-10-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-10-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -46,
+        0,
+        10
+      ],
+      "name": "Tree west-wood-11",
+      "variableOverrides": {
+        "treeId": "west-wood-11",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -44,
+        0,
+        8
+      ],
+      "name": "Tree west-wood-11-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-11-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -46,
+        0,
+        12
+      ],
+      "name": "Tree west-wood-12",
+      "variableOverrides": {
+        "treeId": "west-wood-12",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -48,
+        0,
+        14
+      ],
+      "name": "Tree west-wood-12-dense",
+      "variableOverrides": {
+        "treeId": "west-wood-12-dense",
+        "forestId": "west-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        36,
+        0,
+        -4
+      ],
+      "name": "Tree east-wood-7",
+      "variableOverrides": {
+        "treeId": "east-wood-7",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        38,
+        0,
+        -6
+      ],
+      "name": "Tree east-wood-7-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-7-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        38,
+        0,
+        -10
+      ],
+      "name": "Tree east-wood-8",
+      "variableOverrides": {
+        "treeId": "east-wood-8",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        36,
+        0,
+        -8
+      ],
+      "name": "Tree east-wood-8-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-8-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        38,
+        0,
+        -2
+      ],
+      "name": "Tree east-wood-9",
+      "variableOverrides": {
+        "treeId": "east-wood-9",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        40,
+        0,
+        -4
+      ],
+      "name": "Tree east-wood-9-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-9-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        42,
+        0,
+        -10
+      ],
+      "name": "Tree east-wood-10",
+      "variableOverrides": {
+        "treeId": "east-wood-10",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        40,
+        0,
+        -8
+      ],
+      "name": "Tree east-wood-10-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-10-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        42,
+        0,
+        -4
+      ],
+      "name": "Tree east-wood-11",
+      "variableOverrides": {
+        "treeId": "east-wood-11",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        44,
+        0,
+        -6
+      ],
+      "name": "Tree east-wood-11-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-11-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        44,
+        0,
+        -2
+      ],
+      "name": "Tree east-wood-12",
+      "variableOverrides": {
+        "treeId": "east-wood-12",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        42,
+        0,
+        0
+      ],
+      "name": "Tree east-wood-12-dense",
+      "variableOverrides": {
+        "treeId": "east-wood-12-dense",
+        "forestId": "east-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -14,
+        0,
+        -46
+      ],
+      "name": "Tree north-wood-6",
+      "variableOverrides": {
+        "treeId": "north-wood-6",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -12,
+        0,
+        -48
+      ],
+      "name": "Tree north-wood-6-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-6-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -12,
+        0,
+        -52
+      ],
+      "name": "Tree north-wood-7",
+      "variableOverrides": {
+        "treeId": "north-wood-7",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -14,
+        0,
+        -50
+      ],
+      "name": "Tree north-wood-7-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-7-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -12,
+        0,
+        -44
+      ],
+      "name": "Tree north-wood-8",
+      "variableOverrides": {
+        "treeId": "north-wood-8",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -10,
+        0,
+        -46
+      ],
+      "name": "Tree north-wood-8-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-8-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -8,
+        0,
+        -52
+      ],
+      "name": "Tree north-wood-9",
+      "variableOverrides": {
+        "treeId": "north-wood-9",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -10,
+        0,
+        -50
+      ],
+      "name": "Tree north-wood-9-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-9-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -8,
+        0,
+        -44
+      ],
+      "name": "Tree north-wood-10",
+      "variableOverrides": {
+        "treeId": "north-wood-10",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -6,
+        0,
+        -46
+      ],
+      "name": "Tree north-wood-10-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-10-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -6,
+        0,
+        -42
+      ],
+      "name": "Tree north-wood-11",
+      "variableOverrides": {
+        "treeId": "north-wood-11",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        -8,
+        0,
+        -40
+      ],
+      "name": "Tree north-wood-11-dense",
+      "variableOverrides": {
+        "treeId": "north-wood-11-dense",
+        "forestId": "north-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        2,
+        0,
+        42
+      ],
+      "name": "Tree south-wood-6",
+      "variableOverrides": {
+        "treeId": "south-wood-6",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        4,
+        0,
+        40
+      ],
+      "name": "Tree south-wood-6-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-6-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        4,
+        0,
+        36
+      ],
+      "name": "Tree south-wood-7",
+      "variableOverrides": {
+        "treeId": "south-wood-7",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        2,
+        0,
+        38
+      ],
+      "name": "Tree south-wood-7-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-7-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        4,
+        0,
+        44
+      ],
+      "name": "Tree south-wood-8",
+      "variableOverrides": {
+        "treeId": "south-wood-8",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        6,
+        0,
+        42
+      ],
+      "name": "Tree south-wood-8-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-8-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        8,
+        0,
+        36
+      ],
+      "name": "Tree south-wood-9",
+      "variableOverrides": {
+        "treeId": "south-wood-9",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        6,
+        0,
+        38
+      ],
+      "name": "Tree south-wood-9-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-9-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "pine"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        8,
+        0,
+        44
+      ],
+      "name": "Tree south-wood-10",
+      "variableOverrides": {
+        "treeId": "south-wood-10",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        10,
+        0,
+        42
+      ],
+      "name": "Tree south-wood-10-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-10-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree1"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        10,
+        0,
+        46
+      ],
+      "name": "Tree south-wood-11",
+      "variableOverrides": {
+        "treeId": "south-wood-11",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
+      "position": [
+        8,
+        0,
+        48
+      ],
+      "name": "Tree south-wood-11-dense",
+      "variableOverrides": {
+        "treeId": "south-wood-11-dense",
+        "forestId": "south-grove",
+        "capacity": 60,
+        "variant": "tree2"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_StrategicPoint.actor.json",
+      "position": [
+        -20,
+        0,
+        -20
+      ],
+      "name": "Strategic west_pass",
+      "variableOverrides": {
+        "pointId": "west_pass",
+        "label": "Batı Geçidi",
+        "captureRadius": 10
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_StrategicPoint.actor.json",
+      "position": [
+        20,
+        0,
+        20
+      ],
+      "name": "Strategic east_pass",
+      "variableOverrides": {
+        "pointId": "east_pass",
+        "label": "Doğu Geçidi",
+        "captureRadius": 10
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        26,
+        0,
+        -38
+      ],
+      "name": "Enemy farm (26,-38)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "farm",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        50,
+        0,
+        -38
+      ],
+      "name": "Enemy lumber_camp (50,-38)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "lumber_camp",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        32,
+        0,
+        -26
+      ],
+      "name": "Enemy quarry (32,-26)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "quarry",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        44,
+        0,
+        -26
+      ],
+      "name": "Enemy gold_mine (44,-26)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "gold_mine",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        38,
+        0,
+        -26
+      ],
+      "name": "Enemy depot (38,-26)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "depot",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        38,
+        0,
+        -50
+      ],
+      "name": "Enemy barracks (38,-50)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "barracks",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        26,
+        0,
+        -56
+      ],
+      "name": "Enemy archery_range (26,-56)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "archery_range",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        38,
+        0,
+        -60
+      ],
+      "name": "Enemy market (38,-60)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "market",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        26,
+        0,
+        -44
+      ],
+      "name": "Enemy house (26,-44)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "house",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        50,
+        0,
+        -44
+      ],
+      "name": "Enemy house (50,-44)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "house",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        22,
+        0,
+        -44
+      ],
+      "name": "Enemy house (22,-44)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "house",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        54,
+        0,
+        -44
+      ],
+      "name": "Enemy house (54,-44)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "house",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        26,
+        0,
+        -48
+      ],
+      "name": "Enemy house (26,-48)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "house",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
+      "position": [
+        50,
+        0,
+        -48
+      ],
+      "name": "Enemy house (50,-48)",
+      "variableOverrides": {
+        "owner": "enemy",
+        "buildingId": "house",
+        "regionId": "enemy-base"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
+      "position": [
+        10,
+        0,
+        -32
+      ],
+      "name": "enemy_west outpost",
+      "variableOverrides": {
+        "regionId": "enemy_west",
+        "role": "outpost",
+        "buildingId": "outpost"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
+      "position": [
+        10,
+        0,
+        -40
+      ],
+      "name": "enemy_west depot",
+      "variableOverrides": {
+        "regionId": "enemy_west",
+        "role": "depot",
+        "buildingId": "depot"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
+      "position": [
+        10,
+        0,
+        -24
+      ],
+      "name": "enemy_west production",
+      "variableOverrides": {
+        "regionId": "enemy_west",
+        "role": "production",
+        "buildingId": "farm"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
+      "position": [
+        66,
+        0,
+        -32
+      ],
+      "name": "enemy_east outpost",
+      "variableOverrides": {
+        "regionId": "enemy_east",
+        "role": "outpost",
+        "buildingId": "outpost"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
+      "position": [
+        66,
+        0,
+        -40
+      ],
+      "name": "enemy_east depot",
+      "variableOverrides": {
+        "regionId": "enemy_east",
+        "role": "depot",
+        "buildingId": "depot"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
+      "position": [
+        66,
+        0,
+        -24
+      ],
+      "name": "enemy_east production",
+      "variableOverrides": {
+        "regionId": "enemy_east",
+        "role": "production",
+        "buildingId": "lumber_camp"
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        0,
+        1.5,
+        0
+      ],
+      "name": "Blocker 0",
+      "variableOverrides": {
+        "width": 24,
+        "depth": 8,
+        "height": 5
+      }
+    }
+  ]
 }
