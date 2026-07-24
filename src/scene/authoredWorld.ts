@@ -16,16 +16,18 @@
  * slice — the RTS keeps its nav authority in markers/balance, not in level art.
  * Landscape, atmosphere and post-process are future extensions of this same host.
  */
-import { Box3, Group, Mesh, type DirectionalLight, type Material, type Object3D, type Texture, type WebGLRenderer } from "three";
+import { Box3, Group, Mesh, TextureLoader, type DirectionalLight, type Material, type Object3D, type Texture, type WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { InstancedMesh } from "three";
 
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
-import { createLandscapeObject, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
-import { createFlatLandscapeData, resolveLandscape, type ForgeLandscapeData } from "@engine/scene/landscape";
+import { createLandscapeObject, type LandscapeLayerTexture, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
+import { createFlatLandscapeData, LANDSCAPE_DEFAULT_LAYERS, resolveLandscape, type ForgeLandscapeData } from "@engine/scene/landscape";
+import type { AssetManifest } from "@engine/assets/manifest";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RoomLayout } from "@engine/scene/layout";
+import { loadForgeMaterialLayer } from "./materialAssets";
 import {
   buildSceneInstancedModel,
   buildSceneLightObject,
@@ -86,13 +88,17 @@ interface ManifestModelEntry {
  * parse so the authored-world path resolves ids the same way the RTS actor path
  * does, without pulling in the heavier {@link AssetLoader}.
  */
-async function loadModelManifest(resolveUrl: (path: string) => string): Promise<Map<string, ManifestModelEntry>> {
+async function fetchAssetManifest(resolveUrl: (path: string) => string): Promise<AssetManifest> {
   const response = await fetch(resolveUrl("assets/manifest.json"), { cache: "no-cache" });
   if (!response.ok) throw new Error(`Authored-world manifest fetch failed: ${response.status}`);
-  const manifest = await response.json() as { assets?: unknown };
+  const manifest = await response.json() as AssetManifest;
   if (!Array.isArray(manifest.assets)) throw new Error("Authored-world manifest has no assets array");
+  return manifest;
+}
+
+function modelEntriesFrom(manifest: AssetManifest): Map<string, ManifestModelEntry> {
   const models = new Map<string, ManifestModelEntry>();
-  for (const value of manifest.assets) {
+  for (const value of manifest.assets as unknown[]) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) continue;
     const entry = value as Record<string, unknown>;
     const id = entry["id"];
@@ -103,6 +109,46 @@ async function loadModelManifest(resolveUrl: (path: string) => string): Promise<
     }
   }
   return models;
+}
+
+/**
+ * Resolves the per-layer splat inputs (base color + tiling texture) for a
+ * landscape's material-assigned paint layers, aligned to `data.layers`. Mirrors
+ * {@link RuntimeSceneApp}'s runtime resolver so an authored terrain shows the same
+ * grass/dirt/rock/snow textures the editor paints with. A layer with no material —
+ * or one whose material can't be read — falls back to its preset colour.
+ */
+async function resolveLandscapeLayerTextures(
+  data: ForgeLandscapeData,
+  manifest: AssetManifest,
+  textureLoader: TextureLoader,
+  maxAnisotropy: number,
+  loaded: Texture[],
+  warn: (message: string, error?: unknown) => void,
+): Promise<LandscapeLayerTexture[]> {
+  const worldSize = (data.size.verticesX - 1) * data.size.spacing;
+  const tiling = Math.min(128, Math.max(1, Math.round(worldSize / 8)));
+  const presetById = new Map(LANDSCAPE_DEFAULT_LAYERS.map((preset) => [preset.id as string, preset]));
+  return Promise.all(
+    data.layers.map(async (layer) => {
+      const presetColor = presetById.get(layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color;
+      let resolved: Awaited<ReturnType<typeof loadForgeMaterialLayer>> = null;
+      if (layer.material) {
+        try {
+          resolved = await loadForgeMaterialLayer(manifest, layer.material, textureLoader, { maxAnisotropy });
+        } catch (error) {
+          warn(`Authored-world landscape layer material failed to load: ${layer.material}`, error);
+        }
+      }
+      if (resolved?.texture) loaded.push(resolved.texture);
+      return {
+        id: layer.id,
+        texture: resolved?.texture ?? null,
+        color: resolved?.baseColor ?? presetColor,
+        tiling,
+      } satisfies LandscapeLayerTexture;
+    }),
+  );
 }
 
 /**
@@ -118,10 +164,11 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
   const settings = resolveSceneWorldSettings(layout);
   const loader = createForgeGltfLoader(renderer);
 
-  const manifest = await loadModelManifest(resolveUrl);
+  const assetManifest = await fetchAssetManifest(resolveUrl);
+  const modelEntries = modelEntriesFrom(assetManifest);
   const models = new Map<string, GLTF>();
   await Promise.all(sceneModelAssetIds(layout).map(async (assetId) => {
-    const entry = manifest.get(assetId);
+    const entry = modelEntries.get(assetId);
     if (!entry) {
       warn(`Authored-world asset is not in the manifest: ${assetId}`);
       return;
@@ -163,7 +210,11 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
   // paint still renders, so a sculpted terrain is already visible. A missing or
   // broken sidecar degrades to a flat terrain rather than dropping the whole world.
   const landscapeObjects: LandscapeObject[] = [];
-  for (const actor of layout.landscapes ?? []) {
+  const landscapeLayerTextures: Texture[] = [];
+  const landscapes = layout.landscapes ?? [];
+  const textureLoader = landscapes.length > 0 ? new TextureLoader() : null;
+  const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+  for (const actor of landscapes) {
     let data: ForgeLandscapeData;
     try {
       const response = await fetch(resolveUrl(actor.dataRef), { cache: "no-cache" });
@@ -173,11 +224,21 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       warn(`Authored-world landscape sidecar failed to load: ${actor.dataRef}`, error);
       data = createFlatLandscapeData("medium");
     }
+    const layerTextures = await resolveLandscapeLayerTextures(
+      data,
+      assetManifest,
+      textureLoader!,
+      maxAnisotropy,
+      landscapeLayerTextures,
+      warn,
+    );
     const item: LandscapeRenderItem = {
       ...resolveLandscape(actor),
       position: actor.position,
       rotation: actor.rotation ?? [0, 0, 0],
       data,
+      layerTextures,
+      layerColors: Object.fromEntries(layerTextures.map((layer) => [layer.id, layer.color])),
     };
     const object = createLandscapeObject(item);
     root.add(object);
@@ -226,6 +287,9 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     for (const geometry of geometries) geometry.dispose();
     for (const material of materials) material.dispose();
     for (const texture of textures) texture.dispose();
+    // Landscape splat textures live in the material's custom uniforms, not as
+    // enumerable material properties, so the traversal above cannot reach them.
+    for (const texture of landscapeLayerTextures) texture.dispose();
     for (const record of lightRecords) {
       const light = record.light as { dispose?: () => void };
       light.dispose?.();
