@@ -1077,7 +1077,8 @@ import {
   Vector3,
   VectorKeyframeTrack,
 } from "three";
-import type { AnimationMixer } from "three";
+import type { AnimationMixer, WebGLRenderer } from "three";
+import { AuthoredEnvironment } from "../engine/render-three/authoredEnvironment";
 import {
   createUiNode,
   defaultUiWidgetDef,
@@ -20008,6 +20009,37 @@ check("applySceneFog sets exp/linear fog and clears on hidden/null", () => {
   assert.ok(scene.fog instanceof FogExp2);
   applySceneFog(scene, null);
   assert.equal(scene.fog, null);
+});
+
+// Editor↔Runtime parity guard (parity plan Faz 2): the shared AuthoredEnvironment
+// layer is what every Level-rendering runtime (RuntimeSceneApp, RtsApp) must apply,
+// so authored fog + sky light never silently vanish in a second runtime again. The
+// GL-free surface — fog application and the sky-light presence query the RTS uses to
+// retire its fallback ambient — is asserted here; the IBL cubemap capture needs a
+// real GL context and is covered by the browser smoke.
+check("AuthoredEnvironment applies authored fog and reports authored sky light", () => {
+  const scene = new Scene();
+  // renderer/camera are unused by the fog + sky-light-query paths under test.
+  const env = new AuthoredEnvironment({
+    scene,
+    renderer: {} as unknown as WebGLRenderer,
+    camera: new PerspectiveCamera(),
+    resolveSunActor: () => null,
+  });
+
+  // Height Fog — the concrete singleton that was missing from the RTS Play route.
+  env.applyFog({ heightFog: { mode: "exp", color: "#334455", density: 0.06 } } as never);
+  assert.ok(scene.fog instanceof FogExp2, "authored height fog reaches scene.fog");
+  assert.equal((scene.fog as FogExp2).density, 0.06);
+  // A Level authoring no fog clears it (leaves the runtime's default: no fog).
+  env.applyFog({} as never);
+  assert.equal(scene.fog, null);
+
+  // hasAuthoredSkyLight drives the fallback-ambient retirement in RtsApp.
+  assert.equal(env.hasAuthoredSkyLight({ skyAtmosphere: {} } as never), true);
+  assert.equal(env.hasAuthoredSkyLight({ skyAtmosphere: { hidden: true } } as never), false);
+  assert.equal(env.hasAuthoredSkyLight({} as never), false);
+  assert.equal(env.hasAuthoredSkyLight(null), false);
 });
 
 check("validateHeightFog allowlists fields and round-trips through validateLayout", () => {
