@@ -21,6 +21,8 @@ import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { InstancedMesh } from "three";
 
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
+import { createLandscapeObject, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
+import { createFlatLandscapeData, resolveLandscape, type ForgeLandscapeData } from "@engine/scene/landscape";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
 import type { RoomLayout } from "@engine/scene/layout";
@@ -46,6 +48,12 @@ export interface AuthoredWorldHandle {
   readonly navigationBlockers: readonly NavBlocker[];
   /** Authored directional lights, exposed so a shell can re-tune their shadows. */
   readonly directionalLights: readonly DirectionalLight[];
+  /**
+   * How many Landscape terrains this world mounted. A shell reads this to retire
+   * its own flat placeholder ground once an authored terrain is standing in for
+   * it; 0 means the terrain was absent (or failed to load) and the fallback stays.
+   */
+  readonly landscapeCount: number;
   /** Detach from the scene and release every GPU resource this handle created. */
   dispose(): void;
 }
@@ -148,6 +156,34 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     instancedMeshes.push(...built.meshes);
   }
 
+  // Landscape terrains (heightfield). Mounted from the same `*.landscape.json`
+  // sidecar the editor viewport and RuntimeSceneApp render, so an authored,
+  // sculpted/painted terrain reaches the runtime without a bespoke loader. Layer
+  // *textures* (assigned-material splat) are a later slice; the baked vertex-colour
+  // paint still renders, so a sculpted terrain is already visible. A missing or
+  // broken sidecar degrades to a flat terrain rather than dropping the whole world.
+  const landscapeObjects: LandscapeObject[] = [];
+  for (const actor of layout.landscapes ?? []) {
+    let data: ForgeLandscapeData;
+    try {
+      const response = await fetch(resolveUrl(actor.dataRef), { cache: "no-cache" });
+      if (!response.ok) throw new Error(`status ${response.status}`);
+      data = await response.json() as ForgeLandscapeData;
+    } catch (error) {
+      warn(`Authored-world landscape sidecar failed to load: ${actor.dataRef}`, error);
+      data = createFlatLandscapeData("medium");
+    }
+    const item: LandscapeRenderItem = {
+      ...resolveLandscape(actor),
+      position: actor.position,
+      rotation: actor.rotation ?? [0, 0, 0],
+      data,
+    };
+    const object = createLandscapeObject(item);
+    root.add(object);
+    landscapeObjects.push(object);
+  }
+
   const shadowBounds = options.shadowBounds ?? computeSceneRoomBounds(layout, localBounds);
   const lightRecords: LightObjectRecord[] = [];
   const directionalLights: DirectionalLight[] = [];
@@ -197,7 +233,7 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     models.clear();
   };
 
-  return { root, navigationBlockers: [], directionalLights, dispose };
+  return { root, navigationBlockers: [], directionalLights, landscapeCount: landscapeObjects.length, dispose };
 }
 
 /** Adds a material and its bound textures to the dispose sets. */

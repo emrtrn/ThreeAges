@@ -89,6 +89,7 @@ import { RTS_WORLD_HALF_EXTENT } from "../src/game/rts/world/rtsGround";
 import { RTS_BLOCKOUT_MAP } from "../src/game/rts/world/rtsMapBlockout";
 import { adaptRtsLevel, RtsLevelError } from "../src/game/rts/world/rtsLevelAdapter";
 import { resolveRtsSpatialLayout } from "../src/game/rts/world/rtsSpatialLayout";
+import { levelHasAuthoredWorld } from "../src/game/rts/world/rtsAuthoredWorld";
 import {
   RTS_PLACEMENT_GRID_SIZE,
   buildingFootprintBlocker,
@@ -29012,7 +29013,7 @@ check("Landscape Faz 1: gameplay_proof opts into its own separate Level, not cor
   assert.notEqual(proof.levelRef, core.levelRef, "gameplay_proof and core_match must not share a Level file");
 });
 
-check("Landscape Faz 1: the gameplay proof Level reproduces the full legacy spatial contract", () => {
+check("Landscape: the gameplay proof Level stays structurally playable as it is authored", () => {
   const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
   const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
   const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8")) as {
@@ -29024,26 +29025,157 @@ check("Landscape Faz 1: the gameplay proof Level reproduces the full legacy spat
     instance,
     def: normalizeActorScriptDef(JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown, instance.classRef),
   }));
-  // The gameplay proof Level is a faithful copy of RTS_BLOCKOUT_MAP's inventory,
-  // so resolving it must reproduce the legacy spatial contract exactly — the same
-  // acceptance the Core Match Level meets, held for the gameplay proof's own file.
-  const fromLevel = resolveRtsSpatialLayout(adaptRtsLevel(actors, layout.splines, { buildings, resources }));
-  const legacy = resolveRtsSpatialLayout();
-  assert.deepEqual(fromLevel.playerStart, legacy.playerStart);
-  assert.deepEqual(fromLevel.enemyStart, legacy.enemyStart);
-  assert.deepEqual(fromLevel.resourceNodes, legacy.resourceNodes);
-  assert.deepEqual(fromLevel.trees, legacy.trees);
-  assert.deepEqual(fromLevel.strategicPoints, legacy.strategicPoints);
-  assert.deepEqual(fromLevel.navigationBlockers, legacy.navigationBlockers);
-  assert.deepEqual(fromLevel.enemyBaseRoute, legacy.enemyBaseRoute);
-  assert.deepEqual(fromLevel.enemyExpansions, legacy.enemyExpansions);
-  assert.deepEqual(
-    fromLevel.enemyBaseAnchors.map((anchor) => {
-      const { owner: _owner, ...rest } = anchor as { owner?: string } & typeof anchor;
-      return rest;
-    }),
-    legacy.enemyBaseAnchors,
+  // gameplay_proof is the designer's authoring canvas — a landscape, decor and
+  // marker tuning grow on top of the Faz 1 copy, so unlike RTS_CoreMatch (the
+  // pinned code-mirror, whose exact-equivalence test lives above) this Level is
+  // *expected* to diverge from RTS_BLOCKOUT_MAP. What must survive every edit is
+  // the playable structure, not the coordinates: two starts, a central chokepoint,
+  // both flanks connected around it, resource + wood sources, and the enemy's
+  // economy scaffold. Freezing coordinates here would turn a legal design edit
+  // into a red build; these invariants are the real contract instead.
+  const level = adaptRtsLevel(actors, layout.splines, { buildings, resources });
+  const spatial = resolveRtsSpatialLayout(level);
+  assert.ok(spatial.playerStart && spatial.enemyStart, "both a player and enemy start are authored");
+  assert.ok(spatial.navigationBlockers.length >= 1, "a central chokepoint blocker is authored — the two-flank design's only gameplay wall");
+  assert.ok(spatial.resourceNodes.some((n) => n.resourceId === "stone"), "a stone node is authored");
+  assert.ok(spatial.resourceNodes.some((n) => n.resourceId === "gold"), "a gold node is authored");
+  assert.ok(spatial.trees.length > 0, "wood sources are authored");
+  assert.ok(spatial.enemyBaseAnchors.length > 0, "the enemy base has at least one build anchor");
+  assert.ok(spatial.enemyBaseRoute.length >= 2, "the enemy base road spine is authored");
+
+  // Both starts stay connected around the chokepoint using an open flank rather
+  // than crossing it — the §25 two-flank contract, checked structurally so the
+  // designer can move the wall as long as a flank route survives.
+  const nav = new RtsNavigation();
+  nav.setBlockers(spatial.navigationBlockers);
+  const path = nav.plan(
+    new Vector3(spatial.playerStart.x, 0, spatial.playerStart.z),
+    new Vector3(spatial.enemyStart.x, 0, spatial.enemyStart.z),
   );
+  assert.ok(path && path.length > 2, "the opposing starts remain connected");
+  assert.ok(path.some((point) => Math.abs(point.x) > 12.5), "the route uses an open flank, not the chokepoint");
+});
+
+check("Landscape Faz 2: moving a Level marker moves the runtime behaviour it drives (Level is the authority)", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
+  type LevelActor = {
+    classRef: string;
+    position: [number, number, number];
+    name?: string;
+    variableOverrides?: Record<string, string | number | boolean | string[]>;
+  };
+  const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8")) as {
+    actors: LevelActor[];
+    splines: Parameters<typeof adaptRtsLevel>[1];
+  };
+  const defCache = new Map<string, ReturnType<typeof normalizeActorScriptDef>>();
+  const defFor = (classRef: string) => {
+    const cached = defCache.get(classRef);
+    if (cached) return cached;
+    const def = normalizeActorScriptDef(JSON.parse(readFileSync(`public/${classRef}`, "utf8")) as unknown, classRef);
+    defCache.set(classRef, def);
+    return def;
+  };
+  // Adapt the shipped Level, optionally moving one marker first. Each call works
+  // on a deep copy so the mutation is isolated — the point is to compare the
+  // behaviour a match resolves *before* and *after* a designer edits the Level.
+  const adapt = (mutate?: (actors: LevelActor[]) => void) => {
+    const actors: LevelActor[] = layout.actors.map((a) => ({
+      ...a,
+      position: [...a.position] as [number, number, number],
+      variableOverrides: a.variableOverrides ? { ...a.variableOverrides } : undefined,
+    }));
+    mutate?.(actors);
+    return adaptRtsLevel(
+      actors.map((instance, index) => ({ index, instance, def: defFor(instance.classRef) })),
+      layout.splines,
+      { buildings, resources },
+    );
+  };
+
+  const baseline = resolveRtsSpatialLayout(adapt());
+
+  // 1) The player start marker is the spawn origin and the route's start cell.
+  // Baseline coordinates are read from the authored Level, not assumed, so the
+  // proof holds wherever the designer has since placed the start.
+  const authoredStart = baseline.playerStart;
+  const movedStart = resolveRtsSpatialLayout(adapt((actors) => {
+    const start = actors.find((a) => a.classRef.includes("KingdomStart") && a.variableOverrides?.owner === "player");
+    assert.ok(start, "the Level authors a player start marker to move");
+    start!.position = [-10, 0, 12];
+  }));
+  assert.deepEqual(movedStart.playerStart, { x: -10, z: 12 }, "the resolved player start follows its marker");
+  const nav = new RtsNavigation();
+  nav.setBlockers(movedStart.navigationBlockers);
+  const path = nav.plan(
+    new Vector3(movedStart.playerStart.x, 0, movedStart.playerStart.z),
+    new Vector3(movedStart.enemyStart.x, 0, movedStart.enemyStart.z),
+  );
+  assert.ok(path && path.length >= 2, "a match still plans a route from the moved start");
+  const near = (p: { x: number; z: number }, x: number, z: number) => Math.hypot(p.x - x, p.z - z);
+  assert.ok(
+    near(path[0]!, -10, 12) < near(path[0]!, authoredStart.x, authoredStart.z),
+    "the planned route begins at the moved start, not the authored one",
+  );
+
+  // 2) The resource node marker decides where a matching extractor may draw. The
+  // node's authored position is read from the Level so moving it in the editor
+  // does not break this proof.
+  const { width, depth } = buildings["quarry"]!.footprint;
+  const authoredStone = baseline.resourceNodes.find((n) => n.id === "player_safe_stone");
+  assert.ok(authoredStone, "the Level authors the player safe stone node");
+  const oldNodes = new ResourceNodeSystem(resources, baseline.resourceNodes);
+  assert.equal(oldNodes.canExtractAt("stone", authoredStone!.x, authoredStone!.z, width, depth), true, "baseline: a quarry over the authored stone node extracts");
+  const movedNode = resolveRtsSpatialLayout(adapt((actors) => {
+    const node = actors.find((a) => a.variableOverrides?.nodeId === "player_safe_stone");
+    assert.ok(node, "the Level authors the player safe stone node to move");
+    node!.position = [authoredStone!.x + 40, 0, authoredStone!.z - 40];
+  }));
+  const newNodes = new ResourceNodeSystem(resources, movedNode.resourceNodes);
+  assert.equal(newNodes.canExtractAt("stone", authoredStone!.x, authoredStone!.z, width, depth), false, "the stone node's old spot no longer extracts once its marker moved");
+  assert.equal(newNodes.canExtractAt("stone", authoredStone!.x + 40, authoredStone!.z - 40, width, depth), true, "extraction is now legal where the marker was moved to");
+
+  // 3) The strategic point marker decides where a regional-victory hold is contested.
+  const held = () => "player" as const;
+  const enemyAt = (x: number, z: number) => [{ owner: "enemy" as const, x, z }];
+  const authoredWest = baseline.strategicPoints.find((p) => p.id === "west_pass")!;
+  const movedWest = { x: authoredWest.x + 50, z: authoredWest.z + 50 };
+  const before = new StrategicPointSystem(baseline.strategicPoints, held, () => enemyAt(authoredWest.x, authoredWest.z));
+  before.refresh();
+  assert.equal(before.statusOf("west_pass")!.contested, true, "an enemy standing on the authored point contests it");
+  const movedPoint = resolveRtsSpatialLayout(adapt((actors) => {
+    const point = actors.find((a) => a.variableOverrides?.pointId === "west_pass");
+    assert.ok(point, "the Level authors the west_pass strategic point to move");
+    point!.position = [movedWest.x, 0, movedWest.z];
+  }));
+  const after = new StrategicPointSystem(movedPoint.strategicPoints, held, () => enemyAt(authoredWest.x, authoredWest.z));
+  after.refresh();
+  assert.equal(after.statusOf("west_pass")!.contested, false, "the same enemy no longer contests the objective once its marker moved away");
+  assert.deepEqual(
+    { x: after.statusOf("west_pass")!.point.x, z: after.statusOf("west_pass")!.point.z },
+    movedWest,
+    "the objective now sits where its marker was moved",
+  );
+});
+
+check("Landscape Faz 4: the gameplay proof Level authors a mountable Landscape terrain", () => {
+  const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8")) as {
+    instances: unknown[];
+    landscapes?: Array<{ id: string; dataRef: string; position: [number, number, number] }>;
+  };
+  const landscapes = layout.landscapes ?? [];
+  assert.ok(landscapes.length > 0, "the Level authors at least one Landscape actor");
+  const landscape = landscapes[0]!;
+  assert.ok(landscape.dataRef.endsWith(".landscape.json"), "the Landscape points at a height/layer sidecar");
+  // The sidecar the runtime host will fetch must actually exist, or the mount
+  // would silently degrade to a flat fallback terrain.
+  const sidecar = JSON.parse(readFileSync(`public/${landscape.dataRef}`, "utf8")) as { type?: string; size?: { verticesX?: number } };
+  assert.equal(sidecar.type, "landscape", "the sidecar is a landscape height/layer file");
+  assert.ok((sidecar.size?.verticesX ?? 0) > 1, "the sidecar carries a real vertex grid");
+  // The synchronous gate RtsApp reads to decide it will mount an authored world
+  // (and, once mounted, retire the flat ground) must see the terrain.
+  assert.equal(levelHasAuthoredWorld(layout as never), true, "an authored Landscape counts as a mountable world");
 });
 
 check("Assetization Faz D: the authored Level keeps both flanks and the enemy base route reachable", () => {

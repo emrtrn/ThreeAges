@@ -26,11 +26,12 @@ const RTS_SHADOW_BOUNDS = new Box3(
   new Vector3(RTS_WORLD_HALF_EXTENT, 220, RTS_WORLD_HALF_EXTENT),
 );
 
-/** Whether a Level authors any static world worth mounting (instances or lights). */
+/** Whether a Level authors any static world worth mounting (instances, lights or terrain). */
 export function levelHasAuthoredWorld(layout: RoomLayout): boolean {
   const hasInstances = layout.instances.some((instance) => instance.placements.length > 0);
   const hasLights = (layout.lights ?? []).length > 0;
-  return hasInstances || hasLights;
+  const hasLandscape = (layout.landscapes ?? []).length > 0;
+  return hasInstances || hasLights || hasLandscape;
 }
 
 /** Whether a Level authors its own directional sun (drives the code-sun swap). */

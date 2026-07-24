@@ -13,7 +13,8 @@
     "snapRotationDeg": 15,
     "snapRotationEnabled": true,
     "snapScale": 0.1,
-    "snapScaleEnabled": true
+    "snapScaleEnabled": true,
+    "previewUrl": "/?rts&preset=gameplay_proof&flags=levelAssets"
   },
   "scripts": {
     "preview": "npm run dev",

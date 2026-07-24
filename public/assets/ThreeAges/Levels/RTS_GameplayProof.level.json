@@ -5,81 +5,129 @@
   "instances": [
     {
       "assetId": "mountain-group-1",
+      "placements": []
+    },
+    {
+      "assetId": "rock-group",
+      "placements": []
+    },
+    {
+      "assetId": "resource-gold-1",
       "placements": [
         {
           "position": [
-            0,
-            0,
-            0
+            -34.1,
+            0.01,
+            24.92
           ],
-          "name": "Ridge Center",
-          "rotation": [
-            0,
-            0,
-            0
-          ],
-          "scale": 3
-        },
-        {
-          "position": [
-            -8,
-            0,
-            0.5
-          ],
-          "name": "Ridge West",
-          "rotation": [
-            0,
-            35,
-            0
-          ],
-          "scale": 3
-        },
-        {
-          "position": [
-            8,
-            0,
-            -0.5
-          ],
-          "name": "Ridge East",
-          "rotation": [
-            0,
-            -20,
-            0
-          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
           "scale": 3
         }
       ]
     },
     {
-      "assetId": "rock-group",
+      "assetId": "resource-gold-2",
       "placements": [
         {
           "position": [
-            -4,
-            0,
-            2
+            -34.83,
+            0.01,
+            26.39
           ],
-          "name": "Ridge Rock West",
-          "rotation": [
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-gold-3",
+      "placements": [
+        {
+          "position": [
+            -33.51,
             0,
-            10,
-            0
+            26.47
           ],
-          "scale": 4
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-rock-1",
+      "placements": [
+        {
+          "position": [
+            -41.9,
+            0.02,
+            25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
         },
         {
           "position": [
-            4,
-            0,
-            -2
+            -33.95,
+            0.02,
+            15.63
           ],
-          "name": "Ridge Rock East",
-          "rotation": [
-            0,
-            -30,
-            0
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-rock-2",
+      "placements": [
+        {
+          "position": [
+            -42.79,
+            0.01,
+            26
           ],
-          "scale": 4
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -34.84,
+            0.01,
+            16.63
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        }
+      ]
+    },
+    {
+      "assetId": "resource-rock-3",
+      "placements": [
+        {
+          "position": [
+            -41.78,
+            0,
+            26.42
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
+        },
+        {
+          "position": [
+            -33.83,
+            0,
+            17.05
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 3
         }
       ]
     }
@@ -463,6 +511,18 @@
           "rts.route:enemy:enemy_east:1"
         ]
       }
+    }
+  ],
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "landscapes/landscape-1.landscape.json",
+      "name": "Landscape"
     }
   ],
   "actors": [

@@ -16,6 +16,8 @@ import {
   AmbientLight,
   Color,
   DirectionalLight,
+  GridHelper,
+  Group,
   Mesh,
   Scene,
   type WebGLRenderer,
@@ -273,6 +275,12 @@ export class RtsApp {
   private readonly authoredWorldIntended: boolean;
   /** The code-side sun, kept so an authored directional light can retire it. */
   private codeSun: DirectionalLight | null = null;
+  /**
+   * The flat placeholder ground (plane + grid), kept so an authored Landscape can
+   * retire it once mounted — a sculpted terrain stands in for it, and leaving both
+   * at y=0 would z-fight. Stays under a Landscape-less fallback.
+   */
+  private groundGroup: Group | null = null;
   private readonly scene = new Scene();
   private readonly cameraController = new RtsCameraController();
   private readonly input: RtsInput;
@@ -966,7 +974,11 @@ export class RtsApp {
     // leaves the field lit by this fallback rather than dark.
     this.codeSun = sun;
 
-    this.scene.add(createRtsGround());
+    this.groundGroup = createRtsGround();
+    this.scene.add(this.groundGroup);
+    // Witness of which ground the match renders on: the flat placeholder now, or
+    // an authored Landscape once one mounts (see retireFlatGround).
+    this.canvas.dataset.rtsGround = "flat";
     const blockout = createRtsMapBlockout();
     this.scene.add(blockout);
     void this.loadMapArt(blockout);
@@ -1185,9 +1197,10 @@ export class RtsApp {
         y: 9,
         z: center.position.z,
         progress: 1 - Math.min(1, queue.trainingRemainingSeconds / duration),
-        // The age upgrade pauses this queue, so its bar would otherwise sit
-        // frozen under the age's with nothing to explain why it stopped.
-        label: age.upgrading
+        // Only the Town transition pauses this queue. Ordinary centre level-ups
+        // leave worker production running, so their world label must not claim
+        // the active order was suspended.
+        label: age.upgrading && age.upgradeKind === "town"
           ? `İşçi duraklatıldı · ${queue.queued}/${queue.capacity}`
           : `İşçi üretiliyor · ${queue.queued}/${queue.capacity}`,
       });
@@ -1700,6 +1713,10 @@ export class RtsApp {
         this.codeSun.dispose();
         this.codeSun = null;
       }
+      // Retire the flat placeholder ground only once an authored Landscape has
+      // actually mounted — a terrain now covers the field, and the two overlapping
+      // at y=0 would z-fight. A Landscape-less world (or a failed load) keeps it.
+      if (handle.landscapeCount > 0) this.retireFlatGround();
       // The blockout still drew a placeholder ridge box from the marker blocker;
       // remove it so it does not sit under the authored ridge mesh.
       const placeholder = this.scene.getObjectByName("rts-central-ridge");
@@ -1715,6 +1732,28 @@ export class RtsApp {
       this.log.warn("RTS authored world could not be loaded", error);
       this.canvas.dataset.rtsAuthoredWorld = "fallback";
     }
+  }
+
+  /**
+   * Removes and frees the flat placeholder ground (plane + grid) once an authored
+   * Landscape has taken over. Picking is unaffected: command/placement/road all
+   * raycast a mathematical y=0 plane, not this mesh, so the V1 flat-ground contract
+   * holds without the visual plane standing under the terrain.
+   */
+  private retireFlatGround(): void {
+    const ground = this.groundGroup;
+    if (!ground) return;
+    this.groundGroup = null;
+    this.canvas.dataset.rtsGround = "landscape";
+    ground.removeFromParent();
+    ground.traverse((child) => {
+      if (child instanceof Mesh || child instanceof GridHelper) {
+        child.geometry.dispose();
+        for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
+          material.dispose();
+        }
+      }
+    });
   }
 
   /**

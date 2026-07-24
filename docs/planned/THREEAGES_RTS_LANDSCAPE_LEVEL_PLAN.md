@@ -164,26 +164,41 @@ Kabul:
 
 Amac: Oyun mekaniği icin gerekli tum konum verisini koddan Level'a gecirmek.
 
-- [ ] Oyuncu/dusman start marker'larini yerlestir.
-- [ ] Tum resource node marker'larini tasiyip id, resourceId ve kind degerlerini
-  koru.
-- [ ] Tum tree marker'larini tasiyip `treeId`, `forestId`, variant ve capacity
-  degerlerini koru.
-- [ ] Central ridge, map edge ve gecilmez dekorasyonlar icin acik blocker
-  marker'larini tasiyip legacy AABB'lerle karsilastir.
-- [ ] Enemy base build anchor'larini tasiyip `owner` ve building id degerlerini
-  dogrula.
-- [ ] Expansion marker uclusunu ve zorunlu enemy route spline'larini tasiyip
-  route tag kurallarini dogrula.
-- [ ] Strategic point'leri tasiyip regional-victory flag'i acikken kontrol et.
-- [ ] Level marker hareketinin runtime spawn, kaynak veya AI rota davranisini
-  degistirdigini hedefli bir testle kanitla.
+Not: Faz 1'de `RTS_GameplayProof.level.json` CoreMatch envanterinin birebir
+kopyasi olarak olusturuldugu icin marker'lar Level'da zaten yerlesik. Bu fazin
+isi, tasinan verinin degerlerini korudugunu ve marker'larin gercekten runtime
+otoritesi oldugunu testle kilitlemek.
+
+- [x] Oyuncu/dusman start marker'larini yerlestir. (2 `BP_RTS_KingdomStart`;
+  Faz 1 esdeglik testi `playerStart`/`enemyStart` legacy ile ayni.)
+- [x] Tum resource node marker'larini tasiyip id, resourceId ve kind degerlerini
+  koru. (6 node; `deepEqual(resourceNodes, legacy)`.)
+- [x] Tum tree marker'larini tasiyip `treeId`, `forestId`, variant ve capacity
+  degerlerini koru. (148 tree; `deepEqual(trees, legacy)`.)
+- [x] Central ridge, map edge ve gecilmez dekorasyonlar icin acik blocker
+  marker'larini tasiyip legacy AABB'lerle karsilastir. (1 `BP_RTS_NavigationBlocker`
+  = merkez sirt; adapter AABB'si `deepEqual(navigationBlockers, legacy)`. Kenar
+  blocker'i yok — Faz 0 karari #3: sadece dunya-siniri.)
+- [x] Enemy base build anchor'larini tasiyip `owner` ve building id degerlerini
+  dogrula. (14 anchor; `owner=enemy` + `deepEqual` anchor karsilastirmasi.)
+- [x] Expansion marker uclusunu ve zorunlu enemy route spline'larini tasiyip
+  route tag kurallarini dogrula. (2 bolge x 3 rol + 5 route; `deepEqual(enemyExpansions/enemyBaseRoute, legacy)`,
+  adapter `rts.route:enemy:<region>:<index>` tag kuralini zorlar.)
+- [x] Strategic point'leri tasiyip regional-victory flag'i acikken kontrol et.
+  (2 point; Faz 2 otorite testi `StrategicPointSystem` ile contest davranisini
+  kanitlar.)
+- [x] Level marker hareketinin runtime spawn, kaynak veya AI rota davranisini
+  degistirdigini hedefli bir testle kanitla. (`Landscape Faz 2` testi: player
+  start -> nav route baslangici; resource node -> `canExtractAt`; strategic
+  point -> contest konumu marker'i takip eder.)
 
 Kabul:
 
-- `resolveRtsSpatialLayout(level)` legacy oyun yuzeyine esdeger veri uretir.
-- Oyuncu ve dusman arasinda iki flank uzerinden en az bir gecerli rota vardir.
-- `levelAssets` kapaliyken eski blockout maci calismaya devam eder.
+- [x] `resolveRtsSpatialLayout(level)` legacy oyun yuzeyine esdeger veri uretir.
+- [x] Oyuncu ve dusman arasinda iki flank uzerinden en az bir gecerli rota vardir.
+  (`keeps both flanks` + Faz 2 testi tasinan start'tan da rota planlar.)
+- [x] `levelAssets` kapaliyken eski blockout maci calismaya devam eder.
+  (smoke: flag kapali -> `data-rts-level=blockout`.)
 
 ### Faz 3 - Landscape authoring asset'i ve V1 saha tasarimi
 

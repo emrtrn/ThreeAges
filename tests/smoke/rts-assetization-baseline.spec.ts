@@ -83,9 +83,11 @@ test("Landscape Faz 1: the gameplay_proof preset resolves its own authored Level
   page.on("pageerror", (error) => errors.push(error.message));
 
   // Flag off: even though gameplay_proof now carries a levelRef, the levelAssets
-  // gate keeps it opt-in, so the legacy blockout fallback still drives the match.
+  // gate keeps it opt-in, so the legacy blockout fallback still drives the match
+  // on the flat placeholder ground.
   await page.goto("/?rts&debug&preset=gameplay_proof");
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "flat");
 
   // Flag on: the preset's own RTS_GameplayProof Level loads and its markers become
   // the spatial authority — the Faz 1 witness that the separate authoring asset is
@@ -93,6 +95,9 @@ test("Landscape Faz 1: the gameplay_proof preset resolves its own authored Level
   await page.goto("/?rts&debug&preset=gameplay_proof&flags=levelAssets");
   await expect(page.locator("#game-canvas")).toBeVisible();
   await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored", { timeout: 30_000 });
+  // Faz 4: the Level's authored Landscape mounts and retires the flat ground, so
+  // the match now renders on the sculpted terrain rather than the placeholder plane.
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-ground", "landscape", { timeout: 30_000 });
   await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
 
   await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
