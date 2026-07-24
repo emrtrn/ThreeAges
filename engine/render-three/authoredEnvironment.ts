@@ -104,6 +104,18 @@ export class AuthoredEnvironment {
     applySkyToneMapping(this.renderer, resolved);
   }
 
+  /**
+   * Whether the Level authors a Sky Light (IBL) contribution — i.e. a non-hidden
+   * Sky Atmosphere. A runtime with a hardcoded fallback ambient light queries this
+   * to retire that fallback once the authored sky supplies the ambient bounce
+   * (otherwise the two stack and wash the scene out).
+   */
+  hasAuthoredSkyLight(layout: RoomLayout | null): boolean {
+    const actor = layout?.skyAtmosphere ?? null;
+    if (!actor) return false;
+    return !resolveSkyAtmosphere(actor).hidden;
+  }
+
   /** Applies the Exponential Height Fog to `scene.fog` (distance-based). */
   applyFog(layout: RoomLayout | null): void {
     const actor = layout?.heightFog ?? null;

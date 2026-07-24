@@ -51,10 +51,12 @@ import { resolveRtsSpatialLayout, type RtsSpatialLayout } from "./world/rtsSpati
 import type { RtsLevelDefinition } from "./world/rtsLevelAdapter";
 import { RtsMapArt, collectWorldProps } from "./world/rtsMapArt";
 import {
+  levelAuthoredSun,
   levelHasAuthoredSun,
   levelHasAuthoredWorld,
   loadRtsAuthoredWorld,
 } from "./world/rtsAuthoredWorld";
+import { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
 import type { AuthoredWorldHandle } from "@/scene/authoredWorld";
 import type { RoomLayout } from "@engine/scene/layout";
 import { UnitSystem } from "./units/unitSystem";
@@ -278,6 +280,17 @@ export class RtsApp {
   /** The code-side sun, kept so an authored directional light can retire it. */
   private codeSun: DirectionalLight | null = null;
   /**
+   * The code-side fallback ambient, kept so an authored Sky Light (IBL) can retire
+   * it — otherwise the hardcoded fill stacks on the sky bounce and washes the field.
+   */
+  private codeAmbient: AmbientLight | null = null;
+  /**
+   * Shared authored-environment layer (Editor↔Runtime parity plan): applies the
+   * Level's Sky Atmosphere, Sky Light, Height Fog and Cloud Layer so the RTS Play
+   * route matches the editor. Constructed in the constructor once the renderer exists.
+   */
+  private readonly environment: AuthoredEnvironment;
+  /**
    * The flat placeholder ground (plane + grid), kept so an authored Landscape can
    * retire it once mounted — a sculpted terrain stands in for it, and leaving both
    * at y=0 would z-fight. Stays under a Landscape-less fallback.
@@ -432,6 +445,13 @@ export class RtsApp {
       z: this.spatial.playerStart.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
     };
     this.renderer = createSceneRenderer(canvas, MAX_PIXEL_RATIO);
+    this.environment = new AuthoredEnvironment({
+      scene: this.scene,
+      renderer: this.renderer,
+      camera: this.cameraController.camera,
+      resolveSunActor: () =>
+        this.options.levelLayout ? levelAuthoredSun(this.options.levelLayout) : null,
+    });
     this.actorVisuals = this.options.contentCatalog
       ? new RtsActorVisualFactory(this.renderer, this.options.contentCatalog)
       : null;
@@ -940,6 +960,8 @@ export class RtsApp {
     // no leaked geometry, materials or shadow maps behind.
     this.authoredWorld?.dispose();
     this.authoredWorld = null;
+    // Free the authored sky/cloud domes + Sky Light capture and clear scene.environment.
+    this.environment.teardown();
     // The painter only referenced the authored terrain's data/object, now freed.
     this.roadPainter = null;
     this.renderer.dispose();
@@ -971,7 +993,10 @@ export class RtsApp {
 
   private buildScene(): void {
     // Hemispheric-ish fill: ambient for base visibility, one shadowing key light.
-    this.scene.add(new AmbientLight(0xffffff, 0.65));
+    // Kept referenced so an authored Sky Light (IBL) can retire it once a Level's
+    // sky provides the ambient bounce (see loadAuthoredWorld).
+    this.codeAmbient = new AmbientLight(0xffffff, 0.65);
+    this.scene.add(this.codeAmbient);
     const sun = new DirectionalLight(0xffffff, 1.6);
     sun.position.set(40, 80, 30);
     sun.castShadow = true;
@@ -1141,6 +1166,8 @@ export class RtsApp {
     // would be unreadable exactly when the match is hardest to follow.
     this.notifications.advance(dt);
     this.notificationFeed.setNotifications(this.notifications.active());
+    // Keep the authored sky/cloud domes centered on the camera and advance clouds.
+    this.environment.update(dt);
     this.renderer.render(this.scene, this.cameraController.camera);
   };
 
@@ -1743,6 +1770,22 @@ export class RtsApp {
         this.scene.remove(this.codeSun);
         this.codeSun.dispose();
         this.codeSun = null;
+      }
+      // Editor↔Runtime parity (Faz 1): apply the Level's authored environment
+      // singletons through the shared layer so Play matches the editor viewport —
+      // the Sky Atmosphere dome, its Sky Light (IBL) bounce, Exponential Height Fog
+      // and the Cloud Layer. A Level authoring none of these leaves the RTS look
+      // unchanged (each apply is a no-op / clears to the default).
+      this.environment.applySky(layout);
+      this.environment.applyReflection(layout, true);
+      this.environment.applyFog(layout);
+      this.environment.applyClouds(layout);
+      // Retire the fallback ambient once the authored sky supplies the IBL bounce,
+      // mirroring the code-sun swap above — otherwise the two ambients stack.
+      if (this.codeAmbient && this.environment.hasAuthoredSkyLight(layout)) {
+        this.scene.remove(this.codeAmbient);
+        this.codeAmbient.dispose();
+        this.codeAmbient = null;
       }
       // Retire the flat placeholder ground only once an authored Landscape has
       // actually mounted — a terrain now covers the field, and the two overlapping

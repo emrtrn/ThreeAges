@@ -9,7 +9,7 @@
  * lives in {@link RtsApp}.
  */
 import { Box3, Vector3, type WebGLRenderer } from "three";
-import type { RoomLayout } from "@engine/scene/layout";
+import type { LayoutLightActor, RoomLayout } from "@engine/scene/layout";
 import { projectFileUrl } from "@/project/ProjectSystem";
 import { buildAuthoredWorld, type AuthoredWorldHandle } from "@/scene/authoredWorld";
 import { RTS_WORLD_HALF_EXTENT } from "./rtsGround";
@@ -37,6 +37,15 @@ export function levelHasAuthoredWorld(layout: RoomLayout): boolean {
 /** Whether a Level authors its own directional sun (drives the code-sun swap). */
 export function levelHasAuthoredSun(layout: RoomLayout): boolean {
   return (layout.lights ?? []).some((light) => light.type === "directional");
+}
+
+/**
+ * The Level's directional sun actor (first directional light), or null. Its
+ * persisted rotation is what {@link AuthoredEnvironment} uses to orient the Sky
+ * Atmosphere sun disc + Sky Light capture, so Play matches the editor.
+ */
+export function levelAuthoredSun(layout: RoomLayout): LayoutLightActor | null {
+  return (layout.lights ?? []).find((light) => light.type === "directional") ?? null;
 }
 
 /** Builds the RTS field's authored static world from a resolved Level layout. */
