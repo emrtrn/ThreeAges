@@ -184,4 +184,16 @@ Amac: sapmayi kullanici fark etmeden yakalamak. En az bir otomatik kontrol:
 
 - 2026-07-24: Plan olusturuldu. Kok neden: RtsApp ayri render hatti; authored ortam
   singleton'larini yok sayiyor. Karar: paylasimli `AuthoredEnvironment` katmani +
-  parite testi. Uygulama baslamadi.
+  parite testi.
+- 2026-07-24: **Faz 0 tamamlandi.** `engine/render-three/authoredEnvironment.ts`
+  olusturuldu — `AuthoredEnvironment` sinifi sky/reflection(skylight)/fog/cloud
+  singleton'larina ve sky<->post-process exposure kaplinine sahip; `apply*`,
+  `applySkyPostProcessExposure`, `update`, `disposeReflectionTarget`, `teardown`
+  API'leri. `RuntimeSceneApp` bu owner'a delege ediyor: `skyObject`/`cloudObject`/
+  `reflectionTarget` alanlari ve `applyRuntimeSky`/`Fog`/`Clouds`/`Reflection` +
+  `disposeReflectionTarget` + `applyRuntimeSkyPostProcessExposure` metotlari kaldirildi;
+  build/per-frame/teardown/dispose cagrilari owner'a baglandi. Davranis birebir korundu
+  (uygulama sirasi: sky -> reflection -> postProcess -> fog -> clouds). Dogrulama:
+  `tsc --noEmit` temiz; `test:engine`'deki tek hata onceden var olan River Water foam
+  WIP'i (degisiklik geri alininca ayni sekilde basarisiz — bu refactor'dan bagimsiz).
+  Sonraki: Faz 1 — `RtsApp`'i ayni owner'a baglamak (`levelAssets` arkasinda).
