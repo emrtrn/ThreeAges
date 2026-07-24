@@ -182,7 +182,7 @@
       "shoreWaveSpacing": 2,
       "shoreWaveSpeed": 0.3,
       "shoreWaveReach": 0.4,
-      "shoreWaveBreakupScale": 2,
+      "shoreWaveBreakupScale": 1,
       "foamStamps": [],
       "segmentProfiles": [
         {

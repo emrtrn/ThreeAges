@@ -702,22 +702,22 @@ olarak kullanilir; yeni raster asset uretilmez.
      banktan itibaren dalga fade'inin bitecegi normalize mesafedir.
 
 2. **Ring Foam render overlay**
-   - `[ ]` Point stamp'leri, ribbon vertexlerine bake etmek yerine su yuzeyinin
+   - `[x]` Point stamp'leri, ribbon vertexlerine bake etmek yerine su yuzeyinin
      hemen ustunde duran ayri, editor/runtime gorunur overlay quad'lari olarak
      ciz. Boyut stamp radius'undan gelir.
-   - `[ ]` `circle-rings-a-noise-3` ve Perlin maskesini kullanarak zamana bagli
+   - `[x]` `circle-rings-a-noise-3` ve Perlin maskesini kullanarak zamana bagli
      radyal faz, 2-3 halka ve disari dogru solma uygula.
    - `[ ]` Strip stamp mevcut rapid/wake semantigini korur; bu dilimde Point
      stamp `rings` stilini kullanir. Eski point verileri geriye uyumlu olarak
      halka overlay'ine cozulur.
 
 3. **Scene point authoring**
-   - `[ ]` `+ Point Foam` yerine `Add Ring Foam` moduna gec: water/terrain
+   - `[x]` `+ Point Foam` yerine `Add Ring Foam` moduna gec: water/terrain
      uzerine tiklama Landscape-local stamp konumu olusturur.
-   - `[ ]` Ring Foam marker'ini editor overlay'inde ciz, secimi ekran-uzayi
+   - `[x]` Ring Foam marker'ini editor overlay'inde ciz, secimi ekran-uzayi
      hit-test ile yap ve mevcut Landscape spline point akisi gibi shared move
      gizmosuna bagla.
-   - `[ ]` Details panelinde X/Z satirlarini kaldir; secili point icin sadece
+   - `[x]` Details panelinde X/Z satirlarini kaldir; secili point icin sadece
      Radius, Intensity, Ring Count ve Expansion Speed goster. Delete secili
      point'i siler; tum islemler undo/redo + autosave'den gecer.
    - `[ ]` Landscape tasininca/rotate olunca marker ve runtime overlay, River
@@ -730,8 +730,10 @@ olarak kullanilir; yeni raster asset uretilmez.
      undo/redo sonrasi ayni yerde kalir; concentric halkalar disari yayilir.
    - `[ ]` Orta/dusuk kalite profilleri texture yuklemesi basarisizsa guvenli
      procedural fallback ile calisir; WebGL warning/console error yoktur.
-   - `[ ]` `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`
-     ve hedefli editor browser smoke tamamlanir.
+   - `[x]` `npx tsc --noEmit`, `npm run test:engine` ve `npm run build:verify`
+     tamamlandi.
+   - `[ ]` Hedefli editor browser smoke: Ring Foam ekle, marker'i sec/tasi,
+     undo/redo ve save/reload sonrasi gorunumu elle dogrula.
 
 ### Faz 5 - Opsiyonel yuksek kalite
 

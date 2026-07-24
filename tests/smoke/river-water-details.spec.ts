@@ -22,7 +22,7 @@ test("River Water Details: selected Landscape exposes live water presentation co
   await expect(page.locator('[data-river-water-number="foamScale"]')).toBeVisible();
   await expect(page.locator('[data-river-water-number="shoreWaveIntensity"]')).toBeVisible();
   await expect(page.locator('[data-river-water-number="shoreWaveReach"]')).toBeVisible();
-  await expect(page.locator('[data-river-water-foam-add="point"]')).toBeVisible();
+  await expect(page.locator('[data-river-water-foam-add="ring"]')).toBeVisible();
   await expect(page.locator('[data-river-water-profile-number]')).not.toHaveCount(0);
   await expect(page.locator('[data-river-water-reflection="reflectionMode"]')).toBeVisible();
   await expect(page.locator('[data-river-water-create]')).toBeVisible();

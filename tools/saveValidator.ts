@@ -1168,6 +1168,14 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
       }
       saved.radius = radius;
       saved.intensity = intensity;
+      // Point stamps are rendered as animated Ring Foam. These remain optional
+      // so older point-stamp layouts keep their established placement data.
+      if (stamp.kind === "point") {
+        const ringCount = validateOptionalNumber(stamp.ringCount, `river water foamStamps[${index}].ringCount`, 1, 8);
+        const expansionSpeed = validateOptionalNumber(stamp.expansionSpeed, `river water foamStamps[${index}].expansionSpeed`, 0.05, 5);
+        if (ringCount !== undefined) saved.ringCount = Number(ringCount.toFixed(3));
+        if (expansionSpeed !== undefined) saved.expansionSpeed = Number(expansionSpeed.toFixed(3));
+      }
       return saved;
     });
   }

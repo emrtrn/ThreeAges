@@ -5,9 +5,11 @@ import {
   Float32BufferAttribute,
   Matrix4,
   Mesh,
+  PlaneGeometry,
   ShaderMaterial,
   Texture,
 } from "three";
+import { PLANAR_REFLECTION_EXCLUDED_LAYER } from "./planarReflectionSource";
 
 import type { ForgeLandscapeData, ForgeLandscapeSpline, LandscapeSplinePolylineSample } from "@engine/scene/landscape";
 import { landscapeHeightAtLocal, splineToPolyline } from "@engine/scene/landscape";
@@ -146,6 +148,10 @@ function staticFoamMask(
   if (!foamStamps?.length) return 0;
   let mask = 0;
   for (const stamp of foamStamps) {
+    // Radial points are now rendered as animated overlay rings. Keep strips in
+    // this baked mask path for rapids/wakes, while old point data remains
+    // backwards compatible through the overlay below.
+    if (stamp.kind === "point") continue;
     const end = stamp.kind === "strip" ? stamp.endPosition ?? stamp.position : stamp.position;
     const distance = pointToSegmentDistanceXZ(x, z, stamp.position[0], stamp.position[2], end[0], end[2]);
     const falloff = Math.max(0, 1 - distance / Math.max(EPSILON, stamp.radius));
@@ -171,7 +177,7 @@ export function buildRiverWaterRibbon(
   const foamMasks: number[] = [];
   const flowSpeedMultipliers: number[] = [];
   const indices: number[] = [];
-  const hasStaticFoam = (options.foamStamps?.length ?? 0) > 0;
+  const hasStaticFoam = options.foamStamps?.some((stamp) => stamp.kind === "strip") ?? false;
   // Static masks are baked at vertices, so add only the resolution needed to
   // make authored rock/pier foam legible; ordinary rivers keep their cheaper 5-wide grid.
   const width = hasStaticFoam ? 9 : 5;
@@ -387,6 +393,8 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
   rotation: Vec3;
   /** Repeating grayscale noise used to break up inward shore-wave fronts. */
   foamNoiseMap: Texture | null;
+  /** Development Content concentric-ring mask used by authored point overlays. */
+  ringFoamMap: Texture | null;
   /** Optional shared source; absent covers off/low reflection profiles. */
   reflectionSource?: PlanarReflectionSource | null;
 }
@@ -461,6 +469,10 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.castShadow = false;
     this.receiveShadow = false;
     this.renderOrder = 1;
+    for (const stamp of item.foamStamps) {
+      if (stamp.kind !== "point") continue;
+      this.add(createRiverWaterRingFoamObject(stamp, item.ringFoamMap, item.foamNoiseMap));
+    }
     item.reflectionSource?.addConsumer(this);
     this.onBeforeRender = (renderer, scene, camera) => {
       this.material.uniforms["time"]!.value = performance.now() / 1000;
@@ -469,9 +481,100 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
   }
 
   dispose(): void {
+    for (const child of this.children) {
+      if (child instanceof Mesh) {
+        child.geometry.dispose();
+        const material = child.material;
+        if (Array.isArray(material)) material.forEach((entry) => entry.dispose());
+        else material.dispose();
+      }
+    }
     this.geometry.dispose();
     this.material.dispose();
   }
+}
+
+const RING_FOAM_VERTEX_SHADER = `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}`;
+
+const RING_FOAM_FRAGMENT_SHADER = `
+uniform sampler2D ringFoamMap;
+uniform sampler2D foamNoiseMap;
+uniform float hasRingFoamMap;
+uniform float hasFoamNoiseMap;
+uniform float time;
+uniform float intensity;
+uniform float ringCount;
+uniform float expansionSpeed;
+varying vec2 vUv;
+
+float hash(vec2 value) {
+  return fract(sin(dot(value, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void main() {
+  vec2 centred = vUv - 0.5;
+  float radialDistance = length(centred) * 2.0;
+  float phase = fract(time * expansionSpeed + hash(centred * 19.0) * 0.07);
+  float expansion = 0.22 + phase * 0.78;
+  vec2 animatedUv = centred * (ringCount / 3.0) / expansion + 0.5;
+  float inside = step(0.0, animatedUv.x) * step(animatedUv.x, 1.0) * step(0.0, animatedUv.y) * step(animatedUv.y, 1.0);
+  float textureRings = texture2D(ringFoamMap, animatedUv).r * inside;
+  float fallbackRings = smoothstep(0.82, 0.97, 0.5 + 0.5 * sin(radialDistance * ringCount * 22.0 - time * expansionSpeed * 18.0));
+  float rings = mix(fallbackRings, textureRings, hasRingFoamMap);
+  float textureNoise = texture2D(foamNoiseMap, vUv * 3.7 + vec2(time * expansionSpeed * 0.035, -time * 0.02)).r;
+  float breakup = mix(0.72, smoothstep(0.26, 0.78, textureNoise), hasFoamNoiseMap);
+  float edgeFade = 1.0 - smoothstep(0.74, 1.0, radialDistance);
+  float lifeFade = 1.0 - smoothstep(0.84, 1.0, phase);
+  float alpha = rings * breakup * edgeFade * mix(0.42, 1.0, lifeFade) * intensity;
+  if (alpha <= 0.002) discard;
+  gl_FragColor = vec4(vec3(0.94, 0.99, 0.97), alpha * 0.9);
+}`;
+
+/**
+ * Creates the runtime-visible, animated Ring Foam overlay for one point stamp.
+ * It is parented under the river ribbon, so authored landscape transforms are
+ * inherited. Layer 31 keeps it out of planar-reflection captures.
+ */
+function createRiverWaterRingFoamObject(
+  stamp: LayoutRiverWaterFoamStamp,
+  ringFoamMap: Texture | null,
+  foamNoiseMap: Texture | null,
+): Mesh<PlaneGeometry, ShaderMaterial> {
+  const radius = Math.max(0.05, stamp.radius);
+  const geometry = new PlaneGeometry(radius * 2, radius * 2, 1, 1);
+  const material = new ShaderMaterial({
+    vertexShader: RING_FOAM_VERTEX_SHADER,
+    fragmentShader: RING_FOAM_FRAGMENT_SHADER,
+    uniforms: {
+      ringFoamMap: { value: ringFoamMap },
+      foamNoiseMap: { value: foamNoiseMap },
+      hasRingFoamMap: { value: ringFoamMap ? 1 : 0 },
+      hasFoamNoiseMap: { value: foamNoiseMap ? 1 : 0 },
+      time: { value: 0 },
+      intensity: { value: stamp.intensity },
+      ringCount: { value: stamp.ringCount ?? 3 },
+      expansionSpeed: { value: stamp.expansionSpeed ?? 0.65 },
+    },
+    transparent: true,
+    depthWrite: false,
+    side: DoubleSide,
+  });
+  const overlay = new Mesh(geometry, material);
+  overlay.name = `ring-foam:${stamp.id}`;
+  overlay.position.set(stamp.position[0], stamp.position[1] + 0.025, stamp.position[2]);
+  overlay.rotation.x = -Math.PI / 2;
+  overlay.renderOrder = 2;
+  overlay.layers.enable(PLANAR_REFLECTION_EXCLUDED_LAYER);
+  overlay.raycast = () => {};
+  overlay.onBeforeRender = () => {
+    material.uniforms["time"]!.value = performance.now() / 1000;
+  };
+  return overlay;
 }
 
 export type RiverWaterObjectLike = RiverWaterObject;

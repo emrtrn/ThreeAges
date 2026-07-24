@@ -35742,6 +35742,7 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     shoreWaveBreakupScale: 1.1,
     foamStamps: [
       { id: "pier-a", kind: "point", position: [1, -1.4, 2], radius: 1.5, intensity: 0.8 },
+      { id: "rock-rings", kind: "point", position: [2, -1.4, 2], radius: 2, intensity: 0.75, ringCount: 4, expansionSpeed: 0.8 },
       { id: "rock-run", kind: "strip", position: [3, -1.4, 4], endPosition: [5, -1.4, 4], radius: 1, intensity: 0.5 },
     ],
     segmentProfiles: [
@@ -35773,6 +35774,7 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     shoreWaveBreakupScale: 1.1,
     foamStamps: [
       { id: "pier-a", kind: "point", position: [1, -1.4, 2], radius: 1.5, intensity: 0.8 },
+      { id: "rock-rings", kind: "point", position: [2, -1.4, 2], radius: 2, intensity: 0.75, ringCount: 4, expansionSpeed: 0.8 },
       { id: "rock-run", kind: "strip", position: [3, -1.4, 4], endPosition: [5, -1.4, 4], radius: 1, intensity: 0.5 },
     ],
     segmentProfiles: [
@@ -35824,7 +35826,7 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
     normalTileLength: 2,
     foamStamps: [
       { id: "pier", kind: "point", position: [4, -1.4, 0], radius: 2, intensity: 0.9 },
-      { id: "rocks", kind: "strip", position: [8, -1.4, 2], endPosition: [8, -1.4, 6], radius: 1.5, intensity: 0.6 },
+      { id: "rocks", kind: "strip", position: [8, -1.4, 2], endPosition: [8, -1.4, 6], radius: 1.5, intensity: 0.9 },
     ],
     segmentProfiles: [{ splineSegmentRef: "bc", flowSpeedMultiplier: 1.75, rapidness: 0.8 }],
   });
@@ -35839,7 +35841,7 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
   assert.equal(ribbon.waterDepths.length, ribbon.positions.length / 3);
   assert.equal(ribbon.rapidness.length, ribbon.positions.length / 3);
   assert.equal(ribbon.foamMasks.length, ribbon.positions.length / 3);
-  assert.ok(ribbon.foamMasks.some((value) => value > 0.8), "authored static pier/rock stamps bake a visible foam core into the ribbon");
+  assert.ok(ribbon.foamMasks.some((value) => value > 0.8), "authored strip stamps bake a visible foam core into the ribbon");
   assert.equal(ribbon.flowSpeedMultipliers.length, ribbon.positions.length / 3);
   assert.ok(ribbon.flowSpeedMultipliers.some((value) => value === 1.75), "segment profile controls local flow speed");
   assert.ok(ribbon.rapidness.some((value) => value >= 0.8), "segment profile controls authored rapids");

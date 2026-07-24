@@ -860,7 +860,7 @@ export interface LayoutLandscape {
 /** A static local foam mask authored independently of RTS units and actors. */
 export interface LayoutRiverWaterFoamStamp {
   id: string;
-  /** A radial point or a capsule-like strip on the river surface. */
+  /** A radial ring point or a capsule-like strip on the river surface. */
   kind: "point" | "strip";
   /** Landscape-local centre/start position; only X/Z affect the water ribbon. */
   position: Vec3;
@@ -870,6 +870,10 @@ export interface LayoutRiverWaterFoamStamp {
   radius: number;
   /** Additive foam contribution, 0..1. */
   intensity: number;
+  /** Number of concentric rings rendered by a radial point. Defaults to 3. */
+  ringCount?: number;
+  /** Outward ring-cycle speed in cycles per second. Defaults to 0.65. */
+  expansionSpeed?: number;
 }
 
 /** Per-spline-segment water presentation override for authored rapids. */

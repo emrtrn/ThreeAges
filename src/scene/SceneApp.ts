@@ -654,6 +654,10 @@ export interface LandscapeSculptSettings {
   flattenTargetHeight: number;
   /** Retains the selected water body while Details re-renders. */
   activeRiverWaterId: string | null;
+  /** Ring Foam placement mode; the next water/terrain click creates this point. */
+  riverWaterRingFoamPlacementId: string | null;
+  /** The authored Ring Foam point currently targeted by the shared move gizmo. */
+  activeRiverWaterFoamStampId: string | null;
   activeSplineId: string | null;
   activeSplinePointId: string | null;
   activeSplineSegmentId: string | null;
@@ -814,6 +818,16 @@ interface LandscapeSplinePointGizmoTarget {
   object: LandscapeObject;
   splineId: string;
   pointId: string;
+  world: Vector3;
+}
+
+/** A selected, Landscape-local Ring Foam point exposed through the shared move gizmo. */
+interface RiverWaterFoamStampGizmoTarget {
+  index: number;
+  landscapeId: string;
+  waterId: string;
+  stampId: string;
+  object: LandscapeObject;
   world: Vector3;
 }
 
@@ -1166,6 +1180,8 @@ export class SceneApp {
     falloff: 2,
     flattenTargetHeight: 0,
     activeRiverWaterId: null,
+    riverWaterRingFoamPlacementId: null,
+    activeRiverWaterFoamStampId: null,
     activeSplineId: null,
     activeSplinePointId: null,
     activeSplineSegmentId: null,
@@ -1182,6 +1198,15 @@ export class SceneApp {
     splineId: string;
     pointId: string;
     before: ForgeLandscapeSpline[];
+    objectMatrixInverse: Matrix4;
+  } | null = null;
+  /** Live Ring Foam point drag; snapshots one water body into one undo command. */
+  private riverWaterFoamStampDrag: {
+    index: number;
+    landscapeId: string;
+    waterId: string;
+    stampId: string;
+    before: LayoutRiverWater;
     objectMatrixInverse: Matrix4;
   } | null = null;
   private landscapeBrushCursor: Mesh | null = null;
@@ -1908,6 +1933,14 @@ export class SceneApp {
       activeRiverWaterId: typeof next.activeRiverWaterId === "string" && next.activeRiverWaterId.length > 0
         ? next.activeRiverWaterId
         : null,
+      riverWaterRingFoamPlacementId:
+        typeof next.riverWaterRingFoamPlacementId === "string" && next.riverWaterRingFoamPlacementId.length > 0
+          ? next.riverWaterRingFoamPlacementId
+          : null,
+      activeRiverWaterFoamStampId:
+        typeof next.activeRiverWaterFoamStampId === "string" && next.activeRiverWaterFoamStampId.length > 0
+          ? next.activeRiverWaterFoamStampId
+          : null,
       activeSplineId: typeof next.activeSplineId === "string" && next.activeSplineId.length > 0 ? next.activeSplineId : null,
       activeSplinePointId: typeof next.activeSplinePointId === "string" && next.activeSplinePointId.length > 0 ? next.activeSplinePointId : null,
       activeSplineSegmentId: typeof next.activeSplineSegmentId === "string" && next.activeSplineSegmentId.length > 0 ? next.activeSplineSegmentId : null,
@@ -1927,6 +1960,7 @@ export class SceneApp {
         : this.landscapeSculptSettings.tool;
     this.onStatus?.(`Landscape ${mode}`, "info");
     this.refreshAllLandscapeSplineOverlays();
+    this.refreshAllRiverWaterFoamOverlays();
     if (
       previousEditMode !== this.landscapeSculptSettings.editMode ||
       previousSplineTool !== this.landscapeSculptSettings.splineTool
@@ -6029,6 +6063,7 @@ export class SceneApp {
     this.landscapeSplineOverlays[index] = null;
     void this.rebuildLandscapeSplineMeshes(index);
     this.refreshLandscapeSplineOverlay(index);
+    this.refreshRiverWaterFoamOverlay(index);
     if (this.selection?.kind === "landscape" && this.selection.index === index) {
       this.updateSelectionBox();
     }
@@ -6160,6 +6195,49 @@ export class SceneApp {
     for (let index = 0; index < count; index += 1) this.refreshLandscapeSplineOverlay(index);
   }
 
+  /** Rebuilds the selected river's Ring Foam point markers in the editor viewport. */
+  private refreshRiverWaterFoamOverlay(index: number | undefined): void {
+    if (index === undefined) return;
+    const object = this.landscapeObjects[index];
+    const landscape = this.layout?.landscapes?.[index];
+    if (!object || !landscape) return;
+    const existing = object.getObjectByName("river-water-foam-overlay");
+    if (existing instanceof Group) this.disposeSplineOverlayGroup(existing);
+    if (this.selection?.kind !== "landscape" || this.selection.index !== index) return;
+    const waterId = this.landscapeSculptSettings.activeRiverWaterId;
+    const water = this.layout?.riverWaters?.find((entry) => entry.id === waterId && entry.landscapeRef === landscape.id);
+    if (!water) return;
+    const rings = resolveRiverWater(water).foamStamps.filter((stamp) => stamp.kind === "point");
+    if (rings.length === 0) return;
+    const overlay = new Group();
+    overlay.name = "river-water-foam-overlay";
+    const activeId = this.landscapeSculptSettings.activeRiverWaterFoamStampId;
+    for (const stamp of rings) {
+      const active = stamp.id === activeId;
+      const geometry = new RingGeometry(0.2, 0.38, 20);
+      const material = new MeshBasicMaterial({
+        color: active ? 0xffd23f : 0x50d8ff,
+        depthTest: false,
+        transparent: true,
+        opacity: active ? 1 : 0.9,
+      });
+      const marker = new Mesh(geometry, material);
+      marker.name = `ring-foam-marker:${stamp.id}`;
+      marker.position.set(stamp.position[0], stamp.position[1] + 0.08, stamp.position[2]);
+      marker.rotation.x = -Math.PI / 2;
+      marker.renderOrder = 24;
+      marker.raycast = () => {};
+      overlay.add(marker);
+    }
+    object.add(overlay);
+  }
+
+  private refreshAllRiverWaterFoamOverlays(): void {
+    for (let index = 0; index < this.landscapeObjects.length; index += 1) {
+      this.refreshRiverWaterFoamOverlay(index);
+    }
+  }
+
   /**
    * Rebuilds every landscape mesh from `layout.landscapes` (used on load). Also
    * fetches each landscape's `dataRef` sidecar (public-root-relative), falling
@@ -6195,6 +6273,7 @@ export class SceneApp {
       void this.warmLandscapeLayerMaterials(index);
       void this.rebuildLandscapeSplineMeshes(index);
       this.refreshLandscapeSplineOverlay(index);
+      this.refreshRiverWaterFoamOverlay(index);
     });
   }
 
@@ -6235,6 +6314,7 @@ export class SceneApp {
       }
       const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
       const foamNoiseMap = await this.loadRiverWaterTexture("perlin-noise", "foam noise");
+      const ringFoamMap = await this.loadRiverWaterTexture("circle-rings-a-noise-3", "ring foam");
       const item: RiverWaterRenderItem = {
         ...resolved,
         spline,
@@ -6242,6 +6322,7 @@ export class SceneApp {
         position: [...landscape.position],
         rotation: landscape.rotation ? [...landscape.rotation] : [0, 0, 0],
         foamNoiseMap,
+        ringFoamMap,
         reflectionSource,
       };
       const object = createRiverWaterObject(item, normalMap);
@@ -6250,6 +6331,7 @@ export class SceneApp {
       this.scene.add(object);
       this.riverWaterObjects.push(object);
     }
+    this.refreshAllRiverWaterFoamOverlays();
   }
 
   private async loadRiverWaterNormalTexture(id: string): Promise<Texture | null> {
@@ -7970,6 +8052,19 @@ export class SceneApp {
   private beginLandscapeSculpt(event: PointerEvent): boolean {
     // Foliage Mode disables terrain sculpting entirely (its brush owns the pointer).
     if (this.foliageModeActive || this.meshPaintModeActive) return false;
+    if (this.landscapeSculptSettings.riverWaterRingFoamPlacementId) {
+      return this.placeRiverWaterRingFoamAtPointer(event);
+    }
+    const ringMarker = this.pickRiverWaterFoamStamp(event.clientX, event.clientY);
+    if (ringMarker) {
+      this.setLandscapeSculptSettings({
+        activeRiverWaterId: ringMarker.waterId,
+        activeRiverWaterFoamStampId: ringMarker.stampId,
+      });
+      this.emitSelectionChanged();
+      this.updateGizmo();
+      return true;
+    }
     if (this.landscapeSculptSettings.editMode === "splines") {
       return this.addLandscapeSplinePointAtPointer(event);
     }
@@ -8071,6 +8166,92 @@ export class SceneApp {
       object.matrixWorld,
     );
     return { index, landscapeId: actor.id, object, splineId: activeSplineId, pointId: activeSplinePointId, world };
+  }
+
+  /** Screen-space hit-test for visible Ring Foam editor markers. */
+  private pickRiverWaterFoamStamp(clientX: number, clientY: number): { waterId: string; stampId: string } | null {
+    if (this.selection?.kind !== "landscape") return null;
+    const index = this.selection.index;
+    const landscape = this.layout?.landscapes?.[index];
+    const object = this.landscapeObjects[index];
+    if (!landscape || !object) return null;
+    const waterId = this.landscapeSculptSettings.activeRiverWaterId;
+    const water = this.layout?.riverWaters?.find((entry) => entry.id === waterId && entry.landscapeRef === landscape.id);
+    if (!water) return null;
+    const resolved = resolveRiverWater(water);
+    object.updateWorldMatrix(true, false);
+    const camera = this.editorViewportCamera();
+    const rect = this.canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const projected = new Vector3();
+    let best: { stampId: string; distance: number } | null = null;
+    for (const stamp of resolved.foamStamps) {
+      if (stamp.kind !== "point") continue;
+      projected.set(stamp.position[0], stamp.position[1] + 0.2, stamp.position[2]).applyMatrix4(object.matrixWorld).project(camera);
+      if (projected.z < -1 || projected.z > 1) continue;
+      const distance = Math.hypot(
+        (projected.x * 0.5 + 0.5) * rect.width - px,
+        (-projected.y * 0.5 + 0.5) * rect.height - py,
+      );
+      if (distance <= 16 && (!best || distance < best.distance)) best = { stampId: stamp.id, distance };
+    }
+    return best ? { waterId: resolved.id, stampId: best.stampId } : null;
+  }
+
+  /** Resolves the active Ring Foam point to the shared move-gizmo target. */
+  private activeRiverWaterFoamStamp(): RiverWaterFoamStampGizmoTarget | null {
+    if (this.selection?.kind !== "landscape") return null;
+    const { activeRiverWaterId, activeRiverWaterFoamStampId } = this.landscapeSculptSettings;
+    if (!activeRiverWaterId || !activeRiverWaterFoamStampId) return null;
+    const index = this.selection.index;
+    const landscape = this.layout?.landscapes?.[index];
+    const object = this.landscapeObjects[index];
+    const water = this.layout?.riverWaters?.find((entry) => entry.id === activeRiverWaterId && entry.landscapeRef === landscape?.id);
+    const stamp = water?.foamStamps?.find((entry) => entry.id === activeRiverWaterFoamStampId && entry.kind === "point");
+    if (!landscape || landscape.locked || !object || !stamp) return null;
+    object.updateWorldMatrix(true, false);
+    return {
+      index,
+      landscapeId: landscape.id,
+      waterId: activeRiverWaterId,
+      stampId: stamp.id,
+      object,
+      world: new Vector3(stamp.position[0], stamp.position[1], stamp.position[2]).applyMatrix4(object.matrixWorld),
+    };
+  }
+
+  /** Handles the one click that creates an authored Ring Foam point. */
+  private placeRiverWaterRingFoamAtPointer(event: PointerEvent): boolean {
+    const waterId = this.landscapeSculptSettings.riverWaterRingFoamPlacementId;
+    const index = this.selectedEditableLandscapeIndex();
+    if (!waterId || index === null) return false;
+    const landscape = this.layout?.landscapes?.[index];
+    const hit = this.landscapeLocalHit(event.clientX, event.clientY);
+    const water = this.layout?.riverWaters?.find((entry) => entry.id === waterId && entry.landscapeRef === landscape?.id);
+    if (!landscape || !water || !hit || hit.landscapeIndex !== index) return false;
+    const resolved = resolveRiverWater(water);
+    const used = new Set(resolved.foamStamps.map((stamp) => stamp.id));
+    let number = 1;
+    while (used.has(`foam-${number}`)) number += 1;
+    const stamp: LayoutRiverWaterFoamStamp = {
+      id: `foam-${number}`,
+      kind: "point",
+      position: [round(hit.local.x), resolved.surfaceLevel, round(hit.local.z)],
+      radius: 2,
+      intensity: 0.7,
+      ringCount: 3,
+      expansionSpeed: 0.65,
+    };
+    this.setLandscapeSculptSettings({
+      riverWaterRingFoamPlacementId: null,
+      activeRiverWaterId: waterId,
+      activeRiverWaterFoamStampId: stamp.id,
+    });
+    this.setSelectedLandscapeRiverWater(waterId, { foamStamps: [...resolved.foamStamps, stamp] });
+    this.onStatus?.("Ring Foam placed. Move it with the gizmo.", "success");
+    return true;
   }
 
   /**
@@ -8724,6 +8905,12 @@ export class SceneApp {
           : {}),
         radius: Number(clamp(stamp.radius, 0.1, 100).toFixed(3)),
         intensity: Number(clamp(stamp.intensity, 0, 1).toFixed(3)),
+        ...(stamp.kind === "point"
+          ? {
+              ringCount: Number(clamp(stamp.ringCount ?? 3, 1, 8).toFixed(3)),
+              expansionSpeed: Number(clamp(stamp.expansionSpeed ?? 0.65, 0.05, 5).toFixed(3)),
+            }
+          : {}),
       }));
     }
     if (patch.segmentProfiles !== undefined) {
@@ -8741,6 +8928,7 @@ export class SceneApp {
       if (!this.layout?.riverWaters?.[index]) return;
       this.layout.riverWaters[index] = cloneRiverWater(value);
       void this.buildRiverWaters();
+      this.refreshRiverWaterFoamOverlay(this.selection?.kind === "landscape" ? this.selection.index : undefined);
       this.emitSelectionChanged();
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();
@@ -8768,8 +8956,21 @@ export class SceneApp {
       ...(kind === "strip" ? { endPosition: [x + 3, water.surfaceLevel, 0] as Vec3 } : {}),
       radius: 2,
       intensity: 0.7,
+      ...(kind === "point" ? { ringCount: 3, expansionSpeed: 0.65 } : {}),
     };
     this.setSelectedLandscapeRiverWater(waterId, { foamStamps: [...water.foamStamps, stamp] });
+  }
+
+  /** Arms one-click placement of an animated Ring Foam point on the selected Landscape. */
+  beginSelectedLandscapeRiverWaterRingFoam(waterId: string): void {
+    const water = this.getSelectedLandscapeRiverWaters().find((entry) => entry.id === waterId);
+    if (!water) return;
+    this.setLandscapeSculptSettings({
+      activeRiverWaterId: waterId,
+      riverWaterRingFoamPlacementId: waterId,
+      activeRiverWaterFoamStampId: null,
+    });
+    this.onStatus?.("Click the water or terrain to place Ring Foam.", "info");
   }
 
   removeSelectedLandscapeRiverWaterFoamStamp(waterId: string, stampId: string): void {
@@ -8778,6 +8979,9 @@ export class SceneApp {
     this.setSelectedLandscapeRiverWater(waterId, {
       foamStamps: water.foamStamps.filter((stamp) => stamp.id !== stampId),
     });
+    if (this.landscapeSculptSettings.activeRiverWaterFoamStampId === stampId) {
+      this.setLandscapeSculptSettings({ activeRiverWaterFoamStampId: null });
+    }
   }
 
   /** Removes the visual water body only; its Landscape spline and terrain bed remain authored. */
@@ -11118,6 +11322,10 @@ export class SceneApp {
       this.commitLandscapeSplinePointDrag();
       return;
     }
+    if (this.riverWaterFoamStampDrag) {
+      this.commitRiverWaterFoamStampDrag();
+      return;
+    }
     if (this.splinePointDrag) {
       this.commitSplinePointDrag();
       return;
@@ -11154,6 +11362,12 @@ export class SceneApp {
     if (splinePoint) {
       if (handle.tool !== "move") return;
       this.startLandscapeSplinePointDrag(handle, event, splinePoint);
+      return;
+    }
+    const foamStamp = this.activeRiverWaterFoamStamp();
+    if (foamStamp) {
+      if (handle.tool !== "move") return;
+      this.startRiverWaterFoamStampDrag(handle, event, foamStamp);
       return;
     }
     const genericSplinePoint = this.activeSplinePoint();
@@ -11266,6 +11480,50 @@ export class SceneApp {
     this.canvas.setPointerCapture(event.pointerId);
   }
 
+  /** Starts a shared-gizmo drag for one Ring Foam point (X/Z only in local space). */
+  private startRiverWaterFoamStampDrag(
+    handle: GizmoHandle,
+    event: PointerEvent,
+    stamp: RiverWaterFoamStampGizmoTarget,
+  ): void {
+    const landscapeEditable = this.getSelected();
+    const water = this.layout?.riverWaters?.find((entry) => entry.id === stamp.waterId);
+    if (!landscapeEditable || !water) return;
+    this.gizmoInteraction.beginDrag(handle);
+    this.updateGizmo();
+    const base = stamp.world.clone();
+    const movePlane = createGizmoMovePlane(handle, base, this.gizmoGroup.quaternion);
+    const planeStartHit = movePlane
+      ? this.picker.clientToPlane(event.clientX, event.clientY, movePlane) ?? base.clone()
+      : undefined;
+    this.riverWaterFoamStampDrag = {
+      index: stamp.index,
+      landscapeId: stamp.landscapeId,
+      waterId: stamp.waterId,
+      stampId: stamp.stampId,
+      before: cloneRiverWater(water),
+      objectMatrixInverse: stamp.object.matrixWorld.clone().invert(),
+    };
+    this.pointerDrag = createGizmoPointerDrag({
+      handle,
+      selection: { kind: "landscape", index: stamp.index },
+      selected: { ...landscapeEditable, position: [base.x, base.y, base.z], rotation: [0, 0, 0], scale: [1, 1, 1] },
+      pointerId: event.pointerId,
+      clientX: event.clientX,
+      clientY: event.clientY,
+      floorHit: this.picker.clientToFloor(event.clientX, event.clientY),
+      freeMoveBasis: this.getScreenSpaceMoveBasis(),
+      linkedTransforms: undefined,
+      descendantTransforms: undefined,
+      movePlane,
+      planeStartHit,
+      pivot: [0, 0, 0],
+      pivotWorld: null,
+      pivotEditing: false,
+    });
+    this.canvas.setPointerCapture(event.pointerId);
+  }
+
   private startSplinePointDrag(handle: GizmoHandle, event: PointerEvent, splinePoint: SplinePointGizmoTarget): void {
     const selected = this.getSelected();
     if (!selected) return;
@@ -11374,6 +11632,18 @@ export class SceneApp {
     return [world.x, world.y, world.z];
   }
 
+  private riverWaterFoamStampDragWorld(): Vec3 | null {
+    const drag = this.riverWaterFoamStampDrag;
+    const object = drag ? this.landscapeObjects[drag.index] : null;
+    const stamp = this.layout?.riverWaters
+      ?.find((water) => water.id === drag?.waterId)
+      ?.foamStamps?.find((entry) => entry.id === drag?.stampId);
+    if (!drag || !object || !stamp) return null;
+    object.updateWorldMatrix(true, false);
+    const world = new Vector3(...stamp.position).applyMatrix4(object.matrixWorld);
+    return [world.x, world.y, world.z];
+  }
+
   /**
    * Live-writes the dragged spline point's local position from a world point (no
    * undo entry — {@link commitLandscapeSplinePointDrag} records before/after on
@@ -11391,6 +11661,20 @@ export class SceneApp {
     point.position = [round(local.x), round(local.y), round(local.z)];
     this.landscapeDataDirty.add(drag.landscapeId);
     this.refreshLandscapeSplineOverlay(drag.index);
+    this.updateGizmo();
+    this.emitSelectionChanged();
+  }
+
+  private applyRiverWaterFoamStampWorld(world: Vec3): void {
+    const drag = this.riverWaterFoamStampDrag;
+    const water = this.layout?.riverWaters?.find((entry) => entry.id === drag?.waterId);
+    const stamp = water?.foamStamps?.find((entry) => entry.id === drag?.stampId && entry.kind === "point");
+    if (!drag || !water || !stamp) return;
+    const local = new Vector3(...world).applyMatrix4(drag.objectMatrixInverse);
+    const surfaceLevel = resolveRiverWater(water).surfaceLevel;
+    stamp.position = [round(local.x), surfaceLevel, round(local.z)];
+    void this.buildRiverWaters();
+    this.refreshRiverWaterFoamOverlay(drag.index);
     this.updateGizmo();
     this.emitSelectionChanged();
   }
@@ -11415,6 +11699,26 @@ export class SceneApp {
     );
   }
 
+  private commitRiverWaterFoamStampDrag(): void {
+    const drag = this.riverWaterFoamStampDrag;
+    this.riverWaterFoamStampDrag = null;
+    const index = this.layout?.riverWaters?.findIndex((entry) => entry.id === drag?.waterId) ?? -1;
+    const after = index >= 0 ? this.layout?.riverWaters?.[index] : null;
+    if (!drag || !after || index < 0 || JSON.stringify(drag.before) === JSON.stringify(after)) return;
+    const apply = (value: LayoutRiverWater): void => {
+      if (!this.layout?.riverWaters?.[index]) return;
+      this.layout.riverWaters[index] = cloneRiverWater(value);
+      this.setLandscapeSculptSettings({ activeRiverWaterId: drag.waterId, activeRiverWaterFoamStampId: drag.stampId });
+      void this.buildRiverWaters();
+      this.refreshRiverWaterFoamOverlay(drag.index);
+      this.updateGizmo();
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({ label: "Move Ring Foam", redo: () => apply(after), undo: () => apply(drag.before) });
+  }
+
   private updateMoveDrag(event: PointerEvent, selected: EditableSelection): void {
     const drag = this.pointerDrag;
     if (!drag || drag.mode !== "move") return;
@@ -11424,7 +11728,7 @@ export class SceneApp {
     // A spline-point drag (Faz 6.1) tracks the point's own world position instead.
     const base: Vec3 = drag.pivotEdit
       ? [...drag.startPosition]
-      : this.landscapeSplinePointDragWorld() ?? this.splinePointDragWorld() ?? [...selected.position];
+      : this.landscapeSplinePointDragWorld() ?? this.riverWaterFoamStampDragWorld() ?? this.splinePointDragWorld() ?? [...selected.position];
 
     if (drag.axis === "xyz") {
       const position = freeMoveDragPosition(
@@ -11470,6 +11774,10 @@ export class SceneApp {
     // layout, so it bypasses getMutableTransform / pivot / linked moves entirely.
     if (this.landscapeSplinePointDrag) {
       this.applyLandscapeSplinePointWorld(position);
+      return;
+    }
+    if (this.riverWaterFoamStampDrag) {
+      this.applyRiverWaterFoamStampWorld(position);
       return;
     }
     if (this.splinePointDrag) {
@@ -11590,6 +11898,7 @@ export class SceneApp {
     this.editorSceneController.select(selection);
     this.updateAiNavigationView();
     this.refreshAllLandscapeSplineOverlays();
+    this.refreshAllRiverWaterFoamOverlays();
   }
 
   private selectMany(selections: Selection[], active: Selection | null): void {
@@ -11600,6 +11909,7 @@ export class SceneApp {
   private toggleSelection(selection: Selection): void {
     this.editorSceneController.toggleSelection(selection);
     this.updateAiNavigationView();
+    this.refreshAllRiverWaterFoamOverlays();
   }
 
   private captureLinkedTransformStarts(active: Selection): LinkedMoveStart[] | undefined {
@@ -12684,6 +12994,16 @@ export class SceneApp {
     if (splinePoint) {
       this.gizmoGroup.visible = true;
       this.gizmoGroup.position.copy(splinePoint.world);
+      this.gizmoGroup.rotation.set(0, 0, 0);
+      buildGizmoHandles("move", this.gizmoGroup, this.gizmoPickables, this.gizmoInteraction);
+      this.updateGizmoScreenScale();
+      return;
+    }
+
+    const foamStamp = this.activeRiverWaterFoamStamp();
+    if (foamStamp) {
+      this.gizmoGroup.visible = true;
+      this.gizmoGroup.position.copy(foamStamp.world);
       this.gizmoGroup.rotation.set(0, 0, 0);
       buildGizmoHandles("move", this.gizmoGroup, this.gizmoPickables, this.gizmoInteraction);
       this.updateGizmoScreenScale();

@@ -113,6 +113,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
   deleteSelectedLandscapeRiverWater: (waterId: string) => void;
   setSelectedLandscapeRiverWater: (waterId: string, patch: RiverWaterDetailsPatch) => void;
   addSelectedLandscapeRiverWaterFoamStamp: (waterId: string, kind: LayoutRiverWaterFoamStamp["kind"]) => void;
+  beginSelectedLandscapeRiverWaterRingFoam: (waterId: string) => void;
   removeSelectedLandscapeRiverWaterFoamStamp: (waterId: string, stampId: string) => void;
   getLandscapeSculptSettings: () => LandscapeSculptSettings;
   setLandscapeSculptSettings: (
@@ -223,9 +224,9 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
         <label class="detail-row"><span>Inward Speed</span><input data-river-water-number="shoreWaveSpeed" type="number" min="0" max="10" step="0.05" value="${activeRiverWater.shoreWaveSpeed}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Shore Wave Reach</span><input data-river-water-number="shoreWaveReach" type="number" min="0.05" max="1" step="0.05" value="${activeRiverWater.shoreWaveReach}" ${lockedAttr} /></label>
         <label class="detail-row"><span>Breakup Scale</span><input data-river-water-number="shoreWaveBreakupScale" type="number" min="0.1" max="10" step="0.05" value="${activeRiverWater.shoreWaveBreakupScale}" ${lockedAttr} /></label>
-        <div class="detail-hint">Foam moves with the current and breaks into irregular patches. Use Point/Strip Foam to place it around rocks, piers and rapids.</div>
-        <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-foam-add="point" ${lockedAttr}>+ Point Foam</button><button type="button" class="detail-action-button" data-river-water-foam-add="strip" ${lockedAttr}>+ Strip Foam</button></div>
-        <div class="landscape-layer-list">${activeRiverWater.foamStamps.map((stamp) => `<div class="detail-subsection-title"><span>${escapeHtml(stamp.id)} (${stamp.kind})</span><button type="button" class="detail-action-button" data-river-water-foam-delete="${escapeHtml(stamp.id)}" ${lockedAttr}>Delete</button></div><label class="detail-row"><span>Start X</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:positionX" type="number" step="0.1" value="${stamp.position[0]}" ${lockedAttr} /></label><label class="detail-row"><span>Start Z</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:positionZ" type="number" step="0.1" value="${stamp.position[2]}" ${lockedAttr} /></label>${stamp.kind === "strip" ? `<label class="detail-row"><span>End X</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:endPositionX" type="number" step="0.1" value="${stamp.endPosition?.[0] ?? stamp.position[0]}" ${lockedAttr} /></label><label class="detail-row"><span>End Z</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:endPositionZ" type="number" step="0.1" value="${stamp.endPosition?.[2] ?? stamp.position[2]}" ${lockedAttr} /></label>` : ""}<label class="detail-row"><span>Radius</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:radius" type="number" min="0.1" step="0.1" value="${stamp.radius}" ${lockedAttr} /></label><label class="detail-row"><span>Intensity</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:intensity" type="number" min="0" max="1" step="0.05" value="${stamp.intensity}" ${lockedAttr} /></label>`).join("") || "<div class=\"detail-hint\">Add point foam for rocks/piers or strip foam for small rapids.</div>"}</div>
+        <div class="detail-hint">Ring Foam is placed directly in the viewport, then moved with the gizmo. Strip Foam remains useful for short rapids and wakes.</div>
+        <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-foam-add="ring" ${lockedAttr}>+ Add Ring Foam</button><button type="button" class="detail-action-button" data-river-water-foam-add="strip" ${lockedAttr}>+ Strip Foam</button></div>
+        <div class="landscape-layer-list">${activeRiverWater.foamStamps.map((stamp) => `<div class="detail-subsection-title"><span>${escapeHtml(stamp.id)} (${stamp.kind === "point" ? "Ring Foam" : "Strip Foam"})</span><button type="button" class="detail-action-button" data-river-water-foam-delete="${escapeHtml(stamp.id)}" ${lockedAttr}>Delete</button></div>${stamp.kind === "strip" ? `<label class="detail-row"><span>Start X</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:positionX" type="number" step="0.1" value="${stamp.position[0]}" ${lockedAttr} /></label><label class="detail-row"><span>Start Z</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:positionZ" type="number" step="0.1" value="${stamp.position[2]}" ${lockedAttr} /></label><label class="detail-row"><span>End X</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:endPositionX" type="number" step="0.1" value="${stamp.endPosition?.[0] ?? stamp.position[0]}" ${lockedAttr} /></label><label class="detail-row"><span>End Z</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:endPositionZ" type="number" step="0.1" value="${stamp.endPosition?.[2] ?? stamp.position[2]}" ${lockedAttr} /></label>` : "<div class=\"detail-hint\">Select the viewport marker to move this Ring Foam point.</div>"}<label class="detail-row"><span>Radius</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:radius" type="number" min="0.1" step="0.1" value="${stamp.radius}" ${lockedAttr} /></label><label class="detail-row"><span>Intensity</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:intensity" type="number" min="0" max="1" step="0.05" value="${stamp.intensity}" ${lockedAttr} /></label>${stamp.kind === "point" ? `<label class="detail-row"><span>Ring Count</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:ringCount" type="number" min="1" max="8" step="1" value="${stamp.ringCount ?? 3}" ${lockedAttr} /></label><label class="detail-row"><span>Expansion Speed</span><input data-river-water-foam-number="${escapeHtml(stamp.id)}:expansionSpeed" type="number" min="0.05" max="5" step="0.05" value="${stamp.expansionSpeed ?? 0.65}" ${lockedAttr} /></label>` : ""}`).join("") || "<div class=\"detail-hint\">Add Ring Foam for rocks/piers, or Strip Foam for small rapids.</div>"}</div>
         <div class="detail-subsection-title">Rapids</div>
         <div class="landscape-layer-list">${activeRiverWater.splineSegments.map((segment) => {
           const profile = activeRiverWater.segmentProfiles.find((entry) => entry.splineSegmentRef === segment.id);
@@ -733,8 +734,9 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
     button.addEventListener("click", () => {
       const water = selectedRiverWater();
       const kind = button.dataset.riverWaterFoamAdd;
-      if (!water || (kind !== "point" && kind !== "strip")) return;
-      options.addSelectedLandscapeRiverWaterFoamStamp(water.id, kind);
+      if (!water || (kind !== "ring" && kind !== "strip")) return;
+      if (kind === "ring") options.beginSelectedLandscapeRiverWaterRingFoam(water.id);
+      else options.addSelectedLandscapeRiverWaterFoamStamp(water.id, kind);
       renderLandscapeDetails(options);
     });
   });
@@ -752,10 +754,10 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
       const water = selectedRiverWater();
       const [stampId, key] = (input.dataset.riverWaterFoamNumber ?? "").split(":") as [
         string,
-        "radius" | "intensity" | "positionX" | "positionZ" | "endPositionX" | "endPositionZ",
+        "radius" | "intensity" | "ringCount" | "expansionSpeed" | "positionX" | "positionZ" | "endPositionX" | "endPositionZ",
       ];
       const value = Number(input.value);
-      if (!water || !stampId || !["radius", "intensity", "positionX", "positionZ", "endPositionX", "endPositionZ"].includes(key) || !Number.isFinite(value)) return;
+      if (!water || !stampId || !["radius", "intensity", "ringCount", "expansionSpeed", "positionX", "positionZ", "endPositionX", "endPositionZ"].includes(key) || !Number.isFinite(value)) return;
       options.setSelectedLandscapeRiverWater(water.id, {
         foamStamps: water.foamStamps.map((stamp) => {
           if (stamp.id !== stampId) return stamp;
@@ -764,6 +766,7 @@ export function renderLandscapeDetails(options: SpecialActorDetailsOptions): voi
             position[key === "positionX" ? 0 : 2] = value;
             return { ...stamp, position };
           }
+          if (key === "ringCount" || key === "expansionSpeed") return { ...stamp, [key]: value };
           if (key === "endPositionX" || key === "endPositionZ") {
             const endPosition: Vec3 = [...(stamp.endPosition ?? stamp.position)];
             endPosition[key === "endPositionX" ? 0 : 2] = value;
