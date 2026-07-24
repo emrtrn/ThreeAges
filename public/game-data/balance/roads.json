@@ -10,8 +10,8 @@
       "settlement": "dirt",
       "town": "rock"
     },
-    "width": 2.5,
-    "falloff": 2,
+    "width": 2,
+    "falloff": 1,
     "strength": 0.9,
     "jitter": 0.6,
     "jitterSpacingCells": 5,

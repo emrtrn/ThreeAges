@@ -60,13 +60,80 @@ export function planAutoRoadConnection(
   }
   const target = nearestRoadCell(roads, footprint);
   if (!target) return null;
-  let best: RoadPlan | null = null;
+  const existing = new Set(roads.all().map((cell) => key(cell)));
+  // Preferred shape: a straight stem out of the centre of the face pointing at
+  // the road, so the road meets the building head-on (see centredStemPlan).
+  const centred = centredStemPlan(roads, footprint, target, plan, existing, options.maxNewCells);
+  if (centred) return centred;
+  // Fallback for a boxed-in face (a tree or building right behind it): the
+  // nearest feasible touching anchor, still ordered centred-first, routed freely.
   for (const anchor of perimeterAnchors(roads, footprint, target)) {
     const candidate = plan(anchor, target);
-    if (!candidate || candidate.newCells.length > options.maxNewCells) continue;
-    if (!best || candidate.newCells.length < best.newCells.length) best = candidate;
+    if (candidate && candidate.newCells.length <= options.maxNewCells) return candidate;
   }
-  return best;
+  return null;
+}
+
+/**
+ * Build the access road as a straight stem leaving the centre of the face that
+ * points at the road, then let the router bend the *far* end toward the target.
+ *
+ * The building tile that ends up touching the footprint is the stem's root, so
+ * it lands on the face's centre axis rather than wherever a free A* happened to
+ * clip the perimeter — that off-centre clip is exactly what the earlier greedy
+ * version produced. Forcing the first step straight out (root → stemTip) also
+ * keeps the router from re-entering the "touching row" sideways, so no second,
+ * off-centre tile touches the building either.
+ */
+function centredStemPlan(
+  roads: RoadGraph,
+  footprint: AutoRoadFootprint,
+  target: RoadCell,
+  plan: (start: RoadCell, end: RoadCell) => RoadPlan | null,
+  existing: ReadonlySet<string>,
+  maxNewCells: number,
+): RoadPlan | null {
+  const step = roads.cellSize;
+  const halfRoad = step / 2;
+  const alongZ = Math.abs(target.z - footprint.z) >= Math.abs(target.x - footprint.x);
+  const root = alongZ
+    ? { x: snap(footprint.x, step), z: faceLine(footprint.z, footprint.depth, target.z, halfRoad, step) }
+    : { x: faceLine(footprint.x, footprint.width, target.x, halfRoad, step), z: snap(footprint.z, step) };
+  // Snapping an odd-sized centre can nudge the root just off the touch tolerance;
+  // if so this shape does not apply and the caller falls back.
+  if (!touchesFootprint(root, footprint, halfRoad)) return null;
+  // A blocked or off-map root cannot anchor a road; single-cell plan validates it.
+  if (!plan(root, root)) return null;
+  const outward = alongZ
+    ? { x: root.x, z: root.z + Math.sign(target.z - footprint.z) * step }
+    : { x: root.x + Math.sign(target.x - footprint.x) * step, z: root.z };
+  const tail = plan(outward, target);
+  if (!tail) return null;
+  const cells = [root, ...tail.cells];
+  const newCells = cells.filter((cell) => !existing.has(key(cell)));
+  if (newCells.length > maxNewCells) return null;
+  return { cells, newCells, woodCost: 0 };
+}
+
+/** The grid line one road tile outside a footprint face on the side of `toward`. */
+function faceLine(centre: number, size: number, toward: number, halfRoad: number, step: number): number {
+  const sign = Math.sign(toward - centre) || 1;
+  return snap(centre + sign * (size / 2 + halfRoad), step);
+}
+
+function touchesFootprint(cell: RoadCell, footprint: AutoRoadFootprint, halfRoad: number): boolean {
+  return Math.hypot(
+    Math.max(0, Math.abs(cell.x - footprint.x) - footprint.width / 2 - halfRoad),
+    Math.max(0, Math.abs(cell.z - footprint.z) - footprint.depth / 2 - halfRoad),
+  ) <= halfRoad;
+}
+
+function snap(value: number, step: number): number {
+  return Math.round(value / step) * step;
+}
+
+function key(cell: RoadCell): string {
+  return `${cell.x}:${cell.z}`;
 }
 
 /** Nearest existing road tile by edge-distance to the footprint, or null when none. */
@@ -90,9 +157,15 @@ function nearestRoadCell(roads: RoadGraph, footprint: AutoRoadFootprint): RoadCe
 
 /**
  * Grid cells that would *touch* the footprint by the same half-road tolerance
- * {@link roadCellTouchingFootprint} uses, ordered nearest-first to the target so
- * the greedy caller finds the shortest access road first. Cells that fall inside
- * the footprint are harmless — the router rejects them as blocked.
+ * {@link roadCellTouchingFootprint} uses.
+ *
+ * Ordered centred-first: an anchor sitting on one of the footprint's centre axes
+ * (`x ≈ centre.x` or `z ≈ centre.z`) reads as the road meeting the building
+ * head-on, which is what a face-centred connection looks like. `min(|dx|, |dz|)`
+ * is zero exactly on a face centre and grows toward the corners, so it ranks the
+ * arms of a plus-sign ahead of its diagonals. Ties break toward the target so the
+ * chosen centre is the one on the side the road is actually on. Cells that fall
+ * inside the footprint are harmless — the router rejects them as blocked.
  */
 function perimeterAnchors(roads: RoadGraph, footprint: AutoRoadFootprint, target: RoadCell): RoadCell[] {
   const step = roads.cellSize;
@@ -114,8 +187,15 @@ function perimeterAnchors(roads: RoadGraph, footprint: AutoRoadFootprint, target
     }
   }
   anchors.sort((a, b) =>
-    manhattan(a, target) - manhattan(b, target) || a.x - b.x || a.z - b.z);
+    offCentre(a, footprint) - offCentre(b, footprint)
+    || manhattan(a, target) - manhattan(b, target)
+    || a.x - b.x || a.z - b.z);
   return anchors;
+}
+
+/** How far an anchor sits off the footprint's nearest centre axis; 0 on a face centre. */
+function offCentre(cell: RoadCell, footprint: AutoRoadFootprint): number {
+  return Math.min(Math.abs(cell.x - footprint.x), Math.abs(cell.z - footprint.z));
 }
 
 function manhattan(a: RoadCell, b: RoadCell): number {
