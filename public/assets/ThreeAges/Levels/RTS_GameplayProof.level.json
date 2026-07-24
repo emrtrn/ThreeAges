@@ -5,28 +5,7 @@
   "instances": [
     {
       "assetId": "mountain-group-1",
-      "placements": [
-        {
-          "position": [
-            -61.62,
-            0.08,
-            63.44
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -38.92,
-            0.08,
-            64.07
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "rock-group",
@@ -37,11 +16,12 @@
       "placements": [
         {
           "position": [
-            -34.1,
+            -62.08,
             0.01,
-            24.92
+            51.37
           ],
           "scaleLocked": true,
+          "groupId": "group-mrzfsrd2-1vf",
           "rotationYDeg": 0,
           "scale": 3
         }
@@ -52,11 +32,12 @@
       "placements": [
         {
           "position": [
-            -34.83,
+            -62.81,
             0.01,
-            26.39
+            52.84
           ],
           "scaleLocked": true,
+          "groupId": "group-mrzfsrd2-1vf",
           "rotationYDeg": 0,
           "scale": 3
         }
@@ -67,11 +48,12 @@
       "placements": [
         {
           "position": [
-            -33.51,
+            -61.49,
             0,
-            26.47
+            52.92
           ],
           "scaleLocked": true,
+          "groupId": "group-mrzfsrd2-1vf",
           "rotationYDeg": 0,
           "scale": 3
         }
@@ -82,21 +64,23 @@
       "placements": [
         {
           "position": [
-            -41.9,
+            -43.2,
             0.02,
-            25
+            41.4
           ],
           "scaleLocked": true,
+          "groupId": "group-mrzfsd39-k0",
           "rotationYDeg": 0,
           "scale": 3
         },
         {
           "position": [
-            -33.95,
+            -36.94,
             0.02,
-            15.63
+            15.78
           ],
           "scaleLocked": true,
+          "groupId": "group-mrzfsvqu-3mt",
           "rotationYDeg": 0,
           "scale": 3
         }
@@ -107,21 +91,23 @@
       "placements": [
         {
           "position": [
-            -42.79,
+            -43.59,
             0.01,
-            26
+            42.48
           ],
           "scaleLocked": true,
+          "groupId": "group-mrzfsd39-k0",
           "rotationYDeg": 0,
           "scale": 3
         },
         {
           "position": [
-            -34.84,
+            -37.83,
             0.01,
-            16.63
+            16.78
           ],
           "scaleLocked": true,
+          "groupId": "group-mrzfsvqu-3mt",
           "rotationYDeg": 0,
           "scale": 3
         }
@@ -132,21 +118,23 @@
       "placements": [
         {
           "position": [
-            -41.78,
+            -42.35,
             0,
-            26.42
+            42.49
           ],
           "scaleLocked": true,
+          "groupId": "group-mrzfsd39-k0",
           "rotationYDeg": 0,
           "scale": 3
         },
         {
           "position": [
-            -33.83,
+            -36.82,
             0,
-            17.05
+            17.2
           ],
           "scaleLocked": true,
+          "groupId": "group-mrzfsvqu-3mt",
           "rotationYDeg": 0,
           "scale": 3
         }
@@ -154,73 +142,15 @@
     },
     {
       "assetId": "mountain-group-2",
-      "placements": [
-        {
-          "position": [
-            -53.98,
-            0.04,
-            63.57
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -64.59,
-            0.04,
-            55.87
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        },
-        {
-          "position": [
-            -63.62,
-            0.04,
-            50.73
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "rotation": [
-            0,
-            -90,
-            0
-          ],
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "mountain-single",
-      "placements": [
-        {
-          "position": [
-            -50.03,
-            0.04,
-            64.16
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "mountainlarge-single",
-      "placements": [
-        {
-          "position": [
-            -47.45,
-            0.1,
-            65.03
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 3
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "highpolyplane",
@@ -312,6 +242,7 @@
     }
   ],
   "reflectiveSurfaces": [],
+  "blockingVolumes": [],
   "splines": [
     {
       "id": "enemy-base-route",
@@ -688,9 +619,9 @@
       "splineRef": "spline-1",
       "name": "River Water 1",
       "surfaceLevel": -1,
-      "opacity": 1,
-      "bedVisibility": 0.2,
-      "absorptionDistance": 1,
+      "opacity": 0.8,
+      "bedVisibility": 0.01,
+      "absorptionDistance": 2,
       "foamOpacity": 0.7,
       "shoreWaveSpacing": 4,
       "shoreWaveSpeed": 0.3,
@@ -727,11 +658,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
       "position": [
-        -38,
+        -51.1,
         0,
-        38
+        50.81
       ],
       "name": "Player Start",
+      "scale": 1,
       "variableOverrides": {
         "owner": "player"
       }
@@ -751,11 +683,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
       "position": [
-        -42,
+        -42.84,
         0,
-        26
+        42.39
       ],
       "name": "Resource player_safe_stone",
+      "scale": 1,
       "variableOverrides": {
         "nodeId": "player_safe_stone",
         "resourceId": "stone",
@@ -765,11 +698,12 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
       "position": [
-        -34,
+        -61.62,
         0,
-        26
+        52.35
       ],
       "name": "Resource player_safe_gold",
+      "scale": 1,
       "variableOverrides": {
         "nodeId": "player_safe_gold",
         "resourceId": "gold",
@@ -3363,14 +3297,462 @@
     {
       "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
       "position": [
-        0,
+        -66.5,
         1.5,
-        0
+        -64.9
       ],
-      "name": "Blocker 0",
+      "name": "River Blocker 1",
       "variableOverrides": {
-        "width": 24,
-        "depth": 8,
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -64.3,
+        1.5,
+        -60.4
+      ],
+      "name": "River Blocker 2",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -62,
+        1.5,
+        -55.9
+      ],
+      "name": "River Blocker 3",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -59.8,
+        1.5,
+        -51.5
+      ],
+      "name": "River Blocker 4",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -57.4,
+        1.5,
+        -47.1
+      ],
+      "name": "River Blocker 5",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -54.9,
+        1.5,
+        -42.7
+      ],
+      "name": "River Blocker 6",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -52.2,
+        1.5,
+        -38.5
+      ],
+      "name": "River Blocker 7",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -49.2,
+        1.5,
+        -34.5
+      ],
+      "name": "River Blocker 8",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -36.8,
+        1.5,
+        -26.6
+      ],
+      "name": "River Blocker 11",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -31.9,
+        1.5,
+        -25.5
+      ],
+      "name": "River Blocker 12",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -27,
+        1.5,
+        -24.5
+      ],
+      "name": "River Blocker 13",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -22.2,
+        1.5,
+        -23.2
+      ],
+      "name": "River Blocker 14",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -17.6,
+        1.5,
+        -21.3
+      ],
+      "name": "River Blocker 15",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -13.5,
+        1.5,
+        -18.4
+      ],
+      "name": "River Blocker 16",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -10.1,
+        1.5,
+        -14.7
+      ],
+      "name": "River Blocker 17",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        -7.2,
+        1.5,
+        -10.7
+      ],
+      "name": "River Blocker 18",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        0.2,
+        1.5,
+        2.4
+      ],
+      "name": "River Blocker 21",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        2.6,
+        1.5,
+        6.7
+      ],
+      "name": "River Blocker 22",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        5.2,
+        1.5,
+        11
+      ],
+      "name": "River Blocker 23",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        8,
+        1.5,
+        15.2
+      ],
+      "name": "River Blocker 24",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        11.1,
+        1.5,
+        19
+      ],
+      "name": "River Blocker 25",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        14.9,
+        1.5,
+        22.3
+      ],
+      "name": "River Blocker 26",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        19.1,
+        1.5,
+        25
+      ],
+      "name": "River Blocker 27",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        23.6,
+        1.5,
+        27.2
+      ],
+      "name": "River Blocker 28",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        28.2,
+        1.5,
+        29.1
+      ],
+      "name": "River Blocker 29",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        32.9,
+        1.5,
+        30.8
+      ],
+      "name": "River Blocker 30",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        50.3,
+        1.5,
+        40.3
+      ],
+      "name": "River Blocker 34",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        53.6,
+        1.5,
+        44.1
+      ],
+      "name": "River Blocker 35",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        56.5,
+        1.5,
+        48.1
+      ],
+      "name": "River Blocker 36",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        59.1,
+        1.5,
+        52.4
+      ],
+      "name": "River Blocker 37",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        61.6,
+        1.5,
+        56.7
+      ],
+      "name": "River Blocker 38",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        63.9,
+        1.5,
+        61.2
+      ],
+      "name": "River Blocker 39",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
+        "height": 5
+      }
+    },
+    {
+      "classRef": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
+      "position": [
+        66.3,
+        1.5,
+        65.6
+      ],
+      "name": "River Blocker 40",
+      "variableOverrides": {
+        "width": 10,
+        "depth": 10,
         "height": 5
       }
     }
