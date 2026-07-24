@@ -57,6 +57,14 @@ import {
   loadRtsAuthoredWorld,
 } from "./world/rtsAuthoredWorld";
 import { AuthoredEnvironment } from "@engine/render-three/authoredEnvironment";
+import {
+  applyPostProcessToneMapping,
+  createPostProcessAntialiasPass,
+  createPostProcessEffectPasses,
+  hasPostProcessEffectPasses,
+  PostProcessPipeline,
+  resolvePostProcess,
+} from "@engine/render-three/postProcess";
 import type { AuthoredWorldHandle } from "@/scene/authoredWorld";
 import type { RoomLayout } from "@engine/scene/layout";
 import { UnitSystem } from "./units/unitSystem";
@@ -290,6 +298,12 @@ export class RtsApp {
    * route matches the editor. Constructed in the constructor once the renderer exists.
    */
   private readonly environment: AuthoredEnvironment;
+  /**
+   * Authored Post Process composer (SMAA + bloom + tone mapping) built from the
+   * Level's postProcess actor; null when the Level authors no effect passes, in
+   * which case the render loop draws straight through the renderer as before.
+   */
+  private postProcessPipeline: PostProcessPipeline | null = null;
   /**
    * The flat placeholder ground (plane + grid), kept so an authored Landscape can
    * retire it once mounted — a sculpted terrain stands in for it, and leaving both
@@ -962,6 +976,8 @@ export class RtsApp {
     this.authoredWorld = null;
     // Free the authored sky/cloud domes + Sky Light capture and clear scene.environment.
     this.environment.teardown();
+    this.postProcessPipeline?.dispose();
+    this.postProcessPipeline = null;
     // The painter only referenced the authored terrain's data/object, now freed.
     this.roadPainter = null;
     this.renderer.dispose();
@@ -1168,7 +1184,10 @@ export class RtsApp {
     this.notificationFeed.setNotifications(this.notifications.active());
     // Keep the authored sky/cloud domes centered on the camera and advance clouds.
     this.environment.update(dt);
-    this.renderer.render(this.scene, this.cameraController.camera);
+    // Authored Post Process (bloom/SMAA) composits the frame when present; otherwise
+    // draw straight through the renderer.
+    if (this.postProcessPipeline) this.postProcessPipeline.render(dt);
+    else this.renderer.render(this.scene, this.cameraController.camera);
   };
 
   /** Present player construction, training, and damaged-building health above all world geometry. */
@@ -1778,6 +1797,7 @@ export class RtsApp {
       // unchanged (each apply is a no-op / clears to the default).
       this.environment.applySky(layout);
       this.environment.applyReflection(layout, true);
+      this.applyAuthoredPostProcess(layout);
       this.environment.applyFog(layout);
       this.environment.applyClouds(layout);
       // Retire the fallback ambient once the authored sky supplies the IBL bounce,
@@ -1809,6 +1829,45 @@ export class RtsApp {
       this.log.warn("RTS authored world could not be loaded", error);
       this.canvas.dataset.rtsAuthoredWorld = "fallback";
     }
+  }
+
+  /**
+   * Editor↔Runtime parity (Faz 3): builds the authored Post Process composer (SMAA
+   * + bloom + tone mapping) from the Level's postProcess actor. The RTS route has no
+   * quality profiles, so the authored effects apply directly (ungated). A Level with
+   * no postProcess — or one with only tone mapping and no effect passes — leaves the
+   * pipeline null and the render loop draws straight through the renderer as before.
+   */
+  private applyAuthoredPostProcess(layout: RoomLayout): void {
+    const actor = layout.postProcess ?? null;
+    const resolved = actor ? resolvePostProcess(actor) : null;
+    applyPostProcessToneMapping(this.renderer, resolved);
+    this.environment.applySkyPostProcessExposure(resolved, layout);
+    if (!hasPostProcessEffectPasses(resolved)) {
+      this.postProcessPipeline?.dispose();
+      this.postProcessPipeline = null;
+      return;
+    }
+    const width = this.canvas.clientWidth || window.innerWidth;
+    const height = this.canvas.clientHeight || window.innerHeight;
+    this.postProcessPipeline ??= new PostProcessPipeline({
+      renderer: this.renderer,
+      scene: this.scene,
+      camera: this.cameraController.camera,
+      width,
+      height,
+    });
+    this.postProcessPipeline.setEffectPasses(
+      createPostProcessEffectPasses(resolved, {
+        scene: this.scene,
+        camera: this.cameraController.camera,
+        width,
+        height,
+      }),
+    );
+    this.postProcessPipeline.setAntialiasPass(
+      createPostProcessAntialiasPass(resolved, { width, height }),
+    );
   }
 
   /**
@@ -2032,6 +2091,8 @@ export class RtsApp {
     this.lastH = height;
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
     this.renderer.setSize(width, height, false);
+    this.postProcessPipeline?.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
+    this.postProcessPipeline?.setSize(width, height);
     this.cameraController.setViewport(width, height);
   }
 
