@@ -221,6 +221,14 @@
           "scale": 3
         }
       ]
+    },
+    {
+      "assetId": "highpolyplane",
+      "placements": []
+    },
+    {
+      "assetId": "archery-secondage-level1",
+      "placements": []
     }
   ],
   "characters": [],
@@ -247,6 +255,7 @@
       "castShadow": true
     }
   ],
+  "reflectiveSurfaces": [],
   "splines": [
     {
       "id": "enemy-base-route",

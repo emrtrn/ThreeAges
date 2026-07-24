@@ -857,6 +857,36 @@ export interface LayoutLandscape {
   collision?: boolean;
 }
 
+/**
+ * A visible river-water body whose shape is resolved from one Landscape spline.
+ * The Landscape remains the authority for spline shape and terrain deformation;
+ * this actor owns only water presentation. It intentionally has no collision or
+ * navigation fields: RTS traversal stays authored by blockers and bridge markers.
+ */
+export interface LayoutRiverWater {
+  id: string;
+  name?: string;
+  hidden?: boolean;
+  locked?: boolean;
+  groupId?: string;
+  nodeId?: string;
+  parentId?: string;
+  /** Id of the placed Landscape actor that owns the referenced spline. */
+  landscapeRef: string;
+  /** Id of a spline in that Landscape's `*.landscape.json` sidecar. */
+  splineRef: string;
+  /** Landscape-local, horizontal water height. */
+  surfaceLevel?: number;
+  /** Multiplier over each Landscape spline point's authored width. */
+  widthScale?: number;
+  /** UV-space normal-flow speed in repeats per second. */
+  flowSpeed?: number;
+  /** Repetition multiplier for the flowing normal texture. */
+  normalScale?: number;
+  /** Manifest texture asset id; absent uses the built-in water normal default. */
+  normalTexture?: string;
+}
+
 export interface RoomLayout {
   schema: 1;
   name: string;
@@ -889,6 +919,8 @@ export interface RoomLayout {
   splines?: LayoutSplineActor[];
   /** Placed Landscape (heightfield terrain) actors. Faz 1 UX keeps this to one entry. */
   landscapes?: LayoutLandscape[];
+  /** Spline-driven visual water bodies. They do not own collision or navigation. */
+  riverWaters?: LayoutRiverWater[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

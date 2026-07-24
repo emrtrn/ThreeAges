@@ -1,4 +1,13 @@
 {
   "cellSize": 2,
-  "woodCostPerCell": 4
+  "woodCostPerCell": 4,
+  "visual": {
+    "layerId": "dirt",
+    "width": 2.5,
+    "falloff": 2,
+    "strength": 0.9,
+    "jitter": 0.6,
+    "jitterSpacingCells": 5,
+    "widthVariation": 0.15
+  }
 }

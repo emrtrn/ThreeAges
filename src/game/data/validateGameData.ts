@@ -37,6 +37,7 @@ import type {
   MarketBalance,
   ResourceBalance,
   RoadBalance,
+  RoadVisual,
   SettlementAge,
   StartingResources,
   StartingUnits,
@@ -1266,6 +1267,52 @@ function validateAiTargetWeights(value: unknown, where: string): AiTargetWeights
   return weights;
 }
 
+/** Built-in road-paint tuning used when `roads.json` omits the `visual` block. */
+const DEFAULT_ROAD_VISUAL: RoadVisual = {
+  layerId: "dirt",
+  width: 2.5,
+  falloff: 2,
+  strength: 0.9,
+  jitter: 0.6,
+  jitterSpacingCells: 5,
+  widthVariation: 0.15,
+};
+
+/** Optional finite number field, falling back to `fallback` when absent. */
+function optionalFiniteNumber(
+  obj: Record<string, unknown>,
+  key: string,
+  where: string,
+  fallback: number,
+): number {
+  const value = obj[key];
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new GameDataError(`${where}: field "${key}" must be a finite number`);
+  }
+  return value;
+}
+
+/** Validate the optional presentational road-paint block (defaults when absent). */
+function validateRoadVisual(value: unknown, where: string): RoadVisual {
+  if (value === undefined) return { ...DEFAULT_ROAD_VISUAL };
+  const obj = asObject(value, `${where}.visual`);
+  const scope = `${where}.visual`;
+  const layerId = typeof obj["layerId"] === "string" && obj["layerId"].length > 0
+    ? (obj["layerId"] as string)
+    : DEFAULT_ROAD_VISUAL.layerId;
+  const width = optionalFiniteNumber(obj, "width", scope, DEFAULT_ROAD_VISUAL.width);
+  const falloff = optionalFiniteNumber(obj, "falloff", scope, DEFAULT_ROAD_VISUAL.falloff);
+  const strength = optionalFiniteNumber(obj, "strength", scope, DEFAULT_ROAD_VISUAL.strength);
+  const jitter = optionalFiniteNumber(obj, "jitter", scope, DEFAULT_ROAD_VISUAL.jitter);
+  const jitterSpacingCells = optionalFiniteNumber(obj, "jitterSpacingCells", scope, DEFAULT_ROAD_VISUAL.jitterSpacingCells);
+  const widthVariation = optionalFiniteNumber(obj, "widthVariation", scope, DEFAULT_ROAD_VISUAL.widthVariation);
+  if (width <= 0 || falloff < 0 || strength <= 0 || jitter < 0 || jitterSpacingCells < 1 || widthVariation < 0) {
+    throw new GameDataError(`${scope}: width/strength must be > 0, others must be non-negative (spacing >= 1)`);
+  }
+  return { layerId, width, falloff, strength, jitter, jitterSpacingCells, widthVariation };
+}
+
 /** Validate the small data-owned road cost/grid contract before RTS uses it. */
 export function validateRoadBalance(value: unknown): RoadBalance {
   const where = "balance/roads.json";
@@ -1275,5 +1322,5 @@ export function validateRoadBalance(value: unknown): RoadBalance {
   if (cellSize <= 0 || woodCostPerCell <= 0) {
     throw new GameDataError(`${where}: cell size and wood cost must be > 0`);
   }
-  return { cellSize, woodCostPerCell };
+  return { cellSize, woodCostPerCell, visual: validateRoadVisual(obj["visual"], where) };
 }

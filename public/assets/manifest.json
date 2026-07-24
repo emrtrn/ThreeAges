@@ -23672,6 +23672,29 @@
         "bytes": 646
       },
       "license": "Unknown"
+    },
+    {
+      "id": "m-cobblestonerough-material",
+      "name": "M Cobble Stone Rough.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_CobbleStoneRough.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 651
+      },
+      "license": "Unknown"
     }
   ]
 }

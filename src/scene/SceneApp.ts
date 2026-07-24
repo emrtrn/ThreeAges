@@ -24,10 +24,12 @@ import {
   OrthographicCamera,
   Plane,
   Raycaster,
+  RepeatWrapping,
   RingGeometry,
   SphereGeometry,
   Sprite,
   SpriteMaterial,
+  Texture,
   TextureLoader,
   Vector3,
 } from "three";
@@ -196,6 +198,13 @@ import {
   type LandscapeRenderItem,
   type LandscapeViewMode,
 } from "@engine/render-three/landscape";
+import {
+  createRiverWaterObject,
+  disposeRiverWaterObject,
+  resolveRiverWater,
+  type RiverWaterObjectLike,
+  type RiverWaterRenderItem,
+} from "@engine/render-three/riverWater";
 import {
   FoliageRenderBinding,
   foliageInstanceFromRoll,
@@ -1042,6 +1051,10 @@ export class SceneApp {
   };
   /** Live chunked terrain meshes for placed Landscape actors, by index. */
   private landscapeObjects: LandscapeObject[] = [];
+  /** Visible spline-water ribbons, index-aligned with `layout.riverWaters`. */
+  private riverWaterObjects: RiverWaterObjectLike[] = [];
+  /** Loaded normal maps owned by the editor water preview. */
+  private readonly riverWaterTextures = new Map<string, Texture>();
   /** Instanced spline-mesh groups (Faz 6 Road Tool) parented under each landscape, by index. */
   private landscapeSplineMeshGroups: (Group | null)[] = [];
   /** Editor-only spline control-point/segment overlay, parented under each landscape, by index. */
@@ -1555,6 +1568,13 @@ export class SceneApp {
     }
     for (const layer of this.landscapeLayerMaterialCache.values()) layer.texture?.dispose();
     this.landscapeLayerMaterialCache.clear();
+    for (const water of this.riverWaterObjects) {
+      this.scene.remove(water);
+      disposeRiverWaterObject(water);
+    }
+    this.riverWaterObjects = [];
+    for (const texture of this.riverWaterTextures.values()) texture.dispose();
+    this.riverWaterTextures.clear();
     this.lightOutlineGeometry.dispose();
     this.captureOutlineGeometry.dispose();
     // EngineApp.dispose() is async (subsystems may release async resources);
@@ -3174,6 +3194,7 @@ export class SceneApp {
     this.buildTargetPoints();
     this.buildSplines();
     await this.buildLandscapes();
+    await this.buildRiverWaters();
     await this.buildFoliage();
     this.buildWorldWidgetMarkers();
     this.emitSceneObjectsChanged();
@@ -6084,6 +6105,61 @@ export class SceneApp {
     });
   }
 
+  /**
+   * Builds the visual River Water Body ribbons after their Landscape sidecars are
+   * resident. This is presentation-only: water is excluded from picking and never
+   * creates a collider or navigation rule.
+   */
+  private async buildRiverWaters(): Promise<void> {
+    for (const object of this.riverWaterObjects) {
+      this.scene.remove(object);
+      disposeRiverWaterObject(object);
+    }
+    this.riverWaterObjects = [];
+    const waters = this.layout?.riverWaters ?? [];
+    for (const actor of waters) {
+      const resolved = resolveRiverWater(actor);
+      const landscape = this.layout?.landscapes?.find((candidate) => candidate.id === resolved.landscapeRef);
+      const data = landscape ? this.landscapeData.get(landscape.id) : null;
+      const spline = data?.splines?.find((candidate) => candidate.id === resolved.splineRef);
+      if (!landscape || !spline) {
+        console.warn(`[river-water] Skipped ${resolved.id}: missing Landscape/spline ${resolved.landscapeRef}/${resolved.splineRef}.`);
+        continue;
+      }
+      const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
+      const item: RiverWaterRenderItem = {
+        ...resolved,
+        spline,
+        position: [...landscape.position],
+        rotation: landscape.rotation ? [...landscape.rotation] : [0, 0, 0],
+      };
+      const object = createRiverWaterObject(item, normalMap);
+      object.raycast = () => {};
+      this.scene.add(object);
+      this.riverWaterObjects.push(object);
+    }
+  }
+
+  private async loadRiverWaterNormalTexture(id: string): Promise<Texture | null> {
+    const cached = this.riverWaterTextures.get(id);
+    if (cached) return cached;
+    const manifest = this.manifest;
+    const record = manifest ? assetRecordById(manifest, id) : null;
+    if (!record || assetType(record) !== "texture") {
+      console.warn(`[river-water] Normal texture is not a manifest texture: ${id}.`);
+      return null;
+    }
+    try {
+      const texture = await this.textureLoader.loadAsync(projectFileUrl(assetPath(record)));
+      texture.wrapS = texture.wrapT = RepeatWrapping;
+      this.riverWaterTextures.set(id, texture);
+      return texture;
+    } catch (error) {
+      console.warn(`[river-water] Failed to load normal texture: ${id}.`, error);
+      return null;
+    }
+  }
+
   // --- Foliage Mode (Faz 1: manual Static Mesh foliage paint) ---------------
 
   /** Public-relative path of the level whose foliage sidecar is authored. */
@@ -8764,6 +8840,10 @@ export class SceneApp {
       this.landscapeDataDirty.add(landscapeId);
       this.setLandscapeSculptSettings({ activeSplineId, activeSplinePointId, activeSplineSegmentId });
       void this.rebuildLandscapeSplineMeshes(index);
+      // River Water Bodies reference the same sidecar spline, so an editor point,
+      // width or smoothness edit must rebuild their ribbon too. The mesh remains
+      // visual-only and is never used as terrain/collision authority.
+      void this.buildRiverWaters();
       this.select(selection);
       this.emitSceneObjectsChanged();
       this.scheduleAutoSave();

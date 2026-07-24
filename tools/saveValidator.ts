@@ -1067,6 +1067,48 @@ export function validateLandscape(value: unknown): Record<string, unknown> {
   return landscape;
 }
 
+/**
+ * Allowlist validator for a visual spline-driven River Water Body. Landscape
+ * owns the referenced curve and terrain; this record deliberately carries no
+ * collision/navigation settings, so a water mesh cannot become hidden RTS rules.
+ */
+export function validateRiverWater(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("river water must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  for (const key of ["id", "landscapeRef", "splineRef"] as const) {
+    if (typeof input[key] !== "string" || input[key].length === 0) {
+      throw new Error(`river water ${key} must be a non-empty string`);
+    }
+  }
+  const water: Record<string, unknown> = {
+    id: input.id,
+    landscapeRef: input.landscapeRef,
+    splineRef: input.splineRef,
+  };
+  if (typeof input.name === "string") water.name = input.name;
+  if (input.hidden === true) water.hidden = true;
+  if (input.locked === true) water.locked = true;
+  if (typeof input.groupId === "string") water.groupId = input.groupId;
+  if (typeof input.nodeId === "string") water.nodeId = input.nodeId;
+  if (typeof input.parentId === "string") water.parentId = input.parentId;
+  const surfaceLevel = validateOptionalNumber(input.surfaceLevel, "river water surfaceLevel", -10000, 10000);
+  if (surfaceLevel !== undefined) water.surfaceLevel = Number(surfaceLevel.toFixed(3));
+  const widthScale = validateOptionalNumber(input.widthScale, "river water widthScale", 0.05, 10);
+  if (widthScale !== undefined) water.widthScale = Number(widthScale.toFixed(3));
+  const flowSpeed = validateOptionalNumber(input.flowSpeed, "river water flowSpeed", 0, 10);
+  if (flowSpeed !== undefined) water.flowSpeed = Number(flowSpeed.toFixed(3));
+  const normalScale = validateOptionalNumber(input.normalScale, "river water normalScale", 0.05, 20);
+  if (normalScale !== undefined) water.normalScale = Number(normalScale.toFixed(3));
+  if (typeof input.normalTexture === "string" && input.normalTexture.length > 0) {
+    water.normalTexture = input.normalTexture;
+  } else if (input.normalTexture !== undefined && input.normalTexture !== null) {
+    throw new Error("river water normalTexture must be a string, null, or omitted");
+  }
+  return water;
+}
+
 const LANDSCAPE_MIN_VERTICES = 65;
 const LANDSCAPE_MAX_VERTICES = 257;
 
@@ -1999,6 +2041,13 @@ export function validateLayout(value: unknown): unknown {
       : (() => {
           throw new Error("landscapes must be an array");
         })();
+  const riverWaters = layout.riverWaters === undefined
+    ? null
+    : Array.isArray(layout.riverWaters)
+      ? layout.riverWaters.map(validateRiverWater)
+      : (() => {
+          throw new Error("riverWaters must be an array");
+        })();
 
   const instances = layout.instances.map((instance) => {
     if (!instance || typeof instance !== "object") {
@@ -2083,6 +2132,7 @@ export function validateLayout(value: unknown): unknown {
   if (targetPoints) output.targetPoints = targetPoints;
   if (splines) output.splines = splines;
   if (landscapes) output.landscapes = landscapes;
+  if (riverWaters) output.riverWaters = riverWaters;
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;

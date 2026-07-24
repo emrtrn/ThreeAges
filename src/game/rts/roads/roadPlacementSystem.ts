@@ -59,6 +59,12 @@ export class RoadPlacementSystem {
   private start: RoadCell | null = null;
   private plan: RoadPlan | null = null;
   private reason: RoadPlacementReason | null = null;
+  /**
+   * When an authored terrain is mounted the road look is painted onto it
+   * ({@link RoadTerrainPainter}), so the box-mesh tiles must not also draw. The
+   * translucent preview boxes stay — they remain a readable placement affordance.
+   */
+  private painted = false;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -175,11 +181,24 @@ export class RoadPlacementSystem {
   }
 
   /**
+   * Switch between box-mesh tiles and terrain-painted roads. Painted mode drops
+   * any standing box tiles; the caller ({@link RoadTerrainPainter}) owns the look
+   * from then on. Re-rendering here keeps the two modes' visuals mutually exclusive.
+   */
+  setPaintedMode(enabled: boolean): void {
+    if (this.painted === enabled) return;
+    this.painted = enabled;
+    this.renderNetwork();
+  }
+
+  /**
    * Rebuild every committed road tile. Public because roads can now be
-   * committed headlessly by the AI, not only through this pointer flow.
+   * committed headlessly by the AI, not only through this pointer flow. A no-op
+   * for box geometry in painted mode — the mounted terrain carries the road paint.
    */
   renderNetwork(): void {
     this.clearMeshes(this.permanent);
+    if (this.painted) return;
     for (const segment of this.roads.all()) {
       this.permanent.add(this.createSegmentMesh(segment));
     }

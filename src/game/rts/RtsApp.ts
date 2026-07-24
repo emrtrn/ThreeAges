@@ -125,6 +125,7 @@ import { WorkerProductionSystem, workerQueueCapacityForCenterLevel } from "./str
 import { RoadGraph } from "./roads/roadGraph";
 import { RoadDebugView } from "./roads/roadDebugView";
 import { RoadPlacementSystem } from "./roads/roadPlacementSystem";
+import { RoadTerrainPainter } from "./roads/roadTerrainPainter";
 import { simulationSteps, type RtsSimulationSpeed } from "./simulation/simulationSpeed";
 import { RtsHudBar } from "./ui/rtsHudBar";
 import { RtsNotificationCenter } from "./ui/rtsNotifications";
@@ -353,6 +354,12 @@ export class RtsApp {
   private readonly commands: CommandSystem;
   private readonly placement: BuildingPlacementSystem;
   private readonly roadPlacement: RoadPlacementSystem;
+  /**
+   * Paints committed roads onto the mounted terrain's dirt layer (Painted Roads
+   * plan). Null until an authored Landscape mounts — a Landscape-less field keeps
+   * the box-mesh render, so a failed/absent terrain never leaves roads invisible.
+   */
+  private roadPainter: RoadTerrainPainter | null = null;
   private readonly buildPalette: RtsBuildPalette;
   private readonly selectionPanel = new RtsSelectionPanel((id) => this.runSelectionAction(id));
   /** The building whose demolish is armed and awaiting its confirm click. */
@@ -416,6 +423,9 @@ export class RtsApp {
       ? levelHasAuthoredWorld(this.options.levelLayout)
       : false;
     this.canvas.dataset.rtsAuthoredWorld = this.authoredWorldIntended ? "loading" : "disabled";
+    // Road visual witness: box tiles until an authored terrain mounts and takes
+    // over the paint (set to "painted" in setupRoadPainter).
+    this.canvas.dataset.rtsRoads = "mesh";
     this.openingFocus = {
       x: this.spatial.playerStart.x * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
       z: this.spatial.playerStart.z * (1 - OPENING_FOCUS_PULL_TOWARD_CENTER),
@@ -637,7 +647,7 @@ export class RtsApp {
       // navigationBlockers() itself, which units path through to reach the trees.
       () => [...this.navigationBlockers(), ...this.forests.liveTreeBlockers()],
       () => {
-        this.roadPlacement.renderNetwork();
+        this.syncRoadVisuals();
         // A committed road can link an outpost to its main network, which grows
         // that outpost's control radius. This lives on the service rather than
         // the pointer handler so an AI-built road refreshes territory too.
@@ -928,6 +938,8 @@ export class RtsApp {
     // no leaked geometry, materials or shadow maps behind.
     this.authoredWorld?.dispose();
     this.authoredWorld = null;
+    // The painter only referenced the authored terrain's data/object, now freed.
+    this.roadPainter = null;
     this.renderer.dispose();
   }
 
@@ -1716,7 +1728,10 @@ export class RtsApp {
       // Retire the flat placeholder ground only once an authored Landscape has
       // actually mounted — a terrain now covers the field, and the two overlapping
       // at y=0 would z-fight. A Landscape-less world (or a failed load) keeps it.
-      if (handle.landscapeCount > 0) this.retireFlatGround();
+      if (handle.landscapeCount > 0) {
+        this.retireFlatGround();
+        this.setupRoadPainter(handle);
+      }
       // The blockout still drew a placeholder ridge box from the marker blocker;
       // remove it so it does not sit under the authored ridge mesh.
       const placeholder = this.scene.getObjectByName("rts-central-ridge");
@@ -1754,6 +1769,36 @@ export class RtsApp {
         }
       }
     });
+  }
+
+  /**
+   * Painted Roads (plan Faz 3): once a terrain mounts, hand the road look to the
+   * Landscape paint. The box-mesh render steps aside (painted mode), and whatever
+   * is already committed — a resumed match, an AI's early road — is painted at
+   * once. A Landscape-less field never reaches here, so it keeps the box tiles.
+   */
+  private setupRoadPainter(handle: AuthoredWorldHandle): void {
+    const terrain = handle.landscapes[0];
+    if (!terrain) return;
+    this.roadPainter = new RoadTerrainPainter(
+      terrain,
+      this.options.roadBalance.cellSize,
+      this.options.roadBalance.visual,
+    );
+    this.roadPlacement.setPaintedMode(true);
+    this.canvas.dataset.rtsRoads = "painted";
+    this.roadPainter.sync(this.roads.all(), this.roads.version);
+  }
+
+  /**
+   * The one road-visual refresh, driven by every committed topology change
+   * (player or AI) through {@link RoadConstructionService}'s commit hook. Box
+   * tiles rebuild in mesh mode (a no-op in painted mode); the terrain repaints
+   * when a painter is mounted, dirty-checked on `RoadGraph.version`.
+   */
+  private syncRoadVisuals(): void {
+    this.roadPlacement.renderNetwork();
+    this.roadPainter?.sync(this.roads.all(), this.roads.version);
   }
 
   /**
@@ -1843,6 +1888,9 @@ export class RtsApp {
     this.centers.clear();
     this.structures.clear();
     this.roadPlacement.reset();
+    // Restart clears the graph (bumping its version without a commit hook), so the
+    // painter is reset explicitly: pristine terrain restored, ready to repaint.
+    this.roadPainter?.reset();
     this.projectiles.clear();
     this.rallyPointPending = false;
     this.structureConstruction.resetReservations();

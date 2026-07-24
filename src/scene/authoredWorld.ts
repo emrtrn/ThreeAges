@@ -16,17 +16,18 @@
  * slice — the RTS keeps its nav authority in markers/balance, not in level art.
  * Landscape, atmosphere and post-process are future extensions of this same host.
  */
-import { Box3, Group, Mesh, TextureLoader, type DirectionalLight, type Material, type Object3D, type Texture, type WebGLRenderer } from "three";
+import { Box3, Group, Mesh, RepeatWrapping, TextureLoader, type DirectionalLight, type Material, type Object3D, type Texture, type WebGLRenderer } from "three";
 import type { GLTF } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { InstancedMesh } from "three";
 
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
-import { createLandscapeObject, type LandscapeLayerTexture, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
+import { createLandscapeObject, type LandscapeLayerColors, type LandscapeLayerTexture, type LandscapeObject, type LandscapeRenderItem } from "@engine/render-three/landscape";
+import { createRiverWaterObject, disposeRiverWaterObject, resolveRiverWater, type RiverWaterObjectLike, type RiverWaterRenderItem } from "@engine/render-three/riverWater";
 import { createFlatLandscapeData, LANDSCAPE_DEFAULT_LAYERS, resolveLandscape, type ForgeLandscapeData } from "@engine/scene/landscape";
 import type { AssetManifest } from "@engine/assets/manifest";
 import type { LightObjectRecord } from "@engine/render-three/lights";
 import type { NavBlocker } from "@engine/navigation/gridNavigation";
-import type { RoomLayout } from "@engine/scene/layout";
+import type { RoomLayout, Vec3 } from "@engine/scene/layout";
 import { loadForgeMaterialLayer } from "./materialAssets";
 import {
   buildSceneInstancedModel,
@@ -38,6 +39,23 @@ import {
   resolveSceneWorldSettings,
   sceneModelAssetIds,
 } from "./SceneRuntimeCore";
+
+/**
+ * One authored Landscape a shell mounted, exposed so runtime systems can read
+ * and live-repaint its terrain without re-loading the sidecar. Generic host
+ * contract — carries no game rule; any fork can drive it (e.g. the RTS road
+ * painter blends a `dirt` corridor into `data.layers` and refreshes `object`).
+ */
+export interface MountedLandscape {
+  /** In-memory sidecar data (heights + paint layers). Mutating it needs a geometry refresh. */
+  readonly data: ForgeLandscapeData;
+  /** The chunked render group; feed it to `updateLandscapeObjectGeometry` after edits. */
+  readonly object: LandscapeObject;
+  /** World-space position of the terrain actor (its local origin sits at the grid centre). */
+  readonly position: Vec3;
+  /** Resolved per-layer tint (assigned-material base colours), for the vertex-colour fallback. */
+  readonly layerColors: LandscapeLayerColors;
+}
 
 /** A mounted authored world: one scene subtree the shell owns and later frees. */
 export interface AuthoredWorldHandle {
@@ -56,6 +74,12 @@ export interface AuthoredWorldHandle {
    * it; 0 means the terrain was absent (or failed to load) and the fallback stays.
    */
   readonly landscapeCount: number;
+  /**
+   * The mounted terrains, exposing each one's in-memory data + render object so a
+   * shell can live-edit paint/height and refresh geometry. Empty when
+   * `landscapeCount` is 0. Ordered as the layout's `landscapes` are.
+   */
+  readonly landscapes: readonly MountedLandscape[];
   /** Detach from the scene and release every GPU resource this handle created. */
   dispose(): void;
 }
@@ -211,9 +235,13 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
   // paint still renders, so a sculpted terrain is already visible. A missing or
   // broken sidecar degrades to a flat terrain rather than dropping the whole world.
   const landscapeObjects: LandscapeObject[] = [];
+  const mountedLandscapes: MountedLandscape[] = [];
   const landscapeLayerTextures: Texture[] = [];
+  const riverWaterObjects: RiverWaterObjectLike[] = [];
+  const riverWaterTextures: Texture[] = [];
   const landscapes = layout.landscapes ?? [];
-  const textureLoader = landscapes.length > 0 ? new TextureLoader() : null;
+  const riverWaters = layout.riverWaters ?? [];
+  const textureLoader = landscapes.length > 0 || riverWaters.length > 0 ? new TextureLoader() : null;
   const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
   for (const actor of landscapes) {
     let data: ForgeLandscapeData;
@@ -233,17 +261,73 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       landscapeLayerTextures,
       warn,
     );
+    const layerColors: LandscapeLayerColors = Object.fromEntries(
+      layerTextures.map((layer) => [layer.id, layer.color]),
+    );
     const item: LandscapeRenderItem = {
       ...resolveLandscape(actor),
       position: actor.position,
       rotation: actor.rotation ?? [0, 0, 0],
       data,
       layerTextures,
-      layerColors: Object.fromEntries(layerTextures.map((layer) => [layer.id, layer.color])),
+      layerColors,
     };
     const object = createLandscapeObject(item);
     root.add(object);
     landscapeObjects.push(object);
+    mountedLandscapes.push({ data, object, position: actor.position, layerColors });
+  }
+
+  // Water presentation resolves against the already loaded Landscape sidecar so
+  // editor and runtime share the exact same spline data. Missing references are
+  // non-fatal: a bad optional river must not prevent the authored world loading.
+  const landscapeDataById = new Map(
+    landscapes.map((actor, index) => [actor.id, { actor, data: mountedLandscapes[index]!.data }] as const),
+  );
+  const texturePathById = new Map<string, string>();
+  for (const value of assetManifest.assets as unknown[]) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+    const asset = value as Record<string, unknown>;
+    if (asset.assetType === "texture" && typeof asset.id === "string" && typeof asset.path === "string") {
+      texturePathById.set(asset.id, asset.path);
+    }
+  }
+  const riverNormalCache = new Map<string, Texture | null>();
+  for (const actor of riverWaters) {
+    const resolved = resolveRiverWater(actor);
+    const landscape = landscapeDataById.get(resolved.landscapeRef);
+    const spline = landscape?.data.splines?.find((candidate) => candidate.id === resolved.splineRef);
+    if (!landscape || !spline) {
+      warn(`Authored-world river water skipped: ${resolved.id} references missing Landscape/spline (${resolved.landscapeRef}/${resolved.splineRef}).`);
+      continue;
+    }
+    let normalMap = riverNormalCache.get(resolved.normalTexture);
+    if (normalMap === undefined) {
+      const texturePath = texturePathById.get(resolved.normalTexture);
+      if (!texturePath) {
+        warn(`Authored-world river water normal texture is not in the manifest: ${resolved.normalTexture}`);
+        normalMap = null;
+      } else {
+        try {
+          normalMap = await textureLoader!.loadAsync(resolveUrl(texturePath));
+          normalMap.wrapS = normalMap.wrapT = RepeatWrapping;
+          riverWaterTextures.push(normalMap);
+        } catch (error) {
+          warn(`Authored-world river water normal texture failed to load: ${resolved.normalTexture}`, error);
+          normalMap = null;
+        }
+      }
+      riverNormalCache.set(resolved.normalTexture, normalMap);
+    }
+    const item: RiverWaterRenderItem = {
+      ...resolved,
+      spline,
+      position: landscape.actor.position,
+      rotation: landscape.actor.rotation ?? [0, 0, 0],
+    };
+    const object = createRiverWaterObject(item, normalMap);
+    root.add(object);
+    riverWaterObjects.push(object);
   }
 
   const shadowBounds = options.shadowBounds ?? computeSceneRoomBounds(layout, localBounds);
@@ -291,6 +375,8 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     // Landscape splat textures live in the material's custom uniforms, not as
     // enumerable material properties, so the traversal above cannot reach them.
     for (const texture of landscapeLayerTextures) texture.dispose();
+    for (const texture of riverWaterTextures) texture.dispose();
+    for (const river of riverWaterObjects) disposeRiverWaterObject(river);
     for (const record of lightRecords) {
       const light = record.light as { dispose?: () => void };
       light.dispose?.();
@@ -298,7 +384,14 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
     models.clear();
   };
 
-  return { root, navigationBlockers: [], directionalLights, landscapeCount: landscapeObjects.length, dispose };
+  return {
+    root,
+    navigationBlockers: [],
+    directionalLights,
+    landscapeCount: landscapeObjects.length,
+    landscapes: mountedLandscapes,
+    dispose,
+  };
 }
 
 /** Adds a material and its bound textures to the dispose sets. */

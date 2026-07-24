@@ -584,10 +584,40 @@ export interface AiBalance {
   readonly intentWeights: Readonly<Record<AiIntent, number>>;
 }
 
+/**
+ * Purely presentational tuning for how a committed road network is painted onto
+ * an authored Landscape's paint layer (Painted Roads plan, Faz 0). Logistics —
+ * topology, cost, connectivity — never reads these; they only shape the corridor
+ * the {@link RoadTerrainPainter} hands to the engine's spline paint. When no
+ * Landscape is mounted the box-mesh render ignores them entirely.
+ */
+export interface RoadVisual {
+  /** Landscape paint layer the road corridor blends toward (e.g. `dirt`). */
+  readonly layerId: string;
+  /** Corridor full width in world units (fully painted core before falloff). */
+  readonly width: number;
+  /** Soft edge distance blended out past the core, in world units. */
+  readonly falloff: number;
+  /** Peak paint weight applied along the corridor centre (0..1). */
+  readonly strength: number;
+  /**
+   * Perpendicular jitter amplitude (world units) applied to interior control
+   * points of long straight runs, breaking the grid look. `0` disables jitter
+   * (Faz 3 behaviour: straight runs stay dead straight).
+   */
+  readonly jitter: number;
+  /** Cells between inserted interior jitter points along a long straight run. */
+  readonly jitterSpacingCells: number;
+  /** Per-point width variation as a fraction of `width` (±), `0` disables it. */
+  readonly widthVariation: number;
+}
+
 /** `public/game-data/balance/roads.json` — first-pass logistics road tuning. */
 export interface RoadBalance {
   /** Grid cell width in world units; intentionally independent from unit navigation. */
   readonly cellSize: number;
   /** Wood charged for each newly created road cell. */
   readonly woodCostPerCell: number;
+  /** Presentational road-paint tuning; absent in data falls back to built-in defaults. */
+  readonly visual: RoadVisual;
 }

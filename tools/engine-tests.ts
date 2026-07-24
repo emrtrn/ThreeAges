@@ -190,6 +190,7 @@ import { isTreeVisible } from "../src/game/rts/world/rtsMapArt";
 import type { RtsStrategicPoint } from "../src/game/rts/world/rtsMapBlockout";
 import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
+import { roadGraphToLandscapeSpline, RoadPaintSurface } from "../src/game/rts/roads/roadTerrainPainter";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
 import { congestionSeconds, updateUnitMovement } from "../src/game/rts/units/unitMovement";
@@ -371,6 +372,8 @@ import {
   resampleLandscapeData,
 } from "../engine/scene/landscape";
 import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
+import { buildRiverWaterRibbon } from "../engine/render-three/riverWater";
+import { resolveRiverWater } from "../engine/scene/riverWater";
 import {
   evaluateLandscapeSplineSegment,
   landscapeSplineSegmentComponent,
@@ -766,6 +769,7 @@ import {
   validateTargetPoint,
   validateSplineActor,
   validateLandscape,
+  validateRiverWater,
   validateLandscapeData,
   validateSaveLandscapePayload,
   validatePostProcess,
@@ -20418,6 +20422,116 @@ check("landscape spline apply is a no-op when no segment enables the effect", ()
   assert.deepEqual(applyLandscapeSplinePaint(data, straightSpline({})), { changed: false, bounds: null });
 });
 
+// --- Painted roads: RoadGraph → Landscape spline conversion + restore/repaint ---
+
+const ROAD_PAINT_VISUAL = {
+  layerId: "dirt",
+  width: 2.5,
+  falloff: 2,
+  strength: 0.9,
+  jitter: 0,
+  jitterSpacingCells: 5,
+  widthVariation: 0,
+} as const;
+const ROAD_PAINT_OPTS = { cellSize: 2, origin: [0, 0, 0] as [number, number, number], visual: ROAD_PAINT_VISUAL };
+
+function roadGraphOf(commits: ReadonlyArray<readonly [RoadCell, RoadCell]>): RoadGraph {
+  const roads = new RoadGraph({ cellSize: 2, woodCostPerCell: 4, visual: ROAD_PAINT_VISUAL });
+  for (const [start, end] of commits) {
+    const plan = roads.plan(start, end, []);
+    assert.ok(plan, "test road plan must be routable");
+    roads.commit(plan);
+  }
+  return roads;
+}
+
+check("roadGraphToLandscapeSpline collapses a straight run to one segment", () => {
+  const roads = roadGraphOf([[{ x: -6, z: 0 }, { x: 6, z: 0 }]]); // 7 collinear cells
+  const spline = roadGraphToLandscapeSpline(roads.all(), ROAD_PAINT_OPTS);
+  assert.equal(spline.segments.length, 1, "interior straight cells drop out");
+  assert.equal(spline.points.length, 2, "only the two run endpoints survive");
+  assert.equal(spline.smooth, true);
+  assert.ok(spline.segments.every((s) => s.paint?.layerId === "dirt" && s.paint.strength === 0.9));
+});
+
+check("roadGraphToLandscapeSpline keeps an L corner as a shared control point", () => {
+  const roads = roadGraphOf([
+    [{ x: -4, z: 0 }, { x: 0, z: 0 }],
+    [{ x: 0, z: 0 }, { x: 0, z: 4 }],
+  ]);
+  const spline = roadGraphToLandscapeSpline(roads.all(), ROAD_PAINT_OPTS);
+  assert.equal(spline.points.length, 3, "two ends + the corner");
+  assert.equal(spline.segments.length, 2);
+  const cornerId = `n:0:0`;
+  assert.ok(spline.points.some((p) => p.id === cornerId), "corner cell becomes a control point");
+  assert.ok(spline.segments.every((s) => s.startPointId === cornerId || s.endPointId === cornerId));
+});
+
+check("roadGraphToLandscapeSpline shares one point across a T junction", () => {
+  const roads = roadGraphOf([
+    [{ x: -4, z: 0 }, { x: 4, z: 0 }],
+    [{ x: 0, z: 0 }, { x: 0, z: 4 }],
+  ]);
+  const spline = roadGraphToLandscapeSpline(roads.all(), ROAD_PAINT_OPTS);
+  const junctionId = `n:0:0`;
+  const touching = spline.segments.filter((s) => s.startPointId === junctionId || s.endPointId === junctionId);
+  assert.equal(touching.length, 3, "three arms meet at the junction point");
+  assert.equal(new Set(spline.points.map((p) => p.id)).size, spline.points.length, "point ids are unique");
+});
+
+check("roadGraphToLandscapeSpline paints a lone cell with a zero-length dab", () => {
+  const roads = roadGraphOf([[{ x: 10, z: 10 }, { x: 10, z: 10 }]]);
+  const spline = roadGraphToLandscapeSpline(roads.all(), ROAD_PAINT_OPTS);
+  assert.equal(spline.points.length, 1);
+  assert.equal(spline.segments.length, 1);
+  assert.equal(spline.segments[0]!.startPointId, spline.segments[0]!.endPointId, "self-segment");
+});
+
+check("roadGraphToLandscapeSpline jitter is deterministic and only bends long runs", () => {
+  const roads = roadGraphOf([[{ x: -12, z: 0 }, { x: 12, z: 0 }]]); // 13 cells
+  const jittered = { ...ROAD_PAINT_OPTS, visual: { ...ROAD_PAINT_VISUAL, jitter: 0.6, widthVariation: 0.15 } };
+  const first = roadGraphToLandscapeSpline(roads.all(), jittered);
+  const second = roadGraphToLandscapeSpline(roads.all(), jittered);
+  assert.deepEqual(first, second, "same network paints identically every time");
+  assert.ok(first.segments.length > 1, "a long run gains interior jitter control points");
+  const interior = first.points.filter((p) => p.id.startsWith("j:"));
+  assert.ok(interior.length >= 1 && interior.every((p) => Math.abs(p.position[2]) <= 0.6), "jitter stays within amplitude");
+});
+
+check("RoadPaintSurface repaint blends dirt and reroute leaves no residue", () => {
+  const optsA = ROAD_PAINT_OPTS;
+  const segsA = roadGraphOf([[{ x: -8, z: 0 }, { x: -2, z: 0 }]]).all();
+  const segsB = roadGraphOf([[{ x: 2, z: 0 }, { x: 8, z: 0 }]]).all();
+
+  // Reused surface: paint corridor A, then reroute to corridor B.
+  const reused = createFlatLandscapeData("small");
+  const surface = new RoadPaintSurface(reused);
+  const paintedA = surface.repaint(roadGraphToLandscapeSpline(segsA, optsA));
+  assert.ok(paintedA, "corridor A dirties some vertices");
+  const dirt = reused.layers.find((l) => l.id === "dirt")!;
+  // Corridor A local x -8..-2 → grid index (x+32); centre of A ≈ x -5 → index 27.
+  assert.ok(dirt.weights[32 * 65 + 27]! > 0.5, "corridor A raised dirt");
+  surface.repaint(roadGraphToLandscapeSpline(segsB, optsA));
+
+  // Fresh surface: paint corridor B only.
+  const fresh = createFlatLandscapeData("small");
+  new RoadPaintSurface(fresh).repaint(roadGraphToLandscapeSpline(segsB, optsA));
+  assert.deepEqual(reused.layers, fresh.layers, "rerouting equals painting B from pristine — no A residue");
+});
+
+check("RoadPaintSurface reset restores the exact pristine snapshot", () => {
+  const data = createFlatLandscapeData("small");
+  const pristine = data.layers.map((l) => l.weights.slice());
+  const surface = new RoadPaintSurface(data);
+  surface.repaint(roadGraphToLandscapeSpline(roadGraphOf([[{ x: -6, z: 0 }, { x: 6, z: 0 }]]).all(), ROAD_PAINT_OPTS));
+  assert.notDeepEqual(data.layers.map((l) => l.weights), pristine, "road paint changed the terrain");
+  surface.reset();
+  assert.deepEqual(data.layers.map((l) => l.weights), pristine, "reset returns every weight to mount state");
+  // An empty network sync also lands on pristine (restore with nothing to add).
+  surface.repaint(roadGraphToLandscapeSpline([], ROAD_PAINT_OPTS));
+  assert.deepEqual(data.layers.map((l) => l.weights), pristine);
+});
+
 check("resolveLandscapeSplineMeshChains joins reversed compatible segments and stops at branches", () => {
   const mesh = { enabled: true, assetId: "road", deform: true } as const;
   const chain: ForgeLandscapeSpline = {
@@ -31159,7 +31273,11 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   const balance = validateRoadBalance(
     JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
   );
-  assert.deepEqual(balance, { cellSize: 2, woodCostPerCell: 4 });
+  assert.deepEqual(balance, {
+    cellSize: 2,
+    woodCostPerCell: 4,
+    visual: { layerId: "dirt", width: 2.5, falloff: 2, strength: 0.9, jitter: 0.6, jitterSpacingCells: 5, widthVariation: 0.15 },
+  });
   const roads = new RoadGraph(balance);
   const blockers = [{ min: [-1, -1, -1], max: [1, 3, 1] }];
   const detour = roads.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, blockers);
@@ -35465,6 +35583,62 @@ check("§69: the AI stops deciding once the match is over", () => {
   assert.equal(losing.ai.concluded, false, "a restarted match decides again");
   for (let step = 0; step < 40; step += 1) losing.ai.update(0.5);
   assert.ok(losing.ai.snapshot().intent);
+});
+
+check("River Water Body resolves defaults and only saves presentation fields", () => {
+  assert.deepEqual(resolveRiverWater(null), {
+    id: "river-water",
+    name: "River Water",
+    hidden: false,
+    landscapeRef: "",
+    splineRef: "",
+    surfaceLevel: 0,
+    widthScale: 1,
+    flowSpeed: 0.35,
+    normalScale: 1,
+    normalTexture: "t-water-n",
+  });
+  assert.deepEqual(validateRiverWater({
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    surfaceLevel: -1.4,
+    widthScale: 0.88,
+    flowSpeed: 0.35,
+    ignoredCollision: true,
+  }), {
+    id: "river-1",
+    landscapeRef: "landscape-1",
+    splineRef: "spline-1",
+    surfaceLevel: -1.4,
+    widthScale: 0.88,
+    flowSpeed: 0.35,
+  });
+  assert.throws(() => validateRiverWater({ id: "river-1", landscapeRef: "landscape-1" }));
+});
+
+check("River Water ribbon follows spline width with arc-length UVs and flow attributes", () => {
+  const spline: ForgeLandscapeSpline = {
+    id: "river-spline",
+    points: [
+      { id: "a", position: [0, 0, 0], width: 2, falloff: 0 },
+      { id: "b", position: [8, 0, 0], width: 3, falloff: 0 },
+      { id: "c", position: [8, 0, 8], width: 2, falloff: 0 },
+    ],
+    segments: [
+      { id: "ab", startPointId: "a", endPointId: "b" },
+      { id: "bc", startPointId: "b", endPointId: "c" },
+    ],
+  };
+  const ribbon = buildRiverWaterRibbon(spline, { surfaceLevel: -1.4, widthScale: 1, sampleSpacing: 2, normalTileLength: 2 });
+  assert.ok(ribbon.positions.length > 30, "five cross-section vertices are emitted for each sampled row");
+  assert.equal(ribbon.positions[1], -1.4);
+  assert.equal(ribbon.uvs[0], 0);
+  assert.ok(ribbon.uvs.at(-2)! > 7, "U follows accumulated distance rather than control-point index");
+  assert.equal(ribbon.flowDirections.length / 2, ribbon.positions.length / 3);
+  assert.ok(ribbon.shoreDistances.includes(0));
+  assert.ok(ribbon.shoreDistances.includes(1));
+  assert.ok(ribbon.indices.length > 0);
 });
 
 console.log(`[engine-tests] ${checks} checks passed`);

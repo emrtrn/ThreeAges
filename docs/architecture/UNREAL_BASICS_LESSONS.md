@@ -380,6 +380,33 @@ Yürütme track'i bittikçe buradan çekilir; detaylar yukarıdaki ilgili §'de.
 Yeni kayıtları en üste ekle. Kaydet: tarih, madde #, ne değişti, nerede durdu,
 alınan karar (sonraki oturum yeniden tartışmasın).
 
+- *2026-07-24* - **Painted Roads (RTS yol görseli → landscape dirt paint),
+  Faz 0-4 uygulandı.** RTS yol aracının kutu-mesh görseli, mount edilmiş
+  authored Landscape'in `dirt` paint katmanına boyanan doğal patikayla
+  değiştirildi; lojistik (`RoadGraph` + `roads.json` topoloji/maliyet) hiç
+  değişmedi — painter salt okur. **Ne eklendi:** (1) `roads.json` `visual` bloğu
+  + `RoadVisual` tipi/validasyonu (layerId/width/falloff/strength/jitter/
+  jitterSpacingCells/widthVariation; blok yoksa yerleşik varsayılan). (2)
+  `AuthoredWorldHandle.landscapes: MountedLandscape[]` (data+object+position+
+  layerColors) — genel host kontrat genişlemesi. (3)
+  `src/game/rts/roads/roadTerrainPainter.ts`: saf `roadGraphToLandscapeSpline`
+  (degree≠2/köşe = control point, düz ara hücreler atılır, yarım-kenar dedup,
+  `smooth:true` Catmull-Rom, uzun koşulara deterministik hash jitter, lone-cell
+  self-segment dab), `RoadPaintSurface` (mount-time pristine snapshot →
+  restore+repaint, residü bırakmaz, el boyaması korunur), `RoadTerrainPainter`
+  (`RoadGraph.version` dirty-check, `updateLandscapeObjectGeometry` ile chunk
+  refresh). (4) RtsApp `setupRoadPainter`/`syncRoadVisuals`; `onCommitted` →
+  paint, `restartMatch` → `painter.reset()`, dispose → null;
+  `RoadPlacementSystem.setPaintedMode` kutu render'ı susturur; witness
+  `canvas.dataset.rtsRoads = "mesh"|"painted"`. **Karar:** node/kavşak noktaları
+  jitter'sız (kavşak okunurluğu); runtime deform KAPALI (y=0 picking/nav
+  kontratı). **Testler:** `tools/engine-tests.ts`e 8 check (dönüşüm + restore/
+  repaint + determinizm), `test:engine` yeşil (1084). **Nerede durdu:** kod +
+  testler tamam; Faz 5 (çağ→katman terfisi) opsiyonel, ayrı onay; Faz 6
+  before/after ekran görüntüsü + `smoke:browser` witness genişletmesi kullanıcı/
+  tarayıcıya bağlı. `build:verify` şu an eşZamanlı riverWater WIP'i (untracked
+  `engine/**/riverWater.ts`, `SceneApp.ts`) yüzünden kırmızı — Painted Roads
+  dosyalarında hata yok.
 - *2026-07-02* - **P1 Fizik/Collision sertleştirme: rotasyon + tünelleme + eğim
   (KALICI MİMARİ KARAR).** Kullanıcı üç semptom bildirdi: (1) box-collision'lı
   Architecture modellerinden geçme, (2) düz yolda görünmez engel, (3) eğimli
