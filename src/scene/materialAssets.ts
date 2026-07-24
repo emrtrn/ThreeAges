@@ -87,6 +87,13 @@ export interface ForgeMaterialLayer {
   baseColor: string;
   /** Base-color (albedo) texture, tiling-wrapped for terrain splatting, or `null`. */
   texture: Texture | null;
+  /**
+   * The material's authored UV tiling (`uvTiling.x/y`). For landscape splatting
+   * this is a *multiplier* on the terrain's auto tiling base, so the default
+   * `{ x: 1, y: 1 }` keeps the legacy look and larger values pack the texture
+   * denser.
+   */
+  tiling: { x: number; y: number };
 }
 
 /**
@@ -116,7 +123,11 @@ export async function loadForgeMaterialLayer(
       if (options.maxAnisotropy) texture.anisotropy = options.maxAnisotropy;
       texture.needsUpdate = true;
     }
-    return { baseColor: def.baseColor ?? "#ffffff", texture };
+    return {
+      baseColor: def.baseColor ?? "#ffffff",
+      texture,
+      tiling: { x: def.uvTiling.x, y: def.uvTiling.y },
+    };
   } catch {
     return null;
   }

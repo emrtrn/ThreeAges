@@ -4851,7 +4851,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   ): Promise<LandscapeLayerTexture[]> {
     const manifest = this.assetManifest;
     const worldSize = (data.size.verticesX - 1) * data.size.spacing;
-    const tiling = Math.min(128, Math.max(1, Math.round(worldSize / 8)));
+    const base = Math.min(128, Math.max(1, Math.round(worldSize / 8)));
     const maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
     const presetById = new Map(LANDSCAPE_DEFAULT_LAYERS.map((preset) => [preset.id as string, preset]));
     return Promise.all(
@@ -4864,11 +4864,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
               })
             : null;
         if (resolved?.texture) this.landscapeLayerTextures.push(resolved.texture);
+        const mat = resolved?.tiling ?? { x: 1, y: 1 };
         return {
           id: layer.id,
           texture: resolved?.texture ?? null,
           color: resolved?.baseColor ?? presetColor,
-          tiling,
+          tiling: { x: base * mat.x, y: base * mat.y },
         } satisfies LandscapeLayerTexture;
       }),
     );

@@ -19887,10 +19887,26 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Units",
       "path": "assets/ThreeAges/Actors/Units/BP_RTS_Guard.actor.json",
-      "tags": ["threeages", "rts", "unit", "guard"],
+      "tags": [
+        "threeages",
+        "rts",
+        "unit",
+        "guard"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 665 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 665
+      },
       "license": "Project-local RTS presentation asset"
     },
     {
@@ -19899,10 +19915,27 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Buildings",
       "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_Construction.actor.json",
-      "tags": ["threeages", "rts", "building", "barracks", "construction"],
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "barracks",
+        "construction"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 476 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 476
+      },
       "license": "Project-local RTS presentation asset"
     },
     {
@@ -19911,10 +19944,27 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Buildings",
       "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T1.actor.json",
-      "tags": ["threeages", "rts", "building", "barracks", "tier1"],
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "barracks",
+        "tier1"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 466 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 466
+      },
       "license": "Project-local RTS presentation asset"
     },
     {
@@ -19923,10 +19973,27 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Buildings",
       "path": "assets/ThreeAges/Actors/Buildings/BP_RTS_Barracks_T2.actor.json",
-      "tags": ["threeages", "rts", "building", "barracks", "tier2"],
+      "tags": [
+        "threeages",
+        "rts",
+        "building",
+        "barracks",
+        "tier2"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 443 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 443
+      },
       "license": "Project-local RTS presentation asset"
     },
     {
@@ -19935,10 +20002,26 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Markers",
       "path": "assets/ThreeAges/Actors/Markers/BP_RTS_KingdomStart.actor.json",
-      "tags": ["threeages", "rts", "marker", "start"],
+      "tags": [
+        "threeages",
+        "rts",
+        "marker",
+        "start"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 428 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 428
+      },
       "license": "Project-local RTS gameplay marker"
     },
     {
@@ -19947,10 +20030,26 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Markers",
       "path": "assets/ThreeAges/Actors/Markers/BP_RTS_ResourceNode.actor.json",
-      "tags": ["threeages", "rts", "marker", "resource"],
+      "tags": [
+        "threeages",
+        "rts",
+        "marker",
+        "resource"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 600 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 600
+      },
       "license": "Project-local RTS gameplay marker"
     },
     {
@@ -19959,10 +20058,26 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Markers",
       "path": "assets/ThreeAges/Actors/Markers/BP_RTS_BuildAnchor.actor.json",
-      "tags": ["threeages", "rts", "marker", "anchor"],
+      "tags": [
+        "threeages",
+        "rts",
+        "marker",
+        "anchor"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 678 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 678
+      },
       "license": "Project-local RTS gameplay marker"
     },
     {
@@ -19971,10 +20086,26 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Markers",
       "path": "assets/ThreeAges/Actors/Markers/BP_RTS_ExpansionMarker.actor.json",
-      "tags": ["threeages", "rts", "marker", "expansion"],
+      "tags": [
+        "threeages",
+        "rts",
+        "marker",
+        "expansion"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 626 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 626
+      },
       "license": "Project-local RTS gameplay marker"
     },
     {
@@ -19983,10 +20114,26 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Markers",
       "path": "assets/ThreeAges/Actors/Markers/BP_RTS_Tree.actor.json",
-      "tags": ["threeages", "rts", "marker", "tree"],
+      "tags": [
+        "threeages",
+        "rts",
+        "marker",
+        "tree"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 677 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 677
+      },
       "license": "Project-local RTS gameplay marker"
     },
     {
@@ -19995,10 +20142,26 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Markers",
       "path": "assets/ThreeAges/Actors/Markers/BP_RTS_StrategicPoint.actor.json",
-      "tags": ["threeages", "rts", "marker", "objective"],
+      "tags": [
+        "threeages",
+        "rts",
+        "marker",
+        "objective"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 578 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 578
+      },
       "license": "Project-local RTS gameplay marker"
     },
     {
@@ -20007,10 +20170,26 @@
       "assetType": "prefab",
       "category": "ThreeAges/Actors/Markers",
       "path": "assets/ThreeAges/Actors/Markers/BP_RTS_NavigationBlocker.actor.json",
-      "tags": ["threeages", "rts", "marker", "navigation"],
+      "tags": [
+        "threeages",
+        "rts",
+        "marker",
+        "navigation"
+      ],
       "placeable": false,
-      "placement": { "surface": "floor", "snapToWall": false, "allowRotation": true, "allowScale": false },
-      "runtime": { "loadGroup": "ThreeAges-RTS", "castShadow": false, "receiveShadow": false, "collision": false, "bytes": 545 },
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "ThreeAges-RTS",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 545
+      },
       "license": "Project-local RTS gameplay marker"
     },
     {
@@ -23354,7 +23533,11 @@
       "assetType": "level",
       "category": "Levels",
       "path": "assets/ThreeAges/Levels/RTS_CoreMatch.level.json",
-      "tags": ["rts", "gameplay", "markers"],
+      "tags": [
+        "rts",
+        "gameplay",
+        "markers"
+      ],
       "placeable": false,
       "placement": {
         "surface": "floor",
@@ -23377,7 +23560,11 @@
       "assetType": "level",
       "category": "Levels",
       "path": "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
-      "tags": ["rts", "gameplay", "markers"],
+      "tags": [
+        "rts",
+        "gameplay",
+        "markers"
+      ],
       "placeable": false,
       "placement": {
         "surface": "floor",
@@ -23391,6 +23578,98 @@
         "receiveShadow": false,
         "collision": false,
         "bytes": 3281
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-ground-dirt-bc",
+      "name": "T Ground Dirt BC",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Ground_Dirt_BC.PNG",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 9990309
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "t-ground-dirt-n",
+      "name": "T Ground Dirt N",
+      "assetType": "texture",
+      "category": "Textures",
+      "path": "assets/starter-content/Textures/T_Ground_Dirt_N.PNG",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Textures",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 12326610
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-grounddirty-material",
+      "name": "M Ground Dirty.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_GroundDirty.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 646
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "m-cooblestone-material",
+      "name": "M Cooble Stone.Material",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_CoobleStone.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 646
       },
       "license": "Unknown"
     }

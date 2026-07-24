@@ -11,11 +11,12 @@
   "metalnessTexture": null,
   "aoTexture": null,
   "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
   "emissiveTexture": null,
   "ormTexture": null,
   "uvTiling": {
-    "x": 1,
-    "y": 1
+    "x": 2,
+    "y": 2
   },
   "roughness": 0.8,
   "metalness": 0,

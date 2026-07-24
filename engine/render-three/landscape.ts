@@ -5,6 +5,7 @@ import {
   Group,
   Mesh,
   MeshStandardMaterial,
+  Vector2,
   type Texture,
 } from "three";
 
@@ -90,8 +91,8 @@ export interface LandscapeLayerTexture {
   id: string;
   texture: Texture | null;
   color: string;
-  /** UV repeat count across the whole terrain for this layer's texture. */
-  tiling: number;
+  /** Per-axis UV repeat count across the whole terrain for this layer's texture. */
+  tiling: { x: number; y: number };
 }
 
 /** Resolved settings + world transform + sidecar data the binding needs to build a landscape. */
@@ -300,7 +301,10 @@ function createLandscapeSplatMaterial(layerTextures: LandscapeLayerTexture[]): M
   const texAt = (index: number): Texture | null => layerTextures[index]?.texture ?? null;
   const colorAt = (index: number): Color =>
     new Color(layerTextures[index]?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color);
-  const tilingAt = (index: number): number => Math.max(0.0001, layerTextures[index]?.tiling ?? 1);
+  const tilingAt = (index: number): Vector2 => {
+    const t = layerTextures[index]?.tiling;
+    return new Vector2(Math.max(0.0001, t?.x ?? 1), Math.max(0.0001, t?.y ?? 1));
+  };
 
   material.onBeforeCompile = (shader) => {
     for (let index = 0; index < 4; index += 1) {
@@ -328,10 +332,10 @@ uniform float uLayerHasTex0;
 uniform float uLayerHasTex1;
 uniform float uLayerHasTex2;
 uniform float uLayerHasTex3;
-uniform float uLayerTiling0;
-uniform float uLayerTiling1;
-uniform float uLayerTiling2;
-uniform float uLayerTiling3;
+uniform vec2 uLayerTiling0;
+uniform vec2 uLayerTiling1;
+uniform vec2 uLayerTiling2;
+uniform vec2 uLayerTiling3;
 varying vec4 vLandscapeWeight;`,
       )
       // Inlined here (not a helper at <common>) because vUv is only in scope

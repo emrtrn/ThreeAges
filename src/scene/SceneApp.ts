@@ -5844,16 +5844,17 @@ export class SceneApp {
    * the preset color, so the render falls back to the flat vertex-color look.
    */
   private resolveLandscapeLayerTextures(data: ForgeLandscapeData): LandscapeLayerTexture[] {
-    const tiling = this.landscapeLayerTiling(data);
+    const base = this.landscapeLayerTiling(data);
     const presetById = new Map(LANDSCAPE_DEFAULT_LAYERS.map((preset) => [preset.id as string, preset]));
     return data.layers.map((layer) => {
       const presetColor = presetById.get(layer.id)?.color ?? LANDSCAPE_DEFAULT_LAYERS[0]!.color;
       const cached = layer.material ? this.landscapeLayerMaterialCache.get(layer.material) : undefined;
+      const mat = cached?.tiling ?? { x: 1, y: 1 };
       return {
         id: layer.id,
         texture: cached?.texture ?? null,
         color: cached?.baseColor ?? presetColor,
-        tiling,
+        tiling: { x: base * mat.x, y: base * mat.y },
       };
     });
   }
@@ -11747,6 +11748,22 @@ export class SceneApp {
     if (!this.layout) return;
     this.materialCache.delete(materialId);
     this.materialLoads.delete(materialId);
+    // Landscape splat layers cache their material's albedo/tiling separately from
+    // the mesh material cache, and never invalidate on save on their own. Drop the
+    // stale entry and re-warm every landscape that paints with this material so the
+    // edit (color, base-color texture, UV tiling) shows on the terrain immediately.
+    const cachedLayer = this.landscapeLayerMaterialCache.get(materialId);
+    if (cachedLayer) {
+      cachedLayer.texture?.dispose();
+      this.landscapeLayerMaterialCache.delete(materialId);
+      const landscapes = this.layout.landscapes ?? [];
+      for (let index = 0; index < landscapes.length; index += 1) {
+        const data = this.landscapeData.get(landscapes[index]!.id);
+        if (data?.layers.some((layer) => layer.material === materialId)) {
+          void this.warmLandscapeLayerMaterials(index);
+        }
+      }
+    }
     const affectedAssetIds = new Set<string>();
     for (const instance of this.layout.instances) {
       const defaultSlots = this.assetMaterialSlots.get(instance.assetId)?.slots ?? [];

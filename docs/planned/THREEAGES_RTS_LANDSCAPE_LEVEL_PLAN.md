@@ -21,6 +21,35 @@ V1'in oynanis hedefi **duz veya cok dusuk egimli oynanabilir ova**dir.
 Gorunen tepe, sirt ve kayaliklar dekoratif veya acik navigation blocker olarak
 kalir. Birimlerin yamac takip etmesi bu planin sonraki, ayri bir fazidir.
 
+### 1.1 Hedef konsept: "Iki Nehir Arasi" (referans)
+
+Landscape authoring'in hedef gorseli:
+[THREEAGES_RTS_LANDSCAPE_CONCEPT.png](THREEAGES_RTS_LANDSCAPE_CONCEPT.png)
+(kullanici konsepti, 2026-07-24). Su an **yalniz referans** — marker/blocker
+duzeni henuz bu konsepte gore yeniden kurulmadi (Secenek A: sculpt sirasinda
+bakilir, marker duzeni sonra beraber guncellenir).
+
+Konseptin mevcut yapiyla iliskisi:
+
+- **Eslesen:** oyuncu bazi GB kose, dusman bazi KD kose; merkez-catisma bolgesi;
+  iki flank/yan-baskin rotasi; bati+dogu genisleme; yan ormanlar; orman/kayalik
+  gecilmez sinirlar (dunya-siniri + grove).
+- **Yeni topoloji:** tek merkez sirt yerine **iki nehir + iki kopru** (Kopru A alt,
+  Kopru B ust) tek gecis noktalari olur. Nehirler gorseldir; gecilmezlik nehir
+  boyunca acik `BP_RTS_NavigationBlocker` zinciriyle, kopruler bu zincirdeki
+  bosluklarla tanimlanir (Faz 0 kurali: gizli blocker turetilmez). Merkez sirt
+  blocker'i (`Blocker 0`) bu duzende nehir-blocker zinciriyle degistirilebilir —
+  Faz 0 "tek merkez sirt" karari o zaman guncellenir.
+- **Degismez (V1):** navigation ve picking X/Z'de kalir; nehir yatagi/kopru
+  birimlere gorsel olarak Faz 7-A'da oturur. Denge/preset verisi tasinmaz.
+- **Olcek notu:** iki-nehir + iki-kopru yapisi 140x140 (`RTS_WORLD_HALF_EXTENT=70`)
+  alanina sigar; mevcut landscape 129x129 (~128 birim) — tam kaplama icin
+  editorde ~140'a genisletmek gerekebilir.
+
+Konsepti Level'a gecirme isi iki katman: (1) marker/blocker yeniden duzeni
+(Faz 2 alani, kod+veri), (2) gorsel arazi — nehir/kopru/orman/kayalik (Faz 3,
+authoring).
+
 ## 2. Basari Tanimi
 
 Asagidaki akisin kod degisikligi olmadan calismasi hedeflenir:
@@ -348,23 +377,38 @@ Kabul:
 
 ### Faz 7 - Terrain-aware RTS (V1 sonrasi, ayri onay gerekir)
 
-Bu faz V1'e dahil degildir. V1 kabulunden sonra, yukseklik farkli yollarda
-oynanis istenirse birlikte ele alinacaktir:
+Bu faz V1'e dahil degildir. V1 kabulunden sonra ele alinacak.
 
-- [ ] Landscape height sample API'sini RTS runtime'a bagla.
-- [ ] Unit Y konumunu terrain height'a projekte et; spawn, move, separation ve
-  combat mesafesini ayni kuralla guncelle.
-- [ ] Ground picking'i `y=0` plane yerine Landscape raycast'ine tasi.
-- [ ] Building/road preview ve tamamlanmis yapilari terrain yuksekligi ve
-  egimine hizala.
-- [ ] Eğim, step-height ve gecilebilirlik profilini veriyle tanimla.
-- [ ] Grid navigation'a height/slope maliyeti ya da heightfield nav katmani
-  ekle; route, formation ve congestion davranisini yeniden test et.
-- [ ] Projectile, health/progress overlay, selection/marquee ve fog'un terrain
-  yukseklikleriyle uyumlulugunu tamamla.
+**Kapsam karari (kullanici, 2026-07-24): SECENEK A — sadece gorsel yukseklik
+oturmasi.** Birimler/yapilar/picking arazi yuksekligini (Y) takip eder, ama egim
+oynanisi ETKILEMEZ (hiz, avantaj, gecilebilirlik degismez). Mekanik arazi
+(Secenek B: egim maliyeti/engeli, yuksek zemin avantaji) kapsam DISI. Yani
+asagidaki listeden yalniz 1-4 uygulanir; 5-6 (egim/step-height profili, nav
+height/slope maliyeti) B'ye ait, yapilmayacak; 7 gorsel uyum icin gerektigi kadar.
 
-Bu fazin baslamasi, mekanik arazi avantaji/engeli istenip istenmedigine dair
-ayri tasarim karari gerektirir.
+Baslamadan once V1 kapanmali (Faz 3 sculpt/paint/road + Faz 6 dokuman); aksi
+halde henuz duz olmasi gereken zeminde terrain-aware calismak test zeminini oynak
+yapar.
+
+- [ ] (A) Landscape height sample API'sini RTS runtime'a bagla.
+  (`landscapeHeightAtLocal` engine'de mevcut; RTS'e bir yukseklik servisi olarak.)
+- [ ] (A) Unit Y konumunu terrain height'a projekte et; spawn/move/separation'i
+  gorsel olarak oturt. Combat/separation MESAFESI X/Z'de kalir (egim menzili
+  degistirmez — A karari).
+- [ ] (A) Ground picking'i `y=0` plane yerine Landscape raycast'ine tasi
+  (Faz 5'te bilerek y=0 birakilmisti).
+- [ ] (A) Building/road preview ve tamamlanmis yapilari terrain yuksekligine
+  oturt (egime hizalama istege bagli; gorsel).
+- [ ] ~~(B) Egim, step-height ve gecilebilirlik profilini veriyle tanimla.~~
+  KAPSAM DISI (Secenek A).
+- [ ] ~~(B) Grid navigation'a height/slope maliyeti ya da heightfield nav
+  katmani ekle.~~ KAPSAM DISI (Secenek A) — nav X/Z grid olarak kalir.
+- [ ] (A) Projectile, health/progress overlay, selection/marquee ve fog'un
+  terrain yuksekliklerine gorsel uyumunu tamamla.
+
+Not: Secenek A'da navigation ve oynanis kurallari X/Z'de aynen kalir; degisen
+yalniz sunum (Y projeksiyonu + terrain picking). B'ye gecmek yeni bir karar
+gerektirir.
 
 ## 7. Test ve Kabul Matrisi
 

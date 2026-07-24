@@ -127,7 +127,7 @@ async function resolveLandscapeLayerTextures(
   warn: (message: string, error?: unknown) => void,
 ): Promise<LandscapeLayerTexture[]> {
   const worldSize = (data.size.verticesX - 1) * data.size.spacing;
-  const tiling = Math.min(128, Math.max(1, Math.round(worldSize / 8)));
+  const base = Math.min(128, Math.max(1, Math.round(worldSize / 8)));
   const presetById = new Map(LANDSCAPE_DEFAULT_LAYERS.map((preset) => [preset.id as string, preset]));
   return Promise.all(
     data.layers.map(async (layer) => {
@@ -141,11 +141,12 @@ async function resolveLandscapeLayerTextures(
         }
       }
       if (resolved?.texture) loaded.push(resolved.texture);
+      const mat = resolved?.tiling ?? { x: 1, y: 1 };
       return {
         id: layer.id,
         texture: resolved?.texture ?? null,
         color: resolved?.baseColor ?? presetColor,
-        tiling,
+        tiling: { x: base * mat.x, y: base * mat.y },
       } satisfies LandscapeLayerTexture;
     }),
   );

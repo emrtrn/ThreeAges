@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_CoobleStone",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "t-cobblestone-pebble-d",
+  "normalTexture": "t-cobblestone-pebble-n",
+  "maskTexture": null,
+  "roughnessTexture": null,
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 3,
+    "y": 3
+  },
+  "roughness": 0.8,
+  "metalness": 0,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}
