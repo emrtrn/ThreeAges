@@ -597,6 +597,7 @@ Editor helpers and future world-space UI/FX can opt out through that layer.
 - [x] Foam Point/Strip veya esdeger authoring verisini tanimla.
 - [x] Kopru ayagi ve kayalar icin maskeyi ribbon'a uygula.
 - [x] Segment bazli rapids/hiz authoring'i ekle.
+- [x] Landscape Details icinde River Water Body ayarlarini canli authoring'e bagla.
 - [ ] Kavsak gerekiyorsa junction patch + yerel flow map ekle.
 
 Kabul:
@@ -613,12 +614,66 @@ profil ornegi vardir. Mevcut nehir tek, dalsiz bir zincir oldugu icin junction
 patch/flow-map maddesi uygulanmadi; dallanan bir spline author edilirse Faz 4'un
 kalan kapisi olarak ele alinacak.
 
+Gorsel ayar notu: Gameplay-proof kaya kumesi `rock-cluster` point stamp'i ve
+asagi akis `rock-cluster-wake` strip'i ile isaretlidir. Shader, ribbon kiyi
+mesafesini de shallow renk/alpha gecisine katar; boylece yatak derin olsa bile
+kiyi tek bir koyu, sert sinir gibi okunmaz. Static foam varken ribbon 9-wide ve
+en cok 0.75 world-unit merkez cizgisi araliginda orneklenir; bu, seyrek vertex
+maskesinin kaya cevresinde gorunmeden kaybolmasini engeller.
+
+Editor authoring notu (2026-07-24): River Water, ayri bir Foliage/RTS paneli
+degil, secili Landscape'in `Details > Landscape Mode` akisinda yer alir. Panel
+Landscape'e bagli tum water body'leri listeler; Surface, Flow & Waves, Foam
+Point/Strip (yerel X/Z, radius, intensity), segment rapidness/hiz ve shared
+planar reflection kontrollerini ayni persisted veri uzerinden canli uygular.
+Her degisiklik undo/redo ve auto-save zincirinden gecer; bu nedenle ayni editor
+altyapisi Forge'a proje-kurali tasimadan aktarilabilir.
+
+Yeni nehir akisi: Landscape spline en az iki bagli control point icerdiginde
+ayni karttaki `Add River Water > Source Spline > Create River Water` ile body
+olusturulur. Sistem ilk control point'in yerel yuksekliginin `0.1` birim
+ustunu baslangic water level olarak alir, spline genisligini kullanir ve sonraki Surface ayarlariyla
+yatay su kotu elle inceltilir. Bir spline ayni Landscape icinde yalniz bir
+River Water Body tarafindan sahiplenilebilir. `Water Height (Local Y)` bu yatay
+kotu duzenler; `Delete River Water` yalnizca su gorunumunu kaldirir, spline ve
+nehir yatagini korur. Her iki islem de undo/redo desteklidir.
+
+Gorunurluk icin `Bed Visibility` taban gecirgenligini ayri kontrol eder:
+`0` tabani gizler, `1` berrak su davranisini korur. `Absorption Distance`
+azaldikca su derinlestikce taban daha hizli gizlenir; bu ayarlar genel opacity,
+dalga, kopuk ve planar yansimadan bagimsizdir.
+
 ### Faz 5 - Opsiyonel yuksek kalite
 
 - [ ] Secili water-obstacle layer'i icin depth-intersection foam prototipi.
 - [ ] Screen-space refraction/distortion prototipi.
-- [ ] Farkli su kotlari/reach ve selale sinirlarini tasarla.
+- [x] Farkli su kotlari/reach ve selale sinirlarini tasarla.
 - [ ] GPU zaman olcumu sonucuna gore ozellikleri kalite profiline bagla.
+
+Reach tasarimi (gelecek bir veri/renderer dilimi):
+
+```ts
+interface LayoutRiverWaterReach {
+  id: string;
+  splineSegmentRefs: string[]; // tek, sirali ve dalsiz spline zinciri
+  surfaceLevel: number;        // Landscape-local, yalniz yatay su duzlemi
+  reflectionGroup?: string;
+  waterfallAfter?: { style: "rapidDrop" | "waterfall"; dropHeight: number };
+}
+```
+
+`reaches` bos/olmayan eski actorler mevcut tek `surfaceLevel` davranisini korur.
+Reach uygulamasi her reach icin ayri ribbon/planar-reflection consumer uretir;
+ortak sinirda iki yatay ribbon ust uste bindirilmez. `waterfallAfter` ise mevcut
+yatay ribbon'a egim vermek yerine ayri bir waterfall/rapid-drop mesh, foam ve
+gerekirse particle owner'i olacaktir; planar reflection kullanmayacaktir. Bir
+reach icindeki segmentler sirali ve dalsiz olmalidir. Dallanma ihtiyaci bu
+sozlesmenin disinda kalir ve Faz 4 junction patch + flow-map kapisini acar.
+
+Depth-intersection foam ve gercek screen-space refraction bu dilime alinmadi:
+mevcut RTS direct-render yolunda paylasilan scene depth texture yoktur. Tam sahne
+depth'i kullanmak birimleri de kopuk kaynagina cevirir; bunu onlemek icin secili
+static-water-obstacle layer, depth prepass ve GPU olcumu ayni kapsamda gelmelidir.
 
 ## 15. Dogrulama ve Olcum
 

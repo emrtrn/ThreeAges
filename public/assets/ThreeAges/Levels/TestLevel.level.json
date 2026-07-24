@@ -46,6 +46,56 @@
     {
       "assetId": "farm-secondage-level3",
       "placements": []
+    },
+    {
+      "assetId": "sm-ramp",
+      "placements": [
+        {
+          "position": [
+            10.77,
+            -2.45,
+            16.35
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "sm-bump",
+      "placements": [
+        {
+          "position": [
+            17.44,
+            -2.38,
+            9.04
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            2.2,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "sm-rightarm",
+      "placements": [
+        {
+          "position": [
+            11.85,
+            -1.77,
+            22.2
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            1,
+            2.4,
+            1
+          ]
+        }
+      ]
     }
   ],
   "characters": [],
@@ -60,6 +110,13 @@
     "skyLightCapture": {
       "intensity": 1
     }
+  },
+  "cloudLayer": {
+    "coverage": 0.4,
+    "density": 0.6,
+    "softness": 0.6,
+    "scale": 2,
+    "speed": 0.2
   },
   "postProcess": {
     "antialias": "smaa",
@@ -90,5 +147,45 @@
       "castShadow": true
     }
   ],
-  "landscapes": []
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "landscapes/landscape-1.landscape.json",
+      "name": "Landscape"
+    }
+  ],
+  "riverWaters": [
+    {
+      "id": "river-water-1",
+      "landscapeRef": "landscape-1",
+      "splineRef": "spline-2",
+      "name": "River Water 1",
+      "surfaceLevel": -1,
+      "widthScale": 1,
+      "flowSpeed": 0.2,
+      "normalScale": 0.1,
+      "deepColor": "#1841a0",
+      "shallowColor": "#58aefe",
+      "opacity": 1,
+      "bedVisibility": 0.1,
+      "absorptionDistance": 1,
+      "waveAmplitude": 0.2,
+      "waveLength": 3,
+      "foamIntensity": 1,
+      "foamStamps": [],
+      "segmentProfiles": [
+        {
+          "splineSegmentRef": "segment-1",
+          "flowSpeedMultiplier": 1
+        }
+      ],
+      "reflectionMode": "sharedPlanar",
+      "reflectionQuality": "high"
+    }
+  ]
 }

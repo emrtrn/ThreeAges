@@ -205,7 +205,7 @@ import {
   type RiverWaterObjectLike,
   type RiverWaterRenderItem,
 } from "@engine/render-three/riverWater";
-import { riverWaterReflectionGroupKey } from "@engine/scene/riverWater";
+import { riverWaterReflectionGroupKey, uniqueRiverWaterId } from "@engine/scene/riverWater";
 import { PlanarReflectionSource } from "@engine/render-three/planarReflectionSource";
 import {
   FoliageRenderBinding,
@@ -449,6 +449,9 @@ import type {
   LayoutLandscape,
   LayoutReflectionPlane,
   LayoutReflectiveSurface,
+  LayoutRiverWater,
+  LayoutRiverWaterFoamStamp,
+  LayoutRiverWaterSegmentProfile,
   LayoutSkyAtmosphere,
   LayoutSphereReflectionCapture,
   LayoutSplineActor,
@@ -649,6 +652,8 @@ export interface LandscapeSculptSettings {
   strength: number;
   falloff: number;
   flattenTargetHeight: number;
+  /** Retains the selected water body while Details re-renders. */
+  activeRiverWaterId: string | null;
   activeSplineId: string | null;
   activeSplinePointId: string | null;
   activeSplineSegmentId: string | null;
@@ -658,6 +663,7 @@ export interface LandscapeSplineView {
   id: string;
   name: string;
   pointCount: number;
+  segmentCount: number;
   /** Whether the spline renders as a smooth Catmull-Rom curve (Faz 6.2a). */
   smooth: boolean;
 }
@@ -741,6 +747,53 @@ export interface LandscapeSplineSegmentView {
   paint: { enabled: boolean; layerId: string; strength: number };
   mesh: { enabled: boolean; assetId: string; spacing: number; yawOffset: number; fitToLength: boolean; alignToTerrain: boolean; bank: number; deform: boolean };
 }
+
+/** Editable water-body presentation exposed from the selected Landscape Details panel. */
+export interface RiverWaterDetailsView {
+  id: string;
+  name: string;
+  splineRef: string;
+  surfaceLevel: number;
+  widthScale: number;
+  flowSpeed: number;
+  normalScale: number;
+  normalTexture: string;
+  deepColor: string;
+  shallowColor: string;
+  opacity: number;
+  bedVisibility: number;
+  absorptionDistance: number;
+  waveAmplitude: number;
+  waveLength: number;
+  foamIntensity: number;
+  reflectionMode: "off" | "sharedPlanar";
+  reflectionGroup: string;
+  reflectionQuality: "low" | "medium" | "high";
+  foamStamps: LayoutRiverWaterFoamStamp[];
+  segmentProfiles: LayoutRiverWaterSegmentProfile[];
+  splineSegments: Array<{ id: string; startPointId: string; endPointId: string }>;
+}
+
+export type RiverWaterDetailsPatch = Partial<Pick<
+  LayoutRiverWater,
+  | "surfaceLevel"
+  | "widthScale"
+  | "flowSpeed"
+  | "normalScale"
+  | "deepColor"
+  | "shallowColor"
+  | "opacity"
+  | "bedVisibility"
+  | "absorptionDistance"
+  | "waveAmplitude"
+  | "waveLength"
+  | "foamIntensity"
+  | "reflectionMode"
+  | "reflectionGroup"
+  | "reflectionQuality"
+  | "foamStamps"
+  | "segmentProfiles"
+>>;
 
 /** The spline control point the move gizmo targets (Faz 6.1), with its world anchor. */
 interface LandscapeSplinePointGizmoTarget {
@@ -830,6 +883,24 @@ function cloneLandscapeSplines(splines: readonly ForgeLandscapeSpline[]): ForgeL
         : {}),
     })),
   }));
+}
+
+function cloneRiverWater(water: LayoutRiverWater): LayoutRiverWater {
+  return {
+    ...water,
+    ...(water.foamStamps
+      ? {
+          foamStamps: water.foamStamps.map((stamp) => ({
+            ...stamp,
+            position: [...stamp.position] as Vec3,
+            ...(stamp.endPosition ? { endPosition: [...stamp.endPosition] as Vec3 } : {}),
+          })),
+        }
+      : {}),
+    ...(water.segmentProfiles
+      ? { segmentProfiles: water.segmentProfiles.map((profile) => ({ ...profile })) }
+      : {}),
+  };
 }
 
 /** Collision-free `point-<n>` id for a spline (safe after point deletions). */
@@ -1082,6 +1153,7 @@ export class SceneApp {
     strength: 0.25,
     falloff: 2,
     flattenTargetHeight: 0,
+    activeRiverWaterId: null,
     activeSplineId: null,
     activeSplinePointId: null,
     activeSplineSegmentId: null,
@@ -1821,6 +1893,9 @@ export class SceneApp {
       strength: clamp(next.strength, 0.01, 2),
       falloff: clamp(next.falloff, 0.25, 8),
       flattenTargetHeight: clamp(next.flattenTargetHeight, -1000, 1000),
+      activeRiverWaterId: typeof next.activeRiverWaterId === "string" && next.activeRiverWaterId.length > 0
+        ? next.activeRiverWaterId
+        : null,
       activeSplineId: typeof next.activeSplineId === "string" && next.activeSplineId.length > 0 ? next.activeSplineId : null,
       activeSplinePointId: typeof next.activeSplinePointId === "string" && next.activeSplinePointId.length > 0 ? next.activeSplinePointId : null,
       activeSplineSegmentId: typeof next.activeSplineSegmentId === "string" && next.activeSplineSegmentId.length > 0 ? next.activeSplineSegmentId : null,
@@ -6157,6 +6232,7 @@ export class SceneApp {
       };
       const object = createRiverWaterObject(item, normalMap);
       object.raycast = () => {};
+      object.userData.riverWaterId = resolved.id;
       this.scene.add(object);
       this.riverWaterObjects.push(object);
     }
@@ -7772,6 +7848,25 @@ export class SceneApp {
     const object = this.landscapeObjects[index];
     if (!actor || !object) return;
     applyLandscapeTransform(object, this.landscapeItem(actor));
+    this.syncRiverWaterTransformsForLandscape(actor);
+  }
+
+  /** Keeps water ribbons visually attached while a Landscape is moved or rotated in the editor. */
+  private syncRiverWaterTransformsForLandscape(landscape: LayoutLandscape): void {
+    const waters = this.layout?.riverWaters ?? [];
+    for (const water of waters) {
+      if (water.landscapeRef !== landscape.id) continue;
+      const object = this.riverWaterObjects.find((entry) => entry.userData.riverWaterId === water.id);
+      if (!object) continue;
+      object.position.set(...landscape.position);
+      const rotation = landscape.rotation ?? [0, 0, 0];
+      object.rotation.set(
+        (rotation[0] * Math.PI) / 180,
+        (rotation[1] * Math.PI) / 180,
+        (rotation[2] * Math.PI) / 180,
+        "XYZ",
+      );
+    }
   }
 
   private refreshLandscapeIndices(): void {
@@ -8508,6 +8603,226 @@ export class SceneApp {
     this.setLandscape(this.selection.index, patch);
   }
 
+  /** Water bodies whose spline and presentation are owned by the selected Landscape. */
+  getSelectedLandscapeRiverWaters(): RiverWaterDetailsView[] {
+    if (this.selection?.kind !== "landscape") return [];
+    const landscape = this.layout?.landscapes?.[this.selection.index];
+    if (!landscape) return [];
+    const data = this.landscapeData.get(landscape.id);
+    return (this.layout?.riverWaters ?? [])
+      .filter((water) => water.landscapeRef === landscape.id)
+      .map((water) => {
+        const resolved = resolveRiverWater(water);
+        const spline = data?.splines?.find((entry) => entry.id === resolved.splineRef);
+        return {
+          id: resolved.id,
+          name: resolved.name,
+          splineRef: resolved.splineRef,
+          surfaceLevel: resolved.surfaceLevel,
+          widthScale: resolved.widthScale,
+          flowSpeed: resolved.flowSpeed,
+          normalScale: resolved.normalScale,
+          normalTexture: resolved.normalTexture,
+          deepColor: resolved.deepColor,
+          shallowColor: resolved.shallowColor,
+          opacity: resolved.opacity,
+          bedVisibility: resolved.bedVisibility,
+          absorptionDistance: resolved.absorptionDistance,
+          waveAmplitude: resolved.waveAmplitude,
+          waveLength: resolved.waveLength,
+          foamIntensity: resolved.foamIntensity,
+          reflectionMode: resolved.reflectionMode,
+          reflectionGroup: resolved.reflectionGroup ?? "",
+          reflectionQuality: resolved.reflectionQuality,
+          foamStamps: resolved.foamStamps.map((stamp) => ({
+            ...stamp,
+            position: [...stamp.position] as Vec3,
+            ...(stamp.endPosition ? { endPosition: [...stamp.endPosition] as Vec3 } : {}),
+          })),
+          segmentProfiles: resolved.segmentProfiles.map((profile) => ({ ...profile })),
+          splineSegments: (spline?.segments ?? []).map((segment) => ({
+            id: segment.id,
+            startPointId: segment.startPointId,
+            endPointId: segment.endPointId,
+          })),
+        };
+      });
+  }
+
+  /** Applies one undoable River Water Body presentation edit and refreshes its live ribbon. */
+  setSelectedLandscapeRiverWater(waterId: string, patch: RiverWaterDetailsPatch): void {
+    if (this.selection?.kind !== "landscape") return;
+    const landscape = this.layout?.landscapes?.[this.selection.index];
+    const waters = this.layout?.riverWaters;
+    if (!landscape || landscape.locked || !waters) return;
+    const index = waters.findIndex((water) => water.id === waterId && water.landscapeRef === landscape.id);
+    if (index < 0) return;
+
+    const previous = cloneRiverWater(waters[index]!);
+    const next = cloneRiverWater(previous);
+    if (patch.surfaceLevel !== undefined) next.surfaceLevel = Number(clamp(patch.surfaceLevel, -10000, 10000).toFixed(3));
+    if (patch.widthScale !== undefined) next.widthScale = Number(clamp(patch.widthScale, 0.05, 10).toFixed(3));
+    if (patch.flowSpeed !== undefined) next.flowSpeed = Number(clamp(patch.flowSpeed, 0, 10).toFixed(3));
+    if (patch.normalScale !== undefined) next.normalScale = Number(clamp(patch.normalScale, 0.05, 20).toFixed(3));
+    if (patch.deepColor !== undefined) next.deepColor = patch.deepColor;
+    if (patch.shallowColor !== undefined) next.shallowColor = patch.shallowColor;
+    if (patch.opacity !== undefined) next.opacity = Number(clamp(patch.opacity, 0, 1).toFixed(3));
+    if (patch.bedVisibility !== undefined) next.bedVisibility = Number(clamp(patch.bedVisibility, 0, 1).toFixed(3));
+    if (patch.absorptionDistance !== undefined) next.absorptionDistance = Number(clamp(patch.absorptionDistance, 0.01, 100).toFixed(3));
+    if (patch.waveAmplitude !== undefined) next.waveAmplitude = Number(clamp(patch.waveAmplitude, 0, 1).toFixed(3));
+    if (patch.waveLength !== undefined) next.waveLength = Number(clamp(patch.waveLength, 0.1, 100).toFixed(3));
+    if (patch.foamIntensity !== undefined) next.foamIntensity = Number(clamp(patch.foamIntensity, 0, 1).toFixed(3));
+    if (patch.reflectionMode !== undefined) next.reflectionMode = patch.reflectionMode === "sharedPlanar" ? "sharedPlanar" : "off";
+    if (patch.reflectionGroup !== undefined) {
+      const group = patch.reflectionGroup.trim();
+      if (group) next.reflectionGroup = group;
+      else delete next.reflectionGroup;
+    }
+    if (patch.reflectionQuality !== undefined) {
+      next.reflectionQuality = patch.reflectionQuality === "low" || patch.reflectionQuality === "high"
+        ? patch.reflectionQuality
+        : "medium";
+    }
+    if (patch.foamStamps !== undefined) {
+      next.foamStamps = patch.foamStamps.map((stamp) => ({
+        ...stamp,
+        kind: stamp.kind === "strip" ? "strip" : "point",
+        position: [...stamp.position] as Vec3,
+        ...(stamp.kind === "strip" && stamp.endPosition
+          ? { endPosition: [...stamp.endPosition] as Vec3 }
+          : {}),
+        radius: Number(clamp(stamp.radius, 0.1, 100).toFixed(3)),
+        intensity: Number(clamp(stamp.intensity, 0, 1).toFixed(3)),
+      }));
+    }
+    if (patch.segmentProfiles !== undefined) {
+      next.segmentProfiles = patch.segmentProfiles.map((profile) => ({
+        splineSegmentRef: profile.splineSegmentRef,
+        ...(profile.flowSpeedMultiplier !== undefined
+          ? { flowSpeedMultiplier: Number(clamp(profile.flowSpeedMultiplier, 0, 10).toFixed(3)) }
+          : {}),
+        ...(profile.rapidness !== undefined ? { rapidness: Number(clamp(profile.rapidness, 0, 1).toFixed(3)) } : {}),
+      }));
+    }
+    if (JSON.stringify(previous) === JSON.stringify(next)) return;
+
+    const apply = (value: LayoutRiverWater): void => {
+      if (!this.layout?.riverWaters?.[index]) return;
+      this.layout.riverWaters[index] = cloneRiverWater(value);
+      void this.buildRiverWaters();
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: "Edit River Water",
+      redo: () => apply(next),
+      undo: () => apply(previous),
+    });
+  }
+
+  addSelectedLandscapeRiverWaterFoamStamp(waterId: string, kind: LayoutRiverWaterFoamStamp["kind"]): void {
+    const water = this.getSelectedLandscapeRiverWaters().find((entry) => entry.id === waterId);
+    if (!water) return;
+    const firstSegment = water.splineSegments[0];
+    const segmentIndex = firstSegment ? water.splineSegments.indexOf(firstSegment) : 0;
+    const used = new Set(water.foamStamps.map((stamp) => stamp.id));
+    let number = water.foamStamps.length + 1;
+    while (used.has(`foam-${number}`)) number += 1;
+    const x = segmentIndex * 2;
+    const stamp: LayoutRiverWaterFoamStamp = {
+      id: `foam-${number}`,
+      kind,
+      position: [x, water.surfaceLevel, 0],
+      ...(kind === "strip" ? { endPosition: [x + 3, water.surfaceLevel, 0] as Vec3 } : {}),
+      radius: 2,
+      intensity: 0.7,
+    };
+    this.setSelectedLandscapeRiverWater(waterId, { foamStamps: [...water.foamStamps, stamp] });
+  }
+
+  removeSelectedLandscapeRiverWaterFoamStamp(waterId: string, stampId: string): void {
+    const water = this.getSelectedLandscapeRiverWaters().find((entry) => entry.id === waterId);
+    if (!water) return;
+    this.setSelectedLandscapeRiverWater(waterId, {
+      foamStamps: water.foamStamps.filter((stamp) => stamp.id !== stampId),
+    });
+  }
+
+  /** Removes the visual water body only; its Landscape spline and terrain bed remain authored. */
+  deleteSelectedLandscapeRiverWater(waterId: string): void {
+    if (this.selection?.kind !== "landscape") return;
+    const landscape = this.layout?.landscapes?.[this.selection.index];
+    const waters = this.layout?.riverWaters;
+    if (!landscape || landscape.locked || !waters) return;
+    const target = waters.find((water) => water.id === waterId && water.landscapeRef === landscape.id);
+    if (!target) return;
+
+    // `waters` above was read from the present layout field, so undo restores it.
+    const hadRiverWaters = true;
+    const before = waters.map(cloneRiverWater);
+    const after = before.filter((water) => water.id !== waterId);
+    const nextActiveRiverWaterId = after.find((water) => water.landscapeRef === landscape.id)?.id ?? null;
+    const apply = (value: LayoutRiverWater[], present: boolean, activeRiverWaterId: string | null): void => {
+      if (!this.layout) return;
+      if (present) this.layout.riverWaters = value.map(cloneRiverWater);
+      else delete this.layout.riverWaters;
+      this.landscapeSculptSettings = { ...this.landscapeSculptSettings, activeRiverWaterId };
+      void this.buildRiverWaters();
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: "Delete River Water",
+      redo: () => apply(after, after.length > 0, nextActiveRiverWaterId),
+      undo: () => apply(before, hadRiverWaters, target.id),
+    });
+    this.onStatus?.("River Water deleted; its Landscape spline remains available.", "info");
+  }
+
+  /** Creates a visible River Water Body from one complete spline on the selected Landscape. */
+  createSelectedLandscapeRiverWater(splineId: string): void {
+    if (this.selection?.kind !== "landscape") return;
+    const landscape = this.layout?.landscapes?.[this.selection.index];
+    const data = landscape ? this.landscapeData.get(landscape.id) : null;
+    if (!landscape || landscape.locked || !data) return;
+    const spline = data.splines?.find((entry) => entry.id === splineId);
+    if (!spline || spline.points.length < 2 || spline.segments.length < 1) return;
+    const existing = this.layout?.riverWaters ?? [];
+    if (existing.some((water) => water.landscapeRef === landscape.id && water.splineRef === spline.id)) return;
+
+    const firstPoint = spline.points[0]!;
+    const water: LayoutRiverWater = {
+      id: uniqueRiverWaterId(existing),
+      name: `River Water ${existing.filter((entry) => entry.landscapeRef === landscape.id).length + 1}`,
+      landscapeRef: landscape.id,
+      splineRef: spline.id,
+      // Begin 0.1 units above the first point's local bed elevation; Surface
+      // Level remains the explicit horizontal-water override thereafter.
+      surfaceLevel: Number((firstPoint.position[1] + 0.1).toFixed(3)),
+    };
+    const hadRiverWaters = this.layout?.riverWaters !== undefined;
+    const before = existing.map(cloneRiverWater);
+    const after = [...before, water];
+    const apply = (value: LayoutRiverWater[], present: boolean, activeRiverWaterId: string | null): void => {
+      if (!this.layout) return;
+      if (present) this.layout.riverWaters = value.map(cloneRiverWater);
+      else delete this.layout.riverWaters;
+      this.landscapeSculptSettings = { ...this.landscapeSculptSettings, activeRiverWaterId };
+      void this.buildRiverWaters();
+      this.emitSelectionChanged();
+      this.emitSceneObjectsChanged();
+      this.scheduleAutoSave();
+    };
+    this.executeCommand({
+      label: "Create River Water",
+      redo: () => apply(after, true, water.id),
+      undo: () => apply(before, hadRiverWaters, null),
+    });
+    this.onStatus?.("River Water created from Landscape spline.", "info");
+  }
+
   /**
    * Resolved paint layers for the selected landscape: each layer's display name
    * and swatch follow its assigned material (falling back to the built-in preset).
@@ -8545,6 +8860,7 @@ export class SceneApp {
       id: spline.id,
       name: spline.name ?? spline.id,
       pointCount: spline.points.length,
+      segmentCount: spline.segments.length,
       smooth: spline.smooth === true,
     }));
   }
@@ -12494,6 +12810,9 @@ export class SceneApp {
       writeScale(transform, values.scale);
     }
     this.refreshSelectionObject(selection);
+    // The immediate sync above keeps the ribbon under the gizmo; rebuild at the
+    // committed transform boundary so shared reflection sources get the new plane.
+    if (selection.kind === "landscape") void this.buildRiverWaters();
     this.updateSelectionBox();
     this.updateGizmo();
     this.emitSelectionChanged();

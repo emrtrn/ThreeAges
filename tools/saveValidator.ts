@@ -1111,6 +1111,10 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   }
   const opacity = validateOptionalNumber(input.opacity, "river water opacity", 0, 1);
   if (opacity !== undefined) water.opacity = Number(opacity.toFixed(3));
+  const bedVisibility = validateOptionalNumber(input.bedVisibility, "river water bedVisibility", 0, 1);
+  if (bedVisibility !== undefined) water.bedVisibility = Number(bedVisibility.toFixed(3));
+  const absorptionDistance = validateOptionalNumber(input.absorptionDistance, "river water absorptionDistance", 0.01, 100);
+  if (absorptionDistance !== undefined) water.absorptionDistance = Number(absorptionDistance.toFixed(3));
   const waveAmplitude = validateOptionalNumber(input.waveAmplitude, "river water waveAmplitude", 0, 1);
   if (waveAmplitude !== undefined) water.waveAmplitude = Number(waveAmplitude.toFixed(3));
   const waveLength = validateOptionalNumber(input.waveLength, "river water waveLength", 0.1, 100);

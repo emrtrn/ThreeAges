@@ -35703,6 +35703,8 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     deepColor: "#063447",
     shallowColor: "#2f8b91",
     opacity: 0.82,
+    bedVisibility: 0.05,
+    absorptionDistance: 0.5,
     waveAmplitude: 0.04,
     waveLength: 3.5,
     foamIntensity: 0.55,
@@ -35721,6 +35723,8 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     flowSpeed: 0.35,
     deepColor: "#123456",
     opacity: 0.7,
+    bedVisibility: 0.2,
+    absorptionDistance: 0.75,
     waveAmplitude: 0.08,
     waveLength: 4,
     foamIntensity: 0.6,
@@ -35744,6 +35748,8 @@ check("River Water Body resolves defaults and only saves presentation fields", (
     flowSpeed: 0.35,
     deepColor: "#123456",
     opacity: 0.7,
+    bedVisibility: 0.2,
+    absorptionDistance: 0.75,
     waveAmplitude: 0.08,
     waveLength: 4,
     foamIntensity: 0.6,
@@ -35804,7 +35810,8 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
     ],
     segmentProfiles: [{ splineSegmentRef: "bc", flowSpeedMultiplier: 1.75, rapidness: 0.8 }],
   });
-  assert.ok(ribbon.positions.length > 30, "five cross-section vertices are emitted for each sampled row");
+  assert.ok(ribbon.positions.length > 30, "ribbon cross-section vertices are emitted for each sampled row");
+  assert.equal((ribbon.positions.length / 3) % 9, 0, "authored static foam increases ribbon cross-section resolution");
   assert.equal(ribbon.positions[1], -1.4);
   assert.equal(ribbon.uvs[0], 0);
   assert.ok(ribbon.uvs.at(-2)! > 7, "U follows accumulated distance rather than control-point index");
@@ -35814,7 +35821,7 @@ check("River Water ribbon follows spline width with arc-length UVs and flow attr
   assert.equal(ribbon.waterDepths.length, ribbon.positions.length / 3);
   assert.equal(ribbon.rapidness.length, ribbon.positions.length / 3);
   assert.equal(ribbon.foamMasks.length, ribbon.positions.length / 3);
-  assert.ok(ribbon.foamMasks.some((value) => value > 0.5), "authored static pier/rock stamps bake foam into the ribbon");
+  assert.ok(ribbon.foamMasks.some((value) => value > 0.8), "authored static pier/rock stamps bake a visible foam core into the ribbon");
   assert.equal(ribbon.flowSpeedMultipliers.length, ribbon.positions.length / 3);
   assert.ok(ribbon.flowSpeedMultipliers.some((value) => value === 1.75), "segment profile controls local flow speed");
   assert.ok(ribbon.rapidness.some((value) => value >= 0.8), "segment profile controls authored rapids");

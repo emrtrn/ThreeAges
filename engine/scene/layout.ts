@@ -915,6 +915,10 @@ export interface LayoutRiverWater {
   shallowColor?: string;
   /** Maximum material alpha, 0..1. */
   opacity?: number;
+  /** How much of the terrain bed remains visible through the water: 0 = hidden, 1 = clear. */
+  bedVisibility?: number;
+  /** Local water-depth distance over which bed visibility is absorbed, in world units. */
+  absorptionDistance?: number;
   /** Vertical-only wave amplitude in world units; shore vertices fade to zero. */
   waveAmplitude?: number;
   /** Main wave length in world units. */

@@ -701,7 +701,7 @@
       "landscapeRef": "landscape-1",
       "splineRef": "spline-1",
       "name": "River Water",
-      "surfaceLevel": -1.4,
+      "surfaceLevel": -1.3,
       "widthScale": 0.88,
       "flowSpeed": 0.35,
       "normalScale": 1,
@@ -709,12 +709,43 @@
       "deepColor": "#063447",
       "shallowColor": "#2f8b91",
       "opacity": 0.82,
+      "bedVisibility": 0.05,
+      "absorptionDistance": 0.5,
       "waveAmplitude": 0.04,
       "waveLength": 3.5,
       "foamIntensity": 0.55,
       "reflectionMode": "sharedPlanar",
-      "reflectionGroup": "river-level-minus-1-4",
-      "reflectionQuality": "medium"
+      "reflectionGroup": "river-level-minus-1-3",
+      "reflectionQuality": "medium",
+      "foamStamps": [
+        {
+          "id": "rock-cluster",
+          "kind": "point",
+          "position": [15, -1.3, 20],
+          "radius": 5,
+          "intensity": 0.95
+        },
+        {
+          "id": "rock-cluster-wake",
+          "kind": "strip",
+          "position": [15, -1.3, 21],
+          "endPosition": [18, -1.3, 25],
+          "radius": 2.5,
+          "intensity": 0.8
+        }
+      ],
+      "segmentProfiles": [
+        {
+          "splineSegmentRef": "segment-5",
+          "flowSpeedMultiplier": 1.45,
+          "rapidness": 0.55
+        },
+        {
+          "splineSegmentRef": "segment-6",
+          "flowSpeedMultiplier": 1.25,
+          "rapidness": 0.4
+        }
+      ]
     }
   ],
   "actors": [

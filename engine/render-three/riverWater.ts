@@ -59,6 +59,7 @@ interface RiverSample extends RiverPolylineSample {
 
 const EPSILON = 1e-5;
 const DEFAULT_SAMPLE_SPACING = 1.25;
+const STATIC_FOAM_SAMPLE_SPACING = 0.75;
 const DEFAULT_NORMAL_TILE_LENGTH = 3;
 
 /**
@@ -148,12 +149,15 @@ function staticFoamMask(
     const end = stamp.kind === "strip" ? stamp.endPosition ?? stamp.position : stamp.position;
     const distance = pointToSegmentDistanceXZ(x, z, stamp.position[0], stamp.position[2], end[0], end[2]);
     const falloff = Math.max(0, 1 - distance / Math.max(EPSILON, stamp.radius));
-    mask = Math.max(mask, stamp.intensity * falloff * falloff);
+    // Smoothstep keeps a readable core and a soft outer edge. Squaring the
+    // falloff made a point stamp disappear between this ribbon's sparse rows.
+    const feathered = falloff * falloff * (3 - 2 * falloff);
+    mask = Math.max(mask, stamp.intensity * feathered);
   }
   return mask;
 }
 
-/** Builds 5-wide spline ribbon geometry with arc-length UVs and per-vertex flow data. */
+/** Builds a spline ribbon with arc-length UVs and per-vertex flow data. */
 export function buildRiverWaterRibbon(
   spline: ForgeLandscapeSpline,
   options: BuildRiverWaterRibbonOptions,
@@ -167,11 +171,18 @@ export function buildRiverWaterRibbon(
   const foamMasks: number[] = [];
   const flowSpeedMultipliers: number[] = [];
   const indices: number[] = [];
-  const width = 5;
+  const hasStaticFoam = (options.foamStamps?.length ?? 0) > 0;
+  // Static masks are baked at vertices, so add only the resolution needed to
+  // make authored rock/pier foam legible; ordinary rivers keep their cheaper 5-wide grid.
+  const width = hasStaticFoam ? 9 : 5;
   const tileLength = Math.max(EPSILON, options.normalTileLength ?? DEFAULT_NORMAL_TILE_LENGTH);
   const profiles = new Map((options.segmentProfiles ?? []).map((profile) => [profile.splineSegmentRef, profile]));
   let vertexBase = 0;
-  for (const chain of riverChains(spline, Math.max(0.25, options.sampleSpacing ?? DEFAULT_SAMPLE_SPACING))) {
+  const requestedSpacing = options.sampleSpacing ?? DEFAULT_SAMPLE_SPACING;
+  const sampleSpacing = hasStaticFoam
+    ? Math.min(requestedSpacing, STATIC_FOAM_SAMPLE_SPACING)
+    : requestedSpacing;
+  for (const chain of riverChains(spline, Math.max(0.25, sampleSpacing))) {
     for (let index = 0; index < chain.length; index += 1) {
       const sample = chain[index]!;
       const previous = chain[Math.max(0, index - 1)]!;
@@ -269,6 +280,8 @@ uniform float hasNormalMap;
 uniform vec3 deepColor;
 uniform vec3 shallowColor;
 uniform float opacity;
+uniform float bedVisibility;
+uniform float absorptionDistance;
 uniform float foamIntensity;
 uniform sampler2D reflectionTexture;
 uniform float reflectionStrength;
@@ -286,18 +299,33 @@ void main() {
   float phase = 0.5 + 0.5 * sin(time * flowSpeed * vFlowSpeedMultiplier * 1.4);
   float ripple = hasNormalMap * dot(mix(normalA, normalB, phase), vec2(0.07));
   float depth = clamp(vWaterDepth / 2.2, 0.0, 1.0);
-  vec3 color = mix(shallowColor, deepColor, depth) + ripple;
+  // A ribbon edge can sit over terrain that is already well below the water
+  // plane, so waterDepth alone cannot make a readable shallow bank. Blend the
+  // explicit shore coordinate into the colour/alpha transition as well.
+  float shore = smoothstep(0.38, 0.98, vShoreDistance);
+  float shallow = max(1.0 - depth, shore * 0.78);
+  vec3 color = mix(deepColor, shallowColor, shallow) + ripple;
+  float flowStreak = 0.5 + 0.5 * sin(vRiverUv.x * 13.0 - time * flowSpeed * vFlowSpeedMultiplier * 5.0 + normalA.x * 4.0);
+  color += (flowStreak - 0.5) * (0.012 + depth * 0.008);
   float shoreNoise = 0.5 + 0.5 * sin(vRiverUv.x * 9.0 - time * flowSpeed * vFlowSpeedMultiplier * 3.0 + sin(vRiverUv.x * 2.7));
   float shoreFoam = smoothstep(0.56, 0.96, vShoreDistance) * shoreNoise;
   float rapidFoam = smoothstep(0.16, 0.75, vRapidness) * (0.45 + 0.55 * shoreNoise);
-  float foam = clamp((shoreFoam + rapidFoam) * foamIntensity + vFoamMask, 0.0, 1.0);
-  color = mix(color, vec3(0.84, 0.93, 0.91), foam * 0.72);
+  float authoredFoam = vFoamMask * (0.72 + 0.28 * shoreNoise);
+  float foam = clamp((shoreFoam + rapidFoam) * foamIntensity + authoredFoam, 0.0, 1.0);
+  color = mix(color, vec3(0.84, 0.93, 0.91), foam * 0.78);
   vec2 reflectionUv = vReflectionUv.xy / max(vReflectionUv.w, 0.0001);
   reflectionUv += mix(normalA, normalB, phase) * 0.025;
   vec3 reflected = texture2D(reflectionTexture, reflectionUv).rgb;
   float reflectionAmount = reflectionStrength * (0.15 + depth * 0.2) * (1.0 - foam * 0.65);
   color = mix(color, reflected, clamp(reflectionAmount, 0.0, 0.45));
-  float alpha = opacity * mix(0.58, 1.0, depth);
+  // Overall opacity alone cannot conceal the terrain where a river is shallow:
+  // alpha is deliberately reduced there for a readable bank. This separate
+  // Beer-Lambert-style transmission term gives authors an explicit clear-water
+  // control. At Bed Visibility 0 the riverbed is fully hidden, even at the
+  // shallow edge; deeper terrain is absorbed increasingly quickly.
+  float bedTransmission = clamp(bedVisibility, 0.0, 1.0) * exp(-max(vWaterDepth, 0.0) / max(absorptionDistance, 0.01));
+  float bedOpacity = 1.0 - bedTransmission;
+  float alpha = max(opacity * mix(0.62, 1.0, depth) * mix(1.0, 0.7, shore), bedOpacity);
   gl_FragColor = vec4(color, alpha);
 }`;
 
@@ -344,6 +372,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         deepColor: { value: new Color(item.deepColor) },
         shallowColor: { value: new Color(item.shallowColor) },
         opacity: { value: item.opacity },
+        bedVisibility: { value: item.bedVisibility },
+        absorptionDistance: { value: item.absorptionDistance },
         waveAmplitude: { value: item.waveAmplitude },
         waveLength: { value: item.waveLength },
         foamIntensity: { value: item.foamIntensity },

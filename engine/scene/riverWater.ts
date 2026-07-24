@@ -19,6 +19,8 @@ export interface ResolvedRiverWater {
   deepColor: string;
   shallowColor: string;
   opacity: number;
+  bedVisibility: number;
+  absorptionDistance: number;
   waveAmplitude: number;
   waveLength: number;
   foamIntensity: number;
@@ -43,6 +45,10 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   deepColor: "#063447",
   shallowColor: "#2f8b91",
   opacity: 0.82,
+  // A nearly opaque default keeps the terrain bed from showing through the
+  // authoring preview while retaining an explicit clear-water control.
+  bedVisibility: 0.05,
+  absorptionDistance: 0.5,
   waveAmplitude: 0.04,
   waveLength: 3.5,
   foamIntensity: 0.55,
@@ -70,6 +76,8 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     deepColor: actor?.deepColor ?? defaults.deepColor,
     shallowColor: actor?.shallowColor ?? defaults.shallowColor,
     opacity: actor?.opacity ?? defaults.opacity,
+    bedVisibility: actor?.bedVisibility ?? defaults.bedVisibility,
+    absorptionDistance: actor?.absorptionDistance ?? defaults.absorptionDistance,
     waveAmplitude: actor?.waveAmplitude ?? defaults.waveAmplitude,
     waveLength: actor?.waveLength ?? defaults.waveLength,
     foamIntensity: actor?.foamIntensity ?? defaults.foamIntensity,
