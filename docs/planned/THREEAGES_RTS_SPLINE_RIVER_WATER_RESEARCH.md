@@ -643,6 +643,96 @@ Gorunurluk icin `Bed Visibility` taban gecirgenligini ayri kontrol eder:
 azaldikca su derinlestikce taban daha hizli gizlenir; bu ayarlar genel opacity,
 dalga, kopuk ve planar yansimadan bagimsizdir.
 
+Kopuk, kiyida ve rapid segmentlerinde akim yonunde kayan iki katmanli kirik
+gurultuyle uretilir; bu nedenle duzenli cizgiler yerine parcalanmis beyaz
+yamalar gorunur. `Pattern Scale` yamalarin boyutunu ayarlar. Point/Strip Foam
+stamp'leri kopugu kaya, ayak ve akinti cevresine tasir; stamp siniri de ayni
+gurultuyle parcalanir.
+
+### Faz 4.1 - Kiyi dalgasi ve Ring Foam authoring (plan; uygulama onayindan sonra)
+
+Mevcut shader'daki shore foam, gorunur bir dalga cephesi yerine suyun kenarini
+hafifce renklendirir; X/Z girisli stamp ise sahnede nereye ait oldugunu
+okutmaz. Bu dilim bu iki sorunu ayri presentation katmanlariyla cozer.
+
+#### Hedef goruntu
+
+- Her iki kiyidan merkeze dogru ilerleyen, ince ve kirilmis beyaz dalga
+  seritleri; seritler akintinin yonune tasinmaz, kiyi normali boyunca iceri
+  ilerler.
+- Kaya veya kopru ayagi merkezinde yer alan, disari dogru buyuyup solan 2-3
+  konsantrik halka; tek bir beyaz disk/dekal gorunumu olmamalidir.
+- Kiyidaki dalga ile obstacle halkasi ayni parlaklik, noise ve renk ailesini
+  kullanir; yansima/opacity bunlari maviye bozmamalidir.
+
+#### Yetki ve veri sinirlari
+
+| Konu | Yetki |
+| --- | --- |
+| Kiyi mesafesi, su kotu, ribbon UV | River Water ribbon (`shoreDistance`, `waterDepth`) |
+| Kiyidan merkeze dalga ritmi ve texture maskesi | River Water material |
+| Kaya/ayak halka merkezi, radius, intensity | `LayoutRiverWaterFoamStamp` (`kind: point`) |
+| Point secimi, marker ve hareket gizmosu | Landscape Details + editor-only overlay |
+| Terrain deform/paint ve spline yatagi | Landscape (degismez) |
+| Unit/actor tabanli otomatik foam | Kapsam disi; istemsiz gameplay tetiklenmez |
+
+#### Kullanilacak mevcut dokular
+
+- `circle-rings-a-noise-3` (`DevelopmentContent/Textures/LightMasks/Transparent`):
+  obstacle point icin konsantrik halka maskesi.
+- `perlin-noise` (`DevelopmentContent/Textures/DevelopmentEssentials`):
+  kiyidaki seritleri ve halka kenarlarini kirma maskesi.
+- `t-water-m`: gerekirse yuzeyteki ince akinti ayrintisini destekler; foam
+  maskesinin ana kontrast kaynagi olmaz.
+
+Uygulama, manifest id'siyle texture yukler; alpha/luminance kanali editor
+preview'da dogrulanir. Bir texture'in alpha kanali uygun degilse ayni
+Development Content ailesinin Black varyanti terslenmis luminance maskesi
+olarak kullanilir; yeni raster asset uretilmez.
+
+#### Uygulama adimlari
+
+1. **Shore-wave material pass**
+   - `[x]` `shoreDistance` uzerinden her iki bankta simetrik, merkeze ilerleyen
+     2-3 dar foam bandi hesapla.
+   - `[x]` Bandlari `perlin-noise` ile kir; beyazlik, reflection karisimindan
+     sonra tekrar bastirilmayacak ayri foam compositing asamasinda uygulansin.
+   - `[x]` Body geneli icin `Shore Wave Intensity`, `Band Spacing`, `Inward
+     Speed`, `Shore Wave Reach` ve `Breakup Scale` kontrollerini ekle. Reach,
+     banktan itibaren dalga fade'inin bitecegi normalize mesafedir.
+
+2. **Ring Foam render overlay**
+   - `[ ]` Point stamp'leri, ribbon vertexlerine bake etmek yerine su yuzeyinin
+     hemen ustunde duran ayri, editor/runtime gorunur overlay quad'lari olarak
+     ciz. Boyut stamp radius'undan gelir.
+   - `[ ]` `circle-rings-a-noise-3` ve Perlin maskesini kullanarak zamana bagli
+     radyal faz, 2-3 halka ve disari dogru solma uygula.
+   - `[ ]` Strip stamp mevcut rapid/wake semantigini korur; bu dilimde Point
+     stamp `rings` stilini kullanir. Eski point verileri geriye uyumlu olarak
+     halka overlay'ine cozulur.
+
+3. **Scene point authoring**
+   - `[ ]` `+ Point Foam` yerine `Add Ring Foam` moduna gec: water/terrain
+     uzerine tiklama Landscape-local stamp konumu olusturur.
+   - `[ ]` Ring Foam marker'ini editor overlay'inde ciz, secimi ekran-uzayi
+     hit-test ile yap ve mevcut Landscape spline point akisi gibi shared move
+     gizmosuna bagla.
+   - `[ ]` Details panelinde X/Z satirlarini kaldir; secili point icin sadece
+     Radius, Intensity, Ring Count ve Expansion Speed goster. Delete secili
+     point'i siler; tum islemler undo/redo + autosave'den gecer.
+   - `[ ]` Landscape tasininca/rotate olunca marker ve runtime overlay, River
+     Water ile ayni transformu izler; reflection render'inda gorunmezler.
+
+4. **Dogrulama ve kabul**
+   - `[ ]` Bir kiyi donusunde seritler sahneye sabit sinir yerine iceri dogru
+     hareket eden kirik beyaz dalgalar olarak okunur.
+   - `[ ]` Bir kayaya Ring Foam point konur, gizmo ile tasinir, save/reload ve
+     undo/redo sonrasi ayni yerde kalir; concentric halkalar disari yayilir.
+   - `[ ]` Orta/dusuk kalite profilleri texture yuklemesi basarisizsa guvenli
+     procedural fallback ile calisir; WebGL warning/console error yoktur.
+   - `[ ]` `npx tsc --noEmit`, `npm run test:engine`, `npm run build:verify`
+     ve hedefli editor browser smoke tamamlanir.
+
 ### Faz 5 - Opsiyonel yuksek kalite
 
 - [ ] Secili water-obstacle layer'i icin depth-intersection foam prototipi.

@@ -283,6 +283,14 @@ uniform float opacity;
 uniform float bedVisibility;
 uniform float absorptionDistance;
 uniform float foamIntensity;
+uniform float foamScale;
+uniform float shoreWaveIntensity;
+uniform float shoreWaveSpacing;
+uniform float shoreWaveSpeed;
+uniform float shoreWaveReach;
+uniform float shoreWaveBreakupScale;
+uniform sampler2D foamNoiseMap;
+uniform float hasFoamNoiseMap;
 uniform sampler2D reflectionTexture;
 uniform float reflectionStrength;
 varying vec2 vRiverUv;
@@ -292,6 +300,25 @@ varying float vRapidness;
 varying float vFoamMask;
 varying float vFlowSpeedMultiplier;
 varying vec4 vReflectionUv;
+
+// Two inexpensive value-noise layers prevent foam from reading as even,
+// repeating stripes. vRiverUv.x advances along the authored spline, so the
+// pattern naturally drifts with the river rather than across it.
+float foamHash(vec2 point) {
+  point = fract(point * vec2(123.34, 456.21));
+  point += dot(point, point + 45.32);
+  return fract(point.x * point.y);
+}
+float foamNoise(vec2 point) {
+  vec2 cell = floor(point);
+  vec2 local = fract(point);
+  local = local * local * (3.0 - 2.0 * local);
+  float a = foamHash(cell);
+  float b = foamHash(cell + vec2(1.0, 0.0));
+  float c = foamHash(cell + vec2(0.0, 1.0));
+  float d = foamHash(cell + vec2(1.0, 1.0));
+  return mix(mix(a, b, local.x), mix(c, d, local.x), local.y);
+}
 void main() {
   vec2 baseUv = vec2(vRiverUv.x * normalScale, vRiverUv.y * normalScale);
   vec2 normalA = texture2D(normalMap, baseUv - vec2(time * flowSpeed * vFlowSpeedMultiplier, 0.0)).xy * 2.0 - 1.0;
@@ -307,12 +334,36 @@ void main() {
   vec3 color = mix(deepColor, shallowColor, shallow) + ripple;
   float flowStreak = 0.5 + 0.5 * sin(vRiverUv.x * 13.0 - time * flowSpeed * vFlowSpeedMultiplier * 5.0 + normalA.x * 4.0);
   color += (flowStreak - 0.5) * (0.012 + depth * 0.008);
-  float shoreNoise = 0.5 + 0.5 * sin(vRiverUv.x * 9.0 - time * flowSpeed * vFlowSpeedMultiplier * 3.0 + sin(vRiverUv.x * 2.7));
-  float shoreFoam = smoothstep(0.56, 0.96, vShoreDistance) * shoreNoise;
-  float rapidFoam = smoothstep(0.16, 0.75, vRapidness) * (0.45 + 0.55 * shoreNoise);
-  float authoredFoam = vFoamMask * (0.72 + 0.28 * shoreNoise);
+  vec2 foamUv = vec2(
+    vRiverUv.x * 0.78 - time * flowSpeed * vFlowSpeedMultiplier * 0.34,
+    vRiverUv.y * 4.5
+  ) * max(foamScale, 0.1);
+  float broadFoamNoise = foamNoise(foamUv);
+  float detailFoamNoise = foamNoise(foamUv * 2.13 + vec2(7.1, 3.7));
+  float foamBreakup = smoothstep(0.38, 0.70, mix(broadFoamNoise, detailFoamNoise, 0.52));
+  // vShoreDistance is 1 on either bank and 0 at the centre. Move several
+  // narrow wave fronts along its inverse so they visibly travel bank -> centre
+  // instead of tinting the shoreline as one static border.
+  float inwardDistance = 1.0 - vShoreDistance;
+  vec2 shoreNoiseUv = vec2(
+    vRiverUv.x * 0.38 - time * flowSpeed * vFlowSpeedMultiplier * 0.09,
+    inwardDistance * 3.0
+  ) * max(shoreWaveBreakupScale, 0.1);
+  float textureBreakup = texture2D(foamNoiseMap, shoreNoiseUv).r;
+  float shoreBreakup = mix(foamBreakup, textureBreakup, hasFoamNoiseMap);
+  // Authorable reach keeps the white fronts near the bank instead of letting
+  // their fade reach the middle of a broad river. The final 38% is feathered.
+  float shoreFadeStart = max(0.01, shoreWaveReach * 0.62);
+  float shoreZone = 1.0 - smoothstep(shoreFadeStart, max(shoreFadeStart + 0.01, shoreWaveReach), inwardDistance);
+  float shorePhase = fract(inwardDistance * shoreWaveSpacing - time * shoreWaveSpeed + shoreBreakup * 0.24);
+  float shoreBands = smoothstep(0.78, 0.96, shorePhase);
+  float shoreFoam = shoreZone * shoreBands * smoothstep(0.34, 0.66, shoreBreakup) * shoreWaveIntensity;
+  float rapidFoam = smoothstep(0.16, 0.75, vRapidness) * (0.28 + 0.72 * foamBreakup);
+  // Authored point/strip masks remain legible near an obstacle but are broken
+  // up at their boundary instead of filling an opaque circular decal.
+  float authoredFoam = vFoamMask * (0.36 + 0.64 * foamBreakup);
   float foam = clamp((shoreFoam + rapidFoam) * foamIntensity + authoredFoam, 0.0, 1.0);
-  color = mix(color, vec3(0.84, 0.93, 0.91), foam * 0.78);
+  color = mix(color, vec3(0.91, 0.98, 0.96), foam * 0.92);
   vec2 reflectionUv = vReflectionUv.xy / max(vReflectionUv.w, 0.0001);
   reflectionUv += mix(normalA, normalB, phase) * 0.025;
   vec3 reflected = texture2D(reflectionTexture, reflectionUv).rgb;
@@ -334,6 +385,8 @@ export interface RiverWaterRenderItem extends ResolvedRiverWater {
   landscapeData: ForgeLandscapeData;
   position: Vec3;
   rotation: Vec3;
+  /** Repeating grayscale noise used to break up inward shore-wave fronts. */
+  foamNoiseMap: Texture | null;
   /** Optional shared source; absent covers off/low reflection profiles. */
   reflectionSource?: PlanarReflectionSource | null;
 }
@@ -377,6 +430,13 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
         waveAmplitude: { value: item.waveAmplitude },
         waveLength: { value: item.waveLength },
         foamIntensity: { value: item.foamIntensity },
+        shoreWaveIntensity: { value: item.shoreWaveIntensity },
+        shoreWaveSpacing: { value: item.shoreWaveSpacing },
+        shoreWaveSpeed: { value: item.shoreWaveSpeed },
+        shoreWaveReach: { value: item.shoreWaveReach },
+        shoreWaveBreakupScale: { value: item.shoreWaveBreakupScale },
+        foamNoiseMap: { value: item.foamNoiseMap },
+        hasFoamNoiseMap: { value: item.foamNoiseMap ? 1 : 0 },
         reflectionTexture: { value: item.reflectionSource?.binding.texture ?? null },
         reflectionTextureMatrix: { value: item.reflectionSource?.binding.textureMatrix ?? new Matrix4() },
         reflectionStrength: { value: item.reflectionSource?.binding.strength ?? 0 },

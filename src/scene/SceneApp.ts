@@ -766,6 +766,12 @@ export interface RiverWaterDetailsView {
   waveAmplitude: number;
   waveLength: number;
   foamIntensity: number;
+  foamScale: number;
+  shoreWaveIntensity: number;
+  shoreWaveSpacing: number;
+  shoreWaveSpeed: number;
+  shoreWaveReach: number;
+  shoreWaveBreakupScale: number;
   reflectionMode: "off" | "sharedPlanar";
   reflectionGroup: string;
   reflectionQuality: "low" | "medium" | "high";
@@ -788,6 +794,12 @@ export type RiverWaterDetailsPatch = Partial<Pick<
   | "waveAmplitude"
   | "waveLength"
   | "foamIntensity"
+  | "foamScale"
+  | "shoreWaveIntensity"
+  | "shoreWaveSpacing"
+  | "shoreWaveSpeed"
+  | "shoreWaveReach"
+  | "shoreWaveBreakupScale"
   | "reflectionMode"
   | "reflectionGroup"
   | "reflectionQuality"
@@ -6222,12 +6234,14 @@ export class SceneApp {
         }
       }
       const normalMap = await this.loadRiverWaterNormalTexture(resolved.normalTexture);
+      const foamNoiseMap = await this.loadRiverWaterTexture("perlin-noise", "foam noise");
       const item: RiverWaterRenderItem = {
         ...resolved,
         spline,
         landscapeData: data,
         position: [...landscape.position],
         rotation: landscape.rotation ? [...landscape.rotation] : [0, 0, 0],
+        foamNoiseMap,
         reflectionSource,
       };
       const object = createRiverWaterObject(item, normalMap);
@@ -6239,12 +6253,17 @@ export class SceneApp {
   }
 
   private async loadRiverWaterNormalTexture(id: string): Promise<Texture | null> {
+    return this.loadRiverWaterTexture(id, "normal");
+  }
+
+  /** Loads a repeatable manifest texture shared by water materials. */
+  private async loadRiverWaterTexture(id: string, purpose: string): Promise<Texture | null> {
     const cached = this.riverWaterTextures.get(id);
     if (cached) return cached;
     const manifest = this.manifest;
     const record = manifest ? assetRecordById(manifest, id) : null;
     if (!record || assetType(record) !== "texture") {
-      console.warn(`[river-water] Normal texture is not a manifest texture: ${id}.`);
+      console.warn(`[river-water] ${purpose} texture is not a manifest texture: ${id}.`);
       return null;
     }
     try {
@@ -6253,7 +6272,7 @@ export class SceneApp {
       this.riverWaterTextures.set(id, texture);
       return texture;
     } catch (error) {
-      console.warn(`[river-water] Failed to load normal texture: ${id}.`, error);
+      console.warn(`[river-water] Failed to load ${purpose} texture: ${id}.`, error);
       return null;
     }
   }
@@ -8631,6 +8650,12 @@ export class SceneApp {
           waveAmplitude: resolved.waveAmplitude,
           waveLength: resolved.waveLength,
           foamIntensity: resolved.foamIntensity,
+          foamScale: resolved.foamScale,
+          shoreWaveIntensity: resolved.shoreWaveIntensity,
+          shoreWaveSpacing: resolved.shoreWaveSpacing,
+          shoreWaveSpeed: resolved.shoreWaveSpeed,
+          shoreWaveReach: resolved.shoreWaveReach,
+          shoreWaveBreakupScale: resolved.shoreWaveBreakupScale,
           reflectionMode: resolved.reflectionMode,
           reflectionGroup: resolved.reflectionGroup ?? "",
           reflectionQuality: resolved.reflectionQuality,
@@ -8672,6 +8697,12 @@ export class SceneApp {
     if (patch.waveAmplitude !== undefined) next.waveAmplitude = Number(clamp(patch.waveAmplitude, 0, 1).toFixed(3));
     if (patch.waveLength !== undefined) next.waveLength = Number(clamp(patch.waveLength, 0.1, 100).toFixed(3));
     if (patch.foamIntensity !== undefined) next.foamIntensity = Number(clamp(patch.foamIntensity, 0, 1).toFixed(3));
+    if (patch.foamScale !== undefined) next.foamScale = Number(clamp(patch.foamScale, 0.1, 10).toFixed(3));
+    if (patch.shoreWaveIntensity !== undefined) next.shoreWaveIntensity = Number(clamp(patch.shoreWaveIntensity, 0, 1).toFixed(3));
+    if (patch.shoreWaveSpacing !== undefined) next.shoreWaveSpacing = Number(clamp(patch.shoreWaveSpacing, 0.5, 20).toFixed(3));
+    if (patch.shoreWaveSpeed !== undefined) next.shoreWaveSpeed = Number(clamp(patch.shoreWaveSpeed, 0, 10).toFixed(3));
+    if (patch.shoreWaveReach !== undefined) next.shoreWaveReach = Number(clamp(patch.shoreWaveReach, 0.05, 1).toFixed(3));
+    if (patch.shoreWaveBreakupScale !== undefined) next.shoreWaveBreakupScale = Number(clamp(patch.shoreWaveBreakupScale, 0.1, 10).toFixed(3));
     if (patch.reflectionMode !== undefined) next.reflectionMode = patch.reflectionMode === "sharedPlanar" ? "sharedPlanar" : "off";
     if (patch.reflectionGroup !== undefined) {
       const group = patch.reflectionGroup.trim();

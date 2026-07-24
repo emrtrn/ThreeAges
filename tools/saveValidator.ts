@@ -1121,6 +1121,18 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   if (waveLength !== undefined) water.waveLength = Number(waveLength.toFixed(3));
   const foamIntensity = validateOptionalNumber(input.foamIntensity, "river water foamIntensity", 0, 1);
   if (foamIntensity !== undefined) water.foamIntensity = Number(foamIntensity.toFixed(3));
+  const foamScale = validateOptionalNumber(input.foamScale, "river water foamScale", 0.1, 10);
+  if (foamScale !== undefined) water.foamScale = Number(foamScale.toFixed(3));
+  const shoreWaveIntensity = validateOptionalNumber(input.shoreWaveIntensity, "river water shoreWaveIntensity", 0, 1);
+  if (shoreWaveIntensity !== undefined) water.shoreWaveIntensity = Number(shoreWaveIntensity.toFixed(3));
+  const shoreWaveSpacing = validateOptionalNumber(input.shoreWaveSpacing, "river water shoreWaveSpacing", 0.5, 20);
+  if (shoreWaveSpacing !== undefined) water.shoreWaveSpacing = Number(shoreWaveSpacing.toFixed(3));
+  const shoreWaveSpeed = validateOptionalNumber(input.shoreWaveSpeed, "river water shoreWaveSpeed", 0, 10);
+  if (shoreWaveSpeed !== undefined) water.shoreWaveSpeed = Number(shoreWaveSpeed.toFixed(3));
+  const shoreWaveReach = validateOptionalNumber(input.shoreWaveReach, "river water shoreWaveReach", 0.05, 1);
+  if (shoreWaveReach !== undefined) water.shoreWaveReach = Number(shoreWaveReach.toFixed(3));
+  const shoreWaveBreakupScale = validateOptionalNumber(input.shoreWaveBreakupScale, "river water shoreWaveBreakupScale", 0.1, 10);
+  if (shoreWaveBreakupScale !== undefined) water.shoreWaveBreakupScale = Number(shoreWaveBreakupScale.toFixed(3));
   if (input.foamStamps !== undefined) {
     if (!Array.isArray(input.foamStamps) || input.foamStamps.length > 64) {
       throw new Error("river water foamStamps must be an array of at most 64 entries");

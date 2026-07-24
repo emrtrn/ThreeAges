@@ -925,6 +925,18 @@ export interface LayoutRiverWater {
   waveLength?: number;
   /** Multiplier for procedural shore/rapid foam, 0..1. */
   foamIntensity?: number;
+  /** Scale of the animated procedural foam breakup pattern. */
+  foamScale?: number;
+  /** Strength of the white wave fronts that travel from both banks toward the centre. */
+  shoreWaveIntensity?: number;
+  /** Number of visible inward-moving shore-wave bands per bank. */
+  shoreWaveSpacing?: number;
+  /** Shore-wave travel speed from bank toward the river centre. */
+  shoreWaveSpeed?: number;
+  /** Normalized inward distance from each bank before shore waves fade out. */
+  shoreWaveReach?: number;
+  /** Tiling factor for the shore-wave breakup texture. */
+  shoreWaveBreakupScale?: number;
   /** Static foam masks for bridge piers, rocks, rapids, and other authored obstacles. */
   foamStamps?: LayoutRiverWaterFoamStamp[];
   /** Static flow/rapid overrides keyed by Landscape spline segment id. */

@@ -334,12 +334,31 @@ export async function buildAuthoredWorld(options: AuthoredWorldOptions): Promise
       }
       riverNormalCache.set(resolved.normalTexture, normalMap);
     }
+    let foamNoiseMap = riverNormalCache.get("perlin-noise");
+    if (foamNoiseMap === undefined) {
+      const texturePath = texturePathById.get("perlin-noise");
+      if (!texturePath) {
+        warn("Authored-world river water foam noise texture is not in the manifest: perlin-noise");
+        foamNoiseMap = null;
+      } else {
+        try {
+          foamNoiseMap = await textureLoader!.loadAsync(resolveUrl(texturePath));
+          foamNoiseMap.wrapS = foamNoiseMap.wrapT = RepeatWrapping;
+          riverWaterTextures.push(foamNoiseMap);
+        } catch (error) {
+          warn("Authored-world river water foam noise texture failed to load: perlin-noise", error);
+          foamNoiseMap = null;
+        }
+      }
+      riverNormalCache.set("perlin-noise", foamNoiseMap);
+    }
     const item: RiverWaterRenderItem = {
       ...resolved,
       spline,
       landscapeData: landscape.data,
       position: landscape.actor.position,
       rotation: landscape.actor.rotation ?? [0, 0, 0],
+      foamNoiseMap,
       reflectionSource,
     };
     const object = createRiverWaterObject(item, normalMap);

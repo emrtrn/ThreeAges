@@ -24,6 +24,12 @@ export interface ResolvedRiverWater {
   waveAmplitude: number;
   waveLength: number;
   foamIntensity: number;
+  foamScale: number;
+  shoreWaveIntensity: number;
+  shoreWaveSpacing: number;
+  shoreWaveSpeed: number;
+  shoreWaveReach: number;
+  shoreWaveBreakupScale: number;
   foamStamps: readonly LayoutRiverWaterFoamStamp[];
   segmentProfiles: readonly LayoutRiverWaterSegmentProfile[];
   reflectionMode: "off" | "sharedPlanar";
@@ -52,6 +58,12 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   waveAmplitude: 0.04,
   waveLength: 3.5,
   foamIntensity: 0.55,
+  foamScale: 1.35,
+  shoreWaveIntensity: 0.78,
+  shoreWaveSpacing: 5,
+  shoreWaveSpeed: 0.34,
+  shoreWaveReach: 0.36,
+  shoreWaveBreakupScale: 1.25,
   foamStamps: [],
   segmentProfiles: [],
   reflectionMode: "off",
@@ -81,6 +93,12 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     waveAmplitude: actor?.waveAmplitude ?? defaults.waveAmplitude,
     waveLength: actor?.waveLength ?? defaults.waveLength,
     foamIntensity: actor?.foamIntensity ?? defaults.foamIntensity,
+    foamScale: actor?.foamScale ?? defaults.foamScale,
+    shoreWaveIntensity: actor?.shoreWaveIntensity ?? defaults.shoreWaveIntensity,
+    shoreWaveSpacing: actor?.shoreWaveSpacing ?? defaults.shoreWaveSpacing,
+    shoreWaveSpeed: actor?.shoreWaveSpeed ?? defaults.shoreWaveSpeed,
+    shoreWaveReach: actor?.shoreWaveReach ?? defaults.shoreWaveReach,
+    shoreWaveBreakupScale: actor?.shoreWaveBreakupScale ?? defaults.shoreWaveBreakupScale,
     foamStamps: actor?.foamStamps?.map((stamp) => ({
       ...stamp,
       position: [...stamp.position],
