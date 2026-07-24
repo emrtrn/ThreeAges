@@ -288,40 +288,26 @@
   ],
   "characters": [],
   "worldSettings": {
-    "staticObjectsCastShadow": true
-  },
-  "skyAtmosphere": {
-    "rayleigh": 1,
-    "turbidity": 1,
-    "mie": 0.002,
-    "mieDirectionalG": 0.6
-  },
-  "postProcess": {
-    "antialias": "smaa",
-    "bloom": {
-      "enabled": true,
-      "threshold": 1,
-      "intensity": 1,
-      "radius": 1
-    }
+    "staticObjectsCastShadow": true,
+    "ambientIntensity": 1
   },
   "lights": [
     {
-      "id": "sun",
+      "id": "directional-light-mrzeo4fp-7bl",
       "type": "directional",
       "position": [
-        40,
-        80,
-        30
+        0,
+        5,
+        0
       ],
-      "name": "Sun",
+      "name": "Directional Light",
       "rotation": [
         -55,
         35,
         0
       ],
       "color": "#ffffff",
-      "intensity": 1.6,
+      "intensity": 2,
       "castShadow": true
     }
   ],
@@ -734,7 +720,6 @@
           "intensity": 0.7
         }
       ],
-      "reflectionMode": "sharedPlanar",
       "reflectionQuality": "high"
     }
   ],
