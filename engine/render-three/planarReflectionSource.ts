@@ -13,6 +13,14 @@ import {
   type WebGLRenderer,
 } from "three";
 
+/** Reserved opt-out layer for editor helpers, UI meshes and reflection-only FX. */
+export const PLANAR_REFLECTION_EXCLUDED_LAYER = 31;
+
+/** Keeps a source camera's normal visibility mask while removing the opt-out layer. */
+export function planarReflectionLayerMask(mask: number): number {
+  return mask & ~(1 << PLANAR_REFLECTION_EXCLUDED_LAYER);
+}
+
 /** The one reflection texture/matrix a family of coplanar consumers samples. */
 export interface PlanarReflectionBinding {
   readonly texture: Texture;
@@ -115,6 +123,10 @@ export class PlanarReflectionSource {
     const sourcePerspective = camera as Camera & { far: number; projectionMatrix: Matrix4 };
     perspective.far = sourcePerspective.far;
     perspective.projectionMatrix.copy(sourcePerspective.projectionMatrix);
+    // Keep the caller's normal scene layers, but never render opt-out helpers
+    // into water. Runtime UI is DOM-based today; this reserved Three layer covers
+    // editor gizmos and any future world-space UI/FX explicitly placed on it.
+    reflectionCamera.layers.mask = planarReflectionLayerMask(camera.layers.mask);
 
     // World-space projection: unlike a flat ReflectiveSurface plane, a ribbon
     // consumer has its own transform, so its shader multiplies this by modelMatrix.
@@ -175,4 +187,3 @@ export class PlanarReflectionSource {
     return reflectionCamera;
   }
 }
-

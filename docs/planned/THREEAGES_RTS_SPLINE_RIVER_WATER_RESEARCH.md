@@ -575,7 +575,7 @@ engine paketi ise ilgisiz yol `ageLayers` beklenti uyusmazliginda duruyor.
 - [x] Ayni kot/grup sular icin tek reflection kaynagi kullan.
 - [x] Resolution scale, update interval ve visibility throttling ekle.
 - [x] Low/Medium/High kalite baglantisini kur.
-- [ ] Reflection render layer filtresini ekle.
+- [x] Reflection render layer filtresini ekle.
 
 Kabul:
 
@@ -588,8 +588,9 @@ River Water Body tarafindan paylasilan bir render target/kamera kaynagidir.
 Gruplama anahtari reflection group + dunya su kotu + kalite profilini icerir;
 farkli kotlar ayni hedefi paylasamaz. Low kaynak olusturmaz, Medium 256px ve
 en az 32ms, High 512px ve en az 4ms aralikla guncellenir. Kaynak, gorunmeyen
-su ribbon'i cizilmedigi icin update edilmez. Render-layer filtrelemesi sonraki
-Faz 3 dilimi olarak acik kalir.
+su ribbon'i cizilmedigi icin update edilmez. The reflection camera preserves
+the caller layer mask but excludes `PLANAR_REFLECTION_EXCLUDED_LAYER` (31).
+Editor helpers and future world-space UI/FX can opt out through that layer.
 
 ### Faz 4 - Author edilen obstacle kopugu
 

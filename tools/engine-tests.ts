@@ -374,6 +374,7 @@ import {
 } from "../engine/scene/landscape";
 import type { ForgeLandscapeData, ForgeLandscapeSpline } from "../engine/scene/landscape";
 import { buildRiverWaterRibbon } from "../engine/render-three/riverWater";
+import { PLANAR_REFLECTION_EXCLUDED_LAYER, planarReflectionLayerMask } from "../engine/render-three/planarReflectionSource";
 import { resolveRiverWater, riverWaterReflectionGroupKey } from "../engine/scene/riverWater";
 import {
   evaluateLandscapeSplineSegment,
@@ -35753,6 +35754,8 @@ check("River Water Body resolves defaults and only saves presentation fields", (
   assert.equal(riverWaterReflectionGroupKey(shared, -1.4), "river-a:-1.400:high");
   assert.equal(riverWaterReflectionGroupKey({ ...shared, reflectionQuality: "low" }, -1.4), null);
   assert.notEqual(riverWaterReflectionGroupKey(shared, -1.5), riverWaterReflectionGroupKey(shared, -1.4));
+  assert.equal(PLANAR_REFLECTION_EXCLUDED_LAYER, 31);
+  assert.equal(planarReflectionLayerMask(0xffffffff) >>> 0, 0x7fffffff);
 });
 
 check("River Water ribbon follows spline width with arc-length UVs and flow attributes", () => {
