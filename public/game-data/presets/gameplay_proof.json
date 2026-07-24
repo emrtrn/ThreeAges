@@ -24,5 +24,6 @@
   },
   "gameSpeed": 1,
   "mapState": "two_flanks_blockout",
+  "levelRef": "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
   "aiProfile": "normal"
 }

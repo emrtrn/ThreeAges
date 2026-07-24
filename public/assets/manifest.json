@@ -23370,6 +23370,29 @@
         "bytes": 3281
       },
       "license": "Unknown"
+    },
+    {
+      "id": "rts-gameplay-proof-level",
+      "name": "RTS Gameplay Proof Markers.Level",
+      "assetType": "level",
+      "category": "Levels",
+      "path": "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
+      "tags": ["rts", "gameplay", "markers"],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 3281
+      },
+      "license": "Unknown"
     }
   ]
 }

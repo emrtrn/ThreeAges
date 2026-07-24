@@ -2293,7 +2293,8 @@ oynamaktır. 1 ve 2 bitti — yani sıra artık 3'te: bilinen hata düzeltildi v
   bu alan `balance/ai.json` içinde, `LayoutPlacement`/skeleton/effect allowlist
   yüzeylerinden biri değil — CLAUDE.md'deki `tools/saveValidator.ts` uyarısı bu
   dosyaya uygulanmaz; yalnız AI config loader'ının yeni alanı okuduğundan emin ol.
-  **Yapıldı (2026-07-18).** `balance/ai.json` → `army.peaceSeconds: 300`; tip
+  **Yapıldı (2026-07-18; 2026-07-24 dengesi).** `balance/ai.json` →
+  `army.peaceSeconds: 600` (10 dakika); tip
   `AiBalance.army.peaceSeconds`, doğrulama `validateAiBalance` (`>= 0`; 0 =
   pencere kapalı, yani eski davranış hâlâ ifade edilebilir). Kapı **tek yerde**:
   `intentScorer.scoreAttack` pencere içinde `rawScore: 0` ve nedenini adıyla
@@ -2304,9 +2305,9 @@ oynamaktır. 1 ve 2 bitti — yani sıra artık 3'te: bilinen hata düzeltildi v
   **Savunma kasıtlı olarak dokunulmadı:** `defend` ve `baseThreat` yolları açık,
   yani AI kavgaya *başlamakta* yavaş, kendisine yapılan rush'a cevap vermekte
   değil.
-  **Süre neden 300 sn:** §42'nin authored ilk-temas hedefi 5–9 dk; pencere o
-  aralığın alt ucuna oturuyor, yani AI authored temas penceresinden önce
-  saldıramıyor. Değer veride, kodda sabit değil.
+  **Süre neden 600 sn:** Erken oyun gelişimine daha fazla alan açmak için ilk
+  10 maç simülasyon dakikasında AI saldırı başlatmaz. Değer veride, kodda sabit
+  değil.
   **Ölçüm:** `bb.now` (maç simülasyon saniyesi, `RtsMatchClock` ile aynı tik ve
   aynı reset) — pencere hızla ölçekleniyor, duraklamada donuyor ve saatin ikinci
   bir kopyası tutulmuyor.

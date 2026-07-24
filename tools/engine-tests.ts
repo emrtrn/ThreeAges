@@ -28998,6 +28998,54 @@ check("Assetization Faz D: shipped RTS Core Match Level reproduces the full lega
   );
 });
 
+check("Landscape Faz 1: gameplay_proof opts into its own separate Level, not core_match's file", () => {
+  const proof = validateGamePreset(readPresetJson("gameplay_proof"), "gameplay_proof");
+  const core = validateGamePreset(readPresetJson("core_match"), "core_match");
+  assert.equal(
+    proof.levelRef,
+    "assets/ThreeAges/Levels/RTS_GameplayProof.level.json",
+    "the preset carries a levelRef so ?flags=levelAssets resolves the authored Level",
+  );
+  // The whole point of the separate asset (plan Risk §8): editor-save on the
+  // gameplay proof must never overwrite the core_match scenario, so they cannot
+  // share one file.
+  assert.notEqual(proof.levelRef, core.levelRef, "gameplay_proof and core_match must not share a Level file");
+});
+
+check("Landscape Faz 1: the gameplay proof Level reproduces the full legacy spatial contract", () => {
+  const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
+  const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);
+  const layout = JSON.parse(readFileSync("public/assets/ThreeAges/Levels/RTS_GameplayProof.level.json", "utf8")) as {
+    actors: Array<{ classRef: string; position: [number, number, number]; variableOverrides?: Record<string, string | number | boolean | string[]> }>;
+    splines: Parameters<typeof adaptRtsLevel>[1];
+  };
+  const actors = layout.actors.map((instance, index) => ({
+    index,
+    instance,
+    def: normalizeActorScriptDef(JSON.parse(readFileSync(`public/${instance.classRef}`, "utf8")) as unknown, instance.classRef),
+  }));
+  // The gameplay proof Level is a faithful copy of RTS_BLOCKOUT_MAP's inventory,
+  // so resolving it must reproduce the legacy spatial contract exactly — the same
+  // acceptance the Core Match Level meets, held for the gameplay proof's own file.
+  const fromLevel = resolveRtsSpatialLayout(adaptRtsLevel(actors, layout.splines, { buildings, resources }));
+  const legacy = resolveRtsSpatialLayout();
+  assert.deepEqual(fromLevel.playerStart, legacy.playerStart);
+  assert.deepEqual(fromLevel.enemyStart, legacy.enemyStart);
+  assert.deepEqual(fromLevel.resourceNodes, legacy.resourceNodes);
+  assert.deepEqual(fromLevel.trees, legacy.trees);
+  assert.deepEqual(fromLevel.strategicPoints, legacy.strategicPoints);
+  assert.deepEqual(fromLevel.navigationBlockers, legacy.navigationBlockers);
+  assert.deepEqual(fromLevel.enemyBaseRoute, legacy.enemyBaseRoute);
+  assert.deepEqual(fromLevel.enemyExpansions, legacy.enemyExpansions);
+  assert.deepEqual(
+    fromLevel.enemyBaseAnchors.map((anchor) => {
+      const { owner: _owner, ...rest } = anchor as { owner?: string } & typeof anchor;
+      return rest;
+    }),
+    legacy.enemyBaseAnchors,
+  );
+});
+
 check("Assetization Faz D: the authored Level keeps both flanks and the enemy base route reachable", () => {
   const buildings = validateBuildingBalance(JSON.parse(readFileSync("public/game-data/balance/buildings.json", "utf8")) as unknown);
   const resources = validateResourceBalance(JSON.parse(readFileSync("public/game-data/balance/resources.json", "utf8")) as unknown);

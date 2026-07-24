@@ -78,6 +78,31 @@ test("Assetization Faz D: the opt-in authored Level drives the spatial layout of
   expect(errors, "the authored Level must adapt and boot a match without runtime errors").toEqual([]);
 });
 
+test("Landscape Faz 1: the gameplay_proof preset resolves its own authored Level under levelAssets", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+
+  // Flag off: even though gameplay_proof now carries a levelRef, the levelAssets
+  // gate keeps it opt-in, so the legacy blockout fallback still drives the match.
+  await page.goto("/?rts&debug&preset=gameplay_proof");
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "blockout");
+
+  // Flag on: the preset's own RTS_GameplayProof Level loads and its markers become
+  // the spatial authority — the Faz 1 witness that the separate authoring asset is
+  // wired end to end (preset levelRef -> loader -> RtsApp), not core_match's file.
+  await page.goto("/?rts&debug&preset=gameplay_proof&flags=levelAssets");
+  await expect(page.locator("#game-canvas")).toBeVisible();
+  await expect(page.locator("#game-canvas")).toHaveAttribute("data-rts-level", "authored", { timeout: 30_000 });
+  await expect(page.locator(".rts-match-overlay")).toHaveClass(/is-visible/);
+
+  await page.getByRole("button", { name: "Maçı Başlat", exact: true }).click();
+  await expect(page.locator(".rts-match-overlay")).not.toHaveClass(/is-visible/);
+  await expect(page.locator(".rts-hud-bar")).toBeVisible();
+  await expect(page.locator(".rts-debug-overlay")).toContainText("maç: active");
+
+  expect(errors, "the gameplay proof Level must adapt and boot a match without runtime errors").toEqual([]);
+});
+
 test("Assetization Faz E: the opt-in Level mounts its authored static world and restarts cleanly", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
