@@ -86,6 +86,7 @@ import { BuildingPlacementSystem } from "./structures/buildingPlacementSystem";
 import { StructureConstructionService } from "./structures/structureConstructionService";
 import { KingdomRegistry } from "./kingdom/kingdomRegistry";
 import { RoadConstructionService } from "./roads/roadConstructionService";
+import { planAutoRoadConnection } from "./roads/autoRoadConnector";
 import { RtsBuildPalette } from "./ui/rtsBuildPalette";
 import { RtsSelectionPanel } from "./ui/rtsSelectionPanel";
 import { RtsWorldProgressOverlay, type RtsWorldProgressEntry } from "./ui/rtsWorldProgressOverlay";
@@ -613,6 +614,7 @@ export class RtsApp {
       (structure) => {
         this.applyConstructionVisual(structure);
         this.assignWorkerToConstruction(structure);
+        this.autoConnectRoad(structure);
       },
       (structure) => this.workerConstruction.cancelStructure(structure),
       (stats, x, z) => stats.economy?.requiresResourceNode
@@ -2017,6 +2019,35 @@ export class RtsApp {
 
   private refreshNavigationBlockers(): void {
     this.navigation.setBlockers(this.navigationBlockers());
+  }
+
+  /**
+   * Pave a short access road under a freshly placed building so it touches the
+   * network without the player hand-drawing the last tiles (Option A). Runs at
+   * the tail of construction, once the new footprint is already a blocker, so
+   * the route bends *up to* the building and ends on a cell that touches it —
+   * exactly what {@link roadCellTouchingFootprint} needs to read it as linked.
+   *
+   * Player-only and free: the AI funds its own spine through the wood-charged
+   * {@link RoadConstructionService} (AI design §4), and the player's building
+   * price is taken to already cover its access road, so nothing is billed here.
+   */
+  private autoConnectRoad(structure: PlacedStructure): void {
+    if (structure.owner !== PLAYER_OWNER) return;
+    const maxNewCells = this.options.roadBalance.autoConnect?.maxCells ?? 0;
+    if (maxNewCells <= 0) return;
+    const plan = planAutoRoadConnection(
+      this.roads,
+      {
+        x: structure.x,
+        z: structure.z,
+        width: structure.stats.footprint.width,
+        depth: structure.stats.footprint.depth,
+      },
+      (start, end) => this.roadConstruction.plan(start, end),
+      { maxNewCells },
+    );
+    if (plan) this.roadConstruction.commitFree(plan);
   }
 
   private syncPlacementUi(): void {

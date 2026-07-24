@@ -190,6 +190,7 @@ import { isTreeVisible } from "../src/game/rts/world/rtsMapArt";
 import type { RtsStrategicPoint } from "../src/game/rts/world/rtsMapBlockout";
 import { simulationSteps, type RtsSimulationSpeed } from "../src/game/rts/simulation/simulationSpeed";
 import { RoadGraph } from "../src/game/rts/roads/roadGraph";
+import { planAutoRoadConnection } from "../src/game/rts/roads/autoRoadConnector";
 import { roadGraphToLandscapeSpline, RoadPaintSurface } from "../src/game/rts/roads/roadTerrainPainter";
 import { updateUnitCombat } from "../src/game/rts/units/unitCombat";
 import { updateUnitDeaths } from "../src/game/rts/units/unitDeath";
@@ -31297,6 +31298,7 @@ check("RTS road graph finds obstacle-free cells, charges new segments, and keeps
   assert.deepEqual(balance, {
     cellSize: 2,
     woodCostPerCell: 4,
+    autoConnect: { maxCells: 6 },
     visual: {
       layerId: "dirt",
       width: 2.5,
@@ -31370,6 +31372,68 @@ check("RTS a road routes around a standing tree and straight through once it is 
   const through = construction.plan({ x: -6, z: 0 }, { x: 6, z: 0 });
   assert.ok(through, "a road plans across the cleared cell");
   assert.ok(through.cells.some((cell) => cell.x === 0 && cell.z === 0), "the felled tree no longer diverts the road");
+});
+
+check("RTS auto-connect paves a free access road from a building placed short of the network", () => {
+  const balance = validateRoadBalance(
+    JSON.parse(readFileSync("public/game-data/balance/roads.json", "utf8")) as unknown,
+  );
+  const router = (roads: RoadGraph) => (start: RoadCell, end: RoadCell) => roads.plan(start, end, []);
+
+  // A horizontal road spine along z = 0; a 6x6 footprint centred at z = 8 sits
+  // two cells clear of it, so nothing touches its footprint yet.
+  const roads = new RoadGraph(balance);
+  const spine = roads.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, []);
+  assert.ok(spine);
+  roads.commit(spine);
+  const footprint = { x: 0, z: 8, width: 6, depth: 6 };
+  assert.equal(
+    roadCellTouchingFootprint(roads, footprint.x, footprint.z, footprint.width, footprint.depth),
+    null,
+    "the building starts unlinked, a couple of cells off the spine",
+  );
+
+  const plan = planAutoRoadConnection(roads, footprint, router(roads), { maxNewCells: 6 });
+  assert.ok(plan, "an access road is planned to the nearest spine cell");
+  assert.ok(plan.newCells.length > 0 && plan.newCells.length <= 6, "only the short gap is paved");
+  roads.commit(plan);
+  const touching = roadCellTouchingFootprint(roads, footprint.x, footprint.z, footprint.width, footprint.depth);
+  assert.ok(touching, "after the auto road commits, a tile touches the footprint");
+  assert.equal(
+    roads.connected(touching, { x: 0, z: 0 }),
+    true,
+    "the access road joins the building to the existing spine as one component",
+  );
+
+  // Idempotent: a building already on the network gets no second road.
+  assert.equal(
+    planAutoRoadConnection(roads, footprint, router(roads), { maxNewCells: 6 }),
+    null,
+    "a building already touching a road is left alone",
+  );
+
+  // Range cap: the same building far from the spine is deemed off-grid.
+  const far = new RoadGraph(balance);
+  const farSpine = far.plan({ x: -6, z: 0 }, { x: 6, z: 0 }, []);
+  assert.ok(farSpine);
+  far.commit(farSpine);
+  assert.equal(
+    planAutoRoadConnection(far, { x: 0, z: 40, width: 6, depth: 6 }, router(far), { maxNewCells: 6 }),
+    null,
+    "a building beyond the cell budget gets no free highway",
+  );
+
+  // Nothing to connect to, and a disabled budget, both no-op.
+  assert.equal(
+    planAutoRoadConnection(new RoadGraph(balance), footprint, router(new RoadGraph(balance)), { maxNewCells: 6 }),
+    null,
+    "an empty road graph offers no target",
+  );
+  assert.equal(
+    planAutoRoadConnection(roads, { x: 0, z: 16, width: 6, depth: 6 }, router(roads), { maxNewCells: 0 }),
+    null,
+    "maxNewCells of 0 disables the feature",
+  );
 });
 
 check("RTS full storage leaves linked production in its local buffer until capacity is freed", () => {

@@ -1,6 +1,9 @@
 {
   "cellSize": 2,
   "woodCostPerCell": 4,
+  "autoConnect": {
+    "maxCells": 6
+  },
   "visual": {
     "layerId": "dirt",
     "ageLayers": {

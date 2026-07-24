@@ -36,6 +36,7 @@ import type {
   GameVersion,
   MarketBalance,
   ResourceBalance,
+  RoadAutoConnect,
   RoadBalance,
   RoadVisual,
   SettlementAge,
@@ -1338,5 +1339,23 @@ export function validateRoadBalance(value: unknown): RoadBalance {
   if (cellSize <= 0 || woodCostPerCell <= 0) {
     throw new GameDataError(`${where}: cell size and wood cost must be > 0`);
   }
-  return { cellSize, woodCostPerCell, visual: validateRoadVisual(obj["visual"], where) };
+  const autoConnect = validateRoadAutoConnect(obj["autoConnect"], where);
+  return {
+    cellSize,
+    woodCostPerCell,
+    visual: validateRoadVisual(obj["visual"], where),
+    ...(autoConnect ? { autoConnect } : {}),
+  };
+}
+
+/** Validate the optional auto-connect access-road block (feature off when absent). */
+function validateRoadAutoConnect(value: unknown, where: string): RoadAutoConnect | undefined {
+  if (value === undefined) return undefined;
+  const scope = `${where}.autoConnect`;
+  const obj = asObject(value, scope);
+  const maxCells = requireFiniteNumber(obj, "maxCells", scope);
+  if (maxCells < 0 || !Number.isInteger(maxCells)) {
+    throw new GameDataError(`${scope}: maxCells must be a non-negative integer`);
+  }
+  return { maxCells };
 }

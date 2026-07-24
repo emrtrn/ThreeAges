@@ -48,4 +48,16 @@ export class RoadConstructionService {
     this.onCommitted();
     return { built: true, plan };
   }
+
+  /**
+   * Commit an already-planned route without charging anyone. Used for the access
+   * road auto-built under a freshly placed building, whose price already covers
+   * it (see {@link planAutoRoadConnection}). Roads are unowned, so there is no
+   * wallet to touch — this simply commits and fires the same post-commit hook
+   * `build` does, keeping the road visuals and territory grid in sync.
+   */
+  commitFree(plan: RoadPlan): void {
+    this.roads.commit(plan);
+    this.onCommitted();
+  }
 }

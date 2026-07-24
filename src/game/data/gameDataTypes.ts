@@ -627,4 +627,17 @@ export interface RoadBalance {
   readonly woodCostPerCell: number;
   /** Presentational road-paint tuning; absent in data falls back to built-in defaults. */
   readonly visual: RoadVisual;
+  /** Auto-built access road on placement; absent disables the feature. */
+  readonly autoConnect?: RoadAutoConnect;
+}
+
+/**
+ * When a player building lands near — but not touching — an existing road, a
+ * short access road is paved for free (its cost folded into the building price)
+ * up to `maxCells` new tiles. Beyond that the building is deemed placed off the
+ * network and no road is drawn.
+ */
+export interface RoadAutoConnect {
+  /** Max newly created road cells an auto access road may add; 0 disables it. */
+  readonly maxCells: number;
 }
