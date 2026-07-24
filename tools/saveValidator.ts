@@ -1117,6 +1117,78 @@ export function validateRiverWater(value: unknown): Record<string, unknown> {
   if (waveLength !== undefined) water.waveLength = Number(waveLength.toFixed(3));
   const foamIntensity = validateOptionalNumber(input.foamIntensity, "river water foamIntensity", 0, 1);
   if (foamIntensity !== undefined) water.foamIntensity = Number(foamIntensity.toFixed(3));
+  if (input.foamStamps !== undefined) {
+    if (!Array.isArray(input.foamStamps) || input.foamStamps.length > 64) {
+      throw new Error("river water foamStamps must be an array of at most 64 entries");
+    }
+    const stampIds = new Set<string>();
+    water.foamStamps = input.foamStamps.map((value, index) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error(`river water foamStamps[${index}] must be an object`);
+      }
+      const stamp = value as Record<string, unknown>;
+      if (typeof stamp.id !== "string" || stamp.id.trim().length === 0 || stampIds.has(stamp.id)) {
+        throw new Error(`river water foamStamps[${index}].id must be a unique non-empty string`);
+      }
+      stampIds.add(stamp.id);
+      if (stamp.kind !== "point" && stamp.kind !== "strip") {
+        throw new Error(`river water foamStamps[${index}].kind must be point or strip`);
+      }
+      if (!isNumberTuple(stamp.position)) {
+        throw new Error(`river water foamStamps[${index}].position must be a numeric Vec3`);
+      }
+      const position = stamp.position.map((axis) => Number(axis.toFixed(3)));
+      const saved: Record<string, unknown> = { id: stamp.id, kind: stamp.kind, position };
+      if (stamp.kind === "strip") {
+        if (!isNumberTuple(stamp.endPosition)) {
+          throw new Error(`river water foamStamps[${index}].endPosition must be a numeric Vec3 for strips`);
+        }
+        saved.endPosition = stamp.endPosition.map((axis) => Number(axis.toFixed(3)));
+      }
+      const radius = validateOptionalNumber(stamp.radius, `river water foamStamps[${index}].radius`, 0.05, 100);
+      const intensity = validateOptionalNumber(stamp.intensity, `river water foamStamps[${index}].intensity`, 0, 1);
+      if (radius === undefined || intensity === undefined) {
+        throw new Error(`river water foamStamps[${index}] requires radius and intensity`);
+      }
+      saved.radius = radius;
+      saved.intensity = intensity;
+      return saved;
+    });
+  }
+  if (input.segmentProfiles !== undefined) {
+    if (!Array.isArray(input.segmentProfiles) || input.segmentProfiles.length > 256) {
+      throw new Error("river water segmentProfiles must be an array of at most 256 entries");
+    }
+    const segmentRefs = new Set<string>();
+    water.segmentProfiles = input.segmentProfiles.map((value, index) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new Error(`river water segmentProfiles[${index}] must be an object`);
+      }
+      const profile = value as Record<string, unknown>;
+      if (
+        typeof profile.splineSegmentRef !== "string" ||
+        profile.splineSegmentRef.trim().length === 0 ||
+        segmentRefs.has(profile.splineSegmentRef)
+      ) {
+        throw new Error(`river water segmentProfiles[${index}].splineSegmentRef must be a unique non-empty string`);
+      }
+      segmentRefs.add(profile.splineSegmentRef);
+      const saved: Record<string, unknown> = { splineSegmentRef: profile.splineSegmentRef };
+      const flowSpeedMultiplier = validateOptionalNumber(
+        profile.flowSpeedMultiplier,
+        `river water segmentProfiles[${index}].flowSpeedMultiplier`,
+        0.05,
+        8,
+      );
+      const rapidness = validateOptionalNumber(profile.rapidness, `river water segmentProfiles[${index}].rapidness`, 0, 1);
+      if (flowSpeedMultiplier === undefined && rapidness === undefined) {
+        throw new Error(`river water segmentProfiles[${index}] requires flowSpeedMultiplier or rapidness`);
+      }
+      if (flowSpeedMultiplier !== undefined) saved.flowSpeedMultiplier = flowSpeedMultiplier;
+      if (rapidness !== undefined) saved.rapidness = rapidness;
+      return saved;
+    });
+  }
   if (input.reflectionMode === "sharedPlanar") water.reflectionMode = "sharedPlanar";
   else if (input.reflectionMode !== undefined && input.reflectionMode !== "off") {
     throw new Error("river water reflectionMode must be off or sharedPlanar");

@@ -1,4 +1,8 @@
-import type { LayoutRiverWater } from "./layout";
+import type {
+  LayoutRiverWater,
+  LayoutRiverWaterFoamStamp,
+  LayoutRiverWaterSegmentProfile,
+} from "./layout";
 
 /** Resolved presentation settings for a spline-driven River Water Body. */
 export interface ResolvedRiverWater {
@@ -18,6 +22,8 @@ export interface ResolvedRiverWater {
   waveAmplitude: number;
   waveLength: number;
   foamIntensity: number;
+  foamStamps: readonly LayoutRiverWaterFoamStamp[];
+  segmentProfiles: readonly LayoutRiverWaterSegmentProfile[];
   reflectionMode: "off" | "sharedPlanar";
   reflectionGroup: string | null;
   reflectionQuality: "low" | "medium" | "high";
@@ -40,6 +46,8 @@ export const RIVER_WATER_DEFAULTS: ResolvedRiverWater = {
   waveAmplitude: 0.04,
   waveLength: 3.5,
   foamIntensity: 0.55,
+  foamStamps: [],
+  segmentProfiles: [],
   reflectionMode: "off",
   reflectionGroup: null,
   reflectionQuality: "medium",
@@ -65,6 +73,12 @@ export function resolveRiverWater(actor: LayoutRiverWater | null | undefined): R
     waveAmplitude: actor?.waveAmplitude ?? defaults.waveAmplitude,
     waveLength: actor?.waveLength ?? defaults.waveLength,
     foamIntensity: actor?.foamIntensity ?? defaults.foamIntensity,
+    foamStamps: actor?.foamStamps?.map((stamp) => ({
+      ...stamp,
+      position: [...stamp.position],
+      ...(stamp.endPosition ? { endPosition: [...stamp.endPosition] } : {}),
+    })) ?? defaults.foamStamps,
+    segmentProfiles: actor?.segmentProfiles?.map((profile) => ({ ...profile })) ?? defaults.segmentProfiles,
     reflectionMode: actor?.reflectionMode === "sharedPlanar" ? "sharedPlanar" : "off",
     reflectionGroup: actor?.reflectionGroup?.trim() || null,
     reflectionQuality: actor?.reflectionQuality === "low" || actor?.reflectionQuality === "high"

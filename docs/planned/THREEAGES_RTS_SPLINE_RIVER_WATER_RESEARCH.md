@@ -594,15 +594,24 @@ Editor helpers and future world-space UI/FX can opt out through that layer.
 
 ### Faz 4 - Author edilen obstacle kopugu
 
-- [ ] Foam Point/Strip veya esdeger authoring verisini tanimla.
-- [ ] Kopru ayagi ve kayalar icin maskeyi ribbon'a uygula.
-- [ ] Segment bazli rapids/hiz authoring'i ekle.
+- [x] Foam Point/Strip veya esdeger authoring verisini tanimla.
+- [x] Kopru ayagi ve kayalar icin maskeyi ribbon'a uygula.
+- [x] Segment bazli rapids/hiz authoring'i ekle.
 - [ ] Kavsak gerekiyorsa junction patch + yerel flow map ekle.
 
 Kabul:
 
 - Kopru ayagi ve kaya etrafinda kontrollu kopuk vardir.
 - Kopuk birim ve gecici aktorlerde istemsiz tetiklenmez.
+
+`foamStamps` (point veya strip) Landscape-local konum/radius/intensity ile
+River Water Body verisinde saklanir ve geometry kurulurken vertex foam maskesine
+bake edilir. Bu nedenle birim, projectile veya gecici aktor sorgusu yoktur.
+`segmentProfiles`, spline segment id'si uzerinden yerel flow-speed multiplier ve
+rapidness uygular. Gameplay-proof level'de bir point, bir strip ve iki rapid
+profil ornegi vardir. Mevcut nehir tek, dalsiz bir zincir oldugu icin junction
+patch/flow-map maddesi uygulanmadi; dallanan bir spline author edilirse Faz 4'un
+kalan kapisi olarak ele alinacak.
 
 ### Faz 5 - Opsiyonel yuksek kalite
 

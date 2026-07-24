@@ -11,7 +11,11 @@ import {
 
 import type { ForgeLandscapeData, ForgeLandscapeSpline, LandscapeSplinePolylineSample } from "@engine/scene/landscape";
 import { landscapeHeightAtLocal, splineToPolyline } from "@engine/scene/landscape";
-import type { Vec3 } from "@engine/scene/layout";
+import type {
+  LayoutRiverWaterFoamStamp,
+  LayoutRiverWaterSegmentProfile,
+  Vec3,
+} from "@engine/scene/layout";
 import type { ResolvedRiverWater } from "@engine/scene/riverWater";
 import type { PlanarReflectionSource } from "./planarReflectionSource";
 
@@ -25,6 +29,8 @@ export interface RiverWaterRibbonData {
   shoreDistances: number[];
   waterDepths: number[];
   rapidness: number[];
+  foamMasks: number[];
+  flowSpeedMultipliers: number[];
   indices: number[];
 }
 
@@ -37,9 +43,17 @@ export interface BuildRiverWaterRibbonOptions {
   normalTileLength?: number;
   /** Optional Landscape data used to bake shallow/deep water into the ribbon. */
   landscapeData?: ForgeLandscapeData;
+  /** Static foam masks, evaluated into vertices when the river geometry is built. */
+  foamStamps?: readonly LayoutRiverWaterFoamStamp[];
+  /** Per-segment flow/rapid overrides keyed by the Landscape spline segment id. */
+  segmentProfiles?: readonly LayoutRiverWaterSegmentProfile[];
 }
 
-interface RiverSample extends LandscapeSplinePolylineSample {
+interface RiverPolylineSample extends LandscapeSplinePolylineSample {
+  segmentId: string;
+}
+
+interface RiverSample extends RiverPolylineSample {
   distance: number;
 }
 
@@ -53,10 +67,10 @@ const DEFAULT_NORMAL_TILE_LENGTH = 3;
  * junction/flow-map phase supplies a junction patch.
  */
 function riverChains(spline: ForgeLandscapeSpline, sampleSpacing: number): RiverSample[][] {
-  const piecesBySegment = new Map<string, LandscapeSplinePolylineSample[]>();
+  const piecesBySegment = new Map<string, RiverPolylineSample[]>();
   for (const sub of splineToPolyline(spline, 24)) {
     const pieces = piecesBySegment.get(sub.segment.id) ?? [];
-    if (pieces.length === 0) pieces.push(sub.start);
+    if (pieces.length === 0) pieces.push({ ...sub.start, segmentId: sub.segment.id });
     const dx = sub.end.position[0] - sub.start.position[0];
     const dy = sub.end.position[1] - sub.start.position[1];
     const dz = sub.end.position[2] - sub.start.position[2];
@@ -67,6 +81,7 @@ function riverChains(spline: ForgeLandscapeSpline, sampleSpacing: number): River
         position: [sub.start.position[0] + dx * t, sub.start.position[1] + dy * t, sub.start.position[2] + dz * t],
         width: sub.start.width + (sub.end.width - sub.start.width) * t,
         falloff: sub.start.falloff + (sub.end.falloff - sub.start.falloff) * t,
+        segmentId: sub.segment.id,
       });
     }
     piecesBySegment.set(sub.segment.id, pieces);
@@ -86,7 +101,7 @@ function riverChains(spline: ForgeLandscapeSpline, sampleSpacing: number): River
   const chains: RiverSample[][] = [];
   for (const seed of pending) {
     if (used.has(seed.id)) continue;
-    const samples: LandscapeSplinePolylineSample[] = [];
+    const samples: RiverPolylineSample[] = [];
     let segment: typeof spline.segments[number] | undefined = seed;
     while (segment && !used.has(segment.id)) {
       used.add(segment.id);
@@ -107,6 +122,37 @@ function riverChains(spline: ForgeLandscapeSpline, sampleSpacing: number): River
   return chains;
 }
 
+function pointToSegmentDistanceXZ(
+  pointX: number,
+  pointZ: number,
+  startX: number,
+  startZ: number,
+  endX: number,
+  endZ: number,
+): number {
+  const dx = endX - startX;
+  const dz = endZ - startZ;
+  const lengthSquared = dx * dx + dz * dz;
+  const t = lengthSquared <= EPSILON ? 0 : Math.max(0, Math.min(1, ((pointX - startX) * dx + (pointZ - startZ) * dz) / lengthSquared));
+  return Math.hypot(pointX - (startX + dx * t), pointZ - (startZ + dz * t));
+}
+
+function staticFoamMask(
+  foamStamps: readonly LayoutRiverWaterFoamStamp[] | undefined,
+  x: number,
+  z: number,
+): number {
+  if (!foamStamps?.length) return 0;
+  let mask = 0;
+  for (const stamp of foamStamps) {
+    const end = stamp.kind === "strip" ? stamp.endPosition ?? stamp.position : stamp.position;
+    const distance = pointToSegmentDistanceXZ(x, z, stamp.position[0], stamp.position[2], end[0], end[2]);
+    const falloff = Math.max(0, 1 - distance / Math.max(EPSILON, stamp.radius));
+    mask = Math.max(mask, stamp.intensity * falloff * falloff);
+  }
+  return mask;
+}
+
 /** Builds 5-wide spline ribbon geometry with arc-length UVs and per-vertex flow data. */
 export function buildRiverWaterRibbon(
   spline: ForgeLandscapeSpline,
@@ -118,9 +164,12 @@ export function buildRiverWaterRibbon(
   const shoreDistances: number[] = [];
   const waterDepths: number[] = [];
   const rapidness: number[] = [];
+  const foamMasks: number[] = [];
+  const flowSpeedMultipliers: number[] = [];
   const indices: number[] = [];
   const width = 5;
   const tileLength = Math.max(EPSILON, options.normalTileLength ?? DEFAULT_NORMAL_TILE_LENGTH);
+  const profiles = new Map((options.segmentProfiles ?? []).map((profile) => [profile.splineSegmentRef, profile]));
   let vertexBase = 0;
   for (const chain of riverChains(spline, Math.max(0.25, options.sampleSpacing ?? DEFAULT_SAMPLE_SPACING))) {
     for (let index = 0; index < chain.length; index += 1) {
@@ -141,20 +190,27 @@ export function buildRiverWaterRibbon(
       const turn = 1 - Math.max(-1, Math.min(1, (previousDx * nextDx + previousDz * nextDz) / (previousLength * nextLength)));
       const slope = Math.abs(next.position[1] - previous.position[1]) / Math.max(length, EPSILON);
       const localRapidness = Math.min(1, turn * 1.5 + slope * 0.75);
+      const profile = profiles.get(sample.segmentId);
+      const segmentRapidness = Math.max(localRapidness, profile?.rapidness ?? 0);
+      const flowSpeedMultiplier = profile?.flowSpeedMultiplier ?? 1;
       const sideX = -flowZ;
       const sideZ = flowX;
       for (let lateral = 0; lateral < width; lateral += 1) {
         const v = lateral / (width - 1);
         const offset = (v - 0.5) * 2 * sample.width * options.widthScale;
-        positions.push(sample.position[0] + sideX * offset, options.surfaceLevel, sample.position[2] + sideZ * offset);
+        const x = sample.position[0] + sideX * offset;
+        const z = sample.position[2] + sideZ * offset;
+        positions.push(x, options.surfaceLevel, z);
         uvs.push(sample.distance / tileLength, v);
         flowDirections.push(flowX, flowZ);
         shoreDistances.push(Math.abs(v - 0.5) * 2);
         const terrainHeight = options.landscapeData
-          ? landscapeHeightAtLocal(options.landscapeData, sample.position[0] + sideX * offset, sample.position[2] + sideZ * offset)
+          ? landscapeHeightAtLocal(options.landscapeData, x, z)
           : options.surfaceLevel - 1;
         waterDepths.push(Math.max(0, options.surfaceLevel - terrainHeight));
-        rapidness.push(localRapidness);
+        rapidness.push(segmentRapidness);
+        foamMasks.push(staticFoamMask(options.foamStamps, x, z));
+        flowSpeedMultipliers.push(flowSpeedMultiplier);
       }
     }
     for (let row = 0; row < chain.length - 1; row += 1) {
@@ -166,7 +222,7 @@ export function buildRiverWaterRibbon(
     }
     vertexBase += chain.length * width;
   }
-  return { positions, uvs, flowDirections, shoreDistances, waterDepths, rapidness, indices };
+  return { positions, uvs, flowDirections, shoreDistances, waterDepths, rapidness, foamMasks, flowSpeedMultipliers, indices };
 }
 
 const VERTEX_SHADER = `
@@ -174,10 +230,14 @@ attribute vec2 flowDirection;
 attribute float shoreDistance;
 attribute float waterDepth;
 attribute float rapidness;
+attribute float foamMask;
+attribute float flowSpeedMultiplier;
 varying vec2 vRiverUv;
 varying float vShoreDistance;
 varying float vWaterDepth;
 varying float vRapidness;
+varying float vFoamMask;
+varying float vFlowSpeedMultiplier;
 varying vec4 vReflectionUv;
 uniform float time;
 uniform float flowSpeed;
@@ -189,8 +249,10 @@ void main() {
   vShoreDistance = shoreDistance;
   vWaterDepth = waterDepth;
   vRapidness = rapidness;
+  vFoamMask = foamMask;
+  vFlowSpeedMultiplier = flowSpeedMultiplier;
   float centreWeight = pow(max(0.0, 1.0 - shoreDistance), 1.6);
-  float wavePhase = uv.x * 6.283185 / max(waveLength, 0.01) - time * flowSpeed * 2.0;
+  float wavePhase = uv.x * 6.283185 / max(waveLength, 0.01) - time * flowSpeed * flowSpeedMultiplier * 2.0;
   float wave = sin(wavePhase) + sin(wavePhase * 1.73 + uv.y * 5.0) * 0.35;
   vec3 displaced = position;
   displaced.y += wave * waveAmplitude * centreWeight * (0.65 + rapidness * 0.35);
@@ -214,19 +276,21 @@ varying vec2 vRiverUv;
 varying float vShoreDistance;
 varying float vWaterDepth;
 varying float vRapidness;
+varying float vFoamMask;
+varying float vFlowSpeedMultiplier;
 varying vec4 vReflectionUv;
 void main() {
   vec2 baseUv = vec2(vRiverUv.x * normalScale, vRiverUv.y * normalScale);
-  vec2 normalA = texture2D(normalMap, baseUv - vec2(time * flowSpeed, 0.0)).xy * 2.0 - 1.0;
-  vec2 normalB = texture2D(normalMap, baseUv * 1.37 + vec2(0.37, 0.61) - vec2(time * flowSpeed * 0.73, 0.0)).xy * 2.0 - 1.0;
-  float phase = 0.5 + 0.5 * sin(time * flowSpeed * 1.4);
+  vec2 normalA = texture2D(normalMap, baseUv - vec2(time * flowSpeed * vFlowSpeedMultiplier, 0.0)).xy * 2.0 - 1.0;
+  vec2 normalB = texture2D(normalMap, baseUv * 1.37 + vec2(0.37, 0.61) - vec2(time * flowSpeed * vFlowSpeedMultiplier * 0.73, 0.0)).xy * 2.0 - 1.0;
+  float phase = 0.5 + 0.5 * sin(time * flowSpeed * vFlowSpeedMultiplier * 1.4);
   float ripple = hasNormalMap * dot(mix(normalA, normalB, phase), vec2(0.07));
   float depth = clamp(vWaterDepth / 2.2, 0.0, 1.0);
   vec3 color = mix(shallowColor, deepColor, depth) + ripple;
-  float shoreNoise = 0.5 + 0.5 * sin(vRiverUv.x * 9.0 - time * flowSpeed * 3.0 + sin(vRiverUv.x * 2.7));
+  float shoreNoise = 0.5 + 0.5 * sin(vRiverUv.x * 9.0 - time * flowSpeed * vFlowSpeedMultiplier * 3.0 + sin(vRiverUv.x * 2.7));
   float shoreFoam = smoothstep(0.56, 0.96, vShoreDistance) * shoreNoise;
   float rapidFoam = smoothstep(0.16, 0.75, vRapidness) * (0.45 + 0.55 * shoreNoise);
-  float foam = clamp((shoreFoam + rapidFoam) * foamIntensity, 0.0, 1.0);
+  float foam = clamp((shoreFoam + rapidFoam) * foamIntensity + vFoamMask, 0.0, 1.0);
   color = mix(color, vec3(0.84, 0.93, 0.91), foam * 0.72);
   vec2 reflectionUv = vReflectionUv.xy / max(vReflectionUv.w, 0.0001);
   reflectionUv += mix(normalA, normalB, phase) * 0.025;
@@ -254,6 +318,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
       surfaceLevel: item.surfaceLevel,
       widthScale: item.widthScale,
       landscapeData: item.landscapeData,
+      foamStamps: item.foamStamps,
+      segmentProfiles: item.segmentProfiles,
     });
     const geometry = new BufferGeometry();
     geometry.setAttribute("position", new Float32BufferAttribute(ribbon.positions, 3));
@@ -262,6 +328,8 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     geometry.setAttribute("shoreDistance", new Float32BufferAttribute(ribbon.shoreDistances, 1));
     geometry.setAttribute("waterDepth", new Float32BufferAttribute(ribbon.waterDepths, 1));
     geometry.setAttribute("rapidness", new Float32BufferAttribute(ribbon.rapidness, 1));
+    geometry.setAttribute("foamMask", new Float32BufferAttribute(ribbon.foamMasks, 1));
+    geometry.setAttribute("flowSpeedMultiplier", new Float32BufferAttribute(ribbon.flowSpeedMultipliers, 1));
     geometry.setIndex(ribbon.indices);
     geometry.computeBoundingSphere();
     const material = new ShaderMaterial({

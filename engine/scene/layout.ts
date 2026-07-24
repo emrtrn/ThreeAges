@@ -857,6 +857,30 @@ export interface LayoutLandscape {
   collision?: boolean;
 }
 
+/** A static local foam mask authored independently of RTS units and actors. */
+export interface LayoutRiverWaterFoamStamp {
+  id: string;
+  /** A radial point or a capsule-like strip on the river surface. */
+  kind: "point" | "strip";
+  /** Landscape-local centre/start position; only X/Z affect the water ribbon. */
+  position: Vec3;
+  /** Landscape-local strip endpoint. Required for `strip`. */
+  endPosition?: Vec3;
+  /** Influence radius in world units. */
+  radius: number;
+  /** Additive foam contribution, 0..1. */
+  intensity: number;
+}
+
+/** Per-spline-segment water presentation override for authored rapids. */
+export interface LayoutRiverWaterSegmentProfile {
+  splineSegmentRef: string;
+  /** Multiplies the body-wide flow speed for this segment. */
+  flowSpeedMultiplier?: number;
+  /** Explicit rapid/foam contribution, 0..1. */
+  rapidness?: number;
+}
+
 /**
  * A visible river-water body whose shape is resolved from one Landscape spline.
  * The Landscape remains the authority for spline shape and terrain deformation;
@@ -897,6 +921,10 @@ export interface LayoutRiverWater {
   waveLength?: number;
   /** Multiplier for procedural shore/rapid foam, 0..1. */
   foamIntensity?: number;
+  /** Static foam masks for bridge piers, rocks, rapids, and other authored obstacles. */
+  foamStamps?: LayoutRiverWaterFoamStamp[];
+  /** Static flow/rapid overrides keyed by Landscape spline segment id. */
+  segmentProfiles?: LayoutRiverWaterSegmentProfile[];
   /** `sharedPlanar` lets same-plane bodies share one reflection render; default is off. */
   reflectionMode?: "off" | "sharedPlanar";
   /** Optional shared planar-reflection group. Bodies on different planes must not share it. */

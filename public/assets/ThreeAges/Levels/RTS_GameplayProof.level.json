@@ -235,23 +235,53 @@
       "placements": [
         {
           "position": [
-            12.97,
-            -2,
-            24.06
+            15.23,
+            -2.37,
+            19.64
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 5
+          "scale": 8.29
         },
         {
           "position": [
-            12.51,
-            -2,
-            24.43
+            16.01,
+            -2.37,
+            20.95
           ],
           "scaleLocked": true,
           "rotationYDeg": 0,
-          "scale": 7
+          "rotation": [
+            0,
+            -60,
+            0
+          ],
+          "scale": 7.34
+        },
+        {
+          "position": [
+            14.47,
+            -2.37,
+            20.25
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "scale": 11.6
+        },
+        {
+          "position": [
+            15.2,
+            -2.37,
+            20.63
+          ],
+          "scaleLocked": true,
+          "rotationYDeg": 0,
+          "rotation": [
+            0,
+            -60,
+            0
+          ],
+          "scale": 10.27
         }
       ]
     }

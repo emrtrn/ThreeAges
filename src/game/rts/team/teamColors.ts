@@ -50,7 +50,7 @@ export function createTeamRing(owner: UnitOwner, radius: number): Mesh {
     new MeshBasicMaterial({
       color: new Color(TEAM_COLOR[owner]),
       transparent: true,
-      opacity: 0.1,
+      opacity: 0,
       depthWrite: false,
     }),
   );
