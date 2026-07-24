@@ -19,7 +19,7 @@
         "cost": {
           "food": 250,
           "wood": 250,
-          "gold": 60
+          "gold": 50
         },
         "durationSeconds": 60
       }
